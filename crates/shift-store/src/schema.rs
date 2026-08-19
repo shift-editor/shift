@@ -253,16 +253,8 @@ const WORKSPACE_SCHEMA_V1: &str = r#"
 CREATE TABLE IF NOT EXISTS workspace_state (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     document_id TEXT,
-    source_kind TEXT NOT NULL CHECK (source_kind IN ('untitled', 'package', 'imported')),
-    source_path TEXT,
-    canonical_source_path TEXT,
+    source_kind TEXT NOT NULL CHECK (source_kind IN ('untitled', 'imported')),
     original_import_path TEXT,
-    source_package_id TEXT,
-    source_file_identity_kind TEXT,
-    source_file_identity_value TEXT,
-    source_size INTEGER,
-    source_mtime_ms INTEGER,
-    source_fingerprint TEXT,
     dirty INTEGER NOT NULL DEFAULT 0 CHECK (dirty IN (0, 1)),
     revision INTEGER NOT NULL DEFAULT 0,
     saved_revision INTEGER NOT NULL DEFAULT 0,
@@ -271,7 +263,7 @@ CREATE TABLE IF NOT EXISTS workspace_state (
 "#;
 
 pub const SHIFT_APPLICATION_ID: i64 = 0x5348_4654;
-pub(crate) const SCHEMA_VERSION: i64 = 1;
+pub const SHIFT_DOCUMENT_SCHEMA_VERSION: i64 = 1;
 
 pub(crate) fn defer_import_indexes(tx: &Transaction<'_>) -> Result<(), StoreError> {
     tx.execute_batch(DEFER_IMPORT_INDEXES)?;
@@ -301,17 +293,17 @@ pub(crate) fn ensure_current(conn: &rusqlite::Connection) -> Result<(), StoreErr
     }
 
     let version = schema_version(conn)?;
-    if version > SCHEMA_VERSION {
+    if version > SHIFT_DOCUMENT_SCHEMA_VERSION {
         return Err(StoreError::UnsupportedSchemaVersion {
             found: version,
-            supported: SCHEMA_VERSION,
+            supported: SHIFT_DOCUMENT_SCHEMA_VERSION,
         });
     }
 
     if version < 1 {
         conn.execute_batch(DOCUMENT_SCHEMA_V1)?;
         conn.execute_batch(WORKSPACE_SCHEMA_V1)?;
-        conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+        conn.pragma_update(None, "user_version", SHIFT_DOCUMENT_SCHEMA_VERSION)?;
     }
 
     Ok(())
@@ -330,13 +322,13 @@ pub(crate) fn initialize_document(conn: &rusqlite::Connection) -> Result<(), Sto
     if version != 0 {
         return Err(StoreError::UnsupportedDocumentSchemaVersion {
             found: version,
-            supported: SCHEMA_VERSION,
+            supported: SHIFT_DOCUMENT_SCHEMA_VERSION,
         });
     }
 
     conn.execute_batch(DOCUMENT_SCHEMA_V1)?;
     conn.pragma_update(None, "application_id", SHIFT_APPLICATION_ID)?;
-    conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+    conn.pragma_update(None, "user_version", SHIFT_DOCUMENT_SCHEMA_VERSION)?;
     Ok(())
 }
 
@@ -350,10 +342,10 @@ pub(crate) fn validate_document_header(conn: &rusqlite::Connection) -> Result<()
     }
 
     let version = schema_version(conn)?;
-    if version != SCHEMA_VERSION {
+    if version != SHIFT_DOCUMENT_SCHEMA_VERSION {
         return Err(StoreError::UnsupportedDocumentSchemaVersion {
             found: version,
-            supported: SCHEMA_VERSION,
+            supported: SHIFT_DOCUMENT_SCHEMA_VERSION,
         });
     }
 

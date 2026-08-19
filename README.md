@@ -28,13 +28,12 @@ Shift aims to redefine font editing by combining the power of Rust for performan
 │  shift-bridge      transport adapter                         │
 │  shift-workspace   open working state                        │
 │  shift-font        live font authoring model                 │
-│  shift-store       SQLite working store                      │
-│  shift-source      .shift source package IO                  │
-│  shift-cli         read-only package inspection CLI          │
+│  shift-store       canonical SQLite documents and recovery   │
+│  shift-cli         document authoring and inspection CLI     │
 └──────────────────────────────────────────────────────────────┘
 ```
 
-The desktop app owns shell and editor interaction. Rust owns the live font authoring model, durable working state, source package IO, and native transport boundary.
+The desktop app owns shell and editor interaction. Rust owns the live font authoring model, canonical SQLite documents, durable recovery state, and native transport boundary.
 
 `shift-font` is the core Rust object model:
 
@@ -67,7 +66,7 @@ pnpm dev
 
 ### Command-line inspection
 
-The `shift` CLI can inspect `.shift` source packages without modifying them:
+The `shift` CLI can inspect canonical SQLite `.shift` documents without modifying them:
 
 ```bash
 cargo run -p shift-cli -- inspect path/to/Family.shift

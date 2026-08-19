@@ -27,8 +27,9 @@ impl InspectReport {
     fn render_summary(&self, mode: RenderMode) -> String {
         let mut lines = vec![
             styled_title(&self.file_name, mode),
-            format_kv("format", &self.manifest.format, mode),
-            format_kv("schema", &self.manifest.schema_version.to_string(), mode),
+            format_kv("app id", &self.document.application_id, mode),
+            format_kv("schema", &self.document.schema_version.to_string(), mode),
+            format_kv("document", &self.document.document_id, mode),
             String::new(),
             format_count("axes", self.axes.len(), mode),
             format_count("mappings", self.axis_mappings.len(), mode),

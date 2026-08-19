@@ -70,7 +70,7 @@ pub enum FormatBackendError {
     Font(#[from] shift_font::CoreError),
 
     #[error(transparent)]
-    Shift(#[from] shift_source::SourcePackageError),
+    Store(#[from] shift_store::StoreError),
 
     #[error("UFO backend error: {0}")]
     Ufo(String),

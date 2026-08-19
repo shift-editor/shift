@@ -25,12 +25,10 @@ pub use layer::{
     MAX_LAYER_READ_BATCH_DECODED_BYTES,
 };
 pub use recovery::{RecoveryOverlay, RecoveryState};
-pub use schema::SHIFT_APPLICATION_ID;
+pub use schema::{SHIFT_APPLICATION_ID, SHIFT_DOCUMENT_SCHEMA_VERSION};
 pub use source::{AxisRecord, NewAxis, NewSource, SourceAxisLocation, SourceKind, SourceRecord};
 pub use store::ShiftStore;
 pub use types::{
     AxisId, CommitId, DocumentId, GlyphId, GlyphWriteBatch, LayerBatchTiming, RevisionId, SourceId,
 };
-pub use workspace_state::{
-    Evidence, FileIdentity, SourceIdentitySnapshot, WorkspaceSourceKind, WorkspaceState,
-};
+pub use workspace_state::{WorkspaceSourceKind, WorkspaceState};

@@ -28,7 +28,7 @@ import type {
  * Point-in-time view of the open workspace: identity and records, no geometry.
  */
 export type WorkspaceSnapshot = {
-  documentId: string;
+  workspaceId: string;
   metadata: FontMetadata;
   metrics: FontMetrics;
   metricDefinitions: MetricDefinition[];
@@ -68,10 +68,10 @@ export type WorkspaceSlugAtlasPageRequest = {
   replacementPageIndices: number[];
 };
 
-export type WorkspaceDocumentSourceKind = "untitled" | "package" | "imported";
+export type WorkspaceDocumentSourceKind = "untitled" | "document" | "imported";
 
 /** Immutable product mode for one live font session. */
-export type FontSessionMode = "authored" | "imported";
+export type FontSessionMode = "authored" | "preview";
 
 /** Main-visible identity for one retained, read-only foreign source session. */
 export type FontSourceSession = {
@@ -114,11 +114,10 @@ export interface ByteReadableStreamReader<T> {
   releaseLock(): void;
 }
 
-/** Identifies one concrete `.shift` package instance on disk. */
-export type WorkspacePackageIdentity = {
-  packageId: string;
+/** Identifies one concrete canonical `.shift` document path. */
+export type WorkspaceDocumentIdentity = {
+  documentId: string;
   canonicalPath: string;
-  fingerprint: string;
 };
 
 /**
@@ -131,10 +130,10 @@ export type WorkspacePackageIdentity = {
  * treats both as utility-owned state, not renderer queue state.
  */
 export type WorkspaceDocumentState = {
-  documentId: string;
+  workspaceId: string;
   sourceKind: WorkspaceDocumentSourceKind;
+  documentId: string | null;
   saveTarget: string | null;
-  packageId: string | null;
   canonicalPath: string | null;
   dirty: boolean;
   needsSaveAs: boolean;
@@ -159,9 +158,9 @@ export type WorkspaceExportResult = {
  */
 export type ShellCallMap = {
   "workspace.create": { request: void; response: WorkspaceDocumentState };
-  "workspace.inspectPackage": {
+  "workspace.inspectDocument": {
     request: { path: string };
-    response: WorkspacePackageIdentity;
+    response: WorkspaceDocumentIdentity;
   };
   "workspace.open": {
     request: { path: string };
@@ -239,7 +238,7 @@ export type SyncCallMap = {
     };
   };
   /**
-   * Saves to the current package target, or rejects when the document still
+   * Saves to the current canonical document, or rejects when the workspace still
    * needs a path. Rides the edit lane so the utility serializes it behind every
    * committed edit — no cross-lane watermark required.
    */

@@ -2,7 +2,7 @@ use std::process::{Command, Output};
 
 use serde_json::Value;
 use shift_font::test_support::{sample_font, sample_variable_font};
-use shift_source::ShiftSourcePackage;
+use shift_store::ShiftStore;
 
 fn shift(args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_shift-cli"))
@@ -15,7 +15,7 @@ fn shift(args: &[&str]) -> Output {
 fn inspects_mapped_interpolation_as_stable_json() {
     let temp = tempfile::tempdir().unwrap();
     let path = temp.path().join("Variable.shift");
-    ShiftSourcePackage::save_font(&path, &sample_variable_font()).unwrap();
+    drop(ShiftStore::create_document(&path, &sample_variable_font()).unwrap());
 
     let output = shift(&[
         "glyph",
@@ -44,7 +44,7 @@ fn inspects_mapped_interpolation_as_stable_json() {
 fn structure_view_preserves_component_order_and_transforms() {
     let temp = tempfile::tempdir().unwrap();
     let path = temp.path().join("Components.shift");
-    ShiftSourcePackage::save_font(&path, &sample_font()).unwrap();
+    drop(ShiftStore::create_document(&path, &sample_font()).unwrap());
 
     let output = shift(&[
         "glyph",

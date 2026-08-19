@@ -19,7 +19,7 @@ export type FontSessionHostOptions =
       readonly nativeDialogs: NativeDialogs;
     }
   | {
-      readonly mode: "imported";
+      readonly mode: "preview";
       readonly sessionId: FontSessionId;
       readonly workspaceProcess: WorkspaceProcess;
     };
@@ -67,7 +67,7 @@ export class FontSessionHost {
           this.documentClient?.dispose();
         });
         break;
-      case "imported":
+      case "preview":
         this.documentClient = null;
         this.document = null;
         this.#unlistenDocumentChanged = () => {};
@@ -76,7 +76,7 @@ export class FontSessionHost {
     }
   }
 
-  /** Identity used by authored package indexing. */
+  /** App-local identity used by authored document indexing. */
   get workspaceId(): FontSessionId {
     return this.sessionId;
   }

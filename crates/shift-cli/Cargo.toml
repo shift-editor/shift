@@ -2,7 +2,7 @@
 name = "shift-cli"
 version = "0.1.0"
 edition = "2024"
-description = "Command-line tools for authoring, inspecting, and compiling Shift source packages"
+description = "Command-line tools for authoring, inspecting, and compiling Shift documents"
 readme = "README.md"
 
 [dependencies]
@@ -14,9 +14,10 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 shift-backends = { workspace = true }
 shift-font = { workspace = true }
-shift-source = { workspace = true }
+shift-store = { workspace = true }
+shift-workspace = { workspace = true }
+tempfile = "3"
 thiserror = "2"
 
 [dev-dependencies]
 shift-font = { workspace = true, features = ["test-support"] }
-tempfile = "3"

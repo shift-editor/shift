@@ -5,6 +5,7 @@ use shift_backends::font_loader::FontLoader;
 use shift_backends::{ExportFormat, FontExportRequest, FontExporter};
 use shift_font::test_support::sample_variable_font;
 use shift_font::Font;
+use shift_store::ShiftStore;
 use skrifa::raw::TableProvider;
 use skrifa::{FontRef, MetadataProvider};
 
@@ -75,9 +76,10 @@ fn compiles_mutatorsans_fixture_to_ttf_tables() {
     let shift_path = temp_dir.path().join("MutatorSansLightCondensed.shift");
     let output_path = temp_dir.path().join("MutatorSansLightCondensed.ttf");
     let imported_fixture = load_font(&mutatorsans_ufo_path());
-    FontLoader::new()
-        .write_font(&imported_fixture, shift_path.to_str().unwrap())
-        .expect("MutatorSans fixture should save as canonical Shift source");
+    drop(
+        ShiftStore::create_document(&shift_path, &imported_fixture)
+            .expect("MutatorSans fixture should save as canonical Shift document"),
+    );
     let source = load_font(&shift_path);
 
     FontExporter::new()
@@ -88,7 +90,7 @@ fn compiles_mutatorsans_fixture_to_ttf_tables() {
                 format: ExportFormat::Ttf,
             },
         )
-        .expect("MutatorSans Shift source should compile as TTF");
+        .expect("MutatorSans Shift document should compile as TTF");
 
     let bytes = std::fs::read(&output_path).expect("compiled TTF should be readable");
     let compiled = FontRef::new(&bytes).expect("fontc should emit a valid TTF");
@@ -146,13 +148,14 @@ fn compiles_mutatorsans_fixture_to_ttf_tables() {
 }
 
 #[test]
-fn compiles_variable_shift_source_to_variation_tables() {
+fn compiles_variable_shift_document_to_variation_tables() {
     let temp_dir = tempfile::tempdir().expect("tempdir should be created");
     let shift_path = temp_dir.path().join("Variable.shift");
     let output_path = temp_dir.path().join("Variable.ttf");
-    FontLoader::new()
-        .write_font(&sample_variable_font(), shift_path.to_str().unwrap())
-        .expect("variable fixture should save as canonical Shift source");
+    drop(
+        ShiftStore::create_document(&shift_path, &sample_variable_font())
+            .expect("variable fixture should save as canonical Shift document"),
+    );
     let source = load_font(&shift_path);
 
     FontExporter::new()
@@ -163,7 +166,7 @@ fn compiles_variable_shift_source_to_variation_tables() {
                 format: ExportFormat::Ttf,
             },
         )
-        .expect("variable Shift source should compile as TTF");
+        .expect("variable Shift document should compile as TTF");
 
     let bytes = std::fs::read(&output_path).expect("compiled TTF should be readable");
     let compiled = FontRef::new(&bytes).expect("fontc should emit a valid variable TTF");

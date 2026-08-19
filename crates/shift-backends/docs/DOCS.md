@@ -1,6 +1,6 @@
 # shift-backends
 
-<!-- reviewed: 2026-08-18 review-every: 90d -->
+<!-- reviewed: 2026-08-19 review-every: 90d -->
 
 Font format backends that convert between on-disk font files and the `Font` IR used throughout the editor.
 
@@ -12,7 +12,7 @@ Font format backends that convert between on-disk font files and the `Font` IR u
 
 **Architecture Invariant:** `FontReader` and `FontWriter` require `Send + Sync`. WHY: Backends are stored in `FontLoader` which lives inside the editor's shared state; they must be safe to use from multiple threads.
 
-**Architecture Invariant:** Eager reader/writer backends are stateless unit structs. `OpenTypeFont` retains compiled bytes, `UfoFont` and `DesignspaceFont` retain their indexed GLIF payloads, and `GlyphsFont` retains one upstream-parsed source. Paths are provenance and error context only after open. A `FontImport` is a separate exhaustive bounded conversion cursor; OpenType sources intentionally expose no `FontImporter` capability. WHY: imported sessions must remain coherent and readable after the original path changes or disappears.
+**Architecture Invariant:** Eager reader/writer backends are stateless unit structs. `OpenTypeFont` retains compiled bytes, `UfoFont` and `DesignspaceFont` retain their indexed GLIF payloads, and `GlyphsFont` retains one upstream-parsed source. Paths are provenance and error context only after open. A `FontImport` is a separate exhaustive bounded conversion cursor; OpenType sources intentionally expose no `FontImporter` capability. WHY: preview sessions must remain coherent and readable after the original path changes or disappears.
 
 **Architecture Invariant:** `FontImport::report` describes valid source concepts whose semantics Shift converts, approximates, or omits. Malformed values and parser failures remain errors and never become import losses. WHY: authoring-fidelity limits such as Glyphs bracket layers must be visible without confusing unsupported source semantics with bad data.
 
@@ -123,7 +123,7 @@ src/
 
 **Designspace conformance references:** The [Designspace XML source definition](https://fonttools.readthedocs.io/en/latest/designspaceLib/xml.html#source-element) defines source locations in design-space coordinates. The reference [`SourceDescriptor.getFullDesignLocation`](https://fonttools.readthedocs.io/en/stable/designspaceLib/python.html#fontTools.designspaceLib.SourceDescriptor.getFullDesignLocation) completes omitted dimensions with mapped axis defaults, and [`DesignSpaceDocument.findDefault`](https://fonttools.readthedocs.io/en/stable/designspaceLib/python.html#fontTools.designspaceLib.DesignSpaceDocument.findDefault) selects the source at that complete mapped default. Instance import follows the corresponding complete-location precedence and the reference continuous/discrete axis mapping behavior. Keep importer behavior and fixtures aligned with those APIs when extending Designspace support.
 
-**Saving authoring sources:** `UfoWriter` builds a `norad::Font`, projects the default source's standard metrics, populates metadata/kerning/groups/guidelines/lib, and converts each glyph per layer. It writes the complete UFO to a sibling staging directory, syncs the tree, and atomically swaps it into place. `.shift` packages are written by `ShiftSourcePackage` through `FontLoader`.
+**Saving authoring sources:** `UfoWriter` builds a `norad::Font`, projects the default source's standard metrics, populates metadata/kerning/groups/guidelines/lib, and converts each glyph per layer. It writes the complete UFO to a sibling staging directory, syncs the tree, and atomically swaps it into place. `FontLoader` reads canonical SQLite `.shift` documents but deliberately rejects generic writes; document Save and Save As go through `shift-store` and recovery-aware workspace APIs.
 
 **Compiling TTF:** `FontExporter` snapshots the supplied `FontView` into owned Shift values, creates fontir work for metadata, metrics, glyphs, anchors, features, and static kerning, and passes `ShiftIrSource` directly to `fontc::generate_font`. The returned bytes are atomically written to the requested `.ttf` path. Variable compilation converts Shift axes and independent mappings to fontdrasil coordinate converters, normalizes master source locations, and emits each authored glyph master. Missing non-default glyph layers are sparse masters; every glyph must have a default-source layer. Standard source metrics are emitted at every master location so fontc can build variable metric tables; kerning is currently static.
 

@@ -9,7 +9,7 @@ const { Bridge } = require("../index.js");
 
 const sourceArgument = process.argv[2];
 if (!sourceArgument) {
-  throw new Error("usage: node scripts/profile-slug-atlas.mjs <font-or-package> [iterations]");
+  throw new Error("usage: node scripts/profile-slug-atlas.mjs <font-source> [iterations]");
 }
 
 const iterations = Number.parseInt(process.argv[3] ?? "10", 10);
@@ -20,7 +20,6 @@ if (!Number.isSafeInteger(iterations) || iterations < 1) {
 const sourcePath = isAbsolute(sourceArgument) ? sourceArgument : resolve(sourceArgument);
 const tempDirectory = mkdtempSync(join(tmpdir(), "shift-slug-profile-"));
 const storePath = join(tempDirectory, "working.sqlite");
-const packagePath = join(tempDirectory, "profile.shift");
 const bridge = new Bridge();
 
 function measure(operation) {
@@ -49,14 +48,8 @@ function percentile(sorted, fraction) {
 try {
   const opened = measure(() => bridge.openWorkspace(sourcePath, storePath));
   const cold = prepare();
-  bridge.saveWorkspaceAs(packagePath);
-
-  bridge.closeWorkspace();
-  const resumed = measure(() => bridge.resumeWorkspaceForSource(storePath, packagePath));
-  const resumedPrepare = prepare();
-
   const warm = Array.from({ length: iterations }, prepare);
-  for (const sample of [resumedPrepare, ...warm]) {
+  for (const sample of warm) {
     if (JSON.stringify(sample.signature) !== JSON.stringify(cold.signature)) {
       throw new Error("Slug atlas counts changed between preparations");
     }
@@ -70,8 +63,6 @@ try {
         iterations,
         openMs: opened.milliseconds,
         coldPrepareMs: cold.milliseconds,
-        resumeMs: resumed.milliseconds,
-        resumedPrepareMs: resumedPrepare.milliseconds,
         warmPrepareMs: {
           p50: percentile(samples, 0.5),
           p95: percentile(samples, 0.95),

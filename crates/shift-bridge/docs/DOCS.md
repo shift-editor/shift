@@ -1,6 +1,6 @@
 # shift-bridge
 
-<!-- reviewed: 2026-08-18 review-every: 90d -->
+<!-- reviewed: 2026-08-19 review-every: 90d -->
 
 NAPI bindings that expose the Rust font engine to Node.js and Electron as a `Bridge` class.
 
@@ -20,7 +20,7 @@ NAPI bindings that expose the Rust font engine to Node.js and Electron as a `Bri
 
 **Architecture Invariant:** Rust/Fontdrasil constructs typed glyph, source-metric, and axis-mapping variation bases. The bridge translates compiled regions and vectors without inventing source identities, coefficients, sample order, or support regions; renderer code only evaluates those transport values. **WHY:** Per-location canvas work stays cheap without moving variation-model construction or value-layout ownership into transport code.
 
-**Architecture Invariant:** Package inspection methods are read-only and may run without an open workspace. **WHY:** Electron main/utility code must inspect package identity before deciding whether to reuse, hydrate, relink, or orphan a working document.
+**Architecture Invariant:** `inspectDocument(path)` is read-only and may run without an open workspace. `openDocument(path, recoveryPath)` opens the canonical SQLite file directly against an app-owned sparse overlay; the bridge does not allocate or bind recovery paths. **WHY:** Electron must deduplicate by canonical document identity before selecting the one durable recovery allocation.
 
 **Architecture Invariant:** A prepared Slug page remains native until it is consumed once through napi-rs `ReadableStream<Buffer>` chunks. Every font edit invalidates unconsumed output. The native producer has capacity one, and Electron acknowledges each GPU write before the utility reads another chunk. `slugAtlasCacheRevision()` exposes only the durable authored revision string needed by the utility's disposable cache key; cache bytes and policy remain outside Rust. **WHY:** Fixed pages yield between native calls, support narrow cached replacement after edits, and retain one bounded temporary chunk rather than an atlas-sized JavaScript copy or an unbounded IPC queue. The renderer installs the complete requested page set before presentation. The complete endpoint remains an external profiling boundary, not product startup scheduling.
 
@@ -43,7 +43,7 @@ crates/shift-bridge/
 - `Bridge` -- the exported `#[napi]` class holding the current `FontWorkspace` and document versions.
 - `LayerId` -- mutation-side identity for the glyph layer being edited.
 - `FontSaveSnapshot` -- clone/COW export view of the current workspace font.
-- `NapiPackageIdentity` / `NapiPackageDraft` -- package source and working-store inspection DTOs for utility-process lifecycle decisions.
+- `NapiDocumentIdentity` -- canonical `DocumentId` and canonical path used by utility/main document lifecycle decisions.
 - `ExportFontTask` -- NAPI `Task` implementation for async font export.
 - `BridgeError` -- typed bridge error enum converted once at the NAPI boundary.
 - `NapiAppliedChange` -- replace-grade mutation response returned by apply/undo/redo.
@@ -67,9 +67,9 @@ crates/shift-bridge/
 3. `Bridge` decodes each intent through `map_intent`, parsing boundary strings into typed IDs, and forwards the set as one atomic `FontWorkspace` apply: one SQLite transaction, one undo step.
 4. The bridge returns a pure-state `NapiAppliedChange` — replaced layers, optional font-level replacement collections, and `dependents: Array<GlyphId>` naming the composite glyphs that reference the touched layers; no change records cross to the renderer — and bumps the live version.
 5. Full glyph snapshots first acquire requested layer payloads, then include authored state plus the same `GlyphProjection` used by lightweight reads. `getGlyphProjections()` and previews expand transitive component identities through SQLite indexes, acquire those layers, and only then project without further I/O. Source reads expose master sources only; layer-only/background sources remain native authoring details and never enter renderer interpolation.
-6. `saveWorkspace()` / `saveWorkspaceAs(path)` update the `.shift` source package target and record the persisted version.
-7. `inspectPackage(path)` and `inspectPackageDraft(storePath)` expose source/package identity for the utility process without choosing a recovery policy.
-8. `closeWorkspace()` drops the live Rust workspace handle before the utility process deletes a clean or discarded SQLite document.
+6. `saveWorkspace()` applies a document's sparse recovery overlay to its canonical SQLite file. `saveWorkspaceAsDocument(path, recoveryPath)` publishes a new native document identity and adopts its fresh overlay; `discardWorkspaceChanges()` clears recovery and reloads canonical directory state.
+7. `inspectDocument(path)` exposes canonical identity without opening a live workspace. `openDocument(path, recoveryPath)` opens merged lazy views selected by the utility process.
+8. `closeWorkspace()` drops the live Rust workspace handle before the utility process removes clean or discarded recovery files and bindings.
 9. `exportWorkspace(request)` creates a `FontSaveSnapshot` and exports asynchronously through `shift-backends`.
 10. The renderer calls `prepareSlugAtlasPage(glyphIds, alignment)` for every deterministic fixed directory page and installs the complete set before first presentation. Every native miss independently acquires its indexed component closure. Each bounded build uses one compilation-scoped `GlyphProjectionSet`; no projection or resolved-source map survives its build. The utility may bypass native preparation with a validated external `CachedAtlas` page keyed by `slugAtlasCacheRevision()`, but cached and native pages share the same bounded renderer stream contract. Authored invalidation rebuilds every affected page while the previous complete set remains presented; scrolling performs no bridge work. The complete preparation endpoint remains available to the external profiler; set `SHIFT_PROFILE_SLUG_ATLAS=1` for native phase timings.
 
@@ -105,6 +105,7 @@ All selected-glyph reads must stay location-independent. Do not add resolved SVG
 - Every ID crosses the NAPI boundary as a string. Parse through `input.rs` (`parse::<PointId>(&value)`) so a malformed ID becomes a typed `BridgeError::InvalidInput`; a bare `.parse().unwrap()` inside a `#[napi]` method panics across the FFI boundary and takes the utility process down.
 - `index.d.ts` is generated output — hand edits are overwritten by the next native build. The order matters: rebuild the addon with `pnpm --filter shift-bridge run build:debug` first, then run `pnpm generate:bridge-types`. Regenerating without rebuilding derives the TypeScript facade from a stale declaration file, which typechecks but lies.
 - A new branded ID type used in a `#[napi]` signature must also be added to `dts-header.d.ts`, or the generated declarations reference a type TypeScript cannot resolve.
+- The bridge never allocates recovery paths or decides which document address owns an overlay; putting that policy here can attach one recovery database to two live sessions.
 - Mutations must go through the paths that call `mark_font_changed()`. Dirty/saved reporting comes from the workspace ledger via `workspace.is_dirty()`, not from the bridge's `live_version`/`saved_version` counters (written but never read), so what a skipped `mark_font_changed()` actually breaks is Slug invalidation: stale prepared Slug atlas output stays live, violating the contract that every font edit invalidates unconsumed output.
 - A prepared Slug page is consume-once native state: streaming it twice, or after any font edit, fails by design. Do not cache the stream handle across edits — cache the consumed bytes (keyed by `slugAtlasCacheRevision()`) instead.
 - `Float64Array` flat buffers appear only on outbound values (`NapiLayerReplaced.values`, `NapiGlyphState.values`). Inbound bulk coordinates (`NapiMovePointsIntent`, `NapiMoveAnchorsIntent`) cross as plain interleaved `Array<number>` today — do not assume typed arrays on input. When touching these paths, keep outbound reads in flat buffers; per-point objects reintroduce exactly the marshaling cost the flat-buffer invariant exists to avoid.

@@ -13,25 +13,20 @@ use shift_font::{
     FontMetadata, Glyph, GlyphId, GlyphLayer, LayerId, MetricDefinition, NamedInstance, Source,
     SourceId, TouchedLayer, error::CoreError,
 };
-use shift_source::ShiftSourcePackage;
-use shift_store::{ShiftStore, SourceIdentitySnapshot, WorkspaceSourceKind, WorkspaceState};
+use shift_store::{
+    DocumentMetadata, RecoveryState, ShiftStore, WorkspaceSourceKind, WorkspaceState,
+};
 
+use crate::document_identity::{DocumentIdentity, document_identity};
 use crate::import_staging::{create_import_staging_path, install_import_store};
 use crate::layer_residency::LayerResidency;
 use crate::ledger::{GlyphIdentity, LayerPair, Ledger, LedgerEntry, LedgerStep};
-use crate::source_identity::{
-    PackageDraft, PackageIdentity, package_identity, source_identity_snapshot,
-    validate_source_identity_for_save,
-};
 use crate::{NewWorkspace, stream_into};
 
 #[derive(Debug, thiserror::Error)]
 pub enum WorkspaceError {
     #[error(transparent)]
     Font(#[from] CoreError),
-
-    #[error(transparent)]
-    Source(#[from] shift_source::SourcePackageError),
 
     #[error(transparent)]
     Store(#[from] shift_store::StoreError),
@@ -45,14 +40,8 @@ pub enum WorkspaceError {
     #[error("workspace needs a save path")]
     NeedsSaveAs,
 
-    #[error("source package is missing: {0}")]
-    SourceMissing(PathBuf),
-
-    #[error("source package identity no longer matches: {0}")]
-    SourceIdentityConflict(PathBuf),
-
-    #[error("source package was modified outside Shift: {0}")]
-    SourceExternallyModified(PathBuf),
+    #[error("native .shift documents require an explicit recovery path: {0}")]
+    DocumentRequiresRecoveryPath(PathBuf),
 
     #[error("corrupt working store: {0}")]
     CorruptWorkingStore(String),
@@ -70,7 +59,7 @@ pub enum WorkspaceError {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum WorkspaceSource {
     Untitled,
-    Package { path: PathBuf },
+    Document { path: PathBuf },
     Imported { original_path: PathBuf },
 }
 
@@ -125,36 +114,59 @@ impl FontWorkspace {
         ))
     }
 
-    pub fn create_package(
-        source_path: impl AsRef<Path>,
-        store_path: impl AsRef<Path>,
-        new_workspace: NewWorkspace,
-    ) -> Result<Self, WorkspaceError> {
-        let mut workspace = Self::create_untitled(store_path, new_workspace)?;
-        workspace.save_as(source_path)?;
-        Ok(workspace)
-    }
-
     pub fn open(
         source_path: impl AsRef<Path>,
         store_path: impl AsRef<Path>,
     ) -> Result<Self, WorkspaceError> {
         let source_path = source_path.as_ref();
-        if ShiftSourcePackage::is_package_path(source_path) {
-            Self::open_package(source_path, store_path)
-        } else {
-            Self::import_font(source_path, store_path)
+        if source_path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("shift"))
+        {
+            return Err(WorkspaceError::DocumentRequiresRecoveryPath(
+                source_path.to_path_buf(),
+            ));
         }
+
+        Self::import_font(source_path, store_path)
+    }
+
+    pub fn open_document(
+        document_path: impl AsRef<Path>,
+        recovery_path: impl AsRef<Path>,
+    ) -> Result<Self, WorkspaceError> {
+        let document_path = document_path.as_ref();
+        let store = ShiftStore::open_document_with_recovery(document_path, recovery_path)?;
+        let dirty = !matches!(store.recovery_state()?, Some(RecoveryState::Clean));
+        let font = store.load_font_directory()?;
+        let residency = LayerResidency::with_unloaded(
+            font.glyphs()
+                .flat_map(|glyph| glyph.layers().keys().cloned()),
+        );
+
+        Ok(Self::from_store(
+            font,
+            WorkspaceSource::Document {
+                path: document_path.to_path_buf(),
+            },
+            store,
+            residency,
+            dirty,
+        ))
+    }
+
+    pub fn inspect_document(
+        document_path: impl AsRef<Path>,
+    ) -> Result<DocumentIdentity, WorkspaceError> {
+        document_identity(document_path)
     }
 
     pub fn save(&mut self) -> Result<(), WorkspaceError> {
-        self.acquire_all_layers()?;
-        match self.source.clone() {
-            WorkspaceSource::Package { path } => {
-                self.validate_save_target(&path)?;
-                ShiftSourcePackage::save_font(&path, &self.font)?;
-                let identity = source_identity_snapshot(&path)?;
-                self.mark_saved_package(identity)?;
+        match &self.source {
+            WorkspaceSource::Document { .. } => {
+                self.store.save_document()?;
+                self.ledger.mark_saved();
                 Ok(())
             }
             WorkspaceSource::Untitled | WorkspaceSource::Imported { .. } => {
@@ -163,16 +175,40 @@ impl FontWorkspace {
         }
     }
 
-    pub fn save_as(&mut self, source_path: impl AsRef<Path>) -> Result<(), WorkspaceError> {
-        self.acquire_all_layers()?;
-        let source_package = ShiftSourcePackage::save_font_as(source_path, &self.font)?;
-        let identity = source_identity_snapshot(source_package.path())?;
-        self.source = WorkspaceSource::Package {
-            path: source_package.path().to_path_buf(),
+    pub fn save_as_document(
+        &mut self,
+        document_path: impl AsRef<Path>,
+        recovery_path: impl AsRef<Path>,
+    ) -> Result<DocumentMetadata, WorkspaceError> {
+        let document_path = document_path.as_ref();
+        let metadata = self.store.save_as_document(document_path)?;
+        let store = ShiftStore::open_document_with_recovery(document_path, recovery_path)?;
+        self.store = store;
+        self.source = WorkspaceSource::Document {
+            path: document_path.to_path_buf(),
         };
-        self.mark_saved_package(identity)?;
+        self.ledger = Ledger::default();
 
+        Ok(metadata)
+    }
+
+    pub fn discard_recovery(&mut self) -> Result<(), WorkspaceError> {
+        self.store.discard_recovery()?;
+        let font = self.store.load_font_directory()?;
+        self.residency = LayerResidency::with_unloaded(
+            font.glyphs()
+                .flat_map(|glyph| glyph.layers().keys().cloned()),
+        );
+        self.font = font;
+        self.ledger = Ledger::default();
         Ok(())
+    }
+
+    pub fn document_metadata(&self) -> Result<Option<DocumentMetadata>, WorkspaceError> {
+        match &self.source {
+            WorkspaceSource::Document { .. } => Ok(Some(self.store.document_metadata()?)),
+            _ => Ok(None),
+        }
     }
 
     pub fn resume(store_path: impl AsRef<Path>) -> Result<Self, WorkspaceError> {
@@ -194,54 +230,6 @@ impl FontWorkspace {
             residency,
             state.dirty,
         ))
-    }
-
-    pub fn resume_for_source(
-        store_path: impl AsRef<Path>,
-        source_path: impl AsRef<Path>,
-    ) -> Result<Self, WorkspaceError> {
-        let mut workspace = Self::resume(store_path)?;
-        let identity = source_identity_snapshot(source_path)?;
-        workspace.relink_package_source(identity)?;
-        Ok(workspace)
-    }
-
-    pub fn inspect_package(
-        source_path: impl AsRef<Path>,
-    ) -> Result<PackageIdentity, WorkspaceError> {
-        package_identity(source_path)
-    }
-
-    pub fn inspect_package_draft(
-        store_path: impl AsRef<Path>,
-    ) -> Result<PackageDraft, WorkspaceError> {
-        let store = ShiftStore::open(store_path)?;
-        let state = store
-            .workspace_state()?
-            .ok_or_else(|| WorkspaceError::CorruptWorkingStore("missing workspace_state".into()))?;
-        if state.source_kind != WorkspaceSourceKind::Package {
-            return Err(WorkspaceError::CorruptWorkingStore(
-                "working store is not package-backed".into(),
-            ));
-        }
-
-        let package_id = state.source_package_id.ok_or_else(|| {
-            WorkspaceError::CorruptWorkingStore("package draft missing package ID".into())
-        })?;
-        let source_path = state.source_path.ok_or_else(|| {
-            WorkspaceError::CorruptWorkingStore("package draft missing source path".into())
-        })?;
-        let base_fingerprint = state.source_fingerprint.ok_or_else(|| {
-            WorkspaceError::CorruptWorkingStore("package draft missing base fingerprint".into())
-        })?;
-
-        Ok(PackageDraft {
-            document_id: state.document_id,
-            package_id,
-            source_path,
-            base_fingerprint,
-            dirty: state.dirty,
-        })
     }
 
     pub fn export(
@@ -679,80 +667,6 @@ impl FontWorkspace {
         Ok(result)
     }
 
-    fn validate_save_target(&self, path: &Path) -> Result<(), WorkspaceError> {
-        if !path.exists() {
-            return Err(WorkspaceError::SourceMissing(path.to_path_buf()));
-        }
-
-        let current = source_identity_snapshot(path)?;
-        let Some(state) = self.store.workspace_state()? else {
-            return Ok(());
-        };
-        if state.source_kind != WorkspaceSourceKind::Package {
-            return Ok(());
-        }
-
-        validate_source_identity_for_save(&state.source_identity(), &current, path)
-    }
-
-    fn mark_saved_package(
-        &mut self,
-        identity: SourceIdentitySnapshot,
-    ) -> Result<(), WorkspaceError> {
-        let mut state = self
-            .store
-            .workspace_state()?
-            .unwrap_or_else(|| WorkspaceState::package(identity.clone(), None));
-        state.set_package_identity(identity);
-        state.dirty = false;
-        state.saved_revision = state.revision;
-        self.store.set_workspace_state(state)?;
-        self.ledger.mark_saved();
-        Ok(())
-    }
-
-    fn relink_package_source(
-        &mut self,
-        identity: SourceIdentitySnapshot,
-    ) -> Result<(), WorkspaceError> {
-        let path = identity.source_path.clone().ok_or_else(|| {
-            WorkspaceError::CorruptWorkingStore("package identity missing source path".into())
-        })?;
-        let mut state = self
-            .store
-            .workspace_state()?
-            .ok_or_else(|| WorkspaceError::CorruptWorkingStore("missing workspace_state".into()))?;
-        state.set_package_identity(identity);
-
-        self.store.set_workspace_state(state)?;
-        self.source = WorkspaceSource::Package { path };
-
-        Ok(())
-    }
-
-    fn open_package(
-        source_path: impl AsRef<Path>,
-        store_path: impl AsRef<Path>,
-    ) -> Result<Self, WorkspaceError> {
-        let source_package = ShiftSourcePackage::open(source_path)?;
-        let mut store = ShiftStore::open(store_path)?;
-        let font = ShiftSourcePackage::load_font(source_package.path())?;
-        store.set_font_info(font_info_from_font(&font))?;
-        store.replace_font_state(&font)?;
-        let identity = source_identity_snapshot(source_package.path())?;
-        store.set_workspace_state(WorkspaceState::package(identity, None))?;
-
-        Ok(Self::from_store(
-            font,
-            WorkspaceSource::Package {
-                path: source_package.path().to_path_buf(),
-            },
-            store,
-            LayerResidency::default(),
-            false,
-        ))
-    }
-
     fn import_font(
         import_path: impl AsRef<Path>,
         store_path: impl AsRef<Path>,
@@ -950,9 +864,8 @@ impl FontWorkspace {
 
     pub fn save_target(&self) -> Option<&Path> {
         match &self.source {
-            WorkspaceSource::Untitled => None,
-            WorkspaceSource::Package { path } => Some(path),
-            WorkspaceSource::Imported { .. } => None,
+            WorkspaceSource::Document { path } => Some(path),
+            WorkspaceSource::Untitled | WorkspaceSource::Imported { .. } => None,
         }
     }
 
@@ -969,6 +882,13 @@ impl FontWorkspace {
     }
 
     pub fn is_dirty(&self) -> Result<bool, WorkspaceError> {
+        if matches!(&self.source, WorkspaceSource::Document { .. }) {
+            return Ok(!matches!(
+                self.store.recovery_state()?,
+                Some(RecoveryState::Clean)
+            ));
+        }
+
         Ok(self
             .store
             .workspace_state()?
@@ -977,6 +897,12 @@ impl FontWorkspace {
 
     /// Returns the durable authored revision used to address disposable derived artifacts.
     pub fn slug_atlas_cache_revision(&self) -> Result<String, WorkspaceError> {
+        if matches!(&self.source, WorkspaceSource::Document { .. }) {
+            let metadata = self.store.document_metadata()?;
+            let revision = self.store.recovery_revision()?.unwrap_or_default();
+            return Ok(format!("{}:{revision}", metadata.saved_commit_id));
+        }
+
         let state = self
             .store
             .workspace_state()?
@@ -990,8 +916,12 @@ impl FontWorkspace {
         Ok(state.revision.to_string())
     }
 
-    pub fn set_document_id(&mut self, document_id: String) -> Result<(), WorkspaceError> {
-        self.store.set_workspace_document_id(document_id)?;
+    pub fn set_workspace_id(&mut self, workspace_id: String) -> Result<(), WorkspaceError> {
+        if matches!(&self.source, WorkspaceSource::Document { .. }) {
+            return Ok(());
+        }
+
+        self.store.set_workspace_document_id(workspace_id)?;
         Ok(())
     }
 }
@@ -1412,12 +1342,6 @@ fn new_font(new_workspace: NewWorkspace) -> shift_font::Font {
 fn source_from_workspace_state(state: &WorkspaceState) -> Result<WorkspaceSource, WorkspaceError> {
     match state.source_kind {
         WorkspaceSourceKind::Untitled => Ok(WorkspaceSource::Untitled),
-        WorkspaceSourceKind::Package => {
-            let path = state.source_path.clone().ok_or_else(|| {
-                WorkspaceError::CorruptWorkingStore("package workspace missing source_path".into())
-            })?;
-            Ok(WorkspaceSource::Package { path })
-        }
         WorkspaceSourceKind::Imported => {
             let original_path = state.original_import_path.clone().ok_or_else(|| {
                 WorkspaceError::CorruptWorkingStore(

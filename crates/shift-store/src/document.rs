@@ -130,7 +130,7 @@ impl ShiftStore {
             ],
         )?;
         tx.pragma_update(None, "application_id", schema::SHIFT_APPLICATION_ID)?;
-        tx.pragma_update(None, "user_version", schema::SCHEMA_VERSION)?;
+        tx.pragma_update(None, "user_version", schema::SHIFT_DOCUMENT_SCHEMA_VERSION)?;
         tx.commit()?;
         conn.pragma_update(None, "secure_delete", "OFF")?;
 
@@ -167,11 +167,7 @@ impl ShiftStore {
     pub fn open_document(path: impl AsRef<Path>) -> Result<Self, StoreError> {
         let path = path.as_ref();
 
-        {
-            let probe = open_document_read_only(path)?;
-            schema::validate_document_header(&probe)?;
-            validate_document_shape(&probe)?;
-        }
+        Self::verify_document(path)?;
 
         let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE)?;
         schema::validate_document_header(&conn)?;

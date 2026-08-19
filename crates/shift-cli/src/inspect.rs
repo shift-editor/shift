@@ -27,7 +27,7 @@ mod tests {
         DesignLocation, ExternalLocation, Font, Glyph, GlyphLayer, LayerId, Location,
         NamedInstance, NamedInstanceId, Point, Source, SourceId,
     };
-    use shift_source::ShiftSourcePackage;
+    use shift_store::ShiftStore;
 
     use super::*;
 
@@ -36,8 +36,8 @@ mod tests {
         let report = InspectReport::from_font(Path::new("/tmp/Dogfood.shift"), &sample_font());
 
         assert_eq!(report.file_name, "Dogfood.shift");
-        assert_eq!(report.manifest.format, "shift-source");
-        assert_eq!(report.manifest.schema_version, 1);
+        assert_eq!(report.document.application_id, "SHFT");
+        assert_eq!(report.document.schema_version, 1);
         assert_eq!(report.metadata.display_name, "Dogfood Sans Regular");
         assert_eq!(report.axes.len(), 1);
         assert_eq!(report.sources.len(), 2);
@@ -54,12 +54,12 @@ mod tests {
     }
 
     #[test]
-    fn load_reads_shift_source_package() {
+    fn load_reads_sqlite_shift_document() {
         let temp = tempfile::tempdir().unwrap();
-        let package_path = temp.path().join("Dogfood.shift");
-        ShiftSourcePackage::save_font(&package_path, &sample_font()).unwrap();
+        let document_path = temp.path().join("Dogfood.shift");
+        drop(ShiftStore::create_document(&document_path, &sample_font()).unwrap());
 
-        let report = InspectReport::load(&package_path).unwrap();
+        let report = InspectReport::load(&document_path).unwrap();
 
         assert_eq!(report.file_name, "Dogfood.shift");
         assert_eq!(report.axes[0].tag, "wght");
@@ -73,7 +73,7 @@ mod tests {
         let output = report.render(InspectView::Summary, RenderMode::Plain);
 
         assert!(output.contains("Dogfood.shift"));
-        assert!(output.contains("format  shift-source"));
+        assert!(output.contains("app id  SHFT"));
         assert!(output.contains("axes    1"));
         assert!(output.contains("Sources"));
         assert!(output.contains("Bold*"));
@@ -147,7 +147,7 @@ mod tests {
         let report = InspectReport::from_font(Path::new("/tmp/Dogfood.shift"), &sample_font());
         let json = serde_json::to_value(report).unwrap();
 
-        assert_eq!(json["manifest"]["format"], "shift-source");
+        assert_eq!(json["document"]["applicationId"], "SHFT");
         assert_eq!(json["axes"][0]["tag"], "wght");
         assert_eq!(json["axes"][0]["labels"][0]["id"], "axisLabel_regular");
         assert_eq!(json["axisMappings"], json!([]));
@@ -159,7 +159,7 @@ mod tests {
     }
 
     #[test]
-    fn layers_view_shows_package_layer_counts() {
+    fn layers_view_shows_document_layer_counts() {
         let report = InspectReport::from_font(Path::new("/tmp/Dogfood.shift"), &sample_font());
         let output = report.render(InspectView::Layers, RenderMode::Plain);
 

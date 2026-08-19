@@ -34,6 +34,11 @@ impl ShiftStore {
         post_font: Option<&font::Font>,
         dirty: bool,
     ) -> Result<(), StoreError> {
+        if self.recovery.is_some() && !dirty {
+            self.discard_recovery()?;
+            return Ok(());
+        }
+
         let preserved_font_info = (self.recovery.is_some()
             && change_set
                 .changes

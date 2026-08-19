@@ -4,14 +4,16 @@ import {
   type Page,
   type ElectronApplication,
 } from "@playwright/test";
+import { createBridge } from "@shift/bridge";
 import type { ChildProcess } from "node:child_process";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import * as path from "path";
 import { once } from "events";
 import type { Unicode } from "@shift/types";
 import type { DirtyDocumentChoice } from "../../src/main/document/types";
-import { createAuthoredPackage } from "./fontSource";
+import { createAuthoredDocument } from "./fontSource";
 
 const APP_ROOT = path.resolve(__dirname, "../..");
 export const MAIN_JS = path.join(APP_ROOT, ".vite/build/main.js");
@@ -43,6 +45,13 @@ type ShiftOptions = {
   dirtyDocumentChoice: DirtyDocumentChoice;
   dirtyDocumentChoices: readonly DirtyDocumentChoice[] | undefined;
   dirtyDocumentDelayMs: number;
+};
+
+export type RecoveryApp = {
+  page: Page;
+  documentPath: string;
+  crashAndRestart: () => Promise<Page>;
+  canonicalGlyphNames: () => string[];
 };
 
 /** Base fixture for launcher tests; workspace tests override `startupFontPath`. */
@@ -108,7 +117,7 @@ export const test = base.extend<ShiftFixtures & ShiftOptions>({
     };
 
     if (startupFontPath) {
-      workspacePath = createAuthoredPackage(startupFontPath, path.join(testRoot, "workspace"));
+      workspacePath = createAuthoredDocument(startupFontPath, path.join(testRoot, "workspace"));
     }
 
     const environment = {
@@ -234,6 +243,38 @@ export const documentTest = test.extend<ShiftOptions>({
   scriptedDialogs: [true, { option: true }],
 });
 
+/** Real Electron lifecycle fixture for sparse native recovery tests. */
+export const recoveryTest = base.extend<{ recoveryApp: RecoveryApp }>({
+  recoveryApp: async ({}, use) => {
+    const testRoot = fs.mkdtempSync(path.join(os.tmpdir(), "shift-recovery-e2e-"));
+    const userDataDir = path.join(testRoot, "user-data");
+    const documentPath = createAuthoredDocument(FONT_PATH, path.join(testRoot, "workspace"));
+    let app: ElectronApplication | null = null;
+    let page: Page;
+
+    try {
+      app = await launchShiftApp(userDataDir, documentPath);
+      page = await readyWorkspacePage(app);
+      await use({
+        page,
+        documentPath,
+        crashAndRestart: async () => {
+          if (!app) throw new Error("Electron application is not running");
+
+          await killApp(app);
+          app = await launchShiftApp(userDataDir, documentPath);
+          page = await readyWorkspacePage(app);
+          return page;
+        },
+        canonicalGlyphNames: () => readCanonicalGlyphNames(documentPath, testRoot),
+      });
+    } finally {
+      if (app) await killApp(app);
+      fs.rmSync(testRoot, { recursive: true, force: true });
+    }
+  },
+});
+
 /** Workspace fixture that starts directly with MutatorSans instead of visiting the launcher. */
 export const workspaceTest = test.extend<ShiftOptions>({
   startupFontPath: FONT_PATH,
@@ -265,6 +306,78 @@ export async function waitForWorkspaceReady(page: Page): Promise<void> {
     timeout: 20_000,
   });
   await page.getByLabel("Glyph catalog", { exact: true }).waitFor({ state: "visible" });
+}
+
+async function launchShiftApp(
+  userDataDir: string,
+  workspacePath: string,
+): Promise<ElectronApplication> {
+  const app = await electron.launch({
+    args: [MAIN_JS, `--user-data-dir=${userDataDir}`, "--force-device-scale-factor=1"],
+    env: {
+      ...process.env,
+      NODE_ENV: "test",
+      LIBGL_ALWAYS_SOFTWARE: "1",
+      SHIFT_E2E_FONT_PATH: workspacePath,
+    },
+  });
+
+  try {
+    const page = await app.firstWindow();
+    const activeUserDataDir = await app.evaluate(({ app: electronApp }) =>
+      electronApp.getPath("userData"),
+    );
+    if (fs.realpathSync(activeUserDataDir) !== fs.realpathSync(userDataDir)) {
+      throw new Error(`Electron ignored isolated user data directory: ${activeUserDataDir}`);
+    }
+
+    const browserWindow = await app.browserWindow(page);
+    await browserWindow.evaluate(
+      (win, { w, h }) => {
+        win.unmaximize();
+        win.setSize(w, h);
+        win.center();
+      },
+      { w: WINDOW_WIDTH, h: WINDOW_HEIGHT },
+    );
+    await browserWindow.dispose();
+    await page.waitForFunction(({ w, h }) => window.innerWidth === w && window.innerHeight === h, {
+      w: WINDOW_WIDTH,
+      h: WINDOW_HEIGHT,
+    });
+    return app;
+  } catch (error) {
+    await killApp(app);
+    throw error;
+  }
+}
+
+async function readyWorkspacePage(app: ElectronApplication): Promise<Page> {
+  const page = await app.firstWindow();
+  await page.waitForLoadState("domcontentloaded");
+  await waitForWorkspaceReady(page);
+  return page;
+}
+
+async function killApp(app: ElectronApplication): Promise<void> {
+  const childProcess = app.process();
+  if (childProcess.exitCode !== null || childProcess.signalCode !== null) return;
+
+  const exited = once(childProcess, "exit");
+  childProcess.kill("SIGKILL");
+  await exited;
+}
+
+function readCanonicalGlyphNames(documentPath: string, testRoot: string): string[] {
+  const bridge = createBridge();
+  const recoveryPath = path.join(testRoot, `${crypto.randomUUID()}.recovery.sqlite`);
+  bridge.openDocument(documentPath, recoveryPath);
+  try {
+    return bridge.getGlyphs().map((glyph) => glyph.name);
+  } finally {
+    bridge.closeWorkspace();
+    fs.rmSync(recoveryPath, { force: true });
+  }
 }
 
 /**

@@ -166,7 +166,7 @@ fn metric_definition_replacement_preserves_untouched_source_values() {
     let mut document = ShiftStore::open_document_with_recovery(&document_path, &recovery_path)
         .expect("open with recovery");
     document
-        .apply_change_set_with_font(&changes, &post)
+        .apply_change_set_with_font(&changes, &post, true)
         .expect("write metric recovery change");
     document.save_document().expect("save recovered document");
     drop(document);

@@ -1,8 +1,8 @@
 # shift-cli
 
-Command-line inspection, authoring, and compilation for `.shift` source packages.
+Command-line inspection, authoring, and compilation for canonical SQLite `.shift` documents.
 
-The crate builds the `shift-cli` binary. `inspect` opens a source package, summarizes the font model, and can emit stable JSON for scripts and CI. Resource commands apply semantic Shift intents and save only after the complete change validates. `compile` sends the canonical Shift model directly through fontir/fontc to produce a TrueType font.
+The crate builds the `shift-cli` binary. `inspect` opens a document, summarizes the font model, and can emit stable JSON for scripts and CI. Resource commands apply semantic Shift intents through a temporary recovery overlay and save only after the complete change validates. `compile` sends the canonical Shift model directly through fontir/fontc to produce a TrueType font.
 
 ## Usage
 
@@ -33,9 +33,9 @@ cargo run -p shift-cli -- layer copy path/to/Lab.shift \
 
 Human-readable output is quiet by default and uses plain text when stdout is redirected. Use `--json` when another tool needs the complete report.
 
-Package inspection views:
+Document inspection views:
 
-- `summary`: package metadata, counts, and sources
+- `summary`: document identity, schema, counts, and sources
 - `axes`: variable font axes
 - `mappings`: independent and cross-axis mappings
 - `sources`: design sources and locations
@@ -56,7 +56,7 @@ coordinates and are mapped once into design space. Its views are:
 
 ## Authoring
 
-Authoring commands operate on Shift domain objects rather than package JSON. The resource surface creates font topology, glyph identity, and sparse authored layers:
+Authoring commands operate on Shift domain objects rather than persistence rows. The resource surface creates font topology, glyph identity, and sparse authored layers:
 
 ```sh
 shift font create Lab.shift
@@ -94,9 +94,9 @@ Every mutation supports:
 
 - `--dry-run` to execute real domain validation without writing;
 - `--json` for a structured result; and
-- `--output Variant.shift` to leave the input untouched and write an independent package.
+- `--output Variant.shift` to leave the input untouched and write an independent document.
 
-In-place changes retain package identity. `--output` refuses to overwrite an existing destination and mints a new package identity. All mutations apply to a cloned font and write atomically only after the complete semantic change succeeds.
+In-place changes retain `DocumentId`. `--output` refuses to overwrite an existing destination and mints a new `DocumentId`. All mutations use a temporary sparse recovery overlay; canonical bytes change only after the complete semantic change succeeds.
 
 ## Install
 

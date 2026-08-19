@@ -6,7 +6,6 @@ edition = "2024"
 [dependencies]
 shift-backends = { workspace = true }
 shift-font = { workspace = true }
-shift-source = { workspace = true }
 shift-store = { workspace = true }
 tempfile = "3"
 thiserror = "2"

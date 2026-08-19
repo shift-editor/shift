@@ -219,6 +219,53 @@ fn recovery_overlay_refuses_a_different_document_identity() {
 }
 
 #[test]
+fn save_rechecks_the_canonical_commit_while_the_document_is_open() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let document_path = temp.path().join("Dogfood.shift");
+    let first_recovery_path = temp.path().join("first.recovery.sqlite");
+    let second_recovery_path = temp.path().join("second.recovery.sqlite");
+    let layer_id = shift_font::LayerId::from_raw("A_regular");
+    drop(ShiftStore::create_document(&document_path, &sample_font()).expect("create document"));
+
+    let mut first = ShiftStore::open_document_with_recovery(&document_path, &first_recovery_path)
+        .expect("open first editor");
+    let mut first_layer = first.load_glyph_layer(&layer_id).unwrap().unwrap();
+    first_layer.set_width(700.0);
+    first.replace_glyph_layer(&first_layer).unwrap();
+    let mut second = ShiftStore::open_document_with_recovery(&document_path, &second_recovery_path)
+        .expect("open second editor");
+    let mut second_layer = second.load_glyph_layer(&layer_id).unwrap().unwrap();
+    second_layer.set_width(800.0);
+    second.replace_glyph_layer(&second_layer).unwrap();
+    second.save_document().expect("save second editor");
+
+    let error = first
+        .save_document()
+        .expect_err("stale Save must be refused");
+
+    assert!(matches!(
+        error,
+        StoreError::InvalidRecoveryTransition {
+            expected: "dirty",
+            found: "conflict"
+        }
+    ));
+    assert_eq!(
+        first.recovery_state().unwrap(),
+        Some(RecoveryState::Conflict)
+    );
+    let canonical = ShiftStore::open_document(&document_path).expect("open canonical");
+    assert_eq!(
+        canonical
+            .load_glyph_layer(&layer_id)
+            .unwrap()
+            .unwrap()
+            .width(),
+        800.0
+    );
+}
+
+#[test]
 fn recovery_overlay_detects_a_changed_canonical_base_before_save() {
     let temp = tempfile::tempdir().expect("temp dir");
     let document_path = temp.path().join("Dogfood.shift");

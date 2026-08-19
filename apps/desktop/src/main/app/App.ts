@@ -232,8 +232,9 @@ export class App {
   }
 
   #registerIpcHandlers(): void {
-    ipc.handle(ipcMain, "commands.run", (_event, id) => {
-      return this.#commands.run(id, this.#commandContext());
+    ipc.handle(ipcMain, "commands.run", (event, id) => {
+      const window = this.#requireWindowForWebContents(event.sender);
+      return this.#commands.run(id, this.#commandContext(window));
     });
     ipc.handle(ipcMain, "clipboard.readText", () => {
       return clipboard.readText();
@@ -293,7 +294,11 @@ export class App {
     });
   }
 
-  #commandContext(): CommandContext {
+  #commandContext(window?: Window): CommandContext {
+    window ??= this.#windows.activeWindow() ?? undefined;
+    const session = window ? this.#workspaces.getForBrowserWindow(window.window) : null;
+    const document = session?.document ?? null;
+
     return {
       update: {
         checkForUpdates: async () => {
@@ -302,37 +307,34 @@ export class App {
       },
       document: {
         create: async () => {
-          const window = this.#windows.activeWindow();
           if (!window) return;
 
           await this.#createWorkspaceFromWindow(window);
         },
         open: async () => {
-          const window = this.#windows.activeWindow();
           if (!window) return;
 
           await this.#openWorkspaceFromWindow(window);
         },
-        hasWorkspace: () => (this.#activeFontSession()?.document ?? null) !== null,
+        hasWorkspace: () => document !== null,
         save: async () => {
-          await this.#requireActiveDocument("file.save").save();
+          await document?.save();
         },
         saveAs: async () => {
-          await this.#requireActiveDocument("file.saveAs").saveAs();
+          await document?.saveAs();
         },
         exportTtf: async () => {
-          await this.#requireActiveDocument("file.exportTtf").exportTtf();
+          await document?.exportTtf();
         },
       },
       windows: {
-        active: () => this.#windows.activeWindow(),
+        active: () => window ?? null,
       },
       renderer: {
         run: (id) => {
-          const session = this.#activeFontSession();
-          if (!session?.document) return;
+          if (!window || !document) return;
 
-          session.activeWindow()?.runRendererCommand(id);
+          window.runRendererCommand(id);
         },
       },
     };
@@ -382,17 +384,6 @@ export class App {
     }
 
     return session;
-  }
-
-  #activeFontSession(): FontSessionHost | null {
-    const window = this.#windows.activeWindow();
-    return window ? this.#workspaces.getForBrowserWindow(window.window) : null;
-  }
-
-  #requireActiveDocument(operation: string) {
-    const document = this.#activeFontSession()?.document;
-    if (!document) throw new Error(`${operation} requires an active authored font`);
-    return document;
   }
 
   #requireDocumentsRoot(): string {

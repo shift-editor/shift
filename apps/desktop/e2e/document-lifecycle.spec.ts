@@ -255,7 +255,7 @@ saveAsTest(
 );
 
 copiedDocumentTest(
-  "opening a copied package creates a separate clean document session",
+  "opening a copied document creates a separate clean document session",
   async ({ electronApp, page, saveShiftPath, copyShiftPath }) => {
     const originalPage = await createNewFont(page, electronApp);
     await originalPage.getByRole("button", { name: "Create glyph", exact: true }).click();

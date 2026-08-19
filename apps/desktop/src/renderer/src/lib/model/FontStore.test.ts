@@ -235,9 +235,9 @@ function valuesOnlyChange(): AppliedChange {
   };
 }
 
-function snapshot(documentId: string, layerId: LayerId): WorkspaceSnapshot {
+function snapshot(workspaceId: string, layerId: LayerId): WorkspaceSnapshot {
   return {
-    documentId,
+    workspaceId,
     metadata: { familyName: "Untitled Font" },
     metrics: { unitsPerEm: 1000 },
     metricDefinitions: [],

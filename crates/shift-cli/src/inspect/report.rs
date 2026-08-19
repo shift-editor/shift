@@ -8,34 +8,35 @@ use shift_font::{
     Axis, AxisId, AxisKind, AxisLabel, AxisMapping, AxisMappingPoint, AxisRole, Font, Glyph,
     GlyphLayer, Location, MetricDefinition, MetricKind, NamedInstance, Source, SourceId,
 };
-use shift_source::{FORMAT_ID, SCHEMA_VERSION, ShiftSourcePackage, SourcePackageError};
+use shift_store::{SHIFT_DOCUMENT_SCHEMA_VERSION, ShiftStore, StoreError};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
-#[error("failed to inspect source package {path}")]
+#[error("failed to inspect Shift document {path}")]
 pub struct InspectError {
     path: PathBuf,
     #[source]
-    source: SourcePackageError,
+    source: StoreError,
 }
 
 impl Diagnostic for InspectError {
     fn code<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
-        Some(Box::new("shift_cli::inspect::package"))
+        Some(Box::new("shift_cli::inspect::document"))
     }
 
     fn help<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
         Some(Box::new(
-            "Check that the path points to a readable .shift package.",
+            "Check that the path points to a readable SQLite .shift document.",
         ))
     }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ManifestSummary {
-    pub format: String,
-    pub schema_version: u32,
+pub struct DocumentSummary {
+    pub application_id: String,
+    pub schema_version: i64,
+    pub document_id: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -180,7 +181,7 @@ pub struct GlyphLayerSummary {
 pub struct InspectReport {
     pub path: String,
     pub file_name: String,
-    pub manifest: ManifestSummary,
+    pub document: DocumentSummary,
     pub metadata: MetadataSummary,
     pub axes: Vec<AxisSummary>,
     pub axis_mappings: Vec<AxisMappingSummary>,
@@ -194,12 +195,22 @@ pub struct InspectReport {
 impl InspectReport {
     pub fn load(path: impl AsRef<Path>) -> Result<Self, InspectError> {
         let path = path.as_ref();
-        let font = ShiftSourcePackage::load_font(path).map_err(|source| InspectError {
+        let store = ShiftStore::open_document(path).map_err(|source| InspectError {
+            path: path.to_path_buf(),
+            source,
+        })?;
+        let metadata = store.document_metadata().map_err(|source| InspectError {
+            path: path.to_path_buf(),
+            source,
+        })?;
+        let font = store.load_font_state().map_err(|source| InspectError {
             path: path.to_path_buf(),
             source,
         })?;
 
-        Ok(Self::from_font(path, &font))
+        let mut report = Self::from_font(path, &font);
+        report.document.document_id = metadata.document_id.to_string();
+        Ok(report)
     }
 
     pub(crate) fn from_font(path: &Path, font: &Font) -> Self {
@@ -214,9 +225,10 @@ impl InspectReport {
         Self {
             path: path.display().to_string(),
             file_name: file_name(path),
-            manifest: ManifestSummary {
-                format: FORMAT_ID.to_string(),
-                schema_version: SCHEMA_VERSION,
+            document: DocumentSummary {
+                application_id: "SHFT".to_string(),
+                schema_version: SHIFT_DOCUMENT_SCHEMA_VERSION,
+                document_id: "unavailable".to_string(),
             },
             metadata: MetadataSummary {
                 family_name: font.metadata().family_name.clone(),

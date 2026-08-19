@@ -1,7 +1,7 @@
 use shift_font::{FontMetadata, test_support::sample_font};
 use shift_store::{
-    AxisId, Evidence, FileIdentity, FontInfo, GlyphId, NewAxis, NewGlyph, NewSource,
-    SHIFT_APPLICATION_ID, ShiftStore, SourceId, SourceIdentitySnapshot, SourceKind, WorkspaceState,
+    AxisId, FontInfo, GlyphId, NewAxis, NewGlyph, NewSource, SHIFT_APPLICATION_ID, ShiftStore,
+    SourceId, SourceKind, WorkspaceState,
 };
 
 #[test]
@@ -113,37 +113,6 @@ fn applying_change_set_marks_workspace_state_dirty() {
     assert!(loaded.dirty);
     assert_eq!(loaded.revision, 1);
     assert_eq!(loaded.saved_revision, 0);
-}
-
-#[test]
-fn source_identity_snapshot_separates_exact_equality_from_match_evidence() {
-    let left = SourceIdentitySnapshot {
-        source_path: Some("Family.shift".into()),
-        canonical_source_path: Some("/fonts/Family.shift".into()),
-        source_package_id: None,
-        source_file_identity: Some(FileIdentity {
-            kind: "unix-dev-inode".to_string(),
-            value: "1:2".to_string(),
-        }),
-        source_size: Some(128),
-        source_mtime_ms: Some(1_000),
-        source_fingerprint: Some("fnv1a64:abc".to_string()),
-    };
-    let moved = SourceIdentitySnapshot {
-        source_path: Some("Renamed.shift".into()),
-        canonical_source_path: Some("/fonts/Renamed.shift".into()),
-        ..left.clone()
-    };
-    let unknown = SourceIdentitySnapshot {
-        source_file_identity: None,
-        source_fingerprint: None,
-        ..left.clone()
-    };
-
-    assert_ne!(left, moved);
-    assert_eq!(left.file_identity_match(&moved), Evidence::Same);
-    assert_eq!(left.canonical_path_match(&moved), Evidence::Different);
-    assert_eq!(left.fingerprint_match(&unknown), Evidence::Unknown);
 }
 
 #[test]
@@ -1231,6 +1200,31 @@ fn document_open_rejects_plain_corrupt_and_future_sqlite_files() {
             found: 999,
             supported: 1
         }
+    ));
+}
+
+#[test]
+fn document_open_rejects_foreign_key_corruption_before_write_access() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let path = temp.path().join("BrokenReferences.shift");
+    drop(ShiftStore::create_document(&path, &sample_font()).expect("create document"));
+
+    let conn = rusqlite::Connection::open(&path).expect("open raw document");
+    conn.execute(
+        "UPDATE glyphs SET id = 'glyph_orphaned' WHERE id = (SELECT id FROM glyphs LIMIT 1)",
+        [],
+    )
+    .expect("break a glyph foreign key");
+    drop(conn);
+
+    let error = match ShiftStore::open_document(&path) {
+        Ok(_) => panic!("foreign-key corruption must be refused"),
+        Err(error) => error,
+    };
+    assert!(matches!(
+        error,
+        shift_store::StoreError::InvalidDocument(message)
+            if message == "SQLite foreign-key check failed"
     ));
 }
 

@@ -5,6 +5,7 @@ use std::{
 
 use shift_backends::font_loader::FontLoader;
 use shift_font::{Contour, Font, Glyph, GlyphLayer, LayerId, MetricKind, PointType};
+use shift_store::ShiftStore;
 
 fn fixtures_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -635,15 +636,18 @@ fn loads_designspace_sources_axes_and_default_metadata() {
 }
 
 #[test]
-fn round_trips_shift_source_through_font_loader() {
+fn reads_shift_document_without_exposing_generic_document_writes() {
     let temp = tempfile::tempdir().unwrap();
     let path = temp.path().join("Dogfood.shift");
     let original = simple_geometry_font();
+    drop(ShiftStore::create_document(&path, &original).unwrap());
 
-    FontLoader::new()
-        .write_font(&original, path.to_str().unwrap())
-        .unwrap();
+    let loader = FontLoader::new();
     let loaded = load_font(&path);
+    let error = loader
+        .write_font(&original, path.to_str().unwrap())
+        .unwrap_err();
+    assert!(error.to_string().contains("writing is not supported"));
 
     let glyph = loaded.glyph_by_name("A").expect("A glyph should exist");
     let layer = main_layer(glyph);

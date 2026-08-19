@@ -15,7 +15,7 @@ use shift_font::{
     AnchorId, AnchorSeed, ContourId, Font, FontIntent, FontIntentSet, GlyphId, LayerId, PointId,
     PointSeed, PointType, SourceId,
 };
-use shift_source::ShiftSourcePackage;
+use shift_store::ShiftStore;
 
 use crate::cli::{AddGlyphArgs, AddLayerArgs, CopyLayerArgs};
 
@@ -67,7 +67,6 @@ struct AnchorInput {
 /// Returns an error when a Unicode value is malformed, the glyph conflicts
 /// with existing identity, the package cannot be loaded, or saving fails.
 pub fn add_glyph(args: AddGlyphArgs) -> Result<AuthoringReport> {
-    let font = load_font(&args.path)?;
     let unicodes = parse_unicodes(&args.unicode)?;
     let set = FontIntentSet {
         intents: vec![FontIntent::CreateGlyph {
@@ -77,7 +76,7 @@ pub fn add_glyph(args: AddGlyphArgs) -> Result<AuthoringReport> {
         }],
     };
 
-    apply_mutation(&args.path, &args.mutation, font, set)
+    apply_mutation(&args.path, &args.mutation, set)
 }
 
 /// Adds one sparse authored layer from a semantic JSON payload.
@@ -99,7 +98,7 @@ pub fn add_layer(args: AddLayerArgs) -> Result<AuthoringReport> {
     let input = read_layer_input(&args.input)?;
     let set = layer_intents(layer_id, glyph_id, source_id, input)?;
 
-    apply_mutation(&args.path, &args.mutation, font, set)
+    apply_mutation(&args.path, &args.mutation, set)
 }
 
 /// Copies one glyph layer to another source with fresh internal identities.
@@ -136,11 +135,12 @@ pub fn copy_layer(args: CopyLayerArgs) -> Result<AuthoringReport> {
         }],
     };
 
-    apply_mutation(&args.path, &args.mutation, font, set)
+    apply_mutation(&args.path, &args.mutation, set)
 }
 
 fn load_font(path: &Path) -> Result<Font> {
-    ShiftSourcePackage::load_font(path)
+    ShiftStore::open_document(path)
+        .and_then(|store| store.load_font_state())
         .into_diagnostic()
         .wrap_err("failed to load Shift font")
 }

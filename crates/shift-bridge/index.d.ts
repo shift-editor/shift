@@ -20,16 +20,16 @@ export declare class Bridge {
   createUntitledWorkspace(storePath: string, options?: NapiNewWorkspace | undefined | null): void
   exportWorkspace(request: NapiFontExportRequest): Promise<NapiFontExportResult>
   documentState(): NapiDocumentState
-  inspectPackage(path: string): NapiPackageIdentity
-  inspectPackageDraft(storePath: string): NapiPackageDraft
+  inspectDocument(path: string): NapiDocumentIdentity
   closeWorkspace(): void
+  openDocument(path: string, recoveryPath: string): void
   openWorkspace(path: string, storePath: string): void
-  resumeWorkspaceForSource(storePath: string, sourcePath: string): void
   openFontSource(path: string): NapiFontSnapshot
   closeFontSource(): void
-  setDocumentId(documentId: string): NapiDocumentState
+  setWorkspaceId(workspaceId: string): NapiDocumentState
   saveWorkspace(): NapiDocumentState
-  saveWorkspaceAs(path: string): NapiDocumentState
+  saveWorkspaceAsDocument(path: string, recoveryPath: string): NapiDocumentState
+  discardWorkspaceChanges(): NapiDocumentState
   getMetadata(): NapiFontMetadata
   getMetrics(): NapiFontMetrics
   getGlyphs(): Array<NapiGlyphRecord>
@@ -123,8 +123,14 @@ export declare class Bridge {
   getSources(): Array<NapiSource>
 }
 
+export interface NapiDocumentIdentity {
+  documentId: string
+  canonicalPath: string
+}
+
 export interface NapiDocumentState {
   sourceKind: string
+  documentId?: string
   saveTarget?: string
   dirty: boolean
   needsSaveAs: boolean
@@ -143,20 +149,6 @@ export interface NapiFontExportResult {
 export interface NapiNewWorkspace {
   familyName?: string
   unitsPerEm?: number
-}
-
-export interface NapiPackageDraft {
-  documentId?: string
-  packageId: string
-  sourcePath: string
-  baseFingerprint: string
-  dirty: boolean
-}
-
-export interface NapiPackageIdentity {
-  packageId: string
-  canonicalPath: string
-  fingerprint: string
 }
 export interface NapiAddAnchorsIntent {
   layerId: LayerId

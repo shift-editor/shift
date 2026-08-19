@@ -1,13 +1,21 @@
 use std::process::{Command, Output};
 
 use serde_json::Value;
-use shift_source::ShiftSourcePackage;
+use shift_font::Font;
+use shift_store::ShiftStore;
 
 fn shift(args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_shift-cli"))
         .args(args)
         .output()
         .expect("shift CLI should run")
+}
+
+fn load_font(path: &str) -> Font {
+    ShiftStore::open_document(path)
+        .unwrap()
+        .load_font_state()
+        .unwrap()
 }
 
 #[test]
@@ -59,7 +67,7 @@ fn authors_axis_and_source_through_the_cli() {
     ]);
     assert!(source.status.success(), "{:?}", source.stderr);
 
-    let font = ShiftSourcePackage::load_font(path).unwrap();
+    let font = load_font(path);
     assert_eq!(font.axes()[0].tag(), "wght");
     assert_eq!(font.sources().len(), 2);
     assert_eq!(font.sources()[1].name(), "Black");
@@ -98,12 +106,7 @@ fn dry_run_reports_a_valid_change_without_writing() {
     let report: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(report["valid"], true);
     assert_eq!(report["wrote"], false);
-    assert!(
-        ShiftSourcePackage::load_font(path)
-            .unwrap()
-            .axes()
-            .is_empty()
-    );
+    assert!(load_font(path).axes().is_empty());
 }
 
 #[test]
