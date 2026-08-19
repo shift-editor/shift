@@ -1,5 +1,7 @@
 # Graphics
 
+<!-- reviewed: 2026-08-18 -->
+
 Renderer vector-path values and the accelerated marker-layer backend for editor handle drawing.
 
 ## Architecture Invariants
@@ -45,13 +47,14 @@ Supporting files live in the editor rendering module:
 ```
 editor/rendering/markers/
   types.ts                 — MarkerShape, MarkerColour, MarkerInstance, MARKER_INSTANCE_FLOATS
-  overlays/handles/MarkerHandleRenderer.ts — point handle items -> packed Float32Array
   handleStyles.ts          — CachedInstanceStyle, STYLES lookup table, SHAPE_IDS
   color.ts                 — parseCssColor: CSS color string -> GpuColor [r,g,b,a] floats
   shaders/
     handle.vert.glsl.ts    — vertex shader: scene-to-clip transform with rotation
     handle.frag.glsl.ts    — fragment shader: SDF shape dispatch (box, circle, triangle, segment)
     sdf.glsl.ts            — SDF primitives: sdCircle, sdBox, sdTriangle, sdSegment + coverage
+editor/rendering/overlays/handles/
+  MarkerHandleRenderer.ts  — point handle items -> packed Float32Array
 ```
 
 ## Key Types
@@ -62,7 +65,7 @@ editor/rendering/markers/
 
 - `GlyphCatalogSource` -- immutable session catalog boundary for glyphs, axes, dense location, metrics, invalidation, and atlas acquisition.
 
-- `GlyphAtlasSource` -- backend-neutral page preparation, bounded streaming, discard, and resolved-weight boundary implemented by authored and retained-source adapters.
+- `GlyphAtlasSource` -- backend-neutral page preparation, bounded streaming, discard, and resolved-weight boundary implemented by authored and retained-source adapters. Authored pages snapshot the live `Axis` list and its `AxisMappingBasis` list so per-location weights map external axis coordinates into design space before interpolation; imported pages carry no axes and ship pre-resolved weights instead.
 
 - `ResidentGlyphLayer` -- algorithm-neutral surface used by the catalog controller. It retains one device/context and prepares, streams, and atomically installs complete sets of independently replaceable Slug root pages.
 
@@ -99,9 +102,9 @@ Set `SHIFT_PROFILE_SLUG_ATLAS=1` for release measurements. Main propagates that 
 ### Per-frame draw pipeline
 
 1. `Handles.draw` is called with the scene `Canvas`, glyph data, handle states, camera, and draw offset.
-2. `Handles` reuses `PointHandleItem` wrappers, then `MarkerHandleRenderer` culls those items against camera-owned visible bounds, looks up `STYLES[shape][state]`, and writes 25 floats per visible point into a reusable `Float32Array`.
-3. `MarkerLayer.draw` receives the packed array, instance count, camera, draw offset, and logical canvas size. If the packed array exceeds `#instanceCapacity`, it reallocates the REGL buffer; otherwise it uses `subdata` for a zero-alloc update.
-4. The REGL draw command runs instanced rendering: 6 vertices (unit quad) per instance. The vertex shader transforms each handle from scene coordinates to clip space, applying viewport pan/zoom/scale. The fragment shader dispatches on `v_shape` to the appropriate SDF (box for corner, circle for smooth/control, triangle for direction/first, segment for last), computes fill/stroke coverage with anti-aliasing via `fwidth`, and composites an optional overlay color.
+2. `Handles` reuses `PointHandleItem` wrappers assembled into a `HandleDisplayList` and calls `MarkerHandleRenderer.draw`. Handles are not culled — every item is packed unconditionally (only control lines use `Camera.visibleSceneBounds` frustum culling).
+3. `MarkerHandleRenderer.draw` caches uploads per display list. Only when the `HandleDisplayList` differs from the last uploaded one does it re-pack: it looks up `STYLES[shape][state]`, writes 25 floats per item into a reusable `Float32Array`, and calls `MarkerLayer.uploadInstances` (which reallocates the REGL buffer past `#instanceCapacity`, otherwise uses `subdata` for a zero-alloc update). An unchanged list re-draws with no upload. It then calls `MarkerLayer.drawUploaded` with the instance count, camera, draw offset, and logical canvas size.
+4. The REGL draw command runs instanced rendering: 6 vertices (unit quad) per instance. The vertex shader transforms each handle from scene coordinates to clip space, applying viewport pan/zoom/scale. The fragment shader dispatches on `v_shape` to the appropriate SDF (box for corner, circle for smooth/control, triangle for direction, a segment bar plus triangle composite for first, segment for last), computes fill/stroke coverage with anti-aliasing via `fwidth`, and composites an optional overlay color.
 
 ### Buffer growth strategy
 
@@ -125,7 +128,7 @@ Modify the theme values in `Theme`. `handleStyles.ts` reads from `DEFAULT_THEME`
 
 ### Debugging GPU rendering issues
 
-Set a breakpoint or add logging in `MarkerLayer.draw`. Check `isAvailable()` returns `true`. If handles render as garbage, verify `MARKER_INSTANCE_FLOATS` matches the attribute offset layout in `#initialize`. Compare `SHAPE_IDS` values against the `v_shape` branch thresholds in the fragment shader.
+Set a breakpoint or add logging in `MarkerHandleRenderer.draw` or `MarkerLayer.drawUploaded`. Check `isAvailable()` returns `true`. If handles render as garbage, verify `MARKER_INSTANCE_FLOATS` matches the attribute offset layout in `#initialize`. Compare `SHAPE_IDS` values against the `v_shape` branch thresholds in the fragment shader.
 
 ## Gotchas
 
@@ -150,11 +153,11 @@ Set a breakpoint or add logging in `MarkerLayer.draw`. Check `isAvailable()` ret
 ## Related
 
 - `GlyphContour` -- reactive glyph/component occurrence wrapper that owns a live `ContourPath`
-- `Handles` -- owns accelerated marker-layer drawing plus CPU fallback; calls `MarkerLayer.draw`
+- `Handles` -- owns accelerated marker-layer drawing plus CPU fallback; delegates to `MarkerHandleRenderer.draw`
 - `Renderer` -- owns `MarkerLayer` lifetime; calls `resizeCanvas` on resize
 - `Editor` -- temporarily forwards canvas lifecycle from `CanvasContextProvider` to `Renderer`
 - `CanvasContextProvider` -- React context that reports canvas DOM lifecycle to `Editor`
-- `MarkerHandleRenderer` -- packs reusable point handle items into the Float32Array consumed by `MarkerLayer.draw`
+- `MarkerHandleRenderer` -- packs reusable point handle items into the Float32Array uploaded through `MarkerLayer.uploadInstances` and drawn by `MarkerLayer.drawUploaded`
 - `GlyphCatalogController` -- screen-space catalog RAF, interaction, and layout owner
 - `SlugAtlas` / `SlugRenderer` -- internal packed-atlas and shader implementation behind `ResidentGlyphLayer`
 - `DEFAULT_THEME` -- theme object whose handle styles feed into `STYLES` at load time

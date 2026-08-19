@@ -1,11 +1,13 @@
 # Shared UI (`@shift/ui`)
 
+<!-- reviewed: 2026-08-18 review-every: 90d -->
+
 Shared UI component library for Shift, wrapping Base UI primitives with Tailwind styling and Shift design tokens.
 
 ## Architecture Invariants
 
-- **Architecture Invariant:** Every component wraps a `@base-ui-components/react` primitive -- never raw HTML elements. This keeps accessibility, keyboard handling, and ARIA attributes delegated to Base UI.
-- **Architecture Invariant:** Components are style-only wrappers. They add Tailwind classes via `cn` but do not contain business logic. All application state lives in the consuming app, not in this package.
+- **Architecture Invariant:** Interactive components delegate to a headless primitive library rather than reimplementing widget behavior -- `@base-ui-components/react` by default, with the Resizable family wrapping `react-resizable-panels`. This keeps accessibility, keyboard handling, and ARIA attributes with the primitive. Components may render structural wrapper elements (e.g. `Input`'s positioning `div`/`span`s) around the primitive.
+- **Architecture Invariant:** All application state and business logic live in the consuming app, not in this package. Components add Tailwind classes via `cn`; small self-contained interaction behavior that belongs to the widget itself is allowed (e.g. `Input`'s Cmd/Ctrl+A select-all).
 - **Architecture Invariant:** Each component lives in its own directory with a barrel `index.ts`. The package root `index.ts` re-exports everything -- consumers import from `@shift/ui`, never from deep paths.
 - **Architecture Invariant:** The `cn` utility (clsx + tailwind-merge) must be used for all className composition. This ensures Tailwind class conflicts are resolved correctly when consumers pass overrides.
 - **Architecture Invariant:** The package is source-only (`main` and `exports` both point to `./src/index.ts`). There is no build step -- consuming apps bundle it directly via their own bundler.
@@ -21,13 +23,17 @@ packages/ui/
     components/
       button/Button.tsx    -- Button with variant/size/isActive/icon props
       checkbox/            -- Checkbox and indicator
-      collapsible/         -- Collapsible, CollapsibleTrigger, CollapsiblePanel
+      collapsible/         -- Collapsible, CollapsibleTrigger, CollapsiblePanel, CollapsibleChevron
       dialog/              -- Dialog, DialogBackdrop, DialogPortal, DialogPopup, DialogTitle, DialogClose
       field/               -- Field root, label, control, description, and error
-      input/Input.tsx      -- Input with label/icon positioning
+      input/Input.tsx      -- Input with label/icon positioning and select-all shortcut
+      menu/                -- Menu trigger, portal, positioner, popup, item, and separator
       number-field/        -- Numeric root, input, step controls, and scrub area
+      popover/             -- Popover trigger, portal, positioner, popup, title, and close
+      resizable/           -- ResizablePanelGroup, ResizablePanel, ResizableHandle over react-resizable-panels
       select/              -- Select trigger, popup, list, item, and indicator primitives
       separator/           -- Separator (horizontal/vertical)
+      slider/              -- Slider with thumb-level accessible name
       tabs/                -- Tabs root, list, tab, indicator, and panel
       textarea/            -- Multiline Field control
       toast/               -- ToastProvider, ToastViewport, ToastRoot, ToastTitle, ToastDescription, ToastClose, useToastManager
@@ -91,7 +97,7 @@ Pass a `className` prop -- `cn` (tailwind-merge) will resolve conflicts with the
 ## Verification
 
 - `pnpm typecheck` -- type-checks all components against Base UI and React types.
-- `pnpm test` -- runs vitest (currently passes with no tests).
+- `pnpm test` -- runs the vitest suite (`cn` utility and `Input` select-all behavior).
 
 ## Related
 

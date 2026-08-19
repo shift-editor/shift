@@ -1,5 +1,7 @@
 # shift-source
 
+<!-- reviewed: 2026-08-18 review-every: 90d -->
+
 Source-package crate for Shift's user-authored `.shift` format.
 
 ## Architecture Invariants
@@ -42,6 +44,11 @@ Family.shift
     <glyphId>.json
   modules/
     shift.libData.json            # optional Shift-owned compatibility module for IR lib data
+    shift.fontInfo.json           # optional Shift-owned module for preserved fontinfo remainder fields
+  data/
+    <path>                        # optional verbatim binary data files
+  images/
+    <path>                        # optional verbatim image files
 ```
 
 `glyphs/<glyphId>.json` must contain the same `id`; a mismatch is a load error.
@@ -87,11 +94,15 @@ not become name-keyed source truth.
 
 Current `shift_font::LibData` is preserved in `modules/shift.libData.json`, a
 Shift-owned, schema-versioned module. Core font/glyph/layer JSON documents do
-not grow arbitrary `lib` fields.
+not grow arbitrary `lib` fields. Nested `LibValue::Dict` values round-trip
+through ordered maps on load as well as save, so a load/save cycle is
+byte-stable.
 
 ## How it works
 
-`font_to_tree(font)` converts the live `Font` projection into deterministic JSON entries. `tree_to_font(tree)` validates the manifest and rebuilds a `Font` through public `shift-font` constructors and mutators.
+`font_to_tree(package_id, font)` converts the live `Font` projection into deterministic JSON entries. `tree_to_font(tree)` validates the manifest and rebuilds a `Font` through public `shift-font` constructors and mutators.
+
+Locations become typed at the conversion boundary: named-instance locations are rebuilt as `ExternalLocation` values and source locations as `DesignLocation` values, so the external/design distinction is enforced from load rather than trusted downstream.
 
 `ShiftSourcePackage::save_font(path, font)` writes `path.tmp`, syncs it, then atomically renames it to `path`. `ShiftSourcePackage::load_font(path)` reads the zip tree and returns a rebuilt `Font`.
 
@@ -104,6 +115,32 @@ not grow arbitrary `lib` fields.
 `shift-source` intentionally does not depend on `shift-backends`. `shift-backends`
 owns the `FontLoader` adaptor that delegates `.shift` reads and writes to
 `ShiftSourcePackage::load_font` and `ShiftSourcePackage::save_font`.
+
+## Workflow recipes
+
+### Adding a field to an existing document
+
+1. Add the field to the private doc struct in `package.rs` (`FontDoc`, `SourceDoc`, `LayerDoc`, …) with `#[serde(default)]` or an `Option` so packages written before the change still load.
+2. Update both conversion directions: the `TryFrom` from the `shift_font` model into the doc, and the doc back into the model. `tree_to_font` must rebuild state through public `shift-font` constructors and mutators only — never by exposing private storage serde.
+3. If the field is an ordered authoring collection, encode it as a JSON array carrying stable IDs. Sorted JSON objects are only for dictionaries whose order carries no authoring meaning.
+4. Extend the round-trip coverage in `crates/shift-source/tests/package_test.rs` so save → load reproduces the value exactly.
+5. Verify: `cargo test -p shift-source`.
+
+### Adding a new top-level package entry
+
+1. Emit the entry from `font_to_tree` as a `(path, bytes)` pair; keep JSON deterministic and pretty-printed like the existing entries.
+2. Parse it in `tree_to_font` with explicit absent-entry behavior — optional entries like `features.fea` are absent, never present-but-empty.
+3. Bump the manifest schema version only when old readers can no longer parse the package: load rejects any mismatched `schemaVersion` outright, so a bump orphans packages for older builds.
+4. Verify: `cargo test -p shift-source`, then `cargo test -p shift-workspace` because the workspace round-trips packages through save/open.
+
+## Gotchas
+
+- Glyph identity is validated strictly on load: every `glyphs/<glyphId>.json` must appear in `font.json`'s `glyphOrder` exactly once, every listed ID must have a file, and a glyph file whose internal `id` differs from its filename is a hard error, not a warning.
+- Names in the package are label caches, not references. Kerning or component entries whose cached glyph name disagrees with the referenced glyph ID fail load — "fixing" a package by editing names without the IDs makes it unreadable.
+- Non-finite numbers anywhere in metrics, coordinates, transforms, or locations are rejected in both directions. A font holding a NaN fails to save with a `NonFiniteNumber` error rather than producing a package that will not reopen.
+- The manifest must be the first zip entry, named `manifest.json`, and stored uncompressed; every entry is written `Stored`. Repacking a `.shift` with a zip tool that compresses or reorders entries produces a package this crate refuses to open.
+- `save_font` preserves the `packageId` of a valid package already at the target path; `save_font_as` always mints a new one. Picking the wrong method silently changes package identity, which the workspace uses to bind working stores to sources.
+- Writes go through `<name>.shift.tmp` plus atomic rename with directory sync. A crashed save can leave a stale `.tmp` beside the package but never a truncated `.shift`.
 
 ## Verification
 

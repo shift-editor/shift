@@ -41,6 +41,7 @@ Central routing table for Shift's distributed documentation. Before creating new
 | `apps/desktop/src/renderer/src/lib/graphics/**`  | [`apps/desktop/src/renderer/src/lib/graphics/docs/DOCS.md`](../../apps/desktop/src/renderer/src/lib/graphics/docs/DOCS.md)   | Rendering abstraction with Canvas 2D backend and path caching      |
 | `apps/desktop/src/renderer/src/lib/transform/**` | [`apps/desktop/src/renderer/src/lib/transform/docs/DOCS.md`](../../apps/desktop/src/renderer/src/lib/transform/docs/DOCS.md) | Geometry transforms: rotate, scale, reflect selected points        |
 | `apps/desktop/src/renderer/src/lib/signals/**`   | [`apps/desktop/src/renderer/src/lib/signals/docs/DOCS.md`](../../apps/desktop/src/renderer/src/lib/signals/docs/DOCS.md)     | Fine-grained reactivity: dependency tracking and efficient updates |
+| `apps/desktop/src/renderer/src/lib/text/**`      | [`apps/desktop/src/renderer/src/lib/text/docs/DOCS.md`](../../apps/desktop/src/renderer/src/lib/text/docs/DOCS.md)           | Text editing: stable item identity and derived layout geometry     |
 
 ### Packages
 
