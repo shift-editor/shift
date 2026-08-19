@@ -1,9 +1,9 @@
-import { dialog, type MessageBoxOptions, type SaveDialogOptions } from "electron";
 import path from "node:path";
-import { errorToMessage } from "../../shared/errors";
 import type { WorkspaceDocumentState } from "../../shared/workspace/protocol";
+import type { NativeDialogs } from "../dialogs/NativeDialogs";
 import type { Window } from "../windows/Window";
 import type { Document } from "./DocumentClient";
+import type { CloseReason } from "./types";
 import { createShiftLogger, type ShiftLogger } from "../logging";
 
 export type DocumentSessionOptions = {
@@ -12,11 +12,9 @@ export type DocumentSessionOptions = {
   dialogWindow: () => Window | null;
   windows: () => readonly Window[];
   applicationName: () => string;
+  nativeDialogs: NativeDialogs;
   log?: ShiftLogger;
 };
-
-export type CloseReason = "window" | "quit";
-type DirtyDocumentChoice = "save" | "discard" | "cancel";
 
 /**
  * Main-process owner of the native document workflow.
@@ -32,6 +30,7 @@ export class DocumentSession {
   readonly #dialogWindow: () => Window | null;
   readonly #windows: () => readonly Window[];
   readonly #applicationName: () => string;
+  readonly #nativeDialogs: NativeDialogs;
   readonly #log: ShiftLogger;
 
   #state: WorkspaceDocumentState | null = null;
@@ -42,6 +41,7 @@ export class DocumentSession {
     this.#dialogWindow = options.dialogWindow;
     this.#windows = options.windows;
     this.#applicationName = options.applicationName;
+    this.#nativeDialogs = options.nativeDialogs;
     this.#log = options.log ?? createShiftLogger("document.session");
   }
 
@@ -82,7 +82,12 @@ export class DocumentSession {
       return true;
     }
 
-    const choice = await this.#showDirtyDocumentDialog(state, reason);
+    const choice = await this.#nativeDialogs.confirmDirtyDocument(
+      this.#dialogWindow(),
+      state,
+      reason,
+      this.#applicationName(),
+    );
     this.#log.info("dirty document dialog completed", {
       reason,
       choice,
@@ -170,7 +175,7 @@ export class DocumentSession {
       return;
     }
 
-    const outputPath = await this.#showExportDialog(state);
+    const outputPath = await this.#nativeDialogs.exportTrueTypeFont(this.#dialogWindow(), state);
     if (!outputPath) {
       this.#log.info("TTF export canceled");
       return;
@@ -181,7 +186,11 @@ export class DocumentSession {
       this.#log.info("TTF export completed", { path: outputPath });
     } catch (error) {
       this.#log.warn("TTF export failed", error);
-      await this.#showExportFailedDialog(error);
+      await this.#nativeDialogs.showExportFailure(
+        this.#dialogWindow(),
+        this.#applicationName(),
+        error,
+      );
     }
   }
 
@@ -195,8 +204,13 @@ export class DocumentSession {
     this.#updateWindowTitle();
   }
 
+  /** Reapplies cached document identity and dirty state to every attached window title. */
+  refreshWindowTitles(): void {
+    this.#updateWindowTitle();
+  }
+
   async #saveToNewPath(state: WorkspaceDocumentState): Promise<WorkspaceDocumentState | null> {
-    const savePath = await this.#showSaveDialog(state);
+    const savePath = await this.#nativeDialogs.saveShiftDocument(this.#dialogWindow(), state);
     if (!savePath) {
       this.#log.info("save as canceled", { saveTarget: state.saveTarget });
       return null;
@@ -214,7 +228,11 @@ export class DocumentSession {
       return saved !== null;
     } catch (error) {
       this.#log.warn("dirty document save failed", error);
-      await this.#showSaveFailedDialog(error);
+      await this.#nativeDialogs.showSaveFailure(
+        this.#dialogWindow(),
+        this.#applicationName(),
+        error,
+      );
       return false;
     }
   }
@@ -232,7 +250,11 @@ export class DocumentSession {
       }
 
       this.#log.warn("close guard could not read document state", error);
-      await this.#showSaveFailedDialog(error);
+      await this.#nativeDialogs.showSaveFailure(
+        this.#dialogWindow(),
+        this.#applicationName(),
+        error,
+      );
       return this.#state;
     }
   }
@@ -248,109 +270,6 @@ export class DocumentSession {
     const state = await this.#document.save(savePath);
     this.acceptState(state);
     return state;
-  }
-
-  async #showSaveDialog(state: WorkspaceDocumentState): Promise<string | null> {
-    const options: SaveDialogOptions = {
-      title: "Save Shift Document",
-      defaultPath: state.saveTarget ?? undefined,
-      filters: [{ name: "Shift Source Package", extensions: ["shift"] }],
-      properties: ["createDirectory", "showOverwriteConfirmation"],
-    };
-
-    const window = this.#dialogWindow();
-    const result = window
-      ? await dialog.showSaveDialog(window.window, options)
-      : await dialog.showSaveDialog(options);
-
-    return result.canceled ? null : (result.filePath ?? null);
-  }
-
-  async #showExportDialog(state: WorkspaceDocumentState): Promise<string | null> {
-    const defaultPath = state.saveTarget
-      ? path.join(path.dirname(state.saveTarget), `${path.parse(state.saveTarget).name}.ttf`)
-      : "Untitled.ttf";
-    const options: SaveDialogOptions = {
-      title: "Export TrueType Font",
-      defaultPath,
-      filters: [{ name: "TrueType Font", extensions: ["ttf"] }],
-      properties: ["createDirectory", "showOverwriteConfirmation"],
-    };
-
-    const window = this.#dialogWindow();
-    const result = window
-      ? await dialog.showSaveDialog(window.window, options)
-      : await dialog.showSaveDialog(options);
-
-    return result.canceled ? null : (result.filePath ?? null);
-  }
-
-  async #showDirtyDocumentDialog(
-    state: WorkspaceDocumentState,
-    reason: CloseReason,
-  ): Promise<DirtyDocumentChoice> {
-    const name = state.saveTarget ? path.basename(state.saveTarget) : "Untitled";
-    const options: MessageBoxOptions = {
-      type: "warning",
-      buttons: ["Save", "Don't Save", "Cancel"],
-      defaultId: 0,
-      cancelId: 2,
-      noLink: true,
-      title: this.#applicationName(),
-      message: this.#dirtyDocumentMessage(reason, name),
-      detail: "Your changes will be lost if you don't save them.",
-    };
-
-    const window = this.#dialogWindow();
-    const result = window
-      ? await dialog.showMessageBox(window.window, options)
-      : await dialog.showMessageBox(options);
-
-    if (result.response === 0) return "save";
-    if (result.response === 1) return "discard";
-    return "cancel";
-  }
-
-  async #showSaveFailedDialog(error: unknown): Promise<void> {
-    const options: MessageBoxOptions = {
-      type: "error",
-      buttons: ["OK"],
-      defaultId: 0,
-      title: this.#applicationName(),
-      message: "The document could not be saved.",
-      detail: errorToMessage(error),
-    };
-
-    const window = this.#dialogWindow();
-    if (window) {
-      await dialog.showMessageBox(window.window, options);
-      return;
-    }
-
-    await dialog.showMessageBox(options);
-  }
-
-  async #showExportFailedDialog(error: unknown): Promise<void> {
-    const options: MessageBoxOptions = {
-      type: "error",
-      buttons: ["OK"],
-      defaultId: 0,
-      title: this.#applicationName(),
-      message: "The TrueType font could not be exported.",
-      detail: errorToMessage(error),
-    };
-
-    const window = this.#dialogWindow();
-    if (window) {
-      await dialog.showMessageBox(window.window, options);
-      return;
-    }
-
-    await dialog.showMessageBox(options);
-  }
-
-  #dirtyDocumentMessage(_reason: CloseReason, name: string): string {
-    return `Save changes to ${name} before closing?`;
   }
 
   #updateWindowTitle(): void {
