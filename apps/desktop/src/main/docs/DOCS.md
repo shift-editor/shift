@@ -9,7 +9,7 @@ Electron main process: app startup, windows, menus, document dialogs, and worksp
 - **Architecture Invariant:** `WorkspaceManager` owns live font sessions. Windows attach to sessions; commands and IPC resolve the session from the focused window or sender. A session's immutable mode is `"authored"` or `"imported"`.
 - **Architecture Invariant:** Every font session owns one `WorkspaceProcess`. Authored sessions additionally own one `DocumentClient` and one `DocumentSession`; imported sessions deliberately have no authored document, persistence, dirty state, save target, or export workflow. Main never reads or mutates font data directly.
 - **Architecture Invariant:** Every non-`.shift` font path opens as an immutable imported session. It uses the shared renderer sync lane and `/home` route, but never allocates a SQLite working document or authored Shift model.
-- **Architecture Invariant:** Dirty state and save targets come from the utility-owned workspace state. Main shows native dialogs, but state reads, saves, and exports go through the renderer document lane so pending edits flush first.
+- **Architecture Invariant:** Dirty state and save targets come from the utility-owned workspace state. Main obtains native choices through `NativeDialogs`, but state reads, saves, and exports go through the renderer document lane so pending edits flush first. Production uses Electron dialogs; E2E injects deterministic choices at this outer boundary.
 - **Architecture Invariant:** TTF export snapshots the workspace in the ordered sync lane, then releases that lane before font compilation so subsequent editing is not blocked by fontc.
 - **Architecture Invariant:** A `.shift` package session is reused by `(packageId, canonicalPath)`, not by the path string the user selected and not by the current document id.
 - **Architecture Invariant:** Closing the last window for a workspace runs `DocumentSession.confirmClose`. Clean documents and explicitly discarded dirty documents are closed through the utility process so package bindings and SQLite documents are pruned.
@@ -31,10 +31,14 @@ src/main/
   commands/
     Command.ts                    -- command registry and command context types
     Commands.ts                   -- built-in shell commands
+  dialogs/
+    NativeDialogs.ts              -- outer boundary for native file and document choices
+    electronNativeDialogs.ts      -- production Electron dialog implementation
+    scriptedNativeDialogs.ts      -- deterministic E2E dialog implementation
   document/
     DocumentClient.ts             -- main client for the renderer document lane
     DocumentSession.ts            -- native save/save-as/export/close workflow
-    openFontDialog.ts             -- native open dialog
+    types.ts                      -- close reasons and dirty-document choices
   menu/
     ApplicationMenu.ts            -- Electron application menu
   windows/
@@ -53,6 +57,7 @@ src/main/
 - `FontSessionHost` -- owns the immutable mode, utility process, optional authored document services, and attached windows for one open font.
 - `WorkspaceProcess` -- starts the utility process and exposes shell-lane calls such as create, inspect package, open, close, and document state.
 - `DocumentClient` -- request client for renderer-served document state/save calls.
+- `NativeDialogs` -- injected outer boundary for Open, Save As, Export, dirty-close choices, and failure messages.
 - `DocumentSession` -- native document workflow for Save, Save As, Export TrueType, and close confirmation.
 - `AppLifecycle` -- coordinates Electron window close and app quit around document vetoes.
 - `WorkspaceDocumentState` -- utility-owned lifecycle state mirrored into main and renderer.
@@ -69,7 +74,7 @@ On macOS, closing the last window leaves Shift running. A later Dock activation 
 
 ### Workspace Creation And Open
 
-File -> New asks `WorkspaceManager.createUntitled()` for a session. File -> Open shows `showOpenFontDialog()` and then asks `WorkspaceManager.openPath(path)`.
+File -> New asks `WorkspaceManager.createUntitled()` for a session. File -> Open asks `NativeDialogs.openFont()` for a path and then asks `WorkspaceManager.openPath(path)`.
 
 For every non-`.shift` font path, `WorkspaceManager` opens one immutable retained source in the utility process and registers an `"imported"` session without a document lane. For `.shift` paths, `WorkspaceManager` starts a provisional utility process and calls `workspace.inspectPackage` before opening. If a live session already owns the same `(packageId, canonicalPath)`, the provisional process is stopped and the existing session is returned. Otherwise the process opens the package and the resulting state is registered. Main does not start monolithic Slug preparation: the renderer requests the complete fixed-page set before its first Grid presentation. The utility opens and validates a matching cache artifact once, serves independently verified Zstd pages through the bounded stream contract, or compiles native misses and stages them for atomic publication. Page boundaries keep compilation, streaming, cache replacement, and local edit invalidation bounded without putting page acquisition on the scroll path.
 
@@ -79,7 +84,7 @@ For every non-`.shift` font path, `WorkspaceManager` opens one immutable retaine
 
 ### Save, Export, And Close
 
-Save and Save As start in `DocumentSession`, but the actual save request goes through `DocumentClient` to the renderer document lane. The renderer flushes queued edits through the workspace sync lane before calling `workspace.save` or `workspace.saveAs`.
+Save and Save As start in `DocumentSession`, which obtains destinations and confirmations through `NativeDialogs`; the actual save request goes through `DocumentClient` to the renderer document lane. The renderer flushes queued edits through the workspace sync lane before calling `workspace.save` or `workspace.saveAs`.
 
 Export TrueType follows the same document and sync lanes. The utility process captures an immutable native snapshot after prior edits, then awaits direct Shift IR-to-fontc compilation outside the workspace queue. Edits submitted after snapshot capture can proceed and are not included in that export. Export does not change the package binding or dirty state.
 
@@ -104,7 +109,7 @@ Renderer IPC in `App` is limited to shell capabilities: command execution, clipb
 
 1. Add a command in `commands/Commands.ts`.
 2. Implement it through the command context in `app/App.ts`.
-3. Keep native dialogs in `document/` and workspace ownership in `workspace/`.
+3. Add native choices to `NativeDialogs` with Electron and scripted implementations in `dialogs/`; keep workspace ownership in `workspace/`.
 
 ## Gotchas
 
@@ -120,6 +125,7 @@ Renderer IPC in `App` is limited to shell capabilities: command execution, clipb
 - `pnpm --filter @shift/desktop test src/renderer/src/lib/workspace/WorkspaceEditCoordinator.test.ts`
 - `pnpm typecheck`
 - Electron E2E fixtures copy their startup workspace under a fresh `testRoot`, launch with a fresh `userDataDir`, assert Electron honored that path, and remove the root after force-closing the disposable process.
+- `document-lifecycle.spec.ts` injects scripted native choices and verifies New/Open, first and ordinary Save, Save cancellation/failure safety, dirty-close choices, clean quit/relaunch/reopen, and Export safety through application commands.
 - Manual: open the same `.shift` package twice and verify the existing workspace session is reused.
 - Manual: edit a package, close the last window, and verify the save/discard prompt appears.
 

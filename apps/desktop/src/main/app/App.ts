@@ -22,7 +22,8 @@ import { AppLifecycle } from "./AppLifecycle";
 import { WindowManager } from "../windows/WindowManager";
 import { WorkspaceManager } from "../workspace/WorkspaceManager";
 import type { FontSessionHost } from "../workspace/FontSessionHost";
-import { showOpenFontDialog } from "../document/openFontDialog";
+import type { NativeDialogs } from "../dialogs/NativeDialogs";
+import { electronNativeDialogs } from "../dialogs/electronNativeDialogs";
 import { shiftProductName } from "../release";
 
 const SLUG_ATLAS_PROFILING_ENABLED =
@@ -40,13 +41,11 @@ const SLUG_ATLAS_PROFILING_ENABLED =
 export class App {
   readonly #log: ShiftLogger;
   readonly #lifecycle: AppLifecycle;
+  readonly #nativeDialogs: NativeDialogs;
 
   #commands = new CommandRegistry();
   #windows = new WindowManager();
-  #workspaces = new WorkspaceManager({
-    documentsRoot: () => this.#requireDocumentsRoot(),
-    applicationName: () => this.applicationName,
-  });
+  #workspaces: WorkspaceManager;
   #documentsRoot: string | null = null;
 
   #appIcon = new AppIcon();
@@ -58,8 +57,23 @@ export class App {
     });
   });
 
-  constructor(log: ShiftLogger = createShiftLogger("app")) {
+  /**
+   * Creates the Electron application service graph.
+   *
+   * @param nativeDialogs - outer native-choice boundary shared by file and document workflows.
+   * @param log - application logger that receives shell lifecycle diagnostics.
+   */
+  constructor(
+    nativeDialogs: NativeDialogs = electronNativeDialogs,
+    log: ShiftLogger = createShiftLogger("app"),
+  ) {
     this.#log = log;
+    this.#nativeDialogs = nativeDialogs;
+    this.#workspaces = new WorkspaceManager({
+      documentsRoot: () => this.#requireDocumentsRoot(),
+      applicationName: () => this.applicationName,
+      nativeDialogs: this.#nativeDialogs,
+    });
     this.#lifecycle = new AppLifecycle({
       documentForWindow: (window) => {
         const session = this.#workspaces.getForBrowserWindow(window.window);
@@ -271,6 +285,7 @@ export class App {
         mode: session.mode,
         windowId: browserWindow.id,
       });
+      session.document?.refreshWindowTitles();
       if (browserWindow.isVisible() || browserWindow.isMinimized()) return;
 
       window.focus();
@@ -323,7 +338,7 @@ export class App {
   }
 
   async #openWorkspaceFromWindow(opener: Window): Promise<void> {
-    const openPath = await showOpenFontDialog(opener);
+    const openPath = await this.#nativeDialogs.openFont(opener);
     if (!openPath) return;
 
     const session = await this.#workspaces.openPath(openPath);

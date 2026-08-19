@@ -1,7 +1,7 @@
 import { app, type Event } from "electron";
 import type { ShiftLogger } from "../logging";
 import type { Window } from "../windows/Window";
-import type { CloseReason } from "../document/DocumentSession";
+import type { CloseReason } from "../document/types";
 
 export type CloseConfirmation = {
   shouldConfirmClose(): boolean;
