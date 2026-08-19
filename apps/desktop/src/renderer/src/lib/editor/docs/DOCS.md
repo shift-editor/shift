@@ -1,5 +1,7 @@
 # Editor
 
+<!-- reviewed: 2026-08-18 -->
+
 Central orchestrator for the canvas-based glyph editing surface, wiring viewport transforms, selection, rendering, hit testing, and tool management into a single facade.
 
 ## Architecture Invariants
@@ -12,7 +14,7 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 
 **Architecture Invariant:** `Font.loadGlyph()` is the only asynchronous Glyph acquisition API. `Editor.glyphForId()` is the synchronous runtime and NodeDefinition lookup: it returns the canonical complete Glyph when available, returns `null` otherwise, and never starts I/O. Use `Font.recordForId()` when code must distinguish a nonexistent current-font ID from a Glyph that has not been acquired.
 
-**Architecture Invariant:** Pointer events still carry `screen`, `scene`, and active glyph-local coordinates for the current tool path. Placed scene item-local conversion is not global; it requires an `ItemId` through `Scene.toLocal()` / `Scene.toScene()`.
+**Architecture Invariant:** Pointer events carry only `screen` and `scene` coordinates (`Coordinates`). Node-local conversion is not global: rendering enters a node's space via `ctx.canvas.withTranslation(node.position, ...)`, and hit-test paths derive node-local coordinates after identifying the target node.
 
 **Architecture Invariant:** `drawOffset` is derived render state. Text tools focus glyphs by `GlyphAnchor { runId, itemId }`; `Editor` resolves that anchor through `TextRuns` and `TextLayout.editOriginForItem()`. Tools must not set text-run edit placement coordinates directly.
 
@@ -24,7 +26,7 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 
 **Architecture Invariant:** `Editor.positionSelection(ids)` is the canonical boundary from generic selected object IDs to one active authored `GlyphLayer` plus normalized point/anchor targets. It expands segment and contour IDs, rejects unsupported or mixed-layer input, and carries no scene-node placement; pointer deltas and tool surfaces own coordinate context.
 
-**Architecture Invariant:** Lifecycle events (`EventEmitter`) are for one-shot imperative actions (`fontLoaded`, `fontSaved`, `destroying`). Continuous state changes use signals. Do not mix the two patterns.
+**Architecture Invariant:** Lifecycle events (`EventEmitter`) are for one-shot imperative actions; `LifecycleEventMap` currently contains only `destroying`. Continuous state changes use signals. Do not mix the two patterns.
 
 **Architecture Invariant:** `Editor.toolCell` is the public active-tool state surface. It derives `{ id, state }` from the active tool instance and its `stateCell`; consumers use `toolIf(id)` for built-in state narrowing and do not reach through `ToolManager` for active state.
 
@@ -44,24 +46,21 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 
 ```
 editor/
-  Editor.ts              -- Facade (~1750 lines), wires all subsystems
-  lifecycle.ts           -- EventEmitter for fontLoaded/fontSaved/destroying
-  sidebearings.ts        -- deriveGlyphSidebearings, roundSidebearing
+  Editor.ts              -- Facade (~1373 lines), wires all subsystems
+  lifecycle.ts           -- EventEmitter for lifecycle events (currently `destroying`)
   managers/
     Camera.ts             -- UPM<->screen affine matrices, zoom, pan
   rendering/
     Renderer.ts          -- Canvas layer orchestration and RAF scheduling
     Canvas.ts            -- 2D drawing API wrapping CanvasRenderingContext2D
-    Handles.ts           -- Marker-layer handle rendering with CPU fallback
     FrameHandler.ts      -- RAF deduplication per render target
     FpsMonitor.ts        -- Rolling-window FPS measurement
     Theme.ts             -- DEFAULT_THEME shared editor visual constants
     constants.ts         -- SCREEN_HIT_RADIUS (8px)
-    Camera.visibleSceneBounds -- Frustum culling for off-screen elements
     markers/             -- WebGL marker shaders and instance packing
     overlays/            -- Guides, ControlLines, Segments, Anchors,
-                            DebugOverlays, Handles, handleDrawing
-    composite.ts         -- Composite glyph hit testing
+                            DebugOverlays, handleDrawing, and Handles
+                            (marker-layer handle rendering with CPU fallback)
 ```
 
 ## Key Types
@@ -80,8 +79,8 @@ editor/
 - **`PositionSelection`** -- One active authored `GlyphLayer` paired with normalized point/anchor targets. It contains edit ownership only, not scene placement or pointer coordinates.
 - **`Hover`** -- Tracks the currently hovered glyph-domain entity (point/anchor/segment). Tool-specific controls such as select bounding boxes stay with the owning tool.
 - **`Handles`** -- Handle renderer that tries the accelerated marker layer and falls back to CPU drawing internally.
-- **`FrameHandler`** -- Deduplicates `requestAnimationFrame` per render target. Only the latest callback fires.
-- **`EventEmitter`** -- Typed emitter for `LifecycleEventMap` (`fontLoaded`, `fontSaved`, `destroying`).
+- **`FrameHandler`** -- Deduplicates `requestAnimationFrame` per render target. While a frame is pending, later requests are dropped without storing their callback -- the first callback wins.
+- **`EventEmitter`** -- Typed emitter for `LifecycleEventMap` (currently only `destroying`).
 - **`Theme`** -- Shared visual config for editor-rendered elements. Tool-owned controls keep their own local style constants.
 
 ## How it works
@@ -106,26 +105,22 @@ Tools receive screen and scene coordinates from the pointer pipeline. Scene/node
 
 ### Four canvas layers
 
-| Layer      | Technology   | Content                                                     | Redraw trigger                     |
-| ---------- | ------------ | ----------------------------------------------------------- | ---------------------------------- |
-| background | Canvas 2D    | Guides, tool backgrounds                                    | `#staticEffect`                    |
-| scene      | Canvas 2D    | Glyph outline, segments, handles (CPU), anchors, tool scene | `#staticEffect`                    |
-| handles    | WebGL (regl) | GPU-rendered point handles                                  | `#staticEffect` (via scene render) |
-| overlay    | Canvas 2D    | Bounding box handles, tool overlays                         | `#overlayEffect`                   |
+| Layer      | Technology   | Content                                                     | Redraw trigger                    |
+| ---------- | ------------ | ----------------------------------------------------------- | --------------------------------- |
+| background | Canvas 2D    | Guides, tool backgrounds                                    | `#backgroundEffect`               |
+| scene      | Canvas 2D    | Glyph outline, segments, handles (CPU), anchors, tool scene | `#sceneEffect`                    |
+| handles    | WebGL (regl) | GPU-rendered point handles                                  | `#sceneEffect` (via scene render) |
+| overlay    | Canvas 2D    | Bounding box handles, tool overlays                         | `#overlayEffect`                  |
 
-Background, scene, and overlays are drawn in UPM space (`Canvas.withGlyphSpace()` applies the affine transform). Tool-owned controls convert pixel-sized handles and strokes at draw time.
+Background, scene, and overlays are drawn in UPM space (`Canvas.withSceneSpace()` applies the affine transform). Tool-owned controls convert pixel-sized handles and strokes at draw time.
 
 ### Rendering pipeline
 
-`Renderer.#renderScene()` draws `SceneLayer`, which:
+`Renderer.#renderScene()` draws `SceneLayer`, which runs three passes over the scene nodes:
 
-1. Draws glyph outline (and fill in preview mode)
-2. Draws hovered/selected segments
-3. Draws debug overlays if enabled
-4. Delegates to `ToolManager.drawScene()`
-5. Draws control lines with frustum culling via `Camera.visibleSceneBounds()`
-6. Attempts GPU marker rendering; falls back to CPU if unavailable
-7. Draws anchors
+1. Content pass -- `GlyphNodeDefinition` draws a stroked outline plus debug overlays (if enabled) while the glyph is being edited; a non-editing glyph takes the display path and draws a filled outline instead.
+2. Delegates to `ToolManager.drawScene()` inside each glyph node's transform.
+3. Controls pass -- draws hovered/selected segments, then control lines with frustum culling via `Camera.visibleSceneBounds()`, then handles (GPU marker rendering with CPU fallback), then anchors.
 
 ### Zoom-to-cursor
 
@@ -145,13 +140,13 @@ Glyph geometry exposes domain hit queries for points, anchors, and segments. Too
 
 1. Declare a `WritableSignal<T>` field on `Editor`.
 2. Initialize it in the constructor.
-3. Read the signal in `#staticEffect` (just reference `.value`).
+3. Read the signal in the scene render pass so `#sceneEffect` tracks it (just reference `.value`).
 4. The `FrameHandler` coalesces the redraw automatically.
 
 ### Add a new rendering indicator
 
 1. Create a class under `rendering/overlays/` with a `draw(canvas: Canvas, ...)` method.
-2. Instantiate it as a field on `Editor` (e.g. `#myIndicator = new MyIndicator()`).
+2. Instantiate it as a private field on `GlyphNodeDefinition` alongside the existing drawers (e.g. `#myIndicator = new MyIndicator()`), or on the owning tool if it is tool-specific.
 3. Call `#myIndicator.draw(canvas, ...)` from the appropriate canvas item layer or tool draw hook.
 4. If it depends on new state, read that state in the appropriate effect.
 
@@ -173,8 +168,9 @@ Glyph geometry exposes domain hit queries for points, anchors, and segments. Too
 
 ## Verification
 
-- `npx vitest run apps/desktop/src/renderer/src/lib/editor/` -- unit tests for managers, hit testing, sidebearings, lifecycle, drafts.
-- `npx vitest run --testPathPattern="draft"` -- draft-specific tests.
+- `npx vitest run apps/desktop/src/renderer/src/lib/editor/` -- unit tests for managers, hit testing, sidebearings, lifecycle, plus editor-outcome suites for boolean operations, clipboard copy/paste, and glyph metrics that drive `TestEditor` through real tool gestures and assert resulting contours, selection, and history.
+- Outcome tests treat editor actions as asynchronous: metric setters need `await editor.settle()` before asserting, clipboard and history actions (`copy`, `paste`, `undo`, `redo`) return promises that must be awaited, and drag helpers give every drag sample its cumulative delta from the pointer-down origin.
+- `pnpm test:desktop src/renderer/src/lib/model/positions/PositionEdits.test.ts` -- position-edit (move/rotate/scale) tests.
 - `pnpm test:desktop src/renderer/src/lib/editor/managers/Camera.test.ts` -- camera manager tests.
 - Manual: open a font, zoom/pan, select points, drag, toggle preview mode, verify GPU/CPU handle rendering toggle.
 
@@ -187,5 +183,5 @@ Glyph geometry exposes domain hit queries for points, anchors, and segments. Too
 - `Font` -- Font model access; `Editor.font` for metrics, glyph names, composites.
 - `Selection` -- `Editor.selection` (public). Point/anchor/segment selection with computed contour queries.
 - `Mat` (from `@shift/geo`) -- 2D affine matrix used by `Camera` for coordinate transforms.
-- `Segment` (from `@shift/glyph-state`) -- Segment iteration and hit testing used by `Editor.getSegmentAt()`.
+- `Segment` (from `@shift/glyph-state`) -- Segment iteration and hit testing backing glyph geometry's `hitAt()` (`lib/model/Glyph.ts`), surfaced to the pointer pipeline through `GlyphNodeDefinition.hit()`.
 - `MarkerLayer` (from `graphics/backends`) -- WebGL context for GPU marker rendering.

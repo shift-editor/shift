@@ -1,5 +1,7 @@
 # shift-font
 
+<!-- reviewed: 2026-08-18 review-every: 90d -->
+
 First-class Rust font object model for Shift.
 
 ## Architecture Invariants
@@ -21,10 +23,10 @@ First-class Rust font object model for Shift.
 crates/shift-font/src/
   ir/              -- font entities, IDs, axes, mappings, instances, glyph data
     collection.rs  -- semantic ordered identity collections
+    variation.rs   -- external-to-design mapping evaluation
   intents.rs       -- atomic authoring intents and semantic application
   changes.rs       -- replace-grade semantic change records
   layer_edit.rs    -- glyph-layer geometry mutations
-  variation.rs     -- external-to-design mapping evaluation
   interpolation.rs -- source compatibility, reusable bases, source values
   projection.rs    -- location-independent glyph payloads and resolved views
   composite.rs     -- component occurrences, attachment semantics, and flattening
@@ -118,6 +120,34 @@ layer.apply_bulk_node_positions(updates)?;
 ```
 
 Transport and workspace layers should pass stable identity to find the model object, then call these methods. They should not introduce hidden native edit sessions.
+
+## Workflow recipes
+
+### Adding a new authoring intent
+
+1. Add the variant to `FontIntent` in `crates/shift-font/src/intents.rs`. Layer-scoped intents carry a `LayerId`; extend `FontIntent::layer_id()` and `required_layer_ids()` so `shift-workspace` can acquire the complete layer read set before applying.
+2. Implement the branch in `Font::apply_intents`, delegating the actual edit to a method on the owning model object (`GlyphLayer`, `Font`, `Source`).
+3. Emit a replace-grade `FontChange` record via a constructor in `changes.rs` (e.g. `FontChange::layer_geometry_replaced`). Records carry post-mutation snapshots, not deltas — the workspace persists and replays them.
+4. If the renderer needs identity synchronously, accept caller-minted IDs through a seed struct such as `PointSeed` rather than returning Rust-minted IDs after the fact.
+5. Wire the downstream layers separately: ledger mapping in `shift-workspace`, then in `shift-bridge` a new `NapiFontIntent` payload field plus a `map_intent` branch — intents do not get per-intent `#[napi]` methods; they all flow through the single `apply` entry point.
+6. Verify: `cargo test -p shift-font`, and `cargo test -p shift-workspace` when ledger semantics are affected.
+
+### Adding a glyph-layer geometry mutation
+
+1. Add the method to `GlyphLayer` in `crates/shift-font/src/layer_edit.rs`, next to `add_point_to_contour` and `remove_points`. Return `CoreResult` for anything that can reference missing identity.
+2. Never leave an empty contour record behind: follow `remove_points`, which prunes emptied contours and returns the pruned `ContourId` values so the font-wide structure index stays consistent.
+3. Bulk position paths take `BulkNodePositionUpdates` flat ID/coordinate slices; validate coordinate length against the ID count before mutating anything so a malformed batch never half-applies.
+4. Verify: `cargo test -p shift-font`.
+
+## Gotchas
+
+- Bulk coordinate buffers are interleaved `x0, y0, x1, y1, …` in font units. A coords slice whose length is not exactly twice the ID slice fails validation up front — no partial application, but also no silent truncation.
+- `remove_points` returns the `ContourId` values of contours it pruned. Callers caching contour identity (selection, hit-testing, snapshots) must consume that return value; assuming a contour survives point removal is wrong.
+- `ExternalLocation` and `DesignLocation` are deliberately incompatible. `from_untyped`/`as_untyped` exist only for serialization boundaries — using them to shortcut a conversion silently skips axis mapping. Never feed an already-mapped `DesignLocation` back through mapping; mapping is not idempotent.
+- Cross-source component correspondence is the ordered slot, not `ComponentId`. Compatible layers may use different component IDs in the same slot, so sorting a layer's components or joining on ID across sources silently breaks `gvar`-style compatibility.
+- `GlyphProjectionSet` is scoped to one read or compilation. Holding one across an authored edit yields stale geometry with no error — nothing invalidates it for you.
+- A source with no layer for a glyph is not an empty glyph: it resolves through interpolation or fallback and is simply non-editable at that source. Only an authored empty layer means blank.
+- Anchor count/name/order compatibility is a Shift-specific restriction (anchor positions share the glyph interpolation vector). Do not assume fontTools or OpenType define it when relaxing or tightening compatibility rules.
 
 ## Verification
 

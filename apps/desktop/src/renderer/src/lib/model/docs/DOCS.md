@@ -1,5 +1,7 @@
 # Renderer font model
 
+<!-- reviewed: 2026-08-18 review-every: 90d -->
+
 Reactive TypeScript font, authored glyph-layer, and derived glyph-view surfaces.
 
 ## Architecture Invariants
@@ -51,7 +53,7 @@ lib/interpolation/
 types/
   glyph.ts                   -- GlyphReader and model construction contracts
   glyphRender.ts             -- renderer contour/anchor contracts plus passive RenderGlyph
-workspace/
+apps/desktop/src/renderer/src/workspace/
   FontSession.ts             -- immutable mode/catalog/optional-workspace composition
   FontSessionProvider.tsx    -- one renderer bootstrap and context boundary
 lib/catalog/
@@ -85,7 +87,11 @@ hooks/
 - `GlyphContour` -- one displayed contour occurrence over a source contour, a current transform, and optional owning `ComponentGlyph`; it replaces a `ContourPath` when reactive geometry changes.
 - `ContourPath` -- non-reactive commands plus independently lazy SVG, Canvas path, and bounds for one transformed contour occurrence.
 
-## Resolution and loading
+## How it works
+
+The model is a one-way pipeline from workspace records to displayed geometry. `FontStore` owns renderer-local backing (records, layer state, projections) and the canonical loaded `Glyph` objects; `Font` is the eager metadata and authoring surface plus the asynchronous acquisition boundary; a loaded `Glyph` composes its authored `GlyphLayer` objects and component dependencies into location-specific render models. Acquisition is async exactly once per glyph, and everything downstream — resolution, scrubbing, editing previews — is synchronous and reactive. This shape exists because render and tool code cannot tolerate I/O or bridge round-trips in the frame path: Rust is consulted at acquisition and commit boundaries only, never per frame.
+
+### Resolution and loading
 
 `Font.loadGlyph()` is the sole public asynchronous Glyph acquisition API. Authored reads acquire complete layer snapshots; imported reads acquire a location-independent root projection plus its complete transitive component closure. The full response is validated before one batched `FontStore` publication, so failures publish nothing and remain retryable. Each successful Glyph and dependency stays resident for the session, and later calls return through the same Promise API without another source read.
 
@@ -108,13 +114,13 @@ own masters even when it has no layer at the root glyph's exact source. When no
 viable interpolation exists, it uses a deterministic master-backed fallback;
 layer-only/background sources never participate.
 
-## Scrubbing and reuse
+### Scrubbing and reuse
 
 `Glyph.renderModelAt()` retains one render model per live location signal through a `WeakMap`. Changing a signal reevaluates the same model; historical location values are not retained as cache keys.
 
 Only observed render output is evaluated. Virtualized offscreen models do not subscribe to paths, and no sequence of scrubbed locations increases retained geometry. Component occurrence objects are reused by their Rust-supplied paths.
 
-## Pending authored edits
+### Pending authored edits
 
 Layer edits move through **active** (cancelable), **pending** (finished and queued), and **confirmed** (workspace-echoed) vocabulary. `GlyphLayerEdit` owns active structural interaction state while mutating the ordinary reactive `LayerBuffers`. `GlyphLayerWriter` queues finished wire intents through `LayerIntents`, receives a renderer-local `PendingEditId`, and applies the same typed operations to `GlyphLayerState`. Transactions share one pending identity and run inside one signal batch, so finishing an edit changes persistence ownership without changing visible geometry. A throwing transaction restores each touched layer and sends nothing.
 
@@ -122,11 +128,11 @@ Local operations mutate the existing segmented `LayerBuffers`: advance, contours
 
 `GlyphLayerState.#applyEdit()` wraps pending operations. It captures the pre-edit snapshot once per `PendingEditId`, batches a typed operation closure, and records only successful changes. `beginEdit()`, `finishEdit()`, and `cancelEdit()` separately own the active local lifecycle. Their operation closures remain renderer-local and never cross `LayerIntents` or IPC.
 
-## Packed layout ownership
+### Packed layout ownership
 
 The object that knows a packed layout must also own the logical metadata that interprets it. High-level editing code must not coordinate parallel structure and scalar buffers:
 
-```ts
+```ts illustrative
 // Wrong: two owners can drift and callers must know the x/y stride.
 contour.points.reverse();
 reverseCoordinatePairs(values);
@@ -134,14 +140,14 @@ reverseCoordinatePairs(values);
 
 Put both changes behind the logical record instead:
 
-```ts
+```ts illustrative
 // Correct: ContourBuffer owns point metadata and its itemSize=2 PackedArray.
 contour.reverse();
 ```
 
 `PackedArray` exposes item indexes through `setItem()`, `splice()`, and `reverse()`. Its backing capacity is an implementation detail. Structural glyph limits come from Rust and export formats, not renderer allocation choices.
 
-## Boundaries
+### Boundaries
 
 - `FontSessionClient` owns the one renderer/utility channel and catches up from either the existing workspace snapshot or retained source snapshot according to immutable session mode.
 - `GlyphCatalog` is the only font-wide surface consumed by Home/Grid. Imported `GlyphEntry` directory values populate `FontStore`, while imported authored-record and layer collections remain empty.
@@ -152,6 +158,37 @@ contour.reverse();
 - `GlyphRenderModel` owns no editable source identity and cannot commit edits.
 - `GlyphNodeDefinition` owns handle policy. It filters `GlyphRenderModel.contours` to root-owned occurrences and uses `GlyphRenderModel.anchors`; inherited component points never become editable root points.
 - React controls acquisition demand but does not own font truth or interpolation caches.
+
+## Workflow recipes
+
+### Displaying a glyph in a new view
+
+1. Acquire the glyph once with `await font.loadGlyph(glyphId)` (or `Font.loadGlyphs` for a batch). Never poll `Editor.glyphForId()` hoping a load happens — it only reads.
+2. Build the render surface with `glyph.renderModelAt(externalLocationCell, activeSourceIdCell)`, passing the editor's _stable_ location signals, not freshly created ones.
+3. Consume geometry through the model's reactive signals — `contoursCell`, `boundsCell`, `xAdvanceCell` (or `trackShape()` when you need per-contour coordinate dependencies) — inside a `computed`/`effect`. The bare `contours`/`bounds`/`xAdvance` getters `peek()` and register no dependency, so reading only them leaves the view stale when the location scrubs; alternatively track the location cell explicitly, the way `TextRun`'s layout computed does.
+4. Verify: `pnpm typecheck && pnpm test:desktop src/renderer/src/lib/model/Glyph.test.ts`
+
+### Adding a typed glyph-layer editing operation
+
+1. Add the local operation to `LayerBuffers` (or the owning `ContourBuffer`/`AnchorBuffer`/`ComponentBuffer`) so metadata and packed values change behind one logical record.
+2. Wrap it in `GlyphLayerState` through the pending-edit path (`#applyEdit` captures the pre-edit snapshot per `PendingEditId`), and expose a public method on `GlyphLayer` that applies it locally and queues the matching `FontIntent` through `LayerIntents`.
+3. Do not parse `FontIntent.kind` in the renderer or add font-wide validation — Rust interprets and validates the intent.
+4. Verify: `pnpm test:desktop src/renderer/src/lib/model/GlyphLayerState.test.ts` and `pnpm test:desktop src/renderer/src/lib/model/GlyphLayerGeometry.test.ts`
+
+### Building a cancelable structural interaction (tools)
+
+1. Open the interaction with `glyphLayer.beginEdit()`; the returned `GlyphLayerEdit` mutates the live reactive layer, so rendering and hit testing see the in-progress topology without a preview overlay.
+2. Apply structural changes (`addCubic`, `setPointSmooth`) and previews (`setPositions`) on the edit object; call `finish(label)` to replay the final operations through one workspace transaction, or `cancel()` to restore the latest accepted base.
+3. Verify: `pnpm typecheck && pnpm test:unit`
+
+## Gotchas
+
+- `Editor.glyphForId()` returns `null` both for glyphs that don't exist and for glyphs that simply haven't been acquired yet. Use `Font.recordForId()` to tell the cases apart before concluding a glyph is missing.
+- `renderModelAt()` caches per _location-signal identity_ (a `WeakMap` keyed by the signal object). Creating a new signal per call defeats reuse and re-derives geometry every time; pass the editor's long-lived cells.
+- A glyph can be visible at a location where `Glyph.layerAt()` returns `null` (interpolation or fallback rendering). Editing affordances must gate on layer presence, not on whether geometry renders.
+- `Font.committedFontCell` fires on every committed change and is invalidation-only — the underlying `FontStore` committed-font signal is declared with `equals: () => false`, and `committedFontCell` is a computed wrapper that propagates each notification. Subscribe with `track(...)`; reading data from it instead of the Font surface is a smell.
+- Removing the last point of a contour deletes the contour record immediately, before the workspace echo confirms it. Code holding a `ContourId` across an edit must tolerate the id disappearing.
+- `GlyphLayerEdit.addCubic` may be called at most once per edit; a second call throws. A throw inside `finish()`'s transaction restores every touched layer and sends nothing to the workspace.
 
 ## Verification
 

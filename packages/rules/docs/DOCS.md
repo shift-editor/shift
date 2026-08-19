@@ -1,10 +1,12 @@
 # @shift/rules
 
+<!-- reviewed: 2026-08-18 review-every: 90d -->
+
 Point editing rules engine that enforces geometric constraints (tangency, collinearity, handle co-movement) during drag operations by pattern-matching the point neighborhood around each selected point.
 
 ## Architecture Invariants
 
-- **Architecture Invariant:** The rule table is a singleton built lazily by `getRuleTable`. All concrete patterns are expanded and collision-checked at build time; duplicate patterns throw unless the overriding spec sets `allowPatternOverride: true` with higher precedence.
+- **Architecture Invariant:** The rule table is a singleton built lazily by `getRuleTable`. All concrete patterns are expanded and collision-checked at build time; a duplicate pattern from a **different** rule id throws unless the overriding spec sets `allowPatternOverride: true` with higher precedence. The same rule id re-registering a pattern silently overwrites the earlier entry -- no collision check applies.
 - **Architecture Invariant:** The center point (offset 0) is always encoded by its type token (`C`, `S`, `H`), never as `@`. The `@` token only appears for _other_ selected points in the window. This means `@` at offset 0 in a template is a semantic error.
 - **Architecture Invariant:** `constrainDrag` operates on a **base glyph snapshot** (positions before the drag started). The drag delta (`mousePosition`) is applied internally. Callers must not pre-apply the delta to the glyph.
 - **Architecture Invariant:** Rule moves override selected-point moves in the final `DragPatch`. If a rule computes a position for a point that is also selected, the rule position wins.
@@ -44,7 +46,7 @@ rules/src/
 
 ### Pattern matching (drag start)
 
-`prepareConstrainedDrag` builds a `PointIndex` from the base glyph snapshot, then iterates each selected point. For each point, `pickRuleAtIndex` tries window sizes 5 and 3 (in that order). For each window size, `buildPattern` reads the point neighborhood from the contour using `Contours.at` for wrap-around on closed contours, maps each point to a token (`N`/`C`/`S`/`H`/`@`), and concatenates them into a concrete pattern string. The string is looked up in the rule table. The highest-precedence match wins. `computeAffectedPoints` resolves each `AffectedPointSpec` offset into a concrete `PointId`.
+`prepareConstrainedDrag` builds a `PointIndex` from the base glyph snapshot, then iterates each selected point. For each point, `pickRuleAtIndex` tries window sizes 5 and 3 (in that order). For each window size, `buildPattern` reads the point neighborhood from the contour using the matcher's private `getPointAtOffset` helper for wrap-around on closed contours, maps each point to a token (`N`/`C`/`S`/`H`/`@`), and concatenates them into a concrete pattern string. The string is looked up in the rule table. The highest-precedence match wins. `computeAffectedPoints` resolves each `AffectedPointSpec` offset into a concrete `PointId`.
 
 ### Rule application (every frame)
 
@@ -69,7 +71,7 @@ Rule-computed moves are merged into the selected moves map (overriding where the
 
 ### Debug which rule matched a selection
 
-Call `diagnoseSelectionPatterns` with the glyph and selected point IDs. It returns per-point `PointRuleDiagnostics` with all probes (window sizes tried, patterns generated, match status) and the winning `MatchedRule`. The desktop app exposes this via `dumpSelectionPatternsToConsole`.
+Call `diagnoseSelectionPatterns` with the glyph and selected point IDs. It returns per-point `PointRuleDiagnostics` with all probes (window sizes tried, patterns generated, match status) and the winning `MatchedRule`. It currently has no in-app consumer -- call it from a debug session or a test.
 
 ### Override an existing pattern mapping
 
@@ -80,7 +82,7 @@ Call `diagnoseSelectionPatterns` with the glyph and selected point IDs. It retur
 ## Gotchas
 
 - `X` expands to four tokens (`N`, `C`, `S`, `H`), so a template like `X[CS]X` produces 32 concrete patterns. Combined with set notation this can create large cartesian products and unexpected collisions.
-- Open contours emit `N` (no-point) at missing neighbor positions. Closed contours wrap around via `Contours.at`. A rule that works on closed contours may not match on open ones (or vice versa) due to `N` tokens.
+- Open contours emit `N` (no-point) at missing neighbor positions. Closed contours wrap around via the matcher's private `getPointAtOffset` helper. A rule that works on closed contours may not match on open ones (or vice versa) due to `N` tokens.
 - `maintainCollinearity` returns `null` when the smooth-to-end axis is degenerate or the projection collapses. The action silently skips the move in this case -- no error is thrown.
 - `selectionNeedsRuleResolution` is a fast pre-check. If all selected points are non-smooth corners with no adjacent handles or smooth neighbors, no rules are evaluated at all. Adding a rule for plain corner neighborhoods will not fire unless this guard is updated.
 - The `applyRule` switch is exhaustive by convention but not enforced by TypeScript (no `never` default). Adding a new `RuleId` without a matching case will silently produce no moves.
@@ -91,15 +93,13 @@ Call `diagnoseSelectionPatterns` with the glyph and selected point IDs. It retur
 # Unit tests (pattern expansion, table build, matching, affected resolution)
 cd packages/rules && npx vitest run
 
-# Type check
-cd packages/rules && npx tsc --noEmit
+# Type check (package script runs tsgo --noEmit)
+cd packages/rules && pnpm typecheck
 ```
 
 ## Related
 
 - `Translate` -- select-tool behavior that attaches `PointRuleConstraint` to a fluent `MoveEdit`
 - `MoveEdit` -- active layer-edit lifecycle that feeds constrained drag patches into preview and commit paths
-- `dumpSelectionPatternsToConsole` -- dev-tool that calls `diagnoseSelectionPatterns` for debugging
-- `Contours.at` -- wrapping point accessor used by the matcher for closed/open contour handling
 - `ConstrainDragGlyph` -- minimal source-neutral contour/point contract consumed by rule matching
 - `Vec2` -- vector math from `@shift/geo` used by `constraints.ts` and `actions.ts`

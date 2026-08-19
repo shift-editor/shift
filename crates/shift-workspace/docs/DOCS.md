@@ -1,5 +1,7 @@
 # shift-workspace
 
+<!-- reviewed: 2026-08-18 review-every: 90d -->
+
 Backend runtime object for an open Shift font workspace.
 
 ## Architecture Invariants
@@ -41,16 +43,16 @@ crates/shift-workspace/examples/
 - `NewWorkspace` -- options used when creating a new source package and working store.
 - `PackageIdentity` -- package id, canonical path, and fingerprint for one `.shift` source.
 - `PackageDraft` -- package ownership and dirty/base fingerprint state read from a working store.
-- `WorkspaceSource` -- explicit source state: saved `.shift` package or imported external file.
+- `WorkspaceSource` -- explicit source state: untitled (no source file yet), saved `.shift` package, or imported external file.
 - `WorkspaceError` -- source-package and store failures.
 
 ## How it works
 
-`FontWorkspace::create(source_path, store_path, options)` creates a placeholder `.shift` package, opens the working SQLite store, writes initial font metadata, and starts with an empty `shift-font::Font`.
+`FontWorkspace::create_untitled(store_path, NewWorkspace)` opens the working SQLite store, writes initial font metadata, and starts with an empty `shift-font::Font` and no source package. `FontWorkspace::create_package(source_path, store_path, NewWorkspace)` does the same and then saves a fresh `.shift` package at `source_path`, making it the save target.
 
-`FontWorkspace::open(path, store_path)` detects `.shift` paths as source packages. TTF/OTF, UFO, Designspace, Glyphs, and Glyphs package paths use a metadata/directory-first backend cursor, convert batches of at most 512 glyphs and 1,024 authored layers, parallel-pack/hash/compress those layers, and insert them into a disposable sibling staging database. The legal import transitions are **Staging** (foreign source remains authoritative), **Durable** (stream committed, indexes restored, workspace state written, database synced), then **Published** (closed staging file atomically installed and parent directory synced). Failure before Published removes staging and leaves the previous destination untouched. The returned workspace contains directory placeholders and zero loaded layer payloads. Glyphs source syntax is parsed once into the upstream normalized model before its cursor publishes the header and directory; subsequent Shift conversion and persistence remain bounded. This synchronous API still returns only after finalization; publishing the directory and binary packed-outline grid while import continues requires the separate app import-session boundary. Other supported foreign formats retain the eager compatibility path until they gain a bounded reader.
+`FontWorkspace::open(path, store_path)` detects `.shift` paths as source packages. TTF/OTF, UFO, Designspace, Glyphs, and Glyphs package paths use a metadata/directory-first backend cursor, convert batches of at most 512 glyphs and 1,024 authored layers, parallel-pack/hash/compress those layers, and insert them into a disposable sibling staging database. The legal import transitions are **Staging** (foreign source remains authoritative), **Durable** (stream committed, indexes restored, workspace state written, database synced), then **Published** (closed staging file atomically installed and parent directory synced). Failure before Published removes staging and leaves the previous destination untouched. The returned workspace contains directory placeholders and zero loaded layer payloads. Glyphs source syntax is parsed once into the upstream normalized model before its cursor publishes the header and directory; subsequent Shift conversion and persistence remain bounded. This synchronous API still returns only after finalization; publishing the directory and binary packed-outline grid while import continues happens in the app's session layer (`FontSessionHost` in the main process, `FontSourceSession` in the utility process), not here. Every supported foreign format (UFO, Glyphs and Glyphs package, Designspace, TTF/OTF) streams through this bounded pipeline; the eager `read_font` compatibility fallback runs only when a backend reports streaming as unsupported, which no supported format does today.
 
-`FontWorkspace::save()` succeeds for saved `.shift` workspaces and returns `NeedsSaveAs` for imported workspaces. `save_as(path)` creates a `.shift` package and makes it the save target.
+`FontWorkspace::save()` succeeds for saved `.shift` workspaces and returns `NeedsSaveAs` for both imported and untitled workspaces. `save_as(path)` creates a `.shift` package and makes it the save target.
 
 `FontWorkspace::inspect_package(path)` reads a `.shift` package without opening it as the live workspace. It returns the stable package id, canonical path, and fingerprint used by the utility process to address a package instance.
 
@@ -66,6 +68,7 @@ crates/shift-workspace/examples/
 
 ```bash
 cargo build --release -p shift-workspace --example profile_streaming_import
+# GNU/Linux: /usr/bin/time -v; macOS: /usr/bin/time -l
 /usr/bin/time -v target/release/examples/profile_streaming_import \
   /path/to/font-or-project /tmp/import.sqlite
 ```
@@ -82,8 +85,36 @@ cargo test -p shift-workspace configured_large_corpus_streams_resumes_and_acquir
   -- --ignored --nocapture
 ```
 
-Set both expectations for the selected, checksum-pinned local corpus. Timing and
-RSS remain profiler observations rather than CI assertions.
+Set both expectations to match the selected local corpus; the gate asserts only
+these minimum glyph and layer counts. Timing and RSS remain profiler
+observations rather than CI assertions.
+
+## Workflow recipes
+
+### Making a new intent undoable
+
+1. Layer-scoped intents need no ledger wiring: `FontWorkspace::apply` acquires the intent's `required_layer_ids`, snapshots pre states, and derives `LayerPair` steps from the touched layers in the returned `AppliedIntents` automatically.
+2. Font-level intents must capture their pre state in `capture_font_level_pre_state` and be mapped to a `LedgerStep` variant in `ledger_steps` (both in `workspace.rs`).
+3. Add a matching `replay_*` helper (like `replay_named_instances`) and dispatch it from `replay`; `ReplaySide::Pre` (undo) and `ReplaySide::Post` (redo) share the same path, so one helper covers both directions.
+4. Respect replay ordering: axis topology before named instances, metric definitions before complete source snapshots.
+5. Verify: `cargo test -p shift-workspace` with a test that applies, undoes, and redoes the intent, asserting both font state and store persistence.
+
+### Adding a read that touches layer payloads
+
+1. Route it through `acquire_glyphs(ids, AcquireScope::Glyphs)` — or `AcquireScope::ComponentClosure` when component geometry matters — before reading `font()`. Synchronous `font()` must never initiate I/O.
+2. Keep acquisition batched: pass the complete request in one call so the store's count/decoded-byte planner can bound each internal batch, rather than looping per glyph.
+3. If the read produces a complete snapshot (save, export), acquire all layers first like `save()`/`export()` do; a directory placeholder in the snapshot is a bug.
+4. Verify: `cargo test -p shift-workspace`.
+
+## Gotchas
+
+- `font()` reflects only what has been acquired. A glyph present in the directory but never acquired shows placeholder layers with no error — forgetting acquisition produces silently empty geometry, not a crash.
+- One `apply` call = one SQLite transaction = one undo step, even for multi-intent sets. Batching intents into a single `FontIntentSet` is the only way to get one undo step; there is no separate ledger grouping API.
+- A failed undo/redo replay pushes the entry back onto its stack instead of half-applying, so a replay error is retryable — but code that pops the ledger around `replay` must preserve that restore-on-error contract.
+- The undo and redo stacks each cap at 100 entries and drop the oldest silently. Tests that build long histories and then unwind them fully will pass at small sizes and lie at scale.
+- Dirty is a ledger-position comparison, not a revision comparison. After `resume`, a workspace that was dirty at shutdown has no reachable saved position: no amount of undo makes it report clean.
+- `evict_glyphs` performs no committed-state check — it drops any loaded layer back to a directory placeholder. Eviction is still safe because `apply`, undo, and redo persist every authored edit before swapping the live font, so an uncommitted loaded layer cannot exist. Code that mutates the live font without persisting first would break that guarantee and make eviction lose work.
+- A failed import removes its sibling staging database and leaves the destination untouched. Never treat a leftover staging file as resumable state; only the Published database is real.
 
 ## Verification
 

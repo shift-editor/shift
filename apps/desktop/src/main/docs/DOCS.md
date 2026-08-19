@@ -1,5 +1,7 @@
 # Main
 
+<!-- reviewed: 2026-08-18 -->
+
 Electron main process: app startup, windows, menus, document dialogs, and workspace session ownership.
 
 ## Architecture Invariants
@@ -21,10 +23,11 @@ Electron main process: app startup, windows, menus, document dialogs, and worksp
 ```text
 src/main/
   main.ts                         -- Electron entry point
+  release.ts                      -- compiled distribution identity and product name
   app/
     App.ts                        -- app service graph, IPC handlers, command context
     AppLifecycle.ts               -- close/quit confirmation flow
-    AppIcon.ts                    -- dock/tray icon asset helper
+    AppIcon.ts                    -- distribution-aware runtime icon (macOS Dock, About panel)
   commands/
     Command.ts                    -- command registry and command context types
     Commands.ts                   -- built-in shell commands
@@ -38,7 +41,8 @@ src/main/
     Window.ts                     -- BrowserWindow wrapper
     WindowManager.ts              -- live window registry
   workspace/
-    WorkspaceManager.ts           -- live workspace session registry and package-session dedupe
+    WorkspaceManager.ts           -- live workspace session registry
+    PackageSessionIndex.ts        -- (packageId, canonicalPath) -> live session dedupe index
     WorkspaceProcess.ts           -- utility-process shell-lane controller
     FontSessionHost.ts            -- process/mode/optional-document/window grouping for one font session
 ```
@@ -58,6 +62,8 @@ src/main/
 ### Startup
 
 `main.ts` constructs `App` and calls `start()`. `App.start()` applies the compiled `SHIFT_DISTRIBUTION` identity before its first log entry or path-dependent service action, so logging, settings, caches, and recovery all resolve beneath the correct app-data root. Forge and the E2E builder both write the `main_window` renderer to `.vite/renderer/main_window`; production resolves that same directory through `MAIN_WINDOW_VITE_NAME`. `App` registers commands and IPC handlers, starts `AppLifecycle`, sets the user-data-backed `working-documents` root, creates the launcher window, and installs the application menu. Development uses `Shift Dev` or `Shift Nightly Dev`; an explicit standard `--user-data-dir` switch takes precedence so E2E runs can own isolated browser and working-document state.
+
+The runtime icon follows the same compiled identity: `AppIcon` selects `nightly.png` when `shiftDistribution` is `"nightly"` and `icon.png` otherwise, so Release and Nightly are visually distinct in the macOS Dock and About panel. Packaged installer icons remain owned by Forge configuration.
 
 On macOS, closing the last window leaves Shift running. A later Dock activation opens a new launcher window. Windows and Linux keep the conventional quit-on-last-window behavior.
 
@@ -85,7 +91,7 @@ Message lanes reject in-flight calls when their remote port closes. An unexpecte
 
 Renderer IPC in `App` is limited to shell capabilities: command execution, clipboard, optional document-lane port transfer, immutable session mode, readiness, and shared session sync-lane port transfer. Font data stays on that sync lane between renderer and utility.
 
-## Workflow Recipes
+## Workflow recipes
 
 ### Add a workspace shell call
 
@@ -99,6 +105,14 @@ Renderer IPC in `App` is limited to shell capabilities: command execution, clipb
 1. Add a command in `commands/Commands.ts`.
 2. Implement it through the command context in `app/App.ts`.
 3. Keep native dialogs in `document/` and workspace ownership in `workspace/`.
+
+## Gotchas
+
+- IPC handlers are registered once, before any window exists, and resolve the font session from `event.sender` on every call. Never cache a window or session inside a handler closure — multiple windows can attach to one session, and windows outlive none of them.
+- `document.connect` throws for imported sessions because they have no `documentClient`. Renderer code must check `session.mode` before requesting the document lane.
+- When a `MessagePort` transfer fails partway (e.g. `session.connect` when the sync lane cannot attach), both halves of the `MessageChannelMain` must be closed, as the handler does — a leaked half keeps the channel alive with no owner.
+- On macOS the app runs with zero windows after the last one closes. Menu commands can therefore fire with no focused window; the command context resolves the active window at run time and command implementations must tolerate its absence.
+- In development `AppIcon.path()` resolves `../../icons` relative to `process.cwd()`, so the runtime Dock icon only resolves when Electron is launched with `apps/desktop` as the working directory (the `dev` script does this).
 
 ## Verification
 
