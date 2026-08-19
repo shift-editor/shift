@@ -2,8 +2,19 @@ import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { dump, load } from "js-yaml";
+import { z } from "zod";
 
 const versionPattern = /^\d+\.\d+\.\d+$/;
+const versionSchema = z.string().regex(versionPattern);
+const updateFileSchema = z.looseObject({
+  url: z.string(),
+  sha512: z.string(),
+});
+const updateMetadataSchema = z.looseObject({
+  version: versionSchema,
+  files: z.array(updateFileSchema).min(1),
+  path: z.string().optional(),
+});
 
 export function compareProductVersions(left, right) {
   const leftParts = parseVersion(left);
@@ -16,19 +27,12 @@ export function compareProductVersions(left, right) {
 }
 
 export function rewriteUpdateMetadata(source, version, assetBaseUrl, assetNames) {
-  const metadata = load(source);
-  if (!metadata || typeof metadata !== "object" || metadata.version !== version) {
+  const metadata = parseUpdateMetadata(source, `metadata for ${version}`);
+  if (metadata.version !== version) {
     throw new Error(`Update metadata does not use canonical version ${version}`);
-  }
-  if (!Array.isArray(metadata.files) || metadata.files.length === 0) {
-    throw new Error(`Update metadata is missing files for ${version}`);
   }
 
   for (const file of metadata.files) {
-    if (!file || typeof file.url !== "string" || typeof file.sha512 !== "string") {
-      throw new Error(`Update metadata has an invalid file entry for ${version}`);
-    }
-
     const assetName = metadataAssetName(file.url);
     if (!assetName.includes(version)) {
       throw new Error(`Update asset does not contain version ${version}: ${assetName}`);
@@ -70,7 +74,7 @@ export async function prepareUpdateFeed({
       "utf8",
     );
     const macMetadata = rewriteUpdateMetadata(source, version, assetBaseUrl, assetNames);
-    const mac = load(macMetadata);
+    const mac = parseUpdateMetadata(macMetadata, `macOS ${architecture} metadata`);
     const zip = mac.files.find((file) => file.url.endsWith(".zip"));
     if (!zip) throw new Error(`macOS update metadata is missing a ZIP for ${architecture}`);
     const zipName = metadataAssetName(zip.url);
@@ -86,7 +90,7 @@ export async function prepareUpdateFeed({
       "utf8",
     );
     const windowsMetadata = rewriteUpdateMetadata(source, version, assetBaseUrl, assetNames);
-    const windows = load(windowsMetadata);
+    const windows = parseUpdateMetadata(windowsMetadata, "Windows x64 metadata");
     const installerName = metadataAssetName(windows.files[0].url);
     if (!assetNames.has(`${installerName}.blockmap`)) {
       throw new Error(`Windows update is missing blockmap: ${installerName}.blockmap`);
@@ -97,7 +101,10 @@ export async function prepareUpdateFeed({
   const channelRoot = path.join(site, "updates", distribution);
   const currentMetadataPath = path.join(channelRoot, "darwin", "arm64", "latest-mac.yml");
   try {
-    const current = load(await readFile(currentMetadataPath, "utf8"));
+    const current = parseUpdateMetadata(
+      await readFile(currentMetadataPath, "utf8"),
+      "current arm64 metadata",
+    );
     if (compareProductVersions(version, current.version) <= 0) {
       throw new Error(
         `Update feed must advance from ${String(current.version)} to a newer version, received ${version}`,
@@ -123,10 +130,19 @@ export async function prepareUpdateFeed({
 }
 
 function parseVersion(version) {
-  if (!versionPattern.test(version)) {
+  const result = versionSchema.safeParse(version);
+  if (!result.success) {
     throw new Error(`Expected a numeric three-component version, received: ${version}`);
   }
-  return version.split(".").map(Number);
+  return result.data.split(".").map(Number);
+}
+
+function parseUpdateMetadata(source, context) {
+  const result = updateMetadataSchema.safeParse(load(source));
+  if (!result.success) {
+    throw new Error(`Invalid update ${context}: ${result.error.message}`, { cause: result.error });
+  }
+  return result.data;
 }
 
 async function collectFiles(root) {

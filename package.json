@@ -71,7 +71,8 @@
     "ts-morph": "^27.0.2",
     "tsx": "^4.7.0",
     "turbo": "^2.10.7",
-    "typescript": "^5.5.4"
+    "typescript": "^5.5.4",
+    "zod": "^4.1.12"
   },
   "packageManager": "pnpm@11.18.0"
 }

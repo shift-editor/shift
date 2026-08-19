@@ -78,6 +78,8 @@ test("rewrites generated metadata to exact GitHub assets", () => {
   assert.equal(rewritten.files[0].url, `${assetBaseUrl}/${assetName}`);
   assert.equal(rewritten.path, `${assetBaseUrl}/${assetName}`);
   assert.equal(rewritten.files[0].sha512, "hash");
+  assert.equal(rewritten.files[0].size, 4);
+  assert.equal(rewritten.sha512, "hash");
 });
 
 test("stages generated Release metadata without a Windows channel", async (context) => {
@@ -167,7 +169,26 @@ test("rejects non-monotonic candidates without changing the current feed", async
 
 test("rejects metadata whose version differs from the binary version", () => {
   assert.throws(
-    () => rewriteUpdateMetadata("version: 0.1.2\nfiles: []\n", "0.1.1", "https://x", new Set()),
+    () =>
+      rewriteUpdateMetadata(
+        "version: 0.1.2\nfiles:\n  - url: Shift-0.1.2.zip\n    sha512: hash\n",
+        "0.1.1",
+        "https://x",
+        new Set(),
+      ),
     /canonical version 0\.1\.1/,
+  );
+});
+
+test("rejects malformed update metadata", () => {
+  assert.throws(
+    () =>
+      rewriteUpdateMetadata(
+        "version: 0.1.1\nfiles:\n  - url: Shift-0.1.1.zip\n",
+        "0.1.1",
+        "https://x",
+        new Set(["Shift-0.1.1.zip"]),
+      ),
+    /sha512/,
   );
 });
