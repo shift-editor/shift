@@ -1,4 +1,5 @@
-import { app, autoUpdater, dialog, shell, type MessageBoxOptions } from "electron";
+import { app, dialog, shell, type MessageBoxOptions } from "electron";
+import electronUpdater from "electron-updater";
 import { errorToMessage } from "../../shared/errors";
 import { shiftDistribution, shiftProductVersion, shiftUpdateBaseUrl } from "../release";
 import { updateFeed } from "./updateFeed";
@@ -8,6 +9,7 @@ const INITIAL_CHECK_DELAY_MS = 30_000;
 const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000;
 const RELEASES_URL = "https://github.com/shift-editor/shift/releases";
 const NIGHTLY_URL = "https://github.com/shift-editor/shift/releases/tag/nightly";
+const { autoUpdater } = electronUpdater;
 
 /** Owns native application update checks, dialogs, and restart safety. */
 export class AppUpdater {
@@ -27,6 +29,11 @@ export class AppUpdater {
     if (this.#started || !app.isPackaged || !this.#feed()) return;
     this.#started = true;
 
+    autoUpdater.autoDownload = true;
+    autoUpdater.autoInstallOnAppQuit = false;
+    autoUpdater.autoRunAppAfterInstall = true;
+    autoUpdater.disableWebInstaller = true;
+    autoUpdater.logger = this.#options.log;
     autoUpdater.on("update-available", () => this.#updateAvailable());
     autoUpdater.on("update-not-available", () => {
       void this.#updateNotAvailable().catch((error) => {
@@ -91,7 +98,11 @@ export class AppUpdater {
 
     try {
       autoUpdater.setFeedURL(feed);
-      autoUpdater.checkForUpdates();
+      void autoUpdater.checkForUpdates().catch((error) => {
+        void this.#updateFailed(error).catch((handlerError) => {
+          this.#options.log.error("update check rejection handler failed", handlerError);
+        });
+      });
     } catch (error) {
       this.#status = { type: "idle" };
       this.#options.log.warn("application update check failed", error);
@@ -119,7 +130,7 @@ export class AppUpdater {
 
     this.#status = { type: "restarting" };
     try {
-      autoUpdater.quitAndInstall();
+      autoUpdater.quitAndInstall(false, true);
     } catch (error) {
       this.#relaunchInstalledVersion(error);
     }
@@ -168,7 +179,7 @@ export class AppUpdater {
     await this.#notifyReady();
   }
 
-  async #updateFailed(error: Error): Promise<void> {
+  async #updateFailed(error: unknown): Promise<void> {
     if (this.#status.type === "restarting") {
       this.#relaunchInstalledVersion(error);
       return;

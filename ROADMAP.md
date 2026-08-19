@@ -824,13 +824,13 @@ These are allowed to jump around when energy is high, but they should not silent
 - [x] `.dmg` installer
 - [x] Notarization
 - [ ] Universal binary (Intel + Apple Silicon)
-- [x] Native Electron/Squirrel updater
+- [x] electron-updater with signed ZIP delivery
 
 **Windows**
 
-- [x] Squirrel installer
+- [x] Per-user NSIS installer
 - [ ] Code signing
-- [ ] Native Electron/Squirrel updater (Nightly x64 implemented; installed unsigned N → N+1 verification and Release signing remain)
+- [ ] electron-updater (Nightly x64 implemented; installed unsigned N → N+1 verification and Release signing remain)
 
 **Linux**
 

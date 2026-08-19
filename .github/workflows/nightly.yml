@@ -32,26 +32,22 @@ jobs:
             runner: macos-26
             platform: darwin
             arch: arm64
-            targets: "zip,dmg"
-            package-dir: Shift Nightly-darwin-arm64
+            builder-args: "--mac zip dmg --arm64"
           - name: macOS x64
             runner: macos-26-intel
             platform: darwin
             arch: x64
-            targets: "zip,dmg"
-            package-dir: Shift Nightly-darwin-x64
+            builder-args: "--mac zip dmg --x64"
           - name: Windows x64
             runner: windows-latest
             platform: win32
             arch: x64
-            targets: squirrel
-            package-dir: Shift Nightly-win32-x64
+            builder-args: "--win nsis --x64"
           - name: Linux x64
             runner: ubuntu-latest
             platform: linux
             arch: x64
-            targets: "deb,rpm"
-            package-dir: Shift Nightly-linux-x64
+            builder-args: "--linux deb rpm --x64"
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
@@ -104,48 +100,73 @@ jobs:
       - name: Build native bridge
         run: pnpm build:native
 
+      - name: Build desktop application
+        env:
+          SHIFT_DISTRIBUTION: nightly
+        run: pnpm --filter @shift/desktop build
+
       - name: Make desktop distributables
         env:
           SHIFT_DISTRIBUTION: nightly
+          SHIFT_BUILD_ARCH: ${{ matrix.arch }}
           SIGN_MACOS: ${{ matrix.platform == 'darwin' && '1' || '0' }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: pnpm --filter @shift/desktop exec electron-forge make --arch ${{ matrix.arch }} --targets "${{ matrix.targets }}"
+        run: pnpm --filter @shift/desktop exec electron-builder --config electron-builder.config.ts ${{ matrix.builder-args }} --publish never
 
-      - name: Prepare packaged application for smoke test
-        id: smoke-package
+      - name: Resolve packaged application
+        id: package
         shell: bash
         env:
-          PACKAGE_PATH: apps/desktop/out/${{ matrix.package-dir }}
+          OUTPUT_ROOT: apps/desktop/out/${{ matrix.platform }}-${{ matrix.arch }}
           PLATFORM: ${{ matrix.platform }}
         run: |
           set -euo pipefail
-
-          if [[ "$PLATFORM" == "linux" ]]; then
-            SMOKE_PACKAGE_PATH="apps/desktop/out/shift-nightly-linux-x64"
-            mv "$PACKAGE_PATH" "$SMOKE_PACKAGE_PATH"
-            PACKAGE_PATH="$SMOKE_PACKAGE_PATH"
-            sudo chown root:root "$PACKAGE_PATH/chrome-sandbox"
-            sudo chmod 4755 "$PACKAGE_PATH/chrome-sandbox"
-          fi
-
+          case "$PLATFORM" in
+            darwin)
+              APP_PATH="$(find "$OUTPUT_ROOT" -maxdepth 3 -type d -name 'Shift Nightly.app' -print -quit)"
+              test -n "$APP_PATH"
+              PACKAGE_PATH="$(dirname "$APP_PATH")"
+              echo "app=$APP_PATH" >> "$GITHUB_OUTPUT"
+              ;;
+            win32)
+              EXECUTABLE_PATH="$(find "$OUTPUT_ROOT" -type f -name 'shift-nightly.exe' -print -quit)"
+              test -n "$EXECUTABLE_PATH"
+              PACKAGE_PATH="$(dirname "$EXECUTABLE_PATH")"
+              ;;
+            linux)
+              EXECUTABLE_PATH="$(find "$OUTPUT_ROOT" -type f -name 'shift-nightly' -print -quit)"
+              test -n "$EXECUTABLE_PATH"
+              PACKAGE_PATH="$(dirname "$EXECUTABLE_PATH")"
+              sudo chown root:root "$PACKAGE_PATH/chrome-sandbox"
+              sudo chmod 4755 "$PACKAGE_PATH/chrome-sandbox"
+              ;;
+          esac
+          test -d "$PACKAGE_PATH"
           echo "path=$PACKAGE_PATH" >> "$GITHUB_OUTPUT"
 
       - name: Smoke-test packaged application
-        run: node scripts/smoke-packaged.mjs "${{ steps.smoke-package.outputs.path }}" nightly
+        run: node scripts/smoke-packaged.mjs "${{ steps.package.outputs.path }}" nightly
 
       - name: Verify macOS signature
         if: matrix.platform == 'darwin'
         run: |
-          codesign --verify --deep --strict --verbose=2 "apps/desktop/out/${{ matrix.package-dir }}/Shift Nightly.app"
-          xcrun stapler validate "apps/desktop/out/${{ matrix.package-dir }}/Shift Nightly.app"
+          codesign --verify --deep --strict --verbose=2 "${{ steps.package.outputs.app }}"
+          xcrun stapler validate "${{ steps.package.outputs.app }}"
 
       - name: Upload Nightly artifacts
         uses: actions/upload-artifact@v7
         with:
           name: Shift-Nightly-${{ needs.prepare.outputs.version }}-${{ matrix.platform }}-${{ matrix.arch }}
-          path: apps/desktop/out/make/**
+          path: |
+            apps/desktop/out/${{ matrix.platform }}-${{ matrix.arch }}/*.zip
+            apps/desktop/out/${{ matrix.platform }}-${{ matrix.arch }}/*.dmg
+            apps/desktop/out/${{ matrix.platform }}-${{ matrix.arch }}/*.exe
+            apps/desktop/out/${{ matrix.platform }}-${{ matrix.arch }}/*.blockmap
+            apps/desktop/out/${{ matrix.platform }}-${{ matrix.arch }}/*.deb
+            apps/desktop/out/${{ matrix.platform }}-${{ matrix.arch }}/*.rpm
+            apps/desktop/out/${{ matrix.platform }}-${{ matrix.arch }}/latest*.yml
           if-no-files-found: error
           retention-days: 14
 
@@ -170,7 +191,6 @@ jobs:
         with:
           pattern: Shift-Nightly-*
           path: dist
-          merge-multiple: true
 
       - name: Prepare public assets
         env:
@@ -235,7 +255,6 @@ jobs:
         with:
           pattern: Shift-Nightly-*
           path: dist
-          merge-multiple: true
 
       - name: Require public Nightly assets
         env:

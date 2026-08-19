@@ -11,6 +11,11 @@ export type UpdateStatus =
   | { type: "ready" }
   | { type: "restarting" };
 
+export type UpdateFeed = {
+  provider: "generic";
+  url: string;
+};
+
 export type UpdateFeedTarget = {
   distribution: "release" | "nightly";
   platform: NodeJS.Platform;

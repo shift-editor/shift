@@ -63,26 +63,22 @@ jobs:
             runner: macos-26
             platform: darwin
             arch: arm64
-            targets: "zip,dmg"
-            package-dir: Shift-darwin-arm64
+            builder-args: "--mac zip dmg --arm64"
           - name: macOS x64
             runner: macos-26-intel
             platform: darwin
             arch: x64
-            targets: "zip,dmg"
-            package-dir: Shift-darwin-x64
+            builder-args: "--mac zip dmg --x64"
           - name: Windows x64
             runner: windows-latest
             platform: win32
             arch: x64
-            targets: squirrel
-            package-dir: Shift-win32-x64
+            builder-args: "--win nsis --x64"
           - name: Linux x64
             runner: ubuntu-latest
             platform: linux
             arch: x64
-            targets: "deb,rpm"
-            package-dir: Shift-linux-x64
+            builder-args: "--linux deb rpm --x64"
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
@@ -136,37 +132,73 @@ jobs:
       - name: Build native bridge
         run: pnpm build:native
 
+      - name: Build desktop application
+        env:
+          SHIFT_DISTRIBUTION: release
+        run: pnpm --filter @shift/desktop build
+
       - name: Make desktop distributables
         env:
           SHIFT_DISTRIBUTION: release
+          SHIFT_BUILD_ARCH: ${{ matrix.arch }}
           SIGN_MACOS: ${{ matrix.platform == 'darwin' && '1' || '0' }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: pnpm --filter @shift/desktop exec electron-forge make --arch ${{ matrix.arch }} --targets "${{ matrix.targets }}"
+        run: pnpm --filter @shift/desktop exec electron-builder --config electron-builder.config.ts ${{ matrix.builder-args }} --publish never
 
-      - name: Configure Linux sandbox for smoke test
-        if: matrix.platform == 'linux'
+      - name: Resolve packaged application
+        id: package
         shell: bash
+        env:
+          OUTPUT_ROOT: apps/desktop/out/${{ matrix.platform }}-${{ matrix.arch }}
+          PLATFORM: ${{ matrix.platform }}
         run: |
-          SANDBOX="apps/desktop/out/${{ matrix.package-dir }}/chrome-sandbox"
-          sudo chown root:root "$SANDBOX"
-          sudo chmod 4755 "$SANDBOX"
+          set -euo pipefail
+          case "$PLATFORM" in
+            darwin)
+              APP_PATH="$(find "$OUTPUT_ROOT" -maxdepth 3 -type d -name 'Shift.app' -print -quit)"
+              test -n "$APP_PATH"
+              PACKAGE_PATH="$(dirname "$APP_PATH")"
+              echo "app=$APP_PATH" >> "$GITHUB_OUTPUT"
+              ;;
+            win32)
+              EXECUTABLE_PATH="$(find "$OUTPUT_ROOT" -type f -name 'shift.exe' -print -quit)"
+              test -n "$EXECUTABLE_PATH"
+              PACKAGE_PATH="$(dirname "$EXECUTABLE_PATH")"
+              ;;
+            linux)
+              EXECUTABLE_PATH="$(find "$OUTPUT_ROOT" -type f -name 'shift' -print -quit)"
+              test -n "$EXECUTABLE_PATH"
+              PACKAGE_PATH="$(dirname "$EXECUTABLE_PATH")"
+              sudo chown root:root "$PACKAGE_PATH/chrome-sandbox"
+              sudo chmod 4755 "$PACKAGE_PATH/chrome-sandbox"
+              ;;
+          esac
+          test -d "$PACKAGE_PATH"
+          echo "path=$PACKAGE_PATH" >> "$GITHUB_OUTPUT"
 
       - name: Smoke-test packaged application
-        run: node scripts/smoke-packaged.mjs "apps/desktop/out/${{ matrix.package-dir }}"
+        run: node scripts/smoke-packaged.mjs "${{ steps.package.outputs.path }}"
 
       - name: Verify macOS signature
         if: matrix.platform == 'darwin'
         run: |
-          codesign --verify --deep --strict --verbose=2 "apps/desktop/out/${{ matrix.package-dir }}/Shift.app"
-          xcrun stapler validate "apps/desktop/out/${{ matrix.package-dir }}/Shift.app"
+          codesign --verify --deep --strict --verbose=2 "${{ steps.package.outputs.app }}"
+          xcrun stapler validate "${{ steps.package.outputs.app }}"
 
       - name: Upload desktop artifacts
         uses: actions/upload-artifact@v7
         with:
           name: desktop-release-${{ matrix.platform }}-${{ matrix.arch }}
-          path: apps/desktop/out/make/**
+          path: |
+            apps/desktop/out/${{ matrix.platform }}-${{ matrix.arch }}/*.zip
+            apps/desktop/out/${{ matrix.platform }}-${{ matrix.arch }}/*.dmg
+            apps/desktop/out/${{ matrix.platform }}-${{ matrix.arch }}/*.exe
+            apps/desktop/out/${{ matrix.platform }}-${{ matrix.arch }}/*.blockmap
+            apps/desktop/out/${{ matrix.platform }}-${{ matrix.arch }}/*.deb
+            apps/desktop/out/${{ matrix.platform }}-${{ matrix.arch }}/*.rpm
+            apps/desktop/out/${{ matrix.platform }}-${{ matrix.arch }}/latest*.yml
           if-no-files-found: error
           retention-days: 14
 
@@ -191,7 +223,6 @@ jobs:
         with:
           pattern: desktop-release-*
           path: dist
-          merge-multiple: true
 
       - name: Require the release to remain a draft
         env:
@@ -231,7 +262,7 @@ jobs:
       - name: Generate checksums
         shell: bash
         run: |
-          mapfile -d '' FILES < <(find dist -type f ! -name RELEASES ! -name RELEASES.json -print0 | sort -z)
+          mapfile -d '' FILES < <(find dist -type f ! -name 'latest*.yml' -print0 | sort -z)
           DUPLICATES="$(printf '%s\0' "${FILES[@]}" | xargs -0 -n1 basename | sort | uniq --repeated)"
           if [[ -n "$DUPLICATES" ]]; then
             echo "Release artifacts have duplicate filenames:" >&2
@@ -254,7 +285,7 @@ jobs:
         run: |
           while IFS= read -r -d '' file; do
             gh release upload "$RELEASE_TAG" "$file" --clobber
-          done < <(find dist -type f ! -name RELEASES ! -name RELEASES.json -print0)
+          done < <(find dist -type f ! -name 'latest*.yml' -print0)
           gh release upload "$RELEASE_TAG" SHA256SUMS --clobber
 
       - name: Publish GitHub prerelease
@@ -284,7 +315,6 @@ jobs:
         with:
           pattern: desktop-release-*
           path: dist
-          merge-multiple: true
 
       - name: Require public release assets
         env:

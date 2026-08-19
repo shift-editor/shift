@@ -8,7 +8,6 @@ import {
   type Rectangle,
   type WebContents,
 } from "electron";
-import started from "electron-squirrel-startup";
 import path from "node:path";
 import { Window } from "../windows/Window";
 import { getRendererSource } from "../utils";
@@ -85,7 +84,7 @@ export class App {
   }
 
   /**
-   * Starts Electron after installer-startup handling has completed.
+   * Starts Electron and installs the main-process service graph.
    *
    * @remarks
    * Commands and IPC handlers are registered before the window exists so
@@ -101,12 +100,6 @@ export class App {
     }
 
     this.#log.info("starting");
-
-    if (started) {
-      this.#log.info("app already started, quitting");
-      app.quit();
-      return;
-    }
 
     this.#registerCommands();
     this.#registerIpcHandlers();

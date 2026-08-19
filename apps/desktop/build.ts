@@ -1,25 +1,17 @@
-/**
- * Builds the Electron app (main, preload, renderer) via Vite for E2E testing.
- *
- * This replicates what `@electron-forge/plugin-vite` does at `electron-forge start`
- * but produces a static renderer build instead of starting a dev server.
- *
- * Run: `pnpm tsx e2e/build.ts` (from apps/desktop)
- */
-
+import { builtinModules } from "node:module";
+import path from "node:path";
 import { build } from "vite";
-import * as path from "path";
-import { builtinModules } from "module";
 
-const appRoot = path.resolve(__dirname, "..");
+const appRoot = __dirname;
+const isE2E = process.argv.includes("--e2e");
+const nodeExternals = [
+  "electron",
+  "shift-bridge",
+  ...builtinModules,
+  ...builtinModules.map((module) => `node:${module}`),
+];
 
-/**
- * Node builtins + electron must be external for main/preload —
- * they run in Node, not the browser.
- */
-const nodeExternals = ["electron", ...builtinModules, ...builtinModules.map((m) => `node:${m}`)];
-
-async function buildMain() {
+async function buildMain(): Promise<void> {
   await build({
     configFile: path.join(appRoot, "vite.main.config.ts"),
     build: {
@@ -30,20 +22,17 @@ async function buildMain() {
       },
       outDir: path.join(appRoot, ".vite/build"),
       emptyOutDir: true,
-      minify: false,
-      rollupOptions: {
-        external: nodeExternals,
-      },
+      minify: !isE2E,
+      rollupOptions: { external: nodeExternals },
     },
     define: {
-      // Empty string is falsy — the app falls through to loadFile()
       MAIN_WINDOW_VITE_DEV_SERVER_URL: JSON.stringify(""),
       MAIN_WINDOW_VITE_NAME: JSON.stringify("main_window"),
     },
   });
 }
 
-async function buildWorkspace() {
+async function buildWorkspace(): Promise<void> {
   await build({
     configFile: path.join(appRoot, "vite.main.config.ts"),
     build: {
@@ -54,15 +43,13 @@ async function buildWorkspace() {
       },
       outDir: path.join(appRoot, ".vite/build"),
       emptyOutDir: false,
-      minify: false,
-      rollupOptions: {
-        external: nodeExternals,
-      },
+      minify: !isE2E,
+      rollupOptions: { external: nodeExternals },
     },
   });
 }
 
-async function buildPreload() {
+async function buildPreload(): Promise<void> {
   await build({
     configFile: path.join(appRoot, "vite.preload.config.ts"),
     build: {
@@ -73,41 +60,37 @@ async function buildPreload() {
       },
       outDir: path.join(appRoot, ".vite/build"),
       emptyOutDir: false,
-      minify: false,
-      rollupOptions: {
-        external: nodeExternals,
-      },
+      minify: !isE2E,
+      rollupOptions: { external: nodeExternals },
     },
   });
 }
 
-async function buildRenderer() {
+async function buildRenderer(): Promise<void> {
   await build({
     configFile: path.join(appRoot, "vite.renderer.config.ts"),
-    // Relative base so loadFile() can resolve assets without a server.
     base: "./",
     build: {
       outDir: path.join(appRoot, ".vite/renderer/main_window"),
       emptyOutDir: true,
-      minify: false,
+      minify: !isE2E,
     },
     define: {
-      // Expose editor on window for Playwright perf/interaction tests.
-      __PLAYWRIGHT__: JSON.stringify(true),
+      __PLAYWRIGHT__: JSON.stringify(isE2E),
     },
   });
 }
 
-async function main() {
-  console.log("Building Electron app for E2E tests...");
+async function main(): Promise<void> {
+  console.log(`Building Electron app${isE2E ? " for E2E tests" : ""}...`);
   await buildMain();
   await buildWorkspace();
   await buildPreload();
   await buildRenderer();
-  console.log("E2E build complete.");
+  console.log("Electron build complete.");
 }
 
-main().catch((err) => {
-  console.error(err);
+main().catch((error) => {
+  console.error(error);
   process.exit(1);
 });

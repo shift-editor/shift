@@ -1,6 +1,7 @@
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { dump, load } from "js-yaml";
 
 const versionPattern = /^\d+\.\d+\.\d+$/;
 
@@ -14,44 +15,33 @@ export function compareProductVersions(left, right) {
   return 0;
 }
 
-export function validateMacManifest(manifest, version, expectedAssetBaseUrl) {
-  if (manifest.currentRelease !== version || !Array.isArray(manifest.releases)) {
-    throw new Error(`macOS manifest does not use canonical version ${version}`);
+export function rewriteUpdateMetadata(source, version, assetBaseUrl, assetNames) {
+  const metadata = load(source);
+  if (!metadata || typeof metadata !== "object" || metadata.version !== version) {
+    throw new Error(`Update metadata does not use canonical version ${version}`);
+  }
+  if (!Array.isArray(metadata.files) || metadata.files.length === 0) {
+    throw new Error(`Update metadata is missing files for ${version}`);
   }
 
-  const release = manifest.releases.find(
-    (candidate) => candidate.version === version && candidate.updateTo?.version === version,
-  );
-  if (!release) throw new Error(`macOS manifest is missing release ${version}`);
+  for (const file of metadata.files) {
+    if (!file || typeof file.url !== "string" || typeof file.sha512 !== "string") {
+      throw new Error(`Update metadata has an invalid file entry for ${version}`);
+    }
 
-  const url = new URL(release.updateTo.url);
-  if (!url.toString().startsWith(`${expectedAssetBaseUrl}/`)) {
-    throw new Error(`macOS manifest has an unexpected update URL: ${url}`);
+    const assetName = metadataAssetName(file.url);
+    if (!assetName.includes(version)) {
+      throw new Error(`Update asset does not contain version ${version}: ${assetName}`);
+    }
+    if (!assetNames.has(assetName)) {
+      throw new Error(`Update metadata references a missing asset: ${assetName}`);
+    }
+
+    file.url = `${assetBaseUrl}/${encodeURIComponent(assetName)}`;
   }
-  if (!decodeURIComponent(path.posix.basename(url.pathname)).includes(version)) {
-    throw new Error(`macOS update asset does not contain version ${version}`);
-  }
 
-  return decodeURIComponent(path.posix.basename(url.pathname));
-}
-
-export function rewriteWindowsReleases(releases, assetBaseUrl, assetNames) {
-  const lines = releases.trim().split("\n").filter(Boolean);
-  if (lines.length === 0) throw new Error("Windows RELEASES is empty");
-
-  return `${lines
-    .map((line) => {
-      const fields = line.trim().split(/\s+/);
-      if (fields.length !== 3) throw new Error(`Invalid Windows RELEASES line: ${line}`);
-
-      const packageName = path.win32.basename(fields[1]);
-      if (!assetNames.has(packageName)) {
-        throw new Error(`Windows RELEASES references a missing package: ${packageName}`);
-      }
-
-      return `${fields[0]} ${assetBaseUrl}/${encodeURIComponent(packageName)} ${fields[2]}`;
-    })
-    .join("\n")}\n`;
+  if (typeof metadata.path === "string") metadata.path = metadata.files[0].url;
+  return dump(metadata, { lineWidth: -1, noRefs: true, sortKeys: false });
 }
 
 export async function prepareUpdateFeed({
@@ -72,52 +62,45 @@ export async function prepareUpdateFeed({
   const assetNames = new Set(files.map((file) => path.basename(file)));
   const releaseTag = distribution === "nightly" ? "nightly" : `v${version}`;
   const assetBaseUrl = `https://github.com/${repository}/releases/download/${releaseTag}`;
+  const metadata = new Map();
 
-  const macManifests = new Map();
   for (const architecture of ["arm64", "x64"]) {
-    const manifestPath = findOne(
-      files,
-      artifacts,
-      `macOS ${architecture} RELEASES.json`,
-      new RegExp(`(^|/)zip/darwin/${architecture}/RELEASES\\.json$`),
+    const source = await readFile(
+      findMetadata(files, artifacts, `darwin-${architecture}`, "latest-mac.yml"),
+      "utf8",
     );
-    const source = await readFile(manifestPath, "utf8");
-    const assetName = validateMacManifest(JSON.parse(source), version, assetBaseUrl);
-    if (!assetNames.has(assetName)) {
-      throw new Error(`macOS manifest references a missing asset: ${assetName}`);
+    const macMetadata = rewriteUpdateMetadata(source, version, assetBaseUrl, assetNames);
+    const mac = load(macMetadata);
+    const zip = mac.files.find((file) => file.url.endsWith(".zip"));
+    if (!zip) throw new Error(`macOS update metadata is missing a ZIP for ${architecture}`);
+    const zipName = metadataAssetName(zip.url);
+    if (!assetNames.has(`${zipName}.blockmap`)) {
+      throw new Error(`macOS update is missing blockmap: ${zipName}.blockmap`);
     }
-    macManifests.set(architecture, source);
+    metadata.set(`darwin-${architecture}`, macMetadata);
   }
 
-  const windowsManifestPath = findOne(
-    files,
-    artifacts,
-    "Windows x64 RELEASES",
-    /(^|\/)squirrel\.windows\/x64\/RELEASES$/,
-  );
-  const windowsPackages = new Set(
-    files.filter((file) => /-full\.nupkg$/i.test(file)).map((file) => path.basename(file)),
-  );
-  if (windowsPackages.size !== 1) {
-    throw new Error(`Expected one Windows x64 full NUPKG, found ${windowsPackages.size}`);
+  if (distribution === "nightly") {
+    const source = await readFile(
+      findMetadata(files, artifacts, "win32-x64", "latest.yml"),
+      "utf8",
+    );
+    const windowsMetadata = rewriteUpdateMetadata(source, version, assetBaseUrl, assetNames);
+    const windows = load(windowsMetadata);
+    const installerName = metadataAssetName(windows.files[0].url);
+    if (!assetNames.has(`${installerName}.blockmap`)) {
+      throw new Error(`Windows update is missing blockmap: ${installerName}.blockmap`);
+    }
+    metadata.set("win32-x64", windowsMetadata);
   }
-  const [windowsPackage] = windowsPackages;
-  if (!windowsPackage.includes(version)) {
-    throw new Error(`Windows update asset does not contain version ${version}: ${windowsPackage}`);
-  }
-  const windowsManifest = rewriteWindowsReleases(
-    await readFile(windowsManifestPath, "utf8"),
-    assetBaseUrl,
-    windowsPackages,
-  );
 
   const channelRoot = path.join(site, "updates", distribution);
-  const currentManifestPath = path.join(channelRoot, "darwin", "arm64", "RELEASES.json");
+  const currentMetadataPath = path.join(channelRoot, "darwin", "arm64", "latest-mac.yml");
   try {
-    const current = JSON.parse(await readFile(currentManifestPath, "utf8"));
-    if (compareProductVersions(version, current.currentRelease) <= 0) {
+    const current = load(await readFile(currentMetadataPath, "utf8"));
+    if (compareProductVersions(version, current.version) <= 0) {
       throw new Error(
-        `Update feed must advance from ${String(current.currentRelease)} to a newer version, received ${version}`,
+        `Update feed must advance from ${String(current.version)} to a newer version, received ${version}`,
       );
     }
   } catch (error) {
@@ -125,9 +108,17 @@ export async function prepareUpdateFeed({
   }
 
   await Promise.all([
-    write(path.join(channelRoot, "darwin", "arm64", "RELEASES.json"), macManifests.get("arm64")),
-    write(path.join(channelRoot, "darwin", "x64", "RELEASES.json"), macManifests.get("x64")),
-    write(path.join(channelRoot, "win32", "x64", "RELEASES"), windowsManifest),
+    write(
+      path.join(channelRoot, "darwin", "arm64", "latest-mac.yml"),
+      metadata.get("darwin-arm64"),
+    ),
+    write(path.join(channelRoot, "darwin", "x64", "latest-mac.yml"), metadata.get("darwin-x64")),
+    distribution === "nightly"
+      ? write(path.join(channelRoot, "win32", "x64", "latest.yml"), metadata.get("win32-x64"))
+      : rm(path.join(channelRoot, "win32"), { recursive: true, force: true }),
+    rm(path.join(channelRoot, "darwin", "arm64", "RELEASES.json"), { force: true }),
+    rm(path.join(channelRoot, "darwin", "x64", "RELEASES.json"), { force: true }),
+    rm(path.join(channelRoot, "win32", "x64", "RELEASES"), { force: true }),
   ]);
 }
 
@@ -148,10 +139,19 @@ async function collectFiles(root) {
   return files;
 }
 
-function findOne(files, root, description, pattern) {
-  const matches = files.filter((file) => pattern.test(relativePath(root, file)));
-  if (matches.length !== 1) throw new Error(`Expected one ${description}, found ${matches.length}`);
+function findMetadata(files, root, target, name) {
+  const matches = files.filter((file) => {
+    const relative = relativePath(root, file);
+    return path.basename(file) === name && relative.includes(target);
+  });
+  if (matches.length !== 1) {
+    throw new Error(`Expected one ${target} ${name}, found ${matches.length}`);
+  }
   return matches[0];
+}
+
+function metadataAssetName(url) {
+  return decodeURIComponent(path.posix.basename(new URL(url, "https://metadata.invalid").pathname));
 }
 
 function relativePath(root, file) {

@@ -9,24 +9,37 @@ import test from "node:test";
 const script = path.resolve("scripts/prepare-nightly-release.mjs");
 const version = "0.321.2";
 const fixtures = [
-  [`zip/darwin/arm64/Shift Nightly-darwin-arm64-${version}.zip`, "mac-arm64"],
-  [`zip/darwin/x64/Shift Nightly-darwin-x64-${version}.zip`, "mac-x64"],
-  [`Shift Nightly-${version}-arm64.dmg`, "dmg-arm64"],
-  [`Shift Nightly-${version}-x64.dmg`, "dmg-x64"],
-  [`squirrel.windows/x64/Shift Nightly-${version}-Setup.exe`, "windows-x64"],
-  [`squirrel.windows/x64/shift_nightly-${version}-full.nupkg`, "windows-update"],
-  [`deb/x64/shift-nightly_${version}_amd64.deb`, "linux-deb"],
-  [`rpm/x64/shift-nightly-${version}.x86_64.rpm`, "linux-rpm"],
+  [`desktop-nightly-darwin-arm64/Shift-Nightly-${version}-macOS-arm64.zip`, "mac-arm64"],
+  [`desktop-nightly-darwin-x64/Shift-Nightly-${version}-macOS-x64.zip`, "mac-x64"],
+  [
+    `desktop-nightly-darwin-arm64/Shift-Nightly-${version}-macOS-arm64.zip.blockmap`,
+    "mac-arm64-blockmap",
+  ],
+  [
+    `desktop-nightly-darwin-x64/Shift-Nightly-${version}-macOS-x64.zip.blockmap`,
+    "mac-x64-blockmap",
+  ],
+  [`desktop-nightly-darwin-arm64/Shift-Nightly-${version}-macOS-arm64.dmg`, "dmg-arm64"],
+  [`desktop-nightly-darwin-x64/Shift-Nightly-${version}-macOS-x64.dmg`, "dmg-x64"],
+  [`desktop-nightly-win32-x64/Shift-Nightly-${version}-Windows-x64-Setup.exe`, "windows"],
+  [`desktop-nightly-win32-x64/Shift-Nightly-${version}-Windows-x64-Setup.exe.blockmap`, "blockmap"],
+  [`desktop-nightly-linux-x64/Shift-Nightly-${version}-Linux-x64.deb`, "linux-deb"],
+  [`desktop-nightly-linux-x64/Shift-Nightly-${version}-Linux-x64.rpm`, "linux-rpm"],
 ];
 const outputs = new Map([
   ["Shift-Nightly-macOS-arm64.zip", "mac-arm64"],
-  [`Shift Nightly-darwin-arm64-${version}.zip`, "mac-arm64"],
+  [`Shift-Nightly-${version}-macOS-arm64.zip`, "mac-arm64"],
   ["Shift-Nightly-macOS-x64.zip", "mac-x64"],
-  [`Shift Nightly-darwin-x64-${version}.zip`, "mac-x64"],
+  [`Shift-Nightly-${version}-macOS-x64.zip`, "mac-x64"],
+  [`Shift-Nightly-${version}-macOS-arm64.zip.blockmap`, "mac-arm64-blockmap"],
+  [`Shift-Nightly-${version}-macOS-x64.zip.blockmap`, "mac-x64-blockmap"],
   ["Shift-Nightly-macOS-arm64.dmg", "dmg-arm64"],
+  [`Shift-Nightly-${version}-macOS-arm64.dmg`, "dmg-arm64"],
   ["Shift-Nightly-macOS-x64.dmg", "dmg-x64"],
-  ["Shift-Nightly-Windows-x64.exe", "windows-x64"],
-  [`shift_nightly-${version}-full.nupkg`, "windows-update"],
+  [`Shift-Nightly-${version}-macOS-x64.dmg`, "dmg-x64"],
+  ["Shift-Nightly-Windows-x64.exe", "windows"],
+  [`Shift-Nightly-${version}-Windows-x64-Setup.exe`, "windows"],
+  [`Shift-Nightly-${version}-Windows-x64-Setup.exe.blockmap`, "blockmap"],
   ["Shift-Nightly-Linux-x64.deb", "linux-deb"],
   ["Shift-Nightly-Linux-x64.rpm", "linux-rpm"],
 ]);
@@ -48,7 +61,7 @@ async function writeFixtures(root, entries = fixtures) {
   }
 }
 
-test("prepares DMGs, human downloads, and exact versioned update assets", async (context) => {
+test("prepares human downloads and exact electron-updater assets", async (context) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "shift-nightly-release-"));
   context.after(() => rm(root, { recursive: true, force: true }));
   const dist = path.join(root, "dist");
@@ -91,7 +104,7 @@ test("rejects ambiguous Nightly artifacts", async (context) => {
   context.after(() => rm(root, { recursive: true, force: true }));
   const dist = path.join(root, "dist");
   await writeFixtures(dist);
-  await writeFixtures(dist, [[`duplicate/zip/darwin/arm64/other-${version}.zip`, "duplicate"]]);
+  await writeFixtures(dist, [[`duplicate/Shift-Nightly-${version}-macOS-arm64.zip`, "duplicate"]]);
 
   const result = await runScript(dist, path.join(root, "public"));
   assert.notEqual(result.code, 0);
@@ -106,5 +119,5 @@ test("rejects artifacts from a different Nightly version", async (context) => {
 
   const result = await runScript(dist, path.join(root, "public"), "0.322.1");
   assert.notEqual(result.code, 0);
-  assert.match(result.stderr, /does not contain version 0\.322\.1/);
+  assert.match(result.stderr, /Expected one source.*found 0/);
 });

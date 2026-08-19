@@ -3,8 +3,8 @@ import { updateFeed } from "./updateFeed";
 
 const feedBaseUrl = "https://shift-editor.github.io/shift/updates";
 
-describe("native application update feeds", () => {
-  it("configures the architecture-specific macOS JSON feed", () => {
+describe("electron-updater channels", () => {
+  it("selects the architecture-specific macOS Release channel", () => {
     expect(
       updateFeed(feedBaseUrl, {
         distribution: "release",
@@ -12,12 +12,12 @@ describe("native application update feeds", () => {
         architecture: "arm64",
       }),
     ).toEqual({
-      url: "https://shift-editor.github.io/shift/updates/release/darwin/arm64/RELEASES.json",
-      serverType: "json",
+      provider: "generic",
+      url: "https://shift-editor.github.io/shift/updates/release/darwin/arm64",
     });
   });
 
-  it("selects the isolated Nightly Windows feed", () => {
+  it("selects the isolated Windows Nightly channel", () => {
     expect(
       updateFeed(feedBaseUrl, {
         distribution: "nightly",
@@ -25,6 +25,7 @@ describe("native application update feeds", () => {
         architecture: "x64",
       }),
     ).toEqual({
+      provider: "generic",
       url: "https://shift-editor.github.io/shift/updates/nightly/win32/x64",
     });
   });

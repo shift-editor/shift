@@ -15,7 +15,7 @@ An Alpha is a public Developer Preview, not a stability claim or tester invitati
 
 ## Versions
 
-Every installable binary uses one numeric three-component version. The same value appears in the root and desktop `package.json`, packaged application metadata, macOS `CFBundleShortVersionString` and `CFBundleVersion`, Forge manifests, Windows Squirrel packages, and the About panel.
+Every installable binary uses one numeric three-component version. The same value appears in the root and desktop `package.json`, packaged application metadata, macOS `CFBundleShortVersionString` and `CFBundleVersion`, electron-builder manifests, Windows NSIS installers, and the About panel.
 
 ```sh
 pnpm version:check
@@ -32,23 +32,23 @@ Use Conventional Commit prefixes. `feat`, `fix`, and `perf` appear in the public
 
 | Target              | Package/update policy                                                                |
 | ------------------- | ------------------------------------------------------------------------------------ |
-| macOS arm64/x64     | Signed and notarized ZIP for native updates; DMG for manual installation             |
-| Windows Nightly x64 | Unsigned Squirrel installer and native updates for initial installed N → N+1 testing |
+| macOS arm64/x64     | Signed and notarized ZIP for automatic updates; DMG for manual installation          |
+| Windows Nightly x64 | Unsigned per-user NSIS installer and automatic updates for installed N → N+1 testing |
 | Windows Release x64 | Manual GitHub downloads until Authenticode signing is configured                     |
 | Linux x64           | Manual GitHub downloads (`.deb` / `.rpm`)                                            |
 
-Electron/Squirrel compares the aligned numeric versions, downloads packages, validates Windows `RELEASES` package hashes, verifies macOS code signatures, and installs/relaunches. A Windows `RELEASES` hash detects package corruption; it does **not** authenticate the publisher. Do not treat Windows automatic updates as production-ready until Authenticode signing and installed verification are complete.
+electron-updater compares the aligned numeric versions, verifies generated SHA-512 metadata, downloads packages, verifies macOS code signatures and configured Windows Authenticode publishers, and installs/relaunches. Metadata hashes detect package corruption; they do **not** authenticate an unsigned Windows publisher. Do not treat Windows automatic updates as production-ready until Authenticode signing and installed verification are complete.
 
-Forge's ZIP maker generates architecture-specific macOS `RELEASES.json` files whose URLs name the exact versioned GitHub Release ZIP assets. macOS clients use those JSON feeds with `serverType: "json"`. Windows clients use the directory containing Forge/Squirrel's `RELEASES` and exact versioned NUPKG.
+electron-builder generates architecture-specific `latest-mac.yml` files for exact versioned ZIP assets and `latest.yml` for the Windows Nightly NSIS installer. GitHub Pages hosts only these fixed Release/Nightly metadata files; GitHub Releases hosts the binaries and differential-update blockmaps.
 
-The app waits 30 seconds before its first automatic check so Squirrel's first-run lock can clear, then checks every four hours. Automatic current/error results are quiet. Manual checks report current/download states. A downloaded update offers **Restart and Update** / Later and cannot restart until every document accepts and commits close.
+The app waits 30 seconds before its first automatic check to avoid competing with startup, then checks every four hours. Automatic current/error results are quiet. Manual checks report current/download states. A downloaded update offers **Restart and Update** / Later, is not silently installed on ordinary quit, and cannot restart until every document accepts and commits close.
 
 ## Workflows
 
 - `release-please.yml` maintains a draft release pull request. Merging it creates a numeric version tag and draft GitHub release, then invokes `release-desktop.yml`.
-- `release-desktop.yml` validates `vMAJOR.MINOR.PATCH`, builds macOS arm64/x64 ZIPs and DMGs, Windows x64 Squirrel artifacts, and Linux x64 packages, smoke-tests packaged applications, uploads checksums/assets, publishes the GitHub prerelease, then advances the Release feed.
-- `nightly.yml` resolves one `0.RUN.ATTEMPT` version, builds the same matrix, and updates the rolling Nightly prerelease only after every build succeeds. It retains the exact versioned macOS ZIP and Windows NUPKG used by native updates, plus stable human-download ZIP, DMG, installer, DEB, and RPM names.
-- `prepare-update-feed.mjs` performs the one monotonic candidate-version check, stages Forge's macOS manifests into fixed Pages paths, and rewrites Windows package paths to absolute GitHub Release asset URLs. It does not create immutable feed-history directories.
+- `release-desktop.yml` validates `vMAJOR.MINOR.PATCH`, builds macOS arm64/x64 ZIPs and DMGs, a Windows x64 per-user NSIS installer, and Linux x64 packages, smoke-tests packaged applications, uploads checksums/assets, publishes the GitHub prerelease, then advances the Release feed.
+- `nightly.yml` resolves one `0.RUN.ATTEMPT` version, builds the same matrix, and updates the rolling Nightly prerelease only after every build succeeds. It retains exact versioned macOS ZIP and Windows NSIS/blockmap update assets plus stable human-download ZIP, DMG, installer, DEB, and RPM names.
+- `prepare-update-feed.mjs` performs the one monotonic candidate-version check, stages electron-builder's generated metadata into fixed Pages paths, and rewrites artifact paths to absolute GitHub Release asset URLs. It does not create immutable feed-history directories.
 
 Release and Nightly feed publication share one concurrency group. Binary assets become public before a feed advances. The feed job checks out or creates the `update-feeds` branch, preserves `.nojekyll` and the other distribution directory, updates only its channel, and pushes the branch. GitHub Pages serves it at `https://shift-editor.github.io/shift/updates`.
 
@@ -82,7 +82,7 @@ Never put private keys or signing credentials in repository files, workflow inpu
 5. Perform real installed N → N+1 tests on macOS arm64/x64 and unsigned Windows Nightly x64, including Save, Don't Save, Cancel, Later, and **Restart and Update**.
 6. Keep Windows Release on manual downloads until Authenticode signing and installed update verification are complete.
 
-Electron update orchestration has no worthwhile unit test without mocking Electron, native dialogs, and Squirrel. Pure tests cover feed selection, canonical versions, generated-manifest validation, feed preparation, and Nightly asset retention; installed update behavior remains required manual QA.
+Electron update orchestration has no worthwhile unit test without mocking Electron, native dialogs, and electron-updater. Pure tests cover feed selection, canonical versions, generated metadata validation, feed preparation, and Nightly asset retention; installed update behavior remains required manual QA.
 
 ## Rollback
 
