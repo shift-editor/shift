@@ -14,6 +14,7 @@
     "generate:bridge-types": "turbo run generate:bridge-types",
     "generate:types": "pnpm generate:bridge-types",
     "generate:glyph-info": "pnpm --filter @shift/glyph-info generate",
+    "generate:icons": "bash scripts/icons.sh",
     "glyph-info:repl": "pnpm --filter @shift/glyph-info repl",
     "test": "turbo run test",
     "test:desktop": "turbo run test --filter=@shift/desktop --",
