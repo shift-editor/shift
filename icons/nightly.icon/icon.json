@@ -1,14 +1,14 @@
 {
   "fill" : {
-    "solid" : "extended-gray:0.00000,1.00000"
+    "solid" : "display-p3:0.75879,0.15869,0.11340,1.00000"
   },
   "groups" : [
     {
       "layers" : [
         {
           "glass" : false,
-          "image-name" : "SVG Image 2.svg",
-          "name" : "SVG Image 2",
+          "image-name" : "SVG Image.svg",
+          "name" : "SVG Image",
           "position" : {
             "scale" : 0.75,
             "translation-in-points" : [
