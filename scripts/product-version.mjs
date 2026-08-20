@@ -1,8 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 
 const productFiles = ["package.json", "apps/desktop/package.json"];
-const semverPattern =
-  /^\d+\.\d+\.\d+(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+const versionPattern = /^\d+\.\d+\.\d+$/;
 
 async function readPackage(path) {
   return JSON.parse(await readFile(path, "utf8"));
@@ -13,8 +12,8 @@ async function checkVersion(expectedVersion) {
   const versions = packages.map((packageJson) => packageJson.version);
   const [productVersion] = versions;
 
-  if (!semverPattern.test(productVersion)) {
-    throw new Error(`Invalid product version: ${productVersion}`);
+  if (!versionPattern.test(productVersion)) {
+    throw new Error(`Invalid numeric product version: ${productVersion}`);
   }
 
   if (versions.some((version) => version !== productVersion)) {
@@ -31,8 +30,8 @@ async function checkVersion(expectedVersion) {
 }
 
 async function setVersion(version) {
-  if (!semverPattern.test(version)) {
-    throw new Error(`Invalid product version: ${version}`);
+  if (!versionPattern.test(version)) {
+    throw new Error(`Invalid numeric product version: ${version}`);
   }
 
   for (const path of productFiles) {

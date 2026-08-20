@@ -8,7 +8,6 @@ import {
   type Rectangle,
   type WebContents,
 } from "electron";
-import started from "electron-squirrel-startup";
 import path from "node:path";
 import { Window } from "../windows/Window";
 import { getRendererSource } from "../utils";
@@ -22,8 +21,10 @@ import { AppLifecycle } from "./AppLifecycle";
 import { WindowManager } from "../windows/WindowManager";
 import { WorkspaceManager } from "../workspace/WorkspaceManager";
 import type { FontSessionHost } from "../workspace/FontSessionHost";
-import { showOpenFontDialog } from "../document/openFontDialog";
+import type { NativeDialogs } from "../dialogs/NativeDialogs";
+import { electronNativeDialogs } from "../dialogs/electronNativeDialogs";
 import { shiftProductName } from "../release";
+import { AppUpdater } from "../update/AppUpdater";
 
 const SLUG_ATLAS_PROFILING_ENABLED =
   process.env.SHIFT_PROFILE_SLUG_ATLAS !== undefined &&
@@ -40,13 +41,12 @@ const SLUG_ATLAS_PROFILING_ENABLED =
 export class App {
   readonly #log: ShiftLogger;
   readonly #lifecycle: AppLifecycle;
+  readonly #nativeDialogs: NativeDialogs;
+  readonly #updater: AppUpdater;
 
   #commands = new CommandRegistry();
   #windows = new WindowManager();
-  #workspaces = new WorkspaceManager({
-    documentsRoot: () => this.#requireDocumentsRoot(),
-    applicationName: () => this.applicationName,
-  });
+  #workspaces: WorkspaceManager;
   #documentsRoot: string | null = null;
 
   #appIcon = new AppIcon();
@@ -58,8 +58,23 @@ export class App {
     });
   });
 
-  constructor(log: ShiftLogger = createShiftLogger("app")) {
+  /**
+   * Creates the Electron application service graph.
+   *
+   * @param nativeDialogs - outer native-choice boundary shared by file and document workflows.
+   * @param log - application logger that receives shell lifecycle diagnostics.
+   */
+  constructor(
+    nativeDialogs: NativeDialogs = electronNativeDialogs,
+    log: ShiftLogger = createShiftLogger("app"),
+  ) {
     this.#log = log;
+    this.#nativeDialogs = nativeDialogs;
+    this.#workspaces = new WorkspaceManager({
+      documentsRoot: () => this.#requireDocumentsRoot(),
+      applicationName: () => this.applicationName,
+      nativeDialogs: this.#nativeDialogs,
+    });
     this.#lifecycle = new AppLifecycle({
       documentForWindow: (window) => {
         const session = this.#workspaces.getForBrowserWindow(window.window);
@@ -71,6 +86,11 @@ export class App {
         this.#workspaces.list().flatMap((session) => (session.document ? [session.document] : [])),
       log: this.#log,
     });
+    this.#updater = new AppUpdater({
+      lifecycle: this.#lifecycle,
+      activeWindow: () => this.#windows.activeWindow(),
+      log: createShiftLogger("app.update"),
+    });
   }
 
   get applicationName(): string {
@@ -78,7 +98,7 @@ export class App {
   }
 
   /**
-   * Starts Electron after installer-startup handling has completed.
+   * Starts Electron and installs the main-process service graph.
    *
    * @remarks
    * Commands and IPC handlers are registered before the window exists so
@@ -94,12 +114,6 @@ export class App {
     }
 
     this.#log.info("starting");
-
-    if (started) {
-      this.#log.info("app already started, quitting");
-      app.quit();
-      return;
-    }
 
     this.#registerCommands();
     this.#registerIpcHandlers();
@@ -139,6 +153,7 @@ export class App {
         if (this.#windows.allWindows().length === 0) this.#openLauncher();
       });
 
+      this.#updater.start();
       this.#log.info("finished when ready callback");
     });
     app.on("will-quit", () => {
@@ -271,6 +286,7 @@ export class App {
         mode: session.mode,
         windowId: browserWindow.id,
       });
+      session.document?.refreshWindowTitles();
       if (browserWindow.isVisible() || browserWindow.isMinimized()) return;
 
       window.focus();
@@ -279,6 +295,11 @@ export class App {
 
   #commandContext(): CommandContext {
     return {
+      update: {
+        checkForUpdates: async () => {
+          await this.#updater.checkForUpdates("manual");
+        },
+      },
       document: {
         create: async () => {
           const window = this.#windows.activeWindow();
@@ -323,7 +344,7 @@ export class App {
   }
 
   async #openWorkspaceFromWindow(opener: Window): Promise<void> {
-    const openPath = await showOpenFontDialog(opener);
+    const openPath = await this.#nativeDialogs.openFont(opener);
     if (!openPath) return;
 
     const session = await this.#workspaces.openPath(openPath);

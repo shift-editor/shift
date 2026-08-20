@@ -43,7 +43,7 @@ Use `!` or a `BREAKING CHANGE:` footer only when callers, documents, or user wor
 
 Release Please uses merged conventional commits to update `CHANGELOG.md`, versions, tags, and GitHub release notes. Write `feat`, `fix`, and `perf` subjects for users rather than as file-level implementation summaries.
 
-Do not manually bump the product version or edit generated release sections in an ordinary feature pull request. Release Please owns those changes in its release pull request. Use a `Release-As: X.Y.Z-prerelease.N` footer only after the user explicitly approves a milestone or maturity transition.
+Do not manually bump the product version or edit generated release sections in an ordinary feature pull request. Release Please owns those changes in its release pull request. Use a `Release-As: X.Y.Z` footer only after the user explicitly approves a milestone transition.
 
 ## Subject rules
 

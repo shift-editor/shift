@@ -4,16 +4,18 @@ import {
   type Page,
   type ElectronApplication,
 } from "@playwright/test";
+import type { ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import * as path from "path";
 import { once } from "events";
 import type { Unicode } from "@shift/types";
+import type { DirtyDocumentChoice } from "../../src/main/document/types";
 import { createAuthoredPackage } from "./fontSource";
 
 const APP_ROOT = path.resolve(__dirname, "../..");
-const MAIN_JS = path.join(APP_ROOT, ".vite/build/main.js");
-const FONT_PATH = path.resolve(APP_ROOT, "../../fixtures/fonts/mutatorsans/MutatorSans.ttf");
+export const MAIN_JS = path.join(APP_ROOT, ".vite/build/main.js");
+export const FONT_PATH = path.resolve(APP_ROOT, "../../fixtures/fonts/mutatorsans/MutatorSans.ttf");
 
 /** Fixed window size for deterministic snapshots. */
 const WINDOW_WIDTH = 1200;
@@ -26,21 +28,59 @@ const WINDOW_HEIGHT = 600;
 type ShiftFixtures = {
   electronApp: ElectronApplication;
   page: Page;
+  testRoot: string;
+  saveShiftPath: string;
+  exportTtfPath: string;
 };
 
 type ShiftOptions = {
   startupFontPath: string | undefined;
+  scriptedDialogs: boolean;
+  openFontPath: string | undefined;
+  dirtyDocumentChoice: DirtyDocumentChoice;
 };
 
 /** Base fixture for launcher tests; workspace tests override `startupFontPath`. */
 export const test = base.extend<ShiftFixtures & ShiftOptions>({
   startupFontPath: [undefined, { option: true }],
+  scriptedDialogs: [false, { option: true }],
+  openFontPath: [undefined, { option: true }],
+  dirtyDocumentChoice: ["cancel", { option: true }],
 
-  electronApp: async ({ startupFontPath }, use) => {
+  testRoot: async ({}, use) => {
     const testRoot = fs.mkdtempSync(path.join(os.tmpdir(), "shift-e2e-"));
+
+    try {
+      await use(testRoot);
+    } finally {
+      fs.rmSync(testRoot, { recursive: true, force: true });
+    }
+  },
+
+  saveShiftPath: async ({ testRoot }, use) => {
+    await use(path.join(testRoot, "saved.shift"));
+  },
+
+  exportTtfPath: async ({ testRoot }, use) => {
+    await use(path.join(testRoot, "exported.ttf"));
+  },
+
+  electronApp: async (
+    {
+      startupFontPath,
+      scriptedDialogs,
+      openFontPath,
+      dirtyDocumentChoice,
+      testRoot,
+      saveShiftPath,
+      exportTtfPath,
+    },
+    use,
+  ) => {
     const userDataDir = path.join(testRoot, "user-data");
     let workspacePath: string | undefined;
     let app: ElectronApplication | null = null;
+    let childProcess: ChildProcess | null = null;
 
     if (startupFontPath) {
       workspacePath = createAuthoredPackage(startupFontPath, path.join(testRoot, "workspace"));
@@ -55,11 +95,20 @@ export const test = base.extend<ShiftFixtures & ShiftOptions>({
     if (workspacePath) environment.SHIFT_E2E_FONT_PATH = workspacePath;
     else delete environment.SHIFT_E2E_FONT_PATH;
 
+    if (scriptedDialogs) {
+      environment.SHIFT_E2E_NATIVE_DIALOGS = "1";
+      environment.SHIFT_E2E_SAVE_SHIFT_PATH = saveShiftPath;
+      environment.SHIFT_E2E_EXPORT_TTF_PATH = exportTtfPath;
+      environment.SHIFT_E2E_DIRTY_DOCUMENT_CHOICE = dirtyDocumentChoice;
+      if (openFontPath) environment.SHIFT_E2E_OPEN_FONT_PATH = openFontPath;
+    }
+
     try {
       app = await electron.launch({
         args: [MAIN_JS, `--user-data-dir=${userDataDir}`, "--force-device-scale-factor=1"],
         env: environment,
       });
+      childProcess = app.process();
 
       // Size the window that owns the test page instead of whichever app window was created first.
       const page = await app.firstWindow();
@@ -86,13 +135,11 @@ export const test = base.extend<ShiftFixtures & ShiftOptions>({
 
       await use(app);
     } finally {
-      const childProcess = app?.process();
       if (childProcess && childProcess.exitCode === null && childProcess.signalCode === null) {
         const exited = once(childProcess, "exit");
         childProcess.kill("SIGKILL");
         await exited;
       }
-      fs.rmSync(testRoot, { recursive: true, force: true });
     }
   },
 
@@ -107,8 +154,24 @@ export const test = base.extend<ShiftFixtures & ShiftOptions>({
   },
 });
 
+/** Fixture whose native outer-dialog choices are supplied by deterministic E2E paths. */
+export const documentTest = test.extend<ShiftOptions>({
+  scriptedDialogs: [true, { option: true }],
+});
+
 /** Workspace fixture that starts directly with MutatorSans instead of visiting the launcher. */
 export const workspaceTest = test.extend<ShiftOptions>({
+  startupFontPath: FONT_PATH,
+
+  page: async ({ page }, use) => {
+    await page.waitForURL(/#\/home/, { timeout: 20_000 });
+    await page.getByLabel("Glyph catalog", { exact: true }).waitFor({ state: "visible" });
+    await use(page);
+  },
+});
+
+/** Authored workspace fixture with deterministic native dialog destinations. */
+export const documentWorkspaceTest = documentTest.extend<ShiftOptions>({
   startupFontPath: FONT_PATH,
 
   page: async ({ page }, use) => {

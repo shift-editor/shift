@@ -14,6 +14,7 @@
         "src/main/main.ts",
         "src/preload/preload.ts",
         "src/renderer/renderer.ts",
+        "electron-builder.config.ts",
         "forge.config.ts",
         "vitest.config.ts",
         "vite.main.config.ts",

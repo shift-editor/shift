@@ -115,12 +115,33 @@ These patterns weaken documentation and cause maintenance burden:
 - **Generic descriptions** — "This module handles X" without explaining why it handles X this particular way. The interesting part is always the design choice, not the responsibility statement.
 - **Cross-cutting architecture** — narratives spanning multiple subsystems belong in `docs/architecture/`, not in one module's DOCS.md.
 
+## Review attestation
+
+Every DOCS.md carries, within its first five lines:
+
+```markdown
+<!-- reviewed: 2026-08-18 review-every: 90d -->
+```
+
+Bump the `reviewed` date ONLY after actually re-verifying the doc's claims against source — it is an attestation, not a timestamp. The checker flags docs whose review is overdue or whose source moved after the last review; committing the doc without bumping the date deliberately does NOT clear staleness.
+
+## Enforced invariants
+
+When an invariant is structurally enforceable (dependency bans, import surfaces), prefer adding a rule to `scripts/check-invariants.py` and citing it from the doc: "Enforced by `scripts/check-invariants.py` (`rule-id`)". Prose stays for the WHY; the rule owns the WHAT. Unenforceable motivation (performance rationale, temporal claims) stays prose — don't fake precision.
+
+## Code fences
+
+- `ts`/`typescript` fences are type-checked in CI against the module's tsconfig (`node scripts/check-docs-fences.mjs`). Make examples self-contained: real imports plus `declare const` preambles for free variables. A deliberately non-compiling fragment opts out with ```` ```typescript illustrative ````.
+- Codemap trees are validated path-by-path against the filesystem — every listed file must exist. `python3 scripts/context-drift-check.py --codemap <doc>` prints the module's real tree as ground truth to curate from (curate; don't paste it wholesale).
+- Command lines (pnpm/cargo/vitest, fenced or inline) are validated against real scripts, packages, and CLI flags.
+
 ## After writing
 
 1. Verify backtick-quoted symbols still exist — grep for each `PascalCase` symbol in the doc
 2. Verify markdown links resolve to real files
-3. Run `python3 scripts/context-drift-check.py` to validate the full docs system
-4. Prefer small, accurate updates over comprehensive rewrites. A doc with three correct invariants beats one with ten stale ones.
+3. Run `python3 scripts/context-drift-check.py` to validate the full docs system (it auto-discovers every DOCS.md), plus `node scripts/check-docs-fences.mjs` if you touched ts fences and `python3 scripts/check-invariants.py` if you touched an enforced invariant
+4. Bump the doc's `reviewed:` date — you just verified it
+5. Prefer small, accurate updates over comprehensive rewrites. A doc with three correct invariants beats one with ten stale ones.
 
 ## Scope boundaries
 

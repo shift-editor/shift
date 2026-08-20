@@ -1,11 +1,13 @@
 import { app, type Event } from "electron";
+import type { CloseReason } from "../document/types";
 import type { ShiftLogger } from "../logging";
 import type { Window } from "../windows/Window";
-import type { CloseReason } from "../document/DocumentSession";
 
 export type CloseConfirmation = {
   shouldConfirmClose(): boolean;
-  confirmClose(reason: CloseReason): Promise<boolean>;
+  prepareClose(reason: CloseReason): Promise<boolean>;
+  commitClose(): Promise<void>;
+  cancelClose(): void;
 };
 
 export type AppLifecycleOptions = {
@@ -20,20 +22,14 @@ export type WindowLifecycleOptions = {
 
 type QuitState = "idle" | "confirming" | "confirmed";
 
-/**
- * Coordinates Electron close and quit events around document vetoes.
- *
- * @remarks
- * Electron exposes window close and app quit as separate event paths. This
- * coordinator keeps their re-entrant state in one place and exposes a narrow
- * `registerWindow` surface to app startup.
- */
+/** Coordinates window close, ordinary quit, and update restart around document vetoes. */
 export class AppLifecycle {
   readonly #documentForWindow: (window: Window) => CloseConfirmation | null;
   readonly #documents: () => readonly CloseConfirmation[];
   readonly #log: ShiftLogger;
 
   #quitState: QuitState = "idle";
+  #quitConfirmation: Promise<boolean> | null = null;
   #confirmedWindowCloses = new Set<number>();
   #pendingWindowCloses = new Set<number>();
 
@@ -63,6 +59,32 @@ export class AppLifecycle {
     });
   }
 
+  /** Prepares and commits every document before an ordinary quit or update restart. */
+  async confirmQuit(reason: CloseReason): Promise<boolean> {
+    this.#log.debug("quit confirmation requested", { reason, quitState: this.#quitState });
+    if (this.#quitState === "confirmed") return true;
+    if (this.#quitConfirmation) return this.#quitConfirmation;
+
+    this.#quitState = "confirming";
+    this.#log.info("quit preparation started", { reason });
+    const confirmation = this.#prepareAndCommitDocuments(reason);
+    this.#quitConfirmation = confirmation;
+
+    try {
+      const confirmed = await confirmation;
+      this.#quitState = confirmed ? "confirmed" : "idle";
+      this.#log.info(confirmed ? "quit preparation committed" : "quit preparation canceled", {
+        reason,
+      });
+      return confirmed;
+    } catch (error) {
+      this.#quitState = "idle";
+      throw error;
+    } finally {
+      if (this.#quitConfirmation === confirmation) this.#quitConfirmation = null;
+    }
+  }
+
   #handleWindowClose(window: Window, event: Event): void {
     const windowId = window.window.id;
     this.#log.debug("window close requested", { windowId, quitState: this.#quitState });
@@ -71,6 +93,11 @@ export class AppLifecycle {
         windowId,
         quitState: this.#quitState,
       });
+      return;
+    }
+    if (this.#quitState === "confirming") {
+      this.#log.debug("window close blocked by quit preparation", { windowId });
+      event.preventDefault();
       return;
     }
 
@@ -85,27 +112,44 @@ export class AppLifecycle {
       this.#log.debug("window close guard already pending", { windowId });
       return;
     }
-
     this.#pendingWindowCloses.add(windowId);
-    this.#log.info("window close guard started", { windowId });
-    void document
-      .confirmClose("window")
-      .then((confirmed) => {
-        if (!confirmed) {
-          this.#log.info("window close canceled by document guard", { windowId });
-          return;
-        }
+    this.#log.info("window close preparation started", { windowId });
 
-        this.#log.info("window close confirmed by document guard", { windowId });
-        this.#confirmedWindowCloses.add(windowId);
-        window.close();
-      })
+    void this.#closeWindow(window, document)
       .catch((error) => {
-        this.#log.error("window close guard failed", error);
+        this.#log.error("window close failed", error);
       })
       .finally(() => {
         this.#pendingWindowCloses.delete(windowId);
       });
+  }
+
+  async #closeWindow(window: Window, document: CloseConfirmation): Promise<void> {
+    const windowId = window.window.id;
+    let prepared: boolean;
+    try {
+      prepared = await document.prepareClose("window");
+    } catch (error) {
+      document.cancelClose();
+      this.#log.error("window close preparation failed", error);
+      return;
+    }
+
+    if (!prepared) {
+      document.cancelClose();
+      this.#log.info("window close canceled by document guard", { windowId });
+      return;
+    }
+
+    try {
+      await document.commitClose();
+    } catch (error) {
+      this.#log.error("window document close failed after commit", error);
+    }
+
+    this.#log.info("window close committed", { windowId });
+    this.#confirmedWindowCloses.add(windowId);
+    window.close();
   }
 
   #handleBeforeQuit(event: Event): void {
@@ -114,9 +158,7 @@ export class AppLifecycle {
       this.#log.debug("quit allowed after confirmation");
       return;
     }
-
-    const documents = this.#documents().filter((document) => document.shouldConfirmClose());
-    if (documents.length === 0) {
+    if (this.#documents().length === 0) {
       this.#log.info("quit guard skipped");
       return;
     }
@@ -127,29 +169,37 @@ export class AppLifecycle {
       return;
     }
 
-    this.#quitState = "confirming";
-    this.#log.info("quit guard started");
-    void this.#confirmQuit(documents)
+    void this.confirmQuit("quit")
       .then((confirmed) => {
-        if (!confirmed) {
-          this.#quitState = "idle";
-          this.#log.info("quit canceled by document guard");
-          return;
-        }
-
-        this.#quitState = "confirmed";
-        this.#log.info("quit confirmed by document guard");
-        app.quit();
+        if (confirmed) app.quit();
       })
       .catch((error) => {
-        this.#quitState = "idle";
         this.#log.error("quit guard failed", error);
       });
   }
 
-  async #confirmQuit(documents: readonly CloseConfirmation[]): Promise<boolean> {
-    for (const document of documents) {
-      if (!(await document.confirmClose("quit"))) return false;
+  async #prepareAndCommitDocuments(reason: CloseReason): Promise<boolean> {
+    const documents = this.#documents();
+    const prepared: CloseConfirmation[] = [];
+
+    try {
+      for (const document of documents) {
+        prepared.push(document);
+        if (!(await document.prepareClose(reason))) {
+          for (const candidate of prepared) candidate.cancelClose();
+          return false;
+        }
+      }
+    } catch (error) {
+      for (const document of prepared) document.cancelClose();
+      throw error;
+    }
+
+    const results = await Promise.allSettled(prepared.map((document) => document.commitClose()));
+    for (const result of results) {
+      if (result.status === "rejected") {
+        this.#log.error("document close failed after commit", result.reason);
+      }
     }
 
     return true;

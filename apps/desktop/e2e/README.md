@@ -21,7 +21,7 @@ pnpm test:e2e:visual e2e/home.spec.ts
 pnpm test:e2e:gpu e2e/glyph-grid.spec.ts
 ```
 
-Build the native bridge first with `pnpm build:native` when its binary is absent or stale. Each E2E command builds the Electron main, workspace, preload, and renderer bundles through `e2e/build.ts`.
+Build the native bridge first with `pnpm build:native` when its binary is absent or stale. Each E2E command builds the Electron main, workspace, preload, and renderer bundles through `build.ts --e2e`.
 
 ## Projects and fixtures
 

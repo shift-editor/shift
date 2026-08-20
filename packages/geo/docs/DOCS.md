@@ -1,14 +1,18 @@
 # @shift/geo
 
+<!-- reviewed: 2026-08-18 review-every: 90d -->
+
 Lightweight 2D geometry library providing pure-functional vector math, bezier curve primitives, bounding boxes, polygon operations, and affine transformation matrices.
 
 ## Architecture Invariants
 
-**Architecture Invariant:** `Vec2`, `Bounds`, `Curve`, and `Polygon` are stateless namespace objects (plain `const` objects, not classes). All functions are pure -- they return new `Point2D` objects and never mutate inputs. WHY: tree-shakeability and zero allocation overhead from class instantiation.
+**Architecture Invariant:** `Vec2`, `Bounds`, `Rect`, `Curve`, and `Polygon` are stateless namespace objects (plain `const` objects, not classes). All functions are pure -- they return new `Point2D` objects and never mutate inputs. WHY: tree-shakeability and zero allocation overhead from class instantiation.
 
 **Architecture Invariant:** `Mat` is the sole exception to the pure-function rule. It is a mutable class whose instance methods (`multiply`, `translate`, `scale`, `rotate`, `invert`) mutate in place and return `this` for chaining. Static factory methods (`Identity`, `Translate`, `Scale`, `Rotate`, `Compose`) return new instances. WHY: matrix chaining is a hot path where allocation matters; the mutable API mirrors Canvas2D's `setTransform`.
 
 **Architecture Invariant:** All geometry operates on `Point2D` = `{ x: number; y: number }` from `@shift/geo`. Functions accept any object with `x` and `y` properties -- no wrapper class required. WHY: avoids forcing callers to convert between vector types; any `{ x, y }` works.
+
+**Architecture Invariant:** `@shift/geo` is a leaf library: zero runtime dependencies, and non-test sources import nothing external. WHY: the pure-function guarantee is only reviewable while the import surface stays empty. Enforced by `scripts/check-invariants.py` (`geo-dependency-free`).
 
 **Architecture Invariant:** Floating-point comparisons in `Vec2` use `EPSILON = 1e-10` (module-level constant in Vec2.ts). `Curve` uses separate constants: `NEWTON_TOLERANCE = 1e-6` and `CURVE_SUBDIVISIONS = 32`. These are not configurable at runtime. WHY: consistent precision across all call sites; epsilon tuning should be a deliberate library-wide change, not per-call.
 
@@ -22,6 +26,7 @@ src/
   types.ts       -- Point2D and Rect2D geometry primitives
   Vec2.ts        -- 2D vector operations namespace (~50 functions)
   Bounds.ts      -- axis-aligned bounding box (interface + namespace)
+  Rect.ts        -- Rect2D construction and point containment (namespace)
   Curve.ts       -- line/quadratic/cubic bezier primitives with hit-testing
   Polygon.ts     -- polygon area and winding direction
   Mat.ts         -- mutable 2D affine transformation matrix class
@@ -30,13 +35,14 @@ src/
 ## Key Types
 
 - `Point2D` -- `{ x: number; y: number }`. The universal 2D coordinate type used by every function in the library.
-- `Rect2D` -- `{ x, y, width, height, left, top, right, bottom }`. Returned by `Bounds.toRect` and `Polygon.boundingRect`.
+- `Rect2D` -- `{ x, y, width, height, left, top, right, bottom }`. Returned by `Bounds.toRect`, `Polygon.boundingRect`, and the `Rect` constructors.
 - `Bounds` -- `{ min: Point2D; max: Point2D }` axis-aligned bounding box. Both an interface and a namespace.
 - `LineCurve` -- `{ type: "line"; p0; p1 }`. Straight segment between two points.
 - `QuadraticCurve` -- `{ type: "quadratic"; p0; c; p1 }`. One control point.
 - `CubicCurve` -- `{ type: "cubic"; p0; c0; c1; p1 }`. Two control points.
 - `CurveType` -- discriminated union of `LineCurve | QuadraticCurve | CubicCurve`. Switch on `.type`.
 - `ClosestPoint` -- `{ t, point, distance }`. Returned by `Curve.closestPoint` for hit-testing.
+- `DecomposedTransform` -- degrees-based `{ translateX, translateY, rotation, scaleX, scaleY, skewX, skewY, tCenterX, tCenterY }` record. Defined here in Mat.ts (not in `@shift/types`). `Mat.fromDecomposed` / `Mat.toDecomposed` round-trip only translate/rotate/scale matrices; a matrix with shear does not survive the round trip (see Gotchas).
 - `MatModel` -- readonly interface for the six affine matrix coefficients `(a, b, c, d, e, f)`.
 - `Mat` -- mutable class implementing `MatModel`. Maps directly to Canvas2D `transform(a, b, c, d, e, f)`.
 
@@ -47,6 +53,8 @@ src/
 **Curve** implements bezier math with a discriminated-union pattern. You construct curves with `Curve.line`, `Curve.quadratic`, or `Curve.cubic`, then pass them to polymorphic functions: `pointAt(curve, t)`, `tangentAt`, `normalAt`, `closestPoint`, `bounds`, `splitAt`, `length`, `sample`. Closest-point queries use a two-phase algorithm: coarse subdivision scan (32 samples) followed by Newton-Raphson refinement (up to 8 iterations at 1e-6 tolerance). `quadraticToCubic` performs lossless degree elevation.
 
 **Bounds** provides AABB construction from points, rectangles, or explicit min/max corners, plus composition (`union`, `unionAll`, `includePoint`), queries (`containsPoint`, `overlaps`, `center`, `width`, `height`), and conversion (`toRect`, `expand`).
+
+**Rect** constructs `Rect2D` values: `fromXYWH` from an origin plus dimensions, `fromPoints` from two corners (normalizing so left/top/right/bottom are ordered), and `containsPoint` for inclusive containment tests.
 
 **Polygon** uses the shoelace formula for `signedArea` and winding-direction detection (`isClockwise`, `isCounterClockwise`).
 
@@ -73,9 +81,18 @@ src/
 ### Use Mat for a Canvas2D transform
 
 ```typescript
-const mat = Mat.Identity().translate(cx, cy).rotate(angle).scale(sx, sy).translate(-cx, -cy);
+import { Mat } from "@shift/geo";
+
+declare const ctx: { setTransform(...args: number[]): void };
+declare const angle: number, sx: number, sy: number, cx: number, cy: number;
+
+// rotate/scale about a center point (cx, cy)
+const local = Mat.Identity().rotate(angle).scale(sx, sy); // about the origin
+const mat = Mat.Compose(Mat.Compose(Mat.Translate(cx, cy), local), Mat.Translate(-cx, -cy));
 ctx.setTransform(...mat.toCanvasTransform());
 ```
+
+Do not chain `.translate(cx, cy)…translate(-cx, -cy)` around rotate/scale: `Mat.translate` is a world-space pre-translation (it adds to `e`/`f`) while `rotate`/`scale` post-multiply, so the two translations cancel and the chain transforms about the origin. Compose explicit translation matrices instead, as the app's `Transform.applyMatrix` does.
 
 ## Gotchas
 
@@ -85,6 +102,8 @@ ctx.setTransform(...mat.toCanvasTransform());
 - `Polygon.isClockwise` returns `true` for degenerate polygons (fewer than 3 points).
 - `Bounds.fromPoints` returns `null` for empty arrays, not a zero-size bounds.
 - `Mat.invert()` throws if the matrix is singular (determinant is zero).
+- `Rect.fromXYWH` assumes non-negative dimensions and does not normalize -- negative width/height produce a rect whose `right < left`. Use `Rect.fromPoints` when the corners may be in any order.
+- `Mat.toDecomposed` attributes all shear to `skewX` and always reports `skewY: 0` and `tCenterX`/`tCenterY: 0`. The round trip through `fromDecomposed` reproduces the matrix only for translate/rotate/scale matrices: `fromDecomposed` folds `skewX` into the scale terms with a convention inconsistent with `toDecomposed`'s QR-style extraction, so any matrix with shear comes back numerically different. An authored `skewY` or transform center does not survive decomposition either.
 
 ## Verification
 

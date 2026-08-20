@@ -9,20 +9,20 @@ The release roadmap wins when priorities conflict. Exploration is still useful, 
 
 ## Current Stage
 
-Current repo state: `0.0.1-dev` / pre-alpha source development.
+Current repo state: `0.1.0` / pre-release source development.
 
-Current capability level: roughly `0.2.x-alpha` feature maturity. Core editing work is significantly ahead of release infrastructure, so the first public binary does not need to start at `0.1.0` if the changelog honestly explains what already exists.
+Current capability level: roughly the planned 0.2 Developer Preview milestone. Core editing work is significantly ahead of release infrastructure, so the first public binary does not need to start at `0.1.1` if the changelog honestly explains what already exists.
 
-Recommended first public binary: `0.2.0-alpha.1`.
+Recommended first public binary: `0.2.0`, marked as a Developer Preview GitHub prerelease.
 
 Why:
 
 - Basic vector editing, selection, undo/redo, delete, clipboard, segment hover, snapping pieces, transform tools, glyph thumbnails/search, boolean operations, and some variable/text work already exist.
-- Public release basics are not done yet: no release tags, no root changelog, no release workflow, no signed/notarized binary, no published artifacts, and version files disagree.
+- Release packaging, macOS signing/DMGs, numeric versions, and native update feeds are implemented. Publishing the first version and completing installed N → N+1 verification remain.
 
 ## Release Roadmap
 
-### 0.2.0-alpha.1 — First Installable Editing Alpha
+### 0.2.0 — First Installable Editing Alpha
 
 Promise: a tester can install Shift, launch it, open a font, and try the existing core editor without building from source.
 
@@ -44,7 +44,7 @@ Acceptance tests:
 - Open a UFO/TTF/OTF.
 - Select a glyph, edit points, undo/redo, copy/paste, and close the app.
 
-### 0.3.0-alpha — Persistence And Export Alpha
+### 0.3.0 — Persistence And Export Alpha
 
 Promise: a tester can use Shift on a toy font and verify save/reopen/export behavior.
 
@@ -65,7 +65,7 @@ Acceptance tests:
 - Export a simple TTF/OTF and install or inspect it externally.
 - Try saving a non-writable source format and verify Shift forces Save As.
 
-### 0.4.0-alpha — Glyph Workflow Alpha
+### 0.4.0 — Glyph Workflow Alpha
 
 Promise: a tester can work across multiple glyphs without fighting navigation or glyph metadata.
 
@@ -85,7 +85,7 @@ Acceptance tests:
 - Add or duplicate a glyph and save/reopen.
 - Rename or edit unicode metadata and verify the result survives save/reopen where supported.
 
-### 0.5.0-alpha — Drawing Workflow Depth
+### 0.5.0 — Drawing Workflow Depth
 
 Promise: contour editing feels useful beyond simple point movement.
 
@@ -104,7 +104,7 @@ Acceptance tests:
 - Build a simple glyph from shapes and manual point edits.
 - Use precision aids to align or measure a contour without guessing.
 
-### 0.6.0-alpha — Components And Accents Alpha
+### 0.6.0 — Components And Accents Alpha
 
 Promise: Shift can represent and edit composite glyph workflows at an alpha level.
 
@@ -124,7 +124,7 @@ Acceptance tests:
 - Move/transform a component and save/reopen.
 - Decompose a component and continue editing outlines.
 
-### 0.7.0-alpha — Variable Font Alpha
+### 0.7.0 — Variable Font Alpha
 
 Promise: Shift can inspect and test variable font/designspace workflows, even if editing is incomplete.
 
@@ -144,7 +144,7 @@ Acceptance tests:
 - Detect incompatible glyphs and show a useful message.
 - Export or generate a simple instance.
 
-### 0.8.0-alpha — Spacing And Proofing Alpha
+### 0.8.0 — Spacing And Proofing Alpha
 
 Promise: a tester can evaluate glyphs in text context.
 
@@ -163,7 +163,7 @@ Acceptance tests:
 - Save/reopen spacing changes.
 - Preview a sample string at multiple sizes.
 
-### 0.9.0-beta.1 — Beta Candidate
+### 0.9.0 — Beta Candidate
 
 Promise: a type designer can complete a small real task end-to-end, and the beta line is primarily about fixing bugs.
 
@@ -821,16 +821,16 @@ These are allowed to jump around when energy is high, but they should not silent
 **macOS**
 
 - [x] Signed `.app` bundle
-- [ ] `.dmg` installer
+- [x] `.dmg` installer
 - [x] Notarization
 - [ ] Universal binary (Intel + Apple Silicon)
-- [ ] Auto-updater (Sparkle)
+- [x] electron-updater with signed ZIP delivery
 
 **Windows**
 
-- [ ] NSIS or WiX installer
+- [x] Per-user NSIS installer
 - [ ] Code signing
-- [ ] Auto-updater
+- [ ] electron-updater (Nightly x64 implemented; installed unsigned N → N+1 verification and Release signing remain)
 
 **Linux**
 
@@ -913,54 +913,54 @@ interface ShiftScriptContext {
 
 The authoritative milestone plan is the release roadmap at the top of this file. This section is a compact index.
 
-### v0.2-alpha — First Installable Editing Alpha
+### v0.2 — First Installable Editing Alpha
 
 - Release infrastructure and installable binaries.
 - Existing core vector editing exposed to testers.
 - Clear alpha limitations.
 
-### v0.3-alpha — Persistence And Export Alpha
+### v0.3 — Persistence And Export Alpha
 
 - Save/reopen loop.
 - Save As and dirty state.
 - Basic TTF/OTF export.
 - Round-trip tests.
 
-### v0.4-alpha — Glyph Workflow Alpha
+### v0.4 — Glyph Workflow Alpha
 
 - Recent files.
 - Better glyph grid navigation.
 - Glyph add/duplicate/delete/rename.
 - Unicode/name editing basics.
 
-### v0.5-alpha — Drawing Workflow Depth
+### v0.5 — Drawing Workflow Depth
 
 - Stabilized boolean/path operations.
 - Shape and precision workflow improvements.
 - Better contour indicators and validation basics.
 
-### v0.6-alpha — Components And Accents Alpha
+### v0.6 — Components And Accents Alpha
 
 - Component data model.
 - Component editing/rendering/decomposition.
 - Anchors.
 - Accented glyph generation basics.
 
-### v0.7-alpha — Variable Font Alpha
+### v0.7 — Variable Font Alpha
 
 - User-facing designspace workflow.
 - Master switching.
 - Interpolation preview.
 - Named instances and simple instance export.
 
-### v0.8-alpha — Spacing And Proofing Alpha
+### v0.8 — Spacing And Proofing Alpha
 
 - Sidebearing editing.
 - Spacing strings.
 - Preview/proofing panel.
 - Waterfall view.
 
-### v0.9-beta — Beta Candidate
+### v0.9 — Beta Candidate
 
 - Feature freeze for the 1.0 core workflow.
 - Cross-platform packaging.

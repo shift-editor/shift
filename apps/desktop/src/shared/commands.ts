@@ -6,6 +6,7 @@
  * behavior for each command.
  */
 export type CommandId =
+  | "app.checkForUpdates"
   | "file.new"
   | "file.open"
   | "file.save"

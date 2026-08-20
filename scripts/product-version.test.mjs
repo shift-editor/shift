@@ -27,45 +27,46 @@ async function runVersionScript(root, ...arguments_) {
   return execFileAsync(process.execPath, [scriptPath, ...arguments_], { cwd: root });
 }
 
-test("accepts matching semantic product versions", async (context) => {
-  const root = await createProduct("0.1.0-alpha.0");
+test("accepts matching numeric product versions", async (context) => {
+  const root = await createProduct("0.1.0");
   context.after(() => rm(root, { recursive: true, force: true }));
 
-  const { stdout } = await runVersionScript(root, "check", "0.1.0-alpha.0");
+  const { stdout } = await runVersionScript(root, "check", "0.1.0");
 
-  assert.equal(stdout.trim(), "0.1.0-alpha.0");
+  assert.equal(stdout.trim(), "0.1.0");
 });
 
 test("rejects product version disagreement", async (context) => {
-  const root = await createProduct("0.1.0-alpha.0", "0.1.0-alpha.1");
+  const root = await createProduct("0.1.0", "0.1.1");
   context.after(() => rm(root, { recursive: true, force: true }));
 
   await assert.rejects(
     runVersionScript(root, "check"),
-    /Product versions disagree: package\.json=0\.1\.0-alpha\.0, apps\/desktop\/package\.json=0\.1\.0-alpha\.1/,
+    /Product versions disagree: package\.json=0\.1\.0, apps\/desktop\/package\.json=0\.1\.1/,
   );
 });
 
 test("sets every product version", async (context) => {
-  const root = await createProduct("0.1.0-alpha.0");
+  const root = await createProduct("0.1.0");
   context.after(() => rm(root, { recursive: true, force: true }));
 
-  await runVersionScript(root, "set", "0.1.0-nightly.20260816.12");
+  await runVersionScript(root, "set", "0.321.2");
 
   const rootPackage = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
   const desktopPackage = JSON.parse(
     await readFile(path.join(root, "apps", "desktop", "package.json"), "utf8"),
   );
-  assert.equal(rootPackage.version, "0.1.0-nightly.20260816.12");
-  assert.equal(desktopPackage.version, "0.1.0-nightly.20260816.12");
+  assert.equal(rootPackage.version, "0.321.2");
+  assert.equal(desktopPackage.version, "0.321.2");
 });
 
-test("rejects invalid semantic versions", async (context) => {
-  const root = await createProduct("0.1.0-alpha.0");
+test("rejects prerelease and incomplete versions", async (context) => {
+  const root = await createProduct("0.1.0");
   context.after(() => rm(root, { recursive: true, force: true }));
 
   await assert.rejects(
-    runVersionScript(root, "set", "nightly"),
-    /Invalid product version: nightly/,
+    runVersionScript(root, "set", "0.1.0-alpha.1"),
+    /Invalid numeric product version/,
   );
+  await assert.rejects(runVersionScript(root, "set", "0.1"), /Invalid numeric product version/);
 });

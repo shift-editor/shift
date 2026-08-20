@@ -2,11 +2,9 @@
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
   "bootstrap-sha": "788ba986410b4d2837e9d269ff8938b1dbc5aa9a",
   "release-type": "node",
-  "versioning": "prerelease",
-  "prerelease": true,
   "draft": true,
   "force-tag-creation": true,
-  "bump-minor-pre-major": true,
+  "bump-patch-for-minor-pre-major": true,
   "draft-pull-request": true,
   "include-component-in-tag": false,
   "include-v-in-tag": true,
@@ -62,7 +60,6 @@
   ],
   "packages": {
     ".": {
-      "prerelease-type": "alpha",
       "changelog-path": "CHANGELOG.md",
       "extra-files": ["apps/desktop/package.json"]
     }

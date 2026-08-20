@@ -1,0 +1,8 @@
+{
+  "extends": "@electron-toolkit/tsconfig/tsconfig.node.json",
+  "include": ["build.ts", "electron-builder.config.ts", "forge.config.ts", "vite.*.config.ts"],
+  "compilerOptions": {
+    "module": "preserve",
+    "moduleResolution": "bundler"
+  }
+}

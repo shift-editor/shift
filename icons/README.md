@@ -19,3 +19,11 @@ pnpm generate:icons
 ```
 
 Generation requires macOS, Xcode 26 or newer, and ImageMagick. Do not edit the generated PNG, ICNS, or ICO files directly.
+
+## electron-builder configuration
+
+`apps/desktop/electron-builder.config.ts` selects the distribution-matched assets:
+
+- macOS: `icon.icon` / `nightly.icon`
+- Windows and NSIS: `icon.ico` / `nightly.ico`
+- Linux and runtime APIs: `icon.png` / `nightly.png`
