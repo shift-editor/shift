@@ -1,201 +1,133 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-# Electron Icon Generator Script
-# Usage: ./generate-icons.sh input-image.png [output-directory]
+set -euo pipefail
 
-set -e
+repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+icons_dir="$repo_root/icons"
+work_dir=$(mktemp -d "${TMPDIR:-/tmp}/shift-icons.XXXXXX")
+trap 'rm -rf "$work_dir"' EXIT
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
-
-# Check if ImageMagick is installed
-if ! command -v convert &> /dev/null; then
-    echo -e "${RED}❌ ImageMagick is not installed.${NC}"
-    echo "Install it with:"
-    echo "  macOS: brew install imagemagick"
-    echo "  Ubuntu/Debian: sudo apt-get install imagemagick"
-    echo "  CentOS/RHEL: sudo yum install ImageMagick"
+for command in magick xcrun; do
+  if ! command -v "$command" >/dev/null 2>&1; then
+    echo "Required command not found: $command" >&2
     exit 1
-fi
-
-# Check arguments
-if [ $# -eq 0 ]; then
-    echo "Usage: $0 <input-image> [output-directory]"
-    echo "Example: $0 logo.png ./icons"
-    exit 1
-fi
-
-INPUT_FILE="$1"
-OUTPUT_DIR="${2:-./icons}"
-
-# Check if input file exists
-if [ ! -f "$INPUT_FILE" ]; then
-    echo -e "${RED}❌ Input file not found: $INPUT_FILE${NC}"
-    exit 1
-fi
-
-# Create output directory
-mkdir -p "$OUTPUT_DIR"
-
-echo -e "${BLUE}🎨 Generating icons from: $INPUT_FILE${NC}"
-echo -e "${BLUE}📁 Output directory: $OUTPUT_DIR${NC}"
-
-# Get input image dimensions
-INPUT_SIZE=$(identify -format "%wx%h" "$INPUT_FILE")
-echo -e "${BLUE}📐 Input image size: $INPUT_SIZE${NC}"
-
-# Define icon sizes
-PNG_SIZES=(16 32 48 64 96 128 192 256 512 1024)
-ICO_SIZES=(16 32 48 64 128 256)
-ICNS_SIZES=(16 32 64 128 256 512 1024)
-FAVICON_SIZES=(16 32 48)
-
-echo -e "\n${YELLOW}📋 Generating PNG files...${NC}"
-
-# Generate individual PNG files
-for size in "${PNG_SIZES[@]}"; do
-    output_file="$OUTPUT_DIR/icon-${size}x${size}.png"
-    convert "$INPUT_FILE" -resize "${size}x${size}" -background transparent "$output_file"
-    echo -e "${GREEN}  ✅ Generated: icon-${size}x${size}.png${NC}"
+  fi
 done
 
-# Generate main icon.png (512x512)
-convert "$INPUT_FILE" -resize "512x512" -background transparent "$OUTPUT_DIR/icon.png"
-echo -e "${GREEN}  ✅ Generated: icon.png (512x512)${NC}"
-
-echo -e "\n${YELLOW}🌐 Generating favicon sizes...${NC}"
-
-# Generate favicon sizes
-for size in "${FAVICON_SIZES[@]}"; do
-    output_file="$OUTPUT_DIR/favicon-${size}x${size}.png"
-    convert "$INPUT_FILE" -resize "${size}x${size}" -background transparent "$output_file"
-    echo -e "${GREEN}  ✅ Generated: favicon-${size}x${size}.png${NC}"
-done
-
-# Generate Windows ICO file
-echo -e "\n${YELLOW}🪟 Generating Windows ICO...${NC}"
-
-# Create temporary PNG files for ICO
-ICO_TEMP_DIR="$OUTPUT_DIR/temp_ico"
-mkdir -p "$ICO_TEMP_DIR"
-
-for size in "${ICO_SIZES[@]}"; do
-    convert "$INPUT_FILE" -resize "${size}x${size}" -background transparent "$ICO_TEMP_DIR/icon-${size}.png"
-done
-
-# Combine into ICO file
-convert "$ICO_TEMP_DIR"/icon-*.png "$OUTPUT_DIR/icon.ico"
-echo -e "${GREEN}  ✅ Generated: icon.ico${NC}"
-
-# Clean up temporary files
-rm -rf "$ICO_TEMP_DIR"
-
-# Generate macOS ICNS file
-echo -e "\n${YELLOW}🍎 Generating macOS ICNS...${NC}"
-
-if [[ "$OSTYPE" == "darwin"* ]] && command -v iconutil &> /dev/null; then
-    # Create iconset directory
-    ICONSET_DIR="$OUTPUT_DIR/icon.iconset"
-    mkdir -p "$ICONSET_DIR"
-
-    # Generate required iconset files
-    convert "$INPUT_FILE" -resize "16x16" -background transparent "$ICONSET_DIR/icon_16x16.png"
-    convert "$INPUT_FILE" -resize "32x32" -background transparent "$ICONSET_DIR/icon_16x16@2x.png"
-    convert "$INPUT_FILE" -resize "32x32" -background transparent "$ICONSET_DIR/icon_32x32.png"
-    convert "$INPUT_FILE" -resize "64x64" -background transparent "$ICONSET_DIR/icon_32x32@2x.png"
-    convert "$INPUT_FILE" -resize "128x128" -background transparent "$ICONSET_DIR/icon_128x128.png"
-    convert "$INPUT_FILE" -resize "256x256" -background transparent "$ICONSET_DIR/icon_128x128@2x.png"
-    convert "$INPUT_FILE" -resize "256x256" -background transparent "$ICONSET_DIR/icon_256x256.png"
-    convert "$INPUT_FILE" -resize "512x512" -background transparent "$ICONSET_DIR/icon_256x256@2x.png"
-    convert "$INPUT_FILE" -resize "512x512" -background transparent "$ICONSET_DIR/icon_512x512.png"
-    convert "$INPUT_FILE" -resize "1024x1024" -background transparent "$ICONSET_DIR/icon_512x512@2x.png"
-
-    # Convert iconset to icns
-    iconutil -c icns "$ICONSET_DIR"
-
-    # Clean up iconset directory
-    rm -rf "$ICONSET_DIR"
-
-    echo -e "${GREEN}  ✅ Generated: icon.icns${NC}"
-else
-    echo -e "${YELLOW}  ⚠️  iconutil not available. Using PNG fallback for macOS.${NC}"
-    convert "$INPUT_FILE" -resize "512x512" -background transparent "$OUTPUT_DIR/icon-macos.png"
-    echo -e "${GREEN}  ✅ Generated: icon-macos.png${NC}"
+if [[ $(uname -s) != "Darwin" ]]; then
+  echo "Icon Composer assets require macOS and Xcode 26 or newer." >&2
+  exit 1
 fi
 
-# Generate usage instructions
-echo -e "\n${YELLOW}📖 Generating usage instructions...${NC}"
+developer_dir=$(xcode-select -p)
+icon_tool="$(dirname "$developer_dir")/Applications/Icon Composer.app/Contents/Executables/ictool"
+if [[ ! -x $icon_tool ]]; then
+  echo "Icon Composer command-line tool not found: $icon_tool" >&2
+  exit 1
+fi
 
-cat > "$OUTPUT_DIR/README.md" << 'EOF'
-# Generated Icons
+compile_icon() {
+  local name=$1
+  local bundle="$icons_dir/$name.icon"
+  local output="$work_dir/$name"
+  local preview="$output/preview.png"
 
-This directory contains all the icons generated for your Electron app.
+  if [[ ! -d $bundle ]]; then
+    echo "Icon Composer source not found: $bundle" >&2
+    exit 1
+  fi
 
-## Usage in Electron
+  mkdir -p "$output/compiled"
+  cp -R "$bundle" "$output/Icon.icon"
 
-### Main Process (src/main.js)
-```javascript
-const { app, BrowserWindow } = require('electron');
-const path = require('path');
+  xcrun actool "$output/Icon.icon" \
+    --compile "$output/compiled" \
+    --output-format human-readable-text \
+    --notices \
+    --warnings \
+    --output-partial-info-plist "$output/compiled/assetcatalog_generated_info.plist" \
+    --app-icon Icon \
+    --include-all-app-icons \
+    --accent-color AccentColor \
+    --enable-on-demand-resources NO \
+    --development-region en \
+    --target-device mac \
+    --minimum-deployment-target 26.0 \
+    --platform macosx >/dev/null
 
-app.whenReady().then(() => {
-  // Set dock icon (macOS only)
-  if (process.platform === 'darwin') {
-    app.dock.setIcon(path.join(__dirname, '../icons/icon.png'));
-  }
+  cp "$output/compiled/Icon.icns" "$icons_dir/$name.icns"
 
-  createWindow();
-});
+  "$icon_tool" "$bundle" \
+    --export-image \
+    --output-file "$preview" \
+    --platform macOS \
+    --rendition Default \
+    --width 824 \
+    --height 824 \
+    --scale 1 >/dev/null
 
-function createWindow() {
-  const mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
-    icon: path.join(__dirname, '../icons/icon.png'), // Cross-platform
-    webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false
-    }
-  });
+  # Icon Composer exports edge-to-edge; macOS app icons occupy an 824px region
+  # centered on the standard 1024px canvas.
+  magick "$preview" \
+    -background none \
+    -gravity center \
+    -extent 1024x1024 \
+    -strip \
+    -depth 8 \
+    "PNG32:$icons_dir/$name-macos.png"
 }
-```
 
-### electron-builder configuration
+resize_png() {
+  local source=$1
+  local size=$2
+  local destination=$3
 
-`apps/desktop/electron-builder.config.ts` selects `.icon` on macOS, `.ico` on Windows, and `.png` on Linux and for runtime APIs.
+  magick "$source" -resize "${size}x${size}" -strip -depth 8 "PNG32:$destination"
+}
 
-## Files Generated
+generate_ico() {
+  local source=$1
+  local destination=$2
+  local output="$work_dir/$(basename "$destination" .ico)-ico"
+  local sizes=(16 32 48 64 128 256)
+  local images=()
 
-- `icon.png` - Main icon (512x512) - use for development
-- `icon.ico` - Windows icon
-- `icon.icns` - macOS icon (requires macOS + iconutil)
-- `icon-{size}x{size}.png` - Individual PNG files for various sizes
-- `favicon-{size}x{size}.png` - Favicon sizes for web contexts
+  mkdir -p "$output"
+  for size in "${sizes[@]}"; do
+    local image="$output/$size.png"
+    resize_png "$source" "$size" "$image"
+    images+=("$image")
+  done
 
-## Platform Recommendations
+  magick "${images[@]}" "$destination"
+}
 
-- **Windows**: Use `icon.ico` or `icon.png`
-- **macOS**: Use `icon.icns` or `icon.png`
-- **Linux**: Use `icon.png`
-- **Development**: Use `icon.png` for all platforms
+generate_release_icons() {
+  local source="$icons_dir/icon-macos.png"
+  local sizes=(16 32 48 64 96 128 192 256 512 1024)
 
-## Tips
+  for size in "${sizes[@]}"; do
+    resize_png "$source" "$size" "$icons_dir/icon-${size}x${size}.png"
+  done
 
-1. The input image should be at least 512x512 or 1024x1024 for best results
-2. Use a square image with transparent background
-3. Keep the design simple - it will be scaled down to 16x16
-4. Test your icon at different sizes to ensure it looks good
-EOF
+  cp "$icons_dir/icon-512x512.png" "$icons_dir/icon.png"
+  for size in 16 32 48; do
+    cp "$icons_dir/icon-${size}x${size}.png" "$icons_dir/favicon-${size}x${size}.png"
+  done
 
-echo -e "${GREEN}  ✅ Generated: README.md${NC}"
+  generate_ico "$source" "$icons_dir/icon.ico"
+}
 
-echo -e "\n${GREEN}🎉 Icon generation complete!${NC}"
-echo -e "${BLUE}📖 Check $OUTPUT_DIR/README.md for usage instructions.${NC}"
+generate_nightly_icons() {
+  local source="$icons_dir/nightly-macos.png"
 
-# List generated files
-echo -e "\n${BLUE}📁 Generated files:${NC}"
-ls -la "$OUTPUT_DIR" | grep -E '\.(png|ico|icns|md)$' | awk '{print "  " $9 " (" $5 " bytes)"}'
+  cp "$source" "$icons_dir/nightly.png"
+  generate_ico "$source" "$icons_dir/nightly.ico"
+}
+
+compile_icon icon
+compile_icon nightly
+generate_release_icons
+generate_nightly_icons
+
+echo "Generated release and nightly icons from icons/*.icon"

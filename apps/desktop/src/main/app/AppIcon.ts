@@ -2,7 +2,8 @@ import { app } from "electron";
 import path from "node:path";
 import { shiftDistribution } from "../release";
 
-const iconFileName = shiftDistribution === "nightly" ? "nightly.png" : "icon.png";
+const iconName = shiftDistribution === "nightly" ? "nightly" : "icon";
+const iconFileName = `${iconName}.png`;
 
 /**
  * Resolves and applies the app icon used by runtime shell features.
@@ -22,7 +23,7 @@ export class AppIcon {
   install(): void {
     if (process.platform !== "darwin" || app.isPackaged) return;
 
-    app.dock?.setIcon(this.path());
+    app.dock?.setIcon(path.resolve(process.cwd(), "../../icons", `${iconName}-macos.png`));
   }
 
   /**
