@@ -1,6 +1,12 @@
 import type { Page } from "@playwright/test";
 import type { GlyphId, GlyphName } from "@shift/types";
 import { expect, workspaceTest as test } from "./fixtures/electronApp";
+import { openCatalogGlyph } from "./fixtures/appLocators";
+import {
+  addSquare,
+  hoverVisibleUnselectedPoint,
+  selectVisiblePoint,
+} from "./fixtures/editorInteractions";
 
 interface NavigationGlyphs {
   firstId: GlyphId;
@@ -52,28 +58,7 @@ test("preserves confirmed edits and document history across glyph navigation", a
   const glyphs = await createNavigationGlyphs(page);
   await openGlyph(page, glyphs.firstId);
 
-  const authored = await page.evaluate(async () => {
-    const editor = window.shift?.editor;
-    if (!editor) throw new Error("Expected editor");
-
-    const inserted = editor.insertContent({
-      contours: [
-        {
-          closed: true,
-          points: [
-            { x: 0, y: 0, pointType: "onCurve", smooth: false },
-            { x: 100, y: 0, pointType: "onCurve", smooth: false },
-            { x: 100, y: 100, pointType: "onCurve", smooth: false },
-            { x: 0, y: 100, pointType: "onCurve", smooth: false },
-          ],
-        },
-      ],
-    });
-    if (!inserted) throw new Error("Expected inserted contour");
-
-    await editor.font.editCoordinator.settled();
-    return inserted.length;
-  });
+  const authored = await addSquare(page);
   expect(authored).toBe(4);
   await expect
     .poll(() => currentGlyph(page))
@@ -103,4 +88,80 @@ test("preserves confirmed edits and document history across glyph navigation", a
     await window.shift?.font.editCoordinator.redo();
   });
   await expect.poll(async () => (await currentGlyph(page)).contourCount).toBe(1);
+});
+
+test("starts a fresh Pen context after navigating to another glyph", async ({ page }) => {
+  const glyphs = await createNavigationGlyphs(page);
+  await openCatalogGlyph(page, "navigationA", glyphs.firstId);
+  await page.getByRole("button", { name: "Pen Tool (P)" }).click();
+  const canvas = page.locator("#interactive-canvas");
+  const bounds = await canvas.boundingBox();
+  if (!bounds) throw new Error("Expected editor canvas");
+  await page.mouse.click(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+
+  await returnHome(page);
+  await openCatalogGlyph(page, "navigationB", glyphs.secondId);
+  const secondBounds = await canvas.boundingBox();
+  if (!secondBounds) throw new Error("Expected editor canvas");
+  await page.mouse.click(
+    secondBounds.x + secondBounds.width / 2,
+    secondBounds.y + secondBounds.height / 2,
+  );
+  await page.evaluate(async () => window.shift?.font.editCoordinator.settled());
+
+  const pointCounts = await page.evaluate(({ firstId, secondId }) => {
+    const editor = window.shift?.editor;
+    const sourceId = editor?.font.defaultSource.id;
+    return {
+      first: sourceId ? editor?.glyphForId(firstId)?.layerForSource(sourceId)?.allPoints.length : 0,
+      second: sourceId
+        ? editor?.glyphForId(secondId)?.layerForSource(sourceId)?.allPoints.length
+        : 0,
+    };
+  }, glyphs);
+  expect(pointCounts).toEqual({ first: 1, second: 1 });
+});
+
+test("clears transient editor state when navigating between glyphs", async ({ page }) => {
+  const glyphs = await createNavigationGlyphs(page);
+  await openCatalogGlyph(page, "navigationA", glyphs.firstId);
+  await addSquare(page);
+  await selectVisiblePoint(page);
+  await hoverVisibleUnselectedPoint(page);
+
+  await returnHome(page);
+  await openCatalogGlyph(page, "navigationB", glyphs.secondId);
+
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const editor = window.shift?.editor;
+        const node = editor?.scene.nodesOfKind("glyph")[0];
+        return {
+          glyphId: node?.glyphId,
+          selection: editor?.selection.ids,
+          hover: editor?.hover.id,
+          editing: editor?.editing.nodeIds,
+          nodeId: node?.id,
+          toolState: editor?.toolManager.activeTool?.getState().type,
+        };
+      }),
+    )
+    .toEqual({
+      glyphId: glyphs.secondId,
+      selection: [],
+      hover: null,
+      editing: expect.any(Array),
+      nodeId: expect.any(String),
+      toolState: "ready",
+    });
+  const state = await page.evaluate(() => {
+    const editor = window.shift?.editor;
+    return { editing: editor?.editing.nodeIds, nodeId: editor?.scene.nodesOfKind("glyph")[0]?.id };
+  });
+  expect(state.editing).toEqual([state.nodeId]);
+
+  await returnHome(page);
+  await openCatalogGlyph(page, "navigationA", glyphs.firstId);
+  expect(await currentGlyph(page)).toEqual({ glyphId: glyphs.firstId, contourCount: 1 });
 });

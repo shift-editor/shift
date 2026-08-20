@@ -15,6 +15,11 @@ export interface GlyphCatalogItem {
   readonly unicode: number | null;
 }
 
+/** Publication decision for an asynchronously opened glyph. */
+export type GlyphOpenResult<T> =
+  | { readonly status: "current"; readonly glyph: T }
+  | { readonly status: "stale" };
+
 /** Dense external-axis coordinates ordered like `GlyphCatalogSource.axesCell`. */
 export type CatalogLocation = readonly number[];
 

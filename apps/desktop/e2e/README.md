@@ -39,7 +39,7 @@ SHIFT_E2E_PREVIEW_FONT_PATH=/path/to/font.ttf pnpm test:e2e:gpu e2e/font-preview
 SHIFT_E2E_VARIABLE_PREVIEW_FONT_PATH=/path/to/variable.ttf pnpm test:e2e:gpu e2e/variable-font-preview.spec.ts
 ```
 
-Fixtures copy source files into a temporary workspace. Tests must not depend on a developer's existing Shift workspace or user-data directory.
+Fixtures copy source files into a temporary workspace. Tests must not depend on a developer's existing Shift workspace or user-data directory. Document-lifecycle tests inject deterministic Open, ordered Save As destinations, Export, and dirty-document choices through `NativeDialogs`; ordered choices exercise Save As adoption, multi-document quit, and re-entrant quit without automating OS pickers.
 
 ## Visual snapshots
 
@@ -64,11 +64,13 @@ A snapshot match alone does not prove GPU content exists. Rendering tests that c
 - Keep interactions inside measured bounds; do not assume the host desktop is wider than the fixture window.
 - GPU fixtures must await workspace-window visibility, then apply the final owning `BrowserWindow` size and await the tested page's matching renderer content size; do not let a hidden-to-visible OS adjustment invalidate a baseline.
 - Wait for a route, visible surface, animation frame, or domain state instead of assuming startup completed after a fixed delay.
+- Use `waitForWorkspaceReady()` for authored workspace startup and `waitForEditorReady()`/`openCatalogGlyph()` for glyph routes. A matching URL alone does not mean React has published the requested scene node.
+- Keep negative asynchronous waits limited to behavior where elapsed time is the contract, such as proving a re-entrant quit does not open another confirmation while the first remains pending.
 - Do not force software rendering or a fixed DPR in GPU and performance tests.
 
 ## Failures and artifacts
 
-Local failures are written to `apps/desktop/e2e/test-results/`. CI uploads the same directory as a Playwright artifact, including screenshots, diffs, traces, and error context. Open a trace with:
+Local failures are written to `apps/desktop/e2e/test-results/`. CI uploads the same directory as a Playwright artifact, including screenshots, diffs, traces, error context, and `electron-diagnostics` with window, renderer error/crash, main-process output, and process-exit evidence. Open a trace with:
 
 ```sh
 pnpm --filter @shift/desktop exec playwright show-trace apps/desktop/e2e/test-results/<test>/trace.zip

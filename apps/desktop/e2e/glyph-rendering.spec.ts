@@ -178,8 +178,7 @@ test.describe("Pen tool drawing — segment snapshots", () => {
   });
 
   test("multiple segments — mixed straight and cubic", async ({ page }) => {
-    await page.keyboard.press("p");
-    await page.waitForTimeout(200);
+    await page.getByRole("button", { name: "Pen Tool (P)" }).click();
 
     const canvas = page.locator("#interactive-canvas");
 
@@ -200,7 +199,25 @@ test.describe("Pen tool drawing — segment snapshots", () => {
     await canvas.click({
       position: { x: Math.round(canvasBounds.width * 0.9), y: 500 },
     });
-    await page.waitForTimeout(300);
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const editor = window.shift?.editor;
+          const node = editor?.scene.nodesOfKind("glyph")[0];
+          if (!editor || !node) return 0;
+
+          return (
+            editor.glyphForId(node.glyphId)?.layerForSource(node.sourceId)?.allPoints.length ?? 0
+          );
+        }),
+      )
+      .toBeGreaterThanOrEqual(6);
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) => {
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+        }),
+    );
 
     const canvasUtil = new CanvasUtil(page);
     const screenshot = await canvasUtil.screenshotCanvasContainer();

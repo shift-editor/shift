@@ -146,7 +146,8 @@ Renderer IPC in `App` is limited to shell capabilities: command execution, clipb
 - `pnpm test:desktop src/main/update/updateFeed.test.ts`
 - `pnpm test:release`
 - Electron E2E fixtures copy their startup workspace under a fresh `testRoot`, launch with a fresh `userDataDir`, assert Electron honored that path, and remove the root after force-closing the disposable process.
-- `document-lifecycle.spec.ts` injects scripted native choices and verifies New/Open, first and ordinary Save, Save cancellation/failure safety, dirty-close choices, clean quit/relaunch/reopen, and Export safety through application commands.
+- `document-lifecycle.spec.ts` injects ordered scripted paths/choices and verifies New/Open, first and ordinary Save, independent Save As, saved-document discard/reopen, copied-package session isolation, Save cancellation/failure safety, dirty-close choices, clean quit/relaunch/reopen, and Export safety through application commands.
+- `application-quit.spec.ts` verifies dirty Save/Discard/Cancel, every dirty document in a multi-document quit, re-entrant quit suppression, and document isolation across windows. Ordered scripted choices are consumed once per actual confirmation.
 - Manual: open the same `.shift` package twice and verify the existing workspace session is reused.
 - Manual: edit a package, close the last window, and verify the save/discard prompt appears.
 - Manual installed N → N+1: verify macOS arm64/x64 and unsigned Windows Nightly x64 checks, download, Later, **Restart and Update**, canceled document close, save, discard, install, and relaunch paths. Electron orchestration has no worthwhile unit test without mocking Electron, native dialogs, and electron-updater.
