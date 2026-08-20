@@ -3,76 +3,63 @@ import { createReadStream } from "node:fs";
 import { copyFile, mkdir, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+const [distArgument, outputArgument, version] = process.argv.slice(2);
+if (!distArgument || !outputArgument || !/^\d+\.\d+\.\d+$/.test(version)) {
+  throw new Error(
+    "Usage: prepare-nightly-release.mjs <dist-directory> <output-directory> <numeric-version>",
+  );
+}
+
 const assets = [
   {
-    destination: "Shift-Nightly-macOS-arm64.zip",
-    pattern: /(^|\/)zip\/darwin\/arm64\/[^/]+\.zip$/,
+    destinations: (source) => ["Shift-Nightly-macOS-arm64.zip", path.basename(source)],
+    pattern: new RegExp(`Shift-Nightly-${escapeRegex(version)}-macOS-arm64\\.zip$`),
   },
   {
-    destination: "Shift-Nightly-macOS-x64.zip",
-    pattern: /(^|\/)zip\/darwin\/x64\/[^/]+\.zip$/,
+    destinations: (source) => ["Shift-Nightly-macOS-x64.zip", path.basename(source)],
+    pattern: new RegExp(`Shift-Nightly-${escapeRegex(version)}-macOS-x64\\.zip$`),
   },
   {
-    destination: "Shift-Nightly-macOS-arm64.dmg",
-    pattern: /(^|\/)[^/]+-arm64\.dmg$/,
+    destinations: (source) => [path.basename(source)],
+    pattern: new RegExp(`Shift-Nightly-${escapeRegex(version)}-macOS-arm64\\.zip\\.blockmap$`),
   },
   {
-    destination: "Shift-Nightly-macOS-x64.dmg",
-    pattern: /(^|\/)[^/]+-x64\.dmg$/,
+    destinations: (source) => [path.basename(source)],
+    pattern: new RegExp(`Shift-Nightly-${escapeRegex(version)}-macOS-x64\\.zip\\.blockmap$`),
   },
   {
-    destination: "Shift-Nightly-Windows-x64.exe",
-    pattern: /(^|\/)squirrel\.windows\/x64\/[^/]+Setup\.exe$/,
+    destinations: (source) => ["Shift-Nightly-macOS-arm64.dmg", path.basename(source)],
+    pattern: new RegExp(`Shift-Nightly-${escapeRegex(version)}-macOS-arm64\\.dmg$`),
   },
   {
-    destination: "Shift-Nightly-Linux-x64.deb",
-    pattern: /(^|\/)deb\/x64\/[^/]+\.deb$/,
+    destinations: (source) => ["Shift-Nightly-macOS-x64.dmg", path.basename(source)],
+    pattern: new RegExp(`Shift-Nightly-${escapeRegex(version)}-macOS-x64\\.dmg$`),
   },
   {
-    destination: "Shift-Nightly-Linux-x64.rpm",
-    pattern: /(^|\/)rpm\/x64\/[^/]+\.rpm$/,
+    destinations: (source) => ["Shift-Nightly-Windows-x64.exe", path.basename(source)],
+    pattern: new RegExp(`Shift-Nightly-${escapeRegex(version)}-Windows-x64-Setup\\.exe$`),
+  },
+  {
+    destinations: (source) => [path.basename(source)],
+    pattern: new RegExp(
+      `Shift-Nightly-${escapeRegex(version)}-Windows-x64-Setup\\.exe\\.blockmap$`,
+    ),
+  },
+  {
+    destinations: () => ["Shift-Nightly-Linux-x64.deb"],
+    pattern: new RegExp(`Shift-Nightly-${escapeRegex(version)}-Linux-x64\\.deb$`),
+  },
+  {
+    destinations: () => ["Shift-Nightly-Linux-x64.rpm"],
+    pattern: new RegExp(`Shift-Nightly-${escapeRegex(version)}-Linux-x64\\.rpm$`),
   },
 ];
-
-async function collectFiles(root) {
-  const files = [];
-
-  for (const entry of await readdir(root, { withFileTypes: true })) {
-    const entryPath = path.join(root, entry.name);
-    if (entry.isDirectory()) {
-      files.push(...(await collectFiles(entryPath)));
-    } else if (entry.isFile()) {
-      files.push(entryPath);
-    }
-  }
-
-  return files;
-}
-
-async function sha256(file) {
-  const hash = createHash("sha256");
-
-  await new Promise((resolve, reject) => {
-    createReadStream(file)
-      .on("data", (chunk) => hash.update(chunk))
-      .on("end", resolve)
-      .on("error", reject);
-  });
-
-  return hash.digest("hex");
-}
-
-const [distArgument, outputArgument] = process.argv.slice(2);
-if (!distArgument || !outputArgument) {
-  throw new Error("Usage: prepare-nightly-release.mjs <dist-directory> <output-directory>");
-}
 
 const distRoot = path.resolve(distArgument);
 const outputRoot = path.resolve(outputArgument);
 await mkdir(outputRoot, { recursive: true });
 
-const existingOutput = await readdir(outputRoot);
-if (existingOutput.length > 0) {
+if ((await readdir(outputRoot)).length > 0) {
   throw new Error(`Nightly output directory is not empty: ${outputRoot}`);
 }
 
@@ -80,16 +67,42 @@ const files = await collectFiles(distRoot);
 const checksums = [];
 
 for (const asset of assets) {
-  const matches = files.filter((file) =>
-    asset.pattern.test(path.relative(distRoot, file).split(path.sep).join("/")),
-  );
+  const matches = files.filter((file) => asset.pattern.test(path.basename(file)));
   if (matches.length !== 1) {
-    throw new Error(`Expected one source for ${asset.destination}, found ${matches.length}`);
+    throw new Error(`Expected one source for ${asset.pattern}, found ${matches.length}`);
   }
 
-  const destination = path.join(outputRoot, asset.destination);
-  await copyFile(matches[0], destination);
-  checksums.push(`${await sha256(destination)}  ${asset.destination}`);
+  const source = matches[0];
+  for (const destinationName of asset.destinations(source)) {
+    const destination = path.join(outputRoot, destinationName);
+    await copyFile(source, destination);
+    checksums.push(`${await sha256(destination)}  ${destinationName}`);
+  }
 }
 
-await writeFile(path.join(outputRoot, "SHA256SUMS"), `${checksums.join("\n")}\n`);
+await writeFile(path.join(outputRoot, "SHA256SUMS"), `${checksums.sort().join("\n")}\n`);
+
+async function collectFiles(root) {
+  const files = [];
+  for (const entry of await readdir(root, { withFileTypes: true })) {
+    const entryPath = path.join(root, entry.name);
+    if (entry.isDirectory()) files.push(...(await collectFiles(entryPath)));
+    else if (entry.isFile()) files.push(entryPath);
+  }
+  return files;
+}
+
+async function sha256(file) {
+  const hash = createHash("sha256");
+  await new Promise((resolve, reject) => {
+    createReadStream(file)
+      .on("data", (chunk) => hash.update(chunk))
+      .on("end", resolve)
+      .on("error", reject);
+  });
+  return hash.digest("hex");
+}
+
+function escapeRegex(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}

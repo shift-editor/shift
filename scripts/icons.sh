@@ -164,38 +164,9 @@ function createWindow() {
 }
 ```
 
-### Forge Configuration (forge.config.js)
-```javascript
-module.exports = {
-  packagerConfig: {
-    icon: './icons/icon', // Don't include extension
-  },
-  makers: [
-    {
-      name: '@electron-forge/maker-squirrel',
-      config: {
-        iconUrl: 'https://example.com/icon.ico',
-        setupIcon: './icons/icon.ico'
-      }
-    },
-    {
-      name: '@electron-forge/maker-zip',
-      platforms: ['darwin'],
-      config: {
-        icon: './icons/icon.icns'
-      }
-    },
-    {
-      name: '@electron-forge/maker-deb',
-      config: {
-        options: {
-          icon: './icons/icon.png'
-        }
-      }
-    }
-  ]
-};
-```
+### electron-builder configuration
+
+`apps/desktop/electron-builder.config.ts` selects `.icon` on macOS, `.ico` on Windows, and `.png` on Linux and for runtime APIs.
 
 ## Files Generated
 

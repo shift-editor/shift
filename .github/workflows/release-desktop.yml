@@ -34,12 +34,23 @@ jobs:
         env:
           RELEASE_TAG: ${{ inputs.tag }}
         run: |
-          if [[ ! "$RELEASE_TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+-(alpha|beta)\.[0-9]+)$ ]]; then
-            echo "Expected an alpha or beta tag, received: $RELEASE_TAG" >&2
+          if [[ ! "$RELEASE_TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            echo "Expected a vMAJOR.MINOR.PATCH tag, received: $RELEASE_TAG" >&2
             exit 1
           fi
           echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
           echo "version=${RELEASE_TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Require an unpublished draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        shell: bash
+        run: |
+          if [[ "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" != "true" ]]; then
+            echo "Release $RELEASE_TAG is already public and cannot be rebuilt or clobbered" >&2
+            exit 1
+          fi
 
   build:
     name: Build ${{ matrix.name }}
@@ -52,26 +63,22 @@ jobs:
             runner: macos-26
             platform: darwin
             arch: arm64
-            targets: "zip,dmg"
-            package-dir: Shift-darwin-arm64
+            builder-args: "--mac zip dmg --arm64"
           - name: macOS x64
             runner: macos-26-intel
             platform: darwin
             arch: x64
-            targets: "zip,dmg"
-            package-dir: Shift-darwin-x64
+            builder-args: "--mac zip dmg --x64"
           - name: Windows x64
             runner: windows-latest
             platform: win32
             arch: x64
-            targets: squirrel
-            package-dir: Shift-win32-x64
+            builder-args: "--win nsis --x64"
           - name: Linux x64
             runner: ubuntu-latest
             platform: linux
             arch: x64
-            targets: "deb,rpm"
-            package-dir: Shift-linux-x64
+            builder-args: "--linux deb rpm --x64"
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
@@ -118,7 +125,6 @@ jobs:
         run: pnpm install --frozen-lockfile --prefer-offline
 
       - name: Verify release version
-        shell: bash
         env:
           RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
         run: node scripts/product-version.mjs check "$RELEASE_VERSION"
@@ -126,54 +132,107 @@ jobs:
       - name: Build native bridge
         run: pnpm build:native
 
+      - name: Build desktop application
+        env:
+          SHIFT_DISTRIBUTION: release
+        run: pnpm --filter @shift/desktop build
+
       - name: Make desktop distributables
         env:
           SHIFT_DISTRIBUTION: release
+          SHIFT_BUILD_ARCH: ${{ matrix.arch }}
           SIGN_MACOS: ${{ matrix.platform == 'darwin' && '1' || '0' }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: pnpm --filter @shift/desktop exec electron-forge make --arch ${{ matrix.arch }} --targets "${{ matrix.targets }}"
+        run: pnpm --filter @shift/desktop exec electron-builder --config electron-builder.config.ts ${{ matrix.builder-args }} --publish never
 
-      - name: Configure Linux sandbox for smoke test
-        if: matrix.platform == 'linux'
+      - name: Resolve packaged application
+        id: package
         shell: bash
+        env:
+          OUTPUT_ROOT: apps/desktop/out/${{ matrix.platform }}-${{ matrix.arch }}
+          PLATFORM: ${{ matrix.platform }}
         run: |
-          SANDBOX="apps/desktop/out/${{ matrix.package-dir }}/chrome-sandbox"
-          sudo chown root:root "$SANDBOX"
-          sudo chmod 4755 "$SANDBOX"
+          set -euo pipefail
+          case "$PLATFORM" in
+            darwin)
+              APP_PATH="$(find "$OUTPUT_ROOT" -maxdepth 3 -type d -name 'Shift.app' -print -quit)"
+              test -n "$APP_PATH"
+              PACKAGE_PATH="$(dirname "$APP_PATH")"
+              echo "app=$APP_PATH" >> "$GITHUB_OUTPUT"
+              ;;
+            win32)
+              EXECUTABLE_PATH="$(find "$OUTPUT_ROOT" -type f -name 'shift.exe' -print -quit)"
+              test -n "$EXECUTABLE_PATH"
+              PACKAGE_PATH="$(dirname "$EXECUTABLE_PATH")"
+              ;;
+            linux)
+              EXECUTABLE_PATH="$(find "$OUTPUT_ROOT" -type f -name 'shift' -print -quit)"
+              test -n "$EXECUTABLE_PATH"
+              PACKAGE_PATH="$(dirname "$EXECUTABLE_PATH")"
+              sudo chown root:root "$PACKAGE_PATH/chrome-sandbox"
+              sudo chmod 4755 "$PACKAGE_PATH/chrome-sandbox"
+              ;;
+          esac
+          test -d "$PACKAGE_PATH"
+          echo "path=$PACKAGE_PATH" >> "$GITHUB_OUTPUT"
 
       - name: Smoke-test packaged application
-        run: node scripts/smoke-packaged.mjs "apps/desktop/out/${{ matrix.package-dir }}"
+        run: node scripts/smoke-packaged.mjs "${{ steps.package.outputs.path }}"
 
       - name: Verify macOS signature
         if: matrix.platform == 'darwin'
         run: |
-          codesign --verify --deep --strict --verbose=2 "apps/desktop/out/${{ matrix.package-dir }}/Shift.app"
-          xcrun stapler validate "apps/desktop/out/${{ matrix.package-dir }}/Shift.app"
+          codesign --verify --deep --strict --verbose=2 "${{ steps.package.outputs.app }}"
+          xcrun stapler validate "${{ steps.package.outputs.app }}"
 
       - name: Upload desktop artifacts
         uses: actions/upload-artifact@v7
         with:
           name: desktop-release-${{ matrix.platform }}-${{ matrix.arch }}
-          path: apps/desktop/out/make/**
+          path: |
+            apps/desktop/out/${{ matrix.platform }}-${{ matrix.arch }}/*.zip
+            apps/desktop/out/${{ matrix.platform }}-${{ matrix.arch }}/*.dmg
+            apps/desktop/out/${{ matrix.platform }}-${{ matrix.arch }}/*.exe
+            apps/desktop/out/${{ matrix.platform }}-${{ matrix.arch }}/*.blockmap
+            apps/desktop/out/${{ matrix.platform }}-${{ matrix.arch }}/*.deb
+            apps/desktop/out/${{ matrix.platform }}-${{ matrix.arch }}/*.rpm
+            apps/desktop/out/${{ matrix.platform }}-${{ matrix.arch }}/latest*.yml
           if-no-files-found: error
           retention-days: 14
 
   publish:
-    name: Attach and publish artifacts
+    name: Publish release assets
     needs:
       - prepare
       - build
     runs-on: ubuntu-latest
+    concurrency:
+      group: desktop-update-publication
+      cancel-in-progress: false
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
+          fetch-depth: 1
+
       - uses: actions/download-artifact@v8
         with:
           pattern: desktop-release-*
           path: dist
-          merge-multiple: true
+
+      - name: Require the release to remain a draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          if [[ "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" != "true" ]]; then
+            echo "Release $RELEASE_TAG is already public and cannot be rebuilt or clobbered" >&2
+            exit 1
+          fi
 
       - name: Add Developer Preview notice
         env:
@@ -201,33 +260,97 @@ jobs:
           gh release edit "$RELEASE_TAG" --notes-file release-notes.md
 
       - name: Generate checksums
+        shell: bash
         run: |
-          DUPLICATES="$(find dist -type f -printf '%f\n' | sort | uniq --repeated)"
+          mapfile -d '' FILES < <(find dist -type f ! -name 'latest*.yml' -print0 | sort -z)
+          DUPLICATES="$(printf '%s\0' "${FILES[@]}" | xargs -0 -n1 basename | sort | uniq --repeated)"
           if [[ -n "$DUPLICATES" ]]; then
             echo "Release artifacts have duplicate filenames:" >&2
             echo "$DUPLICATES" >&2
             exit 1
           fi
 
-          while IFS= read -r -d '' file; do
+          : > SHA256SUMS
+          for file in "${FILES[@]}"; do
             CHECKSUM="$(sha256sum "$file" | cut -d ' ' -f 1)"
-            printf '%s  %s\n' "$CHECKSUM" "$(basename "$file")"
-          done < <(find dist -type f -print0 | sort -z) > SHA256SUMS
+            printf '%s  %s\n' "$CHECKSUM" "$(basename "$file")" >> SHA256SUMS
+          done
           cat SHA256SUMS
 
       - name: Upload files to GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+        shell: bash
         run: |
-          gh release view "$RELEASE_TAG" >/dev/null
           while IFS= read -r -d '' file; do
             gh release upload "$RELEASE_TAG" "$file" --clobber
-          done < <(find dist -type f -print0)
+          done < <(find dist -type f ! -name 'latest*.yml' -print0)
           gh release upload "$RELEASE_TAG" SHA256SUMS --clobber
 
-      - name: Publish prerelease
+      - name: Publish GitHub prerelease
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
         run: gh release edit "$RELEASE_TAG" --draft=false --prerelease
+
+  feed:
+    name: Publish release update feed
+    needs:
+      - prepare
+      - publish
+    runs-on: ubuntu-latest
+    concurrency:
+      group: desktop-update-publication
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
+          fetch-depth: 1
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: desktop-release-*
+          path: dist
+
+      - name: Require public release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          if [[ "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" != "false" ]]; then
+            echo "Release assets must be public before advancing update feeds" >&2
+            exit 1
+          fi
+
+      - name: Prepare update-feeds branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --heads origin update-feeds >/dev/null 2>&1; then
+            git fetch origin update-feeds
+            git worktree add site FETCH_HEAD
+          else
+            git worktree add --detach site
+            git -C site switch --orphan update-feeds
+            git -C site rm -rf .
+          fi
+          touch site/.nojekyll
+
+      - name: Stage native release feed
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: node scripts/prepare-update-feed.mjs dist site release "$RELEASE_VERSION"
+
+      - name: Deploy update feeds
+        shell: bash
+        run: |
+          set -euo pipefail
+          git -C site config user.name "github-actions[bot]"
+          git -C site config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C site add .
+          git -C site commit -m "Publish Shift ${{ needs.prepare.outputs.version }} update feed"
+          git -C site push origin HEAD:update-feeds

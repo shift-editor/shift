@@ -8,7 +8,7 @@ const iconFileName = shiftDistribution === "nightly" ? "nightly.png" : "icon.png
  * Resolves and applies the app icon used by runtime shell features.
  *
  * @remarks
- * Packaged app icons are still owned by Forge configuration. This class covers
+ * Packaged app icons are owned by electron-builder configuration. This class covers
  * runtime APIs such as the macOS Dock icon during development and About panel
  * fallback icons on platforms that support `iconPath`.
  */

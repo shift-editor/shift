@@ -16,6 +16,8 @@ export type DocumentSessionOptions = {
   log?: ShiftLogger;
 };
 
+type PendingCloseDiscard = boolean | null;
+
 /**
  * Main-process owner of the native document workflow.
  *
@@ -34,6 +36,7 @@ export class DocumentSession {
   readonly #log: ShiftLogger;
 
   #state: WorkspaceDocumentState | null = null;
+  #pendingCloseDiscard: PendingCloseDiscard = null;
 
   constructor(options: DocumentSessionOptions) {
     this.#document = options.document;
@@ -57,14 +60,15 @@ export class DocumentSession {
   }
 
   /**
-   * Confirms whether the current document may be closed.
+   * Prompts and saves as needed, recording close intent without closing the workspace.
    *
-   * @param reason - Native transition that would discard the document.
-   * @returns `true` when the transition may continue.
+   * @param reason - Native transition that would close the document.
+   * @returns `true` when the transition may commit.
    * @throws {Error} when the renderer cannot provide a settled document state.
    */
-  async confirmClose(reason: CloseReason): Promise<boolean> {
-    this.#log.info("close guard started", {
+  async prepareClose(reason: CloseReason): Promise<boolean> {
+    this.#pendingCloseDiscard = null;
+    this.#log.info("close preparation started", {
       reason,
       connected: this.#document.connected,
       cachedDirty: this.#state?.dirty ?? null,
@@ -72,13 +76,13 @@ export class DocumentSession {
 
     const state = await this.#closeState();
     if (!state) {
-      this.#log.info("close guard allowed: no document state", { reason });
+      this.#log.info("close preparation allowed: no document state", { reason });
       return true;
     }
 
     if (!state.dirty) {
-      await this.#closeDocument(false);
-      this.#log.info("close guard allowed: document is clean", { reason });
+      this.#pendingCloseDiscard = false;
+      this.#log.info("close preparation complete: document is clean", { reason });
       return true;
     }
 
@@ -101,20 +105,32 @@ export class DocumentSession {
     }
 
     if (choice === "discard") {
-      await this.#closeDocument(true);
-      this.#log.info("close guard allowed: changes discarded", { reason });
+      this.#pendingCloseDiscard = true;
+      this.#log.info("close preparation complete: changes discarded", { reason });
       return true;
     }
 
     const saved = await this.#saveDirtyDocument(state);
-    if (saved) await this.#closeDocument(false);
+    if (saved) this.#pendingCloseDiscard = false;
     this.#log.info(
-      saved ? "close guard allowed: document saved" : "close guard blocked: save failed",
-      {
-        reason,
-      },
+      saved ? "close preparation complete: document saved" : "close preparation blocked",
+      { reason },
     );
     return saved;
+  }
+
+  /** Closes the prepared workspace. Calling this method is the point of no return. */
+  async commitClose(): Promise<void> {
+    if (this.#pendingCloseDiscard === null) return;
+
+    const discard = this.#pendingCloseDiscard;
+    this.#pendingCloseDiscard = null;
+    await this.#closeDocument(discard);
+  }
+
+  /** Clears prepared close intent when any document vetoes the transition. */
+  cancelClose(): void {
+    this.#pendingCloseDiscard = null;
   }
 
   /**

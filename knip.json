@@ -21,6 +21,7 @@
         "src/preload/preload.ts",
         "src/utility/workspace.ts",
         "src/renderer/renderer.ts",
+        "electron-builder.config.ts",
         "forge.config.ts",
         "vite.main.config.ts",
         "vite.preload.config.ts",

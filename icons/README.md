@@ -32,39 +32,13 @@ function createWindow() {
 }
 ```
 
-### Forge Configuration (forge.config.js)
+### electron-builder configuration
 
-```javascript
-module.exports = {
-  packagerConfig: {
-    icon: "./icons/icon", // Don't include extension
-  },
-  makers: [
-    {
-      name: "@electron-forge/maker-squirrel",
-      config: {
-        iconUrl: "https://example.com/icon.ico",
-        setupIcon: "./icons/icon.ico",
-      },
-    },
-    {
-      name: "@electron-forge/maker-zip",
-      platforms: ["darwin"],
-      config: {
-        icon: "./icons/icon.icns",
-      },
-    },
-    {
-      name: "@electron-forge/maker-deb",
-      config: {
-        options: {
-          icon: "./icons/icon.png",
-        },
-      },
-    },
-  ],
-};
-```
+`apps/desktop/electron-builder.config.ts` selects the distribution-matched assets:
+
+- macOS: `icon.icon` / `nightly.icon`
+- Windows and NSIS: `icon.ico` / `nightly.ico`
+- Linux and runtime APIs: `icon.png` / `nightly.png`
 
 ## Files Generated
 

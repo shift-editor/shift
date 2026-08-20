@@ -8,7 +8,6 @@ import {
   type Rectangle,
   type WebContents,
 } from "electron";
-import started from "electron-squirrel-startup";
 import path from "node:path";
 import { Window } from "../windows/Window";
 import { getRendererSource } from "../utils";
@@ -25,6 +24,7 @@ import type { FontSessionHost } from "../workspace/FontSessionHost";
 import type { NativeDialogs } from "../dialogs/NativeDialogs";
 import { electronNativeDialogs } from "../dialogs/electronNativeDialogs";
 import { shiftProductName } from "../release";
+import { AppUpdater } from "../update/AppUpdater";
 
 const SLUG_ATLAS_PROFILING_ENABLED =
   process.env.SHIFT_PROFILE_SLUG_ATLAS !== undefined &&
@@ -42,6 +42,7 @@ export class App {
   readonly #log: ShiftLogger;
   readonly #lifecycle: AppLifecycle;
   readonly #nativeDialogs: NativeDialogs;
+  readonly #updater: AppUpdater;
 
   #commands = new CommandRegistry();
   #windows = new WindowManager();
@@ -85,6 +86,11 @@ export class App {
         this.#workspaces.list().flatMap((session) => (session.document ? [session.document] : [])),
       log: this.#log,
     });
+    this.#updater = new AppUpdater({
+      lifecycle: this.#lifecycle,
+      activeWindow: () => this.#windows.activeWindow(),
+      log: createShiftLogger("app.update"),
+    });
   }
 
   get applicationName(): string {
@@ -92,7 +98,7 @@ export class App {
   }
 
   /**
-   * Starts Electron after installer-startup handling has completed.
+   * Starts Electron and installs the main-process service graph.
    *
    * @remarks
    * Commands and IPC handlers are registered before the window exists so
@@ -108,12 +114,6 @@ export class App {
     }
 
     this.#log.info("starting");
-
-    if (started) {
-      this.#log.info("app already started, quitting");
-      app.quit();
-      return;
-    }
 
     this.#registerCommands();
     this.#registerIpcHandlers();
@@ -153,6 +153,7 @@ export class App {
         if (this.#windows.allWindows().length === 0) this.#openLauncher();
       });
 
+      this.#updater.start();
       this.#log.info("finished when ready callback");
     });
     app.on("will-quit", () => {
@@ -294,6 +295,11 @@ export class App {
 
   #commandContext(): CommandContext {
     return {
+      update: {
+        checkForUpdates: async () => {
+          await this.#updater.checkForUpdates("manual");
+        },
+      },
       document: {
         create: async () => {
           const window = this.#windows.activeWindow();

@@ -59,7 +59,12 @@ export class ApplicationMenu {
     return [
       {
         label: app.name,
-        submenu: [{ role: "about" }, { type: "separator" }, { role: "quit" }],
+        submenu: [
+          { role: "about" },
+          this.#commandItem("app.checkForUpdates"),
+          { type: "separator" },
+          { role: "quit" },
+        ],
       },
       {
         label: "File",
@@ -105,7 +110,11 @@ export class ApplicationMenu {
       },
       {
         label: "Help",
-        submenu: [{ role: "about" }],
+        submenu: [
+          this.#commandItem("app.checkForUpdates"),
+          { type: "separator" },
+          { role: "about" },
+        ],
       },
     ];
   }

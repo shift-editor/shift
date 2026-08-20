@@ -66,9 +66,15 @@ jobs:
               - 'docs/releases.md'
               - 'package.json'
               - 'apps/desktop/package.json'
+              - 'apps/desktop/build.ts'
+              - 'apps/desktop/electron-builder.config.ts'
               - 'apps/desktop/forge.config.ts'
               - 'apps/desktop/vite.main.config.ts'
               - 'apps/desktop/vite.preload.config.ts'
+              - 'scripts/prepare-nightly-release.mjs'
+              - 'scripts/prepare-nightly-release.test.mjs'
+              - 'scripts/prepare-update-feed.mjs'
+              - 'scripts/prepare-update-feed.test.mjs'
               - 'scripts/product-version.mjs'
               - 'scripts/product-version.test.mjs'
               - 'scripts/smoke-packaged.mjs'
@@ -327,6 +333,9 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24
+
+      - name: Install release dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts --prefer-offline
 
       - name: Test release scripts
         run: pnpm test:release

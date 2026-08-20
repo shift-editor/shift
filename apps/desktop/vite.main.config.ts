@@ -8,12 +8,15 @@ if (distribution !== "release" && distribution !== "nightly") {
 }
 
 const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, "package.json"), "utf8"));
+const updateBaseUrl =
+  process.env.SHIFT_UPDATE_BASE_URL ?? "https://shift-editor.github.io/shift/updates";
 
 // https://vitejs.dev/config
 export default defineConfig({
   define: {
     SHIFT_DISTRIBUTION: JSON.stringify(distribution),
     SHIFT_PRODUCT_VERSION: JSON.stringify(packageJson.version),
+    SHIFT_UPDATE_BASE_URL: JSON.stringify(updateBaseUrl),
   },
   build: {
     rollupOptions: {
