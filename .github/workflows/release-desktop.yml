@@ -125,9 +125,7 @@ jobs:
         run: pnpm install --frozen-lockfile --prefer-offline
 
       - name: Verify release version
-        env:
-          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
-        run: node scripts/product-version.mjs check "$RELEASE_VERSION"
+        run: node scripts/product-version.mjs check "${{ needs.prepare.outputs.version }}"
 
       - name: Build native bridge
         run: pnpm build:native

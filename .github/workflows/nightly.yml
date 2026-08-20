@@ -93,9 +93,7 @@ jobs:
         run: pnpm install --frozen-lockfile --prefer-offline
 
       - name: Set shared Nightly version
-        env:
-          NIGHTLY_VERSION: ${{ needs.prepare.outputs.version }}
-        run: node scripts/product-version.mjs set "$NIGHTLY_VERSION"
+        run: node scripts/product-version.mjs set "${{ needs.prepare.outputs.version }}"
 
       - name: Build native bridge
         run: pnpm build:native
