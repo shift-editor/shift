@@ -11,7 +11,7 @@ import {
 } from "./fixtures/appLocators";
 
 async function expectRenderedGrid(page: Page): Promise<void> {
-  await expect.poll(() => page.evaluate(() => window.shiftSession?.mode)).toBe("imported");
+  await expect.poll(() => page.evaluate(() => window.shiftSession?.mode)).toBe("preview");
 
   const viewport = glyphCatalogViewport(page);
   await viewport.waitFor({ state: "visible" });

@@ -19,7 +19,7 @@ test.describe("retained font source Grid preview", () => {
     sourcePath,
   }) => {
     await expect.poll(() => page.evaluate(() => Boolean(navigator.gpu))).toBe(true);
-    await expect.poll(() => page.evaluate(() => window.shiftSession?.mode)).toBe("imported");
+    await expect.poll(() => page.evaluate(() => window.shiftSession?.mode)).toBe("preview");
 
     const scrollViewport = glyphCatalogViewport(page);
     await scrollViewport.waitFor({ state: "visible" });
@@ -45,7 +45,7 @@ test.describe("retained font source Grid preview", () => {
       residentGlyphCount: Number(canvas.dataset.residentGlyphCount),
       targetGlyphCount: Number(canvas.dataset.targetGlyphCount),
     }));
-    expect(state.mode).toBe("imported");
+    expect(state.mode).toBe("preview");
     expect(state.workspace).toBeNull();
     expect(state.authoredGlobal).toBeNull();
     expect(residency.residentGlyphCount).toBeGreaterThan(0);
@@ -70,7 +70,7 @@ test.describe("retained font source Grid preview", () => {
 
     const selected = await page.evaluate(() => {
       const session = window.shiftSession;
-      if (!session) throw new Error("Expected imported font session");
+      if (!session) throw new Error("Expected preview font session");
 
       const encodedGlyphId = window.location.hash.split("/editor/")[1];
       if (!encodedGlyphId) throw new Error("Expected selected glyph route");
@@ -90,14 +90,14 @@ test.describe("retained font source Grid preview", () => {
 
     const inspection = await page.evaluate(() => {
       const editor = window.shiftSession?.editor;
-      if (!editor) throw new Error("Expected imported editor");
+      if (!editor) throw new Error("Expected preview editor");
 
       const node = editor.scene.nodesOfKind("glyph")[0];
       if (!node) throw new Error("Expected glyph node");
       const glyph = editor.glyphForId(node.glyphId);
       const geometry = glyph?.geometryAt(editor.externalLocation);
       const point = geometry?.allPoints[0];
-      if (!geometry || !point) throw new Error("Expected imported point geometry");
+      if (!geometry || !point) throw new Error("Expected preview point geometry");
 
       const target = editor.getPointerTarget({
         x: point.x + node.position.x,
@@ -225,7 +225,7 @@ test.describe("retained font source Grid preview", () => {
     expect(reopenedGlyphId).toBe(selected.glyphId);
   });
 
-  test("shows imported font settings with disabled authoring controls", async ({ page }) => {
+  test("shows preview font settings with disabled authoring controls", async ({ page }) => {
     await expect.poll(() => page.evaluate(() => window.shiftSession?.canAuthor)).toBe(false);
 
     await page.getByLabel(/Display and edit font information/).click();

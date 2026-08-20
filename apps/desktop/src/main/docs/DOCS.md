@@ -149,7 +149,7 @@ Renderer IPC in `App` is limited to shell capabilities: command execution, clipb
 - `pnpm test:desktop src/main/update/updateFeed.test.ts`
 - `pnpm test:release`
 - Electron E2E fixtures materialize a native startup document under a fresh `testRoot`, launch with a fresh `userDataDir`, assert Electron honored that path, and remove the root after force-closing the disposable process.
-- `document-lifecycle.spec.ts` injects ordered scripted paths/choices and verifies New/Open, first and ordinary Save, independent Save As, saved-document discard/reopen, copied-document session isolation, Save cancellation/failure safety, dirty-close choices, clean quit/relaunch/reopen, and Export safety through application commands.
+- `document-lifecycle.spec.ts` injects ordered scripted paths/choices and verifies New/Open, first and ordinary Save, independent Save As, saved-document discard/reopen, raw-copy identity reuse, Save cancellation/failure safety, dirty-close choices, clean quit/relaunch/reopen, and Export safety through application commands.
 - `application-quit.spec.ts` verifies dirty Save/Discard/Cancel, every dirty document in a multi-document quit, re-entrant quit suppression, and document isolation across windows. Ordered scripted choices are consumed once per actual confirmation.
 - `document-recovery.spec.ts` force-terminates Electron, reopens the same document and user-data directory, verifies recovery, then verifies explicit Save changes the canonical document.
 - Manual: open the same `.shift` document twice and verify the existing workspace session is reused.

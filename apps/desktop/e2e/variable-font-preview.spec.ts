@@ -2,12 +2,12 @@ import fs from "node:fs";
 import { variablePreviewTest as test, expect } from "./fixtures/perfApp";
 import { firstAxisSlider, glyphCatalogCanvas, variationControls } from "./fixtures/appLocators";
 
-test.describe("variable imported font projection", () => {
+test.describe("variable font preview projection", () => {
   test("scrubs retained glyph geometry without source reads or projection acquisition", async ({
     page,
     sourcePath,
   }) => {
-    await expect.poll(() => page.evaluate(() => window.shiftSession?.mode)).toBe("imported");
+    await expect.poll(() => page.evaluate(() => window.shiftSession?.mode)).toBe("preview");
 
     const glyphCanvas = glyphCatalogCanvas(page);
     await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
@@ -16,7 +16,7 @@ test.describe("variable imported font projection", () => {
 
     const glyphId = await page.evaluate(async () => {
       const session = window.shiftSession;
-      if (!session) throw new Error("Expected imported font session");
+      if (!session) throw new Error("Expected preview font session");
 
       const entry = session.font.entryForName("A");
       if (!entry) throw new Error("Variable fixture should contain A");
@@ -67,7 +67,7 @@ test.describe("variable imported font projection", () => {
     fs.rmSync(sourcePath);
     await page.evaluate(() => {
       const font = window.shiftSession?.font;
-      if (!font) throw new Error("Expected imported font");
+      if (!font) throw new Error("Expected preview font");
 
       font.loadGlyph = async () => {
         throw new Error("variation scrub attempted glyph acquisition");

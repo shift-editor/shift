@@ -14,11 +14,11 @@ interface VariationSample {
 }
 
 async function openVariableGlyph(page: Page): Promise<string> {
-  await expect.poll(() => page.evaluate(() => window.shiftSession?.mode)).toBe("imported");
+  await expect.poll(() => page.evaluate(() => window.shiftSession?.mode)).toBe("preview");
 
   const glyphId = await page.evaluate(async () => {
     const session = window.shiftSession;
-    if (!session) throw new Error("Expected imported font session");
+    if (!session) throw new Error("Expected preview font session");
 
     const entry = session.font.entryForName("A");
     if (!entry) throw new Error("Variable fixture should contain A");
