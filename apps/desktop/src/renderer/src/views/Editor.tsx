@@ -49,10 +49,14 @@ export const Editor = () => {
       },
     ]);
     editor.editing.enter(nodeId);
+    editor.toolManager.reset();
 
     return () => {
-      editor.scene.deleteNode(nodeId);
+      editor.toolManager.reset();
+      editor.selection.clear();
+      editor.hover.clear();
       if (editor.editing.has(nodeId)) editor.editing.clear();
+      editor.scene.deleteNode(nodeId);
     };
   }, [editor, glyph]);
 

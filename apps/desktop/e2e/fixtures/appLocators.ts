@@ -46,6 +46,39 @@ export async function clickFirstCatalogGlyph(page: Page): Promise<void> {
   await glyphCatalogViewport(page).click({ position: FIRST_GLYPH_PREVIEW_POINT });
 }
 
+/**
+ * Waits until the requested glyph owns the visible editor scene.
+ *
+ * @param page - workspace window navigating to the editor.
+ * @param glyphId - glyph identity that must own the published scene node.
+ */
+export async function waitForEditorReady(page: Page, glyphId: string): Promise<void> {
+  await page.waitForURL(new RegExp(`#/editor/${encodeURIComponent(glyphId)}$`));
+  await expect(editorShell(page)).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        (expectedGlyphId) =>
+          window.shift?.editor.scene.nodesOfKind("glyph")[0]?.glyphId === expectedGlyphId,
+        glyphId,
+      ),
+    )
+    .toBe(true);
+}
+
+/**
+ * Navigates directly to a glyph route and waits for its scene publication.
+ *
+ * @param page - workspace window navigating to the editor.
+ * @param glyphId - glyph identity that must own the published scene node.
+ */
+export async function openGlyphRoute(page: Page, glyphId: string): Promise<void> {
+  await page.evaluate((id) => {
+    window.location.hash = `#/editor/${encodeURIComponent(id)}`;
+  }, glyphId);
+  await waitForEditorReady(page, glyphId);
+}
+
 export async function openCatalogGlyph(
   page: Page,
   glyphName: string,
@@ -63,5 +96,5 @@ export async function openCatalogGlyph(
       }),
   );
   await clickFirstCatalogGlyph(page);
-  await page.waitForURL(new RegExp(`#/editor/${encodeURIComponent(glyphId)}$`));
+  await waitForEditorReady(page, glyphId);
 }

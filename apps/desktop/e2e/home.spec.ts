@@ -30,6 +30,40 @@ test.describe("Home view", () => {
     expect(renderedFrame.equals(frameWithoutGlyphs)).toBe(false);
   });
 
+  test("finds encoded characters and unencoded glyph names", async ({ page }) => {
+    const search = page.getByPlaceholder("Search glyphs...");
+    const surface = glyphCatalogSurface(page);
+    const encodedId = await page.evaluate(() => {
+      const font = window.shift?.font;
+      if (!font) throw new Error("Expected font");
+
+      const handle = font.glyphHandleForUnicode(0x41);
+      return font.recordForName(handle.name)?.id;
+    });
+
+    await search.fill("A");
+    await expect(surface).toHaveAttribute("data-first-glyph-id", encodedId ?? "");
+
+    await page.getByRole("button", { name: "Create glyph", exact: true }).click();
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            window.shift?.font.glyphRecords().some((glyph) => glyph.name.startsWith("newGlyph")) ??
+            false,
+        ),
+      )
+      .toBe(true);
+    const unencoded = await page.evaluate(() =>
+      window.shift?.font.glyphRecords().find((glyph) => glyph.name.startsWith("newGlyph")),
+    );
+    if (!unencoded) throw new Error("Expected unencoded glyph");
+
+    await search.fill(unencoded.name);
+    await expect(surface).toHaveAttribute("data-filtered-glyph-count", "1");
+    await expect(surface).toHaveAttribute("data-first-glyph-id", unencoded.id);
+  });
+
   test("keeps the resident grid when returning from the editor", async ({ page }) => {
     const glyphCanvas = glyphCatalogCanvas(page);
     await expect(glyphCanvas).toBeVisible({ timeout: 30_000 });

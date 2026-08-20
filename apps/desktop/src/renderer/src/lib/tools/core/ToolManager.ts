@@ -301,7 +301,7 @@ export class ToolManager implements ToolSwitchHandler {
     this.#publishManifests();
   }
 
-  /** @knipclassignore */
+  /** Resets gesture and active-tool state at an editor context boundary. */
   reset(): void {
     if (this.editor.isDragging) {
       this.cancelPointerGesture();
@@ -311,6 +311,9 @@ export class ToolManager implements ToolSwitchHandler {
     }
 
     if (this.overrideTool) this.#clearOverride();
+
+    const primaryToolId = this.primaryToolId;
+    if (primaryToolId) this.activate(primaryToolId);
   }
 
   notifySelectionChanged(): void {
