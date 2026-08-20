@@ -1,6 +1,7 @@
 import { BrowserWindow } from "electron";
 import { DocumentClient } from "../document/DocumentClient";
 import { DocumentSession } from "../document/DocumentSession";
+import type { NativeDialogs } from "../dialogs/NativeDialogs";
 import type { FontSessionMode } from "../../shared/workspace/protocol";
 import type { Window } from "../windows/Window";
 import { WorkspaceProcess } from "./WorkspaceProcess";
@@ -15,6 +16,7 @@ export type FontSessionHostOptions =
       readonly workspaceProcess: WorkspaceProcess;
       readonly documentClient: DocumentClient;
       readonly applicationName: () => string;
+      readonly nativeDialogs: NativeDialogs;
     }
   | {
       readonly mode: "imported";
@@ -56,6 +58,7 @@ export class FontSessionHost {
           dialogWindow: () => this.activeWindow(),
           windows: () => this.allWindows(),
           applicationName: options.applicationName,
+          nativeDialogs: options.nativeDialogs,
         });
         this.#unlistenDocumentChanged = this.workspaceProcess.onDocumentChanged((state) => {
           this.document?.acceptState(state);

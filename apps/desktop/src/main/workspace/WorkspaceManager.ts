@@ -1,6 +1,7 @@
 import { BrowserWindow, type WebContents } from "electron";
 import path from "node:path";
 import { DocumentClient } from "../document/DocumentClient";
+import type { NativeDialogs } from "../dialogs/NativeDialogs";
 import type { Window } from "../windows/Window";
 import type {
   WorkspaceDocumentState,
@@ -14,6 +15,7 @@ import { PackageSessionIndex } from "./PackageSessionIndex";
 export interface WorkspaceManagerOptions {
   readonly documentsRoot: () => string;
   readonly applicationName: () => string;
+  readonly nativeDialogs: NativeDialogs;
 }
 
 /**
@@ -28,6 +30,7 @@ export interface WorkspaceManagerOptions {
 export class WorkspaceManager {
   readonly #documentsRoot: () => string;
   readonly #applicationName: () => string;
+  readonly #nativeDialogs: NativeDialogs;
   readonly #sessionsById = new Map<FontSessionId, FontSessionHost>();
   readonly #sessionIdByWindowId = new Map<number, FontSessionId>();
   readonly #packageSessions = new PackageSessionIndex();
@@ -40,6 +43,7 @@ export class WorkspaceManager {
   constructor(options: WorkspaceManagerOptions) {
     this.#documentsRoot = options.documentsRoot;
     this.#applicationName = options.applicationName;
+    this.#nativeDialogs = options.nativeDialogs;
   }
 
   /**
@@ -239,6 +243,7 @@ export class WorkspaceManager {
       workspaceProcess,
       documentClient: new DocumentClient(),
       applicationName: this.#applicationName,
+      nativeDialogs: this.#nativeDialogs,
     });
 
     session.document?.acceptState(state);
