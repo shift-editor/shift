@@ -6,6 +6,7 @@ import {
 } from "electron";
 import path from "node:path";
 import { errorToMessage } from "../../shared/errors";
+import type { Window } from "../windows/Window";
 import type { NativeDialogs } from "./NativeDialogs";
 
 const OPEN_FONT_EXTENSIONS = [
@@ -17,6 +18,29 @@ const OPEN_FONT_EXTENSIONS = [
   "ufo",
   "designspace",
 ];
+
+async function showFailure(
+  window: Window | null,
+  applicationName: string,
+  message: string,
+  error: unknown,
+): Promise<void> {
+  const options: MessageBoxOptions = {
+    type: "error",
+    buttons: ["OK"],
+    defaultId: 0,
+    title: applicationName,
+    message,
+    detail: errorToMessage(error),
+  };
+
+  if (window) {
+    await dialog.showMessageBox(window.window, options);
+    return;
+  }
+
+  await dialog.showMessageBox(options);
+}
 
 /** Uses Electron's native dialogs for production file and document choices. */
 export const electronNativeDialogs: NativeDialogs = {
@@ -39,6 +63,14 @@ export const electronNativeDialogs: NativeDialogs = {
     if (result.canceled || result.filePaths.length !== 1) return null;
 
     return result.filePaths[0];
+  },
+
+  async showCreateFailure(window, applicationName, error) {
+    await showFailure(window, applicationName, "A new document could not be created.", error);
+  },
+
+  async showOpenFailure(window, applicationName, error) {
+    await showFailure(window, applicationName, "The selected font could not be opened.", error);
   },
 
   async saveShiftDocument(window, suggestedPath) {
@@ -99,38 +131,10 @@ export const electronNativeDialogs: NativeDialogs = {
   },
 
   async showSaveFailure(window, applicationName, error) {
-    const options: MessageBoxOptions = {
-      type: "error",
-      buttons: ["OK"],
-      defaultId: 0,
-      title: applicationName,
-      message: "The document could not be saved.",
-      detail: errorToMessage(error),
-    };
-
-    if (window) {
-      await dialog.showMessageBox(window.window, options);
-      return;
-    }
-
-    await dialog.showMessageBox(options);
+    await showFailure(window, applicationName, "The document could not be saved.", error);
   },
 
   async showExportFailure(window, applicationName, error) {
-    const options: MessageBoxOptions = {
-      type: "error",
-      buttons: ["OK"],
-      defaultId: 0,
-      title: applicationName,
-      message: "The TrueType font could not be exported.",
-      detail: errorToMessage(error),
-    };
-
-    if (window) {
-      await dialog.showMessageBox(window.window, options);
-      return;
-    }
-
-    await dialog.showMessageBox(options);
+    await showFailure(window, applicationName, "The TrueType font could not be exported.", error);
   },
 };

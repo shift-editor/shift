@@ -49,6 +49,11 @@ const cancelExportTest = workspaceTest.extend({
     await use("");
   },
 });
+const failedOpenTest = test.extend({
+  openFontPath: async ({ testRoot }, use) => {
+    await use(path.join(testRoot, "missing.ufo"));
+  },
+});
 const failedSaveTest = test.extend({
   saveShiftPath: async ({ testRoot }, use) => {
     const nonDirectory = path.join(testRoot, "not-a-directory");
@@ -122,7 +127,11 @@ test.describe("opening a font through the application shell", () => {
     const workspacePage = await openSelectedPreview(page, electronApp);
 
     await workspacePage.getByRole("button", { name: "Create glyph", exact: true }).click();
-    await expect(workspacePage.getByRole("dialog", { name: "Read-only preview" })).toBeVisible();
+    const dialog = workspacePage.getByRole("dialog", { name: "Read-only preview" });
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText(
+      "Compiled TTF and OTF fonts can be inspected here, but this preview cannot be edited or converted.",
+    );
   });
 
   test("does not convert a TTF preview through Save", async ({
@@ -139,6 +148,13 @@ test.describe("opening a font through the application shell", () => {
   });
 });
 
+failedOpenTest("failed Open keeps the launcher available", async ({ electronApp, page }) => {
+  await runCommand(page, electronApp, "file.open");
+
+  await expect(page).toHaveURL(/#\/launcher$/);
+  expect(electronApp.windows()).toHaveLength(1);
+});
+
 otfPreviewTest(
   "does not convert an OTF preview through Save",
   async ({ electronApp, page, saveShiftPath }) => {
@@ -148,6 +164,19 @@ otfPreviewTest(
 
     expect(await workspacePage.evaluate(() => window.shiftSession?.mode)).toBe("preview");
     expect(fs.existsSync(saveShiftPath)).toBe(false);
+  },
+);
+
+convertiblePreviewTest(
+  "convertible previews direct users to save before authoring",
+  async ({ electronApp, page }) => {
+    const workspacePage = await openSelectedPreview(page, electronApp);
+
+    await workspacePage.getByRole("button", { name: "Create glyph", exact: true }).click();
+    const dialog = workspacePage.getByRole("dialog", { name: "Read-only preview" });
+    await expect(dialog).toContainText(
+      "Save this source as a Shift document before making authoring changes.",
+    );
   },
 );
 
@@ -250,7 +279,7 @@ failedPreviewSaveTest(
   async ({ electronApp, page, saveShiftPath, testRoot }) => {
     const workspacePage = await openSelectedPreview(page, electronApp);
 
-    await expect(runCommand(workspacePage, electronApp, "file.save")).rejects.toThrow();
+    await runCommand(workspacePage, electronApp, "file.save");
 
     expect(await workspacePage.evaluate(() => window.shiftSession?.mode)).toBe("preview");
     expect(fs.existsSync(saveShiftPath)).toBe(false);
@@ -365,7 +394,7 @@ failedSaveTest(
       window.shift?.font.editCoordinator.state(),
     );
 
-    await expect(runCommand(workspacePage, electronApp, "file.save")).rejects.toThrow();
+    await runCommand(workspacePage, electronApp, "file.save");
 
     expect(
       await workspacePage.evaluate(async () => window.shift?.font.editCoordinator.state()),
