@@ -13,8 +13,12 @@ import {
 
 const MUTATION_CONTROL_SELECTOR = "[data-read-only-mutation]";
 
+export type ReadOnlyNoticeDialogProps = {
+  canConvert: boolean;
+};
+
 /** Intercepts preview mutation controls without changing their authored appearance. */
-export const ReadOnlyNoticeDialog = () => {
+export const ReadOnlyNoticeDialog = ({ canConvert }: ReadOnlyNoticeDialogProps) => {
   const [readOnlyNoticeOpen, setReadOnlyNoticeOpen] = useState(false);
 
   useEffect(() => {
@@ -47,7 +51,9 @@ export const ReadOnlyNoticeDialog = () => {
             Read-only preview
           </DialogTitle>
           <p className="mt-2 text-sm text-secondary">
-            Convert this font to a Shift document before making authoring changes.
+            {canConvert
+              ? "Save this source as a Shift document before making authoring changes."
+              : "Compiled TTF and OTF fonts can be inspected here, but this preview cannot be edited or converted."}
           </p>
           <DialogClose
             className={cn(

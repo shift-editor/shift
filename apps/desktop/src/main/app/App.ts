@@ -414,39 +414,37 @@ export class App {
     if (existing) return existing;
 
     const converting = (async () => {
-      const sourcePath = preview.sourcePath;
-      if (!sourcePath || !isConvertiblePreviewPath(sourcePath)) return;
-
-      const parsedSourcePath = path.parse(sourcePath);
-      const suggestedPath = path.join(parsedSourcePath.dir, `${parsedSourcePath.name}.shift`);
-      const documentPath = await this.#nativeDialogs.saveShiftDocument(window, suggestedPath);
-      if (!documentPath) return;
-
-      let authored: FontSessionHost;
       try {
-        authored = await this.#workspaces.createDocumentFromPreview(sourcePath, documentPath);
+        const sourcePath = preview.sourcePath;
+        if (!sourcePath || !isConvertiblePreviewPath(sourcePath)) return;
+
+        const parsedSourcePath = path.parse(sourcePath);
+        const suggestedPath = path.join(parsedSourcePath.dir, `${parsedSourcePath.name}.shift`);
+        const documentPath = await this.#nativeDialogs.saveShiftDocument(window, suggestedPath);
+        if (!documentPath) return;
+
+        const authored = await this.#workspaces.createDocumentFromPreview(sourcePath, documentPath);
+        if (this.#workspaces.getForBrowserWindow(window.window) !== preview) {
+          this.#workspaces.unregister(authored.workspaceId);
+          return;
+        }
+
+        this.#workspaces.detachWindow(window);
+        try {
+          this.#workspaces.attachWindow(authored.workspaceId, window);
+        } catch (error) {
+          this.#workspaces.attachWindow(preview.workspaceId, window);
+          this.#workspaces.unregister(authored.workspaceId);
+          throw error;
+        }
+
+        if (preview.windows.size === 0) this.#workspaces.unregister(preview.workspaceId);
+        this.#applicationMenu.updateCommandStates();
+        window.window.webContents.reload();
       } catch (error) {
+        this.#log.warn("preview save failed", error);
         await this.#nativeDialogs.showSaveFailure(window, this.applicationName, error);
-        throw error;
       }
-
-      if (this.#workspaces.getForBrowserWindow(window.window) !== preview) {
-        this.#workspaces.unregister(authored.workspaceId);
-        return;
-      }
-
-      this.#workspaces.detachWindow(window);
-      try {
-        this.#workspaces.attachWindow(authored.workspaceId, window);
-      } catch (error) {
-        this.#workspaces.attachWindow(preview.workspaceId, window);
-        this.#workspaces.unregister(authored.workspaceId);
-        throw error;
-      }
-
-      if (preview.windows.size === 0) this.#workspaces.unregister(preview.workspaceId);
-      this.#applicationMenu.updateCommandStates();
-      window.window.webContents.reload();
     })();
 
     this.#previewConversions.set(preview.sessionId, converting);
@@ -500,18 +498,28 @@ export class App {
   }
 
   async #createWorkspaceFromWindow(opener: Window): Promise<void> {
-    const session = await this.#workspaces.createUntitled();
-    this.#openWorkspaceWindow(opener, session);
+    try {
+      const session = await this.#workspaces.createUntitled();
+      this.#openWorkspaceWindow(opener, session);
+    } catch (error) {
+      this.#log.warn("new document failed", error);
+      await this.#nativeDialogs.showCreateFailure(opener, this.applicationName, error);
+    }
   }
 
   async #openWorkspaceFromWindow(opener: Window): Promise<void> {
-    const openPath = await this.#nativeDialogs.openFont(opener);
-    if (!openPath) return;
+    try {
+      const openPath = await this.#nativeDialogs.openFont(opener);
+      if (!openPath) return;
 
-    const session = await this.#workspaces.openPath(openPath);
-    if (this.#focusExistingWorkspaceWindow(opener, session)) return;
+      const session = await this.#workspaces.openPath(openPath);
+      if (this.#focusExistingWorkspaceWindow(opener, session)) return;
 
-    this.#openWorkspaceWindow(opener, session);
+      this.#openWorkspaceWindow(opener, session);
+    } catch (error) {
+      this.#log.warn("open document failed", error);
+      await this.#nativeDialogs.showOpenFailure(opener, this.applicationName, error);
+    }
   }
 
   #focusExistingWorkspaceWindow(opener: Window, session: FontSessionHost): boolean {
