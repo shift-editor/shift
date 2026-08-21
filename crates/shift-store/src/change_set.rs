@@ -34,6 +34,27 @@ impl ShiftStore {
         post_font: Option<&font::Font>,
         dirty: bool,
     ) -> Result<(), StoreError> {
+        if self.recovery.is_some() && !dirty {
+            self.discard_recovery()?;
+            return Ok(());
+        }
+
+        let preserved_font_info = (self.recovery.is_some()
+            && change_set
+                .changes
+                .iter()
+                .any(|change| matches!(change, font::FontChange::FontMetadataUpdated(_))))
+        .then(|| self.get_font_info())
+        .transpose()?
+        .flatten();
+        if let Some(recovery) = self.recovery.as_mut() {
+            let post_font = post_font.ok_or(StoreError::RecoveryRequiresPostFont)?;
+            return recovery.apply_change_set(change_set, post_font, preserved_font_info.as_ref());
+        }
+        if self.kind == crate::store::StoreKind::Document {
+            return Err(StoreError::DocumentRequiresRecoveryOverlay);
+        }
+
         let tracks_workspace = self.tracks_workspace();
         let tx = self.conn.transaction()?;
         let mut touched_layer_ids = HashSet::new();
@@ -525,7 +546,7 @@ fn contour_from_value(value: &font::ContourValue) -> font::Contour {
     contour
 }
 
-fn upsert_axis_with_order(
+pub(crate) fn upsert_axis_with_order(
     tx: &Transaction<'_>,
     axis: &font::Axis,
     order_index: i64,
@@ -575,7 +596,7 @@ fn insert_axis(
     Ok(())
 }
 
-fn replace_axis_mappings(
+pub(crate) fn replace_axis_mappings(
     tx: &Transaction<'_>,
     mappings: &[font::AxisMapping],
 ) -> Result<(), StoreError> {
@@ -593,7 +614,7 @@ fn replace_axis_mappings(
     Ok(())
 }
 
-fn replace_named_instances(
+pub(crate) fn replace_named_instances(
     tx: &Transaction<'_>,
     instances: &[font::NamedInstance],
 ) -> Result<(), StoreError> {
@@ -611,7 +632,7 @@ fn replace_named_instances(
     Ok(())
 }
 
-fn replace_metric_definitions(
+pub(crate) fn replace_metric_definitions(
     tx: &Transaction<'_>,
     definitions: &[font::MetricDefinition],
 ) -> Result<(), StoreError> {
@@ -736,6 +757,45 @@ fn upsert_source(
     Ok(())
 }
 
+pub(crate) fn write_source_snapshot_in_tx(
+    tx: &Transaction<'_>,
+    source: &font::Source,
+    order_index: i64,
+) -> Result<(), StoreError> {
+    upsert_source(
+        tx,
+        &source.id(),
+        SourceRow {
+            name: Some(source.name()),
+            filename: source.filename(),
+            color: source.color(),
+            kind: SourceKind::from(source.role()),
+            layer_name: source.layer_name(),
+            italic_angle: source.italic_angle(),
+            line_gap: source.line_gap(),
+            underline_position: source.underline_position(),
+            underline_thickness: source.underline_thickness(),
+            order_index,
+        },
+    )?;
+    tx.execute(
+        "DELETE FROM source_locations WHERE source_id = ?1",
+        [source.id().to_string()],
+    )?;
+    for (axis_id, value) in source.location().iter() {
+        upsert_source_location(tx, &source.id(), axis_id, *value)?;
+    }
+    replace_source_metric_values(tx, source.id(), source.metric_values().iter())?;
+    replace_lib_data(
+        tx,
+        "source_lib",
+        "source_id",
+        Some(&source.id().to_string()),
+        source.lib(),
+    )?;
+    Ok(())
+}
+
 fn upsert_glyph(
     tx: &Transaction<'_>,
     glyph_id: &font::GlyphId,
@@ -824,7 +884,7 @@ fn update_font_metadata(
     require_changed(rows_changed, "font info", "1".to_string())
 }
 
-fn upsert_font_info(tx: &Transaction<'_>, font: &font::Font) -> Result<(), StoreError> {
+pub(crate) fn upsert_font_info(tx: &Transaction<'_>, font: &font::Font) -> Result<(), StoreError> {
     let metadata = font.metadata();
     let metrics = font.metrics();
     tx.execute(

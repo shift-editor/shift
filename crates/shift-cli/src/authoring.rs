@@ -10,7 +10,8 @@ use std::path::{Path, PathBuf};
 use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
 use serde::Serialize;
 use shift_font::{Axis, DesignLocation, Font, FontChange, FontIntent, FontIntentSet, SourceId};
-use shift_source::ShiftSourcePackage;
+use shift_store::ShiftStore;
+use shift_workspace::FontWorkspace;
 
 use crate::cli::{AddAxisArgs, AddSourceArgs, CreateFontArgs, MutationArgs};
 
@@ -36,7 +37,7 @@ pub struct AuthoringReport {
 )]
 pub enum AuthoringChange {
     FontCreated {
-        package_id: Option<String>,
+        document_id: Option<String>,
     },
     AxisCreated {
         axis_id: String,
@@ -76,8 +77,8 @@ impl AuthoringReport {
         let mut lines = vec![self.document.display().to_string(), String::new()];
         for change in &self.changes {
             match change {
-                AuthoringChange::FontCreated { package_id } => {
-                    let id = package_id.as_deref().unwrap_or("assigned when written");
+                AuthoringChange::FontCreated { document_id } => {
+                    let id = document_id.as_deref().unwrap_or("assigned when written");
                     lines.push(format!("+ font    {id}"));
                 }
                 AuthoringChange::AxisCreated {
@@ -142,24 +143,30 @@ impl AuthoringReport {
     }
 }
 
-/// Creates a canonical `.shift` package with the model's default source.
+/// Creates a canonical SQLite `.shift` document with the model's default source.
 ///
 /// A dry run validates the path and overwrite precondition without writing.
 ///
 /// # Errors
 ///
 /// Returns an error for a non-`.shift` path, an existing destination, or a
-/// package serialization or filesystem failure.
+/// document serialization or filesystem failure.
 pub fn create_font(args: CreateFontArgs) -> Result<AuthoringReport> {
-    validate_new_package_path(&args.path)?;
+    validate_new_document_path(&args.path)?;
 
-    let package_id = if args.dry_run {
+    let document_id = if args.dry_run {
         None
     } else {
-        let package = ShiftSourcePackage::create_empty(&args.path)
+        let document = ShiftStore::create_document(&args.path, &Font::new())
             .into_diagnostic()
             .wrap_err("failed to create Shift font")?;
-        Some(package.package_id().to_string())
+        Some(
+            document
+                .document_metadata()
+                .into_diagnostic()?
+                .document_id
+                .to_string(),
+        )
     };
 
     Ok(AuthoringReport {
@@ -167,7 +174,7 @@ pub fn create_font(args: CreateFontArgs) -> Result<AuthoringReport> {
         document: args.path.clone(),
         output: args.path,
         wrote: !args.dry_run,
-        changes: vec![AuthoringChange::FontCreated { package_id }],
+        changes: vec![AuthoringChange::FontCreated { document_id }],
     })
 }
 
@@ -175,12 +182,9 @@ pub fn create_font(args: CreateFontArgs) -> Result<AuthoringReport> {
 ///
 /// # Errors
 ///
-/// Returns an error when the package cannot be loaded, the axis is invalid or
+/// Returns an error when the document cannot be loaded, the axis is invalid or
 /// conflicts with existing authoring data, or the destination cannot be saved.
 pub fn add_axis(args: AddAxisArgs) -> Result<AuthoringReport> {
-    let font = ShiftSourcePackage::load_font(&args.path)
-        .into_diagnostic()
-        .wrap_err("failed to load Shift font")?;
     let axis = Axis::new(
         args.tag,
         args.name,
@@ -192,7 +196,7 @@ pub fn add_axis(args: AddAxisArgs) -> Result<AuthoringReport> {
         intents: vec![FontIntent::CreateAxis { axis }],
     };
 
-    apply_mutation(&args.path, &args.mutation, font, set)
+    apply_mutation(&args.path, &args.mutation, set)
 }
 
 /// Adds one master source after resolving axis tags to stable identities.
@@ -205,7 +209,8 @@ pub fn add_axis(args: AddAxisArgs) -> Result<AuthoringReport> {
 /// Returns an error for malformed coordinates, unknown or repeated tags,
 /// non-finite values, invalid source authoring, or persistence failures.
 pub fn add_source(args: AddSourceArgs) -> Result<AuthoringReport> {
-    let font = ShiftSourcePackage::load_font(&args.path)
+    let font = ShiftStore::open_document(&args.path)
+        .and_then(|store| store.load_font_state())
         .into_diagnostic()
         .wrap_err("failed to load Shift font")?;
     let location = parse_location(&font, &args.location)?;
@@ -218,30 +223,36 @@ pub fn add_source(args: AddSourceArgs) -> Result<AuthoringReport> {
         }],
     };
 
-    apply_mutation(&args.path, &args.mutation, font, set)
+    apply_mutation(&args.path, &args.mutation, set)
 }
 
 pub(super) fn apply_mutation(
     path: &Path,
     options: &MutationArgs,
-    font: Font,
     set: FontIntentSet,
 ) -> Result<AuthoringReport> {
     let destination = mutation_destination(path, options.output.as_deref())?;
-    let mut next = font.clone();
-    let outcome = next
-        .apply_intents(set)
+    let recovery = tempfile::tempdir()
+        .into_diagnostic()
+        .wrap_err("failed to create temporary recovery directory")?;
+    let mut workspace = FontWorkspace::open_document(path, recovery.path().join("recovery.sqlite"))
+        .into_diagnostic()
+        .wrap_err("failed to open Shift document")?;
+    let outcome = workspace
+        .apply(set, None)
         .into_diagnostic()
         .wrap_err("authoring change is invalid")?;
-    let changes = report_changes(&next, outcome.changes.changes);
+    let changes = report_changes(workspace.font(), outcome.changes.changes);
 
     if !options.dry_run {
         if options.output.is_some() {
-            ShiftSourcePackage::save_font_as(&destination, &next)
+            workspace
+                .save_as_document(&destination, recovery.path().join("output-recovery.sqlite"))
                 .into_diagnostic()
                 .wrap_err("failed to save independent Shift font")?;
         } else {
-            ShiftSourcePackage::save_font(&destination, &next)
+            workspace
+                .save()
                 .into_diagnostic()
                 .wrap_err("failed to save Shift font")?;
         }
@@ -362,12 +373,16 @@ fn mutation_destination(path: &Path, output: Option<&Path>) -> Result<PathBuf> {
     if output == path {
         bail!("--output must differ from the input path");
     }
-    validate_new_package_path(output)?;
+    validate_new_document_path(output)?;
     Ok(output.to_path_buf())
 }
 
-fn validate_new_package_path(path: &Path) -> Result<()> {
-    if !ShiftSourcePackage::is_package_path(path) {
+fn validate_new_document_path(path: &Path) -> Result<()> {
+    if !path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("shift"))
+    {
         bail!("Shift font path must use the .shift extension");
     }
     if path.exists() {

@@ -25,9 +25,9 @@
 //! `shift-font` defines domain objects, local mutation methods, change records,
 //! geometry helpers, component resolution, and variation helpers.
 //!
-//! Persistence belongs to `shift-store` and `shift-workspace`. Source package IO
-//! belongs to `shift-source`. Transport belongs to `shift-bridge` and
-//! `shift-wire`. UI interaction belongs to the TypeScript editor.
+//! Canonical document persistence belongs to `shift-store`; workspace and recovery
+//! orchestration belongs to `shift-workspace`. Transport belongs to `shift-bridge`
+//! and `shift-wire`. UI interaction belongs to the TypeScript editor.
 //!
 pub mod changes;
 pub mod composite;

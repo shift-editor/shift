@@ -1,7 +1,7 @@
 use shift_font::{FontMetadata, test_support::sample_font};
 use shift_store::{
-    AxisId, Evidence, FileIdentity, FontInfo, GlyphId, NewAxis, NewGlyph, NewSource,
-    SHIFT_APPLICATION_ID, ShiftStore, SourceId, SourceIdentitySnapshot, SourceKind, WorkspaceState,
+    AxisId, FontInfo, GlyphId, NewAxis, NewGlyph, NewSource, SHIFT_APPLICATION_ID, ShiftStore,
+    SourceId, SourceKind, WorkspaceState,
 };
 
 #[test]
@@ -113,37 +113,6 @@ fn applying_change_set_marks_workspace_state_dirty() {
     assert!(loaded.dirty);
     assert_eq!(loaded.revision, 1);
     assert_eq!(loaded.saved_revision, 0);
-}
-
-#[test]
-fn source_identity_snapshot_separates_exact_equality_from_match_evidence() {
-    let left = SourceIdentitySnapshot {
-        source_path: Some("Family.shift".into()),
-        canonical_source_path: Some("/fonts/Family.shift".into()),
-        source_package_id: None,
-        source_file_identity: Some(FileIdentity {
-            kind: "unix-dev-inode".to_string(),
-            value: "1:2".to_string(),
-        }),
-        source_size: Some(128),
-        source_mtime_ms: Some(1_000),
-        source_fingerprint: Some("fnv1a64:abc".to_string()),
-    };
-    let moved = SourceIdentitySnapshot {
-        source_path: Some("Renamed.shift".into()),
-        canonical_source_path: Some("/fonts/Renamed.shift".into()),
-        ..left.clone()
-    };
-    let unknown = SourceIdentitySnapshot {
-        source_file_identity: None,
-        source_fingerprint: None,
-        ..left.clone()
-    };
-
-    assert_ne!(left, moved);
-    assert_eq!(left.file_identity_match(&moved), Evidence::Same);
-    assert_eq!(left.canonical_path_match(&moved), Evidence::Different);
-    assert_eq!(left.fingerprint_match(&unknown), Evidence::Unknown);
 }
 
 #[test]
@@ -1020,6 +989,8 @@ fn canonical_document_round_trip_preserves_kitchen_sink_font_for_export() {
     let metadata = store.document_metadata().expect("document metadata");
     assert!(metadata.document_id.as_str().starts_with("document_"));
     assert_eq!(metadata.document_id.as_str().len(), 41);
+    assert!(metadata.saved_commit_id.as_str().starts_with("commit_"));
+    assert_eq!(metadata.saved_commit_id.as_str().len(), 39);
     assert_eq!(store.load_font_state().expect("load document"), original);
     drop(store);
 
@@ -1075,6 +1046,100 @@ fn raw_document_copy_preserves_document_identity() {
     assert_eq!(
         ShiftStore::verify_document(&copy_path).expect("verify copy"),
         metadata
+    );
+}
+
+#[test]
+fn save_as_document_snapshots_working_store_without_workspace_state() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let working_path = temp.path().join("Working.sqlite");
+    let document_path = temp.path().join("Saved.shift");
+    let font = sample_font();
+    let mut working = ShiftStore::open(&working_path).expect("open working store");
+    working
+        .replace_font_state(&font)
+        .expect("write complete font state");
+    let private_marker = "PRIVATE_WORKSPACE_ORIGIN_MARKER_9f4902c5";
+    let mut state = WorkspaceState::imported(private_marker, Some("workspace-1".to_string()));
+    state.dirty = true;
+    state.revision = 7;
+    working
+        .set_workspace_state(state.clone())
+        .expect("write workspace state");
+
+    let metadata = working
+        .save_as_document(&document_path)
+        .expect("save document snapshot");
+
+    assert_eq!(
+        working.workspace_state().expect("read source state"),
+        Some(state)
+    );
+    let document = ShiftStore::open_document(&document_path).expect("open saved document");
+    assert_eq!(
+        document.document_metadata().expect("document metadata"),
+        metadata
+    );
+    assert_eq!(document.load_font_state().expect("load saved font"), font);
+    drop(document);
+    assert!(!sqlite_sidecar_path(&document_path, "-journal").exists());
+    assert!(!sqlite_sidecar_path(&document_path, "-wal").exists());
+    assert!(!sqlite_sidecar_path(&document_path, "-shm").exists());
+    let document_bytes = std::fs::read(&document_path).expect("read document bytes");
+    assert!(
+        !document_bytes
+            .windows(private_marker.len())
+            .any(|bytes| bytes == private_marker.as_bytes())
+    );
+}
+
+#[test]
+fn save_as_document_from_document_mints_a_new_identity() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let original_path = temp.path().join("Original.shift");
+    let saved_as_path = temp.path().join("SavedAs.shift");
+    let font = sample_font();
+    let original =
+        ShiftStore::create_document(&original_path, &font).expect("create original document");
+    let original_metadata = original.document_metadata().expect("original metadata");
+
+    let saved_as_metadata = original
+        .save_as_document(&saved_as_path)
+        .expect("save document as new document");
+
+    assert_ne!(saved_as_metadata, original_metadata);
+    assert_eq!(
+        original
+            .document_metadata()
+            .expect("unchanged source metadata"),
+        original_metadata
+    );
+    let saved_as = ShiftStore::open_document(&saved_as_path).expect("open saved-as document");
+    assert_eq!(
+        saved_as.load_font_state().expect("load saved-as font"),
+        font
+    );
+}
+
+#[test]
+fn save_as_document_never_clobbers_an_existing_destination() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let working_path = temp.path().join("Working.sqlite");
+    let document_path = temp.path().join("Existing.shift");
+    let working = ShiftStore::open(&working_path).expect("open working store");
+    std::fs::write(&document_path, b"retain me").expect("write destination");
+
+    let error = working
+        .save_as_document(&document_path)
+        .expect_err("existing destination must not be replaced");
+
+    assert!(matches!(
+        error,
+        shift_store::StoreError::DocumentAlreadyExists(existing) if existing == document_path
+    ));
+    assert_eq!(
+        std::fs::read(&document_path).expect("read destination"),
+        b"retain me"
     );
 }
 
@@ -1135,6 +1200,31 @@ fn document_open_rejects_plain_corrupt_and_future_sqlite_files() {
             found: 999,
             supported: 1
         }
+    ));
+}
+
+#[test]
+fn document_open_rejects_foreign_key_corruption_before_write_access() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let path = temp.path().join("BrokenReferences.shift");
+    drop(ShiftStore::create_document(&path, &sample_font()).expect("create document"));
+
+    let conn = rusqlite::Connection::open(&path).expect("open raw document");
+    conn.execute(
+        "UPDATE glyphs SET id = 'glyph_orphaned' WHERE id = (SELECT id FROM glyphs LIMIT 1)",
+        [],
+    )
+    .expect("break a glyph foreign key");
+    drop(conn);
+
+    let error = match ShiftStore::open_document(&path) {
+        Ok(_) => panic!("foreign-key corruption must be refused"),
+        Err(error) => error,
+    };
+    assert!(matches!(
+        error,
+        shift_store::StoreError::InvalidDocument(message)
+            if message == "SQLite foreign-key check failed"
     ));
 }
 

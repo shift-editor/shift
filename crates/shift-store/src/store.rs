@@ -8,6 +8,7 @@ pub struct ShiftStore {
     pub(crate) conn: rusqlite::Connection,
     pub(crate) path: Option<std::path::PathBuf>,
     pub(crate) kind: StoreKind,
+    pub(crate) recovery: Option<crate::RecoveryOverlay>,
 }
 
 impl ShiftStore {

@@ -33,6 +33,6 @@ Stable IDs are identity. Names and Unicode values are editable metadata.
 
 `shift-font` should not perform SQLite persistence. Durable working-store reads and writes belong in `shift-store` and are coordinated by `shift-workspace`.
 
-`shift-font` should not own `.shift` package layout. Source package IO belongs in `shift-source`.
+`shift-font` does not own `.shift` persistence. Canonical SQLite document IO belongs in `shift-store`.
 
 `shift-font` should not own Electron, NAPI, or editor state. The TypeScript editor owns UI interaction, selection, hover, camera, tools, and command history.

@@ -5,7 +5,7 @@ use shift_font::{
     Font, FontChange, FontIntent, FontIntentSet, Glyph, GlyphId, GlyphLayer, GlyphName, LayerId,
     NamedInstance, NamedInstanceId, PointId, PointSeed, PointType, SourceId, error::CoreError,
 };
-use shift_source::ShiftSourcePackage;
+use shift_store::ShiftStore;
 use shift_workspace::{AcquireScope, FontWorkspace, NewWorkspace, WorkspaceError, WorkspaceSource};
 
 fn create_glyph_intent(name: &str, unicodes: Vec<u32>) -> FontIntent {
@@ -75,50 +75,162 @@ fn creates_untitled_workspace_with_working_store_only() {
 }
 
 #[test]
-fn creates_package_workspace_with_source_package_and_working_store() {
+fn native_documents_require_an_explicit_recovery_path() {
     let temp = tempfile::tempdir().unwrap();
-    let source_path = temp.path().join("TestFont.shift");
+    let document_path = temp.path().join("TestFont.shift");
     let store_path = temp.path().join("working.sqlite");
+    drop(ShiftStore::create_document(&document_path, &shift_font::Font::new()).unwrap());
 
-    let workspace = FontWorkspace::create_package(
-        &source_path,
-        &store_path,
-        NewWorkspace::with_family_name("Test Font"),
-    )
-    .unwrap();
+    let error = match FontWorkspace::open(&document_path, &store_path) {
+        Ok(_) => panic!("native document should require an explicit recovery path"),
+        Err(error) => error,
+    };
 
-    assert_eq!(
-        workspace.source(),
-        &WorkspaceSource::Package {
-            path: source_path.clone()
-        }
-    );
-    assert_eq!(workspace.save_target(), Some(source_path.as_path()));
-    assert!(source_path.is_file());
-    assert_eq!(
-        workspace
-            .font_info()
-            .unwrap()
-            .unwrap()
-            .family_name
-            .as_deref(),
-        Some("Test Font")
-    );
-    assert_eq!(workspace.font().glyph_count(), 0);
+    assert!(matches!(
+        error,
+        WorkspaceError::DocumentRequiresRecoveryPath(path) if path == document_path
+    ));
 }
 
 #[test]
-fn opens_existing_workspace_paths() {
+fn native_document_reopens_sparse_recovery_and_saves_to_canonical() {
     let temp = tempfile::tempdir().unwrap();
-    let source_path = temp.path().join("TestFont.shift");
-    let store_path = temp.path().join("working.sqlite");
+    let document_path = temp.path().join("Dogfood.shift");
+    let recovery_path = temp.path().join("recovery.sqlite");
+    let original = shift_font::Font::new();
+    drop(ShiftStore::create_document(&document_path, &original).unwrap());
 
-    FontWorkspace::create_package(&source_path, &store_path, NewWorkspace::new()).unwrap();
+    let mut workspace = FontWorkspace::open_document(&document_path, &recovery_path).unwrap();
+    assert_eq!(
+        workspace.source(),
+        &WorkspaceSource::Document {
+            path: document_path.clone(),
+        }
+    );
+    assert_eq!(workspace.loaded_layer_count(), 0);
+    let clean_revision = workspace.slug_atlas_cache_revision().unwrap();
+    create_glyph(&mut workspace, "B", vec![66]);
+    assert!(workspace.is_dirty().unwrap());
+    let dirty_revision = workspace.slug_atlas_cache_revision().unwrap();
+    assert_ne!(dirty_revision, clean_revision);
+    drop(workspace);
+    assert!(
+        ShiftStore::open_document(&document_path)
+            .unwrap()
+            .load_font_state()
+            .unwrap()
+            .glyph_id_by_name("B")
+            .is_none()
+    );
 
-    let workspace = FontWorkspace::open(&source_path, &store_path).unwrap();
+    let mut recovered = FontWorkspace::open_document(&document_path, &recovery_path).unwrap();
+    assert_eq!(
+        recovered.slug_atlas_cache_revision().unwrap(),
+        dirty_revision
+    );
+    assert!(recovered.font().glyph_id_by_name("B").is_some());
+    recovered.save().unwrap();
+    assert!(!recovered.is_dirty().unwrap());
+    assert_ne!(
+        recovered.slug_atlas_cache_revision().unwrap(),
+        dirty_revision
+    );
+    drop(recovered);
+    assert!(
+        ShiftStore::open_document(&document_path)
+            .unwrap()
+            .load_font_state()
+            .unwrap()
+            .glyph_id_by_name("B")
+            .is_some()
+    );
+}
 
-    assert_eq!(workspace.save_target(), Some(source_path.as_path()));
-    assert!(workspace.font_info().unwrap().is_some());
+#[test]
+fn native_document_undo_to_saved_clears_recovery_across_reopen() {
+    let temp = tempfile::tempdir().unwrap();
+    let document_path = temp.path().join("Dogfood.shift");
+    let recovery_path = temp.path().join("recovery.sqlite");
+    drop(ShiftStore::create_document(&document_path, &shift_font::Font::new()).unwrap());
+
+    let mut workspace = FontWorkspace::open_document(&document_path, &recovery_path).unwrap();
+    create_glyph(&mut workspace, "B", vec![66]);
+    workspace
+        .undo()
+        .unwrap()
+        .expect("glyph creation should undo");
+    assert!(!workspace.is_dirty().unwrap());
+    drop(workspace);
+
+    let recovered = FontWorkspace::open_document(&document_path, &recovery_path).unwrap();
+    assert!(!recovered.is_dirty().unwrap());
+    assert!(recovered.font().glyph_id_by_name("B").is_none());
+}
+
+#[test]
+fn native_document_redo_restores_recovery_across_reopen() {
+    let temp = tempfile::tempdir().unwrap();
+    let document_path = temp.path().join("Dogfood.shift");
+    let recovery_path = temp.path().join("recovery.sqlite");
+    drop(ShiftStore::create_document(&document_path, &shift_font::Font::new()).unwrap());
+
+    let mut workspace = FontWorkspace::open_document(&document_path, &recovery_path).unwrap();
+    create_glyph(&mut workspace, "B", vec![66]);
+    workspace
+        .undo()
+        .unwrap()
+        .expect("glyph creation should undo");
+    workspace
+        .redo()
+        .unwrap()
+        .expect("glyph creation should redo");
+    assert!(workspace.is_dirty().unwrap());
+    drop(workspace);
+
+    let recovered = FontWorkspace::open_document(&document_path, &recovery_path).unwrap();
+    assert!(recovered.is_dirty().unwrap());
+    assert!(recovered.font().glyph_id_by_name("B").is_some());
+}
+
+#[test]
+fn native_document_save_as_adopts_new_identity_without_mutating_source() {
+    let temp = tempfile::tempdir().unwrap();
+    let source_path = temp.path().join("Source.shift");
+    let source_recovery = temp.path().join("source-recovery.sqlite");
+    let destination_path = temp.path().join("Destination.shift");
+    let destination_recovery = temp.path().join("destination-recovery.sqlite");
+    drop(ShiftStore::create_document(&source_path, &shift_font::Font::new()).unwrap());
+    let source_id = ShiftStore::open_document(&source_path)
+        .unwrap()
+        .document_metadata()
+        .unwrap()
+        .document_id;
+    let mut workspace = FontWorkspace::open_document(&source_path, &source_recovery).unwrap();
+    create_glyph(&mut workspace, "B", vec![66]);
+
+    let destination = workspace
+        .save_as_document(&destination_path, &destination_recovery)
+        .unwrap();
+
+    assert_ne!(destination.document_id, source_id);
+    assert_eq!(workspace.save_target(), Some(destination_path.as_path()));
+    assert!(!workspace.is_dirty().unwrap());
+    assert!(
+        ShiftStore::open_document(&source_path)
+            .unwrap()
+            .load_font_state()
+            .unwrap()
+            .glyph_id_by_name("B")
+            .is_none()
+    );
+    assert!(
+        ShiftStore::open_document(&destination_path)
+            .unwrap()
+            .load_font_state()
+            .unwrap()
+            .glyph_id_by_name("B")
+            .is_some()
+    );
 }
 
 #[test]
@@ -608,52 +720,6 @@ fn save_requires_save_as_for_imported_fonts() {
 }
 
 #[test]
-fn save_as_assigns_a_shift_package_save_target() {
-    let temp = tempfile::tempdir().unwrap();
-    let source_path = fixture("fixtures/fonts/mutatorsans-variable/MutatorSans.designspace");
-    let store_path = temp.path().join("working.sqlite");
-    let save_path = temp.path().join("SavedFont.shift");
-
-    let mut workspace = FontWorkspace::open(&source_path, &store_path).unwrap();
-    workspace.save_as(&save_path).unwrap();
-
-    assert_eq!(
-        workspace.source(),
-        &WorkspaceSource::Package {
-            path: save_path.clone()
-        }
-    );
-    assert_eq!(workspace.save_target(), Some(save_path.as_path()));
-    assert!(save_path.is_file());
-    workspace.save().unwrap();
-}
-
-#[test]
-fn save_and_save_as_write_the_live_font_to_the_source_package() {
-    let temp = tempfile::tempdir().unwrap();
-    let store_path = temp.path().join("working.sqlite");
-    let save_path = temp.path().join("SavedFont.shift");
-
-    let mut workspace =
-        FontWorkspace::create_untitled(&store_path, NewWorkspace::with_family_name("Saved Font"))
-            .unwrap();
-    create_glyph(&mut workspace, "A", vec![65]);
-
-    workspace.save_as(&save_path).unwrap();
-
-    let saved = ShiftSourcePackage::load_font(&save_path).unwrap();
-    assert_eq!(saved.metadata().family_name.as_deref(), Some("Saved Font"));
-    assert!(saved.glyph_id_by_name("A").is_some());
-
-    create_glyph(&mut workspace, "B", vec![66]);
-    workspace.save().unwrap();
-
-    let saved = ShiftSourcePackage::load_font(&save_path).unwrap();
-    assert!(saved.glyph_id_by_name("A").is_some());
-    assert!(saved.glyph_id_by_name("B").is_some());
-}
-
-#[test]
 fn slug_atlas_cache_revision_advances_and_survives_resume() {
     let temp = tempfile::tempdir().unwrap();
     let store_path = temp.path().join("working.sqlite");
@@ -796,191 +862,6 @@ fn undo_after_eviction_reacquires_and_tracks_restored_layer_as_loaded() {
     assert_eq!(workspace.loaded_layer_count(), 1);
     assert_eq!(layer.width(), original_width);
     assert_eq!(layer.contours_iter().next().unwrap().points().len(), 4);
-}
-
-#[test]
-fn resume_package_workspace_can_save_unsaved_store_state() {
-    let temp = tempfile::tempdir().unwrap();
-    let store_path = temp.path().join("working.sqlite");
-    let save_path = temp.path().join("SavedFont.shift");
-
-    {
-        let mut workspace =
-            FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
-        create_glyph(&mut workspace, "A", vec![65]);
-        workspace.save_as(&save_path).unwrap();
-        create_glyph(&mut workspace, "B", vec![66]);
-        assert!(workspace.is_dirty().unwrap());
-    }
-
-    let mut workspace = FontWorkspace::resume(&store_path).unwrap();
-    assert_eq!(workspace.save_target(), Some(save_path.as_path()));
-    assert!(workspace.font().glyph_id_by_name("B").is_some());
-
-    workspace.save().unwrap();
-
-    let saved = ShiftSourcePackage::load_font(&save_path).unwrap();
-    assert!(saved.glyph_id_by_name("A").is_some());
-    assert!(saved.glyph_id_by_name("B").is_some());
-    assert!(!workspace.is_dirty().unwrap());
-}
-
-#[test]
-fn dirty_follows_saved_undo_position_across_redo_and_branching() {
-    let temp = tempfile::tempdir().unwrap();
-    let store_path = temp.path().join("working.sqlite");
-    let save_path = temp.path().join("SavedFont.shift");
-    let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
-    create_glyph(&mut workspace, "A", vec![65]);
-    create_glyph(&mut workspace, "B", vec![66]);
-    workspace.save_as(&save_path).unwrap();
-
-    create_glyph(&mut workspace, "C", vec![67]);
-    assert!(workspace.is_dirty().unwrap());
-    workspace.undo().unwrap();
-    assert!(!workspace.is_dirty().unwrap());
-    workspace.redo().unwrap();
-    assert!(workspace.is_dirty().unwrap());
-
-    workspace.undo().unwrap();
-    workspace.undo().unwrap();
-    assert!(workspace.is_dirty().unwrap());
-    create_glyph(&mut workspace, "D", vec![68]);
-    assert!(workspace.is_dirty().unwrap());
-}
-
-#[test]
-fn save_rejects_missing_package_target_without_recreating_it() {
-    let temp = tempfile::tempdir().unwrap();
-    let store_path = temp.path().join("working.sqlite");
-    let save_path = temp.path().join("SavedFont.shift");
-
-    let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
-    workspace.save_as(&save_path).unwrap();
-    fs::remove_file(&save_path).unwrap();
-
-    let error = workspace.save().unwrap_err();
-
-    assert!(matches!(error, WorkspaceError::SourceMissing(path) if path == save_path));
-    assert!(!save_path.exists());
-}
-
-#[test]
-fn save_rejects_package_target_replaced_by_another_file() {
-    let temp = tempfile::tempdir().unwrap();
-    let store_path = temp.path().join("working.sqlite");
-    let save_path = temp.path().join("SavedFont.shift");
-
-    let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
-    workspace.save_as(&save_path).unwrap();
-    ShiftSourcePackage::save_font(&save_path, &shift_font::Font::new()).unwrap();
-
-    let error = workspace.save().unwrap_err();
-
-    assert!(matches!(error, WorkspaceError::SourceIdentityConflict(path) if path == save_path));
-}
-
-#[test]
-fn inspect_package_reports_stable_package_identity() {
-    let temp = tempfile::tempdir().unwrap();
-    let store_path = temp.path().join("working.sqlite");
-    let save_path = temp.path().join("SavedFont.shift");
-
-    let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
-    workspace.save_as(&save_path).unwrap();
-
-    let package = ShiftSourcePackage::open(&save_path).unwrap();
-    let identity = FontWorkspace::inspect_package(&save_path).unwrap();
-
-    assert_eq!(identity.package_id, package.package_id().to_string());
-    assert_eq!(
-        identity.canonical_path,
-        fs::canonicalize(&save_path).unwrap()
-    );
-    assert!(identity.fingerprint.starts_with("fnv1a64:"));
-}
-
-#[test]
-fn inspect_package_draft_reports_bound_package_and_dirty_state() {
-    let temp = tempfile::tempdir().unwrap();
-    let store_path = temp.path().join("working.sqlite");
-    let save_path = temp.path().join("SavedFont.shift");
-
-    let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
-    workspace.save_as(&save_path).unwrap();
-    workspace.set_document_id("doc-1".to_string()).unwrap();
-
-    let package = FontWorkspace::inspect_package(&save_path).unwrap();
-    let clean_draft = FontWorkspace::inspect_package_draft(&store_path).unwrap();
-
-    assert_eq!(clean_draft.document_id.as_deref(), Some("doc-1"));
-    assert_eq!(clean_draft.package_id, package.package_id);
-    assert_eq!(clean_draft.source_path, save_path);
-    assert_eq!(clean_draft.base_fingerprint, package.fingerprint);
-    assert!(!clean_draft.dirty);
-
-    create_glyph(&mut workspace, "A", vec![65]);
-    let dirty_draft = FontWorkspace::inspect_package_draft(&store_path).unwrap();
-
-    assert_eq!(dirty_draft.document_id.as_deref(), Some("doc-1"));
-    assert_eq!(dirty_draft.base_fingerprint, clean_draft.base_fingerprint);
-    assert!(dirty_draft.dirty);
-}
-
-#[test]
-fn save_preserves_package_identity_and_save_as_mints_a_new_identity() {
-    let temp = tempfile::tempdir().unwrap();
-    let store_path = temp.path().join("working.sqlite");
-    let first_path = temp.path().join("First.shift");
-    let second_path = temp.path().join("Second.shift");
-
-    let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
-    workspace.save_as(&first_path).unwrap();
-    let first_id = ShiftSourcePackage::open(&first_path)
-        .unwrap()
-        .package_id()
-        .to_string();
-
-    create_glyph(&mut workspace, "A", vec![65]);
-    workspace.save().unwrap();
-    let saved_id = ShiftSourcePackage::open(&first_path)
-        .unwrap()
-        .package_id()
-        .to_string();
-
-    workspace.save_as(&second_path).unwrap();
-    let second_id = ShiftSourcePackage::open(&second_path)
-        .unwrap()
-        .package_id()
-        .to_string();
-
-    assert_eq!(saved_id, first_id);
-    assert_ne!(second_id, first_id);
-}
-
-#[test]
-fn resume_for_source_relinks_package_identity_after_move() {
-    let temp = tempfile::tempdir().unwrap();
-    let store_path = temp.path().join("working.sqlite");
-    let save_path = temp.path().join("SavedFont.shift");
-    let moved_path = temp.path().join("MovedFont.shift");
-
-    {
-        let mut workspace =
-            FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
-        workspace.save_as(&save_path).unwrap();
-        create_glyph(&mut workspace, "B", vec![66]);
-    }
-    fs::rename(&save_path, &moved_path).unwrap();
-
-    let mut workspace = FontWorkspace::resume_for_source(&store_path, &moved_path).unwrap();
-    assert_eq!(workspace.save_target(), Some(moved_path.as_path()));
-    assert!(workspace.font().glyph_id_by_name("B").is_some());
-
-    workspace.save().unwrap();
-
-    let saved = ShiftSourcePackage::load_font(&moved_path).unwrap();
-    assert!(saved.glyph_id_by_name("B").is_some());
 }
 
 fn set_x_advance_intents(layer_id: LayerId, width: f64) -> FontIntentSet {

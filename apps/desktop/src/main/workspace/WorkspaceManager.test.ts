@@ -1,96 +1,31 @@
 import { describe, expect, it } from "vitest";
-import type { WorkspaceDocumentState } from "../../shared/workspace/protocol";
-import type { WorkspaceProcess } from "./WorkspaceProcess";
-import type { FontSessionHost } from "./FontSessionHost";
+import { FontSessionHost } from "./FontSessionHost";
 import { WorkspaceManager } from "./WorkspaceManager";
+import { WorkspaceProcess } from "./WorkspaceProcess";
 
-class DocumentChangeSource {
-  readonly #listeners = new Set<(state: WorkspaceDocumentState | null) => void>();
-
-  onDocumentChanged(listener: (state: WorkspaceDocumentState | null) => void): () => void {
-    this.#listeners.add(listener);
-
-    return () => {
-      this.#listeners.delete(listener);
-    };
-  }
-
-  emit(state: WorkspaceDocumentState | null): void {
-    for (const listener of this.#listeners) listener(state);
-  }
+function previewSession(workspaceId: string): FontSessionHost {
+  return new FontSessionHost({
+    mode: "preview",
+    sessionId: workspaceId,
+    workspaceProcess: new WorkspaceProcess(),
+  });
 }
 
-describe("WorkspaceManager package session cleanup", () => {
-  function packageState(
-    documentId: string,
-    packageId: string,
-    canonicalPath: string,
-  ): WorkspaceDocumentState {
-    return {
-      documentId,
-      sourceKind: "package",
-      saveTarget: canonicalPath,
-      packageId,
-      canonicalPath,
-      dirty: false,
-      needsSaveAs: false,
-    };
-  }
-
-  function session(workspaceId: string): {
-    source: DocumentChangeSource;
-    session: FontSessionHost;
-  } {
-    const source = new DocumentChangeSource();
-    return {
-      source,
-      session: {
-        workspaceId,
-        workspaceProcess: source as Pick<WorkspaceProcess, "onDocumentChanged">,
-        document: {
-          acceptState() {},
-        },
-        windows: new Set(),
-        dispose() {},
-      } as unknown as FontSessionHost,
-    };
-  }
-
-  it("unregister removes package ownership and ignores later document events", () => {
+describe("WorkspaceManager session ownership", () => {
+  it("allows a workspace identity to be registered again only after unregister", () => {
     const manager = new WorkspaceManager({
       documentsRoot: () => "/tmp",
       applicationName: () => "Shift",
     });
-    const tracked = session("workspace_a");
+    const first = previewSession("workspace_a");
+    const second = previewSession("workspace_a");
 
-    manager.register(tracked.session);
-    tracked.source.emit(packageState("workspace_a", "package_a", "/font-a.shift"));
-    manager.unregister("workspace_a");
-    tracked.source.emit(packageState("workspace_a", "package_b", "/font-b.shift"));
-    const replacement = session("workspace_b");
+    manager.register(first);
+    expect(() => manager.register(second)).toThrow("Workspace session already registered");
+    manager.unregister(first.workspaceId);
+    manager.register(second);
 
-    manager.register(replacement.session);
-    expect(() =>
-      replacement.source.emit(packageState("workspace_b", "package_b", "/font-b.shift")),
-    ).not.toThrow();
-
-    expect(manager.list().map((session) => session.workspaceId)).toEqual(["workspace_b"]);
-  });
-
-  it("does not keep duplicate registered sessions after unregister", () => {
-    const manager = new WorkspaceManager({
-      documentsRoot: () => "/tmp",
-      applicationName: () => "Shift",
-    });
-    const first = session("workspace_a");
-    const second = session("workspace_a");
-
-    manager.register(first.session);
-    expect(() => manager.register(second.session)).toThrow("Workspace session already registered");
-
-    manager.unregister("workspace_a");
-    manager.register(second.session);
-
-    expect(manager.list().map((session) => session.workspaceId)).toEqual(["workspace_a"]);
+    expect(manager.list()).toEqual([second]);
+    manager.unregister(second.workspaceId);
   });
 });

@@ -1,12 +1,12 @@
 # Renderer font model
 
-<!-- reviewed: 2026-08-18 review-every: 90d -->
+<!-- reviewed: 2026-08-19 review-every: 90d -->
 
 Reactive TypeScript font, authored glyph-layer, and derived glyph-view surfaces.
 
 ## Architecture Invariants
 
-- **Architecture Invariant:** `FontSession` is the renderer's one immutable connection composition. Both `"authored"` and `"imported"` modes use `FontStore → Font → Editor → Scene → Renderer` and expose one concrete `GlyphCatalog`; only authored mode also owns a `Workspace` and mutation coordinator. Imported sessions eagerly receive stable session `GlyphId` values but no authored `GlyphRecord` or `GlyphLayer`.
+- **Architecture Invariant:** `FontSession` is the renderer's one immutable connection composition. Both `"authored"` and `"preview"` modes use `FontStore → Font → Editor → Scene → Renderer` and expose one concrete `GlyphCatalog`; only authored mode also owns a `Workspace` and mutation coordinator. Preview sessions eagerly receive stable session `GlyphId` values but no authored `GlyphRecord` or `GlyphLayer`.
 - **Architecture Invariant:** `Font.loadGlyph()` is the asynchronous acquisition boundary. It returns one canonical `Glyph` only after every authored layer and transitive component dependency is available; retained calls return that same object without workspace I/O. `Editor.glyphForId()` may synchronously expose that object to runtime and plugin code after acquisition, but never initiates loading.
 - **Architecture Invariant:** A loaded `Glyph` owns all authored `GlyphLayer` objects and direct component-Glyph references. Its record and layer collections update reactively without replacing the Glyph; its synchronous properties never initiate I/O.
 - **Architecture Invariant:** `FontStore.#glyphs` contains only completely assembled Glyphs. Failed assembly installs nothing, and workspace replacement clears the complete object graph.

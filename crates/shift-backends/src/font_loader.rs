@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use shift_font::Font;
-use shift_source::ShiftSourcePackage;
+use shift_store::ShiftStore;
 
 use crate::errors::{BackendError, BackendResult, FormatBackendError, FormatBackendResult};
 use crate::font_source::{FontReadError, OpenedFont};
@@ -27,17 +27,15 @@ pub(crate) trait FontAdaptor {
 struct UfoFontAdaptor;
 struct GlyphsFontAdaptor;
 struct DesignspaceFontAdaptor;
-struct ShiftFontAdaptor;
+struct ShiftDocumentAdaptor;
 
-impl FontAdaptor for ShiftFontAdaptor {
+impl FontAdaptor for ShiftDocumentAdaptor {
     fn read_font(&self, path: &str) -> FormatBackendResult<Font> {
-        ShiftSourcePackage::load_font(path).map_err(FormatBackendError::from)
+        Ok(ShiftStore::open_document(path)?.load_font_state()?)
     }
 
-    fn write_font(&self, font: &Font, path: &str) -> FormatBackendResult<()> {
-        ShiftSourcePackage::save_font(path, font)
-            .map(|_| ())
-            .map_err(FormatBackendError::from)
+    fn write_font(&self, _font: &Font, _path: &str) -> FormatBackendResult<()> {
+        Err(FormatBackendError::WriteUnsupported)
     }
 }
 
@@ -143,7 +141,7 @@ fn resolve(path: &str) -> BackendResult<ResolvedPath<'_>> {
 impl FontLoader {
     pub fn new() -> Self {
         let mut adaptors: HashMap<FontFormat, Box<dyn FontAdaptor>> = HashMap::new();
-        adaptors.insert(FontFormat::Shift, Box::new(ShiftFontAdaptor));
+        adaptors.insert(FontFormat::Shift, Box::new(ShiftDocumentAdaptor));
         adaptors.insert(FontFormat::Ufo, Box::new(UfoFontAdaptor));
         adaptors.insert(FontFormat::Glyphs, Box::new(GlyphsFontAdaptor));
         adaptors.insert(FontFormat::Designspace, Box::new(DesignspaceFontAdaptor));

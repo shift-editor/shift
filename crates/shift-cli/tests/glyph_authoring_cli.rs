@@ -2,14 +2,21 @@ use std::io::Write;
 use std::process::{Command, Output, Stdio};
 
 use serde_json::Value;
-use shift_font::test_support::sample_font;
-use shift_source::ShiftSourcePackage;
+use shift_font::{Font, test_support::sample_font};
+use shift_store::ShiftStore;
 
 fn shift(args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_shift-cli"))
         .args(args)
         .output()
         .expect("shift CLI should run")
+}
+
+fn load_font(path: &str) -> Font {
+    ShiftStore::open_document(path)
+        .unwrap()
+        .load_font_state()
+        .unwrap()
 }
 
 fn shift_with_stdin(args: &[&str], input: &str) -> Output {
@@ -134,7 +141,7 @@ fn authors_glyph_geometry_and_copies_a_layer_through_the_cli() {
     ]);
     assert!(copied.status.success(), "{:?}", copied.stderr);
 
-    let font = ShiftSourcePackage::load_font(path_string).unwrap();
+    let font = load_font(path_string);
     let glyph = font.glyph_by_name("A").unwrap();
     assert_eq!(glyph.unicodes(), &[0x41]);
     assert_eq!(glyph.layers().len(), 2);
@@ -188,7 +195,7 @@ fn reads_a_layer_payload_from_stdin() {
     );
 
     assert!(output.status.success(), "{:?}", output.stderr);
-    let font = ShiftSourcePackage::load_font(path_string).unwrap();
+    let font = load_font(path_string);
     let layer = font
         .glyph_by_name("space")
         .unwrap()
@@ -273,8 +280,7 @@ fn payload_identity_is_rejected_without_creating_a_partial_layer() {
     );
     assert_eq!(std::fs::read(&path).unwrap(), before);
     assert!(
-        ShiftSourcePackage::load_font(path_string)
-            .unwrap()
+        load_font(path_string)
             .glyph_by_name("A")
             .unwrap()
             .layers()
@@ -287,7 +293,7 @@ fn copying_a_layer_preserves_components_with_fresh_identity() {
     let temp = tempfile::tempdir().unwrap();
     let path = temp.path().join("Lab.shift");
     let path_string = path.to_str().unwrap();
-    ShiftSourcePackage::save_font(&path, &sample_font()).unwrap();
+    drop(ShiftStore::create_document(&path, &sample_font()).unwrap());
     assert!(
         shift(&[
             "source",
@@ -315,7 +321,7 @@ fn copying_a_layer_preserves_components_with_fresh_identity() {
     ]);
 
     assert!(output.status.success(), "{:?}", output.stderr);
-    let font = ShiftSourcePackage::load_font(path_string).unwrap();
+    let font = load_font(path_string);
     let glyph = font.glyph_by_name("A").unwrap();
     let regular_source = font
         .sources()

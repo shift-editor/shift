@@ -4,12 +4,12 @@ import { DocumentClient } from "../document/DocumentClient";
 import type { NativeDialogs } from "../dialogs/NativeDialogs";
 import type { Window } from "../windows/Window";
 import type {
+  WorkspaceDocumentIdentity,
   WorkspaceDocumentState,
-  WorkspacePackageIdentity,
 } from "../../shared/workspace/protocol";
 import { WorkspaceProcess } from "./WorkspaceProcess";
 import { FontSessionHost, type FontSessionId } from "./FontSessionHost";
-import { PackageSessionIndex } from "./PackageSessionIndex";
+import { DocumentSessionIndex } from "./DocumentSessionIndex";
 
 /** Provides app-owned values required when a workspace session is created. */
 export interface WorkspaceManagerOptions {
@@ -33,7 +33,8 @@ export class WorkspaceManager {
   readonly #nativeDialogs: NativeDialogs;
   readonly #sessionsById = new Map<FontSessionId, FontSessionHost>();
   readonly #sessionIdByWindowId = new Map<number, FontSessionId>();
-  readonly #packageSessions = new PackageSessionIndex();
+  readonly #documentSessions = new DocumentSessionIndex();
+  readonly #documentOpenById = new Map<string, Promise<FontSessionHost>>();
 
   /**
    * Creates a manager for live font workspace sessions.
@@ -59,10 +60,10 @@ export class WorkspaceManager {
    * Opens a font source path in a workspace session.
    *
    * @param sourcePath - User-selected font source path.
-   * @returns a live session for the opened source; existing sessions are reused by workspace id.
+   * @returns a live session; native documents are reused by `DocumentId`.
    */
   async openPath(sourcePath: string): Promise<FontSessionHost> {
-    if (!isShiftPackagePath(sourcePath)) return this.#openFontSource(sourcePath);
+    if (!isShiftDocumentPath(sourcePath)) return this.#openFontSource(sourcePath);
 
     const workspaceProcess = new WorkspaceProcess();
     workspaceProcess.start(this.#documentsRoot());
@@ -70,27 +71,28 @@ export class WorkspaceManager {
     try {
       await workspaceProcess.whenReady();
 
-      const identity = isShiftPackagePath(sourcePath)
-        ? await workspaceProcess.inspectPackage(sourcePath)
-        : null;
-      const existingBeforeOpen = identity ? this.#sessionForPackage(identity) : null;
+      const identity = await workspaceProcess.inspectDocument(sourcePath);
+      const existingBeforeOpen = this.#sessionForDocument(identity);
       if (existingBeforeOpen) {
         workspaceProcess.stop();
         return existingBeforeOpen;
       }
 
-      const state = await workspaceProcess.openWorkspace(sourcePath);
-      const existingAfterOpen = this.#sessionForDocumentState(state);
-      if (existingAfterOpen) {
+      const existingOpen = this.#documentOpenById.get(identity.documentId);
+      if (existingOpen) {
         workspaceProcess.stop();
-        if (!existingAfterOpen.document) {
-          throw new Error(`Font session identity collision: ${state.documentId}`);
-        }
-        existingAfterOpen.document.acceptState(state);
-        return existingAfterOpen;
+        return existingOpen;
       }
 
-      return this.#registerLoadedSession(workspaceProcess, state);
+      const opening = this.#openDocument(sourcePath, workspaceProcess);
+      this.#documentOpenById.set(identity.documentId, opening);
+      try {
+        return await opening;
+      } finally {
+        if (this.#documentOpenById.get(identity.documentId) === opening) {
+          this.#documentOpenById.delete(identity.documentId);
+        }
+      }
     } catch (error) {
       workspaceProcess.stop();
       throw error;
@@ -118,7 +120,7 @@ export class WorkspaceManager {
       throw new Error(`Workspace session already registered: ${session.workspaceId}`);
     }
 
-    if (session.mode === "authored") this.#packageSessions.track(session);
+    if (session.mode === "authored") this.#documentSessions.track(session);
     this.#sessionsById.set(session.workspaceId, session);
   }
 
@@ -134,7 +136,7 @@ export class WorkspaceManager {
     for (const window of session.windows) {
       this.#sessionIdByWindowId.delete(window.window.id);
     }
-    this.#packageSessions.untrack(workspaceId);
+    this.#documentSessions.untrack(workspaceId);
     this.#sessionsById.delete(workspaceId);
     session.dispose();
   }
@@ -217,11 +219,11 @@ export class WorkspaceManager {
     try {
       await workspaceProcess.whenReady();
       const state = await load(workspaceProcess);
-      const existing = this.get(state.documentId);
+      const existing = this.get(state.workspaceId);
       if (existing) {
         workspaceProcess.stop();
         if (!existing.document)
-          throw new Error(`Font session identity collision: ${state.documentId}`);
+          throw new Error(`Font session identity collision: ${state.workspaceId}`);
         existing.document.acceptState(state);
         return existing;
       }
@@ -239,7 +241,7 @@ export class WorkspaceManager {
   ): FontSessionHost {
     const session = new FontSessionHost({
       mode: "authored",
-      sessionId: state.documentId,
+      sessionId: state.workspaceId,
       workspaceProcess,
       documentClient: new DocumentClient(),
       applicationName: this.#applicationName,
@@ -249,7 +251,7 @@ export class WorkspaceManager {
     session.document?.acceptState(state);
     this.register(session);
     try {
-      this.#packageSessions.update(session.workspaceId, state);
+      this.#documentSessions.update(session.workspaceId, state);
     } catch (error) {
       this.unregister(session.workspaceId);
       throw error;
@@ -258,16 +260,30 @@ export class WorkspaceManager {
     return session;
   }
 
-  #sessionForDocumentState(state: WorkspaceDocumentState): FontSessionHost | null {
-    const byDocumentId = this.get(state.documentId);
-    if (byDocumentId) return byDocumentId;
+  async #openDocument(
+    sourcePath: string,
+    workspaceProcess: WorkspaceProcess,
+  ): Promise<FontSessionHost> {
+    const state = await workspaceProcess.openWorkspace(sourcePath);
+    const existing = this.#sessionForDocumentState(state);
+    if (existing) {
+      workspaceProcess.stop();
+      return existing;
+    }
 
-    const workspaceId = this.#packageSessions.workspaceIdForState(state);
+    return this.#registerLoadedSession(workspaceProcess, state);
+  }
+
+  #sessionForDocumentState(state: WorkspaceDocumentState): FontSessionHost | null {
+    const byWorkspaceId = this.get(state.workspaceId);
+    if (byWorkspaceId) return byWorkspaceId;
+
+    const workspaceId = this.#documentSessions.workspaceIdForState(state);
     return workspaceId ? this.get(workspaceId) : null;
   }
 
-  #sessionForPackage(identity: WorkspacePackageIdentity): FontSessionHost | null {
-    const workspaceId = this.#packageSessions.workspaceIdForPackage(identity);
+  #sessionForDocument(identity: WorkspaceDocumentIdentity): FontSessionHost | null {
+    const workspaceId = this.#documentSessions.workspaceIdForDocument(identity);
     return workspaceId ? this.get(workspaceId) : null;
   }
 
@@ -285,7 +301,7 @@ export class WorkspaceManager {
       }
 
       const session = new FontSessionHost({
-        mode: "imported",
+        mode: "preview",
         sessionId: state.sessionId,
         workspaceProcess,
       });
@@ -298,6 +314,6 @@ export class WorkspaceManager {
   }
 }
 
-function isShiftPackagePath(sourcePath: string): boolean {
+function isShiftDocumentPath(sourcePath: string): boolean {
   return path.extname(sourcePath).toLowerCase() === ".shift";
 }

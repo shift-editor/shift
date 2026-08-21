@@ -63,7 +63,7 @@ async function createFontSession(
         workspace.editor,
       );
     }
-    case "imported": {
+    case "preview": {
       await client.connect();
       const source = client.sourceCell.peek();
       if (!source) throw new Error("font source connected without a snapshot");
@@ -75,7 +75,7 @@ async function createFontSession(
       editor.setActiveTool("select");
 
       const catalog = new GlyphCatalog(editor, glyphInfo, new ImportedGlyphAtlasSource(client));
-      return new FontSession("imported", catalog, null, client, font, editor);
+      return new FontSession("preview", catalog, null, client, font, editor);
     }
   }
 }

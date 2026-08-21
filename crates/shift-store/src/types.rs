@@ -5,8 +5,9 @@ use shift_font::{Glyph, LayerId};
 use crate::layer::StoredLayerPayload;
 
 const DOCUMENT_ID_PREFIX: &str = "document_";
-const DOCUMENT_ID_BYTES: usize = 16;
-const DOCUMENT_ID_HEX_LENGTH: usize = DOCUMENT_ID_BYTES * 2;
+const COMMIT_ID_PREFIX: &str = "commit_";
+const RANDOM_ID_BYTES: usize = 16;
+const RANDOM_ID_HEX_LENGTH: usize = RANDOM_ID_BYTES * 2;
 
 pub(crate) type EncodedGlyphLayers = Vec<Vec<(LayerId, Vec<u8>)>>;
 
@@ -43,14 +44,7 @@ pub struct DocumentId(String);
 
 impl DocumentId {
     pub fn new() -> Self {
-        let mut bytes = [0; DOCUMENT_ID_BYTES];
-        getrandom::fill(&mut bytes).expect("secure random document ID generation failed");
-        let suffix = bytes
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect::<String>();
-
-        Self(format!("{DOCUMENT_ID_PREFIX}{suffix}"))
+        Self(random_id(DOCUMENT_ID_PREFIX, "document"))
     }
 
     pub fn as_str(&self) -> &str {
@@ -59,10 +53,7 @@ impl DocumentId {
 
     pub(crate) fn from_stored(value: String) -> Option<Self> {
         let suffix = value.strip_prefix(DOCUMENT_ID_PREFIX)?;
-        let valid = suffix.len() == DOCUMENT_ID_HEX_LENGTH
-            && suffix
-                .bytes()
-                .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'));
+        let valid = valid_random_id_suffix(suffix);
 
         valid.then_some(Self(value))
     }
@@ -78,6 +69,56 @@ impl std::fmt::Display for DocumentId {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter.write_str(self.as_str())
     }
+}
+
+/// Durable identity of one explicitly saved canonical document revision.
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct CommitId(String);
+
+impl CommitId {
+    pub fn new() -> Self {
+        Self(random_id(COMMIT_ID_PREFIX, "commit"))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    pub(crate) fn from_stored(value: String) -> Option<Self> {
+        let suffix = value.strip_prefix(COMMIT_ID_PREFIX)?;
+        valid_random_id_suffix(suffix).then_some(Self(value))
+    }
+}
+
+impl Default for CommitId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl std::fmt::Display for CommitId {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
+fn random_id(prefix: &str, kind: &str) -> String {
+    let mut bytes = [0; RANDOM_ID_BYTES];
+    getrandom::fill(&mut bytes)
+        .unwrap_or_else(|_| panic!("secure random {kind} ID generation failed"));
+    let suffix = bytes
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+
+    format!("{prefix}{suffix}")
+}
+
+fn valid_random_id_suffix(suffix: &str) -> bool {
+    suffix.len() == RANDOM_ID_HEX_LENGTH
+        && suffix
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]

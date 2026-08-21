@@ -16,7 +16,7 @@ use glyph_inspect::GlyphInspection;
 use inspect::{InspectReport, RenderMode};
 use miette::IntoDiagnostic;
 use shift_backends::{ExportFormat, FontExportRequest, FontExportResult, FontExporter};
-use shift_source::ShiftSourcePackage;
+use shift_store::ShiftStore;
 
 fn main() -> miette::Result<()> {
     match Cli::parse().command {
@@ -102,7 +102,9 @@ fn write_authoring_report(report: AuthoringReport, json: bool) -> miette::Result
 }
 
 fn compile(args: CompileArgs) -> miette::Result<FontExportResult> {
-    let font = ShiftSourcePackage::load_font(&args.path).into_diagnostic()?;
+    let font = ShiftStore::open_document(&args.path)
+        .and_then(|store| store.load_font_state())
+        .into_diagnostic()?;
     FontExporter::new()
         .export(
             &font,
@@ -160,11 +162,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn compile_command_writes_ttf_from_shift_source() {
+    fn compile_command_writes_ttf_from_shift_document() {
         let temp = tempfile::tempdir().unwrap();
         let source_path = temp.path().join("Dogfood.shift");
         let output_path = temp.path().join("Dogfood.ttf");
-        ShiftSourcePackage::save_font(&source_path, &sample_variable_font()).unwrap();
+        drop(ShiftStore::create_document(&source_path, &sample_variable_font()).unwrap());
 
         let result = compile(CompileArgs {
             path: source_path,

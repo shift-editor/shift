@@ -157,14 +157,10 @@ describe("Bridge", () => {
     expect(existsSync(outputPath)).toBe(true);
   });
 
-  function resumeMutatorPackage() {
+  function openMutatorWorkspace() {
     const sourcePath = join(repositoryRoot, "fixtures/fonts/mutatorsans/MutatorSans.ttf");
     const storePath = join(tempDir, "mutatorsans.sqlite");
-    const packagePath = join(tempDir, "MutatorSans.shift");
     bridge.openWorkspace(sourcePath, storePath);
-    bridge.saveWorkspaceAs(packagePath);
-    bridge.closeWorkspace();
-    bridge.resumeWorkspaceForSource(storePath, packagePath);
   }
 
   it("transports imported variation without fabricating authored sources", () => {
@@ -184,7 +180,7 @@ describe("Bridge", () => {
   });
 
   it("acquires every lazy glyph payload before preparing the complete Slug atlas", () => {
-    resumeMutatorPackage();
+    openMutatorWorkspace();
 
     const atlas = bridge.prepareSlugAtlas(256);
     expect(atlas.glyphs).toHaveLength(bridge.getGlyphs().length);
@@ -193,7 +189,7 @@ describe("Bridge", () => {
   });
 
   it("acquires lazy glyph payloads before preparing a Slug atlas patch", () => {
-    resumeMutatorPackage();
+    openMutatorWorkspace();
 
     const glyph = bridge.getGlyphs().find((record) => record.name === "S");
     expect(glyph).toBeDefined();

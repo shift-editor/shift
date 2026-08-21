@@ -1,6 +1,6 @@
 # shift-font
 
-<!-- reviewed: 2026-08-18 review-every: 90d -->
+<!-- reviewed: 2026-08-19 review-every: 90d -->
 
 First-class Rust font object model for Shift.
 
@@ -102,7 +102,7 @@ Coordinates, advance width, smooth flags, anchor positions, and component transf
 
 `shift-wire` may translate native bases, source values, and projections into transport DTOs, but it must not rebuild source samples, define value ordering or topology compatibility, or evaluate variation models.
 
-`shift-font` should not perform SQLite persistence or define a durable binary encoding. Durable working-store reads, writes, MessagePack encoding, compression, and compatibility policy belong in `shift-store`.
+`shift-font` should not perform SQLite persistence or define a durable binary encoding. Canonical document and recovery reads, writes, MessagePack encoding, compression, and compatibility policy belong in `shift-store`.
 
 `shift-font` should not own Electron, NAPI, or editor state. The TypeScript editor owns UI interaction, selection, hover, camera, tools, and command history.
 
@@ -158,8 +158,7 @@ cargo test -p shift-font
 
 ## Related
 
-- `shift-source` -- stable `.shift` package projection.
-- `shift-store` -- SQLite working-state persistence.
+- `shift-store` -- canonical SQLite `.shift` documents and recovery persistence.
 - `shift-workspace` -- mutation, ledger, and source/store coordination.
 - `shift-backends` -- import and compiler adapters.
 - `shift-wire` -- transport DTO projection.

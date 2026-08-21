@@ -1,13 +1,14 @@
 use std::{
     ffi::OsString,
     path::{Path, PathBuf},
+    time::Duration,
 };
 
-use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
+use rusqlite::{Connection, OpenFlags, OptionalExtension, backup::Backup, params};
 use shift_font::Font;
 
 use crate::{
-    DocumentId, ShiftStore, StoreError,
+    CommitId, DocumentId, RecoveryState, ShiftStore, StoreError,
     connection::{configure_common, configure_document_connection},
     schema,
     store::StoreKind,
@@ -16,6 +17,7 @@ use crate::{
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DocumentMetadata {
     pub document_id: DocumentId,
+    pub saved_commit_id: CommitId,
 }
 
 impl ShiftStore {
@@ -44,10 +46,12 @@ impl ShiftStore {
                 conn,
                 path: Some(staged.to_path_buf()),
                 kind: StoreKind::Document,
+                recovery: None,
             };
             store.replace_font_state(font)?;
             store.insert_document_metadata(&DocumentMetadata {
                 document_id: DocumentId::new(),
+                saved_commit_id: CommitId::new(),
             })?;
             store.sync_store_file()?;
         }
@@ -65,15 +69,105 @@ impl ShiftStore {
         Self::open_document(path)
     }
 
+    /// Saves a consistent snapshot of this store as a new canonical document.
+    ///
+    /// The source remains open and unchanged. The destination receives a new
+    /// document identity, excludes app-local workspace state, and is validated
+    /// and synced at a sibling staging path before no-clobber publication.
+    pub fn save_as_document(&self, path: impl AsRef<Path>) -> Result<DocumentMetadata, StoreError> {
+        let path = path.as_ref();
+        if path.exists() {
+            return Err(StoreError::DocumentAlreadyExists(path.to_path_buf()));
+        }
+
+        let parent = parent_directory(path);
+        let staged = tempfile::Builder::new()
+            .prefix(".shift-document-")
+            .suffix(".shift")
+            .tempfile_in(parent)?
+            .into_temp_path();
+        let mut conn = Connection::open(&staged)?;
+
+        {
+            let backup = Backup::new(&self.conn, &mut conn)?;
+            backup.run_to_completion(256, Duration::from_millis(1), None)?;
+        }
+
+        configure_document_connection(&conn)?;
+        let metadata = DocumentMetadata {
+            document_id: DocumentId::new(),
+            saved_commit_id: CommitId::new(),
+        };
+        if let Some(recovery) = self.recovery.as_ref() {
+            let state = recovery.state()?;
+            match state {
+                RecoveryState::Clean => {}
+                RecoveryState::Dirty | RecoveryState::Conflict => {
+                    crate::recovery::apply_overlay_to_snapshot(
+                        &mut conn,
+                        recovery,
+                        &metadata.saved_commit_id,
+                    )?;
+                }
+                RecoveryState::SavePending => {
+                    return Err(StoreError::InvalidRecoveryTransition {
+                        expected: "clean, dirty, or conflict",
+                        found: state.as_str(),
+                    });
+                }
+            }
+        }
+        conn.pragma_update(None, "secure_delete", "ON")?;
+        let tx = conn.transaction()?;
+        tx.execute_batch(
+            "DROP TABLE IF EXISTS main.workspace_state; DELETE FROM main.document_metadata;",
+        )?;
+        tx.execute(
+            "INSERT INTO main.document_metadata (id, document_id, saved_commit_id) VALUES (1, ?1, ?2)",
+            params![
+                metadata.document_id.as_str(),
+                metadata.saved_commit_id.as_str()
+            ],
+        )?;
+        tx.pragma_update(None, "application_id", schema::SHIFT_APPLICATION_ID)?;
+        tx.pragma_update(None, "user_version", schema::SHIFT_DOCUMENT_SCHEMA_VERSION)?;
+        tx.commit()?;
+        conn.pragma_update(None, "secure_delete", "OFF")?;
+
+        let staged_store = Self {
+            conn,
+            path: Some(staged.to_path_buf()),
+            kind: StoreKind::Document,
+            recovery: None,
+        };
+        staged_store.sync_store_file()?;
+        drop(staged_store);
+        remove_staging_sidecars(&staged)?;
+
+        let verified = Self::verify_document(&staged)?;
+        if verified != metadata {
+            return Err(StoreError::InvalidDocument(
+                "staged document identity changed during validation".to_string(),
+            ));
+        }
+
+        match staged.persist_noclobber(path) {
+            Ok(()) => {}
+            Err(error) if error.error.kind() == std::io::ErrorKind::AlreadyExists => {
+                return Err(StoreError::DocumentAlreadyExists(path.to_path_buf()));
+            }
+            Err(error) => return Err(StoreError::Io(error.error)),
+        }
+        sync_parent_directory(path)?;
+
+        Ok(metadata)
+    }
+
     /// Opens a canonical Shift document after validating it read-only first.
     pub fn open_document(path: impl AsRef<Path>) -> Result<Self, StoreError> {
         let path = path.as_ref();
 
-        {
-            let probe = open_document_read_only(path)?;
-            schema::validate_document_header(&probe)?;
-            validate_document_shape(&probe)?;
-        }
+        Self::verify_document(path)?;
 
         let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE)?;
         schema::validate_document_header(&conn)?;
@@ -84,6 +178,7 @@ impl ShiftStore {
             conn,
             path: Some(path.to_path_buf()),
             kind: StoreKind::Document,
+            recovery: None,
         })
     }
 
@@ -117,8 +212,11 @@ impl ShiftStore {
 
     fn insert_document_metadata(&mut self, metadata: &DocumentMetadata) -> Result<(), StoreError> {
         self.conn.execute(
-            "INSERT INTO document_metadata (id, document_id) VALUES (1, ?1)",
-            params![metadata.document_id.as_str()],
+            "INSERT INTO document_metadata (id, document_id, saved_commit_id) VALUES (1, ?1, ?2)",
+            params![
+                metadata.document_id.as_str(),
+                metadata.saved_commit_id.as_str()
+            ],
         )?;
         Ok(())
     }
@@ -158,18 +256,23 @@ fn load_document_metadata(conn: &Connection) -> Result<DocumentMetadata, StoreEr
 
     let stored = conn
         .query_row(
-            "SELECT document_id FROM document_metadata WHERE id = 1",
+            "SELECT document_id, saved_commit_id FROM document_metadata WHERE id = 1",
             [],
-            |row| row.get::<_, String>(0),
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
         )
         .optional()?
         .ok_or_else(|| {
             StoreError::InvalidDocument("missing document_metadata row 1".to_string())
         })?;
     let document_id =
-        DocumentId::from_stored(stored.clone()).ok_or(StoreError::InvalidDocumentId(stored))?;
+        DocumentId::from_stored(stored.0.clone()).ok_or(StoreError::InvalidDocumentId(stored.0))?;
+    let saved_commit_id =
+        CommitId::from_stored(stored.1.clone()).ok_or(StoreError::InvalidCommitId(stored.1))?;
 
-    Ok(DocumentMetadata { document_id })
+    Ok(DocumentMetadata {
+        document_id,
+        saved_commit_id,
+    })
 }
 
 fn parent_directory(path: &Path) -> &Path {

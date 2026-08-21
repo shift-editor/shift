@@ -1,6 +1,6 @@
 # Desktop E2E tests
 
-Playwright launches the built Electron application against an isolated user-data directory and a copied workspace. The suites cover different execution environments and should not share rendering assumptions.
+Playwright launches the built Electron application against an isolated user-data directory and a native SQLite `.shift` fixture. The suites cover different execution environments and should not share rendering assumptions.
 
 ## Commands
 
@@ -18,6 +18,7 @@ Append a Playwright file filter for a focused run:
 
 ```sh
 pnpm test:e2e:visual e2e/home.spec.ts
+pnpm test:e2e:visual e2e/document-recovery.spec.ts
 pnpm test:e2e:gpu e2e/glyph-grid.spec.ts
 ```
 
@@ -31,7 +32,7 @@ Build the native bridge first with `pnpm build:native` when its binary is absent
 | `gpu`    | `fixtures/perfApp.ts`     | Hardware GPU, host scale, stable content size     | Required on pull requests and `main` |
 | `perf`   | `fixtures/perfApp.ts`     | Hardware GPU, host scale, stable content size     | Nightly and manual only              |
 
-Visual tests default to MutatorSans. Authored GPU and performance tests default to the MutatorSans designspace and accept another editable source through `SHIFT_E2E_FONT_PATH`. Imported residency tests default to MutatorSans TTF through `SHIFT_E2E_PREVIEW_FONT_PATH`; variable imported scrubbing defaults to Host Grotesk through `SHIFT_E2E_VARIABLE_PREVIEW_FONT_PATH`:
+Visual tests default to MutatorSans. Authored GPU and performance tests default to the MutatorSans designspace and accept another editable source through `SHIFT_E2E_FONT_PATH`. Preview residency tests default to MutatorSans TTF through `SHIFT_E2E_PREVIEW_FONT_PATH`; variable preview scrubbing defaults to Host Grotesk through `SHIFT_E2E_VARIABLE_PREVIEW_FONT_PATH`:
 
 ```sh
 SHIFT_E2E_FONT_PATH=/path/to/font.designspace pnpm test:e2e:gpu e2e/glyph-grid.spec.ts
@@ -39,7 +40,7 @@ SHIFT_E2E_PREVIEW_FONT_PATH=/path/to/font.ttf pnpm test:e2e:gpu e2e/font-preview
 SHIFT_E2E_VARIABLE_PREVIEW_FONT_PATH=/path/to/variable.ttf pnpm test:e2e:gpu e2e/variable-font-preview.spec.ts
 ```
 
-Fixtures copy source files into a temporary workspace. Tests must not depend on a developer's existing Shift workspace or user-data directory. Document-lifecycle tests inject deterministic Open, ordered Save As destinations, Export, and dirty-document choices through `NativeDialogs`; ordered choices exercise Save As adoption, multi-document quit, and re-entrant quit without automating OS pickers.
+Authored fixtures import their source into a canonical native document under a temporary test root. Tests must not depend on a developer's existing Shift workspace or user-data directory. Document-lifecycle tests inject deterministic Open, ordered Save As destinations, Export, and dirty-document choices through `NativeDialogs`; ordered choices exercise Save As adoption, multi-document quit, and re-entrant quit without automating OS pickers. The recovery fixture restarts Electron with the same isolated user-data directory and document, allowing forced-termination recovery to be tested without touching developer state.
 
 ## Visual snapshots
 

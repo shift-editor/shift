@@ -1,16 +1,34 @@
 # shift-store
 
-`shift-store` owns Shift's SQLite persistence boundary: the canonical `.shift` application database and the separate app-local working database used during editing and import.
+See [ADR 0001](../../docs/architecture/decisions/0001-canonical-sqlite-shift-documents.md) for the decision that makes SQLite the only canonical `.shift` format.
 
-Callers use typed APIs from this crate rather than preparing SQL or opening a second application-level persistence path. The desktop app has not yet cut over from the legacy ZIP package, so the canonical document APIs are currently a tested foundation rather than the active Save/Open route.
+`shift-store` owns Shift's SQLite persistence boundary: the canonical `.shift` application database, sparse app-local recovery overlays for saved documents, and complete app-local working databases for unsaved imports and new documents.
+
+Callers use typed APIs from this crate rather than preparing SQL or opening a second application-level persistence path. Every `.shift` file is a canonical SQLite document; foreign font formats enter through explicit preview or import boundaries.
 
 ## Canonical document boundary
 
 - A `.shift` document is the SQLite database itself. It uses application ID `SHFT` (`0x53484654`) and an exact `user_version` contract.
 - `ShiftStore::create_document` writes a complete `shift-font::Font` at a sibling staging path, syncs it, and publishes without clobbering an existing destination.
+- `ShiftStore::save_as_document` takes a consistent SQLite snapshot of a working or canonical store without materializing a complete `Font`, removes app-local workspace state, mints a new document identity, validates and syncs the staged canonical database, and publishes without clobbering.
 - `ShiftStore::open_document` validates the file read-only before opening it with rollback journaling and `synchronous=FULL`. `ShiftStore::verify_document` also runs SQLite integrity and foreign-key checks.
-- `DocumentMetadata` contains the stable `DocumentId`. A raw copy preserves it; Save As will mint a new identity at the workspace boundary.
-- Canonical documents never contain app-local `workspace_state`. Working databases retain WAL + NORMAL and their revision/source-binding row.
+- `ShiftStore::open_document_with_recovery` binds a separate sparse `RecoveryOverlay`, reconciles it by commit identity, and installs connection-local merged views. Directory and payload reads prefer changed overlay rows and fall back to the canonical document without copying unrelated layers.
+- `DocumentMetadata` contains the stable `DocumentId` and current `saved_commit_id`. A raw copy preserves both; Save As mints a new document identity and saved commit.
+- Canonical documents never contain app-local `workspace_state` or recovery rows. Working databases retain WAL + NORMAL and their revision/source-binding row.
+
+## Recovery boundary
+
+`RecoveryOverlay` is an app-data SQLite database bound to one `DocumentId` and `base_commit_id`. A completed semantic edit transaction writes only replacement rows, complete replacement layer BLOBs, earned component rows, collection-replacement markers, and deletion tombstones, and advances the durable recovery revision used to invalidate derived caches. The canonical `.shift` remains the last explicitly saved document.
+
+Recovery states are `Clean`, `Dirty`, `SavePending`, and `Conflict`:
+
+- an edit moves `Clean` to `Dirty`;
+- `save_document` first persists a new `pending_commit_id`, applies only overlay changes to the canonical document in one short transaction, writes the same ID as `saved_commit_id`, then acknowledges and clears the overlay;
+- reopening after a crash compares commit IDs: a matching pending/saved ID proves Save committed and clears the overlay, while an unchanged base returns to `Dirty`;
+- Open and every explicit Save reconcile the current canonical commit; a changed base moves a dirty overlay to `Conflict` rather than applying stale rows silently;
+- `discard_recovery` clears the overlay and immediately exposes canonical rows through the same merged views.
+
+`save_as_document` snapshots the canonical main database and applies the current merged overlay only to the staged destination. It mints a new identity while leaving the source document and its unsaved recovery state unchanged. Recovery databases use WAL with `synchronous=FULL`; canonical documents retain rollback/FULL and no required idle sidecars.
 
 ## Storage boundary
 
@@ -46,7 +64,7 @@ Canonical SQLite publication must preserve the complete `shift-font::Font`, not 
 
 ## Schema policy
 
-Shift has not shipped either SQLite schema. Schema changes therefore update the version-1 baselines directly; there is intentionally no compatibility migration for earlier development databases. Canonical document schema stabilization is gated on preservation/export goldens and hostile-input budgets.
+Shift has not shipped either SQLite schema. Schema changes therefore update the version-1 baselines directly; there is intentionally no compatibility migration for earlier development databases. Every canonical table must be classified in the recovery catalog; open validates the overlay's columns, primary keys, foreign keys, and dependency order before installing generated merged views. Canonical document schema stabilization is gated on preservation/export goldens and hostile-input budgets.
 
 ## Responsibilities
 
@@ -62,7 +80,8 @@ Shift has not shipped either SQLite schema. Schema changes therefore update the 
 ```text
 src/
   connection.rs     # canonical, working-WAL, and disposable-import connection postures
-  document.rs       # staged create, validated open/verify, metadata, and durable publication
+  document.rs       # staged create/Save As, validated open/verify, metadata, and durable publication
+  recovery/         # schema-catalogued sparse overlays, merged reads, and commit-ID Save
   schema.rs         # canonical and working pre-release version-1 baselines
   font_state.rs     # eager metadata/directory and explicit full materialization
   import_writer.rs  # pipelined Rayon encode/compress plus one SQLite transaction owner

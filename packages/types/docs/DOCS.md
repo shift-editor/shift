@@ -1,6 +1,6 @@
 # @shift/types
 
-<!-- reviewed: 2026-08-18 review-every: 90d -->
+<!-- reviewed: 2026-08-19 review-every: 90d -->
 
 Shared DTO TypeScript types for Shift. This package owns branded IDs and bridge DTOs generated from `shift-bridge`.
 
@@ -31,7 +31,7 @@ Import from `@shift/types`.
 - `BridgeApi` -- type-only native bridge API surface.
 - `FontMetadata` / `FontMetrics` -- independent font-level DTOs; metadata mutation replaces the complete `FontMetadata` snapshot without changing metrics.
 - `GlyphRecord` -- committed glyph list record: stable id, name, unicodes, component base glyph IDs.
-- `PackageIdentity` / `PackageDraft` -- bridge DTOs used by the desktop utility process to inspect package source identity and working-store ownership.
+- `DocumentIdentity` -- canonical `DocumentId` and canonical path used by the desktop to deduplicate native document sessions before Open.
 - `GlyphStructure` -- stable glyph structure: contours, anchors, components.
 - `ComponentGlyph` -- component reference resolved for editing: parent/base glyph IDs, component paths, and `componentIndex`, the structural slot used to match a component's transform in each source's geometry (transforms are matched by slot, not by ID).
 - `VariationBasis` / `VariationDelta` -- Rust/Fontdrasil-compiled normalized supports and numeric contribution vectors.

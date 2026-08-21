@@ -1,6 +1,10 @@
 import type { GlyphId, SlugAtlas } from "@shift/types";
 import type { FileHandle } from "node:fs/promises";
-import type { ByteReadableStream, WorkspacePackageIdentity } from "../../shared/workspace/protocol";
+import type {
+  ByteReadableStream,
+  FontSourceSnapshot,
+  WorkspaceDocumentIdentity,
+} from "../../shared/workspace/protocol";
 
 /** Opaque key for one authored revision's disposable Slug pages. */
 export type CachedAtlasKey = {
@@ -101,80 +105,60 @@ export type OpenedCachedAtlasPage = {
   stream: ByteReadableStream<Uint8Array>;
 };
 
-/** Identifies one utility-owned SQLite document allocation. */
-export type DocumentAllocation = {
-  documentId: string;
+/** App-owned paths for one live or recoverable authored workspace. */
+export type WorkspaceAllocation = {
+  workspaceId: string;
   storePath: string;
+  recoveryPath: string;
 };
 
-/**
- * Identifies one package instance by package id and canonical source path.
- *
- * @remarks
- * Package addresses intentionally ignore source fingerprints. They identify the
- * durable binding slot; fingerprint comparisons belong to package open actions.
- */
-export class PackageAddress {
-  readonly packageId: string;
+/** Stable canonical document identity plus its exact canonical filesystem path. */
+export class DocumentAddress {
+  readonly documentId: string;
   readonly canonicalPath: string;
 
-  /**
-   * Creates a package address from durable package identity fields.
-   *
-   * @param packageId - stable id stored in the `.shift` manifest.
-   * @param canonicalPath - canonical source path for this package instance.
-   */
-  constructor(packageId: string, canonicalPath: string) {
-    this.packageId = packageId;
+  constructor(documentId: string, canonicalPath: string) {
+    this.documentId = documentId;
     this.canonicalPath = canonicalPath;
   }
 
-  /**
-   * Builds a package address from an inspected package identity.
-   *
-   * @param identity - package identity returned by Rust for the current source path.
-   * @returns package id and canonical path; the source fingerprint is excluded.
-   */
-  static fromIdentity(identity: WorkspacePackageIdentity): PackageAddress {
-    return new PackageAddress(identity.packageId, identity.canonicalPath);
+  static fromIdentity(identity: WorkspaceDocumentIdentity): DocumentAddress {
+    return new DocumentAddress(identity.documentId, identity.canonicalPath);
   }
 
-  /**
-   * Compares package addresses by durable package id and canonical source path.
-   *
-   * @param left - first package address.
-   * @param right - second package address.
-   * @returns true when both addresses identify the same package path.
-   */
-  static equals(left: PackageAddress, right: PackageAddress): boolean {
-    return left.packageId === right.packageId && left.canonicalPath === right.canonicalPath;
+  static equals(left: DocumentAddress, right: DocumentAddress): boolean {
+    return left.documentId === right.documentId && left.canonicalPath === right.canonicalPath;
   }
 }
 
-/** Binds one package instance to its current working document. */
-export type PackageBinding = PackageAddress &
-  DocumentAllocation & {
+/** Binds one canonical document address to its app-owned recovery allocation. */
+export type DocumentBinding = DocumentAddress &
+  WorkspaceAllocation & {
     updatedAt: string;
   };
 
-/** Records a dirty working document detached from its package binding. */
-export type OrphanedDocument = DocumentAllocation & {
-  packageId: string;
-  canonicalPath: string;
-  reason: string;
-  orphanedAt: string;
-};
+/** Whether an editable workspace has a canonical document binding. */
+export type WorkspaceBinding = { kind: "unbound" } | { kind: "bound"; address: DocumentAddress };
 
-/** Describes the package-open action chosen before mutating bindings. */
-export type PackageOpenAction =
-  | { kind: "hydrate" }
-  | { kind: "resume"; binding: PackageBinding }
-  | { kind: "replace"; binding: PackageBinding }
-  | { kind: "orphan"; binding: PackageBinding }
-  | { kind: "move"; binding: PackageBinding };
+/** Legal native ownership states for the utility workspace host. */
+export type WorkspaceHostState =
+  | { kind: "closed" }
+  | { kind: "preview"; preview: FontSourceSnapshot }
+  | {
+      kind: "document";
+      allocation: WorkspaceAllocation;
+      binding: WorkspaceBinding;
+    };
 
-/** Document and package address settled by a package open. */
-export type PackageOpenResult = {
-  document: DocumentAllocation;
-  address: PackageAddress;
+/** Storage action selected before native document Open performs side effects. */
+export type DocumentOpenAction =
+  | { kind: "create" }
+  | { kind: "resume"; binding: DocumentBinding }
+  | { kind: "move"; binding: DocumentBinding }
+  | { kind: "replace"; binding: DocumentBinding };
+
+/** Workspace allocation and canonical address settled by native document Open. */
+export type DocumentOpenResult = {
+  workspace: WorkspaceAllocation;
+  address: DocumentAddress;
 };

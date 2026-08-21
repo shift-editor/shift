@@ -20,7 +20,7 @@ const CLAP_STYLES: Styles = Styles::styled()
 #[command(
     name = "shift",
     version,
-    about = "Command-line tools for Shift source packages",
+    about = "Command-line tools for Shift documents",
     color = ColorChoice::Auto,
     styles = CLAP_STYLES
 )]
@@ -31,10 +31,10 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
-    /// Inspect a .shift source package without modifying it.
+    /// Inspect a SQLite .shift document without modifying it.
     Inspect(InspectArgs),
 
-    /// Compile a .shift source package to a TrueType font.
+    /// Compile a SQLite .shift document to a TrueType font.
     Compile(CompileArgs),
 
     /// Create a Shift font document.
@@ -106,7 +106,7 @@ pub enum LayerCommand {
 
 #[derive(Debug, Args)]
 pub struct CreateFontArgs {
-    /// Path for the new canonical .shift source package.
+    /// Path for the new canonical SQLite .shift document.
     #[arg(value_hint = ValueHint::FilePath)]
     pub path: PathBuf,
 
@@ -121,7 +121,7 @@ pub struct CreateFontArgs {
 
 #[derive(Debug, Args)]
 pub struct AddAxisArgs {
-    /// Path to the canonical .shift source package.
+    /// Path to the canonical SQLite .shift document.
     #[arg(value_hint = ValueHint::FilePath)]
     pub path: PathBuf,
 
@@ -151,7 +151,7 @@ pub struct AddAxisArgs {
 
 #[derive(Debug, Args)]
 pub struct AddSourceArgs {
-    /// Path to the canonical .shift source package.
+    /// Path to the canonical SQLite .shift document.
     #[arg(value_hint = ValueHint::FilePath)]
     pub path: PathBuf,
 
@@ -191,7 +191,7 @@ pub struct InspectGlyphArgs {
 
 #[derive(Debug, Args)]
 pub struct AddGlyphArgs {
-    /// Path to the canonical .shift source package.
+    /// Path to the canonical SQLite .shift document.
     #[arg(value_hint = ValueHint::FilePath)]
     pub path: PathBuf,
 
@@ -208,7 +208,7 @@ pub struct AddGlyphArgs {
 
 #[derive(Debug, Args)]
 pub struct AddLayerArgs {
-    /// Path to the canonical .shift source package.
+    /// Path to the canonical SQLite .shift document.
     #[arg(value_hint = ValueHint::FilePath)]
     pub path: PathBuf,
 
@@ -230,7 +230,7 @@ pub struct AddLayerArgs {
 
 #[derive(Debug, Args)]
 pub struct CopyLayerArgs {
-    /// Path to the canonical .shift source package.
+    /// Path to the canonical SQLite .shift document.
     #[arg(value_hint = ValueHint::FilePath)]
     pub path: PathBuf,
 
@@ -252,7 +252,7 @@ pub struct CopyLayerArgs {
 
 #[derive(Debug, Args)]
 pub struct MutationArgs {
-    /// Write a new independent package instead of modifying the input.
+    /// Write a new independent document instead of modifying the input.
     #[arg(long, value_hint = ValueHint::FilePath)]
     pub output: Option<PathBuf>,
 
@@ -267,7 +267,7 @@ pub struct MutationArgs {
 
 #[derive(Debug, Parser)]
 pub struct CompileArgs {
-    /// Path to the canonical .shift source package.
+    /// Path to the canonical SQLite .shift document.
     #[arg(value_hint = ValueHint::FilePath)]
     pub path: PathBuf,
 
@@ -278,7 +278,7 @@ pub struct CompileArgs {
 
 #[derive(Debug, Parser)]
 pub struct InspectArgs {
-    /// Path to the .shift source package to inspect.
+    /// Path to the SQLite .shift document to inspect.
     #[arg(value_hint = ValueHint::FilePath)]
     pub path: PathBuf,
 

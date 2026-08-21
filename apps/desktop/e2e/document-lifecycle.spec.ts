@@ -255,7 +255,7 @@ saveAsTest(
 );
 
 copiedDocumentTest(
-  "opening a copied package creates a separate clean document session",
+  "opening a raw copy reuses the live document session",
   async ({ electronApp, page, saveShiftPath, copyShiftPath }) => {
     const originalPage = await createNewFont(page, electronApp);
     await originalPage.getByRole("button", { name: "Create glyph", exact: true }).click();
@@ -263,29 +263,28 @@ copiedDocumentTest(
     await expect.poll(() => fs.existsSync(saveShiftPath)).toBe(true);
     fs.copyFileSync(saveShiftPath, copyShiftPath);
 
-    const copiedWindow = electronApp.waitForEvent("window");
-    await runCommand(originalPage, electronApp, "file.open");
-    const copiedPage = await copiedWindow;
-    await waitForWorkspaceReady(copiedPage);
-
     const originalState = await originalPage.evaluate(async () =>
       window.shift?.font.editCoordinator.state(),
     );
-    const copiedState = await copiedPage.evaluate(async () =>
-      window.shift?.font.editCoordinator.state(),
-    );
-    expect(copiedState?.documentId).not.toBe(originalState?.documentId);
-    expect(copiedState).toMatchObject({ dirty: false });
-    expect(originalState).toMatchObject({ dirty: false });
+    const originalWindowCount = electronApp.windows().length;
+    const sourceSnapshot = fs.readFileSync(saveShiftPath);
+    const copySnapshot = fs.readFileSync(copyShiftPath);
+    expect(copySnapshot).toEqual(sourceSnapshot);
 
-    await copiedPage.getByRole("button", { name: "Create glyph", exact: true }).click();
-    await expect.poll(() => windowTitle(copiedPage, electronApp)).toContain("copied.shift *");
-    expect(await windowTitle(originalPage, electronApp)).toContain("saved.shift -");
+    await runCommand(originalPage, electronApp, "file.open");
+
+    expect(electronApp.windows()).toHaveLength(originalWindowCount);
     expect(
-      await originalPage.evaluate(() =>
-        window.shift?.font.glyphRecords().some((glyph) => glyph.name === "newGlyph.1"),
-      ),
-    ).toBe(false);
+      await originalPage.evaluate(async () => window.shift?.font.editCoordinator.state()),
+    ).toEqual(originalState);
+    expect(await windowTitle(originalPage, electronApp)).toContain("saved.shift -");
+
+    await originalPage.getByRole("button", { name: "Create glyph", exact: true }).click();
+    await expect.poll(() => windowTitle(originalPage, electronApp)).toContain("saved.shift *");
+    await runCommand(originalPage, electronApp, "file.save");
+
+    expect(fs.readFileSync(copyShiftPath)).toEqual(copySnapshot);
+    expect(fs.readFileSync(saveShiftPath)).not.toEqual(sourceSnapshot);
   },
 );
 

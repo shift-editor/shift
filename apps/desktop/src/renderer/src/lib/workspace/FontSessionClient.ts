@@ -425,7 +425,7 @@ export class FontSessionClient {
         this.workspaceCell.set(await channel.call("workspace.snapshot", undefined));
         this.documentStateCell.set(await channel.call("document.state", undefined));
         return;
-      case "imported":
+      case "preview":
         this.sourceCell.set(await channel.call("source.snapshot", undefined));
         return;
     }
