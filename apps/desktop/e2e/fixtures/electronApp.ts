@@ -11,7 +11,7 @@ import fs from "node:fs";
 import os from "node:os";
 import * as path from "path";
 import { once } from "events";
-import type { Unicode } from "@shift/types";
+import type { Axis, NamedInstance, Source, Unicode } from "@shift/types";
 import type { DirtyDocumentChoice } from "../../src/main/document/types";
 import { createAuthoredDocument } from "./fontSource";
 
@@ -67,11 +67,18 @@ type ShiftOptions = {
   dirtyDocumentDelayMs: number;
 };
 
+export interface CanonicalVariableFont {
+  axes: Axis[];
+  sources: Source[];
+  namedInstances: NamedInstance[];
+}
+
 export type RecoveryApp = {
   page: Page;
   documentPath: string;
   crashAndRestart: () => Promise<Page>;
   canonicalGlyphNames: () => string[];
+  canonicalVariableFont: () => CanonicalVariableFont;
 };
 
 /** Base fixture for launcher tests; workspace tests override `startupFontPath`. */
@@ -287,6 +294,7 @@ export const recoveryTest = base.extend<{ recoveryApp: RecoveryApp }>({
           return page;
         },
         canonicalGlyphNames: () => readCanonicalGlyphNames(documentPath, testRoot),
+        canonicalVariableFont: () => readCanonicalVariableFont(documentPath, testRoot),
       });
     } finally {
       if (app) await killApp(app);
@@ -394,6 +402,22 @@ function readCanonicalGlyphNames(documentPath: string, testRoot: string): string
   bridge.openDocument(documentPath, recoveryPath);
   try {
     return bridge.getGlyphs().map((glyph) => glyph.name);
+  } finally {
+    bridge.closeWorkspace();
+    fs.rmSync(recoveryPath, { force: true });
+  }
+}
+
+function readCanonicalVariableFont(documentPath: string, testRoot: string): CanonicalVariableFont {
+  const bridge = createBridge();
+  const recoveryPath = path.join(testRoot, `${crypto.randomUUID()}.recovery.sqlite`);
+  bridge.openDocument(documentPath, recoveryPath);
+  try {
+    return {
+      axes: bridge.getAxes(),
+      sources: bridge.getSources(),
+      namedInstances: bridge.getNamedInstances(),
+    };
   } finally {
     bridge.closeWorkspace();
     fs.rmSync(recoveryPath, { force: true });

@@ -10,7 +10,7 @@
 use std::sync::Arc;
 
 use shift_font::{
-    Axis, AxisMapping, FontMetadata, Glyph, GlyphId, GlyphLayer, GlyphName, LayerId,
+    Axis, AxisId, AxisMapping, FontMetadata, Glyph, GlyphId, GlyphLayer, GlyphName, LayerId,
     MetricDefinition, NamedInstance, Source, SourceId,
 };
 
@@ -25,12 +25,9 @@ struct HistoryPosition(u64);
 pub enum LedgerStep {
     /// Edits to existing layers; pairs replay by substitution.
     Layers(Vec<LayerPair>),
-    /// Glyph existence/identity: created (`pre` None), deleted (`post`
-    /// None), or replaced. Snapshots carry the glyph's layers.
-    Glyph {
-        pre: Option<Glyph>,
-        post: Option<Glyph>,
-    },
+    /// One glyph appended by the entry. Undo pops append steps in reverse
+    /// application order; redo appends them in application order.
+    GlyphAppend { glyph: Glyph },
     /// Complete authored metadata snapshots; font metrics are independent.
     FontMetadata {
         pre: FontMetadata,
@@ -44,6 +41,8 @@ pub enum LedgerStep {
         /// restores them too.
         pre_locations: Vec<(SourceId, f64)>,
     },
+    /// Authored axis order on each side of a topology-changing entry.
+    AxisOrder { pre: Vec<AxisId>, post: Vec<AxisId> },
     AxisMappings {
         pre: Vec<AxisMapping>,
         post: Vec<AxisMapping>,
@@ -65,6 +64,14 @@ pub enum LedgerStep {
     Source {
         pre: Option<Source>,
         post: Option<Source>,
+    },
+    /// Authored source order and default identity on each side of a
+    /// topology-changing entry. Replay applies this after source existence.
+    SourceCollection {
+        pre_order: Vec<SourceId>,
+        post_order: Vec<SourceId>,
+        pre_default_source_id: Option<SourceId>,
+        post_default_source_id: Option<SourceId>,
     },
     /// Independent glyph-layer existence for sparse source authoring.
     GlyphLayer {
@@ -116,11 +123,7 @@ impl LedgerEntry {
                     .iter()
                     .flat_map(|pair| [pair.pre.id(), pair.post.id()])
                     .collect(),
-                LedgerStep::Glyph { pre, post } => pre
-                    .iter()
-                    .chain(post.iter())
-                    .flat_map(|glyph| glyph.layers().keys().cloned())
-                    .collect(),
+                LedgerStep::GlyphAppend { glyph } => glyph.layers().keys().cloned().collect(),
                 LedgerStep::GlyphLayer { pre, post, .. } => pre
                     .iter()
                     .chain(post.iter())
@@ -128,10 +131,12 @@ impl LedgerEntry {
                     .collect(),
                 LedgerStep::FontMetadata { .. }
                 | LedgerStep::Axis { .. }
+                | LedgerStep::AxisOrder { .. }
                 | LedgerStep::AxisMappings { .. }
                 | LedgerStep::MetricDefinitions { .. }
                 | LedgerStep::NamedInstances { .. }
                 | LedgerStep::Source { .. }
+                | LedgerStep::SourceCollection { .. }
                 | LedgerStep::GlyphIdentity { .. } => Vec::new(),
             })
             .collect()

@@ -71,9 +71,15 @@ export const SourcesSettingsPanel = ({ initialSourceId, canAuthor }: SourcesSett
               contentClassName="h-8 text-sm font-normal"
               actions={
                 <SidebarActionButton
-                  label={`Delete ${source.name}`}
+                  label={
+                    source.id === font.defaultSource.id
+                      ? `Cannot delete ${source.name}: default source`
+                      : `Delete ${source.name}`
+                  }
                   className="h-8 hover:bg-icon-button-hover"
-                  disabled={!canAuthor || sources.length === 1}
+                  disabled={
+                    !canAuthor || sources.length === 1 || source.id === font.defaultSource.id
+                  }
                   onClick={(event) => {
                     event.stopPropagation();
                     font.deleteSource(source.id);

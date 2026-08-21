@@ -123,6 +123,9 @@ pub enum CoreError {
     #[error("axis {0} not found")]
     AxisNotFound(AxisId),
 
+    #[error("invalid {kind} order: {message}")]
+    InvalidEntityOrder { kind: &'static str, message: String },
+
     #[error("invalid axis {axis_id}: {message}")]
     InvalidAxis { axis_id: AxisId, message: String },
 
@@ -198,6 +201,9 @@ pub enum CoreError {
 
     #[error("sources {first} and {second} have the same design-space location")]
     DuplicateSourceLocation { first: SourceId, second: SourceId },
+
+    #[error("cannot delete default source {0}")]
+    CannotDeleteDefaultSource(SourceId),
 
     #[error("cannot delete the last source")]
     CannotDeleteLastSource,

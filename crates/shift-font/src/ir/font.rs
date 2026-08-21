@@ -529,6 +529,44 @@ impl Font {
         &self.data().axes
     }
 
+    /// Reorders axes without changing their identities or values.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::InvalidEntityOrder`] unless `order` is an exact
+    /// permutation of the current axis identities.
+    pub fn set_axis_order(&mut self, order: &[AxisId]) -> CoreResult<()> {
+        if order.len() != self.axes().len() {
+            return Err(CoreError::InvalidEntityOrder {
+                kind: "axis",
+                message: format!(
+                    "expected {} identities, got {}",
+                    self.axes().len(),
+                    order.len()
+                ),
+            });
+        }
+
+        let mut remaining = self
+            .axes()
+            .iter()
+            .cloned()
+            .map(|axis| (axis.id(), axis))
+            .collect::<HashMap<_, _>>();
+        let mut reordered = Vec::with_capacity(remaining.len());
+        for axis_id in order {
+            let Some(axis) = remaining.remove(axis_id) else {
+                return Err(CoreError::InvalidEntityOrder {
+                    kind: "axis",
+                    message: format!("identity {axis_id} is unknown or repeated"),
+                });
+            };
+            reordered.push(axis);
+        }
+        self.data_mut().axes = reordered;
+        Ok(())
+    }
+
     /// Adds an axis and extends every existing product with its external default.
     ///
     /// # Errors
@@ -783,6 +821,44 @@ impl Font {
         &self.data().sources
     }
 
+    /// Reorders sources without changing their identities or values.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::InvalidEntityOrder`] unless `order` is an exact
+    /// permutation of the current source identities.
+    pub fn set_source_order(&mut self, order: &[SourceId]) -> CoreResult<()> {
+        if order.len() != self.sources().len() {
+            return Err(CoreError::InvalidEntityOrder {
+                kind: "source",
+                message: format!(
+                    "expected {} identities, got {}",
+                    self.sources().len(),
+                    order.len()
+                ),
+            });
+        }
+
+        let mut remaining = self
+            .sources()
+            .iter()
+            .cloned()
+            .map(|source| (source.id(), source))
+            .collect::<HashMap<_, _>>();
+        let mut reordered = Vec::with_capacity(remaining.len());
+        for source_id in order {
+            let Some(source) = remaining.remove(source_id) else {
+                return Err(CoreError::InvalidEntityOrder {
+                    kind: "source",
+                    message: format!("identity {source_id} is unknown or repeated"),
+                });
+            };
+            reordered.push(source);
+        }
+        self.data_mut().sources = reordered;
+        Ok(())
+    }
+
     pub fn source_mut(&mut self, source_id: SourceId) -> Option<&mut Source> {
         self.data_mut()
             .sources
@@ -830,6 +906,8 @@ impl Font {
 
     /// Removes a source record only; the caller removes the source's glyph
     /// layers first so the layer index never points at a missing source.
+    /// This low-level replay primitive never invents a replacement default;
+    /// authored deletion rejects the default source before reaching it.
     pub fn remove_source(&mut self, source_id: SourceId) -> Option<Source> {
         let data = self.data_mut();
         let index = data
@@ -839,7 +917,7 @@ impl Font {
         let source = data.sources.remove(index);
 
         if data.default_source_id == Some(source_id) {
-            data.default_source_id = data.sources.first().map(Source::id);
+            data.default_source_id = None;
         }
 
         Some(source)
@@ -877,6 +955,11 @@ impl Font {
 
     pub fn glyph(&self, glyph_id: GlyphId) -> Option<&Glyph> {
         self.data().glyphs.get(&glyph_id).map(Arc::as_ref)
+    }
+
+    /// Returns a glyph's authored directory position in constant time.
+    pub fn glyph_order(&self, glyph_id: GlyphId) -> Option<usize> {
+        self.data().glyphs.index_of(&glyph_id)
     }
 
     pub fn glyph_id_by_name(&self, name: &str) -> Option<GlyphId> {
@@ -1016,7 +1099,7 @@ impl Font {
         Ok(())
     }
 
-    pub fn remove_glyph(&mut self, glyph_id: GlyphId) -> Option<Glyph> {
+    fn remove_glyph(&mut self, glyph_id: GlyphId) -> Option<Glyph> {
         let state = self.state_mut();
         let glyph = state
             .data
@@ -1025,6 +1108,34 @@ impl Font {
             .map(Arc::unwrap_or_clone)?;
         state.index.remove_glyph(glyph_id, &glyph);
         Some(glyph)
+    }
+
+    /// Removes `glyph_id` only when it is the directory's current tail.
+    ///
+    /// Workspace undo uses this operation to reverse append-only glyph
+    /// creation without reindexing a CJK-scale directory.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::GlyphNotFound`] for an empty directory and
+    /// [`CoreError::InvalidEntityOrder`] when `glyph_id` is not the tail.
+    pub fn pop_glyph(&mut self, glyph_id: GlyphId) -> CoreResult<Glyph> {
+        let Some((tail_id, _)) = self
+            .data()
+            .glyphs
+            .get_index(self.data().glyphs.len().saturating_sub(1))
+        else {
+            return Err(CoreError::GlyphNotFound(glyph_id));
+        };
+        if tail_id != &glyph_id {
+            return Err(CoreError::InvalidEntityOrder {
+                kind: "glyph",
+                message: format!("identity {glyph_id} is not the directory tail"),
+            });
+        }
+
+        self.remove_glyph(glyph_id.clone())
+            .ok_or(CoreError::GlyphNotFound(glyph_id))
     }
 
     pub fn glyph_count(&self) -> usize {
@@ -2019,19 +2130,108 @@ mod tests {
     }
 
     #[test]
-    fn font_remove_insert_glyph() {
+    fn axis_and_source_order_require_exact_identity_permutations() {
+        let mut font = Font::new();
+        font.clear_sources();
+
+        let source_a = SourceId::from_raw("a");
+        let source_b = SourceId::from_raw("b");
+        let source_c = SourceId::from_raw("c");
+        for (source_id, name) in [
+            (source_a.clone(), "A"),
+            (source_b.clone(), "B"),
+            (source_c.clone(), "C"),
+        ] {
+            font.add_source(Source::with_id(
+                source_id,
+                name.to_string(),
+                DesignLocation::new(),
+                None,
+            ));
+        }
+
+        font.set_source_order(&[source_c.clone(), source_a.clone(), source_b.clone()])
+            .unwrap();
+        assert_eq!(
+            font.sources().iter().map(Source::id).collect::<Vec<_>>(),
+            [source_c.clone(), source_a.clone(), source_b.clone()]
+        );
+        let reordered_sources = font.clone();
+        for invalid in [
+            vec![source_a.clone(), source_b.clone()],
+            vec![source_a.clone(), source_a.clone(), source_c.clone()],
+            vec![source_a.clone(), source_b.clone(), SourceId::from_raw("d")],
+        ] {
+            assert!(matches!(
+                font.set_source_order(&invalid),
+                Err(CoreError::InvalidEntityOrder { kind: "source", .. })
+            ));
+            assert_eq!(font, reordered_sources);
+        }
+
+        let axis_a = AxisId::from_raw("a");
+        let axis_b = AxisId::from_raw("b");
+        let axis_c = AxisId::from_raw("c");
+        for (axis_id, tag, name) in [
+            (axis_a.clone(), "AAAA", "A"),
+            (axis_b.clone(), "BBBB", "B"),
+            (axis_c.clone(), "CCCC", "C"),
+        ] {
+            font.add_axis(Axis::with_id(
+                axis_id,
+                tag.to_string(),
+                name.to_string(),
+                0.0,
+                0.0,
+                1.0,
+            ))
+            .unwrap();
+        }
+
+        font.set_axis_order(&[axis_c.clone(), axis_a.clone(), axis_b.clone()])
+            .unwrap();
+        assert_eq!(
+            font.axes().iter().map(Axis::id).collect::<Vec<_>>(),
+            [axis_c.clone(), axis_a.clone(), axis_b.clone()]
+        );
+        let reordered_axes = font.clone();
+        for invalid in [
+            vec![axis_a.clone(), axis_b.clone()],
+            vec![axis_a.clone(), axis_a.clone(), axis_c.clone()],
+            vec![axis_a.clone(), axis_b.clone(), AxisId::from_raw("d")],
+        ] {
+            assert!(matches!(
+                font.set_axis_order(&invalid),
+                Err(CoreError::InvalidEntityOrder { kind: "axis", .. })
+            ));
+            assert_eq!(font, reordered_axes);
+        }
+    }
+
+    #[test]
+    fn font_pop_insert_glyph() {
         let mut font = Font::new();
         let glyph = Glyph::with_unicode("A".to_string(), 65);
         let glyph_id = font.insert_glyph(glyph).unwrap();
 
-        let taken = font.remove_glyph(glyph_id.clone());
-        assert!(taken.is_some());
+        let taken = font.pop_glyph(glyph_id.clone()).unwrap();
         assert_eq!(font.glyph_count(), 0);
         assert_eq!(font.glyph_id_by_name("A"), None);
 
-        font.insert_glyph(taken.unwrap()).unwrap();
+        font.insert_glyph(taken).unwrap();
         assert_eq!(font.glyph_count(), 1);
         assert_eq!(font.glyph_id_by_name("A"), Some(glyph_id.clone()));
+        assert_eq!(font.glyph_order(glyph_id.clone()), Some(0));
+
+        let second_id = font.insert_glyph(Glyph::new("B")).unwrap();
+        let before_invalid_pop = font.clone();
+        assert!(matches!(
+            font.pop_glyph(glyph_id.clone()),
+            Err(CoreError::InvalidEntityOrder { kind: "glyph", .. })
+        ));
+        assert_eq!(font, before_invalid_pop);
+        assert_eq!(font.pop_glyph(second_id.clone()).unwrap().id(), second_id);
+        assert_eq!(font.glyph_order(glyph_id), Some(0));
     }
 
     #[test]
