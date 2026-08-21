@@ -60,6 +60,44 @@ async function canvasPointCount(page: Page): Promise<number> {
   });
 }
 
+launcherTest("application menu exposes native shell actions", async ({ electronApp, page }) => {
+  await expect.poll(() => applicationMenuItemEnabled(page, electronApp, "window.close")).toBe(true);
+
+  const menu = await electronApp.evaluate(({ app, Menu }) => ({
+    packaged: app.isPackaged,
+    platform: process.platform,
+    topLevelLabels: Menu.getApplicationMenu()?.items.map((item) => item.label) ?? [],
+    roles:
+      Menu.getApplicationMenu()?.items.flatMap(
+        (item) =>
+          item.submenu?.items.map((child) => child.role?.toLowerCase()).filter(Boolean) ?? [],
+      ) ?? [],
+    viewLabels:
+      Menu.getApplicationMenu()
+        ?.items.find((item) => item.label === "View")
+        ?.submenu?.items.map((item) => item.label) ?? [],
+  }));
+
+  if (menu.platform === "darwin") {
+    expect(menu.topLevelLabels).toContain("Window");
+    expect(menu.roles).toEqual(
+      expect.arrayContaining([
+        "services",
+        "hide",
+        "hideothers",
+        "unhide",
+        "minimize",
+        "zoom",
+        "front",
+      ]),
+    );
+  } else {
+    expect(menu.roles).toContain("quit");
+  }
+
+  expect(menu.viewLabels.includes("Developer")).toBe(!menu.packaged && menu.platform === "darwin");
+});
+
 launcherTest(
   "application menu disables document commands on the launcher",
   async ({ electronApp, page }) => {
