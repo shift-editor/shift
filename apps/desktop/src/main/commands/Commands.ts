@@ -104,7 +104,56 @@ const fileCommands: Command[] = [
     run: (ctx) => ctx.document.exportTtf(),
   },
 ];
-const editCommands: Command[] = [];
+const editCommands: Command[] = [
+  {
+    id: "edit.undo",
+    label: "Undo",
+    accelerator: "CmdOrCtrl+Z",
+    enabled: (ctx) => ctx.document.hasWorkspace(),
+    run: (ctx) => ctx.renderer.run("edit.undo"),
+  },
+  {
+    id: "edit.redo",
+    label: "Redo",
+    accelerator: "CmdOrCtrl+Shift+Z",
+    enabled: (ctx) => ctx.document.hasWorkspace(),
+    run: (ctx) => ctx.renderer.run("edit.redo"),
+  },
+  {
+    id: "edit.cut",
+    label: "Cut",
+    accelerator: "CmdOrCtrl+X",
+    enabled: (ctx) => ctx.document.hasWorkspace(),
+    run: (ctx) => ctx.renderer.run("edit.cut"),
+  },
+  {
+    id: "edit.copy",
+    label: "Copy",
+    accelerator: "CmdOrCtrl+C",
+    enabled: (ctx) => ctx.document.hasWorkspace(),
+    run: (ctx) => ctx.renderer.run("edit.copy"),
+  },
+  {
+    id: "edit.paste",
+    label: "Paste",
+    accelerator: "CmdOrCtrl+V",
+    enabled: (ctx) => ctx.document.hasWorkspace(),
+    run: (ctx) => ctx.renderer.run("edit.paste"),
+  },
+  {
+    id: "edit.deleteSelection",
+    label: "Delete",
+    enabled: (ctx) => ctx.document.hasWorkspace(),
+    run: (ctx) => ctx.renderer.run("edit.deleteSelection"),
+  },
+  {
+    id: "edit.selectAll",
+    label: "Select All",
+    accelerator: "CmdOrCtrl+A",
+    enabled: (ctx) => ctx.document.hasWorkspace(),
+    run: (ctx) => ctx.renderer.run("edit.selectAll"),
+  },
+];
 
 const glyphCommands: Command[] = [
   {

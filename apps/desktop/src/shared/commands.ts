@@ -12,6 +12,13 @@ export type CommandId =
   | "file.save"
   | "file.saveAs"
   | "file.exportTtf"
+  | "edit.undo"
+  | "edit.redo"
+  | "edit.cut"
+  | "edit.copy"
+  | "edit.paste"
+  | "edit.deleteSelection"
+  | "edit.selectAll"
   | "glyph.reverseSelectedContour"
   | "window.close"
   | "window.minimise"
@@ -27,4 +34,12 @@ export type CommandId =
  * Main owns native menu routing; renderer owns selection interpretation and
  * editor mutation.
  */
-export type RendererCommandId = "glyph.reverseSelectedContour";
+export type RendererCommandId =
+  | "edit.undo"
+  | "edit.redo"
+  | "edit.cut"
+  | "edit.copy"
+  | "edit.paste"
+  | "edit.deleteSelection"
+  | "edit.selectAll"
+  | "glyph.reverseSelectedContour";

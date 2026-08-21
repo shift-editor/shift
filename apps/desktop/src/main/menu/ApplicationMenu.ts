@@ -1,6 +1,7 @@
 import { app, Menu, type MenuItemConstructorOptions } from "electron";
 import type { CommandId } from "../../shared/commands";
 import { commandMenuItem, fileMenuItems } from "./menuItems";
+import { commands } from "../commands/Commands";
 import { shiftProductVersion } from "../release";
 
 const isMac = process.platform === "darwin";
@@ -16,16 +17,34 @@ const isMac = process.platform === "darwin";
 export class ApplicationMenu {
   readonly #aboutIconPath: string;
   readonly #runCommand: (id: CommandId) => void;
+  readonly #isCommandEnabled: (id: CommandId) => boolean;
+  #menu: Menu | null = null;
 
-  constructor(aboutIconPath: string, runCommand: (id: CommandId) => void) {
+  constructor(
+    aboutIconPath: string,
+    runCommand: (id: CommandId) => void,
+    isCommandEnabled: (id: CommandId) => boolean,
+  ) {
     this.#aboutIconPath = aboutIconPath;
     this.#runCommand = runCommand;
+    this.#isCommandEnabled = isCommandEnabled;
   }
 
   /** Installs the current menu template as Electron's application menu. */
   install(): void {
     this.configureAboutPanel();
-    Menu.setApplicationMenu(this.build());
+    this.#menu = this.build();
+    Menu.setApplicationMenu(this.#menu);
+  }
+
+  /** Re-evaluates command capabilities against the active window and session. */
+  updateCommandStates(): void {
+    if (!this.#menu) return;
+
+    for (const command of commands) {
+      const item = this.#menu.getMenuItemById(command.id);
+      if (item) item.enabled = this.#isCommandEnabled(command.id);
+    }
   }
 
   /** Configures the native About panel opened by Electron's `about` role. */
@@ -135,20 +154,20 @@ export class ApplicationMenu {
   }
 
   #fileItems(): MenuItemConstructorOptions[] {
-    return fileMenuItems(this.#runCommand);
+    return fileMenuItems(this.#runCommand, this.#isCommandEnabled);
   }
 
   #editItems(): MenuItemConstructorOptions[] {
     return [
-      { role: "undo" },
-      { role: "redo" },
+      this.#commandItem("edit.undo"),
+      this.#commandItem("edit.redo"),
       { type: "separator" },
-      { role: "cut" },
-      { role: "copy" },
-      { role: "paste" },
-      { role: "delete" },
+      this.#commandItem("edit.cut"),
+      this.#commandItem("edit.copy"),
+      this.#commandItem("edit.paste"),
+      this.#commandItem("edit.deleteSelection"),
       { type: "separator" },
-      { role: "selectAll" },
+      this.#commandItem("edit.selectAll"),
     ];
   }
 
@@ -158,6 +177,6 @@ export class ApplicationMenu {
 
   /** Builds a menu item from the command registry's metadata. */
   #commandItem(id: CommandId): MenuItemConstructorOptions {
-    return commandMenuItem(id, this.#runCommand);
+    return commandMenuItem(id, this.#runCommand, this.#isCommandEnabled);
   }
 }
