@@ -723,7 +723,7 @@ export interface PointSeed {
   smooth: boolean
 }
 
-export type PointType = "onCurve" | "offCurve";
+export type PointType = "onCurve" | "offCurve" | "qCurve";
 
 export interface RemoveAnchorsIntent {
   layerId: LayerId
