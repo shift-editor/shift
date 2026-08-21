@@ -1,0 +1,21 @@
+{
+glyphname = A;
+layers = (
+{
+layerId = MASTER1;
+paths = (
+{
+closed = 1;
+nodes = (
+"0 0 LINE",
+"100 0 LINE",
+"100 100 LINE",
+"0 100 LINE"
+);
+}
+);
+width = 600;
+}
+);
+unicode = 0041;
+}

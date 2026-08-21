@@ -18,6 +18,26 @@ import { createAuthoredDocument } from "./fontSource";
 const APP_ROOT = path.resolve(__dirname, "../..");
 export const MAIN_JS = path.join(APP_ROOT, ".vite/build/main.js");
 export const FONT_PATH = path.resolve(APP_ROOT, "../../fixtures/fonts/mutatorsans/MutatorSans.ttf");
+export const OTF_FONT_PATH = path.resolve(
+  APP_ROOT,
+  "../../fixtures/fonts/mutatorsans/MutatorSans.otf",
+);
+export const UFO_FONT_PATH = path.resolve(
+  APP_ROOT,
+  "../../fixtures/fonts/mutatorsans/MutatorSansLightCondensed.ufo",
+);
+export const DESIGNSPACE_FONT_PATH = path.resolve(
+  APP_ROOT,
+  "../../fixtures/fonts/mutatorsans-variable/MutatorSans.designspace",
+);
+export const GLYPHS_FONT_PATH = path.resolve(
+  APP_ROOT,
+  "../../fixtures/fonts/MutatorSansVariable.glyphs",
+);
+export const GLYPHSPACKAGE_FONT_PATH = path.resolve(
+  APP_ROOT,
+  "../../fixtures/fonts/PackageFont.glyphspackage",
+);
 
 /** Fixed window size for deterministic snapshots. */
 const WINDOW_WIDTH = 1200;

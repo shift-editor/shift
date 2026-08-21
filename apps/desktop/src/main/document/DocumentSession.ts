@@ -226,7 +226,10 @@ export class DocumentSession {
   }
 
   async #saveToNewPath(state: WorkspaceDocumentState): Promise<WorkspaceDocumentState | null> {
-    const savePath = await this.#nativeDialogs.saveShiftDocument(this.#dialogWindow(), state);
+    const savePath = await this.#nativeDialogs.saveShiftDocument(
+      this.#dialogWindow(),
+      state.saveTarget,
+    );
     if (!savePath) {
       this.#log.info("save as canceled", { saveTarget: state.saveTarget });
       return null;

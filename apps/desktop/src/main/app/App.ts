@@ -25,6 +25,7 @@ import type { NativeDialogs } from "../dialogs/NativeDialogs";
 import { electronNativeDialogs } from "../dialogs/electronNativeDialogs";
 import { shiftProductName } from "../release";
 import { AppUpdater } from "../update/AppUpdater";
+import { isConvertiblePreviewPath } from "../../shared/workspace/previewConversion";
 
 const SLUG_ATLAS_PROFILING_ENABLED =
   process.env.SHIFT_PROFILE_SLUG_ATLAS !== undefined &&
@@ -48,6 +49,7 @@ export class App {
   #windows = new WindowManager();
   #workspaces: WorkspaceManager;
   #documentsRoot: string | null = null;
+  #previewConversions = new Map<string, Promise<void>>();
 
   #appIcon = new AppIcon();
   #applicationMenu = new ApplicationMenu(this.#appIcon.path(), (id) => {
@@ -316,12 +318,25 @@ export class App {
 
           await this.#openWorkspaceFromWindow(window);
         },
+        canSave: () =>
+          document !== null ||
+          (session?.mode === "preview" &&
+            session.sourcePath !== null &&
+            isConvertiblePreviewPath(session.sourcePath)),
         hasWorkspace: () => document !== null,
         save: async () => {
-          await document?.save();
+          if (document) {
+            await document.save();
+          } else if (window && session?.mode === "preview") {
+            await this.#savePreviewAsDocument(window, session);
+          }
         },
         saveAs: async () => {
-          await document?.saveAs();
+          if (document) {
+            await document.saveAs();
+          } else if (window && session?.mode === "preview") {
+            await this.#savePreviewAsDocument(window, session);
+          }
         },
         exportTtf: async () => {
           await document?.exportTtf();
@@ -338,6 +353,55 @@ export class App {
         },
       },
     };
+  }
+
+  async #savePreviewAsDocument(window: Window, preview: FontSessionHost): Promise<void> {
+    const existing = this.#previewConversions.get(preview.sessionId);
+    if (existing) return existing;
+
+    const converting = (async () => {
+      const sourcePath = preview.sourcePath;
+      if (!sourcePath || !isConvertiblePreviewPath(sourcePath)) return;
+
+      const parsedSourcePath = path.parse(sourcePath);
+      const suggestedPath = path.join(parsedSourcePath.dir, `${parsedSourcePath.name}.shift`);
+      const documentPath = await this.#nativeDialogs.saveShiftDocument(window, suggestedPath);
+      if (!documentPath) return;
+
+      let authored: FontSessionHost;
+      try {
+        authored = await this.#workspaces.createDocumentFromPreview(sourcePath, documentPath);
+      } catch (error) {
+        await this.#nativeDialogs.showSaveFailure(window, this.applicationName, error);
+        throw error;
+      }
+
+      if (this.#workspaces.getForBrowserWindow(window.window) !== preview) {
+        this.#workspaces.unregister(authored.workspaceId);
+        return;
+      }
+
+      this.#workspaces.detachWindow(window);
+      try {
+        this.#workspaces.attachWindow(authored.workspaceId, window);
+      } catch (error) {
+        this.#workspaces.attachWindow(preview.workspaceId, window);
+        this.#workspaces.unregister(authored.workspaceId);
+        throw error;
+      }
+
+      if (preview.windows.size === 0) this.#workspaces.unregister(preview.workspaceId);
+      window.window.webContents.reload();
+    })();
+
+    this.#previewConversions.set(preview.sessionId, converting);
+    try {
+      await converting;
+    } finally {
+      if (this.#previewConversions.get(preview.sessionId) === converting) {
+        this.#previewConversions.delete(preview.sessionId);
+      }
+    }
   }
 
   async #createWorkspaceFromWindow(opener: Window): Promise<void> {
