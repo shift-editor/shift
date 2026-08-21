@@ -30,7 +30,7 @@ export const electronNativeDialogs: NativeDialogs = {
         { name: "Glyphs", extensions: ["glyphs", "glyphspackage"] },
         { name: "UFO/Designspace", extensions: ["ufo", "designspace"] },
       ],
-      properties: process.platform === "darwin" ? ["openFile", "openDirectory"] : ["openFile"],
+      properties: ["openFile", "openDirectory"],
     };
     const result = window
       ? await dialog.showOpenDialog(window.window, options)
