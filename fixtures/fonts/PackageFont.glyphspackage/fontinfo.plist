@@ -1,0 +1,13 @@
+{
+familyName = "Package Font";
+unitsPerEm = 1000;
+fontMaster = (
+{
+ascender = 800;
+capHeight = 700;
+descender = -200;
+id = MASTER1;
+xHeight = 500;
+}
+);
+}

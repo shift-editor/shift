@@ -2,10 +2,13 @@ import fs from "node:fs";
 import path from "node:path";
 import type { ElectronApplication, Page } from "@playwright/test";
 import {
+  DESIGNSPACE_FONT_PATH,
   documentTest as test,
   documentWorkspaceTest as workspaceTest,
   expect,
   FONT_PATH,
+  GLYPHS_FONT_PATH,
+  GLYPHSPACKAGE_FONT_PATH,
   OTF_FONT_PATH,
   UFO_FONT_PATH,
   waitForWorkspaceReady,
@@ -91,6 +94,10 @@ async function openSelectedPreview(page: Page, electronApp: ElectronApplication)
 }
 
 function sourceTreeSnapshot(rootPath: string): [string, string][] {
+  if (fs.statSync(rootPath).isFile()) {
+    return [[path.basename(rootPath), fs.readFileSync(rootPath, "base64")]];
+  }
+
   const snapshot: [string, string][] = [];
   const visit = (directoryPath: string) => {
     for (const entry of fs
@@ -185,6 +192,46 @@ convertiblePreviewTest(
     }
   },
 );
+
+for (const { format, sourcePath, sourceRoot } of [
+  {
+    format: "Designspace",
+    sourcePath: DESIGNSPACE_FONT_PATH,
+    sourceRoot: path.dirname(DESIGNSPACE_FONT_PATH),
+  },
+  { format: "Glyphs", sourcePath: GLYPHS_FONT_PATH, sourceRoot: GLYPHS_FONT_PATH },
+  {
+    format: "Glyphspackage",
+    sourcePath: GLYPHSPACKAGE_FONT_PATH,
+    sourceRoot: GLYPHSPACKAGE_FONT_PATH,
+  },
+]) {
+  const formatConversionTest = test.extend({
+    openFontPath: [sourcePath, { option: true }],
+  });
+
+  formatConversionTest(
+    `Save As converts a ${format} preview without changing its source`,
+    async ({ electronApp, page, saveShiftPath }) => {
+      const sourceBefore = sourceTreeSnapshot(sourceRoot);
+      const workspacePage = await openSelectedPreview(page, electronApp);
+
+      await workspacePage.evaluate(() => {
+        void window.shiftHost?.commands.run("file.saveAs");
+      });
+      await waitForWorkspaceReady(workspacePage);
+      await expect
+        .poll(() => workspacePage.evaluate(() => window.shiftSession?.mode))
+        .toBe("authored");
+
+      expect(fs.existsSync(saveShiftPath)).toBe(true);
+      expect(
+        await workspacePage.evaluate(() => window.shift?.font.glyphRecords().length ?? 0),
+      ).toBeGreaterThan(0);
+      expect(sourceTreeSnapshot(sourceRoot)).toEqual(sourceBefore);
+    },
+  );
+}
 
 cancelPreviewSaveTest(
   "canceling preview Save leaves the source in preview mode",
