@@ -1,4 +1,5 @@
 import type { FontSessionMode } from "@shared/workspace/protocol";
+import { isConvertiblePreviewPath } from "@shared/workspace/previewConversion";
 import type { Editor } from "@/lib/editor/Editor";
 import type { Font } from "@/lib/model/Font";
 import type { GlyphCatalog } from "@/lib/catalog/GlyphCatalog";
@@ -10,6 +11,8 @@ export class FontSession {
   readonly mode: FontSessionMode;
   /** Whether this immutable session permits durable authoring operations. */
   readonly canAuthor: boolean;
+  /** Whether this preview can be saved as a canonical Shift document. */
+  readonly canConvert: boolean;
   readonly catalog: GlyphCatalog;
   readonly workspace: Workspace | null;
   readonly font: Font;
@@ -26,6 +29,7 @@ export class FontSession {
   ) {
     this.mode = mode;
     this.canAuthor = mode === "authored";
+    this.canConvert = isConvertiblePreviewPath(client.sourceCell.peek()?.canonicalPath ?? "");
     this.catalog = catalog;
     this.workspace = workspace;
     this.font = font;
