@@ -16,10 +16,10 @@ export interface NativeDialogs {
    * Selects an independent `.shift` destination.
    *
    * @param window - native window that should own the choice.
-   * @param state - settled document state used to suggest the current target.
+   * @param suggestedPath - current document target or source-derived `.shift` suggestion.
    * @returns the selected path, or null when the user cancels.
    */
-  saveShiftDocument(window: Window | null, state: WorkspaceDocumentState): Promise<string | null>;
+  saveShiftDocument(window: Window | null, suggestedPath: string | null): Promise<string | null>;
 
   /**
    * Selects a TrueType export destination.

@@ -1,10 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
+import type { ElectronApplication, Page } from "@playwright/test";
 import {
   documentTest as test,
   documentWorkspaceTest as workspaceTest,
   expect,
   FONT_PATH,
+  OTF_FONT_PATH,
+  UFO_FONT_PATH,
   waitForWorkspaceReady,
 } from "./fixtures/electronApp";
 import {
@@ -57,23 +60,172 @@ const failedExportTest = workspaceTest.extend({
     await use(path.join(nonDirectory, "exported.ttf"));
   },
 });
+const convertiblePreviewTest = test.extend({
+  openFontPath: [UFO_FONT_PATH, { option: true }],
+});
+const cancelPreviewSaveTest = convertiblePreviewTest.extend({
+  saveShiftPath: async ({}, use) => {
+    await use("");
+  },
+});
+const failedPreviewSaveTest = convertiblePreviewTest.extend({
+  saveShiftPath: async ({ testRoot }, use) => {
+    const nonDirectory = path.join(testRoot, "not-a-directory");
+    fs.writeFileSync(nonDirectory, "blocked");
+    await use(path.join(nonDirectory, "converted.shift"));
+  },
+});
+const otfPreviewTest = test.extend({
+  openFontPath: [OTF_FONT_PATH, { option: true }],
+});
+
+async function openSelectedPreview(page: Page, electronApp: ElectronApplication): Promise<Page> {
+  const workspaceWindow = electronApp.waitForEvent("window");
+  await page.getByRole("button", { name: /Load font/ }).click();
+
+  const workspacePage = await workspaceWindow;
+  await workspacePage.waitForURL(/#\/home$/);
+  await expect(workspacePage.getByLabel("Glyph catalog", { exact: true })).toBeVisible();
+  await expect.poll(() => workspacePage.evaluate(() => window.shiftSession?.mode)).toBe("preview");
+  return workspacePage;
+}
+
+function sourceTreeSnapshot(rootPath: string): [string, string][] {
+  const snapshot: [string, string][] = [];
+  const visit = (directoryPath: string) => {
+    for (const entry of fs
+      .readdirSync(directoryPath, { withFileTypes: true })
+      .sort((left, right) => left.name.localeCompare(right.name))) {
+      const entryPath = path.join(directoryPath, entry.name);
+      if (entry.isDirectory()) {
+        visit(entryPath);
+      } else if (entry.isFile()) {
+        snapshot.push([path.relative(rootPath, entryPath), fs.readFileSync(entryPath, "base64")]);
+      }
+    }
+  };
+  visit(rootPath);
+  return snapshot;
+}
 
 test.describe("opening a font through the application shell", () => {
   test.use({ openFontPath: FONT_PATH });
 
   test("opens a selected font through the launcher", async ({ electronApp, page }) => {
-    const workspaceWindow = electronApp.waitForEvent("window");
-
-    await page.getByRole("button", { name: /Load font/ }).click();
-
-    const workspacePage = await workspaceWindow;
-    await workspacePage.waitForURL(/#\/home$/);
-    await expect(workspacePage.getByLabel("Glyph catalog", { exact: true })).toBeVisible();
+    const workspacePage = await openSelectedPreview(page, electronApp);
 
     await workspacePage.getByRole("button", { name: "Create glyph", exact: true }).click();
     await expect(workspacePage.getByRole("dialog", { name: "Read-only preview" })).toBeVisible();
   });
+
+  test("does not convert a TTF preview through Save", async ({
+    electronApp,
+    page,
+    saveShiftPath,
+  }) => {
+    const workspacePage = await openSelectedPreview(page, electronApp);
+
+    await runCommand(workspacePage, electronApp, "file.save");
+
+    expect(await workspacePage.evaluate(() => window.shiftSession?.mode)).toBe("preview");
+    expect(fs.existsSync(saveShiftPath)).toBe(false);
+  });
 });
+
+otfPreviewTest(
+  "does not convert an OTF preview through Save",
+  async ({ electronApp, page, saveShiftPath }) => {
+    const workspacePage = await openSelectedPreview(page, electronApp);
+
+    await runCommand(workspacePage, electronApp, "file.save");
+
+    expect(await workspacePage.evaluate(() => window.shiftSession?.mode)).toBe("preview");
+    expect(fs.existsSync(saveShiftPath)).toBe(false);
+  },
+);
+
+convertiblePreviewTest(
+  "Save converts a preview to an editable Shift document that reopens",
+  async ({ electronApp, page, saveShiftPath, testRoot }) => {
+    const sourceBefore = sourceTreeSnapshot(UFO_FONT_PATH);
+    const workspacePage = await openSelectedPreview(page, electronApp);
+
+    await workspacePage.evaluate(() => {
+      void window.shiftHost?.commands.run("file.save");
+    });
+    await waitForWorkspaceReady(workspacePage);
+    await expect
+      .poll(() => workspacePage.evaluate(() => window.shiftSession?.mode))
+      .toBe("authored");
+
+    expect(fs.existsSync(saveShiftPath)).toBe(true);
+    expect(sourceTreeSnapshot(UFO_FONT_PATH)).toEqual(sourceBefore);
+    await workspacePage.getByRole("button", { name: "Create glyph", exact: true }).click();
+    await expect.poll(() => windowTitle(workspacePage, electronApp)).toContain("saved.shift *");
+    await runCommand(workspacePage, electronApp, "file.save");
+    expect(sourceTreeSnapshot(UFO_FONT_PATH)).toEqual(sourceBefore);
+
+    await quitApp(electronApp);
+    const relaunchedApp = await relaunchApp(testRoot, saveShiftPath);
+    try {
+      const launcherPage = await relaunchedApp.firstWindow();
+      await launcherPage.waitForURL(/#\/launcher$/);
+      const reopenedWindow = relaunchedApp.waitForEvent("window");
+      await launcherPage.getByRole("button", { name: /Load font/ }).click();
+      const reopenedPage = await reopenedWindow;
+      await waitForWorkspaceReady(reopenedPage);
+
+      expect(
+        await reopenedPage.evaluate(() =>
+          window.shift?.font.glyphRecords().some((glyph) => glyph.name === "newGlyph"),
+        ),
+      ).toBe(true);
+    } finally {
+      await killApp(relaunchedApp);
+    }
+  },
+);
+
+cancelPreviewSaveTest(
+  "canceling preview Save leaves the source in preview mode",
+  async ({ electronApp, page, testRoot }) => {
+    const workspacePage = await openSelectedPreview(page, electronApp);
+
+    await runCommand(workspacePage, electronApp, "file.save");
+
+    expect(await workspacePage.evaluate(() => window.shiftSession?.mode)).toBe("preview");
+    expect(findShiftDocuments(testRoot)).toEqual([]);
+  },
+);
+
+failedPreviewSaveTest(
+  "failed preview Save preserves the preview and removes conversion state",
+  async ({ electronApp, page, saveShiftPath, testRoot }) => {
+    const workspacePage = await openSelectedPreview(page, electronApp);
+
+    await expect(runCommand(workspacePage, electronApp, "file.save")).rejects.toThrow();
+
+    expect(await workspacePage.evaluate(() => window.shiftSession?.mode)).toBe("preview");
+    expect(fs.existsSync(saveShiftPath)).toBe(false);
+    const workspacesRoot = path.join(testRoot, "user-data", "working-documents", "workspaces");
+    expect(fs.existsSync(workspacesRoot) ? fs.readdirSync(workspacesRoot) : []).toEqual([]);
+  },
+);
+
+function findShiftDocuments(rootPath: string): string[] {
+  const documents: string[] = [];
+  const visit = (entryPath: string) => {
+    if (!fs.existsSync(entryPath)) return;
+    const stat = fs.statSync(entryPath);
+    if (stat.isDirectory()) {
+      for (const entry of fs.readdirSync(entryPath)) visit(path.join(entryPath, entry));
+    } else if (entryPath.endsWith(".shift")) {
+      documents.push(entryPath);
+    }
+  };
+  visit(rootPath);
+  return documents;
+}
 
 test.describe("document lifecycle through the application shell", () => {
   test("first Save writes an independent shift document that reopens", async ({

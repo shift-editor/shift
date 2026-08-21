@@ -41,10 +41,10 @@ export const electronNativeDialogs: NativeDialogs = {
     return result.filePaths[0];
   },
 
-  async saveShiftDocument(window, state) {
+  async saveShiftDocument(window, suggestedPath) {
     const options: SaveDialogOptions = {
       title: "Save Shift Document",
-      defaultPath: state.saveTarget ?? undefined,
+      defaultPath: suggestedPath ?? undefined,
       filters: [{ name: "Shift Document", extensions: ["shift"] }],
       properties: ["createDirectory", "showOverwriteConfirmation"],
     };
