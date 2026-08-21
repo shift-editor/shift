@@ -10,6 +10,7 @@ import type {
 import { WorkspaceProcess } from "./WorkspaceProcess";
 import { FontSessionHost, type FontSessionId } from "./FontSessionHost";
 import { DocumentSessionIndex } from "./DocumentSessionIndex";
+import { isConvertiblePreviewPath } from "../../shared/workspace/previewConversion";
 
 /** Provides app-owned values required when a workspace session is created. */
 export interface WorkspaceManagerOptions {
@@ -54,6 +55,20 @@ export class WorkspaceManager {
    */
   async createUntitled(): Promise<FontSessionHost> {
     return this.#createSession((workspaceProcess) => workspaceProcess.createWorkspace());
+  }
+
+  /** Fully imports a convertible preview and publishes a new canonical document. */
+  async createDocumentFromPreview(
+    sourcePath: string,
+    documentPath: string,
+  ): Promise<FontSessionHost> {
+    if (!isConvertiblePreviewPath(sourcePath)) {
+      throw new Error(`Preview source cannot become a Shift document: ${sourcePath}`);
+    }
+
+    return this.#createSession((workspaceProcess) =>
+      workspaceProcess.createDocumentFromSource(sourcePath, documentPath),
+    );
   }
 
   /**
@@ -303,6 +318,7 @@ export class WorkspaceManager {
       const session = new FontSessionHost({
         mode: "preview",
         sessionId: state.sessionId,
+        sourcePath: state.canonicalPath,
         workspaceProcess,
       });
       this.register(session);

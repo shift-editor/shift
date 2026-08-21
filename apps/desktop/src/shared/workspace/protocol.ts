@@ -151,13 +151,19 @@ export type WorkspaceExportResult = {
  * @remarks
  * `workspace.connect` carries the renderer's sync-lane port as a transferred
  * port, not as payload. Create/open return document lifecycle state only; font
- * records stay on the sync lane. Save is NOT here: it rides the sync lane as a
- * committed operation so FIFO orders it behind edits (see `workspace.save`).
- * Main reads `document.state` to decide Save vs Save As and learns save
- * outcomes from the `document.changed` event.
+ * records stay on the sync lane. Authored Save is NOT here: it rides the sync
+ * lane so FIFO orders it behind edits (see `workspace.save`). Preview conversion
+ * is the exception because a preview has no authored renderer lane or edits;
+ * `workspace.createFromSource` atomically creates its first canonical document.
+ * Main reads `document.state` to decide Save vs Save As and learns save outcomes
+ * from the `document.changed` event.
  */
 export type ShellCallMap = {
   "workspace.create": { request: void; response: WorkspaceDocumentState };
+  "workspace.createFromSource": {
+    request: { sourcePath: string; documentPath: string };
+    response: WorkspaceDocumentState;
+  };
   "workspace.inspectDocument": {
     request: { path: string };
     response: WorkspaceDocumentIdentity;

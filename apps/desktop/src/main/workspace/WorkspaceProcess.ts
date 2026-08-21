@@ -99,6 +99,17 @@ export class WorkspaceProcess {
     return this.#requireChannel().call("workspace.create", undefined);
   }
 
+  /** Fully imports a foreign source and atomically publishes its first Shift document. */
+  createDocumentFromSource(
+    sourcePath: string,
+    documentPath: string,
+  ): Promise<WorkspaceDocumentState> {
+    return this.#requireChannel().call("workspace.createFromSource", {
+      sourcePath,
+      documentPath,
+    });
+  }
+
   /** Reads canonical document identity before Open for live-session reuse. */
   inspectDocument(path: string): Promise<WorkspaceDocumentIdentity> {
     return this.#requireChannel().call("workspace.inspectDocument", { path });
