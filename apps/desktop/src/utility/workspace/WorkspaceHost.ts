@@ -104,6 +104,8 @@ export class WorkspaceHost {
   start(): void {
     this.#shell = serveChannel<ShellCallMap, ShellEventMap>(this.#shellTransport, {
       "workspace.create": () => this.#serialize(() => this.#create()),
+      "workspace.createFromSource": ({ sourcePath, documentPath }) =>
+        this.#serialize(() => this.#createFromSource(sourcePath, documentPath)),
       "workspace.inspectDocument": ({ path }) => this.#serialize(() => this.#inspectDocument(path)),
       "workspace.open": ({ path }) => this.#serialize(() => this.#open(path)),
       "workspace.close": ({ discard }) => this.#serialize(() => this.#close(discard)),
@@ -567,6 +569,53 @@ export class WorkspaceHost {
     this.#atlasCacheRevision = null;
 
     return this.#emitDocumentChanged();
+  }
+
+  #createFromSource(sourcePath: string, documentPath: string): WorkspaceDocumentState {
+    if (this.#state.kind !== "closed") {
+      throw new Error("a preview or document is already open");
+    }
+
+    const allocation = this.#documents.createWorkspace();
+
+    try {
+      this.#bridge.openWorkspace(sourcePath, allocation.storePath);
+      this.#bridge.setWorkspaceId(allocation.workspaceId);
+      this.#state = {
+        kind: "document",
+        allocation,
+        binding: { kind: "unbound" },
+      };
+      this.#atlasCacheRevision = null;
+
+      return this.#saveAs(documentPath);
+    } catch (error) {
+      const workspace = this.#state.kind === "document" ? this.#state : null;
+      let publishedDocument = false;
+      try {
+        const saveTarget = workspace ? this.#bridge.documentState().saveTarget : null;
+        publishedDocument =
+          typeof saveTarget === "string" && path.resolve(saveTarget) === path.resolve(documentPath);
+      } catch {
+        // The original error remains authoritative; cleanup is best-effort.
+      }
+
+      if (workspace?.binding.kind === "bound") {
+        this.#documents.removeDocumentBinding(workspace.binding.address);
+      }
+      this.#bridge.closeWorkspace();
+      this.#state = { kind: "closed" };
+      this.#atlasCacheRevision = null;
+      this.#documents.deleteWorkspace(allocation.workspaceId);
+
+      if (publishedDocument) {
+        for (const suffix of ["", "-wal", "-shm", "-journal"]) {
+          fs.rmSync(`${documentPath}${suffix}`, { force: true });
+        }
+      }
+
+      throw error;
+    }
   }
 
   #inspectDocument(documentPath: string): WorkspaceDocumentIdentity {

@@ -21,6 +21,7 @@ export type FontSessionHostOptions =
   | {
       readonly mode: "preview";
       readonly sessionId: FontSessionId;
+      readonly sourcePath: string;
       readonly workspaceProcess: WorkspaceProcess;
     };
 
@@ -34,6 +35,7 @@ export type FontSessionHostOptions =
 export class FontSessionHost {
   readonly mode: FontSessionMode;
   readonly sessionId: FontSessionId;
+  readonly sourcePath: string | null;
   readonly workspaceProcess: WorkspaceProcess;
   readonly documentClient: DocumentClient | null;
   readonly document: DocumentSession | null;
@@ -45,6 +47,7 @@ export class FontSessionHost {
   constructor(options: FontSessionHostOptions) {
     this.mode = options.mode;
     this.sessionId = options.sessionId;
+    this.sourcePath = options.mode === "preview" ? options.sourcePath : null;
     this.workspaceProcess = options.workspaceProcess;
 
     switch (options.mode) {

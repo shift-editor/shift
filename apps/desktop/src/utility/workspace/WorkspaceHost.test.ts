@@ -39,6 +39,10 @@ const retainedFontPath = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../../renderer/src/assets/fonts/HostGrotesk-VariableFont_wght.ttf",
 );
+const convertibleFontPath = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../../../../../fixtures/fonts/mutatorsans/MutatorSansLightCondensed.ufo",
+);
 
 const createGlyph = (
   name: GlyphName,
@@ -361,6 +365,56 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     expect(await sync.call("source.snapshot", undefined)).not.toBeNull();
     expect(await shell.call("source.close", undefined)).toBeNull();
     expect(await sync.call("source.snapshot", undefined)).toBeNull();
+  });
+
+  it("creates a canonical document atomically from a foreign source", async () => {
+    const documentPath = path.join(tmpRoot, "Converted.shift");
+
+    const state = await shell.call("workspace.createFromSource", {
+      sourcePath: convertibleFontPath,
+      documentPath,
+    });
+    const sync = await connectSyncLane();
+    const snapshot = await sync.call("workspace.snapshot", undefined);
+
+    expect(state).toMatchObject({
+      sourceKind: "document",
+      documentId: expect.stringMatching(/^document_/),
+      saveTarget: documentPath,
+      canonicalPath: fs.realpathSync(documentPath),
+      dirty: false,
+      needsSaveAs: false,
+    });
+    expect(snapshot?.workspaceId).toBe(state.workspaceId);
+    expect(snapshot?.glyphs.length).toBeGreaterThan(0);
+    expect(canonicalGlyphNames(documentPath)).toEqual(
+      expect.arrayContaining(snapshot?.glyphs.map((glyph) => glyph.name) ?? []),
+    );
+  });
+
+  it("preserves an occupied destination and returns to closed after conversion fails", async () => {
+    const occupiedPath = path.join(tmpRoot, "Occupied.shift");
+    fs.writeFileSync(occupiedPath, "occupied");
+
+    await expect(
+      shell.call("workspace.createFromSource", {
+        sourcePath: convertibleFontPath,
+        documentPath: occupiedPath,
+      }),
+    ).rejects.toThrow("document already exists");
+
+    expect(fs.readFileSync(occupiedPath, "utf8")).toBe("occupied");
+    await expect(shell.call("document.state", undefined)).resolves.toBeNull();
+    const workspacesRoot = path.join(tmpRoot, "workspaces");
+    expect(fs.existsSync(workspacesRoot) ? fs.readdirSync(workspacesRoot) : []).toEqual([]);
+
+    const retryPath = path.join(tmpRoot, "Retried.shift");
+    await expect(
+      shell.call("workspace.createFromSource", {
+        sourcePath: convertibleFontPath,
+        documentPath: retryPath,
+      }),
+    ).resolves.toMatchObject({ saveTarget: retryPath, needsSaveAs: false });
   });
 
   it("streams one authored Slug generation through bounded native chunks", async () => {

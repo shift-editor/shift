@@ -7,6 +7,7 @@ function previewSession(workspaceId: string): FontSessionHost {
   return new FontSessionHost({
     mode: "preview",
     sessionId: workspaceId,
+    sourcePath: `/tmp/${workspaceId}.ufo`,
     workspaceProcess: new WorkspaceProcess(),
   });
 }
