@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { ElectronApplication, Page } from "@playwright/test";
+import { createBridge } from "@shift/bridge";
 import {
   DESIGNSPACE_FONT_PATH,
   documentTest as test,
@@ -54,6 +55,13 @@ const failedSaveTest = test.extend({
     const nonDirectory = path.join(testRoot, "not-a-directory");
     fs.writeFileSync(nonDirectory, "blocked");
     await use(path.join(nonDirectory, "saved.shift"));
+  },
+});
+const existingSaveTest = test.extend({
+  saveShiftPath: async ({ testRoot }, use) => {
+    const saveShiftPath = path.join(testRoot, "saved.shift");
+    fs.writeFileSync(saveShiftPath, "replace me");
+    await use(saveShiftPath);
   },
 });
 const failedExportTest = workspaceTest.extend({
@@ -259,6 +267,17 @@ failedPreviewSaveTest(
   },
 );
 
+function savedGlyphNames(documentPath: string, testRoot: string): string[] {
+  const bridge = createBridge();
+  bridge.openDocument(documentPath, path.join(testRoot, "saved-validation.recovery.sqlite"));
+
+  try {
+    return bridge.getGlyphs().map((glyph) => glyph.name);
+  } finally {
+    bridge.closeWorkspace();
+  }
+}
+
 function findShiftDocuments(rootPath: string): string[] {
   const documents: string[] = [];
   const visit = (entryPath: string) => {
@@ -335,6 +354,25 @@ test.describe("document lifecycle through the application shell", () => {
     await expect.poll(() => windowTitle(workspacePage, electronApp)).toContain("Untitled *");
   });
 });
+
+existingSaveTest(
+  "first Save replaces an existing selected destination and closes cleanly",
+  async ({ electronApp, page, saveShiftPath, testRoot }) => {
+    const previousDestination = fs.readFileSync(saveShiftPath);
+    const workspacePage = await createNewFont(page, electronApp);
+    await workspacePage.getByRole("button", { name: "Create glyph", exact: true }).click();
+
+    await runCommand(workspacePage, electronApp, "file.save");
+
+    await expect
+      .poll(() => workspacePage.evaluate(() => window.shift?.documentStateCell.peek()))
+      .toMatchObject({ saveTarget: saveShiftPath, needsSaveAs: false, dirty: false });
+    expect(fs.readFileSync(saveShiftPath)).not.toEqual(previousDestination);
+    await closeWindow(workspacePage, electronApp);
+    await expect.poll(() => workspacePage.isClosed()).toBe(true);
+    expect(savedGlyphNames(saveShiftPath, testRoot)).toContain("newGlyph");
+  },
+);
 
 cancelSaveTest(
   "canceling first Save preserves the untitled dirty document",

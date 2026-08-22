@@ -392,18 +392,32 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     );
   });
 
-  it("preserves an occupied destination and returns to closed after conversion fails", async () => {
+  it("replaces an occupied destination during conversion", async () => {
     const occupiedPath = path.join(tmpRoot, "Occupied.shift");
-    fs.writeFileSync(occupiedPath, "occupied");
+    const previousDestination = Buffer.from("replace me");
+    fs.writeFileSync(occupiedPath, previousDestination);
+
+    const state = await shell.call("workspace.createFromSource", {
+      sourcePath: convertibleFontPath,
+      documentPath: occupiedPath,
+    });
+
+    expect(state).toMatchObject({ saveTarget: occupiedPath, needsSaveAs: false, dirty: false });
+    expect(fs.readFileSync(occupiedPath)).not.toEqual(previousDestination);
+    expect(canonicalGlyphNames(occupiedPath).length).toBeGreaterThan(0);
+  });
+
+  it("returns to closed after conversion publication fails", async () => {
+    const blockedParent = path.join(tmpRoot, "not-a-directory");
+    fs.writeFileSync(blockedParent, "blocked");
 
     await expect(
       shell.call("workspace.createFromSource", {
         sourcePath: convertibleFontPath,
-        documentPath: occupiedPath,
+        documentPath: path.join(blockedParent, "Converted.shift"),
       }),
-    ).rejects.toThrow("document already exists");
+    ).rejects.toThrow();
 
-    expect(fs.readFileSync(occupiedPath, "utf8")).toBe("occupied");
     await expect(shell.call("document.state", undefined)).resolves.toBeNull();
     const workspacesRoot = path.join(tmpRoot, "workspaces");
     expect(fs.existsSync(workspacesRoot) ? fs.readdirSync(workspacesRoot) : []).toEqual([]);
@@ -738,12 +752,12 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     const saved = await saveDocumentWithGlyphA(sync, "Bound.shift");
     await addGlyphB(sync);
     const before = await shell.call("document.state", undefined);
-    const occupiedPath = path.join(tmpRoot, "Occupied.shift");
-    fs.writeFileSync(occupiedPath, "occupied");
+    const blockedParent = path.join(tmpRoot, "not-a-directory");
+    fs.writeFileSync(blockedParent, "blocked");
 
-    await expect(sync.call("workspace.saveAs", { path: occupiedPath })).rejects.toThrow(
-      "document already exists",
-    );
+    await expect(
+      sync.call("workspace.saveAs", { path: path.join(blockedParent, "Saved.shift") }),
+    ).rejects.toThrow();
     await expect(shell.call("document.state", undefined)).resolves.toEqual(before);
     const retryPath = path.join(tmpRoot, "Retried.shift");
     const retried = await sync.call("workspace.saveAs", { path: retryPath });

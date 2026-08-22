@@ -1122,25 +1122,24 @@ fn save_as_document_from_document_mints_a_new_identity() {
 }
 
 #[test]
-fn save_as_document_never_clobbers_an_existing_destination() {
+fn save_as_document_atomically_replaces_an_existing_destination() {
     let temp = tempfile::tempdir().expect("temp dir");
     let working_path = temp.path().join("Working.sqlite");
     let document_path = temp.path().join("Existing.shift");
-    let working = ShiftStore::open(&working_path).expect("open working store");
-    std::fs::write(&document_path, b"retain me").expect("write destination");
+    let font = sample_font();
+    let mut working = ShiftStore::open(&working_path).expect("open working store");
+    working
+        .replace_font_state(&font)
+        .expect("write complete font state");
+    std::fs::write(&document_path, b"replace me").expect("write destination");
 
-    let error = working
+    let metadata = working
         .save_as_document(&document_path)
-        .expect_err("existing destination must not be replaced");
+        .expect("replace destination with saved document");
 
-    assert!(matches!(
-        error,
-        shift_store::StoreError::DocumentAlreadyExists(existing) if existing == document_path
-    ));
-    assert_eq!(
-        std::fs::read(&document_path).expect("read destination"),
-        b"retain me"
-    );
+    let saved = ShiftStore::open_document(&document_path).expect("open replaced document");
+    assert_eq!(saved.document_metadata().unwrap(), metadata);
+    assert_eq!(saved.load_font_state().unwrap(), font);
 }
 
 #[test]
