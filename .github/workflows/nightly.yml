@@ -273,7 +273,7 @@ jobs:
           else
             git worktree add --detach site
             git -C site switch --orphan update-feeds
-            git -C site rm -rf .
+            git -C site rm -rf --ignore-unmatch .
           fi
           touch site/.nojekyll
 
