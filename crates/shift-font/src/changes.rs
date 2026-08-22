@@ -1,7 +1,7 @@
 use crate::{
     Anchor, AnchorId, Axis, AxisId, AxisMapping, Contour, ContourId, FontMetadata, Glyph, GlyphId,
-    GlyphLayer, GlyphName, LayerId, MetricDefinition, MetricId, MetricValue, NamedInstance, Point,
-    PointId, PointType, Source, SourceId,
+    GlyphLayer, GlyphName, LayerId, MetricDefinition, NamedInstance, Point, PointId, PointType,
+    Source, SourceId,
 };
 
 #[derive(Clone, Debug, Default)]
@@ -42,8 +42,10 @@ pub enum FontChange {
     SourceCreated(SourceCreated),
     SourceUpdated(SourceUpdated),
     SourceDeleted(SourceDeleted),
-    GlyphCreated(GlyphCreated),
-    GlyphDeleted(GlyphDeleted),
+    /// A new glyph identity was appended to the authored directory.
+    GlyphAppended(GlyphAppended),
+    /// Undo removed the matching tail glyph from the authored directory.
+    GlyphPopped(GlyphPopped),
     GlyphIdentityChanged(GlyphIdentityChanged),
     GlyphLayerCreated(GlyphLayerCreated),
     GlyphLayerDeleted(GlyphLayerDeleted),
@@ -110,12 +112,12 @@ impl FontChange {
         Self::SourceDeleted(SourceDeleted { source_id })
     }
 
-    pub fn glyph_created(glyph: &Glyph) -> Self {
-        Self::GlyphCreated(GlyphCreated::from(glyph))
+    pub fn glyph_appended(glyph: &Glyph) -> Self {
+        Self::GlyphAppended(GlyphAppended::from(glyph))
     }
 
-    pub fn glyph_deleted(glyph_id: GlyphId) -> Self {
-        Self::GlyphDeleted(GlyphDeleted { glyph_id })
+    pub fn glyph_popped(glyph_id: GlyphId) -> Self {
+        Self::GlyphPopped(GlyphPopped { glyph_id })
     }
 
     pub fn glyph_identity_changed(
@@ -228,8 +230,8 @@ impl FontChange {
             | Self::SourceCreated(_)
             | Self::SourceUpdated(_)
             | Self::SourceDeleted(_)
-            | Self::GlyphCreated(_)
-            | Self::GlyphDeleted(_)
+            | Self::GlyphAppended(_)
+            | Self::GlyphPopped(_)
             | Self::GlyphIdentityChanged(_) => None,
         }
     }
@@ -273,43 +275,19 @@ pub struct NamedInstancesUpdated {
     pub instances: Vec<NamedInstance>,
 }
 
+/// Complete source snapshot emitted when a source identity enters the font.
+///
+/// Replay and persistence must restore every authored field rather than
+/// reconstructing a partial source from directory values.
 #[derive(Clone, Debug)]
 pub struct SourceCreated {
-    pub source_id: SourceId,
-    pub name: String,
-    pub location: Vec<SourceAxisValue>,
-    pub metric_values: Vec<SourceMetricValue>,
-    pub italic_angle: Option<f64>,
-    pub line_gap: Option<f64>,
-    pub underline_position: Option<f64>,
-    pub underline_thickness: Option<f64>,
+    pub source: Source,
 }
 
 impl From<&Source> for SourceCreated {
     fn from(source: &Source) -> Self {
         Self {
-            source_id: source.id(),
-            name: source.name().to_string(),
-            location: source
-                .location()
-                .iter()
-                .map(|(axis_id, value)| SourceAxisValue {
-                    axis_id: axis_id.clone(),
-                    value: *value,
-                })
-                .collect(),
-            metric_values: source
-                .metric_values()
-                .iter()
-                .map(|(metric_id, value)| SourceMetricValue {
-                    metric_id: metric_id.clone(),
-                    value: *value,
-                })
-                .collect(),
-            italic_angle: source.italic_angle(),
-            line_gap: source.line_gap(),
-            underline_position: source.underline_position(),
-            underline_thickness: source.underline_thickness(),
+            source: source.clone(),
         }
     }
 }
@@ -330,25 +308,13 @@ pub struct SourceDeleted {
 }
 
 #[derive(Clone, Debug)]
-pub struct SourceAxisValue {
-    pub axis_id: AxisId,
-    pub value: f64,
-}
-
-#[derive(Clone, Debug)]
-pub struct SourceMetricValue {
-    pub metric_id: MetricId,
-    pub value: MetricValue,
-}
-
-#[derive(Clone, Debug)]
-pub struct GlyphCreated {
+pub struct GlyphAppended {
     pub glyph_id: GlyphId,
     pub name: GlyphName,
     pub unicodes: Vec<u32>,
 }
 
-impl From<&Glyph> for GlyphCreated {
+impl From<&Glyph> for GlyphAppended {
     fn from(glyph: &Glyph) -> Self {
         Self {
             glyph_id: glyph.id(),
@@ -359,7 +325,7 @@ impl From<&Glyph> for GlyphCreated {
 }
 
 #[derive(Clone, Debug)]
-pub struct GlyphDeleted {
+pub struct GlyphPopped {
     pub glyph_id: GlyphId,
 }
 

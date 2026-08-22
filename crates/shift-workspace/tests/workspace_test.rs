@@ -3,7 +3,8 @@ use std::{fs, path::PathBuf};
 use shift_font::{
     AnchorId, AnchorSeed, Axis, AxisId, BooleanOp, ContourId, DesignLocation, ExternalLocation,
     Font, FontChange, FontIntent, FontIntentSet, Glyph, GlyphId, GlyphLayer, GlyphName, LayerId,
-    NamedInstance, NamedInstanceId, PointId, PointSeed, PointType, SourceId, error::CoreError,
+    NamedInstance, NamedInstanceId, PointId, PointSeed, PointType, Source, SourceId,
+    error::CoreError,
 };
 use shift_store::ShiftStore;
 use shift_workspace::{AcquireScope, FontWorkspace, NewWorkspace, WorkspaceError, WorkspaceSource};
@@ -48,6 +49,19 @@ fn create_glyph_layer(
         )
         .unwrap();
     layer_id
+}
+
+fn assert_persisted_font_matches_workspace(workspace: &mut FontWorkspace) {
+    let glyph_ids = workspace.font().glyphs().map(Glyph::id).collect::<Vec<_>>();
+    workspace
+        .acquire_glyphs(&glyph_ids, AcquireScope::Glyphs)
+        .unwrap();
+    let persisted = workspace.store().load_font_state().unwrap();
+    assert_eq!(
+        &persisted,
+        workspace.font(),
+        "durable font diverged from live workspace state"
+    );
 }
 
 #[test]
@@ -144,6 +158,151 @@ fn native_document_reopens_sparse_recovery_and_saves_to_canonical() {
             .glyph_id_by_name("B")
             .is_some()
     );
+}
+
+#[test]
+fn non_default_source_delete_undo_redo_survives_recovery_and_save() {
+    let temp = tempfile::tempdir().unwrap();
+    let document_path = temp.path().join("Sources.shift");
+    let recovery_path = temp.path().join("recovery.sqlite");
+    let mut font = Font::empty();
+    let axis_id = AxisId::from_raw("weight");
+    font.add_axis(Axis::with_id(
+        axis_id.clone(),
+        "wght".to_string(),
+        "Weight".to_string(),
+        100.0,
+        400.0,
+        900.0,
+    ))
+    .unwrap();
+    let primary_id = SourceId::from_raw("primary");
+    let middle_id = SourceId::from_raw("middle");
+    let fallback_id = SourceId::from_raw("fallback");
+    for (source_id, name, value) in [
+        (primary_id.clone(), "Primary", 400.0),
+        (middle_id.clone(), "Middle", 700.0),
+        (fallback_id.clone(), "Fallback", 900.0),
+    ] {
+        font.add_source(Source::with_id(
+            source_id,
+            name.to_string(),
+            weight_location(axis_id.clone(), value),
+            Some(format!("{name}.ufo")),
+        ));
+    }
+    font.set_default_source_id(primary_id.clone());
+    let original = font.clone();
+    drop(ShiftStore::create_document(&document_path, &font).unwrap());
+
+    let mut workspace = FontWorkspace::open_document(&document_path, &recovery_path).unwrap();
+    workspace
+        .apply(
+            FontIntentSet {
+                intents: vec![FontIntent::DeleteSource {
+                    source_id: middle_id,
+                }],
+            },
+            Some("Delete Middle".to_string()),
+        )
+        .unwrap();
+    assert_eq!(
+        workspace.font().default_source_id(),
+        Some(primary_id.clone())
+    );
+    assert_eq!(
+        workspace
+            .font()
+            .sources()
+            .iter()
+            .map(Source::id)
+            .collect::<Vec<_>>(),
+        [primary_id.clone(), fallback_id]
+    );
+    assert_persisted_font_matches_workspace(&mut workspace);
+
+    workspace
+        .undo()
+        .unwrap()
+        .expect("source delete should undo");
+    assert_eq!(workspace.font(), &original);
+    assert_persisted_font_matches_workspace(&mut workspace);
+    workspace
+        .redo()
+        .unwrap()
+        .expect("source delete should redo");
+    assert_eq!(
+        workspace.font().default_source_id(),
+        Some(primary_id.clone())
+    );
+    assert_persisted_font_matches_workspace(&mut workspace);
+    let edited = workspace.font().clone();
+    drop(workspace);
+
+    let mut recovered = FontWorkspace::open_document(&document_path, &recovery_path).unwrap();
+    assert_eq!(recovered.font(), &edited);
+    assert_persisted_font_matches_workspace(&mut recovered);
+    recovered.save().unwrap();
+    drop(recovered);
+
+    let saved = ShiftStore::open_document(&document_path)
+        .unwrap()
+        .load_font_state()
+        .unwrap();
+    assert_eq!(saved.default_source_id(), Some(primary_id));
+    assert_eq!(saved, edited);
+}
+
+#[test]
+fn default_source_delete_is_rejected_without_live_or_durable_mutation() {
+    let temp = tempfile::tempdir().unwrap();
+    let document_path = temp.path().join("ProtectedDefault.shift");
+    let recovery_path = temp.path().join("recovery.sqlite");
+    let mut font = Font::new();
+    let default_source_id = font.default_source_id().unwrap();
+    let axis_id = AxisId::from_raw("weight");
+    font.add_axis(Axis::with_id(
+        axis_id.clone(),
+        "wght".to_string(),
+        "Weight".to_string(),
+        100.0,
+        400.0,
+        900.0,
+    ))
+    .unwrap();
+    font.add_source(Source::new(
+        "Bold".to_string(),
+        weight_location(axis_id, 900.0),
+    ));
+    let original = font.clone();
+    drop(ShiftStore::create_document(&document_path, &font).unwrap());
+
+    let mut workspace = FontWorkspace::open_document(&document_path, &recovery_path).unwrap();
+    let error = match workspace.apply(
+        FontIntentSet {
+            intents: vec![FontIntent::DeleteSource {
+                source_id: default_source_id.clone(),
+            }],
+        },
+        Some("Delete Default".to_string()),
+    ) {
+        Ok(_) => panic!("default source deletion should be rejected"),
+        Err(error) => error,
+    };
+
+    assert!(matches!(
+        error,
+        WorkspaceError::Font(CoreError::CannotDeleteDefaultSource(source_id))
+            if source_id == default_source_id
+    ));
+    assert_eq!(workspace.font(), &original);
+    assert!(!workspace.is_dirty().unwrap());
+    assert_persisted_font_matches_workspace(&mut workspace);
+    drop(workspace);
+
+    let reopened = FontWorkspace::open_document(&document_path, &recovery_path).unwrap();
+    assert_eq!(reopened.font(), &original);
+    assert!(!reopened.is_dirty().unwrap());
 }
 
 #[test]
@@ -375,15 +534,35 @@ fn configured_large_corpus_streams_resumes_and_acquires() {
         .unwrap();
     assert!(workspace.loaded_layer_count() > 0);
     assert!(workspace.loaded_layer_count() < layer_count);
+
+    let append_started = std::time::Instant::now();
+    let appended_id = create_glyph(&mut workspace, "shiftSparseProbe", Vec::new());
+    let append_elapsed = append_started.elapsed();
+    assert_eq!(workspace.font().glyph_count(), glyph_count + 1);
+    let undo_started = std::time::Instant::now();
+    workspace.undo().unwrap().expect("glyph append should undo");
+    let undo_elapsed = undo_started.elapsed();
+    assert_eq!(workspace.font().glyph_count(), glyph_count);
+    assert!(workspace.font().glyph(appended_id).is_none());
+    assert_eq!(
+        workspace
+            .store()
+            .load_font_directory()
+            .unwrap()
+            .glyph_count(),
+        glyph_count
+    );
     drop(workspace);
 
     let resumed = FontWorkspace::resume(&store_path).unwrap();
     assert_eq!(resumed.font().glyph_count(), glyph_count);
     assert_eq!(resumed.loaded_layer_count(), 0);
     eprintln!(
-        "corpus={} glyphs={glyph_count} layers={layer_count} store_bytes={} elapsed_ms={:.3}",
+        "corpus={} glyphs={glyph_count} layers={layer_count} store_bytes={} append_ms={:.3} undo_ms={:.3} elapsed_ms={:.3}",
         source_path.display(),
         fs::metadata(&store_path).unwrap().len(),
+        append_elapsed.as_secs_f64() * 1_000.0,
+        undo_elapsed.as_secs_f64() * 1_000.0,
         started.elapsed().as_secs_f64() * 1_000.0
     );
 }
@@ -916,7 +1095,7 @@ fn create_glyph_undo_redo_removes_and_restores_glyph_identity() {
     let undone = workspace.undo().unwrap().expect("createGlyph should undo");
     assert_eq!(workspace.font().glyph_count(), 0);
     assert!(undone.changes.changes.iter().any(
-        |change| matches!(change, FontChange::GlyphDeleted(change) if change.glyph_id == glyph_id)
+        |change| matches!(change, FontChange::GlyphPopped(change) if change.glyph_id == glyph_id)
     ));
 
     let redone = workspace.redo().unwrap().expect("createGlyph should redo");
@@ -1055,7 +1234,7 @@ fn delete_source_undo_redo_removes_and_restores_existing_sparse_layers() {
         .changes
         .changes
         .iter()
-        .any(|change| matches!(change, FontChange::SourceCreated(change) if change.source_id == source_id)));
+        .any(|change| matches!(change, FontChange::SourceCreated(change) if change.source.id() == source_id)));
     assert!(
         workspace
             .font()
@@ -1073,6 +1252,7 @@ fn delete_source_undo_redo_removes_and_restores_existing_sparse_layers() {
             .layer_id_for_glyph_source(glyph_b, source_id.clone()),
         None
     );
+    assert_persisted_font_matches_workspace(&mut workspace);
 
     let redone = workspace.redo().unwrap().expect("deleteSource should redo");
     assert!(redone
@@ -1087,6 +1267,7 @@ fn delete_source_undo_redo_removes_and_restores_existing_sparse_layers() {
             .iter()
             .all(|source| source.id() != source_id)
     );
+    assert_persisted_font_matches_workspace(&mut workspace);
     assert!(workspace.font().layer(layer_id).is_none());
 }
 
@@ -1117,6 +1298,212 @@ fn batched_create_glyphs_undo_as_one_step() {
     workspace.redo().unwrap().expect("batch should redo");
     assert_eq!(workspace.font().glyph_count(), 3);
     assert!(workspace.font().glyph_id_by_name("B").is_some());
+}
+
+#[test]
+fn axis_source_delete_batches_replay_in_both_orders() {
+    for axis_first in [true, false] {
+        let temp = tempfile::tempdir().unwrap();
+        let store_path = temp.path().join("working.sqlite");
+        let mut workspace =
+            FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
+        let axis_id = create_weight_axis(&mut workspace);
+        let source_id = SourceId::from_raw("bold");
+        workspace
+            .apply(
+                FontIntentSet {
+                    intents: vec![FontIntent::CreateSource {
+                        source_id: source_id.clone(),
+                        name: "Bold".to_string(),
+                        location: weight_location(axis_id.clone(), 700.0),
+                    }],
+                },
+                None,
+            )
+            .unwrap();
+
+        let delete_axis = FontIntent::DeleteAxis {
+            axis_id: axis_id.clone(),
+        };
+        let delete_source = FontIntent::DeleteSource {
+            source_id: source_id.clone(),
+        };
+        workspace
+            .apply(
+                FontIntentSet {
+                    intents: if axis_first {
+                        vec![delete_axis, delete_source]
+                    } else {
+                        vec![delete_source, delete_axis]
+                    },
+                },
+                Some("Delete Axis and Source".to_string()),
+            )
+            .unwrap();
+        assert_persisted_font_matches_workspace(&mut workspace);
+
+        workspace.undo().unwrap().expect("batch should undo");
+        let restored = workspace
+            .font()
+            .sources()
+            .iter()
+            .find(|source| source.id() == source_id)
+            .unwrap();
+        assert_eq!(restored.location().get(&axis_id), Some(700.0));
+        assert_persisted_font_matches_workspace(&mut workspace);
+
+        workspace.redo().unwrap().expect("batch should redo");
+        assert!(workspace.font().axes().is_empty());
+        assert!(
+            workspace
+                .font()
+                .sources()
+                .iter()
+                .all(|source| source.id() != source_id)
+        );
+        assert_persisted_font_matches_workspace(&mut workspace);
+
+        workspace.undo().unwrap().expect("batch should undo again");
+        assert_persisted_font_matches_workspace(&mut workspace);
+    }
+}
+
+#[test]
+fn batched_source_deletes_restore_order_and_default_on_every_replay() {
+    let temp = tempfile::tempdir().unwrap();
+    let store_path = temp.path().join("working.sqlite");
+    let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
+    let source_a = workspace.font().default_source_id().unwrap();
+    let axis_id = create_weight_axis(&mut workspace);
+    let source_b = SourceId::from_raw("b");
+    let source_c = SourceId::from_raw("c");
+    let source_d = SourceId::from_raw("d");
+    workspace
+        .apply(
+            FontIntentSet {
+                intents: vec![
+                    FontIntent::CreateSource {
+                        source_id: source_b.clone(),
+                        name: "B".to_string(),
+                        location: weight_location(axis_id.clone(), 700.0),
+                    },
+                    FontIntent::CreateSource {
+                        source_id: source_c.clone(),
+                        name: "C".to_string(),
+                        location: weight_location(axis_id.clone(), 800.0),
+                    },
+                    FontIntent::CreateSource {
+                        source_id: source_d.clone(),
+                        name: "D".to_string(),
+                        location: weight_location(axis_id, 900.0),
+                    },
+                ],
+            },
+            None,
+        )
+        .unwrap();
+    let original = workspace.font().clone();
+
+    workspace
+        .apply(
+            FontIntentSet {
+                intents: vec![
+                    FontIntent::DeleteSource {
+                        source_id: source_b,
+                    },
+                    FontIntent::DeleteSource {
+                        source_id: source_c,
+                    },
+                ],
+            },
+            Some("Delete Sources".to_string()),
+        )
+        .unwrap();
+    assert_eq!(
+        workspace
+            .font()
+            .sources()
+            .iter()
+            .map(Source::id)
+            .collect::<Vec<_>>(),
+        [source_a.clone(), source_d]
+    );
+    assert_eq!(workspace.font().default_source_id(), Some(source_a));
+    assert_persisted_font_matches_workspace(&mut workspace);
+
+    workspace.undo().unwrap().expect("batch should undo");
+    assert_eq!(workspace.font(), &original);
+    assert_persisted_font_matches_workspace(&mut workspace);
+
+    workspace.redo().unwrap().expect("batch should redo");
+    assert_persisted_font_matches_workspace(&mut workspace);
+
+    workspace.undo().unwrap().expect("batch should undo again");
+    assert_eq!(workspace.font(), &original);
+    assert_persisted_font_matches_workspace(&mut workspace);
+}
+
+#[test]
+fn batched_axis_deletes_restore_order_on_every_replay() {
+    let temp = tempfile::tempdir().unwrap();
+    let store_path = temp.path().join("working.sqlite");
+    let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
+    let axis_a = AxisId::from_raw("a");
+    let axis_b = AxisId::from_raw("b");
+    let axis_c = AxisId::from_raw("c");
+    workspace
+        .apply(
+            FontIntentSet {
+                intents: [
+                    (axis_a.clone(), "AAAA", "A"),
+                    (axis_b.clone(), "BBBB", "B"),
+                    (axis_c.clone(), "CCCC", "C"),
+                ]
+                .into_iter()
+                .map(|(axis_id, tag, name)| FontIntent::CreateAxis {
+                    axis: Axis::with_id(axis_id, tag.to_string(), name.to_string(), 0.0, 0.0, 1.0),
+                })
+                .collect(),
+            },
+            None,
+        )
+        .unwrap();
+    let original = workspace.font().clone();
+
+    workspace
+        .apply(
+            FontIntentSet {
+                intents: vec![
+                    FontIntent::DeleteAxis {
+                        axis_id: axis_a.clone(),
+                    },
+                    FontIntent::DeleteAxis { axis_id: axis_b },
+                ],
+            },
+            Some("Delete Axes".to_string()),
+        )
+        .unwrap();
+    assert_eq!(
+        workspace
+            .font()
+            .axes()
+            .iter()
+            .map(Axis::id)
+            .collect::<Vec<_>>(),
+        [axis_c]
+    );
+    assert_persisted_font_matches_workspace(&mut workspace);
+
+    workspace.undo().unwrap().expect("batch should undo");
+    assert_eq!(workspace.font(), &original);
+    assert_persisted_font_matches_workspace(&mut workspace);
+
+    workspace.redo().unwrap().expect("batch should redo");
+    assert_persisted_font_matches_workspace(&mut workspace);
+
+    workspace.undo().unwrap().expect("batch should undo again");
+    assert_eq!(workspace.font(), &original);
+    assert_persisted_font_matches_workspace(&mut workspace);
 }
 
 #[test]
@@ -1976,8 +2363,8 @@ fn failed_undo_replay_hands_the_entry_back_for_retry() {
     let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
     create_glyph(&mut workspace, "A", vec![65]);
 
-    // Wipe the store's font rows so the undo's GlyphDeleted change has no
-    // row to delete and the replay fails at the persistence step.
+    // Wipe the store's font rows so the undo's GlyphPopped change has no
+    // row to pop and the replay fails at the persistence step.
     workspace
         .store_mut()
         .replace_font_state(&shift_font::Font::new())

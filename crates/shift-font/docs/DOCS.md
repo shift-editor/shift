@@ -1,6 +1,6 @@
 # shift-font
 
-<!-- reviewed: 2026-08-19 review-every: 90d -->
+<!-- reviewed: 2026-08-21 review-every: 90d -->
 
 First-class Rust font object model for Shift.
 
@@ -10,7 +10,9 @@ First-class Rust font object model for Shift.
 - **Architecture Invariant:** Stable IDs are identity. Names, tags, Unicode assignments, and coordinates remain editable authoring values.
 - **Architecture Invariant:** Glyph-structure IDs are font-wide within their entity type. Contours, points, components, anchors, and glyph-layer guidelines are never addressed by a layer-qualified identity.
 - **Architecture Invariant:** Ordered, identity-addressable authoring collections use `EntityList`. Its iteration, equality, and serialization preserve authored order; its private backing container is not part of the model contract.
+- **Architecture Invariant:** Glyph creation is append-only. Undo uses `Font::pop_glyph` and succeeds only for the matching directory tail; arbitrary glyph deletion has no authoring intent. Batched undo therefore pops glyphs in reverse creation order without reindexing a CJK-scale directory.
 - **Architecture Invariant:** Named instances own complete external locations but no source or geometry. Sources own design-space locations.
+- **Architecture Invariant:** The default source is the required master origin at the axes' default location, not an arbitrary fallback. `DeleteSource` rejects both the default source and the last source; replacing the default requires a future explicit atomic operation that preserves a valid origin.
 - **Architecture Invariant:** Mapping edits never rewrite external named-instance intent.
 - **Architecture Invariant:** Fontdrasil exclusively constructs variation sample order, supports, and numeric deltas. `shift-font` exposes compiled `VariationBasis` and `AxisMappingBasis` values; TypeScript and transport layers only evaluate or translate them.
 - **Architecture Invariant:** Authored metadata and font metrics are independent. Metadata edits replace the complete metadata snapshot without rewriting metrics.
@@ -147,6 +149,7 @@ Transport and workspace layers should pass stable identity to find the model obj
 - Cross-source component correspondence is the ordered slot, not `ComponentId`. Compatible layers may use different component IDs in the same slot, so sorting a layer's components or joining on ID across sources silently breaks `gvar`-style compatibility.
 - `GlyphProjectionSet` is scoped to one read or compilation. Holding one across an authored edit yields stale geometry with no error — nothing invalidates it for you.
 - A source with no layer for a glyph is not an empty glyph: it resolves through interpolation or fallback and is simply non-editable at that source. Only an authored empty layer means blank.
+- Never select the first remaining source after default-source deletion. Designspace defaults are location-defined, and Shift compilation requires the identified default to remain a master at the normalized default location; unsupported deletion must fail before mutation.
 - Anchor count/name/order compatibility is a Shift-specific restriction (anchor positions share the glyph interpolation vector). Do not assume fontTools or OpenType define it when relaxing or tightening compatibility rules.
 
 ## Verification

@@ -55,31 +55,35 @@ impl RecoveryOverlay {
         for change in &change_set.changes {
             match change {
                 font::FontChange::FontMetadataUpdated(_) => metadata_changed = true,
-                font::FontChange::AxisCreated(change) => {
-                    axis_ids.insert(change.axis.id());
+                font::FontChange::AxisCreated(_) => {
+                    axis_ids.extend(post_font.axes().iter().map(font::Axis::id));
+                    source_ids.extend(post_font.sources().iter().map(font::Source::id));
                 }
                 font::FontChange::AxisUpdated(change) => {
                     axis_ids.insert(change.axis.id());
                 }
                 font::FontChange::AxisDeleted(change) => {
                     axis_ids.insert(change.axis_id.clone());
+                    axis_ids.extend(post_font.axes().iter().map(font::Axis::id));
+                    source_ids.extend(post_font.sources().iter().map(font::Source::id));
                 }
                 font::FontChange::AxisMappingsUpdated(_) => mappings_changed = true,
                 font::FontChange::MetricDefinitionsUpdated(_) => definitions_changed = true,
                 font::FontChange::NamedInstancesUpdated(_) => instances_changed = true,
-                font::FontChange::SourceCreated(change) => {
-                    source_ids.insert(change.source_id.clone());
+                font::FontChange::SourceCreated(_) => {
+                    source_ids.extend(post_font.sources().iter().map(font::Source::id));
                 }
                 font::FontChange::SourceUpdated(change) => {
                     source_ids.insert(change.source.id());
                 }
                 font::FontChange::SourceDeleted(change) => {
                     source_ids.insert(change.source_id.clone());
+                    source_ids.extend(post_font.sources().iter().map(font::Source::id));
                 }
-                font::FontChange::GlyphCreated(change) => {
+                font::FontChange::GlyphAppended(change) => {
                     glyph_ids.insert(change.glyph_id.clone());
                 }
-                font::FontChange::GlyphDeleted(change) => {
+                font::FontChange::GlyphPopped(change) => {
                     glyph_ids.insert(change.glyph_id.clone());
                 }
                 font::FontChange::GlyphIdentityChanged(change) => {
@@ -94,7 +98,7 @@ impl RecoveryOverlay {
         }
 
         let tx = self.conn.transaction()?;
-        if metadata_changed {
+        if metadata_changed || !source_ids.is_empty() {
             upsert_font_info(&tx, post_font)?;
             if let Some(preserved) = preserved_font_info {
                 tx.execute(
@@ -153,11 +157,13 @@ impl RecoveryOverlay {
         }
 
         for glyph_id in glyph_ids {
-            if let Some((order_index, glyph)) = post_font
-                .glyphs()
-                .enumerate()
-                .find(|(_, glyph)| glyph.id() == glyph_id)
-            {
+            if let Some(glyph) = post_font.glyph(glyph_id.clone()) {
+                let order_index = post_font.glyph_order(glyph_id.clone()).ok_or_else(|| {
+                    StoreError::MissingEntity {
+                        kind: "glyph order",
+                        id: glyph_id.to_string(),
+                    }
+                })?;
                 clear_tombstone(&tx, GLYPHS, glyph_id.as_str())?;
                 write_glyph_directory_in_tx(&tx, glyph, order_index as i64, WriteMode::Upsert)?;
                 mark_replaced(&tx, GLYPH_UNICODES, glyph_id.as_str())?;
