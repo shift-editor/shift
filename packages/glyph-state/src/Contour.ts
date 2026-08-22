@@ -90,14 +90,14 @@ export class Contour {
   }
 
   get firstOnCurvePoint(): Point | null {
-    return this.points.find((point) => point.pointType === "onCurve") ?? null;
+    return this.points.find(Point.isOnCurve) ?? null;
   }
 
   get lastOnCurvePoint(): Point | null {
     const points = this.points;
     for (let index = points.length - 1; index >= 0; index--) {
       const point = points[index];
-      if (point?.pointType === "onCurve") return point;
+      if (point && Point.isOnCurve(point)) return point;
     }
     return null;
   }

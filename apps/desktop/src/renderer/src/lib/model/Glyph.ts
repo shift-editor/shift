@@ -788,7 +788,10 @@ export class GlyphLayer {
     const points = segment.asQuad()!;
     const [curveA, curveB] = segment.splitAt(t) as [QuadraticCurve, QuadraticCurve];
 
-    const splitPointId = this.insertPointBefore(points.end.id, Point.smooth(curveA.p1));
+    const splitPointId = this.insertPointBefore(
+      points.end.id,
+      Point.create(curveA.p1, points.end.pointType, true),
+    );
     this.insertPointBefore(points.end.id, Point.offCurve(curveB.c));
     this.movePointTo(points.control.id, curveA.c);
 
