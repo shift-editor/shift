@@ -42,6 +42,46 @@ export async function runCommand(
   }, command);
 }
 
+export async function applicationMenuItemEnabled(
+  page: Page,
+  electronApp: ElectronApplication,
+  command: CommandId,
+): Promise<boolean> {
+  const browserWindow = await electronApp.browserWindow(page);
+  await browserWindow.evaluate((window) => window.focus());
+  await browserWindow.dispose();
+
+  return electronApp.evaluate(({ Menu }, id) => {
+    const item = Menu.getApplicationMenu()?.getMenuItemById(id);
+    if (!item) throw new Error(`Missing application menu item: ${id}`);
+    return item.enabled;
+  }, command);
+}
+
+export async function clickApplicationMenuItem(
+  page: Page,
+  electronApp: ElectronApplication,
+  command: CommandId,
+): Promise<void> {
+  const browserWindow = await electronApp.browserWindow(page);
+  await expect
+    .poll(() =>
+      browserWindow.evaluate((window) => {
+        window.focus();
+        return window.isFocused();
+      }),
+    )
+    .toBe(true);
+  await browserWindow.dispose();
+
+  await electronApp.evaluate(({ BrowserWindow, Menu }, id) => {
+    const item = Menu.getApplicationMenu()?.getMenuItemById(id);
+    if (!item) throw new Error(`Missing application menu item: ${id}`);
+    if (!item.enabled) throw new Error(`Application menu item is disabled: ${id}`);
+    item.click(item, BrowserWindow.getFocusedWindow(), {});
+  }, command);
+}
+
 export async function windowTitle(page: Page, electronApp: ElectronApplication): Promise<string> {
   const browserWindow = await electronApp.browserWindow(page);
   const title = await browserWindow.evaluate((window) => window.getTitle());

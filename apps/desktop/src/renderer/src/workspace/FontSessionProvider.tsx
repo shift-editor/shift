@@ -39,7 +39,9 @@ export function FontSessionProvider({ children }: { children: ReactNode }) {
 
     const unlisten = workspace
       ? getShiftHost().commands.onRunRendererCommand((id) => {
-          runRendererCommand(workspace.editor, id);
+          void runRendererCommand(workspace.editor, id).catch((error) => {
+            console.error("renderer command failed", id, error);
+          });
         })
       : () => {};
 
