@@ -1,4 +1,4 @@
-name: Nightly Desktop
+name: Release Shift Nightly
 
 on:
   schedule:
@@ -248,6 +248,14 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 1
+
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
 
       - uses: actions/download-artifact@v8
         with:
