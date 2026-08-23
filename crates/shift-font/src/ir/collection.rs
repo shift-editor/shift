@@ -79,6 +79,11 @@ where
         self.entries.get_index(index)
     }
 
+    /// Returns an entity's authored-order position without scanning the list.
+    pub fn index_of(&self, id: &T::Id) -> Option<usize> {
+        self.entries.get_index_of(id)
+    }
+
     pub fn keys(&self) -> indexmap::map::Keys<'_, T::Id, T> {
         self.entries.keys()
     }

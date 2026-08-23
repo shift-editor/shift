@@ -85,9 +85,6 @@ fn recovery_overlay_reopens_and_saves_semantic_directory_changes() {
 
     let mut post = original.clone();
     post.metadata_mut().family_name = Some("Recovered Sans".to_string());
-    let deleted_glyph_id = shift_font::GlyphId::from_raw("acute");
-    post.remove_glyph(deleted_glyph_id.clone())
-        .expect("sample glyph");
     let weight_id = shift_font::AxisId::from_raw("weight");
     let mut weight = post
         .axes()
@@ -122,7 +119,6 @@ fn recovery_overlay_reopens_and_saves_semantic_directory_changes() {
         shift_font::FontChange::named_instances_updated(post.named_instances()),
         shift_font::FontChange::metric_definitions_updated(&metric_definitions),
         shift_font::FontChange::source_updated(&regular_source),
-        shift_font::FontChange::glyph_deleted(deleted_glyph_id),
     ]);
 
     let mut document = ShiftStore::open_document_with_recovery(&document_path, &recovery_path)
@@ -260,15 +256,35 @@ fn recovery_overlay_adds_a_new_glyph_and_layer_without_copying_the_directory() {
         620.0,
     );
     glyph.set_layer(layer.clone());
-    let mut post = original;
+    let mut post = original.clone();
     post.insert_glyph(glyph.clone()).expect("insert glyph");
     let changes = shift_font::FontChangeSet::new(vec![
-        shift_font::FontChange::glyph_created(&glyph),
+        shift_font::FontChange::glyph_appended(&glyph),
         shift_font::FontChange::glyph_layer_created(glyph_id.clone(), &layer),
     ]);
 
     let mut document = ShiftStore::open_document_with_recovery(&document_path, &recovery_path)
         .expect("open with recovery");
+    let non_tail_id = original.glyphs().next().expect("sample glyph").id();
+    let tail_id = original.glyphs().last().expect("sample tail glyph").id();
+    assert_ne!(non_tail_id, tail_id);
+    let mut invalid_post = original.clone();
+    invalid_post.pop_glyph(tail_id).expect("pop tail glyph");
+    let error = document
+        .apply_change_set_with_font(
+            &shift_font::FontChange::glyph_popped(non_tail_id).into(),
+            &invalid_post,
+            true,
+        )
+        .unwrap_err();
+    assert!(matches!(
+        error,
+        shift_store::StoreError::Font(shift_font::CoreError::InvalidEntityOrder {
+            kind: "glyph",
+            ..
+        })
+    ));
+
     document
         .apply_change_set_with_font(&changes, &post, true)
         .unwrap();
@@ -276,7 +292,7 @@ fn recovery_overlay_adds_a_new_glyph_and_layer_without_copying_the_directory() {
     assert_eq!(directory.glyph_count(), post.glyph_count());
     assert_eq!(
         directory
-            .glyph(glyph_id)
+            .glyph(glyph_id.clone())
             .expect("new glyph in merged directory")
             .layers()
             .get(&layer_id)
@@ -312,7 +328,76 @@ fn recovery_overlay_adds_a_new_glyph_and_layer_without_copying_the_directory() {
     );
     drop(recovery);
 
+    let mut reverted = post.clone();
+    reverted.pop_glyph(glyph_id.clone()).expect("pop glyph");
+    document
+        .apply_change_set_with_font(
+            &shift_font::FontChange::glyph_popped(glyph_id.clone()).into(),
+            &reverted,
+            true,
+        )
+        .unwrap();
+    assert_eq!(
+        document.load_font_directory().unwrap().glyph_count(),
+        original.glyph_count()
+    );
+    let recovery = rusqlite::Connection::open(&recovery_path).expect("inspect reverted recovery");
+    assert_eq!(
+        recovery
+            .query_row("SELECT COUNT(*) FROM glyphs", [], |row| row
+                .get::<_, i64>(0))
+            .unwrap(),
+        0
+    );
+    assert_eq!(
+        recovery
+            .query_row(
+                "SELECT COUNT(*) FROM recovery_tombstones WHERE entity_kind = 'glyph'",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap(),
+        1
+    );
+    drop(recovery);
+
+    document
+        .apply_change_set_with_font(&changes, &post, true)
+        .unwrap();
     document.save_document().expect("save additions");
+
+    document
+        .apply_change_set_with_font(
+            &shift_font::FontChange::glyph_popped(glyph_id.clone()).into(),
+            &reverted,
+            true,
+        )
+        .expect("pop the saved tail glyph");
+    assert_eq!(document.load_font_state().unwrap(), reverted);
+    let recovery = rusqlite::Connection::open(&recovery_path).expect("inspect saved pop");
+    assert_eq!(
+        recovery
+            .query_row("SELECT COUNT(*) FROM glyphs", [], |row| row
+                .get::<_, i64>(0))
+            .unwrap(),
+        0
+    );
+    assert_eq!(
+        recovery
+            .query_row(
+                "SELECT COUNT(*) FROM recovery_tombstones WHERE entity_kind = 'glyph'",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap(),
+        1
+    );
+    drop(recovery);
+
+    document
+        .apply_change_set_with_font(&changes, &post, true)
+        .expect("redo the saved append");
+    document.save_document().expect("save redone addition");
     drop(document);
     let saved = ShiftStore::open_document(&document_path).expect("open saved document");
     assert_eq!(saved.load_font_state().unwrap(), post);
@@ -324,7 +409,8 @@ fn parent_deletion_does_not_reinsert_an_earlier_layer_override() {
     let document_path = temp.path().join("Dogfood.shift");
     let recovery_path = temp.path().join("recovery.sqlite");
     let glyph_id = shift_font::GlyphId::from_raw("A");
-    let layer_id = shift_font::LayerId::from_raw("A_regular");
+    let layer_id = shift_font::LayerId::from_raw("A_bold");
+    let source_id = shift_font::SourceId::from_raw("bold");
     let original = sample_font();
     drop(ShiftStore::create_document(&document_path, &original).expect("create document"));
 
@@ -335,8 +421,15 @@ fn parent_deletion_does_not_reinsert_an_earlier_layer_override() {
     document.replace_glyph_layer(&layer).unwrap();
 
     let mut post = original;
-    post.remove_glyph(glyph_id.clone()).expect("remove glyph");
-    let changes = shift_font::FontChangeSet::from(shift_font::FontChange::glyph_deleted(glyph_id));
+    let removed_layer = post
+        .remove_glyph_layer(layer_id.clone())
+        .expect("remove glyph layer");
+    post.remove_source(source_id.clone())
+        .expect("remove source");
+    let changes = shift_font::FontChangeSet::new(vec![
+        shift_font::FontChange::glyph_layer_deleted(glyph_id, &removed_layer),
+        shift_font::FontChange::source_deleted(source_id),
+    ]);
     document
         .apply_change_set_with_font(&changes, &post, true)
         .unwrap();
