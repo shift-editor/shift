@@ -1,6 +1,6 @@
 # Tools
 
-<!-- reviewed: 2026-08-18 -->
+<!-- reviewed: 2026-08-22 -->
 
 State machine-based tool system for the Shift font editor: translates pointer/keyboard input into tool-specific state transitions and rendering.
 
@@ -94,7 +94,7 @@ User pointer/key
 
 ### Pen curve authoring invariant
 
-- `PenContext.activeEndpoint` is the Pen tool's continuation truth, including while its latest authored point is still awaiting a workspace echo.
+- `Pen.activeEndpointCell` is the Pen tool's derived continuation truth. It follows the active contour through `GlyphLayer.geometryCell`, so local edits, workspace echoes, undo, and redo all resolve the latest on-curve endpoint from the same authored topology. `PenContext` retains only the active contour identity and a point-keyed transient outgoing handle.
 - A corner endpoint has no authored outgoing tangent; extending it as a cubic seeds the untouched control one third of the way toward the new anchor. A smooth endpoint carries its outgoing handle position explicitly and never receives that default.
 - `Pen.resolveCurve()` on the tool itself is the single resolver from speculative `PenCurve` state to the exact cubic. `PenStroke` topology edits and `HandleBehavior` drag previews both call it, so previewed and committed geometry cannot diverge.
 - `anchored -> dragging` begins a `GlyphLayerEdit` and immediately adds one complete cubic to the reactive authored layer. Outline, control-line, bounds, and handle rendering therefore derive from one current topology throughout the gesture.

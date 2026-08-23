@@ -24,6 +24,11 @@ export interface PenCurve {
   readonly handlePosition: Point2D;
 }
 
+export interface PenOutgoingHandle {
+  readonly pointId: PointId;
+  readonly position: Point2D;
+}
+
 export type PenState =
   | { type: "idle" }
   | { type: "ready" }
@@ -43,10 +48,10 @@ export type PenContext =
   | {
       readonly glyphNode: GlyphNode;
       readonly activeContourId: null;
-      readonly activeEndpoint: null;
+      readonly outgoingHandle: null;
     }
   | {
       readonly glyphNode: GlyphNode;
       readonly activeContourId: ContourId;
-      readonly activeEndpoint: PenEndpoint;
+      readonly outgoingHandle: PenOutgoingHandle | null;
     };
