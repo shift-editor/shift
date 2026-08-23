@@ -90,9 +90,8 @@ impl OutlinePen for ShiftPen {
     }
 
     /// Preserves the source quadratic as one control and one qcurve endpoint.
-    /// The canonical layer codec retains this distinction; the wire projects
-    /// the endpoint as on-curve, which still lets clients infer one-control
-    /// quadratic segments without cubic expansion.
+    /// The canonical layer codec and wire retain this distinction so clients
+    /// can edit quadratic segments without cubic expansion.
     fn quad_to(&mut self, cx0: f32, cy0: f32, x: f32, y: f32) {
         let control_id = self.next_point_id();
         let endpoint_id = self.next_point_id();
