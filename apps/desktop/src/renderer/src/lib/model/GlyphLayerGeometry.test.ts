@@ -307,6 +307,27 @@ describe("GlyphLayer metrics", () => {
       expect(layer().sidebearings.rsb).toBe(initialRightSidebearing);
     });
 
+    it("does not reapply a displayed tight-bounds value", async () => {
+      const segment = layer().contours[0]!.segments()[0]!;
+      layer().upgradeLineToCubic(segment.id);
+      await editor.settle();
+
+      const control = layer().contours[0]!.segments()[0]!.asCubic()!.controlStart;
+      layer().applyPositionPatch([{ kind: "point", id: control.id, x: -100, y: control.y }]);
+      await editor.settle();
+
+      const displayed = editor.sceneGlyphRenderModel?.sidebearings.lsb;
+      if (displayed === null || displayed === undefined) throw new Error("Expected sidebearings");
+      const positions = layer().allPoints.map(({ x, y }) => ({ x, y }));
+      const advance = layer().xAdvance;
+
+      editor.setLeftSidebearing(displayed);
+      await editor.settle();
+
+      expect(layer().allPoints.map(({ x, y }) => ({ x, y }))).toEqual(positions);
+      expect(layer().xAdvance).toBe(advance);
+    });
+
     it("reverts translation and advance with one ledger undo", async () => {
       const pointId = layer().allPoints[0]!.id;
       const point = layer().point(pointId)!;

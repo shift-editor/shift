@@ -24,7 +24,7 @@ export function useGlyphXAdvance(): GlyphXAdvanceState {
 
         return {
           xAdvance: glyph.renderModelAt(editor.externalLocationCell, editor.activeSourceIdCell)
-            .xAdvance,
+            .xAdvanceCell.value,
           hasLayer: activeSourceId
             ? glyph.layerForSource(activeSourceId) !== null
             : glyph.layerAt(externalLocation) !== null,

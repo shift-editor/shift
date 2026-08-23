@@ -18,7 +18,7 @@ function layerState(): GlyphState {
           closed: false,
           points: [
             { id: pointId(1), pointType: "onCurve", smooth: false },
-            { id: pointId(2), pointType: "offCurve", smooth: false },
+            { id: pointId(2), pointType: "onCurve", smooth: false },
           ],
         },
       ],
@@ -26,6 +26,28 @@ function layerState(): GlyphState {
       components: [],
     },
     values: new Float64Array([500, 10, 20, 30, 40, 300, 400]),
+  };
+}
+
+function curvedLayerState(): GlyphState {
+  return {
+    layerId: layerId(1),
+    structure: {
+      contours: [
+        {
+          id: contourId(1),
+          closed: false,
+          points: [
+            { id: pointId(1), pointType: "onCurve", smooth: false },
+            { id: pointId(2), pointType: "offCurve", smooth: false },
+            { id: pointId(3), pointType: "onCurve", smooth: false },
+          ],
+        },
+      ],
+      anchors: [],
+      components: [],
+    },
+    values: new Float64Array([600, 0, 0, -100, 100, 200, 0]),
   };
 }
 
@@ -114,6 +136,15 @@ describe("glyph layer geometry follows coordinate patches", () => {
       max: { x: 75, y: 125 },
     });
     expect(state.sidebearings).toEqual({ lsb: -25, rsb: 425 });
+  });
+
+  it("keeps packed metrics consistent with tight glyph geometry", () => {
+    const state = new GlyphLayerState(curvedLayerState());
+
+    expect(state.bounds).toEqual(state.geometry.bounds);
+    expect(state.bounds?.min.x).toBeCloseTo(-25);
+    expect(state.sidebearings.lsb).toBeCloseTo(-25);
+    expect(state.sidebearings.rsb).toBe(400);
   });
 
   it("serializes patched coordinates into state values", () => {

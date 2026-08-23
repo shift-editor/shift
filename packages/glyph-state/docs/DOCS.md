@@ -1,6 +1,6 @@
 # Glyph State
 
-<!-- reviewed: 2026-08-18 review-every: 90d -->
+<!-- reviewed: 2026-08-22 review-every: 90d -->
 
 Pure readers and geometry helpers for `GlyphStructure + Float64Array` glyph state.
 
@@ -10,6 +10,7 @@ Pure readers and geometry helpers for `GlyphStructure + Float64Array` glyph stat
 - **Architecture Invariant:** `GlyphGeometry` is a lazy reader over `GlyphStructure + values`. The renderer may cache an instance per reactive state update; rendering paths should not rebuild it inside inner draw loops.
 - **Architecture Invariant:** The flat values layout matches `shift-wire`: xAdvance, contour point positions, anchor positions, then component transforms. Any layout change in Rust must update `GlyphGeometry`, `Contour`, `Anchor`, and `Component` together.
 - **Architecture Invariant:** Segment parsing is structural. Two on-curve points produce a line; onCurve/offCurve/onCurve produces a quad; onCurve/offCurve/offCurve/onCurve produces a cubic. Runs starting with an off-curve point are skipped only in open contours — closed contours wrap and consume leading off-curves as controls of the final wrapped segment — and runs of three or more off-curves after an on-curve point are emitted as mis-typed cubics rather than dropped (see Gotchas).
+- **Architecture Invariant:** `bounds` always means tight drawable curve bounds, and sidebearings derive only from those bounds plus advance width. Raw control-point extents are point bounds and must be exposed as `pointBounds` if a consumer needs them; `selectionBounds` may intentionally combine complete curve segments with individually selected points.
 
 ## Codemap
 
@@ -84,7 +85,6 @@ Renderer code should keep using cached `GlyphGeometry` instances from the model 
 ## Gotchas
 
 - `Segment.parse` skips only runs that start with an off-curve point, and only in open contours — those points produce no segments, so they vanish from `Contour.bounds`, `segments`, and segment hit testing. In a closed contour the parser wraps past the end, so leading off-curves become controls of the final wrapped segment instead of being skipped. More than two consecutive off-curves are not skipped either: the cubic branch never checks that its fourth point is on-curve, so onCurve/off/off/off emits a malformed cubic whose `anchor2` is the third off-curve, and that segment participates in segments, bounds, and hit testing as if it were real.
-- `bounds` and `sidebearings` disagree by design: `bounds` unions curve-accurate segment bounds, while `sidebearings` uses raw point extents (`Bounds.fromPoints` over all points, off-curve controls included). Control points that overshoot the outline widen the sidebearing extents but not `bounds`.
 - `hitAt` has fixed priority -- an anchor hit beats a closer point hit, and a point hit beats a closer segment hit. For nearest-across-kinds behavior, call `hitPoint` / `hitAnchor` / `hitSegment` yourself and compare distances.
 - The `componentTransformKind` passed to the `GlyphGeometry` constructor must match how the value buffer was packed: `"decomposed"` reads 9 values per component, `"affine"` reads 6. There is no runtime check -- a mismatch silently misreads every component transform. The default is `"decomposed"`.
 - `withPositionUpdates` copies the entire value buffer per call. Batch a frame's updates into one call; unknown point/anchor ids in the update list are skipped without error.
