@@ -1,8 +1,14 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { GlyphCatalogController } from "./GlyphCatalogController";
 import { GlyphNameInput } from "./GlyphNameInput";
 import { useTheme } from "@/context/ThemeContext";
-import type { GlyphCatalogCanvasProps, GlyphCatalogItem } from "@/types/glyphCatalog";
+import type {
+  GlyphCatalogCanvasProps,
+  GlyphCatalogItem,
+  PendingGlyphNames,
+} from "@/types/glyphCatalog";
+import { useEditor } from "@/workspace/WorkspaceContext";
+import { useSignalState } from "@/lib/signals";
 
 /** Thin React shell around the imperative, canvas-owned glyph catalog. */
 export function GlyphCatalogCanvas({
@@ -20,6 +26,8 @@ export function GlyphCatalogCanvas({
   onUnavailable,
 }: GlyphCatalogCanvasProps) {
   const { themeName } = useTheme();
+  const editor = useEditor();
+  const editsSettled = useSignalState(editor.font.editCoordinator.settledCell);
   const glyphCanvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const inputContainerRef = useRef<HTMLDivElement>(null);
@@ -27,6 +35,7 @@ export function GlyphCatalogCanvas({
   const controllerRef = useRef<GlyphCatalogController | null>(null);
   const [ready, setReady] = useState(false);
   const [editingGlyph, setEditingGlyph] = useState<GlyphCatalogItem | null>(null);
+  const [pendingGlyphNames, setPendingGlyphNames] = useState<PendingGlyphNames>(() => new Map());
 
   useLayoutEffect(() => {
     const container = containerRef.current;
@@ -75,7 +84,15 @@ export function GlyphCatalogCanvas({
   useLayoutEffect(() => {
     controllerRef.current?.update(
       {
-        glyphs,
+        glyphs: glyphs.map((glyph) =>
+          pendingGlyphNames.has(glyph.id)
+            ? {
+                ...glyph,
+                name: pendingGlyphNames.get(glyph.id)!,
+                displayName: pendingGlyphNames.get(glyph.id)!,
+              }
+            : glyph,
+        ),
         location,
         metrics,
         sourceId,
@@ -85,7 +102,7 @@ export function GlyphCatalogCanvas({
       },
       inputContainerRef.current,
     );
-  }, [active, editingGlyph, glyphs, location, metrics, sourceId, themeName]);
+  }, [active, editingGlyph, glyphs, location, metrics, pendingGlyphNames, sourceId, themeName]);
 
   useLayoutEffect(() => {
     if (!editingGlyph) return;
@@ -94,12 +111,34 @@ export function GlyphCatalogCanvas({
     inputRef.current?.select();
   }, [editingGlyph]);
 
+  useEffect(() => {
+    if (pendingGlyphNames.size === 0) return;
+
+    setPendingGlyphNames((current) => {
+      const next = new Map(current);
+
+      for (const [glyphId, pendingName] of current) {
+        const visibleGlyph = glyphs.find(({ id }) => id === glyphId);
+        const committedName = editor.font.recordForId(glyphId)?.name;
+        const visibleNameConfirmed =
+          committedName === pendingName && (!visibleGlyph || visibleGlyph.name === pendingName);
+        const renameRejected = editsSettled && committedName !== pendingName;
+        if (visibleNameConfirmed || renameRejected) next.delete(glyphId);
+      }
+
+      return next.size === current.size ? current : next;
+    });
+  }, [editor, editsSettled, glyphs, pendingGlyphNames]);
+
   return (
     <>
       <canvas
         ref={glyphCanvasRef}
         aria-hidden="true"
         data-testid="glyph-catalog-canvas"
+        data-first-glyph-name={
+          glyphs[0] ? (pendingGlyphNames.get(glyphs[0].id) ?? glyphs[0].displayName) : undefined
+        }
         className="pointer-events-none absolute left-0 top-0 z-[2] h-full w-full bg-transparent"
         style={{ visibility: ready ? "visible" : "hidden" }}
       />
@@ -117,7 +156,12 @@ export function GlyphCatalogCanvas({
           <GlyphNameInput
             ref={inputRef}
             glyph={editingGlyph}
-            onFinished={() => setEditingGlyph(null)}
+            onFinished={(nextName) => {
+              if (nextName) {
+                setPendingGlyphNames((current) => new Map(current).set(editingGlyph.id, nextName));
+              }
+              setEditingGlyph((current) => (current?.id === editingGlyph.id ? null : current));
+            }}
           />
         </div>
       ) : null}
