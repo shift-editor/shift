@@ -82,6 +82,8 @@ export class ApplicationMenu {
           { role: "about" },
           this.#commandItem("app.checkForUpdates"),
           { type: "separator" },
+          this.#commandItem("app.showSettings"),
+          { type: "separator" },
           { role: "services", submenu: [] },
           { type: "separator" },
           { role: "hide" },
@@ -108,8 +110,15 @@ export class ApplicationMenu {
         submenu: this.#glyphItems(),
       },
       {
-        label: "Window",
-        submenu: [{ role: "minimize" }, { role: "zoom" }, { type: "separator" }, { role: "front" }],
+        role: "windowMenu",
+        submenu: [
+          { role: "minimize" },
+          { role: "zoom" },
+          { type: "separator" },
+          { role: "front" },
+          { type: "separator" },
+          this.#commandItem("window.showHome"),
+        ],
       },
     ];
   }
@@ -175,9 +184,12 @@ export class ApplicationMenu {
   #fileItems(includeQuit: boolean): MenuItemConstructorOptions[] {
     const items: MenuItemConstructorOptions[] = [
       ...fileMenuItems(this.#runCommand, this.#isCommandEnabled),
-      { type: "separator" },
-      this.#commandItem("window.close"),
     ];
+    if (includeQuit) {
+      items.push({ type: "separator" }, this.#commandItem("app.showSettings"));
+    }
+
+    items.push({ type: "separator" }, this.#commandItem("window.close"));
     if (!includeQuit) return items;
 
     return [...items, { type: "separator" }, { role: "quit" }];

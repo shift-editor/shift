@@ -67,6 +67,7 @@ launcherTest("application menu exposes native shell actions", async ({ electronA
     packaged: app.isPackaged,
     platform: process.platform,
     topLevelLabels: Menu.getApplicationMenu()?.items.map((item) => item.label) ?? [],
+    topLevelRoles: Menu.getApplicationMenu()?.items.map((item) => item.role?.toLowerCase()) ?? [],
     roles:
       Menu.getApplicationMenu()?.items.flatMap(
         (item) =>
@@ -76,10 +77,13 @@ launcherTest("application menu exposes native shell actions", async ({ electronA
       Menu.getApplicationMenu()
         ?.items.find((item) => item.label === "View")
         ?.submenu?.items.map((item) => item.label) ?? [],
+    settingsAccelerator:
+      Menu.getApplicationMenu()?.getMenuItemById("app.showSettings")?.accelerator,
   }));
 
   if (menu.platform === "darwin") {
     expect(menu.topLevelLabels).toContain("Window");
+    expect(menu.topLevelRoles).toContain("windowmenu");
     expect(menu.roles).toEqual(
       expect.arrayContaining([
         "services",
@@ -95,12 +99,38 @@ launcherTest("application menu exposes native shell actions", async ({ electronA
     expect(menu.roles).toContain("quit");
   }
 
+  expect(menu.settingsAccelerator).toBe("CmdOrCtrl+,");
   expect(menu.viewLabels.includes("Developer")).toBe(!menu.packaged && menu.platform === "darwin");
+});
+
+authoredTest("Settings opens the active font configuration", async ({ electronApp, page }) => {
+  await clickApplicationMenuItem(page, electronApp, "app.showSettings");
+
+  await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Font", exact: true })).toBeVisible();
+});
+
+authoredTest("Home focuses one reusable launcher window", async ({ electronApp, page }) => {
+  authoredTest.skip(process.platform !== "darwin", "Home currently lives in the macOS Window menu");
+  const initialWindowCount = electronApp.windows().length;
+  const launcherOpened = electronApp.waitForEvent("window");
+
+  await clickApplicationMenuItem(page, electronApp, "window.showHome");
+  const launcher = await launcherOpened;
+  await launcher.waitForURL(/#\/launcher$/);
+  expect(electronApp.windows()).toHaveLength(initialWindowCount + 1);
+
+  await clickApplicationMenuItem(page, electronApp, "window.showHome");
+  expect(electronApp.windows()).toHaveLength(initialWindowCount + 1);
+  await expect.poll(() => launcher.evaluate(() => document.hasFocus())).toBe(true);
 });
 
 launcherTest(
   "application menu disables document commands on the launcher",
   async ({ electronApp, page }) => {
+    await expect
+      .poll(() => applicationMenuItemEnabled(page, electronApp, "app.showSettings"))
+      .toBe(false);
     await expect.poll(() => applicationMenuItemEnabled(page, electronApp, "file.new")).toBe(true);
     await expect.poll(() => applicationMenuItemEnabled(page, electronApp, "file.open")).toBe(true);
     await expect.poll(() => applicationMenuItemEnabled(page, electronApp, "file.save")).toBe(false);
@@ -119,6 +149,9 @@ binaryPreviewTest(
   async ({ electronApp, page }) => {
     const workspacePage = await openSelectedPreview(page, electronApp);
 
+    await expect
+      .poll(() => applicationMenuItemEnabled(workspacePage, electronApp, "app.showSettings"))
+      .toBe(true);
     await expect
       .poll(() => applicationMenuItemEnabled(workspacePage, electronApp, "file.save"))
       .toBe(false);

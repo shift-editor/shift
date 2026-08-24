@@ -1,6 +1,6 @@
 # Main
 
-<!-- reviewed: 2026-08-21 -->
+<!-- reviewed: 2026-08-24 -->
 
 Electron main process: app startup, windows, menus, document dialogs, and workspace session ownership.
 
@@ -86,6 +86,8 @@ On macOS, closing the last window leaves Shift running. A later Dock activation 
 Native menu items carry the shared `CommandId`, label, accelerator, and current `CommandRegistry` capability. `ApplicationMenu.updateCommandStates()` refreshes enabled state when window focus or session ownership changes and after a command settles. Save and Save As are enabled for authored documents and convertible previews; Export and Edit commands require an authored document.
 
 Edit-menu accelerators and clicks send `RendererCommandId` operations to the active authored renderer instead of using Electron's DOM-only roles. The renderer preserves conventional behavior for a focused text input; otherwise Undo, Redo, Cut, Copy, Paste, Delete, and Select All operate on Shift's canvas editor and canonical workspace history. Commands may remain enabled within an authored document when its current selection, clipboard, or history makes a particular invocation a safe no-op.
+
+The macOS Window menu is registered through Electron's native `windowMenu` role so AppKit owns system placement, tiling, and open-window affordances. **Home** focuses an existing launcher or creates one without replacing the current document window. **Settings…** sends `app.showSettings` to the active font renderer and opens the existing document-scoped settings surface at Font; it remains unavailable on the launcher until Shift has app-wide settings.
 
 Eligible packaged macOS builds and Windows Nightly x64 builds start `AppUpdater` after the first window is prepared. The updater waits 30 seconds before its first quiet check to avoid competing with application startup, then checks every four hours. Development builds explain that updates require packaging; Windows Release and Linux direct manual checks to matching GitHub downloads.
 

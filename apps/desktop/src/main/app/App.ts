@@ -362,10 +362,22 @@ export class App {
       },
       windows: {
         active: () => window ?? null,
+        showHome: () => {
+          const home = this.#windows
+            .allWindows()
+            .find((candidate) => this.#workspaces.getForBrowserWindow(candidate.window) === null);
+          if (home) {
+            home.focus();
+            return;
+          }
+
+          this.#openLauncher();
+        },
       },
       renderer: {
+        available: () => session !== null,
         run: (id) => {
-          if (!window || !document) return;
+          if (!window || !session) return;
 
           window.runRendererCommand(id);
         },
