@@ -313,15 +313,17 @@ impl FontWorkspace {
             steps.push(LedgerStep::Layers(pairs));
         }
 
-        let mut created_glyphs: Vec<GlyphId> = Vec::new();
+        let mut appended_glyphs: Vec<GlyphId> = Vec::new();
         for change in &outcome.changes.changes {
             match change {
-                FontChange::GlyphCreated(change) => {
-                    created_glyphs.push(change.glyph_id.clone());
-                    steps.push(LedgerStep::Glyph {
-                        pre: None,
-                        post: self.font.glyph(change.glyph_id.clone()).cloned(),
-                    });
+                FontChange::GlyphAppended(change) => {
+                    appended_glyphs.push(change.glyph_id.clone());
+                    let glyph = self
+                        .font
+                        .glyph(change.glyph_id.clone())
+                        .cloned()
+                        .expect("an appended glyph must exist in the committed font");
+                    steps.push(LedgerStep::GlyphAppend { glyph });
                 }
                 FontChange::AxisCreated(change) => steps.push(LedgerStep::Axis {
                     pre: None,
@@ -392,7 +394,7 @@ impl FontWorkspace {
                         .font
                         .sources()
                         .iter()
-                        .find(|source| source.id() == change.source_id)
+                        .find(|source| source.id() == change.source.id())
                         .cloned(),
                 }),
                 FontChange::SourceDeleted(change) => steps.push(LedgerStep::Source {
@@ -412,8 +414,8 @@ impl FontWorkspace {
                     post: Some(change.source.clone()),
                 }),
                 FontChange::GlyphLayerCreated(change) => {
-                    // A created glyph's layers ride its Glyph snapshot.
-                    if created_glyphs.contains(&change.glyph_id) {
+                    // An appended glyph's layers ride its Glyph snapshot.
+                    if appended_glyphs.contains(&change.glyph_id) {
                         continue;
                     }
                     let Some(layer) = self.font.layer(change.layer_id.clone()) else {
@@ -426,7 +428,7 @@ impl FontWorkspace {
                     });
                 }
                 FontChange::GlyphLayerDeleted(change) => {
-                    if created_glyphs.contains(&change.glyph_id) {
+                    if appended_glyphs.contains(&change.glyph_id) {
                         continue;
                     }
                     steps.push(LedgerStep::GlyphLayer {
@@ -442,10 +444,9 @@ impl FontWorkspace {
                     });
                 }
                 // Every remaining change kind is layer-scoped and already
-                // captured by the LayerPair snapshots above. GlyphDeleted
-                // has no producing intent yet; replay is its only emitter,
-                // and replayed changes never re-enter the ledger.
-                FontChange::GlyphDeleted(_)
+                // captured by the LayerPair snapshots above. GlyphPopped is
+                // emitted only by replay, which never re-enters the ledger.
+                FontChange::GlyphPopped(_)
                 | FontChange::LayerMetricsChanged(_)
                 | FontChange::ContourAdded(_)
                 | FontChange::ContourOpenClosedChanged(_)
@@ -455,6 +456,34 @@ impl FontWorkspace {
                 | FontChange::PointPositionsChanged(_)
                 | FontChange::AnchorPositionsChanged(_)
                 | FontChange::LayerGeometryReplaced(_) => {}
+            }
+        }
+
+        if let Some(pre_order) = pre.axis_order.as_ref() {
+            let post_order = self.font.axes().iter().map(Axis::id).collect::<Vec<_>>();
+            if *pre_order != post_order {
+                steps.push(LedgerStep::AxisOrder {
+                    pre: pre_order.clone(),
+                    post: post_order,
+                });
+            }
+        }
+
+        if let Some(pre_order) = pre.source_order.as_ref() {
+            let post_order = self
+                .font
+                .sources()
+                .iter()
+                .map(Source::id)
+                .collect::<Vec<_>>();
+            let post_default_source_id = self.font.default_source_id();
+            if *pre_order != post_order || pre.default_source_id != post_default_source_id {
+                steps.push(LedgerStep::SourceCollection {
+                    pre_order: pre_order.clone(),
+                    post_order,
+                    pre_default_source_id: pre.default_source_id.clone(),
+                    post_default_source_id,
+                });
             }
         }
 
@@ -532,6 +561,8 @@ impl FontWorkspace {
 
         let mut named_instances = None;
         let mut metric_definitions = None;
+        let mut axis_order = None;
+        let mut source_collection = None;
         let mut steps = entry
             .steps
             .iter()
@@ -542,6 +573,24 @@ impl FontWorkspace {
                 }
                 LedgerStep::MetricDefinitions { pre, post } => {
                     metric_definitions = Some((pre.clone(), post.clone()));
+                    None
+                }
+                LedgerStep::AxisOrder { pre, post } => {
+                    axis_order = Some((pre.clone(), post.clone()));
+                    None
+                }
+                LedgerStep::SourceCollection {
+                    pre_order,
+                    post_order,
+                    pre_default_source_id,
+                    post_default_source_id,
+                } => {
+                    source_collection = Some((
+                        pre_order.clone(),
+                        post_order.clone(),
+                        pre_default_source_id.clone(),
+                        post_default_source_id.clone(),
+                    ));
                     None
                 }
                 step => Some(step.clone()),
@@ -565,9 +614,8 @@ impl FontWorkspace {
                     LedgerStep::Layers(pairs) => {
                         replay_layer_pairs(font, pairs, side, &mut changes, &mut touched)?;
                     }
-                    LedgerStep::Glyph { pre, post } => {
-                        let (from, to) = side.orient(pre, post);
-                        replay_glyph(font, from, to, &mut changes, &mut touched)?;
+                    LedgerStep::GlyphAppend { glyph } => {
+                        replay_glyph(font, glyph, side, &mut changes, &mut touched)?;
                     }
                     LedgerStep::FontMetadata { pre, post } => {
                         let (_from, to) = side.orient(pre, post);
@@ -585,6 +633,9 @@ impl FontWorkspace {
                         let (from, to) = side.orient(pre, post);
                         replay_axis_mappings(font, from, to, &mut changes)?;
                     }
+                    LedgerStep::AxisOrder { .. } => {
+                        unreachable!("axis order replays after axis topology")
+                    }
                     LedgerStep::NamedInstances { .. } => {
                         unreachable!("named instances replay after axis topology")
                     }
@@ -594,6 +645,9 @@ impl FontWorkspace {
                     LedgerStep::Source { pre, post } => {
                         let (from, to) = side.orient(pre, post);
                         replay_source(font, from, to, &mut changes)?;
+                    }
+                    LedgerStep::SourceCollection { .. } => {
+                        unreachable!("source collection replays after source topology")
                     }
                     LedgerStep::GlyphLayer {
                         glyph_id,
@@ -618,6 +672,41 @@ impl FontWorkspace {
                         let (from, to) = side.orient(pre, post);
                         replay_glyph_identity(font, glyph_id, from, to, &mut changes)?;
                     }
+                }
+            }
+
+            if let Some((pre, post)) = axis_order {
+                let (_from, to) = side.orient(pre, post);
+                font.set_axis_order(&to)?;
+            }
+
+            if let Some((pre_order, post_order, pre_default, post_default)) = source_collection {
+                let ((_from_order, _from_default), (to_order, to_default)) =
+                    side.orient((pre_order, pre_default), (post_order, post_default));
+                font.set_source_order(&to_order)?;
+                match to_default {
+                    Some(source_id)
+                        if font.sources().iter().any(|source| source.id() == source_id) =>
+                    {
+                        font.set_default_source_id(source_id);
+                    }
+                    Some(source_id) => {
+                        return Err(CoreError::InvalidEntityOrder {
+                            kind: "source",
+                            message: format!(
+                                "default identity {source_id} is absent from the target order"
+                            ),
+                        }
+                        .into());
+                    }
+                    None if !font.sources().is_empty() => {
+                        return Err(CoreError::InvalidEntityOrder {
+                            kind: "source",
+                            message: "non-empty source order has no default identity".into(),
+                        }
+                        .into());
+                    }
+                    None => {}
                 }
             }
 
@@ -937,7 +1026,10 @@ struct FontLevelPreState {
     layers: Vec<PreLayer>,
     metadata: Option<FontMetadata>,
     sources: Vec<Source>,
+    source_order: Option<Vec<SourceId>>,
+    default_source_id: Option<SourceId>,
     axes: Vec<Axis>,
+    axis_order: Option<Vec<AxisId>>,
     axis_mappings: Option<Vec<shift_font::AxisMapping>>,
     metric_definitions: Option<Vec<MetricDefinition>>,
     named_instances: Option<Vec<NamedInstance>>,
@@ -964,6 +1056,23 @@ fn capture_font_level_pre_state(
     ) && pre.named_instances.is_none()
     {
         pre.named_instances = Some(font.named_instances().to_vec());
+    }
+
+    if matches!(
+        intent,
+        FontIntent::CreateSource { .. } | FontIntent::DeleteSource { .. }
+    ) && pre.source_order.is_none()
+    {
+        pre.source_order = Some(font.sources().iter().map(Source::id).collect());
+        pre.default_source_id = font.default_source_id();
+    }
+
+    if matches!(
+        intent,
+        FontIntent::CreateAxis { .. } | FontIntent::DeleteAxis { .. }
+    ) && pre.axis_order.is_none()
+    {
+        pre.axis_order = Some(font.axes().iter().map(Axis::id).collect());
     }
 
     match intent {
@@ -1111,28 +1220,26 @@ fn replay_layer_pairs(
 
 fn replay_glyph(
     font: &mut shift_font::Font,
-    from: Option<Glyph>,
-    to: Option<Glyph>,
+    glyph: Glyph,
+    side: ReplaySide,
     changes: &mut FontChangeSet,
     touched: &mut Vec<TouchedLayer>,
 ) -> Result<(), WorkspaceError> {
-    if let Some(glyph) = from {
-        font.remove_glyph(glyph.id())
-            .ok_or(CoreError::GlyphNotFound(glyph.id()))?;
-        changes.push(FontChange::glyph_deleted(glyph.id()));
+    if side == ReplaySide::Pre {
+        font.pop_glyph(glyph.id())?;
+        changes.push(FontChange::glyph_popped(glyph.id()));
+        return Ok(());
     }
 
-    if let Some(glyph) = to {
-        font.insert_glyph(glyph.clone())?;
-        changes.push(FontChange::glyph_created(&glyph));
+    font.insert_glyph(glyph.clone())?;
+    changes.push(FontChange::glyph_appended(&glyph));
 
-        for layer in glyph.layers().values() {
-            changes.push(FontChange::glyph_layer_created(glyph.id(), layer.as_ref()));
-            touched.push(TouchedLayer {
-                layer: layer.clone(),
-                structural: true,
-            });
-        }
+    for layer in glyph.layers().values() {
+        changes.push(FontChange::glyph_layer_created(glyph.id(), layer.as_ref()));
+        touched.push(TouchedLayer {
+            layer: layer.clone(),
+            structural: true,
+        });
     }
 
     Ok(())

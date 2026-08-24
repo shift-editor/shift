@@ -200,7 +200,7 @@ impl From<&BezPath> for Contours {
                 PathEl::QuadTo(ctrl, end) => {
                     if let Some(c) = current.as_mut() {
                         c.add_point(ctrl.x, ctrl.y, PointType::OffCurve, false);
-                        c.add_point(end.x, end.y, PointType::OnCurve, false);
+                        c.add_point(end.x, end.y, PointType::QCurve, false);
                     }
                 }
                 PathEl::CurveTo(c1, c2, end) => {
@@ -415,6 +415,25 @@ mod tests {
         assert_eq!(contours.len(), 1);
         assert!(contours[0].is_closed());
         assert_eq!(contours[0].len(), 3);
+    }
+
+    #[test]
+    fn bezpath_quadratic_to_contour_preserves_qcurve_endpoint() {
+        let mut path = BezPath::new();
+        path.move_to((0.0, 0.0));
+        path.quad_to((50.0, 100.0), (100.0, 0.0));
+
+        let contours = Contours::from(&path);
+        assert_eq!(contours.len(), 1);
+        assert_eq!(contours[0].len(), 3);
+        assert_eq!(
+            contours[0].get_point_at(1).unwrap().point_type(),
+            PointType::OffCurve
+        );
+        assert_eq!(
+            contours[0].get_point_at(2).unwrap().point_type(),
+            PointType::QCurve
+        );
     }
 
     #[test]

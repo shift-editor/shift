@@ -55,7 +55,8 @@ export const Sources = ({ canAuthor }: { canAuthor: boolean }) => {
             canAuthor ? (
               <SourceActionsMenu
                 sourceName={s.name}
-                canDelete={sources.length > 1}
+                isDefaultSource={s.id === editor.font.defaultSource.id}
+                canDelete={sources.length > 1 && s.id !== editor.font.defaultSource.id}
                 onEdit={() => settings.open({ category: "sources", sourceId: s.id })}
                 onDelete={() => deleteSource(s.id)}
               />
@@ -71,11 +72,13 @@ export const Sources = ({ canAuthor }: { canAuthor: boolean }) => {
 
 const SourceActionsMenu = ({
   sourceName,
+  isDefaultSource,
   canDelete,
   onEdit,
   onDelete,
 }: {
   sourceName: string;
+  isDefaultSource: boolean;
   canDelete: boolean;
   onEdit: () => void;
   onDelete: () => void;
@@ -99,7 +102,7 @@ const SourceActionsMenu = ({
           <MenuItem onClick={onEdit}>Edit</MenuItem>
           <MenuSeparator />
           <MenuItem variant="danger" disabled={!canDelete} onClick={onDelete}>
-            Delete source
+            {isDefaultSource ? "Default source cannot be deleted" : "Delete source"}
           </MenuItem>
         </MenuPopup>
       </MenuPositioner>

@@ -1329,8 +1329,8 @@ impl Bridge {
     for change in &outcome.changes.changes {
       match change {
         FontChange::FontMetadataUpdated(_) => metadata_changed = true,
-        FontChange::GlyphCreated(_)
-        | FontChange::GlyphDeleted(_)
+        FontChange::GlyphAppended(_)
+        | FontChange::GlyphPopped(_)
         | FontChange::GlyphIdentityChanged(_)
         | FontChange::GlyphLayerCreated(_)
         | FontChange::GlyphLayerDeleted(_) => glyphs_changed = true,

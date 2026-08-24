@@ -42,6 +42,7 @@ export const GlyphSection = () => {
         <div className="flex justify-center items-center gap-2">
           <div className="contents">
             <EditableSidebarInput
+              ariaLabel="Left sidebearing"
               label="LSB"
               className="text-right"
               value={leftSidebearing}
@@ -56,6 +57,7 @@ export const GlyphSection = () => {
           </div>
           <div className="contents">
             <EditableSidebarInput
+              ariaLabel="Right sidebearing"
               label="RSB"
               labelPosition="right"
               className="text-left"
