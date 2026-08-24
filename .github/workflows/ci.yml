@@ -44,7 +44,6 @@ jobs:
 
       - uses: dorny/paths-filter@v4
         id: filter
-        if: github.event_name != 'merge_group'
         with:
           filters: |
             rust:
@@ -93,7 +92,7 @@ jobs:
   agent-skills:
     name: Agent Skills
     needs: detect-changes
-    if: github.event_name == 'merge_group' || needs.detect-changes.outputs.skills == 'true'
+    if: needs.detect-changes.outputs.skills == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -117,7 +116,7 @@ jobs:
   docs-drift:
     name: Docs Drift
     needs: detect-changes
-    if: github.event_name == 'merge_group' || needs.detect-changes.outputs.docs == 'true' || needs.detect-changes.outputs.typescript == 'true' || needs.detect-changes.outputs.rust == 'true'
+    if: needs.detect-changes.outputs.docs == 'true' || needs.detect-changes.outputs.typescript == 'true' || needs.detect-changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -160,7 +159,7 @@ jobs:
   lint:
     name: Lint
     needs: detect-changes
-    if: github.event_name == 'merge_group' || needs.detect-changes.outputs.typescript == 'true'
+    if: needs.detect-changes.outputs.typescript == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -196,7 +195,7 @@ jobs:
   typecheck:
     name: Typecheck
     needs: detect-changes
-    if: github.event_name == 'merge_group' || needs.detect-changes.outputs.typescript == 'true'
+    if: needs.detect-changes.outputs.typescript == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -238,7 +237,7 @@ jobs:
   unit-test:
     name: Unit Tests
     needs: detect-changes
-    if: github.event_name == 'merge_group' || needs.detect-changes.outputs.typescript == 'true'
+    if: needs.detect-changes.outputs.typescript == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -286,7 +285,7 @@ jobs:
   deadcode:
     name: Dead Code
     needs: detect-changes
-    if: github.event_name == 'merge_group' || needs.detect-changes.outputs.typescript == 'true'
+    if: needs.detect-changes.outputs.typescript == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -320,7 +319,7 @@ jobs:
   release-config:
     name: Release Configuration
     needs: detect-changes
-    if: github.event_name == 'merge_group' || needs.detect-changes.outputs.release == 'true'
+    if: needs.detect-changes.outputs.release == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -354,7 +353,7 @@ jobs:
   rust-fmt:
     name: Rust Format
     needs: detect-changes
-    if: github.event_name == 'merge_group' || needs.detect-changes.outputs.rust == 'true'
+    if: needs.detect-changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -372,7 +371,7 @@ jobs:
   rust-check:
     name: Rust Clippy & Tests
     needs: detect-changes
-    if: github.event_name == 'merge_group' || needs.detect-changes.outputs.rust == 'true'
+    if: needs.detect-changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -399,7 +398,7 @@ jobs:
   integration:
     name: Integration Tests
     needs: detect-changes
-    if: github.event_name == 'merge_group' || needs.detect-changes.outputs.rust == 'true'
+    if: needs.detect-changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -449,7 +448,9 @@ jobs:
     name: E2E ${{ matrix.name }}
     needs: detect-changes
     if: >-
-      github.event_name == 'merge_group' ||
+      (github.event_name == 'merge_group' &&
+        (needs.detect-changes.outputs.typescript == 'true' ||
+          needs.detect-changes.outputs.rust == 'true')) ||
       github.event_name == 'push' ||
       github.event_name == 'workflow_dispatch'
     strategy:
