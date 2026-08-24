@@ -1,4 +1,4 @@
-import { Vec2, type Point2D } from "@shift/geo";
+import type { Point2D } from "@shift/geo";
 import type { ContourId, PointId } from "@shift/types";
 import { Point, type Contour, type SegmentId } from "@shift/glyph-state";
 import type { GlyphLayer } from "@/lib/model/Glyph";
@@ -46,7 +46,7 @@ export class PenStroke {
   }
 
   get activeEndpoint(): PenEndpoint | null {
-    return this.#pen.context?.activeEndpoint ?? null;
+    return this.#pen.activeEndpointCell.peek();
   }
 
   startContour(position: Point2D): PointId {
@@ -56,11 +56,7 @@ export class PenStroke {
       return [contourId, pointId] as const;
     });
 
-    this.#pen.setActiveContour(contourId, {
-      kind: "corner",
-      pointId,
-      position,
-    });
+    this.#pen.setActiveContour(contourId);
     return pointId;
   }
 
@@ -79,7 +75,7 @@ export class PenStroke {
       throw new Error("cannot begin curve without an active Pen contour");
     }
 
-    if (context.activeEndpoint.pointId !== curve.start.pointId) {
+    if (this.activeEndpoint?.pointId !== curve.start.pointId) {
       throw new Error("cannot begin curve from a stale Pen endpoint");
     }
 
@@ -133,14 +129,14 @@ export class PenStroke {
 
   continueContour(contourId: ContourId, side: "start" | "end", pointId: PointId): void {
     const contour = this.#layer.contour(contourId);
-    const endpoint = contour ? this.#endpointFor(contour, side, pointId) : null;
-    if (!endpoint) return;
+    const anchor = side === "start" ? contour?.firstPoint : contour?.lastPoint;
+    if (!anchor || anchor.id !== pointId || !anchor.isOnCurve) return;
 
     if (side === "start") {
       this.#layer.reverseContour(contourId);
     }
 
-    this.#pen.setActiveContour(contourId, endpoint);
+    this.#pen.setActiveContour(contourId);
     this.#pen.editor.selection.select([pointId]);
   }
 
@@ -150,23 +146,5 @@ export class PenStroke {
 
   commitAnchor(position: Point2D): PointId | null {
     return this.appendOnCurve(position);
-  }
-
-  #endpointFor(contour: Contour, side: "start" | "end", pointId: PointId): PenEndpoint | null {
-    const anchor = side === "start" ? contour.firstPoint : contour.lastPoint;
-    if (!anchor || anchor.id !== pointId || !anchor.isOnCurve) return null;
-
-    const adjacent =
-      side === "start" ? contour.points[1] : contour.points[contour.points.length - 2];
-    if (anchor.smooth && adjacent?.isOffCurve) {
-      return {
-        kind: "smooth",
-        pointId,
-        position: anchor.position,
-        outgoingHandlePosition: Vec2.mirror(adjacent, anchor),
-      };
-    }
-
-    return { kind: "corner", pointId, position: anchor.position };
   }
 }

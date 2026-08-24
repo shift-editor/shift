@@ -59,7 +59,7 @@ export class ContourBuffer {
     this.segmentsCell = computed(() => this.contourCell.value.segments(), {
       name: `glyphLayer.contour[${contourIndex}].segments`,
     });
-    this.boundsCell = computed(() => ContourBuffer.#bounds(this.valuesCell.value), {
+    this.boundsCell = computed(() => this.contourCell.value.bounds, {
       name: `glyphLayer.contour[${contourIndex}].bounds`,
     });
   }
@@ -197,25 +197,5 @@ export class ContourBuffer {
 
     const coordinates = this.#coordinatesCell.peek();
     if (coordinates.replace(values)) this.#coordinatesCell.set(coordinates);
-  }
-
-  static #bounds(values: Float64Array): BoundsType | null {
-    if (values.length < 2) return null;
-
-    let minX = values[0] ?? 0;
-    let minY = values[1] ?? 0;
-    let maxX = minX;
-    let maxY = minY;
-
-    for (let offset = 2; offset < values.length; offset += 2) {
-      const x = values[offset] ?? 0;
-      const y = values[offset + 1] ?? 0;
-      if (x < minX) minX = x;
-      if (y < minY) minY = y;
-      if (x > maxX) maxX = x;
-      if (y > maxY) maxY = y;
-    }
-
-    return { min: { x: minX, y: minY }, max: { x: maxX, y: maxY } };
   }
 }

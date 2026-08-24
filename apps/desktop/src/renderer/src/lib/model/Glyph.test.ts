@@ -436,6 +436,22 @@ describe("glyph layers keep public geometry coherent across position edits", () 
     expect(rendered.xAdvance).toBe(530);
   });
 
+  it("publishes render advance changes reactively", async () => {
+    const glyph = editor.glyphForId(record.id);
+    if (!glyph) throw new Error("Expected Glyph");
+    const renderModel = glyph.renderModelAt(signal(emptyExternalAxisLocation()));
+    const observed: number[] = [];
+    const subscription = effect(() => {
+      observed.push(renderModel.xAdvanceCell.value);
+    });
+
+    layer.setXAdvance(530);
+    await editor.settle();
+
+    expect(observed).toEqual([500, 530]);
+    subscription.dispose();
+  });
+
   it("keeps source-backed render contours fresh after position edits", async () => {
     const [, second] = await addTriangle(editor, layer);
     const glyph = editor.glyphForId(record.id);

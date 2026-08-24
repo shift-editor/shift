@@ -1,4 +1,5 @@
 import { workspaceTest as test, expect, navigateToEditor } from "./fixtures/electronApp";
+import { glyphProperties } from "./fixtures/appLocators";
 import { CanvasUtil } from "./fixtures/CanvasUtil";
 
 test.describe("Editor view", () => {
@@ -33,5 +34,19 @@ test.describe("Editor view", () => {
     const canvas = new CanvasUtil(page);
     const screenshot = await canvas.screenshotCanvasLayer("marker-canvas");
     await expect(screenshot).toMatchSnapshot("handles-canvas-A.png");
+  });
+
+  test("keeps advance width text current after a sidebar metrics edit", async ({ page }) => {
+    const properties = glyphProperties(page);
+    const advanceInput = properties.getByLabel("Advance width", { exact: true });
+    const rightSidebearingInput = properties.getByLabel("Right sidebearing", { exact: true });
+    const initialAdvance = Number(await advanceInput.inputValue());
+    const initialRightSidebearing = Number(await rightSidebearingInput.inputValue());
+
+    await rightSidebearingInput.click();
+    await rightSidebearingInput.fill(String(initialRightSidebearing + 25));
+    await rightSidebearingInput.press("Enter");
+
+    await expect(advanceInput).toHaveValue(String(initialAdvance + 25));
   });
 });

@@ -116,6 +116,27 @@ test.describe("Pen tool drawing — segment snapshots", () => {
     await expect(screenshot).toMatchSnapshot("pen-straight-segment.png");
   });
 
+  test("preview line follows the latest on-curve endpoint after undo", async ({ page }) => {
+    await page.getByRole("button", { name: "Pen Tool (P)" }).click();
+
+    const canvas = page.locator("#interactive-canvas");
+    const bounds = await canvas.boundingBox();
+    if (!bounds) throw new Error("Expected interactive canvas bounds");
+
+    const baseline = Math.round(bounds.height * 0.7);
+    await canvas.click({ position: { x: Math.round(bounds.width * 0.35), y: baseline } });
+    await canvas.click({ position: { x: Math.round(bounds.width * 0.5), y: baseline } });
+    await canvas.click({ position: { x: Math.round(bounds.width * 0.65), y: baseline } });
+    await page.evaluate(async () => window.shift?.editor.undo());
+
+    await page.mouse.move(bounds.x + bounds.width * 0.8, bounds.y + bounds.height * 0.35);
+    await page.waitForTimeout(100);
+
+    const canvasUtil = new CanvasUtil(page);
+    const screenshot = await canvasUtil.screenshotCanvasContainer();
+    await expect(screenshot).toMatchSnapshot("pen-preview-after-undo.png");
+  });
+
   test("cubic curve with handles (click-drag)", async ({ page }) => {
     await page.keyboard.press("p");
     await page.waitForTimeout(200);

@@ -1,6 +1,6 @@
 # Renderer font model
 
-<!-- reviewed: 2026-08-21 review-every: 90d -->
+<!-- reviewed: 2026-08-22 review-every: 90d -->
 
 Reactive TypeScript font, authored glyph-layer, and derived glyph-view surfaces.
 
@@ -28,6 +28,7 @@ Reactive TypeScript font, authored glyph-layer, and derived glyph-view surfaces.
 - **Architecture Invariant:** TypeScript evaluates `VariationBasis` values but never constructs variation sample order, support regions, master influence, or deltas. Authored interpolation, imported glyph variation, source metrics, Slug weights, and axis mappings share this evaluator.
 - **Architecture Invariant:** Authored object IDs resolve through `FontStore` ownership indexes before imported-geometry fallback. Point, anchor, segment, and contour objects retain their authored `GlyphLayer` and read its live structure and coordinate signals, so object bounds and overlays remain reactive without rescanning complete geometry.
 - **Architecture Invariant:** Selected-glyph sidebearing and advance controls read the editor's single glyph scene node. Values stay live through the glyph model; mutations are available only when that glyph has an exact authored layer at the current location.
+- **Architecture Invariant:** Every model property named `bounds` represents tight drawable curve bounds. Authored packed buffers delegate contour bounds to `@shift/glyph-state` instead of scanning raw coordinates; sidebearings derive from those bounds and advance width. Raw control-point extents, if needed, are explicitly named `pointBounds`, while `selectionBounds` may include individual selected controls.
 
 ## Codemap
 

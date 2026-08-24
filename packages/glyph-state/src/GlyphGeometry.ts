@@ -438,7 +438,7 @@ class GeometryCache {
 
   get sidebearings(): GlyphSidebearings {
     if (this.#sidebearings === null) {
-      const bounds = Bounds.fromPoints(this.points);
+      const bounds = this.bounds;
       if (bounds === null) return { lsb: null, rsb: null };
 
       this.#sidebearings = {

@@ -8,7 +8,13 @@ import { PenTargets } from "./PenTargets";
 import { PenOverlay } from "./PenOverlay";
 import { Curve, Vec2, type CubicCurve } from "@shift/geo";
 import type { ContourId } from "@shift/types";
-import { signal, type Signal, type WritableSignal } from "@/lib/signals";
+import {
+  computed,
+  signal,
+  type ComputedSignal,
+  type Signal,
+  type WritableSignal,
+} from "@/lib/signals";
 import { PenStroke } from "./PenStroke";
 
 export type { PenState };
@@ -17,6 +23,7 @@ export class Pen extends BaseTool<PenState, Pen> {
   readonly id: ToolName = "pen";
 
   readonly #ctx: WritableSignal<PenContext | null>;
+  readonly activeEndpointCell: ComputedSignal<PenEndpoint | null>;
   #penOverlay = new PenOverlay(this);
 
   readonly behaviors = [new EscapeBehavior(), new PenDownBehaviour(), new HandleBehavior()];
@@ -25,6 +32,42 @@ export class Pen extends BaseTool<PenState, Pen> {
     super(editor);
     this.#ctx = signal<PenContext | null>(null, {
       name: "tool.pen.context",
+    });
+    this.activeEndpointCell = computed(() => {
+      const context = this.#ctx.value;
+      if (!context?.activeContourId) return null;
+
+      const layer = this.editor
+        .glyphForId(context.glyphNode.glyphId)
+        ?.layerForSource(context.glyphNode.sourceId);
+      const contour = layer?.geometryCell.value.contour(context.activeContourId);
+      if (!contour || contour.closed) return null;
+
+      const anchor = contour.lastOnCurvePoint;
+      if (!anchor) return null;
+
+      const outgoingHandle = context.outgoingHandle;
+      if (outgoingHandle?.pointId === anchor.id) {
+        return {
+          kind: "smooth",
+          pointId: anchor.id,
+          position: anchor.position,
+          outgoingHandlePosition: outgoingHandle.position,
+        };
+      }
+
+      const anchorIndex = contour.points.indexOf(anchor);
+      const adjacent = contour.points[anchorIndex - 1];
+      if (anchor.smooth && adjacent?.isOffCurve) {
+        return {
+          kind: "smooth",
+          pointId: anchor.id,
+          position: anchor.position,
+          outgoingHandlePosition: Vec2.mirror(adjacent, anchor),
+        };
+      }
+
+      return { kind: "corner", pointId: anchor.id, position: anchor.position };
     });
   }
 
@@ -40,25 +83,29 @@ export class Pen extends BaseTool<PenState, Pen> {
     this.#ctx.set(null);
   }
 
-  setActiveContour(contourId: ContourId, endpoint: PenEndpoint): void {
+  setActiveContour(contourId: ContourId): void {
     const context = this.#ctx.peek();
     if (!context) return;
 
-    this.#ctx.set({ ...context, activeContourId: contourId, activeEndpoint: endpoint });
+    this.#ctx.set({ ...context, activeContourId: contourId, outgoingHandle: null });
   }
 
   setActiveEndpoint(endpoint: PenEndpoint): void {
     const context = this.#ctx.peek();
     if (!context?.activeContourId) return;
 
-    this.#ctx.set({ ...context, activeEndpoint: endpoint });
+    const outgoingHandle =
+      endpoint.kind === "smooth"
+        ? { pointId: endpoint.pointId, position: endpoint.outgoingHandlePosition }
+        : null;
+    this.#ctx.set({ ...context, outgoingHandle });
   }
 
   clearActiveContour(): void {
     const context = this.#ctx.peek();
     if (!context) return;
 
-    this.#ctx.set({ ...context, activeContourId: null, activeEndpoint: null });
+    this.#ctx.set({ ...context, activeContourId: null, outgoingHandle: null });
   }
 
   resolveCurve(curve: PenCurve): CubicCurve {
@@ -123,13 +170,18 @@ export class Pen extends BaseTool<PenState, Pen> {
     this.#ctx.set({
       glyphNode: node,
       activeContourId: null,
-      activeEndpoint: null,
+      outgoingHandle: null,
     });
   }
 
   override deactivate(): void {
     this.setState({ type: "idle" });
     this.clearContext();
+  }
+
+  override dispose(): void {
+    this.activeEndpointCell.dispose();
+    super.dispose();
   }
 
   override drawOverlay(canvas: Canvas): void {

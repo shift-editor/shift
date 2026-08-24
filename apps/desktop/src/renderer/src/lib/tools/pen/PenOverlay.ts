@@ -18,11 +18,15 @@ export class PenOverlay extends CanvasItem<PenOverlayProps> {
   }
 
   protected props(): PenOverlayProps {
+    const context = this.#pen.contextCell.value;
+    const state = this.#pen.stateCell.value;
+    const activeEndpoint = state.type === "ready" ? this.#pen.activeEndpointCell.value : null;
+
     return {
-      state: this.#pen.stateCell.value,
+      state,
       pointer: this.#editor.input.pointerCell.value,
-      nodePosition: this.#pen.contextCell.value?.glyphNode.position ?? null,
-      lastOnCurvePoint: this.#lastOnCurvePoint(),
+      nodePosition: context?.glyphNode.position ?? null,
+      lastOnCurvePoint: activeEndpoint?.position ?? null,
     };
   }
 
@@ -80,9 +84,5 @@ export class PenOverlay extends CanvasItem<PenOverlayProps> {
       controlStyle.stroke,
       controlStyle.lineWidth,
     );
-  }
-
-  #lastOnCurvePoint(): Point2D | null {
-    return this.#pen.contextCell.peek()?.activeEndpoint?.position ?? null;
   }
 }
