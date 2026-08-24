@@ -29,6 +29,17 @@ const packageName = isNightly ? "shift-nightly" : "shift";
 const artifactName = isNightly ? "Shift-Nightly" : "Shift";
 const appId = isNightly ? "app.shift.nightly" : "app.shift";
 const iconName = isNightly ? "nightly" : "icon";
+const documentIconName = "shift-document";
+const documentMimeType = "application/x-shift-document";
+const linuxDocumentIconName = isNightly ? "shift-nightly-document" : documentIconName;
+const linuxDocumentIconSizes = [16, 32, 48, 64, 128, 256, 512];
+const linuxPackageFiles = [
+  `${path.join(__dirname, `resources/linux/${distribution}.xml`)}=/usr/share/mime/packages/${packageName}.xml`,
+  ...linuxDocumentIconSizes.map(
+    (size) =>
+      `${path.join(__dirname, `../../icons/${documentIconName}-${size}x${size}.png`)}=/usr/share/icons/hicolor/${size}x${size}/mimetypes/${linuxDocumentIconName}.png`,
+  ),
+];
 const packageJson = JSON.parse(readFileSync(path.join(__dirname, "package.json"), "utf8"));
 const productVersion = packageJson.version as string;
 const updateBaseUrl =
@@ -85,6 +96,19 @@ const config: Configuration = {
     onlyLoadAppFromAsar: true,
   },
   publish: [{ provider: "generic", url: channelUrl }],
+  fileAssociations:
+    process.platform === "darwin"
+      ? [
+          {
+            ext: "shift",
+            name: "Shift Document",
+            description: "Shift font document",
+            icon: documentIconName,
+            role: "Editor",
+            rank: isNightly ? "Alternate" : "Owner",
+          },
+        ]
+      : [],
   mac: {
     target: ["zip", "dmg"],
     category: "public.app-category.graphics-design",
@@ -111,6 +135,7 @@ const config: Configuration = {
     createDesktopShortcut: false,
     createStartMenuShortcut: true,
     runAfterFinish: true,
+    include: path.join(__dirname, "resources/windows/installer.nsh"),
     artifactName: `${artifactName}-${productVersion}-Windows-${buildArchitecture}-Setup.\${ext}`,
   },
   linux: {
@@ -123,7 +148,14 @@ const config: Configuration = {
     maintainer: "Kostya Farber <kostya.farber@gmail.com>",
     vendor: "Shift",
     syncDesktopName: true,
+    mimeTypes: [documentMimeType],
     artifactName: `${artifactName}-${productVersion}-Linux-${buildArchitecture}.\${ext}`,
+  },
+  deb: {
+    fpm: linuxPackageFiles,
+  },
+  rpm: {
+    fpm: linuxPackageFiles,
   },
 };
 

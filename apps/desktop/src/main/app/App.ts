@@ -49,6 +49,7 @@ export class App {
   #windows = new WindowManager();
   #workspaces: WorkspaceManager;
   #documentsRoot: string | null = null;
+  #pendingOpenPaths: string[] = [];
   #previewConversions = new Map<string, Promise<void>>();
 
   #appIcon = new AppIcon();
@@ -124,6 +125,28 @@ export class App {
       app.setPath("userData", path.join(app.getPath("appData"), applicationName));
     }
 
+    if (!app.requestSingleInstanceLock()) {
+      app.quit();
+      return;
+    }
+
+    app.on("open-file", (event, sourcePath) => {
+      event.preventDefault();
+      this.#handleOpenPath(sourcePath);
+    });
+    app.on("second-instance", (_event, commandLine) => {
+      let handledOpenPath = false;
+      for (const argument of commandLine) {
+        if (path.extname(argument).toLowerCase() !== ".shift") continue;
+
+        handledOpenPath = true;
+        this.#handleOpenPath(argument);
+      }
+
+      if (!handledOpenPath) this.#windows.activeWindow()?.focus();
+    });
+    for (const argument of process.argv) this.#handleOpenPath(argument);
+
     this.#log.info("starting");
 
     this.#registerCommands();
@@ -148,7 +171,6 @@ export class App {
       switch (process.env.SHIFT_E2E_FONT_PATH) {
         case undefined:
         case "":
-          this.#openLauncher();
           break;
         default:
           try {
@@ -158,10 +180,12 @@ export class App {
             this.#loadWorkspace(window);
           } catch (error) {
             this.#log.error("failed to open E2E workspace", error);
-            this.#openLauncher();
           }
           break;
       }
+
+      await this.#openExternalPath();
+      if (this.#windows.allWindows().length === 0) this.#openLauncher();
 
       app.on("activate", () => {
         if (this.#windows.allWindows().length === 0) this.#openLauncher();
@@ -431,6 +455,46 @@ export class App {
     } finally {
       if (this.#previewConversions.get(preview.sessionId) === converting) {
         this.#previewConversions.delete(preview.sessionId);
+      }
+    }
+  }
+
+  #handleOpenPath(sourcePath: string): void {
+    if (path.extname(sourcePath).toLowerCase() !== ".shift") return;
+
+    const openPath = path.resolve(sourcePath);
+    if (this.#pendingOpenPaths.includes(openPath)) return;
+
+    const shouldStartOpening = this.#pendingOpenPaths.length === 0;
+    this.#pendingOpenPaths.push(openPath);
+    if (!this.#documentsRoot || !shouldStartOpening) return;
+
+    void this.#openExternalPath().catch((error) => {
+      this.#log.error("failed to process external document paths", error);
+    });
+  }
+
+  async #openExternalPath(): Promise<void> {
+    while (this.#pendingOpenPaths.length > 0) {
+      const sourcePath = this.#pendingOpenPaths[0];
+
+      try {
+        const session = await this.#workspaces.openPath(sourcePath);
+        const opener = this.#windows.activeWindow();
+        if (opener) {
+          if (this.#focusExistingWorkspaceWindow(opener, session)) continue;
+
+          this.#openWorkspaceWindow(opener, session);
+          continue;
+        }
+
+        const window = this.#createWindow(false);
+        this.#workspaces.attachWindow(session.workspaceId, window);
+        this.#loadWorkspace(window);
+      } catch (error) {
+        this.#log.error("failed to open external document", sourcePath, error);
+      } finally {
+        this.#pendingOpenPaths.shift();
       }
     }
   }
