@@ -1,5 +1,7 @@
+import { execFile } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { promisify } from "node:util";
 import type { ElectronApplication, Page } from "@playwright/test";
 import { createBridge } from "@shift/bridge";
 import {
@@ -10,6 +12,7 @@ import {
   FONT_PATH,
   GLYPHS_FONT_PATH,
   GLYPHSPACKAGE_FONT_PATH,
+  MAIN_JS,
   OTF_FONT_PATH,
   UFO_FONT_PATH,
   waitForWorkspaceReady,
@@ -23,6 +26,9 @@ import {
   runCommand,
   windowTitle,
 } from "./fixtures/documentLifecycle";
+import { createAuthoredDocument } from "./fixtures/fontSource";
+
+const execFileAsync = promisify(execFile);
 
 const discardTest = test.extend({
   dirtyDocumentChoice: ["discard", { option: true }],
@@ -121,6 +127,48 @@ function sourceTreeSnapshot(rootPath: string): [string, string][] {
   };
   visit(rootPath);
   return snapshot;
+}
+
+workspaceTest(
+  "opens a document sent to the running application",
+  async ({ electronApp, testRoot }) => {
+    const secondPath = createSecondDocument(testRoot);
+
+    await launchSecondInstance(electronApp, testRoot, secondPath);
+
+    await expect.poll(() => electronApp.windows().length).toBe(2);
+    await expect.poll(() => hasWindowTitle(electronApp, "second.shift -")).toBe(true);
+  },
+);
+
+function createSecondDocument(testRoot: string): string {
+  const generatedPath = createAuthoredDocument(FONT_PATH, path.join(testRoot, "second-workspace"));
+  const secondPath = path.join(testRoot, "second.shift");
+  fs.renameSync(generatedPath, secondPath);
+  return secondPath;
+}
+
+async function launchSecondInstance(
+  electronApp: ElectronApplication,
+  testRoot: string,
+  documentPath: string,
+): Promise<void> {
+  const executablePath = await electronApp.evaluate(() => process.execPath);
+  await execFileAsync(executablePath, [
+    MAIN_JS,
+    `--user-data-dir=${path.join(testRoot, "user-data")}`,
+    documentPath,
+  ]);
+}
+
+async function hasWindowTitle(
+  electronApp: ElectronApplication,
+  expected: string,
+): Promise<boolean> {
+  const titles = await Promise.all(
+    electronApp.windows().map((window) => windowTitle(window, electronApp)),
+  );
+  return titles.some((title) => title.includes(expected));
 }
 
 test.describe("opening a font through the application shell", () => {

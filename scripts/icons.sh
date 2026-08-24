@@ -102,6 +102,62 @@ generate_ico() {
   magick "${images[@]}" "$destination"
 }
 
+generate_icns() {
+  local source=$1
+  local destination=$2
+  local iconset="$work_dir/$(basename "$destination" .icns).iconset"
+
+  mkdir -p "$iconset"
+  resize_png "$source" 16 "$iconset/icon_16x16.png"
+  resize_png "$source" 32 "$iconset/icon_16x16@2x.png"
+  resize_png "$source" 32 "$iconset/icon_32x32.png"
+  resize_png "$source" 64 "$iconset/icon_32x32@2x.png"
+  resize_png "$source" 128 "$iconset/icon_128x128.png"
+  resize_png "$source" 256 "$iconset/icon_128x128@2x.png"
+  resize_png "$source" 256 "$iconset/icon_256x256.png"
+  resize_png "$source" 512 "$iconset/icon_256x256@2x.png"
+  resize_png "$source" 512 "$iconset/icon_512x512.png"
+  resize_png "$source" 1024 "$iconset/icon_512x512@2x.png"
+  iconutil --convert icns --output "$destination" "$iconset"
+}
+
+generate_document_icons() {
+  local source="$repo_root/apps/desktop/src/renderer/src/assets/logo.png"
+  local frame="$work_dir/shift-document-frame.svg"
+  local document="$work_dir/shift-document.png"
+  local sizes=(16 32 48 64 128 256 512 1024)
+
+  cat >"$frame" <<'SVG'
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="22" stdDeviation="24" flood-color="#000" flood-opacity="0.22"/>
+    </filter>
+  </defs>
+  <path d="M190 48h478l216 216v644c0 38-30 68-68 68H190c-38 0-68-30-68-68V116c0-38 30-68 68-68z"
+        fill="#f8f8fa" stroke="#c8c9ce" stroke-width="12" filter="url(#shadow)"/>
+  <path d="M668 48v148c0 38 30 68 68 68h148z" fill="#dedfe4" stroke="#c8c9ce" stroke-width="12" stroke-linejoin="round"/>
+</svg>
+SVG
+
+  magick "$frame" \
+    \( "$source" -resize 620x620 \) \
+    -gravity center \
+    -geometry +0+105 \
+    -composite \
+    -strip \
+    -depth 8 \
+    "PNG32:$document"
+
+  for size in "${sizes[@]}"; do
+    resize_png "$document" "$size" "$icons_dir/shift-document-${size}x${size}.png"
+  done
+
+  cp "$icons_dir/shift-document-512x512.png" "$icons_dir/shift-document.png"
+  generate_icns "$document" "$icons_dir/shift-document.icns"
+  generate_ico "$document" "$icons_dir/shift-document.ico"
+}
+
 generate_release_icons() {
   local source="$icons_dir/icon-macos.png"
   local sizes=(16 32 48 64 96 128 192 256 512 1024)
@@ -129,5 +185,6 @@ compile_icon icon
 compile_icon nightly
 generate_release_icons
 generate_nightly_icons
+generate_document_icons
 
-echo "Generated release and nightly icons from icons/*.icon"
+echo "Generated release, nightly, and Shift document icons"

@@ -153,8 +153,7 @@ export const test = base.extend<ShiftFixtures & ShiftOptions>({
       // Force software rendering for deterministic GPU-free snapshots.
       LIBGL_ALWAYS_SOFTWARE: "1",
     };
-    if (workspacePath) environment.SHIFT_E2E_FONT_PATH = workspacePath;
-    else delete environment.SHIFT_E2E_FONT_PATH;
+    delete environment.SHIFT_E2E_FONT_PATH;
 
     if (scriptedDialogs) {
       environment.SHIFT_E2E_NATIVE_DIALOGS = "1";
@@ -175,7 +174,12 @@ export const test = base.extend<ShiftFixtures & ShiftOptions>({
 
     try {
       app = await electron.launch({
-        args: [MAIN_JS, `--user-data-dir=${userDataDir}`, "--force-device-scale-factor=1"],
+        args: [
+          MAIN_JS,
+          `--user-data-dir=${userDataDir}`,
+          "--force-device-scale-factor=1",
+          ...(workspacePath ? [workspacePath] : []),
+        ],
         env: environment,
       });
       childProcess = app.process();
