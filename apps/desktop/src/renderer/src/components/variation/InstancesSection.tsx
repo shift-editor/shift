@@ -12,7 +12,7 @@ interface InstancesSectionProps {
 export const InstancesSection = ({ defaultOpen = false }: InstancesSectionProps) => {
   const [open, setOpen] = useState(defaultOpen);
   const [instanceMenuOpen, setInstanceMenuOpen] = useState(false);
-  const canAuthor = useFontSession().canAuthor;
+  const canAuthor = useFontSession().mode === "authored";
 
   return (
     <CollapsibleSection

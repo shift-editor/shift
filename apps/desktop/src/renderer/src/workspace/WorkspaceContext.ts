@@ -1,7 +1,7 @@
 import { createContext, useContext } from "react";
 import type { Editor } from "@/lib/editor/Editor";
 import type { Font } from "@/lib/model/Font";
-import type { FontSession } from "./FontSession";
+import type { FontSession } from "@/types/fontSession";
 import type { Workspace } from "./Workspace";
 
 export const FontSessionContext = createContext<FontSession | null>(null);

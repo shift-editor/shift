@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { GlyphCatalogController } from "./GlyphCatalogController";
 import { GlyphNameInput } from "./GlyphNameInput";
 import { useTheme } from "@/context/ThemeContext";
@@ -7,8 +7,8 @@ import type {
   GlyphCatalogItem,
   PendingGlyphNames,
 } from "@/types/glyphCatalog";
-import { useEditor } from "@/workspace/WorkspaceContext";
-import { useSignalState } from "@/lib/signals";
+import { useFontSession } from "@/workspace/WorkspaceContext";
+import { effect, track } from "@/lib/signals";
 
 /** Thin React shell around the imperative, canvas-owned glyph catalog. */
 export function GlyphCatalogCanvas({
@@ -26,8 +26,21 @@ export function GlyphCatalogCanvas({
   onUnavailable,
 }: GlyphCatalogCanvasProps) {
   const { themeName } = useTheme();
-  const editor = useEditor();
-  const editsSettled = useSignalState(editor.font.editCoordinator.settledCell);
+  const session = useFontSession();
+  const workspace = session.workspace;
+  const editsSettled =
+    useSyncExternalStore(
+      (callback) => {
+        if (!workspace) return () => {};
+
+        const subscription = effect(() => {
+          track(workspace.applyStatusCell);
+          callback();
+        });
+        return () => subscription.dispose();
+      },
+      () => workspace?.applyStatusCell.peek() ?? "idle",
+    ) === "idle";
   const glyphCanvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const inputContainerRef = useRef<HTMLDivElement>(null);
@@ -119,7 +132,7 @@ export function GlyphCatalogCanvas({
 
       for (const [glyphId, pendingName] of current) {
         const visibleGlyph = glyphs.find(({ id }) => id === glyphId);
-        const committedName = editor.font.recordForId(glyphId)?.name;
+        const committedName = session.font.recordForId(glyphId)?.name;
         const visibleNameConfirmed =
           committedName === pendingName && (!visibleGlyph || visibleGlyph.name === pendingName);
         const renameRejected = editsSettled && committedName !== pendingName;
@@ -128,7 +141,7 @@ export function GlyphCatalogCanvas({
 
       return next.size === current.size ? current : next;
     });
-  }, [editor, editsSettled, glyphs, pendingGlyphNames]);
+  }, [editsSettled, glyphs, pendingGlyphNames, session.font]);
 
   return (
     <>

@@ -12,7 +12,7 @@ interface AxesSectionProps {
 export const AxesSection = ({ defaultOpen = false }: AxesSectionProps) => {
   const [open, setOpen] = useState(defaultOpen);
   const [axisMenuOpen, setAxisMenuOpen] = useState(false);
-  const canAuthor = useFontSession().canAuthor;
+  const canAuthor = useFontSession().mode === "authored";
 
   return (
     <CollapsibleSection
