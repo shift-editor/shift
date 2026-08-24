@@ -226,7 +226,7 @@ test.describe("retained font source Grid preview", () => {
   });
 
   test("shows preview font settings with disabled authoring controls", async ({ page }) => {
-    await expect.poll(() => page.evaluate(() => window.shiftSession?.canAuthor)).toBe(false);
+    await expect.poll(() => page.evaluate(() => window.shiftSession?.mode)).toBe("preview");
 
     await page.getByLabel(/Display and edit font information/).click();
     const settingsDialog = page.getByRole("dialog", { name: "Settings" });

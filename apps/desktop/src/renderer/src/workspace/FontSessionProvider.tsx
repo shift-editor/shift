@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import "@/types/window";
-import type { FontSession } from "./FontSession";
+import type { FontSession } from "@/types/fontSession";
 import { FontSessionContext, WorkspaceContext } from "./WorkspaceContext";
 import { getFontSession } from "./runtime";
 

@@ -1,6 +1,7 @@
 import { expect, type Page } from "@playwright/test";
 
 const FIRST_GLYPH_PREVIEW_POINT = { x: 50, y: 50 };
+const FIRST_GLYPH_NAME_POINT = { x: 50, y: 117 };
 
 export function glyphCatalogViewport(page: Page) {
   return page.getByLabel("Glyph catalog", { exact: true });
@@ -41,9 +42,14 @@ export async function firstAxisSlider(page: Page) {
   return page.getByRole("slider", { name: axisName, exact: true });
 }
 
-/** Keeps the canvas layout coordinate contract in one place. */
+/** Keeps the canvas preview coordinate contract in one place. */
 export async function clickFirstCatalogGlyph(page: Page): Promise<void> {
   await glyphCatalogViewport(page).click({ position: FIRST_GLYPH_PREVIEW_POINT });
+}
+
+/** Keeps the canvas name-cell coordinate contract in one place. */
+export async function clickFirstCatalogGlyphName(page: Page): Promise<void> {
+  await glyphCatalogViewport(page).click({ position: FIRST_GLYPH_NAME_POINT });
 }
 
 /**

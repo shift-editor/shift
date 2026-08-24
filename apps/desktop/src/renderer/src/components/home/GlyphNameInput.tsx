@@ -23,31 +23,30 @@ export const GlyphNameInput = forwardRef<HTMLInputElement, GlyphNameInputProps>(
       setDraft(next);
     };
 
-    const commit = (): void => {
+    const commit = (): GlyphName | null => {
       const next = draftRef.current.trim() as GlyphName;
       if (next === glyphName) {
         updateDraft(glyphName);
-        return;
+        return null;
       }
 
       if (!next || editor.font.recordForName(next)) {
         updateDraft(glyphName);
-        return;
+        return null;
       }
 
       const resolved = glyphInfo.getGlyphByName(next);
       editor.font.updateGlyphIdentity(glyph.id, next, resolved ? [resolved.codepoint] : []);
+      return next;
     };
 
     return (
       <Input
         ref={ref}
+        aria-label="Glyph name"
         value={draft}
         onChange={(event) => updateDraft(event.currentTarget.value as GlyphName)}
-        onBlur={() => {
-          commit();
-          onFinished();
-        }}
+        onBlur={() => onFinished(commit())}
         onKeyDown={(event) => {
           event.nativeEvent.stopImmediatePropagation();
 

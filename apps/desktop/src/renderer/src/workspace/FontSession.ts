@@ -1,45 +1,62 @@
-import type { FontSessionMode } from "@shared/workspace/protocol";
 import type { Editor } from "@/lib/editor/Editor";
 import type { Font } from "@/lib/model/Font";
 import type { GlyphCatalog } from "@/lib/catalog/GlyphCatalog";
 import type { FontSessionClient } from "@/lib/workspace/FontSessionClient";
+import type { AuthoredFontSession, PreviewFontSession } from "@/types/fontSession";
 import type { Workspace } from "./Workspace";
 
-/** Immutable renderer composition for one connected font session. */
-export class FontSession {
-  readonly mode: FontSessionMode;
-  /** Whether this immutable session permits durable authoring operations. */
-  readonly canAuthor: boolean;
-  readonly catalog: GlyphCatalog;
-  readonly workspace: Workspace | null;
-  readonly font: Font;
-  readonly editor: Editor;
-  readonly #client: FontSessionClient;
+/**
+ * Creates an authored renderer composition with durable workspace capabilities.
+ *
+ * @param catalog - Resident catalog owned for the session lifetime.
+ * @param workspace - Connected authored workspace disposed with the session.
+ * @param client - Session transport disposed after the renderer composition.
+ * @returns an authored session whose disposal releases every owned resource.
+ */
+export function createAuthoredFontSession(
+  catalog: GlyphCatalog,
+  workspace: Workspace,
+  client: FontSessionClient,
+): AuthoredFontSession {
+  return {
+    mode: "authored",
+    catalog,
+    workspace,
+    font: workspace.font,
+    editor: workspace.editor,
+    dispose() {
+      catalog.dispose();
+      workspace.dispose();
+      client.dispose();
+    },
+  };
+}
 
-  constructor(
-    mode: FontSessionMode,
-    catalog: GlyphCatalog,
-    workspace: Workspace | null,
-    client: FontSessionClient,
-    font: Font,
-    editor: Editor,
-  ) {
-    this.mode = mode;
-    this.canAuthor = mode === "authored";
-    this.catalog = catalog;
-    this.workspace = workspace;
-    this.font = font;
-    this.editor = editor;
-    this.#client = client;
-  }
-
-  dispose(): void {
-    this.catalog.dispose();
-    if (this.workspace) {
-      this.workspace.dispose();
-    } else {
-      this.font.dispose();
-    }
-    this.#client.dispose();
-  }
+/**
+ * Creates a read-only renderer composition over an imported font source.
+ *
+ * @param catalog - Resident catalog owned for the session lifetime.
+ * @param client - Session transport disposed after the renderer composition.
+ * @param font - Imported font model disposed with the session.
+ * @param editor - Read-only editor sharing the imported font model.
+ * @returns a preview session whose disposal releases every owned resource.
+ */
+export function createPreviewFontSession(
+  catalog: GlyphCatalog,
+  client: FontSessionClient,
+  font: Font,
+  editor: Editor,
+): PreviewFontSession {
+  return {
+    mode: "preview",
+    catalog,
+    workspace: null,
+    font,
+    editor,
+    dispose() {
+      catalog.dispose();
+      font.dispose();
+      client.dispose();
+    },
+  };
 }

@@ -2,6 +2,7 @@ import type { Page } from "@playwright/test";
 import { workspaceTest as test, expect } from "./fixtures/electronApp";
 import {
   clickFirstCatalogGlyph,
+  clickFirstCatalogGlyphName,
   glyphCatalogCanvas,
   glyphCatalogSurface,
 } from "./fixtures/appLocators";
@@ -64,6 +65,26 @@ test.describe("Home view", () => {
     await expect(surface).toHaveAttribute("data-first-glyph-id", unencoded.id);
   });
 
+  test("keeps a renamed glyph visible until the catalog confirms its new name", async ({
+    page,
+  }) => {
+    const glyph = await createQuickGlyph(page);
+    const nextName = `${glyph.name}.renamed`;
+    await page.getByPlaceholder("Search glyphs...").fill(glyph.name);
+    await expect(glyphCatalogSurface(page)).toHaveAttribute("data-filtered-glyph-count", "1");
+    await afterNextPaint(page);
+    await clickFirstCatalogGlyphName(page);
+
+    const input = page.getByLabel("Glyph name", { exact: true });
+    await input.fill(nextName);
+    const remainedVisible = observeRenameTransition(page, glyph.id, nextName);
+    await input.press("Enter");
+
+    expect(await remainedVisible).toBe(true);
+    await expect(input).toHaveCount(0);
+    await expect(glyphCatalogCanvas(page)).toHaveAttribute("data-first-glyph-name", nextName);
+  });
+
   test("keeps the resident grid when returning from the editor", async ({ page }) => {
     const glyphCanvas = glyphCatalogCanvas(page);
     await expect(glyphCanvas).toBeVisible({ timeout: 30_000 });
@@ -98,6 +119,66 @@ test.describe("Home view", () => {
       .toEqual(initialSize);
   });
 });
+
+async function createQuickGlyph(page: Page) {
+  await page.getByRole("button", { name: "Create glyph", exact: true }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          window.shift?.font.glyphRecords().find((glyph) => glyph.name.startsWith("newGlyph")) ??
+          null,
+      ),
+    )
+    .not.toBeNull();
+
+  const glyph = await page.evaluate(() =>
+    window.shift?.font.glyphRecords().find((record) => record.name.startsWith("newGlyph")),
+  );
+  if (!glyph) throw new Error("Expected new glyph");
+
+  return glyph;
+}
+
+async function observeRenameTransition(
+  page: Page,
+  glyphId: string,
+  nextName: string,
+): Promise<boolean> {
+  return page.evaluate(
+    ({ glyphId, nextName }) =>
+      new Promise<boolean>((resolve) => {
+        function sample(): void {
+          const currentName = window.shift?.font
+            .glyphRecords()
+            .find(({ id }) => id === glyphId)?.name;
+          const input = document.querySelector<HTMLInputElement>('[aria-label="Glyph name"]');
+          const canvas = document.querySelector<HTMLCanvasElement>(
+            '[data-testid="glyph-catalog-canvas"]',
+          );
+          if (input) {
+            requestAnimationFrame(sample);
+            return;
+          }
+
+          const visibleName = canvas?.dataset.firstGlyphName;
+          if (currentName === nextName) {
+            resolve(visibleName === nextName);
+            return;
+          }
+          if (visibleName !== nextName) {
+            resolve(false);
+            return;
+          }
+
+          requestAnimationFrame(sample);
+        }
+
+        requestAnimationFrame(sample);
+      }),
+    { glyphId, nextName },
+  );
+}
 
 async function afterNextPaint(page: Page): Promise<void> {
   await page.evaluate(

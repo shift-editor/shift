@@ -15,6 +15,8 @@ export interface GlyphCatalogItem {
   readonly unicode: number | null;
 }
 
+export type PendingGlyphNames = ReadonlyMap<GlyphId, GlyphName>;
+
 /** Publication decision for an asynchronously opened glyph. */
 export type GlyphOpenResult<T> =
   | { readonly status: "current"; readonly glyph: T }
@@ -98,7 +100,7 @@ export interface GlyphCatalogControllerFrame {
 
 export interface GlyphNameInputProps {
   readonly glyph: GlyphCatalogItem;
-  readonly onFinished: () => void;
+  readonly onFinished: (nextName: GlyphName | null) => void;
 }
 
 export interface GlyphCatalogCanvasProps {

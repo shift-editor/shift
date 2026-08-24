@@ -1,6 +1,25 @@
+import type { Locator, Page } from "@playwright/test";
 import { workspaceTest as test, expect, navigateToEditor } from "./fixtures/electronApp";
 import { glyphProperties } from "./fixtures/appLocators";
 import { CanvasUtil } from "./fixtures/CanvasUtil";
+
+async function selectionBounds(page: Page) {
+  const bounds = await page.evaluate(() => window.shift?.editor.selectionBounds());
+  if (!bounds) throw new Error("Expected selection bounds");
+
+  return bounds;
+}
+
+async function selectionCenter(page: Page) {
+  const bounds = await selectionBounds(page);
+  return { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
+}
+
+async function setInputValue(input: Locator, value: number): Promise<void> {
+  await input.click();
+  await input.fill(String(value));
+  await input.press("Enter");
+}
 
 test.describe("Editor view", () => {
   test.beforeEach(async ({ page }) => {
@@ -48,5 +67,71 @@ test.describe("Editor view", () => {
     await rightSidebearingInput.press("Enter");
 
     await expect(advanceInput).toHaveValue(String(initialAdvance + 25));
+  });
+
+  test("does not move a selection when its displayed position is reapplied", async ({ page }) => {
+    await page.keyboard.press("Meta+a");
+    const properties = glyphProperties(page);
+    const xInput = properties.getByLabel("X position", { exact: true });
+    const yInput = properties.getByLabel("Y position", { exact: true });
+    const initialBounds = await selectionBounds(page);
+
+    await expect(xInput).toHaveValue(String(Math.round(initialBounds.x)));
+    await expect(yInput).toHaveValue(String(Math.round(initialBounds.y)));
+    await xInput.press("Enter");
+    await yInput.press("Enter");
+
+    await expect.poll(() => selectionBounds(page)).toEqual(initialBounds);
+  });
+
+  test("positions a selection from its top-left independently of the scale anchor", async ({
+    page,
+  }) => {
+    await page.keyboard.press("Meta+a");
+    const properties = glyphProperties(page);
+    const xInput = properties.getByLabel("X position", { exact: true });
+    const yInput = properties.getByLabel("Y position", { exact: true });
+    const initialBounds = await selectionBounds(page);
+    const targetX = Math.round(initialBounds.x) + 25;
+    const targetY = Math.round(initialBounds.y) + 30;
+
+    await properties.getByLabel("Top-left scale anchor", { exact: true }).click();
+    await setInputValue(xInput, targetX);
+    await setInputValue(yInput, targetY);
+
+    await expect.poll(() => selectionBounds(page)).toMatchObject({ x: targetX, y: targetY });
+  });
+
+  test("applies scaling around the selected scale anchor", async ({ page }) => {
+    await page.keyboard.press("Meta+a");
+    const properties = glyphProperties(page);
+    const initialBounds = await selectionBounds(page);
+
+    await properties.getByLabel("Top-left scale anchor", { exact: true }).click();
+    const scaleInput = properties.getByLabel("Scale factor", { exact: true });
+    await setInputValue(scaleInput, 2);
+
+    await expect
+      .poll(() => selectionBounds(page))
+      .toMatchObject({
+        x: initialBounds.x,
+        y: initialBounds.y,
+        width: initialBounds.width * 2,
+        height: initialBounds.height * 2,
+      });
+  });
+
+  test("keeps rotation and flipping centered regardless of the scale anchor", async ({ page }) => {
+    await page.keyboard.press("Meta+a");
+    const properties = glyphProperties(page);
+    await properties.getByLabel("Top-left scale anchor", { exact: true }).click();
+    const initialCenter = await selectionCenter(page);
+
+    await properties.getByRole("button", { name: "Rotate 90 degrees clockwise" }).click();
+    await expect.poll(() => selectionCenter(page)).toEqual(initialCenter);
+    const rotatedBounds = await selectionBounds(page);
+
+    await properties.getByRole("button", { name: "Flip horizontally" }).click();
+    await expect.poll(() => selectionBounds(page)).toEqual(rotatedBounds);
   });
 });

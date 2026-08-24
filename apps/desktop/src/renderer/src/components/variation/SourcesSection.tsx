@@ -12,7 +12,7 @@ interface SourcesSectionProps {
 export const SourcesSection = ({ defaultOpen = false }: SourcesSectionProps) => {
   const [open, setOpen] = useState(defaultOpen);
   const [sourceMenuOpen, setSourceMenuOpen] = useState(false);
-  const canAuthor = useFontSession().canAuthor;
+  const canAuthor = useFontSession().mode === "authored";
 
   return (
     <CollapsibleSection

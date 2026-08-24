@@ -63,7 +63,7 @@ const FontSessionScreens = () => {
         <div className={catalogActive ? undefined : "relative z-10"}>
           <Outlet />
         </div>
-        {session.canAuthor ? null : <ReadOnlyNoticeDialog />}
+        {session.mode === "authored" ? null : <ReadOnlyNoticeDialog />}
       </SettingsNavigationProvider>
     </GlyphCatalogProvider>
   );
@@ -79,8 +79,8 @@ const ShiftSessionSetup = () => {
     if (!documentLoaded) return;
 
     editor.setExternalLocation(font.defaultLocation());
-    if (session.canAuthor) editor.selectSource(font.defaultSource.id);
-  }, [documentLoaded, editor, font, session.canAuthor]);
+    if (session.mode === "authored") editor.selectSource(font.defaultSource.id);
+  }, [documentLoaded, editor, font, session.mode]);
 
   return null;
 };

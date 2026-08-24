@@ -1,4 +1,4 @@
-import type { FontSession } from "@/workspace/FontSession";
+import type { FontSession } from "./fontSession";
 import type { Workspace } from "@/workspace/Workspace";
 
 declare global {

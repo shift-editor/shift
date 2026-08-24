@@ -12,7 +12,8 @@ import type { GlyphReader } from "@/types/glyph";
 import { FontSessionClient } from "@/lib/workspace/FontSessionClient";
 import { getShiftHost } from "@/host/shiftHost";
 import { Workspace } from "./Workspace";
-import { FontSession } from "./FontSession";
+import { createAuthoredFontSession, createPreviewFontSession } from "./FontSession";
+import type { FontSession } from "@/types/fontSession";
 import { getGlyphInfo } from "./glyphInfo";
 
 declare global {
@@ -54,14 +55,7 @@ async function createFontSession(
         () => workspace.font.getAxisMappingBases(),
       );
       const catalog = new GlyphCatalog(workspace.editor, glyphInfo, atlas);
-      return new FontSession(
-        "authored",
-        catalog,
-        workspace,
-        client,
-        workspace.font,
-        workspace.editor,
-      );
+      return createAuthoredFontSession(catalog, workspace, client);
     }
     case "preview": {
       await client.connect();
@@ -75,7 +69,7 @@ async function createFontSession(
       editor.setActiveTool("select");
 
       const catalog = new GlyphCatalog(editor, glyphInfo, new ImportedGlyphAtlasSource(client));
-      return new FontSession("preview", catalog, null, client, font, editor);
+      return createPreviewFontSession(catalog, client, font, editor);
     }
   }
 }
