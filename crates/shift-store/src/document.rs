@@ -72,14 +72,10 @@ impl ShiftStore {
     /// Saves a consistent snapshot of this store as a new canonical document.
     ///
     /// The source remains open and unchanged. The destination receives a new
-    /// document identity, excludes app-local workspace state, and is validated
-    /// and synced at a sibling staging path before no-clobber publication.
+    /// document identity, excludes app-local workspace state, and atomically
+    /// replaces any existing file only after sibling staging, validation, and sync.
     pub fn save_as_document(&self, path: impl AsRef<Path>) -> Result<DocumentMetadata, StoreError> {
         let path = path.as_ref();
-        if path.exists() {
-            return Err(StoreError::DocumentAlreadyExists(path.to_path_buf()));
-        }
-
         let parent = parent_directory(path);
         let staged = tempfile::Builder::new()
             .prefix(".shift-document-")
@@ -151,13 +147,9 @@ impl ShiftStore {
             ));
         }
 
-        match staged.persist_noclobber(path) {
-            Ok(()) => {}
-            Err(error) if error.error.kind() == std::io::ErrorKind::AlreadyExists => {
-                return Err(StoreError::DocumentAlreadyExists(path.to_path_buf()));
-            }
-            Err(error) => return Err(StoreError::Io(error.error)),
-        }
+        staged
+            .persist(path)
+            .map_err(|error| StoreError::Io(error.error))?;
         sync_parent_directory(path)?;
 
         Ok(metadata)
