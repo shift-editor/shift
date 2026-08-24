@@ -3,65 +3,65 @@ import { createReadStream } from "node:fs";
 import { copyFile, mkdir, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-const [distArgument, outputArgument, version] = process.argv.slice(2);
-if (!distArgument || !outputArgument || !/^\d+\.\d+\.\d+$/.test(version)) {
+const [distArgument, publicArgument, updatesArgument, version] = process.argv.slice(2);
+if (!distArgument || !publicArgument || !updatesArgument || !/^\d+\.\d+\.\d+$/.test(version)) {
   throw new Error(
-    "Usage: prepare-nightly-release.mjs <dist-directory> <output-directory> <numeric-version>",
+    "Usage: prepare-nightly-release.mjs <dist-directory> <public-directory> <updates-directory> <numeric-version>",
   );
 }
 
 const assets = [
   {
-    destinations: (source) => [path.basename(source)],
     pattern: new RegExp(`Shift-Nightly-${escapeRegex(version)}-macOS-arm64\\.zip$`),
+    publicName: "Shift-Nightly-macOS-arm64.zip",
+    update: true,
   },
   {
-    destinations: (source) => [path.basename(source)],
     pattern: new RegExp(`Shift-Nightly-${escapeRegex(version)}-macOS-x64\\.zip$`),
+    publicName: "Shift-Nightly-macOS-x64.zip",
+    update: true,
   },
   {
-    destinations: (source) => [path.basename(source)],
     pattern: new RegExp(`Shift-Nightly-${escapeRegex(version)}-macOS-arm64\\.zip\\.blockmap$`),
+    update: true,
   },
   {
-    destinations: (source) => [path.basename(source)],
     pattern: new RegExp(`Shift-Nightly-${escapeRegex(version)}-macOS-x64\\.zip\\.blockmap$`),
+    update: true,
   },
   {
-    destinations: (source) => [path.basename(source)],
     pattern: new RegExp(`Shift-Nightly-${escapeRegex(version)}-macOS-arm64\\.dmg$`),
+    publicName: "Shift-Nightly-macOS-arm64.dmg",
   },
   {
-    destinations: (source) => [path.basename(source)],
     pattern: new RegExp(`Shift-Nightly-${escapeRegex(version)}-macOS-x64\\.dmg$`),
+    publicName: "Shift-Nightly-macOS-x64.dmg",
   },
   {
-    destinations: (source) => [path.basename(source)],
     pattern: new RegExp(`Shift-Nightly-${escapeRegex(version)}-Windows-x64-Setup\\.exe$`),
+    publicName: "Shift-Nightly-Windows-x64-Setup.exe",
+    update: true,
   },
   {
-    destinations: (source) => [path.basename(source)],
     pattern: new RegExp(
       `Shift-Nightly-${escapeRegex(version)}-Windows-x64-Setup\\.exe\\.blockmap$`,
     ),
+    update: true,
   },
   {
-    destinations: (source) => [path.basename(source)],
     pattern: new RegExp(`Shift-Nightly-${escapeRegex(version)}-Linux-x64\\.deb$`),
+    publicName: "Shift-Nightly-Linux-x64.deb",
   },
   {
-    destinations: (source) => [path.basename(source)],
     pattern: new RegExp(`Shift-Nightly-${escapeRegex(version)}-Linux-x64\\.rpm$`),
+    publicName: "Shift-Nightly-Linux-x64.rpm",
   },
 ];
 
 const distRoot = path.resolve(distArgument);
-const outputRoot = path.resolve(outputArgument);
-await mkdir(outputRoot, { recursive: true });
-
-if ((await readdir(outputRoot)).length > 0) {
-  throw new Error(`Nightly output directory is not empty: ${outputRoot}`);
-}
+const publicRoot = path.resolve(publicArgument);
+const updatesRoot = path.resolve(updatesArgument);
+await Promise.all([prepareEmptyDirectory(publicRoot), prepareEmptyDirectory(updatesRoot)]);
 
 const files = await collectFiles(distRoot);
 const checksums = [];
@@ -73,14 +73,24 @@ for (const asset of assets) {
   }
 
   const source = matches[0];
-  for (const destinationName of asset.destinations(source)) {
-    const destination = path.join(outputRoot, destinationName);
+  if (asset.publicName) {
+    const destination = path.join(publicRoot, asset.publicName);
     await copyFile(source, destination);
-    checksums.push(`${await sha256(destination)}  ${destinationName}`);
+    checksums.push(`${await sha256(destination)}  ${asset.publicName}`);
+  }
+  if (asset.update) {
+    await copyFile(source, path.join(updatesRoot, path.basename(source)));
   }
 }
 
-await writeFile(path.join(outputRoot, "SHA256SUMS"), `${checksums.sort().join("\n")}\n`);
+await writeFile(path.join(publicRoot, "SHA256SUMS"), `${checksums.sort().join("\n")}\n`);
+
+async function prepareEmptyDirectory(directory) {
+  await mkdir(directory, { recursive: true });
+  if ((await readdir(directory)).length > 0) {
+    throw new Error(`Nightly output directory is not empty: ${directory}`);
+  }
+}
 
 async function collectFiles(root) {
   const files = [];

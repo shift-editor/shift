@@ -7,7 +7,7 @@ Shift ships one versioned desktop product. Internal Rust crates and JavaScript p
 | State     | Product identity | Bundle ID           | Data root       | Publication                   |
 | --------- | ---------------- | ------------------- | --------------- | ----------------------------- |
 | `release` | Shift            | `app.shift`         | `Shift`         | Draft, then GitHub prerelease |
-| `nightly` | Shift Nightly    | `app.shift.nightly` | `Shift Nightly` | Rolling GitHub prerelease     |
+| `nightly` | Shift Nightly    | `app.shift.nightly` | `Shift Nightly` | Rolling GitHub prerelease and immutable R2 updater archive |
 
 `SHIFT_DISTRIBUTION` accepts only `release` or `nightly` during a build. Release and Nightly have separate application identities, data roots, and update-feed paths. A failed build does not advance its update feed.
 
@@ -39,7 +39,7 @@ Use Conventional Commit prefixes. `feat`, `fix`, and `perf` appear in the public
 
 electron-updater compares the aligned numeric versions, verifies generated SHA-512 metadata, downloads packages, verifies macOS code signatures and configured Windows Authenticode publishers, and installs/relaunches. Metadata hashes detect package corruption; they do **not** authenticate an unsigned Windows publisher. Do not treat Windows automatic updates as production-ready until Authenticode signing and installed verification are complete.
 
-electron-builder generates architecture-specific `latest-mac.yml` files for exact versioned ZIP assets and `latest.yml` for the Windows Nightly NSIS installer. GitHub Pages hosts only these fixed Release/Nightly metadata files; GitHub Releases hosts the binaries and differential-update blockmaps.
+electron-builder generates architecture-specific `latest-mac.yml` files for exact versioned ZIP assets and `latest.yml` for the Windows Nightly NSIS installer. GitHub Pages hosts the fixed Release/Nightly metadata files. Versioned Release binaries and their differential-update blockmaps remain on GitHub Releases. Nightly metadata instead references immutable updater packages under `nightly/<full-commit>/` in Cloudflare R2. Because electron-updater cannot derive a previous blockmap URL across commit-addressed directories, Nightly updates fall back to full package downloads; Release differential updates are unchanged.
 
 The app waits 30 seconds before its first automatic check to avoid competing with startup, then checks every four hours. Automatic current/error results are quiet. Manual checks report current/download states. A downloaded update offers **Restart and Update** / Later, is not silently installed on ordinary quit, and cannot restart until every document accepts and commits close.
 
@@ -47,20 +47,23 @@ The app waits 30 seconds before its first automatic check to avoid competing wit
 
 - `release-please.yml` maintains a draft release pull request. Merging it creates a numeric version tag and draft GitHub release, then invokes `release-desktop.yml`.
 - `release-desktop.yml` validates `vMAJOR.MINOR.PATCH`, builds macOS arm64/x64 ZIPs and DMGs, a Windows x64 per-user NSIS installer, and Linux x64 packages, smoke-tests packaged applications, uploads checksums/assets, publishes the GitHub prerelease, then advances the Release feed.
-- `nightly.yml` resolves one `0.RUN.ATTEMPT` version, builds the same matrix, and updates the rolling Nightly prerelease only after every build succeeds. It publishes one exact versioned ZIP, DMG, installer, DEB, and RPM asset set rather than duplicate stable-name aliases.
-- `prepare-update-feed.mjs` performs the one monotonic candidate-version check, stages electron-builder's generated metadata into fixed Pages paths, and rewrites artifact paths to absolute GitHub Release asset URLs. It does not create immutable feed-history directories.
+- `nightly.yml` resolves one `0.RUN.ATTEMPT` version and builds the same matrix. After every build succeeds, it archives versioned updater assets in the immutable R2 prefix `nightly/<full-commit>/`, replaces the rolling GitHub prerelease's friendly download aliases, and advances the feed to the exact R2 prefix. A commit whose R2 manifest and feed are already active is skipped.
+- `prepare-update-feed.mjs` performs the one monotonic candidate-version check and stages electron-builder's generated metadata into fixed Pages paths. Release asset URLs continue to target their versioned GitHub release; Nightly URLs target the candidate's immutable R2 prefix. It does not create feed-history directories.
 
 Release and Nightly feed publication share one concurrency group. Binary assets become public before a feed advances. The feed job checks out or creates the `update-feeds` branch, preserves `.nojekyll` and the other distribution directory, updates only its channel, and pushes the branch. GitHub Pages serves it at `https://shift-editor.github.io/shift/updates`.
 
-A separate feed job allows feed deployment to be retried from retained workflow artifacts without rebuilding binaries. The first successful deployment creates `update-feeds`; later deployments update one channel directory. After the Nightly feed advances, a prune job removes legacy aliases and inactive versioned binaries while retaining inactive blockmaps for 14 days. Those small blockmaps allow recent installations to use differential updates; older installations fall back to a full package download. A failed prune leaves the active feed and binaries intact.
+A separate feed job allows a failed feed deployment to be retried from the original run's retained workflow artifacts without rebuilding binaries. The first successful deployment creates `update-feeds`; later deployments update one channel directory. Nightly publication follows `built → uploaded → active → retired → deleted`: the R2 manifest is uploaded last, a complete prefix becomes active only when the feed references it, and a newer feed retires the previous prefix. After the feed advances, pruning makes the GitHub release match the authoritative friendly asset set and deletes retired R2 prefixes older than 14 days. The active R2 prefix is exempt even if Nightly publication stops. A failed prune leaves the active feed and binaries intact.
 
 The Release Please workflow mints a short-lived token from the repository-scoped Shift Release Please GitHub App so generated pull requests trigger normal CI.
 
 ## GitHub configuration
 
-| Variable                       | Purpose                                     |
-| ------------------------------ | ------------------------------------------- |
-| `RELEASE_PLEASE_APP_CLIENT_ID` | Public client ID for the Release Please App |
+| Variable                       | Purpose                                                   |
+| ------------------------------ | --------------------------------------------------------- |
+| `RELEASE_PLEASE_APP_CLIENT_ID` | Public client ID for the Release Please App               |
+| `CLOUDFLARE_ACCOUNT_ID`        | Cloudflare account containing the release bucket          |
+| `R2_RELEASE_BUCKET`            | R2 bucket name; production uses `shift-releases`          |
+| `R2_RELEASE_BASE_URL`          | HTTPS custom-domain base URL exposing the public R2 bucket |
 
 | Secret                           | Purpose                                                  |
 | -------------------------------- | -------------------------------------------------------- |
@@ -70,19 +73,23 @@ The Release Please workflow mints a short-lived token from the repository-scoped
 | `APPLE_ID`                       | Apple Developer account login used by `notarytool`       |
 | `APPLE_APP_SPECIFIC_PASSWORD`    | Apple ID app-specific password                           |
 | `APPLE_TEAM_ID`                  | Paid Apple Developer Program team ID                     |
+| `R2_ACCESS_KEY_ID`               | R2 S3 API access key with object read/write permission   |
+| `R2_SECRET_ACCESS_KEY`           | R2 S3 API secret access key                               |
 
 Never put private keys or signing credentials in repository files, workflow inputs, artifacts, or logs. macOS release and Nightly jobs fail when signing credentials are absent.
 
 ## Setup and required QA
 
 1. Add the Apple signing/notarization secrets.
-2. Run a desktop workflow once to create `update-feeds`.
-3. Configure GitHub Pages to publish the root of `update-feeds`.
-4. Confirm packaged Release and Nightly builds contact only their matching feed paths.
-5. Perform real installed N → N+1 tests on macOS arm64/x64 and unsigned Windows Nightly x64, including Save, Don't Save, Cancel, Later, and **Restart and Update**.
-6. Keep Windows Release on manual downloads until Authenticode signing and installed update verification are complete.
+2. Create the Standard-storage R2 bucket `shift-releases`. Do not configure a bucket lifecycle rule; workflow pruning protects the active build.
+3. Attach a production custom domain to the bucket and configure the three R2 variables and two R2 secrets above.
+4. Run a desktop workflow once to create `update-feeds`.
+5. Configure GitHub Pages to publish the root of `update-feeds`.
+6. Confirm packaged Release and Nightly builds contact only their matching feed paths, and that Nightly metadata references the expected full commit in R2.
+7. Perform real installed N → N+1 tests on macOS arm64/x64 and unsigned Windows Nightly x64, including full-download fallback, Save, Don't Save, Cancel, Later, and **Restart and Update**.
+8. Keep Windows Release on manual downloads until Authenticode signing and installed update verification are complete.
 
-Electron update orchestration has no worthwhile unit test without mocking Electron, native dialogs, and electron-updater. Pure tests cover feed selection, canonical versions, generated metadata validation, feed preparation, and Nightly asset retention; installed update behavior remains required manual QA.
+Electron update orchestration has no worthwhile unit test without mocking Electron, native dialogs, and electron-updater. Pure tests cover feed selection, canonical versions, generated metadata validation, feed preparation, and Nightly asset partitioning; installed update behavior and retention pruning remain required manual QA.
 
 ## Rollback
 
@@ -90,5 +97,5 @@ Electron update orchestration has no worthwhile unit test without mocking Electr
 - A failed versioned build remains a private draft release; fix and rerun it before publication.
 - Never delete or reuse a published numeric version tag. Correct it with the next version.
 - A failed Nightly build or feed deployment leaves the previous feed active. Republish a complete later Nightly rather than editing a feed in place.
-- If assets publish but feed deployment fails, rerun the feed job from retained artifacts. Clients continue using the previous feed until deployment succeeds, and pruning does not run.
-- If Nightly pruning fails after the feed advances, rerun the prune job. Do not move the feed backward or delete the active version's assets.
+- If R2 assets and GitHub aliases publish but feed deployment fails, rerun the failed feed job from the original run's retained artifacts. A full workflow rerun refuses to overwrite the complete immutable R2 prefix. Clients continue using the previous feed until deployment succeeds, and pruning does not run.
+- If Nightly pruning fails after the feed advances, rerun the prune job. Do not move the feed backward or delete the active commit's R2 prefix.

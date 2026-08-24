@@ -13,17 +13,83 @@ concurrency:
 
 jobs:
   prepare:
-    name: Resolve Nightly version
+    name: Resolve Nightly publication
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
-      version: ${{ steps.version.outputs.version }}
+      should_publish: ${{ steps.publication.outputs.should_publish }}
+      upload_r2: ${{ steps.publication.outputs.upload_r2 }}
+      version: ${{ steps.publication.outputs.version }}
     steps:
-      - id: version
-        run: echo "version=0.${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Check Nightly publication state
+        id: publication
+        shell: bash
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_EC2_METADATA_DISABLED: "true"
+          AWS_REGION: auto
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          R2_BUCKET: ${{ vars.R2_RELEASE_BUCKET }}
+        run: |
+          set -euo pipefail
+          : "${R2_ACCOUNT_ID:?CLOUDFLARE_ACCOUNT_ID is required}"
+          : "${R2_BUCKET:?R2_RELEASE_BUCKET is required}"
+          ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+          MANIFEST="nightly/${GITHUB_SHA}/manifest.json"
+
+          if aws s3api head-object \
+            --endpoint-url "$ENDPOINT" \
+            --bucket "$R2_BUCKET" \
+            --key "$MANIFEST" >/dev/null 2>&1; then
+            upload_r2=false
+            aws s3 cp "s3://${R2_BUCKET}/${MANIFEST}" archived-manifest.json \
+              --endpoint-url "$ENDPOINT" \
+              --no-progress \
+              --only-show-errors
+            version="$(jq -er '.version | select(test("^[0-9]+\\.[0-9]+\\.[0-9]+$"))' archived-manifest.json)"
+          else
+            aws s3api list-objects-v2 \
+              --endpoint-url "$ENDPOINT" \
+              --bucket "$R2_BUCKET" \
+              --max-keys 1 >/dev/null
+            upload_r2=true
+            version="0.${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
+          fi
+
+          active=false
+          if git ls-remote --exit-code --heads origin update-feeds >/dev/null 2>&1; then
+            git fetch origin update-feeds
+            if git show FETCH_HEAD:updates/nightly/darwin/arm64/latest-mac.yml 2>/dev/null \
+              | grep -Fq "/nightly/${GITHUB_SHA}/"; then
+              active=true
+            fi
+          fi
+
+          if [[ "$upload_r2" == "false" ]]; then
+            if [[ "$active" == "true" ]]; then
+              echo "Nightly ${GITHUB_SHA} is already active"
+              echo "should_publish=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "R2 contains ${GITHUB_SHA}, but the Nightly feed does not reference it." >&2
+              echo "Rerun the failed feed job from the original workflow run." >&2
+              exit 1
+            fi
+          else
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+          fi
+          echo "upload_r2=$upload_r2" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
   build:
     name: Build ${{ matrix.name }}
     needs: prepare
+    if: needs.prepare.outputs.should_publish == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -173,7 +239,7 @@ jobs:
     needs:
       - prepare
       - build
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && needs.prepare.outputs.should_publish == 'true'
     runs-on: ubuntu-latest
     concurrency:
       group: desktop-update-publication
@@ -190,10 +256,75 @@ jobs:
           pattern: Shift-Nightly-*
           path: dist
 
-      - name: Prepare public assets
+      - name: Prepare Nightly assets
         env:
           NIGHTLY_VERSION: ${{ needs.prepare.outputs.version }}
-        run: node scripts/prepare-nightly-release.mjs dist public "$NIGHTLY_VERSION"
+        run: node scripts/prepare-nightly-release.mjs dist public updates "$NIGHTLY_VERSION"
+
+      - name: Write immutable Nightly manifest
+        shell: bash
+        env:
+          NIGHTLY_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          (
+            cd updates
+            sha256sum * | jq -Rn \
+              '[inputs | capture("^(?<sha256>[0-9a-f]+)  (?<name>.+)$")]'
+          ) > assets.json
+          jq -n \
+            --arg commit "$GITHUB_SHA" \
+            --arg publishedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg version "$NIGHTLY_VERSION" \
+            --slurpfile assets assets.json \
+            '{commit: $commit, version: $version, publishedAt: $publishedAt, assets: $assets[0]}' \
+            > manifest.json
+          rm assets.json
+
+      - name: Archive immutable updater assets in R2
+        if: needs.prepare.outputs.upload_r2 == 'true'
+        shell: bash
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_EC2_METADATA_DISABLED: "true"
+          AWS_REGION: auto
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          R2_BUCKET: ${{ vars.R2_RELEASE_BUCKET }}
+        run: |
+          set -euo pipefail
+          ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+          DESTINATION="s3://${R2_BUCKET}/nightly/${GITHUB_SHA}/"
+          aws s3 cp updates "$DESTINATION" \
+            --recursive \
+            --endpoint-url "$ENDPOINT" \
+            --cache-control "public, max-age=31536000, immutable" \
+            --no-progress \
+            --only-show-errors
+          aws s3 cp manifest.json "${DESTINATION}manifest.json" \
+            --endpoint-url "$ENDPOINT" \
+            --cache-control "public, max-age=31536000, immutable" \
+            --no-progress \
+            --only-show-errors
+
+      - name: Verify public R2 assets
+        shell: bash
+        env:
+          R2_BASE_URL: ${{ vars.R2_RELEASE_BASE_URL }}
+        run: |
+          set -euo pipefail
+          : "${R2_BASE_URL:?R2_RELEASE_BASE_URL is required}"
+          [[ "$R2_BASE_URL" == https://* ]] || {
+            echo "R2_RELEASE_BASE_URL must use HTTPS" >&2
+            exit 1
+          }
+          BUILD_URL="${R2_BASE_URL%/}/nightly/${GITHUB_SHA}"
+          jq -r '.assets[].name' manifest.json | while IFS= read -r asset; do
+            curl --fail --head --retry 5 --retry-all-errors \
+              "${BUILD_URL}/${asset}" >/dev/null
+          done
+          curl --fail --head --retry 5 --retry-all-errors \
+            "${BUILD_URL}/manifest.json" >/dev/null
 
       - name: Write Nightly release notes
         shell: bash
@@ -286,9 +417,14 @@ jobs:
           touch site/.nojekyll
 
       - name: Stage native Nightly feed
+        shell: bash
         env:
           NIGHTLY_VERSION: ${{ needs.prepare.outputs.version }}
-        run: node scripts/prepare-update-feed.mjs dist site nightly "$NIGHTLY_VERSION"
+          R2_BASE_URL: ${{ vars.R2_RELEASE_BASE_URL }}
+        run: |
+          set -euo pipefail
+          export NIGHTLY_ASSET_BASE_URL="${R2_BASE_URL%/}/nightly/${GITHUB_SHA}"
+          node scripts/prepare-update-feed.mjs dist site nightly "$NIGHTLY_VERSION"
 
       - name: Deploy update feeds
         shell: bash
@@ -313,26 +449,65 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Find retired assets
-        env:
-          GH_TOKEN: ${{ github.token }}
-          NIGHTLY_VERSION: ${{ needs.prepare.outputs.version }}
-        run: |
-          gh release view nightly --json assets > nightly-assets.json
-          node scripts/find-obsolete-nightly-assets.mjs nightly-assets.json "$NIGHTLY_VERSION" 14 > retired-assets.txt
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: Shift-Nightly-*
+          path: dist
 
-      - name: Delete retired assets
+      - name: Prepare authoritative GitHub asset set
+        env:
+          NIGHTLY_VERSION: ${{ needs.prepare.outputs.version }}
+        run: node scripts/prepare-nightly-release.mjs dist public updates "$NIGHTLY_VERSION"
+
+      - name: Delete retired GitHub assets
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
+          find public -maxdepth 1 -type f -printf '%f\n' | sort > active-assets.txt
+          gh release view nightly --json assets \
+            --jq '.assets[].name | select(. == "SHA256SUMS" or startswith("Shift-Nightly-"))' \
+            | sort > published-assets.txt
+          comm -23 published-assets.txt active-assets.txt > retired-assets.txt
+
           if [[ ! -s retired-assets.txt ]]; then
-            echo "No retired Nightly assets"
-            exit 0
+            echo "No retired GitHub Nightly assets"
+          else
+            while IFS= read -r asset; do
+              echo "Deleting GitHub asset $asset"
+              gh release delete-asset nightly "$asset" --yes
+            done < retired-assets.txt
           fi
 
-          while IFS= read -r asset; do
-            echo "Deleting $asset"
-            gh release delete-asset nightly "$asset" --yes
-          done < retired-assets.txt
+      - name: Delete retired R2 Nightlies older than 14 days
+        shell: bash
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_EC2_METADATA_DISABLED: "true"
+          AWS_REGION: auto
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          R2_BUCKET: ${{ vars.R2_RELEASE_BUCKET }}
+        run: |
+          set -euo pipefail
+          ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+          aws s3api list-objects-v2 \
+            --endpoint-url "$ENDPOINT" \
+            --bucket "$R2_BUCKET" \
+            --prefix nightly/ \
+            --output json > r2-objects.json
+          node scripts/find-retired-nightly-objects.mjs \
+            r2-objects.json "$GITHUB_SHA" 14 > retired-r2-objects.txt
+
+          if [[ ! -s retired-r2-objects.txt ]]; then
+            echo "No retired R2 Nightlies"
+          else
+            while IFS= read -r key; do
+              echo "Deleting R2 object $key"
+              aws s3api delete-object \
+                --endpoint-url "$ENDPOINT" \
+                --bucket "$R2_BUCKET" \
+                --key "$key"
+            done < retired-r2-objects.txt
+          fi

@@ -26,22 +26,33 @@ const fixtures = [
   [`desktop-nightly-linux-x64/Shift-Nightly-${version}-Linux-x64.deb`, "linux-deb"],
   [`desktop-nightly-linux-x64/Shift-Nightly-${version}-Linux-x64.rpm`, "linux-rpm"],
 ];
-const outputs = new Map([
+const publicOutputs = new Map([
+  ["Shift-Nightly-macOS-arm64.zip", "mac-arm64"],
+  ["Shift-Nightly-macOS-x64.zip", "mac-x64"],
+  ["Shift-Nightly-macOS-arm64.dmg", "dmg-arm64"],
+  ["Shift-Nightly-macOS-x64.dmg", "dmg-x64"],
+  ["Shift-Nightly-Windows-x64-Setup.exe", "windows"],
+  ["Shift-Nightly-Linux-x64.deb", "linux-deb"],
+  ["Shift-Nightly-Linux-x64.rpm", "linux-rpm"],
+]);
+const updateOutputs = new Map([
   [`Shift-Nightly-${version}-macOS-arm64.zip`, "mac-arm64"],
   [`Shift-Nightly-${version}-macOS-x64.zip`, "mac-x64"],
   [`Shift-Nightly-${version}-macOS-arm64.zip.blockmap`, "mac-arm64-blockmap"],
   [`Shift-Nightly-${version}-macOS-x64.zip.blockmap`, "mac-x64-blockmap"],
-  [`Shift-Nightly-${version}-macOS-arm64.dmg`, "dmg-arm64"],
-  [`Shift-Nightly-${version}-macOS-x64.dmg`, "dmg-x64"],
   [`Shift-Nightly-${version}-Windows-x64-Setup.exe`, "windows"],
   [`Shift-Nightly-${version}-Windows-x64-Setup.exe.blockmap`, "blockmap"],
-  [`Shift-Nightly-${version}-Linux-x64.deb`, "linux-deb"],
-  [`Shift-Nightly-${version}-Linux-x64.rpm`, "linux-rpm"],
 ]);
 
-async function runScript(dist, output, candidateVersion = version) {
+async function runScript(dist, publicOutput, updatesOutput, candidateVersion = version) {
   return await new Promise((resolve) => {
-    const child = spawn(process.execPath, [script, dist, output, candidateVersion]);
+    const child = spawn(process.execPath, [
+      script,
+      dist,
+      publicOutput,
+      updatesOutput,
+      candidateVersion,
+    ]);
     let stderr = "";
     child.stderr.on("data", (chunk) => (stderr += chunk));
     child.on("close", (code) => resolve({ code, stderr }));
@@ -56,25 +67,34 @@ async function writeFixtures(root, entries = fixtures) {
   }
 }
 
-test("prepares one exact versioned Nightly asset set", async (context) => {
+async function runFixture(context, entries = fixtures, candidateVersion = version) {
   const root = await mkdtemp(path.join(os.tmpdir(), "shift-nightly-release-"));
   context.after(() => rm(root, { recursive: true, force: true }));
   const dist = path.join(root, "dist");
-  const output = path.join(root, "public");
-  await writeFixtures(dist);
+  const publicOutput = path.join(root, "public");
+  const updatesOutput = path.join(root, "updates");
+  await writeFixtures(dist, entries);
+  const result = await runScript(dist, publicOutput, updatesOutput, candidateVersion);
+  return { root, dist, publicOutput, updatesOutput, result };
+}
 
-  const result = await runScript(dist, output);
+test("prepares friendly public aliases and exact versioned updater assets", async (context) => {
+  const { publicOutput, updatesOutput, result } = await runFixture(context);
   assert.equal(result.code, 0, result.stderr);
-  for (const [destination, content] of outputs) {
-    assert.equal(await readFile(path.join(output, destination), "utf8"), content);
+
+  for (const [destination, content] of publicOutputs) {
+    assert.equal(await readFile(path.join(publicOutput, destination), "utf8"), content);
+  }
+  for (const [destination, content] of updateOutputs) {
+    assert.equal(await readFile(path.join(updatesOutput, destination), "utf8"), content);
   }
 
-  const checksumLines = (await readFile(path.join(output, "SHA256SUMS"), "utf8"))
+  const checksumLines = (await readFile(path.join(publicOutput, "SHA256SUMS"), "utf8"))
     .trim()
     .split("\n");
   assert.deepEqual(
     checksumLines,
-    [...outputs]
+    [...publicOutputs]
       .map(([destination, content]) => {
         const digest = createHash("sha256").update(content).digest("hex");
         return `${digest}  ${destination}`;
@@ -84,35 +104,28 @@ test("prepares one exact versioned Nightly asset set", async (context) => {
 });
 
 test("rejects incomplete Nightly artifact sets", async (context) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "shift-nightly-release-"));
-  context.after(() => rm(root, { recursive: true, force: true }));
-  const dist = path.join(root, "dist");
-  await writeFixtures(dist, fixtures.slice(1));
-
-  const result = await runScript(dist, path.join(root, "public"));
+  const { result } = await runFixture(context, fixtures.slice(1));
   assert.notEqual(result.code, 0);
   assert.match(result.stderr, /Expected one source.*found 0/);
 });
 
 test("rejects ambiguous Nightly artifacts", async (context) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "shift-nightly-release-"));
-  context.after(() => rm(root, { recursive: true, force: true }));
-  const dist = path.join(root, "dist");
-  await writeFixtures(dist);
-  await writeFixtures(dist, [[`duplicate/Shift-Nightly-${version}-macOS-arm64.zip`, "duplicate"]]);
+  const fixture = await runFixture(context);
+  await writeFixtures(fixture.dist, [
+    [`duplicate/Shift-Nightly-${version}-macOS-arm64.zip`, "duplicate"],
+  ]);
 
-  const result = await runScript(dist, path.join(root, "public"));
+  const result = await runScript(
+    fixture.dist,
+    path.join(fixture.root, "second-public"),
+    path.join(fixture.root, "second-updates"),
+  );
   assert.notEqual(result.code, 0);
   assert.match(result.stderr, /Expected one source.*found 2/);
 });
 
 test("rejects artifacts from a different Nightly version", async (context) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "shift-nightly-release-"));
-  context.after(() => rm(root, { recursive: true, force: true }));
-  const dist = path.join(root, "dist");
-  await writeFixtures(dist);
-
-  const result = await runScript(dist, path.join(root, "public"), "0.322.1");
+  const { result } = await runFixture(context, fixtures, "0.322.1");
   assert.notEqual(result.code, 0);
   assert.match(result.stderr, /Expected one source.*found 0/);
 });
