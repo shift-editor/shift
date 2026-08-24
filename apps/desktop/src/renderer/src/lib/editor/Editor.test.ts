@@ -228,7 +228,7 @@ describe("Editor renderer commands", () => {
     const contour = editor.requireGlyphLayer().contours[0]!;
     editor.selection.select(contour.points.slice(0, 2).map((point) => point.id));
 
-    const handled = runRendererCommand(editor, "glyph.reverseSelectedContour");
+    const handled = await runRendererCommand(editor, "glyph.reverseSelectedContour");
     await editor.settle();
 
     expect(handled).toBe(true);

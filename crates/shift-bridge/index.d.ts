@@ -726,7 +726,8 @@ export interface NapiPointSeed {
 
 export declare const enum NapiPointType {
   OnCurve = 'onCurve',
-  OffCurve = 'offCurve'
+  OffCurve = 'offCurve',
+  QCurve = 'qCurve'
 }
 
 export interface NapiRemoveAnchorsIntent {

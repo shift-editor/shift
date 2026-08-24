@@ -27,21 +27,16 @@ const fixtures = [
   [`desktop-nightly-linux-x64/Shift-Nightly-${version}-Linux-x64.rpm`, "linux-rpm"],
 ];
 const outputs = new Map([
-  ["Shift-Nightly-macOS-arm64.zip", "mac-arm64"],
   [`Shift-Nightly-${version}-macOS-arm64.zip`, "mac-arm64"],
-  ["Shift-Nightly-macOS-x64.zip", "mac-x64"],
   [`Shift-Nightly-${version}-macOS-x64.zip`, "mac-x64"],
   [`Shift-Nightly-${version}-macOS-arm64.zip.blockmap`, "mac-arm64-blockmap"],
   [`Shift-Nightly-${version}-macOS-x64.zip.blockmap`, "mac-x64-blockmap"],
-  ["Shift-Nightly-macOS-arm64.dmg", "dmg-arm64"],
   [`Shift-Nightly-${version}-macOS-arm64.dmg`, "dmg-arm64"],
-  ["Shift-Nightly-macOS-x64.dmg", "dmg-x64"],
   [`Shift-Nightly-${version}-macOS-x64.dmg`, "dmg-x64"],
-  ["Shift-Nightly-Windows-x64.exe", "windows"],
   [`Shift-Nightly-${version}-Windows-x64-Setup.exe`, "windows"],
   [`Shift-Nightly-${version}-Windows-x64-Setup.exe.blockmap`, "blockmap"],
-  ["Shift-Nightly-Linux-x64.deb", "linux-deb"],
-  ["Shift-Nightly-Linux-x64.rpm", "linux-rpm"],
+  [`Shift-Nightly-${version}-Linux-x64.deb`, "linux-deb"],
+  [`Shift-Nightly-${version}-Linux-x64.rpm`, "linux-rpm"],
 ]);
 
 async function runScript(dist, output, candidateVersion = version) {
@@ -61,7 +56,7 @@ async function writeFixtures(root, entries = fixtures) {
   }
 }
 
-test("prepares human downloads and exact electron-updater assets", async (context) => {
+test("prepares one exact versioned Nightly asset set", async (context) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "shift-nightly-release-"));
   context.after(() => rm(root, { recursive: true, force: true }));
   const dist = path.join(root, "dist");

@@ -1,4 +1,4 @@
-name: Release Desktop
+name: Release Shift
 
 on:
   workflow_call:
@@ -309,6 +309,14 @@ jobs:
           ref: ${{ needs.prepare.outputs.tag }}
           fetch-depth: 1
 
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
+
       - uses: actions/download-artifact@v8
         with:
           pattern: desktop-release-*
@@ -334,7 +342,7 @@ jobs:
           else
             git worktree add --detach site
             git -C site switch --orphan update-feeds
-            git -C site rm -rf .
+            git -C site rm -rf --ignore-unmatch .
           fi
           touch site/.nojekyll
 

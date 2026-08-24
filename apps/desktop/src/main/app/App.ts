@@ -52,13 +52,22 @@ export class App {
   #previewConversions = new Map<string, Promise<void>>();
 
   #appIcon = new AppIcon();
-  #applicationMenu = new ApplicationMenu(this.#appIcon.path(), (id) => {
-    // Menu/accelerator commands run detached, so a failure (e.g. a save that
-    // throws) has nowhere to propagate — catch and surface it here.
-    void this.#commands.run(id, this.#commandContext()).catch((error) => {
-      this.#log.error("menu command failed", id, error);
-    });
-  });
+  #applicationMenu = new ApplicationMenu(
+    this.#appIcon.path(),
+    (id) => {
+      // Menu/accelerator commands run detached, so a failure (e.g. a save that
+      // throws) has nowhere to propagate — catch and surface it here.
+      void this.#commands
+        .run(id, this.#commandContext())
+        .catch((error) => {
+          this.#log.error("menu command failed", id, error);
+        })
+        .finally(() => {
+          this.#applicationMenu.updateCommandStates();
+        });
+    },
+    (id) => this.#commands.isEnabled(id, this.#commandContext()),
+  );
 
   /**
    * Creates the Electron application service graph.
@@ -132,6 +141,9 @@ export class App {
 
       this.#appIcon.install();
       this.#applicationMenu.install();
+      app.on("browser-window-focus", () => {
+        this.#applicationMenu.updateCommandStates();
+      });
 
       switch (process.env.SHIFT_E2E_FONT_PATH) {
         case undefined:
@@ -189,6 +201,7 @@ export class App {
           this.#workspaces.unregister(session.workspaceId);
         }
         this.#windows.remove(window);
+        this.#applicationMenu.updateCommandStates();
       },
     });
 
@@ -234,9 +247,13 @@ export class App {
   }
 
   #registerIpcHandlers(): void {
-    ipc.handle(ipcMain, "commands.run", (event, id) => {
+    ipc.handle(ipcMain, "commands.run", async (event, id) => {
       const window = this.#requireWindowForWebContents(event.sender);
-      return this.#commands.run(id, this.#commandContext(window));
+      try {
+        await this.#commands.run(id, this.#commandContext(window));
+      } finally {
+        this.#applicationMenu.updateCommandStates();
+      }
     });
     ipc.handle(ipcMain, "clipboard.readText", () => {
       return clipboard.readText();
@@ -290,6 +307,7 @@ export class App {
         windowId: browserWindow.id,
       });
       session.document?.refreshWindowTitles();
+      this.#applicationMenu.updateCommandStates();
       if (browserWindow.isVisible() || browserWindow.isMinimized()) return;
 
       window.focus();
@@ -391,6 +409,7 @@ export class App {
       }
 
       if (preview.windows.size === 0) this.#workspaces.unregister(preview.workspaceId);
+      this.#applicationMenu.updateCommandStates();
       window.window.webContents.reload();
     })();
 

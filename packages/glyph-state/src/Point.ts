@@ -48,7 +48,12 @@ export class Point implements PointInput {
   }
 
   static create(position: Point2D, pointType: PointType, smooth = false): NewPoint {
-    return pointType === "onCurve" ? Point.onCurve(position, smooth) : Point.offCurve(position);
+    return {
+      x: position.x,
+      y: position.y,
+      pointType,
+      smooth: pointType === "offCurve" ? false : smooth,
+    };
   }
 
   static smooth(position: Point2D): NewPoint {
@@ -65,7 +70,7 @@ export class Point implements PointInput {
   }
 
   static isOnCurve(point: { readonly pointType: PointType }): boolean {
-    return point.pointType === "onCurve";
+    return point.pointType === "onCurve" || point.pointType === "qCurve";
   }
 
   static isOffCurve(point: { readonly pointType: PointType }): boolean {

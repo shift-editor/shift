@@ -1,4 +1,4 @@
-name: Nightly Desktop
+name: Release Shift Nightly
 
 on:
   schedule:
@@ -249,6 +249,14 @@ jobs:
         with:
           fetch-depth: 1
 
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
+
       - uses: actions/download-artifact@v8
         with:
           pattern: Shift-Nightly-*
@@ -273,7 +281,7 @@ jobs:
           else
             git worktree add --detach site
             git -C site switch --orphan update-feeds
-            git -C site rm -rf .
+            git -C site rm -rf --ignore-unmatch .
           fi
           touch site/.nojekyll
 
@@ -291,3 +299,40 @@ jobs:
           git -C site add .
           git -C site commit -m "Publish Shift Nightly ${{ needs.prepare.outputs.version }} update feed"
           git -C site push origin HEAD:update-feeds
+
+  prune:
+    name: Prune retired Nightly assets
+    needs:
+      - prepare
+      - feed
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Find retired assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NIGHTLY_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          gh release view nightly --json assets > nightly-assets.json
+          node scripts/find-obsolete-nightly-assets.mjs nightly-assets.json "$NIGHTLY_VERSION" 14 > retired-assets.txt
+
+      - name: Delete retired assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -s retired-assets.txt ]]; then
+            echo "No retired Nightly assets"
+            exit 0
+          fi
+
+          while IFS= read -r asset; do
+            echo "Deleting $asset"
+            gh release delete-asset nightly "$asset" --yes
+          done < retired-assets.txt

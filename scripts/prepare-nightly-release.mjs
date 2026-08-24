@@ -12,11 +12,11 @@ if (!distArgument || !outputArgument || !/^\d+\.\d+\.\d+$/.test(version)) {
 
 const assets = [
   {
-    destinations: (source) => ["Shift-Nightly-macOS-arm64.zip", path.basename(source)],
+    destinations: (source) => [path.basename(source)],
     pattern: new RegExp(`Shift-Nightly-${escapeRegex(version)}-macOS-arm64\\.zip$`),
   },
   {
-    destinations: (source) => ["Shift-Nightly-macOS-x64.zip", path.basename(source)],
+    destinations: (source) => [path.basename(source)],
     pattern: new RegExp(`Shift-Nightly-${escapeRegex(version)}-macOS-x64\\.zip$`),
   },
   {
@@ -28,15 +28,15 @@ const assets = [
     pattern: new RegExp(`Shift-Nightly-${escapeRegex(version)}-macOS-x64\\.zip\\.blockmap$`),
   },
   {
-    destinations: (source) => ["Shift-Nightly-macOS-arm64.dmg", path.basename(source)],
+    destinations: (source) => [path.basename(source)],
     pattern: new RegExp(`Shift-Nightly-${escapeRegex(version)}-macOS-arm64\\.dmg$`),
   },
   {
-    destinations: (source) => ["Shift-Nightly-macOS-x64.dmg", path.basename(source)],
+    destinations: (source) => [path.basename(source)],
     pattern: new RegExp(`Shift-Nightly-${escapeRegex(version)}-macOS-x64\\.dmg$`),
   },
   {
-    destinations: (source) => ["Shift-Nightly-Windows-x64.exe", path.basename(source)],
+    destinations: (source) => [path.basename(source)],
     pattern: new RegExp(`Shift-Nightly-${escapeRegex(version)}-Windows-x64-Setup\\.exe$`),
   },
   {
@@ -46,11 +46,11 @@ const assets = [
     ),
   },
   {
-    destinations: () => ["Shift-Nightly-Linux-x64.deb"],
+    destinations: (source) => [path.basename(source)],
     pattern: new RegExp(`Shift-Nightly-${escapeRegex(version)}-Linux-x64\\.deb$`),
   },
   {
-    destinations: () => ["Shift-Nightly-Linux-x64.rpm"],
+    destinations: (source) => [path.basename(source)],
     pattern: new RegExp(`Shift-Nightly-${escapeRegex(version)}-Linux-x64\\.rpm$`),
   },
 ];

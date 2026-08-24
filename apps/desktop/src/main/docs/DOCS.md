@@ -81,6 +81,12 @@ The runtime icon follows the same compiled identity: `AppIcon` selects `nightly.
 
 On macOS, closing the last window leaves Shift running. A later Dock activation opens a new launcher window. Windows and Linux keep the conventional quit-on-last-window behavior.
 
+### Application Commands
+
+Native menu items carry the shared `CommandId`, label, accelerator, and current `CommandRegistry` capability. `ApplicationMenu.updateCommandStates()` refreshes enabled state when window focus or session ownership changes and after a command settles. Save and Save As are enabled for authored documents and convertible previews; Export and Edit commands require an authored document.
+
+Edit-menu accelerators and clicks send `RendererCommandId` operations to the active authored renderer instead of using Electron's DOM-only roles. The renderer preserves conventional behavior for a focused text input; otherwise Undo, Redo, Cut, Copy, Paste, Delete, and Select All operate on Shift's canvas editor and canonical workspace history. Commands may remain enabled within an authored document when its current selection, clipboard, or history makes a particular invocation a safe no-op.
+
 Eligible packaged macOS builds and Windows Nightly x64 builds start `AppUpdater` after the first window is prepared. The updater waits 30 seconds before its first quiet check to avoid competing with application startup, then checks every four hours. Development builds explain that updates require packaging; Windows Release and Linux direct manual checks to matching GitHub downloads.
 
 ### Application Updates
@@ -153,6 +159,7 @@ Renderer IPC in `App` is limited to shell capabilities: command execution, clipb
 - `pnpm test:release`
 - Electron E2E fixtures materialize a native startup document under a fresh `testRoot`, launch with a fresh `userDataDir`, assert Electron honored that path, and remove the root after force-closing the disposable process.
 - `document-lifecycle.spec.ts` injects ordered scripted paths/choices and verifies New/Open, convertible-preview Save and authored handoff, TTF/OTF exclusion, first and ordinary Save, independent Save As, saved-document discard/reopen, raw-copy identity reuse, Save cancellation/failure safety, dirty-close choices, clean quit/relaunch/reopen, and Export safety through application commands.
+- `application-menu.spec.ts` invokes actual native menu items and verifies launcher/binary/convertible/authored capability states, focused-text Copy/Paste, and canvas Select All, Copy, Paste, Undo, Redo, Delete, and Cut behavior.
 - `application-quit.spec.ts` verifies dirty Save/Discard/Cancel, every dirty document in a multi-document quit, re-entrant quit suppression, and document isolation across windows. Ordered scripted choices are consumed once per actual confirmation.
 - `document-recovery.spec.ts` force-terminates Electron, reopens the same document and user-data directory, verifies recovery, then verifies explicit Save changes the canonical document.
 - Manual: open the same `.shift` document twice and verify the existing workspace session is reused.

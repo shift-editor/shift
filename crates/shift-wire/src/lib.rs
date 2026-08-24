@@ -790,13 +790,15 @@ impl From<&IrPoint> for PointData {
 pub enum PointType {
     OnCurve,
     OffCurve,
+    QCurve,
 }
 
 impl From<IrPointType> for PointType {
     fn from(point_type: IrPointType) -> Self {
         match point_type {
-            IrPointType::OnCurve | IrPointType::QCurve => Self::OnCurve,
+            IrPointType::OnCurve => Self::OnCurve,
             IrPointType::OffCurve => Self::OffCurve,
+            IrPointType::QCurve => Self::QCurve,
         }
     }
 }
@@ -804,8 +806,9 @@ impl From<IrPointType> for PointType {
 impl From<PointType> for IrPointType {
     fn from(point_type: PointType) -> Self {
         match point_type {
-            PointType::OffCurve => IrPointType::OffCurve,
             PointType::OnCurve => IrPointType::OnCurve,
+            PointType::OffCurve => IrPointType::OffCurve,
+            PointType::QCurve => IrPointType::QCurve,
         }
     }
 }

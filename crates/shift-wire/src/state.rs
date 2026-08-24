@@ -99,7 +99,7 @@ fn restore_components(layer: &mut GlyphLayer, components: &[ComponentData]) -> C
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::values_from_layer;
+    use crate::{values_from_layer, PointType};
     use shift_font::{Anchor, Component, DecomposedTransform, GlyphId, LayerId, SourceId};
 
     fn sample_layer() -> GlyphLayer {
@@ -189,6 +189,56 @@ mod tests {
         assert_eq!(component.base_glyph_name().as_str(), "base");
         assert_eq!(component.transform().translate_x, 7.0);
         assert_eq!(component.transform().t_center_y, 15.0);
+
+        Ok(())
+    }
+
+    #[test]
+    fn layer_state_round_trip_preserves_point_types() -> CoreResult<()> {
+        let mut layer = GlyphLayer::new(LayerId::new(), SourceId::new());
+        let mut contour = IrContour::with_id(ContourId::from_raw(10));
+        contour.add_point_with_id(PointId::from_raw(20), 0.0, 0.0, IrPointType::OnCurve, false);
+        contour.add_point_with_id(
+            PointId::from_raw(21),
+            50.0,
+            100.0,
+            IrPointType::OffCurve,
+            false,
+        );
+        contour.add_point_with_id(PointId::from_raw(22), 100.0, 0.0, IrPointType::QCurve, true);
+        layer.add_contour(contour);
+
+        let structure = GlyphStructure::from(&layer);
+        assert_eq!(
+            structure.contours[0]
+                .points
+                .iter()
+                .map(|point| point.point_type)
+                .collect::<Vec<_>>(),
+            vec![PointType::OnCurve, PointType::OffCurve, PointType::QCurve]
+        );
+
+        let restored = layer_from_state(
+            layer.id(),
+            layer.source_id(),
+            &structure,
+            &values_from_layer(&layer),
+        )?;
+        assert_eq!(
+            restored
+                .contours_iter()
+                .next()
+                .unwrap()
+                .points()
+                .iter()
+                .map(|point| point.point_type())
+                .collect::<Vec<_>>(),
+            vec![
+                IrPointType::OnCurve,
+                IrPointType::OffCurve,
+                IrPointType::QCurve
+            ]
+        );
 
         Ok(())
     }
