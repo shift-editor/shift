@@ -54,6 +54,7 @@ export async function prepareUpdateFeed({
   distribution,
   version,
   repository = "shift-editor/shift",
+  nightlyAssetBaseUrl,
 }) {
   if (distribution !== "release" && distribution !== "nightly") {
     throw new Error(`Expected release or nightly distribution, received: ${distribution}`);
@@ -64,8 +65,12 @@ export async function prepareUpdateFeed({
   const site = path.resolve(siteRoot);
   const files = await collectFiles(artifacts);
   const assetNames = new Set(files.map((file) => path.basename(file)));
-  const releaseTag = distribution === "nightly" ? "nightly" : `v${version}`;
-  const assetBaseUrl = `https://github.com/${repository}/releases/download/${releaseTag}`;
+  const assetBaseUrl = resolveAssetBaseUrl({
+    distribution,
+    version,
+    repository,
+    nightlyAssetBaseUrl,
+  });
   const metadata = new Map();
 
   for (const architecture of ["arm64", "x64"]) {
@@ -127,6 +132,19 @@ export async function prepareUpdateFeed({
     rm(path.join(channelRoot, "darwin", "x64", "RELEASES.json"), { force: true }),
     rm(path.join(channelRoot, "win32", "x64", "RELEASES"), { force: true }),
   ]);
+}
+
+function resolveAssetBaseUrl({ distribution, version, repository, nightlyAssetBaseUrl }) {
+  if (distribution === "release") {
+    return `https://github.com/${repository}/releases/download/v${version}`;
+  }
+  if (!nightlyAssetBaseUrl) {
+    throw new Error("Nightly update assets require an R2 asset base URL");
+  }
+
+  const url = new URL(nightlyAssetBaseUrl);
+  if (url.protocol !== "https:") throw new Error("Nightly R2 asset base URL must use HTTPS");
+  return url.toString().replace(/\/$/, "");
 }
 
 function parseVersion(version) {
@@ -193,5 +211,6 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
     distribution,
     version,
     repository: process.env.GITHUB_REPOSITORY,
+    nightlyAssetBaseUrl: process.env.NIGHTLY_ASSET_BASE_URL,
   });
 }

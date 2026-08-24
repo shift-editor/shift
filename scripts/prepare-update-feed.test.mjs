@@ -11,6 +11,8 @@ import {
 } from "./prepare-update-feed.mjs";
 
 const repository = "shift-editor/shift";
+const nightlyAssetBaseUrl =
+  "https://downloads.shift.graphics/nightly/0123456789abcdef0123456789abcdef01234567";
 
 async function writeArtifacts(root, { version = "0.1.1", distribution = "release" } = {}) {
   const prefix = distribution === "nightly" ? "Shift-Nightly" : "Shift";
@@ -124,6 +126,7 @@ test("stages Nightly macOS and Windows metadata", async (context) => {
     distribution: "nightly",
     version: "0.321.1",
     repository,
+    nightlyAssetBaseUrl,
   });
 
   const windows = load(
@@ -132,7 +135,25 @@ test("stages Nightly macOS and Windows metadata", async (context) => {
   assert.equal(windows.version, "0.321.1");
   assert.equal(
     windows.files[0].url,
-    "https://github.com/shift-editor/shift/releases/download/nightly/Shift-Nightly-0.321.1-Windows-x64-Setup.exe",
+    `${nightlyAssetBaseUrl}/Shift-Nightly-0.321.1-Windows-x64-Setup.exe`,
+  );
+});
+
+test("requires an R2 asset base URL for Nightly metadata", async (context) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "shift-update-feed-"));
+  context.after(() => rm(root, { recursive: true, force: true }));
+  const artifactsRoot = path.join(root, "artifacts");
+  await writeArtifacts(artifactsRoot, { distribution: "nightly" });
+
+  await assert.rejects(
+    prepareUpdateFeed({
+      artifactsRoot,
+      siteRoot: path.join(root, "site"),
+      distribution: "nightly",
+      version: "0.1.1",
+      repository,
+    }),
+    /require an R2 asset base URL/,
   );
 });
 
