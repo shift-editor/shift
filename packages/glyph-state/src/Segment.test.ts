@@ -42,4 +42,25 @@ describe("segment ids", () => {
       "segment:point_2:point_3",
     ]);
   });
+
+  it("parses qCurve endpoints as quadratic segments", () => {
+    const contour = new Contour(
+      {
+        id: asContourId("contour_qcurve"),
+        closed: false,
+        points: [
+          { id: asPointId("point_start"), pointType: "onCurve", smooth: false },
+          { id: asPointId("point_control"), pointType: "offCurve", smooth: false },
+          { id: asPointId("point_end"), pointType: "qCurve", smooth: true },
+        ],
+      },
+      new Float64Array([500, 0, 0, 50, 100, 100, 0]),
+      1,
+    );
+
+    const segment = contour.segments()[0];
+    expect(segment?.type).toBe("quad");
+    expect(segment?.end.pointType).toBe("qCurve");
+    expect(contour.lastOnCurvePoint?.pointType).toBe("qCurve");
+  });
 });

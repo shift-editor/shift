@@ -144,6 +144,11 @@ test.describe("variable-font authoring controls", () => {
       .toBe("Optical Scale");
 
     await selectCategory(dialog, "Sources");
+    const defaultSourceName = await page.evaluate(() => window.shift?.font.defaultSource.name);
+    if (!defaultSourceName) throw new Error("Expected default source");
+    await expect(
+      dialog.getByLabel(`Cannot delete ${defaultSourceName}: default source`),
+    ).toBeDisabled();
     await dialog.getByRole("button", { name: "Bold", exact: true }).click();
     const sourceName = main.getByLabel("Name", { exact: true });
     await sourceName.fill("Display Bold");

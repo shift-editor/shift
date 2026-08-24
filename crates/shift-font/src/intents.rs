@@ -538,7 +538,7 @@ impl Font {
         let glyph_id = glyph_id.unwrap_or_default();
         let mut glyph = Glyph::with_id(glyph_id, glyph_name.clone());
         glyph.set_unicodes(unicodes);
-        changes.push(FontChange::glyph_created(&glyph));
+        changes.push(FontChange::glyph_appended(&glyph));
 
         self.insert_glyph(glyph)?;
         Ok(Vec::new())
@@ -597,6 +597,9 @@ impl Font {
     ) -> CoreResult<()> {
         if self.sources().len() <= 1 {
             return Err(CoreError::CannotDeleteLastSource);
+        }
+        if self.default_source_id().as_ref() == Some(source_id) {
+            return Err(CoreError::CannotDeleteDefaultSource(source_id.clone()));
         }
 
         let layers: Vec<(GlyphId, GlyphLayer)> = self
@@ -1169,6 +1172,35 @@ impl Font {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn deleting_the_default_source_is_rejected_without_mutation() {
+        let mut font = Font::new();
+        let default_source_id = font.default_source_id().unwrap();
+        let axis = Axis::weight();
+        let axis_id = axis.id();
+        font.add_axis(axis).unwrap();
+        let mut location = DesignLocation::new();
+        location.set(axis_id, 700.0);
+        font.add_source(Source::new("Bold".to_string(), location));
+        let original = font.clone();
+
+        let error = match font.apply_intents(FontIntentSet {
+            intents: vec![FontIntent::DeleteSource {
+                source_id: default_source_id.clone(),
+            }],
+        }) {
+            Ok(_) => panic!("default source deletion should be rejected"),
+            Err(error) => error,
+        };
+
+        assert!(matches!(
+            error,
+            CoreError::CannotDeleteDefaultSource(source_id)
+                if source_id == default_source_id
+        ));
+        assert_eq!(font, original);
+    }
 
     #[test]
     fn duplicate_master_locations_include_omitted_axis_defaults() {

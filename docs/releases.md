@@ -47,12 +47,12 @@ The app waits 30 seconds before its first automatic check to avoid competing wit
 
 - `release-please.yml` maintains a draft release pull request. Merging it creates a numeric version tag and draft GitHub release, then invokes `release-desktop.yml`.
 - `release-desktop.yml` validates `vMAJOR.MINOR.PATCH`, builds macOS arm64/x64 ZIPs and DMGs, a Windows x64 per-user NSIS installer, and Linux x64 packages, smoke-tests packaged applications, uploads checksums/assets, publishes the GitHub prerelease, then advances the Release feed.
-- `nightly.yml` resolves one `0.RUN.ATTEMPT` version, builds the same matrix, and updates the rolling Nightly prerelease only after every build succeeds. It retains exact versioned macOS ZIP and Windows NSIS/blockmap update assets plus stable human-download ZIP, DMG, installer, DEB, and RPM names.
+- `nightly.yml` resolves one `0.RUN.ATTEMPT` version, builds the same matrix, and updates the rolling Nightly prerelease only after every build succeeds. It publishes one exact versioned ZIP, DMG, installer, DEB, and RPM asset set rather than duplicate stable-name aliases.
 - `prepare-update-feed.mjs` performs the one monotonic candidate-version check, stages electron-builder's generated metadata into fixed Pages paths, and rewrites artifact paths to absolute GitHub Release asset URLs. It does not create immutable feed-history directories.
 
 Release and Nightly feed publication share one concurrency group. Binary assets become public before a feed advances. The feed job checks out or creates the `update-feeds` branch, preserves `.nojekyll` and the other distribution directory, updates only its channel, and pushes the branch. GitHub Pages serves it at `https://shift-editor.github.io/shift/updates`.
 
-A separate feed job allows feed deployment to be retried from retained workflow artifacts without rebuilding binaries. The first successful deployment creates `update-feeds`; later deployments update one channel directory.
+A separate feed job allows feed deployment to be retried from retained workflow artifacts without rebuilding binaries. The first successful deployment creates `update-feeds`; later deployments update one channel directory. After the Nightly feed advances, a prune job removes legacy aliases and inactive versioned binaries while retaining inactive blockmaps for 14 days. Those small blockmaps allow recent installations to use differential updates; older installations fall back to a full package download. A failed prune leaves the active feed and binaries intact.
 
 The Release Please workflow mints a short-lived token from the repository-scoped Shift Release Please GitHub App so generated pull requests trigger normal CI.
 
@@ -90,4 +90,5 @@ Electron update orchestration has no worthwhile unit test without mocking Electr
 - A failed versioned build remains a private draft release; fix and rerun it before publication.
 - Never delete or reuse a published numeric version tag. Correct it with the next version.
 - A failed Nightly build or feed deployment leaves the previous feed active. Republish a complete later Nightly rather than editing a feed in place.
-- If assets publish but feed deployment fails, rerun the feed job from retained artifacts. Clients continue using the previous feed until deployment succeeds.
+- If assets publish but feed deployment fails, rerun the feed job from retained artifacts. Clients continue using the previous feed until deployment succeeds, and pruning does not run.
+- If Nightly pruning fails after the feed advances, rerun the prune job. Do not move the feed backward or delete the active version's assets.

@@ -4,6 +4,7 @@ import type { PointLike } from "./types";
 
 const onCurve = (): PointLike => ({ pointType: "onCurve" });
 const offCurve = (): PointLike => ({ pointType: "offCurve" });
+const qCurve = (): PointLike => ({ pointType: "qCurve" });
 
 describe("Validate", () => {
   describe("result constructors", () => {
@@ -32,14 +33,16 @@ describe("Validate", () => {
   });
 
   describe("point predicates", () => {
-    it("isOnCurve returns true for onCurve points", () => {
+    it("treats onCurve and qCurve endpoints as on-curve", () => {
       expect(Validate.isOnCurve(onCurve())).toBe(true);
+      expect(Validate.isOnCurve(qCurve())).toBe(true);
       expect(Validate.isOnCurve(offCurve())).toBe(false);
     });
 
-    it("isOffCurve returns true for offCurve points", () => {
+    it("isOffCurve returns true only for offCurve points", () => {
       expect(Validate.isOffCurve(offCurve())).toBe(true);
       expect(Validate.isOffCurve(onCurve())).toBe(false);
+      expect(Validate.isOffCurve(qCurve())).toBe(false);
     });
   });
 
@@ -57,6 +60,7 @@ describe("Validate", () => {
       expect(Validate.findNextOnCurve(points, 0)).toBe(0);
       expect(Validate.findNextOnCurve(points, 1)).toBe(3);
       expect(Validate.findNextOnCurve(points, 3)).toBe(3);
+      expect(Validate.findNextOnCurve([offCurve(), qCurve()], 0)).toBe(1);
     });
 
     it("findNextOnCurve returns null when no onCurve found", () => {
@@ -75,6 +79,7 @@ describe("Validate", () => {
 
     it("matchesQuadPattern validates quadratic segments", () => {
       expect(Validate.matchesQuadPattern([onCurve(), offCurve(), onCurve()])).toBe(true);
+      expect(Validate.matchesQuadPattern([onCurve(), offCurve(), qCurve()])).toBe(true);
       expect(Validate.matchesQuadPattern([onCurve(), onCurve(), onCurve()])).toBe(false);
       expect(Validate.matchesQuadPattern([onCurve(), offCurve()])).toBe(false);
     });
@@ -214,6 +219,7 @@ describe("Validate", () => {
       expect(Validate.isValidSequence([onCurve()])).toBe(true);
       expect(Validate.isValidSequence([offCurve()])).toBe(false);
       expect(Validate.isValidSequence([onCurve(), onCurve()])).toBe(true);
+      expect(Validate.isValidSequence([onCurve(), offCurve(), qCurve()])).toBe(true);
       expect(Validate.isValidSequence([onCurve(), offCurve()])).toBe(false);
       expect(
         Validate.isValidSequence([onCurve(), offCurve(), offCurve(), offCurve(), onCurve()]),
@@ -225,6 +231,7 @@ describe("Validate", () => {
       expect(Validate.canFormValidSegments([onCurve()])).toBe(false);
       expect(Validate.canFormValidSegments([onCurve(), onCurve()])).toBe(true);
       expect(Validate.canFormValidSegments([onCurve(), offCurve(), onCurve()])).toBe(true);
+      expect(Validate.canFormValidSegments([onCurve(), offCurve(), qCurve()])).toBe(true);
       expect(Validate.canFormValidSegments([onCurve(), offCurve(), offCurve(), onCurve()])).toBe(
         true,
       );
@@ -241,9 +248,9 @@ describe("Validate", () => {
       }
     });
 
-    it("single onCurve has anchor", () => {
-      const result = Validate.hasAnchor([onCurve()]);
-      expect(result.valid).toBe(true);
+    it("onCurve and qCurve points are anchors", () => {
+      expect(Validate.hasAnchor([onCurve()]).valid).toBe(true);
+      expect(Validate.hasAnchor([qCurve()]).valid).toBe(true);
     });
 
     it("single offCurve returns ORPHAN_OFF_CURVE error", () => {
@@ -278,8 +285,9 @@ describe("Validate", () => {
       expect(Validate.hasValidAnchor([])).toBe(false);
     });
 
-    it("returns true for single onCurve", () => {
+    it("returns true for onCurve and qCurve anchors", () => {
       expect(Validate.hasValidAnchor([onCurve()])).toBe(true);
+      expect(Validate.hasValidAnchor([qCurve()])).toBe(true);
     });
 
     it("returns false for single offCurve", () => {

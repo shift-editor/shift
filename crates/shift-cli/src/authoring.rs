@@ -280,23 +280,24 @@ fn report_changes(font: &Font, changes: Vec<FontChange>) -> Vec<AuthoringChange>
                 maximum: change.axis.maximum(),
             }),
             FontChange::SourceCreated(change) => Some(AuthoringChange::SourceCreated {
-                source_id: change.source_id.to_string(),
-                name: change.name,
+                source_id: change.source.id().to_string(),
+                name: change.source.name().to_string(),
                 location: change
-                    .location
-                    .into_iter()
-                    .filter_map(|coordinate| {
+                    .source
+                    .location()
+                    .iter()
+                    .filter_map(|(axis_id, value)| {
                         let tag = font
                             .axes()
                             .iter()
-                            .find(|axis| axis.id() == coordinate.axis_id)?
+                            .find(|axis| axis.id() == *axis_id)?
                             .tag()
                             .to_string();
-                        Some((tag, coordinate.value))
+                        Some((tag, *value))
                     })
                     .collect(),
             }),
-            FontChange::GlyphCreated(change) => Some(AuthoringChange::GlyphCreated {
+            FontChange::GlyphAppended(change) => Some(AuthoringChange::GlyphCreated {
                 glyph_id: change.glyph_id.to_string(),
                 name: change.name.to_string(),
                 unicodes: change

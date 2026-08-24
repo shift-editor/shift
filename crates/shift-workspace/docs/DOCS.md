@@ -1,6 +1,6 @@
 # shift-workspace
 
-<!-- reviewed: 2026-08-19 review-every: 90d -->
+<!-- reviewed: 2026-08-21 review-every: 90d -->
 
 Backend runtime object for an open Shift font workspace.
 
@@ -19,6 +19,9 @@ Backend runtime object for an open Shift font workspace.
 - **Architecture Invariant:** Ledger replay restores complete named-instance collections after axis topology so undo/redo never observes an instance against the wrong external-axis shape.
 - **Architecture Invariant:** Metadata ledger entries store complete pre/post snapshots and replay them independently of font metrics.
 - **Architecture Invariant:** Metric-definition ledger state replays before complete source snapshots so source metric IDs are always valid during undo and redo.
+- **Architecture Invariant:** Source and axis topology entries retain complete pre/post identity order. Replay restores entities first, then restores collection order and the source collection's default identity; SQLite persists the same dense order in that transaction.
+- **Architecture Invariant:** `LedgerStep::GlyphAppend` represents the only authored glyph-topology transition. Redo appends in application order and undo pops in reverse order; persistence materializes and rewrites only those tail rows, never the complete glyph directory.
+- **Architecture Invariant:** After every successful apply, undo, or redo, loading the merged durable store produces the live `Font`; a failed transition changes neither live state, durable state, nor ledger availability.
 - **Architecture Invariant:** Undo and redo retain at most 100 entries per stack. Extending either stack drops that stack's oldest entry; a fresh apply clears redo.
 - **Architecture Invariant:** Document `dirty` compares the ledger's current history position with its saved position; the durable authored revision remains monotonic and is not an undo cursor. Undo/redo persist their resulting dirty value atomically with replay. A resumed dirty workspace has no reachable saved position because its in-memory ledger does not survive process restart.
 
@@ -84,7 +87,8 @@ cargo test -p shift-workspace configured_large_corpus_streams_resumes_and_acquir
 ```
 
 Set both expectations to match the selected local corpus; the gate asserts only
-these minimum glyph and layer counts. Timing and RSS remain profiler
+these minimum glyph and layer counts. It also reports one glyph append and undo
+through the normal workspace persistence path. Timing and RSS remain profiler
 observations rather than CI assertions.
 
 ## Workflow recipes
@@ -94,8 +98,8 @@ observations rather than CI assertions.
 1. Layer-scoped intents need no ledger wiring: `FontWorkspace::apply` acquires the intent's `required_layer_ids`, snapshots pre states, and derives `LayerPair` steps from the touched layers in the returned `AppliedIntents` automatically.
 2. Font-level intents must capture their pre state in `capture_font_level_pre_state` and be mapped to a `LedgerStep` variant in `ledger_steps` (both in `workspace.rs`).
 3. Add a matching `replay_*` helper (like `replay_named_instances`) and dispatch it from `replay`; `ReplaySide::Pre` (undo) and `ReplaySide::Post` (redo) share the same path, so one helper covers both directions.
-4. Respect replay ordering: axis topology before named instances, metric definitions before complete source snapshots.
-5. Verify: `cargo test -p shift-workspace` with a test that applies, undoes, and redoes the intent, asserting both font state and store persistence.
+4. Respect replay ordering: axis topology before named instances, metric definitions before complete source snapshots, and collection order/default identity after entity existence.
+5. Verify: `cargo test -p shift-workspace` with a test that applies, undoes, and redoes the intent, asserting exact `Font` equality with a reloaded merged store after every transition.
 
 ### Adding a read that touches layer payloads
 

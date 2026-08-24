@@ -75,6 +75,215 @@ fn metadata_change_set_preserves_metrics_and_store_only_font_info() {
 }
 
 #[test]
+fn source_creation_restores_the_complete_snapshot() {
+    let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
+    let font = sample_font();
+    let source = font
+        .sources()
+        .iter()
+        .find(|source| source.name() == "Bold")
+        .cloned()
+        .unwrap();
+    store.replace_font_state(&font).unwrap();
+
+    store
+        .apply_change_set(&shift_font::FontChange::source_deleted(source.id()).into())
+        .unwrap();
+    store
+        .apply_change_set(&shift_font::FontChange::source_created(&source).into())
+        .unwrap();
+
+    let persisted = store.load_font_state().unwrap();
+    assert_eq!(
+        persisted
+            .sources()
+            .iter()
+            .find(|candidate| candidate.id() == source.id()),
+        Some(&source)
+    );
+}
+
+#[test]
+fn change_sets_preserve_dense_entity_order_indices() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("working.sqlite");
+    let mut store = ShiftStore::open(&path).unwrap();
+    let font = sample_font();
+    store.replace_font_state(&font).unwrap();
+
+    let axis = font.axes()[1].clone();
+    let source = font.sources()[1].clone();
+    let glyph = shift_font::Glyph::new("B");
+    store
+        .apply_change_set(&shift_font::FontChangeSet::new(vec![
+            shift_font::FontChange::axis_updated(&axis),
+            shift_font::FontChange::source_updated(&source),
+            shift_font::FontChange::glyph_appended(&glyph),
+        ]))
+        .unwrap();
+
+    let conn = rusqlite::Connection::open(&path).unwrap();
+    for (table, expected) in [
+        ("axes", vec![0_i64, 1]),
+        ("sources", vec![0_i64, 1]),
+        ("glyphs", vec![0_i64, 1, 2]),
+    ] {
+        let mut statement = conn
+            .prepare(&format!(
+                "SELECT order_index FROM {table} ORDER BY order_index"
+            ))
+            .unwrap();
+        let actual = statement
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<Result<Vec<i64>, _>>()
+            .unwrap();
+        assert_eq!(actual, expected, "unexpected {table} order");
+    }
+
+    store
+        .apply_change_set(&shift_font::FontChangeSet::new(vec![
+            shift_font::FontChange::axis_deleted(font.axes()[0].id()),
+            shift_font::FontChange::source_deleted(font.sources()[1].id()),
+            shift_font::FontChange::glyph_popped(glyph.id()),
+        ]))
+        .unwrap();
+
+    for (table, expected) in [
+        ("axes", vec![0_i64]),
+        ("sources", vec![0_i64]),
+        ("glyphs", vec![0_i64, 1]),
+    ] {
+        let mut statement = conn
+            .prepare(&format!(
+                "SELECT order_index FROM {table} ORDER BY order_index"
+            ))
+            .unwrap();
+        let actual = statement
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<Result<Vec<i64>, _>>()
+            .unwrap();
+        assert_eq!(actual, expected, "unexpected compacted {table} order");
+    }
+}
+
+#[test]
+fn glyph_edit_is_sparse() {
+    const GLYPH_COUNT: usize = 4_096;
+
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("working.sqlite");
+    let mut font = shift_font::Font::new();
+    for index in 0..GLYPH_COUNT {
+        font.insert_glyph(shift_font::Glyph::with_id(
+            shift_font::GlyphId::from_raw(format!("g{index}")),
+            format!("g{index}"),
+        ))
+        .unwrap();
+    }
+
+    let mut store = ShiftStore::open(&path).unwrap();
+    store.replace_font_state(&font).unwrap();
+    let audit = rusqlite::Connection::open(&path).unwrap();
+    audit
+        .execute_batch(
+            "CREATE TABLE glyph_write_audit (operation TEXT NOT NULL, glyph_id TEXT NOT NULL);
+             CREATE TRIGGER audit_glyph_insert AFTER INSERT ON glyphs BEGIN
+               INSERT INTO glyph_write_audit VALUES ('insert', NEW.id);
+             END;
+             CREATE TRIGGER audit_glyph_update AFTER UPDATE ON glyphs BEGIN
+               INSERT INTO glyph_write_audit VALUES ('update', NEW.id);
+             END;
+             CREATE TRIGGER audit_glyph_delete AFTER DELETE ON glyphs BEGIN
+               INSERT INTO glyph_write_audit VALUES ('delete', OLD.id);
+             END;",
+        )
+        .unwrap();
+    drop(audit);
+
+    let appended =
+        shift_font::Glyph::with_id(shift_font::GlyphId::from_raw("appended"), "appended");
+    let mut with_append = font.clone();
+    with_append.insert_glyph(appended.clone()).unwrap();
+    store
+        .apply_change_set_with_font(
+            &shift_font::FontChange::glyph_appended(&appended).into(),
+            &with_append,
+            true,
+        )
+        .unwrap();
+
+    let mut after_pop = with_append;
+    after_pop.pop_glyph(appended.id()).unwrap();
+    store
+        .apply_change_set_with_font(
+            &shift_font::FontChange::glyph_popped(appended.id()).into(),
+            &after_pop,
+            true,
+        )
+        .unwrap();
+
+    let first_id = font.glyphs().next().unwrap().id();
+    let error = store
+        .apply_change_set(&shift_font::FontChange::glyph_popped(first_id).into())
+        .unwrap_err();
+    assert!(matches!(
+        error,
+        shift_store::StoreError::Font(shift_font::CoreError::InvalidEntityOrder {
+            kind: "glyph",
+            ..
+        })
+    ));
+
+    let audit = rusqlite::Connection::open(&path).unwrap();
+    let writes = audit
+        .prepare("SELECT operation || ':' || glyph_id FROM glyph_write_audit ORDER BY rowid")
+        .unwrap()
+        .query_map([], |row| row.get::<_, String>(0))
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    assert_eq!(
+        writes,
+        [
+            format!("insert:{}", appended.id()),
+            format!("delete:{}", appended.id()),
+        ]
+    );
+    let (count, minimum, maximum) = audit
+        .query_row(
+            "SELECT COUNT(*), MIN(order_index), MAX(order_index) FROM glyphs",
+            [],
+            |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, i64>(2)?,
+                ))
+            },
+        )
+        .unwrap();
+    assert_eq!((count, minimum, maximum), (GLYPH_COUNT as i64, 0, 4_095));
+}
+
+#[test]
+fn failed_change_set_rolls_back_all_entity_and_order_changes() {
+    let mut store = ShiftStore::open_memory_for_test().unwrap();
+    let original = sample_font();
+    store.replace_font_state(&original).unwrap();
+
+    let existing_source_id = original.sources()[0].id();
+    let result = store.apply_change_set(&shift_font::FontChangeSet::new(vec![
+        shift_font::FontChange::source_deleted(existing_source_id),
+        shift_font::FontChange::source_deleted(shift_font::SourceId::from_raw("missing")),
+    ]));
+
+    assert!(result.is_err());
+    assert_eq!(store.load_font_state().unwrap(), original);
+}
+
+#[test]
 fn writes_and_reads_workspace_state() {
     let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
     let state = WorkspaceState::untitled(Some("doc-1".to_string()));
@@ -101,7 +310,7 @@ fn applying_change_set_marks_workspace_state_dirty() {
 
     store
         .apply_change_set(&shift_font::FontChangeSet::new(vec![
-            shift_font::FontChange::glyph_created(&glyph),
+            shift_font::FontChange::glyph_appended(&glyph),
         ]))
         .expect("change set should apply");
 
@@ -377,7 +586,7 @@ fn applies_glyph_identity_change_set() {
 
     store
         .apply_change_set(&shift_font::FontChangeSet::new(vec![
-            shift_font::FontChange::GlyphCreated(shift_font::GlyphCreated::from(&glyph)),
+            shift_font::FontChange::GlyphAppended(shift_font::GlyphAppended::from(&glyph)),
             shift_font::FontChange::glyph_layer_created(glyph.id(), &layer),
             shift_font::FontChange::GlyphIdentityChanged(shift_font::GlyphIdentityChanged {
                 glyph_id: glyph_id.clone(),
@@ -440,7 +649,7 @@ fn glyph_rename_preserves_authored_order() {
 }
 
 #[test]
-fn applies_glyph_delete_change_set_and_cascades_layers() {
+fn popping_glyph_cascades_layers() {
     let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
     let glyph = shift_font::Glyph::with_unicode("A", 65);
     let glyph_id = glyph.id();
@@ -451,9 +660,9 @@ fn applies_glyph_delete_change_set_and_cascades_layers() {
 
     store
         .apply_change_set(&shift_font::FontChangeSet::new(vec![
-            shift_font::FontChange::glyph_created(&glyph),
+            shift_font::FontChange::glyph_appended(&glyph),
             shift_font::FontChange::glyph_layer_created(glyph.id(), &layer),
-            shift_font::FontChange::glyph_deleted(glyph.id()),
+            shift_font::FontChange::glyph_popped(glyph.id()),
         ]))
         .expect("change set should apply");
 
@@ -483,7 +692,7 @@ fn applies_layer_metrics_and_contour_point_changes() {
 
     store
         .apply_change_set(&shift_font::FontChangeSet::new(vec![
-            shift_font::FontChange::glyph_created(&glyph),
+            shift_font::FontChange::glyph_appended(&glyph),
             shift_font::FontChange::glyph_layer_created(glyph.id(), &layer),
             shift_font::FontChange::LayerMetricsChanged(shift_font::LayerMetricsChanged {
                 layer_id: layer.id(),
@@ -532,7 +741,7 @@ fn applies_layer_geometry_replacement() {
 
     store
         .apply_change_set(&shift_font::FontChangeSet::new(vec![
-            shift_font::FontChange::glyph_created(&glyph),
+            shift_font::FontChange::glyph_appended(&glyph),
             shift_font::FontChange::glyph_layer_created(glyph.id(), &layer),
             shift_font::FontChange::ContourAdded(shift_font::ContourAdded {
                 layer_id: layer.id(),
@@ -675,7 +884,7 @@ fn rejects_incremental_change_for_missing_point_row() {
     let missing_point_id = shift_font::PointId::new();
 
     let result = store.apply_change_set(&shift_font::FontChangeSet::new(vec![
-        shift_font::FontChange::glyph_created(&glyph),
+        shift_font::FontChange::glyph_appended(&glyph),
         shift_font::FontChange::glyph_layer_created(glyph.id(), &layer),
         shift_font::FontChange::PointPositionsChanged(shift_font::PointPositionsChanged {
             layer_id: layer.id(),
@@ -936,7 +1145,7 @@ fn anchored_layer_change_set(
     layer: &shift_font::GlyphLayer,
 ) -> shift_font::FontChangeSet {
     shift_font::FontChangeSet::new(vec![
-        shift_font::FontChange::glyph_created(glyph),
+        shift_font::FontChange::glyph_appended(glyph),
         shift_font::FontChange::glyph_layer_created(glyph.id(), layer),
         shift_font::FontChange::layer_geometry_replaced(layer),
     ])

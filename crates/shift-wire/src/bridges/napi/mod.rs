@@ -137,6 +137,7 @@ pub struct NapiCatalogAtlasWeights {
 pub enum NapiPointType {
     OnCurve,
     OffCurve,
+    QCurve,
 }
 
 impl From<PointType> for NapiPointType {
@@ -144,6 +145,7 @@ impl From<PointType> for NapiPointType {
         match point_type {
             PointType::OnCurve => Self::OnCurve,
             PointType::OffCurve => Self::OffCurve,
+            PointType::QCurve => Self::QCurve,
         }
     }
 }
@@ -153,6 +155,7 @@ impl From<NapiPointType> for PointType {
         match point_type {
             NapiPointType::OnCurve => Self::OnCurve,
             NapiPointType::OffCurve => Self::OffCurve,
+            NapiPointType::QCurve => Self::QCurve,
         }
     }
 }
