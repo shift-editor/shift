@@ -7,9 +7,21 @@ const appCommands: Command[] = [
     label: "Check for Updates…",
     run: (ctx) => ctx.update.checkForUpdates(),
   },
+  {
+    id: "app.showSettings",
+    label: "Settings…",
+    accelerator: "CmdOrCtrl+,",
+    enabled: (ctx) => ctx.renderer.available(),
+    run: (ctx) => ctx.renderer.run("app.showSettings"),
+  },
 ];
 
 const windowCommands: Command[] = [
+  {
+    id: "window.showHome",
+    label: "Home",
+    run: (ctx) => ctx.windows.showHome(),
+  },
   {
     id: "window.close",
     label: "Close Window",

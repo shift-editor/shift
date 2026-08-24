@@ -113,8 +113,12 @@ export type CommandContext = {
      * @returns `null` when the app has not created a window or the window is gone.
      */
     active: () => Window | null;
+    /** Focuses an existing launcher window or creates one when none exists. */
+    showHome: () => void;
   };
   renderer: {
+    /** Returns whether the active window owns a font renderer session. */
+    available: () => boolean;
     /** Sends a renderer-owned command to the active workspace window. */
     run: (id: RendererCommandId) => void;
   };

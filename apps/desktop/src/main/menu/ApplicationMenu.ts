@@ -82,12 +82,20 @@ export class ApplicationMenu {
           { role: "about" },
           this.#commandItem("app.checkForUpdates"),
           { type: "separator" },
+          this.#commandItem("app.showSettings"),
+          { type: "separator" },
+          { role: "services", submenu: [] },
+          { type: "separator" },
+          { role: "hide" },
+          { role: "hideOthers" },
+          { role: "unhide" },
+          { type: "separator" },
           { role: "quit" },
         ],
       },
       {
         label: "File",
-        submenu: this.#fileItems(),
+        submenu: this.#fileItems(false),
       },
       {
         label: "Edit",
@@ -95,15 +103,22 @@ export class ApplicationMenu {
       },
       {
         label: "View",
-        submenu: [
-          ...this.#viewZoomItems(),
-          { type: "separator" },
-          { label: "Developer", submenu: this.#developerItems() },
-        ],
+        submenu: this.#viewItems(),
       },
       {
         label: "Glyph",
         submenu: this.#glyphItems(),
+      },
+      {
+        role: "windowMenu",
+        submenu: [
+          { role: "minimize" },
+          { role: "zoom" },
+          { type: "separator" },
+          { role: "front" },
+          { type: "separator" },
+          this.#commandItem("window.showHome"),
+        ],
       },
     ];
   }
@@ -113,7 +128,7 @@ export class ApplicationMenu {
     return [
       {
         label: "File",
-        submenu: this.#fileItems(),
+        submenu: this.#fileItems(true),
       },
       {
         label: "Edit",
@@ -146,15 +161,38 @@ export class ApplicationMenu {
     ];
   }
 
-  #developerItems(): MenuItemConstructorOptions[] {
-    const tools: MenuItemConstructorOptions[] = [{ role: "toggleDevTools" }];
-    if (app.isPackaged) return tools;
+  #viewItems(): MenuItemConstructorOptions[] {
+    const items = this.#viewZoomItems();
+    if (app.isPackaged) return items;
 
-    return [{ role: "reload" }, { role: "forceReload" }, { type: "separator" }, ...tools];
+    return [
+      ...items,
+      { type: "separator" },
+      { label: "Developer", submenu: this.#developerItems() },
+    ];
   }
 
-  #fileItems(): MenuItemConstructorOptions[] {
-    return fileMenuItems(this.#runCommand, this.#isCommandEnabled);
+  #developerItems(): MenuItemConstructorOptions[] {
+    return [
+      { role: "reload" },
+      { role: "forceReload" },
+      { type: "separator" },
+      { role: "toggleDevTools" },
+    ];
+  }
+
+  #fileItems(includeQuit: boolean): MenuItemConstructorOptions[] {
+    const items: MenuItemConstructorOptions[] = [
+      ...fileMenuItems(this.#runCommand, this.#isCommandEnabled),
+    ];
+    if (includeQuit) {
+      items.push({ type: "separator" }, this.#commandItem("app.showSettings"));
+    }
+
+    items.push({ type: "separator" }, this.#commandItem("window.close"));
+    if (!includeQuit) return items;
+
+    return [...items, { type: "separator" }, { role: "quit" }];
   }
 
   #editItems(): MenuItemConstructorOptions[] {

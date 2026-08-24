@@ -7,6 +7,7 @@
  */
 export type CommandId =
   | "app.checkForUpdates"
+  | "app.showSettings"
   | "file.new"
   | "file.open"
   | "file.save"
@@ -20,6 +21,7 @@ export type CommandId =
   | "edit.deleteSelection"
   | "edit.selectAll"
   | "glyph.reverseSelectedContour"
+  | "window.showHome"
   | "window.close"
   | "window.minimise"
   | "window.maximise"
@@ -28,13 +30,15 @@ export type CommandId =
   | "ui.zoomReset";
 
 /**
- * Identifies a command implemented by the active renderer/editor.
+ * Identifies a command implemented by the active font renderer.
  *
- * Renderer command IDs are sent from main to the focused workspace window.
- * Main owns native menu routing; renderer owns selection interpretation and
- * editor mutation.
+ * Renderer command IDs are sent from main to the focused font window. Main
+ * owns native menu routing; renderer UI owns the resulting surface or edit.
  */
-export type RendererCommandId =
+export type RendererCommandId = EditorCommandId | "app.showSettings";
+
+/** Identifies a renderer command that acts on the current editor or text focus. */
+export type EditorCommandId =
   | "edit.undo"
   | "edit.redo"
   | "edit.cut"

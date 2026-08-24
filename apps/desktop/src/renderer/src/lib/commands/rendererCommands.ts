@@ -1,10 +1,10 @@
-import type { RendererCommandId } from "@shared/commands";
+import type { EditorCommandId } from "@shared/commands";
 import type { ContourId } from "@shift/types";
 import type { Editor } from "@/lib/editor/Editor";
 import { electronSystemClipboard } from "@/lib/clipboard";
 import { objectIsKindOf } from "@/types";
 
-const TEXT_EDIT_COMMANDS = new Set<RendererCommandId>([
+const TEXT_EDIT_COMMANDS = new Set<EditorCommandId>([
   "edit.undo",
   "edit.redo",
   "edit.cut",
@@ -24,7 +24,7 @@ const TEXT_EDIT_COMMANDS = new Set<RendererCommandId>([
  * @param id - Shared command identity requested by native shell or renderer UI.
  * @returns true when the command mutates or handles current state.
  */
-export async function runRendererCommand(editor: Editor, id: RendererCommandId): Promise<boolean> {
+export async function runRendererCommand(editor: Editor, id: EditorCommandId): Promise<boolean> {
   if (TEXT_EDIT_COMMANDS.has(id)) {
     const textResult = await runFocusedTextEditCommand(id);
     if (textResult !== null) return textResult;
@@ -92,7 +92,7 @@ export async function runRendererCommand(editor: Editor, id: RendererCommandId):
   }
 }
 
-async function runFocusedTextEditCommand(id: RendererCommandId): Promise<boolean | null> {
+async function runFocusedTextEditCommand(id: EditorCommandId): Promise<boolean | null> {
   const target = focusedEditableElement();
   if (!target) return null;
 

@@ -1,7 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
 import "@/types/window";
-import { getShiftHost } from "@/host/shiftHost";
-import { runRendererCommand } from "@/lib/commands/rendererCommands";
 import type { FontSession } from "./FontSession";
 import { FontSessionContext, WorkspaceContext } from "./WorkspaceContext";
 import { getFontSession } from "./runtime";
@@ -37,16 +35,7 @@ export function FontSessionProvider({ children }: { children: ReactNode }) {
     const workspace = session.workspace;
     if (workspace) window.shift = workspace;
 
-    const unlisten = workspace
-      ? getShiftHost().commands.onRunRendererCommand((id) => {
-          void runRendererCommand(workspace.editor, id).catch((error) => {
-            console.error("renderer command failed", id, error);
-          });
-        })
-      : () => {};
-
     return () => {
-      unlisten();
       delete window.shift;
       delete window.shiftSession;
     };
