@@ -10,16 +10,21 @@ export interface TransformGridProps {
 const INACTIVE_COLOR = "#C2C2C2";
 const ACTIVE_COLOR = "#0C92F4";
 
-const anchorPositions: { id: AnchorPosition; cx: number; cy: number }[] = [
-  { id: "tl", cx: 4, cy: 4 },
-  { id: "tm", cx: 31, cy: 4 },
-  { id: "tr", cx: 58, cy: 4 },
-  { id: "lm", cx: 4, cy: 27 },
-  { id: "m", cx: 32, cy: 27 },
-  { id: "rm", cx: 58, cy: 27 },
-  { id: "bl", cx: 4, cy: 48 },
-  { id: "bm", cx: 31, cy: 48 },
-  { id: "br", cx: 58, cy: 48 },
+const anchorPositions: {
+  id: AnchorPosition;
+  label: string;
+  cx: number;
+  cy: number;
+}[] = [
+  { id: "tl", label: "Top-left scale anchor", cx: 4, cy: 4 },
+  { id: "tm", label: "Top scale anchor", cx: 31, cy: 4 },
+  { id: "tr", label: "Top-right scale anchor", cx: 58, cy: 4 },
+  { id: "lm", label: "Left scale anchor", cx: 4, cy: 27 },
+  { id: "m", label: "Center scale anchor", cx: 32, cy: 27 },
+  { id: "rm", label: "Right scale anchor", cx: 58, cy: 27 },
+  { id: "bl", label: "Bottom-left scale anchor", cx: 4, cy: 48 },
+  { id: "bm", label: "Bottom scale anchor", cx: 31, cy: 48 },
+  { id: "br", label: "Bottom-right scale anchor", cx: 58, cy: 48 },
 ];
 
 export const TransformGrid = ({
@@ -37,9 +42,11 @@ export const TransformGrid = ({
       xmlns="http://www.w3.org/2000/svg"
     >
       <rect x="4" y="4" width="54" height="44" stroke="#C2C2C2" strokeWidth="2" />
-      {anchorPositions.map(({ id, cx, cy }) => (
+      {anchorPositions.map(({ id, label, cx, cy }) => (
         <circle
           key={id}
+          role="button"
+          aria-label={label}
           cx={cx}
           cy={cy}
           r="4"

@@ -87,6 +87,7 @@ export const ScaleSection = () => {
         <div className="flex flex-col gap-2">
           <div className="text-xs text-secondary">Scale</div>
           <EditableSidebarInput
+            ariaLabel="Scale factor"
             className="max-w-18 pl-7"
             value={1}
             suffix="x"

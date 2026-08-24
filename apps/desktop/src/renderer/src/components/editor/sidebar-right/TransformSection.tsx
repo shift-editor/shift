@@ -2,10 +2,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { SidebarSection } from "./SidebarSection";
 import { EditableSidebarInput, type EditableSidebarInputHandle } from "./EditableSidebarInput";
 import { IconButton } from "./IconButton";
-import { useTransformOrigin } from "@/context/TransformOriginContext";
 import { useEditor } from "@/workspace/WorkspaceContext";
-import { anchorToPoint } from "@/lib/transform/anchor";
 import { useSignalState } from "@/lib/signals";
+import { Bounds } from "@shift/geo";
 import { useSelectionBounds } from "@/hooks/useSelectionBounds";
 
 import RotateIcon from "@/assets/sidebar-right/rotate.svg";
@@ -92,7 +91,6 @@ const DistributeButtonsRow = React.memo(function DistributeButtonsRow({
 
 export const TransformSection = () => {
   const editor = useEditor();
-  const { anchor } = useTransformOrigin();
   const selection = useSignalState(editor.selection.stateCell);
   const selectedPointIds = useMemo(() => selection.ids.filter(isPointId), [selection]);
   const selectionBounds = useSelectionBounds();
@@ -140,8 +138,8 @@ export const TransformSection = () => {
   );
 
   const origin = useMemo(
-    () => (selectionBounds ? anchorToPoint(anchor, selectionBounds) : undefined),
-    [anchor, selectionBounds],
+    () => (selectionBounds ? Bounds.center(selectionBounds) : undefined),
+    [selectionBounds],
   );
 
   const handleRotate90 = () => {
@@ -176,11 +174,11 @@ export const TransformSection = () => {
       if (!layer) return;
       if (!selectionBounds) return;
 
-      const anchorPoint = anchorToPoint(anchor, selectionBounds);
-      const target = axis === "x" ? { x: value, y: anchorPoint.y } : { x: anchorPoint.x, y: value };
-      layer.moveSelectionTo([...selectedPointIds], target, anchorPoint);
+      const position = selectionBounds.min;
+      const target = axis === "x" ? { x: value, y: position.y } : { x: position.x, y: value };
+      layer.moveSelectionTo([...selectedPointIds], target, position);
     },
-    [anchor, layer, selectedPointIds, selectionBounds],
+    [layer, selectedPointIds, selectionBounds],
   );
 
   return (
@@ -199,12 +197,14 @@ export const TransformSection = () => {
         <div className="flex gap-2">
           <EditableSidebarInput
             ref={xRef}
+            ariaLabel="X position"
             label="X"
             disabled={!editable}
             onValueChange={(v) => handlePositionChange("x", v)}
           />
           <EditableSidebarInput
             ref={yRef}
+            ariaLabel="Y position"
             label="Y"
             disabled={!editable}
             onValueChange={(v) => handlePositionChange("y", v)}
@@ -216,6 +216,7 @@ export const TransformSection = () => {
         <div className="text-xs text-secondary">Rotation</div>
         <div className="flex gap-2 items-center">
           <EditableSidebarInput
+            ariaLabel="Rotation"
             className="max-w-32"
             value={rotation}
             suffix="°"
@@ -225,9 +226,24 @@ export const TransformSection = () => {
             icon={<RotateIcon className="w-5 h-5" />}
           />
           <div className="flex w-full items-center justify-start gap-1">
-            <IconButton icon={RotateCwIcon} disabled={!editable} onClick={handleRotate90} />
-            <IconButton icon={FlipHIcon} disabled={!editable} onClick={handleFlipH} />
-            <IconButton icon={FlipVIcon} disabled={!editable} onClick={handleFlipV} />
+            <IconButton
+              ariaLabel="Rotate 90 degrees clockwise"
+              icon={RotateCwIcon}
+              disabled={!editable}
+              onClick={handleRotate90}
+            />
+            <IconButton
+              ariaLabel="Flip horizontally"
+              icon={FlipHIcon}
+              disabled={!editable}
+              onClick={handleFlipH}
+            />
+            <IconButton
+              ariaLabel="Flip vertically"
+              icon={FlipVIcon}
+              disabled={!editable}
+              onClick={handleFlipV}
+            />
           </div>
         </div>
       </div>

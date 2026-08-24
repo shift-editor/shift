@@ -1,6 +1,6 @@
 # Transform
 
-<!-- reviewed: 2026-08-18 review-every: 90d -->
+<!-- reviewed: 2026-08-24 review-every: 90d -->
 
 Pure geometry transformation system for rotating, scaling, reflecting, aligning, and distributing selected points.
 
@@ -60,7 +60,7 @@ Segment-aware selection bounds are not part of this module. `Contour.selectionBo
 
 ### Anchor mapping
 
-`anchorToPoint` converts a 9-position `AnchorPosition` into a `Point2D` on a `Bounds` rectangle. The sidebar `TransformSection` and `ScaleSection` components call it to resolve the transform origin from the selection bounds; `TransformGrid` only renders the 9-dot picker that selects the `AnchorPosition`.
+`anchorToPoint` converts a 9-position `AnchorPosition` into a `Point2D` on a `Bounds` rectangle. `ScaleSection` uses it to resolve the scale origin selected through `TransformGrid`. Position edits always target the selection's top-left, while rotation and reflection use the selection center; the scale anchor does not affect those operations.
 
 ### Zoom from wheel
 
@@ -99,18 +99,20 @@ const result = Transform.applyMatrix(points, matrix, origin);
 ## Gotchas
 
 - `reflectPoints("horizontal")` flips Y (mirrors across the X axis), not X. The naming follows "flip across the horizontal center line" convention, which inverts the vertical coordinate.
-- `applyMatrix` defaults origin to `{ x: 0, y: 0 }`, not the selection center. Callers must supply the pivot themselves — the sidebar sections resolve it with `anchorToPoint` over the selection bounds, and the select tool's `BoundingBox` uses the scene rect's center (its local `rectCenter` helper).
+- `applyMatrix` defaults origin to `{ x: 0, y: 0 }`, not the selection center. Callers must supply the pivot themselves — `ScaleSection` resolves its selected scale anchor with `anchorToPoint`, `TransformSection` uses the selection center for rotation and reflection, and the select tool's `BoundingBox` uses the scene rect's center (its local `rectCenter` helper).
 - `distributePoints` with fewer than 3 points is a no-op -- no error is thrown, the input is returned unchanged.
 - There is no `SelectionBounds.ts` here anymore. Segment-aware bounds moved to `Contour.selectionBounds` in `@shift/glyph-state` (only fully selected segments contribute curve bounds there), but nothing in production calls it — the visible selection box is `Editor.selectionBounds()`, which unions full per-object bounds.
 
 ## Verification
 
 ```bash
-# Unit tests for all transform files
-npx vitest run --reporter verbose src/renderer/src/lib/transform/
+# Focused transform tests
+pnpm test:desktop src/renderer/src/lib/transform/Transform.test.ts
+pnpm test:desktop src/renderer/src/lib/transform/Alignment.test.ts
+pnpm test:desktop src/renderer/src/lib/transform/zoomFromWheel.test.ts
 
 # Layer integration tests
-pnpm --filter @shift/desktop test -- src/renderer/src/lib/model/GlyphLayerGeometry.test.ts
+pnpm test:desktop src/renderer/src/lib/model/GlyphLayerGeometry.test.ts
 ```
 
 ## Related
@@ -118,5 +120,5 @@ pnpm --filter @shift/desktop test -- src/renderer/src/lib/model/GlyphLayerGeomet
 - `GlyphLayer` -- mutating transform API over authored glyph geometry
 - `Mat`, `MatModel`, `Bounds` -- matrix and bounds math from `@shift/geo`
 - `Contour.selectionBounds` (`@shift/glyph-state`) -- segment-aware selection bounding boxes, formerly this module's `SelectionBounds.ts`; currently unused in production, `Editor.selectionBounds()` supplies the visible selection rectangle
-- `TransformSection`, `ScaleSection` -- sidebar UI components that resolve origins via `anchorToPoint` and drive transforms through `GlyphLayer`; `TransformGrid` renders the anchor picker they share
+- `TransformSection`, `ScaleSection` -- sidebar UI components that drive transforms through `GlyphLayer`; `ScaleSection` resolves its origin via `anchorToPoint`, and `TransformGrid` renders its anchor picker
 - `Canvas` (`components/editor/Canvas.tsx`) -- consumes `zoomMultiplierFromWheel` for viewport zoom
