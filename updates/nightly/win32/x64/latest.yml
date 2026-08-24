@@ -1,8 +1,8 @@
-version: 0.18.1
+version: 0.19.1
 files:
-  - url: https://github.com/shift-editor/shift/releases/download/nightly/Shift-Nightly-0.18.1-Windows-x64-Setup.exe
-    sha512: 6V52HU7nAJHURaHHlXhlII1bwVlNuu+pY8WmH37pwNV7bPu3LOEQm20yXEBcUXRDPTuBMsxoS2xr9faNJc1evg==
-    size: 102714180
-path: https://github.com/shift-editor/shift/releases/download/nightly/Shift-Nightly-0.18.1-Windows-x64-Setup.exe
-sha512: 6V52HU7nAJHURaHHlXhlII1bwVlNuu+pY8WmH37pwNV7bPu3LOEQm20yXEBcUXRDPTuBMsxoS2xr9faNJc1evg==
-releaseDate: '2026-08-23T06:41:30.539Z'
+  - url: https://github.com/shift-editor/shift/releases/download/nightly/Shift-Nightly-0.19.1-Windows-x64-Setup.exe
+    sha512: hHa+Q215wXpUR9q5YI2f8cRvo1p0QCq0drScH5tNpUEMX8YRHR8WYSPJi5cNuPRHMtASwRLcY6ZULDIAs+3Dkg==
+    size: 102732093
+path: https://github.com/shift-editor/shift/releases/download/nightly/Shift-Nightly-0.19.1-Windows-x64-Setup.exe
+sha512: hHa+Q215wXpUR9q5YI2f8cRvo1p0QCq0drScH5tNpUEMX8YRHR8WYSPJi5cNuPRHMtASwRLcY6ZULDIAs+3Dkg==
+releaseDate: '2026-08-24T05:55:12.944Z'

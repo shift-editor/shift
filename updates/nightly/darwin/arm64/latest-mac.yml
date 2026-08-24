@@ -1,11 +1,11 @@
-version: 0.18.1
+version: 0.19.1
 files:
-  - url: https://github.com/shift-editor/shift/releases/download/nightly/Shift-Nightly-0.18.1-macOS-arm64.zip
-    sha512: Ju0jsmtGKm1Ygen0b9sGk+PEbJYA1k6+SSmU0RruSE4ZWgJpP2FyZVyNlh252Q6FmOex7/lWiRX5bLLHLJUlMw==
-    size: 123257206
-  - url: https://github.com/shift-editor/shift/releases/download/nightly/Shift-Nightly-0.18.1-macOS-arm64.dmg
-    sha512: o3MuD3UXf1SAE5KVg1sukmRXxgZCIIyCmoo+lo5mr/FLayI1x00p+tGFruufitNQ6H0kfnhIKeSIi31VKs4PRg==
-    size: 123620190
-path: https://github.com/shift-editor/shift/releases/download/nightly/Shift-Nightly-0.18.1-macOS-arm64.zip
-sha512: Ju0jsmtGKm1Ygen0b9sGk+PEbJYA1k6+SSmU0RruSE4ZWgJpP2FyZVyNlh252Q6FmOex7/lWiRX5bLLHLJUlMw==
-releaseDate: '2026-08-23T06:39:57.454Z'
+  - url: https://github.com/shift-editor/shift/releases/download/nightly/Shift-Nightly-0.19.1-macOS-arm64.zip
+    sha512: rxLUPpK8ZyG4S3lSNrrJR7HGP8hi26uQPp18Wln5QvYnoU1bl921+WFF+BXqatgSgJYYuBknyRLfv/fJM7A14A==
+    size: 123270606
+  - url: https://github.com/shift-editor/shift/releases/download/nightly/Shift-Nightly-0.19.1-macOS-arm64.dmg
+    sha512: 4NFTIlMQ79IHQNHUB8oDERmkIgplLiqbckHiiVFmayBlxbuXeBZ9y4fduzdgFT97Hk7BnWSdf8xDAA4JZjne7A==
+    size: 123617535
+path: https://github.com/shift-editor/shift/releases/download/nightly/Shift-Nightly-0.19.1-macOS-arm64.zip
+sha512: rxLUPpK8ZyG4S3lSNrrJR7HGP8hi26uQPp18Wln5QvYnoU1bl921+WFF+BXqatgSgJYYuBknyRLfv/fJM7A14A==
+releaseDate: '2026-08-24T05:55:06.167Z'
