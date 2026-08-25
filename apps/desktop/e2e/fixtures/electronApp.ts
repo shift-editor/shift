@@ -1,6 +1,7 @@
 import {
   test as base,
   _electron as electron,
+  expect,
   type Page,
   type ElectronApplication,
 } from "@playwright/test";
@@ -216,6 +217,14 @@ export const test = base.extend<ShiftFixtures & ShiftOptions>({
         throw new Error(`Electron ignored isolated user data directory: ${activeUserDataDir}`);
       }
       const browserWindow = await app.browserWindow(page);
+      if (workspacePath) {
+        await expect
+          .poll(() => browserWindow.evaluate((window) => window.isMaximized()), {
+            timeout: 20_000,
+          })
+          .toBe(true);
+      }
+
       await browserWindow.evaluate(
         (win, { w, h }) => {
           win.unmaximize();

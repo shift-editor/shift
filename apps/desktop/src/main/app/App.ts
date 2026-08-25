@@ -347,7 +347,7 @@ export class App {
       this.#applicationMenu.updateCommandStates();
       if (browserWindow.isVisible() || browserWindow.isMinimized()) return;
 
-      window.focus();
+      window.present();
     });
   }
 
