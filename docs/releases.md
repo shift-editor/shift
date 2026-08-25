@@ -37,7 +37,7 @@ Use Conventional Commit prefixes. `feat`, `fix`, and `perf` appear in the public
 | Windows Release x64 | Manual GitHub downloads until Authenticode signing is configured                     |
 | Linux x64           | Manual GitHub downloads (`.deb` / `.rpm`)                                            |
 
-Packaged builds register `.shift` as a Shift Document with shared document artwork. Release is the preferred handler; Nightly remains an alternate so installing it does not take document ownership from Release. macOS uses bundle document metadata, Windows uses per-user NSIS registry entries, and Linux DEB/RPM packages install `application/x-shift-document` metadata and hicolor MIME icons.
+Packaged builds register `.shift` as a Shift Document with shared document artwork. Release is the preferred handler; Nightly remains an alternate so installing it does not take document ownership from Release. macOS composites the Shift badge onto its standard document shape from bundle metadata and the packaged asset catalog, Windows uses per-user NSIS registry entries, and Linux DEB/RPM packages install `application/x-shift-document` metadata and hicolor MIME icons.
 
 electron-updater compares the aligned numeric versions, verifies generated SHA-512 metadata, downloads packages, verifies macOS code signatures and configured Windows Authenticode publishers, and installs/relaunches. Metadata hashes detect package corruption; they do **not** authenticate an unsigned Windows publisher. Do not treat Windows automatic updates as production-ready until Authenticode signing and installed verification are complete.
 

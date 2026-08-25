@@ -123,9 +123,44 @@ generate_icns() {
 
 generate_document_icons() {
   local source="$repo_root/apps/desktop/src/renderer/src/assets/logo.png"
+  local asset_catalog="$icons_dir/shift-document.xcassets"
+  local badge="$asset_catalog/shift-document-badge.iconset"
   local frame="$work_dir/shift-document-frame.svg"
   local document="$work_dir/shift-document.png"
   local sizes=(16 32 48 64 128 256 512 1024)
+
+  rm -rf "$asset_catalog"
+  mkdir -p "$badge"
+  cat >"$asset_catalog/Contents.json" <<'JSON'
+{"info":{"author":"xcode","version":1}}
+JSON
+  cat >"$badge/Contents.json" <<'JSON'
+{
+  "images": [
+    {"filename":"icon_16x16.png","idiom":"mac","scale":"1x","size":"16x16"},
+    {"filename":"icon_16x16@2x.png","idiom":"mac","scale":"2x","size":"16x16"},
+    {"filename":"icon_32x32.png","idiom":"mac","scale":"1x","size":"32x32"},
+    {"filename":"icon_32x32@2x.png","idiom":"mac","scale":"2x","size":"32x32"},
+    {"filename":"icon_128x128.png","idiom":"mac","scale":"1x","size":"128x128"},
+    {"filename":"icon_128x128@2x.png","idiom":"mac","scale":"2x","size":"128x128"},
+    {"filename":"icon_256x256.png","idiom":"mac","scale":"1x","size":"256x256"},
+    {"filename":"icon_256x256@2x.png","idiom":"mac","scale":"2x","size":"256x256"},
+    {"filename":"icon_512x512.png","idiom":"mac","scale":"1x","size":"512x512"},
+    {"filename":"icon_512x512@2x.png","idiom":"mac","scale":"2x","size":"512x512"}
+  ],
+  "info": {"author":"xcode","version":1}
+}
+JSON
+  resize_png "$source" 16 "$badge/icon_16x16.png"
+  resize_png "$source" 32 "$badge/icon_16x16@2x.png"
+  resize_png "$source" 32 "$badge/icon_32x32.png"
+  resize_png "$source" 64 "$badge/icon_32x32@2x.png"
+  resize_png "$source" 128 "$badge/icon_128x128.png"
+  resize_png "$source" 256 "$badge/icon_128x128@2x.png"
+  resize_png "$source" 256 "$badge/icon_256x256.png"
+  resize_png "$source" 512 "$badge/icon_256x256@2x.png"
+  resize_png "$source" 512 "$badge/icon_512x512.png"
+  resize_png "$source" 1024 "$badge/icon_512x512@2x.png"
 
   cat >"$frame" <<'SVG'
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
@@ -140,7 +175,7 @@ generate_document_icons() {
 </svg>
 SVG
 
-  magick "$frame" \
+  magick -background none "$frame" \
     \( "$source" -resize 620x620 \) \
     -gravity center \
     -geometry +0+105 \
@@ -154,7 +189,6 @@ SVG
   done
 
   cp "$icons_dir/shift-document-512x512.png" "$icons_dir/shift-document.png"
-  generate_icns "$document" "$icons_dir/shift-document.icns"
   generate_ico "$document" "$icons_dir/shift-document.ico"
 }
 
