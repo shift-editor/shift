@@ -13,6 +13,24 @@ export interface NativeDialogs {
   openFont(window: Window | null): Promise<string | null>;
 
   /**
+   * Shows a blocking failure after a new document could not be created.
+   *
+   * @param window - native window that should own the message.
+   * @param applicationName - product name shown by the native shell.
+   * @param error - failure whose safe diagnostic detail is presented.
+   */
+  showCreateFailure(window: Window | null, applicationName: string, error: unknown): Promise<void>;
+
+  /**
+   * Shows a blocking failure after a selected font could not be opened.
+   *
+   * @param window - native window that should own the message.
+   * @param applicationName - product name shown by the native shell.
+   * @param error - failure whose safe diagnostic detail is presented.
+   */
+  showOpenFailure(window: Window | null, applicationName: string, error: unknown): Promise<void>;
+
+  /**
    * Selects an independent `.shift` destination.
    *
    * @param window - native window that should own the choice.

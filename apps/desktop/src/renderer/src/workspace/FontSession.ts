@@ -1,3 +1,4 @@
+import { isConvertiblePreviewPath } from "@shared/workspace/previewConversion";
 import type { Editor } from "@/lib/editor/Editor";
 import type { Font } from "@/lib/model/Font";
 import type { GlyphCatalog } from "@/lib/catalog/GlyphCatalog";
@@ -49,6 +50,7 @@ export function createPreviewFontSession(
 ): PreviewFontSession {
   return {
     mode: "preview",
+    canConvert: isConvertiblePreviewPath(client.sourceCell.peek()?.canonicalPath ?? ""),
     catalog,
     workspace: null,
     font,

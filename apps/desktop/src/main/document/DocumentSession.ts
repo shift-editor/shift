@@ -133,44 +133,54 @@ export class DocumentSession {
     this.#pendingCloseDiscard = null;
   }
 
-  /**
-   * Runs Save, escalating to Save As when the document has no target yet.
-   *
-   * @throws {Error} when the renderer cannot read state or save.
-   */
+  /** Runs Save, escalating to Save As when the document has no target yet. */
   async save(): Promise<void> {
     this.#log.info("save document requested");
-    const state = await this.#requestState();
-    this.acceptState(state);
-    if (!state) {
-      this.#log.info("save document skipped: no document state");
-      return;
-    }
 
-    if (state.needsSaveAs) {
-      await this.#saveToNewPath(state);
-      return;
-    }
+    try {
+      const state = await this.#requestState();
+      if (!state) {
+        this.#log.info("save document skipped: no document state");
+        return;
+      }
 
-    await this.#requestSave(null);
-    this.#log.info("save document completed", { saveTarget: state.saveTarget });
+      if (state.needsSaveAs) {
+        await this.#saveToNewPath(state);
+        return;
+      }
+
+      await this.#requestSave(null);
+      this.#log.info("save document completed", { saveTarget: state.saveTarget });
+    } catch (error) {
+      this.#log.warn("save document failed", error);
+      await this.#nativeDialogs.showSaveFailure(
+        this.#dialogWindow(),
+        this.#applicationName(),
+        error,
+      );
+    }
   }
 
-  /**
-   * Runs Save As from main with a native save dialog.
-   *
-   * @throws {Error} when the renderer cannot read state or save.
-   */
+  /** Runs Save As from main with a native save dialog. */
   async saveAs(): Promise<void> {
     this.#log.info("save as requested");
-    const state = await this.#requestState();
-    this.acceptState(state);
-    if (!state) {
-      this.#log.info("save as skipped: no document state");
-      return;
-    }
 
-    await this.#saveToNewPath(state);
+    try {
+      const state = await this.#requestState();
+      if (!state) {
+        this.#log.info("save as skipped: no document state");
+        return;
+      }
+
+      await this.#saveToNewPath(state);
+    } catch (error) {
+      this.#log.warn("save as failed", error);
+      await this.#nativeDialogs.showSaveFailure(
+        this.#dialogWindow(),
+        this.#applicationName(),
+        error,
+      );
+    }
   }
 
   /**

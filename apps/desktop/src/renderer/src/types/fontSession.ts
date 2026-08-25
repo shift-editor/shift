@@ -17,6 +17,7 @@ export interface AuthoredFontSession extends FontSessionBase {
 
 export interface PreviewFontSession extends FontSessionBase {
   readonly mode: "preview";
+  readonly canConvert: boolean;
   readonly workspace: null;
 }
 
