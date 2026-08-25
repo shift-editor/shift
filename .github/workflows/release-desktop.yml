@@ -249,7 +249,7 @@ jobs:
           generated = marker.sub("", Path("generated-notes.md").read_text()).lstrip()
           notice = """<!-- shift-preview-notice:start -->
           > [!WARNING]
-          > **Developer Preview:** Work on copies and keep independent backups. The macOS builds are signed and notarized. Windows builds are currently unsigned and may trigger Microsoft SmartScreen. Linux packages are unsigned.
+          > **Developer Preview:** Work on copies and keep independent backups. The macOS builds are signed and notarized. Windows builds are currently unsigned and may trigger Microsoft SmartScreen. Linux packages are unsigned. See the [code signing policy](https://github.com/shift-editor/shift/blob/main/CODE_SIGNING_POLICY.md).
           <!-- shift-preview-notice:end -->
 
           """
