@@ -47,9 +47,11 @@ const BROWSER_WINDOW_DEFAULT_OPTIONS: BrowserWindowConstructorOptions = {
 
 export class Window {
   #window: BrowserWindow;
+  #maximiseOnPresent: boolean;
 
   constructor(options: WindowOptions) {
     const windowOptions = { ...WINDOW_DEFAULT_OPTIONS, ...options };
+    this.#maximiseOnPresent = windowOptions.maximised ?? false;
     const browserWindowOptions = {
       ...BROWSER_WINDOW_DEFAULT_OPTIONS,
       ...windowOptions.browserWindowOptions,
@@ -71,12 +73,8 @@ export class Window {
 
     if (windowOptions.autoShow) {
       this.#window.once("ready-to-show", () => {
-        this.#window.show();
+        this.present();
       });
-    }
-
-    if (windowOptions.maximised) {
-      this.#window.maximize();
     }
   }
 
@@ -86,6 +84,17 @@ export class Window {
 
   close(): void {
     this.#window.close();
+  }
+
+  present(): void {
+    this.#window.show();
+
+    if (this.#maximiseOnPresent) {
+      this.#maximiseOnPresent = false;
+      this.#window.maximize();
+    }
+
+    this.#window.focus();
   }
 
   focus(): void {

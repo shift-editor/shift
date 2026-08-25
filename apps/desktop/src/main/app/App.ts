@@ -202,10 +202,11 @@ export class App {
     });
   }
 
-  #createWindow(autoShow = true, bounds?: Rectangle): Window {
+  #createWindow(autoShow = true, bounds?: Rectangle, maximised = false): Window {
     const window = new Window({
       preloadPath: path.join(__dirname, "preload.js"),
       autoShow,
+      maximised,
       ...(bounds
         ? {
             width: bounds.width,
@@ -346,7 +347,7 @@ export class App {
       this.#applicationMenu.updateCommandStates();
       if (browserWindow.isVisible() || browserWindow.isMinimized()) return;
 
-      window.focus();
+      window.present();
     });
   }
 
@@ -498,7 +499,7 @@ export class App {
           continue;
         }
 
-        const window = this.#createWindow(false);
+        const window = this.#createWindow(false, undefined, true);
         this.#workspaces.attachWindow(session.workspaceId, window);
         this.#loadWorkspace(window);
       } catch (error) {
