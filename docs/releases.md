@@ -4,9 +4,9 @@ Shift ships one versioned desktop product. Internal Rust crates and JavaScript p
 
 ## Distribution states
 
-| State     | Product identity | Bundle ID           | Data root       | Publication                   |
-| --------- | ---------------- | ------------------- | --------------- | ----------------------------- |
-| `release` | Shift            | `app.shift`         | `Shift`         | Draft, then GitHub prerelease |
+| State     | Product identity | Bundle ID           | Data root       | Publication                                                |
+| --------- | ---------------- | ------------------- | --------------- | ---------------------------------------------------------- |
+| `release` | Shift            | `app.shift`         | `Shift`         | Draft, then GitHub prerelease                              |
 | `nightly` | Shift Nightly    | `app.shift.nightly` | `Shift Nightly` | Rolling GitHub prerelease and immutable R2 updater archive |
 
 `SHIFT_DISTRIBUTION` accepts only `release` or `nightly` during a build. Release and Nightly have separate application identities, data roots, and update-feed paths. A failed build does not advance its update feed.
@@ -43,7 +43,7 @@ electron-updater compares the aligned numeric versions, verifies generated SHA-5
 
 electron-builder generates architecture-specific `latest-mac.yml` files for exact versioned ZIP assets and `latest.yml` for the Windows Nightly NSIS installer. GitHub Pages hosts the fixed Release/Nightly metadata files. Versioned Release binaries and their differential-update blockmaps remain on GitHub Releases. Nightly metadata instead references immutable updater packages under `nightly/<full-commit>/` in Cloudflare R2. Because electron-updater cannot derive a previous blockmap URL across commit-addressed directories, Nightly updates fall back to full package downloads; Release differential updates are unchanged.
 
-The app waits 30 seconds before its first automatic check to avoid competing with startup, then checks every four hours. Automatic current/error results are quiet. Manual checks report current/download states. A downloaded update offers **Restart and Update** / Later, is not silently installed on ordinary quit, and cannot restart until every document accepts and commits close.
+The app waits 30 seconds before its first automatic check to avoid competing with startup, then checks every four hours. Automatic current/error results are quiet. A native-framed update window asks for consent before downloading, then replaces those choices with byte and percentage progress that can be canceled. Download completion replaces progress with **Restart and Install** / Later, is not silently installed on ordinary quit, and cannot restart until every document accepts and commits close.
 
 ## Workflows
 
@@ -60,11 +60,11 @@ The Release Please workflow mints a short-lived token from the repository-scoped
 
 ## GitHub configuration
 
-| Variable                       | Purpose                                                   |
-| ------------------------------ | --------------------------------------------------------- |
-| `RELEASE_PLEASE_APP_CLIENT_ID` | Public client ID for the Release Please App               |
-| `CLOUDFLARE_ACCOUNT_ID`        | Cloudflare account containing the release bucket          |
-| `R2_RELEASE_BUCKET`            | R2 bucket name; production uses `shift-releases`          |
+| Variable                       | Purpose                                                    |
+| ------------------------------ | ---------------------------------------------------------- |
+| `RELEASE_PLEASE_APP_CLIENT_ID` | Public client ID for the Release Please App                |
+| `CLOUDFLARE_ACCOUNT_ID`        | Cloudflare account containing the release bucket           |
+| `R2_RELEASE_BUCKET`            | R2 bucket name; production uses `shift-releases`           |
 | `R2_RELEASE_BASE_URL`          | HTTPS custom-domain base URL exposing the public R2 bucket |
 
 | Secret                           | Purpose                                                  |
@@ -76,7 +76,7 @@ The Release Please workflow mints a short-lived token from the repository-scoped
 | `APPLE_APP_SPECIFIC_PASSWORD`    | Apple ID app-specific password                           |
 | `APPLE_TEAM_ID`                  | Paid Apple Developer Program team ID                     |
 | `R2_ACCESS_KEY_ID`               | R2 S3 API access key with object read/write permission   |
-| `R2_SECRET_ACCESS_KEY`           | R2 S3 API secret access key                               |
+| `R2_SECRET_ACCESS_KEY`           | R2 S3 API secret access key                              |
 
 Never put private keys or signing credentials in repository files, workflow inputs, artifacts, or logs. macOS release and Nightly jobs fail when signing credentials are absent.
 
@@ -88,7 +88,7 @@ Never put private keys or signing credentials in repository files, workflow inpu
 4. Run a desktop workflow once to create `update-feeds`.
 5. Configure GitHub Pages to publish the root of `update-feeds`.
 6. Confirm packaged Release and Nightly builds contact only their matching feed paths, and that Nightly metadata references the expected full commit in R2.
-7. Perform real installed N → N+1 tests on macOS arm64/x64 and unsigned Windows Nightly x64, including full-download fallback, Save, Don't Save, Cancel, Later, and **Restart and Update**.
+7. Perform real installed N → N+1 tests on macOS arm64/x64 and unsigned Windows Nightly x64, including download consent, full-download fallback, progress, download cancellation and retry, Save, Don't Save, Later, and **Restart and Install**.
 8. Keep Windows Release on manual downloads until Authenticode signing and installed update verification are complete.
 
 Electron update orchestration has no worthwhile unit test without mocking Electron, native dialogs, and electron-updater. Pure tests cover feed selection, canonical versions, generated metadata validation, feed preparation, and Nightly asset partitioning; installed update behavior and retention pruning remain required manual QA.

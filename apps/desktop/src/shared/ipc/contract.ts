@@ -4,6 +4,7 @@ import type {
   WorkspaceDocumentState,
   WorkspaceExportResult,
 } from "../workspace/protocol";
+import type { UpdateProgress } from "../update/types";
 
 export type DocumentCallMap = {
   "document.state": { request: void; response: WorkspaceDocumentState | null };
@@ -45,6 +46,10 @@ export type RendererToMain = {
    */
   "session.connect": () => void;
   "session.ready": () => void;
+  "update.startDownload": () => void;
+  "update.cancelDownload": () => void;
+  "update.restartToUpdate": () => void;
+  "update.later": () => void;
 };
 
 /**
@@ -59,4 +64,10 @@ export type MainToRenderer = {
   "commands.runRenderer": (id: RendererCommandId) => void;
   /** UI (chrome) zoom changed via the View menu or its accelerators. */
   "ui.zoomChanged": (percent: number) => void;
+  /** Reports that an application update is available to download. */
+  "update.available": (version: string) => void;
+  /** Reports cumulative progress for the active application update download. */
+  "update.progress": (progress: UpdateProgress) => void;
+  /** Reports that the downloaded application version can be installed. */
+  "update.ready": (version: string) => void;
 };

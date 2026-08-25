@@ -7,8 +7,9 @@ export type UpdateTrigger = "automatic" | "manual";
 export type UpdateStatus =
   | { type: "idle" }
   | { type: "checking"; trigger: UpdateTrigger }
-  | { type: "downloading"; trigger: UpdateTrigger }
-  | { type: "ready" }
+  | { type: "available"; version: string }
+  | { type: "downloading"; version: string }
+  | { type: "ready"; version: string }
   | { type: "restarting" };
 
 export type UpdateFeed = {

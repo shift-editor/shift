@@ -17,7 +17,7 @@ Electron main process: app startup, windows, menus, document dialogs, and worksp
 - **Architecture Invariant:** Closing every window keeps the application alive on macOS. Activating the windowless app opens a fresh launcher; Windows and Linux quit after the last window closes.
 - **Architecture Invariant:** Release and Nightly builds have distinct product identities and app-data roots. `Shift` uses `app.shift` and the `Shift` data root; `Shift Nightly` uses `app.shift.nightly` and the `Shift Nightly` data root. An explicit `--user-data-dir` switch takes precedence for tests and diagnostics.
 - **Architecture Invariant:** Shift is single-instance within one distribution data root. Operating-system `.shift` activations received before readiness queue in order; later activations focus an already-open document or create another workspace window. Release owns the document association, while Nightly remains an alternate handler.
-- **Architecture Invariant:** `AppUpdater` owns application update state in main. It selects only the fixed electron-updater metadata channel for the compiled distribution and exact platform/architecture, deduplicates checks/downloads/restarts, and cannot call `quitAndInstall()` until `AppLifecycle` commits every document. macOS Release/Nightly and Windows Nightly x64 update automatically; Windows Release and Linux use distribution-matched manual downloads.
+- **Architecture Invariant:** `AppUpdater` owns application update state in main. It selects only the fixed electron-updater metadata channel for the compiled distribution and exact platform/architecture, requires consent before downloading, deduplicates checks/downloads/restarts, and cannot call `quitAndInstall()` until `AppLifecycle` commits every document. `UpdateWindow` reflects main-owned progress and ready state but never owns updater transitions. macOS Release/Nightly and Windows Nightly x64 update automatically; Windows Release and Linux use distribution-matched manual downloads.
 - **Architecture Invariant:** Disposable Slug pages live under the app-wide `derived-cache/slug-atlases` root beside `working-documents`, never inside authored `.shift` content. Utility processes share the one-GiB byte-budgeted LRU; each process validates an artifact index once and then verifies and decompresses its fixed pages independently. Staging paths use readable `run-{pid}-{id}/page-{index}-{id}.zst` names, and every retry owns a distinct file until publication. The LRU scans after an artifact is opened or published, never after every page stream. Stale, corrupt, and evicted entries rebuild.
 - **Architecture Invariant:** IPC channels are type-safe. `ipcMain.handle` calls use the typed wrapper from `shared/ipc/main`, and channel names and payload types live in `shared/ipc/contract.ts` and `shared/workspace/protocol.ts`.
 
@@ -45,7 +45,8 @@ src/main/
   menu/
     ApplicationMenu.ts            -- Electron application menu
   update/
-    AppUpdater.ts                  -- update orchestration, scheduling, and native dialogs
+    AppUpdater.ts                  -- update orchestration, scheduling, consent, and restart safety
+    UpdateWindow.ts                -- native-framed download progress and install prompt window
     types.ts                       -- update status and feed contracts
     updateFeed.ts                  -- pure native feed selection
   windows/
@@ -68,8 +69,9 @@ src/main/
 - `NativeDialogs` -- injected outer boundary for Open, Save As, Export, dirty-close choices, and failure messages.
 - `DocumentSession` -- native document workflow for Save, Save As, Export TrueType, and close confirmation.
 - `AppLifecycle` -- coordinates Electron window close, app quit, and update restart around document vetoes.
-- `AppUpdater` -- main-process owner of native feed selection, Electron auto-update events, and native update UI.
-- `UpdateStatus` -- updater lifecycle: idle, checking, downloading, ready, or restarting.
+- `AppUpdater` -- main-process owner of native feed selection, Electron auto-update events, consent, cancellation, and restart safety.
+- `UpdateWindow` -- native-framed renderer of download progress and ready-to-install choices.
+- `UpdateStatus` -- updater lifecycle: idle, checking, available, downloading, ready, or restarting.
 - `WorkspaceDocumentState` -- utility-owned lifecycle state mirrored into main and renderer.
 
 ## How it works
@@ -98,7 +100,7 @@ Eligible packaged macOS builds and Windows Nightly x64 builds start `AppUpdater`
 
 `AppUpdater.checkForUpdates(trigger)` derives a fixed HTTPS generic-provider URL from the compiled Release or Nightly distribution and exact platform/architecture. electron-updater reads architecture-specific `latest-mac.yml` on macOS and `latest.yml` for Windows Nightly. It owns numeric version comparison, SHA-512 verification, download, macOS code-signature verification, Authenticode verification when configured, installation, and relaunch. Release and Nightly never share feed paths.
 
-Automatic current/error results stay quiet. Manual current checks report the installed version; a manual check during download explains that work can continue. Download completion offers **Restart and Update** / Later, and a manual check while ready reopens that prompt. Restart prepares every document, cancels all prepared closes if one vetoes, commits every agreed close, and only then calls `quitAndInstall()`. Electron closes windows before normal `before-quit`, so `AppLifecycle`'s `confirmed` state allows those closes. An install failure after commit relaunches the currently installed application; closed in-memory sessions are never reconstructed.
+Automatic current/error results stay quiet. When a check finds an update, the native-framed update window offers **Download Update** / Later; declining leaves the version available without prompting again during periodic checks. An accepted download replaces those choices with cumulative progress. Closing the window or choosing Cancel cancels the transfer and returns to available. Download completion replaces progress with **Restart and Install** / Later, and a manual check while available or ready reopens the relevant choice. Later retains a verified download without silently installing it on ordinary quit. Restart prepares every document, cancels all prepared closes if one vetoes, commits every agreed close, and only then calls `quitAndInstall()`. Electron closes windows before normal `before-quit`, so `AppLifecycle`'s `confirmed` state allows those closes. An install failure after commit relaunches the currently installed application; closed in-memory sessions are never reconstructed.
 
 The application menu exposes `app.checkForUpdates` under the macOS app menu and the Windows/Linux Help menu. Update behavior remains main-owned and does not add renderer IPC.
 
@@ -128,7 +130,7 @@ Message lanes reject in-flight calls when their remote port closes. An unexpecte
 
 ### IPC
 
-Renderer IPC in `App` is limited to shell capabilities: command execution, clipboard, optional document-lane port transfer, immutable session mode, readiness, and shared session sync-lane port transfer. Font data stays on that sync lane between renderer and utility.
+Renderer IPC in `App` is limited to shell capabilities: command execution, clipboard, update-window progress/actions, optional document-lane port transfer, immutable session mode, readiness, and shared session sync-lane port transfer. Font data stays on that sync lane between renderer and utility.
 
 ## Workflow recipes
 
@@ -173,7 +175,7 @@ Renderer IPC in `App` is limited to shell capabilities: command execution, clipb
 - Manual installed builds: double-click a `.shift` file on macOS, Windows, GNOME, and KDE; verify the document icon, first launch, existing-instance activation, and Release/Nightly handler priority.
 - Manual: open the same `.shift` document twice and verify the existing workspace session is reused.
 - Manual: edit a document, close the last window, and verify the save/discard prompt appears.
-- Manual installed N → N+1: verify macOS arm64/x64 and unsigned Windows Nightly x64 checks, download, Later, **Restart and Update**, canceled document close, save, discard, install, and relaunch paths. Electron orchestration has no worthwhile unit test without mocking Electron, native dialogs, and electron-updater.
+- Manual installed N → N+1: verify macOS arm64/x64 and unsigned Windows Nightly x64 consent, download progress, progress-window close/Cancel, retry, Later before and after download, **Restart and Install**, canceled document close, save, discard, install, and relaunch paths. Electron orchestration has no worthwhile unit test without mocking Electron, native dialogs, and electron-updater.
 
 ## Related
 

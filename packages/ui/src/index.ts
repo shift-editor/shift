@@ -68,6 +68,7 @@ export {
   type SelectItemIndicatorProps,
 } from "./components/select";
 export { Slider, type SliderProps } from "./components/slider";
+export { Progress, type ProgressProps } from "./components/progress";
 export {
   Menu,
   MenuTrigger,

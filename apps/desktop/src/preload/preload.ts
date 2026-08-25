@@ -19,6 +19,15 @@ const shiftHost: ShiftHost = {
     connect: invoke(ipcRenderer, "session.connect"),
     ready: invoke(ipcRenderer, "session.ready"),
   },
+  update: {
+    startDownload: invoke(ipcRenderer, "update.startDownload"),
+    cancelDownload: invoke(ipcRenderer, "update.cancelDownload"),
+    restartToUpdate: invoke(ipcRenderer, "update.restartToUpdate"),
+    later: invoke(ipcRenderer, "update.later"),
+    onProgress: listen(ipcRenderer, "update.progress"),
+    onAvailable: listen(ipcRenderer, "update.available"),
+    onReady: listen(ipcRenderer, "update.ready"),
+  },
   ui: {
     onZoomChanged: listen(ipcRenderer, "ui.zoomChanged"),
   },

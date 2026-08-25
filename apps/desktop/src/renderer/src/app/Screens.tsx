@@ -11,19 +11,21 @@ import { DebugProvider } from "@/context/DebugProvider";
 import { SettingsNavigationProvider } from "@/context/SettingsNavigationProvider";
 import { GlyphCatalogProvider } from "@/context/GlyphCatalogProvider";
 import { ReadOnlyNoticeDialog } from "@/components/chrome/ReadOnlyNoticeDialog";
+import { UpdateScreen } from "@/views/UpdateScreen";
 
 /**
- * Routes launcher and workspace windows to their screen trees.
+ * Routes launcher, updater, and workspace windows to their screen trees.
  *
  * @remarks
- * Main chooses the initial route when it creates a window. Launcher routes do
- * not connect to a workspace; workspace routes connect through the sender
- * window and fail if main has not attached that window to a session.
+ * Main chooses the initial route when it creates a window. Launcher and updater
+ * routes do not connect to a workspace; workspace routes connect through the
+ * sender window and fail if main has not attached that window to a session.
  */
 export const Screens = () => {
   return (
     <Routes>
       <Route path="/launcher" element={<Landing />} />
+      <Route path="/update" element={<UpdateScreen />} />
       <Route
         element={
           <FontSessionProvider>
