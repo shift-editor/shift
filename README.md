@@ -80,6 +80,12 @@ See [crates/shift-cli/README.md](crates/shift-cli/README.md) for the supported v
 
 See [ROADMAP.md](ROADMAP.md) for current implementation status and planned features. We are planning to ship a production grade font editor.
 
+## Security and signing
+
+Windows releases are currently unsigned while Shift applies for open-source code signing. See the [code signing policy](CODE_SIGNING_POLICY.md) for the signing scope, release controls, team roles, and network/privacy disclosures.
+
+Security vulnerabilities can be reported privately to [Kostya Farber](mailto:kostya.farber@gmail.com).
+
 ## Community
 
 Join our [Discord server](https://discord.gg/582FxBdNH7) to ask questions, report bugs, or contribute!

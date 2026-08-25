@@ -334,7 +334,7 @@ jobs:
           > [!WARNING]
           > **Experimental Nightly:** Work on copies and keep independent backups. This build may contain bugs, crashes, data loss, or security vulnerabilities.
 
-          Built from [\`$SHORT_SHA\`]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit/$GITHUB_SHA) after every platform completed packaging and its packaged-app smoke test. macOS builds are signed and notarized; Windows and Linux builds are currently unsigned.
+          Built from [\`$SHORT_SHA\`]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit/$GITHUB_SHA) after every platform completed packaging and its packaged-app smoke test. macOS builds are signed and notarized; Windows and Linux builds are currently unsigned. See the [code signing policy](https://github.com/shift-editor/shift/blob/main/CODE_SIGNING_POLICY.md).
 
           This rolling prerelease is replaced only by a later complete Nightly build.
           EOF
