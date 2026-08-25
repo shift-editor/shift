@@ -49,6 +49,51 @@ const executablePath = (() => {
   }
 })();
 
+function commandJson(command, args) {
+  const result = spawnSync(command, args, { encoding: "utf8", maxBuffer: 10 * 1024 * 1024 });
+  if (result.status !== 0) {
+    throw new Error(`${command} failed: ${result.stderr || result.stdout}`);
+  }
+
+  return JSON.parse(result.stdout);
+}
+
+function verifyMacosDocumentIcon() {
+  if (process.platform !== "darwin") return;
+
+  const resourcesPath = path.join(packagePath, `${packageName}.app`, "Contents", "Resources");
+  const info = commandJson("plutil", [
+    "-convert",
+    "json",
+    "-o",
+    "-",
+    path.join(packagePath, `${packageName}.app`, "Contents", "Info.plist"),
+  ]);
+  const documentType = info.CFBundleDocumentTypes?.find(
+    ({ LSItemContentTypes }) => LSItemContentTypes?.[0] === "app.shift.document",
+  );
+  const exportedType = info.UTExportedTypeDeclarations?.find(
+    ({ UTTypeIdentifier }) => UTTypeIdentifier === "app.shift.document",
+  );
+  const assets = commandJson("xcrun", [
+    "assetutil",
+    "--info",
+    path.join(resourcesPath, "Assets.car"),
+  ]);
+
+  if (documentType?.CFBundleTypeIconSystemGenerated !== true) {
+    throw new Error("Packaged Shift document type does not use the macOS system icon compositor");
+  }
+  if (exportedType?.UTTypeIcons?.UTTypeIconBadgeName !== "shift-document-badge") {
+    throw new Error("Packaged Shift document type does not reference its document badge");
+  }
+  if (!assets.some(({ Name }) => Name === "shift-document-badge")) {
+    throw new Error("Packaged asset catalog does not contain the Shift document badge");
+  }
+}
+
+verifyMacosDocumentIcon();
+
 async function reservePort() {
   const server = createServer();
   await new Promise((resolve, reject) => {

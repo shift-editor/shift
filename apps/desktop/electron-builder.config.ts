@@ -1,6 +1,12 @@
+import { execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { copyFile, mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
-import type { Configuration } from "electron-builder";
+import { promisify } from "node:util";
+import type { AfterPackContext, Configuration } from "electron-builder";
+
+const execFileAsync = promisify(execFile);
 
 const distribution = process.env.SHIFT_DISTRIBUTION ?? "release";
 if (distribution !== "release" && distribution !== "nightly") {
@@ -30,6 +36,7 @@ const artifactName = isNightly ? "Shift-Nightly" : "Shift";
 const appId = isNightly ? "app.shift.nightly" : "app.shift";
 const iconName = isNightly ? "nightly" : "icon";
 const documentIconName = "shift-document";
+const documentBadgeName = "shift-document-badge";
 const documentTypeIdentifier = "app.shift.document";
 const documentMimeType = "application/x-shift-document";
 const linuxDocumentIconName = isNightly ? "shift-nightly-document" : documentIconName;
@@ -54,7 +61,54 @@ if (signMacos) {
   }
 }
 
+async function compileMacosAssetCatalog(context: AfterPackContext) {
+  if (context.electronPlatformName !== "darwin") return;
+
+  const outputPath = await mkdtemp(path.join(os.tmpdir(), "shift-macos-assets-"));
+  const infoPath = path.join(outputPath, "assetcatalog_generated_info.plist");
+  const appIconPath = path.join(__dirname, `../../icons/${iconName}.icon`);
+  const documentAssetsPath = path.join(__dirname, "../../icons/shift-document.xcassets");
+  const packagedAssetsPath = path.join(
+    context.appOutDir,
+    `${productName}.app`,
+    "Contents/Resources/Assets.car",
+  );
+
+  try {
+    await execFileAsync("xcrun", [
+      "actool",
+      appIconPath,
+      documentAssetsPath,
+      "--compile",
+      outputPath,
+      "--output-format",
+      "human-readable-text",
+      "--notices",
+      "--warnings",
+      "--output-partial-info-plist",
+      infoPath,
+      "--app-icon",
+      "Icon",
+      "--include-all-app-icons",
+      "--enable-on-demand-resources",
+      "NO",
+      "--development-region",
+      "en",
+      "--target-device",
+      "mac",
+      "--minimum-deployment-target",
+      "26.0",
+      "--platform",
+      "macosx",
+    ]);
+    await copyFile(path.join(outputPath, "Assets.car"), packagedAssetsPath);
+  } finally {
+    await rm(outputPath, { force: true, recursive: true });
+  }
+}
+
 const config: Configuration = {
+  afterPack: compileMacosAssetCatalog,
   appId,
   productName,
   buildVersion: productVersion,
@@ -83,14 +137,6 @@ const config: Configuration = {
   extraResources: [
     { from: `../../icons/${iconName}.png`, to: `${iconName}.png` },
     { from: "../../LICENSE", to: "LICENSE" },
-    ...(process.platform === "darwin"
-      ? [
-          {
-            from: `../../icons/${documentIconName}.icns`,
-            to: `${documentIconName}.icns`,
-          },
-        ]
-      : []),
   ],
   asar: true,
   asarUnpack: ["**/*.node"],
@@ -116,7 +162,7 @@ const config: Configuration = {
     extendInfo: {
       CFBundleDocumentTypes: [
         {
-          CFBundleTypeIconFile: `${documentIconName}.icns`,
+          CFBundleTypeIconSystemGenerated: true,
           CFBundleTypeName: "Shift Document",
           CFBundleTypeRole: "Editor",
           LSHandlerRank: isNightly ? "Alternate" : "Owner",
@@ -127,7 +173,10 @@ const config: Configuration = {
         {
           UTTypeConformsTo: ["public.data", "public.content"],
           UTTypeDescription: "Shift font document",
-          UTTypeIconFile: `${documentIconName}.icns`,
+          UTTypeIcons: {
+            UTTypeIconBadgeName: documentBadgeName,
+            UTTypeIconText: "",
+          },
           UTTypeIdentifier: documentTypeIdentifier,
           UTTypeTagSpecification: {
             "public.filename-extension": ["shift"],
