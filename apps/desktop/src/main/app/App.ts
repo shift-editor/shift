@@ -285,6 +285,18 @@ export class App {
     ipc.handle(ipcMain, "clipboard.writeText", (_event, text) => {
       clipboard.writeText(text);
     });
+    ipc.handle(ipcMain, "update.startDownload", async () => {
+      await this.#updater.startDownload();
+    });
+    ipc.handle(ipcMain, "update.cancelDownload", () => {
+      this.#updater.cancelDownload();
+    });
+    ipc.handle(ipcMain, "update.restartToUpdate", async () => {
+      await this.#updater.restartToUpdate();
+    });
+    ipc.handle(ipcMain, "update.later", () => {
+      this.#updater.later();
+    });
     ipc.handle(ipcMain, "document.connect", (event) => {
       this.#log.info("document connect requested");
       const session = this.#fontSessionForSender(event.sender, "document.connect");

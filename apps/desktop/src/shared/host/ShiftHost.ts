@@ -1,4 +1,5 @@
 import type { CommandId, RendererCommandId } from "../commands";
+import type { UpdateProgress } from "../update/types";
 import type { FontSessionMode } from "../workspace/protocol";
 
 /**
@@ -50,6 +51,38 @@ export interface ShiftHost {
      */
     connect: () => Promise<void>;
     ready: () => Promise<void>;
+  };
+  /** Controls and observes the main-owned application update flow. */
+  update: {
+    /** Starts downloading the available update and opens its progress view. */
+    startDownload: () => Promise<void>;
+    /** Cancels the active update download and closes its progress window. */
+    cancelDownload: () => Promise<void>;
+    /** Restarts the application after document confirmation and installs the ready update. */
+    restartToUpdate: () => Promise<void>;
+    /** Closes the ready prompt while retaining the downloaded update. */
+    later: () => Promise<void>;
+    /**
+     * Subscribes to cumulative update download progress.
+     *
+     * @param callback - receives the latest byte counts, speed, and percentage.
+     * @returns an unsubscribe function.
+     */
+    onProgress: (callback: (progress: UpdateProgress) => void) => () => void;
+    /**
+     * Subscribes to available update versions.
+     *
+     * @param callback - receives the product version available to download.
+     * @returns an unsubscribe function.
+     */
+    onAvailable: (callback: (version: string) => void) => () => void;
+    /**
+     * Subscribes to update download completion.
+     *
+     * @param callback - receives the downloaded product version.
+     * @returns an unsubscribe function.
+     */
+    onReady: (callback: (version: string) => void) => () => void;
   };
   /** App-shell UI events owned by the main process. */
   ui: {

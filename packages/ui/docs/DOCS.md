@@ -30,6 +30,7 @@ packages/ui/
       menu/                -- Menu trigger, portal, positioner, popup, item, and separator
       number-field/        -- Numeric root, input, step controls, and scrub area
       popover/             -- Popover trigger, portal, positioner, popup, title, and close
+      progress/            -- Progress root with styled track and indicator
       resizable/           -- ResizablePanelGroup, ResizablePanel, ResizableHandle over react-resizable-panels
       select/              -- Select trigger, popup, list, item, and indicator primitives
       separator/           -- Separator (horizontal/vertical)
@@ -48,6 +49,7 @@ packages/ui/
 - **Form control props** -- `CheckboxProps`, `FieldProps`, `NumberFieldProps`, `SelectProps`, and `TextareaProps` preserve their Base UI or native control contracts while adding Shift styling.
 - **`TabsProps`** and tab-part props -- expose the Base UI Tabs composition so consumers can choose their own panel layout while retaining shared interaction and focus behavior.
 - **`SeparatorProps`** -- adds `orientation` (`"horizontal" | "vertical"`) to the Base UI separator.
+- **`ProgressProps`** -- extends Base UI Progress root props with track and indicator class overrides.
 - **`DialogProps`** / **`DialogBackdropProps`** / **`DialogPopupProps`** / **`DialogTitleProps`** -- thin wrappers over Base UI Dialog sub-component props.
 - **`CollapsibleProps`** / **`CollapsibleTriggerProps`** / **`CollapsiblePanelProps`** -- thin wrappers over Base UI Collapsible sub-component props.
 - **`ToastProviderProps`** -- `children` and `timeout` (default 2000ms).
@@ -61,7 +63,7 @@ Each component follows the same pattern: import the Base UI primitive, wrap it i
 
 **Input** adds label and icon positioning logic (left/right for each) on top of the Base UI input, adjusting padding classes dynamically.
 
-**Field**, **Checkbox**, **NumberField**, **Select**, **Tabs**, and **Textarea** are composable primitive families for settings and inspector forms. Validation and application state remain in the consumer; these wrappers only provide accessible structure, behavior, and Shift styling. `Textarea` renders a native textarea through Base UI Field's `Control` slot so it participates in the same label, validation, and disabled-state contract. `Slider` forwards its `aria-label` to Base UI's interactive thumb rather than leaving the accessible name on the non-interactive root.
+**Field**, **Checkbox**, **NumberField**, **Select**, **Tabs**, and **Textarea** are composable primitive families for settings and inspector forms. Validation and application state remain in the consumer; these wrappers only provide accessible structure, behavior, and Shift styling. `Textarea` renders a native textarea through Base UI Field's `Control` slot so it participates in the same label, validation, and disabled-state contract. `Slider` forwards its `aria-label` to Base UI's interactive thumb rather than leaving the accessible name on the non-interactive root. `Progress` composes Base UI's root, track, and indicator while allowing a consumer to override each visual layer.
 
 **Toast** is the most complex component family. `ToastProvider` wraps Base UI's provider with a default 2-second timeout. `ToastViewport` renders through a portal, centered at the top of the viewport. Individual toasts use enter/exit opacity transitions. Consumers call `useToastManager` (re-exported directly from Base UI) to imperatively add toasts.
 

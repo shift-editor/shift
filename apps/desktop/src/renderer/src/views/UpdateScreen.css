@@ -1,0 +1,101 @@
+.update-window {
+  --update-background: #ececec;
+  --update-text: #202020;
+  --update-secondary-text: #626262;
+  --update-track: #d2d2d2;
+  --update-button: #dadada;
+  --update-button-hover: #cecece;
+
+  position: fixed;
+  inset: 0;
+  color: var(--update-text);
+  background: var(--update-background);
+  font-family: -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
+  user-select: none;
+}
+
+.update-window-content {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  padding: 26px 52px 34px;
+  text-align: center;
+}
+
+.update-window-icon {
+  width: 72px;
+  height: 72px;
+  border-radius: 16px;
+  filter: drop-shadow(0 5px 7px rgb(0 0 0 / 18%));
+}
+
+.update-window-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.update-window-copy h1 {
+  font-size: 17px;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.update-window-copy p {
+  color: var(--update-secondary-text);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.update-window-progress {
+  width: 100%;
+}
+
+.update-window-progress-track {
+  height: 8px;
+  background: var(--update-track);
+}
+
+.update-window-progress-indicator {
+  background: var(--color-accent);
+  transition-duration: 180ms;
+}
+
+.update-window-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.update-window-button,
+.update-window-primary-button {
+  min-width: 150px;
+  height: 42px;
+  border: 0;
+  border-radius: 999px;
+  font-size: 15px;
+  font-weight: 500;
+  -webkit-app-region: no-drag;
+}
+
+.update-window-button {
+  color: var(--update-text);
+  background: var(--update-button);
+}
+
+.update-window-button:hover {
+  background: var(--update-button-hover);
+}
+
+@media (prefers-color-scheme: dark) {
+  .update-window {
+    --update-background: #242424;
+    --update-text: #e6e6e6;
+    --update-secondary-text: #aaa;
+    --update-track: #3d3d3d;
+    --update-button: #3a3a3a;
+    --update-button-hover: #464646;
+  }
+}

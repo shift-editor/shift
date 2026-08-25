@@ -1,7 +1,10 @@
 import { app, dialog, shell, type MessageBoxOptions } from "electron";
 import electronUpdater from "electron-updater";
+import path from "node:path";
 import { errorToMessage } from "../../shared/errors";
+import type { UpdateProgress } from "../../shared/update/types";
 import { shiftDistribution, shiftProductVersion, shiftUpdateBaseUrl } from "../release";
+import { UpdateWindow } from "./UpdateWindow";
 import { updateFeed } from "./updateFeed";
 import type { AppUpdaterOptions, UpdateStatus, UpdateTrigger } from "./types";
 
@@ -9,19 +12,28 @@ const INITIAL_CHECK_DELAY_MS = 30_000;
 const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000;
 const RELEASES_URL = "https://github.com/shift-editor/shift/releases";
 const NIGHTLY_URL = "https://github.com/shift-editor/shift/releases/tag/nightly";
-const { autoUpdater } = electronUpdater;
+const { autoUpdater, CancellationToken } = electronUpdater;
 
-/** Owns native application update checks, dialogs, and restart safety. */
+/** Owns application update checks, user consent, download progress, and restart safety. */
 export class AppUpdater {
   readonly #options: AppUpdaterOptions;
+  readonly #updateWindow: UpdateWindow;
 
   #status: UpdateStatus = { type: "idle" };
   #started = false;
-  #readyPrompt: Promise<void> | null = null;
+  #downloadCancellationToken: InstanceType<typeof CancellationToken> | null = null;
   #relaunching = false;
 
+  /**
+   * Creates the application updater and its lazy progress window.
+   *
+   * @param options - app-shell dependencies used for document safety, window ownership, and logging.
+   */
   constructor(options: AppUpdaterOptions) {
     this.#options = options;
+    this.#updateWindow = new UpdateWindow(path.join(__dirname, "preload.js"), options.log, () =>
+      this.#updateWindowClosed(),
+    );
   }
 
   /** Installs Electron listeners and schedules quiet checks for eligible builds. */
@@ -29,22 +41,26 @@ export class AppUpdater {
     if (this.#started || !app.isPackaged || !this.#feed()) return;
     this.#started = true;
 
-    autoUpdater.autoDownload = true;
+    autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = false;
     autoUpdater.autoRunAppAfterInstall = true;
     autoUpdater.disableWebInstaller = true;
     autoUpdater.logger = this.#options.log;
-    autoUpdater.on("update-available", () => this.#updateAvailable());
+    autoUpdater.on("update-available", (info) => this.#updateAvailable(info.version));
     autoUpdater.on("update-not-available", () => {
       void this.#updateNotAvailable().catch((error) => {
         this.#options.log.error("update-not-available handler failed", error);
       });
     });
-    autoUpdater.on("update-downloaded", () => {
-      void this.#updateDownloaded().catch((error) => {
-        this.#options.log.error("update-downloaded handler failed", error);
+    autoUpdater.on("download-progress", (progress) => {
+      this.#downloadProgress({
+        percent: Math.min(100, Math.max(0, progress.percent)),
+        transferred: progress.transferred,
+        total: progress.total,
+        bytesPerSecond: progress.bytesPerSecond,
       });
     });
+    autoUpdater.on("update-downloaded", () => this.#updateDownloaded());
     autoUpdater.on("error", (error) => {
       void this.#updateFailed(error).catch((handlerError) => {
         this.#options.log.error("updater error handler failed", handlerError);
@@ -78,11 +94,14 @@ export class AppUpdater {
       case "checking":
       case "restarting":
         return;
+      case "available":
+        if (trigger === "manual") this.#notifyAvailable();
+        return;
       case "downloading":
-        if (trigger === "manual") await this.#showDownloading();
+        if (trigger === "manual") this.#updateWindow.showDownloading();
         return;
       case "ready":
-        if (trigger === "manual") await this.#notifyReady();
+        if (trigger === "manual") this.#notifyReady();
         return;
       case "idle":
         break;
@@ -110,6 +129,44 @@ export class AppUpdater {
     }
   }
 
+  /** Downloads the available update and presents cumulative progress until completion. */
+  async startDownload(): Promise<void> {
+    if (this.#status.type !== "available") return;
+
+    const version = this.#status.version;
+    const cancellationToken = new CancellationToken();
+    this.#status = { type: "downloading", version };
+    this.#downloadCancellationToken = cancellationToken;
+    this.#updateWindow.showDownloading();
+
+    try {
+      await autoUpdater.downloadUpdate(cancellationToken);
+    } catch (error) {
+      if (this.#status.type === "downloading") await this.#updateFailed(error);
+    } finally {
+      if (this.#downloadCancellationToken === cancellationToken) {
+        this.#downloadCancellationToken = null;
+      }
+    }
+  }
+
+  /** Cancels the active download and returns the available update to a deferred state. */
+  cancelDownload(): void {
+    if (this.#status.type !== "downloading") return;
+
+    const version = this.#status.version;
+    this.#status = { type: "available", version };
+    this.#downloadCancellationToken?.cancel();
+    this.#updateWindow.close();
+  }
+
+  /** Defers the available or ready update without discarding its current state. */
+  later(): void {
+    if (this.#status.type !== "available" && this.#status.type !== "ready") return;
+
+    this.#updateWindow.close();
+  }
+
   /** Closes every document, then asks Electron to apply the downloaded update. */
   async restartToUpdate(): Promise<void> {
     if (this.#status.type !== "ready") return;
@@ -129,6 +186,7 @@ export class AppUpdater {
     }
 
     this.#status = { type: "restarting" };
+    this.#updateWindow.close();
     try {
       autoUpdater.quitAndInstall(false, true);
     } catch (error) {
@@ -144,16 +202,11 @@ export class AppUpdater {
     });
   }
 
-  #updateAvailable(): void {
+  #updateAvailable(version: string): void {
     if (this.#status.type !== "checking") return;
 
-    const trigger = this.#status.trigger;
-    this.#status = { type: "downloading", trigger };
-    if (trigger === "manual") {
-      void this.#showDownloading().catch((error) => {
-        this.#options.log.error("update download dialog failed", error);
-      });
-    }
+    this.#status = { type: "available", version };
+    this.#notifyAvailable();
   }
 
   async #updateNotAvailable(): Promise<void> {
@@ -172,64 +225,63 @@ export class AppUpdater {
     });
   }
 
-  async #updateDownloaded(): Promise<void> {
+  #downloadProgress(progress: UpdateProgress): void {
     if (this.#status.type !== "downloading") return;
 
-    this.#status = { type: "ready" };
-    await this.#notifyReady();
+    this.#updateWindow.updateProgress(progress);
+  }
+
+  #updateDownloaded(): void {
+    if (this.#status.type !== "downloading") return;
+
+    const version = this.#status.version;
+    this.#status = { type: "ready", version };
+    this.#downloadCancellationToken = null;
+    this.#notifyReady();
   }
 
   async #updateFailed(error: unknown): Promise<void> {
-    if (this.#status.type === "restarting") {
-      this.#relaunchInstalledVersion(error);
-      return;
-    }
-    if (this.#status.type !== "checking" && this.#status.type !== "downloading") return;
-
-    const trigger = this.#status.trigger;
-    this.#status = { type: "idle" };
-    this.#options.log.warn("application update failed", error);
-    if (trigger === "manual") await this.#showFailure(error);
-  }
-
-  async #showDownloading(): Promise<void> {
-    await this.#showMessage({
-      type: "info",
-      buttons: ["OK"],
-      title: app.name,
-      message: `Downloading an ${app.name} update…`,
-      detail: "You can keep working. Shift will let you know when the update is ready.",
-    });
-  }
-
-  async #notifyReady(): Promise<void> {
-    if (this.#readyPrompt) {
-      await this.#readyPrompt;
-      return;
-    }
-
-    this.#readyPrompt = this.#showReady();
-    try {
-      await this.#readyPrompt;
-    } finally {
-      this.#readyPrompt = null;
+    switch (this.#status.type) {
+      case "restarting":
+        this.#relaunchInstalledVersion(error);
+        return;
+      case "checking": {
+        const trigger = this.#status.trigger;
+        this.#status = { type: "idle" };
+        this.#options.log.warn("application update check failed", error);
+        if (trigger === "manual") await this.#showFailure(error);
+        return;
+      }
+      case "downloading": {
+        const version = this.#status.version;
+        this.#status = { type: "available", version };
+        this.#downloadCancellationToken = null;
+        this.#updateWindow.close();
+        this.#options.log.warn("application update download failed", error);
+        await this.#showDownloadFailure(error);
+        return;
+      }
+      case "idle":
+      case "available":
+      case "ready":
+        return;
     }
   }
 
-  async #showReady(): Promise<void> {
+  #notifyAvailable(): void {
+    if (this.#status.type !== "available") return;
+
+    this.#updateWindow.showAvailable(this.#status.version);
+  }
+
+  #notifyReady(): void {
     if (this.#status.type !== "ready") return;
 
-    const result = await this.#showMessage({
-      type: "info",
-      buttons: ["Restart and Update", "Later"],
-      defaultId: 0,
-      cancelId: 1,
-      noLink: true,
-      title: app.name,
-      message: `${app.name} is ready to update.`,
-      detail: "Shift will ask about unsaved documents before restarting.",
-    });
-    if (result.response === 0) await this.restartToUpdate();
+    this.#updateWindow.showReady(this.#status.version);
+  }
+
+  #updateWindowClosed(): void {
+    if (this.#status.type === "downloading") this.cancelDownload();
   }
 
   async #showFailure(error: unknown): Promise<void> {
@@ -241,6 +293,20 @@ export class AppUpdater {
       noLink: true,
       title: app.name,
       message: `${app.name} couldn't check for updates.`,
+      detail: errorToMessage(error),
+    });
+    if (result.response === 0) await shell.openExternal(this.#downloadsUrl());
+  }
+
+  async #showDownloadFailure(error: unknown): Promise<void> {
+    const result = await this.#showMessage({
+      type: "error",
+      buttons: ["View Downloads", "OK"],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true,
+      title: app.name,
+      message: `${app.name} couldn't download the update.`,
       detail: errorToMessage(error),
     });
     if (result.response === 0) await shell.openExternal(this.#downloadsUrl());
