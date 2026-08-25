@@ -30,6 +30,7 @@ const artifactName = isNightly ? "Shift-Nightly" : "Shift";
 const appId = isNightly ? "app.shift.nightly" : "app.shift";
 const iconName = isNightly ? "nightly" : "icon";
 const documentIconName = "shift-document";
+const documentTypeIdentifier = "app.shift.document";
 const documentMimeType = "application/x-shift-document";
 const linuxDocumentIconName = isNightly ? "shift-nightly-document" : documentIconName;
 const linuxDocumentIconSizes = [16, 32, 48, 64, 128, 256, 512];
@@ -82,6 +83,14 @@ const config: Configuration = {
   extraResources: [
     { from: `../../icons/${iconName}.png`, to: `${iconName}.png` },
     { from: "../../LICENSE", to: "LICENSE" },
+    ...(process.platform === "darwin"
+      ? [
+          {
+            from: `../../icons/${documentIconName}.icns`,
+            to: `${documentIconName}.icns`,
+          },
+        ]
+      : []),
   ],
   asar: true,
   asarUnpack: ["**/*.node"],
@@ -96,19 +105,6 @@ const config: Configuration = {
     onlyLoadAppFromAsar: true,
   },
   publish: [{ provider: "generic", url: channelUrl }],
-  fileAssociations:
-    process.platform === "darwin"
-      ? [
-          {
-            ext: "shift",
-            name: "Shift Document",
-            description: "Shift font document",
-            icon: documentIconName,
-            role: "Editor",
-            rank: isNightly ? "Alternate" : "Owner",
-          },
-        ]
-      : [],
   mac: {
     target: ["zip", "dmg"],
     category: "public.app-category.graphics-design",
@@ -117,9 +113,33 @@ const config: Configuration = {
     hardenedRuntime: true,
     notarize: signMacos,
     helperBundleId: `${appId}.helper`,
+    extendInfo: {
+      CFBundleDocumentTypes: [
+        {
+          CFBundleTypeIconFile: `${documentIconName}.icns`,
+          CFBundleTypeName: "Shift Document",
+          CFBundleTypeRole: "Editor",
+          LSHandlerRank: isNightly ? "Alternate" : "Owner",
+          LSItemContentTypes: [documentTypeIdentifier],
+        },
+      ],
+      UTExportedTypeDeclarations: [
+        {
+          UTTypeConformsTo: ["public.data", "public.content"],
+          UTTypeDescription: "Shift font document",
+          UTTypeIconFile: `${documentIconName}.icns`,
+          UTTypeIdentifier: documentTypeIdentifier,
+          UTTypeTagSpecification: {
+            "public.filename-extension": ["shift"],
+            "public.mime-type": [documentMimeType],
+          },
+        },
+      ],
+    },
     artifactName: `${artifactName}-${productVersion}-macOS-${buildArchitecture}.\${ext}`,
   },
   dmg: {
+    icon: `../../icons/${iconName}.icns`,
     artifactName: `${artifactName}-${productVersion}-macOS-${buildArchitecture}.\${ext}`,
   },
   win: {
