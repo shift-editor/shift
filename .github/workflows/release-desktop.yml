@@ -269,7 +269,9 @@ jobs:
           trap 'rm -f "$PASSPHRASE_FILE"' EXIT
           install -m 600 /dev/null "$PASSPHRASE_FILE"
           printf '%s' "$LINUX_REPOSITORY_GPG_PASSPHRASE" > "$PASSPHRASE_FILE"
+          GPG_BIN="$(command -v gpg)"
           rpmsign --addsign \
+            --define "__gpg $GPG_BIN" \
             --define "_gpg_name $FINGERPRINT" \
             --define "_openpgp_sign_id $FINGERPRINT" \
             --define "_gpg_path $GNUPGHOME" \
@@ -277,10 +279,12 @@ jobs:
             "${RPMS[0]}"
 
           gpg --batch --export "$FINGERPRINT" > shift-repository.gpg
+          RPM_PUBLIC_KEY="$RUNNER_TEMP/shift-repository-rpm.asc"
+          gpg --batch --armor --export "$FINGERPRINT" > "$RPM_PUBLIC_KEY"
           RPM_DB="$RUNNER_TEMP/linux-signing-rpmdb"
           install -d "$RPM_DB"
           rpm --dbpath "$RPM_DB" --initdb
-          rpmkeys --dbpath "$RPM_DB" --import shift-repository.gpg
+          rpmkeys --dbpath "$RPM_DB" --import "$RPM_PUBLIC_KEY"
           rpmkeys --dbpath "$RPM_DB" --checksig "${RPMS[0]}"
 
       - name: Add Developer Preview notice
@@ -430,10 +434,12 @@ jobs:
           }
           cmp dist/shift-repository.gpg <(gpg --batch --export "$FINGERPRINT")
 
+          RPM_PUBLIC_KEY="$RUNNER_TEMP/shift-repository-rpm.asc"
+          gpg --batch --armor --export "$FINGERPRINT" > "$RPM_PUBLIC_KEY"
           RPM_DB="$RUNNER_TEMP/linux-repository-rpmdb"
           install -d "$RPM_DB"
           rpm --dbpath "$RPM_DB" --initdb
-          rpmkeys --dbpath "$RPM_DB" --import dist/shift-repository.gpg
+          rpmkeys --dbpath "$RPM_DB" --import "$RPM_PUBLIC_KEY"
           rpmkeys --dbpath "$RPM_DB" --checksig "dist/Shift-${{ needs.prepare.outputs.version }}-Linux-x64.rpm"
 
       - name: Build and sign repository metadata
