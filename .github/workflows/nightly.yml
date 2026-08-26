@@ -113,7 +113,7 @@ jobs:
             runner: ubuntu-latest
             platform: linux
             arch: x64
-            builder-args: "--linux deb rpm --x64"
+            builder-args: "--linux deb rpm AppImage --x64"
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
@@ -230,6 +230,7 @@ jobs:
             apps/desktop/out/${{ matrix.platform }}-${{ matrix.arch }}/*.blockmap
             apps/desktop/out/${{ matrix.platform }}-${{ matrix.arch }}/*.deb
             apps/desktop/out/${{ matrix.platform }}-${{ matrix.arch }}/*.rpm
+            apps/desktop/out/${{ matrix.platform }}-${{ matrix.arch }}/*.AppImage
             apps/desktop/out/${{ matrix.platform }}-${{ matrix.arch }}/latest*.yml
           if-no-files-found: error
           retention-days: 14

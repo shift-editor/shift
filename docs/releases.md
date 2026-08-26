@@ -30,12 +30,13 @@ Use Conventional Commit prefixes. `feat`, `fix`, and `perf` appear in the public
 
 ## Packaging and updates
 
-| Target              | Package/update policy                                                                |
-| ------------------- | ------------------------------------------------------------------------------------ |
-| macOS arm64/x64     | Signed and notarized ZIP for automatic updates; DMG for manual installation          |
-| Windows Nightly x64 | Unsigned per-user NSIS installer and automatic updates for installed N → N+1 testing |
-| Windows Release x64 | Manual GitHub downloads until Authenticode signing is configured                     |
-| Linux x64           | Manual GitHub downloads (`.deb` / `.rpm`)                                            |
+| Target              | Package/update policy                                                                                           |
+| ------------------- | --------------------------------------------------------------------------------------------------------------- |
+| macOS arm64/x64     | Signed and notarized ZIP for automatic updates; DMG for manual installation                                         |
+| Windows Nightly x64 | Unsigned per-user NSIS installer and automatic updates for installed N → N+1 testing                            |
+| Windows Release x64 | Manual GitHub downloads until Authenticode signing is configured                                                |
+| Linux Nightly x64   | Unsigned direct GitHub downloads (`.deb`, `.rpm`, and AppImage)                                                 |
+| Linux Release x64   | Signed RPM and checksum manifest; direct downloads plus signed APT/DNF repositories and an AppImage             |
 
 Packaged builds register `.shift` as a Shift Document with shared document artwork. Release is the preferred handler; Nightly remains an alternate so installing it does not take document ownership from Release. macOS composites the Shift badge onto its standard document shape from bundle metadata and the packaged asset catalog, Windows uses per-user NSIS registry entries, and Linux DEB/RPM packages install `application/x-shift-document` metadata and hicolor MIME icons.
 
@@ -43,14 +44,45 @@ electron-updater compares the aligned numeric versions, verifies generated SHA-5
 
 electron-builder generates architecture-specific `latest-mac.yml` files for exact versioned ZIP assets and `latest.yml` for the Windows Nightly NSIS installer. GitHub Pages hosts the fixed Release/Nightly metadata files. Versioned Release binaries and their differential-update blockmaps remain on GitHub Releases. Nightly metadata instead references immutable updater packages under `nightly/<full-commit>/` in Cloudflare R2. Because electron-updater cannot derive a previous blockmap URL across commit-addressed directories, Nightly updates fall back to full package downloads; Release differential updates are unchanged.
 
+Linux Release packages use the dedicated `Shift Package Signing` RSA-4096 key. The RPM carries an embedded signature, and the signed `SHA256SUMS.asc` authenticates every direct-download Linux format, including DEB and AppImage. APT authenticates package hashes through `InRelease`; DNF checks both the RPM signature and the detached `repomd.xml` signature. The public key is published as `shift-repository.gpg` with the GitHub release and at `https://packages.shift.graphics/keys/shift-repository.gpg`.
+
 The app waits 30 seconds before its first automatic check to avoid competing with startup, then checks every four hours. Automatic current/error results are quiet. A native-framed update window asks for consent before downloading, then replaces those choices with byte and percentage progress that can be canceled. Download completion replaces progress with **Restart and Install** / Later, is not silently installed on ordinary quit, and cannot restart until every document accepts and commits close.
+
+## Linux installation
+
+APT users install the scoped repository key and deb822 source definition before installing Shift:
+
+```sh
+sudo install -d -m 755 /etc/apt/keyrings
+curl -fsSL https://packages.shift.graphics/keys/shift-repository.gpg \
+  | sudo tee /etc/apt/keyrings/shift-repository.gpg >/dev/null
+curl -fsSL https://packages.shift.graphics/config/shift.sources \
+  | sudo tee /etc/apt/sources.list.d/shift.sources >/dev/null
+sudo apt update
+sudo apt install shift
+```
+
+DNF users install the repository definition, which enables both package and repository-metadata signature checks:
+
+```sh
+sudo curl -fsSL \
+  https://packages.shift.graphics/config/shift.repo \
+  -o /etc/yum.repos.d/shift.repo
+sudo dnf install shift
+```
+
+The AppImage remains a direct-download alternative. Verify it through the release's `SHA256SUMS` and `SHA256SUMS.asc`, make it executable, and run it without installing a repository.
 
 ## Workflows
 
 - `release-please.yml` maintains a draft release pull request. Merging it creates a numeric version tag and draft GitHub release, then invokes `release-desktop.yml`.
-- `release-desktop.yml` validates `vMAJOR.MINOR.PATCH`, builds macOS arm64/x64 ZIPs and DMGs, a Windows x64 per-user NSIS installer, and Linux x64 packages, smoke-tests packaged applications, uploads checksums/assets, publishes the GitHub prerelease, then advances the Release feed.
+- `release-desktop.yml` validates `vMAJOR.MINOR.PATCH`, builds macOS arm64/x64 ZIPs and DMGs, a Windows x64 per-user NSIS installer, and Linux x64 DEB/RPM/AppImage packages, smoke-tests packaged applications, signs the Release RPM and checksum manifest, uploads the GitHub prerelease, publishes signed APT/DNF repositories, then advances the Release feed.
 - `nightly.yml` resolves one `0.RUN.ATTEMPT` version and builds the same matrix. After every build succeeds, it archives versioned updater assets in the immutable R2 prefix `nightly/<full-commit>/`, replaces the rolling GitHub prerelease's friendly download aliases, and advances the feed to the exact R2 prefix. A commit whose R2 manifest and feed are already active is skipped.
 - `prepare-update-feed.mjs` performs the one monotonic candidate-version check and stages electron-builder's generated metadata into fixed Pages paths. Release asset URLs continue to target their versioned GitHub release; Nightly URLs target the candidate's immutable R2 prefix. It does not create feed-history directories.
+
+The Linux repository follows `built → signed → active`. `built` means the complete x64 artifact set passed its packaged-app smoke test. `signed` means the RPM, APT `Release`, DNF `repomd.xml`, and direct-download checksum manifest have signatures from the configured repository key. `active` means the public APT `InRelease` and DNF metalink reference that signed release.
+
+APT uploads immutable package and by-hash content before replacing the single signed `InRelease` root. DNF stores each complete repository under `rpm/releases/<version>/x86_64/`; the stable `rpm/release/x86_64/metalink.xml` activates one immutable version. Activation saves the preceding roots, updates the DNF metalink and APT `InRelease`, verifies both through the public domain, and installs Shift in clean Ubuntu and Fedora containers. Any failure during activation or installation restores the preceding roots. Nightlies never enter either native repository.
 
 Release and Nightly feed publication share one concurrency group. Binary assets become public before a feed advances. The feed job checks out or creates the `update-feeds` branch, preserves `.nojekyll` and the other distribution directory, updates only its channel, and pushes the branch. GitHub Pages serves it at `https://shift-editor.github.io/shift/updates`.
 
@@ -66,6 +98,8 @@ The Release Please workflow mints a short-lived token from the repository-scoped
 | `CLOUDFLARE_ACCOUNT_ID`        | Cloudflare account containing the release bucket           |
 | `R2_RELEASE_BUCKET`            | R2 bucket name; production uses `shift-releases`           |
 | `R2_RELEASE_BASE_URL`          | HTTPS custom-domain base URL exposing the public R2 bucket |
+| `LINUX_PACKAGE_BASE_URL`       | Linux repository origin; production uses `https://packages.shift.graphics` |
+| `LINUX_REPOSITORY_GPG_FINGERPRINT` | Full fingerprint of the dedicated Linux repository signing key |
 
 | Secret                           | Purpose                                                  |
 | -------------------------------- | -------------------------------------------------------- |
@@ -77,6 +111,8 @@ The Release Please workflow mints a short-lived token from the repository-scoped
 | `APPLE_TEAM_ID`                  | Paid Apple Developer Program team ID                     |
 | `R2_ACCESS_KEY_ID`               | R2 S3 API access key with object read/write permission   |
 | `R2_SECRET_ACCESS_KEY`           | R2 S3 API secret access key                              |
+| `LINUX_REPOSITORY_GPG_PRIVATE_KEY` | ASCII-armored private Linux repository signing key     |
+| `LINUX_REPOSITORY_GPG_PASSPHRASE` | Passphrase protecting the Linux repository signing key |
 
 Never put private keys or signing credentials in repository files, workflow inputs, artifacts, or logs. macOS release and Nightly jobs fail when signing credentials are absent.
 
@@ -85,11 +121,14 @@ Never put private keys or signing credentials in repository files, workflow inpu
 1. Add the Apple signing/notarization secrets.
 2. Create the Standard-storage R2 bucket `shift-releases`. Do not configure a bucket lifecycle rule; workflow pruning protects the active build.
 3. Attach a production custom domain to the bucket and configure the three R2 variables and two R2 secrets above.
-4. Run a desktop workflow once to create `update-feeds`.
-5. Configure GitHub Pages to publish the root of `update-feeds`.
-6. Confirm packaged Release and Nightly builds contact only their matching feed paths, and that Nightly metadata references the expected full commit in R2.
-7. Perform real installed N → N+1 tests on macOS arm64/x64 and unsigned Windows Nightly x64, including download consent, full-download fallback, progress, download cancellation and retry, Save, Don't Save, Later, and **Restart and Install**.
-8. Keep Windows Release on manual downloads until Authenticode signing and installed update verification are complete.
+4. Attach `packages.shift.graphics` to the same bucket and set `LINUX_PACKAGE_BASE_URL` to that HTTPS origin.
+5. Create a dedicated RSA-4096 key whose identity is exactly `Shift Package Signing`. Keep an offline backup, add its armored private key and passphrase as repository secrets, and configure its full fingerprint as `LINUX_REPOSITORY_GPG_FINGERPRINT`.
+6. Run a desktop workflow once to create `update-feeds` and the Linux repositories.
+7. Configure GitHub Pages to publish the root of `update-feeds`.
+8. Confirm packaged Release and Nightly builds contact only their matching feed paths, and that Nightly metadata references the expected full commit in R2.
+9. Confirm the repository job installs the exact candidate version in its clean Ubuntu and Fedora containers. After a second versioned release exists, perform an installed N → N+1 APT and DNF upgrade test.
+10. Perform real installed N → N+1 tests on macOS arm64/x64 and unsigned Windows Nightly x64, including download consent, full-download fallback, progress, download cancellation and retry, Save, Don't Save, Later, and **Restart and Install**.
+11. Keep Windows Release on manual downloads until Authenticode signing and installed update verification are complete.
 
 Electron update orchestration has no worthwhile unit test without mocking Electron, native dialogs, and electron-updater. Pure tests cover feed selection, canonical versions, generated metadata validation, feed preparation, and Nightly asset partitioning; installed update behavior and retention pruning remain required manual QA.
 
@@ -100,4 +139,5 @@ Electron update orchestration has no worthwhile unit test without mocking Electr
 - Never delete or reuse a published numeric version tag. Correct it with the next version.
 - A failed Nightly build or feed deployment leaves the previous feed active. Republish a complete later Nightly rather than editing a feed in place.
 - If R2 assets and GitHub aliases publish but feed deployment fails, rerun the failed feed job from the original run's retained artifacts. A full workflow rerun refuses to overwrite the complete immutable R2 prefix. Clients continue using the previous feed until deployment succeeds, and pruning does not run.
+- If Linux repository preparation or inactive upload fails, fix and rerun the repository job; neither activation root changed. Activation and clean-container failures restore the preceding APT `InRelease` and DNF metalink. Never rewrite a published version directory.
 - If Nightly pruning fails after the feed advances, rerun the prune job. Do not move the feed backward or delete the active commit's R2 prefix.

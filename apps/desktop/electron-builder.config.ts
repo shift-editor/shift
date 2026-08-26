@@ -208,7 +208,7 @@ const config: Configuration = {
     artifactName: `${artifactName}-${productVersion}-Windows-${buildArchitecture}-Setup.\${ext}`,
   },
   linux: {
-    target: ["deb", "rpm"],
+    target: ["deb", "rpm", "AppImage"],
     icon: `../../icons/${iconName}.png`,
     executableName: packageName,
     category: "Graphics",
@@ -218,6 +218,9 @@ const config: Configuration = {
     vendor: "Shift",
     syncDesktopName: true,
     mimeTypes: [documentMimeType],
+    artifactName: `${artifactName}-${productVersion}-Linux-${buildArchitecture}.\${ext}`,
+  },
+  appImage: {
     artifactName: `${artifactName}-${productVersion}-Linux-${buildArchitecture}.\${ext}`,
   },
   deb: {

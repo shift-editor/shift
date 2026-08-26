@@ -72,6 +72,8 @@ jobs:
               - 'apps/desktop/vite.preload.config.ts'
               - 'scripts/find-retired-nightly-objects.mjs'
               - 'scripts/find-retired-nightly-objects.test.mjs'
+              - 'scripts/prepare-linux-repositories.mjs'
+              - 'scripts/prepare-linux-repositories.test.mjs'
               - 'scripts/prepare-nightly-release.mjs'
               - 'scripts/prepare-nightly-release.test.mjs'
               - 'scripts/prepare-update-feed.mjs'

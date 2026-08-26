@@ -25,6 +25,7 @@ const fixtures = [
   [`desktop-nightly-win32-x64/Shift-Nightly-${version}-Windows-x64-Setup.exe.blockmap`, "blockmap"],
   [`desktop-nightly-linux-x64/Shift-Nightly-${version}-Linux-x64.deb`, "linux-deb"],
   [`desktop-nightly-linux-x64/Shift-Nightly-${version}-Linux-x64.rpm`, "linux-rpm"],
+  [`desktop-nightly-linux-x64/Shift-Nightly-${version}-Linux-x64.AppImage`, "linux-appimage"],
 ];
 const publicOutputs = new Map([
   ["Shift-Nightly-macOS-arm64.zip", "mac-arm64"],
@@ -34,6 +35,7 @@ const publicOutputs = new Map([
   ["Shift-Nightly-Windows-x64-Setup.exe", "windows"],
   ["Shift-Nightly-Linux-x64.deb", "linux-deb"],
   ["Shift-Nightly-Linux-x64.rpm", "linux-rpm"],
+  ["Shift-Nightly-Linux-x64.AppImage", "linux-appimage"],
 ]);
 const updateOutputs = new Map([
   [`Shift-Nightly-${version}-macOS-arm64.zip`, "mac-arm64"],

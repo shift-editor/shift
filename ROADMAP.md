@@ -834,7 +834,7 @@ These are allowed to jump around when energy is high, but they should not silent
 
 **Linux**
 
-- [ ] AppImage
+- [x] AppImage
 - [x] .deb package
 - [x] .rpm package
 

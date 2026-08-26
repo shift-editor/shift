@@ -78,7 +78,7 @@ jobs:
             runner: ubuntu-latest
             platform: linux
             arch: x64
-            builder-args: "--linux deb rpm --x64"
+            builder-args: "--linux deb rpm AppImage --x64"
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
@@ -196,6 +196,7 @@ jobs:
             apps/desktop/out/${{ matrix.platform }}-${{ matrix.arch }}/*.blockmap
             apps/desktop/out/${{ matrix.platform }}-${{ matrix.arch }}/*.deb
             apps/desktop/out/${{ matrix.platform }}-${{ matrix.arch }}/*.rpm
+            apps/desktop/out/${{ matrix.platform }}-${{ matrix.arch }}/*.AppImage
             apps/desktop/out/${{ matrix.platform }}-${{ matrix.arch }}/latest*.yml
           if-no-files-found: error
           retention-days: 14
@@ -232,6 +233,60 @@ jobs:
             exit 1
           fi
 
+      - name: Install Linux signing tools
+        run: sudo apt-get update && sudo apt-get install --yes gnupg rpm
+
+      - name: Sign Linux release artifacts
+        shell: bash
+        env:
+          LINUX_REPOSITORY_GPG_FINGERPRINT: ${{ vars.LINUX_REPOSITORY_GPG_FINGERPRINT }}
+          LINUX_REPOSITORY_GPG_PASSPHRASE: ${{ secrets.LINUX_REPOSITORY_GPG_PASSPHRASE }}
+          LINUX_REPOSITORY_GPG_PRIVATE_KEY: ${{ secrets.LINUX_REPOSITORY_GPG_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          : "${LINUX_REPOSITORY_GPG_FINGERPRINT:?LINUX_REPOSITORY_GPG_FINGERPRINT is required}"
+          : "${LINUX_REPOSITORY_GPG_PASSPHRASE:?LINUX_REPOSITORY_GPG_PASSPHRASE is required}"
+          : "${LINUX_REPOSITORY_GPG_PRIVATE_KEY:?LINUX_REPOSITORY_GPG_PRIVATE_KEY is required}"
+          export GNUPGHOME="$RUNNER_TEMP/linux-signing-gnupg"
+          install -d -m 700 "$GNUPGHOME"
+          printf '%s' "$LINUX_REPOSITORY_GPG_PRIVATE_KEY" | gpg --batch --import
+
+          FINGERPRINT="${LINUX_REPOSITORY_GPG_FINGERPRINT//[[:space:]]/}"
+          ACTUAL_FINGERPRINT="$(gpg --batch --with-colons --fingerprint "$FINGERPRINT" \
+            | awk -F: '$1 == "fpr" { print $10; exit }')"
+          [[ "$ACTUAL_FINGERPRINT" == "$FINGERPRINT" ]] || {
+            echo "Imported Linux signing key does not match the configured fingerprint" >&2
+            exit 1
+          }
+          gpg --batch --list-secret-keys "$FINGERPRINT" >/dev/null
+
+          mapfile -d '' RPMS < <(find dist -type f -name 'Shift-*-Linux-x64.rpm' -print0)
+          [[ "${#RPMS[@]}" == 1 ]] || {
+            echo "Expected one Linux RPM, found ${#RPMS[@]}" >&2
+            exit 1
+          }
+          PASSPHRASE_FILE="$RUNNER_TEMP/linux-signing-passphrase"
+          trap 'rm -f "$PASSPHRASE_FILE"' EXIT
+          install -m 600 /dev/null "$PASSPHRASE_FILE"
+          printf '%s' "$LINUX_REPOSITORY_GPG_PASSPHRASE" > "$PASSPHRASE_FILE"
+          GPG_BIN="$(command -v gpg)"
+          rpmsign --addsign \
+            --define "__gpg $GPG_BIN" \
+            --define "_gpg_name $FINGERPRINT" \
+            --define "_openpgp_sign_id $FINGERPRINT" \
+            --define "_gpg_path $GNUPGHOME" \
+            --define "_gpg_sign_cmd_extra_args --batch --pinentry-mode loopback --passphrase-file $PASSPHRASE_FILE" \
+            "${RPMS[0]}"
+
+          gpg --batch --export "$FINGERPRINT" > shift-repository.gpg
+          RPM_PUBLIC_KEY="$RUNNER_TEMP/shift-repository-rpm.asc"
+          gpg --batch --armor --export "$FINGERPRINT" > "$RPM_PUBLIC_KEY"
+          RPM_DB="$RUNNER_TEMP/linux-signing-rpmdb"
+          install -d "$RPM_DB"
+          rpm --dbpath "$RPM_DB" --initdb
+          rpmkeys --dbpath "$RPM_DB" --import "$RPM_PUBLIC_KEY"
+          rpmkeys --dbpath "$RPM_DB" --checksig "${RPMS[0]}"
+
       - name: Add Developer Preview notice
         env:
           GH_TOKEN: ${{ github.token }}
@@ -249,7 +304,7 @@ jobs:
           generated = marker.sub("", Path("generated-notes.md").read_text()).lstrip()
           notice = """<!-- shift-preview-notice:start -->
           > [!WARNING]
-          > **Developer Preview:** Work on copies and keep independent backups. The macOS builds are signed and notarized. Windows builds are currently unsigned and may trigger Microsoft SmartScreen. Linux packages are unsigned. See the [code signing policy](https://github.com/shift-editor/shift/blob/main/CODE_SIGNING_POLICY.md).
+          > **Developer Preview:** Work on copies and keep independent backups. The macOS builds are signed and notarized. Windows builds are currently unsigned and may trigger Microsoft SmartScreen. Linux RPMs and the checksum manifest are signed with the Shift repository key. See the [code signing policy](https://github.com/shift-editor/shift/blob/main/CODE_SIGNING_POLICY.md).
           <!-- shift-preview-notice:end -->
 
           """
@@ -257,9 +312,14 @@ jobs:
           PY
           gh release edit "$RELEASE_TAG" --notes-file release-notes.md
 
-      - name: Generate checksums
+      - name: Generate and sign checksums
         shell: bash
+        env:
+          LINUX_REPOSITORY_GPG_FINGERPRINT: ${{ vars.LINUX_REPOSITORY_GPG_FINGERPRINT }}
+          LINUX_REPOSITORY_GPG_PASSPHRASE: ${{ secrets.LINUX_REPOSITORY_GPG_PASSPHRASE }}
         run: |
+          set -euo pipefail
+          export GNUPGHOME="$RUNNER_TEMP/linux-signing-gnupg"
           mapfile -d '' FILES < <(find dist -type f ! -name 'latest*.yml' -print0 | sort -z)
           DUPLICATES="$(printf '%s\0' "${FILES[@]}" | xargs -0 -n1 basename | sort | uniq --repeated)"
           if [[ -n "$DUPLICATES" ]]; then
@@ -275,6 +335,19 @@ jobs:
           done
           cat SHA256SUMS
 
+          FINGERPRINT="${LINUX_REPOSITORY_GPG_FINGERPRINT//[[:space:]]/}"
+          printf '%s' "$LINUX_REPOSITORY_GPG_PASSPHRASE" | gpg \
+            --batch \
+            --yes \
+            --pinentry-mode loopback \
+            --passphrase-fd 0 \
+            --local-user "$FINGERPRINT" \
+            --armor \
+            --detach-sign \
+            --output SHA256SUMS.asc \
+            SHA256SUMS
+          gpg --batch --verify SHA256SUMS.asc SHA256SUMS
+
       - name: Upload files to GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -284,13 +357,351 @@ jobs:
           while IFS= read -r -d '' file; do
             gh release upload "$RELEASE_TAG" "$file" --clobber
           done < <(find dist -type f ! -name 'latest*.yml' -print0)
-          gh release upload "$RELEASE_TAG" SHA256SUMS --clobber
+          gh release upload \
+            "$RELEASE_TAG" \
+            SHA256SUMS \
+            SHA256SUMS.asc \
+            shift-repository.gpg \
+            --clobber
 
       - name: Publish GitHub prerelease
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
         run: gh release edit "$RELEASE_TAG" --draft=false --prerelease
+
+  linux-repositories:
+    name: Publish Linux repositories
+    needs:
+      - prepare
+      - publish
+    runs-on: ubuntu-latest
+    concurrency:
+      group: linux-repository-publication
+      cancel-in-progress: false
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Install repository tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes apt-utils createrepo-c gnupg rpm
+
+      - name: Download signed Linux release artifacts
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir dist
+          gh release download "$RELEASE_TAG" \
+            --dir dist \
+            --pattern "Shift-${RELEASE_VERSION}-Linux-x64.deb" \
+            --pattern "Shift-${RELEASE_VERSION}-Linux-x64.rpm" \
+            --pattern "Shift-${RELEASE_VERSION}-Linux-x64.AppImage" \
+            --pattern shift-repository.gpg
+
+      - name: Import and verify repository signing key
+        shell: bash
+        env:
+          LINUX_REPOSITORY_GPG_FINGERPRINT: ${{ vars.LINUX_REPOSITORY_GPG_FINGERPRINT }}
+          LINUX_REPOSITORY_GPG_PRIVATE_KEY: ${{ secrets.LINUX_REPOSITORY_GPG_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          : "${LINUX_REPOSITORY_GPG_FINGERPRINT:?LINUX_REPOSITORY_GPG_FINGERPRINT is required}"
+          : "${LINUX_REPOSITORY_GPG_PRIVATE_KEY:?LINUX_REPOSITORY_GPG_PRIVATE_KEY is required}"
+          export GNUPGHOME="$RUNNER_TEMP/linux-repository-gnupg"
+          install -d -m 700 "$GNUPGHOME"
+          printf '%s' "$LINUX_REPOSITORY_GPG_PRIVATE_KEY" | gpg --batch --import
+
+          FINGERPRINT="${LINUX_REPOSITORY_GPG_FINGERPRINT//[[:space:]]/}"
+          ACTUAL_FINGERPRINT="$(gpg --batch --with-colons --fingerprint "$FINGERPRINT" \
+            | awk -F: '$1 == "fpr" { print $10; exit }')"
+          [[ "$ACTUAL_FINGERPRINT" == "$FINGERPRINT" ]] || {
+            echo "Imported Linux signing key does not match the configured fingerprint" >&2
+            exit 1
+          }
+          cmp dist/shift-repository.gpg <(gpg --batch --export "$FINGERPRINT")
+
+          RPM_PUBLIC_KEY="$RUNNER_TEMP/shift-repository-rpm.asc"
+          gpg --batch --armor --export "$FINGERPRINT" > "$RPM_PUBLIC_KEY"
+          RPM_DB="$RUNNER_TEMP/linux-repository-rpmdb"
+          install -d "$RPM_DB"
+          rpm --dbpath "$RPM_DB" --initdb
+          rpmkeys --dbpath "$RPM_DB" --import "$RPM_PUBLIC_KEY"
+          rpmkeys --dbpath "$RPM_DB" --checksig "dist/Shift-${{ needs.prepare.outputs.version }}-Linux-x64.rpm"
+
+      - name: Build and sign repository metadata
+        shell: bash
+        env:
+          LINUX_PACKAGE_BASE_URL: ${{ vars.LINUX_PACKAGE_BASE_URL }}
+          LINUX_REPOSITORY_GPG_FINGERPRINT: ${{ vars.LINUX_REPOSITORY_GPG_FINGERPRINT }}
+          LINUX_REPOSITORY_GPG_PASSPHRASE: ${{ secrets.LINUX_REPOSITORY_GPG_PASSPHRASE }}
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          : "${LINUX_PACKAGE_BASE_URL:?LINUX_PACKAGE_BASE_URL is required}"
+          : "${LINUX_REPOSITORY_GPG_PASSPHRASE:?LINUX_REPOSITORY_GPG_PASSPHRASE is required}"
+          export GNUPGHOME="$RUNNER_TEMP/linux-repository-gnupg"
+          FINGERPRINT="${LINUX_REPOSITORY_GPG_FINGERPRINT//[[:space:]]/}"
+
+          node scripts/prepare-linux-repositories.mjs stage dist repository "$RELEASE_VERSION"
+          (
+            cd repository/apt
+            apt-ftparchive packages pool/main \
+              > dists/release/main/binary-amd64/Packages
+            gzip -9 -n -c dists/release/main/binary-amd64/Packages \
+              > dists/release/main/binary-amd64/Packages.gz
+          )
+          createrepo_c \
+            --checksum sha256 \
+            "repository/rpm/releases/${RELEASE_VERSION}/x86_64"
+
+          REPOMD="repository/rpm/releases/${RELEASE_VERSION}/x86_64/repodata/repomd.xml"
+          printf '%s' "$LINUX_REPOSITORY_GPG_PASSPHRASE" | gpg \
+            --batch \
+            --yes \
+            --pinentry-mode loopback \
+            --passphrase-fd 0 \
+            --local-user "$FINGERPRINT" \
+            --armor \
+            --detach-sign \
+            --output "${REPOMD}.asc" \
+            "$REPOMD"
+
+          node scripts/prepare-linux-repositories.mjs finalize \
+            repository \
+            "$RELEASE_VERSION" \
+            "$LINUX_PACKAGE_BASE_URL" \
+            "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+          RELEASE_FILE="repository/apt/dists/release/Release"
+          printf '%s' "$LINUX_REPOSITORY_GPG_PASSPHRASE" | gpg \
+            --batch \
+            --yes \
+            --pinentry-mode loopback \
+            --passphrase-fd 0 \
+            --local-user "$FINGERPRINT" \
+            --digest-algo SHA256 \
+            --clearsign \
+            --output repository/apt/dists/release/InRelease \
+            "$RELEASE_FILE"
+          install -d repository/keys
+          cp dist/shift-repository.gpg repository/keys/shift-repository.gpg
+
+          gpg --batch --verify "${REPOMD}.asc" "$REPOMD"
+          gpg --batch --verify repository/apt/dists/release/InRelease
+
+      - name: Upload inactive repository content
+        shell: bash
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_EC2_METADATA_DISABLED: "true"
+          AWS_REGION: auto
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          R2_BUCKET: ${{ vars.R2_RELEASE_BUCKET }}
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          : "${R2_ACCOUNT_ID:?CLOUDFLARE_ACCOUNT_ID is required}"
+          : "${R2_BUCKET:?R2_RELEASE_BUCKET is required}"
+          ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+          DESTINATION="s3://${R2_BUCKET}"
+
+          aws s3 cp repository/apt/pool "${DESTINATION}/apt/pool/" \
+            --recursive \
+            --endpoint-url "$ENDPOINT" \
+            --cache-control "public, max-age=31536000, immutable" \
+            --no-progress \
+            --only-show-errors
+          aws s3 cp repository/apt/dists/release/main "${DESTINATION}/apt/dists/release/main/" \
+            --recursive \
+            --endpoint-url "$ENDPOINT" \
+            --cache-control "no-cache" \
+            --no-progress \
+            --only-show-errors
+          aws s3 cp repository/apt/dists/release/Release "${DESTINATION}/apt/dists/release/Release" \
+            --endpoint-url "$ENDPOINT" \
+            --cache-control "no-cache" \
+            --no-progress \
+            --only-show-errors
+          aws s3 cp \
+            "repository/rpm/releases/${RELEASE_VERSION}/x86_64" \
+            "${DESTINATION}/rpm/releases/${RELEASE_VERSION}/x86_64/" \
+            --recursive \
+            --endpoint-url "$ENDPOINT" \
+            --cache-control "public, max-age=31536000, immutable" \
+            --no-progress \
+            --only-show-errors
+          aws s3 cp repository/config "${DESTINATION}/config/" \
+            --recursive \
+            --endpoint-url "$ENDPOINT" \
+            --cache-control "no-cache" \
+            --no-progress \
+            --only-show-errors
+          aws s3 cp repository/keys "${DESTINATION}/keys/" \
+            --recursive \
+            --endpoint-url "$ENDPOINT" \
+            --cache-control "no-cache" \
+            --no-progress \
+            --only-show-errors
+
+      - name: Verify inactive public content
+        shell: bash
+        env:
+          LINUX_PACKAGE_BASE_URL: ${{ vars.LINUX_PACKAGE_BASE_URL }}
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          BASE_URL="${LINUX_PACKAGE_BASE_URL%/}"
+          [[ "$BASE_URL" == https://* ]] || {
+            echo "LINUX_PACKAGE_BASE_URL must use HTTPS" >&2
+            exit 1
+          }
+          curl --fail --retry 5 --retry-all-errors \
+            "$BASE_URL/keys/shift-repository.gpg" \
+            --output public-repository-key.gpg
+          cmp repository/keys/shift-repository.gpg public-repository-key.gpg
+          curl --fail --head --retry 5 --retry-all-errors \
+            "$BASE_URL/apt/pool/main/s/shift/shift_${RELEASE_VERSION}_amd64.deb" >/dev/null
+
+          REPOMD_URL="$BASE_URL/rpm/releases/${RELEASE_VERSION}/x86_64/repodata/repomd.xml"
+          curl --fail --retry 5 --retry-all-errors "$REPOMD_URL" --output public-repomd.xml
+          curl --fail --retry 5 --retry-all-errors "${REPOMD_URL}.asc" --output public-repomd.xml.asc
+          export GNUPGHOME="$RUNNER_TEMP/linux-repository-gnupg"
+          gpg --batch --verify public-repomd.xml.asc public-repomd.xml
+
+      - name: Activate and test Linux repositories
+        shell: bash
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_EC2_METADATA_DISABLED: "true"
+          AWS_REGION: auto
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          LINUX_PACKAGE_BASE_URL: ${{ vars.LINUX_PACKAGE_BASE_URL }}
+          R2_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          R2_BUCKET: ${{ vars.R2_RELEASE_BUCKET }}
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+          DESTINATION="s3://${R2_BUCKET}"
+          PREVIOUS="$RUNNER_TEMP/previous-linux-repository"
+          mkdir "$PREVIOUS"
+          DNF_KEY="rpm/release/x86_64/metalink.xml"
+          APT_KEY="apt/dists/release/InRelease"
+          DNF_PREVIOUS=false
+          APT_PREVIOUS=false
+          DNF_ACTIVATED=false
+          APT_ACTIVATED=false
+
+          if aws s3api head-object --endpoint-url "$ENDPOINT" --bucket "$R2_BUCKET" --key "$DNF_KEY" >/dev/null 2>&1; then
+            DNF_PREVIOUS=true
+            aws s3 cp "${DESTINATION}/${DNF_KEY}" "$PREVIOUS/metalink.xml" \
+              --endpoint-url "$ENDPOINT" --no-progress --only-show-errors
+          fi
+          if aws s3api head-object --endpoint-url "$ENDPOINT" --bucket "$R2_BUCKET" --key "$APT_KEY" >/dev/null 2>&1; then
+            APT_PREVIOUS=true
+            aws s3 cp "${DESTINATION}/${APT_KEY}" "$PREVIOUS/InRelease" \
+              --endpoint-url "$ENDPOINT" --no-progress --only-show-errors
+          fi
+
+          restore_object() {
+            local had_previous="$1"
+            local backup="$2"
+            local key="$3"
+            if [[ "$had_previous" == true ]]; then
+              aws s3 cp "$backup" "${DESTINATION}/${key}" \
+                --endpoint-url "$ENDPOINT" \
+                --cache-control "no-cache" \
+                --no-progress \
+                --only-show-errors
+            else
+              aws s3api delete-object \
+                --endpoint-url "$ENDPOINT" \
+                --bucket "$R2_BUCKET" \
+                --key "$key" >/dev/null
+            fi
+          }
+          rollback() {
+            local status=$?
+            if [[ "$status" != 0 ]]; then
+              echo "Linux repository activation failed; restoring preceding roots" >&2
+              if [[ "$APT_ACTIVATED" == true ]]; then
+                restore_object "$APT_PREVIOUS" "$PREVIOUS/InRelease" "$APT_KEY"
+              fi
+              if [[ "$DNF_ACTIVATED" == true ]]; then
+                restore_object "$DNF_PREVIOUS" "$PREVIOUS/metalink.xml" "$DNF_KEY"
+              fi
+            fi
+            exit "$status"
+          }
+          trap rollback EXIT
+
+          aws s3 cp repository/rpm/release/x86_64/metalink.xml "${DESTINATION}/${DNF_KEY}" \
+            --endpoint-url "$ENDPOINT" \
+            --cache-control "no-cache" \
+            --no-progress \
+            --only-show-errors
+          DNF_ACTIVATED=true
+          aws s3 cp repository/apt/dists/release/InRelease "${DESTINATION}/${APT_KEY}" \
+            --endpoint-url "$ENDPOINT" \
+            --cache-control "no-cache" \
+            --no-progress \
+            --only-show-errors
+          APT_ACTIVATED=true
+
+          BASE_URL="${LINUX_PACKAGE_BASE_URL%/}"
+          curl --fail --retry 5 --retry-all-errors \
+            "$BASE_URL/rpm/release/x86_64/metalink.xml" \
+            --output active-metalink.xml
+          cmp repository/rpm/release/x86_64/metalink.xml active-metalink.xml
+          curl --fail --retry 5 --retry-all-errors \
+            "$BASE_URL/apt/dists/release/InRelease" \
+            --output active-InRelease
+          cmp repository/apt/dists/release/InRelease active-InRelease
+
+          docker run --rm \
+            --env BASE_URL="$BASE_URL" \
+            --env EXPECTED_VERSION="$RELEASE_VERSION" \
+            ubuntu:24.04 \
+            bash -euxo pipefail -c '
+              apt-get update
+              apt-get install --yes ca-certificates curl
+              install -d -m 755 /etc/apt/keyrings
+              curl --fail "$BASE_URL/keys/shift-repository.gpg" \
+                --output /etc/apt/keyrings/shift-repository.gpg
+              curl --fail "$BASE_URL/config/shift.sources" \
+                --output /etc/apt/sources.list.d/shift.sources
+              apt-get update
+              apt-get install --yes shift
+              test "$(dpkg-query --show --showformat="\${Version}" shift)" = "$EXPECTED_VERSION"
+            '
+          docker run --rm \
+            --env BASE_URL="$BASE_URL" \
+            --env EXPECTED_VERSION="$RELEASE_VERSION" \
+            fedora:latest \
+            bash -euxo pipefail -c '
+              dnf install --assumeyes ca-certificates curl
+              curl --fail "$BASE_URL/config/shift.repo" \
+                --output /etc/yum.repos.d/shift.repo
+              dnf install --assumeyes shift
+              test "$(rpm --query --queryformat "%{VERSION}" shift)" = "$EXPECTED_VERSION"
+            '
+
+          trap - EXIT
 
   feed:
     name: Publish release update feed
