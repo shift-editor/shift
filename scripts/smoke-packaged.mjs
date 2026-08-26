@@ -87,6 +87,9 @@ function verifyMacosDocumentIcon() {
   if (exportedType?.UTTypeIcons?.UTTypeIconBadgeName !== "shift-document-badge") {
     throw new Error("Packaged Shift document type does not reference its document badge");
   }
+  if (exportedType?.UTTypeIcons?.UTTypeIconText !== "SHIFT") {
+    throw new Error("Packaged Shift document type does not include its icon label");
+  }
   if (!assets.some(({ Name }) => Name === "shift-document-badge")) {
     throw new Error("Packaged asset catalog does not contain the Shift document badge");
   }

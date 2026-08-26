@@ -175,7 +175,7 @@ const config: Configuration = {
           UTTypeDescription: "Shift font document",
           UTTypeIcons: {
             UTTypeIconBadgeName: documentBadgeName,
-            UTTypeIconText: "",
+            UTTypeIconText: "SHIFT",
           },
           UTTypeIdentifier: documentTypeIdentifier,
           UTTypeTagSpecification: {
