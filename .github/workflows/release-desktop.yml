@@ -279,6 +279,10 @@ jobs:
             "${RPMS[0]}"
 
           gpg --batch --export "$FINGERPRINT" > shift-repository.gpg
+          cmp apps/desktop/resources/linux/shift-repository.gpg shift-repository.gpg || {
+            echo "Release DEB repository key does not match the configured signing key" >&2
+            exit 1
+          }
           RPM_PUBLIC_KEY="$RUNNER_TEMP/shift-repository-rpm.asc"
           gpg --batch --armor --export "$FINGERPRINT" > "$RPM_PUBLIC_KEY"
           RPM_DB="$RUNNER_TEMP/linux-signing-rpmdb"
@@ -680,14 +684,29 @@ jobs:
             bash -euxo pipefail -c '
               apt-get update
               apt-get install --yes ca-certificates curl
-              install -d -m 755 /etc/apt/keyrings
+              curl --fail \
+                "$BASE_URL/apt/pool/main/s/shift/shift_${EXPECTED_VERSION}_amd64.deb" \
+                --output /tmp/shift.deb
+              apt-get install --yes /tmp/shift.deb
               curl --fail "$BASE_URL/keys/shift-repository.gpg" \
-                --output /etc/apt/keyrings/shift-repository.gpg
+                --output /tmp/shift-repository.gpg
+              cmp /etc/apt/keyrings/shift-repository.gpg /tmp/shift-repository.gpg
               curl --fail "$BASE_URL/config/shift.sources" \
-                --output /etc/apt/sources.list.d/shift.sources
+                --output /tmp/shift.sources
+              cmp /etc/apt/sources.list.d/shift.sources /tmp/shift.sources
+              dpkg-query --show --showformat="\${Conffiles}\n" shift \
+                | grep -F /etc/apt/keyrings/shift-repository.gpg
+              dpkg-query --show --showformat="\${Conffiles}\n" shift \
+                | grep -F /etc/apt/sources.list.d/shift.sources
               apt-get update
-              apt-get install --yes shift
+              apt-get install --reinstall --yes shift
               test "$(dpkg-query --show --showformat="\${Version}" shift)" = "$EXPECTED_VERSION"
+              apt-get remove --yes shift
+              test -f /etc/apt/keyrings/shift-repository.gpg
+              test -f /etc/apt/sources.list.d/shift.sources
+              dpkg --purge shift
+              test ! -e /etc/apt/keyrings/shift-repository.gpg
+              test ! -e /etc/apt/sources.list.d/shift.sources
             '
           docker run --rm \
             --env BASE_URL="$BASE_URL" \

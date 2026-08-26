@@ -44,13 +44,20 @@ electron-updater compares the aligned numeric versions, verifies generated SHA-5
 
 electron-builder generates architecture-specific `latest-mac.yml` files for exact versioned ZIP assets and `latest.yml` for the Windows Nightly NSIS installer. GitHub Pages hosts the fixed Release/Nightly metadata files. Versioned Release binaries and their differential-update blockmaps remain on GitHub Releases. Nightly metadata instead references immutable updater packages under `nightly/<full-commit>/` in Cloudflare R2. Because electron-updater cannot derive a previous blockmap URL across commit-addressed directories, Nightly updates fall back to full package downloads; Release differential updates are unchanged.
 
-Linux Release packages use the dedicated `Shift Package Signing` RSA-4096 key. The RPM carries an embedded signature, and the signed `SHA256SUMS.asc` authenticates every direct-download Linux format, including DEB and AppImage. APT authenticates package hashes through `InRelease`; DNF checks both the RPM signature and the detached `repomd.xml` signature. The public key is published as `shift-repository.gpg` with the GitHub release and at `https://packages.shift.graphics/keys/shift-repository.gpg`.
+Linux Release packages use the dedicated `Shift Package Signing` RSA-4096 key. The RPM carries an embedded signature, and the signed `SHA256SUMS.asc` authenticates every direct-download Linux format, including DEB and AppImage. The Release DEB embeds the public key and APT source as Debian conffiles so a direct install enrolls in authenticated APT updates; Nightly DEBs never enroll in the Release repository. APT authenticates package hashes through `InRelease`; DNF checks both the RPM signature and the detached `repomd.xml` signature. The public key is published as `shift-repository.gpg` with the GitHub release and at `https://packages.shift.graphics/keys/shift-repository.gpg`.
 
 The app waits 30 seconds before its first automatic check to avoid competing with startup, then checks every four hours. Automatic current/error results are quiet. A native-framed update window asks for consent before downloading, then replaces those choices with byte and percentage progress that can be canceled. Download completion replaces progress with **Restart and Install** / Later, is not silently installed on ordinary quit, and cannot restart until every document accepts and commits close.
 
 ## Linux installation
 
-APT users install the scoped repository key and deb822 source definition before installing Shift:
+APT users can download a Release DEB from the GitHub release and install it directly:
+
+```sh
+sudo apt install ./Shift-<version>-Linux-x64.deb
+sudo apt update
+```
+
+The DEB installs the scoped repository key and deb822 source definition, so later versions arrive through ordinary APT upgrades. `apt remove shift` leaves that configuration available; `apt purge shift` removes it. Users who prefer to configure the repository before installing Shift can do so explicitly:
 
 ```sh
 sudo install -d -m 755 /etc/apt/keyrings
