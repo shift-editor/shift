@@ -15,6 +15,8 @@ Shift aims to redefine font editing by combining the power of Rust for performan
 > [!WARNING]
 > Shift is an unstable Developer Preview. Versioned Alpha builds are for early testing, not production font work. Work on copies and retain independent backups. Installable builds are published through [GitHub Releases](https://github.com/shift-editor/shift/releases); the latest complete development snapshot is available as [Shift Nightly](https://github.com/shift-editor/shift/releases/tag/nightly).
 
+Linux versioned releases are available through signed [APT and DNF repositories](docs/releases.md#linux-installation), with DEB, RPM, and AppImage direct downloads retained as alternatives.
+
 ## Architecture
 
 ```

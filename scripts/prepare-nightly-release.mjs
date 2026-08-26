@@ -56,6 +56,10 @@ const assets = [
     pattern: new RegExp(`Shift-Nightly-${escapeRegex(version)}-Linux-x64\\.rpm$`),
     publicName: "Shift-Nightly-Linux-x64.rpm",
   },
+  {
+    pattern: new RegExp(`Shift-Nightly-${escapeRegex(version)}-Linux-x64\\.AppImage$`),
+    publicName: "Shift-Nightly-Linux-x64.AppImage",
+  },
 ];
 
 const distRoot = path.resolve(distArgument);
