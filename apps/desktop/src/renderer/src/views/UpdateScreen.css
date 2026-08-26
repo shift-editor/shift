@@ -1,5 +1,5 @@
 .update-window {
-  --update-background: #ececec;
+  --update-background: #ffffff;
   --update-text: #202020;
   --update-secondary-text: #626262;
   --update-track: #d2d2d2;
@@ -87,15 +87,4 @@
 
 .update-window-button:hover {
   background: var(--update-button-hover);
-}
-
-@media (prefers-color-scheme: dark) {
-  .update-window {
-    --update-background: #242424;
-    --update-text: #e6e6e6;
-    --update-secondary-text: #aaa;
-    --update-track: #3d3d3d;
-    --update-button: #3a3a3a;
-    --update-button-hover: #464646;
-  }
 }

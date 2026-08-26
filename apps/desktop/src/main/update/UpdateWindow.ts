@@ -1,4 +1,4 @@
-import { app, BrowserWindow, nativeTheme } from "electron";
+import { app, BrowserWindow } from "electron";
 import type { ShiftLogger } from "../logging";
 import { getRendererSource } from "../utils";
 import * as ipc from "../../shared/ipc/main";
@@ -110,7 +110,7 @@ export class UpdateWindow {
       resizable: false,
       maximizable: false,
       fullscreenable: false,
-      backgroundColor: nativeTheme.shouldUseDarkColors ? "#242424" : "#ececec",
+      backgroundColor: "#ffffff",
       ...(process.platform === "darwin" ? { titleBarStyle: "hiddenInset" as const } : {}),
       webPreferences: {
         preload: this.#preloadPath,
