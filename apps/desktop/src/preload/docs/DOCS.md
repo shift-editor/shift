@@ -1,6 +1,6 @@
 # Preload
 
-<!-- reviewed: 2026-08-18 review-every: 90d -->
+<!-- reviewed: 2026-08-27 review-every: 90d -->
 
 Electron preload script that exposes the typed Shift host API and relays session ports to the renderer.
 
@@ -19,7 +19,7 @@ preload/
 
 ## Key Types
 
-- `ShiftHost` -- renderer-facing app-shell API for commands, documents, sessions, application updates, UI events, and clipboard access.
+- `ShiftHost` -- renderer-facing app-shell API for commands, native menus, documents, sessions, application updates, UI events, and clipboard access.
 - `RendererToMain` -- renderer-to-main request/response channel map.
 - `MainToRenderer` -- main-to-renderer broadcast channel map.
 
@@ -27,7 +27,7 @@ preload/
 
 The preload runs once before the renderer loads:
 
-1. Builds `ShiftHost` methods from typed `invoke` and `listen` IPC helpers, including update-window progress and actions.
+1. Builds `ShiftHost` methods from typed `invoke` and `listen` IPC helpers, including native context-menu requests and update-window progress and actions.
 2. Exposes that object as `window.shiftHost` through `contextBridge`.
 3. Relays session and document `MessagePort`s into the page. Because packaged `file://` pages have opaque origins, receivers authenticate these relays with `event.source === window` plus the expected message type rather than comparing origin strings.
 

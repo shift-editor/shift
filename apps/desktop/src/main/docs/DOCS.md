@@ -1,6 +1,6 @@
 # Main
 
-<!-- reviewed: 2026-08-24 -->
+<!-- reviewed: 2026-08-27 -->
 
 Electron main process: app startup, windows, menus, document dialogs, and workspace session ownership.
 
@@ -92,6 +92,8 @@ Native menu items carry the shared `CommandId`, label, accelerator, and current 
 
 Edit-menu accelerators and clicks send `RendererCommandId` operations to the active authored renderer instead of using Electron's DOM-only roles. The renderer preserves conventional behavior for a focused text input; otherwise Undo, Redo, Cut, Copy, Paste, Delete, and Select All operate on Shift's canvas editor and canonical workspace history. Commands may remain enabled within an authored document when its current selection, clipboard, or history makes a particular invocation a safe no-op.
 
+The View menu reserves conventional Zoom In and Zoom Out labels and shortcuts for the glyph canvas. Browser-window scaling is exposed separately as Interface Size with Alt-modified shortcuts, preventing native accelerators from intercepting canvas zoom. The renderer requests the native canvas context menu through `menu.showCanvasContextMenu`; main resolves the sender's authored workspace and binds Cut, Copy, Paste, Duplicate, Delete, Select All, Deselect, and Reverse Selected Contour to that same sender window.
+
 The macOS Window menu is registered through Electron's native `windowMenu` role so AppKit owns system placement, tiling, and open-window affordances. **Home** focuses an existing launcher or creates one without replacing the current document window. **Settings…** sends `app.showSettings` to the active font renderer and opens the existing document-scoped settings surface at Font; it remains unavailable on the launcher until Shift has app-wide settings.
 
 Eligible packaged macOS builds and Windows Nightly x64 builds start `AppUpdater` after the first window is prepared. The updater waits 30 seconds before its first quiet check to avoid competing with application startup, then checks every four hours. Development builds explain that updates require packaging; Windows Release and Linux direct manual checks to matching GitHub downloads.
@@ -102,7 +104,7 @@ Eligible packaged macOS builds and Windows Nightly x64 builds start `AppUpdater`
 
 Automatic current/error results stay quiet. When a check finds an update, the native-framed update window offers **Download Update** / Later; declining leaves the version available without prompting again during periodic checks. An accepted download replaces those choices with cumulative progress. Closing the window or choosing Cancel cancels the transfer and returns to available. Download completion replaces progress with **Restart and Install** / Later, and a manual check while available or ready reopens the relevant choice. Later retains a verified download without silently installing it on ordinary quit. Restart prepares every document, cancels all prepared closes if one vetoes, commits every agreed close, and only then calls `quitAndInstall()`. Electron closes windows before normal `before-quit`, so `AppLifecycle`'s `confirmed` state allows those closes. An install failure after commit relaunches the currently installed application; closed in-memory sessions are never reconstructed.
 
-The application menu exposes `app.checkForUpdates` under the macOS app menu and the Windows/Linux Help menu. Update behavior remains main-owned and does not add renderer IPC.
+The application menu exposes `app.checkForUpdates` under the macOS app menu and the Windows/Linux Help menu. Every platform's Help menu also opens the Shift website, Discord, X account, and GitHub issue form through fixed main-owned URLs. Update behavior remains main-owned and does not add renderer IPC.
 
 ### Workspace Creation And Open
 
@@ -130,7 +132,7 @@ Message lanes reject in-flight calls when their remote port closes. An unexpecte
 
 ### IPC
 
-Renderer IPC in `App` is limited to shell capabilities: command execution, clipboard, update-window progress/actions, optional document-lane port transfer, immutable session mode, readiness, and shared session sync-lane port transfer. Font data stays on that sync lane between renderer and utility.
+Renderer IPC in `App` is limited to shell capabilities: command execution, native context-menu presentation, clipboard, update-window progress/actions, optional document-lane port transfer, immutable session mode, readiness, and shared session sync-lane port transfer. Font data stays on that sync lane between renderer and utility.
 
 ## Workflow recipes
 
@@ -168,7 +170,8 @@ Renderer IPC in `App` is limited to shell capabilities: command execution, clipb
 - `pnpm test:release`
 - Electron E2E fixtures materialize a native startup document under a fresh `testRoot`, launch with a fresh `userDataDir`, assert Electron honored that path, and remove the root after force-closing the disposable process.
 - `document-lifecycle.spec.ts` injects ordered scripted paths/choices and verifies New/Open, convertible-preview Save and authored handoff, TTF/OTF exclusion, first and ordinary Save, independent Save As, saved-document discard/reopen, raw-copy identity reuse, Save cancellation/failure safety, dirty-close choices, clean quit/relaunch/reopen, and Export safety through application commands.
-- `application-menu.spec.ts` invokes actual native menu items and verifies launcher/binary/convertible/authored capability states, focused-text Copy/Paste, and canvas Select All, Copy, Paste, Undo, Redo, Delete, and Cut behavior.
+- `application-menu.spec.ts` invokes actual native menu items and verifies Help, Settings, canvas/interface zoom, launcher/binary/convertible/authored capability states, focused-text Copy/Paste, and canvas Select All, Copy, Paste, Undo, Redo, Delete, and Cut behavior.
+- Manual: right-click an authored glyph canvas and verify the native menu opens at the pointer, each action targets that window, and no canvas menu appears on launcher or preview surfaces.
 - `application-quit.spec.ts` verifies dirty Save/Discard/Cancel, every dirty document in a multi-document quit, re-entrant quit suppression, and document isolation across windows. Ordered scripted choices are consumed once per actual confirmation.
 - `document-recovery.spec.ts` force-terminates Electron, reopens the same document and user-data directory, verifies recovery, then verifies explicit Save changes the canonical document.
 - Standard workspace E2E fixtures launch Electron with a `.shift` command-line argument, so document activation owns the same document lifecycle coverage as File -> Open.

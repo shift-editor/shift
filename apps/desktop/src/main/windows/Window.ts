@@ -123,22 +123,22 @@ export class Window {
     }
   }
 
-  /** Steps UI (chrome) zoom up to the next ladder stop and notifies the renderer. */
-  zoomIn(): void {
+  /** Steps interface size up to the next ladder stop and notifies the renderer. */
+  increaseInterfaceSize(): void {
     const current = zoomLevelToPercent(this.#window.webContents.getZoomLevel());
     const next = ZOOM_PERCENTS.find((percent) => percent > current + 1);
     this.#setZoomPercent(next ?? ZOOM_PERCENTS[ZOOM_PERCENTS.length - 1]!);
   }
 
-  /** Steps UI (chrome) zoom down to the previous ladder stop and notifies the renderer. */
-  zoomOut(): void {
+  /** Steps interface size down to the previous ladder stop and notifies the renderer. */
+  decreaseInterfaceSize(): void {
     const current = zoomLevelToPercent(this.#window.webContents.getZoomLevel());
     const previous = [...ZOOM_PERCENTS].reverse().find((percent) => percent < current - 1);
     this.#setZoomPercent(previous ?? ZOOM_PERCENTS[0]!);
   }
 
-  /** Restores UI (chrome) zoom to 100% and notifies the renderer. */
-  resetZoom(): void {
+  /** Restores interface size to 100% and notifies the renderer. */
+  resetInterfaceSize(): void {
     this.#setZoomPercent(100);
   }
 

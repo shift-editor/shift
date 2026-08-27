@@ -55,11 +55,16 @@ export class App {
   #appIcon = new AppIcon();
   #applicationMenu = new ApplicationMenu(
     this.#appIcon.path(),
-    (id) => {
+    (id, browserWindow) => {
+      const window = browserWindow
+        ? this.#windows.windowForBrowserWindow(browserWindow)
+        : undefined;
+      if (browserWindow && !window) return;
+
       // Menu/accelerator commands run detached, so a failure (e.g. a save that
       // throws) has nowhere to propagate — catch and surface it here.
       void this.#commands
-        .run(id, this.#commandContext())
+        .run(id, this.#commandContext(window))
         .catch((error) => {
           this.#log.error("menu command failed", id, error);
         })
@@ -67,7 +72,14 @@ export class App {
           this.#applicationMenu.updateCommandStates();
         });
     },
-    (id) => this.#commands.isEnabled(id, this.#commandContext()),
+    (id, browserWindow) => {
+      const window = browserWindow
+        ? this.#windows.windowForBrowserWindow(browserWindow)
+        : undefined;
+      if (browserWindow && !window) return false;
+
+      return this.#commands.isEnabled(id, this.#commandContext(window));
+    },
   );
 
   /**
@@ -279,6 +291,12 @@ export class App {
       } finally {
         this.#applicationMenu.updateCommandStates();
       }
+    });
+    ipc.handle(ipcMain, "menu.showCanvasContextMenu", (event) => {
+      const window = this.#requireWindowForWebContents(event.sender);
+      if (!this.#commandContext(window).document.hasWorkspace()) return;
+
+      this.#applicationMenu.showCanvasContextMenu(window.window);
     });
     ipc.handle(ipcMain, "clipboard.readText", () => {
       return clipboard.readText();

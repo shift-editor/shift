@@ -29,6 +29,7 @@ export type DocumentEventMap = Record<string, never>;
  */
 export type RendererToMain = {
   "commands.run": (id: CommandId) => void;
+  "menu.showCanvasContextMenu": () => void;
   "clipboard.readText": () => string;
   "clipboard.writeText": (text: string) => void;
   /**
@@ -62,7 +63,7 @@ export type RendererToMain = {
 export type MainToRenderer = {
   /** Requests that the active renderer run an editor-owned command. */
   "commands.runRenderer": (id: RendererCommandId) => void;
-  /** UI (chrome) zoom changed via the View menu or its accelerators. */
+  /** Interface size changed via the View menu or its accelerators. */
   "ui.zoomChanged": (percent: number) => void;
   /** Reports that an application update is available to download. */
   "update.available": (version: string) => void;

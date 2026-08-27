@@ -21,7 +21,8 @@ describe("empty and invalid editor operations", () => {
 
   it("refuses deletion and duplication without selected geometry", async () => {
     expect(await editor.deleteSelection()).toBe(false);
-    expect(editor.duplicateSelection()).toEqual([]);
+    expect(await runRendererCommand(editor, "edit.duplicate")).toBe(false);
+    expect(await runRendererCommand(editor, "edit.deselect")).toBe(false);
     expect(editor.pointCount).toBe(0);
   });
 
@@ -33,6 +34,29 @@ describe("empty and invalid editor operations", () => {
   it("ignores boolean operations with missing contour identities", () => {
     editor.boolean(mintContourId(), mintContourId(), "union");
     expect(editor.glyphContours).toEqual([]);
+  });
+
+  it("duplicates selected geometry and selects the duplicate", async () => {
+    await editor.drawOpenContour([
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+    ]);
+    editor.selectAll();
+
+    expect(await runRendererCommand(editor, "edit.duplicate")).toBe(true);
+    expect(editor.pointCount).toBe(4);
+    expect(editor.selection.ids).toHaveLength(2);
+    expect(await runRendererCommand(editor, "edit.deselect")).toBe(true);
+    expect(editor.selection.ids).toEqual([]);
+  });
+
+  it("routes native View commands through the canvas editor", async () => {
+    const originalZoom = editor.zoom;
+
+    expect(await runRendererCommand(editor, "view.zoomIn")).toBe(true);
+    expect(editor.zoom).toBeGreaterThan(originalZoom);
+    expect(await runRendererCommand(editor, "view.zoomOut")).toBe(true);
+    expect(editor.zoom).toBeCloseTo(originalZoom);
   });
 
   it("routes native Edit commands through the canvas editor", async () => {

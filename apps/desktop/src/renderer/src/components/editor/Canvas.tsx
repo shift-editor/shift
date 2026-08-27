@@ -4,6 +4,7 @@ import { CanvasContextProvider } from "@/context/CanvasContextProvider";
 import { useDebugSafe } from "@/context/DebugContext";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { zoomMultiplierFromWheel } from "@/lib/transform";
+import { getShiftHost } from "@/host/shiftHost";
 import { InteractiveScene } from "./InteractiveScene";
 import { StaticScene } from "./StaticScene";
 import { DebugPanel } from "../debug/DebugPanel";
@@ -47,8 +48,22 @@ export const Canvas: FC = () => {
       }
     };
 
+    const handleContextMenu = async (event: MouseEvent) => {
+      event.preventDefault();
+
+      try {
+        await getShiftHost().menu.showCanvasContextMenu();
+      } catch (error) {
+        console.error("canvas context menu failed", error);
+      }
+    };
+
     element.addEventListener("wheel", handleWheel, { passive: false });
-    return () => element.removeEventListener("wheel", handleWheel);
+    element.addEventListener("contextmenu", handleContextMenu);
+    return () => {
+      element.removeEventListener("wheel", handleWheel);
+      element.removeEventListener("contextmenu", handleContextMenu);
+    };
   }, []);
 
   return (

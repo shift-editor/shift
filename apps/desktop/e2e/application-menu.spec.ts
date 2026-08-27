@@ -77,6 +77,23 @@ launcherTest("application menu exposes native shell actions", async ({ electronA
       Menu.getApplicationMenu()
         ?.items.find((item) => item.label === "View")
         ?.submenu?.items.map((item) => item.label) ?? [],
+    interfaceSizeLabels:
+      Menu.getApplicationMenu()
+        ?.items.find((item) => item.label === "View")
+        ?.submenu?.items.find((item) => item.label === "Interface Size")
+        ?.submenu?.items.map((item) => item.label) ?? [],
+    fileIds:
+      Menu.getApplicationMenu()
+        ?.items.find((item) => item.label === "File")
+        ?.submenu?.items.map((item) => item.id) ?? [],
+    editIds:
+      Menu.getApplicationMenu()
+        ?.items.find((item) => item.label === "Edit")
+        ?.submenu?.items.map((item) => item.id) ?? [],
+    helpIds:
+      Menu.getApplicationMenu()
+        ?.items.find((item) => item.label === "Help")
+        ?.submenu?.items.map((item) => item.id) ?? [],
     settingsAccelerator:
       Menu.getApplicationMenu()?.getMenuItemById("app.showSettings")?.accelerator,
   }));
@@ -99,7 +116,21 @@ launcherTest("application menu exposes native shell actions", async ({ electronA
     expect(menu.roles).toContain("quit");
   }
 
+  expect(menu.fileIds).not.toContain("app.showSettings");
+  expect(menu.editIds.includes("app.showSettings")).toBe(menu.platform !== "darwin");
+  expect(menu.helpIds).toEqual(
+    expect.arrayContaining([
+      "help.openWebsite",
+      "help.openDiscord",
+      "help.openX",
+      "help.reportIssue",
+    ]),
+  );
   expect(menu.settingsAccelerator).toBe("CmdOrCtrl+,");
+  expect(menu.viewLabels).toEqual(
+    expect.arrayContaining(["Zoom In", "Zoom Out", "Interface Size"]),
+  );
+  expect(menu.interfaceSizeLabels).toEqual(["Increase", "Decrease", "Reset"]);
   expect(menu.viewLabels.includes("Developer")).toBe(!menu.packaged && menu.platform === "darwin");
 });
 
@@ -109,6 +140,39 @@ authoredTest("Settings opens the active font configuration", async ({ electronAp
   await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Font", exact: true })).toBeVisible();
 });
+
+convertiblePreviewTest(
+  "View menu distinguishes canvas zoom from interface size",
+  async ({ electronApp, page }) => {
+    const workspacePage = await openSelectedPreview(page, electronApp);
+    await clickApplicationMenuItem(workspacePage, electronApp, "file.save");
+    await waitForWorkspaceReady(workspacePage);
+
+    const browserWindow = await electronApp.browserWindow(workspacePage);
+    const originalInterfaceSize = await browserWindow.evaluate((window) =>
+      window.webContents.getZoomFactor(),
+    );
+    const originalCanvasZoom = await workspacePage.evaluate(
+      () => window.shiftSession?.editor.zoom ?? 0,
+    );
+
+    await clickApplicationMenuItem(workspacePage, electronApp, "view.zoomIn");
+    const canvasZoom = await workspacePage.evaluate(() => window.shiftSession?.editor.zoom ?? 0);
+    expect(canvasZoom).toBeGreaterThan(originalCanvasZoom);
+    expect(await browserWindow.evaluate((window) => window.webContents.getZoomFactor())).toBe(
+      originalInterfaceSize,
+    );
+
+    await clickApplicationMenuItem(workspacePage, electronApp, "ui.increaseSize");
+    expect(
+      await browserWindow.evaluate((window) => window.webContents.getZoomFactor()),
+    ).toBeGreaterThan(originalInterfaceSize);
+    expect(await workspacePage.evaluate(() => window.shiftSession?.editor.zoom ?? 0)).toBe(
+      canvasZoom,
+    );
+    await browserWindow.dispose();
+  },
+);
 
 authoredTest("Home focuses one reusable launcher window", async ({ electronApp, page }) => {
   authoredTest.skip(process.platform !== "darwin", "Home currently lives in the macOS Window menu");
