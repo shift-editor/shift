@@ -1,7 +1,12 @@
 import { shell } from "electron";
 import type { Command } from "./Command";
 import type { CommandRegistry } from "./Command";
-import { SHIFT_DISCORD_URL, SHIFT_NEW_ISSUE_URL, SHIFT_X_URL } from "../../shared/links";
+import {
+  SHIFT_DISCORD_URL,
+  SHIFT_NEW_ISSUE_URL,
+  SHIFT_WEBSITE_URL,
+  SHIFT_X_URL,
+} from "../../shared/links";
 
 const appCommands: Command[] = [
   {
@@ -24,6 +29,11 @@ const appCommands: Command[] = [
 ];
 
 const helpCommands: Command[] = [
+  {
+    id: "help.openWebsite",
+    label: "Website",
+    run: () => shell.openExternal(SHIFT_WEBSITE_URL),
+  },
   {
     id: "help.openDiscord",
     label: "Discord",
