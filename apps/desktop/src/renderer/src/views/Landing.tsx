@@ -38,6 +38,9 @@ export const Landing = () => {
             variant="ghost"
           >
             New font
+            <span aria-hidden="true" className="text-sm font-medium text-muted">
+              ⌘ + n
+            </span>
           </Button>
           <Button
             className="w-full flex justify-between items-center font-medium"
@@ -45,7 +48,9 @@ export const Landing = () => {
             variant="ghost"
           >
             Load font
-            <span className="text-sm font-medium text-muted">⌘ + o</span>
+            <span aria-hidden="true" className="text-sm font-medium text-muted">
+              ⌘ + o
+            </span>
           </Button>
         </div>
         <div className="flex flex-col gap-4 mt-4">
