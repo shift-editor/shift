@@ -122,12 +122,15 @@ generate_icns() {
 }
 
 generate_document_icons() {
-  local source="$repo_root/apps/desktop/src/renderer/src/assets/logo.png"
+  local source_svg="$icons_dir/shift-document.svg"
+  local source="$work_dir/shift-document-mark.png"
   local asset_catalog="$icons_dir/shift-document.xcassets"
   local badge="$asset_catalog/shift-document-badge.iconset"
   local frame="$work_dir/shift-document-frame.svg"
   local document="$work_dir/shift-document.png"
   local sizes=(16 32 48 64 128 256 512 1024)
+
+  sips -s format png "$source_svg" --out "$source" >/dev/null
 
   rm -rf "$asset_catalog"
   mkdir -p "$badge"
