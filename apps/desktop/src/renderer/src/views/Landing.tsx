@@ -1,4 +1,4 @@
-import logo from "@/assets/logo@1024.png";
+import LauncherLogo from "@/assets/launcher-logo.svg";
 import { Button, Separator } from "@shift/ui";
 import { RecentFiles } from "./RecentFiles";
 import { Titlebar } from "@/components/chrome/Titlebar";
@@ -28,23 +28,19 @@ export const Landing = () => {
       <Titlebar />
       <section className=" flex h-screen flex-col items-center justify-center gap-4">
         <div className="flex flex-col items-center gap-2">
-          <div className="flex items-center gap-2 flex-col">
-            <img src={logo} alt="Shift" className="h-16 w-16" />
-            <h1 className="font-display text-4xl font-extrabold tracking-tight text-primary">
-              Shift <span className="ml-[-0.4rem]">.</span>
-            </h1>
-          </div>
+          <LauncherLogo aria-hidden="true" className="h-auto w-[240px] text-primary" />
+          <h1 className="sr-only">Shift</h1>
         </div>
-        <div className="flex flex-col items-start w-[250px]">
+        <div className="flex flex-col items-start w-[200px]">
           <Button
-            className="w-full flex justify-between items-center"
+            className="w-full flex justify-between items-center font-medium"
             onClick={handleNewFont}
             variant="ghost"
           >
             New font
           </Button>
           <Button
-            className="w-full flex justify-between items-center"
+            className="w-full flex justify-between items-center font-medium"
             onClick={handleOpenFont}
             variant="ghost"
           >

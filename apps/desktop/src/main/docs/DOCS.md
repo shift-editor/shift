@@ -27,10 +27,12 @@ Electron main process: app startup, windows, menus, document dialogs, and worksp
 src/main/
   main.ts                         -- Electron entry point
   release.ts                      -- compiled distribution identity and product name
+  about/
+    AboutWindow.ts                -- singleton native-framed product information window
   app/
     App.ts                        -- app service graph, IPC handlers, command context
     AppLifecycle.ts               -- close/quit confirmation flow
-    AppIcon.ts                    -- distribution-aware runtime icon (macOS Dock, About panel)
+    AppIcon.ts                    -- distribution-aware development Dock icon
   commands/
     Command.ts                    -- command registry and command context types
     Commands.ts                   -- built-in shell commands
@@ -80,7 +82,7 @@ src/main/
 
 `main.ts` constructs `App` and calls `start()`. `App.start()` applies the compiled `SHIFT_DISTRIBUTION` identity before its first log entry or path-dependent service action, so logging, settings, caches, and recovery all resolve beneath the correct app-data root. The production/E2E build and development-only Forge runner write the `main_window` renderer to `.vite/renderer/main_window`; production resolves that same directory through `MAIN_WINDOW_VITE_NAME`. `App` registers commands and IPC handlers, starts `AppLifecycle`, sets the user-data-backed `working-documents` root, creates the launcher window, and installs the application menu. Development uses `Shift Dev` or `Shift Nightly Dev`; an explicit standard `--user-data-dir` switch takes precedence so E2E runs can own isolated browser and working-document state.
 
-The runtime icon follows the same compiled identity: `AppIcon` selects `nightly.png` when `shiftDistribution` is `"nightly"` and `icon.png` otherwise, so Release and Nightly are visually distinct in the macOS Dock and About panel. Packaged installer icons remain owned by electron-builder configuration. Both distributions use the shared `shift-document` artwork for `.shift` files; association priority, not document appearance, distinguishes their ownership.
+The runtime icon follows the same compiled identity: `AppIcon` selects `nightly-macos.png` when `shiftDistribution` is `"nightly"` and `icon-macos.png` otherwise, so Release and Nightly are visually distinct in the development macOS Dock. Packaged installer icons remain owned by electron-builder configuration. The renderer's shared `app-icon.png` supplies the custom About and Update screens. Both distributions use the shared `shift-document` artwork for `.shift` files; association priority, not document appearance, distinguishes their ownership.
 
 `App.start()` establishes the distribution-specific data root before taking Electron's single-instance lock. macOS `open-file`, first-instance command-line arguments, and subsequent `second-instance` arguments feed one ordered pending-path queue. Startup drains that queue before deciding whether a launcher is needed.
 
@@ -88,7 +90,7 @@ On macOS, closing the last window leaves Shift running. A later Dock activation 
 
 ### Application Commands
 
-Native menu items carry the shared `CommandId`, label, accelerator, and current `CommandRegistry` capability. `ApplicationMenu.updateCommandStates()` refreshes enabled state when window focus or session ownership changes and after a command settles. Save and Save As are enabled for authored documents and convertible previews; Export and Edit commands require an authored document.
+Native menu items carry the shared `CommandId`, label, accelerator, and current `CommandRegistry` capability. `ApplicationMenu.updateCommandStates()` refreshes enabled state when window focus or session ownership changes and after a command settles. `app.showAbout` opens or focuses the singleton fixed-size custom About window; its HTTPS links remain renderer-declared while `AboutWindow` opens them through Electron's shell boundary. Save and Save As are enabled for authored documents and convertible previews; Export and Edit commands require an authored document.
 
 Edit-menu accelerators and clicks send `RendererCommandId` operations to the active authored renderer instead of using Electron's DOM-only roles. The renderer preserves conventional behavior for a focused text input; otherwise Undo, Redo, Cut, Copy, Paste, Delete, and Select All operate on Shift's canvas editor and canonical workspace history. Commands may remain enabled within an authored document when its current selection, clipboard, or history makes a particular invocation a safe no-op.
 
@@ -157,7 +159,7 @@ Renderer IPC in `App` is limited to shell capabilities: command execution, nativ
 - `document.connect` throws for preview sessions because they have no `documentClient`. Renderer code must check `session.mode` before requesting the document lane.
 - When a `MessagePort` transfer fails partway (e.g. `session.connect` when the sync lane cannot attach), both halves of the `MessageChannelMain` must be closed, as the handler does — a leaked half keeps the channel alive with no owner.
 - On macOS the app runs with zero windows after the last one closes. Menu commands can therefore fire with no focused window; the command context resolves the active window at run time and command implementations must tolerate its absence.
-- In development `AppIcon.path()` resolves `../../icons` relative to `process.cwd()`, so the runtime Dock icon only resolves when Electron is launched with `apps/desktop` as the working directory (the `dev` script does this).
+- In development `AppIcon.install()` resolves `../../icons` relative to `process.cwd()`, so the runtime Dock icon only resolves when Electron is launched with `apps/desktop` as the working directory (the `dev` script does this).
 - Linux file associations use `application/x-shift-document`. electron-builder hardcodes generic document artwork for generated MIME definitions, so the DEB/RPM configuration packages explicit MIME XML and hicolor MIME icons instead.
 - Windows keeps its per-user NSIS policy. The custom installer include registers Release as the `.shift` owner and Nightly only under Open With; do not replace it with electron-builder's documented per-machine-only association shortcut.
 

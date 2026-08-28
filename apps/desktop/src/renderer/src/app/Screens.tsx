@@ -11,6 +11,7 @@ import { DebugProvider } from "@/context/DebugProvider";
 import { SettingsNavigationProvider } from "@/context/SettingsNavigationProvider";
 import { GlyphCatalogProvider } from "@/context/GlyphCatalogProvider";
 import { ReadOnlyNoticeDialog } from "@/components/chrome/ReadOnlyNoticeDialog";
+import { AboutScreen } from "@/views/AboutScreen";
 import { UpdateScreen } from "@/views/UpdateScreen";
 
 /**
@@ -24,6 +25,7 @@ import { UpdateScreen } from "@/views/UpdateScreen";
 export const Screens = () => {
   return (
     <Routes>
+      <Route path="/about" element={<AboutScreen />} />
       <Route path="/launcher" element={<Landing />} />
       <Route path="/update" element={<UpdateScreen />} />
       <Route

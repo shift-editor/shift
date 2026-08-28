@@ -1,13 +1,14 @@
 import { shell } from "electron";
 import type { Command } from "./Command";
 import type { CommandRegistry } from "./Command";
-
-const SHIFT_WEBSITE_URL = "https://shift.graphics/";
-const SHIFT_DISCORD_URL = "https://discord.gg/582FxBdNH7";
-const SHIFT_X_URL = "https://x.com/kostyafarber_";
-const SHIFT_NEW_ISSUE_URL = "https://github.com/shift-editor/shift/issues/new";
+import { SHIFT_DISCORD_URL, SHIFT_NEW_ISSUE_URL, SHIFT_X_URL } from "../../shared/links";
 
 const appCommands: Command[] = [
+  {
+    id: "app.showAbout",
+    label: "About Shift",
+    run: (ctx) => ctx.windows.showAbout(),
+  },
   {
     id: "app.checkForUpdates",
     label: "Check for Updates…",
@@ -24,23 +25,18 @@ const appCommands: Command[] = [
 
 const helpCommands: Command[] = [
   {
-    id: "help.openWebsite",
-    label: "Shift Website",
-    run: () => shell.openExternal(SHIFT_WEBSITE_URL),
-  },
-  {
     id: "help.openDiscord",
-    label: "Join the Shift Discord",
+    label: "Discord",
     run: () => shell.openExternal(SHIFT_DISCORD_URL),
   },
   {
     id: "help.openX",
-    label: "Follow Kostya on X",
+    label: "X / Twitter",
     run: () => shell.openExternal(SHIFT_X_URL),
   },
   {
     id: "help.reportIssue",
-    label: "Report an Issue…",
+    label: "Submit feedback",
     run: () => shell.openExternal(SHIFT_NEW_ISSUE_URL),
   },
 ];

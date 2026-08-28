@@ -13,6 +13,7 @@ import { Window } from "../windows/Window";
 import { getRendererSource } from "../utils";
 import * as ipc from "../../shared/ipc/main";
 import { AppIcon } from "./AppIcon";
+import { AboutWindow } from "../about/AboutWindow";
 import { CommandRegistry, type CommandContext } from "../commands/Command";
 import { registerCommands } from "../commands/Commands";
 import { ApplicationMenu } from "../menu/ApplicationMenu";
@@ -43,6 +44,7 @@ export class App {
   readonly #log: ShiftLogger;
   readonly #lifecycle: AppLifecycle;
   readonly #nativeDialogs: NativeDialogs;
+  readonly #aboutWindow: AboutWindow;
   readonly #updater: AppUpdater;
 
   #commands = new CommandRegistry();
@@ -54,7 +56,6 @@ export class App {
 
   #appIcon = new AppIcon();
   #applicationMenu = new ApplicationMenu(
-    this.#appIcon.path(),
     (id, browserWindow) => {
       const window = browserWindow
         ? this.#windows.windowForBrowserWindow(browserWindow)
@@ -94,6 +95,10 @@ export class App {
   ) {
     this.#log = log;
     this.#nativeDialogs = nativeDialogs;
+    this.#aboutWindow = new AboutWindow(
+      path.join(__dirname, "preload.js"),
+      createShiftLogger("app.about"),
+    );
     this.#workspaces = new WorkspaceManager({
       documentsRoot: () => this.#requireDocumentsRoot(),
       applicationName: () => this.applicationName,
@@ -417,6 +422,9 @@ export class App {
       },
       windows: {
         active: () => window ?? null,
+        showAbout: () => {
+          this.#aboutWindow.show();
+        },
         showHome: () => {
           const home = this.#windows
             .allWindows()

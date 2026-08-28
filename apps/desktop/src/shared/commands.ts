@@ -7,6 +7,7 @@
  */
 export type CommandId =
   | "app.checkForUpdates"
+  | "app.showAbout"
   | "app.showSettings"
   | "help.openWebsite"
   | "help.openDiscord"

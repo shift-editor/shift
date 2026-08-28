@@ -2,7 +2,6 @@ import { app, Menu, type BrowserWindow, type MenuItemConstructorOptions } from "
 import type { CommandId } from "../../shared/commands";
 import { commandMenuItem, fileMenuItems } from "./menuItems";
 import { commands } from "../commands/Commands";
-import { shiftProductVersion } from "../release";
 
 const isMac = process.platform === "darwin";
 
@@ -15,24 +14,26 @@ const isMac = process.platform === "darwin";
  * the same command implementation.
  */
 export class ApplicationMenu {
-  readonly #aboutIconPath: string;
   readonly #runCommand: (id: CommandId, window?: BrowserWindow) => void;
   readonly #isCommandEnabled: (id: CommandId, window?: BrowserWindow) => boolean;
   #menu: Menu | null = null;
 
+  /**
+   * Creates the platform menu builder.
+   *
+   * @param runCommand - executes Shift-owned menu actions against the current window.
+   * @param isCommandEnabled - resolves each command's current native enabled state.
+   */
   constructor(
-    aboutIconPath: string,
     runCommand: (id: CommandId, window?: BrowserWindow) => void,
     isCommandEnabled: (id: CommandId, window?: BrowserWindow) => boolean,
   ) {
-    this.#aboutIconPath = aboutIconPath;
     this.#runCommand = runCommand;
     this.#isCommandEnabled = isCommandEnabled;
   }
 
   /** Installs the current menu template as Electron's application menu. */
   install(): void {
-    this.configureAboutPanel();
     this.#menu = this.build();
     Menu.setApplicationMenu(this.#menu);
   }
@@ -45,18 +46,6 @@ export class ApplicationMenu {
       const item = this.#menu.getMenuItemById(command.id);
       if (item) item.enabled = this.#isCommandEnabled(command.id);
     }
-  }
-
-  /** Configures the native About panel opened by Electron's `about` role. */
-  configureAboutPanel(): void {
-    app.setAboutPanelOptions({
-      applicationName: app.name,
-      applicationVersion: shiftProductVersion,
-      version: shiftProductVersion,
-      copyright: "Copyright © 2026 Shift",
-      credits: "A font editor for drawing, spacing, and shaping type.",
-      iconPath: this.#aboutIconPath,
-    });
   }
 
   /**
@@ -98,7 +87,7 @@ export class ApplicationMenu {
       {
         label: app.name,
         submenu: [
-          { role: "about" },
+          this.#commandItem("app.showAbout"),
           this.#commandItem("app.checkForUpdates"),
           { type: "separator" },
           this.#commandItem("app.showSettings"),
@@ -234,7 +223,6 @@ export class ApplicationMenu {
 
   #helpItems(includeApplicationItems: boolean): MenuItemConstructorOptions[] {
     const items: MenuItemConstructorOptions[] = [
-      this.#commandItem("help.openWebsite"),
       this.#commandItem("help.openDiscord"),
       this.#commandItem("help.openX"),
       { type: "separator" },
@@ -247,7 +235,7 @@ export class ApplicationMenu {
       { type: "separator" },
       this.#commandItem("app.checkForUpdates"),
       { type: "separator" },
-      { role: "about" },
+      this.#commandItem("app.showAbout"),
     ];
   }
 
