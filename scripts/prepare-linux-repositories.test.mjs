@@ -94,6 +94,13 @@ test("writes authenticated APT roots and an immutable DNF metalink", async (cont
   const aptSource = await readFile(path.join(repositoryRoot, "config/shift.sources"), "utf8");
   assert.match(aptSource, /Suites: release/);
   assert.match(aptSource, /Signed-By: \/etc\/apt\/keyrings\/shift-repository\.gpg/);
+  assert.equal(
+    aptSource,
+    await readFile(
+      new URL("../apps/desktop/resources/linux/shift.sources", import.meta.url),
+      "utf8",
+    ),
+  );
 
   const dnfRepository = await readFile(path.join(repositoryRoot, "config/shift.repo"), "utf8");
   assert.match(dnfRepository, /^\[shift-release\]$/m);

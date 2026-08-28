@@ -224,7 +224,17 @@ const config: Configuration = {
     artifactName: `${artifactName}-${productVersion}-Linux-${buildArchitecture}.\${ext}`,
   },
   deb: {
-    fpm: linuxPackageFiles,
+    fpm: isNightly
+      ? linuxPackageFiles
+      : [
+          "--config-files",
+          "/etc/apt/keyrings/shift-repository.gpg",
+          "--config-files",
+          "/etc/apt/sources.list.d/shift.sources",
+          ...linuxPackageFiles,
+          `${path.join(__dirname, "resources/linux/shift-repository.gpg")}=/etc/apt/keyrings/shift-repository.gpg`,
+          `${path.join(__dirname, "resources/linux/shift.sources")}=/etc/apt/sources.list.d/shift.sources`,
+        ],
   },
   rpm: {
     fpm: linuxPackageFiles,
