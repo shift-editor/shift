@@ -45,7 +45,7 @@
 }
 
 .about-window-heading a {
-  color: inherit;
+  color: var(--about-link);
   font-family: "SFMono-Regular", Consolas, monospace;
   text-decoration: none;
   -webkit-app-region: no-drag;
