@@ -6,6 +6,7 @@ import "./AboutScreen.css";
 export const AboutScreen = () => {
   const [searchParams] = useSearchParams();
   const productName = searchParams.get("name") ?? "Shift";
+  const shiftBuildCommit = searchParams.get("commit") ?? "unknown";
   const version = searchParams.get("version") ?? "";
 
   return (
@@ -14,6 +15,20 @@ export const AboutScreen = () => {
       <div className="about-window-heading">
         <h1>{productName}</h1>
         {version ? <p>Version {version}</p> : null}
+        <p>
+          Build{" "}
+          {shiftBuildCommit === "unknown" ? (
+            "unknown"
+          ) : (
+            <a
+              href={`https://github.com/shift-editor/shift/commit/${shiftBuildCommit}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {shiftBuildCommit.slice(0, 8)}
+            </a>
+          )}
+        </p>
       </div>
       <p className="about-window-tagline">A font editor for drawing, spacing, and shaping type.</p>
       <nav className="about-window-links" aria-label="Shift links">

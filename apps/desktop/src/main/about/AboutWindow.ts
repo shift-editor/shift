@@ -1,6 +1,6 @@
 import { app, BrowserWindow, shell } from "electron";
 import type { ShiftLogger } from "../logging";
-import { shiftProductVersion } from "../release";
+import { shiftBuildCommit, shiftProductVersion } from "../release";
 import { getRendererSource } from "../utils";
 
 /** Owns the singleton native-framed window that presents Shift product information. */
@@ -76,6 +76,7 @@ export class AboutWindow {
   #load(window: BrowserWindow): void {
     const source = getRendererSource();
     const query = new URLSearchParams({
+      commit: shiftBuildCommit,
       name: app.name,
       version: shiftProductVersion,
     });

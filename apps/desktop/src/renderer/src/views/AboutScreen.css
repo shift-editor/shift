@@ -44,6 +44,18 @@
   line-height: 1.35;
 }
 
+.about-window-heading a {
+  color: inherit;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  text-decoration: none;
+  -webkit-app-region: no-drag;
+}
+
+.about-window-heading a:hover {
+  color: var(--about-link);
+  text-decoration: underline;
+}
+
 .about-window-tagline {
   margin-top: 14px;
   font-size: 13px;
