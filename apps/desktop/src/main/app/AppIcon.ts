@@ -3,16 +3,8 @@ import path from "node:path";
 import { shiftDistribution } from "../release";
 
 const iconName = shiftDistribution === "nightly" ? "nightly" : "icon";
-const iconFileName = `${iconName}.png`;
 
-/**
- * Resolves and applies the app icon used by runtime shell features.
- *
- * @remarks
- * Packaged app icons are owned by electron-builder configuration. This class covers
- * runtime APIs such as the macOS Dock icon during development and About panel
- * fallback icons on platforms that support `iconPath`.
- */
+/** Applies the distribution-aware development icon to runtime shell features. */
 export class AppIcon {
   /**
    * Applies the development icon to macOS Dock when available.
@@ -24,18 +16,5 @@ export class AppIcon {
     if (process.platform !== "darwin" || app.isPackaged) return;
 
     app.dock?.setIcon(path.resolve(process.cwd(), "../../icons", `${iconName}-macos.png`));
-  }
-
-  /**
-   * Returns the PNG icon path available to runtime Electron APIs.
-   *
-   * @returns the packaged resource path in production, or the repo icon during development.
-   */
-  path(): string {
-    if (app.isPackaged) {
-      return path.join(process.resourcesPath, iconFileName);
-    }
-
-    return path.resolve(process.cwd(), "../../icons", iconFileName);
   }
 }

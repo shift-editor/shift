@@ -1,6 +1,6 @@
 # Main
 
-<!-- reviewed: 2026-08-24 -->
+<!-- reviewed: 2026-08-27 -->
 
 Electron main process: app startup, windows, menus, document dialogs, and workspace session ownership.
 
@@ -27,10 +27,12 @@ Electron main process: app startup, windows, menus, document dialogs, and worksp
 src/main/
   main.ts                         -- Electron entry point
   release.ts                      -- compiled distribution identity and product name
+  about/
+    AboutWindow.ts                -- singleton native-framed product information window
   app/
     App.ts                        -- app service graph, IPC handlers, command context
     AppLifecycle.ts               -- close/quit confirmation flow
-    AppIcon.ts                    -- distribution-aware runtime icon (macOS Dock, About panel)
+    AppIcon.ts                    -- distribution-aware development Dock icon
   commands/
     Command.ts                    -- command registry and command context types
     Commands.ts                   -- built-in shell commands
@@ -80,7 +82,7 @@ src/main/
 
 `main.ts` constructs `App` and calls `start()`. `App.start()` applies the compiled `SHIFT_DISTRIBUTION` identity before its first log entry or path-dependent service action, so logging, settings, caches, and recovery all resolve beneath the correct app-data root. The production/E2E build and development-only Forge runner write the `main_window` renderer to `.vite/renderer/main_window`; production resolves that same directory through `MAIN_WINDOW_VITE_NAME`. `App` registers commands and IPC handlers, starts `AppLifecycle`, sets the user-data-backed `working-documents` root, creates the launcher window, and installs the application menu. Development uses `Shift Dev` or `Shift Nightly Dev`; an explicit standard `--user-data-dir` switch takes precedence so E2E runs can own isolated browser and working-document state.
 
-The runtime icon follows the same compiled identity: `AppIcon` selects `nightly.png` when `shiftDistribution` is `"nightly"` and `icon.png` otherwise, so Release and Nightly are visually distinct in the macOS Dock and About panel. Packaged installer icons remain owned by electron-builder configuration. Both distributions use the shared `shift-document` artwork for `.shift` files; association priority, not document appearance, distinguishes their ownership.
+The runtime icon follows the same compiled identity: `AppIcon` selects `nightly-macos.png` when `shiftDistribution` is `"nightly"` and `icon-macos.png` otherwise, so Release and Nightly are visually distinct in the development macOS Dock. Packaged installer icons remain owned by electron-builder configuration. The renderer's shared `app-icon.png` supplies the custom About and Update screens. Both distributions use the shared `shift-document` artwork for `.shift` files; association priority, not document appearance, distinguishes their ownership.
 
 `App.start()` establishes the distribution-specific data root before taking Electron's single-instance lock. macOS `open-file`, first-instance command-line arguments, and subsequent `second-instance` arguments feed one ordered pending-path queue. Startup drains that queue before deciding whether a launcher is needed.
 
@@ -88,9 +90,11 @@ On macOS, closing the last window leaves Shift running. A later Dock activation 
 
 ### Application Commands
 
-Native menu items carry the shared `CommandId`, label, accelerator, and current `CommandRegistry` capability. `ApplicationMenu.updateCommandStates()` refreshes enabled state when window focus or session ownership changes and after a command settles. Save and Save As are enabled for authored documents and convertible previews; Export and Edit commands require an authored document.
+Native menu items carry the shared `CommandId`, label, accelerator, and current `CommandRegistry` capability. `ApplicationMenu.updateCommandStates()` refreshes enabled state when window focus or session ownership changes and after a command settles. `app.showAbout` opens or focuses the singleton fixed-size custom About window; it displays the embedded `SHIFT_BUILD_COMMIT`, links that identifier to GitHub, and opens renderer-declared HTTPS destinations through Electron's shell boundary. Save and Save As are enabled for authored documents and convertible previews; Export and Edit commands require an authored document.
 
 Edit-menu accelerators and clicks send `RendererCommandId` operations to the active authored renderer instead of using Electron's DOM-only roles. The renderer preserves conventional behavior for a focused text input; otherwise Undo, Redo, Cut, Copy, Paste, Delete, and Select All operate on Shift's canvas editor and canonical workspace history. Commands may remain enabled within an authored document when its current selection, clipboard, or history makes a particular invocation a safe no-op.
+
+The View menu reserves conventional Zoom In and Zoom Out labels and shortcuts for the glyph canvas. Browser-window scaling is exposed separately as Interface Size with Alt-modified shortcuts, preventing native accelerators from intercepting canvas zoom. The renderer requests the native canvas context menu through `menu.showCanvasContextMenu`; main resolves the sender's authored workspace and binds Cut, Copy, Paste, Duplicate, Delete, Select All, Deselect, and Reverse Selected Contour to that same sender window.
 
 The macOS Window menu is registered through Electron's native `windowMenu` role so AppKit owns system placement, tiling, and open-window affordances. **Home** focuses an existing launcher or creates one without replacing the current document window. **Settings…** sends `app.showSettings` to the active font renderer and opens the existing document-scoped settings surface at Font; it remains unavailable on the launcher until Shift has app-wide settings.
 
@@ -102,7 +106,7 @@ Eligible packaged macOS builds and Windows Nightly x64 builds start `AppUpdater`
 
 Automatic current/error results stay quiet. When a check finds an update, the native-framed update window offers **Download Update** / Later; declining leaves the version available without prompting again during periodic checks. An accepted download replaces those choices with cumulative progress. Closing the window or choosing Cancel cancels the transfer and returns to available. Download completion replaces progress with **Restart and Install** / Later, and a manual check while available or ready reopens the relevant choice. Later retains a verified download without silently installing it on ordinary quit. Restart prepares every document, cancels all prepared closes if one vetoes, commits every agreed close, and only then calls `quitAndInstall()`. Electron closes windows before normal `before-quit`, so `AppLifecycle`'s `confirmed` state allows those closes. An install failure after commit relaunches the currently installed application; closed in-memory sessions are never reconstructed.
 
-The application menu exposes `app.checkForUpdates` under the macOS app menu and the Windows/Linux Help menu. Update behavior remains main-owned and does not add renderer IPC.
+The application menu exposes `app.checkForUpdates` under the macOS app menu and the Windows/Linux Help menu. Every platform's Help menu also opens the Shift website, Discord, X account, and GitHub issue form through fixed main-owned URLs. Update behavior remains main-owned and does not add renderer IPC.
 
 ### Workspace Creation And Open
 
@@ -130,7 +134,7 @@ Message lanes reject in-flight calls when their remote port closes. An unexpecte
 
 ### IPC
 
-Renderer IPC in `App` is limited to shell capabilities: command execution, clipboard, update-window progress/actions, optional document-lane port transfer, immutable session mode, readiness, and shared session sync-lane port transfer. Font data stays on that sync lane between renderer and utility.
+Renderer IPC in `App` is limited to shell capabilities: command execution, native context-menu presentation, clipboard, update-window progress/actions, optional document-lane port transfer, immutable session mode, readiness, and shared session sync-lane port transfer. Font data stays on that sync lane between renderer and utility.
 
 ## Workflow recipes
 
@@ -155,7 +159,7 @@ Renderer IPC in `App` is limited to shell capabilities: command execution, clipb
 - `document.connect` throws for preview sessions because they have no `documentClient`. Renderer code must check `session.mode` before requesting the document lane.
 - When a `MessagePort` transfer fails partway (e.g. `session.connect` when the sync lane cannot attach), both halves of the `MessageChannelMain` must be closed, as the handler does — a leaked half keeps the channel alive with no owner.
 - On macOS the app runs with zero windows after the last one closes. Menu commands can therefore fire with no focused window; the command context resolves the active window at run time and command implementations must tolerate its absence.
-- In development `AppIcon.path()` resolves `../../icons` relative to `process.cwd()`, so the runtime Dock icon only resolves when Electron is launched with `apps/desktop` as the working directory (the `dev` script does this).
+- In development `AppIcon.install()` resolves `../../icons` relative to `process.cwd()`, so the runtime Dock icon only resolves when Electron is launched with `apps/desktop` as the working directory (the `dev` script does this).
 - Linux file associations use `application/x-shift-document`. electron-builder hardcodes generic document artwork for generated MIME definitions, so the DEB/RPM configuration packages explicit MIME XML and hicolor MIME icons instead.
 - Windows keeps its per-user NSIS policy. The custom installer include registers Release as the `.shift` owner and Nightly only under Open With; do not replace it with electron-builder's documented per-machine-only association shortcut.
 
@@ -168,7 +172,8 @@ Renderer IPC in `App` is limited to shell capabilities: command execution, clipb
 - `pnpm test:release`
 - Electron E2E fixtures materialize a native startup document under a fresh `testRoot`, launch with a fresh `userDataDir`, assert Electron honored that path, and remove the root after force-closing the disposable process.
 - `document-lifecycle.spec.ts` injects ordered scripted paths/choices and verifies New/Open, convertible-preview Save and authored handoff, TTF/OTF exclusion, first and ordinary Save, independent Save As, saved-document discard/reopen, raw-copy identity reuse, Save cancellation/failure safety, dirty-close choices, clean quit/relaunch/reopen, and Export safety through application commands.
-- `application-menu.spec.ts` invokes actual native menu items and verifies launcher/binary/convertible/authored capability states, focused-text Copy/Paste, and canvas Select All, Copy, Paste, Undo, Redo, Delete, and Cut behavior.
+- `application-menu.spec.ts` invokes actual native menu items and verifies Help, Settings, canvas/interface zoom, launcher/binary/convertible/authored capability states, focused-text Copy/Paste, and canvas Select All, Copy, Paste, Undo, Redo, Delete, and Cut behavior.
+- Manual: right-click an authored glyph canvas and verify the native menu opens at the pointer, each action targets that window, and no canvas menu appears on launcher or preview surfaces.
 - `application-quit.spec.ts` verifies dirty Save/Discard/Cancel, every dirty document in a multi-document quit, re-entrant quit suppression, and document isolation across windows. Ordered scripted choices are consumed once per actual confirmation.
 - `document-recovery.spec.ts` force-terminates Electron, reopens the same document and user-data directory, verifies recovery, then verifies explicit Save changes the canonical document.
 - Standard workspace E2E fixtures launch Electron with a `.shift` command-line argument, so document activation owns the same document lifecycle coverage as File -> Open.

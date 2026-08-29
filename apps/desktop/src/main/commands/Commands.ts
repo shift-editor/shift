@@ -1,7 +1,19 @@
+import { shell } from "electron";
 import type { Command } from "./Command";
 import type { CommandRegistry } from "./Command";
+import {
+  SHIFT_DISCORD_URL,
+  SHIFT_NEW_ISSUE_URL,
+  SHIFT_WEBSITE_URL,
+  SHIFT_X_URL,
+} from "../../shared/links";
 
 const appCommands: Command[] = [
+  {
+    id: "app.showAbout",
+    label: "About Shift",
+    run: (ctx) => ctx.windows.showAbout(),
+  },
   {
     id: "app.checkForUpdates",
     label: "Check for Updates…",
@@ -13,6 +25,29 @@ const appCommands: Command[] = [
     accelerator: "CmdOrCtrl+,",
     enabled: (ctx) => ctx.renderer.available(),
     run: (ctx) => ctx.renderer.run("app.showSettings"),
+  },
+];
+
+const helpCommands: Command[] = [
+  {
+    id: "help.openWebsite",
+    label: "Website",
+    run: () => shell.openExternal(SHIFT_WEBSITE_URL),
+  },
+  {
+    id: "help.openDiscord",
+    label: "Discord",
+    run: () => shell.openExternal(SHIFT_DISCORD_URL),
+  },
+  {
+    id: "help.openX",
+    label: "X / Twitter",
+    run: () => shell.openExternal(SHIFT_X_URL),
+  },
+  {
+    id: "help.reportIssue",
+    label: "Submit feedback",
+    run: () => shell.openExternal(SHIFT_NEW_ISSUE_URL),
   },
 ];
 
@@ -52,30 +87,44 @@ const windowCommands: Command[] = [
 
 const viewCommands: Command[] = [
   {
-    id: "ui.zoomIn",
+    id: "view.zoomIn",
     label: "Zoom In",
     accelerator: "CmdOrCtrl+Plus",
-    enabled: (ctx) => ctx.windows.active() !== null,
-    run: (ctx) => {
-      ctx.windows.active()?.zoomIn();
-    },
+    enabled: (ctx) => ctx.document.hasWorkspace(),
+    run: (ctx) => ctx.renderer.run("view.zoomIn"),
   },
   {
-    id: "ui.zoomOut",
+    id: "view.zoomOut",
     label: "Zoom Out",
-    accelerator: "CmdOrCtrl+Shift+-",
+    accelerator: "CmdOrCtrl+-",
+    enabled: (ctx) => ctx.document.hasWorkspace(),
+    run: (ctx) => ctx.renderer.run("view.zoomOut"),
+  },
+  {
+    id: "ui.increaseSize",
+    label: "Increase Interface Size",
+    accelerator: "CmdOrCtrl+Alt+Plus",
     enabled: (ctx) => ctx.windows.active() !== null,
     run: (ctx) => {
-      ctx.windows.active()?.zoomOut();
+      ctx.windows.active()?.increaseInterfaceSize();
     },
   },
   {
-    id: "ui.zoomReset",
-    label: "Reset Zoom",
-    accelerator: "CmdOrCtrl+0",
+    id: "ui.decreaseSize",
+    label: "Decrease Interface Size",
+    accelerator: "CmdOrCtrl+Alt+-",
     enabled: (ctx) => ctx.windows.active() !== null,
     run: (ctx) => {
-      ctx.windows.active()?.resetZoom();
+      ctx.windows.active()?.decreaseInterfaceSize();
+    },
+  },
+  {
+    id: "ui.resetSize",
+    label: "Reset Interface Size",
+    accelerator: "CmdOrCtrl+Alt+0",
+    enabled: (ctx) => ctx.windows.active() !== null,
+    run: (ctx) => {
+      ctx.windows.active()?.resetInterfaceSize();
     },
   },
 ];
@@ -159,11 +208,23 @@ const editCommands: Command[] = [
     run: (ctx) => ctx.renderer.run("edit.deleteSelection"),
   },
   {
+    id: "edit.duplicate",
+    label: "Duplicate",
+    enabled: (ctx) => ctx.document.hasWorkspace(),
+    run: (ctx) => ctx.renderer.run("edit.duplicate"),
+  },
+  {
     id: "edit.selectAll",
     label: "Select All",
     accelerator: "CmdOrCtrl+A",
     enabled: (ctx) => ctx.document.hasWorkspace(),
     run: (ctx) => ctx.renderer.run("edit.selectAll"),
+  },
+  {
+    id: "edit.deselect",
+    label: "Deselect",
+    enabled: (ctx) => ctx.document.hasWorkspace(),
+    run: (ctx) => ctx.renderer.run("edit.deselect"),
   },
 ];
 
@@ -186,6 +247,7 @@ const glyphCommands: Command[] = [
  */
 export const commands: Command[] = [
   ...appCommands,
+  ...helpCommands,
   ...windowCommands,
   ...viewCommands,
   ...fileCommands,

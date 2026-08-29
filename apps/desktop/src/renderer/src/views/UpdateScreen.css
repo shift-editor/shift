@@ -26,9 +26,8 @@
 }
 
 .update-window-icon {
-  width: 72px;
-  height: 72px;
-  border-radius: 16px;
+  width: 88px;
+  height: 88px;
   filter: drop-shadow(0 5px 7px rgb(0 0 0 / 18%));
 }
 
@@ -71,16 +70,21 @@
 
 .update-window-button,
 .update-window-primary-button {
-  min-width: 150px;
-  height: 42px;
+  height: 34px;
+  padding: 0 16px;
   border: 0;
-  border-radius: 999px;
-  font-size: 15px;
+  border-radius: 8px;
+  font-size: 13px;
   font-weight: 500;
   -webkit-app-region: no-drag;
 }
 
+.update-window-primary-button {
+  min-width: 144px;
+}
+
 .update-window-button {
+  min-width: 96px;
   color: var(--update-text);
   background: var(--update-button);
 }

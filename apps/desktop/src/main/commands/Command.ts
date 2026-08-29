@@ -113,6 +113,8 @@ export type CommandContext = {
      * @returns `null` when the app has not created a window or the window is gone.
      */
     active: () => Window | null;
+    /** Opens the singleton About window, or focuses it when already open. */
+    showAbout: () => void;
     /** Focuses an existing launcher window or creates one when none exists. */
     showHome: () => void;
   };

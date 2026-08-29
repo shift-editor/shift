@@ -13,6 +13,7 @@ import { Window } from "../windows/Window";
 import { getRendererSource } from "../utils";
 import * as ipc from "../../shared/ipc/main";
 import { AppIcon } from "./AppIcon";
+import { AboutWindow } from "../about/AboutWindow";
 import { CommandRegistry, type CommandContext } from "../commands/Command";
 import { registerCommands } from "../commands/Commands";
 import { ApplicationMenu } from "../menu/ApplicationMenu";
@@ -43,6 +44,7 @@ export class App {
   readonly #log: ShiftLogger;
   readonly #lifecycle: AppLifecycle;
   readonly #nativeDialogs: NativeDialogs;
+  readonly #aboutWindow: AboutWindow;
   readonly #updater: AppUpdater;
 
   #commands = new CommandRegistry();
@@ -54,12 +56,16 @@ export class App {
 
   #appIcon = new AppIcon();
   #applicationMenu = new ApplicationMenu(
-    this.#appIcon.path(),
-    (id) => {
+    (id, browserWindow) => {
+      const window = browserWindow
+        ? this.#windows.windowForBrowserWindow(browserWindow)
+        : undefined;
+      if (browserWindow && !window) return;
+
       // Menu/accelerator commands run detached, so a failure (e.g. a save that
       // throws) has nowhere to propagate — catch and surface it here.
       void this.#commands
-        .run(id, this.#commandContext())
+        .run(id, this.#commandContext(window))
         .catch((error) => {
           this.#log.error("menu command failed", id, error);
         })
@@ -67,7 +73,14 @@ export class App {
           this.#applicationMenu.updateCommandStates();
         });
     },
-    (id) => this.#commands.isEnabled(id, this.#commandContext()),
+    (id, browserWindow) => {
+      const window = browserWindow
+        ? this.#windows.windowForBrowserWindow(browserWindow)
+        : undefined;
+      if (browserWindow && !window) return false;
+
+      return this.#commands.isEnabled(id, this.#commandContext(window));
+    },
   );
 
   /**
@@ -82,6 +95,10 @@ export class App {
   ) {
     this.#log = log;
     this.#nativeDialogs = nativeDialogs;
+    this.#aboutWindow = new AboutWindow(
+      path.join(__dirname, "preload.js"),
+      createShiftLogger("app.about"),
+    );
     this.#workspaces = new WorkspaceManager({
       documentsRoot: () => this.#requireDocumentsRoot(),
       applicationName: () => this.applicationName,
@@ -280,6 +297,12 @@ export class App {
         this.#applicationMenu.updateCommandStates();
       }
     });
+    ipc.handle(ipcMain, "menu.showCanvasContextMenu", (event) => {
+      const window = this.#requireWindowForWebContents(event.sender);
+      if (!this.#commandContext(window).document.hasWorkspace()) return;
+
+      this.#applicationMenu.showCanvasContextMenu(window.window);
+    });
     ipc.handle(ipcMain, "clipboard.readText", () => {
       return clipboard.readText();
     });
@@ -399,6 +422,9 @@ export class App {
       },
       windows: {
         active: () => window ?? null,
+        showAbout: () => {
+          this.#aboutWindow.show();
+        },
         showHome: () => {
           const home = this.#windows
             .allWindows()

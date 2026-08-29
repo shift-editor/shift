@@ -1,8 +1,7 @@
-import { app, Menu, type MenuItemConstructorOptions } from "electron";
+import { app, Menu, type BrowserWindow, type MenuItemConstructorOptions } from "electron";
 import type { CommandId } from "../../shared/commands";
 import { commandMenuItem, fileMenuItems } from "./menuItems";
 import { commands } from "../commands/Commands";
-import { shiftProductVersion } from "../release";
 
 const isMac = process.platform === "darwin";
 
@@ -15,24 +14,26 @@ const isMac = process.platform === "darwin";
  * the same command implementation.
  */
 export class ApplicationMenu {
-  readonly #aboutIconPath: string;
-  readonly #runCommand: (id: CommandId) => void;
-  readonly #isCommandEnabled: (id: CommandId) => boolean;
+  readonly #runCommand: (id: CommandId, window?: BrowserWindow) => void;
+  readonly #isCommandEnabled: (id: CommandId, window?: BrowserWindow) => boolean;
   #menu: Menu | null = null;
 
+  /**
+   * Creates the platform menu builder.
+   *
+   * @param runCommand - executes Shift-owned menu actions against the current window.
+   * @param isCommandEnabled - resolves each command's current native enabled state.
+   */
   constructor(
-    aboutIconPath: string,
-    runCommand: (id: CommandId) => void,
-    isCommandEnabled: (id: CommandId) => boolean,
+    runCommand: (id: CommandId, window?: BrowserWindow) => void,
+    isCommandEnabled: (id: CommandId, window?: BrowserWindow) => boolean,
   ) {
-    this.#aboutIconPath = aboutIconPath;
     this.#runCommand = runCommand;
     this.#isCommandEnabled = isCommandEnabled;
   }
 
   /** Installs the current menu template as Electron's application menu. */
   install(): void {
-    this.configureAboutPanel();
     this.#menu = this.build();
     Menu.setApplicationMenu(this.#menu);
   }
@@ -47,18 +48,6 @@ export class ApplicationMenu {
     }
   }
 
-  /** Configures the native About panel opened by Electron's `about` role. */
-  configureAboutPanel(): void {
-    app.setAboutPanelOptions({
-      applicationName: app.name,
-      applicationVersion: shiftProductVersion,
-      version: shiftProductVersion,
-      copyright: "Copyright © 2026 Shift",
-      credits: "A font editor for drawing, spacing, and shaping type.",
-      iconPath: this.#aboutIconPath,
-    });
-  }
-
   /**
    * Builds a fresh Electron menu from the current app state.
    *
@@ -66,6 +55,25 @@ export class ApplicationMenu {
    */
   build(): Menu {
     return Menu.buildFromTemplate(this.template());
+  }
+
+  /** Opens the native editing menu for the glyph canvas under the current pointer. */
+  showCanvasContextMenu(window: BrowserWindow): void {
+    const menu = Menu.buildFromTemplate([
+      this.#commandItem("edit.cut", window),
+      this.#commandItem("edit.copy", window),
+      this.#commandItem("edit.paste", window),
+      { type: "separator" },
+      this.#commandItem("edit.duplicate", window),
+      this.#commandItem("edit.deleteSelection", window),
+      { type: "separator" },
+      this.#commandItem("edit.selectAll", window),
+      this.#commandItem("edit.deselect", window),
+      { type: "separator" },
+      this.#commandItem("glyph.reverseSelectedContour", window),
+    ]);
+
+    menu.popup({ window });
   }
 
   /** Builds the platform-appropriate top-level menu template. */
@@ -79,7 +87,7 @@ export class ApplicationMenu {
       {
         label: app.name,
         submenu: [
-          { role: "about" },
+          this.#commandItem("app.showAbout"),
           this.#commandItem("app.checkForUpdates"),
           { type: "separator" },
           this.#commandItem("app.showSettings"),
@@ -99,11 +107,11 @@ export class ApplicationMenu {
       },
       {
         label: "Edit",
-        submenu: this.#editItems(),
+        submenu: this.#editItems(false),
       },
       {
         label: "View",
-        submenu: this.#viewItems(),
+        submenu: this.#viewItems(true),
       },
       {
         label: "Glyph",
@@ -120,6 +128,10 @@ export class ApplicationMenu {
           this.#commandItem("window.showHome"),
         ],
       },
+      {
+        role: "help",
+        submenu: this.#helpItems(false),
+      },
     ];
   }
 
@@ -132,38 +144,38 @@ export class ApplicationMenu {
       },
       {
         label: "Edit",
-        submenu: this.#editItems(),
+        submenu: this.#editItems(true),
       },
       {
         label: "View",
-        submenu: this.#viewZoomItems(),
+        submenu: this.#viewItems(false),
       },
       {
         label: "Glyph",
         submenu: this.#glyphItems(),
       },
       {
-        label: "Help",
-        submenu: [
-          this.#commandItem("app.checkForUpdates"),
-          { type: "separator" },
-          { role: "about" },
-        ],
+        role: "help",
+        submenu: this.#helpItems(true),
       },
     ];
   }
 
-  #viewZoomItems(): MenuItemConstructorOptions[] {
-    return [
-      this.#commandItem("ui.zoomIn"),
-      this.#commandItem("ui.zoomOut"),
-      this.#commandItem("ui.zoomReset"),
+  #viewItems(includeDeveloper: boolean): MenuItemConstructorOptions[] {
+    const items: MenuItemConstructorOptions[] = [
+      this.#commandItem("view.zoomIn"),
+      this.#commandItem("view.zoomOut"),
+      { type: "separator" },
+      {
+        label: "Interface Size",
+        submenu: [
+          this.#commandItem("ui.increaseSize", undefined, "Increase"),
+          this.#commandItem("ui.decreaseSize", undefined, "Decrease"),
+          this.#commandItem("ui.resetSize", undefined, "Reset"),
+        ],
+      },
     ];
-  }
-
-  #viewItems(): MenuItemConstructorOptions[] {
-    const items = this.#viewZoomItems();
-    if (app.isPackaged) return items;
+    if (app.isPackaged || !includeDeveloper) return items;
 
     return [
       ...items,
@@ -184,19 +196,16 @@ export class ApplicationMenu {
   #fileItems(includeQuit: boolean): MenuItemConstructorOptions[] {
     const items: MenuItemConstructorOptions[] = [
       ...fileMenuItems(this.#runCommand, this.#isCommandEnabled),
+      { type: "separator" },
+      this.#commandItem("window.close"),
     ];
-    if (includeQuit) {
-      items.push({ type: "separator" }, this.#commandItem("app.showSettings"));
-    }
-
-    items.push({ type: "separator" }, this.#commandItem("window.close"));
     if (!includeQuit) return items;
 
     return [...items, { type: "separator" }, { role: "quit" }];
   }
 
-  #editItems(): MenuItemConstructorOptions[] {
-    return [
+  #editItems(includeSettings: boolean): MenuItemConstructorOptions[] {
+    const items: MenuItemConstructorOptions[] = [
       this.#commandItem("edit.undo"),
       this.#commandItem("edit.redo"),
       { type: "separator" },
@@ -207,6 +216,28 @@ export class ApplicationMenu {
       { type: "separator" },
       this.#commandItem("edit.selectAll"),
     ];
+    if (!includeSettings) return items;
+
+    return [...items, { type: "separator" }, this.#commandItem("app.showSettings")];
+  }
+
+  #helpItems(includeApplicationItems: boolean): MenuItemConstructorOptions[] {
+    const items: MenuItemConstructorOptions[] = [
+      this.#commandItem("help.openWebsite"),
+      this.#commandItem("help.openDiscord"),
+      this.#commandItem("help.openX"),
+      { type: "separator" },
+      this.#commandItem("help.reportIssue"),
+    ];
+    if (!includeApplicationItems) return items;
+
+    return [
+      ...items,
+      { type: "separator" },
+      this.#commandItem("app.checkForUpdates"),
+      { type: "separator" },
+      this.#commandItem("app.showAbout"),
+    ];
   }
 
   #glyphItems(): MenuItemConstructorOptions[] {
@@ -214,7 +245,13 @@ export class ApplicationMenu {
   }
 
   /** Builds a menu item from the command registry's metadata. */
-  #commandItem(id: CommandId): MenuItemConstructorOptions {
-    return commandMenuItem(id, this.#runCommand, this.#isCommandEnabled);
+  #commandItem(id: CommandId, window?: BrowserWindow, label?: string): MenuItemConstructorOptions {
+    const item = commandMenuItem(
+      id,
+      (commandId) => this.#runCommand(commandId, window),
+      (commandId) => this.#isCommandEnabled(commandId, window),
+    );
+
+    return label ? { ...item, label } : item;
   }
 }

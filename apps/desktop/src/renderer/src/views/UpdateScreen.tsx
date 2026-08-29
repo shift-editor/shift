@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "react-router";
 import { Button, Progress } from "@shift/ui";
-import logo from "@/assets/logo@1024.png";
+import appIcon from "@/assets/app-icon.png";
 import { getShiftHost } from "@/host/shiftHost";
 import type { UpdateProgress } from "@shared/update/types";
 import "./UpdateScreen.css";
@@ -154,7 +154,7 @@ export const UpdateScreen = () => {
   return (
     <main className="update-window">
       <section className="update-window-content" aria-live="polite">
-        <img src={logo} alt="" className="update-window-icon" />
+        <img src={appIcon} alt="" className="update-window-icon" />
         {content}
       </section>
     </main>

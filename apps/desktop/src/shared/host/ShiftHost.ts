@@ -28,6 +28,11 @@ export interface ShiftHost {
      */
     onRunRendererCommand: (callback: (id: RendererCommandId) => void) => () => void;
   };
+  /** Opens native menus owned by the app shell. */
+  menu: {
+    /** Opens the glyph canvas context menu under the current pointer. */
+    showCanvasContextMenu: () => Promise<void>;
+  };
   /** Connects the renderer to main-owned document requests. */
   document: {
     /**
@@ -87,7 +92,7 @@ export interface ShiftHost {
   /** App-shell UI events owned by the main process. */
   ui: {
     /**
-     * Subscribes to UI (chrome) zoom changes driven by the View menu.
+     * Subscribes to interface-size changes driven by the View menu.
      *
      * @returns an unsubscribe function.
      */

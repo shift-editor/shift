@@ -51,9 +51,32 @@ export async function runRendererCommand(editor: Editor, id: EditorCommandId): P
     case "edit.deleteSelection":
       return editor.deleteSelection();
 
+    case "edit.duplicate": {
+      const inserted = editor.duplicateSelection();
+      if (inserted.length === 0) return false;
+
+      editor.selection.select(inserted);
+      await editor.font.editCoordinator.settled();
+      return true;
+    }
+
     case "edit.selectAll":
       editor.selectAll();
       return editor.selection.ids.length > 0;
+
+    case "edit.deselect": {
+      const hadSelection = editor.selection.hasSelection();
+      editor.selection.clear();
+      return hadSelection;
+    }
+
+    case "view.zoomIn":
+      editor.zoomIn();
+      return true;
+
+    case "view.zoomOut":
+      editor.zoomOut();
+      return true;
 
     case "glyph.reverseSelectedContour": {
       const contourIds = new Set<ContourId>();
@@ -121,6 +144,10 @@ async function runFocusedTextEditCommand(id: EditorCommandId): Promise<boolean |
       return replaceSelectedText(target, "", "deleteContentForward", true);
     case "edit.selectAll":
       return selectAllText(target);
+    case "edit.duplicate":
+    case "edit.deselect":
+    case "view.zoomIn":
+    case "view.zoomOut":
     case "glyph.reverseSelectedContour":
       return null;
   }

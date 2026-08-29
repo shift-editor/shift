@@ -103,8 +103,8 @@ export class UpdateWindow {
     }
 
     const window = new BrowserWindow({
-      width: 480,
-      height: 360,
+      width: 420,
+      height: 320,
       title: `Updating ${app.name}`,
       show: false,
       resizable: false,

@@ -7,7 +7,12 @@
  */
 export type CommandId =
   | "app.checkForUpdates"
+  | "app.showAbout"
   | "app.showSettings"
+  | "help.openWebsite"
+  | "help.openDiscord"
+  | "help.openX"
+  | "help.reportIssue"
   | "file.new"
   | "file.open"
   | "file.save"
@@ -19,15 +24,19 @@ export type CommandId =
   | "edit.copy"
   | "edit.paste"
   | "edit.deleteSelection"
+  | "edit.duplicate"
   | "edit.selectAll"
+  | "edit.deselect"
   | "glyph.reverseSelectedContour"
   | "window.showHome"
   | "window.close"
   | "window.minimise"
   | "window.maximise"
-  | "ui.zoomIn"
-  | "ui.zoomOut"
-  | "ui.zoomReset";
+  | "view.zoomIn"
+  | "view.zoomOut"
+  | "ui.increaseSize"
+  | "ui.decreaseSize"
+  | "ui.resetSize";
 
 /**
  * Identifies a command implemented by the active font renderer.
@@ -45,5 +54,9 @@ export type EditorCommandId =
   | "edit.copy"
   | "edit.paste"
   | "edit.deleteSelection"
+  | "edit.duplicate"
   | "edit.selectAll"
+  | "edit.deselect"
+  | "view.zoomIn"
+  | "view.zoomOut"
   | "glyph.reverseSelectedContour";
