@@ -223,6 +223,7 @@ export class ApplicationMenu {
 
   #helpItems(includeApplicationItems: boolean): MenuItemConstructorOptions[] {
     const items: MenuItemConstructorOptions[] = [
+      this.#commandItem("help.openWebsite"),
       this.#commandItem("help.openDiscord"),
       this.#commandItem("help.openX"),
       { type: "separator" },
