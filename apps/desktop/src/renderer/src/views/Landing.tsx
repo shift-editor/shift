@@ -1,5 +1,6 @@
-import LauncherLogo from "@/assets/launcher-logo.svg";
 import { Button, Separator } from "@shift/ui";
+import { LauncherLogo } from "@/app/branding";
+import { shiftProductName } from "@/app/release";
 import { RecentFiles } from "./RecentFiles";
 import { Titlebar } from "@/components/chrome/Titlebar";
 import { getShiftHost } from "@/host/shiftHost";
@@ -29,7 +30,7 @@ export const Landing = () => {
       <section className=" flex h-screen flex-col items-center justify-center gap-4">
         <div className="flex flex-col items-center gap-2">
           <LauncherLogo aria-hidden="true" className="h-auto w-[240px] text-primary" />
-          <h1 className="sr-only">Shift</h1>
+          <h1 className="sr-only">{shiftProductName}</h1>
         </div>
         <div className="flex flex-col items-start w-[200px]">
           <Button

@@ -84,13 +84,13 @@ function verifyMacosDocumentIcon() {
   if (documentType?.CFBundleTypeIconSystemGenerated !== true) {
     throw new Error("Packaged Shift document type does not use the macOS system icon compositor");
   }
-  if (exportedType?.UTTypeIcons?.UTTypeIconBadgeName !== "shift-document-badge") {
+  if (exportedType?.UTTypeIcons?.UTTypeIconBadgeName !== "shift-document-badge-v2") {
     throw new Error("Packaged Shift document type does not reference its document badge");
   }
   if (exportedType?.UTTypeIcons?.UTTypeIconText !== "SHIFT") {
     throw new Error("Packaged Shift document type does not include its icon label");
   }
-  if (!assets.some(({ Name }) => Name === "shift-document-badge")) {
+  if (!assets.some(({ Name }) => Name === "shift-document-badge-v2")) {
     throw new Error("Packaged asset catalog does not contain the Shift document badge");
   }
 }
