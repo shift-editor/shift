@@ -3,6 +3,10 @@ import svgr from "vite-plugin-svgr";
 import path from "path";
 
 const packagesDir = path.resolve(__dirname, "../../packages");
+const distribution = process.env.SHIFT_DISTRIBUTION ?? "release";
+if (distribution !== "release" && distribution !== "nightly") {
+  throw new Error(`Invalid SHIFT_DISTRIBUTION: ${distribution}`);
+}
 
 // https://vitejs.dev/config
 export default defineConfig(async () => {
@@ -14,6 +18,9 @@ export default defineConfig(async () => {
 
   return {
     root: path.resolve(__dirname, "src/renderer"),
+    define: {
+      SHIFT_DISTRIBUTION: JSON.stringify(distribution),
+    },
     publicDir: path.resolve(__dirname, "src/renderer/public"),
     build: {
       outDir: path.resolve(__dirname, ".vite/renderer/main_window"),

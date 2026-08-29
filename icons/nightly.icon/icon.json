@@ -1,19 +1,30 @@
 {
+  "color-space-for-untagged-svg-colors" : "display-p3",
   "fill" : {
-    "solid" : "display-p3:0.86133,0.63916,0.21790,1.00000"
+    "automatic-gradient" : "display-p3:0.70149,0.60859,0.00000,1.00000",
+    "orientation" : {
+      "start" : {
+        "x" : 0.5,
+        "y" : 0
+      },
+      "stop" : {
+        "x" : 0.5,
+        "y" : 0.7
+      }
+    }
   },
   "groups" : [
     {
       "layers" : [
         {
-          "glass" : false,
-          "image-name" : "SVG Image 2.svg",
-          "name" : "SVG Image 2",
+          "glass" : true,
+          "image-name" : "SVG Image 4.svg",
+          "name" : "SVG Image 4",
           "position" : {
-            "scale" : 0.75,
+            "scale" : 0.5499999999999999,
             "translation-in-points" : [
-              0,
-              0
+              -31.1484375,
+              -17.6640625
             ]
           }
         }

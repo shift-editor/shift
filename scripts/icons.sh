@@ -4,6 +4,7 @@ set -euo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 icons_dir="$repo_root/icons"
+renderer_assets_dir="$repo_root/apps/desktop/src/renderer/src/assets"
 work_dir=$(mktemp -d "${TMPDIR:-/tmp}/shift-icons.XXXXXX")
 trap 'rm -rf "$work_dir"' EXIT
 
@@ -125,7 +126,7 @@ generate_document_icons() {
   local source_svg="$icons_dir/shift-document.svg"
   local source="$work_dir/shift-document-mark.png"
   local asset_catalog="$icons_dir/shift-document.xcassets"
-  local badge="$asset_catalog/shift-document-badge.iconset"
+  local badge="$asset_catalog/shift-document-badge-v2.iconset"
   local frame="$work_dir/shift-document-frame.svg"
   local document="$work_dir/shift-document.png"
   local sizes=(16 32 48 64 128 256 512 1024)
@@ -199,6 +200,8 @@ generate_release_icons() {
   local source="$icons_dir/icon-macos.png"
   local sizes=(16 32 48 64 96 128 192 256 512 1024)
 
+  cp "$source" "$renderer_assets_dir/app-icon.png"
+
   for size in "${sizes[@]}"; do
     resize_png "$source" "$size" "$icons_dir/icon-${size}x${size}.png"
   done
@@ -214,6 +217,7 @@ generate_release_icons() {
 generate_nightly_icons() {
   local source="$icons_dir/nightly-macos.png"
 
+  cp "$source" "$renderer_assets_dir/app-icon-nightly.png"
   cp "$source" "$icons_dir/nightly.png"
   generate_ico "$source" "$icons_dir/nightly.ico"
 }

@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "react-router";
 import { Button, Progress } from "@shift/ui";
-import appIcon from "@/assets/app-icon.png";
+import { appIcon } from "@/app/branding";
+import { shiftProductName } from "@/app/release";
 import { getShiftHost } from "@/host/shiftHost";
 import type { UpdateProgress } from "@shared/update/types";
 import "./UpdateScreen.css";
@@ -88,7 +89,9 @@ export const UpdateScreen = () => {
       content = (
         <>
           <div className="update-window-copy">
-            <h1>Shift {version} is available.</h1>
+            <h1>
+              {shiftProductName} {version} is available.
+            </h1>
             <p>Would you like to download it now?</p>
           </div>
           <div className="update-window-actions">
@@ -131,7 +134,9 @@ export const UpdateScreen = () => {
       content = (
         <>
           <div className="update-window-copy">
-            <h1>Shift {version} is ready to install.</h1>
+            <h1>
+              {shiftProductName} {version} is ready to install.
+            </h1>
           </div>
           <div className="update-window-actions">
             <Button

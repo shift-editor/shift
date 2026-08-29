@@ -1,5 +1,5 @@
 import { useSearchParams } from "react-router";
-import appIcon from "@/assets/app-icon.png";
+import { appIcon } from "@/app/branding";
 import { SHIFT_DISCORD_URL, SHIFT_WEBSITE_URL, SHIFT_X_URL } from "@shared/links";
 import "./AboutScreen.css";
 
