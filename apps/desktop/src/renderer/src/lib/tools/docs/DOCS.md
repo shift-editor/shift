@@ -1,6 +1,6 @@
 # Tools
 
-<!-- reviewed: 2026-08-22 -->
+<!-- reviewed: 2026-08-29 -->
 
 State machine-based tool system for the Shift font editor: translates pointer/keyboard input into tool-specific state transitions and rendering.
 
@@ -60,7 +60,7 @@ tools/
 - `ToolManager` — owns installed manifests, resident tool instances, `GestureDetector`, rAF pointer coalescing, replacement, removal, and temporary tool switching.
 - `ActiveTool<Id>` — editor-facing `{ id, state }` snapshot. `Editor.toolIf(id)` narrows built-in state through `ToolStateMap`; runtime IDs fall back to `ToolState`.
 - `GestureDetector` — stateful recognizer: drag threshold, double-click timing. Fed raw `pointerDown`/`Move`/`Up`, emits `ToolEvent[]`.
-- `ToolManifest` — `{ id, create, icon, tooltip, shortcut? }`. Registration descriptor passed to `editor.registerTool`.
+- `ToolManifest` — `{ id, create, icon, tooltip, shortcut?, hidden?, disabled? }`. Registration descriptor passed to `editor.registerTool`. Hidden tools are omitted from the toolbar; disabled tools render as non-interactive controls; both suppress user keyboard shortcuts while remaining programmatically activatable.
 - `ToolRegistration` — exclusive ownership handle returned by `editor.registerTool`; exposes `replace(manifest)` and idempotent `dispose()`.
 - `StateDiagram` — `{ states, initial, transitions }`. Declarative spec for compliance testing.
 - `ToolName` — `string` (not a fixed union; extensible for plugins).
@@ -129,7 +129,7 @@ After `#runBehaviors`, if `next !== prev` (reference equality):
 
 ### Runtime contribution lifecycle
 
-`editor.registerTool(manifest)` installs metadata and returns its `ToolRegistration`. `replace()` publishes new metadata immediately. Inactive tools use the new factory on their next activation; resident instances are reconstructed immediately unless they own an active drag, in which case reconstruction waits for `dragEnd` or `dragCancel`. Removing an active contribution cancels its gesture before disposal and falls back to Select when available. `Editor.destroy()` permanently disposes all resident instances and their computed signals.
+`editor.registerTool(manifest)` installs metadata and returns its `ToolRegistration`. `replace()` publishes new metadata immediately. Inactive tools use the new factory on their next activation; resident instances are reconstructed immediately unless they own an active drag, in which case reconstruction waits for `dragEnd` or `dragCancel`. Hidden tools are omitted from the toolbar, and disabled tools render as non-interactive controls. Both suppress user keyboard shortcuts while remaining programmatically activatable for internal flows and tests. Removing an active contribution cancels its gesture before disposal and falls back to Select when available. `Editor.destroy()` permanently disposes all resident instances and their computed signals.
 
 ### Local edit patterns for drag mutations
 
@@ -162,7 +162,7 @@ All three receive a `Canvas` instance.
    - Implement `initialState()` returning `{ type: "idle" }`.
    - Implement `activate()` with `this.setState({ type: "ready" })`.
 3. Optionally add `static stateSpec = defineStateDiagram(...)` for compliance testing.
-4. Register in `registerBuiltInTools` (`tools.ts`): `editor.registerTool({ id, create, icon, tooltip, shortcut? })`.
+4. Register in `registerBuiltInTools` (`tools.ts`): `editor.registerTool({ id, create, icon, tooltip, shortcut?, hidden?, disabled? })`.
 
 ### Adding a behavior (createBehavior style)
 

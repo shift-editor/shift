@@ -252,8 +252,12 @@ export class Editor {
       () => {
         const registry = new Map<ToolName, ToolRegistryItem>();
         for (const [id, manifest] of this.#toolManager.manifestsCell.value) {
-          const { icon, tooltip, shortcut } = manifest;
-          registry.set(id, shortcut ? { icon, tooltip, shortcut } : { icon, tooltip });
+          const { icon, tooltip, shortcut, hidden, disabled } = manifest;
+          const item: ToolRegistryItem = { icon, tooltip };
+          if (shortcut) item.shortcut = shortcut;
+          if (hidden) item.hidden = true;
+          if (disabled) item.disabled = true;
+          registry.set(id, item);
         }
         return registry;
       },
@@ -331,9 +335,9 @@ export class Editor {
   public getToolShortcuts(): ToolShortcutEntry[] {
     const shortcuts: ToolShortcutEntry[] = [];
     for (const [toolId, manifest] of this.#toolManager.manifests) {
-      if (manifest.shortcut != null) {
-        shortcuts.push({ toolId, shortcut: manifest.shortcut });
-      }
+      if (manifest.hidden || manifest.disabled || manifest.shortcut == null) continue;
+
+      shortcuts.push({ toolId, shortcut: manifest.shortcut });
     }
     return shortcuts;
   }
