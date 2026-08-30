@@ -503,6 +503,9 @@ jobs:
         if: steps.native-cache.outputs.cache-hit != 'true'
         run: pnpm build:native
 
+      - name: Generate glyph info
+        run: pnpm generate:glyph-info
+
       - name: Build E2E app
         run: pnpm --filter @shift/desktop build:e2e
 
