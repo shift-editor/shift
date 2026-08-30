@@ -108,7 +108,12 @@ function createAppTest(fontPath: string, prepareSource: typeof createAuthoredDoc
           childProcess.kill("SIGKILL");
           await exited;
         }
-        fs.rmSync(testRoot, { recursive: true, force: true });
+        fs.rmSync(testRoot, {
+          recursive: true,
+          force: true,
+          maxRetries: 5,
+          retryDelay: 100,
+        });
       }
     },
 

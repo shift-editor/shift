@@ -3,6 +3,8 @@ import type { AxisId, GlyphId, GlyphName, NamedInstanceId, SourceId } from "@shi
 import { expect, test } from "./fixtures/perfApp";
 import {
   editorShell,
+  fontNavigation,
+  glyphCatalogCanvas,
   glyphProperties,
   openCatalogGlyph,
   variationControls,
@@ -137,11 +139,17 @@ async function expectPreview(
 test("keeps variable preview and exact-source editability coherent across Grid navigation", async ({
   page,
 }) => {
+  test.slow();
+
   await expect.poll(() => page.evaluate(() => Boolean(navigator.gpu))).toBe(true);
   await expect.poll(() => page.evaluate(() => Boolean(window.shift?.font.loaded))).toBe(true);
   const fixture = await createVariableNavigationFixture(page);
 
-  await page.getByRole("button", { name: "Axes", exact: true }).click();
+  await expect(page).toHaveURL(/#\/home$/);
+  await expect(glyphCatalogCanvas(page)).toHaveAttribute("data-grid-readiness", "Complete", {
+    timeout: 30_000,
+  });
+  await fontNavigation(page).getByRole("button", { name: "Axes", exact: true }).click();
   const axisInput = page.getByLabel("Navigation Weight value", { exact: true });
   await axisInput.click();
   await axisInput.fill("650");
