@@ -104,7 +104,7 @@ export const SourcesSettingsPanel = ({ initialSourceId, canAuthor }: SourcesSett
           canAuthor={canAuthor}
         />
       ) : (
-        <div className="grid place-items-center text-xs text-secondary">No sources</div>
+        <div className="grid place-items-center text-ui text-secondary">No sources</div>
       )}
     </div>
   );
