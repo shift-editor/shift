@@ -448,8 +448,8 @@ jobs:
   # ---------------------------------------------------------------------------
   # Required end-to-end correctness
   # ---------------------------------------------------------------------------
-  e2e:
-    name: E2E ${{ matrix.name }}
+  e2e-build:
+    name: E2E Build
     needs: detect-changes
     if: >-
       (github.event_name == 'merge_group' &&
@@ -457,17 +457,7 @@ jobs:
           needs.detect-changes.outputs.rust == 'true')) ||
       github.event_name == 'push' ||
       github.event_name == 'workflow_dispatch'
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: Visual
-            project: visual
-            runner: macos-latest
-          - name: GPU
-            project: gpu
-            runner: macos-latest
-    runs-on: ${{ matrix.runner }}
+    runs-on: macos-latest
     permissions:
       contents: read
     steps:
@@ -513,14 +503,90 @@ jobs:
         if: steps.native-cache.outputs.cache-hit != 'true'
         run: pnpm build:native
 
+      - name: Generate glyph info
+        run: pnpm generate:glyph-info
+
+      - name: Build E2E app
+        run: pnpm --filter @shift/desktop build:e2e
+
+      - name: Upload E2E app
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-app-${{ github.run_id }}
+          path: |
+            apps/desktop/.vite/
+            crates/shift-bridge/*.node
+          include-hidden-files: true
+          retention-days: 1
+
+  e2e:
+    name: E2E ${{ matrix.name }}
+    needs: e2e-build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Visual 1/3
+            project: visual
+            shard: 1/3
+            artifact-suffix: visual-1-of-3
+          - name: Visual 2/3
+            project: visual
+            shard: 2/3
+            artifact-suffix: visual-2-of-3
+          - name: Visual 3/3
+            project: visual
+            shard: 3/3
+            artifact-suffix: visual-3-of-3
+          - name: GPU
+            project: gpu
+            shard: 1/1
+            artifact-suffix: gpu
+    runs-on: macos-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+          submodules: true
+
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Cache node_modules
+        uses: actions/cache@v6
+        with:
+          path: |
+            node_modules
+            apps/*/node_modules
+            packages/*/node_modules
+            crates/*/node_modules
+          key: node-modules-v3-node24-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Download E2E app
+        uses: actions/download-artifact@v8
+        with:
+          name: e2e-app-${{ github.run_id }}
+          path: .
+
       - name: Run E2E tests
-        run: pnpm test:e2e:${{ matrix.project }}
+        run: >-
+          pnpm --dir apps/desktop exec playwright test
+          --project=${{ matrix.project }}
+          --fully-parallel
+          --shard=${{ matrix.shard }}
 
       - name: Upload Playwright failures
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: playwright-${{ matrix.project }}-results
+          name: playwright-${{ matrix.artifact-suffix }}-results
           path: apps/desktop/e2e/test-results/
           retention-days: 7
 
@@ -541,6 +607,7 @@ jobs:
       - rust-fmt
       - rust-check
       - integration
+      - e2e-build
       - e2e
     runs-on: ubuntu-latest
     permissions: {}
