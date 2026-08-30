@@ -84,7 +84,6 @@ const TOOL_LABELS: Record<string, string> = {
   pen: "Pen Tool (P)",
   hand: "Hand Tool (H)",
   shape: "Shape Tool (S)",
-  text: "Text Tool (T)",
 };
 
 test.describe("Canvas pointer lifecycle", () => {
@@ -157,4 +156,8 @@ test.describe("Toolbar tools", () => {
       await expect(page).toHaveScreenshot(`tool-${tool}.png`);
     });
   }
+
+  test("hides unavailable tools", async ({ page }) => {
+    await expect(page.getByRole("button", { name: "Text Tool (T)" })).toHaveCount(0);
+  });
 });
