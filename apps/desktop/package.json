@@ -20,6 +20,7 @@
     "test:e2e:visual": "playwright test --project=visual",
     "test:e2e:visual:update": "playwright test --project=visual --update-snapshots",
     "test:e2e:gpu": "playwright test --project=gpu",
+    "test:e2e:platform": "playwright test --project=platform",
     "test:e2e:perf": "playwright test --project=perf",
     "test:perf": "vitest bench --run"
   },

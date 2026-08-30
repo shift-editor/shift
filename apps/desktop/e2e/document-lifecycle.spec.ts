@@ -195,6 +195,7 @@ async function launchSecondInstance(
 ): Promise<void> {
   const executablePath = await electronApp.evaluate(() => process.execPath);
   await execFileAsync(executablePath, [
+    ...(process.platform === "linux" ? ["--no-sandbox"] : []),
     MAIN_JS,
     `--user-data-dir=${path.join(testRoot, "user-data")}`,
     documentPath,

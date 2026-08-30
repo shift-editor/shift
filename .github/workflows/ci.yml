@@ -448,25 +448,25 @@ jobs:
   # ---------------------------------------------------------------------------
   # Required end-to-end correctness
   # ---------------------------------------------------------------------------
-  e2e:
-    name: E2E ${{ matrix.name }}
+  e2e-build:
+    name: E2E Build ${{ matrix.name }}
     needs: detect-changes
     if: >-
       (github.event_name == 'merge_group' &&
         (needs.detect-changes.outputs.typescript == 'true' ||
           needs.detect-changes.outputs.rust == 'true')) ||
-      github.event_name == 'push' ||
+      (github.event_name == 'push' && needs.detect-changes.outputs.rust == 'true') ||
       github.event_name == 'workflow_dispatch'
     strategy:
       fail-fast: false
       matrix:
         include:
-          - name: Visual
-            project: visual
+          - name: macOS
             runner: macos-latest
-          - name: GPU
-            project: gpu
-            runner: macos-latest
+          - name: Windows
+            runner: windows-latest
+          - name: Linux
+            runner: ubuntu-latest
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
@@ -502,7 +502,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: crates/shift-bridge/*.node
-          key: native-module-${{ runner.os }}-${{ hashFiles('crates/**', 'Cargo.lock') }}
+          key: native-module-e2e-v1-${{ runner.os }}-${{ hashFiles('Cargo.toml', 'crates/**', 'Cargo.lock', 'rust-toolchain.toml') }}
 
       - uses: Swatinem/rust-cache@v2
         if: steps.native-cache.outputs.cache-hit != 'true'
@@ -511,16 +511,122 @@ jobs:
 
       - name: Build native module
         if: steps.native-cache.outputs.cache-hit != 'true'
-        run: pnpm build:native
+        run: pnpm build:native:e2e
 
-      - name: Run E2E tests
-        run: pnpm test:e2e:${{ matrix.project }}
+      - name: Generate glyph info
+        if: github.event_name != 'push'
+        run: pnpm generate:glyph-info
 
-      - name: Upload Playwright failures
-        if: failure()
+      - name: Build E2E app
+        if: github.event_name != 'push'
+        run: pnpm --filter @shift/desktop build:e2e
+
+      - name: Upload E2E app
+        if: github.event_name != 'push'
         uses: actions/upload-artifact@v7
         with:
-          name: playwright-${{ matrix.project }}-results
+          name: e2e-app-${{ github.run_id }}-${{ runner.os }}
+          path: |
+            apps/desktop/.vite/
+            crates/shift-bridge/*.node
+          include-hidden-files: true
+          retention-days: 1
+
+  e2e:
+    name: E2E ${{ matrix.name }} ${{ matrix.shard }}/${{ matrix.shard-total }}
+    needs: e2e-build
+    if: github.event_name != 'push'
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [visual, platform-windows, platform-linux]
+        shard: [1, 2, 3]
+        include:
+          - shard-total: 3
+          - target: visual
+            name: Visual
+            project: visual
+            runner: macos-latest
+          - target: platform-windows
+            name: Platform Windows
+            project: platform
+            runner: windows-latest
+          - target: platform-linux
+            name: Platform Linux
+            project: platform
+            runner: ubuntu-latest
+          - target: gpu
+            name: GPU
+            project: gpu
+            runner: macos-latest
+            shard: 1
+            shard-total: 1
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Install Linux display environment
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install --yes fluxbox xvfb
+
+      - name: Cache node_modules
+        uses: actions/cache@v6
+        with:
+          path: |
+            node_modules
+            apps/*/node_modules
+            packages/*/node_modules
+            crates/*/node_modules
+          key: node-modules-v3-node24-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Download E2E app
+        uses: actions/download-artifact@v8
+        with:
+          name: e2e-app-${{ github.run_id }}-${{ runner.os }}
+          path: .
+
+      - name: Run E2E tests
+        if: runner.os != 'Linux'
+        run: >-
+          pnpm --dir apps/desktop exec playwright test
+          --project=${{ matrix.project }}
+          --fully-parallel
+          --shard=${{ matrix.shard }}/${{ matrix.shard-total }}
+
+      - name: Run E2E tests with virtual desktop
+        if: runner.os == 'Linux'
+        run: >-
+          xvfb-run --auto-servernum --server-args='-screen 0 1920x1080x24' sh -c
+          'fluxbox >/tmp/shift-fluxbox.log 2>&1 & sleep 1;
+          exec pnpm --dir apps/desktop exec playwright test
+          --project=${{ matrix.project }} --fully-parallel --shard=${{ matrix.shard }}/${{ matrix.shard-total }}'
+
+      - name: Upload platform evidence
+        if: always() && matrix.project == 'platform'
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-${{ matrix.target }}-${{ matrix.shard }}-of-${{ matrix.shard-total }}-results
+          path: apps/desktop/e2e/test-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload Playwright failures
+        if: failure() && matrix.project != 'platform'
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-${{ matrix.target }}-${{ matrix.shard }}-of-${{ matrix.shard-total }}-results
           path: apps/desktop/e2e/test-results/
           retention-days: 7
 
@@ -541,6 +647,7 @@ jobs:
       - rust-fmt
       - rust-check
       - integration
+      - e2e-build
       - e2e
     runs-on: ubuntu-latest
     permissions: {}
