@@ -101,7 +101,12 @@ export const test = base.extend<ShiftFixtures & ShiftOptions>({
     try {
       await use(testRoot);
     } finally {
-      fs.rmSync(testRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+      await fs.promises.rm(testRoot, {
+        recursive: true,
+        force: true,
+        maxRetries: 10,
+        retryDelay: 100,
+      });
     }
   },
 
@@ -311,7 +316,12 @@ export const recoveryTest = base.extend<{ recoveryApp: RecoveryApp }>({
       });
     } finally {
       if (app) await killApp(app);
-      fs.rmSync(testRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+      await fs.promises.rm(testRoot, {
+        recursive: true,
+        force: true,
+        maxRetries: 10,
+        retryDelay: 100,
+      });
     }
   },
 });
