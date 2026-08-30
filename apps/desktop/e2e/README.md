@@ -29,7 +29,7 @@ pnpm test:e2e:gpu e2e/variable-navigation-glyph-grid.spec.ts \
   --grep "keeps variable preview" --repeat-each=10
 ```
 
-Build the native bridge first with `pnpm build:native` when its binary is absent or stale. Each E2E command builds the Electron main, workspace, preload, and renderer bundles through `build.ts --e2e`; filtering still avoids running unrelated tests.
+Each E2E command runs a Turbo `build:e2e` prerequisite, which builds the native bridge, generated bridge types, glyph-info resources, and Electron main, workspace, preload, and renderer bundles through `build.ts --e2e` before Playwright starts; filtering still avoids running unrelated tests.
 
 ## E2E impact checks
 
