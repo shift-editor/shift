@@ -83,7 +83,7 @@ When the correct split is unclear, propose the subjects and path groups before s
 2. Inspect `git status`, unstaged and staged diffs, and recent commit subjects.
 3. Identify secrets, generated files, unrelated work, and the logical commit boundaries.
 4. If multiple commits are needed and the user has not already approved the plan, propose the ordered subjects and wait.
-5. Run the focused tests and repository checks appropriate to each change.
+5. Run the focused tests and repository checks appropriate to each change. For desktop user-flow or rendering changes, complete the E2E impact check in `apps/desktop/e2e/README.md`: search existing specs by affected surface, run the smallest relevant Playwright project/file/title filter, inspect intentional snapshot updates, and state any relevant E2E coverage not run.
 6. Stage explicit paths or hunks. Never use `git add .` or `git add -A`.
 7. Commit without bypassing hooks.
 8. Inspect `git status` and the resulting commit after each commit.

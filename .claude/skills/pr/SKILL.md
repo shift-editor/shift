@@ -73,6 +73,15 @@ Testing entries must distinguish:
 
 For UI changes, include screenshots or recordings when available and useful. For release changes, state whether packaging was smoke-tested and which hosted platform/signing checks remain.
 
+### Desktop E2E impact
+
+For changes that can affect desktop user flows or rendering, complete the E2E impact check in `apps/desktop/e2e/README.md` before opening or updating the pull request.
+
+- Search existing specs by affected surface, command, or workflow even when the branch does not change E2E files.
+- Run the smallest relevant Playwright project, file, and title filter. Run the complete affected project for broad or shared-fixture changes.
+- Update visual snapshots only for intentional appearance changes, inspect every changed image, and rerun without update mode.
+- List exact E2E commands in `## Testing`; explicitly identify relevant E2E coverage not run and why.
+
 ### Issue linkage
 
 Every ordinary pull request includes `## Issue`. Search open and recently closed issues before opening or updating the pull request, and reference every issue materially addressed by the change.
