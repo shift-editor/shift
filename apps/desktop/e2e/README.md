@@ -14,23 +14,42 @@ Run commands from the repository root:
 | `pnpm test:e2e:gpu`           | Run hardware-GPU correctness tests             |
 | `pnpm test:e2e:perf`          | Run Playwright performance measurements        |
 
-Append a Playwright file filter for a focused run:
+Append Playwright file and title filters to run the smallest relevant check:
 
 ```sh
 pnpm test:e2e:visual e2e/home.spec.ts
-pnpm test:e2e:visual e2e/document-recovery.spec.ts
-pnpm test:e2e:gpu e2e/glyph-grid.spec.ts
+pnpm test:e2e:visual e2e/document-recovery.spec.ts --grep "Save As"
+pnpm test:e2e:gpu e2e/glyph-grid.spec.ts --grep "source switching"
 ```
 
-Each E2E command runs a Turbo `build:e2e` prerequisite, which builds the native bridge, generated bridge types, glyph-info resources, and Electron main, workspace, preload, and renderer bundles through `build.ts --e2e` before Playwright starts.
+Use repeat mode to reproduce a suspected flake without running the rest of the project:
+
+```sh
+pnpm test:e2e:gpu e2e/variable-navigation-glyph-grid.spec.ts \
+  --grep "keeps variable preview" --repeat-each=10
+```
+
+Each E2E command runs a Turbo `build:e2e` prerequisite, which builds the native bridge, generated bridge types, glyph-info resources, and Electron main, workspace, preload, and renderer bundles through `build.ts --e2e` before Playwright starts; filtering still avoids running unrelated tests.
+
+## E2E impact checks
+
+Before committing a desktop user-flow or rendering change:
+
+1. Search `apps/desktop/e2e/` using the affected surface, command, or workflow name. A production-file change can require an existing E2E test or snapshot update even when no E2E source changed.
+2. Run the matching `visual` spec for interface, interaction, menu, lifecycle, persistence, or software-rendered canvas behavior. Run the matching `gpu` spec for hardware rendering, preview residency, or Grid behavior.
+3. Use a file and `--grep` filter for a narrow change. Run the complete affected project when the change crosses several flows or shared fixture boundaries.
+4. For intentional visual changes, update and inspect the affected snapshots, then rerun the focused visual spec without update mode. The `ci: update visual snapshots` pull-request label can regenerate macOS baselines on the branch when local rendering differs from the hosted runner.
+5. Record the exact E2E commands in the pull request. Explicitly state which relevant project was not run and why.
+
+Do not update snapshots merely to make a failure pass. Inspect the diff and confirm that it represents the intended product change.
 
 ## Projects and fixtures
 
-| Project  | Fixture                   | Rendering                                         | CI policy                            |
-| -------- | ------------------------- | ------------------------------------------------- | ------------------------------------ |
-| `visual` | `fixtures/electronApp.ts` | Software rendering, DPR 1, `1200×600` page window | Required on pull requests and `main` |
-| `gpu`    | `fixtures/perfApp.ts`     | Hardware GPU, host scale, stable content size     | Required on pull requests and `main` |
-| `perf`   | `fixtures/perfApp.ts`     | Hardware GPU, host scale, stable content size     | Nightly and manual only              |
+| Project  | Fixture                   | Rendering                                         | CI policy                                 |
+| -------- | ------------------------- | ------------------------------------------------- | ----------------------------------------- |
+| `visual` | `fixtures/electronApp.ts` | Software rendering, DPR 1, `1200×600` page window | Required in the merge queue and on `main` |
+| `gpu`    | `fixtures/perfApp.ts`     | Hardware GPU, host scale, stable content size     | Required in the merge queue and on `main` |
+| `perf`   | `fixtures/perfApp.ts`     | Hardware GPU, host scale, stable content size     | Nightly and manual only                   |
 
 Visual tests default to MutatorSans. Authored GPU and performance tests default to the MutatorSans designspace and accept another editable source through `SHIFT_E2E_FONT_PATH`. Preview residency tests default to MutatorSans TTF through `SHIFT_E2E_PREVIEW_FONT_PATH`; variable preview scrubbing defaults to Host Grotesk through `SHIFT_E2E_VARIABLE_PREVIEW_FONT_PATH`:
 

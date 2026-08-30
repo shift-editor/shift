@@ -194,6 +194,21 @@ describe("runtime tool contributions", () => {
     expect(editor.toolRegistryCell.value.has("runtime-test")).toBe(false);
   });
 
+  it("publishes availability metadata without user shortcuts", () => {
+    const registration = editor.registerTool({
+      ...runtimeManifest(1, "Runtime", "r"),
+      disabled: true,
+    });
+
+    expect(editor.toolRegistryCell.value.get("runtime-test")?.disabled).toBe(true);
+    expect(editor.getToolShortcuts()).not.toContainEqual({ toolId: "runtime-test", shortcut: "r" });
+
+    registration.replace({ ...runtimeManifest(1, "Runtime", "r"), hidden: true });
+
+    expect(editor.toolRegistryCell.value.get("runtime-test")?.hidden).toBe(true);
+    expect(editor.getToolShortcuts()).not.toContainEqual({ toolId: "runtime-test", shortcut: "r" });
+  });
+
   it("rejects duplicate ownership", () => {
     editor.registerTool(runtimeManifest(1));
 

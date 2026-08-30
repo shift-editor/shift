@@ -19,6 +19,8 @@ if (!packagePathArgument) {
 }
 
 const packagePath = path.resolve(packagePathArgument);
+const macosDocumentTypeIdentifier = "app.shift.document.v2";
+const macosDocumentBadgeName = "shift-document-badge-v2";
 const packageName = (() => {
   switch (distribution) {
     case "release":
@@ -49,31 +51,36 @@ const executablePath = (() => {
   }
 })();
 
-function commandJson(command, args) {
+function runCommand(command, args) {
   const result = spawnSync(command, args, { encoding: "utf8", maxBuffer: 10 * 1024 * 1024 });
   if (result.status !== 0) {
     throw new Error(`${command} failed: ${result.stderr || result.stdout}`);
   }
 
-  return JSON.parse(result.stdout);
+  return result.stdout;
+}
+
+function commandJson(command, args) {
+  return JSON.parse(runCommand(command, args));
 }
 
 function verifyMacosDocumentIcon() {
   if (process.platform !== "darwin") return;
 
-  const resourcesPath = path.join(packagePath, `${packageName}.app`, "Contents", "Resources");
+  const appPath = path.join(packagePath, `${packageName}.app`);
+  const resourcesPath = path.join(appPath, "Contents", "Resources");
   const info = commandJson("plutil", [
     "-convert",
     "json",
     "-o",
     "-",
-    path.join(packagePath, `${packageName}.app`, "Contents", "Info.plist"),
+    path.join(appPath, "Contents", "Info.plist"),
   ]);
   const documentType = info.CFBundleDocumentTypes?.find(
-    ({ LSItemContentTypes }) => LSItemContentTypes?.[0] === "app.shift.document",
+    ({ LSItemContentTypes }) => LSItemContentTypes?.[0] === macosDocumentTypeIdentifier,
   );
   const exportedType = info.UTExportedTypeDeclarations?.find(
-    ({ UTTypeIdentifier }) => UTTypeIdentifier === "app.shift.document",
+    ({ UTTypeIdentifier }) => UTTypeIdentifier === macosDocumentTypeIdentifier,
   );
   const assets = commandJson("xcrun", [
     "assetutil",
@@ -84,13 +91,13 @@ function verifyMacosDocumentIcon() {
   if (documentType?.CFBundleTypeIconSystemGenerated !== true) {
     throw new Error("Packaged Shift document type does not use the macOS system icon compositor");
   }
-  if (exportedType?.UTTypeIcons?.UTTypeIconBadgeName !== "shift-document-badge-v2") {
+  if (exportedType?.UTTypeIcons?.UTTypeIconBadgeName !== macosDocumentBadgeName) {
     throw new Error("Packaged Shift document type does not reference its document badge");
   }
   if (exportedType?.UTTypeIcons?.UTTypeIconText !== "SHIFT") {
     throw new Error("Packaged Shift document type does not include its icon label");
   }
-  if (!assets.some(({ Name }) => Name === "shift-document-badge-v2")) {
+  if (!assets.some(({ Name }) => Name === macosDocumentBadgeName)) {
     throw new Error("Packaged asset catalog does not contain the Shift document badge");
   }
 }

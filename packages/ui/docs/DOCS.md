@@ -1,6 +1,6 @@
 # Shared UI (`@shift/ui`)
 
-<!-- reviewed: 2026-08-18 review-every: 90d -->
+<!-- reviewed: 2026-08-29 review-every: 90d -->
 
 Shared UI component library for Shift, wrapping Base UI primitives with Tailwind styling and Shift design tokens.
 
@@ -37,6 +37,7 @@ packages/ui/
       slider/              -- Slider with thumb-level accessible name
       tabs/                -- Tabs root, list, tab, indicator, and panel
       textarea/            -- Multiline Field control
+      toolbar/             -- Toolbar root, group, button, and separator
       toast/               -- ToastProvider, ToastViewport, ToastRoot, ToastTitle, ToastDescription, ToastClose, useToastManager
       tooltip/             -- Tooltip, TooltipTrigger, TooltipContent, TooltipProvider
   vitest.config.ts         -- jsdom test configuration
@@ -48,6 +49,7 @@ packages/ui/
 - **`InputProps`** -- extends Base UI `Input` props with `label`, `labelPosition`, `icon`, and `iconPosition`.
 - **Form control props** -- `CheckboxProps`, `FieldProps`, `NumberFieldProps`, `SelectProps`, and `TextareaProps` preserve their Base UI or native control contracts while adding Shift styling.
 - **`TabsProps`** and tab-part props -- expose the Base UI Tabs composition so consumers can choose their own panel layout while retaining shared interaction and focus behavior.
+- **`ToolbarProps`** and toolbar-part props -- expose Base UI's toolbar composition and roving keyboard focus for application tool strips.
 - **`SeparatorProps`** -- adds `orientation` (`"horizontal" | "vertical"`) to the Base UI separator.
 - **`ProgressProps`** -- extends Base UI Progress root props with track and indicator class overrides.
 - **`DialogProps`** / **`DialogBackdropProps`** / **`DialogPopupProps`** / **`DialogTitleProps`** -- thin wrappers over Base UI Dialog sub-component props.
@@ -64,6 +66,8 @@ Each component follows the same pattern: import the Base UI primitive, wrap it i
 **Input** adds label and icon positioning logic (left/right for each) on top of the Base UI input, adjusting padding classes dynamically.
 
 **Field**, **Checkbox**, **NumberField**, **Select**, **Tabs**, and **Textarea** are composable primitive families for settings and inspector forms. Validation and application state remain in the consumer; these wrappers only provide accessible structure, behavior, and Shift styling. `Textarea` renders a native textarea through Base UI Field's `Control` slot so it participates in the same label, validation, and disabled-state contract. `Slider` forwards its `aria-label` to Base UI's interactive thumb rather than leaving the accessible name on the non-interactive root. `Progress` composes Base UI's root, track, and indicator while allowing a consumer to override each visual layer.
+
+**Toolbar** exposes Base UI's root, group, button, and separator. Consumers can render the shared `Button` through `ToolbarButton` to retain Shift styling while participating in toolbar focus navigation, or render another Base UI trigger through it for menu composition.
 
 **Toast** is the most complex component family. `ToastProvider` wraps Base UI's provider with a default 2-second timeout. `ToastViewport` renders through a portal, centered at the top of the viewport. Individual toasts use enter/exit opacity transitions. Consumers call `useToastManager` (re-exported directly from Base UI) to imperatively add toasts.
 
