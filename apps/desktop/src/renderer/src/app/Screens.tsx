@@ -13,6 +13,9 @@ import { GlyphCatalogProvider } from "@/context/GlyphCatalogProvider";
 import { ReadOnlyNoticeDialog } from "@/components/chrome/ReadOnlyNoticeDialog";
 import { AboutScreen } from "@/views/AboutScreen";
 import { UpdateScreen } from "@/views/UpdateScreen";
+import { DocumentErrorBoundary } from "./DocumentErrorBoundary";
+
+declare const __PLAYWRIGHT__: boolean;
 
 /**
  * Routes launcher, updater, and workspace windows to their screen trees.
@@ -28,17 +31,21 @@ export const Screens = () => {
       <Route path="/about" element={<AboutScreen />} />
       <Route path="/launcher" element={<Landing />} />
       <Route path="/update" element={<UpdateScreen />} />
+      <Route path="/e2e-root-render-failure" element={<E2ERootRenderFailure />} />
       <Route
         element={
           <FontSessionProvider>
-            <DebugProvider>
-              <FontSessionScreens />
-            </DebugProvider>
+            <DocumentErrorBoundary>
+              <DebugProvider>
+                <FontSessionScreens />
+              </DebugProvider>
+            </DocumentErrorBoundary>
           </FontSessionProvider>
         }
       >
         <Route path="/home" />
         <Route path="/editor/:glyphId" element={<Editor />} />
+        <Route path="/e2e-document-render-failure" element={<E2EDocumentRenderFailure />} />
       </Route>
       <Route path="*" element={<Navigate to="/launcher" replace />} />
     </Routes>
@@ -73,6 +80,16 @@ const FontSessionScreens = () => {
       </SettingsNavigationProvider>
     </GlyphCatalogProvider>
   );
+};
+
+const E2ERootRenderFailure = () => {
+  if (__PLAYWRIGHT__) throw new Error("E2E root render failure");
+  return <Navigate to="/launcher" replace />;
+};
+
+const E2EDocumentRenderFailure = () => {
+  if (__PLAYWRIGHT__) throw new Error("E2E document render failure");
+  return <Navigate to="/home" replace />;
 };
 
 const ShiftSessionSetup = () => {

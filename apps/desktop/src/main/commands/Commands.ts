@@ -1,4 +1,5 @@
 import { shell } from "electron";
+import log from "electron-log/main";
 import type { Command } from "./Command";
 import type { CommandRegistry } from "./Command";
 import {
@@ -48,6 +49,11 @@ const helpCommands: Command[] = [
     id: "help.reportIssue",
     label: "Submit feedback",
     run: () => shell.openExternal(SHIFT_NEW_ISSUE_URL),
+  },
+  {
+    id: "help.showLogs",
+    label: "Show Logs",
+    run: () => shell.showItemInFolder(log.transports.file.getFile().path),
   },
 ];
 

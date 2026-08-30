@@ -1,5 +1,6 @@
 import type { CommandId, RendererCommandId } from "../commands";
 import type { UpdateProgress } from "../update/types";
+import type { RendererErrorReport } from "../ipc/contract";
 import type { FontSessionMode } from "../workspace/protocol";
 
 /**
@@ -88,6 +89,15 @@ export interface ShiftHost {
      * @returns an unsubscribe function.
      */
     onReady: (callback: (version: string) => void) => () => void;
+  };
+  /** Native window operations owned by the main process. */
+  window: {
+    /** Reconstructs this document renderer without clearing recovery state. */
+    reopenDocument: () => Promise<void>;
+  };
+  /** Privacy-safe renderer diagnostics reported to the main log. */
+  errors: {
+    reportRenderer: (report: RendererErrorReport) => Promise<void>;
   };
   /** App-shell UI events owned by the main process. */
   ui: {

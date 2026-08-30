@@ -19,6 +19,41 @@ test("reopens a crashed document renderer with completed edits", async ({ electr
   await expect.poll(() => electronApp.windows().length).toBe(1);
 });
 
+test("reopens after a document render failure", async ({ electronApp, page }) => {
+  const glyphName = "reactDocumentRecovery" as GlyphName;
+  await page.evaluate((name) => {
+    window.shift?.editor.createGlyph(name);
+  }, glyphName);
+  await waitForGlyph(page, glyphName);
+
+  await page.evaluate(() => {
+    window.location.hash = "/e2e-document-render-failure";
+  });
+  await expect(
+    page.getByRole("heading", {
+      name: "This document encountered an unexpected interface error.",
+    }),
+  ).toBeVisible();
+  await expect(page.getByText("Your completed edits have been preserved.")).toBeVisible();
+
+  const nextWindow = electronApp.waitForEvent("window");
+  await page.getByRole("button", { name: "Reopen Document" }).click();
+  const reopenedPage = await nextWindow;
+  await waitForWorkspaceReady(reopenedPage);
+  await waitForGlyph(reopenedPage, glyphName);
+});
+
+test("contains root route render failures", async ({ page }) => {
+  await page.evaluate(() => {
+    window.location.hash = "/e2e-root-render-failure";
+  });
+
+  await expect(
+    page.getByRole("heading", { name: "Shift encountered an unexpected interface error." }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Reload Window" })).toBeVisible();
+});
+
 async function crashRendererAndWaitForWindow(
   electronApp: ElectronApplication,
   page: Page,

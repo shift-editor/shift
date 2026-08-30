@@ -313,20 +313,33 @@ export class App {
       }
 
       try {
-        const reopened = await this.#workspaces.reopenSession(sessionId);
-        const bounds = owner?.window.isDestroyed() ? undefined : owner?.window.getBounds();
-        const window = this.#createWindow(false, bounds);
-        this.#workspaces.attachWindow(reopened.workspaceId, window);
-        this.#loadWorkspace(window);
-
-        for (const crashedWindow of this.#crashedWindows(session, failedWindow)) {
-          if (!crashedWindow.window.isDestroyed()) crashedWindow.window.destroy();
-        }
+        await this.#reopenDocumentWindow(owner, this.#crashedWindows(session, failedWindow));
         return;
       } catch (error) {
         this.#log.error("failed to reopen crashed document", error);
         failure = "restoreFailed";
       }
+    }
+  }
+
+  async #reopenDocumentWindow(
+    owner: Window | null,
+    staleWindows?: readonly Window[],
+  ): Promise<void> {
+    if (!owner) throw new Error("document reopen requires a document window");
+
+    staleWindows ??= [owner];
+    const session = this.#workspaces.getForBrowserWindow(owner.window);
+    if (!session?.document) throw new Error("document reopen requires an authored workspace");
+
+    const reopened = await this.#workspaces.reopenSession(session.workspaceId);
+    const bounds = owner.window.isDestroyed() ? undefined : owner.window.getBounds();
+    const window = this.#createWindow(false, bounds);
+    this.#workspaces.attachWindow(reopened.workspaceId, window);
+    this.#loadWorkspace(window);
+
+    for (const staleWindow of staleWindows) {
+      if (!staleWindow.window.isDestroyed()) staleWindow.window.destroy();
     }
   }
 
@@ -426,6 +439,13 @@ export class App {
 
       event.sender.postMessage("session.port", null, [port2]);
       this.#log.info("font session port sent to renderer");
+    });
+    ipc.handle(ipcMain, "window.reopenDocument", async (event) => {
+      const window = this.#requireWindowForWebContents(event.sender);
+      await this.#reopenDocumentWindow(window);
+    });
+    ipc.handle(ipcMain, "errors.reportRenderer", (_event, report) => {
+      this.#log.warn("renderer error reported", report);
     });
     ipc.handle(ipcMain, "session.ready", (event) => {
       if (SLUG_ATLAS_PROFILING_ENABLED) {
