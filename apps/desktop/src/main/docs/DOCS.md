@@ -86,7 +86,7 @@ The runtime icon follows the same compiled identity: `AppIcon` selects `nightly-
 
 `App.start()` establishes the distribution-specific data root before taking Electron's single-instance lock. macOS `open-file`, first-instance command-line arguments, and subsequent `second-instance` arguments feed one ordered pending-path queue. Startup drains that queue before deciding whether a launcher is needed.
 
-On macOS, closing the last window leaves Shift running. A later Dock activation opens a new launcher window. Windows and Linux keep the conventional quit-on-last-window behavior.
+On macOS, closing the last window leaves Shift running. A later Dock activation opens a new launcher window. The launcher opens at a compact 800×600 native size instead of inheriting the workspace window's 1200-pixel minimum width. Windows and Linux keep the conventional quit-on-last-window behavior.
 
 ### Application Commands
 
