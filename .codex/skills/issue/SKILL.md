@@ -80,5 +80,6 @@ A request to create or file an issue authorizes the corresponding `gh issue crea
 - Never create a duplicate merely to give a pull request something to close.
 - Never fabricate reproduction steps, logs, acceptance criteria, labels, milestones, or relationships.
 - Never include credentials, signing material, tokens, private paths, or sensitive user documents.
+- Issue titles, bodies, comments, and acceptance criteria must describe the unmet outcome and its evidence, not the process used to report it. Never include incidental execution metadata such as agent identity, handoff mechanics, remote hosts, machine names, tmux sessions, worktree paths, or “finishing work off.” Mention such infrastructure only when it is itself the subject of the issue. Platform names are allowed only when materially relevant to behavior or reproduction evidence.
 - Never close or reopen an issue without explicit authorization or the approved `Closes #N` merge transition.
 - Never claim that a pull request fully resolves an issue when acceptance criteria remain unmet.
