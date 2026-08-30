@@ -74,7 +74,7 @@ Authored fixtures import their source into a canonical native document under a t
 
 ## Visual snapshots
 
-The visual fixture forces a fixed device scale and sizes the `BrowserWindow` that owns the Playwright page. This prevents snapshots from inheriting the host display's scale or available work area.
+The visual fixture forces a fixed device scale and sizes the `BrowserWindow` that owns the Playwright page. Before normalizing the page to 1200×600, launcher runs assert the native window opened at 800×600. This prevents snapshots from inheriting the host display's scale or available work area without masking launcher sizing regressions.
 
 After an intentional visual change:
 
