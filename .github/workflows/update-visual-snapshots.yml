@@ -1,0 +1,199 @@
+name: Update Visual Snapshots
+
+on:
+  pull_request_target:
+    types:
+      - labeled
+
+permissions: {}
+
+concurrency:
+  group: update-visual-snapshots-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  generate:
+    name: Generate Snapshots
+    if: >-
+      github.event.label.name == 'ci: update visual snapshots' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: macos-latest
+    permissions:
+      contents: read
+    outputs:
+      changed: ${{ steps.patch.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+          submodules: true
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Install toolchain
+        run: rustup show
+
+      - name: Cache node_modules
+        uses: actions/cache@v6
+        with:
+          path: |
+            node_modules
+            apps/*/node_modules
+            packages/*/node_modules
+            crates/*/node_modules
+          key: node-modules-v3-node24-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Cache native module binary
+        id: native-cache
+        uses: actions/cache@v6
+        with:
+          path: crates/shift-bridge/*.node
+          key: native-module-${{ runner.os }}-${{ hashFiles('crates/**', 'Cargo.lock') }}
+
+      - uses: Swatinem/rust-cache@v2
+        if: steps.native-cache.outputs.cache-hit != 'true'
+        with:
+          shared-key: shift-rust-${{ runner.os }}
+
+      - name: Build native module
+        if: steps.native-cache.outputs.cache-hit != 'true'
+        run: pnpm build:native
+
+      - name: Update visual snapshots
+        run: pnpm test:e2e:visual:update
+
+      - name: Create snapshot patch
+        id: patch
+        env:
+          PATCH_PATH: ${{ runner.temp }}/visual-snapshots.patch
+        run: |
+          unexpected="$(git diff --name-only | grep -v '^apps/desktop/e2e/__screenshots__/' || true)"
+          if [[ -n "$unexpected" ]]; then
+            echo "Snapshot update modified unexpected files:"
+            echo "$unexpected"
+            exit 1
+          fi
+
+          if git diff --quiet -- apps/desktop/e2e/__screenshots__; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git diff --binary -- apps/desktop/e2e/__screenshots__ > "$PATCH_PATH"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Upload snapshot patch
+        if: steps.patch.outputs.changed == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: visual-snapshots-${{ github.run_id }}
+          path: ${{ runner.temp }}/visual-snapshots.patch
+          retention-days: 1
+
+  commit:
+    name: Commit Snapshots
+    needs: generate
+    if: needs.generate.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      sha: ${{ steps.commit.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: visual-snapshots-${{ github.run_id }}
+          path: ${{ runner.temp }}
+
+      - name: Apply snapshot patch
+        env:
+          PATCH_PATH: ${{ runner.temp }}/visual-snapshots.patch
+        run: |
+          git apply --binary --index "$PATCH_PATH"
+
+          unexpected="$(git diff --cached --name-only | grep -v '^apps/desktop/e2e/__screenshots__/' || true)"
+          if [[ -n "$unexpected" ]]; then
+            echo "Snapshot patch contains unexpected files:"
+            echo "$unexpected"
+            exit 1
+          fi
+
+          test -n "$(git diff --cached --name-only)"
+
+      - name: Commit and push snapshots
+        id: commit
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "test(e2e): update visual snapshots"
+          git push origin "HEAD:refs/heads/$HEAD_REF"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  verify:
+    name: Verify Visual E2E
+    needs: commit
+    runs-on: macos-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.commit.outputs.sha }}
+          fetch-depth: 1
+          submodules: true
+
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Install toolchain
+        run: rustup show
+
+      - name: Cache node_modules
+        uses: actions/cache@v6
+        with:
+          path: |
+            node_modules
+            apps/*/node_modules
+            packages/*/node_modules
+            crates/*/node_modules
+          key: node-modules-v3-node24-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Cache native module binary
+        id: native-cache
+        uses: actions/cache@v6
+        with:
+          path: crates/shift-bridge/*.node
+          key: native-module-${{ runner.os }}-${{ hashFiles('crates/**', 'Cargo.lock') }}
+
+      - uses: Swatinem/rust-cache@v2
+        if: steps.native-cache.outputs.cache-hit != 'true'
+        with:
+          shared-key: shift-rust-${{ runner.os }}
+
+      - name: Build native module
+        if: steps.native-cache.outputs.cache-hit != 'true'
+        run: pnpm build:native
+
+      - name: Verify visual snapshots
+        run: pnpm test:e2e:visual
