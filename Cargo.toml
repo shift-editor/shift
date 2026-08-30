@@ -11,3 +11,8 @@ shift-font = { path = "crates/shift-font" }
 shift-slug = { path = "crates/shift-slug" }
 shift-store = { path = "crates/shift-store" }
 shift-workspace = { path = "crates/shift-workspace" }
+
+[profile.e2e]
+inherits = "release"
+opt-level = 1
+codegen-units = 256
