@@ -201,7 +201,7 @@ const InstanceNumberField = ({ label, value, onChange, onCommit }: InstanceNumbe
 );
 
 const InstancesEmptyState = ({ hasAxes }: { hasAxes: boolean }) => (
-  <div className="flex items-center justify-center px-8 text-center text-xs text-secondary">
+  <div className="flex items-center justify-center px-8 text-center text-sm text-secondary">
     {hasAxes
       ? "Create an instance to define a named product location."
       : "Add an axis to create instances."}

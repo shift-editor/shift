@@ -83,7 +83,7 @@ export const AxesSettingsPanel = ({ initialAxisId, canAuthor }: AxesSettingsPane
             </SidebarActionRow>
           ))}
           {axes.length === 0 && (
-            <p className="px-2 py-3 text-xs text-secondary">No axes defined.</p>
+            <p className="px-2 py-3 text-sm text-secondary">No axes defined.</p>
           )}
         </nav>
       </aside>
@@ -91,7 +91,7 @@ export const AxesSettingsPanel = ({ initialAxisId, canAuthor }: AxesSettingsPane
       {selectedAxis ? (
         <AxisEditor key={selectedAxis.id} axis={selectedAxis} canAuthor={canAuthor} />
       ) : (
-        <div className="flex items-center justify-center text-xs text-secondary">
+        <div className="flex items-center justify-center text-sm text-secondary">
           Create an axis to edit its definition, mapping, and styles.
         </div>
       )}
