@@ -41,6 +41,7 @@
             pnpm
             python3
             rustToolchain
+            sqlite
           ];
 
           linuxPackages = with pkgs; lib.optionals stdenv.hostPlatform.isLinux [
@@ -50,10 +51,10 @@
             dbus
             gtk3
             nss
-            xorg.libX11
-            xorg.libXScrnSaver
-            xorg.libXtst
-            xorg.libxkbfile
+            libx11
+            libxscrnsaver
+            libxtst
+            libxkbfile
           ];
 
           darwinPackages = with pkgs; lib.optionals stdenv.hostPlatform.isDarwin [
