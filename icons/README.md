@@ -20,7 +20,7 @@ pnpm generate:icons
 
 Generation requires macOS, Xcode 26 or newer, and ImageMagick. Do not edit the generated PNG, ICNS, or ICO files directly.
 
-The `.shift` document artwork is derived from the release logo by `scripts/icons.sh`. macOS receives versioned `shift-document-badge` renditions in `shift-document.xcassets` and composites them onto its standard folded document shape. Bump the badge asset name when its artwork changes so macOS refreshes the registered icon. Windows receives `shift-document.ico`; Linux receives the size-specific `shift-document` PNGs.
+The `.shift` document artwork is generated from `shift-document.svg` by `scripts/icons.sh`. macOS receives versioned `shift-document-badge` renditions in `shift-document.xcassets` and composites them onto its standard folded document shape. macOS caches that composition by UTI, so a shipped artwork refresh must version the macOS document type identifier as well as the badge asset name. Windows receives `shift-document.ico`; Linux receives the size-specific `shift-document` PNGs.
 
 ## electron-builder configuration
 
@@ -29,4 +29,4 @@ The `.shift` document artwork is derived from the release logo by `scripts/icons
 - macOS: `icon.icon` / `nightly.icon`
 - Windows and NSIS: `icon.ico` / `nightly.ico`
 - Linux and runtime APIs: `icon.png` / `nightly.png`
-- `.shift` documents: macOS system-composed `shift-document-badge-v2`; Windows `shift-document.ico`; Linux size-specific PNGs
+- `.shift` documents: macOS system-composed `shift-document-badge-v2` under `app.shift.document.v2`; Windows `shift-document.ico`; Linux size-specific PNGs
