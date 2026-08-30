@@ -179,6 +179,13 @@ export class App {
 
       this.#documentsRoot = path.join(app.getPath("userData"), "working-documents");
 
+      const restoredSessions = await this.#workspaces.restoreRecoveries();
+      for (const session of restoredSessions) {
+        const window = this.#createWindow(false, undefined, true);
+        this.#workspaces.attachWindow(session.workspaceId, window);
+        this.#loadWorkspace(window);
+      }
+
       this.#appIcon.install();
       this.#applicationMenu.install();
       app.on("browser-window-focus", () => {

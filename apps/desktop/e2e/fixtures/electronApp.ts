@@ -307,7 +307,7 @@ export const recoveryTest = base.extend<{ recoveryApp: RecoveryApp }>({
           if (!app) throw new Error("Electron application is not running");
 
           await killApp(app);
-          app = await launchShiftApp(userDataDir, documentPath);
+          app = await launchShiftApp(userDataDir);
           page = await readyWorkspacePage(app);
           return page;
         },
@@ -361,16 +361,18 @@ export async function waitForWorkspaceReady(page: Page): Promise<void> {
 
 async function launchShiftApp(
   userDataDir: string,
-  workspacePath: string,
+  workspacePath?: string,
 ): Promise<ElectronApplication> {
+  const environment = {
+    ...process.env,
+    NODE_ENV: "test",
+    LIBGL_ALWAYS_SOFTWARE: "1",
+  };
+  if (workspacePath) environment.SHIFT_E2E_FONT_PATH = workspacePath;
+
   const app = await electron.launch({
     args: [MAIN_JS, `--user-data-dir=${userDataDir}`, "--force-device-scale-factor=1"],
-    env: {
-      ...process.env,
-      NODE_ENV: "test",
-      LIBGL_ALWAYS_SOFTWARE: "1",
-      SHIFT_E2E_FONT_PATH: workspacePath,
-    },
+    env: environment,
   });
 
   try {
