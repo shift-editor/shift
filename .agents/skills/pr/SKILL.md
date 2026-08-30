@@ -129,6 +129,7 @@ When reviewing a pull request:
 - Never open an ordinary pull request without searching for relevant issues and including an issue section.
 - Never open a pull request from a branch with uncommitted intended changes.
 - Never include credentials, signing material, `.env` files, or tokens.
+- Pull request titles, bodies, comments, commits, and release-note wording must describe the change and its validation, not agent workflow. Never mention agents, handoffs, remote hosts, machine names, tmux sessions, worktrees, or “finishing work off.” Platform names are allowed only when materially relevant to behavior or testing evidence.
 - Never force-push, merge, enable auto-merge, or publish a release unless the user explicitly asks.
 - Never fabricate issue links, test results, screenshots, reviewers, or release-note claims.
 - Never hide a failed or skipped check from the pull request body.
