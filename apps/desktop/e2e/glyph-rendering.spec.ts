@@ -6,6 +6,7 @@
  * smooth/corner nodes and off-curve handles — exercising every visual style.
  */
 
+import type { Page } from "@playwright/test";
 import { workspaceTest as test, expect, navigateToEditor } from "./fixtures/electronApp";
 import { CanvasUtil } from "./fixtures/CanvasUtil";
 
@@ -14,6 +15,16 @@ const GLYPH_S = "53"; // Complex quadratic curves
 const GLYPH_B = "42"; // Mix of curves + straights
 const GLYPH_I = "49"; // Simple straight segments
 const GLYPH_Q = "51"; // Counter with curves
+
+async function glyphPointCount(page: Page): Promise<number> {
+  return page.evaluate(() => {
+    const editor = window.shift?.editor;
+    const node = editor?.scene.nodesOfKind("glyph")[0];
+    if (!editor || !node) throw new Error("Expected an active glyph node");
+
+    return editor.glyphForId(node.glyphId)?.layerForSource(node.sourceId)?.allPoints.length ?? 0;
+  });
+}
 
 // ---------------------------------------------------------------------------
 // S glyph — full layer snapshots
@@ -88,183 +99,207 @@ test.describe("Pen tool drawing — segment snapshots", () => {
   });
 
   test("single on-curve point (click)", async ({ page }) => {
-    // Switch to pen tool.
-    await page.keyboard.press("p");
-    await page.waitForTimeout(200);
-
-    // Click once on the canvas to place a single point.
-    const canvas = page.locator("#interactive-canvas");
-    await canvas.click({ position: { x: 600, y: 400 } });
-    await page.waitForTimeout(300);
+    const penButton = page.getByRole("button", { name: "Pen Tool (P)" });
+    await penButton.click();
+    await expect(penButton).toHaveAttribute("data-active", "true");
 
     const canvasUtil = new CanvasUtil(page);
-    const screenshot = await canvasUtil.screenshotCanvasContainer();
-    await expect(screenshot).toMatchSnapshot("pen-single-point.png");
+    const initialPointCount = await glyphPointCount(page);
+    const point = await canvasUtil.interactivePagePoint({ x: 0.7, y: 0.7 });
+    await page.mouse.click(point.x, point.y);
+    await expect.poll(() => glyphPointCount(page)).toBe(initialPointCount + 1);
+
+    await expect(canvasUtil.canvasContainer()).toHaveScreenshot("pen-single-point.png", {
+      maxDiffPixelRatio: 0,
+    });
   });
 
   test("straight line segment (two clicks)", async ({ page }) => {
-    await page.keyboard.press("p");
-    await page.waitForTimeout(200);
-
-    const canvas = page.locator("#interactive-canvas");
-    await canvas.click({ position: { x: 500, y: 300 } });
-    await canvas.click({ position: { x: 700, y: 500 } });
-    await page.waitForTimeout(300);
+    const penButton = page.getByRole("button", { name: "Pen Tool (P)" });
+    await penButton.click();
+    await expect(penButton).toHaveAttribute("data-active", "true");
 
     const canvasUtil = new CanvasUtil(page);
-    const screenshot = await canvasUtil.screenshotCanvasContainer();
-    await expect(screenshot).toMatchSnapshot("pen-straight-segment.png");
+    const initialPointCount = await glyphPointCount(page);
+    const first = await canvasUtil.interactivePagePoint({ x: 0.55, y: 0.45 });
+    const second = await canvasUtil.interactivePagePoint({ x: 0.8, y: 0.8 });
+    await page.mouse.click(first.x, first.y);
+    await expect.poll(() => glyphPointCount(page)).toBe(initialPointCount + 1);
+    await page.mouse.click(second.x, second.y);
+    await expect.poll(() => glyphPointCount(page)).toBe(initialPointCount + 2);
+
+    await expect(canvasUtil.canvasContainer()).toHaveScreenshot("pen-straight-segment.png", {
+      maxDiffPixelRatio: 0,
+    });
   });
 
   test("preview line follows the latest on-curve endpoint after undo", async ({ page }) => {
-    await page.getByRole("button", { name: "Pen Tool (P)" }).click();
-
-    const canvas = page.locator("#interactive-canvas");
-    const bounds = await canvas.boundingBox();
-    if (!bounds) throw new Error("Expected interactive canvas bounds");
-
-    const baseline = Math.round(bounds.height * 0.7);
-    await canvas.click({ position: { x: Math.round(bounds.width * 0.35), y: baseline } });
-    await canvas.click({ position: { x: Math.round(bounds.width * 0.5), y: baseline } });
-    await canvas.click({ position: { x: Math.round(bounds.width * 0.65), y: baseline } });
-    await page.evaluate(async () => window.shift?.editor.undo());
-
-    await page.mouse.move(bounds.x + bounds.width * 0.8, bounds.y + bounds.height * 0.35);
-    await page.waitForTimeout(100);
+    const penButton = page.getByRole("button", { name: "Pen Tool (P)" });
+    await penButton.click();
+    await expect(penButton).toHaveAttribute("data-active", "true");
 
     const canvasUtil = new CanvasUtil(page);
-    const screenshot = await canvasUtil.screenshotCanvasContainer();
-    await expect(screenshot).toMatchSnapshot("pen-preview-after-undo.png");
+    const initialPointCount = await glyphPointCount(page);
+    for (const [index, x] of [0.35, 0.5, 0.65].entries()) {
+      const point = await canvasUtil.interactivePagePoint({ x, y: 0.7 });
+      await page.mouse.click(point.x, point.y);
+      await expect.poll(() => glyphPointCount(page)).toBe(initialPointCount + index + 1);
+    }
+    await page.evaluate(async () => window.shift?.editor.undo());
+    await expect.poll(() => glyphPointCount(page)).toBe(initialPointCount + 2);
+
+    const preview = await canvasUtil.interactivePagePoint({ x: 0.8, y: 0.35 });
+    await page.mouse.move(preview.x, preview.y);
+
+    await expect(canvasUtil.canvasContainer()).toHaveScreenshot("pen-preview-after-undo.png", {
+      maxDiffPixelRatio: 0,
+    });
   });
 
   test("cubic curve with handles (click-drag)", async ({ page }) => {
-    await page.keyboard.press("p");
-    await page.waitForTimeout(200);
-
-    const canvas = page.locator("#interactive-canvas");
-
-    // First point: click to place on-curve.
-    await canvas.click({ position: { x: 400, y: 400 } });
-
-    // Second point: click-drag to create cubic with handles.
-    await page.mouse.move(600, 300);
-    await page.mouse.down();
-    await page.mouse.move(700, 250, { steps: 5 });
-    await page.mouse.up();
-    await page.waitForTimeout(300);
+    const penButton = page.getByRole("button", { name: "Pen Tool (P)" });
+    await penButton.click();
+    await expect(penButton).toHaveAttribute("data-active", "true");
 
     const canvasUtil = new CanvasUtil(page);
-    const screenshot = await canvasUtil.screenshotCanvasContainer();
-    await expect(screenshot).toMatchSnapshot("pen-cubic-curve.png");
+    const initialPointCount = await glyphPointCount(page);
+    const first = await canvasUtil.interactivePagePoint({ x: 0.35, y: 0.7 });
+    const second = await canvasUtil.interactivePagePoint({ x: 0.55, y: 0.45 });
+    const handle = await canvasUtil.interactivePagePoint({ x: 0.65, y: 0.35 });
+    await page.mouse.click(first.x, first.y);
+    await expect.poll(() => glyphPointCount(page)).toBe(initialPointCount + 1);
+    await page.mouse.move(second.x, second.y);
+    await page.mouse.down();
+    await page.mouse.move(handle.x, handle.y, { steps: 5 });
+    await page.mouse.up();
+    await expect.poll(() => glyphPointCount(page)).toBe(initialPointCount + 4);
+
+    await expect(canvasUtil.canvasContainer()).toHaveScreenshot("pen-cubic-curve.png", {
+      maxDiffPixelRatio: 0,
+    });
   });
 
   test("cubic curve preview before pointer release", async ({ page }) => {
-    await page.getByRole("button", { name: "Pen Tool (P)" }).click();
-    await page.waitForTimeout(200);
-
-    const canvas = page.locator("#interactive-canvas");
-    await canvas.click({ position: { x: 400, y: 400 } });
-    await page.mouse.move(600, 300);
-    await page.mouse.down();
-    await page.mouse.move(700, 250, { steps: 5 });
-    await page.waitForTimeout(100);
+    const penButton = page.getByRole("button", { name: "Pen Tool (P)" });
+    await penButton.click();
+    await expect(penButton).toHaveAttribute("data-active", "true");
 
     const canvasUtil = new CanvasUtil(page);
-    const screenshot = await canvasUtil.screenshotCanvasContainer();
-    await expect(screenshot).toMatchSnapshot("pen-cubic-curve-drag-preview.png");
+    const initialPointCount = await glyphPointCount(page);
+    const first = await canvasUtil.interactivePagePoint({ x: 0.35, y: 0.7 });
+    const second = await canvasUtil.interactivePagePoint({ x: 0.55, y: 0.45 });
+    const handle = await canvasUtil.interactivePagePoint({ x: 0.65, y: 0.35 });
+    await page.mouse.click(first.x, first.y);
+    await expect.poll(() => glyphPointCount(page)).toBe(initialPointCount + 1);
+    await page.mouse.move(second.x, second.y);
+    await page.mouse.down();
+    await page.mouse.move(handle.x, handle.y, { steps: 5 });
+    await expect.poll(() => glyphPointCount(page)).toBe(initialPointCount + 4);
+    await expect
+      .poll(() => page.evaluate(() => window.shift?.editor.toolCell.peek()?.state.type))
+      .toBe("dragging");
+
+    await expect(canvasUtil.canvasContainer()).toHaveScreenshot(
+      "pen-cubic-curve-drag-preview.png",
+      { maxDiffPixelRatio: 0 },
+    );
 
     await page.mouse.up();
   });
 
   test("smooth junction preview before consecutive curve release", async ({ page }) => {
-    await page.getByRole("button", { name: "Pen Tool (P)" }).click();
-    await page.waitForTimeout(200);
-
-    const canvas = page.locator("#interactive-canvas");
-    await canvas.click({ position: { x: 400, y: 400 } });
-    await page.mouse.move(600, 300);
-    await page.mouse.down();
-    await page.mouse.move(700, 250, { steps: 5 });
-    await page.mouse.up();
-    await page.mouse.move(800, 300);
-    await page.mouse.down();
-    await page.mouse.move(900, 250, { steps: 5 });
-    await page.waitForTimeout(100);
+    const penButton = page.getByRole("button", { name: "Pen Tool (P)" });
+    await penButton.click();
+    await expect(penButton).toHaveAttribute("data-active", "true");
 
     const canvasUtil = new CanvasUtil(page);
-    const screenshot = await canvasUtil.screenshotCanvasContainer();
-    await expect(screenshot).toMatchSnapshot("pen-smooth-junction-drag-preview.png");
+    const initialPointCount = await glyphPointCount(page);
+    const first = await canvasUtil.interactivePagePoint({ x: 0.4, y: 0.7 });
+    const second = await canvasUtil.interactivePagePoint({ x: 0.58, y: 0.45 });
+    const secondHandle = await canvasUtil.interactivePagePoint({ x: 0.68, y: 0.35 });
+    const third = await canvasUtil.interactivePagePoint({ x: 0.78, y: 0.48 });
+    const thirdHandle = await canvasUtil.interactivePagePoint({ x: 0.9, y: 0.38 });
+    await page.mouse.click(first.x, first.y);
+    await expect.poll(() => glyphPointCount(page)).toBe(initialPointCount + 1);
+    await page.mouse.move(second.x, second.y);
+    await page.mouse.down();
+    await page.mouse.move(secondHandle.x, secondHandle.y, { steps: 5 });
+    await page.mouse.up();
+    await expect.poll(() => glyphPointCount(page)).toBe(initialPointCount + 4);
+
+    await page.mouse.move(third.x, third.y);
+    await page.mouse.down();
+    await page.mouse.move(thirdHandle.x, thirdHandle.y, { steps: 5 });
+    await expect
+      .poll(() => page.evaluate(() => window.shift?.editor.toolCell.peek()?.state.type))
+      .toBe("dragging");
+
+    await expect(canvasUtil.canvasContainer()).toHaveScreenshot(
+      "pen-smooth-junction-drag-preview.png",
+      { maxDiffPixelRatio: 0 },
+    );
 
     await page.mouse.up();
   });
 
   test("multiple segments — mixed straight and cubic", async ({ page }) => {
-    await page.getByRole("button", { name: "Pen Tool (P)" }).click();
-
-    const canvas = page.locator("#interactive-canvas");
-
-    // Segment 1: straight line (click → click).
-    await canvas.click({ position: { x: 350, y: 500 } });
-    await canvas.click({ position: { x: 500, y: 350 } });
-
-    // Segment 2: cubic curve (click-drag from last point).
-    await page.mouse.move(650, 300);
-    await page.mouse.down();
-    await page.mouse.move(750, 250, { steps: 5 });
-    await page.mouse.up();
-
-    // Segment 3: another straight, kept inside the measured canvas bounds.
-    const canvasBounds = await canvas.boundingBox();
-    if (!canvasBounds) throw new Error("Expected interactive canvas bounds");
-
-    await canvas.click({
-      position: { x: Math.round(canvasBounds.width * 0.9), y: 500 },
-    });
-    await expect
-      .poll(() =>
-        page.evaluate(() => {
-          const editor = window.shift?.editor;
-          const node = editor?.scene.nodesOfKind("glyph")[0];
-          if (!editor || !node) return 0;
-
-          return (
-            editor.glyphForId(node.glyphId)?.layerForSource(node.sourceId)?.allPoints.length ?? 0
-          );
-        }),
-      )
-      .toBeGreaterThanOrEqual(6);
-    await page.evaluate(
-      () =>
-        new Promise<void>((resolve) => {
-          requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-        }),
-    );
+    const penButton = page.getByRole("button", { name: "Pen Tool (P)" });
+    await penButton.click();
+    await expect(penButton).toHaveAttribute("data-active", "true");
 
     const canvasUtil = new CanvasUtil(page);
-    const screenshot = await canvasUtil.screenshotCanvasContainer();
-    await expect(screenshot).toMatchSnapshot("pen-mixed-segments.png");
+    const initialPointCount = await glyphPointCount(page);
+    const first = await canvasUtil.interactivePagePoint({ x: 0.4, y: 0.8 });
+    const second = await canvasUtil.interactivePagePoint({ x: 0.55, y: 0.6 });
+    const third = await canvasUtil.interactivePagePoint({ x: 0.7, y: 0.45 });
+    const thirdHandle = await canvasUtil.interactivePagePoint({ x: 0.82, y: 0.35 });
+    const fourth = await canvasUtil.interactivePagePoint({ x: 0.92, y: 0.75 });
+    await page.mouse.click(first.x, first.y);
+    await expect.poll(() => glyphPointCount(page)).toBe(initialPointCount + 1);
+    await page.mouse.click(second.x, second.y);
+    await expect.poll(() => glyphPointCount(page)).toBe(initialPointCount + 2);
+    await page.mouse.move(third.x, third.y);
+    await page.mouse.down();
+    await page.mouse.move(thirdHandle.x, thirdHandle.y, { steps: 5 });
+    await page.mouse.up();
+    await expect.poll(() => glyphPointCount(page)).toBe(initialPointCount + 5);
+    await page.mouse.click(fourth.x, fourth.y);
+    await expect.poll(() => glyphPointCount(page)).toBe(initialPointCount + 6);
+
+    await expect(canvasUtil.canvasContainer()).toHaveScreenshot("pen-mixed-segments.png", {
+      maxDiffPixelRatio: 0,
+    });
   });
 
   test("cubic S-curve with symmetric handles", async ({ page }) => {
-    await page.keyboard.press("p");
-    await page.waitForTimeout(200);
-
-    // First anchor with handles (drag right).
-    await page.mouse.move(400, 500);
-    await page.mouse.down();
-    await page.mouse.move(500, 500, { steps: 5 });
-    await page.mouse.up();
-
-    // Second anchor with handles (drag left) — creates S-curve.
-    await page.mouse.move(700, 300);
-    await page.mouse.down();
-    await page.mouse.move(600, 300, { steps: 5 });
-    await page.mouse.up();
-    await page.waitForTimeout(300);
+    const penButton = page.getByRole("button", { name: "Pen Tool (P)" });
+    await penButton.click();
+    await expect(penButton).toHaveAttribute("data-active", "true");
 
     const canvasUtil = new CanvasUtil(page);
-    const screenshot = await canvasUtil.screenshotCanvasContainer();
-    await expect(screenshot).toMatchSnapshot("pen-s-curve-handles.png");
+    const initialPointCount = await glyphPointCount(page);
+    const first = await canvasUtil.interactivePagePoint({ x: 0.4, y: 0.7 });
+    const second = await canvasUtil.interactivePagePoint({ x: 0.58, y: 0.4 });
+    const secondHandle = await canvasUtil.interactivePagePoint({ x: 0.68, y: 0.3 });
+    const third = await canvasUtil.interactivePagePoint({ x: 0.82, y: 0.65 });
+    const thirdHandle = await canvasUtil.interactivePagePoint({ x: 0.7, y: 0.75 });
+    await page.mouse.click(first.x, first.y);
+    await expect.poll(() => glyphPointCount(page)).toBe(initialPointCount + 1);
+    await page.mouse.move(second.x, second.y);
+    await page.mouse.down();
+    await page.mouse.move(secondHandle.x, secondHandle.y, { steps: 5 });
+    await page.mouse.up();
+    await expect.poll(() => glyphPointCount(page)).toBe(initialPointCount + 4);
+
+    await page.mouse.move(third.x, third.y);
+    await page.mouse.down();
+    await page.mouse.move(thirdHandle.x, thirdHandle.y, { steps: 5 });
+    await page.mouse.up();
+    await expect.poll(() => glyphPointCount(page)).toBe(initialPointCount + 7);
+
+    await expect(canvasUtil.canvasContainer()).toHaveScreenshot("pen-s-curve-handles.png", {
+      maxDiffPixelRatio: 0,
+    });
   });
 });
 

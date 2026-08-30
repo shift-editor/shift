@@ -67,9 +67,18 @@ The visual fixture forces a fixed device scale and sizes the `BrowserWindow` tha
 
 After an intentional visual change:
 
-1. Run `pnpm test:e2e:visual:update`.
+1. Run `pnpm test:e2e:visual:update`, optionally with a file and `--grep` filter.
 2. Review every changed image under `e2e/__screenshots__/`.
-3. Run `pnpm test:e2e:visual` without update mode.
+3. Run the same visual scope without update mode.
+
+Write visual snapshot tests as the final assertion in a behavioral test:
+
+- Establish the fixture deterministically and assert the domain or tool state that owns the visible pixels before capturing them.
+- Express canvas gestures as normalized positions inside the target canvas. Use `CanvasUtil.interactivePagePoint()` for raw mouse input, and choose a known hit region rather than merely staying inside the canvas bounds.
+- Await each authored step before issuing a dependent gesture. Do not replace state readiness with fixed delays or animation-frame counts.
+- Prefer `expect(locator).toHaveScreenshot()` so Playwright waits for consecutive stable frames. Capture the smallest surface that owns the visual contract.
+- Keep sparse geometry comparisons exact. Broad pixel-ratio tolerances can hide a materially displaced thin curve because it occupies few pixels.
+- Regenerate only snapshots affected by the intentional behavior, inspect every image, and rerun without update mode.
 
 A snapshot match alone does not prove GPU content exists. Rendering tests that can pass with a blank canvas must also compare frames with and without the relevant canvas or assert equivalent semantic output. Route-return tests must make that comparison after navigation because residency attributes do not prove Chromium retained or repainted the WebGPU presentation.
 
