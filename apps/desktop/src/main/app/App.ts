@@ -31,6 +31,7 @@ import { isConvertiblePreviewPath } from "../../shared/workspace/previewConversi
 const SLUG_ATLAS_PROFILING_ENABLED =
   process.env.SHIFT_PROFILE_SLUG_ATLAS !== undefined &&
   process.env.SHIFT_PROFILE_SLUG_ATLAS !== "0";
+const LAUNCHER_MIN_WIDTH = 800;
 
 /**
  * Owns Electron app startup and the first main-process service graph.
@@ -219,11 +220,12 @@ export class App {
     });
   }
 
-  #createWindow(autoShow = true, bounds?: Rectangle, maximised = false): Window {
+  #createWindow(autoShow = true, bounds?: Rectangle, maximised = false, minWidth?: number): Window {
     const window = new Window({
       preloadPath: path.join(__dirname, "preload.js"),
       autoShow,
       maximised,
+      ...(minWidth === undefined ? {} : { minWidth }),
       ...(bounds
         ? {
             width: bounds.width,
@@ -251,7 +253,7 @@ export class App {
   }
 
   #openLauncher(): Window {
-    const window = this.#createWindow();
+    const window = this.#createWindow(true, undefined, false, LAUNCHER_MIN_WIDTH);
     this.#loadLauncher(window);
     return window;
   }
