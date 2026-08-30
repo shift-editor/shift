@@ -235,6 +235,8 @@ export const test = base.extend<ShiftFixtures & ShiftOptions>({
       await browserWindow.evaluate(
         (win, { w, h }) => {
           win.unmaximize();
+          // Hosted displays can be narrower than the deterministic snapshot size.
+          win.setMinimumSize(w, h);
           win.setSize(w, h);
           win.center();
         },
