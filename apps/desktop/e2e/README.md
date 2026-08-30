@@ -12,6 +12,7 @@ Run commands from the repository root:
 | `pnpm test:e2e:visual`        | Run deterministic visual and interaction tests |
 | `pnpm test:e2e:visual:update` | Regenerate visual snapshots                    |
 | `pnpm test:e2e:gpu`           | Run hardware-GPU correctness tests             |
+| `pnpm test:e2e:platform`      | Run cross-platform desktop integration tests   |
 | `pnpm test:e2e:perf`          | Run Playwright performance measurements        |
 
 Append Playwright file and title filters to run the smallest relevant check:
@@ -45,11 +46,19 @@ Do not update snapshots merely to make a failure pass. Inspect the diff and conf
 
 ## Projects and fixtures
 
-| Project  | Fixture                   | Rendering                                         | CI policy                                 |
-| -------- | ------------------------- | ------------------------------------------------- | ----------------------------------------- |
-| `visual` | `fixtures/electronApp.ts` | Software rendering, DPR 1, `1200×600` page window | Required in the merge queue and on `main` |
-| `gpu`    | `fixtures/perfApp.ts`     | Hardware GPU, host scale, stable content size     | Required in the merge queue and on `main` |
-| `perf`   | `fixtures/perfApp.ts`     | Hardware GPU, host scale, stable content size     | Nightly and manual only                   |
+| Project    | Fixture                   | Rendering                                         | CI policy                                       |
+| ---------- | ------------------------- | ------------------------------------------------- | ----------------------------------------------- |
+| `visual`   | `fixtures/electronApp.ts` | Software rendering, DPR 1, `1200×600` page window | Required on macOS in merge queue and `main`     |
+| `platform` | `fixtures/electronApp.ts` | Software rendering, DPR 1, `1200×600` page window | Required on Windows/Linux in merge queue/`main` |
+| `gpu`      | `fixtures/perfApp.ts`     | Hardware GPU, host scale, stable content size     | Required on macOS in merge queue and `main`     |
+| `perf`     | `fixtures/perfApp.ts`     | Hardware GPU, host scale, stable content size     | Nightly and manual only                         |
+
+The `platform` project concentrates on native desktop boundaries: document lifecycle, Save and Save As, recovery after forced termination, application quit, native menus, Unicode filesystem paths, and import/export persistence. Headless Linux runs under Xvfb with Fluxbox so native maximize, focus, and window-placement behavior has a window manager; both are available in the Nix dev shell. GPU and performance behavior remain separate from this software-rendered suite.
+
+```sh
+xvfb-run --auto-servernum --server-args='-screen 0 1920x1080x24' sh -c \
+  'fluxbox >/tmp/shift-fluxbox.log 2>&1 & sleep 1; exec pnpm test:e2e:platform'
+```
 
 Visual tests default to MutatorSans. Authored GPU and performance tests default to the MutatorSans designspace and accept another editable source through `SHIFT_E2E_FONT_PATH`. Preview residency tests default to MutatorSans TTF through `SHIFT_E2E_PREVIEW_FONT_PATH`; variable preview scrubbing defaults to Host Grotesk through `SHIFT_E2E_VARIABLE_PREVIEW_FONT_PATH`:
 
@@ -90,7 +99,7 @@ A snapshot match alone does not prove GPU content exists. Rendering tests that c
 
 ## Failures and artifacts
 
-Local failures are written to `apps/desktop/e2e/test-results/`. CI uploads the same directory as a Playwright artifact, including screenshots, diffs, traces, error context, and `electron-diagnostics` with window, renderer error/crash, main-process output, and process-exit evidence. Open a trace with:
+Local failures are written to `apps/desktop/e2e/test-results/`. CI uploads the same directory as a Playwright artifact, including screenshots, diffs, traces, error context, and `electron-diagnostics` with window, renderer error/crash, main-process output, and process-exit evidence. Windows/Linux platform jobs also retain successful evidence for 14 days: launcher, catalog, editor, and reopened-editor screenshots; the generated `.shift` document; the exported TTF; and a runtime/file-hash manifest. These screenshots are inspection artifacts rather than golden visual assertions. Open a trace with:
 
 ```sh
 pnpm --filter @shift/desktop exec playwright show-trace apps/desktop/e2e/test-results/<test>/trace.zip

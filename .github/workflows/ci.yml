@@ -449,7 +449,7 @@ jobs:
   # Required end-to-end correctness
   # ---------------------------------------------------------------------------
   e2e-build:
-    name: E2E Build
+    name: E2E Build ${{ matrix.name }}
     needs: detect-changes
     if: >-
       (github.event_name == 'merge_group' &&
@@ -457,7 +457,17 @@ jobs:
           needs.detect-changes.outputs.rust == 'true')) ||
       github.event_name == 'push' ||
       github.event_name == 'workflow_dispatch'
-    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            runner: macos-latest
+          - name: Windows
+            runner: windows-latest
+          - name: Linux
+            runner: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
     steps:
@@ -512,7 +522,7 @@ jobs:
       - name: Upload E2E app
         uses: actions/upload-artifact@v7
         with:
-          name: e2e-app-${{ github.run_id }}
+          name: e2e-app-${{ github.run_id }}-${{ runner.os }}
           path: |
             apps/desktop/.vite/
             crates/shift-bridge/*.node
@@ -520,29 +530,34 @@ jobs:
           retention-days: 1
 
   e2e:
-    name: E2E ${{ matrix.name }}
+    name: E2E ${{ matrix.name }} ${{ matrix.shard }}/${{ matrix.shard-total }}
     needs: e2e-build
     strategy:
       fail-fast: false
       matrix:
+        target: [visual, platform-windows, platform-linux]
+        shard: [1, 2, 3]
         include:
-          - name: Visual 1/3
+          - shard-total: 3
+          - target: visual
+            name: Visual
             project: visual
-            shard: 1/3
-            artifact-suffix: visual-1-of-3
-          - name: Visual 2/3
-            project: visual
-            shard: 2/3
-            artifact-suffix: visual-2-of-3
-          - name: Visual 3/3
-            project: visual
-            shard: 3/3
-            artifact-suffix: visual-3-of-3
-          - name: GPU
+            runner: macos-latest
+          - target: platform-windows
+            name: Platform Windows
+            project: platform
+            runner: windows-latest
+          - target: platform-linux
+            name: Platform Linux
+            project: platform
+            runner: ubuntu-latest
+          - target: gpu
+            name: GPU
             project: gpu
-            shard: 1/1
-            artifact-suffix: gpu
-    runs-on: macos-latest
+            runner: macos-latest
+            shard: 1
+            shard-total: 1
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
     steps:
@@ -555,6 +570,10 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24
+
+      - name: Install Linux display environment
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install --yes fluxbox xvfb
 
       - name: Cache node_modules
         uses: actions/cache@v6
@@ -572,21 +591,39 @@ jobs:
       - name: Download E2E app
         uses: actions/download-artifact@v8
         with:
-          name: e2e-app-${{ github.run_id }}
+          name: e2e-app-${{ github.run_id }}-${{ runner.os }}
           path: .
 
       - name: Run E2E tests
+        if: runner.os != 'Linux'
         run: >-
           pnpm --dir apps/desktop exec playwright test
           --project=${{ matrix.project }}
           --fully-parallel
-          --shard=${{ matrix.shard }}
+          --shard=${{ matrix.shard }}/${{ matrix.shard-total }}
 
-      - name: Upload Playwright failures
-        if: failure()
+      - name: Run E2E tests with virtual desktop
+        if: runner.os == 'Linux'
+        run: >-
+          xvfb-run --auto-servernum --server-args='-screen 0 1920x1080x24' sh -c
+          'fluxbox >/tmp/shift-fluxbox.log 2>&1 & sleep 1;
+          exec pnpm --dir apps/desktop exec playwright test
+          --project=${{ matrix.project }} --fully-parallel --shard=${{ matrix.shard }}/${{ matrix.shard-total }}'
+
+      - name: Upload platform evidence
+        if: always() && matrix.project == 'platform'
         uses: actions/upload-artifact@v7
         with:
-          name: playwright-${{ matrix.artifact-suffix }}-results
+          name: playwright-${{ matrix.target }}-${{ matrix.shard }}-of-${{ matrix.shard-total }}-results
+          path: apps/desktop/e2e/test-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload Playwright failures
+        if: failure() && matrix.project != 'platform'
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-${{ matrix.target }}-${{ matrix.shard }}-of-${{ matrix.shard-total }}-results
           path: apps/desktop/e2e/test-results/
           retention-days: 7
 

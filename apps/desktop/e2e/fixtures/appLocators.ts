@@ -73,13 +73,18 @@ export async function waitForEditorReady(page: Page, glyphId: string): Promise<v
 }
 
 /**
- * Navigates directly to a glyph route and waits for its scene publication.
+ * Acquires a glyph, navigates to its editor route, and waits for scene publication.
  *
- * @param page - workspace window navigating to the editor.
- * @param glyphId - glyph identity that must own the published scene node.
+ * @param page - authored or preview workspace window navigating to the editor.
+ * @param glyphId - catalog identity to acquire before publishing the route.
+ * @throws {Error} when the workspace is unavailable or glyph acquisition fails.
  */
 export async function openGlyphRoute(page: Page, glyphId: string): Promise<void> {
-  await page.evaluate((id) => {
+  await page.evaluate(async (id) => {
+    const font = window.shift?.font;
+    if (!font) throw new Error("Expected font workspace");
+
+    await font.loadGlyph(id);
     window.location.hash = `#/editor/${encodeURIComponent(id)}`;
   }, glyphId);
   await waitForEditorReady(page, glyphId);
