@@ -48,6 +48,8 @@ export const BUILT_IN_TOOL_MANIFESTS: readonly ToolManifest[] = [
     icon: TextIcon,
     tooltip: "Text Tool (T)",
     shortcut: "t",
+    hidden: true,
+    disabled: true,
   },
 ];
 

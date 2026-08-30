@@ -73,6 +73,15 @@ Testing entries must distinguish:
 
 For UI changes, include screenshots or recordings when available and useful. For release changes, state whether packaging was smoke-tested and which hosted platform/signing checks remain.
 
+### Desktop E2E impact
+
+For changes that can affect desktop user flows or rendering, complete the E2E impact check in `apps/desktop/e2e/README.md` before opening or updating the pull request.
+
+- Search existing specs by affected surface, command, or workflow even when the branch does not change E2E files.
+- Run the smallest relevant Playwright project, file, and title filter. Run the complete affected project for broad or shared-fixture changes.
+- Update visual snapshots only for intentional appearance changes, inspect every changed image, and rerun without update mode.
+- List exact E2E commands in `## Testing`; explicitly identify relevant E2E coverage not run and why.
+
 ### Issue linkage
 
 Every ordinary pull request includes `## Issue`. Search open and recently closed issues before opening or updating the pull request, and reference every issue materially addressed by the change.
@@ -120,6 +129,7 @@ When reviewing a pull request:
 - Never open an ordinary pull request without searching for relevant issues and including an issue section.
 - Never open a pull request from a branch with uncommitted intended changes.
 - Never include credentials, signing material, `.env` files, or tokens.
+- Pull request titles, bodies, comments, commits, and release-note wording must describe the change and its validation, not the process used to produce it. Never include incidental execution metadata such as agent identity, handoff mechanics, remote hosts, machine names, tmux sessions, worktree paths, or “finishing work off.” Mention such infrastructure only when it is itself the subject of the change. Platform names are allowed only when materially relevant to behavior or testing evidence.
 - Never force-push, merge, enable auto-merge, or publish a release unless the user explicitly asks.
 - Never fabricate issue links, test results, screenshots, reviewers, or release-note claims.
 - Never hide a failed or skipped check from the pull request body.

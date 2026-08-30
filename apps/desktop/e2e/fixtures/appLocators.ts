@@ -95,12 +95,9 @@ export async function openCatalogGlyph(
   await page.getByPlaceholder("Search glyphs...").fill(glyphName);
   await expect(surface).toHaveAttribute("data-filtered-glyph-count", "1");
   await expect(surface).toHaveAttribute("data-first-glyph-id", glyphId);
-  await page.evaluate(
-    () =>
-      new Promise<void>((resolve) => {
-        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-      }),
-  );
+  await expect(glyphCatalogCanvas(page)).toHaveAttribute("data-grid-readiness", "Complete", {
+    timeout: 30_000,
+  });
   await clickFirstCatalogGlyph(page);
   await waitForEditorReady(page, glyphId);
 }

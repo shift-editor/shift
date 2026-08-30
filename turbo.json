@@ -14,12 +14,30 @@
         "dts-header.d.ts",
         "$TURBO_ROOT$/Cargo.toml",
         "$TURBO_ROOT$/Cargo.lock",
+        "$TURBO_ROOT$/rust-toolchain.toml",
         "$TURBO_ROOT$/crates/*/Cargo.toml",
+        "$TURBO_ROOT$/crates/*/build.rs",
+        "$TURBO_ROOT$/crates/*/src/**"
+      ],
+      "outputs": ["index.js", "index.d.ts", "*.node"]
+    },
+    "shift-bridge#build:debug": {
+      "inputs": [
+        "src/**",
+        "package.json",
+        "Cargo.toml",
+        "dts-header.d.ts",
+        "$TURBO_ROOT$/Cargo.toml",
+        "$TURBO_ROOT$/Cargo.lock",
+        "$TURBO_ROOT$/rust-toolchain.toml",
+        "$TURBO_ROOT$/crates/*/Cargo.toml",
+        "$TURBO_ROOT$/crates/*/build.rs",
         "$TURBO_ROOT$/crates/*/src/**"
       ],
       "outputs": ["index.js", "index.d.ts", "*.node"]
     },
     "generate:bridge-types": {
+      "dependsOn": ["shift-bridge#build"],
       "inputs": [
         "$TURBO_ROOT$/crates/shift-bridge/index.d.ts",
         "$TURBO_ROOT$/crates/shift-bridge/dts-header.d.ts",
@@ -46,6 +64,90 @@
       ],
       "outputs": []
     },
+    "@shift/desktop#build": {
+      "dependsOn": [
+        "shift-bridge#build",
+        "@shift/types#generate:bridge-types",
+        "@shift/glyph-info#generate"
+      ],
+      "outputs": [".vite/**"],
+      "inputs": [
+        "src/**",
+        "build.ts",
+        "package.json",
+        "tsconfig*.json",
+        "vite*.config.ts",
+        "electron-builder.config.ts",
+        "resources/**",
+        "$TURBO_ROOT$/icons/**"
+      ]
+    },
+    "@shift/desktop#build:e2e": {
+      "dependsOn": [
+        "shift-bridge#build",
+        "@shift/types#generate:bridge-types",
+        "@shift/glyph-info#generate"
+      ],
+      "outputs": [".vite/**"],
+      "inputs": [
+        "src/**",
+        "build.ts",
+        "package.json",
+        "tsconfig*.json",
+        "vite*.config.ts",
+        "electron-builder.config.ts",
+        "resources/**",
+        "$TURBO_ROOT$/icons/**"
+      ]
+    },
+    "@shift/desktop#package": {
+      "dependsOn": ["build"],
+      "cache": false
+    },
+    "@shift/desktop#make": {
+      "dependsOn": ["build"],
+      "cache": false
+    },
+    "@shift/desktop#test:perf": {
+      "dependsOn": [
+        "shift-bridge#build",
+        "@shift/types#generate:bridge-types",
+        "@shift/glyph-info#generate"
+      ],
+      "cache": false,
+      "outputs": [],
+      "inputs": ["src/**", "*.config.ts", "package.json"]
+    },
+    "@shift/desktop#test:e2e": {
+      "dependsOn": ["build:e2e"],
+      "cache": false,
+      "outputs": [],
+      "inputs": ["e2e/**", "playwright.config.ts", "src/**", "*.config.ts", "package.json"]
+    },
+    "@shift/desktop#test:e2e:visual": {
+      "dependsOn": ["build:e2e"],
+      "cache": false,
+      "outputs": [],
+      "inputs": ["e2e/**", "playwright.config.ts", "src/**", "*.config.ts", "package.json"]
+    },
+    "@shift/desktop#test:e2e:visual:update": {
+      "dependsOn": ["build:e2e"],
+      "cache": false,
+      "outputs": [],
+      "inputs": ["e2e/**", "playwright.config.ts", "src/**", "*.config.ts", "package.json"]
+    },
+    "@shift/desktop#test:e2e:gpu": {
+      "dependsOn": ["build:e2e"],
+      "cache": false,
+      "outputs": [],
+      "inputs": ["e2e/**", "playwright.config.ts", "src/**", "*.config.ts", "package.json"]
+    },
+    "@shift/desktop#test:e2e:perf": {
+      "dependsOn": ["build:e2e"],
+      "cache": false,
+      "outputs": [],
+      "inputs": ["e2e/**", "playwright.config.ts", "src/**", "*.config.ts", "package.json"]
+    },
     "lint": {
       "outputs": []
     },
@@ -62,7 +164,11 @@
       "inputs": ["src/**", "*.config.ts"]
     },
     "@shift/desktop#test": {
-      "dependsOn": ["^build", "@shift/glyph-info#generate"],
+      "dependsOn": [
+        "shift-bridge#build",
+        "@shift/types#generate:bridge-types",
+        "@shift/glyph-info#generate"
+      ],
       "outputs": [],
       "inputs": ["src/**", "*.config.ts"]
     },
@@ -72,7 +178,6 @@
       "inputs": ["src/**", "*.config.ts"]
     },
     "test:watch": {
-      "dependsOn": ["^build"],
       "cache": false,
       "persistent": true
     },
@@ -82,7 +187,11 @@
       "persistent": true
     },
     "@shift/desktop#test:watch": {
-      "dependsOn": ["^build", "@shift/glyph-info#generate"],
+      "dependsOn": [
+        "shift-bridge#build",
+        "@shift/types#generate:bridge-types",
+        "@shift/glyph-info#generate"
+      ],
       "cache": false,
       "persistent": true
     }

@@ -64,7 +64,7 @@ pnpm install
 pnpm dev
 ```
 
-`pnpm dev` builds the Rust addon in debug mode. Use `pnpm dev:release` for representative performance, or `pnpm dev:watch` / `pnpm dev:watch:release` to rebuild the addon when Rust changes.
+`pnpm dev` builds the Rust addon in debug mode through Turbo before starting Electron. Use `pnpm dev:release` for representative performance, or `pnpm dev:watch` / `pnpm dev:watch:release` to rebuild the addon when Rust changes.
 
 ### Command-line inspection
 
