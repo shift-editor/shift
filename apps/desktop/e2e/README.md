@@ -22,7 +22,7 @@ pnpm test:e2e:visual e2e/document-recovery.spec.ts
 pnpm test:e2e:gpu e2e/glyph-grid.spec.ts
 ```
 
-Build the native bridge first with `pnpm build:native` when its binary is absent or stale. Each E2E command builds the Electron main, workspace, preload, and renderer bundles through `build.ts --e2e`.
+Each E2E command runs a Turbo `build:e2e` prerequisite, which builds the native bridge, generated bridge types, glyph-info resources, and Electron main, workspace, preload, and renderer bundles through `build.ts --e2e` before Playwright starts.
 
 ## Projects and fixtures
 

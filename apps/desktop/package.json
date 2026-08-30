@@ -8,19 +8,20 @@
   "scripts": {
     "dev": "electron-forge start",
     "build": "tsx build.ts",
-    "package": "pnpm build && electron-builder --config electron-builder.config.ts --dir --publish never",
-    "make": "pnpm build && electron-builder --config electron-builder.config.ts --publish never",
+    "package": "electron-builder --config electron-builder.config.ts --dir --publish never",
+    "make": "electron-builder --config electron-builder.config.ts --publish never",
     "typecheck": "tsgo --noEmit -p tsconfig.build.json && tsgo --noEmit -p tsconfig.config.json",
     "lint": "oxlint --fix src/",
     "lint:check": "oxlint --deny-warnings src/",
     "test": "vitest run",
     "test:watch": "vitest",
-    "build:e2e": "pnpm --workspace-root generate:glyph-info && tsx build.ts --e2e",
-    "test:e2e": "pnpm build:e2e && pnpm exec playwright test --project=visual --project=gpu",
-    "test:e2e:visual": "pnpm build:e2e && pnpm exec playwright test --project=visual",
-    "test:e2e:visual:update": "pnpm build:e2e && pnpm exec playwright test --project=visual --update-snapshots",
-    "test:e2e:gpu": "pnpm build:e2e && pnpm exec playwright test --project=gpu",
-    "test:e2e:perf": "pnpm build:e2e && pnpm exec playwright test --project=perf"
+    "build:e2e": "tsx build.ts --e2e",
+    "test:e2e": "playwright test --project=visual --project=gpu",
+    "test:e2e:visual": "playwright test --project=visual",
+    "test:e2e:visual:update": "playwright test --project=visual --update-snapshots",
+    "test:e2e:gpu": "playwright test --project=gpu",
+    "test:e2e:perf": "playwright test --project=perf",
+    "test:perf": "vitest bench --run"
   },
   "author": {
     "name": "Kostya Farber",
