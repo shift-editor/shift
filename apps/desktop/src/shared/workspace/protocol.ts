@@ -70,6 +70,21 @@ export type WorkspaceSlugAtlasPageRequest = {
 
 export type WorkspaceDocumentSourceKind = "untitled" | "document" | "imported";
 
+/** Recoverable authored workspace discovered under the app-owned documents root. */
+export type WorkspaceRecovery =
+  | {
+      kind: "saved";
+      state: "recoverable";
+      workspaceId: string;
+      documentId: string;
+      canonicalPath: string;
+    }
+  | {
+      kind: "unsaved";
+      state: "recoverable";
+      workspaceId: string;
+    };
+
 /** Immutable product mode for one live font session. */
 export type FontSessionMode = "authored" | "preview";
 
@@ -170,6 +185,14 @@ export type ShellCallMap = {
   };
   "workspace.open": {
     request: { path: string };
+    response: WorkspaceDocumentState;
+  };
+  "workspace.listRecoveries": {
+    request: void;
+    response: WorkspaceRecovery[];
+  };
+  "workspace.resume": {
+    request: { workspaceId: string };
     response: WorkspaceDocumentState;
   };
   "workspace.close": { request: { discard: boolean }; response: null };

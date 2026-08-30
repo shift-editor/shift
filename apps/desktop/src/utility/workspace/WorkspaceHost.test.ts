@@ -714,6 +714,30 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     expect(canonicalGlyphNames(saved.path)).toEqual(["A", "B"]);
   });
 
+  it("lists recoveries and resumes an unsaved working database", async () => {
+    const sync = await connectSyncLane();
+    const created = await createWorkspace(sync);
+    await addGlyphB(sync);
+
+    const restarted = await startAdditionalHost();
+    await expect(restarted.shell.call("workspace.listRecoveries", undefined)).resolves.toEqual([
+      { kind: "unsaved", state: "recoverable", workspaceId: created.workspaceId },
+    ]);
+
+    const state = await restarted.shell.call("workspace.resume", {
+      workspaceId: created.workspaceId,
+    });
+    const snapshot = await restarted.sync.call("workspace.snapshot", undefined);
+
+    expect(state).toMatchObject({
+      workspaceId: created.workspaceId,
+      sourceKind: "untitled",
+      dirty: true,
+      needsSaveAs: true,
+    });
+    expect(snapshot?.glyphs.map((glyph) => glyph.name)).toEqual(["B"]);
+  });
+
   it("discard removes recovered edits without changing the canonical document", async () => {
     const source = await connectSyncLane();
     const saved = await saveDocumentWithGlyphA(source, "DiscardMe.shift");

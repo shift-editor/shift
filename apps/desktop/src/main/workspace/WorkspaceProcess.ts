@@ -7,6 +7,7 @@ import type {
   ShellEventMap,
   WorkspaceDocumentIdentity,
   WorkspaceDocumentState,
+  WorkspaceRecovery,
 } from "../../shared/workspace/protocol";
 import { createShiftLogger, type ShiftLogger } from "../logging";
 
@@ -124,6 +125,16 @@ export class WorkspaceProcess {
    */
   openWorkspace(path: string): Promise<WorkspaceDocumentState> {
     return this.#requireChannel().call("workspace.open", { path });
+  }
+
+  /** Lists recoverable app-owned workspaces selected by the active distribution root. */
+  listRecoveries(): Promise<WorkspaceRecovery[]> {
+    return this.#requireChannel().call("workspace.listRecoveries", undefined);
+  }
+
+  /** Resumes one trusted app-owned working store selected by workspace id. */
+  resumeWorkspace(workspaceId: string): Promise<WorkspaceDocumentState> {
+    return this.#requireChannel().call("workspace.resume", { workspaceId });
   }
 
   /** Opens a retained read-only source without allocating a workspace document. */

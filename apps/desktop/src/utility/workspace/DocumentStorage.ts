@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
+import type { WorkspaceRecovery } from "../../shared/workspace/protocol";
 import { DocumentAddress, type DocumentBinding, type WorkspaceAllocation } from "./types";
 
 const SQLITE_SIDECAR_SUFFIXES = ["", "-wal", "-shm", "-journal"] as const;
@@ -79,6 +80,45 @@ export class DocumentStorage {
     return binding;
   }
 
+  /** Lists every recoverable workspace allocation under this distribution root. */
+  listRecoveries(): WorkspaceRecovery[] {
+    const recoveries = new Map<string, WorkspaceRecovery>();
+    const savedWorkspaceIds = new Set<string>();
+
+    for (const binding of this.#listAllDocumentBindings()) {
+      savedWorkspaceIds.add(binding.workspaceId);
+      if (!fs.existsSync(binding.recoveryPath)) continue;
+
+      recoveries.set(`saved:${binding.workspaceId}`, {
+        kind: "saved",
+        state: "recoverable",
+        workspaceId: binding.workspaceId,
+        documentId: binding.documentId,
+        canonicalPath: binding.canonicalPath,
+      });
+    }
+
+    const workspacesPath = path.join(this.#rootPath, "workspaces");
+    if (!fs.existsSync(workspacesPath)) return sortRecoveries([...recoveries.values()]);
+
+    for (const entry of fs.readdirSync(workspacesPath, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      assertSafeSegment("workspace id", entry.name);
+      if (savedWorkspaceIds.has(entry.name)) continue;
+
+      const workspace = this.workspace(entry.name);
+      if (!fs.existsSync(workspace.storePath)) continue;
+
+      recoveries.set(`unsaved:${workspace.workspaceId}`, {
+        kind: "unsaved",
+        state: "recoverable",
+        workspaceId: workspace.workspaceId,
+      });
+    }
+
+    return sortRecoveries([...recoveries.values()]);
+  }
+
   /** Lists every path binding for one canonical document identity. */
   listDocumentBindings(documentId: string): DocumentBinding[] {
     assertSafeSegment("document id", documentId);
@@ -97,6 +137,34 @@ export class DocumentStorage {
     }
 
     return bindings.sort((left, right) => left.canonicalPath.localeCompare(right.canonicalPath));
+  }
+
+  #listAllDocumentBindings(): DocumentBinding[] {
+    const rootPath = path.join(this.#rootPath, "bindings");
+    if (!fs.existsSync(rootPath)) return [];
+
+    const bindings: DocumentBinding[] = [];
+    for (const documentEntry of fs.readdirSync(rootPath, { withFileTypes: true })) {
+      if (!documentEntry.isDirectory()) continue;
+      assertSafeSegment("document id", documentEntry.name);
+
+      const directoryPath = path.join(rootPath, documentEntry.name);
+      for (const entry of fs.readdirSync(directoryPath, { withFileTypes: true })) {
+        if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
+
+        const bindingPath = path.join(directoryPath, entry.name);
+        const binding = readDocumentBinding(bindingPath);
+        const address = new DocumentAddress(documentEntry.name, binding.canonicalPath);
+        this.#validateBinding(address, binding, bindingPath);
+        bindings.push(binding);
+      }
+    }
+
+    return bindings.sort((left, right) =>
+      left.documentId === right.documentId
+        ? left.canonicalPath.localeCompare(right.canonicalPath)
+        : left.documentId.localeCompare(right.documentId),
+    );
   }
 
   /** Atomically binds one canonical document address to an app-local workspace. */
@@ -165,6 +233,15 @@ function readDocumentBinding(bindingPath: string): DocumentBinding {
     })
     .join("; ");
   throw new Error(`invalid document binding: ${bindingPath}: ${details}`);
+}
+
+function sortRecoveries(recoveries: WorkspaceRecovery[]): WorkspaceRecovery[] {
+  return recoveries.sort((left, right) => {
+    const kind = left.kind.localeCompare(right.kind);
+    if (kind !== 0) return kind;
+
+    return left.workspaceId.localeCompare(right.workspaceId);
+  });
 }
 
 function writeJsonAtomic(targetPath: string, value: unknown): void {
