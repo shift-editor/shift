@@ -9,6 +9,8 @@ import { once } from "node:events";
 import path from "node:path";
 import { MAIN_JS, waitForWorkspaceReady } from "./electronApp";
 
+export { killApp } from "./electronApp";
+
 export async function createNewFont(page: Page, electronApp: ElectronApplication): Promise<Page> {
   const workspaceWindow = electronApp.waitForEvent("window");
   await page.getByRole("button", { name: "New font", exact: true }).click();
@@ -139,13 +141,4 @@ export async function relaunchApp(
       SHIFT_E2E_SAVE_SHIFT_PATH: saveShiftPath,
     },
   });
-}
-
-export async function killApp(electronApp: ElectronApplication): Promise<void> {
-  const childProcess = electronApp.process();
-  if (childProcess.exitCode !== null || childProcess.signalCode !== null) return;
-
-  const exited = once(childProcess, "exit");
-  childProcess.kill("SIGKILL");
-  await exited;
 }

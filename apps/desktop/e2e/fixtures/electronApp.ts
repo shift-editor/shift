@@ -6,12 +6,14 @@ import {
   type ElectronApplication,
 } from "@playwright/test";
 import { createBridge } from "@shift/bridge";
+import { execFile } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import * as path from "path";
 import { once } from "events";
+import { promisify } from "node:util";
 import type { Axis, NamedInstance, Source, Unicode } from "@shift/types";
 import type { DirtyDocumentChoice } from "../../src/main/document/types";
 import { createAuthoredDocument } from "./fontSource";
@@ -43,6 +45,7 @@ export const GLYPHSPACKAGE_FONT_PATH = path.resolve(
 /** Fixed window size for deterministic snapshots. */
 const WINDOW_WIDTH = 1200;
 const WINDOW_HEIGHT = 600;
+const execFileAsync = promisify(execFile);
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -260,11 +263,7 @@ export const test = base.extend<ShiftFixtures & ShiftOptions>({
         });
       }
 
-      if (childProcess && childProcess.exitCode === null && childProcess.signalCode === null) {
-        const exited = once(childProcess, "exit");
-        childProcess.kill("SIGKILL");
-        await exited;
-      }
+      if (childProcess) await terminateProcessTree(childProcess);
     }
   },
 
@@ -402,12 +401,34 @@ async function readyWorkspacePage(app: ElectronApplication): Promise<Page> {
   return page;
 }
 
-async function killApp(app: ElectronApplication): Promise<void> {
-  const childProcess = app.process();
+/**
+ * Force-terminates the application and all descendant processes.
+ *
+ * @param app - application whose process tree must release test resources.
+ * @throws {Error} when the platform termination command cannot stop a running application.
+ */
+export async function killApp(app: ElectronApplication): Promise<void> {
+  await terminateProcessTree(app.process());
+}
+
+/** Terminates an Electron process tree through a handle that survives Playwright disconnection. */
+async function terminateProcessTree(childProcess: ChildProcess): Promise<void> {
   if (childProcess.exitCode !== null || childProcess.signalCode !== null) return;
 
   const exited = once(childProcess, "exit");
-  childProcess.kill("SIGKILL");
+  if (process.platform === "win32") {
+    const pid = childProcess.pid;
+    if (pid === undefined) throw new Error("Electron process has no PID");
+
+    try {
+      await execFileAsync("taskkill", ["/F", "/PID", String(pid), "/T"]);
+    } catch (error) {
+      if (childProcess.exitCode === null && childProcess.signalCode === null) throw error;
+    }
+  } else {
+    childProcess.kill("SIGKILL");
+  }
+
   await exited;
 }
 
