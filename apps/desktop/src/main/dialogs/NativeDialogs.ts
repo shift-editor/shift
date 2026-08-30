@@ -1,5 +1,5 @@
 import type { WorkspaceDocumentState } from "../../shared/workspace/protocol";
-import type { CloseReason, DirtyDocumentChoice } from "../document/types";
+import type { CloseReason, DirtyDocumentChoice, DocumentCrashChoice } from "../document/types";
 import type { Window } from "../windows/Window";
 
 /** Owns native user choices at the outer Electron dialog boundary. */
@@ -63,6 +63,20 @@ export interface NativeDialogs {
     reason: CloseReason,
     applicationName: string,
   ): Promise<DirtyDocumentChoice>;
+
+  /**
+   * Confirms whether a crashed document should be reconstructed.
+   *
+   * @param window - native window that should own the confirmation.
+   * @param applicationName - product name shown by the native shell.
+   * @param failure - whether this is the first crash prompt or a failed reopen retry prompt.
+   * @returns the user's Reopen/Try Again or Close Window choice.
+   */
+  confirmDocumentReopen(
+    window: Window | null,
+    applicationName: string,
+    failure: "crashed" | "restoreFailed",
+  ): Promise<DocumentCrashChoice>;
 
   /**
    * Shows a blocking failure after a document save was refused or failed.

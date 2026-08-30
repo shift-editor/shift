@@ -1,4 +1,4 @@
-import type { DirtyDocumentChoice } from "../document/types";
+import type { DirtyDocumentChoice, DocumentCrashChoice } from "../document/types";
 import type { NativeDialogs } from "./NativeDialogs";
 
 const dirtyDocumentChoices = parseDirtyDocumentChoices(
@@ -44,10 +44,23 @@ export const scriptedNativeDialogs: NativeDialogs = {
     return dirtyDocumentChoice(process.env.SHIFT_E2E_DIRTY_DOCUMENT_CHOICE);
   },
 
+  async confirmDocumentReopen() {
+    return documentCrashChoice(process.env.SHIFT_E2E_DOCUMENT_CRASH_CHOICE);
+  },
+
   async showSaveFailure() {},
 
   async showExportFailure() {},
 };
+
+function documentCrashChoice(value: string | undefined): DocumentCrashChoice {
+  switch (value) {
+    case "close":
+      return "close";
+    default:
+      return "reopen";
+  }
+}
 
 function dirtyDocumentChoice(value: string | undefined): DirtyDocumentChoice {
   switch (value) {

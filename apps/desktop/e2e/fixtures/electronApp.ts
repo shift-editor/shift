@@ -69,6 +69,7 @@ type ShiftOptions = {
   dirtyDocumentChoice: DirtyDocumentChoice;
   dirtyDocumentChoices: readonly DirtyDocumentChoice[] | undefined;
   dirtyDocumentDelayMs: number;
+  documentCrashChoice: "reopen" | "close";
 };
 
 export interface CanonicalVariableFont {
@@ -94,6 +95,7 @@ export const test = base.extend<ShiftFixtures & ShiftOptions>({
   dirtyDocumentChoice: ["cancel", { option: true }],
   dirtyDocumentChoices: [undefined, { option: true }],
   dirtyDocumentDelayMs: [0, { option: true }],
+  documentCrashChoice: ["reopen", { option: true }],
 
   testRoot: async ({}, use) => {
     const testRoot = fs.mkdtempSync(path.join(os.tmpdir(), "shift-e2e-"));
@@ -135,6 +137,7 @@ export const test = base.extend<ShiftFixtures & ShiftOptions>({
       dirtyDocumentChoice,
       dirtyDocumentChoices,
       dirtyDocumentDelayMs,
+      documentCrashChoice,
       testRoot,
       saveShiftPath,
       exportTtfPath,
@@ -179,6 +182,7 @@ export const test = base.extend<ShiftFixtures & ShiftOptions>({
         environment.SHIFT_E2E_DIRTY_DOCUMENT_DELAY_MS = String(dirtyDocumentDelayMs);
       }
       if (openFontPath) environment.SHIFT_E2E_OPEN_FONT_PATH = openFontPath;
+      environment.SHIFT_E2E_DOCUMENT_CRASH_CHOICE = documentCrashChoice;
     }
 
     try {

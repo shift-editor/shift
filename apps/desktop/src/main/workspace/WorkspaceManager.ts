@@ -18,6 +18,7 @@ export interface WorkspaceManagerOptions {
   readonly documentsRoot: () => string;
   readonly applicationName: () => string;
   readonly nativeDialogs: NativeDialogs;
+  readonly onSessionCrashed?: (session: FontSessionHost) => void;
 }
 
 /**
@@ -33,6 +34,7 @@ export class WorkspaceManager {
   readonly #documentsRoot: () => string;
   readonly #applicationName: () => string;
   readonly #nativeDialogs: NativeDialogs;
+  readonly #onSessionCrashed: (session: FontSessionHost) => void;
   readonly #sessionsById = new Map<FontSessionId, FontSessionHost>();
   readonly #sessionIdByWindowId = new Map<number, FontSessionId>();
   readonly #documentSessions = new DocumentSessionIndex();
@@ -47,6 +49,7 @@ export class WorkspaceManager {
     this.#documentsRoot = options.documentsRoot;
     this.#applicationName = options.applicationName;
     this.#nativeDialogs = options.nativeDialogs;
+    this.#onSessionCrashed = options.onSessionCrashed ?? (() => {});
   }
 
   /**
@@ -300,6 +303,7 @@ export class WorkspaceManager {
       documentClient: new DocumentClient(),
       applicationName: this.#applicationName,
       nativeDialogs: this.#nativeDialogs,
+      onWorkspaceExit: (crashedSession) => this.#onSessionCrashed(crashedSession),
     });
 
     session.document?.acceptState(state);
@@ -325,6 +329,22 @@ export class WorkspaceManager {
       default:
         assertNever(recovery);
     }
+  }
+
+  async reopenSession(sessionId: FontSessionId): Promise<FontSessionHost> {
+    const session = this.#requireWorkspace(sessionId);
+    if (session.mode !== "authored") {
+      throw new Error(`Cannot reopen preview session: ${sessionId}`);
+    }
+    if (session.workspaceProcess.running) return session;
+
+    const windows = session.allWindows();
+    this.unregister(session.workspaceId);
+    const reopened = await this.#createSession((workspaceProcess) =>
+      workspaceProcess.resumeWorkspace(sessionId),
+    );
+    for (const window of windows) this.#sessionIdByWindowId.delete(window.window.id);
+    return reopened;
   }
 
   async #openDocument(
