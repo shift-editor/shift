@@ -1,4 +1,14 @@
 export { Button, type ButtonProps } from "./components/button";
+export {
+  Toolbar,
+  ToolbarGroup,
+  ToolbarButton,
+  ToolbarSeparator,
+  type ToolbarProps,
+  type ToolbarGroupProps,
+  type ToolbarButtonProps,
+  type ToolbarSeparatorProps,
+} from "./components/toolbar";
 export { Separator, type SeparatorProps } from "./components/separator";
 export { Input, type InputProps } from "./components/input";
 export { Textarea, type TextareaProps } from "./components/textarea";

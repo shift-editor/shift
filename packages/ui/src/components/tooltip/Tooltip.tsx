@@ -32,7 +32,9 @@ interface TooltipTriggerProps {
 }
 
 function TooltipTrigger({ children }: TooltipTriggerProps) {
-  return <BaseTooltip.Trigger render={<span />}>{children}</BaseTooltip.Trigger>;
+  return (
+    <BaseTooltip.Trigger render={<span className="inline-flex" />}>{children}</BaseTooltip.Trigger>
+  );
 }
 
 interface TooltipContentProps {

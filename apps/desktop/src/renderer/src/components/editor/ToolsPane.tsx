@@ -1,6 +1,15 @@
 import { FC } from "react";
 
-import { Button, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, cn } from "@shift/ui";
+import {
+  Button,
+  Toolbar,
+  ToolbarButton,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+  cn,
+} from "@shift/ui";
 import { useSignalState } from "@/lib/signals";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { SVG } from "@/types/common";
@@ -11,23 +20,42 @@ interface ToolbarIconProps {
   name: ToolName;
   tooltip: string;
   activeTool: ToolName | null;
+  disabled?: boolean;
   onClick?: () => void;
 }
-export const ToolbarIcon: FC<ToolbarIconProps> = ({ Icon, name, tooltip, activeTool, onClick }) => {
+export const ToolbarIcon: FC<ToolbarIconProps> = ({
+  Icon,
+  name,
+  tooltip,
+  activeTool,
+  disabled,
+  onClick,
+}) => {
   const isActive = activeTool === name;
 
   return (
     <Tooltip delayDuration={1500}>
       <TooltipTrigger>
-        <Button
-          className={cn("w-7 h-7 rounded-md")}
-          variant={isActive ? "primary" : "ghost"}
-          icon={<Icon className={cn("w-full h-full", isActive ? "text-white" : "text-primary")} />}
-          aria-label={tooltip}
-          isActive={isActive}
-          onClick={onClick}
-          data-read-only-mutation={onClick ? undefined : true}
-          size="icon"
+        <ToolbarButton
+          disabled={disabled}
+          render={
+            <Button
+              className={cn("h-8 w-8 rounded-md", !isActive && "hover:bg-icon-button-hover")}
+              variant={isActive ? "primary" : "ghost"}
+              icon={
+                <Icon
+                  className={cn("h-5.5 w-5.5", isActive ? "text-white" : "text-primary")}
+                  strokeWidth={1.25}
+                />
+              }
+              aria-label={tooltip}
+              disabled={disabled}
+              isActive={isActive}
+              onClick={onClick}
+              data-read-only-mutation={onClick ? undefined : true}
+              size="icon"
+            />
+          }
         />
       </TooltipTrigger>
       <TooltipContent
@@ -49,20 +77,26 @@ export const ToolsPane: FC = () => {
   return (
     <section className="flex flex-col items-center justify-center gap-2">
       <TooltipProvider delayDuration={2000}>
-        <div className="flex items-center gap-2 bg-white rounded-lg border-b border-line p-0.5">
-          {Array.from(toolRegistry.entries()).map(([name, { icon, tooltip }]) => (
-            <ToolbarIcon
-              key={name}
-              Icon={icon}
-              name={name}
-              tooltip={tooltip}
-              activeTool={activeTool}
-              onClick={() => {
-                editor.setActiveTool(name);
-              }}
-            />
-          ))}
-        </div>
+        <Toolbar
+          aria-label="Editor tools"
+          className="flex h-[40px] items-center gap-2 overflow-hidden rounded-lg border-b border-line bg-white px-1"
+        >
+          {Array.from(toolRegistry.entries())
+            .filter(([, item]) => !item.hidden)
+            .map(([name, { icon, tooltip, disabled }]) => (
+              <ToolbarIcon
+                key={name}
+                Icon={icon}
+                name={name}
+                tooltip={tooltip}
+                activeTool={activeTool}
+                disabled={disabled}
+                onClick={() => {
+                  editor.setActiveTool(name);
+                }}
+              />
+            ))}
+        </Toolbar>
       </TooltipProvider>
     </section>
   );

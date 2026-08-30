@@ -30,6 +30,8 @@ export interface ToolRegistryItem {
   icon: React.FC<React.SVGProps<SVGSVGElement>>;
   tooltip: string;
   shortcut?: string;
+  hidden?: boolean;
+  disabled?: boolean;
 }
 
 export interface TemporaryToolOptions {
