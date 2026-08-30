@@ -142,6 +142,12 @@
       "outputs": [],
       "inputs": ["e2e/**", "playwright.config.ts", "src/**", "*.config.ts", "package.json"]
     },
+    "@shift/desktop#test:e2e:platform": {
+      "dependsOn": ["build:e2e"],
+      "cache": false,
+      "outputs": [],
+      "inputs": ["e2e/**", "playwright.config.ts", "src/**", "*.config.ts", "package.json"]
+    },
     "@shift/desktop#test:e2e:perf": {
       "dependsOn": ["build:e2e"],
       "cache": false,

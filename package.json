@@ -26,6 +26,7 @@
     "test:e2e:visual": "turbo run build:e2e --filter=@shift/desktop && pnpm --dir apps/desktop exec playwright test --project=visual",
     "test:e2e:visual:update": "turbo run build:e2e --filter=@shift/desktop && pnpm --dir apps/desktop exec playwright test --project=visual --update-snapshots",
     "test:e2e:gpu": "turbo run build:e2e --filter=@shift/desktop && pnpm --dir apps/desktop exec playwright test --project=gpu",
+    "test:e2e:platform": "turbo run build:e2e --filter=@shift/desktop && pnpm --dir apps/desktop exec playwright test --project=platform",
     "test:e2e:perf": "turbo run build:e2e --filter=@shift/desktop && pnpm --dir apps/desktop exec playwright test --project=perf",
     "test:playwright": "pnpm test:e2e",
     "test:watch": "turbo run test:watch",

@@ -33,6 +33,11 @@ export default defineConfig({
       testIgnore: /(?:font-preview|glyph-grid|gpu|perf)\.spec/,
     },
     {
+      name: "platform",
+      testMatch:
+        /(?:application-menu|application-quit|document-lifecycle|document-recovery|platform-integration)\.spec/,
+    },
+    {
       name: "gpu",
       testMatch: /(?:font-preview|glyph-grid)\.spec/,
     },

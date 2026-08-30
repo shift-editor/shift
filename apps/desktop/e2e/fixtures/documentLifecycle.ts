@@ -101,9 +101,22 @@ export async function requestAppQuit(electronApp: ElectronApplication): Promise<
   });
 }
 
+/**
+ * Ensures the Electron process exits after a quit request or last-window shutdown.
+ *
+ * @param electronApp - application that may already be exiting on non-macOS platforms.
+ */
 export async function quitApp(electronApp: ElectronApplication): Promise<void> {
-  const exited = once(electronApp.process(), "exit");
-  await requestAppQuit(electronApp);
+  const childProcess = electronApp.process();
+  if (childProcess.exitCode !== null || childProcess.signalCode !== null) return;
+
+  const exited = once(childProcess, "exit");
+  try {
+    await requestAppQuit(electronApp);
+  } catch {
+    if (childProcess.exitCode === null && childProcess.signalCode === null) await exited;
+    return;
+  }
   await exited;
 }
 

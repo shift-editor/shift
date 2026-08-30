@@ -467,6 +467,12 @@ jobs:
           - name: GPU
             project: gpu
             runner: macos-latest
+          - name: Platform Windows
+            project: platform
+            runner: windows-latest
+          - name: Platform Linux
+            project: platform
+            runner: ubuntu-latest
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
@@ -483,6 +489,10 @@ jobs:
 
       - name: Install toolchain
         run: rustup show
+
+      - name: Install Linux display environment
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install --yes fluxbox xvfb
 
       - name: Cache node_modules
         uses: actions/cache@v6
@@ -514,13 +524,30 @@ jobs:
         run: pnpm build:native
 
       - name: Run E2E tests
+        if: runner.os != 'Linux'
         run: pnpm test:e2e:${{ matrix.project }}
 
-      - name: Upload Playwright failures
-        if: failure()
+      - name: Run E2E tests with virtual desktop
+        if: runner.os == 'Linux'
+        run: >-
+          xvfb-run --auto-servernum --server-args='-screen 0 1920x1080x24' sh -c
+          'fluxbox >/tmp/shift-fluxbox.log 2>&1 & sleep 1;
+          exec pnpm test:e2e:${{ matrix.project }}'
+
+      - name: Upload platform evidence
+        if: always() && matrix.project == 'platform'
         uses: actions/upload-artifact@v7
         with:
-          name: playwright-${{ matrix.project }}-results
+          name: playwright-${{ matrix.project }}-${{ runner.os }}-results
+          path: apps/desktop/e2e/test-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload Playwright failures
+        if: failure() && matrix.project != 'platform'
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-${{ matrix.project }}-${{ runner.os }}-results
           path: apps/desktop/e2e/test-results/
           retention-days: 7
 

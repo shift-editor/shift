@@ -49,8 +49,10 @@
             at-spi2-atk
             cups
             dbus
+            fluxbox
             gtk3
             nss
+            xvfb-run
             libx11
             libxscrnsaver
             libxtst

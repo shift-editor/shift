@@ -982,7 +982,7 @@ The authoritative milestone plan is the release roadmap at the top of this file.
 - [ ] Increase Rust unit test coverage
 - [ ] Integration tests for native bindings
 - [ ] Frontend component tests
-- [ ] E2E tests (Playwright)
+- [x] E2E tests (Playwright)
 - [ ] Visual regression tests
 
 **Performance**

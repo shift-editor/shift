@@ -225,10 +225,11 @@ export const test = base.extend<ShiftFixtures & ShiftOptions>({
           .toBe(true);
       }
 
+      await browserWindow.evaluate((window) => window.unmaximize());
+      await expect.poll(() => browserWindow.evaluate((window) => window.isMaximized())).toBe(false);
       await browserWindow.evaluate(
         (win, { w, h }) => {
-          win.unmaximize();
-          win.setSize(w, h);
+          win.setContentSize(w, h);
           win.center();
         },
         { w: WINDOW_WIDTH, h: WINDOW_HEIGHT },
@@ -373,10 +374,11 @@ async function launchShiftApp(
     }
 
     const browserWindow = await app.browserWindow(page);
+    await browserWindow.evaluate((window) => window.unmaximize());
+    await expect.poll(() => browserWindow.evaluate((window) => window.isMaximized())).toBe(false);
     await browserWindow.evaluate(
       (win, { w, h }) => {
-        win.unmaximize();
-        win.setSize(w, h);
+        win.setContentSize(w, h);
         win.center();
       },
       { w: WINDOW_WIDTH, h: WINDOW_HEIGHT },

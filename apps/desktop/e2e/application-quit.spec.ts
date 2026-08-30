@@ -2,7 +2,7 @@ import { expect, type ElectronApplication, type Page } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
 import { documentTest as test, waitForWorkspaceReady } from "./fixtures/electronApp";
-import { openCatalogGlyph } from "./fixtures/appLocators";
+import { openGlyphRoute } from "./fixtures/appLocators";
 import {
   addSquare,
   hoverVisibleUnselectedPoint,
@@ -132,12 +132,16 @@ test("keeps authored document state isolated between windows", async ({ electron
   const secondPage = await createAnotherDirtyFont(firstPage, electronApp);
   const firstGlyphId = await glyphIdForName(firstPage, "newGlyph");
   const secondGlyphId = await glyphIdForName(secondPage, "newGlyph");
+  await Promise.all([
+    firstPage.waitForFunction(() => window.shift?.applyStatusCell.peek() === "idle"),
+    secondPage.waitForFunction(() => window.shift?.applyStatusCell.peek() === "idle"),
+  ]);
 
-  await openCatalogGlyph(firstPage, "newGlyph", firstGlyphId);
+  await openGlyphRoute(firstPage, firstGlyphId);
   await addSquare(firstPage);
   await selectVisiblePoint(firstPage);
   await hoverVisibleUnselectedPoint(firstPage);
-  await openCatalogGlyph(secondPage, "newGlyph", secondGlyphId);
+  await openGlyphRoute(secondPage, secondGlyphId);
 
   expect(await secondPage.evaluate(() => window.shift?.editor.selection.ids)).toEqual([]);
   expect(await secondPage.evaluate(() => window.shift?.editor.hover.id)).toBeNull();
