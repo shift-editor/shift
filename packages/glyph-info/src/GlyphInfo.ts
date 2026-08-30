@@ -131,7 +131,8 @@ export class GlyphInfo {
   #decomposed: Map<number, number[]>;
   #usedBy: Map<number, number[]>;
   #charsets: CharsetDefinition[];
-  #searchIndex: MiniSearch;
+  #searchData: Record<string, unknown>[];
+  #searchIndex: MiniSearch | null = null;
 
   constructor(resources: GlyphInfoResources) {
     this.#glyphData = new Map(resources.glyphData.map((g) => [g.codepoint, g]));
@@ -158,14 +159,22 @@ export class GlyphInfo {
     );
 
     this.#charsets = resources.charsets;
+    this.#searchData = resources.searchData;
+  }
 
-    this.#searchIndex = new MiniSearch({
+  #getSearchIndex(): MiniSearch {
+    if (this.#searchIndex) return this.#searchIndex;
+
+    const searchIndex = new MiniSearch({
       fields: ["glyphName", "unicodeName", "altNames", "category", "subCategory"],
       storeFields: ["codepoint", "glyphName", "unicodeName", "category", "subCategory"],
       idField: "codepoint",
       searchOptions: { prefix: true, combineWith: "AND" },
     });
-    this.#searchIndex.addAll(resources.searchData);
+    searchIndex.addAll(this.#searchData);
+    this.#searchIndex = searchIndex;
+
+    return searchIndex;
   }
 
   // --- Glyph Data (Map lookups) ---
@@ -323,7 +332,7 @@ export class GlyphInfo {
     const sanitized = query.trim().replace(/['"()*:^{}]/g, " ");
     if (!sanitized.trim()) return [];
 
-    const results = this.#searchIndex.search(sanitized, {
+    const results = this.#getSearchIndex().search(sanitized, {
       prefix: true,
       combineWith: "AND",
     }) as unknown as GlyphSearchHit[];
