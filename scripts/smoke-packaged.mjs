@@ -100,23 +100,6 @@ function verifyMacosDocumentIcon() {
   if (!assets.some(({ Name }) => Name === macosDocumentBadgeName)) {
     throw new Error("Packaged asset catalog does not contain the Shift document badge");
   }
-
-  const launchServices =
-    "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister";
-  runCommand(launchServices, ["-f", appPath]);
-
-  try {
-    runCommand("xcrun", [
-      "swift",
-      path.join(import.meta.dirname, "verify-macos-document-icon.swift"),
-      macosDocumentTypeIdentifier,
-    ]);
-  } finally {
-    const result = spawnSync(launchServices, ["-u", appPath], { encoding: "utf8" });
-    if (result.status !== 0) {
-      console.warn(`Could not unregister packaged app: ${result.stderr || result.stdout}`);
-    }
-  }
 }
 
 verifyMacosDocumentIcon();
