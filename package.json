@@ -11,6 +11,7 @@
     "dev:watch:release": "./scripts/watch.sh release",
     "build:native": "turbo run build --filter=shift-bridge",
     "build:native:debug": "turbo run build:debug --filter=shift-bridge",
+    "build:native:e2e": "turbo run build:e2e --filter=shift-bridge",
     "generate:bridge-types": "turbo run generate:bridge-types",
     "generate:types": "pnpm generate:bridge-types",
     "generate:glyph-info": "turbo run generate --filter=@shift/glyph-info",

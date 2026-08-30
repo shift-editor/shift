@@ -36,6 +36,21 @@
       ],
       "outputs": ["index.js", "index.d.ts", "*.node"]
     },
+    "shift-bridge#build:e2e": {
+      "inputs": [
+        "src/**",
+        "package.json",
+        "Cargo.toml",
+        "dts-header.d.ts",
+        "$TURBO_ROOT$/Cargo.toml",
+        "$TURBO_ROOT$/Cargo.lock",
+        "$TURBO_ROOT$/rust-toolchain.toml",
+        "$TURBO_ROOT$/crates/*/Cargo.toml",
+        "$TURBO_ROOT$/crates/*/build.rs",
+        "$TURBO_ROOT$/crates/*/src/**"
+      ],
+      "outputs": ["index.js", "index.d.ts", "*.node"]
+    },
     "generate:bridge-types": {
       "dependsOn": ["shift-bridge#build"],
       "inputs": [

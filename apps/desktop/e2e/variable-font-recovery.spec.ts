@@ -170,13 +170,17 @@ async function authorSourceTopology(page: Page): Promise<SourceFixture> {
 
     const medium = font.source(mediumSourceId);
     if (!medium) throw new Error("Expected Medium source");
+
+    const ascender = font.metricDefinitions.find(({ kind }) => kind === "ascender");
+    if (!ascender) throw new Error("Expected ascender metric");
+
     await font.updateSource({
       ...medium,
       name: "Medium Master",
       italicAngle: -2,
       lineGap: 37,
-      metricValues: medium.metricValues.map((value, index) =>
-        index === 0 ? { ...value, position: value.position + 17 } : value,
+      metricValues: medium.metricValues.map((value) =>
+        value.metricId === ascender.id ? { ...value, position: value.position + 17 } : value,
       ),
     });
 
