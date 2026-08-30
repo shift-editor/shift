@@ -63,6 +63,13 @@ export const Separator = React.forwardRef<HTMLDivElement, SeparatorProps>(
 
 This project uses **pnpm** (v11) as its package manager.
 
+## Development Environment
+
+- Run repository commands inside the Nix dev shell defined by `flake.nix`.
+- When `IN_NIX_SHELL` is unset, use `nix develop --command <command>` rather than relying on machine-global Node, pnpm, Rust, Cargo, or native dependencies.
+- Fresh and remote worktrees must not assume direnv has allowed `.envrc`; either launch the agent with `nix develop --command pi` or prefix its repository commands with `nix develop --command`.
+- Do not create Corepack wrappers or install fallback toolchains to work around a missing dev-shell command.
+
 ## Available Commands
 
 ### Development
