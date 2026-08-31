@@ -130,6 +130,30 @@ export const electronNativeDialogs: NativeDialogs = {
     }
   },
 
+  async confirmDocumentReopen(window, applicationName, failure) {
+    const options: MessageBoxOptions = {
+      type: failure === "crashed" ? "warning" : "error",
+      buttons: failure === "crashed" ? ["Reopen", "Close Window"] : ["Try Again", "Close Window"],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true,
+      title: applicationName,
+      message:
+        failure === "crashed"
+          ? "The document window closed unexpectedly."
+          : "The document could not be reopened.",
+      detail:
+        failure === "crashed"
+          ? "Reopen the document to continue where you left off. Your unsaved changes have been preserved."
+          : "Your recovery data has been retained.",
+    };
+    const result = window
+      ? await dialog.showMessageBox(window.window, options)
+      : await dialog.showMessageBox(options);
+
+    return result.response === 0 ? "reopen" : "close";
+  },
+
   async showSaveFailure(window, applicationName, error) {
     await showFailure(window, applicationName, "The document could not be saved.", error);
   },

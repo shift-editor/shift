@@ -17,6 +17,7 @@ export type FontSessionHostOptions =
       readonly documentClient: DocumentClient;
       readonly applicationName: () => string;
       readonly nativeDialogs: NativeDialogs;
+      readonly onWorkspaceExit?: (session: FontSessionHost) => void;
     }
   | {
       readonly mode: "preview";
@@ -68,6 +69,7 @@ export class FontSessionHost {
         });
         this.#unlistenWorkspaceExit = this.workspaceProcess.onExit(() => {
           this.documentClient?.dispose();
+          if (options.onWorkspaceExit) options.onWorkspaceExit(this);
         });
         break;
       case "preview":
