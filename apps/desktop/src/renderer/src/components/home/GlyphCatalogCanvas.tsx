@@ -1,5 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { SlugGlyphCatalogRenderer } from "./SlugGlyphCatalogRenderer";
+import { SvgGlyphCatalogRenderer } from "./SvgGlyphCatalogRenderer";
+import { selectGlyphCatalogRenderer } from "./selectGlyphCatalogRenderer";
 import { GlyphNameInput } from "./GlyphNameInput";
 import { useTheme } from "@/context/ThemeContext";
 import type {
@@ -7,7 +9,7 @@ import type {
   GlyphCatalogItem,
   PendingGlyphNames,
 } from "@/types/glyphCatalog";
-import type { GlyphCatalogRenderer } from "@/types/glyphCatalogRenderer";
+import type { GlyphCatalogRenderer, GlyphCatalogRendererKind } from "@/types/glyphCatalogRenderer";
 import { useFontSession } from "@/workspace/WorkspaceContext";
 import { effect, track } from "@/lib/signals";
 
@@ -21,6 +23,7 @@ export function GlyphCatalogCanvas({
   active,
   atlasSource,
   observeAtlasInvalidation,
+  glyphPreviews,
   canAuthor,
   openGlyph,
   onFirstFrame,
@@ -43,10 +46,12 @@ export function GlyphCatalogCanvas({
       () => workspace?.applyStatusCell.peek() ?? "idle",
     ) === "idle";
   const glyphCanvasRef = useRef<HTMLCanvasElement>(null);
+  const glyphSvgRef = useRef<SVGSVGElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const inputContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const rendererRef = useRef<GlyphCatalogRenderer | null>(null);
+  const [rendererKind, setRendererKind] = useState<GlyphCatalogRendererKind | null>(null);
   const [ready, setReady] = useState(false);
   const [editingGlyph, setEditingGlyph] = useState<GlyphCatalogItem | null>(null);
   const [pendingGlyphNames, setPendingGlyphNames] = useState<PendingGlyphNames>(() => new Map());
@@ -54,41 +59,88 @@ export function GlyphCatalogCanvas({
   useLayoutEffect(() => {
     const container = containerRef.current;
     const glyphCanvas = glyphCanvasRef.current;
+    const glyphSvg = glyphSvgRef.current;
     const overlayCanvas = overlayCanvasRef.current;
-    if (!container || !glyphCanvas || !overlayCanvas) return undefined;
+    if (!container || !glyphCanvas || !glyphSvg || !overlayCanvas) return undefined;
+    const activeContainer = container;
+    const activeGlyphCanvas = glyphCanvas;
+    const activeGlyphSvg = glyphSvg;
+    const activeOverlayCanvas = overlayCanvas;
 
-    const renderer = new SlugGlyphCatalogRenderer(
-      container,
-      glyphCanvas,
-      overlayCanvas,
-      atlasSource,
-      observeAtlasInvalidation,
-      canAuthor
-        ? (glyph) => {
-            setEditingGlyph(glyph);
-          }
-        : null,
-      () => {
-        inputRef.current?.blur();
-        setEditingGlyph(null);
-      },
-      openGlyph,
-      (nextReady) => {
-        setReady(nextReady);
-        if (nextReady) onFirstFrame();
-      },
-      onUnavailable,
-    );
-    rendererRef.current = renderer;
+    const abort = new AbortController();
+    const onEditGlyph = canAuthor
+      ? (glyph: GlyphCatalogItem) => {
+          setEditingGlyph(glyph);
+        }
+      : null;
+    const onEditingUnavailable = () => {
+      inputRef.current?.blur();
+      setEditingGlyph(null);
+    };
+    const onReadyChange = (nextReady: boolean) => {
+      setReady(nextReady);
+      if (nextReady) onFirstFrame();
+    };
 
+    async function selectRenderer(): Promise<void> {
+      try {
+        const selection = await selectGlyphCatalogRenderer(
+          abort.signal,
+          () =>
+            SlugGlyphCatalogRenderer.create(
+              activeContainer,
+              activeGlyphCanvas,
+              activeOverlayCanvas,
+              atlasSource,
+              observeAtlasInvalidation,
+              onEditGlyph,
+              onEditingUnavailable,
+              openGlyph,
+              onReadyChange,
+              onUnavailable,
+              abort.signal,
+            ),
+          () =>
+            new SvgGlyphCatalogRenderer(
+              activeContainer,
+              activeGlyphSvg,
+              activeOverlayCanvas,
+              glyphPreviews,
+              observeAtlasInvalidation,
+              onEditGlyph,
+              onEditingUnavailable,
+              openGlyph,
+              onReadyChange,
+              onUnavailable,
+            ),
+        );
+        if (abort.signal.aborted) {
+          selection.renderer.destroy();
+          return;
+        }
+
+        rendererRef.current = selection.renderer;
+        setRendererKind(selection.kind);
+      } catch (error) {
+        if (!abort.signal.aborted) {
+          console.error("glyph catalog renderer selection failed", error);
+          onUnavailable();
+        }
+      }
+    }
+
+    void selectRenderer();
     return () => {
+      abort.abort(new Error("glyph catalog renderer selection disposed"));
+      const renderer = rendererRef.current;
       rendererRef.current = null;
-      renderer.destroy();
+      renderer?.destroy();
     };
   }, [
     atlasSource,
     canAuthor,
     containerRef,
+    glyphPreviews,
     observeAtlasInvalidation,
     onFirstFrame,
     onUnavailable,
@@ -116,7 +168,17 @@ export function GlyphCatalogCanvas({
       },
       inputContainerRef.current,
     );
-  }, [active, editingGlyph, glyphs, location, metrics, pendingGlyphNames, sourceId, themeName]);
+  }, [
+    active,
+    editingGlyph,
+    glyphs,
+    location,
+    metrics,
+    pendingGlyphNames,
+    rendererKind,
+    sourceId,
+    themeName,
+  ]);
 
   useLayoutEffect(() => {
     if (!editingGlyph) return;
@@ -150,11 +212,23 @@ export function GlyphCatalogCanvas({
         ref={glyphCanvasRef}
         aria-hidden="true"
         data-testid="glyph-catalog-canvas"
+        data-glyph-catalog-renderer="slug"
         data-first-glyph-name={
           glyphs[0] ? (pendingGlyphNames.get(glyphs[0].id) ?? glyphs[0].displayName) : undefined
         }
         className="pointer-events-none absolute left-0 top-0 z-[2] h-full w-full bg-transparent"
-        style={{ visibility: ready ? "visible" : "hidden" }}
+        style={{ visibility: ready && rendererKind === "slug" ? "visible" : "hidden" }}
+      />
+      <svg
+        ref={glyphSvgRef}
+        aria-hidden="true"
+        data-testid="glyph-catalog-svg"
+        data-glyph-catalog-renderer="svg"
+        data-first-glyph-name={
+          glyphs[0] ? (pendingGlyphNames.get(glyphs[0].id) ?? glyphs[0].displayName) : undefined
+        }
+        className="pointer-events-none absolute left-0 top-0 z-[2] h-full w-full overflow-hidden bg-transparent"
+        style={{ visibility: ready && rendererKind === "svg" ? "visible" : "hidden" }}
       />
       <canvas
         ref={overlayCanvasRef}

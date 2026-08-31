@@ -1,6 +1,13 @@
 import type { GlyphCategory, GlyphCategorySummary } from "@shift/glyph-info";
 import type { Rect2D } from "@shift/geo";
-import type { CatalogAxis, CatalogMetrics, GlyphId, GlyphName, SourceId } from "@shift/types";
+import type {
+  CatalogAxis,
+  CatalogMetrics,
+  GlyphId,
+  GlyphName,
+  GlyphPreview,
+  SourceId,
+} from "@shift/types";
 import type { RefObject } from "react";
 import type { RenderGlyph } from "./glyphRender";
 import type { ThemeName } from "./uiState";
@@ -41,6 +48,10 @@ export interface GlyphCatalogSource {
   observeAtlasInvalidation: (
     listener: (glyphIds: readonly GlyphId[] | null, directory: readonly GlyphId[]) => void,
   ) => () => void;
+  glyphPreviews: (
+    glyphIds: readonly GlyphId[],
+    location: CatalogLocation,
+  ) => Promise<readonly GlyphPreview[]>;
   location: CatalogLocation;
   axes: readonly CatalogAxis[];
   metrics: CatalogMetrics;
@@ -112,6 +123,7 @@ export interface GlyphCatalogCanvasProps {
   readonly active: boolean;
   readonly atlasSource: GlyphAtlasSource;
   readonly observeAtlasInvalidation: GlyphCatalogSource["observeAtlasInvalidation"];
+  readonly glyphPreviews: GlyphCatalogSource["glyphPreviews"];
   readonly canAuthor: boolean;
   readonly openGlyph: (glyph: GlyphCatalogItem) => Promise<void>;
   readonly onFirstFrame: () => void;

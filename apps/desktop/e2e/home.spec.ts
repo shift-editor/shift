@@ -3,7 +3,7 @@ import { workspaceTest as test, expect } from "./fixtures/electronApp";
 import {
   clickFirstCatalogGlyph,
   clickFirstCatalogGlyphName,
-  glyphCatalogCanvas,
+  glyphCatalogRenderer,
   glyphCatalogSurface,
 } from "./fixtures/appLocators";
 
@@ -32,20 +32,20 @@ test.describe("Home view", () => {
     await expect.poll(() => elementWidth(rightSidebar)).toBeCloseTo(defaultWidth, 0);
   });
 
-  test("glyph canvas contributes rendered outlines", async ({ page }) => {
+  test("glyph renderer contributes rendered outlines", async ({ page }) => {
     const catalogSurface = glyphCatalogSurface(page);
-    const glyphCanvas = glyphCatalogCanvas(page);
-    await expect(glyphCanvas).toBeVisible({ timeout: 30_000 });
+    const renderer = glyphCatalogRenderer(page);
+    await expect(renderer).toBeVisible({ timeout: 30_000 });
 
     const renderedFrame = await catalogSurface.screenshot();
-    const visibility = await glyphCanvas.evaluate((canvas) => {
-      const previous = canvas.style.visibility;
-      canvas.style.visibility = "hidden";
+    const visibility = await renderer.evaluate((element) => {
+      const previous = element.style.visibility;
+      element.style.visibility = "hidden";
       return previous;
     });
     const frameWithoutGlyphs = await catalogSurface.screenshot();
-    await glyphCanvas.evaluate((canvas, previous) => {
-      canvas.style.visibility = previous;
+    await renderer.evaluate((element, previous) => {
+      element.style.visibility = previous;
     }, visibility);
 
     expect(renderedFrame.equals(frameWithoutGlyphs)).toBe(false);
@@ -102,39 +102,40 @@ test.describe("Home view", () => {
 
     expect(await remainedVisible).toBe(true);
     await expect(input).toHaveCount(0);
-    await expect(glyphCatalogCanvas(page)).toHaveAttribute("data-first-glyph-name", nextName);
+    await expect(glyphCatalogRenderer(page)).toHaveAttribute("data-first-glyph-name", nextName);
   });
 
-  test("keeps the resident grid when returning from the editor", async ({ page }) => {
-    const glyphCanvas = glyphCatalogCanvas(page);
-    await expect(glyphCanvas).toBeVisible({ timeout: 30_000 });
-    await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
+  test("keeps the selected renderer when returning from the editor", async ({ page }) => {
+    const renderer = glyphCatalogRenderer(page);
+    await expect(renderer).toBeVisible({ timeout: 30_000 });
+    await expect(renderer).toHaveAttribute("data-grid-readiness", "Complete", {
       timeout: 30_000,
     });
     await afterNextPaint(page);
-    const initialSize = await glyphCanvas.evaluate((canvas) => ({
-      width: canvas.width,
-      height: canvas.height,
-    }));
+    const rendererKind = await renderer.getAttribute("data-glyph-catalog-renderer");
+    const initialSize = await renderer.evaluate((element) => {
+      const bounds = element.getBoundingClientRect();
+      return { width: bounds.width, height: bounds.height };
+    });
 
     await clickFirstCatalogGlyph(page);
     await page.waitForURL(/#\/editor\//);
     await afterNextPaint(page);
 
-    await expect
-      .poll(() =>
-        glyphCanvas.evaluate((canvas) => ({ width: canvas.width, height: canvas.height })),
-      )
-      .toEqual(initialSize);
+    await expect(renderer).toBeAttached();
 
     await page.getByRole("button", { name: "Display all glyphs" }).click();
     await page.waitForURL(/#\/home/);
     await afterNextPaint(page);
 
-    await expect(glyphCanvas).toBeVisible();
+    await expect(renderer).toBeVisible();
+    await expect(renderer).toHaveAttribute("data-glyph-catalog-renderer", rendererKind ?? "");
     await expect
       .poll(() =>
-        glyphCanvas.evaluate((canvas) => ({ width: canvas.width, height: canvas.height })),
+        renderer.evaluate((element) => {
+          const bounds = element.getBoundingClientRect();
+          return { width: bounds.width, height: bounds.height };
+        }),
       )
       .toEqual(initialSize);
   });
@@ -177,15 +178,15 @@ async function observeRenameTransition(
             .glyphRecords()
             .find(({ id }) => id === glyphId)?.name;
           const input = document.querySelector<HTMLInputElement>('[aria-label="Glyph name"]');
-          const canvas = document.querySelector<HTMLCanvasElement>(
-            '[data-testid="glyph-catalog-canvas"]',
-          );
+          const renderer = [
+            ...document.querySelectorAll<HTMLElement>("[data-glyph-catalog-renderer]"),
+          ].find((element) => getComputedStyle(element).visibility === "visible");
           if (input) {
             requestAnimationFrame(sample);
             return;
           }
 
-          const visibleName = canvas?.dataset.firstGlyphName;
+          const visibleName = renderer?.dataset.firstGlyphName;
           if (currentName === nextName) {
             resolve(visibleName === nextName);
             return;

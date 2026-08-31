@@ -15,6 +15,7 @@ export const GlyphGrid = memo(function GlyphGrid() {
     sourceId,
     atlasSource,
     observeAtlasInvalidation,
+    glyphPreviews,
     canAuthor,
     openGlyph,
   } = useGlyphCatalog();
@@ -96,6 +97,7 @@ export const GlyphGrid = memo(function GlyphGrid() {
         active={catalogActive}
         atlasSource={atlasSource}
         observeAtlasInvalidation={observeAtlasInvalidation}
+        glyphPreviews={glyphPreviews}
         canAuthor={canAuthor}
         openGlyph={openGlyph}
         onFirstFrame={handleCatalogReady}

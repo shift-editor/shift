@@ -8,6 +8,7 @@ import { Font } from "@/lib/model/Font";
 import { FontStore } from "@/lib/model/FontStore";
 import { GlyphCatalog } from "@/lib/catalog/GlyphCatalog";
 import { registerBuiltInTools } from "@/lib/tools/tools";
+import { locationFromDesignAxisLocation } from "@/lib/variation/location";
 import type { GlyphReader } from "@/types/glyph";
 import { FontSessionClient } from "@/lib/workspace/FontSessionClient";
 import { getShiftHost } from "@/host/shiftHost";
@@ -83,6 +84,9 @@ function sourceGlyphReader(client: FontSessionClient): GlyphReader {
         for (const snapshot of closure) snapshots.set(snapshot.glyphId, snapshot);
       }
       return [...snapshots.values()];
+    },
+    glyphPreviews(glyphIds, location) {
+      return client.glyphPreviews(glyphIds, locationFromDesignAxisLocation(location));
     },
   };
 }

@@ -15,6 +15,14 @@ export function glyphCatalogCanvas(page: Page) {
   return page.getByTestId("glyph-catalog-canvas");
 }
 
+export function glyphCatalogSvg(page: Page) {
+  return page.getByTestId("glyph-catalog-svg");
+}
+
+export function glyphCatalogRenderer(page: Page) {
+  return page.locator("[data-glyph-catalog-renderer]:visible");
+}
+
 export function editorShell(page: Page) {
   return page.getByTestId("editor-shell");
 }
@@ -100,7 +108,7 @@ export async function openCatalogGlyph(
   await page.getByPlaceholder("Search glyphs...").fill(glyphName);
   await expect(surface).toHaveAttribute("data-filtered-glyph-count", "1");
   await expect(surface).toHaveAttribute("data-first-glyph-id", glyphId);
-  await expect(glyphCatalogCanvas(page)).toHaveAttribute("data-grid-readiness", "Complete", {
+  await expect(glyphCatalogRenderer(page)).toHaveAttribute("data-grid-readiness", "Complete", {
     timeout: 30_000,
   });
   await clickFirstCatalogGlyph(page);

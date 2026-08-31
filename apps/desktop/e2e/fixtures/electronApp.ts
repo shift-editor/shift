@@ -66,6 +66,7 @@ type ShiftFixtures = {
 
 type ShiftOptions = {
   startupFontPath: string | undefined;
+  electronArgs: readonly string[];
   scriptedDialogs: boolean;
   openFontPath: string | undefined;
   saveShiftPaths: readonly string[] | undefined;
@@ -93,6 +94,7 @@ export type RecoveryApp = {
 /** Base fixture for launcher tests; workspace tests override `startupFontPath`. */
 export const test = base.extend<ShiftFixtures & ShiftOptions>({
   startupFontPath: [undefined, { option: true }],
+  electronArgs: [[], { option: true }],
   scriptedDialogs: [false, { option: true }],
   openFontPath: [undefined, { option: true }],
   saveShiftPaths: [undefined, { option: true }],
@@ -135,6 +137,7 @@ export const test = base.extend<ShiftFixtures & ShiftOptions>({
   electronApp: async (
     {
       startupFontPath,
+      electronArgs,
       scriptedDialogs,
       openFontPath,
       saveShiftPaths,
@@ -195,6 +198,7 @@ export const test = base.extend<ShiftFixtures & ShiftOptions>({
           MAIN_JS,
           `--user-data-dir=${userDataDir}`,
           "--force-device-scale-factor=1",
+          ...electronArgs,
           ...(workspacePath ? [workspacePath] : []),
         ],
         env: environment,
