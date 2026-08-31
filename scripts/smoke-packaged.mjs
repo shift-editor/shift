@@ -150,6 +150,22 @@ async function waitForDebugEndpoint(url, child, output) {
   throw new Error(`Timed out waiting for the packaged app\n${output.join("")}`);
 }
 
+async function waitForRendererPage(browser, child, output) {
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline) {
+    const page = browser.contexts().flatMap((context) => context.pages())[0];
+    if (page) return page;
+
+    if (child.exitCode !== null) {
+      throw new Error(`Packaged app exited with code ${child.exitCode}\n${output.join("")}`);
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+
+  throw new Error(`Timed out waiting for the packaged renderer page\n${output.join("")}`);
+}
+
 const testRoot = await mkdtemp(path.join(os.tmpdir(), "shift-packaged-smoke-"));
 const userDataPath = path.join(testRoot, "user-data");
 const port = await reservePort();
@@ -172,9 +188,7 @@ try {
   await waitForDebugEndpoint(debugUrl, child, output);
   browser = await chromium.connectOverCDP(debugUrl);
 
-  const context = browser.contexts()[0];
-  const page = context?.pages()[0];
-  if (!page) throw new Error("Packaged app did not create a renderer page");
+  const page = await waitForRendererPage(browser, child, output);
 
   const pageErrors = [];
   page.on("pageerror", (error) => pageErrors.push(error));
