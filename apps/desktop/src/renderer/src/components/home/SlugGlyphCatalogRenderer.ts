@@ -15,13 +15,15 @@ import type {
 } from "@/types/glyphCatalog";
 import type { GlyphPreviewInstance } from "@/types/glyphPreview";
 import type { GlyphAtlasPageRequest, GlyphAtlasSource } from "@/types/glyphAtlas";
+import type { GlyphCatalogRenderer } from "@/types/glyphCatalogRenderer";
 
 const ATLAS_PAGE_ROOT_COUNT = 256;
 const SLUG_ATLAS_PROFILING_ENABLED =
   new URLSearchParams(window.location.search).get("shiftProfileSlugAtlas") === "1";
 
-/** Owns catalog DOM events, complete atlas replacement, and frame scheduling. */
-export class GlyphCatalogController {
+/** Owns Slug catalog events, complete atlas replacement, and frame scheduling. */
+export class SlugGlyphCatalogRenderer implements GlyphCatalogRenderer {
+  readonly kind = "slug" as const;
   readonly #container: HTMLDivElement;
   readonly #glyphCanvas: HTMLCanvasElement;
   readonly #atlasSource: GlyphAtlasSource;
