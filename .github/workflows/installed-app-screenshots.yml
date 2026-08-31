@@ -356,19 +356,9 @@ jobs:
             const statusRows = platforms.map(
               (platform) => `| ${platform.name} | ${statusFor(platform)} |`,
             );
-            const scenarios = screenshots.flatMap(([label, fileName]) => {
+            const screenshotRows = screenshots.map(([label, fileName]) => {
               const images = platforms.map((platform) => imageFor(platform, label, fileName));
-              return [
-                "<details>",
-                `<summary>${label}</summary>`,
-                "",
-                `| ${platforms.map((platform) => platform.name).join(" | ")} |`,
-                `| ${platforms.map(() => "---").join(" | ")} |`,
-                `| ${images.join(" | ")} |`,
-                "",
-                "</details>",
-                "",
-              ];
+              return `| ${label} | ${images.join(" | ")} |`;
             });
             const body = [
               marker,
@@ -378,7 +368,15 @@ jobs:
               "| --- | --- |",
               ...statusRows,
               "",
-              ...scenarios,
+              "<details>",
+              "<summary>Screenshots</summary>",
+              "",
+              `| Scenario | ${platforms.map((platform) => platform.name).join(" | ")} |`,
+              `| --- | ${platforms.map(() => "---").join(" | ")} |`,
+              ...screenshotRows,
+              "",
+              "</details>",
+              "",
               `[View workflow run](${serverUrl}/${owner}/${repo}/actions/runs/${runId})`,
               "",
               "Screenshots are review artifacts, not pixel-gated baselines. Public PNGs expire after 14 days.",

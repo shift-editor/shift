@@ -134,7 +134,7 @@ async function captureNativeDialog() {
       window.focus();
       item.click(item, window, {});
     });
-    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    await new Promise((resolve) => setTimeout(resolve, 3_000));
     await writeScreenshot("native-dialog.png", await captureDesktop(app));
   } finally {
     await terminateApplication(app);
