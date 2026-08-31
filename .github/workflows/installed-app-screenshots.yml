@@ -21,12 +21,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: macOS arm64
-            runner: macos-26
+          - name: macOS x64
+            runner: macos-26-intel
             platform: darwin
-            architecture: arm64
-            directory: macos-arm64
-            builder-args: --mac dmg --arm64
+            architecture: x64
+            directory: macos-x64
+            builder-args: --mac dmg --x64
           - name: Windows x64
             runner: windows-latest
             platform: win32
@@ -90,7 +90,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          dmg="$(find apps/desktop/out/darwin-arm64 -maxdepth 1 -type f -name '*.dmg' -print -quit)"
+          dmg="$(find apps/desktop/out/darwin-${{ matrix.architecture }} -maxdepth 1 -type f -name '*.dmg' -print -quit)"
           test -n "$dmg"
           mount_point="$RUNNER_TEMP/shift-dmg"
           installed_app="$RUNNER_TEMP/Applications/Shift.app"
@@ -222,7 +222,7 @@ jobs:
             document-icon.png
           )
           screenshots=()
-          for platform in macos-arm64 windows-x64 linux-x64; do
+          for platform in macos-x64 windows-x64 linux-x64; do
             for name in "${screenshot_names[@]}"; do
               screenshot="installed-app-screenshots/${platform}/${name}"
               [[ -f "$screenshot" ]] && screenshots+=("$screenshot")
@@ -311,9 +311,9 @@ jobs:
             });
             const platforms = [
               {
-                name: "macOS arm64",
-                jobName: "Capture macOS arm64",
-                directory: "macos-arm64",
+                name: "macOS x64",
+                jobName: "Capture macOS x64",
+                directory: "macos-x64",
               },
               {
                 name: "Windows x64",
