@@ -35,7 +35,7 @@ export default defineConfig({
     {
       name: "platform",
       testMatch:
-        /(?:application-menu|application-quit|document-lifecycle|document-recovery|platform-integration)\.spec/,
+        /(?:application-menu|application-quit|document-crash|document-lifecycle|document-recovery|platform-integration)\.spec/,
     },
     {
       name: "gpu",

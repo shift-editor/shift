@@ -69,6 +69,7 @@ type ShiftOptions = {
   dirtyDocumentChoice: DirtyDocumentChoice;
   dirtyDocumentChoices: readonly DirtyDocumentChoice[] | undefined;
   dirtyDocumentDelayMs: number;
+  documentCrashChoice: "reopen" | "close";
 };
 
 export interface CanonicalVariableFont {
@@ -94,6 +95,7 @@ export const test = base.extend<ShiftFixtures & ShiftOptions>({
   dirtyDocumentChoice: ["cancel", { option: true }],
   dirtyDocumentChoices: [undefined, { option: true }],
   dirtyDocumentDelayMs: [0, { option: true }],
+  documentCrashChoice: ["reopen", { option: true }],
 
   testRoot: async ({}, use) => {
     const testRoot = fs.mkdtempSync(path.join(os.tmpdir(), "shift-e2e-"));
@@ -135,6 +137,7 @@ export const test = base.extend<ShiftFixtures & ShiftOptions>({
       dirtyDocumentChoice,
       dirtyDocumentChoices,
       dirtyDocumentDelayMs,
+      documentCrashChoice,
       testRoot,
       saveShiftPath,
       exportTtfPath,
@@ -179,6 +182,7 @@ export const test = base.extend<ShiftFixtures & ShiftOptions>({
         environment.SHIFT_E2E_DIRTY_DOCUMENT_DELAY_MS = String(dirtyDocumentDelayMs);
       }
       if (openFontPath) environment.SHIFT_E2E_OPEN_FONT_PATH = openFontPath;
+      environment.SHIFT_E2E_DOCUMENT_CRASH_CHOICE = documentCrashChoice;
     }
 
     try {
@@ -307,7 +311,7 @@ export const recoveryTest = base.extend<{ recoveryApp: RecoveryApp }>({
           if (!app) throw new Error("Electron application is not running");
 
           await killApp(app);
-          app = await launchShiftApp(userDataDir, documentPath);
+          app = await launchShiftApp(userDataDir);
           page = await readyWorkspacePage(app);
           return page;
         },
@@ -361,16 +365,18 @@ export async function waitForWorkspaceReady(page: Page): Promise<void> {
 
 async function launchShiftApp(
   userDataDir: string,
-  workspacePath: string,
+  workspacePath?: string,
 ): Promise<ElectronApplication> {
+  const environment = {
+    ...process.env,
+    NODE_ENV: "test",
+    LIBGL_ALWAYS_SOFTWARE: "1",
+  };
+  if (workspacePath) environment.SHIFT_E2E_FONT_PATH = workspacePath;
+
   const app = await electron.launch({
     args: [MAIN_JS, `--user-data-dir=${userDataDir}`, "--force-device-scale-factor=1"],
-    env: {
-      ...process.env,
-      NODE_ENV: "test",
-      LIBGL_ALWAYS_SOFTWARE: "1",
-      SHIFT_E2E_FONT_PATH: workspacePath,
-    },
+    env: environment,
   });
 
   try {
