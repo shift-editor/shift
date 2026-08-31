@@ -86,6 +86,7 @@ The AppImage remains a direct-download alternative. Verify it through the releas
 - `release-desktop.yml` validates `vMAJOR.MINOR.PATCH`, builds macOS arm64/x64 ZIPs and DMGs, a Windows x64 per-user NSIS installer, and Linux x64 DEB/RPM/AppImage packages, smoke-tests packaged applications, signs the Release RPM and checksum manifest, uploads the GitHub prerelease, publishes signed APT/DNF repositories, then advances the Release feed.
 - `nightly-after-merge.yml` dispatches `nightly.yml` after a pull request labeled `release: nightly` merges into `main`. Closing an unmerged pull request or merging one without the label does nothing.
 - `nightly.yml` runs from that dispatch, its daily schedule, or a manual dispatch. It resolves one `0.RUN.ATTEMPT` version and builds the same matrix. After every build succeeds, it archives versioned updater assets in the immutable R2 prefix `nightly/<full-commit>/`, replaces the rolling GitHub prerelease's friendly download aliases, and advances the feed to the exact R2 prefix. A commit whose R2 manifest and feed are already active is skipped.
+- `installed-app-screenshots.yml` is a macOS x64, Windows x64, and Linux x64 review workflow that runs when its harness changes and can also be dispatched manually. It builds and installs Release packages, captures the installed launcher, document, application menu, native dialog, and `.shift` activation, and retains screenshots, registration metadata, and resolved document icons as 14-day Actions artifacts. For same-repository pull requests, it also publishes only the expected PNGs under `installed-app-screenshots/pr-<number>/run-<id>/` in the dedicated screenshot R2 bucket and renders their direct public URLs in collapsed scenario sections within a sticky review comment. Its non-published capture package alone enables Electron's Node CLI inspector for Playwright; Release and Nightly packages keep that fuse disabled.
 - `prepare-update-feed.mjs` performs the one monotonic candidate-version check and stages electron-builder's generated metadata into fixed Pages paths. Release asset URLs continue to target their versioned GitHub release; Nightly URLs target the candidate's immutable R2 prefix. It does not create feed-history directories.
 
 The Linux repository follows `built → signed → active`. `built` means the complete x64 artifact set passed its packaged-app smoke test. `signed` means the RPM, APT `Release`, DNF `repomd.xml`, and direct-download checksum manifest have signatures from the configured repository key. `active` means the public APT `InRelease` and DNF metalink reference that signed release.
@@ -100,27 +101,31 @@ The Release Please workflow mints a short-lived token from the repository-scoped
 
 ## GitHub configuration
 
-| Variable                       | Purpose                                                    |
-| ------------------------------ | ---------------------------------------------------------- |
-| `RELEASE_PLEASE_APP_CLIENT_ID` | Public client ID for the Release Please App                |
-| `CLOUDFLARE_ACCOUNT_ID`        | Cloudflare account containing the release bucket           |
-| `R2_RELEASE_BUCKET`            | R2 bucket name; production uses `shift-releases`           |
-| `R2_RELEASE_BASE_URL`          | HTTPS custom-domain base URL exposing the public R2 bucket |
-| `LINUX_PACKAGE_BASE_URL`       | Linux repository origin; production uses `https://packages.shift.graphics` |
-| `LINUX_REPOSITORY_GPG_FINGERPRINT` | Full fingerprint of the dedicated Linux repository signing key |
+| Variable                           | Purpose                                                                    |
+| ---------------------------------- | -------------------------------------------------------------------------- |
+| `RELEASE_PLEASE_APP_CLIENT_ID`     | Public client ID for the Release Please App                                |
+| `CLOUDFLARE_ACCOUNT_ID`            | Cloudflare account containing the R2 buckets                               |
+| `R2_RELEASE_BUCKET`                | Release R2 bucket; production uses `shift-releases`                        |
+| `R2_RELEASE_BASE_URL`              | HTTPS custom-domain base URL exposing the release bucket                   |
+| `R2_SCREENSHOT_BUCKET`             | Screenshot R2 bucket; production uses `shift-screenshots`                  |
+| `R2_SCREENSHOT_BASE_URL`           | HTTPS origin exposing public installed-app screenshots                     |
+| `LINUX_PACKAGE_BASE_URL`           | Linux repository origin; production uses `https://packages.shift.graphics` |
+| `LINUX_REPOSITORY_GPG_FINGERPRINT` | Full fingerprint of the dedicated Linux repository signing key             |
 
-| Secret                           | Purpose                                                  |
-| -------------------------------- | -------------------------------------------------------- |
-| `RELEASE_PLEASE_APP_PRIVATE_KEY` | Private key used to mint installation tokens for one run |
-| `APPLE_CERTIFICATE`              | Base64-encoded Developer ID Application `.p12`           |
-| `APPLE_CERTIFICATE_PASSWORD`     | Password protecting the `.p12`                           |
-| `APPLE_ID`                       | Apple Developer account login used by `notarytool`       |
-| `APPLE_APP_SPECIFIC_PASSWORD`    | Apple ID app-specific password                           |
-| `APPLE_TEAM_ID`                  | Paid Apple Developer Program team ID                     |
-| `R2_ACCESS_KEY_ID`               | R2 S3 API access key with object read/write permission   |
-| `R2_SECRET_ACCESS_KEY`           | R2 S3 API secret access key                              |
-| `LINUX_REPOSITORY_GPG_PRIVATE_KEY` | ASCII-armored private Linux repository signing key     |
-| `LINUX_REPOSITORY_GPG_PASSPHRASE` | Passphrase protecting the Linux repository signing key |
+| Secret                             | Purpose                                                        |
+| ---------------------------------- | -------------------------------------------------------------- |
+| `RELEASE_PLEASE_APP_PRIVATE_KEY`   | Private key used to mint installation tokens for one run       |
+| `APPLE_CERTIFICATE`                | Base64-encoded Developer ID Application `.p12`                 |
+| `APPLE_CERTIFICATE_PASSWORD`       | Password protecting the `.p12`                                 |
+| `APPLE_ID`                         | Apple Developer account login used by `notarytool`             |
+| `APPLE_APP_SPECIFIC_PASSWORD`      | Apple ID app-specific password                                 |
+| `APPLE_TEAM_ID`                    | Paid Apple Developer Program team ID                           |
+| `R2_ACCESS_KEY_ID`                 | Release-bucket S3 access key with object read/write permission |
+| `R2_SECRET_ACCESS_KEY`             | Release-bucket S3 secret access key                            |
+| `R2_SCREENSHOT_ACCESS_KEY_ID`      | Bucket-scoped screenshot S3 access key                         |
+| `R2_SCREENSHOT_SECRET_ACCESS_KEY`  | Bucket-scoped screenshot S3 secret access key                  |
+| `LINUX_REPOSITORY_GPG_PRIVATE_KEY` | ASCII-armored private Linux repository signing key             |
+| `LINUX_REPOSITORY_GPG_PASSPHRASE`  | Passphrase protecting the Linux repository signing key         |
 
 Never put private keys or signing credentials in repository files, workflow inputs, artifacts, or logs. macOS release and Nightly jobs fail when signing credentials are absent.
 
@@ -128,15 +133,16 @@ Never put private keys or signing credentials in repository files, workflow inpu
 
 1. Add the Apple signing/notarization secrets.
 2. Create the Standard-storage R2 bucket `shift-releases`. Do not configure a bucket lifecycle rule; workflow pruning protects the active build.
-3. Attach a production custom domain to the bucket and configure the three R2 variables and two R2 secrets above.
-4. Attach `packages.shift.graphics` to the same bucket and set `LINUX_PACKAGE_BASE_URL` to that HTTPS origin.
-5. Create a dedicated RSA-4096 key whose identity is exactly `Shift Package Signing`. Keep an offline backup, add its armored private key and passphrase as repository secrets, and configure its full fingerprint as `LINUX_REPOSITORY_GPG_FINGERPRINT`.
-6. Run a desktop workflow once to create `update-feeds` and the Linux repositories.
-7. Configure GitHub Pages to publish the root of `update-feeds`.
-8. Confirm packaged Release and Nightly builds contact only their matching feed paths, and that Nightly metadata references the expected full commit in R2.
-9. Confirm the repository job installs the exact candidate version in its clean Ubuntu and Fedora containers. After a second versioned release exists, perform an installed N → N+1 APT and DNF upgrade test.
-10. Perform real installed N → N+1 tests on macOS arm64/x64 and unsigned Windows Nightly x64, including download consent, full-download fallback, progress, download cancellation and retry, Save, Don't Save, Later, and **Restart and Install**.
-11. Keep Windows Release on manual downloads until Authenticode signing and installed update verification are complete.
+3. Attach a production custom domain to the release bucket and configure its three R2 variables and two R2 secrets above.
+4. Create the dedicated Standard-storage bucket `shift-screenshots`, attach `screenshots.shift.graphics`, and configure the two screenshot variables and bucket-scoped object read/write secrets above. Add a lifecycle rule that deletes objects under `installed-app-screenshots/` after 14 days; do not apply it to the release bucket.
+5. Attach `packages.shift.graphics` to the release bucket and set `LINUX_PACKAGE_BASE_URL` to that HTTPS origin.
+6. Create a dedicated RSA-4096 key whose identity is exactly `Shift Package Signing`. Keep an offline backup, add its armored private key and passphrase as repository secrets, and configure its full fingerprint as `LINUX_REPOSITORY_GPG_FINGERPRINT`.
+7. Run a desktop workflow once to create `update-feeds` and the Linux repositories.
+8. Configure GitHub Pages to publish the root of `update-feeds`.
+9. Confirm packaged Release and Nightly builds contact only their matching feed paths, and that Nightly metadata references the expected full commit in R2.
+10. Confirm the repository job installs the exact candidate version in its clean Ubuntu and Fedora containers. After a second versioned release exists, perform an installed N → N+1 APT and DNF upgrade test.
+11. Perform real installed N → N+1 tests on macOS arm64/x64 and unsigned Windows Nightly x64, including download consent, full-download fallback, progress, download cancellation and retry, Save, Don't Save, Later, and **Restart and Install**.
+12. Keep Windows Release on manual downloads until Authenticode signing and installed update verification are complete.
 
 Electron update orchestration has no worthwhile unit test without mocking Electron, native dialogs, and electron-updater. Pure tests cover feed selection, canonical versions, generated metadata validation, feed preparation, and Nightly asset partitioning; installed update behavior and retention pruning remain required manual QA.
 
