@@ -1,6 +1,6 @@
 import { execFile, spawnSync } from "node:child_process";
 import fs from "node:fs";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -36,6 +36,7 @@ if (!fs.existsSync(executablePath)) {
 
 const testRoot = await mkdtemp(path.join(os.tmpdir(), "shift-installed-screenshots-"));
 const documentPath = path.join(testRoot, "Installed app – association.shift");
+let desktopCaptureIndex = 0;
 await mkdir(outputPath, { recursive: true });
 
 try {
@@ -90,17 +91,33 @@ async function captureDocument() {
 }
 
 async function captureFileAssociation() {
-  const app = await launchInstalledApp();
+  switch (process.platform) {
+    case "linux": {
+      const app = await launchInstalledApp("file-association", [documentPath]);
 
-  try {
-    await readyLauncher(app);
-    const workspacePromise = app.waitForEvent("window");
-    await openDocumentWithOperatingSystem(documentPath);
-    const workspace = await workspacePromise;
-    await readyWorkspace(workspace);
-    await captureWindowAndDesktop(app, workspace, "file-association");
-  } finally {
-    await terminateApplication(app);
+      try {
+        const workspace = await app.firstWindow();
+        await readyWorkspace(workspace);
+        await captureWindowAndDesktop(app, workspace, "file-association");
+      } finally {
+        await terminateApplication(app);
+      }
+      return;
+    }
+    default: {
+      const app = await launchInstalledApp();
+
+      try {
+        await readyLauncher(app);
+        const workspacePromise = app.waitForEvent("window");
+        await openDocumentWithOperatingSystem(documentPath);
+        const workspace = await workspacePromise;
+        await readyWorkspace(workspace);
+        await captureWindowAndDesktop(app, workspace, "file-association");
+      } finally {
+        await terminateApplication(app);
+      }
+    }
   }
 }
 
@@ -198,6 +215,13 @@ async function captureApplicationMenu(app) {
 }
 
 async function captureDesktop(app) {
+  if (process.platform === "darwin") {
+    const screenshotPath = path.join(testRoot, `desktop-${desktopCaptureIndex}.png`);
+    desktopCaptureIndex += 1;
+    await execFileAsync("screencapture", ["-x", "-t", "png", screenshotPath]);
+    return (await readFile(screenshotPath)).toString("base64");
+  }
+
   return app.evaluate(async ({ desktopCapturer, screen }) => {
     const display = screen.getPrimaryDisplay();
     const width = Math.round(display.size.width * display.scaleFactor);

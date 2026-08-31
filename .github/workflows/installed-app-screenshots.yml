@@ -21,13 +21,23 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - name: macOS arm64
+            runner: macos-26
+            platform: darwin
+            architecture: arm64
+            directory: macos-arm64
+            builder-args: --mac dmg --arm64
           - name: Windows x64
             runner: windows-latest
             platform: win32
+            architecture: x64
+            directory: windows-x64
             builder-args: --win nsis --x64
           - name: Linux x64
             runner: ubuntu-latest
             platform: linux
+            architecture: x64
+            directory: linux-x64
             builder-args: --linux deb --x64
     runs-on: ${{ matrix.runner }}
     permissions:
@@ -66,7 +76,7 @@ jobs:
 
       - name: Build installer
         env:
-          SHIFT_BUILD_ARCH: x64
+          SHIFT_BUILD_ARCH: ${{ matrix.architecture }}
           SHIFT_DISTRIBUTION: release
           SHIFT_INSTALLED_APP_SCREENSHOTS: "1"
         run: >-
@@ -74,6 +84,28 @@ jobs:
           --config electron-builder.config.ts
           ${{ matrix.builder-args }}
           --publish never
+
+      - name: Install macOS application
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          dmg="$(find apps/desktop/out/darwin-arm64 -maxdepth 1 -type f -name '*.dmg' -print -quit)"
+          test -n "$dmg"
+          mount_point="$RUNNER_TEMP/shift-dmg"
+          installed_app="$RUNNER_TEMP/Applications/Shift.app"
+          mkdir -p "$mount_point" "$(dirname "$installed_app")"
+          hdiutil attach "$dmg" -mountpoint "$mount_point" -nobrowse -readonly
+          trap 'hdiutil detach "$mount_point" -force >/dev/null 2>&1 || true' EXIT
+          ditto "$mount_point/Shift.app" "$installed_app"
+          hdiutil detach "$mount_point"
+          trap - EXIT
+
+          launch_services=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+          "$launch_services" -f "$installed_app"
+          executable="$installed_app/Contents/MacOS/Shift"
+          test -x "$executable"
+          echo "SHIFT_INSTALLED_APP_PATH=$executable" >> "$GITHUB_ENV"
 
       - name: Install Windows application
         if: runner.os == 'Windows'
@@ -107,13 +139,21 @@ jobs:
           test -x "$executable"
           echo "SHIFT_INSTALLED_APP_PATH=$executable" >> "$GITHUB_ENV"
 
+      - name: Capture installed macOS application
+        if: runner.os == 'macOS'
+        shell: bash
+        run: >-
+          node scripts/capture-installed-app.mjs
+          "$SHIFT_INSTALLED_APP_PATH"
+          "installed-app-screenshots/${{ matrix.directory }}"
+
       - name: Capture installed Windows application
         if: runner.os == 'Windows'
         shell: pwsh
         run: >-
           node scripts/capture-installed-app.mjs
           "$env:SHIFT_INSTALLED_APP_PATH"
-          "installed-app-screenshots/windows-x64"
+          "installed-app-screenshots/${{ matrix.directory }}"
 
       - name: Capture installed Linux application
         if: runner.os == 'Linux'
@@ -121,13 +161,15 @@ jobs:
         run: |
           set -euo pipefail
           dbus-run-session -- xvfb-run --auto-servernum --server-args='-screen 0 1920x1080x24' \
-            sh -c 'fluxbox >/tmp/shift-fluxbox.log 2>&1 & sleep 1; exec node scripts/capture-installed-app.mjs "$SHIFT_INSTALLED_APP_PATH" installed-app-screenshots/linux-x64'
+            sh -c 'fluxbox >/tmp/shift-fluxbox.log 2>&1 & sleep 1; exec node scripts/capture-installed-app.mjs "$SHIFT_INSTALLED_APP_PATH" "installed-app-screenshots/$SHIFT_SCREENSHOT_DIRECTORY"'
+        env:
+          SHIFT_SCREENSHOT_DIRECTORY: ${{ matrix.directory }}
 
       - name: Upload installed app screenshots
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: installed-app-screenshots-${{ matrix.platform }}-x64
+          name: installed-app-screenshots-${{ matrix.platform }}-${{ matrix.architecture }}
           path: installed-app-screenshots/
           if-no-files-found: warn
           retention-days: 14
@@ -180,7 +222,7 @@ jobs:
             document-icon.png
           )
           screenshots=()
-          for platform in windows-x64 linux-x64; do
+          for platform in macos-arm64 windows-x64 linux-x64; do
             for name in "${screenshot_names[@]}"; do
               screenshot="installed-app-screenshots/${platform}/${name}"
               [[ -f "$screenshot" ]] && screenshots+=("$screenshot")
@@ -269,6 +311,11 @@ jobs:
             });
             const platforms = [
               {
+                name: "macOS arm64",
+                jobName: "Capture macOS arm64",
+                directory: "macos-arm64",
+              },
+              {
                 name: "Windows x64",
                 jobName: "Capture Windows x64",
                 directory: "windows-x64",
@@ -306,21 +353,32 @@ jobs:
               const alt = `${platform.name} ${label}`;
               return `<a href="${url}"><img src="${url}" alt="${alt}" width="360"></a>`;
             };
-            const rows = screenshots.map(([label, fileName]) => {
-              const images = platforms.map((platform) => imageFor(platform, label, fileName));
-              return `| ${label} | ${images.join(" | ")} |`;
-            });
-            const headers = platforms.map(
-              (platform) => `${platform.name}<br>${statusFor(platform)}`,
+            const statusRows = platforms.map(
+              (platform) => `| ${platform.name} | ${statusFor(platform)} |`,
             );
+            const scenarios = screenshots.flatMap(([label, fileName]) => {
+              const images = platforms.map((platform) => imageFor(platform, label, fileName));
+              return [
+                "<details>",
+                `<summary>${label}</summary>`,
+                "",
+                `| ${platforms.map((platform) => platform.name).join(" | ")} |`,
+                `| ${platforms.map(() => "---").join(" | ")} |`,
+                `| ${images.join(" | ")} |`,
+                "",
+                "</details>",
+                "",
+              ];
+            });
             const body = [
               marker,
               "## Installed app screenshots",
               "",
-              `| Screenshot | ${headers.join(" | ")} |`,
-              `| --- | ${platforms.map(() => "---").join(" | ")} |`,
-              ...rows,
+              "| Platform | Result |",
+              "| --- | --- |",
+              ...statusRows,
               "",
+              ...scenarios,
               `[View workflow run](${serverUrl}/${owner}/${repo}/actions/runs/${runId})`,
               "",
               "Screenshots are review artifacts, not pixel-gated baselines. Public PNGs expire after 14 days.",
