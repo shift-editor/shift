@@ -54,6 +54,7 @@ const updateBaseUrl =
   process.env.SHIFT_UPDATE_BASE_URL ?? "https://shift-editor.github.io/shift/updates";
 const channelUrl = `${updateBaseUrl.replace(/\/$/, "")}/${distribution}/${process.platform}/${buildArchitecture}`;
 const signMacos = process.env.SIGN_MACOS === "1";
+const installedAppScreenshots = process.env.SHIFT_INSTALLED_APP_SCREENSHOTS === "1";
 
 if (signMacos) {
   for (const name of ["APPLE_ID", "APPLE_APP_SPECIFIC_PASSWORD", "APPLE_TEAM_ID"]) {
@@ -146,7 +147,7 @@ const config: Configuration = {
     runAsNode: false,
     enableCookieEncryption: true,
     enableNodeOptionsEnvironmentVariable: false,
-    enableNodeCliInspectArguments: false,
+    enableNodeCliInspectArguments: installedAppScreenshots,
     enableEmbeddedAsarIntegrityValidation: true,
     onlyLoadAppFromAsar: true,
   },

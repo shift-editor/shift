@@ -80,6 +80,7 @@ jobs:
               - 'scripts/prepare-update-feed.test.mjs'
               - 'scripts/product-version.mjs'
               - 'scripts/product-version.test.mjs'
+              - 'scripts/capture-installed-app.mjs'
               - 'scripts/smoke-packaged.mjs'
             skills:
               - '.agents/skills/**'

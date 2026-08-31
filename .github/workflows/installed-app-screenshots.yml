@@ -1,0 +1,133 @@
+name: Installed App Screenshots
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/installed-app-screenshots.yml
+      - apps/desktop/electron-builder.config.ts
+      - scripts/capture-installed-app.mjs
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: installed-app-screenshots-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  capture:
+    name: Capture ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64
+            runner: windows-latest
+            platform: win32
+            builder-args: --win nsis --x64
+          - name: Linux x64
+            runner: ubuntu-latest
+            platform: linux
+            builder-args: --linux deb --x64
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+          submodules: true
+
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Install Rust toolchain
+        run: rustup show
+
+      - name: Install Linux packaging and display tools
+        if: runner.os == 'Linux'
+        run: >-
+          sudo apt-get update &&
+          sudo apt-get install --yes
+          adwaita-icon-theme dbus-x11 fakeroot fluxbox gsettings-desktop-schemas rpm xvfb
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Build native bridge
+        run: pnpm build:native
+
+      - name: Build desktop application
+        env:
+          SHIFT_DISTRIBUTION: release
+        run: pnpm --filter @shift/desktop build
+
+      - name: Build installer
+        env:
+          SHIFT_BUILD_ARCH: x64
+          SHIFT_DISTRIBUTION: release
+          SHIFT_INSTALLED_APP_SCREENSHOTS: "1"
+        run: >-
+          pnpm --filter @shift/desktop exec electron-builder
+          --config electron-builder.config.ts
+          ${{ matrix.builder-args }}
+          --publish never
+
+      - name: Install Windows application
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem "apps/desktop/out/win32-x64/*Setup.exe" | Select-Object -First 1
+          if (-not $installer) { throw "Windows installer was not produced" }
+
+          $process = Start-Process -FilePath $installer.FullName -ArgumentList "/S" -PassThru
+          Wait-Process -Id $process.Id -Timeout 300
+          if ($process.ExitCode -ne 0) { throw "Windows installer exited with $($process.ExitCode)" }
+
+          Start-Sleep -Seconds 2
+          Get-Process shift -ErrorAction SilentlyContinue | Stop-Process -Force
+
+          $installed = Get-ChildItem "$env:LOCALAPPDATA/Programs" -Filter "shift.exe" -Recurse |
+            Select-Object -First 1
+          if (-not $installed) { throw "Installed Shift executable was not found" }
+
+          Add-Content -Path $env:GITHUB_ENV -Value "SHIFT_INSTALLED_APP_PATH=$($installed.FullName)"
+
+      - name: Install Linux application
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          package="$(find apps/desktop/out/linux-x64 -maxdepth 1 -type f -name '*.deb' -print -quit)"
+          test -n "$package"
+          sudo apt-get install --yes "$PWD/$package"
+          executable="$(readlink -f "$(command -v shift)")"
+          test -x "$executable"
+          echo "SHIFT_INSTALLED_APP_PATH=$executable" >> "$GITHUB_ENV"
+
+      - name: Capture installed Windows application
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: >-
+          node scripts/capture-installed-app.mjs
+          "$env:SHIFT_INSTALLED_APP_PATH"
+          "installed-app-screenshots/windows-x64"
+
+      - name: Capture installed Linux application
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          dbus-run-session -- xvfb-run --auto-servernum --server-args='-screen 0 1920x1080x24' \
+            sh -c 'fluxbox >/tmp/shift-fluxbox.log 2>&1 & sleep 1; exec node scripts/capture-installed-app.mjs "$SHIFT_INSTALLED_APP_PATH" installed-app-screenshots/linux-x64'
+
+      - name: Upload installed app screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: installed-app-screenshots-${{ matrix.platform }}-x64
+          path: installed-app-screenshots/
+          if-no-files-found: warn
+          retention-days: 14
