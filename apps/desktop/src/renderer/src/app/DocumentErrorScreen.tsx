@@ -1,7 +1,13 @@
 import { Button } from "@shift/ui";
 import { getShiftHost } from "@/host/shiftHost";
+import { ErrorDialog } from "./ErrorDialog";
 
-export function DocumentErrorScreen() {
+type DocumentErrorScreenProps = {
+  error: unknown;
+  componentStack?: string;
+};
+
+export function DocumentErrorScreen({ error, componentStack }: DocumentErrorScreenProps) {
   async function reopenDocument(): Promise<void> {
     try {
       await getShiftHost().window.reopenDocument();
@@ -19,19 +25,16 @@ export function DocumentErrorScreen() {
   }
 
   return (
-    <main className="grid h-screen place-items-center bg-canvas p-8 text-primary">
-      <section className="max-w-md space-y-4 rounded-lg border border-border bg-panel p-6 shadow-lg">
-        <h1 className="text-lg font-semibold">
-          This document encountered an unexpected interface error.
-        </h1>
-        <p className="text-sm text-secondary">Your completed edits have been preserved.</p>
-        <div className="flex gap-2">
-          <Button variant="primary" onClick={reopenDocument}>
-            Reopen Document
-          </Button>
-          <Button onClick={closeWindow}>Close Window</Button>
-        </div>
-      </section>
-    </main>
+    <ErrorDialog
+      title="Something went wrong with this document"
+      description="Your completed edits are safe. Reopen the document to continue."
+      error={error}
+      componentStack={componentStack}
+    >
+      <Button variant="primary" onClick={reopenDocument}>
+        Reopen Document
+      </Button>
+      <Button onClick={closeWindow}>Close Window</Button>
+    </ErrorDialog>
   );
 }

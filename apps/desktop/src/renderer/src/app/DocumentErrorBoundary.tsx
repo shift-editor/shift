@@ -3,7 +3,7 @@ import { DocumentErrorScreen } from "./DocumentErrorScreen";
 import { reportRendererError } from "./errorReporting";
 
 type Props = { children: ReactNode };
-type State = { error: Error | null };
+type State = { error: Error | null; componentStack?: string };
 
 export class DocumentErrorBoundary extends Component<Props, State> {
   state: State = { error: null };
@@ -13,11 +13,17 @@ export class DocumentErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
-    reportRendererError("DocumentErrorBoundary", error, info.componentStack ?? undefined);
+    const componentStack = info.componentStack ?? undefined;
+    reportRendererError("DocumentErrorBoundary", error, componentStack);
+    this.setState({ componentStack });
   }
 
   render() {
-    if (this.state.error) return <DocumentErrorScreen />;
+    if (this.state.error) {
+      return (
+        <DocumentErrorScreen error={this.state.error} componentStack={this.state.componentStack} />
+      );
+    }
 
     return this.props.children;
   }

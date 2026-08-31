@@ -31,10 +31,12 @@ test("reopens after a document render failure", async ({ electronApp, page }) =>
   });
   await expect(
     page.getByRole("heading", {
-      name: "This document encountered an unexpected interface error.",
+      name: "Something went wrong with this document",
     }),
   ).toBeVisible();
-  await expect(page.getByText("Your completed edits have been preserved.")).toBeVisible();
+  await expect(
+    page.getByText("Your completed edits are safe. Reopen the document to continue."),
+  ).toBeVisible();
 
   const nextWindow = electronApp.waitForEvent("window");
   await page.getByRole("button", { name: "Reopen Document" }).click();
@@ -48,10 +50,12 @@ test("contains root route render failures", async ({ page }) => {
     window.location.hash = "/e2e-root-render-failure";
   });
 
-  await expect(
-    page.getByRole("heading", { name: "Shift encountered an unexpected interface error." }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Something went wrong" })).toBeVisible();
+  await expect(page.getByRole("dialog")).toBeVisible();
   await expect(page.getByRole("button", { name: "Reload Window" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Show details" }).click();
+  await expect(page.getByLabel("Error details")).toContainText("E2E root render failure");
 });
 
 async function crashRendererAndWaitForWindow(
