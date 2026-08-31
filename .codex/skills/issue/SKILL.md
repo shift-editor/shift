@@ -52,6 +52,18 @@ Add reproduction steps, evidence, constraints, or out-of-scope notes only when t
 
 Acceptance criteria must describe behavior or durable repository outcomes. Do not use vague criteria such as “works correctly,” “tests pass,” or “code is clean.”
 
+### UI evidence
+
+For UI defects or visual-change requests whose appearance matters, attach screenshots or recordings when the affected state can be reproduced safely.
+
+- Show the actual affected UI and the state that demonstrates the problem or review need.
+- Prefer GitHub user attachments over committing issue-only media to the repository.
+- Redact private user data, credentials, and sensitive documents before uploading.
+- Label conceptual mockups as proposals; never present them as the current implementation.
+- If useful evidence cannot be captured safely or reliably, state why instead of fabricating it.
+
+Do not require visual evidence when the issue has no visible review surface.
+
 ## Pull request linkage
 
 Issue state has these meanings:
