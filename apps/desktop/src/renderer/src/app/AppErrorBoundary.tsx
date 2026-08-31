@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { Button } from "@shift/ui";
 import { getShiftHost } from "@/host/shiftHost";
 import { reportRendererError } from "./errorReporting";
 
@@ -27,18 +28,12 @@ export class AppErrorBoundary extends Component<Props, State> {
           </h1>
           <p className="text-sm text-secondary">Reload the window to continue.</p>
           <div className="flex gap-2">
-            <button
-              className="rounded bg-primary px-3 py-2 text-sm text-primary-foreground"
-              onClick={() => window.location.reload()}
-            >
+            <Button variant="primary" onClick={() => window.location.reload()}>
               Reload Window
-            </button>
-            <button
-              className="rounded border border-border px-3 py-2 text-sm"
-              onClick={() => getShiftHost().commands.run("window.close")}
-            >
+            </Button>
+            <Button onClick={() => getShiftHost().commands.run("window.close")}>
               Close Window
-            </button>
+            </Button>
           </div>
         </section>
       </main>

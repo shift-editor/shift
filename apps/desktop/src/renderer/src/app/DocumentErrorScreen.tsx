@@ -1,3 +1,4 @@
+import { Button } from "@shift/ui";
 import { getShiftHost } from "@/host/shiftHost";
 
 export function DocumentErrorScreen() {
@@ -25,15 +26,10 @@ export function DocumentErrorScreen() {
         </h1>
         <p className="text-sm text-secondary">Your completed edits have been preserved.</p>
         <div className="flex gap-2">
-          <button
-            className="rounded bg-primary px-3 py-2 text-sm text-primary-foreground"
-            onClick={reopenDocument}
-          >
+          <Button variant="primary" onClick={reopenDocument}>
             Reopen Document
-          </button>
-          <button className="rounded border border-border px-3 py-2 text-sm" onClick={closeWindow}>
-            Close Window
-          </button>
+          </Button>
+          <Button onClick={closeWindow}>Close Window</Button>
         </div>
       </section>
     </main>
