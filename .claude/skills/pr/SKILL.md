@@ -71,7 +71,19 @@ Testing entries must distinguish:
 - checks not run;
 - focused manual verification where an automated test would be low value.
 
-For UI changes, include screenshots or recordings when available and useful. For release changes, state whether packaging was smoke-tested and which hosted platform/signing checks remain.
+For release changes, state whether packaging was smoke-tested and which hosted platform/signing checks remain.
+
+### UI review evidence
+
+For materially visible UI changes, attach screenshots or recordings before marking the pull request ready for review.
+
+- Cover every distinct state needed to review the change, including native dialogs and fallback, error, empty, loading, or disabled states when affected.
+- Capture the actual implementation. Include before-and-after evidence when the change intentionally modifies existing appearance or interaction.
+- Prefer GitHub user attachments over committing review-only media to the repository.
+- Redact private user data, credentials, and sensitive documents before uploading.
+- If useful evidence cannot be captured safely or reliably, state why in the pull request rather than silently omitting it.
+
+Do not add ceremonial screenshots for changes with no visible review surface.
 
 ### Desktop E2E impact
 
