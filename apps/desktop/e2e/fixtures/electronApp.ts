@@ -84,7 +84,8 @@ export interface CanonicalVariableFont {
 export type RecoveryApp = {
   page: Page;
   documentPath: string;
-  crashAndRestart: () => Promise<Page>;
+  crashAndRecover: () => Promise<Page>;
+  crashAndReopenDocument: () => Promise<Page>;
   canonicalGlyphNames: () => string[];
   canonicalVariableFont: () => CanonicalVariableFont;
 };
@@ -316,11 +317,19 @@ export const recoveryTest = base.extend<{ recoveryApp: RecoveryApp }>({
       await use({
         page,
         documentPath,
-        crashAndRestart: async () => {
+        crashAndRecover: async () => {
           if (!app) throw new Error("Electron application is not running");
 
           await killApp(app);
           app = await launchShiftApp(userDataDir);
+          page = await readyWorkspacePage(app);
+          return page;
+        },
+        crashAndReopenDocument: async () => {
+          if (!app) throw new Error("Electron application is not running");
+
+          await killApp(app);
+          app = await launchShiftApp(userDataDir, documentPath);
           page = await readyWorkspacePage(app);
           return page;
         },

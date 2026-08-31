@@ -65,7 +65,7 @@ test("persists source topology", async ({ recoveryApp }) => {
   await redo(recoveryApp.page);
   await expectVariableFont(recoveryApp.page, deleted);
 
-  const recovered = await recoveryApp.crashAndRestart();
+  const recovered = await recoveryApp.crashAndRecover();
   await expectVariableFont(recovered, deleted);
   expectCanonicalFont(recoveryApp, baseline);
 
@@ -74,7 +74,7 @@ test("persists source topology", async ({ recoveryApp }) => {
   await expectVariableFont(recovered, saved);
   expectCanonicalFont(recoveryApp, saved);
 
-  const reopened = await recoveryApp.crashAndRestart();
+  const reopened = await recoveryApp.crashAndReopenDocument();
   await expectVariableFont(reopened, saved);
 });
 
@@ -127,7 +127,7 @@ test("persists axis topology", async ({ recoveryApp }) => {
   await redo(recoveryApp.page);
   await expectVariableFont(recoveryApp.page, deleted);
 
-  const recovered = await recoveryApp.crashAndRestart();
+  const recovered = await recoveryApp.crashAndRecover();
   await expectVariableFont(recovered, deleted);
   expectCanonicalFont(recoveryApp, baseline);
 
@@ -136,7 +136,7 @@ test("persists axis topology", async ({ recoveryApp }) => {
   await expectVariableFont(recovered, saved);
   expectCanonicalFont(recoveryApp, saved);
 
-  const reopened = await recoveryApp.crashAndRestart();
+  const reopened = await recoveryApp.crashAndReopenDocument();
   await expectVariableFont(reopened, saved);
 });
 
