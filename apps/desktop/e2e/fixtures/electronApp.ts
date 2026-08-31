@@ -42,6 +42,9 @@ export const GLYPHSPACKAGE_FONT_PATH = path.resolve(
   "../../fixtures/fonts/PackageFont.glyphspackage",
 );
 
+/** Native launcher size before deterministic snapshot normalization. */
+const LAUNCHER_WIDTH = 800;
+const LAUNCHER_HEIGHT = 600;
 /** Fixed window size for deterministic snapshots. */
 const WINDOW_WIDTH = 1200;
 const WINDOW_HEIGHT = 600;
@@ -235,12 +238,18 @@ export const test = base.extend<ShiftFixtures & ShiftOptions>({
             timeout: 20_000,
           })
           .toBe(true);
+      } else {
+        await expect
+          .poll(() => browserWindow.evaluate((window) => window.getSize()))
+          .toEqual([LAUNCHER_WIDTH, LAUNCHER_HEIGHT]);
       }
 
       await browserWindow.evaluate((window) => window.unmaximize());
       await expect.poll(() => browserWindow.evaluate((window) => window.isMaximized())).toBe(false);
       await browserWindow.evaluate(
         (win, { w, h }) => {
+          // Hosted displays can be narrower than the deterministic snapshot size.
+          win.setMinimumSize(w, h);
           win.setContentSize(w, h);
           win.center();
         },

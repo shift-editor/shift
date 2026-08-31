@@ -46,12 +46,14 @@ Do not update snapshots merely to make a failure pass. Inspect the diff and conf
 
 ## Projects and fixtures
 
-| Project    | Fixture                   | Rendering                                         | CI policy                                       |
-| ---------- | ------------------------- | ------------------------------------------------- | ----------------------------------------------- |
-| `visual`   | `fixtures/electronApp.ts` | Software rendering, DPR 1, `1200×600` page window | Required on macOS in merge queue and `main`     |
-| `platform` | `fixtures/electronApp.ts` | Software rendering, DPR 1, `1200×600` page window | Required on Windows/Linux in merge queue/`main` |
-| `gpu`      | `fixtures/perfApp.ts`     | Hardware GPU, host scale, stable content size     | Required on macOS in merge queue and `main`     |
-| `perf`     | `fixtures/perfApp.ts`     | Hardware GPU, host scale, stable content size     | Nightly and manual only                         |
+| Project    | Fixture                   | Rendering                                         | CI policy                                    |
+| ---------- | ------------------------- | ------------------------------------------------- | -------------------------------------------- |
+| `visual`   | `fixtures/electronApp.ts` | Software rendering, DPR 1, `1200×600` page window | Required on macOS in the merge queue         |
+| `platform` | `fixtures/electronApp.ts` | Software rendering, DPR 1, `1200×600` page window | Required on Windows/Linux in the merge queue |
+| `gpu`      | `fixtures/perfApp.ts`     | Hardware GPU, host scale, stable content size     | Required on macOS in the merge queue         |
+| `perf`     | `fixtures/perfApp.ts`     | Hardware GPU, host scale, stable content size     | Nightly and manual only                      |
+
+Post-merge `main` workflows do not repeat the E2E suites for the same commit. Rust-changing pushes still build each platform's native module to seed default-branch caches for later merge-queue runs.
 
 The `platform` project concentrates on native desktop boundaries: document lifecycle, Save and Save As, recovery after forced termination, application quit, native menus, Unicode filesystem paths, and import/export persistence. Headless Linux runs under Xvfb with Fluxbox so native maximize, focus, and window-placement behavior has a window manager; both are available in the Nix dev shell. GPU and performance behavior remain separate from this software-rendered suite.
 
@@ -72,7 +74,7 @@ Authored fixtures import their source into a canonical native document under a t
 
 ## Visual snapshots
 
-The visual fixture forces a fixed device scale and sizes the `BrowserWindow` that owns the Playwright page. This prevents snapshots from inheriting the host display's scale or available work area.
+The visual fixture forces a fixed device scale and sizes the `BrowserWindow` that owns the Playwright page. Before normalizing the page to 1200×600, launcher runs assert the native window opened at 800×600. This prevents snapshots from inheriting the host display's scale or available work area without masking launcher sizing regressions.
 
 After an intentional visual change:
 
