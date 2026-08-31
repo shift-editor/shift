@@ -247,7 +247,6 @@ async function openDocumentWithOperatingSystem(openPath) {
 async function captureRegistration() {
   switch (process.platform) {
     case "linux": {
-      const fileType = await commandOutput("xdg-mime", ["query", "filetype", documentPath]);
       const defaultApplication = await commandOutput("xdg-mime", [
         "query",
         "default",
@@ -259,15 +258,16 @@ async function captureRegistration() {
         "standard::content-type,standard::icon",
         documentPath,
       ]);
-      if (fileType.trim() !== "application/x-shift-document") {
-        throw new Error(`Unexpected installed MIME type: ${fileType.trim()}`);
+      const fileType = gioInfo.match(/^\s*standard::content-type:\s*(\S+)\s*$/m)?.[1];
+      if (fileType !== "application/x-shift-document") {
+        throw new Error(`Unexpected installed MIME type: ${fileType ?? "not reported"}`);
       }
       if (!defaultApplication.toLowerCase().includes("shift")) {
         throw new Error(`Shift is not the installed MIME handler: ${defaultApplication.trim()}`);
       }
       await writeFile(
         path.join(outputPath, "registration.txt"),
-        `file type: ${fileType}default application: ${defaultApplication}\n${gioInfo}`,
+        `file type: ${fileType}\ndefault application: ${defaultApplication.trim()}\n\n${gioInfo}`,
       );
 
       const iconPath = "/usr/share/icons/hicolor/256x256/mimetypes/shift-document.png";

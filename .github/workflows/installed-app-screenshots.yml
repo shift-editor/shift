@@ -134,17 +134,128 @@ jobs:
 
   report:
     name: Report installed app screenshots
-    if: always() && github.event_name == 'pull_request'
+    if: >-
+      always() &&
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository
     needs: capture
     runs-on: ubuntu-latest
     permissions:
       actions: read
       pull-requests: write
     steps:
+      - name: Download installed app screenshots
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          pattern: installed-app-screenshots-*
+          path: installed-app-screenshots
+          merge-multiple: true
+
+      - id: upload
+        name: Publish installed app screenshots
+        if: always()
+        shell: bash
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_SCREENSHOT_ACCESS_KEY_ID }}
+          AWS_EC2_METADATA_DISABLED: "true"
+          AWS_REGION: auto
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SCREENSHOT_SECRET_ACCESS_KEY }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          R2_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          R2_BASE_URL: ${{ vars.R2_SCREENSHOT_BASE_URL }}
+          R2_BUCKET: ${{ vars.R2_SCREENSHOT_BUCKET }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          screenshot_names=(
+            launcher.png
+            launcher-desktop.png
+            document.png
+            document-desktop.png
+            file-association.png
+            file-association-desktop.png
+            application-menu.png
+            native-dialog.png
+            document-icon.png
+          )
+          screenshots=()
+          for platform in windows-x64 linux-x64; do
+            for name in "${screenshot_names[@]}"; do
+              screenshot="installed-app-screenshots/${platform}/${name}"
+              [[ -f "$screenshot" ]] && screenshots+=("$screenshot")
+            done
+          done
+          if [[ ${#screenshots[@]} -eq 0 ]]; then
+            echo "uploaded=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          : "${AWS_ACCESS_KEY_ID:?R2_SCREENSHOT_ACCESS_KEY_ID is required}"
+          : "${AWS_SECRET_ACCESS_KEY:?R2_SCREENSHOT_SECRET_ACCESS_KEY is required}"
+          : "${R2_ACCOUNT_ID:?CLOUDFLARE_ACCOUNT_ID is required}"
+          : "${R2_BUCKET:?R2_SCREENSHOT_BUCKET is required}"
+          : "${R2_BASE_URL:?R2_SCREENSHOT_BASE_URL is required}"
+          [[ "$PR_NUMBER" =~ ^[1-9][0-9]*$ && "$RUN_ID" =~ ^[1-9][0-9]*$ ]] || {
+            echo "Pull request and run IDs must be positive integers" >&2
+            exit 1
+          }
+          [[ "$R2_ACCOUNT_ID" =~ ^[0-9a-f]{32}$ ]] || {
+            echo "CLOUDFLARE_ACCOUNT_ID is invalid" >&2
+            exit 1
+          }
+          [[ "$R2_BUCKET" =~ ^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$ ]] || {
+            echo "R2_SCREENSHOT_BUCKET is invalid" >&2
+            exit 1
+          }
+          r2_origin="${R2_BASE_URL%/}"
+          [[ "$r2_origin" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?$ ]] || {
+            echo "R2_SCREENSHOT_BASE_URL must be an HTTPS origin" >&2
+            exit 1
+          }
+
+          endpoint="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+          prefix="installed-app-screenshots/pr-${PR_NUMBER}/run-${RUN_ID}"
+          destination="s3://${R2_BUCKET}/${prefix}"
+          base_url="${r2_origin}/${prefix}"
+          for screenshot in "${screenshots[@]}"; do
+            relative="${screenshot#installed-app-screenshots/}"
+            aws s3 cp "$screenshot" "${destination}/${relative}" \
+              --endpoint-url "$endpoint" \
+              --cache-control 'public, max-age=300' \
+              --content-type image/png \
+              --no-progress \
+              --only-show-errors
+
+            content_type="$(curl \
+              --fail \
+              --head \
+              --retry 5 \
+              --retry-all-errors \
+              --show-error \
+              --silent \
+              --output /dev/null \
+              --write-out '%{content_type}' \
+              "${base_url}/${relative}")"
+            [[ "$content_type" == "image/png" ]] || {
+              echo "Public screenshot has unexpected content type: ${content_type:-missing}" >&2
+              exit 1
+            }
+          done
+
+          echo "base_url=$base_url" >> "$GITHUB_OUTPUT"
+          echo "uploaded=true" >> "$GITHUB_OUTPUT"
+
       - name: Update pull request comment
+        if: always()
         uses: actions/github-script@v8
+        env:
+          SCREENSHOT_BASE_URL: ${{ steps.upload.outputs.base_url }}
+          SCREENSHOTS_UPLOADED: ${{ steps.upload.outputs.uploaded }}
         with:
           script: |
+            const fs = require("node:fs");
+            const path = require("node:path");
             const marker = "<!-- installed-app-screenshots -->";
             const { owner, repo } = context.repo;
             const runId = context.runId;
@@ -156,43 +267,63 @@ jobs:
               filter: "latest",
               per_page: 100,
             });
-            const artifacts = await github.paginate(
-              github.rest.actions.listWorkflowRunArtifacts,
-              { owner, repo, run_id: runId, per_page: 100 },
-            );
             const platforms = [
               {
                 name: "Windows x64",
                 jobName: "Capture Windows x64",
-                artifactName: "installed-app-screenshots-win32-x64",
+                directory: "windows-x64",
               },
               {
                 name: "Linux x64",
                 jobName: "Capture Linux x64",
-                artifactName: "installed-app-screenshots-linux-x64",
+                directory: "linux-x64",
               },
             ];
-            const rows = platforms.map(({ name, jobName, artifactName }) => {
+            const screenshots = [
+              ["Launcher window", "launcher.png"],
+              ["Launcher desktop", "launcher-desktop.png"],
+              ["Document window", "document.png"],
+              ["Document desktop", "document-desktop.png"],
+              ["File association window", "file-association.png"],
+              ["File association desktop", "file-association-desktop.png"],
+              ["Application menu", "application-menu.png"],
+              ["Native dialog", "native-dialog.png"],
+              ["Document icon", "document-icon.png"],
+            ];
+            const statusFor = ({ jobName }) => {
               const job = jobs.find((candidate) => candidate.name === jobName);
-              const artifact = artifacts.find((candidate) => candidate.name === artifactName);
               const result = job?.conclusion ?? job?.status ?? "not found";
-              const status = result === "success" ? `✅ ${result}` : `❌ ${result}`;
-              const screenshots = artifact
-                ? `[Download artifact](${serverUrl}/${owner}/${repo}/actions/runs/${runId}/artifacts/${artifact.id})`
-                : "Not available";
-              return `| ${name} | ${status} | ${screenshots} |`;
+              return result === "success" ? `✅ ${result}` : `❌ ${result}`;
+            };
+            const imageFor = (platform, label, fileName) => {
+              const relativePath = `${platform.directory}/${fileName}`;
+              const localPath = path.join("installed-app-screenshots", relativePath);
+              if (process.env.SCREENSHOTS_UPLOADED !== "true" || !fs.existsSync(localPath)) {
+                return "Not available";
+              }
+
+              const url = `${process.env.SCREENSHOT_BASE_URL}/${relativePath}`;
+              const alt = `${platform.name} ${label}`;
+              return `<a href="${url}"><img src="${url}" alt="${alt}" width="360"></a>`;
+            };
+            const rows = screenshots.map(([label, fileName]) => {
+              const images = platforms.map((platform) => imageFor(platform, label, fileName));
+              return `| ${label} | ${images.join(" | ")} |`;
             });
+            const headers = platforms.map(
+              (platform) => `${platform.name}<br>${statusFor(platform)}`,
+            );
             const body = [
               marker,
               "## Installed app screenshots",
               "",
-              "| Platform | Result | Screenshots and metadata |",
-              "| --- | --- | --- |",
+              `| Screenshot | ${headers.join(" | ")} |`,
+              `| --- | ${platforms.map(() => "---").join(" | ")} |`,
               ...rows,
               "",
               `[View workflow run](${serverUrl}/${owner}/${repo}/actions/runs/${runId})`,
               "",
-              "Screenshots are review artifacts, not pixel-gated baselines.",
+              "Screenshots are review artifacts, not pixel-gated baselines. Public PNGs expire after 14 days.",
             ].join("\n");
             const comments = await github.paginate(github.rest.issues.listComments, {
               owner,
