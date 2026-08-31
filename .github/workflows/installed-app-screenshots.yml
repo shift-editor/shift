@@ -131,3 +131,90 @@ jobs:
           path: installed-app-screenshots/
           if-no-files-found: warn
           retention-days: 14
+
+  report:
+    name: Report installed app screenshots
+    if: always() && github.event_name == 'pull_request'
+    needs: capture
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      pull-requests: write
+    steps:
+      - name: Update pull request comment
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const marker = "<!-- installed-app-screenshots -->";
+            const { owner, repo } = context.repo;
+            const runId = context.runId;
+            const serverUrl = process.env.GITHUB_SERVER_URL;
+            const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
+              owner,
+              repo,
+              run_id: runId,
+              filter: "latest",
+              per_page: 100,
+            });
+            const artifacts = await github.paginate(
+              github.rest.actions.listWorkflowRunArtifacts,
+              { owner, repo, run_id: runId, per_page: 100 },
+            );
+            const platforms = [
+              {
+                name: "Windows x64",
+                jobName: "Capture Windows x64",
+                artifactName: "installed-app-screenshots-win32-x64",
+              },
+              {
+                name: "Linux x64",
+                jobName: "Capture Linux x64",
+                artifactName: "installed-app-screenshots-linux-x64",
+              },
+            ];
+            const rows = platforms.map(({ name, jobName, artifactName }) => {
+              const job = jobs.find((candidate) => candidate.name === jobName);
+              const artifact = artifacts.find((candidate) => candidate.name === artifactName);
+              const result = job?.conclusion ?? job?.status ?? "not found";
+              const status = result === "success" ? `✅ ${result}` : `❌ ${result}`;
+              const screenshots = artifact
+                ? `[Download artifact](${serverUrl}/${owner}/${repo}/actions/runs/${runId}/artifacts/${artifact.id})`
+                : "Not available";
+              return `| ${name} | ${status} | ${screenshots} |`;
+            });
+            const body = [
+              marker,
+              "## Installed app screenshots",
+              "",
+              "| Platform | Result | Screenshots and metadata |",
+              "| --- | --- | --- |",
+              ...rows,
+              "",
+              `[View workflow run](${serverUrl}/${owner}/${repo}/actions/runs/${runId})`,
+              "",
+              "Screenshots are review artifacts, not pixel-gated baselines.",
+            ].join("\n");
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number: context.issue.number,
+              per_page: 100,
+            });
+            const existing = comments.find(
+              (comment) => comment.user?.type === "Bot" && comment.body?.includes(marker),
+            );
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
