@@ -107,7 +107,7 @@ describe("KeyboardRouter", () => {
 
   describe("tool shortcuts", () => {
     it("switches tools from canvas shortcuts for non-text tools", async () => {
-      const e = createKeyboardEvent({ key: "s" });
+      const e = createKeyboardEvent({ key: "r" });
 
       const handled = await router.handleKeyDown(e);
 
@@ -117,7 +117,7 @@ describe("KeyboardRouter", () => {
 
     it("does not run tool shortcuts outside the canvas context", async () => {
       canvasActive = false;
-      const e = createKeyboardEvent({ key: "s" });
+      const e = createKeyboardEvent({ key: "r" });
 
       const handled = await router.handleKeyDown(e);
 

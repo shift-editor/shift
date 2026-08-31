@@ -1,4 +1,4 @@
-import type { ToolName } from "@/lib/tools/core";
+import type { ToolMenuItem, ToolName } from "@/lib/tools/core";
 
 export type ToolStateScope = "app" | "document";
 
@@ -30,6 +30,8 @@ export interface ToolRegistryItem {
   icon: React.FC<React.SVGProps<SVGSVGElement>>;
   tooltip: string;
   shortcut?: string;
+  onSelect?: () => void;
+  menuItems?: readonly ToolMenuItem[];
   hidden?: boolean;
   disabled?: boolean;
 }

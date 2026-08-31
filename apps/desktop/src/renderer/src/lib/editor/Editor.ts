@@ -258,9 +258,22 @@ export class Editor {
       () => {
         const registry = new Map<ToolName, ToolRegistryItem>();
         for (const [id, manifest] of this.#toolManager.manifestsCell.value) {
-          const { icon, tooltip, shortcut, hidden, disabled } = manifest;
+          if (manifest.menuSelectionCell) track(manifest.menuSelectionCell);
+
+          const { icon, tooltip, shortcut, onSelect, menuItems, hidden, disabled } = manifest;
           const item: ToolRegistryItem = { icon, tooltip };
           if (shortcut) item.shortcut = shortcut;
+          if (onSelect) item.onSelect = onSelect;
+          if (menuItems) {
+            item.menuItems = menuItems.map(({ id, icon, label, shortcut, selected, onSelect }) => ({
+              id,
+              icon,
+              label,
+              shortcut,
+              selected,
+              onSelect,
+            }));
+          }
           if (hidden) item.hidden = true;
           if (disabled) item.disabled = true;
           registry.set(id, item);
@@ -341,9 +354,19 @@ export class Editor {
   public getToolShortcuts(): ToolShortcutEntry[] {
     const shortcuts: ToolShortcutEntry[] = [];
     for (const [toolId, manifest] of this.#toolManager.manifests) {
-      if (manifest.hidden || manifest.disabled || manifest.shortcut == null) continue;
+      if (manifest.hidden || manifest.disabled) continue;
 
-      shortcuts.push({ toolId, shortcut: manifest.shortcut });
+      if (manifest.shortcut != null) {
+        const shortcut: ToolShortcutEntry = { toolId, shortcut: manifest.shortcut };
+        if (manifest.onSelect) shortcut.onSelect = manifest.onSelect;
+        shortcuts.push(shortcut);
+      }
+
+      for (const item of manifest.menuItems ?? []) {
+        if (item.shortcut === manifest.shortcut) continue;
+
+        shortcuts.push({ toolId, shortcut: item.shortcut, onSelect: item.onSelect });
+      }
     }
     return shortcuts;
   }

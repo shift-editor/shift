@@ -52,6 +52,21 @@ describe("Shape tool", () => {
     expect(editor.toolIf("select")?.state).toEqual({ type: "ready" });
   });
 
+  it("does not create a rectangle while circle is selected", async () => {
+    const circle = editor.toolRegistry
+      .get("shape")
+      ?.menuItems?.find((item) => item.id === "circle");
+    if (!circle) throw new Error("circle shape menu item is not registered");
+    circle.onSelect();
+
+    editor.pointerDown(10, 10);
+    editor.pointerMove(50, 30);
+    editor.pointerUp(110, 90);
+    await editor.settle();
+
+    expect(contours()).toHaveLength(0);
+  });
+
   it("escape mid-drag discards the preview without committing a contour", () => {
     const contoursBefore = contours().length;
 

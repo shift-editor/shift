@@ -2,18 +2,32 @@ import { Vec2, type Point2D, type Rect2D } from "@shift/geo";
 import { Point } from "@shift/glyph-state";
 import type { ContourId } from "@shift/types";
 import { BaseTool, type ToolName } from "../core";
-import type { ShapeState } from "./types";
+import type { ShapeKind, ShapeState } from "./types";
 import { ShapeReadyBehavior, ShapeDraggingBehavior } from "./behaviors";
+import type { Editor } from "@/lib/editor/Editor";
 import type { Canvas } from "@/lib/editor/rendering/Canvas";
+import type { Signal } from "@/lib/signals";
 import type { CursorType } from "@/types/editor";
 
 export class Shape extends BaseTool<ShapeState, Shape> {
   readonly id: ToolName = "shape";
 
   readonly behaviors = [ShapeReadyBehavior, ShapeDraggingBehavior];
+  readonly #shapeKindCell: Signal<ShapeKind>;
+
+  constructor(editor: Editor, shapeKindCell: Signal<ShapeKind>) {
+    super(editor);
+    this.#shapeKindCell = shapeKindCell;
+  }
 
   initialState(): ShapeState {
     return { type: "idle" };
+  }
+
+  protected override preTransition(state: ShapeState): { state: ShapeState } | null {
+    if (this.#shapeKindCell.peek() === "circle") return { state };
+
+    return null;
   }
 
   override getCursor(): CursorType {

@@ -1,6 +1,8 @@
 import type { Point2D } from "@shift/geo";
 import type { Behavior } from "../core/Behavior";
 
+export type ShapeKind = "rectangle" | "circle";
+
 export type ShapeState =
   | { type: "idle" }
   | { type: "ready" }

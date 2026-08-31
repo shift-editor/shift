@@ -83,7 +83,7 @@ const TOOL_LABELS: Record<string, string> = {
   select: "Select Tool (V)",
   pen: "Pen Tool (P)",
   hand: "Hand Tool (H)",
-  shape: "Shape Tool (S)",
+  shape: "Rectangle Tool (R)",
 };
 
 test.describe("Canvas pointer lifecycle", () => {
@@ -150,12 +150,30 @@ test.describe("Toolbar tools", () => {
 
   for (const [tool, label] of Object.entries(TOOL_LABELS)) {
     test(`${tool} tool active state matches snapshot`, async ({ page }) => {
-      await page.getByRole("button", { name: label }).click();
+      await page.getByRole("button", { name: label, exact: true }).click();
       await page.waitForTimeout(300);
 
       await expect(page).toHaveScreenshot(`tool-${tool}.png`);
     });
   }
+
+  test("selects shape kinds from the menu and keyboard", async ({ page }) => {
+    await page.getByRole("button", { name: "Rectangle Tool (R) options" }).click();
+    const rectangleItem = page.getByRole("menuitemcheckbox", { name: "Rectangle R" });
+    const circleItem = page.getByRole("menuitemcheckbox", { name: "Circle O" });
+    await expect(rectangleItem).toHaveAttribute("aria-checked", "true");
+    await expect(circleItem).toHaveAttribute("aria-checked", "false");
+    await circleItem.click();
+    await expect(page.getByRole("button", { name: "Circle Tool (O)", exact: true })).toBeVisible();
+
+    await page.keyboard.press("r");
+    await expect(
+      page.getByRole("button", { name: "Rectangle Tool (R)", exact: true }),
+    ).toBeVisible();
+
+    await page.keyboard.press("o");
+    await expect(page.getByRole("button", { name: "Circle Tool (O)", exact: true })).toBeVisible();
+  });
 
   test("hides unavailable tools", async ({ page }) => {
     await expect(page.getByRole("button", { name: "Text Tool (T)" })).toHaveCount(0);
