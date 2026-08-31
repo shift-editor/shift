@@ -14,7 +14,7 @@ test("recovers completed edits after forced termination and saves explicitly", a
   await waitForGlyphsAndState(recoveryApp.page, [glyphName], true, true);
   expect(recoveryApp.canonicalGlyphNames()).not.toContain(glyphName);
 
-  const restarted = await recoveryApp.crashAndRestart();
+  const restarted = await recoveryApp.crashAndRecover();
 
   await waitForGlyphsAndState(restarted, [glyphName], true, true);
   expect(recoveryApp.canonicalGlyphNames()).not.toContain(glyphName);
@@ -56,14 +56,20 @@ test("recovers batched glyph undo", async ({ recoveryApp }) => {
   await waitForGlyphsAndState(recoveryApp.page, glyphNames, false, true);
   expect(recoveryApp.canonicalGlyphNames()).toEqual(expect.arrayContaining(glyphNames));
 
-  const recovered = await recoveryApp.crashAndRestart();
+  const recovered = await recoveryApp.crashAndRecover();
   await waitForGlyphsAndState(recovered, glyphNames, false, true);
   expect(recoveryApp.canonicalGlyphNames()).toEqual(expect.arrayContaining(glyphNames));
   await save(recovered);
   expect(recoveryApp.canonicalGlyphNames()).not.toEqual(expect.arrayContaining(glyphNames));
 
-  const reopened = await recoveryApp.crashAndRestart();
-  await waitForGlyphsAndState(reopened, glyphNames, false, false);
+  const followupGlyph = "recoveryAfterSave" as GlyphName;
+  await recovered.evaluate((name) => {
+    window.shift?.editor.createGlyph(name);
+  }, followupGlyph);
+  await waitForGlyphsAndState(recovered, [followupGlyph], true, true);
+
+  const reopened = await recoveryApp.crashAndRecover();
+  await waitForGlyphsAndState(reopened, [followupGlyph], true, true);
 });
 
 async function save(page: Page): Promise<void> {

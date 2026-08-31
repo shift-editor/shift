@@ -6,6 +6,7 @@ import type { Window } from "../windows/Window";
 import type {
   WorkspaceDocumentIdentity,
   WorkspaceDocumentState,
+  WorkspaceRecovery,
 } from "../../shared/workspace/protocol";
 import { WorkspaceProcess } from "./WorkspaceProcess";
 import { FontSessionHost, type FontSessionId } from "./FontSessionHost";
@@ -17,6 +18,7 @@ export interface WorkspaceManagerOptions {
   readonly documentsRoot: () => string;
   readonly applicationName: () => string;
   readonly nativeDialogs: NativeDialogs;
+  readonly onSessionCrashed?: (session: FontSessionHost) => void;
 }
 
 /**
@@ -32,6 +34,7 @@ export class WorkspaceManager {
   readonly #documentsRoot: () => string;
   readonly #applicationName: () => string;
   readonly #nativeDialogs: NativeDialogs;
+  readonly #onSessionCrashed: (session: FontSessionHost) => void;
   readonly #sessionsById = new Map<FontSessionId, FontSessionHost>();
   readonly #sessionIdByWindowId = new Map<number, FontSessionId>();
   readonly #documentSessions = new DocumentSessionIndex();
@@ -46,6 +49,7 @@ export class WorkspaceManager {
     this.#documentsRoot = options.documentsRoot;
     this.#applicationName = options.applicationName;
     this.#nativeDialogs = options.nativeDialogs;
+    this.#onSessionCrashed = options.onSessionCrashed ?? (() => {});
   }
 
   /**
@@ -69,6 +73,44 @@ export class WorkspaceManager {
     return this.#createSession((workspaceProcess) =>
       workspaceProcess.createDocumentFromSource(sourcePath, documentPath),
     );
+  }
+
+  /** Restores every dirty recoverable workspace beneath the active documents root. */
+  async restoreRecoveries(): Promise<FontSessionHost[]> {
+    const discoveryProcess = new WorkspaceProcess();
+    discoveryProcess.start(this.#documentsRoot());
+
+    let recoveries: WorkspaceRecovery[];
+    try {
+      await discoveryProcess.whenReady();
+      recoveries = await discoveryProcess.listRecoveries();
+    } catch (error) {
+      console.warn("failed to discover workspace recoveries", error);
+      recoveries = [];
+    } finally {
+      discoveryProcess.stop();
+    }
+
+    const restored: FontSessionHost[] = [];
+    for (const recovery of recoveries) {
+      try {
+        const session = await this.#restoreRecovery(recovery);
+        if (restored.includes(session)) continue;
+
+        const state = await session.workspaceProcess.documentState();
+        if (state?.dirty) {
+          restored.push(session);
+          continue;
+        }
+
+        await session.workspaceProcess.closeWorkspace(false);
+        this.unregister(session.workspaceId);
+      } catch (error) {
+        console.warn("failed to restore workspace recovery", recovery, error);
+      }
+    }
+
+    return restored;
   }
 
   /**
@@ -261,6 +303,7 @@ export class WorkspaceManager {
       documentClient: new DocumentClient(),
       applicationName: this.#applicationName,
       nativeDialogs: this.#nativeDialogs,
+      onWorkspaceExit: (crashedSession) => this.#onSessionCrashed(crashedSession),
     });
 
     session.document?.acceptState(state);
@@ -273,6 +316,35 @@ export class WorkspaceManager {
     }
 
     return session;
+  }
+
+  async #restoreRecovery(recovery: WorkspaceRecovery): Promise<FontSessionHost> {
+    switch (recovery.kind) {
+      case "saved":
+        return this.openPath(recovery.canonicalPath);
+      case "unsaved":
+        return this.#createSession((workspaceProcess) =>
+          workspaceProcess.resumeWorkspace(recovery.workspaceId),
+        );
+      default:
+        assertNever(recovery);
+    }
+  }
+
+  async reopenSession(sessionId: FontSessionId): Promise<FontSessionHost> {
+    const session = this.#requireWorkspace(sessionId);
+    if (session.mode !== "authored") {
+      throw new Error(`Cannot reopen preview session: ${sessionId}`);
+    }
+    if (session.workspaceProcess.running) return session;
+
+    const windows = session.allWindows();
+    this.unregister(session.workspaceId);
+    const reopened = await this.#createSession((workspaceProcess) =>
+      workspaceProcess.resumeWorkspace(sessionId),
+    );
+    for (const window of windows) this.#sessionIdByWindowId.delete(window.window.id);
+    return reopened;
   }
 
   async #openDocument(
@@ -332,4 +404,8 @@ export class WorkspaceManager {
 
 function isShiftDocumentPath(sourcePath: string): boolean {
   return path.extname(sourcePath).toLowerCase() === ".shift";
+}
+
+function assertNever(value: never): never {
+  throw new Error(`unknown workspace recovery: ${JSON.stringify(value)}`);
 }

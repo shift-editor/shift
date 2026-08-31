@@ -22,6 +22,12 @@ const shiftHost: ShiftHost = {
     connect: invoke(ipcRenderer, "session.connect"),
     ready: invoke(ipcRenderer, "session.ready"),
   },
+  window: {
+    reopenDocument: invoke(ipcRenderer, "window.reopenDocument"),
+  },
+  errors: {
+    reportRenderer: invoke(ipcRenderer, "errors.reportRenderer"),
+  },
   update: {
     startDownload: invoke(ipcRenderer, "update.startDownload"),
     cancelDownload: invoke(ipcRenderer, "update.cancelDownload"),

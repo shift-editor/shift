@@ -4,6 +4,7 @@ import path from "path";
 
 const packagesDir = path.resolve(__dirname, "../../packages");
 const distribution = process.env.SHIFT_DISTRIBUTION ?? "release";
+const shiftBuildCommit = process.env.SHIFT_BUILD_COMMIT ?? process.env.GITHUB_SHA ?? "unknown";
 if (distribution !== "release" && distribution !== "nightly") {
   throw new Error(`Invalid SHIFT_DISTRIBUTION: ${distribution}`);
 }
@@ -20,6 +21,7 @@ export default defineConfig(async () => {
     root: path.resolve(__dirname, "src/renderer"),
     define: {
       SHIFT_DISTRIBUTION: JSON.stringify(distribution),
+      SHIFT_BUILD_COMMIT: JSON.stringify(shiftBuildCommit),
     },
     publicDir: path.resolve(__dirname, "src/renderer/public"),
     build: {

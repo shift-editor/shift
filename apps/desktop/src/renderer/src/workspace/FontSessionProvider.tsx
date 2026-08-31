@@ -1,6 +1,8 @@
 import { useEffect, useState, type ReactNode } from "react";
 import "@/types/window";
 import type { FontSession } from "@/types/fontSession";
+import { DocumentErrorScreen } from "@/app/DocumentErrorScreen";
+import { reportRendererError } from "@/app/errorReporting";
 import { FontSessionContext, WorkspaceContext } from "./WorkspaceContext";
 import { getFontSession } from "./runtime";
 
@@ -17,6 +19,7 @@ export function FontSessionProvider({ children }: { children: ReactNode }) {
         if (active) setSession(connected);
       } catch (error) {
         console.error("font session failed to connect", error);
+        reportRendererError("FontSessionProvider", error);
         if (active) setConnectionError(error);
       }
     }
@@ -41,13 +44,7 @@ export function FontSessionProvider({ children }: { children: ReactNode }) {
     };
   }, [session]);
 
-  if (connectionError) {
-    return (
-      <main className="grid h-screen place-items-center bg-canvas text-primary">
-        Font session failed to load.
-      </main>
-    );
-  }
+  if (connectionError) return <DocumentErrorScreen error={connectionError} />;
   if (!session) return null;
 
   return (

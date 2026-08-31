@@ -13,6 +13,7 @@ export type CommandId =
   | "help.openDiscord"
   | "help.openX"
   | "help.reportIssue"
+  | "help.showLogs"
   | "file.new"
   | "file.open"
   | "file.save"

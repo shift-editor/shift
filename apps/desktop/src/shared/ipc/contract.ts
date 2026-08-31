@@ -20,6 +20,15 @@ export type DocumentCallMap = {
 
 export type DocumentEventMap = Record<string, never>;
 
+export type RendererErrorReport = {
+  productVersion: string | null;
+  buildCommit: string | null;
+  route: string;
+  boundaryName: string;
+  message: string;
+  componentStack?: string;
+};
+
 /**
  * Defines request/response channels that the renderer may invoke on main.
  *
@@ -47,6 +56,8 @@ export type RendererToMain = {
    */
   "session.connect": () => void;
   "session.ready": () => void;
+  "window.reopenDocument": () => void;
+  "errors.reportRenderer": (report: RendererErrorReport) => void;
   "update.startDownload": () => void;
   "update.cancelDownload": () => void;
   "update.restartToUpdate": () => void;

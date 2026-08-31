@@ -54,6 +54,7 @@ export class App {
   #documentsRoot: string | null = null;
   #pendingOpenPaths: string[] = [];
   #previewConversions = new Map<string, Promise<void>>();
+  #documentCrashDecisions = new Map<string, Promise<void>>();
 
   #appIcon = new AppIcon();
   #applicationMenu = new ApplicationMenu(
@@ -104,6 +105,7 @@ export class App {
       documentsRoot: () => this.#requireDocumentsRoot(),
       applicationName: () => this.applicationName,
       nativeDialogs: this.#nativeDialogs,
+      onSessionCrashed: (session) => this.#handleDocumentCrash(session, null),
     });
     this.#lifecycle = new AppLifecycle({
       documentForWindow: (window) => {
@@ -180,6 +182,13 @@ export class App {
 
       this.#documentsRoot = path.join(app.getPath("userData"), "working-documents");
 
+      const restoredSessions = await this.#workspaces.restoreRecoveries();
+      for (const session of restoredSessions) {
+        const window = this.#createWindow(false, undefined, true);
+        this.#workspaces.attachWindow(session.workspaceId, window);
+        this.#loadWorkspace(window);
+      }
+
       this.#appIcon.install();
       this.#applicationMenu.install();
       app.on("browser-window-focus", () => {
@@ -235,6 +244,14 @@ export class App {
         : {}),
     });
     this.#windows.add(window);
+    window.window.webContents.on("render-process-gone", (_event, details) => {
+      if (details.reason === "clean-exit") return;
+
+      const session = this.#workspaces.getForBrowserWindow(window.window);
+      if (!session?.document) return;
+
+      this.#handleDocumentCrash(session, window);
+    });
 
     this.#lifecycle.registerWindow(window, {
       onClosed: () => {
@@ -260,6 +277,77 @@ export class App {
 
   #loadLauncher(window: Window): void {
     this.#loadRenderer(window, "/launcher");
+  }
+
+  #handleDocumentCrash(session: FontSessionHost, failedWindow: Window | null): void {
+    const existing = this.#documentCrashDecisions.get(session.workspaceId);
+    if (existing) return;
+
+    const handling = this.#documentCrashFlow(session.workspaceId, failedWindow);
+    this.#documentCrashDecisions.set(session.workspaceId, handling);
+    void handling
+      .catch((error) => {
+        this.#log.error("document crash flow failed", error);
+      })
+      .finally(() => {
+        if (this.#documentCrashDecisions.get(session.workspaceId) === handling) {
+          this.#documentCrashDecisions.delete(session.workspaceId);
+        }
+      });
+  }
+
+  async #documentCrashFlow(sessionId: string, failedWindow: Window | null): Promise<void> {
+    let failure: "crashed" | "restoreFailed" = "crashed";
+
+    while (true) {
+      const session = this.#workspaces.get(sessionId);
+      const owner = failedWindow ?? session?.activeWindow() ?? null;
+      const choice = await this.#nativeDialogs.confirmDocumentReopen(
+        owner,
+        this.applicationName,
+        failure,
+      );
+      if (choice === "close") {
+        for (const window of this.#crashedWindows(session, failedWindow)) {
+          if (!window.window.isDestroyed()) window.window.destroy();
+        }
+        return;
+      }
+
+      try {
+        await this.#reopenDocumentWindow(owner, this.#crashedWindows(session, failedWindow));
+        return;
+      } catch (error) {
+        this.#log.error("failed to reopen crashed document", error);
+        failure = "restoreFailed";
+      }
+    }
+  }
+
+  async #reopenDocumentWindow(
+    owner: Window | null,
+    staleWindows?: readonly Window[],
+  ): Promise<void> {
+    if (!owner) throw new Error("document reopen requires a document window");
+
+    staleWindows ??= [owner];
+    const session = this.#workspaces.getForBrowserWindow(owner.window);
+    if (!session?.document) throw new Error("document reopen requires an authored workspace");
+
+    const reopened = await this.#workspaces.reopenSession(session.workspaceId);
+    const bounds = owner.window.isDestroyed() ? undefined : owner.window.getBounds();
+    const window = this.#createWindow(false, bounds);
+    this.#workspaces.attachWindow(reopened.workspaceId, window);
+    this.#loadWorkspace(window);
+
+    for (const staleWindow of staleWindows) {
+      if (!staleWindow.window.isDestroyed()) staleWindow.window.destroy();
+    }
+  }
+
+  #crashedWindows(session: FontSessionHost | null, failedWindow: Window | null): Window[] {
+    if (failedWindow) return [failedWindow];
+    return session?.allWindows() ?? [];
   }
 
   #loadWorkspace(window: Window): void {
@@ -353,6 +441,13 @@ export class App {
 
       event.sender.postMessage("session.port", null, [port2]);
       this.#log.info("font session port sent to renderer");
+    });
+    ipc.handle(ipcMain, "window.reopenDocument", async (event) => {
+      const window = this.#requireWindowForWebContents(event.sender);
+      await this.#reopenDocumentWindow(window);
+    });
+    ipc.handle(ipcMain, "errors.reportRenderer", (_event, report) => {
+      this.#log.warn("renderer error reported", report);
     });
     ipc.handle(ipcMain, "session.ready", (event) => {
       if (SLUG_ATLAS_PROFILING_ENABLED) {

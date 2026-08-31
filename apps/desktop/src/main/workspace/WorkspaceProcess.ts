@@ -58,6 +58,11 @@ export class WorkspaceProcess {
     this.#wire(proc, channel);
   }
 
+  /** Whether the utility process is currently available for shell-lane calls. */
+  get running(): boolean {
+    return this.#process !== null && this.#channel !== null;
+  }
+
   /** Stops the utility process; in-flight shell-lane calls reject. */
   stop(): void {
     const proc = this.#process;
