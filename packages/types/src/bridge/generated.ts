@@ -39,6 +39,7 @@ export interface BridgeApi {
   closeWorkspace(): void
   openDocument(path: string, recoveryPath: string): void
   openWorkspace(path: string, storePath: string): void
+  resumeWorkspace(storePath: string): void
   openFontSource(path: string): FontSnapshot
   closeFontSource(): void
   setWorkspaceId(workspaceId: string): DocumentState

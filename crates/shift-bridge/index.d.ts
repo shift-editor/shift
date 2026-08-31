@@ -24,6 +24,7 @@ export declare class Bridge {
   closeWorkspace(): void
   openDocument(path: string, recoveryPath: string): void
   openWorkspace(path: string, storePath: string): void
+  resumeWorkspace(storePath: string): void
   openFontSource(path: string): NapiFontSnapshot
   closeFontSource(): void
   setWorkspaceId(workspaceId: string): NapiDocumentState

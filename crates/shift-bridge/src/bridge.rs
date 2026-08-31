@@ -1204,6 +1204,15 @@ impl Bridge {
   }
 
   #[napi]
+  pub fn resume_workspace(&mut self, store_path: String) -> errors::Result<()> {
+    self.workspace = Some(FontWorkspace::resume(store_path)?);
+    self.font_source = None;
+    self.source_identity = None;
+    self.reset_versions();
+    Ok(())
+  }
+
+  #[napi]
   pub fn open_font_source(&mut self, path: String) -> errors::Result<NapiFontSnapshot> {
     let source = FontLoader::new().open_source(Path::new(&path))?;
     let identity = SourceIdentity::new(source.directory())?;

@@ -118,6 +118,60 @@ describe("native document recovery allocations", () => {
     expect(canonicalGlyphNames(documentPath, root)).toEqual(["A"]);
   });
 
+  it("lists saved and unsaved recoverable workspaces", () => {
+    const saved = openDocument(documentPath, storage);
+    addGlyph(saved.bridge, "B", 66);
+    saved.bridge.closeWorkspace();
+
+    const unsaved = storage.createWorkspace();
+    const unsavedBridge = createBridge();
+    unsavedBridge.createUntitledWorkspace(unsaved.storePath);
+    unsavedBridge.setWorkspaceId(unsaved.workspaceId);
+    addGlyph(unsavedBridge, "C", 67);
+    unsavedBridge.closeWorkspace();
+
+    expect(storage.listRecoveries()).toEqual([
+      {
+        kind: "saved",
+        state: "recoverable",
+        workspaceId: saved.workspaceId,
+        documentId: createBridge().inspectDocument(documentPath).documentId,
+        canonicalPath: fs.realpathSync(documentPath),
+      },
+      { kind: "unsaved", state: "recoverable", workspaceId: unsaved.workspaceId },
+    ]);
+  });
+
+  it("rejects malformed recovery bindings during discovery", () => {
+    const opened = openDocument(documentPath, storage);
+    opened.bridge.closeWorkspace();
+    corruptRecoveryPath(root, documentPath);
+
+    expect(() => storage.listRecoveries()).toThrow("workspace path mismatch");
+    expect(fs.existsSync(opened.workspace.recoveryPath)).toBe(true);
+  });
+
+  it("resumes a complete unsaved working store without a source path", () => {
+    const unsaved = storage.createWorkspace();
+    const first = createBridge();
+    first.createUntitledWorkspace(unsaved.storePath);
+    first.setWorkspaceId(unsaved.workspaceId);
+    addGlyph(first, "A", 65);
+    first.closeWorkspace();
+
+    const resumed = createBridge();
+    resumed.resumeWorkspace(unsaved.storePath);
+    resumed.setWorkspaceId(unsaved.workspaceId);
+
+    expect(resumed.getGlyphs().map((glyph) => glyph.name)).toEqual(["A"]);
+    expect(resumed.documentState()).toMatchObject({
+      sourceKind: "untitled",
+      dirty: true,
+      needsSaveAs: true,
+    });
+    resumed.closeWorkspace();
+  });
+
   it("refuses a document replaced after identity inspection", () => {
     const bridge = createBridge();
     const identity = bridge.inspectDocument(documentPath);

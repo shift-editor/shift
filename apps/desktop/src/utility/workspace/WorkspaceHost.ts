@@ -108,6 +108,8 @@ export class WorkspaceHost {
         this.#serialize(() => this.#createFromSource(sourcePath, documentPath)),
       "workspace.inspectDocument": ({ path }) => this.#serialize(() => this.#inspectDocument(path)),
       "workspace.open": ({ path }) => this.#serialize(() => this.#open(path)),
+      "workspace.listRecoveries": () => this.#serialize(() => this.#documents.listRecoveries()),
+      "workspace.resume": ({ workspaceId }) => this.#serialize(() => this.#resume(workspaceId)),
       "workspace.close": ({ discard }) => this.#serialize(() => this.#close(discard)),
       "source.open": ({ path }) => this.#serialize(() => this.#openFontSource(path)),
       "source.close": () => this.#serialize(() => this.#closeFontSource()),
@@ -670,6 +672,24 @@ export class WorkspaceHost {
       binding: { kind: "bound", address: opened.address },
     };
     this.#atlasCacheRevision = null;
+    return this.#emitDocumentChanged();
+  }
+
+  #resume(workspaceId: string): WorkspaceDocumentState {
+    if (this.#state.kind !== "closed") {
+      throw new Error("a preview or document is already open");
+    }
+
+    const allocation = this.#documents.workspace(workspaceId);
+    this.#bridge.resumeWorkspace(allocation.storePath);
+    this.#bridge.setWorkspaceId(allocation.workspaceId);
+    this.#state = {
+      kind: "document",
+      allocation,
+      binding: { kind: "unbound" },
+    };
+    this.#atlasCacheRevision = null;
+
     return this.#emitDocumentChanged();
   }
 
