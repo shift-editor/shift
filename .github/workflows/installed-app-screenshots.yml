@@ -103,7 +103,7 @@ jobs:
           package="$(find apps/desktop/out/linux-x64 -maxdepth 1 -type f -name '*.deb' -print -quit)"
           test -n "$package"
           sudo apt-get install --yes "$PWD/$package"
-          executable="$(readlink -f "$(command -v shift)")"
+          executable="$(readlink -f /usr/bin/shift)"
           test -x "$executable"
           echo "SHIFT_INSTALLED_APP_PATH=$executable" >> "$GITHUB_ENV"
 
