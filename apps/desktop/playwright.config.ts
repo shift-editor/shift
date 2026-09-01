@@ -4,7 +4,7 @@ import { defineConfig } from "@playwright/test";
  * Playwright configuration for Shift's Electron E2E + visual snapshot tests.
  *
  * Run locally:   pnpm test:e2e
- * Update snaps:  pnpm test:e2e --update-snapshots
+ * Update snaps:  pnpm test:e2e:visual:update
  */
 export default defineConfig({
   testDir: "./e2e",

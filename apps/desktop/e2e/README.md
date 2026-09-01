@@ -6,14 +6,22 @@ Playwright launches the built Electron application against an isolated user-data
 
 Run commands from the repository root:
 
-| Command                       | Purpose                                        |
-| ----------------------------- | ---------------------------------------------- |
-| `pnpm test:e2e`               | Run required visual and GPU correctness suites |
-| `pnpm test:e2e:visual`        | Run deterministic visual and interaction tests |
-| `pnpm test:e2e:visual:update` | Regenerate visual snapshots                    |
-| `pnpm test:e2e:gpu`           | Run hardware-GPU correctness tests             |
-| `pnpm test:e2e:platform`      | Run cross-platform desktop integration tests   |
-| `pnpm test:e2e:perf`          | Run Playwright performance measurements        |
+| Command                       | Purpose                                                  |
+| ----------------------------- | -------------------------------------------------------- |
+| `pnpm test:e2e`               | Run the normal correctness projects for the current host |
+| `pnpm test:e2e:visual`        | Run deterministic visual and interaction tests           |
+| `pnpm test:e2e:visual:update` | Regenerate visual snapshots                              |
+| `pnpm test:e2e:gpu`           | Run hardware-GPU correctness tests                       |
+| `pnpm test:e2e:platform`      | Run cross-platform desktop integration tests             |
+| `pnpm test:e2e:perf`          | Run Playwright performance measurements                  |
+
+The default command runs `visual` and `gpu` on macOS, and `platform` on Linux and Windows. Performance measurements are always opt-in.
+
+## Host setup
+
+- **Linux and macOS:** the Nix development shell supplies the pinned Node, pnpm, Rust, native build tools, and Linux virtual-desktop dependencies. Direnv enters it automatically after `.envrc` is allowed; otherwise prefix commands with `nix develop --command`.
+- **Windows:** run from a native development shell with Node 24, Corepack/pnpm 11, the repository Rust toolchain, and Visual Studio C++ Build Tools installed. Xvfb and Fluxbox are not used.
+- **GPU and performance:** use an active native desktop session with a compatible hardware GPU and driver. The virtual Linux desktop is only for software-rendered visual and platform projects.
 
 Append Playwright file and title filters to run the smallest relevant check:
 
@@ -55,11 +63,12 @@ Do not update snapshots merely to make a failure pass. Inspect the diff and conf
 
 Post-merge `main` workflows do not repeat the E2E suites for the same commit. Rust-changing pushes still build each platform's native module to seed default-branch caches for later merge-queue runs.
 
-The `platform` project concentrates on native desktop boundaries: document lifecycle, Save and Save As, recovery after forced termination, application quit, native menus, Unicode filesystem paths, and import/export persistence. Headless Linux runs under Xvfb with Fluxbox so native maximize, focus, and window-placement behavior has a window manager; both are available in the Nix dev shell. GPU and performance behavior remain separate from this software-rendered suite.
+The `platform` project concentrates on native desktop boundaries: document lifecycle, Save and Save As, recovery after forced termination, application quit, native menus, Unicode filesystem paths, and import/export persistence. On Linux, the E2E runner automatically creates an isolated `1920×1080×24` Xvfb display with Fluxbox so native maximize, focus, and window-placement behavior has a window manager. Both dependencies are available in the Nix dev shell. GPU and performance behavior remain separate and run directly against the host desktop and GPU.
+
+Outside an active development shell, the portable Linux and macOS invocation is:
 
 ```sh
-xvfb-run --auto-servernum --server-args='-screen 0 1920x1080x24' sh -c \
-  'fluxbox >/tmp/shift-fluxbox.log 2>&1 & sleep 1; exec pnpm test:e2e:platform'
+nix develop --command pnpm test:e2e:platform
 ```
 
 Visual tests default to MutatorSans. Authored GPU and performance tests default to the MutatorSans designspace and accept another editable source through `SHIFT_E2E_FONT_PATH`. Preview residency tests default to MutatorSans TTF through `SHIFT_E2E_PREVIEW_FONT_PATH`; variable preview scrubbing defaults to Host Grotesk through `SHIFT_E2E_VARIABLE_PREVIEW_FONT_PATH`:
