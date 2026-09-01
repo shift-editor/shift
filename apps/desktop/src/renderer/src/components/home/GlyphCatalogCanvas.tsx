@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
-import { GlyphCatalogController } from "./GlyphCatalogController";
+import { SlugGlyphCatalogRenderer } from "./SlugGlyphCatalogRenderer";
 import { GlyphNameInput } from "./GlyphNameInput";
 import { useTheme } from "@/context/ThemeContext";
 import type {
@@ -7,6 +7,7 @@ import type {
   GlyphCatalogItem,
   PendingGlyphNames,
 } from "@/types/glyphCatalog";
+import type { GlyphCatalogRenderer } from "@/types/glyphCatalogRenderer";
 import { useFontSession } from "@/workspace/WorkspaceContext";
 import { effect, track } from "@/lib/signals";
 
@@ -45,7 +46,7 @@ export function GlyphCatalogCanvas({
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const inputContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const controllerRef = useRef<GlyphCatalogController | null>(null);
+  const rendererRef = useRef<GlyphCatalogRenderer | null>(null);
   const [ready, setReady] = useState(false);
   const [editingGlyph, setEditingGlyph] = useState<GlyphCatalogItem | null>(null);
   const [pendingGlyphNames, setPendingGlyphNames] = useState<PendingGlyphNames>(() => new Map());
@@ -56,7 +57,7 @@ export function GlyphCatalogCanvas({
     const overlayCanvas = overlayCanvasRef.current;
     if (!container || !glyphCanvas || !overlayCanvas) return undefined;
 
-    const controller = new GlyphCatalogController(
+    const renderer = new SlugGlyphCatalogRenderer(
       container,
       glyphCanvas,
       overlayCanvas,
@@ -78,11 +79,11 @@ export function GlyphCatalogCanvas({
       },
       onUnavailable,
     );
-    controllerRef.current = controller;
+    rendererRef.current = renderer;
 
     return () => {
-      controllerRef.current = null;
-      controller.destroy();
+      rendererRef.current = null;
+      renderer.destroy();
     };
   }, [
     atlasSource,
@@ -95,7 +96,7 @@ export function GlyphCatalogCanvas({
   ]);
 
   useLayoutEffect(() => {
-    controllerRef.current?.update(
+    rendererRef.current?.update(
       {
         glyphs: glyphs.map((glyph) =>
           pendingGlyphNames.has(glyph.id)
