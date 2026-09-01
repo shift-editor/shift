@@ -79,6 +79,7 @@ export class AppLifecycle {
       return confirmed;
     } catch (error) {
       this.#quitState = "idle";
+      this.#log.error("quit preparation failed", { reason, error });
       throw error;
     } finally {
       if (this.#quitConfirmation === confirmation) this.#quitConfirmation = null;
@@ -145,6 +146,7 @@ export class AppLifecycle {
       await document.commitClose();
     } catch (error) {
       this.#log.error("window document close failed after commit", error);
+      return;
     }
 
     this.#log.info("window close committed", { windowId });
@@ -196,10 +198,20 @@ export class AppLifecycle {
     }
 
     const results = await Promise.allSettled(prepared.map((document) => document.commitClose()));
+    const failures: unknown[] = [];
     for (const result of results) {
-      if (result.status === "rejected") {
-        this.#log.error("document close failed after commit", result.reason);
+      switch (result.status) {
+        case "fulfilled":
+          break;
+        case "rejected":
+          failures.push(result.reason);
+          this.#log.error("document close failed after commit", result.reason);
+          break;
       }
+    }
+
+    if (failures.length > 0) {
+      throw new AggregateError(failures, "One or more documents could not be closed");
     }
 
     return true;

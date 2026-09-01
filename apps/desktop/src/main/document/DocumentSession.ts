@@ -1,5 +1,6 @@
 import path from "node:path";
 import type { WorkspaceDocumentState } from "../../shared/workspace/protocol";
+import { AsyncOnce } from "../AsyncOnce";
 import type { NativeDialogs } from "../dialogs/NativeDialogs";
 import type { Window } from "../windows/Window";
 import type { Document } from "./DocumentClient";
@@ -37,6 +38,9 @@ export class DocumentSession {
 
   #state: WorkspaceDocumentState | null = null;
   #pendingCloseDiscard: PendingCloseDiscard = null;
+  #closePreparation = new AsyncOnce<boolean>();
+  #closePreparationOwnerReason: CloseReason | null = null;
+  #closeCommit: Promise<void> | null = null;
 
   constructor(options: DocumentSessionOptions) {
     this.#document = options.document;
@@ -62,75 +66,134 @@ export class DocumentSession {
   /**
    * Prompts and saves as needed, recording close intent without closing the workspace.
    *
-   * @param reason - Native transition that would close the document.
+   * @param requestReason - Native transition requesting the shared document close.
    * @returns `true` when the transition may commit.
    * @throws {Error} when the renderer cannot provide a settled document state.
    */
-  async prepareClose(reason: CloseReason): Promise<boolean> {
-    this.#pendingCloseDiscard = null;
-    this.#log.info("close preparation started", {
-      reason,
-      connected: this.#document.connected,
-      cachedDirty: this.#state?.dirty ?? null,
+  async prepareClose(requestReason: CloseReason): Promise<boolean> {
+    if (this.#closePreparationOwnerReason === null) {
+      this.#closePreparationOwnerReason = requestReason;
+      this.#log.info("close preparation started", {
+        ownerReason: requestReason,
+        requestReason,
+        connected: this.#document.connected,
+        cachedDirty: this.#state?.dirty ?? null,
+      });
+    } else {
+      this.#log.info("close preparation joined", {
+        ownerReason: this.#closePreparationOwnerReason,
+        requestReason,
+      });
+    }
+
+    const ownerReason = this.#closePreparationOwnerReason;
+    const preparation = this.#closePreparation.run(async () => {
+      const state = await this.#closeState();
+      if (!state) {
+        this.#log.info("close preparation allowed: no document state", {
+          ownerReason,
+          requestReason: ownerReason,
+        });
+        return true;
+      }
+
+      if (!state.dirty) {
+        this.#pendingCloseDiscard = false;
+        this.#log.info("close preparation complete: document is clean", {
+          ownerReason,
+          requestReason: ownerReason,
+        });
+        return true;
+      }
+
+      const choice = await this.#nativeDialogs.confirmDirtyDocument(
+        this.#dialogWindow(),
+        state,
+        ownerReason,
+        this.#applicationName(),
+      );
+      this.#log.info("dirty document decision received", {
+        ownerReason,
+        requestReason: ownerReason,
+        choice,
+        saveTarget: state.saveTarget,
+        needsSaveAs: state.needsSaveAs,
+      });
+
+      if (choice === "cancel") {
+        this.#log.info("close preparation canceled by user", {
+          ownerReason,
+          requestReason: ownerReason,
+        });
+        return false;
+      }
+
+      if (choice === "discard") {
+        this.#pendingCloseDiscard = true;
+        this.#log.info("close preparation complete: changes discarded", {
+          ownerReason,
+          requestReason: ownerReason,
+        });
+        return true;
+      }
+
+      this.#log.info("close document save started", {
+        ownerReason,
+        requestReason: ownerReason,
+      });
+      const saved = await this.#saveDirtyDocument(state, ownerReason);
+      if (saved) this.#pendingCloseDiscard = false;
+      this.#log.info(saved ? "close document save completed" : "close preparation blocked", {
+        ownerReason,
+        requestReason: ownerReason,
+      });
+      return saved;
     });
 
-    const state = await this.#closeState();
-    if (!state) {
-      this.#log.info("close preparation allowed: no document state", { reason });
-      return true;
+    try {
+      const prepared = await preparation;
+      if (!prepared) {
+        this.#pendingCloseDiscard = null;
+        this.#closePreparationOwnerReason = null;
+        this.#closePreparation.reset();
+      }
+      return prepared;
+    } catch (error) {
+      this.#pendingCloseDiscard = null;
+      this.#closePreparationOwnerReason = null;
+      this.#closePreparation.reset();
+      throw error;
     }
-
-    if (!state.dirty) {
-      this.#pendingCloseDiscard = false;
-      this.#log.info("close preparation complete: document is clean", { reason });
-      return true;
-    }
-
-    const choice = await this.#nativeDialogs.confirmDirtyDocument(
-      this.#dialogWindow(),
-      state,
-      reason,
-      this.#applicationName(),
-    );
-    this.#log.info("dirty document dialog completed", {
-      reason,
-      choice,
-      saveTarget: state.saveTarget,
-      needsSaveAs: state.needsSaveAs,
-    });
-
-    if (choice === "cancel") {
-      this.#log.info("close guard canceled by user", { reason });
-      return false;
-    }
-
-    if (choice === "discard") {
-      this.#pendingCloseDiscard = true;
-      this.#log.info("close preparation complete: changes discarded", { reason });
-      return true;
-    }
-
-    const saved = await this.#saveDirtyDocument(state);
-    if (saved) this.#pendingCloseDiscard = false;
-    this.#log.info(
-      saved ? "close preparation complete: document saved" : "close preparation blocked",
-      { reason },
-    );
-    return saved;
   }
 
-  /** Closes the prepared workspace. Calling this method is the point of no return. */
+  /** Closes the prepared workspace once. Calling this method is the point of no return. */
   async commitClose(): Promise<void> {
-    if (this.#pendingCloseDiscard === null) return;
+    if (this.#closeCommit) return this.#closeCommit;
 
     const discard = this.#pendingCloseDiscard;
-    this.#pendingCloseDiscard = null;
-    await this.#closeDocument(discard);
+    if (discard === null) {
+      this.#closePreparationOwnerReason = null;
+      this.#closePreparation.reset();
+      return;
+    }
+
+    const ownerReason = this.#closePreparationOwnerReason;
+    this.#log.info("workspace close started", {
+      ownerReason,
+      requestReason: ownerReason,
+      discard,
+    });
+    this.#closeCommit = this.#commitWorkspaceClose(discard, ownerReason);
+    return this.#closeCommit;
   }
 
   /** Clears prepared close intent when any document vetoes the transition. */
   cancelClose(): void {
+    if (this.#closeCommit) return;
+
     this.#pendingCloseDiscard = null;
+    this.#closePreparationOwnerReason = null;
+    this.#closePreparation.reset();
   }
 
   /** Runs Save, escalating to Save As when the document has no target yet. */
@@ -235,6 +298,32 @@ export class DocumentSession {
     this.#updateWindowTitle();
   }
 
+  async #commitWorkspaceClose(discard: boolean, ownerReason: CloseReason | null): Promise<void> {
+    await Promise.resolve();
+
+    try {
+      await this.#closeDocument(discard);
+      this.#log.info("workspace close completed", {
+        ownerReason,
+        requestReason: ownerReason,
+        discard,
+      });
+    } catch (error) {
+      this.#log.error("workspace close failed", {
+        ownerReason,
+        requestReason: ownerReason,
+        discard,
+        error,
+      });
+      throw error;
+    } finally {
+      this.#pendingCloseDiscard = null;
+      this.#closePreparationOwnerReason = null;
+      this.#closePreparation.reset();
+      this.#closeCommit = null;
+    }
+  }
+
   async #saveToNewPath(state: WorkspaceDocumentState): Promise<WorkspaceDocumentState | null> {
     const savePath = await this.#nativeDialogs.saveShiftDocument(
       this.#dialogWindow(),
@@ -249,14 +338,21 @@ export class DocumentSession {
     return this.#requestSave(savePath);
   }
 
-  async #saveDirtyDocument(state: WorkspaceDocumentState): Promise<boolean> {
+  async #saveDirtyDocument(
+    state: WorkspaceDocumentState,
+    ownerReason: CloseReason,
+  ): Promise<boolean> {
     try {
       const saved = state.needsSaveAs
         ? await this.#saveToNewPath(state)
         : await this.#requestSave(null);
       return saved !== null;
     } catch (error) {
-      this.#log.warn("dirty document save failed", error);
+      this.#log.warn("close document save failed", {
+        ownerReason,
+        requestReason: ownerReason,
+        error,
+      });
       await this.#nativeDialogs.showSaveFailure(
         this.#dialogWindow(),
         this.#applicationName(),
