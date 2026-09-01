@@ -1,6 +1,6 @@
 # Main
 
-<!-- reviewed: 2026-08-27 -->
+<!-- reviewed: 2026-09-01 -->
 
 Electron main process: app startup, windows, menus, document dialogs, and workspace session ownership.
 
@@ -13,7 +13,7 @@ Electron main process: app startup, windows, menus, document dialogs, and worksp
 - **Architecture Invariant:** Dirty state and save targets come from the utility-owned workspace state. Main obtains native choices through `NativeDialogs`, but state reads, saves, and exports go through the renderer document lane so pending edits flush first. Production uses Electron dialogs; E2E injects deterministic choices at this outer boundary.
 - **Architecture Invariant:** TTF export snapshots the workspace in the ordered sync lane, then releases that lane before font compilation so subsequent editing is not blocked by fontc.
 - **Architecture Invariant:** Within one app instance, at most one live or in-flight session owns a `DocumentId`. Different documents open concurrently; a raw filesystem copy retains its identity and therefore reuses the existing session until Save As mints an independent `DocumentId`.
-- **Architecture Invariant:** `DocumentSession.prepareClose(reason)` may prompt and save, but it never closes a workspace. Window close prepares and commits its one document. Quit and update restart prepare every document before committing any; cancellation calls `cancelClose()` on every prepared document. `commitClose()` is the point of no return and clears recovery only for an explicit discard.
+- **Architecture Invariant:** `DocumentSession.prepareClose(reason)` may prompt and save, but it never closes a workspace. Overlapping Window Close, Quit, and Restart to Update requests for one document share one retained preparation; the first request owns the reason and native dialog until cancellation, failure, or commit cleanup resets it. Window close prepares and commits its one document. Quit and update restart prepare every document before committing any; cancellation calls `cancelClose()` on every prepared document. Joined `commitClose()` calls share one workspace close, which is the point of no return and clears recovery only for an explicit discard.
 - **Architecture Invariant:** Closing every window keeps the application alive on macOS. Activating the windowless app opens a fresh launcher; Windows and Linux quit after the last window closes.
 - **Architecture Invariant:** Release and Nightly builds have distinct product identities and app-data roots. `Shift` uses `app.shift` and the `Shift` data root; `Shift Nightly` uses `app.shift.nightly` and the `Shift Nightly` data root. An explicit `--user-data-dir` switch takes precedence for tests and diagnostics.
 - **Architecture Invariant:** Shift is single-instance within one distribution data root. Operating-system `.shift` activations received before readiness queue in order; later activations focus an already-open document or create another workspace window. Release owns the document association, while Nightly remains an alternate handler.
@@ -26,6 +26,7 @@ Electron main process: app startup, windows, menus, document dialogs, and worksp
 ```text
 src/main/
   main.ts                         -- Electron entry point
+  AsyncOnce.ts                    -- resettable retained asynchronous one-shot
   release.ts                      -- compiled distribution identity and product name
   about/
     AboutWindow.ts                -- singleton native-framed product information window
@@ -63,6 +64,7 @@ src/main/
 
 ## Key Types
 
+- `AsyncOnce` -- resettable one-shot that retains the exact pending or settled promise until explicit cleanup.
 - `WorkspaceManager` -- registry for live authored documents, immutable preview sessions, and window attachments.
 - `FontSessionHost` -- owns the immutable mode, utility process, optional authored document services, and attached windows for one open font.
 - `DocumentSessionIndex` -- maps each live `DocumentId` to one app-local workspace session and follows Save As identity changes.
@@ -104,7 +106,7 @@ Eligible packaged macOS builds and Windows Nightly x64 builds start `AppUpdater`
 
 `AppUpdater.checkForUpdates(trigger)` derives a fixed HTTPS generic-provider URL from the compiled Release or Nightly distribution and exact platform/architecture. electron-updater reads architecture-specific `latest-mac.yml` on macOS and `latest.yml` for Windows Nightly. It owns numeric version comparison, SHA-512 verification, download, macOS code-signature verification, Authenticode verification when configured, installation, and relaunch. Release and Nightly never share feed paths.
 
-Automatic current/error results stay quiet. When a check finds an update, the native-framed update window offers **Download Update** / Later; declining leaves the version available without prompting again during periodic checks. An accepted download replaces those choices with cumulative progress. Closing the window or choosing Cancel cancels the transfer and returns to available. Download completion replaces progress with **Restart and Install** / Later, and a manual check while available or ready reopens the relevant choice. Later retains a verified download without silently installing it on ordinary quit. Restart prepares every document, cancels all prepared closes if one vetoes, commits every agreed close, and only then calls `quitAndInstall()`. Electron closes windows before normal `before-quit`, so `AppLifecycle`'s `confirmed` state allows those closes. An install failure after commit relaunches the currently installed application; closed in-memory sessions are never reconstructed.
+Automatic current/error results stay quiet. When a check finds an update, the native-framed update window offers **Download Update** / Later; declining leaves the version available without prompting again during periodic checks. An accepted download replaces those choices with cumulative progress. Closing the window or choosing Cancel cancels the transfer and returns to available. Download completion replaces progress with **Restart and Install** / Later, and a manual check while available or ready reopens the relevant choice. Later retains a verified download without silently installing it on ordinary quit. Restart prepares every document, cancels all prepared closes if one vetoes, commits every agreed close, and only then calls `quitAndInstall()`. A preparation or workspace-close failure blocks installation, remains technical in the log, and presents actionable document-save guidance rather than workspace internals. Electron closes windows before normal `before-quit`, so `AppLifecycle`'s `confirmed` state allows those closes. An install failure after commit relaunches the currently installed application; closed in-memory sessions are never reconstructed.
 
 The application menu exposes `app.checkForUpdates` under the macOS app menu and the Windows/Linux Help menu. Every platform's Help menu also opens the Shift website, Discord, X account, and GitHub issue form through fixed main-owned URLs. Update behavior remains main-owned and does not add renderer IPC.
 
@@ -128,7 +130,7 @@ Export TrueType follows the same document and sync lanes. The utility process ca
 
 For a document-backed workspace, Save first reconciles the current canonical commit and then commits only its sparse recovery rows. A changed commit becomes `Conflict` rather than accepting a stale Save. Save As snapshots the merged view to a new canonical `DocumentId`, installs a fresh recovery overlay, and rebinds the existing app-local workspace session. The source canonical document remains unchanged.
 
-Close and quit call `DocumentSession.prepareClose`. If the document is clean, the user saves successfully, or the user chooses discard, the session records the close intent without closing the workspace. Once the whole transition is accepted, `commitClose` calls `workspace.close`; an explicit discard first clears native recovery state. The utility then drops the Rust workspace handle, removes the document binding, and deletes the app-owned workspace directory. A crash or forced termination bypasses this cleanup, allowing the next open of the same document address to resume completed recovery transactions.
+Close and quit call `DocumentSession.prepareClose`. The first request retains ownership from state settlement through the native decision and any save; later Window Close, Quit, or Restart to Update requests join that exact result even after it settles but before commit. Cancel and failed preparation reset the transition. If the document is clean, the user saves successfully, or the user chooses discard, the session records the close intent without closing the workspace. Once the whole transition is accepted, joined `commitClose` calls await one `workspace.close`; an explicit discard first clears native recovery state. Completed and failed commit cleanup reset the retained transition. The utility then drops the Rust workspace handle, removes the document binding, and deletes the app-owned workspace directory. A crash or forced termination bypasses this cleanup, allowing the next open of the same document address to resume completed recovery transactions.
 
 Message lanes reject in-flight calls when their remote port closes. An unexpected utility-process exit also disconnects the renderer document lane: Save remains blocked because pending edits cannot be settled, while an explicit Discard treats the unavailable workspace as already closed so window and quit guards can finish.
 
@@ -168,6 +170,7 @@ Renderer IPC in `App` is limited to shell capabilities: command execution, nativ
 - `pnpm --filter @shift/desktop test src/utility/workspace/WorkspaceHost.test.ts`
 - `pnpm --filter @shift/desktop test src/renderer/src/lib/workspace/WorkspaceEditCoordinator.test.ts`
 - `pnpm typecheck`
+- `pnpm test:desktop src/main/AsyncOnce.test.ts src/main/document/DocumentSession.test.ts src/main/app/AppLifecycle.test.ts`
 - `pnpm test:desktop src/main/update/updateFeed.test.ts`
 - `pnpm test:release`
 - Electron E2E fixtures materialize a native startup document under a fresh `testRoot`, launch with a fresh `userDataDir`, assert Electron honored that path, and remove the root after force-closing the disposable process.

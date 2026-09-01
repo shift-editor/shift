@@ -172,21 +172,25 @@ export class AppUpdater {
     if (this.#status.type !== "ready") return;
 
     try {
-      if (!(await this.#options.lifecycle.confirmQuit("update"))) return;
+      if (!(await this.#options.lifecycle.confirmQuit("update"))) {
+        this.#options.log.info("update restart blocked by document close");
+        return;
+      }
     } catch (error) {
-      this.#options.log.warn("documents could not be prepared for update", error);
+      this.#options.log.warn("update restart blocked by document close failure", error);
       await this.#showMessage({
         type: "error",
         buttons: ["OK"],
         title: app.name,
-        message: `${app.name} couldn't restart to update.`,
-        detail: errorToMessage(error),
+        message: "The update was not installed.",
+        detail: "Review and save your open documents, then try restarting to update again.",
       });
       return;
     }
 
     this.#status = { type: "restarting" };
     this.#updateWindow.close();
+    this.#options.log.info("update installation beginning");
     try {
       autoUpdater.quitAndInstall(false, true);
     } catch (error) {
