@@ -37,7 +37,7 @@ export class FeedbackWindow {
 
     const window = new BrowserWindow({
       width: 520,
-      height: 430,
+      height: 500,
       title: "Feedback",
       show: false,
       resizable: false,

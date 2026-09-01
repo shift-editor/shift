@@ -1,0 +1,114 @@
+.feedback-window {
+  --feedback-background: #ffffff;
+  --feedback-text: #202020;
+  --feedback-secondary-text: #626262;
+  --feedback-field: #f5f5f5;
+  --feedback-border: #d2d2d2;
+  --feedback-button: #dadada;
+  --feedback-button-hover: #cecece;
+  --feedback-link: #1668d8;
+
+  position: fixed;
+  inset: 0;
+  color: var(--feedback-text);
+  background: var(--feedback-background);
+  font-family: -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
+  user-select: none;
+}
+
+.feedback-window-content {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 34px 52px 30px;
+}
+
+.feedback-window-icon {
+  width: 72px;
+  height: 72px;
+  filter: drop-shadow(0 5px 7px rgb(0 0 0 / 18%));
+}
+
+.feedback-window-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: center;
+}
+
+.feedback-window-copy h1 {
+  font-size: 17px;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.feedback-window-copy p {
+  color: var(--feedback-secondary-text);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.feedback-window-field {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  user-select: text;
+}
+
+.feedback-window-textarea {
+  min-height: 116px;
+  resize: none;
+  border: 1px solid var(--feedback-border);
+  border-radius: 8px;
+  color: var(--feedback-text);
+  background: var(--feedback-field);
+  padding: 10px;
+  font-weight: 400;
+}
+
+.feedback-window-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.feedback-window-button,
+.feedback-window-primary-button {
+  display: inline-flex;
+  height: 34px;
+  min-width: 128px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  -webkit-app-region: no-drag;
+}
+
+.feedback-window-button {
+  color: var(--feedback-text);
+  background: var(--feedback-button);
+}
+
+.feedback-window-button:hover {
+  background: var(--feedback-button-hover);
+}
+
+.feedback-window-report-link {
+  color: var(--feedback-link);
+  font-size: 13px;
+  text-decoration: none;
+  -webkit-app-region: no-drag;
+}
+
+.feedback-window-report-link:hover {
+  text-decoration: underline;
+}

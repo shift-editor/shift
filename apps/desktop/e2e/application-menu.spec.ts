@@ -143,17 +143,18 @@ launcherTest("Feedback opens a modeless composer", async ({ electronApp, page })
   const feedbackPage = await feedbackOpened;
   await feedbackPage.waitForURL(/#\/feedback$/);
 
-  const feedback = feedbackPage.getByRole("textbox", {
-    name: "What would you like to share?",
-  });
+  const feedback = feedbackPage.getByRole("textbox", { name: "Email message" });
   const emailFeedback = feedbackPage.getByRole("button", { name: "Email Feedback" });
   await expect(feedbackPage.getByRole("heading", { name: "Feedback" })).toBeVisible();
   await expect(emailFeedback).toBeDisabled();
+  await expect(
+    feedbackPage.getByText("Drop us a message in Discord or send us an email."),
+  ).toBeVisible();
   await expect(feedbackPage.getByRole("link", { name: "Report a Problem…" })).toHaveAttribute(
     "href",
     "https://github.com/shift-editor/shift/issues/new?template=bug_report.yml",
   );
-  await expect(feedbackPage.getByRole("link", { name: "Discord" })).toHaveAttribute(
+  await expect(feedbackPage.getByRole("link", { name: "Open Discord" })).toHaveAttribute(
     "href",
     "https://discord.gg/tgcy4R3Va4",
   );
