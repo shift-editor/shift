@@ -80,6 +80,82 @@ export class DocumentStorage {
     return binding;
   }
 
+  /**
+   * Removes storage that cannot contain recoverable authored edits.
+   *
+   * @remarks
+   * Recoverable working stores and recovery overlays are retained indefinitely.
+   * Malformed or unknown artifacts are also retained and reported rather than
+   * risking data loss.
+   *
+   * @throws {Error} when a storage root cannot be enumerated or modified.
+   */
+  pruneOrphanedStorage(): void {
+    const workspacesPath = path.join(this.#rootPath, "workspaces");
+    const bindingsPath = path.join(this.#rootPath, "bindings");
+
+    if (fs.existsSync(bindingsPath)) {
+      for (const documentEntry of fs.readdirSync(bindingsPath, { withFileTypes: true })) {
+        const directoryPath = path.join(bindingsPath, documentEntry.name);
+        if (!documentEntry.isDirectory()) {
+          console.warn(`retaining invalid document storage: ${directoryPath}`);
+          continue;
+        }
+
+        for (const entry of fs.readdirSync(directoryPath, { withFileTypes: true })) {
+          const bindingPath = path.join(directoryPath, entry.name);
+          if (!entry.isFile() || !entry.name.endsWith(".json")) {
+            console.warn(`retaining invalid document storage: ${bindingPath}`);
+            continue;
+          }
+
+          try {
+            assertSafeSegment("document id", documentEntry.name);
+            const binding = readDocumentBinding(bindingPath);
+            const address = new DocumentAddress(documentEntry.name, binding.canonicalPath);
+            this.#validateBinding(address, binding, bindingPath);
+
+            if (fs.existsSync(binding.recoveryPath)) continue;
+            if (fs.existsSync(binding.storePath)) {
+              fs.rmSync(bindingPath, { force: true });
+              continue;
+            }
+            if (workspaceContainsAuthoredState(path.dirname(binding.storePath))) {
+              console.warn(`retaining invalid document storage: ${bindingPath}`);
+              continue;
+            }
+
+            fs.rmSync(bindingPath, { force: true });
+          } catch (error) {
+            console.warn(`retaining invalid document storage: ${bindingPath}`, error);
+          }
+        }
+      }
+      removeEmptyDirectories(bindingsPath);
+    }
+
+    if (!fs.existsSync(workspacesPath)) return;
+    for (const entry of fs.readdirSync(workspacesPath, { withFileTypes: true })) {
+      const workspacePath = path.join(workspacesPath, entry.name);
+      if (!entry.isDirectory()) {
+        console.warn(`retaining invalid workspace storage: ${workspacePath}`);
+        continue;
+      }
+
+      try {
+        assertSafeSegment("workspace id", entry.name);
+        removeOrphanedSqliteSidecars(workspacePath);
+        if (fs.readdirSync(workspacePath).length === 0) {
+          fs.rmSync(workspacePath, { recursive: true, force: true });
+        } else if (!workspaceContainsAuthoredState(workspacePath)) {
+          console.warn(`retaining invalid workspace storage: ${workspacePath}`);
+        }
+      } catch (error) {
+        console.warn(`retaining invalid workspace storage: ${workspacePath}`, error);
+      }
+    }
+  }
+
   /** Lists every recoverable workspace allocation under this distribution root. */
   listRecoveries(): WorkspaceRecovery[] {
     const recoveries = new Map<string, WorkspaceRecovery>();
@@ -254,6 +330,43 @@ function writeJsonAtomic(targetPath: string, value: unknown): void {
   } catch (error) {
     fs.rmSync(tempPath, { force: true });
     throw error;
+  }
+}
+
+function removeOrphanedSqliteSidecars(workspacePath: string): void {
+  for (const entry of fs.readdirSync(workspacePath, { withFileTypes: true })) {
+    if (!entry.isFile()) continue;
+
+    const match = /^(.*\.sqlite)(?:-wal|-shm|-journal)$/.exec(entry.name);
+    if (!match) continue;
+
+    const primaryPath = path.join(workspacePath, match[1]!);
+    if (!fs.existsSync(primaryPath)) {
+      fs.rmSync(path.join(workspacePath, entry.name), { force: true });
+    }
+  }
+}
+
+function workspaceContainsAuthoredState(workspacePath: string): boolean {
+  if (!fs.existsSync(workspacePath)) return false;
+
+  return fs
+    .readdirSync(workspacePath, { withFileTypes: true })
+    .some(
+      (entry) =>
+        entry.isFile() &&
+        (entry.name === "document.sqlite" ||
+          /^recovery(?:-[A-Za-z0-9._-]+)?\.sqlite$/.test(entry.name)),
+    );
+}
+
+function removeEmptyDirectories(rootPath: string): void {
+  for (const entry of fs.readdirSync(rootPath, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+
+    const directoryPath = path.join(rootPath, entry.name);
+    removeEmptyDirectories(directoryPath);
+    if (fs.readdirSync(directoryPath).length === 0) fs.rmdirSync(directoryPath);
   }
 }
 

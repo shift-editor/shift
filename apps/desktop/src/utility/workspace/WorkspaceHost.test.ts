@@ -789,6 +789,17 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     expect(canonicalGlyphNames(saved.path)).toEqual(["A", "B"]);
   });
 
+  it("prunes orphan storage before recovery discovery", async () => {
+    const orphanPath = path.join(tmpRoot, "workspaces", "orphan");
+    fs.mkdirSync(orphanPath, { recursive: true });
+    fs.writeFileSync(path.join(orphanPath, "recovery.sqlite-wal"), "orphan");
+    const restarted = await startAdditionalHost();
+
+    await restarted.shell.call("workspace.listRecoveries", undefined);
+
+    expect(fs.existsSync(orphanPath)).toBe(false);
+  });
+
   it("lists recoveries and resumes an unsaved working database", async () => {
     const sync = await connectSyncLane();
     const created = await createWorkspace(sync);
