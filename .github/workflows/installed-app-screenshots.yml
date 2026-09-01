@@ -10,20 +10,30 @@ on:
     types:
       - labeled
   workflow_dispatch:
+    inputs:
+      pull_request_number:
+        description: Pull request to capture and comment on
+        required: true
+        type: string
+      capture_run_id:
+        description: Existing capture run to publish instead of rebuilding
+        required: false
+        type: string
 
 permissions: {}
 
 concurrency:
-  group: installed-app-screenshots-${{ github.event.pull_request.number || github.ref }}
+  group: installed-app-screenshots-${{ github.event.pull_request.number || inputs.pull_request_number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   capture:
     name: Capture ${{ matrix.name }}
     if: >-
-      github.event_name != 'pull_request_target' ||
-      (github.event.label.name == 'ci: installed app screenshots' &&
-        github.event.pull_request.head.repo.full_name == github.repository)
+      (github.event_name != 'pull_request_target' ||
+        (github.event.label.name == 'ci: installed app screenshots' &&
+          github.event.pull_request.head.repo.full_name == github.repository)) &&
+      (github.event_name != 'workflow_dispatch' || inputs.capture_run_id == '')
     strategy:
       fail-fast: false
       matrix:
@@ -53,7 +63,12 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 1
-          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
+          ref: >-
+            ${{
+              github.event_name == 'pull_request_target' && github.event.pull_request.head.sha ||
+              github.event_name == 'workflow_dispatch' && format('refs/pull/{0}/head', inputs.pull_request_number) ||
+              github.sha
+            }}
           submodules: true
 
       - uses: pnpm/action-setup@v6
@@ -186,10 +201,12 @@ jobs:
     name: Report installed app screenshots
     if: >-
       always() &&
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      (github.event_name == 'pull_request' ||
+      ((github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository) ||
         (github.event_name == 'pull_request_target' &&
-          github.event.label.name == 'ci: installed app screenshots'))
+          github.event.label.name == 'ci: installed app screenshots' &&
+          github.event.pull_request.head.repo.full_name == github.repository) ||
+        github.event_name == 'workflow_dispatch')
     needs: capture
     runs-on: ubuntu-latest
     permissions:
@@ -197,12 +214,24 @@ jobs:
       pull-requests: write
     steps:
       - name: Download installed app screenshots
+        if: inputs.capture_run_id == ''
         continue-on-error: true
         uses: actions/download-artifact@v8
         with:
           pattern: installed-app-screenshots-*
           path: installed-app-screenshots
           merge-multiple: true
+
+      - name: Download existing installed app screenshots
+        if: inputs.capture_run_id != ''
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          pattern: installed-app-screenshots-*
+          path: installed-app-screenshots
+          merge-multiple: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ inputs.capture_run_id }}
 
       - id: upload
         name: Publish installed app screenshots
@@ -213,11 +242,11 @@ jobs:
           AWS_EC2_METADATA_DISABLED: "true"
           AWS_REGION: auto
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SCREENSHOT_SECRET_ACCESS_KEY }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pull_request_number }}
           R2_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           R2_BASE_URL: ${{ vars.R2_SCREENSHOT_BASE_URL }}
           R2_BUCKET: ${{ vars.R2_SCREENSHOT_BUCKET }}
-          RUN_ID: ${{ github.run_id }}
+          RUN_ID: ${{ inputs.capture_run_id || github.run_id }}
         run: |
           set -euo pipefail
           screenshot_names=(
@@ -302,6 +331,8 @@ jobs:
         if: always()
         uses: actions/github-script@v8
         env:
+          CAPTURE_RUN_ID: ${{ inputs.capture_run_id || github.run_id }}
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pull_request_number }}
           SCREENSHOT_BASE_URL: ${{ steps.upload.outputs.base_url }}
           SCREENSHOTS_UPLOADED: ${{ steps.upload.outputs.uploaded }}
         with:
@@ -310,7 +341,8 @@ jobs:
             const path = require("node:path");
             const marker = "<!-- installed-app-screenshots -->";
             const { owner, repo } = context.repo;
-            const runId = context.runId;
+            const issueNumber = Number.parseInt(process.env.PR_NUMBER, 10);
+            const runId = Number.parseInt(process.env.CAPTURE_RUN_ID, 10);
             const serverUrl = process.env.GITHUB_SERVER_URL;
             const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
               owner,
@@ -394,7 +426,7 @@ jobs:
             const comments = await github.paginate(github.rest.issues.listComments, {
               owner,
               repo,
-              issue_number: context.issue.number,
+              issue_number: issueNumber,
               per_page: 100,
             });
             const existing = comments.find(
@@ -411,7 +443,7 @@ jobs:
               await github.rest.issues.createComment({
                 owner,
                 repo,
-                issue_number: context.issue.number,
+                issue_number: issueNumber,
                 body,
               });
             }
