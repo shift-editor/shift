@@ -1,6 +1,6 @@
 # Main
 
-<!-- reviewed: 2026-08-27 -->
+<!-- reviewed: 2026-09-01 -->
 
 Electron main process: app startup, windows, menus, document dialogs, and workspace session ownership.
 
@@ -106,7 +106,7 @@ Eligible packaged macOS builds and Windows Nightly x64 builds start `AppUpdater`
 
 Automatic current/error results stay quiet. When a check finds an update, the native-framed update window offers **Download Update** / Later; declining leaves the version available without prompting again during periodic checks. An accepted download replaces those choices with cumulative progress. Closing the window or choosing Cancel cancels the transfer and returns to available. Download completion replaces progress with **Restart and Install** / Later, and a manual check while available or ready reopens the relevant choice. Later retains a verified download without silently installing it on ordinary quit. Restart prepares every document, cancels all prepared closes if one vetoes, commits every agreed close, and only then calls `quitAndInstall()`. Electron closes windows before normal `before-quit`, so `AppLifecycle`'s `confirmed` state allows those closes. An install failure after commit relaunches the currently installed application; closed in-memory sessions are never reconstructed.
 
-The application menu exposes `app.checkForUpdates` under the macOS app menu and the Windows/Linux Help menu. Every platform's Help menu also opens the Shift website, Discord, X account, and GitHub issue form through fixed main-owned URLs. Update behavior remains main-owned and does not add renderer IPC.
+The application menu exposes `app.checkForUpdates` under the macOS app menu and the Windows/Linux Help menu. Every platform's Help menu also opens the Shift website, Discord, and X account. Its adjacent support actions open the dedicated public Bug report form, reveal electron-log's active file in the platform file manager, or start a minimal feedback email through fixed main-owned destinations. Users review and attach logs manually; Shift does not read or upload their files. Update behavior remains main-owned and does not add renderer IPC.
 
 ### Workspace Creation And Open
 

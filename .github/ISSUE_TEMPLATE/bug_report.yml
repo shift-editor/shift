@@ -1,0 +1,73 @@
+name: Bug report
+description: Report a problem in Shift
+title: ""
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use **Help → Show Logs** to locate the current `main.log`, then attach it manually below.
+
+        Logs can contain private local file, folder, or project names. Review and redact the log before uploading it. Do not attach authored font or document files, credentials, or other private content unless you deliberately choose to share it.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: input
+    id: occurrence-time
+    attributes:
+      label: Approximate occurrence time (including timezone)
+      description: Include the date, local time, and timezone so maintainers can correlate log timestamps.
+      placeholder: 2026-08-28 14:30 UTC-7
+    validations:
+      required: true
+
+  - type: input
+    id: shift-version
+    attributes:
+      label: Shift version and channel/distribution
+      description: For example, Release, Nightly, or Development.
+    validations:
+      required: true
+
+  - type: input
+    id: operating-system
+    attributes:
+      label: Operating system and architecture
+      placeholder: macOS 15.6 arm64
+    validations:
+      required: true
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots or screen recordings (when useful)
+      description: Drag screenshots or screen recordings into this field.
+
+  - type: textarea
+    id: main-log
+    attributes:
+      label: Relevant main.log
+      description: Use Help → Show Logs, review and redact the current main.log, then drag it into this field.

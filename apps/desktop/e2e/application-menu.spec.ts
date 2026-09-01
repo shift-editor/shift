@@ -124,6 +124,8 @@ launcherTest("application menu exposes native shell actions", async ({ electronA
       "help.openDiscord",
       "help.openX",
       "help.reportIssue",
+      "help.showLogs",
+      "help.emailFeedback",
     ]),
   );
   expect(menu.settingsAccelerator).toBe("CmdOrCtrl+,");

@@ -14,6 +14,7 @@ export type CommandId =
   | "help.openX"
   | "help.reportIssue"
   | "help.showLogs"
+  | "help.emailFeedback"
   | "file.new"
   | "file.open"
   | "file.save"

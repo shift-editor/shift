@@ -4,6 +4,7 @@ import type { Command } from "./Command";
 import type { CommandRegistry } from "./Command";
 import {
   SHIFT_DISCORD_URL,
+  SHIFT_FEEDBACK_EMAIL,
   SHIFT_NEW_ISSUE_URL,
   SHIFT_WEBSITE_URL,
   SHIFT_X_URL,
@@ -47,13 +48,18 @@ const helpCommands: Command[] = [
   },
   {
     id: "help.reportIssue",
-    label: "Submit feedback",
+    label: "Report a Problem…",
     run: () => shell.openExternal(SHIFT_NEW_ISSUE_URL),
   },
   {
     id: "help.showLogs",
     label: "Show Logs",
     run: () => shell.showItemInFolder(log.transports.file.getFile().path),
+  },
+  {
+    id: "help.emailFeedback",
+    label: "Feedback…",
+    run: () => shell.openExternal(`mailto:${SHIFT_FEEDBACK_EMAIL}`),
   },
 ];
 

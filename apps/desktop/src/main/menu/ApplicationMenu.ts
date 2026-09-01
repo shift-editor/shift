@@ -228,6 +228,8 @@ export class ApplicationMenu {
       this.#commandItem("help.openX"),
       { type: "separator" },
       this.#commandItem("help.reportIssue"),
+      this.#commandItem("help.showLogs"),
+      this.#commandItem("help.emailFeedback"),
     ];
     if (!includeApplicationItems) return items;
 
