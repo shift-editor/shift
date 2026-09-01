@@ -1,6 +1,6 @@
 # shift-bridge
 
-<!-- reviewed: 2026-08-19 review-every: 90d -->
+<!-- reviewed: 2026-09-01 review-every: 90d -->
 
 NAPI bindings that expose the Rust font engine to Node.js and Electron as a `Bridge` class.
 
@@ -34,7 +34,7 @@ crates/shift-bridge/
     errors.rs    -- bridge error type and NAPI mapping
     input.rs     -- boundary parsing/adaptation helpers
   scripts/
-    profile-slug-atlas.mjs -- release profiler through `Bridge.prepareSlugAtlas`
+    profile-slug-atlas.mjs -- release source/native-document page and stream profiler
   Cargo.toml     -- cdylib crate; depends on shift-font, shift-wire, shift-backends, napi
 ```
 
@@ -71,9 +71,15 @@ crates/shift-bridge/
 7. `inspectDocument(path)` exposes canonical identity without opening a live workspace. `openDocument(path, recoveryPath)` opens merged lazy views selected by the utility process.
 8. `closeWorkspace()` drops the live Rust workspace handle before the utility process removes clean or discarded recovery files and bindings.
 9. `exportWorkspace(request)` creates a `FontSaveSnapshot` and exports asynchronously through `shift-backends`.
-10. The renderer calls `prepareSlugAtlasPage(glyphIds, alignment)` for every deterministic fixed directory page and installs the complete set before first presentation. Every native miss independently acquires its indexed component closure. Each bounded build uses one compilation-scoped `GlyphProjectionSet`; no projection or resolved-source map survives its build. The utility may bypass native preparation with a validated external `CachedAtlas` page keyed by `slugAtlasCacheRevision()`, but cached and native pages share the same bounded renderer stream contract. Authored invalidation rebuilds every affected page while the previous complete set remains presented; scrolling performs no bridge work. The complete preparation endpoint remains available to the external profiler; set `SHIFT_PROFILE_SLUG_ATLAS=1` for native phase timings.
+10. The renderer calls `prepareSlugAtlasPage(glyphIds, alignment)` for every deterministic fixed directory page and installs the complete set before first presentation. Every native miss independently acquires its indexed component closure. Closure traversal passes each complete deduplicated frontier to one bounded store query primitive; it never crosses SQLite once per root. Each bounded build uses one compilation-scoped `GlyphProjectionSet`; no projection or resolved-source map survives its build. The utility may bypass native preparation with a validated external `CachedAtlas` page keyed by canonical `DocumentId` for bound documents and app-local `workspaceId` for unbound documents. Cached and native pages share the same bounded renderer stream contract. Authored invalidation rebuilds every affected page while the previous complete set remains presented; scrolling performs no bridge work. The complete preparation endpoint remains available to the external profiler; set `SHIFT_PROFILE_SLUG_ATLAS=1` for native phase timings.
 
 Imported (read-only) font sources go through `SourceIdentity`: opening a source mints stable glyph, axis, source, mapping, instance, and metric IDs once and retains the canonical `FontAxis` values plus the compiled `AxisMappingBasis` values for that directory. Imported per-source metrics (italic angle, line gap, underline, cap height, x-height) come from the backend directory rather than synthesized defaults. Catalog atlas coordinates arrive as external axis values and are mapped through the retained bases into design space before atlas weight evaluation, so external controls never leak into design-space interpolation. Authored mutations stay gated off while a read-only source is open.
+
+## Slug atlas profiling
+
+`profile-slug-atlas.mjs` detects native `.shift` input and exercises `openDocument(document, recovery)`, the same deterministic 256-root pages used by product startup, and each native stream. Other source formats retain the complete-atlas profiling path. `SHIFT_PROFILE_SLUG_ATLAS=1` additionally separates component closure, merged-view read/decode, font installation, atlas compilation, and layout without adding production timing DTOs.
+
+On the Mini release build, OpenSans-CondensedItalic (3,431 glyphs, 3,063 components, 14 pages) reproduced the native regression as `openDocument` 113.177 ms and a cold page set of 18,514.129 ms; individual pages took 590.943–1,670.340 ms. Phase evidence isolated the first page to component closure 1,171.901 ms, merged-view read/decode 4.625 ms, and font installation 0.688 ms. Batching each graph frontier reduced the cold page set, including native streaming, to 292.668 ms; page preparation took 14.723–26.484 ms, page streaming 0.098–2.099 ms, and the subsequent complete page set took 234.859 ms. The real local macOS GPU application completed cold page preparation/stream/upload in 370.600 ms, first GPU completion in 3.300 ms, and launch-to-ready in 1,250.112 ms. A clean close/reopen loaded all 14 pages from the canonical-`DocumentId` cache, completed preparation/stream/upload in 26.600 ms, first GPU completion in 3.500 ms, and launch-to-ready in 623.000 ms. These values are profiler evidence, not CI thresholds; ordinary CI asserts graph work counts, cache origin, revision invalidation, and byte identity.
 
 ## Type Boundary
 

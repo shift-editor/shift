@@ -124,6 +124,121 @@ fn requested_layers_load_across_multiple_count_bounded_batches() {
 }
 
 #[test]
+fn native_component_closure_batches_root_queries() {
+    let temp = tempfile::tempdir().unwrap();
+    let document_path = temp.path().join("Components.shift");
+    let recovery_path = temp.path().join("recovery.sqlite");
+    drop(ShiftStore::create_document(&document_path, &font::test_support::sample_font()).unwrap());
+    let store = ShiftStore::open_document_with_recovery(&document_path, &recovery_path).unwrap();
+    let roots = (0..=MAX_LAYER_READ_BATCH_COUNT)
+        .map(|index| font::GlyphId::from_raw(format!("root_{index:04}")))
+        .collect::<Vec<_>>();
+    super::references::COMPONENT_CLOSURE_QUERY_COUNT.with(|count| count.set(0));
+
+    let closure = store.referenced_glyph_closure(roots.clone()).unwrap();
+
+    assert_eq!(closure, roots);
+    super::references::COMPONENT_CLOSURE_QUERY_COUNT.with(|count| assert_eq!(count.get(), 2));
+}
+
+#[test]
+fn component_closure_is_cycle_safe_and_queries_each_frontier() {
+    let store = ShiftStore::open_memory_for_test().unwrap();
+    store
+        .conn
+        .execute(
+            "INSERT INTO sources (id, name, kind, order_index) VALUES ('source', 'Source', 'master', 0)",
+            [],
+        )
+        .unwrap();
+    for (index, glyph_id) in ["a", "b", "c"]
+        .map(font::GlyphId::from_raw)
+        .into_iter()
+        .enumerate()
+    {
+        store
+            .conn
+            .execute(
+                "INSERT INTO glyphs (id, name, order_index) VALUES (?1, ?1, ?2)",
+                params![glyph_id.to_string(), index as i64],
+            )
+            .unwrap();
+        store
+            .conn
+            .execute(
+                "INSERT INTO glyph_layers (id, glyph_id, source_id, width) VALUES (?1, ?2, 'source', 1000)",
+                params![format!("{glyph_id}-layer"), glyph_id.to_string()],
+            )
+            .unwrap();
+    }
+    for (owner, base) in [("a", "b"), ("b", "c"), ("c", "a")].map(|(owner, base)| {
+        (
+            font::GlyphId::from_raw(owner),
+            font::GlyphId::from_raw(base),
+        )
+    }) {
+        store
+            .conn
+            .execute(
+                "INSERT INTO glyph_components (id, layer_id, base_glyph_id, order_index) VALUES (?1, ?2, ?3, 0)",
+                params![
+                    format!("{owner}-component"),
+                    format!("{owner}-layer"),
+                    base.to_string()
+                ],
+            )
+            .unwrap();
+    }
+    super::references::COMPONENT_CLOSURE_QUERY_COUNT.with(|count| count.set(0));
+
+    let closure = store
+        .referenced_glyph_closure([font::GlyphId::from_raw("a")])
+        .unwrap();
+
+    assert_eq!(
+        closure,
+        ["a", "b", "c"].map(font::GlyphId::from_raw).to_vec()
+    );
+    super::references::COMPONENT_CLOSURE_QUERY_COUNT.with(|count| assert_eq!(count.get(), 3));
+}
+
+#[test]
+fn dependent_lookup_preserves_results_across_component_query_batches() {
+    let (store, font) = populated_store();
+    let owner = font
+        .glyphs()
+        .find(|glyph| {
+            glyph
+                .layers()
+                .values()
+                .any(|layer| !layer.components().is_empty())
+        })
+        .unwrap();
+    let base_glyph_id = owner
+        .layers()
+        .values()
+        .flat_map(|layer| layer.components_iter())
+        .next()
+        .unwrap()
+        .base_glyph_id();
+    let target = font
+        .glyph(base_glyph_id)
+        .unwrap()
+        .layers()
+        .keys()
+        .next()
+        .unwrap();
+    let mut layer_ids = (0..super::references::MAX_COMPONENT_QUERY_BATCH_COUNT)
+        .map(|index| font::LayerId::from_raw(format!("missing_{index:04}")))
+        .collect::<Vec<_>>();
+    layer_ids.push(target.clone());
+
+    let dependents = store.dependent_glyph_ids_for_layers(&layer_ids).unwrap();
+
+    assert!(dependents.contains(&owner.id()));
+}
+
+#[test]
 fn one_internal_batch_rejects_excessive_layer_counts_before_sql() {
     let store = ShiftStore::open_memory_for_test().unwrap();
     let layer_ids = (0..=MAX_LAYER_READ_BATCH_COUNT)

@@ -206,10 +206,14 @@ export class WorkspaceHost {
 
   async #prepareSlugAtlasPage(request: WorkspaceSlugAtlasPageRequest): Promise<WorkspaceSlugAtlas> {
     const started = performance.now();
+    const workspace = this.#requireDocument();
     const cacheRequest: CachedAtlasPageRequest = {
       ...request,
       key: {
-        documentKey: this.#requireDocument().allocation.workspaceId,
+        documentKey:
+          workspace.binding.kind === "bound"
+            ? workspace.binding.address.documentId
+            : workspace.allocation.workspaceId,
         revisionKey: this.#currentAtlasCacheRevision(),
       },
     };

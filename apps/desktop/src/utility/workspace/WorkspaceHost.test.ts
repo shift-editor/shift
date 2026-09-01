@@ -493,6 +493,81 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     await shell.call("workspace.close", { discard: true });
   });
 
+  it("reuses saved document atlas bytes after a fresh workspace allocation", async () => {
+    const sync = await connectSyncLane();
+    const snapshot = await createWorkspace(sync);
+    const glyph = createGlyphALayer(snapshot.sources[0]!.id);
+    await applyWorkspace(sync, { intents: glyph.intents });
+    const documentPath = path.join(tmpRoot, "Cached.shift");
+    const saved = await sync.call("workspace.saveAs", { path: documentPath });
+    const request = {
+      glyphIds: [glyph.glyphId],
+      alignment: 256,
+      pageIndex: 0,
+      pageCount: 1,
+      replacementPageIndices: [0],
+    };
+    const page = await sync.call("workspace.slugAtlasPagePrepare", request);
+    const bytes = await streamSlugAtlas(sync, page.generation, 64, page.origin);
+
+    await shell.call("workspace.close", { discard: false });
+    const reopened = await shell.call("workspace.open", { path: documentPath });
+    const cached = await sync.call("workspace.slugAtlasPagePrepare", request);
+    const cachedBytes = await streamSlugAtlas(sync, cached.generation, 64, cached.origin);
+
+    expect(page.origin).toBe("native");
+    expect(reopened.workspaceId).not.toBe(saved.workspaceId);
+    expect(reopened.documentId).toBe(saved.documentId);
+    expect(cached.origin).toBe("cached");
+    expect(cachedBytes).toEqual(bytes);
+
+    await applyWorkspace(sync, {
+      intents: [{ kind: "setXAdvance", setXAdvance: { layerId: glyph.layerId, width: 700 } }],
+    });
+    const changed = await sync.call("workspace.slugAtlasPagePrepare", request);
+    expect(changed.origin).toBe("native");
+    await sync.call("workspace.slugAtlasPageDiscard", {
+      generation: changed.generation,
+      origin: changed.origin,
+    });
+    await shell.call("workspace.close", { discard: true });
+  });
+
+  it("keeps unbound atlas artifacts isolated by workspace allocation", async () => {
+    const sync = await connectSyncLane();
+    const glyphId = mintGlyphId();
+    const layerId = mintLayerId();
+    const first = await createWorkspace(sync);
+    await applyWorkspace(sync, {
+      intents: [createGlyphA(glyphId), createGlyphLayer(glyphId, first.sources[0]!.id, layerId)],
+    });
+    const request = {
+      glyphIds: [glyphId],
+      alignment: 256,
+      pageIndex: 0,
+      pageCount: 1,
+      replacementPageIndices: [0],
+    };
+    const page = await sync.call("workspace.slugAtlasPagePrepare", request);
+    await streamSlugAtlas(sync, page.generation, 64, page.origin);
+    await shell.call("workspace.close", { discard: true });
+
+    const second = await createWorkspace(sync);
+    await applyWorkspace(sync, {
+      intents: [createGlyphA(glyphId), createGlyphLayer(glyphId, second.sources[0]!.id, layerId)],
+    });
+    const isolated = await sync.call("workspace.slugAtlasPagePrepare", request);
+
+    expect(second.workspaceId).not.toBe(first.workspaceId);
+    expect(page.origin).toBe("native");
+    expect(isolated.origin).toBe("native");
+    await sync.call("workspace.slugAtlasPageDiscard", {
+      generation: isolated.generation,
+      origin: isolated.origin,
+    });
+    await shell.call("workspace.close", { discard: true });
+  });
+
   it("publishes cached pages after retrying one page before the build completes", async () => {
     const sync = await connectSyncLane();
     const snapshot = await createWorkspace(sync);
