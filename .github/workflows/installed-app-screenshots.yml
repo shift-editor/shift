@@ -6,6 +6,7 @@ on:
       - .github/workflows/installed-app-screenshots.yml
       - apps/desktop/electron-builder.config.ts
       - scripts/capture-installed-app.mjs
+      - scripts/run-with-virtual-desktop.mjs
   pull_request_target:
     types:
       - labeled
@@ -168,8 +169,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          dbus-run-session -- xvfb-run --auto-servernum --server-args='-screen 0 1920x1080x24' \
-            sh -c 'fluxbox >/tmp/shift-fluxbox.log 2>&1 & sleep 1; exec node scripts/capture-installed-app.mjs "$SHIFT_INSTALLED_APP_PATH" "installed-app-screenshots/$SHIFT_SCREENSHOT_DIRECTORY"'
+          dbus-run-session -- node scripts/run-with-virtual-desktop.mjs -- \
+            node scripts/capture-installed-app.mjs \
+            "$SHIFT_INSTALLED_APP_PATH" \
+            "installed-app-screenshots/$SHIFT_SCREENSHOT_DIRECTORY"
         env:
           SHIFT_SCREENSHOT_DIRECTORY: ${{ matrix.directory }}
 

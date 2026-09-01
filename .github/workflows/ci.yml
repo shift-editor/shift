@@ -55,6 +55,8 @@ jobs:
               - 'apps/**'
               - 'packages/**'
               - 'pnpm-lock.yaml'
+              - 'scripts/run-e2e.mjs'
+              - 'scripts/run-with-virtual-desktop.mjs'
               - 'tsconfig*.json'
               - 'turbo.json'
             release:
@@ -609,10 +611,11 @@ jobs:
       - name: Run E2E tests with virtual desktop
         if: runner.os == 'Linux'
         run: >-
-          xvfb-run --auto-servernum --server-args='-screen 0 1920x1080x24' sh -c
-          'fluxbox >/tmp/shift-fluxbox.log 2>&1 & sleep 1;
-          exec pnpm --dir apps/desktop exec playwright test
-          --project=${{ matrix.project }} --fully-parallel --shard=${{ matrix.shard }}/${{ matrix.shard-total }}'
+          node scripts/run-with-virtual-desktop.mjs --
+          pnpm --dir apps/desktop exec playwright test
+          --project=${{ matrix.project }}
+          --fully-parallel
+          --shard=${{ matrix.shard }}/${{ matrix.shard-total }}
 
       - name: Upload platform evidence
         if: always() && matrix.project == 'platform'
