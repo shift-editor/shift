@@ -108,7 +108,11 @@ export class WorkspaceHost {
         this.#serialize(() => this.#createFromSource(sourcePath, documentPath)),
       "workspace.inspectDocument": ({ path }) => this.#serialize(() => this.#inspectDocument(path)),
       "workspace.open": ({ path }) => this.#serialize(() => this.#open(path)),
-      "workspace.listRecoveries": () => this.#serialize(() => this.#documents.listRecoveries()),
+      "workspace.listRecoveries": () =>
+        this.#serialize(() => {
+          this.#documents.pruneOrphanedStorage();
+          return this.#documents.listRecoveries();
+        }),
       "workspace.resume": ({ workspaceId }) => this.#serialize(() => this.#resume(workspaceId)),
       "workspace.close": ({ discard }) => this.#serialize(() => this.#close(discard)),
       "source.open": ({ path }) => this.#serialize(() => this.#openFontSource(path)),
@@ -206,10 +210,14 @@ export class WorkspaceHost {
 
   async #prepareSlugAtlasPage(request: WorkspaceSlugAtlasPageRequest): Promise<WorkspaceSlugAtlas> {
     const started = performance.now();
+    const workspace = this.#requireDocument();
     const cacheRequest: CachedAtlasPageRequest = {
       ...request,
       key: {
-        documentKey: this.#requireDocument().allocation.workspaceId,
+        documentKey:
+          workspace.binding.kind === "bound"
+            ? workspace.binding.address.documentId
+            : workspace.allocation.workspaceId,
         revisionKey: this.#currentAtlasCacheRevision(),
       },
     };

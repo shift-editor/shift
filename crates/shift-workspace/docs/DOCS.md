@@ -1,6 +1,6 @@
 # shift-workspace
 
-<!-- reviewed: 2026-08-21 review-every: 90d -->
+<!-- reviewed: 2026-09-01 review-every: 90d -->
 
 Backend runtime object for an open Shift font workspace.
 
@@ -8,6 +8,7 @@ Backend runtime object for an open Shift font workspace.
 
 - **Architecture Invariant:** `FontWorkspace` composes a directory-complete, payload-lazy `shift-font::Font` with one `shift-store` posture: a canonical SQLite document plus sparse recovery overlay, or an app-owned working database for new/imported content.
 - **Architecture Invariant:** Resuming SQLite loads metadata and glyph/layer directory facts only. `acquire_glyphs` performs explicit bounded payload I/O; synchronous `font()` reads never initiate I/O.
+- **Architecture Invariant:** `AcquireScope::ComponentClosure` expands the component graph one deduplicated, cycle-safe frontier at a time. Each frontier is queried in bounded batches against merged canonical/recovery truth; acquisition never issues one store query per root glyph. **WHY:** Graph recursion is expected, but query-per-node traversal multiplies merged-view cost across every fixed atlas page.
 - **Architecture Invariant:** TTF/OTF, UFO, Designspace, and Glyphs imports consume bounded `FontImport` batches and write through one `FontImportWriter`; they never construct a complete geometry-resident Shift `Font`. Glyph conversion, MessagePack encoding, BLAKE3 hashing, and independent per-layer compression use Rayon, while SQLite has one transaction owner. The upstream Glyphs parser still materializes its normalized source model before bounded Shift conversion begins.
 - **Architecture Invariant:** `LayerResidency` is the sole owner of loaded-layer membership and placeholder replacement. A loaded layer is only a cache of already-committed authored state; apply, undo, and redo reacquire their complete layer read sets before mutation, and `evict_glyphs` replaces only committed layers with directory placeholders.
 - **Architecture Invariant:** `open_document(document_path, recovery_path)` reads the canonical `.shift` SQLite file directly and exposes merged rows from an app-owned sparse overlay. It never unpacks or copies the canonical document.
@@ -61,7 +62,7 @@ crates/shift-workspace/examples/
 
 `FontWorkspace::slug_atlas_cache_revision()` returns the persisted authored revision used by the utility process to distinguish disposable `CachedAtlas` entries across edits and process restarts. For native documents the key is `saved_commit_id:recovery_revision`; Save changes the commit identity and resets the overlay revision, while Discard returns to the prior clean key.
 
-`FontWorkspace::resume(store_path)` builds the eager directory skeleton without reading any layer BLOB. `acquire_glyphs(ids, AcquireScope::Glyphs)` fetches only requested layers; `AcquireScope::ComponentClosure` first expands component dependencies from the relational index. Acquisition passes the complete request to the store's shared count- and decoded-byte-aware planner. Each internal batch reads directory facts, payloads, and component indexes for at most 512 layers and 256 MiB decoded bytes, decompresses and verifies exact lengths plus BLAKE3 in parallel, accumulates the canonical results, and validates the complete replacement before mutating the uniquely owned live font in place. Validated identity sets become the final index entries rather than a temporary duplicate; shared font snapshots still use copy-on-write. A malformed batch does not replace the live cache. Export explicitly acquires all layers before creating its complete snapshot; document Save and Save As operate from durable store views and do not depend on live layer residency.
+`FontWorkspace::resume(store_path)` builds the eager directory skeleton without reading any layer BLOB. `acquire_glyphs(ids, AcquireScope::Glyphs)` fetches only requested layers; `AcquireScope::ComponentClosure` first expands component dependencies from the relational index. Closure batches each graph frontier in groups of at most 512 roots, so SQL statement count is proportional to graph depth and bounded frontier batches rather than reachable glyph count. Acquisition then passes the complete deduplicated request to the store's shared count- and decoded-byte-aware planner. Each internal batch reads directory facts once, then reads payloads and component indexes for at most 512 layers and 256 MiB decoded bytes, decompresses and verifies exact lengths plus BLAKE3 in parallel, accumulates the canonical results, and validates the complete replacement before mutating the uniquely owned live font in place. Validated identity sets become the final index entries rather than a temporary duplicate; shared font snapshots still use copy-on-write. A malformed batch does not replace the live cache. Export explicitly acquires all layers before creating its complete snapshot; document Save and Save As operate from durable store views and do not depend on live layer residency.
 
 ## Profiling
 
@@ -105,8 +106,9 @@ observations rather than CI assertions.
 
 1. Route it through `acquire_glyphs(ids, AcquireScope::Glyphs)` — or `AcquireScope::ComponentClosure` when component geometry matters — before reading `font()`. Synchronous `font()` must never initiate I/O.
 2. Keep acquisition batched: pass the complete request in one call so the store's count/decoded-byte planner can bound each internal batch, rather than looping per glyph.
-3. If the read produces a complete in-memory snapshot, acquire all layers first like export does; a directory placeholder in that snapshot is a bug. Document Save and Save As are store-owned and do not require this acquisition.
-4. Verify: `cargo test -p shift-workspace`.
+3. Treat component relationships as a graph query, not a helper loop. Batch each complete frontier, deduplicate before expansion, remain cycle-safe, and verify statement work against `open_document` plus `RecoveryOverlay`; a direct working store can hide merged-view amplification.
+4. If the read produces a complete in-memory snapshot, acquire all layers first like export does; a directory placeholder in that snapshot is a bug. Document Save and Save As are store-owned and do not require this acquisition.
+5. Verify: `cargo test -p shift-workspace` and the `shift-store` component-closure work-count tests.
 
 ## Gotchas
 

@@ -3,6 +3,7 @@ use std::{
     io,
     path::{Path, PathBuf},
     sync::Arc,
+    time::Instant,
 };
 
 use shift_backends::{
@@ -832,12 +833,20 @@ impl FontWorkspace {
         glyph_ids: &[GlyphId],
         scope: AcquireScope,
     ) -> Result<(), WorkspaceError> {
+        let started = Instant::now();
         let glyph_ids = if scope == AcquireScope::ComponentClosure {
             self.store
                 .referenced_glyph_closure(glyph_ids.iter().cloned())?
         } else {
             glyph_ids.to_vec()
         };
+        if std::env::var("SHIFT_PROFILE_SLUG_ATLAS").is_ok_and(|value| value != "0") {
+            eprintln!(
+                "[slug-atlas-acquisition] phase=component-closure duration_ms={:.3}",
+                started.elapsed().as_secs_f64() * 1_000.0
+            );
+        }
+
         let layer_ids = glyph_ids
             .into_iter()
             .flat_map(|glyph_id| {
@@ -874,9 +883,24 @@ impl FontWorkspace {
         // Decode through bounded SQLite reads. Font validates the complete
         // replacement batch before mutating, so malformed input leaves the
         // live cache unchanged without copying the complete directory.
+        let started = Instant::now();
         let layers = self.store.load_glyph_layers(&layer_ids)?;
+        if std::env::var("SHIFT_PROFILE_SLUG_ATLAS").is_ok_and(|value| value != "0") {
+            eprintln!(
+                "[slug-atlas-acquisition] phase=merged-view-read-decode duration_ms={:.3}",
+                started.elapsed().as_secs_f64() * 1_000.0
+            );
+        }
+
+        let started = Instant::now();
         self.font.replace_glyph_layers(layers)?;
         self.residency.mark_loaded(layer_ids);
+        if std::env::var("SHIFT_PROFILE_SLUG_ATLAS").is_ok_and(|value| value != "0") {
+            eprintln!(
+                "[slug-atlas-acquisition] phase=font-install duration_ms={:.3}",
+                started.elapsed().as_secs_f64() * 1_000.0
+            );
+        }
         Ok(())
     }
 
