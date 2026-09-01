@@ -2,10 +2,8 @@ import type { GlyphCatalogControllerFrame } from "./glyphCatalog";
 
 export type GlyphCatalogRendererKind = "slug" | "svg";
 
-/** Owns one session-fixed glyph catalog rendering implementation. */
+/** Owns the imperative resources of the selected Slug catalog backend. */
 export interface GlyphCatalogRenderer {
-  readonly kind: GlyphCatalogRendererKind;
-
   /** Applies the latest catalog frame and optional inline-name input host. */
   update(frame: GlyphCatalogControllerFrame, inputContainer: HTMLDivElement | null): void;
 
@@ -13,8 +11,7 @@ export interface GlyphCatalogRenderer {
   destroy(): void;
 }
 
-/** Couples the selected session renderer with its stable implementation kind. */
-export interface GlyphCatalogRendererSelection {
-  readonly kind: GlyphCatalogRendererKind;
-  readonly renderer: GlyphCatalogRenderer;
-}
+/** Reports whether Slug claimed the session or React must render the SVG fallback. */
+export type GlyphCatalogRendererSelection =
+  | { readonly kind: "slug"; readonly renderer: GlyphCatalogRenderer }
+  | { readonly kind: "svg" };

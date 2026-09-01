@@ -8,7 +8,6 @@ import type {
   GlyphPreview,
   SourceId,
 } from "@shift/types";
-import type { RefObject } from "react";
 import type { RenderGlyph } from "./glyphRender";
 import type { ThemeName } from "./uiState";
 import type { GlyphAtlasSource } from "./glyphAtlas";
@@ -114,8 +113,7 @@ export interface GlyphNameInputProps {
   readonly onFinished: (nextName: GlyphName | null) => void;
 }
 
-export interface GlyphCatalogCanvasProps {
-  readonly containerRef: RefObject<HTMLDivElement | null>;
+export interface GlyphCatalogBackendGateProps {
   readonly glyphs: readonly GlyphCatalogItem[];
   readonly location: CatalogLocation;
   readonly metrics: CatalogMetrics;
@@ -128,4 +126,28 @@ export interface GlyphCatalogCanvasProps {
   readonly openGlyph: (glyph: GlyphCatalogItem) => Promise<void>;
   readonly onFirstFrame: () => void;
   readonly onUnavailable: () => void;
+}
+
+export interface GlyphCatalogViewProps {
+  readonly glyphs: readonly GlyphCatalogItem[];
+  readonly location: CatalogLocation;
+  readonly metrics: CatalogMetrics;
+  readonly active: boolean;
+  readonly observeAtlasInvalidation: GlyphCatalogSource["observeAtlasInvalidation"];
+  readonly canAuthor: boolean;
+  readonly openGlyph: (glyph: GlyphCatalogItem) => Promise<void>;
+  readonly onPendingGlyphName: (glyphId: GlyphId, glyphName: GlyphName) => void;
+  readonly onFirstFrame: () => void;
+  readonly onUnavailable: () => void;
+}
+
+export interface SlugGlyphCatalogSurfaceProps extends GlyphCatalogViewProps {
+  readonly sourceId: SourceId | null;
+  readonly atlasSource: GlyphAtlasSource;
+  readonly onSelected: () => void;
+  readonly onFallback: () => void;
+}
+
+export interface SvgGlyphCatalogGridProps extends GlyphCatalogViewProps {
+  readonly glyphPreviews: GlyphCatalogSource["glyphPreviews"];
 }

@@ -3,14 +3,17 @@ import type { SegmentId } from "@shift/glyph-state";
 
 export { currentEditingId } from "./editing";
 export type {
-  GlyphCatalogCanvasProps,
+  GlyphCatalogBackendGateProps,
   GlyphCatalogCell,
   GlyphCatalogCellArea,
   GlyphCatalogFrame,
   GlyphCatalogItem,
   GlyphCatalogLayoutMetrics,
   GlyphCatalogSource,
+  GlyphCatalogViewProps,
   GlyphNameInputProps,
+  SlugGlyphCatalogSurfaceProps,
+  SvgGlyphCatalogGridProps,
 } from "./glyphCatalog";
 export type { EditingId, PendingEditId } from "./editing";
 export type { FontOptions, FontStoreOptions } from "./font";

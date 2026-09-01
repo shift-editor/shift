@@ -20,7 +20,7 @@ export function glyphCatalogSvg(page: Page) {
 }
 
 export function glyphCatalogRenderer(page: Page) {
-  return page.locator("[data-glyph-catalog-renderer]:visible");
+  return page.locator("[data-glyph-catalog-renderer]");
 }
 
 export function editorShell(page: Page) {
@@ -50,12 +50,12 @@ export async function firstAxisSlider(page: Page) {
   return page.getByRole("slider", { name: axisName, exact: true });
 }
 
-/** Keeps the canvas preview coordinate contract in one place. */
+/** Keeps the catalog preview coordinate contract in one place. */
 export async function clickFirstCatalogGlyph(page: Page): Promise<void> {
   await glyphCatalogViewport(page).click({ position: FIRST_GLYPH_PREVIEW_POINT });
 }
 
-/** Keeps the canvas name-cell coordinate contract in one place. */
+/** Keeps the catalog name-cell coordinate contract in one place. */
 export async function clickFirstCatalogGlyphName(page: Page): Promise<void> {
   await glyphCatalogViewport(page).click({ position: FIRST_GLYPH_NAME_POINT });
 }

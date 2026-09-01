@@ -4,22 +4,20 @@ import type {
 } from "@/types/glyphCatalogRenderer";
 
 /**
- * Selects one glyph catalog renderer for the caller-owned workspace session.
+ * Selects Slug or delegates SVG presentation back to the React catalog gate.
  *
  * @remarks
- * Only Slug initialization failure selects SVG. Once returned, the selection
- * is immutable; later renderer failures remain owned by the selected backend.
+ * Only Slug initialization failure selects SVG. Once Slug is returned, later
+ * renderer failures remain owned by Slug and never change the session backend.
  *
- * @param signal - Aborts selection without constructing the SVG fallback.
+ * @param signal - Aborts selection when the owning catalog is disposed.
  * @param createSlug - Initializes the preferred WebGPU renderer.
- * @param createSvg - Constructs the fallback after a non-abort initialization failure.
- * @returns The one renderer selection the caller must retain and destroy.
- * @throws {Error} when selection is aborted or SVG construction fails.
+ * @returns The initialized Slug renderer, or the SVG backend decision.
+ * @throws {Error} when selection is aborted.
  */
 export async function selectGlyphCatalogRenderer(
   signal: AbortSignal,
   createSlug: () => Promise<GlyphCatalogRenderer>,
-  createSvg: () => GlyphCatalogRenderer,
 ): Promise<GlyphCatalogRendererSelection> {
   let slug: GlyphCatalogRenderer | null = null;
   try {
@@ -33,8 +31,7 @@ export async function selectGlyphCatalogRenderer(
     }
 
     console.warn("Slug glyph catalog initialization failed; using SVG", error);
-    const renderer = createSvg();
-    return { kind: "svg", renderer };
+    return { kind: "svg" };
   }
 }
 
