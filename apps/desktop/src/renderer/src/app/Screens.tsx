@@ -12,6 +12,7 @@ import { SettingsNavigationProvider } from "@/context/SettingsNavigationProvider
 import { GlyphCatalogProvider } from "@/context/GlyphCatalogProvider";
 import { ReadOnlyNoticeDialog } from "@/components/chrome/ReadOnlyNoticeDialog";
 import { AboutScreen } from "@/views/AboutScreen";
+import { FeedbackScreen } from "@/views/FeedbackScreen";
 import { UpdateScreen } from "@/views/UpdateScreen";
 import { DocumentErrorBoundary } from "./DocumentErrorBoundary";
 
@@ -29,6 +30,7 @@ export const Screens = () => {
   return (
     <Routes>
       <Route path="/about" element={<AboutScreen />} />
+      <Route path="/feedback" element={<FeedbackScreen />} />
       <Route path="/launcher" element={<Landing />} />
       <Route path="/update" element={<UpdateScreen />} />
       <Route path="/e2e-root-render-failure" element={<E2ERootRenderFailure />} />

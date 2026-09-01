@@ -15,6 +15,7 @@ import * as ipc from "../../shared/ipc/main";
 import { AppIcon } from "./AppIcon";
 import { AboutWindow } from "../about/AboutWindow";
 import { CommandRegistry, type CommandContext } from "../commands/Command";
+import { FeedbackWindow } from "../feedback/FeedbackWindow";
 import { registerCommands } from "../commands/Commands";
 import { ApplicationMenu } from "../menu/ApplicationMenu";
 import { createShiftLogger, type ShiftLogger } from "../logging";
@@ -46,6 +47,7 @@ export class App {
   readonly #lifecycle: AppLifecycle;
   readonly #nativeDialogs: NativeDialogs;
   readonly #aboutWindow: AboutWindow;
+  readonly #feedbackWindow: FeedbackWindow;
   readonly #updater: AppUpdater;
 
   #commands = new CommandRegistry();
@@ -100,6 +102,10 @@ export class App {
     this.#aboutWindow = new AboutWindow(
       path.join(__dirname, "preload.js"),
       createShiftLogger("app.about"),
+    );
+    this.#feedbackWindow = new FeedbackWindow(
+      path.join(__dirname, "preload.js"),
+      createShiftLogger("app.feedback"),
     );
     this.#workspaces = new WorkspaceManager({
       documentsRoot: () => this.#requireDocumentsRoot(),
@@ -521,6 +527,9 @@ export class App {
         active: () => window ?? null,
         showAbout: () => {
           this.#aboutWindow.show();
+        },
+        showFeedback: () => {
+          this.#feedbackWindow.show();
         },
         showHome: () => {
           const home = this.#windows

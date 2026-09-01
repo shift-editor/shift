@@ -4,7 +4,6 @@ import type { Command } from "./Command";
 import type { CommandRegistry } from "./Command";
 import {
   SHIFT_DISCORD_URL,
-  SHIFT_FEEDBACK_EMAIL,
   SHIFT_NEW_ISSUE_URL,
   SHIFT_WEBSITE_URL,
   SHIFT_X_URL,
@@ -59,7 +58,7 @@ const helpCommands: Command[] = [
   {
     id: "help.emailFeedback",
     label: "Feedback…",
-    run: () => shell.openExternal(`mailto:${SHIFT_FEEDBACK_EMAIL}`),
+    run: (ctx) => ctx.windows.showFeedback(),
   },
 ];
 

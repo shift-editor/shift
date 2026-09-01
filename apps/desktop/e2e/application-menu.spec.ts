@@ -136,6 +136,38 @@ launcherTest("application menu exposes native shell actions", async ({ electronA
   expect(menu.viewLabels.includes("Developer")).toBe(!menu.packaged && menu.platform === "darwin");
 });
 
+launcherTest("Feedback opens a modeless composer", async ({ electronApp, page }) => {
+  const feedbackOpened = electronApp.waitForEvent("window");
+
+  await clickApplicationMenuItem(page, electronApp, "help.emailFeedback");
+  const feedbackPage = await feedbackOpened;
+  await feedbackPage.waitForURL(/#\/feedback$/);
+
+  const feedback = feedbackPage.getByRole("textbox", {
+    name: "What would you like to share?",
+  });
+  const emailFeedback = feedbackPage.getByRole("button", { name: "Email Feedback" });
+  await expect(feedbackPage.getByRole("heading", { name: "Feedback" })).toBeVisible();
+  await expect(emailFeedback).toBeDisabled();
+  await expect(feedbackPage.getByRole("link", { name: "Report a Problem…" })).toHaveAttribute(
+    "href",
+    "https://github.com/shift-editor/shift/issues/new?template=bug_report.yml",
+  );
+  await expect(feedbackPage.getByRole("link", { name: "Discord" })).toHaveAttribute(
+    "href",
+    "https://discord.gg/tgcy4R3Va4",
+  );
+
+  await feedback.fill("   ");
+  await expect(emailFeedback).toBeDisabled();
+  await feedback.fill("The editor is working well.");
+  await expect(emailFeedback).toBeEnabled();
+
+  const feedbackWindow = await electronApp.browserWindow(feedbackPage);
+  expect(await feedbackWindow.evaluate((window) => window.isModal())).toBe(false);
+  await feedbackWindow.dispose();
+});
+
 authoredTest("Settings opens the active font configuration", async ({ electronApp, page }) => {
   await clickApplicationMenuItem(page, electronApp, "app.showSettings");
 
