@@ -1,3 +1,5 @@
+import { Tooltip, TooltipContent, TooltipTrigger } from "@shift/ui";
+
 export type AnchorPosition = "tl" | "tm" | "tr" | "lm" | "m" | "rm" | "bl" | "bm" | "br";
 
 export interface TransformGridProps {
@@ -43,17 +45,23 @@ export const TransformGrid = ({
     >
       <rect x="4" y="4" width="54" height="44" stroke="#C2C2C2" strokeWidth="2" />
       {anchorPositions.map(({ id, label, cx, cy }) => (
-        <circle
-          key={id}
-          role="button"
-          aria-label={label}
-          cx={cx}
-          cy={cy}
-          r="4"
-          fill={activeAnchor === id ? ACTIVE_COLOR : INACTIVE_COLOR}
-          style={{ cursor: onChange ? "pointer" : "default" }}
-          onClick={() => onChange?.(id)}
-        />
+        <Tooltip key={id}>
+          <TooltipTrigger>
+            <circle
+              role="button"
+              aria-label={label}
+              cx={cx}
+              cy={cy}
+              r="4"
+              fill={activeAnchor === id ? ACTIVE_COLOR : INACTIVE_COLOR}
+              style={{ cursor: onChange ? "pointer" : "default" }}
+              onClick={() => {
+                if (onChange) onChange(id);
+              }}
+            />
+          </TooltipTrigger>
+          <TooltipContent>{label}</TooltipContent>
+        </Tooltip>
       ))}
     </svg>
   );

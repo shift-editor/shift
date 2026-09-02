@@ -53,9 +53,14 @@ export const InstancesSettingsPanel = ({
           {canAuthor ? (
             <CreateInstanceMenu onInstanceCreated={setPendingInstanceId} />
           ) : (
-            <SidebarActionButton label="Create instance" disabled>
-              <PlusIcon className="h-3 w-3" />
-            </SidebarActionButton>
+            <Tooltip>
+              <TooltipTrigger>
+                <SidebarActionButton label="Create instance" aria-disabled="true">
+                  <PlusIcon className="h-3 w-3" />
+                </SidebarActionButton>
+              </TooltipTrigger>
+              <TooltipContent>Create instance</TooltipContent>
+            </Tooltip>
           )}
         </div>
 

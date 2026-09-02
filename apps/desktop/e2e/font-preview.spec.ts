@@ -248,7 +248,10 @@ test.describe("retained font source Grid preview", () => {
       .toBe(true);
 
     await settingsDialog.getByRole("button", { name: "Sources", exact: true }).click();
-    await expect(settingsDialog.getByLabel("Create source")).toBeDisabled();
+    const createSource = settingsDialog.getByLabel("Create source");
+    await expect(createSource).toHaveAttribute("aria-disabled", "true");
+    await createSource.hover();
+    await expect(page.getByRole("tooltip")).toHaveText("Create source");
     const sourceControls = settingsDialog.locator("main input");
     await expect.poll(() => sourceControls.count()).toBeGreaterThan(0);
     await expect

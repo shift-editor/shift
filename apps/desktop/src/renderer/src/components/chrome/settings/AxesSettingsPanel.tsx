@@ -57,9 +57,14 @@ export const AxesSettingsPanel = ({ initialAxisId, canAuthor }: AxesSettingsPane
           {canAuthor ? (
             <CreateAxisMenu onAxisCreated={setCreatedAxisId} />
           ) : (
-            <SidebarActionButton label="Create axis" disabled>
-              <PlusIcon className="h-3 w-3" />
-            </SidebarActionButton>
+            <Tooltip>
+              <TooltipTrigger>
+                <SidebarActionButton label="Create axis" aria-disabled="true">
+                  <PlusIcon className="h-3 w-3" />
+                </SidebarActionButton>
+              </TooltipTrigger>
+              <TooltipContent>Create axis</TooltipContent>
+            </Tooltip>
           )}
         </div>
 

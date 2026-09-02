@@ -50,9 +50,14 @@ export const SourcesSettingsPanel = ({ initialSourceId, canAuthor }: SourcesSett
           {canAuthor ? (
             <CreateSourceMenu onSourceCreated={setPendingSourceId} />
           ) : (
-            <SidebarActionButton label="Create source" disabled>
-              <PlusIcon className="h-3 w-3" />
-            </SidebarActionButton>
+            <Tooltip>
+              <TooltipTrigger>
+                <SidebarActionButton label="Create source" aria-disabled="true">
+                  <PlusIcon className="h-3 w-3" />
+                </SidebarActionButton>
+              </TooltipTrigger>
+              <TooltipContent>Create source</TooltipContent>
+            </Tooltip>
           )}
         </div>
 

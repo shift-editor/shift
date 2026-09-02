@@ -98,6 +98,26 @@ test.describe("Editor view", () => {
     await expect(glyphProperties(page).getByText("Boolean", { exact: true })).toBeVisible();
   });
 
+  test("explains icon-only editor actions on hover", async ({ page }) => {
+    const toolbar = page.getByRole("toolbar", { name: "Editor tools" });
+    const selectTool = toolbar.getByRole("button", { name: "Select Tool (V)" });
+    await selectTool.hover();
+    await expect(page.getByRole("tooltip")).toHaveText("Select Tool (V)");
+
+    await page.keyboard.press("Meta+a");
+    const rotate = glyphProperties(page).getByRole("button", {
+      name: "Rotate 90 degrees clockwise",
+    });
+    await rotate.hover();
+    await expect(page.getByRole("tooltip")).toHaveText("Rotate 90 degrees clockwise");
+
+    const scaleAnchor = glyphProperties(page).getByRole("button", {
+      name: "Top-left scale anchor",
+    });
+    await scaleAnchor.hover();
+    await expect(page.getByRole("tooltip")).toHaveText("Top-left scale anchor");
+  });
+
   test("keeps advance width text current after a sidebar metrics edit", async ({ page }) => {
     const properties = glyphProperties(page);
     const advanceInput = properties.getByLabel("Advance width", { exact: true });

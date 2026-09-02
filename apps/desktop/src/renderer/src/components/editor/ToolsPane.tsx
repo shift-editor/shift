@@ -37,10 +37,13 @@ export const ToolbarIcon: FC<ToolbarIconProps> = ({
     <Tooltip delayDuration={1500}>
       <TooltipTrigger>
         <ToolbarButton
-          disabled={disabled}
           render={
             <Button
-              className={cn("h-8 w-8 rounded-md", !isActive && "hover:bg-icon-button-hover")}
+              className={cn(
+                "h-8 w-8 rounded-md",
+                !isActive && "hover:bg-icon-button-hover",
+                disabled && "cursor-default opacity-50",
+              )}
               variant={isActive ? "primary" : "ghost"}
               icon={
                 <Icon
@@ -49,9 +52,13 @@ export const ToolbarIcon: FC<ToolbarIconProps> = ({
                 />
               }
               aria-label={tooltip}
-              disabled={disabled}
+              aria-disabled={disabled || undefined}
               isActive={isActive}
-              onClick={onClick}
+              onClick={() => {
+                if (disabled) return;
+
+                if (onClick) onClick();
+              }}
               data-read-only-mutation={onClick ? undefined : true}
               size="icon"
             />

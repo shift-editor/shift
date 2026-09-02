@@ -148,7 +148,7 @@ test.describe("variable-font authoring controls", () => {
     if (!defaultSourceName) throw new Error("Expected default source");
     await expect(
       dialog.getByLabel(`Cannot delete ${defaultSourceName}: default source`),
-    ).toBeDisabled();
+    ).toHaveAttribute("aria-disabled", "true");
     await dialog.getByRole("button", { name: "Bold", exact: true }).click();
     const sourceName = main.getByLabel("Name", { exact: true });
     await sourceName.fill("Display Bold");
