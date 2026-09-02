@@ -43,6 +43,9 @@ typings/
 # TypeScript cache
 *.tsbuildinfo
 
+# Local direnv cache
+.direnv/
+
 # Optional npm cache directory
 .npm
 

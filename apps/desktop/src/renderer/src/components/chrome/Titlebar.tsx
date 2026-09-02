@@ -7,6 +7,11 @@ interface TrafficLightButtonProps {
   isHovered: boolean;
 }
 
+interface TitlebarProps {
+  closeOnly?: boolean;
+  onClose?: () => void;
+}
+
 const TrafficLightButton = ({ color, onClick, isHovered }: TrafficLightButtonProps) => {
   const colors = {
     close: {
@@ -65,10 +70,20 @@ const TrafficLightButton = ({ color, onClick, isHovered }: TrafficLightButtonPro
   );
 };
 
-export const Titlebar = () => {
+/**
+ * Renders draggable app chrome with full or close-only window controls.
+ *
+ * @param props - Control visibility and optional close behavior for the owning window.
+ */
+export const Titlebar = ({ closeOnly = false, onClose }: TitlebarProps) => {
   const [isHovered, setIsHovered] = useState(false);
 
   const handleClose = () => {
+    if (onClose) {
+      onClose();
+      return;
+    }
+
     getShiftHost().commands.run("window.close");
   };
 
@@ -82,13 +97,19 @@ export const Titlebar = () => {
 
   return (
     <div
-      className="titlebar-drag flex items-center gap-2 px-3 py-2"
+      role="toolbar"
+      aria-label="Window controls"
+      className="titlebar-drag flex shrink-0 items-center gap-2 px-3 py-2"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
       <TrafficLightButton color="close" onClick={handleClose} isHovered={isHovered} />
-      <TrafficLightButton color="minimize" onClick={handleMinimize} isHovered={isHovered} />
-      <TrafficLightButton color="maximize" onClick={handleMaximize} isHovered={isHovered} />
+      {closeOnly ? null : (
+        <>
+          <TrafficLightButton color="minimize" onClick={handleMinimize} isHovered={isHovered} />
+          <TrafficLightButton color="maximize" onClick={handleMaximize} isHovered={isHovered} />
+        </>
+      )}
     </div>
   );
 };

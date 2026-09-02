@@ -111,7 +111,8 @@ export class UpdateWindow {
       maximizable: false,
       fullscreenable: false,
       backgroundColor: "#ffffff",
-      ...(process.platform === "darwin" ? { titleBarStyle: "hiddenInset" as const } : {}),
+      titleBarStyle: "hidden",
+      trafficLightPosition: { x: -100, y: -100 },
       webPreferences: {
         preload: this.#preloadPath,
         contextIsolation: true,
