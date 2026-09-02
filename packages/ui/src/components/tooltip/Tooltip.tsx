@@ -28,13 +28,11 @@ function Tooltip({ children, delayDuration }: TooltipProps) {
 }
 
 interface TooltipTriggerProps {
-  children: React.ReactNode;
+  children: React.ReactElement<Record<string, unknown>>;
 }
 
 function TooltipTrigger({ children }: TooltipTriggerProps) {
-  return (
-    <BaseTooltip.Trigger render={<span className="inline-flex" />}>{children}</BaseTooltip.Trigger>
-  );
+  return <BaseTooltip.Trigger render={children} />;
 }
 
 interface TooltipContentProps {
@@ -54,6 +52,7 @@ function TooltipContent({
     <BaseTooltip.Portal>
       <BaseTooltip.Positioner side={side} sideOffset={sideOffset}>
         <BaseTooltip.Popup
+          role="tooltip"
           className={cn(
             "z-50 rounded-md bg-surface px-3 py-1.5 text-xs text-primary border shadow-sm",
             "animate-in fade-in-0 zoom-in-95",

@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import type { Axis, AxisLabel, AxisLabelId } from "@shift/types";
 import { mintAxisLabelId } from "@shift/types";
-import { Button, Checkbox, Input } from "@shift/ui";
+import { Button, Checkbox, Input, Tooltip, TooltipContent, TooltipTrigger } from "@shift/ui";
 import MinusIcon from "@/assets/general/minus.svg";
 import PlusIcon from "@/assets/general/plus.svg";
 import { SettingsNumberField } from "./SettingsNumberField";
@@ -229,21 +229,26 @@ const ElidableCell = ({ label, draft }: { label: AxisLabel; draft: AxisDraft }) 
 
 const RemoveCell = ({ label, draft }: { label: AxisLabel; draft: AxisDraft }) => (
   <td>
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon-sm"
-      className="mx-auto h-5 w-5 text-muted opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-icon-button-hover"
-      aria-label={`Remove ${label.name}`}
-      onClick={async () => {
-        await draft.updateAndCommit((axis) => ({
-          ...axis,
-          labels: axis.labels.filter((item) => item.id !== label.id),
-        }));
-      }}
-    >
-      <MinusIcon className="h-2.5 w-2.5" />
-    </Button>
+    <Tooltip>
+      <TooltipTrigger>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          className="mx-auto h-5 w-5 text-muted opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-icon-button-hover"
+          aria-label={`Remove ${label.name}`}
+          onClick={async () => {
+            await draft.updateAndCommit((axis) => ({
+              ...axis,
+              labels: axis.labels.filter((item) => item.id !== label.id),
+            }));
+          }}
+        >
+          <MinusIcon className="h-2.5 w-2.5" />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{`Remove ${label.name}`}</TooltipContent>
+    </Tooltip>
   </td>
 );
 

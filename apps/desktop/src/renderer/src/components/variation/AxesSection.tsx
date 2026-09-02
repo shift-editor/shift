@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@shift/ui";
 import { CollapsibleSection, SidebarActionButton } from "@/components/sidebar";
 import { AxesPanel } from "./AxesPanel";
 import { CreateAxisMenu } from "./CreateAxisMenu";
@@ -24,9 +25,14 @@ export const AxesSection = ({ defaultOpen = false }: AxesSectionProps) => {
         canAuthor ? (
           <CreateAxisMenu onOpenChange={setAxisMenuOpen} />
         ) : (
-          <SidebarActionButton label="Create axis" data-read-only-mutation>
-            <PlusIcon className="h-3 w-3" />
-          </SidebarActionButton>
+          <Tooltip>
+            <TooltipTrigger>
+              <SidebarActionButton label="Create axis" data-read-only-mutation>
+                <PlusIcon className="h-3 w-3" />
+              </SidebarActionButton>
+            </TooltipTrigger>
+            <TooltipContent>Create axis</TooltipContent>
+          </Tooltip>
         )
       }
     >

@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import type { Axis, MetricDefinition, Source, SourceId, SourceMetricValue } from "@shift/types";
-import { Input, cn } from "@shift/ui";
+import { Input, Tooltip, TooltipContent, TooltipTrigger, cn } from "@shift/ui";
 import MinusIcon from "@/assets/general/minus.svg";
 import PlusIcon from "@/assets/general/plus.svg";
 import { SidebarActionButton, SidebarActionRow } from "@/components/sidebar/SidebarActionRow";
@@ -70,23 +70,42 @@ export const SourcesSettingsPanel = ({ initialSourceId, canAuthor }: SourcesSett
               onClick={() => setSelectedSourceId(source.id)}
               contentClassName="h-8 text-sm font-normal"
               actions={
-                <SidebarActionButton
-                  label={
-                    source.id === font.defaultSource.id
+                <Tooltip>
+                  <TooltipTrigger>
+                    <SidebarActionButton
+                      label={
+                        source.id === font.defaultSource.id
+                          ? `Cannot delete ${source.name}: default source`
+                          : `Delete ${source.name}`
+                      }
+                      className="h-8 hover:bg-icon-button-hover"
+                      aria-disabled={
+                        !canAuthor || sources.length === 1 || source.id === font.defaultSource.id
+                          ? true
+                          : undefined
+                      }
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        if (
+                          !canAuthor ||
+                          sources.length === 1 ||
+                          source.id === font.defaultSource.id
+                        ) {
+                          return;
+                        }
+
+                        font.deleteSource(source.id);
+                      }}
+                    >
+                      <MinusIcon className="h-3 w-3" />
+                    </SidebarActionButton>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {source.id === font.defaultSource.id
                       ? `Cannot delete ${source.name}: default source`
-                      : `Delete ${source.name}`
-                  }
-                  className="h-8 hover:bg-icon-button-hover"
-                  disabled={
-                    !canAuthor || sources.length === 1 || source.id === font.defaultSource.id
-                  }
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    font.deleteSource(source.id);
-                  }}
-                >
-                  <MinusIcon className="h-3 w-3" />
-                </SidebarActionButton>
+                      : `Delete ${source.name}`}
+                  </TooltipContent>
+                </Tooltip>
               }
             >
               <span className="truncate">{source.name}</span>

@@ -6,6 +6,9 @@ import {
   DialogPopup,
   DialogPortal,
   DialogTitle,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
   X,
   cn,
 } from "@shift/ui";
@@ -59,16 +62,21 @@ export const SettingsDialog = ({
             aria-label="Settings details"
             className="relative min-h-0 min-w-0 overflow-hidden bg-canvas"
           >
-            <DialogClose
-              className={cn(
-                "absolute right-2 top-2 z-10 inline-flex h-7 w-7 cursor-pointer",
-                "items-center justify-center rounded text-primary/70 transition-colors",
-                "hover:bg-hover hover:text-primary",
-              )}
-              aria-label="Close settings"
-            >
-              <X className="h-4 w-4" />
-            </DialogClose>
+            <Tooltip>
+              <TooltipTrigger>
+                <DialogClose
+                  className={cn(
+                    "absolute right-2 top-2 z-10 inline-flex h-7 w-7 cursor-pointer",
+                    "items-center justify-center rounded text-primary/70 transition-colors",
+                    "hover:bg-hover hover:text-primary",
+                  )}
+                  aria-label="Close settings"
+                >
+                  <X className="h-4 w-4" />
+                </DialogClose>
+              </TooltipTrigger>
+              <TooltipContent>Close settings</TooltipContent>
+            </Tooltip>
 
             <SettingsCategoryPanel target={activeTarget} canAuthor={canAuthor} />
           </main>

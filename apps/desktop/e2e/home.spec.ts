@@ -85,6 +85,28 @@ test.describe("Home view", () => {
     await expect(surface).toHaveAttribute("data-first-glyph-id", unencoded.id);
   });
 
+  test("explains why source creation is unavailable without axes", async ({ page }) => {
+    await page.evaluate(async () => {
+      const font = window.shift?.font;
+      if (!font) throw new Error("Expected font");
+
+      for (const axis of font.getAxes()) font.deleteAxis(axis.id);
+      await font.editCoordinator.settled();
+    });
+
+    const createSource = page.getByRole("button", { name: "Create source", exact: true });
+    const explanation = page.getByRole("tooltip");
+    await expect(createSource).toHaveAttribute("aria-disabled", "true");
+
+    await createSource.hover();
+    await expect(explanation).toHaveText("Create an axis before adding another source");
+
+    await page.mouse.move(600, 300);
+    await expect(explanation).toBeHidden();
+    await createSource.focus();
+    await expect(explanation).toHaveText("Create an axis before adding another source");
+  });
+
   test("keeps a renamed glyph visible until the catalog confirms its new name", async ({
     page,
   }) => {

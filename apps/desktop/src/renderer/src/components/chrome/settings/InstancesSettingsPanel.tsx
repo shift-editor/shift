@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import type { Axis, NamedInstance, NamedInstanceId } from "@shift/types";
-import { Input, cn } from "@shift/ui";
+import { Input, Tooltip, TooltipContent, TooltipTrigger, cn } from "@shift/ui";
 import MinusIcon from "@/assets/general/minus.svg";
 import PlusIcon from "@/assets/general/plus.svg";
 import { SidebarActionButton, SidebarActionRow } from "@/components/sidebar/SidebarActionRow";
@@ -73,17 +73,24 @@ export const InstancesSettingsPanel = ({
               onClick={() => setSelectedInstanceId(instance.id)}
               contentClassName="h-8 text-sm font-normal"
               actions={
-                <SidebarActionButton
-                  label={`Delete ${instance.name}`}
-                  className="h-8 hover:bg-icon-button-hover"
-                  disabled={!canAuthor}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    font.deleteNamedInstance(instance.id);
-                  }}
-                >
-                  <MinusIcon className="h-3 w-3" />
-                </SidebarActionButton>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <SidebarActionButton
+                      label={`Delete ${instance.name}`}
+                      className="h-8 hover:bg-icon-button-hover"
+                      aria-disabled={!canAuthor || undefined}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        if (!canAuthor) return;
+
+                        font.deleteNamedInstance(instance.id);
+                      }}
+                    >
+                      <MinusIcon className="h-3 w-3" />
+                    </SidebarActionButton>
+                  </TooltipTrigger>
+                  <TooltipContent>{`Delete ${instance.name}`}</TooltipContent>
+                </Tooltip>
               }
             >
               <span className="truncate">{instance.name}</span>
