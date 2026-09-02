@@ -12,11 +12,11 @@ export class ControlLines {
     contours: readonly GlyphRenderContour[],
     isLineVisible?: (from: { x: number; y: number }, to: { x: number; y: number }) => boolean,
   ): void {
-    const { stroke, widthPx } = canvas.theme.glyph;
+    const { color, widthPx } = canvas.theme.controlLine;
     const lw = canvas.pxToUpm(widthPx);
 
     canvas.ctx.save();
-    canvas.ctx.strokeStyle = stroke;
+    canvas.ctx.strokeStyle = color;
     canvas.ctx.lineWidth = lw;
     canvas.ctx.setLineDash([]);
     canvas.ctx.beginPath();

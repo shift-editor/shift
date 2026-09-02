@@ -146,21 +146,44 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
   }
 
   #drawEditableContent(node: GlyphNode, ctx: RenderContext, view: GlyphRenderModel): void {
+    track(view.rootClosedContoursPathCell);
+    ctx.canvas.fillPath(view.rootClosedContoursPath, ctx.canvas.theme.glyph.editableFill);
+
+    track(view.componentsCell);
+    for (const component of view.components) {
+      track(component.closedContoursPathCell);
+      ctx.canvas.fillPath(component.closedContoursPath, ctx.canvas.theme.component.fill);
+    }
+
     this.#outline.draw(ctx.canvas, view, {
-      fill: null,
       stroke: {
         color: ctx.canvas.theme.glyph.stroke,
         widthPx: ctx.canvas.theme.glyph.widthPx,
       },
     });
 
+    for (const component of view.components) {
+      for (const contour of component.contours) {
+        ctx.canvas.strokePath(
+          contour.path,
+          ctx.canvas.theme.glyph.stroke,
+          ctx.canvas.theme.component.widthPx,
+        );
+      }
+    }
+
     this.#drawDebugOverlays(node, ctx, view);
   }
 
   #drawDisplayContent(ctx: RenderContext, view: GlyphRenderModel): void {
-    this.#outline.draw(ctx.canvas, view, {
-      fill: ctx.canvas.theme.glyph.fill,
-    });
+    track(view.closedContoursPathCell);
+    track(view.openContoursPathCell);
+    ctx.canvas.fillPath(view.closedContoursPath, ctx.canvas.theme.glyph.fill);
+    ctx.canvas.strokePath(
+      view.openContoursPath,
+      ctx.canvas.theme.glyph.stroke,
+      ctx.canvas.theme.glyph.widthPx,
+    );
   }
 
   #drawControls(node: GlyphNode, ctx: RenderContext): void {
@@ -223,6 +246,9 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
   }
 
   #selectedSegmentIds(node: GlyphNode): readonly SegmentId[] {
+    const tool = this.editor.toolCell.peek();
+    if (tool?.id === "select" && tool.state.type === "translating") return [];
+
     const segmentIds: SegmentId[] = [];
 
     for (const object of this.editor.objects(this.editor.selection.ids)) {

@@ -1363,6 +1363,7 @@ export class Editor {
         if (!inserted) return false;
 
         this.selection.select(inserted);
+        this.setActiveTool("select");
         await this.font.editCoordinator.settled();
         return true;
       }
@@ -1373,11 +1374,18 @@ export class Editor {
     }
   }
 
-  public boolean(
+  /**
+   * Applies a Boolean operation and selects every resulting contour once committed.
+   *
+   * @param contourIdA - First complete closed contour participating in the operation.
+   * @param contourIdB - Second complete closed contour participating in the operation.
+   * @param operation - Set operation applied to the two contours.
+   */
+  public async boolean(
     contourIdA: ContourId,
     contourIdB: ContourId,
     operation: "union" | "subtract" | "intersect" | "difference",
-  ): void {
+  ): Promise<void> {
     const sourceId = this.activeSourceId;
     if (!sourceId) return;
 
@@ -1388,9 +1396,16 @@ export class Editor {
     if (!node) return;
 
     const layer = this.#fontStore.glyphForId(node.glyphId)?.layerForSource(sourceId);
-    if (!layer) return;
+    if (!layer || !layer.contour(contourIdA) || !layer.contour(contourIdB)) return;
 
+    const previousContourIds = new Set(layer.contours.map((contour) => contour.id));
     layer.applyBooleanOp(contourIdA, contourIdB, operation);
+    await this.font.editCoordinator.settled();
+
+    const resultContourIds = layer.contours
+      .filter((contour) => !previousContourIds.has(contour.id))
+      .map((contour) => contour.id);
+    this.selection.select(resultContourIds);
   }
 
   public duplicateSelection(): PointId[] {

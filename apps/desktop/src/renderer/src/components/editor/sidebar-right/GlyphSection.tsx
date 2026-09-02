@@ -30,7 +30,7 @@ export const GlyphSection = () => {
     sidebearings.hasLayer && leftSidebearing !== null && rightSidebearing !== null;
   const unicode =
     glyph.unicode === null || glyph.unicode === undefined
-      ? "Unencoded"
+      ? "—"
       : formatCodepointAsUPlus(glyph.unicode);
 
   return (

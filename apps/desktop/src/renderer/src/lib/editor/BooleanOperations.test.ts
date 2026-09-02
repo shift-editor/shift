@@ -38,10 +38,17 @@ describe("editor boolean operations", () => {
     editor = new TestEditor();
     await editor.startSession();
     editor.selectTool("shape");
-    editor.dragScene({ down: { x: 10, y: 10 }, start: { x: 20, y: 20 }, end: { x: 100, y: 100 } });
-    await editor.settle();
-    editor.dragScene({ down: { x: 60, y: 60 }, start: { x: 70, y: 70 }, end: { x: 150, y: 150 } });
-    await editor.settle();
+    await editor.dragScene({
+      down: { x: 10, y: 10 },
+      start: { x: 20, y: 20 },
+      end: { x: 100, y: 100 },
+    });
+    editor.selectTool("shape");
+    await editor.dragScene({
+      down: { x: 60, y: 60 },
+      start: { x: 70, y: 70 },
+      end: { x: 150, y: 150 },
+    });
     editor.selection.select(editor.requireGlyphLayer().contours.map(({ id }) => id));
   });
 
@@ -50,9 +57,10 @@ describe("editor boolean operations", () => {
     async ({ operation, contourCount, area, bounds }) => {
       const [contourIdA, contourIdB] = selectedContours(editor);
 
-      editor.boolean(contourIdA, contourIdB, operation);
-      await editor.settle();
-      expectGeometry(editor.requireGlyphLayer(), contourCount, area, bounds);
+      await editor.boolean(contourIdA, contourIdB, operation);
+      const layer = editor.requireGlyphLayer();
+      expectGeometry(layer, contourCount, area, bounds);
+      expect(editor.selection.ids).toEqual(layer.contours.map((contour) => contour.id));
 
       await editor.undo();
       expectGeometry(editor.requireGlyphLayer(), 2, 16_200, [10, 10, 150, 150]);
@@ -62,17 +70,39 @@ describe("editor boolean operations", () => {
     },
   );
 
+  it("clears selection when an operation has no resulting contours", async () => {
+    const layer = editor.requireGlyphLayer();
+    const secondContour = layer.contours[1];
+    if (!secondContour) throw new Error("Expected a second contour");
+
+    layer.applyPositionPatch(
+      secondContour.points.map((point) => ({
+        kind: "point",
+        id: point.id,
+        x: point.x + 200,
+        y: point.y,
+      })),
+    );
+    await editor.settle();
+
+    const [contourIdA, contourIdB] = selectedContours(editor);
+    await editor.boolean(contourIdA, contourIdB, "intersect");
+
+    expect(layer.contours).toEqual([]);
+    expect(editor.selection.ids).toEqual([]);
+  });
+
   it("refuses boolean edits while no authored source is active", async () => {
     const layer = editor.requireGlyphLayer();
     const before = geometrySummary(layer);
     const [contourIdA, contourIdB] = selectedContours(editor);
     editor.setSourceToDefault();
 
-    editor.boolean(contourIdA, contourIdB, "union");
-    await editor.settle();
+    await editor.boolean(contourIdA, contourIdB, "union");
 
     expect(editor.activeSourceId).toBeNull();
     expect(geometrySummary(layer)).toEqual(before);
+    expect(editor.selection.ids).toEqual([contourIdA, contourIdB]);
 
     await editor.undo();
     expectGeometry(layer, 1, 8_100, [10, 10, 100, 100]);
