@@ -3,9 +3,9 @@ import { useLocation } from "react-router";
 import { Button, Progress } from "@shift/ui";
 import { appIcon } from "@/app/branding";
 import { shiftProductName } from "@/app/release";
+import { Titlebar } from "@/components/chrome/Titlebar";
 import { getShiftHost } from "@/host/shiftHost";
 import type { UpdateProgress } from "@shared/update/types";
-import "./UpdateScreen.css";
 
 const INITIAL_PROGRESS: UpdateProgress = {
   percent: 0,
@@ -88,22 +88,17 @@ export const UpdateScreen = () => {
     case "available":
       content = (
         <>
-          <div className="update-window-copy">
-            <h1>
+          <div className="flex flex-col gap-1.5">
+            <h1 className="text-base font-semibold">
               {shiftProductName} {version} is available.
             </h1>
-            <p>Would you like to download it now?</p>
+            <p className="text-sm text-secondary">Would you like to download it now?</p>
           </div>
-          <div className="update-window-actions">
-            <Button
-              variant="primary"
-              size="lg"
-              className="update-window-primary-button"
-              onClick={startDownload}
-            >
+          <div className="flex gap-2.5">
+            <Button variant="primary" className="min-w-36" onClick={startDownload}>
               Download Update
             </Button>
-            <Button size="lg" className="update-window-button" onClick={later}>
+            <Button className="min-w-24" onClick={later}>
               Later
             </Button>
           </div>
@@ -113,18 +108,16 @@ export const UpdateScreen = () => {
     case "downloading":
       content = (
         <>
-          <div className="update-window-copy">
-            <h1>{progressText}</h1>
-          </div>
+          <h1 className="text-base font-semibold">{progressText}</h1>
           <Progress
             aria-label="Update download progress"
             aria-valuetext={progressText}
             value={progress.percent}
-            className="update-window-progress"
-            trackClassName="update-window-progress-track"
-            indicatorClassName="update-window-progress-indicator"
+            className="w-full"
+            trackClassName="bg-secondary/30"
+            indicatorClassName="duration-200"
           />
-          <Button size="lg" className="update-window-button" onClick={cancelDownload}>
+          <Button className="min-w-24" onClick={cancelDownload}>
             Cancel
           </Button>
         </>
@@ -133,21 +126,14 @@ export const UpdateScreen = () => {
     case "ready":
       content = (
         <>
-          <div className="update-window-copy">
-            <h1>
-              {shiftProductName} {version} is ready to install.
-            </h1>
-          </div>
-          <div className="update-window-actions">
-            <Button
-              variant="primary"
-              size="lg"
-              className="update-window-primary-button"
-              onClick={restartToUpdate}
-            >
+          <h1 className="text-base font-semibold">
+            {shiftProductName} {version} is ready to install.
+          </h1>
+          <div className="flex gap-2.5">
+            <Button variant="primary" className="min-w-36" onClick={restartToUpdate}>
               Restart and Install
             </Button>
-            <Button size="lg" className="update-window-button" onClick={later}>
+            <Button className="min-w-24" onClick={later}>
               Later
             </Button>
           </div>
@@ -157,9 +143,13 @@ export const UpdateScreen = () => {
   }
 
   return (
-    <main className="update-window">
-      <section className="update-window-content" aria-live="polite">
-        <img src={appIcon} alt="" className="update-window-icon" />
+    <main className="flex h-screen flex-col bg-surface text-primary">
+      <Titlebar closeOnly onClose={later} />
+      <section
+        className="flex min-h-0 flex-1 flex-col items-center justify-center gap-[22px] px-6 pb-6 text-center"
+        aria-live="polite"
+      >
+        <img src={appIcon} alt="" className="h-20 w-20 drop-shadow-md" />
         {content}
       </section>
     </main>

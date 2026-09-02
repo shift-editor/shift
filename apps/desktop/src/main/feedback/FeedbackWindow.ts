@@ -1,17 +1,21 @@
-import { app, BrowserWindow, shell } from "electron";
+import { BrowserWindow, shell } from "electron";
 import type { ShiftLogger } from "../logging";
-import { shiftBuildCommit, shiftProductVersion } from "../release";
 import { getRendererSource } from "../utils";
+import {
+  SHIFT_FEEDBACK_DISCORD_URL,
+  SHIFT_FEEDBACK_EMAIL,
+  SHIFT_NEW_ISSUE_URL,
+} from "../../shared/links";
 
-/** Owns the singleton native-framed window that presents Shift product information. */
-export class AboutWindow {
+/** Owns the singleton modeless window for composing and routing user feedback. */
+export class FeedbackWindow {
   readonly #preloadPath: string;
   readonly #log: ShiftLogger;
 
   #window: BrowserWindow | null = null;
 
   /**
-   * Creates a lazily opened About window.
+   * Creates a lazily opened feedback window.
    *
    * @param preloadPath - compiled preload shared with other app windows.
    * @param log - logger that receives renderer and external-link failures.
@@ -21,7 +25,7 @@ export class AboutWindow {
     this.#log = log;
   }
 
-  /** Opens the About window, or focuses the existing instance. */
+  /** Opens the feedback window, or focuses its existing draft. */
   show(): void {
     if (this.#window && !this.#window.isDestroyed()) {
       if (this.#window.isMinimized()) this.#window.restore();
@@ -32,9 +36,9 @@ export class AboutWindow {
     }
 
     const window = new BrowserWindow({
-      width: 420,
-      height: 360,
-      title: `About ${app.name}`,
+      width: 520,
+      height: 500,
+      title: "Feedback",
       show: false,
       resizable: false,
       minimizable: false,
@@ -63,10 +67,17 @@ export class AboutWindow {
       if (this.#window === window) this.#window = null;
     });
     window.webContents.setWindowOpenHandler(({ url }) => {
-      if (!url.startsWith("https://")) return { action: "deny" };
+      if (
+        url !== SHIFT_NEW_ISSUE_URL &&
+        url !== SHIFT_FEEDBACK_DISCORD_URL &&
+        (!url.startsWith(`mailto:${SHIFT_FEEDBACK_EMAIL}?body=`) ||
+          url.slice(`mailto:${SHIFT_FEEDBACK_EMAIL}?body=`.length).includes("&"))
+      ) {
+        return { action: "deny" };
+      }
 
       void shell.openExternal(url).catch((error) => {
-        this.#log.error("about link failed to open", { url, error });
+        this.#log.error("feedback link failed to open", { url, error });
       });
       return { action: "deny" };
     });
@@ -76,24 +87,18 @@ export class AboutWindow {
 
   #load(window: BrowserWindow): void {
     const source = getRendererSource();
-    const query = new URLSearchParams({
-      commit: shiftBuildCommit,
-      name: app.name,
-      version: shiftProductVersion,
-    });
-    const hash = `/about?${query.toString()}`;
 
     if (source.type === "url") {
       const url = new URL(source.source);
-      url.hash = hash;
+      url.hash = "/feedback";
       void window.loadURL(url.toString()).catch((error) => {
-        this.#log.error("about window failed to load", error);
+        this.#log.error("feedback window failed to load", error);
       });
       return;
     }
 
-    void window.loadFile(source.source, { hash }).catch((error) => {
-      this.#log.error("about window failed to load", error);
+    void window.loadFile(source.source, { hash: "/feedback" }).catch((error) => {
+      this.#log.error("feedback window failed to load", error);
     });
   }
 }

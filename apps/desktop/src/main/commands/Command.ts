@@ -115,6 +115,8 @@ export type CommandContext = {
     active: () => Window | null;
     /** Opens the singleton About window, or focuses it when already open. */
     showAbout: () => void;
+    /** Opens the singleton feedback window, or focuses its current draft. */
+    showFeedback: () => void;
     /** Focuses an existing launcher window or creates one when none exists. */
     showHome: () => void;
   };

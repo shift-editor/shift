@@ -25,9 +25,9 @@ export const Landing = () => {
   };
 
   return (
-    <main className="bg-canvas">
+    <main className="flex h-screen flex-col bg-surface">
       <Titlebar />
-      <section className=" flex h-screen flex-col items-center justify-center gap-4">
+      <section className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4">
         <div className="flex flex-col items-center gap-2">
           <LauncherLogo aria-hidden="true" className="h-auto w-[240px] text-primary" />
           <h1 className="sr-only">{shiftProductName}</h1>

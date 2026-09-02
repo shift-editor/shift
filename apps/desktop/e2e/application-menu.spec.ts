@@ -124,6 +124,8 @@ launcherTest("application menu exposes native shell actions", async ({ electronA
       "help.openDiscord",
       "help.openX",
       "help.reportIssue",
+      "help.showLogs",
+      "help.emailFeedback",
     ]),
   );
   expect(menu.settingsAccelerator).toBe("CmdOrCtrl+,");
@@ -132,6 +134,82 @@ launcherTest("application menu exposes native shell actions", async ({ electronA
   );
   expect(menu.interfaceSizeLabels).toEqual(["Increase", "Decrease", "Reset"]);
   expect(menu.viewLabels.includes("Developer")).toBe(!menu.packaged && menu.platform === "darwin");
+});
+
+launcherTest("About uses shared close-only window controls", async ({ electronApp, page }) => {
+  const aboutOpened = electronApp.waitForEvent("window");
+
+  await clickApplicationMenuItem(page, electronApp, "app.showAbout");
+  const aboutPage = await aboutOpened;
+  await aboutPage.waitForURL(/#\/about\?/);
+
+  const windowControls = aboutPage.getByRole("toolbar", { name: "Window controls" });
+  await expect(windowControls.getByRole("button", { name: "close" })).toBeVisible();
+  await expect(windowControls.getByRole("button", { name: "minimize" })).toHaveCount(0);
+  await expect(windowControls.getByRole("button", { name: "maximize" })).toHaveCount(0);
+
+  const aboutWindow = await electronApp.browserWindow(aboutPage);
+  expect(await aboutWindow.evaluate((window) => window.isModal())).toBe(false);
+  await aboutWindow.dispose();
+});
+
+launcherTest("Update uses shared close-only window controls", async ({ page }) => {
+  await page.evaluate(() => {
+    window.location.hash = "/update?state=ready&version=1.2.3";
+  });
+  await page.waitForURL(/#\/update\?state=ready&version=1\.2\.3$/);
+
+  const windowControls = page.getByRole("toolbar", { name: "Window controls" });
+  await expect(windowControls.getByRole("button", { name: "close" })).toBeVisible();
+  await expect(windowControls.getByRole("button", { name: "minimize" })).toHaveCount(0);
+  await expect(windowControls.getByRole("button", { name: "maximize" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Restart and Install" })).toBeVisible();
+});
+
+launcherTest("Feedback opens a modeless composer", async ({ electronApp, page }) => {
+  const feedbackOpened = electronApp.waitForEvent("window");
+
+  await clickApplicationMenuItem(page, electronApp, "help.emailFeedback");
+  const feedbackPage = await feedbackOpened;
+  await feedbackPage.waitForURL(/#\/feedback$/);
+
+  const feedback = feedbackPage.getByRole("textbox", { name: "Email message" });
+  const sendFeedback = feedbackPage.getByRole("button", { name: "Send Feedback" });
+  await expect(feedbackPage.getByRole("heading", { name: "Feedback" })).toBeVisible();
+  await expect(sendFeedback).toBeDisabled();
+  await expect(feedbackPage.getByRole("button", { name: "Cancel" })).toBeVisible();
+  await expect(feedbackPage.getByRole("link", { name: "open an issue on GitHub" })).toHaveAttribute(
+    "href",
+    "https://github.com/shift-editor/shift/issues/new?template=bug_report.yml",
+  );
+  await expect(feedbackPage.getByRole("link", { name: "Discord" })).toHaveAttribute(
+    "href",
+    "https://discord.gg/tgcy4R3Va4",
+  );
+
+  await feedback.fill("   ");
+  await expect(sendFeedback).toBeDisabled();
+  await feedback.fill("The editor is working well.");
+  await expect(sendFeedback).toBeEnabled();
+  await expect(sendFeedback).toHaveAttribute("aria-keyshortcuts", "Meta+Enter Control+Enter");
+
+  await feedback.press(process.platform === "darwin" ? "Meta+A" : "Control+A");
+  expect(
+    await feedback.evaluate((textarea) => ({
+      start: textarea.selectionStart,
+      end: textarea.selectionEnd,
+      length: textarea.value.length,
+    })),
+  ).toEqual({ start: 0, end: 27, length: 27 });
+
+  const windowControls = feedbackPage.getByRole("toolbar", { name: "Window controls" });
+  await expect(windowControls.getByRole("button", { name: "close" })).toBeVisible();
+  await expect(windowControls.getByRole("button", { name: "minimize" })).toHaveCount(0);
+  await expect(windowControls.getByRole("button", { name: "maximize" })).toHaveCount(0);
+
+  const feedbackWindow = await electronApp.browserWindow(feedbackPage);
+  expect(await feedbackWindow.evaluate((window) => window.isModal())).toBe(false);
+  await feedbackWindow.dispose();
 });
 
 authoredTest("Settings opens the active font configuration", async ({ electronApp, page }) => {

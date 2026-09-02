@@ -47,13 +47,18 @@ const helpCommands: Command[] = [
   },
   {
     id: "help.reportIssue",
-    label: "Submit feedback",
+    label: "Report a Problem…",
     run: () => shell.openExternal(SHIFT_NEW_ISSUE_URL),
   },
   {
     id: "help.showLogs",
     label: "Show Logs",
     run: () => shell.showItemInFolder(log.transports.file.getFile().path),
+  },
+  {
+    id: "help.emailFeedback",
+    label: "Feedback…",
+    run: (ctx) => ctx.windows.showFeedback(),
   },
 ];
 
