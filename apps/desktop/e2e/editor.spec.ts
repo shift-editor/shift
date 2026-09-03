@@ -21,6 +21,10 @@ async function setInputValue(input: Locator, value: number): Promise<void> {
   await input.press("Enter");
 }
 
+async function elementWidth(element: Locator): Promise<number> {
+  return (await element.boundingBox())?.width ?? 0;
+}
+
 test.describe("Editor view", () => {
   test.beforeEach(async ({ page }) => {
     // Navigate to glyph "A" (U+0041).
@@ -29,6 +33,39 @@ test.describe("Editor view", () => {
 
   test("full editor matches snapshot", async ({ page }) => {
     await expect(page).toHaveScreenshot("editor-glyph-A.png");
+  });
+
+  test("resets sidebars to their default width on divider double-click", async ({ page }) => {
+    const layout = page.getByTestId("editor-layout-panels");
+    const leftSidebar = layout.getByTestId("left-sidebar-panel");
+    const rightSidebar = layout.getByTestId("right-sidebar-panel");
+    const leftDivider = layout.getByRole("separator", { name: "Resize left sidebar" });
+    const rightDivider = layout.getByRole("separator", { name: "Resize right sidebar" });
+    const layoutWidth = await elementWidth(layout);
+    const defaultWidth = layoutWidth * 0.15;
+
+    await leftDivider.focus();
+    await page.keyboard.press("ArrowRight");
+    await expect.poll(() => elementWidth(leftSidebar)).toBeGreaterThan(defaultWidth);
+    await leftDivider.dispatchEvent("dblclick");
+    await expect.poll(() => elementWidth(leftSidebar)).toBeCloseTo(defaultWidth, 0);
+
+    await rightDivider.focus();
+    await page.keyboard.press("ArrowLeft");
+    await expect.poll(() => elementWidth(rightSidebar)).toBeGreaterThan(defaultWidth);
+    await rightDivider.dispatchEvent("dblclick");
+    await expect.poll(() => elementWidth(rightSidebar)).toBeCloseTo(defaultWidth, 0);
+    await expect.poll(() => elementWidth(leftSidebar)).toBeCloseTo(defaultWidth, 0);
+  });
+
+  test("remains interactive after a renderer reload", async ({ page }) => {
+    await page.reload();
+    await expect(page.locator("#scene-canvas")).toBeVisible({ timeout: 15_000 });
+
+    await page.keyboard.press("Meta+a");
+    await expect
+      .poll(() => page.evaluate(() => window.shift?.editor.selection.ids.length ?? 0))
+      .toBeGreaterThan(0);
   });
 
   test("composited canvas matches snapshot", async ({ page }) => {
@@ -53,6 +90,12 @@ test.describe("Editor view", () => {
     const canvas = new CanvasUtil(page);
     const screenshot = await canvas.screenshotCanvasLayer("marker-canvas");
     await expect(screenshot).toMatchSnapshot("handles-canvas-A.png");
+  });
+
+  test("shows Boolean operations for two completely selected contours", async ({ page }) => {
+    await page.keyboard.press("Meta+a");
+
+    await expect(glyphProperties(page).getByText("Boolean", { exact: true })).toBeVisible();
   });
 
   test("keeps advance width text current after a sidebar metrics edit", async ({ page }) => {

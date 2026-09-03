@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { workspaceTest as test, expect } from "./fixtures/electronApp";
 import {
   clickFirstCatalogGlyph,
@@ -10,6 +10,26 @@ import {
 test.describe("Home view", () => {
   test("glyph grid matches snapshot", async ({ page }) => {
     await expect(page).toHaveScreenshot("home-glyph-grid.png");
+  });
+
+  test("resets both sidebars to the same default width", async ({ page }) => {
+    const layout = page.getByTestId("home-layout-panels");
+    const leftSidebar = page.getByTestId("left-sidebar-panel");
+    const rightSidebar = page.getByTestId("right-sidebar-panel");
+    const leftDivider = page.getByRole("separator", { name: "Resize left sidebar" });
+    const rightDivider = page.getByRole("separator", { name: "Resize right sidebar" });
+    const defaultWidth = (await elementWidth(layout)) * 0.15;
+
+    await leftDivider.focus();
+    await page.keyboard.press("ArrowRight");
+    await leftDivider.dispatchEvent("dblclick");
+
+    await rightDivider.focus();
+    await page.keyboard.press("ArrowLeft");
+    await rightDivider.dispatchEvent("dblclick");
+
+    await expect.poll(() => elementWidth(leftSidebar)).toBeCloseTo(defaultWidth, 0);
+    await expect.poll(() => elementWidth(rightSidebar)).toBeCloseTo(defaultWidth, 0);
   });
 
   test("glyph canvas contributes rendered outlines", async ({ page }) => {
@@ -119,6 +139,10 @@ test.describe("Home view", () => {
       .toEqual(initialSize);
   });
 });
+
+async function elementWidth(element: Locator): Promise<number> {
+  return (await element.boundingBox())?.width ?? 0;
+}
 
 async function createQuickGlyph(page: Page) {
   await page.getByRole("button", { name: "Create glyph", exact: true }).click();

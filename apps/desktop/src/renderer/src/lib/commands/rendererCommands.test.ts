@@ -31,8 +31,8 @@ describe("empty and invalid editor operations", () => {
     expect(editor.glyphContours).toEqual([]);
   });
 
-  it("ignores boolean operations with missing contour identities", () => {
-    editor.boolean(mintContourId(), mintContourId(), "union");
+  it("ignores boolean operations with missing contour identities", async () => {
+    await editor.boolean(mintContourId(), mintContourId(), "union");
     expect(editor.glyphContours).toEqual([]);
   });
 

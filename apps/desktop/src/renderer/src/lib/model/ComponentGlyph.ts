@@ -31,6 +31,7 @@ export class ComponentGlyph {
   readonly transformCell: Signal<MatModel>;
   readonly resolvedTransformCell: Signal<MatModel>;
   readonly contoursCell: Signal<readonly GlyphContour[]>;
+  readonly closedContoursPathCell: Signal<Path2D>;
   readonly childrenCell: Signal<readonly ComponentGlyph[]>;
   readonly boundsCell: Signal<BoundsType | null>;
 
@@ -94,6 +95,14 @@ export class ComponentGlyph {
     });
 
     this.contoursCell = renderModel.contoursAt(this.#glyphIdCell, this.resolvedTransformCell, this);
+    this.closedContoursPathCell = computed(() => {
+      const path = new Path2D();
+      for (const contour of this.contoursCell.value) {
+        contour.trackShape();
+        if (contour.contour.closed) path.addPath(contour.path);
+      }
+      return path;
+    });
     this.childrenCell = computed(() =>
       this.#renderModel.childrenOf(
         this.#definitionCell.value.componentPath,
@@ -141,6 +150,10 @@ export class ComponentGlyph {
 
   get contours(): readonly GlyphContour[] {
     return this.contoursCell.peek();
+  }
+
+  get closedContoursPath(): Path2D {
+    return this.closedContoursPathCell.peek();
   }
 
   get children(): readonly ComponentGlyph[] {

@@ -19,7 +19,9 @@ export interface Theme {
   cursor: { color: string; widthPx: number };
   guides: { color: string; widthPx: number };
   selection: { fill: string; stroke: string; widthPx: number };
-  glyph: { fill: string; stroke: string; widthPx: number };
+  glyph: { fill: string; editableFill: string; stroke: string; widthPx: number };
+  component: { fill: string; widthPx: number };
+  controlLine: { color: string; widthPx: number };
   handle: {
     corner: HandleStateStyles;
     smooth: HandleStateStyles;
@@ -59,46 +61,53 @@ const hover = (alpha: number) => `rgba(255, 255, 255, ${alpha})`;
 
 export const DEFAULT_THEME: Theme = {
   cursor: { color: "#0C92F4", widthPx: 1.25 },
-  guides: { color: "#6366f1", widthPx: 0.5 },
+  guides: { color: "rgba(37, 99, 235, 0.50)", widthPx: 0.5 },
   selection: {
     fill: "rgba(59, 130, 246, 0.1)",
     stroke: "rgba(59, 130, 246, 0.5)",
     widthPx: 0.5,
   },
-  glyph: { fill: "#000000", stroke: "#000000", widthPx: 0.75 },
+  glyph: {
+    fill: "#000000",
+    editableFill: "rgba(225, 225, 225, 0.20)",
+    stroke: "#000000",
+    widthPx: 0.75,
+  },
+  component: { fill: "rgba(231, 231, 231, 0.75)", widthPx: 1 },
+  controlLine: { color: "rgba(136, 136, 136, 0.65)", widthPx: 0.75 },
   handle: {
     corner: {
-      idle: { fill: "#ffffff", stroke: "#d203c4", size: 6, lineWidth: 0.5 },
+      idle: { fill: "#ffffff", stroke: "#0C92F4", size: 6, lineWidth: 0.5 },
       hovered: {
         fill: "#ffffff",
-        stroke: "#d203c4",
+        stroke: "#0C92F4",
         size: 6,
-        lineWidth: 1,
-        overlayColor: hover(0.5),
-      },
-      selected: { fill: "#d203c4", stroke: "#ffffff", size: 8, lineWidth: 2 },
-    },
-    smooth: {
-      idle: { fill: "#ffffff", stroke: "#03D211", size: 2.5, lineWidth: 3 },
-      hovered: {
-        fill: "#ffffff",
-        stroke: "#03D211",
-        size: 3,
-        lineWidth: 3,
+        lineWidth: 0.75,
         overlayColor: hover(0.1),
       },
-      selected: { fill: "#03D211", stroke: "#ffffff", size: 4, lineWidth: 4 },
+      selected: { fill: "#0C92F4", stroke: "#ffffff", size: 7, lineWidth: 1 },
+    },
+    smooth: {
+      idle: { fill: "#ffffff", stroke: "#0C92F4", size: 2.5, lineWidth: 2 },
+      hovered: {
+        fill: "#ffffff",
+        stroke: "#0C92F4",
+        size: 2.5,
+        lineWidth: 2,
+        overlayColor: hover(0.1),
+      },
+      selected: { fill: "#0C92F4", stroke: "#ffffff", size: 3, lineWidth: 4 },
     },
     control: {
-      idle: { fill: "#ffffff", stroke: "#B0B0B0", size: 2.5, lineWidth: 3 },
+      idle: { fill: "#ffffff", stroke: "#B0B0B0", size: 2, lineWidth: 2 },
       hovered: {
         fill: "#ffffff",
         stroke: "#B0B0B0",
-        size: 3,
+        size: 2.5,
         lineWidth: 3,
         overlayColor: hover(0.1),
       },
-      selected: { fill: "#B0B0B0", stroke: "#ffffff", size: 4, lineWidth: 4 },
+      selected: { fill: "#B0B0B0", stroke: "#ffffff", size: 2.5, lineWidth: 3 },
     },
     anchor: {
       idle: { fill: "#ffffff", stroke: "#6B15EC", size: 6, lineWidth: 1 },
@@ -109,18 +118,18 @@ export const DEFAULT_THEME: Theme = {
         lineWidth: 1,
         overlayColor: hover(0.75),
       },
-      selected: { fill: "#6B15EC", stroke: "#ffffff", size: 8, lineWidth: 2 },
+      selected: { fill: "#6B15EC", stroke: "#ffffff", size: 6, lineWidth: 2 },
     },
     direction: {
-      idle: { fill: "#ffffff", stroke: "#d203c4", size: 6, lineWidth: 0.5 },
+      idle: { fill: "#ffffff", stroke: "#0C92F4", size: 6, lineWidth: 0.5 },
       hovered: {
         fill: "#ffffff",
-        stroke: "#d203c4",
+        stroke: "#0C92F4",
         size: 6,
         lineWidth: 1,
         overlayColor: hover(0.1),
       },
-      selected: { fill: "#d203c4", stroke: "#ffffff", size: 8, lineWidth: 2 },
+      selected: { fill: "#0C92F4", stroke: "#ffffff", size: 7, lineWidth: 1 },
     },
     first: {
       idle: {
@@ -143,9 +152,9 @@ export const DEFAULT_THEME: Theme = {
       selected: {
         fill: "#0C92F4",
         stroke: "#ffffff",
-        size: 8,
+        size: 6,
         lineWidth: 1,
-        barSize: 20,
+        barSize: 18,
         barStroke: "#0C92F4",
       },
     },
@@ -158,7 +167,7 @@ export const DEFAULT_THEME: Theme = {
         lineWidth: 1,
         overlayColor: hover(0.5),
       },
-      selected: { fill: "#ffffff", stroke: "#0C92F4", size: 14, lineWidth: 2 },
+      selected: { fill: "#ffffff", stroke: "#0C92F4", size: 12, lineWidth: 2 },
     },
   },
   segment: {

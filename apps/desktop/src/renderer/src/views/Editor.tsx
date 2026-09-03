@@ -1,13 +1,19 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
 import { useParams } from "react-router";
 
-import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@shift/ui";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+  type ResizablePanelHandle,
+} from "@shift/ui";
 import { Toolbar } from "@/components/chrome/Toolbar";
 import { LeftSidebar } from "@/components/editor/LeftSidebar";
 import { RightSidebar } from "@/components/editor/RightSidebar";
 import { Canvas } from "@/components/editor/Canvas";
 import { useEditor } from "@/workspace/WorkspaceContext";
+import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
 import { useFocusZone, ZoneContainer } from "@/context/FocusZoneContext";
 import { KeyboardRouter } from "@/lib/keyboard";
 import { useSignalState } from "@/lib/signals";
@@ -16,8 +22,10 @@ import { asGlyphId, mintNodeId } from "@shift/types";
 export const Editor = () => {
   const { glyphId: glyphIdParam } = useParams();
   const editor = useEditor();
+  const { openedGlyph } = useGlyphCatalog();
   const glyphId = glyphIdParam ? asGlyphId(glyphIdParam) : null;
-  const glyph = glyphId ? editor.glyphForId(glyphId) : null;
+  // Route acquisition publishes openedGlyph after materializing the canonical Glyph.
+  const glyph = openedGlyph && glyphId ? editor.glyphForId(glyphId) : null;
   const cursorStyle = useSignalState(editor.cursorCell);
   const gesture = useSignalState(editor.gesture.cell);
   const activeSourceId = useSignalState(editor.activeSourceIdCell);
@@ -119,6 +127,9 @@ export const Editor = () => {
   );
 };
 
+const LEFT_SIDEBAR_DEFAULT_SIZE = 15;
+const RIGHT_SIDEBAR_DEFAULT_SIZE = 15;
+
 const EditorLayout = ({
   cursorStyle,
   gesture,
@@ -127,52 +138,70 @@ const EditorLayout = ({
   cursorStyle: string;
   gesture: string;
   children: ReactNode;
-}) => (
-  <div
-    data-testid="editor-shell"
-    className="shift-editor-shell flex h-screen w-screen min-w-[600px] flex-col bg-white"
-    data-gesture={gesture}
-    style={{ "--shift-cursor": cursorStyle } as React.CSSProperties}
-  >
-    <Toolbar />
-    <ResizablePanelGroup
-      direction="horizontal"
-      autoSaveId="shift:editor-layout"
-      className="flex-1 overflow-hidden"
+}) => {
+  const leftSidebarPanelRef = useRef<ResizablePanelHandle>(null);
+  const rightSidebarPanelRef = useRef<ResizablePanelHandle>(null);
+
+  return (
+    <div
+      data-testid="editor-shell"
+      className="shift-editor-shell flex h-screen w-screen min-w-[600px] flex-col bg-white"
+      data-gesture={gesture}
+      style={{ "--shift-cursor": cursorStyle } as React.CSSProperties}
     >
-      <ResizablePanel
-        id="left-sidebar"
-        order={1}
-        defaultSize={15}
-        minSize={10}
-        maxSize={30}
-        collapsible
-        collapsedSize={0}
+      <Toolbar />
+      <ResizablePanelGroup
+        data-testid="editor-layout-panels"
+        direction="horizontal"
+        autoSaveId="shift:editor-layout"
+        className="flex-1 overflow-hidden"
       >
-        <ZoneContainer zone="sidebar" className="h-full">
-          <LeftSidebar />
-        </ZoneContainer>
-      </ResizablePanel>
-      <ResizableHandle inset="start" />
-      <ResizablePanel id="canvas" order={2} minSize={30}>
-        <ZoneContainer zone="canvas" className="h-full">
-          {children}
-        </ZoneContainer>
-      </ResizablePanel>
-      <ResizableHandle inset="end" />
-      <ResizablePanel
-        id="right-sidebar"
-        order={3}
-        defaultSize={15}
-        minSize={10}
-        maxSize={30}
-        collapsible
-        collapsedSize={0}
-      >
-        <ZoneContainer zone="sidebar" className="h-full">
-          <RightSidebar />
-        </ZoneContainer>
-      </ResizablePanel>
-    </ResizablePanelGroup>
-  </div>
-);
+        <ResizablePanel
+          ref={leftSidebarPanelRef}
+          data-testid="left-sidebar-panel"
+          id="left-sidebar"
+          order={1}
+          defaultSize={LEFT_SIDEBAR_DEFAULT_SIZE}
+          minSize={10}
+          maxSize={30}
+          collapsible
+          collapsedSize={0}
+        >
+          <ZoneContainer zone="sidebar" className="h-full">
+            <LeftSidebar />
+          </ZoneContainer>
+        </ResizablePanel>
+        <ResizableHandle
+          aria-label="Resize left sidebar"
+          inset="start"
+          onDoubleClick={() => leftSidebarPanelRef.current?.resize(LEFT_SIDEBAR_DEFAULT_SIZE)}
+        />
+        <ResizablePanel id="canvas" order={2} minSize={30}>
+          <ZoneContainer zone="canvas" className="h-full">
+            {children}
+          </ZoneContainer>
+        </ResizablePanel>
+        <ResizableHandle
+          aria-label="Resize right sidebar"
+          inset="end"
+          onDoubleClick={() => rightSidebarPanelRef.current?.resize(RIGHT_SIDEBAR_DEFAULT_SIZE)}
+        />
+        <ResizablePanel
+          ref={rightSidebarPanelRef}
+          data-testid="right-sidebar-panel"
+          id="right-sidebar"
+          order={3}
+          defaultSize={RIGHT_SIDEBAR_DEFAULT_SIZE}
+          minSize={10}
+          maxSize={30}
+          collapsible
+          collapsedSize={0}
+        >
+          <ZoneContainer zone="sidebar" className="h-full">
+            <RightSidebar />
+          </ZoneContainer>
+        </ResizablePanel>
+      </ResizablePanelGroup>
+    </div>
+  );
+};

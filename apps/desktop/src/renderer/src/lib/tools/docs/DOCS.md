@@ -1,6 +1,6 @@
 # Tools
 
-<!-- reviewed: 2026-08-29 -->
+<!-- reviewed: 2026-09-02 -->
 
 State machine-based tool system for the Shift font editor: translates pointer/keyboard input into tool-specific state transitions and rendering.
 
@@ -39,7 +39,6 @@ tools/
     ToolManager.ts       — tool orchestration, contribution ownership, replacement
     ToolManifest.ts      — ToolManifest registration descriptor
     ToolRegistration.ts  — ownership handle for replace/remove lifecycle
-    StateDiagram.ts      — defineStateDiagram for declarative tool state specs
     ToolStateMap.ts      — union map of all built-in tool states
     createContext.ts     — ToolName, ToolState, BUILT_IN_TOOL_IDS
   hand/                  — canvas panning (createBehavior style)
@@ -62,7 +61,6 @@ tools/
 - `GestureDetector` — stateful recognizer: drag threshold, double-click timing. Fed raw `pointerDown`/`Move`/`Up`, emits `ToolEvent[]`.
 - `ToolManifest` — `{ id, create, icon, tooltip, shortcut?, hidden?, disabled? }`. Registration descriptor passed to `editor.registerTool`. Hidden tools are omitted from the toolbar; disabled tools render as non-interactive controls; both suppress user keyboard shortcuts while remaining programmatically activatable.
 - `ToolRegistration` — exclusive ownership handle returned by `editor.registerTool`; exposes `replace(manifest)` and idempotent `dispose()`.
-- `StateDiagram` — `{ states, initial, transitions }`. Declarative spec for compliance testing.
 - `ToolName` — `string` (not a fixed union; extensible for plugins).
 - `ToolState` — `{ type: string }` base interface for all tool state unions.
 - `Coordinates` — `{ screen, scene }` bundle on pointer events.
@@ -161,8 +159,7 @@ All three receive a `Canvas` instance.
    - Declare `readonly behaviors: Behavior<MyState>[] = [...]`.
    - Implement `initialState()` returning `{ type: "idle" }`.
    - Implement `activate()` with `this.setState({ type: "ready" })`.
-3. Optionally add `static stateSpec = defineStateDiagram(...)` for compliance testing.
-4. Register in `registerBuiltInTools` (`tools.ts`): `editor.registerTool({ id, create, icon, tooltip, shortcut?, hidden?, disabled? })`.
+3. Register in `registerBuiltInTools` (`tools.ts`): `editor.registerTool({ id, create, icon, tooltip, shortcut?, hidden?, disabled? })`.
 
 ### Adding a behavior (createBehavior style)
 
@@ -199,9 +196,8 @@ export class MyBehavior implements Behavior<MyState> {
 ### Adding a state
 
 1. Add a variant to the state union: `| { type: "newState"; data: Data }`.
-2. If using `stateSpec`, add the state to `states` and add transitions.
-3. Create a behavior (or extend an existing one) with handlers that guard on `state.type === "newState"`.
-4. Insert the behavior at the right position in the tool's `behaviors` array.
+2. Create a behavior (or extend an existing one) with handlers that guard on `state.type === "newState"`.
+3. Insert the behavior at the right position in the tool's `behaviors` array.
 
 ### Using a fluent position edit for drag mutations
 

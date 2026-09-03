@@ -6,6 +6,7 @@
  * smooth/corner nodes and off-curve handles — exercising every visual style.
  */
 
+import type { Page } from "@playwright/test";
 import { workspaceTest as test, expect, navigateToEditor } from "./fixtures/electronApp";
 import { CanvasUtil } from "./fixtures/CanvasUtil";
 
@@ -14,6 +15,23 @@ const GLYPH_S = "53"; // Complex quadratic curves
 const GLYPH_B = "42"; // Mix of curves + straights
 const GLYPH_I = "49"; // Simple straight segments
 const GLYPH_Q = "51"; // Counter with curves
+
+async function selectedSegmentPixelCount(page: Page): Promise<number> {
+  return page.locator("#scene-canvas").evaluate((element) => {
+    const canvas = element as HTMLCanvasElement;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Expected scene canvas context");
+
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+    let count = 0;
+    for (let index = 0; index < pixels.length; index += 4) {
+      if (pixels[index] === 24 && pixels[index + 1] === 134 && pixels[index + 2] === 215) {
+        count++;
+      }
+    }
+    return count;
+  });
+}
 
 // ---------------------------------------------------------------------------
 // S glyph — full layer snapshots
@@ -114,6 +132,39 @@ test.describe("Pen tool drawing — segment snapshots", () => {
     const canvasUtil = new CanvasUtil(page);
     const screenshot = await canvasUtil.screenshotCanvasContainer();
     await expect(screenshot).toMatchSnapshot("pen-straight-segment.png");
+  });
+
+  test("selected segment highlight hides while translating", async ({ page }) => {
+    const canvas = page.locator("#interactive-canvas");
+    await page.keyboard.press("p");
+    await canvas.click({ position: { x: 500, y: 300 } });
+    await canvas.click({ position: { x: 700, y: 500 } });
+    await page.getByRole("button", { name: "Select Tool (V)" }).click();
+    await canvas.click({ position: { x: 600, y: 400 } });
+    await expect.poll(() => selectedSegmentPixelCount(page)).toBeGreaterThan(0);
+
+    const bounds = await canvas.boundingBox();
+    if (!bounds) throw new Error("Expected interactive canvas bounds");
+    await page.mouse.move(bounds.x + 600, bounds.y + 400);
+    await page.mouse.down();
+    await page.mouse.move(bounds.x + 640, bounds.y + 440, { steps: 5 });
+    await expect.poll(() => selectedSegmentPixelCount(page)).toBe(0);
+    await page.mouse.up();
+  });
+
+  test("space preview keeps an open contour outline visible", async ({ page }) => {
+    await page.keyboard.press("p");
+
+    const canvas = page.locator("#interactive-canvas");
+    await canvas.click({ position: { x: 500, y: 300 } });
+    await canvas.click({ position: { x: 700, y: 500 } });
+    await page.keyboard.down("Space");
+    await page.waitForTimeout(300);
+
+    const canvasUtil = new CanvasUtil(page);
+    const screenshot = await canvasUtil.screenshotCanvasContainer();
+    await page.keyboard.up("Space");
+    await expect(screenshot).toMatchSnapshot("pen-open-contour-space-preview.png");
   });
 
   test("preview line follows the latest on-curve endpoint after undo", async ({ page }) => {

@@ -22,12 +22,14 @@ describe("editor clipboard operations", () => {
     const source = layer.contours[0]!;
 
     expect(await editor.copy()).toBe(true);
+    editor.selectTool("shape");
     expect(await editor.paste()).toBe(true);
 
     const pasted = layer.contours[1]!;
     expect(contourShape(pasted)).toEqual(offsetContour(source, 20, -20));
     expect(pasted.points.map(({ id }) => id)).not.toEqual(source.points.map(({ id }) => id));
     expect(editor.selection.ids).toEqual(pasted.points.map(({ id }) => id));
+    expect(editor.toolIf("select")?.state).toEqual({ type: "ready" });
   });
 
   it("compounds repeated paste offsets and undoes each insertion separately", async () => {

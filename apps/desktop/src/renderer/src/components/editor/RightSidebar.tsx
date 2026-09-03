@@ -1,5 +1,5 @@
 import { Separator } from "@shift/ui";
-import { isAnchorId, isPointId } from "@shift/types";
+import { isAnchorId, isContourId, isPointId } from "@shift/types";
 import { TransformSection } from "./sidebar-right/TransformSection";
 import { ScaleSection } from "./sidebar-right/ScaleSection";
 import { TransformOriginProvider } from "@/context/TransformOriginContext";
@@ -20,6 +20,7 @@ export const RightSidebar = () => {
 
   const hasPointSelection = selection.ids.some(isPointId);
   const hasAnchorSelection = selection.ids.some(isAnchorId);
+  const hasBooleanSelection = selection.ids.filter(isContourId).length >= 2;
 
   return (
     <aside
@@ -36,11 +37,15 @@ export const RightSidebar = () => {
           <GlyphSection />
         </div>
         <Separator />
-        {hasPointSelection && (
+        {(hasPointSelection || hasBooleanSelection) && (
           <div className="px-3 py-3 flex flex-col gap-4">
             <BooleanOps />
-            <TransformSection />
-            <ScaleSection />
+            {hasPointSelection && (
+              <>
+                <TransformSection />
+                <ScaleSection />
+              </>
+            )}
           </div>
         )}
         {!hasPointSelection && hasAnchorSelection && (

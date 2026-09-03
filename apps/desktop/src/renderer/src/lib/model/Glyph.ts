@@ -1037,6 +1037,9 @@ export class GlyphRenderModel {
   readonly #contoursCell: Signal<readonly GlyphContour[]>;
   readonly #boundsCell: Signal<BoundsType | null>;
   readonly #drawPathCell: Signal<Path2D>;
+  readonly #rootClosedContoursPathCell: Signal<Path2D>;
+  readonly #closedContoursPathCell: Signal<Path2D>;
+  readonly #openContoursPathCell: Signal<Path2D>;
   readonly #svgPathCell: Signal<string>;
   readonly #sidebearingsCell: Signal<GlyphSidebearings>;
   readonly #anchorsCell: Signal<readonly RenderAnchor[]>;
@@ -1115,6 +1118,30 @@ export class GlyphRenderModel {
       for (const contour of this.#contoursCell.value) {
         contour.trackShape();
         path.addPath(contour.path);
+      }
+      return path;
+    });
+    this.#rootClosedContoursPathCell = computed(() => {
+      const path = new Path2D();
+      for (const contour of this.#contoursCell.value) {
+        contour.trackShape();
+        if (contour.component === null && contour.contour.closed) path.addPath(contour.path);
+      }
+      return path;
+    });
+    this.#closedContoursPathCell = computed(() => {
+      const path = new Path2D();
+      for (const contour of this.#contoursCell.value) {
+        contour.trackShape();
+        if (contour.contour.closed) path.addPath(contour.path);
+      }
+      return path;
+    });
+    this.#openContoursPathCell = computed(() => {
+      const path = new Path2D();
+      for (const contour of this.#contoursCell.value) {
+        contour.trackShape();
+        if (!contour.contour.closed) path.addPath(contour.path);
       }
       return path;
     });
@@ -1261,6 +1288,30 @@ export class GlyphRenderModel {
 
   get drawPath(): Path2D {
     return this.#drawPathCell.peek();
+  }
+
+  get rootClosedContoursPathCell(): Signal<Path2D> {
+    return this.#rootClosedContoursPathCell;
+  }
+
+  get rootClosedContoursPath(): Path2D {
+    return this.#rootClosedContoursPathCell.peek();
+  }
+
+  get closedContoursPathCell(): Signal<Path2D> {
+    return this.#closedContoursPathCell;
+  }
+
+  get closedContoursPath(): Path2D {
+    return this.#closedContoursPathCell.peek();
+  }
+
+  get openContoursPathCell(): Signal<Path2D> {
+    return this.#openContoursPathCell;
+  }
+
+  get openContoursPath(): Path2D {
+    return this.#openContoursPathCell.peek();
   }
 
   get svgPath(): string {
