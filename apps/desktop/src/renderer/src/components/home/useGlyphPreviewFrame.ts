@@ -86,9 +86,10 @@ export function useGlyphPreviewFrame(
         for (let start = 0; start < missingGlyphIds.length; start += PREVIEW_BATCH_SIZE) {
           const batch = missingGlyphIds.slice(start, start + PREVIEW_BATCH_SIZE);
           const previews = await glyphPreviews(batch, location);
-          if (isObsolete() || cache.key !== locationKey) return;
+          if (cache.key !== locationKey) return;
 
           cache.fill(batch, previews);
+          if (isObsolete()) return;
         }
 
         if (isObsolete()) return;

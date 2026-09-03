@@ -33,7 +33,7 @@ export function SvgGlyphCatalogGrid({
     [glyphs.length, viewportHeight, viewportWidth],
   );
   const targetFrame = useMemo(() => layout.frame(glyphs, scrollTop), [glyphs, layout, scrollTop]);
-  const [publishedFrame, previews, readiness, cacheBytes] = useGlyphPreviewFrame(
+  const [, previews, readiness, cacheBytes] = useGlyphPreviewFrame(
     targetFrame,
     location,
     active && viewportWidth > 0 && viewportHeight > 0,
@@ -99,12 +99,12 @@ export function SvgGlyphCatalogGrid({
       onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
     >
       <div className="relative" style={{ height: layout.totalHeight, width: "100%" }}>
-        {publishedFrame?.cells.map((cell) => {
+        {targetFrame.cells.map((cell) => {
           const preview = previews.get(cell.glyph.id);
           const previewLayout = preview
             ? new GlyphPreviewLayout(metrics, preview.xAdvance, cell.previewRect.height)
             : null;
-          const top = cell.cellRect.top + publishedFrame.scrollTop;
+          const top = cell.cellRect.top + targetFrame.scrollTop;
 
           return (
             <div
@@ -139,7 +139,7 @@ export function SvgGlyphCatalogGrid({
                   </svg>
                 ) : null}
               </Button>
-              <div style={{ height: publishedFrame.layout.nameGap }} />
+              <div style={{ height: targetFrame.layout.nameGap }} />
               {editingGlyphId === cell.glyph.id ? (
                 <GlyphNameInput
                   ref={editingInputRef}
