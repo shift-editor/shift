@@ -15,6 +15,14 @@ export function glyphCatalogCanvas(page: Page) {
   return page.getByTestId("glyph-catalog-canvas");
 }
 
+export function glyphCatalogSvg(page: Page) {
+  return page.getByTestId("glyph-catalog-svg");
+}
+
+export function glyphCatalogRenderer(page: Page) {
+  return page.locator("[data-glyph-catalog-renderer]");
+}
+
 export function editorShell(page: Page) {
   return page.getByTestId("editor-shell");
 }
@@ -42,12 +50,12 @@ export async function firstAxisSlider(page: Page) {
   return page.getByRole("slider", { name: axisName, exact: true });
 }
 
-/** Keeps the canvas preview coordinate contract in one place. */
+/** Keeps the catalog preview coordinate contract in one place. */
 export async function clickFirstCatalogGlyph(page: Page): Promise<void> {
   await glyphCatalogViewport(page).click({ position: FIRST_GLYPH_PREVIEW_POINT });
 }
 
-/** Keeps the canvas name-cell coordinate contract in one place. */
+/** Keeps the catalog name-cell coordinate contract in one place. */
 export async function clickFirstCatalogGlyphName(page: Page): Promise<void> {
   await glyphCatalogViewport(page).click({ position: FIRST_GLYPH_NAME_POINT });
 }
@@ -100,7 +108,7 @@ export async function openCatalogGlyph(
   await page.getByPlaceholder("Search glyphs...").fill(glyphName);
   await expect(surface).toHaveAttribute("data-filtered-glyph-count", "1");
   await expect(surface).toHaveAttribute("data-first-glyph-id", glyphId);
-  await expect(glyphCatalogCanvas(page)).toHaveAttribute("data-grid-readiness", "Complete", {
+  await expect(glyphCatalogRenderer(page)).toHaveAttribute("data-grid-readiness", "Complete", {
     timeout: 30_000,
   });
   await clickFirstCatalogGlyph(page);

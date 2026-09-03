@@ -1,8 +1,16 @@
 import type { GlyphInfo } from "@shift/glyph-info";
-import type { Axis, CatalogAxis, CatalogMetrics, GlyphId, GlyphName, SourceId } from "@shift/types";
+import type {
+  Axis,
+  CatalogAxis,
+  CatalogMetrics,
+  GlyphId,
+  GlyphName,
+  GlyphPreview,
+  SourceId,
+} from "@shift/types";
 import { computed, type ComputedSignal, type Signal } from "@/lib/signals";
 import type { Editor } from "@/lib/editor/Editor";
-import { externalAxisLocationFromRecord } from "@/lib/variation/location";
+import { externalAxisLocationFromRecord, mapAxisLocation } from "@/lib/variation/location";
 import type { GlyphAtlasSource } from "@/types/glyphAtlas";
 import type { CatalogLocation, GlyphCatalogItem } from "@/types/glyphCatalog";
 import { RenderGlyph } from "@/lib/model/RenderGlyph";
@@ -78,6 +86,23 @@ export class GlyphCatalog {
       this.styleNameCell,
       this.sourceIdCell,
     ];
+  }
+
+  async glyphPreviews(
+    glyphIds: readonly GlyphId[],
+    location: CatalogLocation,
+  ): Promise<readonly GlyphPreview[]> {
+    const font = this.#editor.font;
+    const axes = font.getAxes();
+    if (location.length !== axes.length) {
+      throw new Error(`catalog received ${location.length} coordinates for ${axes.length} axes`);
+    }
+
+    const externalLocation = externalAxisLocationFromRecord(
+      Object.fromEntries(axes.map((axis, index) => [axis.id, location[index] ?? axis.default])),
+    );
+    const designLocation = mapAxisLocation(externalLocation, axes, font.getAxisMappingBases());
+    return font.glyphPreviews(glyphIds, designLocation);
   }
 
   async openGlyph(glyphId: GlyphId): Promise<RenderGlyph> {

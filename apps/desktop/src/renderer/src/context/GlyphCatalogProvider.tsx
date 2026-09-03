@@ -44,6 +44,11 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
     [catalog],
   );
 
+  const glyphPreviews = useCallback<GlyphCatalogSource["glyphPreviews"]>(
+    (glyphIds, previewLocation) => catalog.glyphPreviews(glyphIds, previewLocation),
+    [catalog],
+  );
+
   const [query, setQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<GlyphCategory | null>(null);
   const [selectedSubCategoryKey, setSelectedSubCategoryKey] = useState<string | null>(null);
@@ -185,6 +190,7 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
     setQuery,
     atlasSource: catalog.atlas,
     observeAtlasInvalidation,
+    glyphPreviews,
     location,
     axes,
     metrics,

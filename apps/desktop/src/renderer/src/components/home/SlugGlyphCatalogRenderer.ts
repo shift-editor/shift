@@ -55,7 +55,24 @@ export class SlugGlyphCatalogRenderer implements GlyphCatalogRenderer {
   #needsRedraw = true;
   #disposed = false;
 
-  constructor(
+  /**
+   * Initializes the preferred WebGPU renderer before claiming the catalog session.
+   *
+   * @param container - Native scroll viewport that owns catalog interaction.
+   * @param glyphCanvas - Surface configured for Slug preview output.
+   * @param overlayCanvas - Surface used for names and hover decoration.
+   * @param atlasSource - Session adapter for complete Slug atlas pages.
+   * @param observeAtlasInvalidation - Subscribes to directory and geometry revisions.
+   * @param onEditGlyph - Starts inline naming, or null for read-only sessions.
+   * @param onEditingUnavailable - Ends editing when its cell leaves the frame.
+   * @param openGlyph - Opens a preview cell, or null when interaction is disabled.
+   * @param onReadyChange - Publishes whether the selected renderer has a complete frame.
+   * @param onUnavailable - Reports a selected Slug renderer that cannot present a frame.
+   * @param signal - Cancels initialization when the owning catalog is disposed.
+   * @returns A renderer owning the initialized device, context, events, and subscriptions.
+   * @throws {Error} when WebGPU is unavailable, incompatible, or initialization is aborted.
+   */
+  static async create(
     container: HTMLDivElement,
     glyphCanvas: HTMLCanvasElement,
     overlayCanvas: HTMLCanvasElement,
@@ -68,6 +85,53 @@ export class SlugGlyphCatalogRenderer implements GlyphCatalogRenderer {
     openGlyph: ((glyph: GlyphCatalogItem) => Promise<void>) | null,
     onReadyChange: (ready: boolean) => void,
     onUnavailable: () => void,
+    signal: AbortSignal,
+  ): Promise<SlugGlyphCatalogRenderer> {
+    let renderer: SlugGlyphCatalogRenderer | null = null;
+    const layer = await ResidentGlyphLayer.create(
+      glyphCanvas,
+      atlasSource,
+      (reason) => {
+        if (renderer) renderer.#handleDeviceLoss(reason);
+      },
+      signal,
+    );
+
+    if (signal.aborted) {
+      layer.destroy();
+      throw signal.reason;
+    }
+
+    renderer = new SlugGlyphCatalogRenderer(
+      container,
+      glyphCanvas,
+      overlayCanvas,
+      atlasSource,
+      observeAtlasInvalidation,
+      onEditGlyph,
+      onEditingUnavailable,
+      openGlyph,
+      onReadyChange,
+      onUnavailable,
+      layer,
+    );
+    return renderer;
+  }
+
+  private constructor(
+    container: HTMLDivElement,
+    glyphCanvas: HTMLCanvasElement,
+    overlayCanvas: HTMLCanvasElement,
+    atlasSource: GlyphAtlasSource,
+    observeAtlasInvalidation: (
+      listener: (glyphIds: readonly GlyphId[] | null, directory: readonly GlyphId[]) => void,
+    ) => () => void,
+    onEditGlyph: ((glyph: GlyphCatalogItem) => void) | null,
+    onEditingUnavailable: () => void,
+    openGlyph: ((glyph: GlyphCatalogItem) => Promise<void>) | null,
+    onReadyChange: (ready: boolean) => void,
+    onUnavailable: () => void,
+    layer: ResidentGlyphLayer,
   ) {
     this.#container = container;
     this.#glyphCanvas = glyphCanvas;
@@ -77,6 +141,7 @@ export class SlugGlyphCatalogRenderer implements GlyphCatalogRenderer {
     this.#openGlyph = openGlyph;
     this.#onReadyChange = onReadyChange;
     this.#onUnavailable = onUnavailable;
+    this.#layer = layer;
     this.#overlay = new GlyphCatalogOverlay(overlayCanvas);
     this.#glyphCanvas.dataset.fullyResident = "false";
     this.#glyphCanvas.dataset.gridReadiness = "Initial" satisfies GridReadiness;
@@ -96,7 +161,6 @@ export class SlugGlyphCatalogRenderer implements GlyphCatalogRenderer {
     this.#unobserveAtlas = observeAtlasInvalidation((glyphIds, directory) => {
       this.#invalidate(glyphIds, directory);
     });
-    this.#startLayer();
   }
 
   update(frame: GlyphCatalogControllerFrame, inputContainer: HTMLDivElement | null): void {
