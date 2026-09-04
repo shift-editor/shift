@@ -29,12 +29,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: macOS x64
-            runner: macos-26-intel
+          - name: macOS arm64
+            runner: macos-26
             platform: darwin
-            architecture: x64
-            directory: macos-x64
-            builder-args: --mac dmg --x64
+            architecture: arm64
+            directory: macos-arm64
+            builder-args: --mac dmg --arm64
           - name: Windows x64
             runner: windows-latest
             platform: win32
@@ -234,7 +234,7 @@ jobs:
             native-dialog.png
           )
           screenshots=()
-          for platform in macos-x64 windows-x64 linux-x64; do
+          for platform in macos-arm64 windows-x64 linux-x64; do
             for name in "${screenshot_names[@]}"; do
               screenshot="installed-app-screenshots/${platform}/${name}"
               [[ -f "$screenshot" ]] && screenshots+=("$screenshot")
@@ -323,9 +323,9 @@ jobs:
             });
             const platforms = [
               {
-                name: "macOS x64",
-                jobName: "Capture macOS x64",
-                directory: "macos-x64",
+                name: "macOS arm64",
+                jobName: "Capture macOS arm64",
+                directory: "macos-arm64",
               },
               {
                 name: "Windows x64",
