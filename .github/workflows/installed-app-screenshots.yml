@@ -124,6 +124,15 @@ jobs:
           test -x "$executable"
           echo "SHIFT_INSTALLED_APP_PATH=$executable" >> "$GITHUB_ENV"
 
+      - name: Pre-approve macOS screen capture
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          approvals_plist="$HOME/Library/Group Containers/group.com.apple.replayd/ScreenCaptureApprovals.plist"
+          mkdir -p "$(dirname "$approvals_plist")"
+          defaults write "$approvals_plist" "/bin/bash" -date "3024-01-01 00:00:00 +0000"
+          killall cfprefsd 2>/dev/null || true
+
       - name: Install Windows application
         if: runner.os == 'Windows'
         shell: pwsh
