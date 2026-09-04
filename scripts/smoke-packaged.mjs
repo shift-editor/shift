@@ -21,6 +21,7 @@ if (!packagePathArgument) {
 const packagePath = path.resolve(packagePathArgument);
 const macosDocumentTypeIdentifier = "app.shift.document.v2";
 const macosDocumentBadgeName = "shift-document-badge-v2";
+const macosSourceFontExtensions = ["ttf", "otf", "glyphs", "glyphspackage", "ufo", "designspace"];
 const packageName = (() => {
   switch (distribution) {
     case "release":
@@ -99,6 +100,39 @@ function verifyMacosDocumentIcon() {
   }
   if (!assets.some(({ Name }) => Name === macosDocumentBadgeName)) {
     throw new Error("Packaged asset catalog does not contain the Shift document badge");
+  }
+
+  const expectedDocumentRank = distribution === "nightly" ? "Alternate" : "Owner";
+  if (documentType?.LSHandlerRank !== expectedDocumentRank) {
+    throw new Error(`Packaged Shift document type must use ${expectedDocumentRank} handler rank`);
+  }
+
+  for (const extension of macosSourceFontExtensions) {
+    const sourceType = info.CFBundleDocumentTypes?.find(({ CFBundleTypeExtensions }) =>
+      CFBundleTypeExtensions?.includes(extension),
+    );
+    if (!sourceType) {
+      throw new Error(`Packaged app does not declare the .${extension} source-font association`);
+    }
+    if (sourceType.CFBundleTypeRole !== "Viewer" || sourceType.LSHandlerRank !== "Alternate") {
+      throw new Error(`Packaged .${extension} association must be an alternate viewer`);
+    }
+  }
+
+  const binaryFontType = info.CFBundleDocumentTypes?.find(({ CFBundleTypeExtensions }) =>
+    CFBundleTypeExtensions?.includes("ttf"),
+  );
+  for (const contentType of ["public.truetype-ttf-font", "public.opentype-font"]) {
+    if (!binaryFontType?.LSItemContentTypes?.includes(contentType)) {
+      throw new Error(`Packaged binary-font association does not include ${contentType}`);
+    }
+  }
+
+  const sourcePackageType = info.CFBundleDocumentTypes?.find(({ CFBundleTypeExtensions }) =>
+    CFBundleTypeExtensions?.includes("ufo"),
+  );
+  if (sourcePackageType?.LSTypeIsPackage !== true) {
+    throw new Error("Packaged UFO and Glyphspackage associations must be document packages");
   }
 }
 
