@@ -62,9 +62,6 @@ jobs:
         with:
           node-version: 24
 
-      - name: Install Rust toolchain
-        run: rustup show
-
       - name: Install Linux packaging and display tools
         if: runner.os == 'Linux'
         run: >-
@@ -81,6 +78,10 @@ jobs:
         with:
           path: crates/shift-bridge/*.node
           key: installed-native-v1-${{ runner.os }}-${{ matrix.architecture }}-${{ hashFiles('Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', 'crates/*/Cargo.toml', 'crates/*/build.rs', 'crates/*/src/**', 'crates/shift-bridge/package.json', 'crates/shift-bridge/*.d.ts', 'pnpm-lock.yaml', 'turbo.json') }}
+
+      - name: Install Rust toolchain
+        if: steps.native-cache.outputs.cache-hit != 'true'
+        run: rustup show
 
       - name: Build native bridge
         if: steps.native-cache.outputs.cache-hit != 'true'
