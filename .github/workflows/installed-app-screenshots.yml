@@ -130,8 +130,11 @@ jobs:
         run: |
           approvals_plist="$HOME/Library/Group Containers/group.com.apple.replayd/ScreenCaptureApprovals.plist"
           mkdir -p "$(dirname "$approvals_plist")"
-          defaults write "$approvals_plist" "/bin/bash" -date "3024-01-01 00:00:00 +0000"
-          killall cfprefsd 2>/dev/null || true
+          defaults write "$approvals_plist" "/bin/bash" -dict \
+            kScreenCaptureApprovalLastAlerted -date "3024-01-01 00:00:00 +0000" \
+            kScreenCaptureApprovalLastUsed -date "3024-01-01 00:00:00 +0000"
+          killall -HUP replayd 2>/dev/null || true
+          killall -u "$USER" cfprefsd 2>/dev/null || true
 
       - name: Install Windows application
         if: runner.os == 'Windows'
