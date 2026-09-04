@@ -29,12 +29,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: macOS x64
-            runner: macos-26-intel
+          - name: macOS arm64
+            runner: macos-26
             platform: darwin
-            architecture: x64
-            directory: macos-x64
-            builder-args: --mac dmg --x64
+            architecture: arm64
+            directory: macos-arm64
+            builder-args: --mac dmg --arm64
           - name: Windows x64
             runner: windows-latest
             platform: win32
@@ -62,9 +62,6 @@ jobs:
         with:
           node-version: 24
 
-      - name: Install Rust toolchain
-        run: rustup show
-
       - name: Install Linux packaging and display tools
         if: runner.os == 'Linux'
         run: >-
@@ -75,7 +72,19 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --prefer-offline
 
+      - name: Cache native bridge
+        id: native-cache
+        uses: actions/cache@v6
+        with:
+          path: crates/shift-bridge/*.node
+          key: installed-native-v1-${{ runner.os }}-${{ matrix.architecture }}-${{ hashFiles('Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', 'crates/*/Cargo.toml', 'crates/*/build.rs', 'crates/*/src/**', 'crates/shift-bridge/package.json', 'crates/shift-bridge/*.d.ts', 'pnpm-lock.yaml', 'turbo.json') }}
+
+      - name: Install Rust toolchain
+        if: steps.native-cache.outputs.cache-hit != 'true'
+        run: rustup show
+
       - name: Build native bridge
+        if: steps.native-cache.outputs.cache-hit != 'true'
         run: pnpm build:native
 
       - name: Build desktop application
@@ -115,6 +124,18 @@ jobs:
           executable="$installed_app/Contents/MacOS/Shift"
           test -x "$executable"
           echo "SHIFT_INSTALLED_APP_PATH=$executable" >> "$GITHUB_ENV"
+
+      - name: Pre-approve macOS screen capture
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          approvals_plist="$HOME/Library/Group Containers/group.com.apple.replayd/ScreenCaptureApprovals.plist"
+          mkdir -p "$(dirname "$approvals_plist")"
+          defaults write "$approvals_plist" "/bin/bash" -dict \
+            kScreenCaptureApprovalLastAlerted -date "3024-01-01 00:00:00 +0000" \
+            kScreenCaptureApprovalLastUsed -date "3024-01-01 00:00:00 +0000"
+          killall -HUP replayd 2>/dev/null || true
+          killall -u "$USER" cfprefsd 2>/dev/null || true
 
       - name: Install Windows application
         if: runner.os == 'Windows'
@@ -234,7 +255,7 @@ jobs:
             native-dialog.png
           )
           screenshots=()
-          for platform in macos-x64 windows-x64 linux-x64; do
+          for platform in macos-arm64 windows-x64 linux-x64; do
             for name in "${screenshot_names[@]}"; do
               screenshot="installed-app-screenshots/${platform}/${name}"
               [[ -f "$screenshot" ]] && screenshots+=("$screenshot")
@@ -323,9 +344,9 @@ jobs:
             });
             const platforms = [
               {
-                name: "macOS x64",
-                jobName: "Capture macOS x64",
-                directory: "macos-x64",
+                name: "macOS arm64",
+                jobName: "Capture macOS arm64",
+                directory: "macos-arm64",
               },
               {
                 name: "Windows x64",
