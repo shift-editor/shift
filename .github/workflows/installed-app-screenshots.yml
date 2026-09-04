@@ -232,7 +232,6 @@ jobs:
             file-association-desktop.png
             application-menu.png
             native-dialog.png
-            document-icon.png
           )
           screenshots=()
           for platform in macos-x64 windows-x64 linux-x64; do
@@ -348,7 +347,6 @@ jobs:
               ["File association desktop", "file-association-desktop.png"],
               ["Application menu", "application-menu.png"],
               ["Native dialog", "native-dialog.png"],
-              ["Document icon", "document-icon.png"],
             ];
             const statusFor = ({ jobName }) => {
               const job = jobs.find((candidate) => candidate.name === jobName);

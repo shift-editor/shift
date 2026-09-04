@@ -294,10 +294,6 @@ async function captureRegistration() {
         `file type: ${fileType}\ndefault application: ${defaultApplication.trim()}\n\n${gioInfo}`,
       );
 
-      const iconPath = "/usr/share/icons/hicolor/256x256/mimetypes/shift-document.png";
-      if (fs.existsSync(iconPath)) {
-        fs.copyFileSync(iconPath, path.join(outputPath, "document-icon.png"));
-      }
       return;
     }
     case "win32": {
@@ -321,7 +317,6 @@ async function captureRegistration() {
         path.join(outputPath, "registration.txt"),
         `${extension.trim()}\n\n${command.trim()}\n`,
       );
-      await captureWindowsDocumentIcon();
       return;
     }
     case "darwin":
@@ -329,34 +324,6 @@ async function captureRegistration() {
     default:
       throw new Error(`Unsupported registration platform: ${process.platform}`);
   }
-}
-
-async function captureWindowsDocumentIcon() {
-  const iconPath = path.join(outputPath, "document-icon.png");
-  await execFileAsync(
-    "powershell.exe",
-    [
-      "-NoProfile",
-      "-NonInteractive",
-      "-Command",
-      [
-        "Add-Type -AssemblyName System.Drawing",
-        "$icon = [System.Drawing.Icon]::ExtractAssociatedIcon($env:SHIFT_SCREENSHOT_DOCUMENT)",
-        "if (-not $icon) { throw 'Windows did not resolve a document icon' }",
-        "$bitmap = $icon.ToBitmap()",
-        "$bitmap.Save($env:SHIFT_SCREENSHOT_ICON, [System.Drawing.Imaging.ImageFormat]::Png)",
-        "$bitmap.Dispose()",
-        "$icon.Dispose()",
-      ].join("; "),
-    ],
-    {
-      env: {
-        ...process.env,
-        SHIFT_SCREENSHOT_DOCUMENT: documentPath,
-        SHIFT_SCREENSHOT_ICON: iconPath,
-      },
-    },
-  );
 }
 
 async function commandOutput(command, args) {
