@@ -90,7 +90,7 @@ import {
 import { PositionList } from "./positions/PositionList";
 import { GlyphLayerPositionPatch } from "./GlyphLayerPositionPatch";
 import { GlyphLayerEdit } from "./GlyphLayerEdit";
-import { deletePoints } from "./deletePoints";
+import { DeletePoints } from "./DeletePoints";
 import { GlyphLayerState } from "./GlyphLayerState";
 import type { ContourBuffer } from "./ContourBuffer";
 import type { LayerBuffers } from "./LayerBuffers";
@@ -851,7 +851,7 @@ export class GlyphLayer {
    * @throws {Error} When an affected contour span cannot be traversed; the edit is rolled back.
    */
   deletePoints(pointIds: readonly PointId[], mode: DeleteMode = "fit"): boolean {
-    return deletePoints(this, pointIds, mode);
+    return new DeletePoints(this, pointIds, mode).apply();
   }
 
   /**
