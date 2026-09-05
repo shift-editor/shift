@@ -177,6 +177,7 @@ const DEFAULT_CONFIG: Required<GestureDetectorConfig> = {
 export class GestureDetector {
   private downCoords: Coordinates | null = null;
   private downModifiers: ModifierKeys | null = null;
+  private lastDragModifiers: ModifierKeys | null = null;
   private dragging = false;
   private lastClickTime = 0;
   private lastClickPoint: Point2D | null = null;
@@ -199,6 +200,7 @@ export class GestureDetector {
   pointerDown(coords: Coordinates, modifiers: Modifiers): void {
     this.downCoords = coords;
     this.downModifiers = normalizeModifiers(modifiers);
+    this.lastDragModifiers = null;
     this.dragging = false;
   }
 
@@ -223,6 +225,7 @@ export class GestureDetector {
 
     if (!this.dragging && distance > this.dragThreshold) {
       this.dragging = true;
+      this.lastDragModifiers = modifierKeys;
       return [
         {
           type: "dragStart",
@@ -242,6 +245,7 @@ export class GestureDetector {
     }
 
     if (this.dragging) {
+      this.lastDragModifiers = modifierKeys;
       return [
         {
           type: "drag",
@@ -257,13 +261,22 @@ export class GestureDetector {
   }
 
   /**
-   * Process a pointer release. Returns the final `drag` sample before `dragEnd`
-   * if dragging, `doubleClick` within timing/distance thresholds, or `click`.
+   * Completes a gesture at the release position without changing its drag constraints.
+   *
+   * @remarks
+   * The final `drag` and `dragEnd` retain the latest drag sample's modifiers.
+   * Modifier changes affect dragging only when another pointer move is processed;
+   * releasing a key just before the pointer does not reshape the final preview.
+   * Completion clears the retained pointer and drag-modifier state.
+   *
+   * @param coords - Final pointer position, including movement since the last drag sample.
+   * @param modifiers - Release-time modifiers used for clicks and double-clicks only.
+   * @returns The final `drag` followed by `dragEnd`, a click event, or no events if unpressed.
    */
   pointerUp(coords: Coordinates, modifiers: Modifiers): GestureEvent[] {
     if (!this.downCoords || !this.downModifiers) return [];
 
-    const modifierKeys = normalizeModifiers(modifiers);
+    const modifierKeys = this.lastDragModifiers ?? normalizeModifiers(modifiers);
     const events: GestureEvent[] = [];
     const delta = pointerDelta(coords, this.downCoords);
 
@@ -326,6 +339,7 @@ export class GestureDetector {
   private resetPointerState(): void {
     this.downCoords = null;
     this.downModifiers = null;
+    this.lastDragModifiers = null;
     this.dragging = false;
   }
 }
