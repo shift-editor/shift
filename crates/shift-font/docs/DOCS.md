@@ -1,6 +1,6 @@
 # shift-font
 
-<!-- reviewed: 2026-08-21 review-every: 90d -->
+<!-- reviewed: 2026-09-05 review-every: 90d -->
 
 First-class Rust font object model for Shift.
 
@@ -61,7 +61,7 @@ crates/shift-font/src/
 - `GlyphComponents` is the ordered, cycle-pruned component occurrence list for one root glyph. Every `ComponentGlyph` carries its full `ComponentId` ancestry, its zero-based slot within the immediate parent layer, and its Rust-selected anchor attachment. The ancestry identifies the authored occurrence; the parent-local slot correlates numeric transforms across compatible source layers whose corresponding components have different authored IDs.
 - `FontProjection` is a read-only, location-bound view that reuses resolved component layers across one or many glyph requests.
 - `ResolvedGlyph` is derived, flattened geometry plus x advance. An existing blank glyph resolves to an empty contour list; a missing glyph resolves to `None`.
-- `Contour` and `Point` describe outline geometry inside a glyph layer.
+- `Contour` and `Point` describe outline geometry inside a glyph layer. Quadratic path conversion preserves one off-curve control and a `PointType::QCurve` endpoint rather than reducing the endpoint to `OnCurve`.
 
 ## Identity
 

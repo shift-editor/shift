@@ -1,6 +1,6 @@
 # Renderer font model
 
-<!-- reviewed: 2026-08-24 review-every: 90d -->
+<!-- reviewed: 2026-09-05 review-every: 90d -->
 
 Reactive TypeScript font, authored glyph-layer, and derived glyph-view surfaces.
 
@@ -14,6 +14,7 @@ Reactive TypeScript font, authored glyph-layer, and derived glyph-view surfaces.
 - **Architecture Invariant:** `GlyphProjection` is plain, location-independent backing owned internally by `FontStore`. It is not an open/ready/loading lifecycle and is not exposed as the renderer's user-facing glyph object.
 - **Architecture Invariant:** One `GlyphRenderModel` follows one location signal. Location changes lazily replace its current computed geometry; Shift never retains a cache keyed by historical location values.
 - **Architecture Invariant:** `GlyphRenderModel.contours` is the complete root-plus-component contour occurrence stream used by rendering, bounds, layout, and sidebearings. A contour's `component` is `null` only when the root glyph owns it.
+- **Architecture Invariant:** Render paths distinguish closed contours from open contours. Root-only and component-owned closed paths support separate editable fills; display rendering fills all closed contours and strokes open contours without implicitly filling gaps.
 - **Architecture Invariant:** A render model shares one evaluated source-contour list per base glyph at its current location. Each component placement owns a distinct `GlyphContour` wrapper for transform and provenance; `GlyphRenderModel.contours` flattens references to those same occurrence objects rather than copying contour coordinates.
 - **Architecture Invariant:** Rust owns component order, ancestry, attachment selection, and cycle pruning through `GlyphComponents`. TypeScript only resolves current coordinates and composes matrices. Component paths preserve authored occurrence identity; numeric transforms are selected by the occurrence's parent-local `componentIndex`, because compatible exact-source layers may assign different `ComponentId` values to corresponding slots.
 - **Architecture Invariant:** Numeric authored edits flow through the existing `GlyphLayerState` signal graph. Do not add a revision signal, invalidate projections to `null`, or refetch native variation data for point, component-transform, advance, or metric value changes.
@@ -38,6 +39,7 @@ lib/model/
   FontStore.ts               -- workspace records, authored layer state, projections, canonical Glyph ownership
   Glyph.ts                   -- Glyph, GlyphLayer, internal GlyphRenderModel, root lookup, composed metrics
   GlyphLayerEdit.ts          -- reversible structural edits over the current reactive layer
+  deletePoints.ts            -- contour-aware fitted deletion, gaps, and handle conversion
   ComponentGlyph.ts          -- component and contour occurrence provenance/reactivity
   GlyphLayerState.ts         -- local edit lifecycle and pending confirmation
   positions/                 -- PositionEdits, PositionList, transforms, references, and modifiers
@@ -129,6 +131,14 @@ Layer edits move through **active** (cancelable), **pending** (finished and queu
 Local operations mutate the existing segmented `LayerBuffers`: advance, contours, anchors, and components. Each logical record owns both the metadata and the `PackedArray` values needed to interpret it. `GlyphStructure` and the flat `Float64Array` are repacked lazily at geometry and wire boundaries. Renderer code does not parse `FontIntent.kind` or perform font-wide validation. While an edit is active, an arriving workspace replacement becomes its latest restoration base and the edit reapplies immediately in the same batch. Each loaded layer otherwise keeps a confirmed shadow only while edits are pending. Every echo advances that shadow, but visible pending geometry is replaced only after the layer's pending identities drain; workspace failure still discards renderer state through the existing full resync.
 
 `GlyphLayerState.#applyEdit()` wraps pending operations. It captures the pre-edit snapshot once per `PendingEditId`, batches a typed operation closure, and records only successful changes. `beginEdit()`, `finishEdit()`, and `cancelEdit()` separately own the active local lifecycle. Their operation closures remain renderer-local and never cross `LayerIntents` or IPC.
+
+### Contour-aware deletion
+
+`GlyphLayer.deletePoints(pointIds, mode)` interprets explicit selected point IDs against the original contours and groups all resulting mutations into one workspace transaction. `DeleteMode` is `"fit"` for endpoint-tangent-constrained cubic replacement and `"gap"` for disconnected surviving fragments. Each span between surviving on-curve points is processed once; selected handles within a removed span are consumed by that span's policy, while selected handles outside it convert their segment to a line. Raw `removePoints` remains a separate primitive and clipboard cut behavior is unchanged.
+
+Closed contours are traversed cyclically, including leading controls belonging to the wrapped segment. Gaps open or split them into valid open fragments. No surviving on-curve points removes the contour; one survivor becomes an open one-point contour. The original contour retains the fragment containing its first surviving on-curve identity; additional fragments receive new contour IDs and append to the layer without reordering unrelated contours. Surviving points keep their IDs and authored values; new fitted controls receive new IDs. A retained point keeps the original contour from being pruned while the other points are reinserted through the existing seeded mutation primitives. Intermediate mutations stay inside the reactive/workspace transaction; the local result and confirmed echo have identical topology.
+
+The [deletion behavior tests](../../editor/Deletion.test.ts), [contour-topology tests](../../editor/DeletionTopology.test.ts), and [fresh-reopen tests](../../workspace/FreshReopen.test.ts) verify geometry, identity, cyclic boundaries, refusal, local/confirmed parity, atomic undo/redo, and fresh-workspace persistence through the real editor and native bridge. The deletion Electron E2E suite drives canvas selection, keyboard and native-menu deletion, pixel-level rendering checks, and save/reopen.
 
 ### Packed layout ownership
 

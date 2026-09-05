@@ -1,6 +1,6 @@
 # Editor
 
-<!-- reviewed: 2026-08-18 -->
+<!-- reviewed: 2026-09-05 -->
 
 Central orchestrator for the canvas-based glyph editing surface, wiring viewport transforms, selection, rendering, hit testing, and tool management into a single facade.
 
@@ -30,7 +30,7 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 
 **Architecture Invariant:** `Editor.toolCell` is the public active-tool state surface. It derives `{ id, state }` from the active tool instance and its `stateCell`; consumers use `toolIf(id)` for built-in state narrowing and do not reach through `ToolManager` for active state. Entering or leaving a glyph route resets the active tool instance, selection, hover, and editing scope so transient interaction state cannot cross glyphs.
 
-**Architecture Invariant:** `ToolManager` is authoritative for installed manifests. `Editor.toolRegistryCell` derives reactive toolbar metadata from that collection, and `registerTool()` returns the `ToolRegistration` that exclusively owns replacement and removal of the contributed ID.
+**Architecture Invariant:** `ToolManager` is authoritative for installed manifests. `Editor.toolRegistryCell` derives reactive toolbar metadata, including hidden and disabled flags, from that collection. Both flags suppress user tool shortcuts while preserving programmatic activation, and `registerTool()` returns the `ToolRegistration` that exclusively owns replacement and removal of the contributed ID.
 
 **Architecture Invariant:** Camera and text-layout metrics resolve from the active design location through `Font.metricsAtLocation()`. Exact master locations use authored source values; intermediate locations evaluate the Rust-built source-metric interpolation model. Glyph navigation preserves one stable UPM scale and origin rather than fitting each outline independently; empty, narrow, wide, and extreme glyphs therefore retain comparable editing scale.
 
@@ -46,7 +46,7 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 
 ```
 editor/
-  Editor.ts              -- Facade (~1373 lines), wires all subsystems
+  Editor.ts              -- Facade, wires all subsystems
   lifecycle.ts           -- EventEmitter for lifecycle events (currently `destroying`)
   managers/
     Camera.ts             -- UPM<->screen affine matrices, zoom, pan
@@ -110,7 +110,7 @@ Tools receive screen and scene coordinates from the pointer pipeline. Scene/node
 | background | Canvas 2D    | Guides, tool backgrounds                                    | `#backgroundEffect`               |
 | scene      | Canvas 2D    | Glyph outline, segments, handles (CPU), anchors, tool scene | `#sceneEffect`                    |
 | handles    | WebGL (regl) | GPU-rendered point handles                                  | `#sceneEffect` (via scene render) |
-| overlay    | Canvas 2D    | Bounding box handles, tool overlays                         | `#overlayEffect`                  |
+| overlay    | Canvas 2D    | Bounding box outline, tool overlays                         | `#overlayEffect`                  |
 
 Background, scene, and overlays are drawn in UPM space (`Canvas.withSceneSpace()` applies the affine transform). Tool-owned controls convert pixel-sized handles and strokes at draw time.
 
@@ -118,7 +118,7 @@ Background, scene, and overlays are drawn in UPM space (`Canvas.withSceneSpace()
 
 `Renderer.#renderScene()` draws `SceneLayer`, which runs three passes over the scene nodes:
 
-1. Content pass -- `GlyphNodeDefinition` draws a stroked outline plus debug overlays (if enabled) while the glyph is being edited; a non-editing glyph takes the display path and draws a filled outline instead.
+1. Content pass -- `GlyphNodeDefinition` draws distinct translucent fills for closed root and component contours, stroked outlines, and optional debug overlays while editing. Display rendering fills closed contours and strokes open contours; it never implicitly fills an open gap.
 2. Delegates to `ToolManager.drawScene()` inside each glyph node's transform.
 3. Controls pass -- draws hovered/selected segments, then control lines with frustum culling via `Camera.visibleSceneBounds()`, then handles (GPU marker rendering with CPU fallback), then anchors.
 
@@ -129,6 +129,14 @@ Background, scene, and overlays are drawn in UPM space (`Canvas.withSceneSpace()
 ### Position selection boundary
 
 `Editor.positionSelection(ids)` resolves points and anchors directly, expands selected segments and contours to points, and verifies that every target belongs to the active authored layer. Select-tool behaviors pass the returned targets to `GlyphLayer.positions.move`, `.rotate`, or `.scale`; scene-space gesture calculations remain in the tool layer.
+
+### Editing result selection
+
+Paste selects inserted objects and activates Select before awaiting the workspace echo. Boolean operations await their committed geometry and select every newly created result contour, including an empty selection when the result has no contours.
+
+### Deletion
+
+`Editor.deleteSelection(mode)` normalizes point, segment, and contour selection against the active authored layer and delegates to `GlyphLayer.deletePoints`. Delete and Backspace use `"fit"`; Shift selects `"gap"`. Native-menu Delete uses the default fitted behavior. Selecting a segment is equivalent to selecting all of its points. Unsupported, missing, or mixed-anchor selections refuse without mutation. Successful deletion clears selection and hover and awaits the workspace echo; the entire geometry edit is one undo step.
 
 ### Hit testing
 
@@ -168,8 +176,15 @@ Glyph geometry exposes domain hit queries for points, anchors, and segments. Too
 
 ## Verification
 
-- `npx vitest run apps/desktop/src/renderer/src/lib/editor/` -- unit tests for managers, hit testing, sidebearings, lifecycle, plus editor-outcome suites for boolean operations, clipboard copy/paste, and glyph metrics that drive `TestEditor` through real tool gestures and assert resulting contours, selection, and history.
+- `pnpm test:desktop src/renderer/src/lib/editor/` -- real-editor tests for managers, hit testing, sidebearings, lifecycle, plus editor-outcome suites for boolean operations, clipboard copy/paste, and glyph metrics that drive `TestEditor` through real tool gestures and assert resulting contours, selection, and history.
 - Outcome tests treat editor actions as asynchronous: metric setters need `await editor.settle()` before asserting, clipboard and history actions (`copy`, `paste`, `undo`, `redo`) return promises that must be awaited, and drag helpers give every drag sample its cumulative delta from the pointer-down origin.
+- [Deletion behavior](../Deletion.test.ts), [contour topology](../DeletionTopology.test.ts), and [fresh-reopen tests](../../workspace/FreshReopen.test.ts) cover fitted/gap deletion, exact undo/redo, and saved geometry. Run them and the real-canvas Electron suite with:
+
+  ```bash
+  pnpm test:desktop src/renderer/src/lib/editor/Deletion.test.ts src/renderer/src/lib/editor/DeletionTopology.test.ts src/renderer/src/lib/workspace/FreshReopen.test.ts
+  pnpm test:e2e:visual e2e/deletion.spec.ts
+  ```
+
 - `pnpm test:desktop src/renderer/src/lib/model/positions/PositionEdits.test.ts` -- position-edit (move/rotate/scale) tests.
 - `pnpm test:desktop src/renderer/src/lib/editor/managers/Camera.test.ts` -- camera manager tests.
 - `pnpm test:e2e:visual e2e/glyph-navigation.spec.ts e2e/glyph-view.spec.ts e2e/tools.spec.ts` -- stale/transient navigation, stable UPM framing, and DOM cancellation evidence.

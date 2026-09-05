@@ -1,6 +1,6 @@
 # Glyph State
 
-<!-- reviewed: 2026-08-22 review-every: 90d -->
+<!-- reviewed: 2026-09-05 review-every: 90d -->
 
 Pure readers and geometry helpers for `GlyphStructure + Float64Array` glyph state.
 
@@ -9,6 +9,7 @@ Pure readers and geometry helpers for `GlyphStructure + Float64Array` glyph stat
 - **Architecture Invariant:** This package has no editor state, signals, command history, bridge calls, source/session selection, DOM APIs, or mutation ownership. It only interprets already-provided glyph state. Its dependency surface is exactly `@shift/types` + `@shift/geo` — enforced by `scripts/check-invariants.py` (`glyph-state-deps`).
 - **Architecture Invariant:** `GlyphGeometry` is a lazy reader over `GlyphStructure + values`. The renderer may cache an instance per reactive state update; rendering paths should not rebuild it inside inner draw loops.
 - **Architecture Invariant:** The flat values layout matches `shift-wire`: xAdvance, contour point positions, anchor positions, then component transforms. Any layout change in Rust must update `GlyphGeometry`, `Contour`, `Anchor`, and `Component` together.
+- **Architecture Invariant:** On-curve predicates accept both `onCurve` and `qCurve`. Point factories preserve the requested endpoint type and smooth flag; only off-curve controls force smoothness off.
 - **Architecture Invariant:** Segment parsing is structural. Two on-curve points produce a line; onCurve/offCurve/onCurve produces a quad; onCurve/offCurve/offCurve/onCurve produces a cubic. Runs starting with an off-curve point are skipped only in open contours — closed contours wrap and consume leading off-curves as controls of the final wrapped segment — and runs of three or more off-curves after an on-curve point are emitted as mis-typed cubics rather than dropped (see Gotchas).
 - **Architecture Invariant:** `bounds` always means tight drawable curve bounds, and sidebearings derive only from those bounds plus advance width. Raw control-point extents are point bounds and must be exposed as `pointBounds` if a consumer needs them; `selectionBounds` may intentionally combine complete curve segments with individually selected points.
 
