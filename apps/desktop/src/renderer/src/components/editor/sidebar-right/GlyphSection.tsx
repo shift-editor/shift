@@ -1,5 +1,6 @@
 import { useParams } from "react-router";
 import { asGlyphId } from "@shift/types";
+import { cn } from "@shift/ui";
 import PlaceholderGlyph from "@/assets/sidebar-right/placeholder-glyph.svg";
 import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
 import { useGlyphSidebearings } from "@/hooks/useGlyphSidebearings";
@@ -20,24 +21,24 @@ export const GlyphSection = () => {
   const glyph = glyphId
     ? (availableGlyphs.find((candidate) => candidate.id === glyphId) ?? null)
     : null;
-  if (!glyph) return null;
-
   const leftSidebearing =
     sidebearings.sidebearings.lsb === null ? null : Math.round(sidebearings.sidebearings.lsb);
   const rightSidebearing =
     sidebearings.sidebearings.rsb === null ? null : Math.round(sidebearings.sidebearings.rsb);
   const sidebearingsEditable =
     sidebearings.hasLayer && leftSidebearing !== null && rightSidebearing !== null;
-  const unicode =
-    glyph.unicode === null || glyph.unicode === undefined
-      ? "—"
-      : formatCodepointAsUPlus(glyph.unicode);
+  const unicodeUnavailable =
+    glyph === null || glyph.unicode === null || glyph.unicode === undefined;
+  const unicode = unicodeUnavailable ? "—" : formatCodepointAsUPlus(glyph.unicode);
+  const displayName = glyph === null ? "—" : glyph.displayName;
 
   return (
     <SidebarSection title="Glyph">
       <main className="flex flex-col items-center">
         <div className="flex flex-col items-center gap-0.5 mb-2">
-          <div className="font-mono text-sm">{unicode}</div>
+          <div className={cn("font-mono text-sm", unicodeUnavailable && "text-secondary")}>
+            {unicode}
+          </div>
         </div>
         <div className="flex justify-center items-center gap-2">
           <div className="contents">
@@ -73,12 +74,14 @@ export const GlyphSection = () => {
           <EditableSidebarInput
             ariaLabel="Advance width"
             className="text-center"
-            value={Math.round(xAdvance.xAdvance)}
+            value={glyph ? Math.round(xAdvance.xAdvance) : null}
             disabled={!xAdvance.hasLayer}
             onValueChange={xAdvance.hasLayer ? (value) => editor.setXAdvance(value) : undefined}
           />
         </div>
-        <div className="font-sans mt-2 text-sm">{glyph.displayName}</div>
+        <div className={cn("font-sans mt-2 text-sm", glyph === null && "text-secondary")}>
+          {displayName}
+        </div>
       </main>
     </SidebarSection>
   );

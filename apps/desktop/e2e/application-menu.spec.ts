@@ -219,6 +219,52 @@ authoredTest("Settings opens the active font configuration", async ({ electronAp
   await expect(page.getByRole("heading", { name: "Font", exact: true })).toBeVisible();
 });
 
+authoredTest(
+  "Settings rounds mapping display without losing editing precision",
+  async ({ page }) => {
+    await page
+      .getByRole("button", {
+        name: "Display and edit font information, such as family name, weight, style, etc.",
+        exact: true,
+      })
+      .click();
+    const settings = page.getByRole("dialog", { name: "Settings" });
+    await settings.getByRole("button", { name: "Axes", exact: true }).click();
+    await settings.getByRole("button", { name: "Create axis", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Add custom axis" }).click();
+    await settings.getByRole("tab", { name: "Mapping", exact: true }).click();
+
+    const input = settings.getByLabel("Source mapping point 2", { exact: true });
+    await input.focus();
+    await expect(input).toBeFocused();
+    await input.fill("42.85278");
+    await expect(input).toHaveValue("42.85278");
+    await settings.getByRole("heading", { name: "Source Mapping" }).click();
+    await expect(input).toHaveValue("42.85");
+
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          window
+            .shiftSession!.font.getAxisMappings()
+            .flatMap((mapping) =>
+              mapping.points.flatMap((point) => Object.values(point.output.values)),
+            ),
+        ),
+      )
+      .toContain(42.85278);
+
+    const mappings = await page.evaluate(() => window.shiftSession!.font.getAxisMappings());
+    await input.focus();
+    await expect(input).toHaveValue("42.85278");
+    await settings.getByRole("heading", { name: "Source Mapping" }).click();
+    await expect(input).toHaveValue("42.85");
+    expect(await page.evaluate(() => window.shiftSession!.font.getAxisMappings())).toEqual(
+      mappings,
+    );
+  },
+);
+
 convertiblePreviewTest(
   "View menu distinguishes canvas zoom from interface size",
   async ({ electronApp, page }) => {

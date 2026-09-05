@@ -1,4 +1,4 @@
-import { Separator } from "@shift/ui";
+import { Button, Separator } from "@shift/ui";
 import { isAnchorId, isContourId, isPointId } from "@shift/types";
 import { TransformSection } from "./sidebar-right/TransformSection";
 import { ScaleSection } from "./sidebar-right/ScaleSection";
@@ -8,9 +8,14 @@ import { useSignalState } from "@/lib/signals";
 import { GlyphSection } from "./sidebar-right/GlyphSection";
 import { AnchorSection } from "./sidebar-right/AnchorSection";
 import { BooleanOps } from "./BooleanOps";
+import { LockIcon } from "@/components/icons/LockIcon";
+import { usePreviewNotice } from "@/context/PreviewNoticeProvider";
 
 export const RightSidebar = () => {
   const session = useFontSession();
+  const showPreviewNotice = usePreviewNotice();
+  const readOnlyFont = session.mode === "preview";
+
   const editor = useEditor();
 
   const familyName = useSignalState(session.catalog.familyNameCell) ?? "Untitled";
@@ -28,7 +33,20 @@ export const RightSidebar = () => {
       className="h-full w-full min-w-0 bg-panel border-l border-line-subtle flex flex-col overflow-hidden"
     >
       <div className="px-3 py-2 flex items-center justify-between">
-        <span className="text-ui font-medium text-primary truncate">{familyName}</span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-ui font-medium text-primary truncate">{familyName}</span>
+          {readOnlyFont && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Read-only preview"
+              className="h-5 w-5 p-0 text-sidebar-icon"
+              onClick={showPreviewNotice}
+            >
+              <LockIcon aria-hidden className="h-3.5 w-3.5" />
+            </Button>
+          )}
+        </div>
         <span className="text-ui font-medium text-muted">{Math.round(zoom * 100)}%</span>
       </div>
       <Separator />

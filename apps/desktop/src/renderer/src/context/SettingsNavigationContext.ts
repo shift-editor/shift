@@ -2,6 +2,7 @@ import { createContext, useContext } from "react";
 import type { SettingsTarget } from "@/types/settings";
 
 export interface SettingsNavigation {
+  readonly target: SettingsTarget | null;
   open: (target: SettingsTarget) => void;
 }
 

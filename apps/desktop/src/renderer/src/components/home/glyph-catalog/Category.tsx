@@ -1,19 +1,30 @@
 import type { GlyphCategory } from "@shift/glyph-info";
-import { Button } from "@shift/ui";
+import { Button, cn } from "@shift/ui";
 import { CategoryIcon } from "./CategoryIcon";
 import ChevronRightIcon from "@/assets/general/chevron-right.svg";
 
 export interface CategoryProps {
   category: GlyphCategory;
   selectedCategory: GlyphCategory | null;
+  isTopLevelCategorySelected: boolean;
   onSelectCategory: (category: GlyphCategory) => void;
 }
-export const Category = ({ category, selectedCategory, onSelectCategory }: CategoryProps) => {
+export const Category = ({
+  category,
+  selectedCategory,
+  isTopLevelCategorySelected,
+  onSelectCategory,
+}: CategoryProps) => {
   const isActive = selectedCategory === category;
 
   return (
     <Button
-      className="w-full justify-between"
+      className={cn(
+        "w-full justify-between",
+        isActive &&
+          isTopLevelCategorySelected &&
+          "hover:bg-transparent data-[active]:bg-transparent",
+      )}
       variant="ghost"
       size="sm"
       onClick={() => onSelectCategory(category)}

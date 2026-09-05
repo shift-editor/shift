@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 
 import { Button } from "@shift/ui";
 import { routes } from "@/app/routes";
@@ -6,6 +6,7 @@ import { useSettingsNavigation } from "@/context/SettingsNavigationContext";
 
 export const NavigationPane = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const settings = useSettingsNavigation();
 
   return (
@@ -35,6 +36,11 @@ export const NavigationPane = () => {
                 icon={<Icon width={20} height={20} className="text-primary" />}
                 aria-label={route.description}
                 variant="ghost"
+                isActive={
+                  route.kind === "dialog"
+                    ? settings.target !== null
+                    : settings.target === null && location.pathname === route.path
+                }
                 size="icon"
                 onClick={onClick}
               />

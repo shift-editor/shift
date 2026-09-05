@@ -24,7 +24,7 @@ export const SourcesSection = ({ defaultOpen = false }: SourcesSectionProps) => 
         canAuthor ? (
           <CreateSourceMenu onOpenChange={setSourceMenuOpen} />
         ) : (
-          <SidebarActionButton label="Create source" data-read-only-mutation>
+          <SidebarActionButton label="Create source" disabled>
             <PlusIcon className="h-3 w-3" />
           </SidebarActionButton>
         )

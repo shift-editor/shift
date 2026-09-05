@@ -24,7 +24,7 @@ export const AxesSection = ({ defaultOpen = false }: AxesSectionProps) => {
         canAuthor ? (
           <CreateAxisMenu onOpenChange={setAxisMenuOpen} />
         ) : (
-          <SidebarActionButton label="Create axis" data-read-only-mutation>
+          <SidebarActionButton label="Create axis" disabled>
             <PlusIcon className="h-3 w-3" />
           </SidebarActionButton>
         )

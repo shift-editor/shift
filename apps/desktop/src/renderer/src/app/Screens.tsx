@@ -10,7 +10,7 @@ import { FontSessionProvider } from "@/workspace/FontSessionProvider";
 import { DebugProvider } from "@/context/DebugProvider";
 import { SettingsNavigationProvider } from "@/context/SettingsNavigationProvider";
 import { GlyphCatalogProvider } from "@/context/GlyphCatalogProvider";
-import { ReadOnlyNoticeDialog } from "@/components/chrome/ReadOnlyNoticeDialog";
+import { PreviewNoticeProvider } from "@/context/PreviewNoticeProvider";
 import { AboutScreen } from "@/views/AboutScreen";
 import { FeedbackScreen } from "@/views/FeedbackScreen";
 import { UpdateScreen } from "@/views/UpdateScreen";
@@ -55,7 +55,6 @@ export const Screens = () => {
 };
 
 const FontSessionScreens = () => {
-  const session = useFontSession();
   const location = useLocation();
 
   // Preserve the resident catalog atlas across screen navigation. Route visibility
@@ -64,22 +63,21 @@ const FontSessionScreens = () => {
 
   return (
     <GlyphCatalogProvider>
-      <SettingsNavigationProvider>
-        <ShiftSessionSetup />
-        <div
-          aria-hidden={!catalogActive}
-          className={catalogActive ? undefined : "pointer-events-none fixed inset-0 z-0"}
-          inert={!catalogActive}
-        >
-          <Home />
-        </div>
-        <div className={catalogActive ? undefined : "relative z-10"}>
-          <Outlet />
-        </div>
-        {session.mode === "authored" ? null : (
-          <ReadOnlyNoticeDialog canConvert={session.canConvert} />
-        )}
-      </SettingsNavigationProvider>
+      <PreviewNoticeProvider>
+        <SettingsNavigationProvider>
+          <ShiftSessionSetup />
+          <div
+            aria-hidden={!catalogActive}
+            className={catalogActive ? undefined : "pointer-events-none fixed inset-0 z-0"}
+            inert={!catalogActive}
+          >
+            <Home />
+          </div>
+          <div className={catalogActive ? undefined : "relative z-10"}>
+            <Outlet />
+          </div>
+        </SettingsNavigationProvider>
+      </PreviewNoticeProvider>
     </GlyphCatalogProvider>
   );
 };

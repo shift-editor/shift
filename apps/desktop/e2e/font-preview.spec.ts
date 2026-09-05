@@ -179,10 +179,7 @@ test.describe("retained font source Grid preview", () => {
       expect(afterScrub.equals(beforeScrub)).toBe(false);
     }
 
-    await editorSurface.getByLabel("Create source").click();
-    await expect(page.getByText("Read-only preview")).toBeVisible();
-    await page.keyboard.press("Escape");
-    await expect(page.getByText("Read-only preview")).toBeHidden();
+    await expect(editorSurface.getByLabel("Create source")).toBeDisabled();
 
     await editorSurface.getByLabel("Display all glyphs").click();
     await page.waitForURL(/#\/home$/);

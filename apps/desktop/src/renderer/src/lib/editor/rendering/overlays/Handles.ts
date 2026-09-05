@@ -24,12 +24,14 @@ export class Handles {
     contours: readonly GlyphContour[],
     selection: Selection,
     hover: Hover,
+    interpolated: boolean,
   ): void {
     const list = this.#items.fromContours(
       contours.map((contour) => contour.contour),
       {
         selection,
         hover,
+        interpolated,
       },
     );
 

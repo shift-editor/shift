@@ -54,8 +54,8 @@ export const GlyphCatalogView = () => {
             size="sm"
             aria-label="Create glyph"
             title="Create glyph"
+            disabled={!canAuthor}
             onClick={canAuthor ? createQuickGlyph : undefined}
-            data-read-only-mutation={canAuthor ? undefined : true}
           >
             <PlusIcon className="w-3 h-3 text-muted" />
           </Button>
@@ -92,6 +92,7 @@ export const GlyphCatalogView = () => {
                 <Category
                   category={categoryNode.category}
                   selectedCategory={selectedCategory}
+                  isTopLevelCategorySelected={isTopLevelCategorySelected}
                   onSelectCategory={selectCategory}
                 />
               </CollapsibleTrigger>

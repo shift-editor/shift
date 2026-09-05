@@ -27,6 +27,7 @@ import {
   windowTitle,
 } from "./fixtures/documentLifecycle";
 import { createAuthoredDocument } from "./fixtures/fontSource";
+import { clickFirstCatalogGlyph } from "./fixtures/appLocators";
 
 const execFileAsync = promisify(execFile);
 
@@ -215,15 +216,109 @@ async function hasWindowTitle(
 test.describe("opening a font through the application shell", () => {
   test.use({ openFontPath: FONT_PATH });
 
-  test("opens a selected font through the launcher", async ({ electronApp, page }) => {
+  test("opens a selected font with disabled authoring controls", async ({ electronApp, page }) => {
     const workspacePage = await openSelectedPreview(page, electronApp);
 
-    await workspacePage.getByRole("button", { name: "Create glyph", exact: true }).click();
-    const dialog = workspacePage.getByRole("dialog", { name: "Read-only preview" });
-    await expect(dialog).toBeVisible();
-    await expect(dialog).toContainText(
-      "Compiled TTF and OTF fonts can be inspected here, but this preview cannot be edited or converted.",
+    for (const label of ["Create glyph", "Create source", "Create instance", "Create axis"]) {
+      await expect(workspacePage.getByRole("button", { name: label, exact: true })).toBeDisabled();
+    }
+    for (const label of ["Pen Tool (P)", "Shape Tool (S)"]) {
+      await expect(workspacePage.getByRole("button", { name: label, exact: true })).toBeDisabled();
+    }
+
+    await workspacePage.getByRole("button", { name: "Read-only preview", exact: true }).click();
+    const notice = workspacePage.getByRole("dialog", { name: "Read-only preview" });
+    await expect(notice).toBeVisible();
+    await expect(notice).toContainText(
+      "This font is read-only. You can inspect it, but editing and conversion aren’t supported.",
     );
+    await expect(notice.getByRole("button", { name: "Save as Shift…" })).toHaveCount(0);
+    await expect(notice).toHaveScreenshot("read-only-preview-notice.png");
+    await notice.getByRole("button", { name: "OK" }).click();
+    await expect(notice).toBeHidden();
+  });
+
+  test("preview canvas clicks explain restrictions while marquee stays selection-free", async ({
+    electronApp,
+    page,
+  }) => {
+    const workspacePage = await openSelectedPreview(page, electronApp);
+    await clickFirstCatalogGlyph(workspacePage);
+    await workspacePage.waitForURL(/#\/editor\//);
+    const canvas = workspacePage.locator("#interactive-canvas");
+    await expect(canvas).toBeVisible();
+    await expect
+      .poll(() =>
+        workspacePage.evaluate(() => window.shiftSession?.editor.scene.nodesOfKind("glyph").length),
+      )
+      .toBe(1);
+
+    const targets = await workspacePage.evaluate(() => {
+      const editor = window.shiftSession!.editor;
+      const node = editor.scene.nodesOfKind("glyph")[0]!;
+      const glyph = editor.glyphForId(node.glyphId)!;
+      const geometry = glyph.geometryAt(editor.externalLocation);
+      const point = geometry.allPoints[0]!;
+      const segment = geometry.segments[0]!.pointAt(0.5);
+      const view = glyph.renderModelAt(editor.externalLocationCell, editor.activeSourceIdCell);
+      const metrics = editor.font.metricsAtLocation(editor.externalLocation);
+      return [
+        point,
+        segment,
+        {
+          x: view.xAdvanceCell.peek() / 2,
+          y: metrics.descender - editor.camera.screenToUpmDistance(15),
+        },
+      ].map((point) =>
+        editor.projectSceneToScreen({
+          x: point.x + node.position.x,
+          y: point.y + node.position.y,
+        }),
+      );
+    });
+    const bounds = await canvas.boundingBox();
+    if (!bounds) throw new Error("Expected canvas bounds");
+    const notice = workspacePage.getByRole("dialog", { name: "Read-only preview", exact: true });
+
+    for (const point of targets.slice(0, 2)) {
+      await workspacePage.mouse.move(bounds.x + point.x, bounds.y + point.y);
+      await expect
+        .poll(() => workspacePage.evaluate(() => window.shiftSession!.editor.hover.id))
+        .toBeNull();
+      await canvas.click({ position: point });
+      await expect(notice).toBeVisible();
+      await expect
+        .poll(() => workspacePage.evaluate(() => window.shiftSession!.editor.selection.ids.length))
+        .toBe(0);
+      await notice.getByRole("button", { name: "OK", exact: true }).click();
+      await expect(notice).toBeHidden();
+    }
+
+    await canvas.click({ position: targets[2]! });
+    await expect(notice).toBeHidden();
+
+    const point = targets[0]!;
+    await workspacePage.mouse.move(bounds.x + point.x, bounds.y + point.y);
+    await workspacePage.mouse.down();
+    await workspacePage.mouse.move(bounds.x + point.x + 30, bounds.y + point.y + 30, { steps: 5 });
+    await expect
+      .poll(() =>
+        workspacePage.evaluate(() => window.shiftSession!.editor.toolCell.peek()?.state.type),
+      )
+      .toBe("brushing");
+    await expect
+      .poll(() => workspacePage.evaluate(() => window.shiftSession!.editor.selection.ids.length))
+      .toBe(0);
+    await expect(notice).toBeHidden();
+    await workspacePage.mouse.up();
+    await expect
+      .poll(() =>
+        workspacePage.evaluate(() => window.shiftSession!.editor.toolCell.peek()?.state.type),
+      )
+      .toBe("ready");
+    await expect
+      .poll(() => workspacePage.evaluate(() => window.shiftSession!.editor.selection.ids.length))
+      .toBe(0);
   });
 
   test("does not convert a TTF preview through Save", async ({
@@ -260,15 +355,13 @@ otfPreviewTest(
 );
 
 convertiblePreviewTest(
-  "convertible previews direct users to save before authoring",
+  "convertible previews keep authoring controls disabled until Save",
   async ({ electronApp, page }) => {
     const workspacePage = await openSelectedPreview(page, electronApp);
 
-    await workspacePage.getByRole("button", { name: "Create glyph", exact: true }).click();
-    const dialog = workspacePage.getByRole("dialog", { name: "Read-only preview" });
-    await expect(dialog).toContainText(
-      "Save this source as a Shift document before making authoring changes.",
-    );
+    for (const label of ["Create glyph", "Create source", "Create instance", "Create axis"]) {
+      await expect(workspacePage.getByRole("button", { name: label, exact: true })).toBeDisabled();
+    }
   },
 );
 
@@ -278,9 +371,10 @@ convertiblePreviewTest(
     const sourceBefore = sourceTreeSnapshot(UFO_FONT_PATH);
     const workspacePage = await openSelectedPreview(page, electronApp);
 
-    await workspacePage.evaluate(() => {
-      void window.shiftHost?.commands.run("file.save");
-    });
+    await workspacePage.getByRole("button", { name: "Read-only preview", exact: true }).click();
+    const notice = workspacePage.getByRole("dialog", { name: "Save as Shift to edit" });
+    await expect(notice).toBeVisible();
+    await notice.getByRole("button", { name: "Save as Shift…" }).click();
     await waitForWorkspaceReady(workspacePage);
     await expect
       .poll(() => workspacePage.evaluate(() => window.shiftSession?.mode))

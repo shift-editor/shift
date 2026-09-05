@@ -3,6 +3,7 @@ import { isPointId, type PointId } from "@shift/types";
 import { TestEditor } from "@/testing/TestEditor";
 import { SELECT_BOUNDING_BOX_STYLE } from "./BoundingBox";
 import { Select } from "./Select";
+import { LOCK_GAP_PX, LOCK_SIZE_PX } from "@/lib/editor/rendering/icons/lock";
 
 // Restored from the WS6 behavioral inventory (git show ef037c6e^).
 describe("Select tool", () => {
@@ -570,5 +571,61 @@ describe("Select tool", () => {
       expect(editor.selection.has(inside.id)).toBe(true);
       expect(editor.selection.has(outside.id)).toBe(false);
     });
+  });
+});
+
+describe("Select tool in preview sessions", () => {
+  let editor: TestEditor;
+
+  beforeEach(async () => {
+    editor = new TestEditor("preview");
+    await editor.startSession();
+    await editor.drawOpenContour([
+      { x: 100, y: 100 },
+      { x: 200, y: 200 },
+    ]);
+    editor.selectTool("select");
+  });
+
+  it("disables authoring tools while keeping Select available", () => {
+    expect(editor.toolRegistry.get("select")?.disabled).toBeFalsy();
+    expect(editor.toolRegistry.get("pen")?.disabled).toBe(true);
+    expect(editor.toolRegistry.get("shape")?.disabled).toBe(true);
+  });
+
+  it("draws a marquee without hover or selection state", async () => {
+    await editor.clickGlyphLocal(100, 100);
+    expect(editor.selection.ids).toEqual([]);
+
+    const pointScreen = editor.projectSceneToScreen({ x: 100, y: 100 });
+    editor.pointerMove(pointScreen.x, pointScreen.y);
+    expect(editor.hover.id).toBeNull();
+
+    await editor.dragScene({
+      down: { x: 80, y: 80 },
+      start: { x: 84, y: 80 },
+      end: { x: 150, y: 150 },
+    });
+    expect(editor.selection.ids).toEqual([]);
+    expect(editor.toolCell.peek()?.state.type).toBe("ready");
+  });
+
+  it("treats the preview lock as ordinary empty canvas", async () => {
+    const view = editor.sceneGlyphRenderModel;
+    const node = editor.glyphNode;
+    if (!view || !node) throw new Error("Expected placed preview glyph");
+
+    const metrics = editor.font.metricsForSource(editor.font.defaultSource.id);
+    const size = editor.camera.screenToUpmDistance(LOCK_SIZE_PX);
+    const gap = editor.camera.screenToUpmDistance(LOCK_GAP_PX);
+    const lockPoint = {
+      x: node.position.x + view.xAdvanceCell.peek() / 2,
+      y: node.position.y + metrics.descender - gap - size / 2,
+    };
+    expect(editor.getPointerTarget(lockPoint).kind).toBe("canvas");
+    await editor.clickGlyphLocal(lockPoint.x, lockPoint.y);
+
+    expect(editor.selection.ids).toEqual([]);
+    expect(editor.toolCell.peek()?.state.type).toBe("ready");
   });
 });

@@ -24,7 +24,7 @@ export const InstancesSection = ({ defaultOpen = false }: InstancesSectionProps)
         canAuthor ? (
           <CreateInstanceMenu onOpenChange={setInstanceMenuOpen} />
         ) : (
-          <SidebarActionButton label="Create instance" data-read-only-mutation>
+          <SidebarActionButton label="Create instance" disabled>
             <PlusIcon className="h-3 w-3" />
           </SidebarActionButton>
         )

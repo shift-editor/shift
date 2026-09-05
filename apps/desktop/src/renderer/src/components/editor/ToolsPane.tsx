@@ -52,7 +52,6 @@ export const ToolbarIcon: FC<ToolbarIconProps> = ({
               disabled={disabled}
               isActive={isActive}
               onClick={onClick}
-              data-read-only-mutation={onClick ? undefined : true}
               size="icon"
             />
           }

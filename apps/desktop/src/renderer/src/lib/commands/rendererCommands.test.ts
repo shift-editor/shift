@@ -3,6 +3,15 @@ import { mintContourId } from "@shift/types";
 import { TestEditor } from "@/testing/TestEditor";
 import { runRendererCommand } from "./rendererCommands";
 
+describe("preview editor commands", () => {
+  it("does not create canvas selection through Select All", async () => {
+    const editor = new TestEditor("preview");
+    await editor.startSession("preview", null);
+    expect(await runRendererCommand(editor, "edit.selectAll")).toBe(false);
+    expect(editor.selection.ids).toEqual([]);
+  });
+});
+
 describe("empty and invalid editor operations", () => {
   let editor: TestEditor;
 

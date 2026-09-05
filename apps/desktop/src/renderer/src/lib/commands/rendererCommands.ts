@@ -30,6 +30,8 @@ export async function runRendererCommand(editor: Editor, id: EditorCommandId): P
     if (textResult !== null) return textResult;
   }
 
+  if (editor.sessionMode === "preview" && id === "edit.selectAll") return false;
+
   switch (id) {
     case "edit.undo":
       await editor.undo();
