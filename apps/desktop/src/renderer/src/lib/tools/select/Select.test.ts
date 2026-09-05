@@ -376,6 +376,94 @@ describe("Select tool", () => {
       expect(secondAfter.y).toBeCloseTo(250);
     });
 
+    describe("constrained resize release", () => {
+      beforeEach(async () => {
+        const ids = await editor.drawOpenContour([
+          { x: 100, y: 100 },
+          { x: 200, y: 200 },
+        ]);
+        editor.selection.select(ids);
+        editor.selectTool("select");
+      });
+
+      it.each([true, false])(
+        "commits the visible preview with Shift held=%s at release",
+        async (shiftKey) => {
+          const layer = editor.requireGlyphLayer();
+          const down = editor.projectSceneToScreen({ x: 200, y: 200 });
+          const end = editor.projectSceneToScreen({ x: 250, y: 225 });
+          editor.pointerDown(down.x, down.y, { shiftKey: true });
+          editor.pointerMove(end.x, end.y, { shiftKey: true });
+          expect(editor.toolManager.activeTool?.state.type).toBe("resizing");
+
+          const preview = layer.contours[0]!.points.map(({ x, y }) => ({ x, y }));
+          expect(preview).toEqual([
+            { x: 100, y: 100 },
+            { x: 250, y: 250 },
+          ]);
+          editor.pointerUp(end.x, end.y, { shiftKey });
+          await editor.settle();
+
+          expect(layer.contours[0]!.points.map(({ x, y }) => ({ x, y }))).toEqual(preview);
+        },
+      );
+
+      it("uses the release position with the last preview constraints and preserves undo", async () => {
+        const layer = editor.requireGlyphLayer();
+        const down = editor.projectSceneToScreen({ x: 200, y: 200 });
+        const move = editor.projectSceneToScreen({ x: 250, y: 225 });
+        const up = editor.projectSceneToScreen({ x: 275, y: 230 });
+        editor.pointerDown(down.x, down.y).pointerMove(move.x, move.y, { shiftKey: true });
+        editor.pointerUp(up.x, up.y);
+        await editor.settle();
+        expect(layer.contours[0]!.points.map(({ x, y }) => ({ x, y }))).toEqual([
+          { x: 100, y: 100 },
+          { x: 275, y: 275 },
+        ]);
+
+        await editor.undo();
+        expect(layer.contours[0]!.points.map(({ x, y }) => ({ x, y }))).toEqual([
+          { x: 100, y: 100 },
+          { x: 200, y: 200 },
+        ]);
+        await editor.redo();
+        expect(layer.contours[0]!.points.map(({ x, y }) => ({ x, y }))).toEqual([
+          { x: 100, y: 100 },
+          { x: 275, y: 275 },
+        ]);
+      });
+
+      it("removes the constraint when dragging continues without Shift", async () => {
+        const layer = editor.requireGlyphLayer();
+        const down = editor.projectSceneToScreen({ x: 200, y: 200 });
+        const move = editor.projectSceneToScreen({ x: 250, y: 225 });
+        const end = editor.projectSceneToScreen({ x: 275, y: 230 });
+        editor.pointerDown(down.x, down.y).pointerMove(move.x, move.y, { shiftKey: true });
+        editor.pointerMove(end.x, end.y).pointerUp(end.x, end.y, { shiftKey: true });
+        await editor.settle();
+
+        expect(layer.contours[0]!.points.map(({ x, y }) => ({ x, y }))).toEqual([
+          { x: 100, y: 100 },
+          { x: 275, y: 230 },
+        ]);
+      });
+
+      it("uses the modifiers from a queued movement drained at mouseup", async () => {
+        const layer = editor.requireGlyphLayer();
+        const down = editor.projectSceneToScreen({ x: 200, y: 200 });
+        const move = editor.projectSceneToScreen({ x: 250, y: 225 });
+        editor.pointerDown(down.x, down.y);
+        editor.toolManager.handlePointerMove(move, { shiftKey: true, altKey: false });
+        editor.pointerUp(move.x, move.y);
+        await editor.settle();
+
+        expect(layer.contours[0]!.points.map(({ x, y }) => ({ x, y }))).toEqual([
+          { x: 100, y: 100 },
+          { x: 250, y: 250 },
+        ]);
+      });
+    });
+
     it("rotates the current selection from the pointer-down bounding-box zone", async () => {
       editor.selectTool("pen");
       await editor.clickGlyphLocal(100, 100);

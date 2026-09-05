@@ -12,6 +12,7 @@ import {
   X,
   cn,
 } from "@shift/ui";
+import { message } from "@shared/messages";
 import type { SettingsCategory, SettingsTarget } from "@/types/settings";
 import { useFont } from "@/workspace/WorkspaceContext";
 import { AxesSettingsPanel } from "./AxesSettingsPanel";
@@ -50,7 +51,7 @@ export const SettingsDialog = ({
             "border border-line-subtle bg-canvas shadow-lg",
           )}
         >
-          <DialogTitle className="sr-only">Settings</DialogTitle>
+          <DialogTitle className="sr-only">{message("settings.dialog.title")}</DialogTitle>
           <SettingsSidebar
             category={activeTarget.category}
             onCategoryChange={(category) => {
@@ -70,12 +71,12 @@ export const SettingsDialog = ({
                     "items-center justify-center rounded text-primary/70 transition-colors",
                     "hover:bg-hover hover:text-primary",
                   )}
-                  aria-label="Close settings"
+                  aria-label={message("settings.dialog.close")}
                 >
                   <X className="h-4 w-4" />
                 </DialogClose>
               </TooltipTrigger>
-              <TooltipContent>Close settings</TooltipContent>
+              <TooltipContent>{message("settings.dialog.close")}</TooltipContent>
             </Tooltip>
 
             <SettingsCategoryPanel target={activeTarget} canAuthor={canAuthor} />

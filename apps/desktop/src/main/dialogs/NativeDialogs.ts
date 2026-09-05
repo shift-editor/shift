@@ -13,22 +13,20 @@ export interface NativeDialogs {
   openFont(window: Window | null): Promise<string | null>;
 
   /**
-   * Shows a blocking failure after a new document could not be created.
+   * Shows a blocking, nontechnical failure after document creation fails.
    *
    * @param window - native window that should own the message.
    * @param applicationName - product name shown by the native shell.
-   * @param error - failure whose safe diagnostic detail is presented.
    */
-  showCreateFailure(window: Window | null, applicationName: string, error: unknown): Promise<void>;
+  showCreateFailure(window: Window | null, applicationName: string): Promise<void>;
 
   /**
-   * Shows a blocking failure after a selected font could not be opened.
+   * Shows a blocking, nontechnical failure after opening a selected font fails.
    *
    * @param window - native window that should own the message.
    * @param applicationName - product name shown by the native shell.
-   * @param error - failure whose safe diagnostic detail is presented.
    */
-  showOpenFailure(window: Window | null, applicationName: string, error: unknown): Promise<void>;
+  showOpenFailure(window: Window | null, applicationName: string): Promise<void>;
 
   /**
    * Selects an independent `.shift` destination.
@@ -79,20 +77,18 @@ export interface NativeDialogs {
   ): Promise<DocumentCrashChoice>;
 
   /**
-   * Shows a blocking failure after a document save was refused or failed.
+   * Shows a blocking, nontechnical failure after a document save fails.
    *
    * @param window - native window that should own the message.
    * @param applicationName - product name shown by the native shell.
-   * @param error - failure whose safe diagnostic detail is presented.
    */
-  showSaveFailure(window: Window | null, applicationName: string, error: unknown): Promise<void>;
+  showSaveFailure(window: Window | null, applicationName: string): Promise<void>;
 
   /**
-   * Shows a blocking failure after TrueType export was refused or failed.
+   * Shows a blocking, nontechnical failure after TrueType export fails.
    *
    * @param window - native window that should own the message.
    * @param applicationName - product name shown by the native shell.
-   * @param error - failure whose safe diagnostic detail is presented.
    */
-  showExportFailure(window: Window | null, applicationName: string, error: unknown): Promise<void>;
+  showExportFailure(window: Window | null, applicationName: string): Promise<void>;
 }

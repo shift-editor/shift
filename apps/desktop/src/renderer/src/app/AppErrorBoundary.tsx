@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { Button } from "@shift/ui";
+import { message } from "@shared/messages";
 import { getShiftHost } from "@/host/shiftHost";
 import { ErrorDialog } from "./ErrorDialog";
 import { reportRendererError } from "./errorReporting";
@@ -33,15 +34,15 @@ export class AppErrorBoundary extends Component<Props, State> {
 
     return (
       <ErrorDialog
-        title="Something went wrong"
-        description="Reload this window to continue."
+        title={message("error.app.title")}
+        description={message("error.app.description")}
         error={this.state.error}
         componentStack={this.state.componentStack}
       >
         <Button variant="primary" onClick={() => window.location.reload()}>
-          Reload Window
+          {message("action.reloadWindow")}
         </Button>
-        <Button onClick={this.closeWindow}>Close Window</Button>
+        <Button onClick={this.closeWindow}>{message("action.closeWindow")}</Button>
       </ErrorDialog>
     );
   }

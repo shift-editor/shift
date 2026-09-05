@@ -8,6 +8,7 @@ import {
   DialogTitle,
   cn,
 } from "@shift/ui";
+import { message } from "@shared/messages";
 
 interface PreviewNoticeDialogProps {
   open: boolean;
@@ -33,26 +34,24 @@ export const PreviewNoticeDialog = ({
         )}
       >
         <DialogTitle className="text-base font-medium text-primary">
-          {canConvert ? "Save as Shift to edit" : "Read-only preview"}
+          {message(canConvert ? "preview.convertible.title" : "preview.readOnly.title")}
         </DialogTitle>
         <p className="mt-2 text-sm text-muted">
-          {canConvert
-            ? "This font is open as a read-only preview. Save it as a Shift document to make changes."
-            : "This font is read-only. You can inspect it, but editing and conversion aren’t supported."}
+          {message(canConvert ? "preview.convertible.description" : "preview.readOnly.description")}
         </p>
         <div className="mt-3 flex justify-end gap-2">
           {canConvert ? (
             <>
-              <DialogClose render={<Button size="sm">Cancel</Button>} />
+              <DialogClose render={<Button size="sm">{message("action.cancel")}</Button>} />
               <Button size="sm" variant="primary" onClick={onSaveAsShift}>
-                Save as Shift…
+                {message("action.saveAsShift")}
               </Button>
             </>
           ) : (
             <DialogClose
               render={
                 <Button size="sm" variant="primary" className="h-6 min-w-16 px-4">
-                  OK
+                  {message("action.ok")}
                 </Button>
               }
             />

@@ -28,6 +28,7 @@ import { electronNativeDialogs } from "../dialogs/electronNativeDialogs";
 import { shiftProductName } from "../release";
 import { AppUpdater } from "../update/AppUpdater";
 import { isConvertiblePreviewPath } from "../../shared/workspace/previewConversion";
+import { OPEN_FONT_EXTENSIONS } from "../../shared/openFontExtensions";
 
 const SLUG_ATLAS_PROFILING_ENABLED =
   process.env.SHIFT_PROFILE_SLUG_ATLAS !== undefined &&
@@ -163,7 +164,7 @@ export class App {
     app.on("second-instance", (_event, commandLine) => {
       let handledOpenPath = false;
       for (const argument of commandLine) {
-        if (path.extname(argument).toLowerCase() !== ".shift") continue;
+        if (!OPEN_FONT_EXTENSIONS.includes(path.extname(argument).slice(1).toLowerCase())) continue;
 
         handledOpenPath = true;
         this.#handleOpenPath(argument);
@@ -588,7 +589,7 @@ export class App {
         window.window.webContents.reload();
       } catch (error) {
         this.#log.warn("preview save failed", error);
-        await this.#nativeDialogs.showSaveFailure(window, this.applicationName, error);
+        await this.#nativeDialogs.showSaveFailure(window, this.applicationName);
       }
     })();
 
@@ -603,7 +604,7 @@ export class App {
   }
 
   #handleOpenPath(sourcePath: string): void {
-    if (path.extname(sourcePath).toLowerCase() !== ".shift") return;
+    if (!OPEN_FONT_EXTENSIONS.includes(path.extname(sourcePath).slice(1).toLowerCase())) return;
 
     const openPath = path.resolve(sourcePath);
     if (this.#pendingOpenPaths.includes(openPath)) return;
@@ -623,7 +624,11 @@ export class App {
 
       try {
         const session = await this.#workspaces.openPath(sourcePath);
-        const opener = this.#windows.activeWindow();
+        const opener =
+          this.#windows.activeWindow() ??
+          this.#windows
+            .allWindows()
+            .find((window) => this.#workspaces.getForBrowserWindow(window.window) === null);
         if (opener) {
           if (this.#focusExistingWorkspaceWindow(opener, session)) continue;
 
@@ -648,7 +653,7 @@ export class App {
       this.#openWorkspaceWindow(opener, session);
     } catch (error) {
       this.#log.warn("new document failed", error);
-      await this.#nativeDialogs.showCreateFailure(opener, this.applicationName, error);
+      await this.#nativeDialogs.showCreateFailure(opener, this.applicationName);
     }
   }
 
@@ -663,7 +668,7 @@ export class App {
       this.#openWorkspaceWindow(opener, session);
     } catch (error) {
       this.#log.warn("open document failed", error);
-      await this.#nativeDialogs.showOpenFailure(opener, this.applicationName, error);
+      await this.#nativeDialogs.showOpenFailure(opener, this.applicationName);
     }
   }
 

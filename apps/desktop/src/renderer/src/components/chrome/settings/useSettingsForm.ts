@@ -54,9 +54,10 @@ export function useSettingsForm<T extends FieldValues>(
 
         form.reset(refreshed, { keepDirtyValues: true });
       } catch (cause) {
+        console.error(options.errorMessage, cause);
         form.setError("root.server", {
           type: "workspace",
-          message: cause instanceof Error ? cause.message : options.errorMessage,
+          message: options.errorMessage,
         });
       }
     },

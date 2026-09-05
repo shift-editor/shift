@@ -171,6 +171,60 @@ describe("GestureDetector", () => {
       });
     });
 
+    it.each([true, false])(
+      "retains the last drag modifiers when release keys change (held=%s)",
+      (held) => {
+        const modifiers = { shiftKey: held, altKey: held, metaKey: held, ctrlKey: held };
+        detector.pointerDown(c(100, 100), NO_MODIFIERS);
+        detector.pointerMove(c(110, 100), modifiers);
+        const events = detector.pointerUp(c(120, 110), {
+          shiftKey: !held,
+          altKey: !held,
+          metaKey: !held,
+          ctrlKey: !held,
+        });
+
+        expect(events).toEqual([
+          expect.objectContaining({
+            type: "drag",
+            coords: c(120, 110),
+            ...modifiers,
+            accelKey: held,
+          }),
+          expect.objectContaining({
+            type: "dragEnd",
+            coords: c(120, 110),
+            ...modifiers,
+            accelKey: held,
+          }),
+        ]);
+      },
+    );
+
+    it("adopts modifier changes on the next drag movement", () => {
+      detector.pointerDown(c(100, 100), NO_MODIFIERS);
+      detector.pointerMove(c(110, 100), { ...NO_MODIFIERS, shiftKey: true });
+      detector.pointerMove(c(120, 100), NO_MODIFIERS);
+      const events = detector.pointerUp(c(130, 100), { ...NO_MODIFIERS, shiftKey: true });
+
+      expect(events).toEqual([
+        expect.objectContaining({ type: "drag", coords: c(130, 100), shiftKey: false }),
+        expect.objectContaining({ type: "dragEnd", coords: c(130, 100), shiftKey: false }),
+      ]);
+    });
+
+    it("uses release modifiers for a click after a completed constrained drag", () => {
+      detector.pointerDown(c(100, 100), NO_MODIFIERS);
+      detector.pointerMove(c(110, 100), { ...NO_MODIFIERS, shiftKey: true });
+      detector.pointerUp(c(110, 100), NO_MODIFIERS);
+      detector.pointerDown(c(200, 200), { ...NO_MODIFIERS, shiftKey: true });
+      const events = detector.pointerUp(c(200, 200), NO_MODIFIERS);
+
+      expect(events).toEqual([
+        expect.objectContaining({ type: "click", ...NORMALIZED_NO_MODIFIERS }),
+      ]);
+    });
+
     it("isDragging returns true during drag", () => {
       expect(detector.isDragging).toBe(false);
 
@@ -196,6 +250,20 @@ describe("GestureDetector", () => {
       const events = detector.pointerMove(c(120, 100), NO_MODIFIERS);
       expect(events).toHaveLength(1);
       expect(expectAt(events, 0).type).toBe("pointerMove");
+    });
+
+    it("does not retain canceled drag modifiers in the next gesture", () => {
+      detector.pointerDown(c(100, 100), NO_MODIFIERS);
+      detector.pointerMove(c(110, 100), { ...NO_MODIFIERS, shiftKey: true });
+      detector.reset();
+      detector.pointerDown(c(200, 200), NO_MODIFIERS);
+      detector.pointerMove(c(210, 200), NO_MODIFIERS);
+      const events = detector.pointerUp(c(220, 200), NO_MODIFIERS);
+
+      expect(events).toEqual([
+        expect.objectContaining({ type: "drag", ...NORMALIZED_NO_MODIFIERS }),
+        expect.objectContaining({ type: "dragEnd", ...NORMALIZED_NO_MODIFIERS }),
+      ]);
     });
 
     it("resets double-click tracking", () => {

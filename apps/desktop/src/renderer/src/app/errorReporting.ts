@@ -15,6 +15,7 @@ export function reportRendererError(
     route: window.location.hash,
     boundaryName,
     message,
+    stack: error instanceof Error ? (error.stack ?? null) : null,
     componentStack,
   };
 

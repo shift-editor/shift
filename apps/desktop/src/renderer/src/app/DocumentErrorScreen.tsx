@@ -1,13 +1,14 @@
 import { Button } from "@shift/ui";
+import { message } from "@shared/messages";
 import { getShiftHost } from "@/host/shiftHost";
 import { ErrorDialog } from "./ErrorDialog";
 
 type DocumentErrorScreenProps = {
-  error: unknown;
+  error?: unknown;
   componentStack?: string;
 };
 
-export function DocumentErrorScreen({ error, componentStack }: DocumentErrorScreenProps) {
+export function DocumentErrorScreen({ error, componentStack }: DocumentErrorScreenProps = {}) {
   async function reopenDocument(): Promise<void> {
     try {
       await getShiftHost().window.reopenDocument();
@@ -26,15 +27,15 @@ export function DocumentErrorScreen({ error, componentStack }: DocumentErrorScre
 
   return (
     <ErrorDialog
-      title="Something went wrong with this document"
-      description="Your completed edits are safe. Reopen the document to continue."
+      title={message("error.document.title")}
+      description={message("error.document.description")}
       error={error}
       componentStack={componentStack}
     >
       <Button variant="primary" onClick={reopenDocument}>
-        Reopen Document
+        {message("action.reopenDocument")}
       </Button>
-      <Button onClick={closeWindow}>Close Window</Button>
+      <Button onClick={closeWindow}>{message("action.closeWindow")}</Button>
     </ErrorDialog>
   );
 }

@@ -1,6 +1,7 @@
 import type { ChangeEvent, ReactNode } from "react";
 import type { FontMetadata } from "@shift/types";
 import { Field, FieldLabel, Input, Textarea } from "@shift/ui";
+import { message } from "@shared/messages";
 import { useSignalState } from "@/lib/signals";
 import { useFont } from "@/workspace/WorkspaceContext";
 import { SettingsNumberField } from "./SettingsNumberField";
@@ -12,7 +13,7 @@ export const FontSettingsPanel = ({ canAuthor }: { canAuthor: boolean }) => {
   const metadata = useSignalState(font.metadataCell);
   const form = useSettingsForm<FontMetadata>({
     canonical: metadata,
-    errorMessage: "Unable to update font metadata",
+    errorMessage: message("settings.fontSaveFailed"),
     save: async (next) => {
       await font.updateMetadata(next);
       return font.metadata;

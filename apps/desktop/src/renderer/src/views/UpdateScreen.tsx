@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "react-router";
 import { Button, Progress } from "@shift/ui";
+import { message } from "@shared/messages";
 import { appIcon } from "@/app/branding";
 import { shiftProductName } from "@/app/release";
 import { Titlebar } from "@/components/chrome/Titlebar";
@@ -80,8 +81,11 @@ export const UpdateScreen = () => {
 
   const progressText =
     progress.total > 0
-      ? `Downloading update… ${formatBytes(progress.transferred)} of ${formatBytes(progress.total)}`
-      : "Preparing download…";
+      ? message("update.downloading.progress", {
+          transferred: formatBytes(progress.transferred),
+          total: formatBytes(progress.total),
+        })
+      : message("update.downloading.preparing");
 
   let content;
   switch (view) {
@@ -90,16 +94,19 @@ export const UpdateScreen = () => {
         <>
           <div className="flex flex-col gap-1.5">
             <h1 className="text-base font-semibold">
-              {shiftProductName} {version} is available.
+              {message("update.available.title", {
+                applicationName: shiftProductName,
+                version,
+              })}
             </h1>
-            <p className="text-sm text-secondary">Would you like to download it now?</p>
+            <p className="text-sm text-secondary">{message("update.available.description")}</p>
           </div>
           <div className="flex gap-2.5">
             <Button variant="primary" className="min-w-36" onClick={startDownload}>
-              Download Update
+              {message("action.downloadUpdate")}
             </Button>
             <Button className="min-w-24" onClick={later}>
-              Later
+              {message("action.later")}
             </Button>
           </div>
         </>
@@ -110,7 +117,7 @@ export const UpdateScreen = () => {
         <>
           <h1 className="text-base font-semibold">{progressText}</h1>
           <Progress
-            aria-label="Update download progress"
+            aria-label={message("update.downloading.accessibleLabel")}
             aria-valuetext={progressText}
             value={progress.percent}
             className="w-full"
@@ -118,7 +125,7 @@ export const UpdateScreen = () => {
             indicatorClassName="duration-200"
           />
           <Button className="min-w-24" onClick={cancelDownload}>
-            Cancel
+            {message("action.cancel")}
           </Button>
         </>
       );
@@ -127,14 +134,17 @@ export const UpdateScreen = () => {
       content = (
         <>
           <h1 className="text-base font-semibold">
-            {shiftProductName} {version} is ready to install.
+            {message("update.ready.title", {
+              applicationName: shiftProductName,
+              version,
+            })}
           </h1>
           <div className="flex gap-2.5">
             <Button variant="primary" className="min-w-36" onClick={restartToUpdate}>
-              Restart and Install
+              {message("action.restartAndInstall")}
             </Button>
             <Button className="min-w-24" onClick={later}>
-              Later
+              {message("action.later")}
             </Button>
           </div>
         </>

@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { Axis, AxisMapping, AxisMappingPoint } from "@shift/types";
 import { mintAxisMappingId } from "@shift/types";
 import { Button, Tooltip, TooltipContent, TooltipTrigger } from "@shift/ui";
+import { message } from "@shared/messages";
 import MinusIcon from "@/assets/general/minus.svg";
 import PlusIcon from "@/assets/general/plus.svg";
 import { useSignalState } from "@/lib/signals";
@@ -21,7 +22,7 @@ export const AxisMappingPanel = ({ axis }: AxisMappingPanelProps) => {
   const [fallback] = useState(() => identityMapping(axis));
   const form = useSettingsForm<AxisMapping>({
     canonical: stored ?? fallback,
-    errorMessage: "Unable to update the mapping",
+    errorMessage: message("settings.mappingSaveFailed"),
     save: async (nextMapping) => {
       const current = font.getAxisMappings();
       const index = current.findIndex(
@@ -71,9 +72,11 @@ export const AxisMappingPanel = ({ axis }: AxisMappingPanelProps) => {
       await font.setAxisMappings(next);
       form.form.reset(fallback);
     } catch (cause) {
+      const errorMessage = message("settings.mappingSaveFailed");
+      console.error(errorMessage, cause);
       form.form.setError("root.server", {
         type: "workspace",
-        message: cause instanceof Error ? cause.message : "Unable to remove the mapping",
+        message: errorMessage,
       });
     }
   };
