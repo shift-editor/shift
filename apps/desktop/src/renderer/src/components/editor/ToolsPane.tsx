@@ -91,6 +91,7 @@ export const ToolSplitButton: FC<ToolSplitButtonProps> = ({
     <ToolButton {...buttonProps} />
     <Menu modal={false}>
       <MenuTrigger
+        disabled={buttonProps.disabled}
         render={
           <ToolbarButton
             disabled={buttonProps.disabled}
