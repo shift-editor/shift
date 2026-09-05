@@ -1,6 +1,6 @@
 # @shift/types
 
-<!-- reviewed: 2026-08-19 review-every: 90d -->
+<!-- reviewed: 2026-09-05 review-every: 90d -->
 
 Shared DTO TypeScript types for Shift. This package owns branded IDs and bridge DTOs generated from `shift-bridge`.
 
@@ -28,7 +28,7 @@ packages/types/src/
 
 Import from `@shift/types`.
 
-- `BridgeApi` -- type-only native bridge API surface.
+- `BridgeApi` -- type-only native bridge API surface, including canonical document open/save/discard and recoverable workspace resume operations.
 - `FontMetadata` / `FontMetrics` -- independent font-level DTOs; metadata mutation replaces the complete `FontMetadata` snapshot without changing metrics.
 - `GlyphRecord` -- committed glyph list record: stable id, name, unicodes, component base glyph IDs.
 - `DocumentIdentity` -- canonical `DocumentId` and canonical path used by the desktop to deduplicate native document sessions before Open.
@@ -43,7 +43,7 @@ Import from `@shift/types`.
 - `Axis` / `AxisMapping` / `NamedInstance` -- generated variation authoring DTOs, keyed by branded entity IDs and expressed in Shift coordinate spaces.
 - `SourceMetricsInterpolationSnapshot` -- derived metric schema, reusable interpolation basis, and ordered source values; it is workspace transport state, not an authored source or named instance.
 - `LayerReplaced` -- one replaced glyph layer in an applied change.
-- `PointType` -- bridge point type union.
+- `PointType` -- bridge point type union: `"onCurve" | "offCurve" | "qCurve"`. Quadratic endpoints remain distinct across transport even though anchor predicates accept both on-curve variants.
 
 ## How it works
 

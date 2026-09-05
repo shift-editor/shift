@@ -1,6 +1,6 @@
 # shift-backends
 
-<!-- reviewed: 2026-08-19 review-every: 90d -->
+<!-- reviewed: 2026-09-05 review-every: 90d -->
 
 Font format backends that convert between on-disk font files and the `Font` IR used throughout the editor.
 
@@ -32,7 +32,7 @@ Font format backends that convert between on-disk font files and the `Font` IR u
 
 **Architecture Invariant:** Compiled-font directories enumerate `maxp` glyph IDs, not only `cmap` mappings. Unencoded glyphs receive their `post`/CFF name or a synthesized `gidN` name. `GlyphIndex` is the dense backend-local GID and never crosses the native session boundary; the bridge maps it to an eager stable session `GlyphId`. WHY: `cmap` is character lookup, not the complete glyph directory.
 
-**Architecture Invariant:** TrueType quadratic segments remain one `OffCurve` control plus one `QCurve` endpoint in the authored layer. Closing qcurve endpoints transfer their type to the wrapped start point. CFF cubic segments remain cubic. The bridge may project a qcurve endpoint as on-curve because clients infer the quadratic from its single control; canonical storage and source export retain the distinction. WHY: lifting every TrueType quadratic to cubic adds a point and derived coordinates to every segment, inflating canonical documents without adding information.
+**Architecture Invariant:** TrueType quadratic segments remain one `OffCurve` control plus one `QCurve` endpoint in the authored layer. Closing qcurve endpoints transfer their type to the wrapped start point. CFF cubic segments remain cubic. The bridge, canonical storage, and source export preserve the qcurve endpoint type; clients treat it as an on-curve anchor without erasing its quadratic identity. WHY: lifting every TrueType quadratic to cubic adds a point and derived coordinates to every segment, inflating canonical documents without adding information.
 
 **Architecture Invariant:** Designspace source locations are complete design-space locations. An omitted source dimension resolves to that axis's mapped default; default-source selection compares against that complete location and never substitutes the first source. A `layer` attribute only selects outline storage. Selected-glyph acquisition compiles source layers into a fallback, compatible normalized deltas, and exact-source exceptions; location evaluation occurs later in TypeScript. WHY: mixing user defaults with design coordinates corrupts interpolation bases.
 
