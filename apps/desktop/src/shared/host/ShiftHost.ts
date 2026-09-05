@@ -12,6 +12,8 @@ import type { FontSessionMode } from "../workspace/protocol";
  * IPC channel names.
  */
 export interface ShiftHost {
+  /** Operating system that owns the current application window. */
+  platform: NodeJS.Platform;
   /** Runs app commands owned by the main process. */
   commands: {
     /**

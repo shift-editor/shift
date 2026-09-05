@@ -7,6 +7,7 @@ import type { ShiftHost } from "../shared/host/ShiftHost";
 import { invoke, listen } from "../shared/ipc/renderer";
 
 const shiftHost: ShiftHost = {
+  platform: process.platform,
   commands: {
     run: invoke(ipcRenderer, "commands.run"),
     onRunRendererCommand: listen(ipcRenderer, "commands.runRenderer"),

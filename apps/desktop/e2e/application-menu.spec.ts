@@ -27,6 +27,20 @@ async function openSelectedPreview(page: Page, electronApp: ElectronApplication)
   return workspacePage;
 }
 
+async function expectCloseOnlyWindowControls(page: Page): Promise<void> {
+  const platform = await page.evaluate(() => window.shiftHost?.platform);
+  const windowControls = page.getByRole("toolbar", { name: "Window controls" });
+
+  if (platform !== "darwin") {
+    await expect(windowControls).toHaveCount(0);
+    return;
+  }
+
+  await expect(windowControls.getByRole("button", { name: "close" })).toBeVisible();
+  await expect(windowControls.getByRole("button", { name: "minimize" })).toHaveCount(0);
+  await expect(windowControls.getByRole("button", { name: "maximize" })).toHaveCount(0);
+}
+
 async function openFirstAuthoredGlyph(page: Page): Promise<void> {
   const glyphId = await page.evaluate(async () => {
     const session = window.shiftSession;
@@ -136,33 +150,27 @@ launcherTest("application menu exposes native shell actions", async ({ electronA
   expect(menu.viewLabels.includes("Developer")).toBe(!menu.packaged && menu.platform === "darwin");
 });
 
-launcherTest("About uses shared close-only window controls", async ({ electronApp, page }) => {
+launcherTest("About uses platform-appropriate window controls", async ({ electronApp, page }) => {
   const aboutOpened = electronApp.waitForEvent("window");
 
   await clickApplicationMenuItem(page, electronApp, "app.showAbout");
   const aboutPage = await aboutOpened;
   await aboutPage.waitForURL(/#\/about\?/);
 
-  const windowControls = aboutPage.getByRole("toolbar", { name: "Window controls" });
-  await expect(windowControls.getByRole("button", { name: "close" })).toBeVisible();
-  await expect(windowControls.getByRole("button", { name: "minimize" })).toHaveCount(0);
-  await expect(windowControls.getByRole("button", { name: "maximize" })).toHaveCount(0);
+  await expectCloseOnlyWindowControls(aboutPage);
 
   const aboutWindow = await electronApp.browserWindow(aboutPage);
   expect(await aboutWindow.evaluate((window) => window.isModal())).toBe(false);
   await aboutWindow.dispose();
 });
 
-launcherTest("Update uses shared close-only window controls", async ({ page }) => {
+launcherTest("Update uses platform-appropriate window controls", async ({ page }) => {
   await page.evaluate(() => {
     window.location.hash = "/update?state=ready&version=1.2.3";
   });
   await page.waitForURL(/#\/update\?state=ready&version=1\.2\.3$/);
 
-  const windowControls = page.getByRole("toolbar", { name: "Window controls" });
-  await expect(windowControls.getByRole("button", { name: "close" })).toBeVisible();
-  await expect(windowControls.getByRole("button", { name: "minimize" })).toHaveCount(0);
-  await expect(windowControls.getByRole("button", { name: "maximize" })).toHaveCount(0);
+  await expectCloseOnlyWindowControls(page);
   await expect(page.getByRole("button", { name: "Restart and Install" })).toBeVisible();
 });
 
@@ -202,10 +210,7 @@ launcherTest("Feedback opens a modeless composer", async ({ electronApp, page })
     })),
   ).toEqual({ start: 0, end: 27, length: 27 });
 
-  const windowControls = feedbackPage.getByRole("toolbar", { name: "Window controls" });
-  await expect(windowControls.getByRole("button", { name: "close" })).toBeVisible();
-  await expect(windowControls.getByRole("button", { name: "minimize" })).toHaveCount(0);
-  await expect(windowControls.getByRole("button", { name: "maximize" })).toHaveCount(0);
+  await expectCloseOnlyWindowControls(feedbackPage);
 
   const feedbackWindow = await electronApp.browserWindow(feedbackPage);
   expect(await feedbackWindow.evaluate((window) => window.isModal())).toBe(false);
