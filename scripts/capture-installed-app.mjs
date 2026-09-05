@@ -6,6 +6,12 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { _electron as electron } from "@playwright/test";
 import nativeBridge from "../crates/shift-bridge/index.js";
+import {
+  createFileDialogs,
+  createMessageDialogs,
+  message,
+  screenshotManifest,
+} from "./installed-app-screenshot-scenarios.mjs";
 
 const execFileAsync = promisify(execFile);
 const availableCaptures = [
@@ -13,7 +19,12 @@ const availableCaptures = [
   "document",
   "file-association",
   "application-menu",
-  "native-dialog",
+  "file-dialogs",
+  "message-dialogs",
+  "preview-dialogs",
+  "react-errors",
+  "update-window",
+  "settings-error",
 ];
 const [executableArgument, outputArgument, captureArgument] = process.argv.slice(2);
 if (!executableArgument || !outputArgument) {
@@ -25,6 +36,12 @@ if (!executableArgument || !outputArgument) {
 const executablePath = path.resolve(executableArgument);
 const outputPath = path.resolve(outputArgument);
 const sourcePath = path.resolve("fixtures/fonts/mutatorsans/MutatorSans.ttf");
+const convertibleSourcePath = path.resolve(
+  "fixtures/fonts/mutatorsans/MutatorSansLightCondensed.ufo",
+);
+const packageJson = JSON.parse(await readFile(path.resolve("apps/desktop/package.json"), "utf8"));
+const applicationName = "Shift";
+const updateVersion = packageJson.version;
 const captures = new Set(captureArgument ? captureArgument.split(",") : availableCaptures);
 const unsupportedCaptures = [...captures].filter((capture) => !availableCaptures.includes(capture));
 if (unsupportedCaptures.length > 0) {
@@ -34,6 +51,7 @@ if (!fs.existsSync(executablePath)) {
   throw new Error(`Installed application executable does not exist: ${executablePath}`);
 }
 
+const messageDialogs = createMessageDialogs(applicationName, updateVersion);
 const testRoot = await mkdtemp(path.join(os.tmpdir(), "shift-installed-screenshots-"));
 const documentPath = path.join(testRoot, "Installed app – association.shift");
 let desktopCaptureIndex = 0;
@@ -42,13 +60,18 @@ await mkdir(outputPath, { recursive: true });
 try {
   createDocument(documentPath);
   if (captures.has("file-association")) await captureRegistration();
-  await writeMetadata();
   if (captures.has("launcher") || captures.has("application-menu")) {
     await captureLauncherAndMenu();
   }
   if (captures.has("document")) await captureDocument();
   if (captures.has("file-association")) await captureFileAssociation();
-  if (captures.has("native-dialog")) await captureNativeDialog();
+  if (captures.has("file-dialogs")) await captureFileDialogs();
+  if (captures.has("message-dialogs")) await captureMessageDialogs();
+  if (captures.has("preview-dialogs")) await capturePreviewDialogs();
+  if (captures.has("react-errors")) await captureReactErrors();
+  if (captures.has("update-window")) await captureUpdateWindow();
+  if (captures.has("settings-error")) await captureSettingsError();
+  await writeMetadata();
 } finally {
   await rm(testRoot, { force: true, recursive: true, maxRetries: 10, retryDelay: 100 });
 }
@@ -121,27 +144,200 @@ async function captureFileAssociation() {
   }
 }
 
-async function captureNativeDialog() {
-  const app = await launchInstalledApp("native-dialog");
+async function captureFileDialogs() {
+  for (const scenario of createFileDialogs(testRoot)) await captureNativeDialog(scenario);
+}
+
+async function captureMessageDialogs() {
+  for (const scenario of messageDialogs) await captureNativeDialog(scenario);
+}
+
+async function captureNativeDialog(scenario) {
+  const profileName = path.basename(scenario.fileName, ".png");
+  const app = await launchInstalledApp(profileName);
 
   try {
     await readyLauncher(app);
-    await app.evaluate(({ BrowserWindow, Menu }) => {
+    await app.evaluate(({ BrowserWindow, dialog }, request) => {
       const window = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
-      const item = Menu.getApplicationMenu()?.getMenuItemById("file.open");
-      if (!window || !item) throw new Error("Installed app did not expose its Open command");
+      if (!window) throw new Error("Installed app did not open a window for its native dialog");
 
       window.focus();
-      item.click(item, window, {});
-    });
-    await new Promise((resolve) => setTimeout(resolve, 3_000));
-    await writeScreenshot("native-dialog.png", await captureDesktop(app));
+      switch (request.kind) {
+        case "message":
+          void dialog.showMessageBox(window, request.options);
+          break;
+        case "open":
+          void dialog.showOpenDialog(window, request.options);
+          break;
+        case "save":
+          void dialog.showSaveDialog(window, request.options);
+          break;
+        default:
+          throw new Error(`Unsupported native dialog kind: ${request.kind}`);
+      }
+    }, scenario);
+    await new Promise((resolve) => setTimeout(resolve, 2_500));
+    await writeScreenshot(scenario.fileName, await captureDesktop(app));
   } finally {
     await terminateApplication(app);
   }
 }
 
-async function launchInstalledApp(profileName, additionalArguments = []) {
+async function capturePreviewDialogs() {
+  await capturePreviewDialog({
+    sourcePath: convertibleSourcePath,
+    title: message("preview.convertible.title"),
+    fileName: "preview-convertible.png",
+  });
+  await capturePreviewDialog({
+    sourcePath,
+    title: message("preview.readOnly.title"),
+    fileName: "preview-view-only.png",
+  });
+}
+
+async function capturePreviewDialog(scenario) {
+  const profileName = path.basename(scenario.fileName, ".png");
+  const app = await launchInstalledApp(profileName, [], {
+    SHIFT_E2E_FONT_PATH: scenario.sourcePath,
+  });
+
+  try {
+    const page = await app.firstWindow();
+    await readyFontSession(page);
+    await page.getByRole("button", { name: "Read-only preview", exact: true }).click();
+    await page.getByRole("dialog", { name: scenario.title, exact: true }).waitFor();
+    await page.screenshot({ path: path.join(outputPath, scenario.fileName) });
+  } finally {
+    await terminateApplication(app);
+  }
+}
+
+async function captureReactErrors() {
+  await captureApplicationError();
+  await captureDocumentError();
+}
+
+async function captureApplicationError() {
+  const app = await launchInstalledApp("react-app-error");
+
+  try {
+    const page = await readyLauncher(app);
+    await page.evaluate(() => {
+      window.location.hash = "/e2e-root-render-failure";
+    });
+    await page.getByRole("heading", { name: message("error.app.title") }).waitFor();
+    await page.screenshot({ path: path.join(outputPath, "react-app-error.png") });
+    await page.getByRole("button", { name: message("error.details.show") }).click();
+    await page.getByLabel(message("error.details.label")).waitFor();
+    await page.screenshot({ path: path.join(outputPath, "react-app-error-details.png") });
+  } finally {
+    await terminateApplication(app);
+  }
+}
+
+async function captureDocumentError() {
+  const app = await launchInstalledApp("react-document-error", [documentPath]);
+
+  try {
+    const page = await app.firstWindow();
+    await readyWorkspace(page);
+    await page.evaluate(() => {
+      window.location.hash = "/e2e-document-render-failure";
+    });
+    await page.getByRole("heading", { name: message("error.document.title") }).waitFor();
+    await page.screenshot({ path: path.join(outputPath, "react-document-error.png") });
+    await page.getByRole("button", { name: message("error.details.show") }).click();
+    await page.getByLabel(message("error.details.label")).waitFor();
+    await page.screenshot({ path: path.join(outputPath, "react-document-error-details.png") });
+  } finally {
+    await terminateApplication(app);
+  }
+}
+
+async function captureUpdateWindow() {
+  const app = await launchInstalledApp("update-window");
+
+  try {
+    const page = await readyLauncher(app);
+    const browserWindow = await app.browserWindow(page);
+    await browserWindow.evaluate((window) => window.setSize(420, 320));
+    await browserWindow.dispose();
+
+    const scenarios = [
+      {
+        state: "available",
+        heading: message("update.available.title", {
+          applicationName,
+          version: updateVersion,
+        }),
+        fileName: "update-available.png",
+      },
+      {
+        state: "downloading",
+        heading: message("update.downloading.preparing"),
+        fileName: "update-downloading.png",
+      },
+      {
+        state: "ready",
+        heading: message("update.ready.title", {
+          applicationName,
+          version: updateVersion,
+        }),
+        fileName: "update-ready.png",
+      },
+    ];
+
+    for (const scenario of scenarios) {
+      await page.evaluate((route) => {
+        window.location.hash = route;
+      }, `/update?state=${scenario.state}&version=${updateVersion}`);
+      await page.getByRole("heading", { name: scenario.heading, exact: true }).waitFor();
+      await page.screenshot({ path: path.join(outputPath, scenario.fileName) });
+      await page.evaluate(() => {
+        window.location.hash = "/launcher";
+      });
+      await page.getByRole("button", { name: "New font", exact: true }).waitFor();
+    }
+  } finally {
+    await terminateApplication(app);
+  }
+}
+
+async function captureSettingsError() {
+  const app = await launchInstalledApp("settings-save-failed", [documentPath]);
+
+  try {
+    const page = await app.firstWindow();
+    await readyWorkspace(page);
+    await page.evaluate(() => {
+      const font = window.shift?.font;
+      if (!font) throw new Error("Installed app did not expose an authored font");
+
+      Object.defineProperty(font, "updateMetadata", {
+        configurable: true,
+        value: async () => {
+          throw new Error("Installed screenshot settings failure");
+        },
+      });
+    });
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: message("settings.dialog.title") });
+    await dialog.getByLabel("Family Name").fill("Screenshot failure");
+    await dialog.getByRole("heading", { name: "Font", exact: true }).click();
+    await dialog.getByText(message("settings.fontSaveFailed"), { exact: true }).waitFor();
+    await page.screenshot({ path: path.join(outputPath, "settings-save-failed.png") });
+  } finally {
+    await terminateApplication(app);
+  }
+}
+
+async function launchInstalledApp(
+  profileName,
+  additionalArguments = [],
+  additionalEnvironment = {},
+) {
   const args = ["--force-device-scale-factor=1", ...additionalArguments];
   if (profileName) {
     args.push(`--user-data-dir=${path.join(testRoot, `user-data-${profileName}`)}`);
@@ -154,6 +350,7 @@ async function launchInstalledApp(profileName, additionalArguments = []) {
       ...process.env,
       ELECTRON_ENABLE_LOGGING: "1",
       LIBGL_ALWAYS_SOFTWARE: "1",
+      ...additionalEnvironment,
     },
     timeout: 30_000,
   });
@@ -169,8 +366,15 @@ async function readyLauncher(app) {
 }
 
 async function readyWorkspace(page) {
-  await page.waitForURL(/#\/home/, { timeout: 30_000 });
+  await readyFontSession(page);
   await page.waitForFunction(() => window.shift?.font.loaded === true, undefined, {
+    timeout: 30_000,
+  });
+}
+
+async function readyFontSession(page) {
+  await page.waitForURL(/#\/home/, { timeout: 30_000 });
+  await page.waitForFunction(() => window.shiftSession?.font.loaded === true, undefined, {
     timeout: 30_000,
   });
   await page.getByLabel("Glyph catalog", { exact: true }).waitFor({
@@ -337,6 +541,7 @@ async function writeMetadata() {
     architecture: process.arch,
     executablePath,
     captures: [...captures],
+    screenshots: screenshotManifest,
     createdAt: new Date().toISOString(),
   };
   await writeFile(path.join(outputPath, "metadata.json"), `${JSON.stringify(metadata, null, 2)}\n`);
