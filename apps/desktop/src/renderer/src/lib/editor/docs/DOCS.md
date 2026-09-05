@@ -136,7 +136,7 @@ Paste selects inserted objects and activates Select before awaiting the workspac
 
 ### Deletion
 
-`Editor.deleteSelection(mode)` normalizes point, segment, and contour selection against the active authored layer and delegates to `GlyphLayer.deletePoints`. Delete and Backspace use `"fit"`; Shift selects `"gap"`. Native-menu Delete uses the default fitted behavior. Selecting a segment is equivalent to selecting all of its points. Unsupported, missing, or mixed-anchor selections refuse without mutation. Successful deletion clears selection and hover and awaits the workspace echo; the entire geometry edit is one undo step.
+`Editor.deleteSelection(mode)` normalizes point, segment, and contour selection against the active authored layer and delegates to `GlyphLayer.deletePoints`. Delete and Backspace use `"fit"`; Shift selects `"gap"`. Native-menu Delete uses the same default reconnection behavior. Reconnection never raises the original span's highest degree: lines stay lines, quadratic/line mixtures stay quadratic, and spans containing cubics are fitted as cubics. Selecting a segment is equivalent to selecting all of its points. Unsupported, missing, or mixed-anchor selections refuse without mutation. Successful deletion clears selection and hover and awaits the workspace echo; the entire geometry edit is one undo step.
 
 ### Hit testing
 
@@ -178,10 +178,10 @@ Glyph geometry exposes domain hit queries for points, anchors, and segments. Too
 
 - `pnpm test:desktop src/renderer/src/lib/editor/` -- real-editor tests for managers, hit testing, sidebearings, lifecycle, plus editor-outcome suites for boolean operations, clipboard copy/paste, and glyph metrics that drive `TestEditor` through real tool gestures and assert resulting contours, selection, and history.
 - Outcome tests treat editor actions as asynchronous: metric setters need `await editor.settle()` before asserting, clipboard and history actions (`copy`, `paste`, `undo`, `redo`) return promises that must be awaited, and drag helpers give every drag sample its cumulative delta from the pointer-down origin.
-- [Deletion behavior](../Deletion.test.ts), [contour topology](../DeletionTopology.test.ts), and [fresh-reopen tests](../../workspace/FreshReopen.test.ts) cover fitted/gap deletion, exact undo/redo, and saved geometry. Run them and the real-canvas Electron suite with:
+- [Deletion behavior](../Deletion.test.ts), [degree preservation](../DeletionDegree.test.ts), [contour topology](../DeletionTopology.test.ts), and [fresh-reopen tests](../../workspace/FreshReopen.test.ts) cover fitted/gap deletion, exact undo/redo, and saved geometry. Run them and the real-canvas Electron suite with:
 
   ```bash
-  pnpm test:desktop src/renderer/src/lib/editor/Deletion.test.ts src/renderer/src/lib/editor/DeletionTopology.test.ts src/renderer/src/lib/workspace/FreshReopen.test.ts
+  pnpm test:desktop src/renderer/src/lib/editor/Deletion.test.ts src/renderer/src/lib/editor/DeletionDegree.test.ts src/renderer/src/lib/editor/DeletionTopology.test.ts src/renderer/src/lib/workspace/FreshReopen.test.ts
   pnpm test:e2e:visual e2e/deletion.spec.ts
   ```
 

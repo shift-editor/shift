@@ -39,7 +39,7 @@ lib/model/
   FontStore.ts               -- workspace records, authored layer state, projections, canonical Glyph ownership
   Glyph.ts                   -- Glyph, GlyphLayer, internal GlyphRenderModel, root lookup, composed metrics
   GlyphLayerEdit.ts          -- reversible structural edits over the current reactive layer
-  deletePoints.ts            -- contour-aware fitted deletion, gaps, and handle conversion
+  DeletePoints.ts            -- per-operation degree-preserving deletion, gaps, and handle conversion
   ComponentGlyph.ts          -- component and contour occurrence provenance/reactivity
   GlyphLayerState.ts         -- local edit lifecycle and pending confirmation
   positions/                 -- PositionEdits, PositionList, transforms, references, and modifiers
@@ -134,11 +134,11 @@ Local operations mutate the existing segmented `LayerBuffers`: advance, contours
 
 ### Contour-aware deletion
 
-`GlyphLayer.deletePoints(pointIds, mode)` interprets explicit selected point IDs against the original contours and groups all resulting mutations into one workspace transaction. `DeleteMode` is `"fit"` for endpoint-tangent-constrained cubic replacement and `"gap"` for disconnected surviving fragments. Each span between surviving on-curve points is processed once; selected handles within a removed span are consumed by that span's policy, while selected handles outside it convert their segment to a line. Raw `removePoints` remains a separate primitive and clipboard cut behavior is unchanged.
+`GlyphLayer.deletePoints(pointIds, mode)` creates a per-operation `DeletePoints` and calls `apply()` to interpret explicit selected point IDs against the original contours in one workspace transaction. The operation holds the layer, copied selection, and mode; private helpers separate handle removal, original-span traversal, surviving-fragment construction, and identity-preserving contour replacement. `DeleteMode` is `"fit"` for degree-preserving reconnection and `"gap"` for disconnected surviving fragments. Line-only spans join surviving endpoints directly without controls. Spans containing quadratics but no cubics fit one quadratic control with exact endpoints, without constraining endpoint tangents. Only spans containing cubics use endpoint-tangent-constrained cubic fitting. Each span between surviving on-curve points is processed once; selected handles within a removed span are consumed by that span's policy, while selected handles outside it convert their segment to a line. Raw `removePoints` remains a separate primitive and clipboard cut behavior is unchanged.
 
 Closed contours are traversed cyclically, including leading controls belonging to the wrapped segment. Gaps open or split them into valid open fragments. No surviving on-curve points removes the contour; one survivor becomes an open one-point contour. The original contour retains the fragment containing its first surviving on-curve identity; additional fragments receive new contour IDs and append to the layer without reordering unrelated contours. Surviving points keep their IDs and authored values; new fitted controls receive new IDs. A retained point keeps the original contour from being pruned while the other points are reinserted through the existing seeded mutation primitives. Intermediate mutations stay inside the reactive/workspace transaction; the local result and confirmed echo have identical topology.
 
-The [deletion behavior tests](../../editor/Deletion.test.ts), [contour-topology tests](../../editor/DeletionTopology.test.ts), and [fresh-reopen tests](../../workspace/FreshReopen.test.ts) verify geometry, identity, cyclic boundaries, refusal, local/confirmed parity, atomic undo/redo, and fresh-workspace persistence through the real editor and native bridge. The deletion Electron E2E suite drives canvas selection, keyboard and native-menu deletion, pixel-level rendering checks, and save/reopen.
+The [deletion behavior tests](../../editor/Deletion.test.ts), [degree-preservation tests](../../editor/DeletionDegree.test.ts), [contour-topology tests](../../editor/DeletionTopology.test.ts), and [fresh-reopen tests](../../workspace/FreshReopen.test.ts) verify geometry, identity, cyclic boundaries, refusal, local/confirmed parity, atomic undo/redo, and fresh-workspace persistence through the real editor and native bridge. The deletion Electron E2E suite drives canvas selection, keyboard and native-menu deletion, pixel-level rendering checks, and save/reopen.
 
 ### Packed layout ownership
 

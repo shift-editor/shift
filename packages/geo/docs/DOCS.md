@@ -29,6 +29,7 @@ src/
   Rect.ts        -- Rect2D construction and point containment (namespace)
   Curve.ts       -- line/quadratic/cubic bezier primitives with hit-testing
   fitCubic.ts    -- endpoint-tangent-constrained least-squares span fitting
+  fitQuadratic.ts -- one-control least-squares span fitting with exact endpoints
   Polygon.ts     -- polygon area and winding direction
   Mat.ts         -- mutable 2D affine transformation matrix class
 ```
@@ -54,6 +55,8 @@ src/
 **Curve** implements bezier math with a discriminated-union pattern. You construct curves with `Curve.line`, `Curve.quadratic`, or `Curve.cubic`, then pass them to polymorphic functions: `pointAt(curve, t)`, `tangentAt`, `normalAt`, `closestPoint`, `bounds`, `splitAt`, `length`, `sample`. Closest-point queries use a two-phase algorithm: coarse subdivision scan (32 samples) followed by Newton-Raphson refinement (up to 8 iterations at 1e-6 tolerance). `quadraticToCubic` performs lossless degree elevation.
 
 **`Curve.fitCubic(curves)`** approximates a nonempty connected span with one cubic, keeping its endpoints exact and its available endpoint tangent directions fixed. It samples the original curves, normalizes coordinates by sampled path length, solves a bounded two-variable least-squares problem for control lengths, and refines sample parameters with safeguarded Newton steps that preserve traversal order. Singular solves evaluate boundary candidates; zero endpoint derivatives use control-polygon directions; collapsed geometry produces a collapsed cubic. A poor fit keeps the best finite candidate rather than splitting the result or inserting on-curve points. The fit is an approximation, not a guaranteed error-bound simplifier. Its refinement is independent of the closest-point hit-test routine.
+
+**`Curve.fitQuadratic(curves)`** approximates a connected span with one control and exact endpoints. It solves length-weighted least squares at sampled arc-length parameters after normalizing coordinates; unlike cubic fitting, it does not constrain endpoint tangents or refine sample parameters. It preserves a single quadratic exactly and returns a collapsed quadratic for collapsed input. Empty, disconnected, or nonfinite input is rejected. Deletion chooses the output degree from the original span before invoking either fitter, so line-only spans never enter a curve fitter.
 
 **Bounds** provides AABB construction from points, rectangles, or explicit min/max corners, plus composition (`union`, `unionAll`, `includePoint`), queries (`containsPoint`, `overlaps`, `center`, `width`, `height`), and conversion (`toRect`, `expand`).
 
