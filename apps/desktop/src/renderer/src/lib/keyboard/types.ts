@@ -1,4 +1,5 @@
 import type { ToolName } from "@/lib/tools/core";
+import type { DeleteMode } from "@/types/glyph";
 import type { ToolShortcutEntry } from "@/types/tools";
 
 // TODO: probably remove this and just pass editor.
@@ -8,7 +9,7 @@ export interface KeyboardEditorActions {
   copy(): Promise<boolean>;
   cut(): Promise<boolean>;
   paste(): Promise<boolean>;
-  deleteSelection(): Promise<boolean>;
+  deleteSelection(mode?: DeleteMode): Promise<boolean>;
   undo(): Promise<void>;
   redo(): Promise<void>;
   selectAll(): void;

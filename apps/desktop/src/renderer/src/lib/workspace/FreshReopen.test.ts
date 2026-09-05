@@ -44,6 +44,36 @@ describe("saved editor outcomes survive a fresh workspace stack", () => {
     rmSync(outputRoot, { recursive: true, force: true });
   });
 
+  it.each(["fit", "gap"] as const)(
+    "persists %s deletion with exact geometry and identities",
+    async (mode) => {
+      const outputRoot = mkdtempSync(join(tmpdir(), "shift-deletion-reopen-"));
+      const savePath = join(outputRoot, "Deleted.shift");
+      const original = new TestEditor();
+      await original.startSession();
+      const points = await original.drawOpenContour([
+        { x: 0, y: 0 },
+        { x: 100, y: 100 },
+        { x: 200, y: 0 },
+      ]);
+      original.selection.select([points[1]]);
+      await original.deleteSelection(mode);
+      const expected = original.requireGlyphLayer().state;
+      await original.saveAs(savePath);
+      await original.closeSession();
+
+      const reopened = new TestEditor();
+      try {
+        await reopened.openSession(savePath, "A");
+        expect(reopened.requireGlyphLayer().state).toEqual(expected);
+        expect(reopened.requireGlyphLayer().point(points[1])).toBeNull();
+        await reopened.closeSession();
+      } finally {
+        rmSync(outputRoot, { recursive: true, force: true });
+      }
+    },
+  );
+
   it("reopens authored geometry and continues undoable editing", async () => {
     const outputRoot = mkdtempSync(join(tmpdir(), "shift-fresh-reopen-"));
     const savePath = join(outputRoot, "RoundTrip.shift");

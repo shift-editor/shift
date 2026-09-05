@@ -356,7 +356,11 @@ These are allowed to jump around when energy is high, but they should not silent
 
 **Delete Operations**
 
-- [x] `Delete` / `Backspace` key → `removePoints()` on selection
+- [x] `Delete` / `Backspace` and native-menu Delete fit the original span between surviving endpoints
+- [x] `Shift+Delete` / `Shift+Backspace` remove spans without reconnecting surviving fragments
+- [x] Deleting a cubic handle converts its segment to a line
+- [x] Cyclic selections, whole-contour removal, and one-point survivors preserve valid topology
+- [x] Exact undo/redo, real-editor regression tests, and Electron deletion/save/reopen coverage
 - [x] Menu item for Delete (Edit menu integration)
 
 ---
