@@ -36,8 +36,12 @@ function percentToZoomLevel(percent: number): number {
 }
 
 const BROWSER_WINDOW_DEFAULT_OPTIONS: BrowserWindowConstructorOptions = {
-  titleBarStyle: "hidden",
-  trafficLightPosition: { x: -100, y: -100 },
+  ...(process.platform === "darwin"
+    ? {
+        titleBarStyle: "hidden" as const,
+        trafficLightPosition: { x: -100, y: -100 },
+      }
+    : {}),
   webPreferences: {
     contextIsolation: true,
     nodeIntegration: false,

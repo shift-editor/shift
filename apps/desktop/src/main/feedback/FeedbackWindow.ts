@@ -45,8 +45,12 @@ export class FeedbackWindow {
       maximizable: false,
       fullscreenable: false,
       backgroundColor: "#ffffff",
-      titleBarStyle: "hidden",
-      trafficLightPosition: { x: -100, y: -100 },
+      ...(process.platform === "darwin"
+        ? {
+            titleBarStyle: "hidden" as const,
+            trafficLightPosition: { x: -100, y: -100 },
+          }
+        : {}),
       webPreferences: {
         preload: this.#preloadPath,
         contextIsolation: true,

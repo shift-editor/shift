@@ -1,5 +1,5 @@
 import { Button, cn, type ButtonProps } from "@shift/ui";
-import type { ReactNode } from "react";
+import { forwardRef, type ReactNode } from "react";
 
 interface SidebarActionRowProps {
   children: ReactNode;
@@ -73,20 +73,19 @@ interface SidebarActionButtonProps extends Omit<ButtonProps, "children" | "size"
   children: ReactNode;
 }
 
-export const SidebarActionButton = ({
-  label,
-  children,
-  className,
-  ...props
-}: SidebarActionButtonProps) => (
-  <Button
-    variant="ghost"
-    size="icon-sm"
-    aria-label={label}
-    title={label}
-    className={cn("h-6 w-6 p-0.5 text-muted hover:text-primary", className)}
-    {...props}
-  >
-    {children}
-  </Button>
+export const SidebarActionButton = forwardRef<HTMLButtonElement, SidebarActionButtonProps>(
+  ({ label, children, className, ...props }, ref) => (
+    <Button
+      ref={ref}
+      variant="ghost"
+      size="icon-sm"
+      aria-label={label}
+      className={cn("h-6 w-6 p-0.5 text-muted hover:text-primary", className)}
+      {...props}
+    >
+      {children}
+    </Button>
+  ),
 );
+
+SidebarActionButton.displayName = "SidebarActionButton";

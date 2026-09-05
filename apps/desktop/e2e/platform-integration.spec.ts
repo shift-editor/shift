@@ -26,6 +26,15 @@ const platformTest = test.extend({
   },
 });
 
+platformTest("uses platform-appropriate window controls", async ({ electronApp, page }) => {
+  const platform = await electronApp.evaluate(() => process.platform);
+  const rendererPlatform = await page.evaluate(() => window.shiftHost?.platform);
+  const customWindowControls = page.getByRole("toolbar", { name: "Window controls" });
+
+  expect(rendererPlatform).toBe(platform);
+  await expect(customWindowControls).toHaveCount(platform === "darwin" ? 1 : 0);
+});
+
 platformTest(
   "saves, exports, and reopens through Unicode paths with inspectable evidence",
   async ({ electronApp, page, saveShiftPath, exportTtfPath, testRoot }, testInfo) => {

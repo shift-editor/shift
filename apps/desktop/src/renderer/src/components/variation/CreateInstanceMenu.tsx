@@ -12,6 +12,9 @@ import {
   PopoverPositioner,
   PopoverTitle,
   PopoverTrigger,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
   X,
   cn,
 } from "@shift/ui";
@@ -113,18 +116,33 @@ export const CreateInstanceMenu = ({
     handleOpenChange(false);
   };
 
-  return (
-    <Popover open={open} onOpenChange={handleOpenChange} modal={false}>
-      <PopoverTrigger
-        render={
-          <SidebarActionButton
-            label={axes.length > 0 ? "Create instance" : "Add an axis before creating instances"}
-            disabled={axes.length === 0}
-          >
+  if (axes.length === 0) {
+    return (
+      <Tooltip>
+        <TooltipTrigger>
+          <SidebarActionButton label="Create instance" aria-disabled="true">
             <PlusIcon className="h-3 w-3" />
           </SidebarActionButton>
-        }
-      />
+        </TooltipTrigger>
+        <TooltipContent>Create instance</TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  return (
+    <Popover open={open} onOpenChange={handleOpenChange} modal={false}>
+      <Tooltip>
+        <TooltipTrigger>
+          <PopoverTrigger
+            render={
+              <SidebarActionButton label="Create instance">
+                <PlusIcon className="h-3 w-3" />
+              </SidebarActionButton>
+            }
+          />
+        </TooltipTrigger>
+        <TooltipContent>Create instance</TooltipContent>
+      </Tooltip>
       <PopoverPortal>
         <PopoverPositioner sideOffset={4} align="start">
           <PopoverPopup className="w-50 p-0" initialFocus={nameInputRef}>
@@ -132,15 +150,20 @@ export const CreateInstanceMenu = ({
               <PopoverTitle className="text-ui font-medium text-primary">
                 Create Instance
               </PopoverTitle>
-              <PopoverClose
-                className={cn(
-                  "inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded",
-                  "text-primary/70 transition-colors hover:bg-hover hover:text-primary",
-                )}
-                aria-label="Close"
-              >
-                <X className="h-4 w-4" />
-              </PopoverClose>
+              <Tooltip>
+                <TooltipTrigger>
+                  <PopoverClose
+                    className={cn(
+                      "inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded",
+                      "text-primary/70 transition-colors hover:bg-hover hover:text-primary",
+                    )}
+                    aria-label="Close"
+                  >
+                    <X className="h-4 w-4" />
+                  </PopoverClose>
+                </TooltipTrigger>
+                <TooltipContent>Close</TooltipContent>
+              </Tooltip>
             </div>
 
             <form onSubmit={handleSubmit}>

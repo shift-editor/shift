@@ -6,6 +6,9 @@ import {
   CollapsibleTrigger,
   Input,
   Search,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
 } from "@shift/ui";
 
 import AllIcon from "@/assets/sidebar-left/all.svg";
@@ -49,16 +52,20 @@ export const GlyphCatalogView = () => {
       <div className="flex-1 overflow-y-auto scrollbar-hidden">
         <div className="flex items-center justify-between font-sans mb-2">
           <span className="text-ui font-medium text-primary">Glyphs</span>
-          <Button
-            variant="ghost"
-            size="sm"
-            aria-label="Create glyph"
-            title="Create glyph"
-            disabled={!canAuthor}
-            onClick={canAuthor ? createQuickGlyph : undefined}
-          >
-            <PlusIcon className="w-3 h-3 text-muted" />
-          </Button>
+          <Tooltip>
+            <TooltipTrigger>
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label="Create glyph"
+                aria-disabled={!canAuthor || undefined}
+                onClick={canAuthor ? createQuickGlyph : undefined}
+              >
+                <PlusIcon className="w-3 h-3 text-muted" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Create glyph</TooltipContent>
+          </Tooltip>
         </div>
 
         <div className="w-full">

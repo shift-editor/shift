@@ -87,7 +87,7 @@ glyphsPreviewTest("Glyphs sources render a complete resident Grid", async ({ pag
   await expect
     .poll(() => page.evaluate(() => window.shiftSession?.catalog.locationCell.value))
     .not.toEqual(beforeLocation);
-  await editorShell(page).getByLabel("Display all glyphs").click();
+  await editorShell(page).getByLabel("Font overview").click();
   await page.waitForURL(/#\/home$/);
   await expect(glyphCatalogCanvas(page)).toHaveAttribute("data-grid-readiness", "Complete");
   await expect

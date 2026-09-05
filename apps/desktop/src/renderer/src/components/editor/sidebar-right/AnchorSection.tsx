@@ -58,12 +58,14 @@ export const AnchorSection = () => {
       <div className="flex gap-2">
         <EditableSidebarInput
           ref={xRef}
+          ariaLabel="Anchor X position"
           label="X"
           disabled={!editable}
           onValueChange={(value) => handlePositionChange("x", value)}
         />
         <EditableSidebarInput
           ref={yRef}
+          ariaLabel="Anchor Y position"
           label="Y"
           disabled={!editable}
           onValueChange={(value) => handlePositionChange("y", value)}

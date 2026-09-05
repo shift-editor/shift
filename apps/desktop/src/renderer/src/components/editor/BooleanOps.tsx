@@ -38,6 +38,7 @@ export const BooleanOps = () => {
     <SidebarSection title="Boolean">
       <div className="flex gap-2">
         <IconButton
+          ariaLabel="Union contours"
           icon={UnionIcon}
           disabled={!editable}
           onClick={async () => {
@@ -45,6 +46,7 @@ export const BooleanOps = () => {
           }}
         />
         <IconButton
+          ariaLabel="Intersect contours"
           icon={IntersectIcon}
           disabled={!editable}
           onClick={async () => {
@@ -52,6 +54,7 @@ export const BooleanOps = () => {
           }}
         />
         <IconButton
+          ariaLabel="Subtract contours"
           icon={SubtractIcon}
           disabled={!editable}
           onClick={async () => {

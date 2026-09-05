@@ -1,6 +1,7 @@
 import "./App.css";
 import { useEffect } from "react";
 import { HashRouter } from "react-router";
+import { TooltipProvider } from "@shift/ui";
 
 import { ThemeProvider } from "@/context/ThemeContext";
 import { FocusZoneProvider } from "@/context/FocusZoneContext";
@@ -30,15 +31,17 @@ export const App = () => {
 
   return (
     <ThemeProvider defaultTheme="light">
-      <ZoomToast>
-        <FocusZoneProvider defaultZone="canvas">
-          <HashRouter>
-            <AppErrorBoundary>
-              <Screens />
-            </AppErrorBoundary>
-          </HashRouter>
-        </FocusZoneProvider>
-      </ZoomToast>
+      <TooltipProvider delayDuration={500}>
+        <ZoomToast>
+          <FocusZoneProvider defaultZone="canvas">
+            <HashRouter>
+              <AppErrorBoundary>
+                <Screens />
+              </AppErrorBoundary>
+            </HashRouter>
+          </FocusZoneProvider>
+        </ZoomToast>
+      </TooltipProvider>
     </ThemeProvider>
   );
 };

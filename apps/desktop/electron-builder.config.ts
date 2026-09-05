@@ -39,6 +39,28 @@ const documentIconName = "shift-document";
 const documentBadgeName = "shift-document-badge-v2";
 const documentTypeIdentifier = "app.shift.document.v2";
 const documentMimeType = "application/x-shift-document";
+const macosSourceDocumentTypes = [
+  {
+    CFBundleTypeExtensions: ["ttf", "otf"],
+    CFBundleTypeName: "OpenType Font",
+    CFBundleTypeRole: "Viewer",
+    LSHandlerRank: "Alternate",
+    LSItemContentTypes: ["public.truetype-ttf-font", "public.opentype-font"],
+  },
+  {
+    CFBundleTypeExtensions: ["glyphs", "designspace"],
+    CFBundleTypeName: "Font Source",
+    CFBundleTypeRole: "Viewer",
+    LSHandlerRank: "Alternate",
+  },
+  {
+    CFBundleTypeExtensions: ["glyphspackage", "ufo"],
+    CFBundleTypeName: "Font Source Package",
+    CFBundleTypeRole: "Viewer",
+    LSHandlerRank: "Alternate",
+    LSTypeIsPackage: true,
+  },
+];
 const linuxDocumentIconName = isNightly ? "shift-nightly-document" : documentIconName;
 const linuxDocumentIconSizes = [16, 32, 48, 64, 128, 256, 512];
 const linuxPackageFiles = [
@@ -169,6 +191,7 @@ const config: Configuration = {
           LSHandlerRank: isNightly ? "Alternate" : "Owner",
           LSItemContentTypes: [documentTypeIdentifier],
         },
+        ...macosSourceDocumentTypes,
       ],
       UTExportedTypeDeclarations: [
         {

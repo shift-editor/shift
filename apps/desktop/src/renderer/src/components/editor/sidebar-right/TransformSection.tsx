@@ -34,29 +34,39 @@ const AlignButtonsRow = React.memo(function AlignButtonsRow({
     <div className="flex gap-4">
       <div className="flex gap-1">
         <IconButton
+          ariaLabel="Align left"
           icon={AlignLeftIcon}
           onClick={() => onAlign("left")}
           disabled={!canDistribute}
         />
         <IconButton
+          ariaLabel="Align horizontal centers"
           icon={AlignCenterHIcon}
           onClick={() => onAlign("center-h")}
           disabled={!canDistribute}
         />
         <IconButton
+          ariaLabel="Align right"
           icon={AlignRightIcon}
           onClick={() => onAlign("right")}
           disabled={!canDistribute}
         />
       </div>
       <div className="flex gap-1">
-        <IconButton icon={AlignTopIcon} onClick={() => onAlign("top")} disabled={!canDistribute} />
         <IconButton
+          ariaLabel="Align top"
+          icon={AlignTopIcon}
+          onClick={() => onAlign("top")}
+          disabled={!canDistribute}
+        />
+        <IconButton
+          ariaLabel="Align vertical centers"
           icon={AlignCenterVIcon}
           onClick={() => onAlign("center-v")}
           disabled={!canDistribute}
         />
         <IconButton
+          ariaLabel="Align bottom"
           icon={AlignBottomIcon}
           onClick={() => onAlign("bottom")}
           disabled={!canDistribute}
@@ -76,11 +86,13 @@ const DistributeButtonsRow = React.memo(function DistributeButtonsRow({
   return (
     <div className="flex gap-1">
       <IconButton
+        ariaLabel="Distribute horizontally"
         icon={DistributeHorizontalIcon}
         onClick={() => onDistribute("horizontal")}
         disabled={!canDistribute}
       />
       <IconButton
+        ariaLabel="Distribute vertically"
         icon={DistributeVerticalIcon}
         onClick={() => onDistribute("vertical")}
         disabled={!canDistribute}

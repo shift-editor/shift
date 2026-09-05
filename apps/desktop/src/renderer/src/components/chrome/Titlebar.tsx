@@ -77,6 +77,9 @@ const TrafficLightButton = ({ color, onClick, isHovered }: TrafficLightButtonPro
  */
 export const Titlebar = ({ closeOnly = false, onClose }: TitlebarProps) => {
   const [isHovered, setIsHovered] = useState(false);
+  const host = getShiftHost();
+
+  if (host.platform !== "darwin") return null;
 
   const handleClose = () => {
     if (onClose) {
@@ -84,15 +87,15 @@ export const Titlebar = ({ closeOnly = false, onClose }: TitlebarProps) => {
       return;
     }
 
-    getShiftHost().commands.run("window.close");
+    host.commands.run("window.close");
   };
 
   const handleMinimize = () => {
-    getShiftHost().commands.run("window.minimise");
+    host.commands.run("window.minimise");
   };
 
   const handleMaximize = () => {
-    getShiftHost().commands.run("window.maximise");
+    host.commands.run("window.maximise");
   };
 
   return (

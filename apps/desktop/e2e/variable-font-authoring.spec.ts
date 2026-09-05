@@ -9,7 +9,7 @@ interface VariableFixture {
 }
 
 async function openSettings(page: Page, category: "Axes" | "Sources" | "Instances") {
-  await page.getByLabel(/Display and edit font information/).click();
+  await page.getByRole("button", { name: "Settings" }).click();
   const dialog = page.getByRole("dialog", { name: "Settings" });
   await expect(dialog).toBeVisible();
   await dialog.getByRole("button", { name: category, exact: true }).click();
@@ -146,9 +146,10 @@ test.describe("variable-font authoring controls", () => {
     await selectCategory(dialog, "Sources");
     const defaultSourceName = await page.evaluate(() => window.shift?.font.defaultSource.name);
     if (!defaultSourceName) throw new Error("Expected default source");
-    await expect(
-      dialog.getByLabel(`Cannot delete ${defaultSourceName}: default source`),
-    ).toBeDisabled();
+    await expect(dialog.getByLabel(`Delete ${defaultSourceName}`)).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
     await dialog.getByRole("button", { name: "Bold", exact: true }).click();
     const sourceName = main.getByLabel("Name", { exact: true });
     await sourceName.fill("Display Bold");

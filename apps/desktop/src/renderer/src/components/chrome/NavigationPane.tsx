@@ -1,6 +1,6 @@
 import { useLocation, useNavigate } from "react-router";
 
-import { Button } from "@shift/ui";
+import { Button, Tooltip, TooltipContent, TooltipTrigger } from "@shift/ui";
 import { routes } from "@/app/routes";
 import { useSettingsNavigation } from "@/context/SettingsNavigationContext";
 
@@ -31,19 +31,25 @@ export const NavigationPane = () => {
             };
 
             return (
-              <Button
-                key={route.id}
-                icon={<Icon width={20} height={20} className="text-primary" />}
-                aria-label={route.description}
-                variant="ghost"
-                isActive={
-                  route.kind === "dialog"
-                    ? settings.target !== null
-                    : settings.target === null && location.pathname === route.path
-                }
-                size="icon"
-                onClick={onClick}
-              />
+              <Tooltip key={route.id}>
+                <TooltipTrigger>
+                  <Button
+                    icon={<Icon width={20} height={20} className="text-primary" />}
+                    aria-label={route.description}
+                    variant="ghost"
+                    isActive={
+                      route.kind === "dialog"
+                        ? settings.target !== null
+                        : settings.target === null && location.pathname === route.path
+                    }
+                    size="icon"
+                    onClick={onClick}
+                  />
+                </TooltipTrigger>
+                <TooltipContent side="bottom" sideOffset={5}>
+                  {route.description}
+                </TooltipContent>
+              </Tooltip>
             );
           })}
         </div>

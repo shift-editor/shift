@@ -57,9 +57,13 @@ Do not update snapshots merely to make a failure pass. Inspect the diff and conf
 | Project    | Fixture                   | Rendering                                         | CI policy                                    |
 | ---------- | ------------------------- | ------------------------------------------------- | -------------------------------------------- |
 | `visual`   | `fixtures/electronApp.ts` | Software rendering, DPR 1, `1200×600` page window | Required on macOS in the merge queue         |
-| `platform` | `fixtures/electronApp.ts` | Software rendering, DPR 1, `1200×600` page window | Required on Windows/Linux in the merge queue |
+| `platform` | `fixtures/electronApp.ts` | Software rendering, DPR 1, native window geometry | Required on Windows/Linux in the merge queue |
 | `gpu`      | `fixtures/perfApp.ts`     | Hardware GPU, host scale, stable content size     | Required on macOS in the merge queue         |
 | `perf`     | `fixtures/perfApp.ts`     | Hardware GPU, host scale, stable content size     | Nightly and manual only                      |
+
+The shared fixture option `windowSizing` defaults to `"visual"` in the visual project and `"native"` elsewhere. `prepareWindow` waits for visibility and DOM readiness in both modes, but only visual mode unmaximizes and normalizes the renderer viewport. Platform workflows wait for their relevant controls or workspace readiness without depending on exact snapshot dimensions. Recovery launches use the same policy on every restart. GPU and performance fixture sizing is unchanged.
+
+`window-behavior.spec.ts` explicitly uses `windowSizing: "native"` in both projects. It owns the launcher's 800×600 outer-size assertion, startup-document maximization, and command-driven restore/maximize coverage. Platform-appropriate control coverage remains in `application-menu.spec.ts` and `platform-integration.spec.ts`.
 
 Post-merge `main` workflows do not repeat the E2E suites for the same commit. Rust-changing pushes still build each platform's native module to seed default-branch caches for later merge-queue runs.
 
@@ -83,7 +87,7 @@ Authored fixtures import their source into a canonical native document under a t
 
 ## Visual snapshots
 
-The visual fixture forces a fixed device scale and sizes the `BrowserWindow` that owns the Playwright page. Before normalizing the page to 1200×600, launcher runs assert the native window opened at 800×600. This prevents snapshots from inheriting the host display's scale or available work area without masking launcher sizing regressions.
+The visual fixture forces a fixed device scale and sizes the `BrowserWindow` that owns the Playwright page to a 1200×600 renderer viewport. Native launcher sizing and startup maximization are tested separately in `window-behavior.spec.ts`, before normalization can mask regressions. Exact snapshot dimensions are not a prerequisite for platform workflows.
 
 After an intentional visual change:
 
@@ -110,7 +114,7 @@ A snapshot match alone does not prove GPU content exists. Rendering tests that c
 
 ## Failures and artifacts
 
-Local failures are written to `apps/desktop/e2e/test-results/`. CI uploads the same directory as a Playwright artifact, including screenshots, diffs, traces, error context, and `electron-diagnostics` with window, renderer error/crash, main-process output, and process-exit evidence. Windows/Linux platform jobs also retain successful evidence for 14 days: launcher, catalog, editor, and reopened-editor screenshots; the generated `.shift` document; the exported TTF; and a runtime/file-hash manifest. These screenshots are inspection artifacts rather than golden visual assertions. Open a trace with:
+Local failures are written to `apps/desktop/e2e/test-results/`. CI uploads the same directory as a Playwright artifact, including screenshots, diffs, traces, error context, and `electron-diagnostics` with window, renderer error/crash, main-process output, and process-exit evidence. `collectWindowDiagnostics` records native outer/content bounds, visibility, minimize/maximize state, zoom factor, display bounds/work area/scale, and renderer dimensions/DPR. Native and renderer inspection failures are recorded independently. Recovery launch failures include geometry in the error before terminating Electron. Windows/Linux platform jobs also retain successful evidence for 14 days: launcher, catalog, editor, and reopened-editor screenshots; the generated `.shift` document; the exported TTF; and a runtime/file-hash manifest. These screenshots are inspection artifacts rather than golden visual assertions. Open a trace with:
 
 ```sh
 pnpm --filter @shift/desktop exec playwright show-trace apps/desktop/e2e/test-results/<test>/trace.zip

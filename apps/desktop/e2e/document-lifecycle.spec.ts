@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
-import { _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
+import type { ElectronApplication, Page } from "@playwright/test";
 import { createBridge } from "@shift/bridge";
 import {
   DESIGNSPACE_FONT_PATH,
@@ -135,22 +135,6 @@ function sourceTreeSnapshot(rootPath: string): [string, string][] {
   return snapshot;
 }
 
-test("opens a startup document in a maximized window", async ({ testRoot }) => {
-  const documentPath = createSecondDocument(testRoot);
-  const electronApp = await launchStartupDocument(testRoot, documentPath);
-
-  try {
-    const page = await electronApp.firstWindow();
-    await waitForWorkspaceReady(page);
-    const browserWindow = await electronApp.browserWindow(page);
-
-    await expect.poll(() => browserWindow.evaluate((window) => window.isMaximized())).toBe(true);
-    await browserWindow.dispose();
-  } finally {
-    await killApp(electronApp);
-  }
-});
-
 workspaceTest(
   "opens a document sent to the running application",
   async ({ electronApp, testRoot }) => {
@@ -168,25 +152,6 @@ function createSecondDocument(testRoot: string): string {
   const secondPath = path.join(testRoot, "second.shift");
   fs.renameSync(generatedPath, secondPath);
   return secondPath;
-}
-
-async function launchStartupDocument(
-  testRoot: string,
-  documentPath: string,
-): Promise<ElectronApplication> {
-  return electron.launch({
-    args: [
-      MAIN_JS,
-      `--user-data-dir=${path.join(testRoot, "startup-user-data")}`,
-      "--force-device-scale-factor=1",
-      documentPath,
-    ],
-    env: {
-      ...process.env,
-      NODE_ENV: "test",
-      LIBGL_ALWAYS_SOFTWARE: "1",
-    },
-  });
 }
 
 async function launchSecondInstance(

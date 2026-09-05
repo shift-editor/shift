@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@shift/ui";
 import { CollapsibleSection, SidebarActionButton } from "@/components/sidebar";
 import { CreateInstanceMenu } from "./CreateInstanceMenu";
 import { Instances } from "./Instances";
@@ -24,9 +25,14 @@ export const InstancesSection = ({ defaultOpen = false }: InstancesSectionProps)
         canAuthor ? (
           <CreateInstanceMenu onOpenChange={setInstanceMenuOpen} />
         ) : (
-          <SidebarActionButton label="Create instance" disabled>
-            <PlusIcon className="h-3 w-3" />
-          </SidebarActionButton>
+          <Tooltip>
+            <TooltipTrigger>
+              <SidebarActionButton label="Create instance" aria-disabled>
+                <PlusIcon className="h-3 w-3" />
+              </SidebarActionButton>
+            </TooltipTrigger>
+            <TooltipContent>Create instance</TooltipContent>
+          </Tooltip>
         )
       }
     >

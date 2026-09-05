@@ -14,7 +14,7 @@
 ## Agent Skills
 
 - `.agents/skills/` is the canonical source for repository skills. Pi discovers this standard location automatically.
-- Load the matching skill before acting: `commit` for commits, `pr` for pull requests, `issue` for issues, `writing-tests` for test changes or reviews, `jsdoc` for JSDoc, and `rustdoc` for Rust documentation.
+- Load the matching skill before acting: `commit` for commits, `pr` for pull requests, `issue` for issues, `writing-tests` for test changes or reviews, `ui` for interface and styling work, `jsdoc` for JSDoc, and `rustdoc` for Rust documentation.
 - `.claude/skills/` and `.codex/skills/` are generated client adapters. Never edit shared skills there directly.
 - After changing a canonical skill, run `pnpm agent-skills:sync`. CI runs `pnpm agent-skills:check` to prevent adapter drift.
 

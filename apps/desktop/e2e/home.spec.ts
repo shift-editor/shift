@@ -15,12 +15,12 @@ test.describe("Home view", () => {
 
   test("navigation highlights Home or Settings without leaving both active", async ({ page }) => {
     const grid = page.getByRole("button", {
-      name: "Display all glyphs",
+      name: "Font overview",
       exact: true,
       includeHidden: true,
     });
     const info = page.getByRole("button", {
-      name: "Display and edit font information, such as family name, weight, style, etc.",
+      name: "Settings",
       exact: true,
       includeHidden: true,
     });
@@ -42,16 +42,14 @@ test.describe("Home view", () => {
     await clickFirstCatalogGlyph(page);
     await page.waitForURL(/#\/editor\//);
     await page.mouse.move(0, 0);
-    await expect(page.getByRole("button", { name: "Display all glyphs", exact: true })).toHaveCSS(
+    await expect(page.getByRole("button", { name: "Font overview", exact: true })).toHaveCSS(
       "background-color",
       "rgba(0, 0, 0, 0)",
     );
-    await expect(
-      page.getByRole("button", {
-        name: "Display and edit font information, such as family name, weight, style, etc.",
-        exact: true,
-      }),
-    ).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    await expect(page.getByRole("button", { name: "Settings", exact: true })).toHaveCSS(
+      "background-color",
+      "rgba(0, 0, 0, 0)",
+    );
   });
 
   test("selected category uses one background across its heading and children", async ({
@@ -152,6 +150,28 @@ test.describe("Home view", () => {
     await expect(surface).toHaveAttribute("data-first-glyph-id", unencoded.id);
   });
 
+  test("keeps unavailable source creation discoverable without axes", async ({ page }) => {
+    await page.evaluate(async () => {
+      const font = window.shift?.font;
+      if (!font) throw new Error("Expected font");
+
+      for (const axis of font.getAxes()) font.deleteAxis(axis.id);
+      await font.editCoordinator.settled();
+    });
+
+    const createSource = page.getByRole("button", { name: "Create source", exact: true });
+    const tooltip = page.getByRole("tooltip");
+    await expect(createSource).toHaveAttribute("aria-disabled", "true");
+
+    await createSource.hover();
+    await expect(tooltip).toHaveText("Create source");
+
+    await page.mouse.move(600, 300);
+    await expect(tooltip).toBeHidden();
+    await createSource.focus();
+    await expect(tooltip).toHaveText("Create source");
+  });
+
   test("keeps a renamed glyph visible until the catalog confirms its new name", async ({
     page,
   }) => {
@@ -191,7 +211,7 @@ test.describe("Home view", () => {
 
     await expect(renderer).toBeAttached();
 
-    await page.getByRole("button", { name: "Display all glyphs" }).click();
+    await page.getByRole("button", { name: "Font overview" }).click();
     await page.waitForURL(/#\/home/);
     await afterNextPaint(page);
 

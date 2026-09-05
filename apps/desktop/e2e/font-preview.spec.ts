@@ -181,7 +181,7 @@ test.describe("retained font source Grid preview", () => {
 
     await expect(editorSurface.getByLabel("Create source")).toBeDisabled();
 
-    await editorSurface.getByLabel("Display all glyphs").click();
+    await editorSurface.getByLabel("Font overview").click();
     await page.waitForURL(/#\/home$/);
     await expect(scrollViewport).toBeVisible({ timeout: 1_000 });
     await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
@@ -225,7 +225,7 @@ test.describe("retained font source Grid preview", () => {
   test("shows preview font settings with disabled authoring controls", async ({ page }) => {
     await expect.poll(() => page.evaluate(() => window.shiftSession?.mode)).toBe("preview");
 
-    await page.getByLabel(/Display and edit font information/).click();
+    await page.getByRole("button", { name: "Settings" }).click();
     const settingsDialog = page.getByRole("dialog", { name: "Settings" });
     await expect(settingsDialog).toBeVisible();
     await expect(page.getByText("Read-only preview")).toBeHidden();
@@ -245,7 +245,10 @@ test.describe("retained font source Grid preview", () => {
       .toBe(true);
 
     await settingsDialog.getByRole("button", { name: "Sources", exact: true }).click();
-    await expect(settingsDialog.getByLabel("Create source")).toBeDisabled();
+    const createSource = settingsDialog.getByLabel("Create source");
+    await expect(createSource).toHaveAttribute("aria-disabled", "true");
+    await createSource.hover();
+    await expect(page.getByRole("tooltip")).toHaveText("Create source");
     const sourceControls = settingsDialog.locator("main input");
     await expect.poll(() => sourceControls.count()).toBeGreaterThan(0);
     await expect
