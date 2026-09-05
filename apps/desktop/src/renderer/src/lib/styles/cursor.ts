@@ -8,6 +8,8 @@ export function cursorToCSS(cursor: CursorType): string {
       return `-webkit-image-set(url("../cursors/cursor@32-moving.svg") 1x, url("../cursors/cursor@64-moving.svg") 2x) 5 0, move`;
     case "copy":
       return `-webkit-image-set(url("../cursors/cursor@32-copy.svg") 1x, url("../cursors/cursor@64-copy.svg") 2x) 5 0, copy`;
+    case "bend":
+      return `-webkit-image-set(url("../cursors/cursor@32-bend.svg") 1x, url("../cursors/cursor@64-bend.svg") 2x) 5 0, default`;
     case "pen":
       return `-webkit-image-set(url("../cursors/pen@32.svg") 1x, url("../cursors/pen@64.svg") 2x) 8 8, crosshair`;
     case "pen-add":

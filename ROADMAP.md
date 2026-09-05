@@ -426,7 +426,7 @@ These are allowed to jump around when energy is high, but they should not silent
 
 - [ ] Ruler tool (measure distance/angle between points)
 - [ ] Knife tool (cut contours at intersection)
-- [ ] Bend curves with mouse (drag segment to reshape)
+- [x] Bend curves with mouse (drag segment to reshape)
 - [ ] Shape tool: rectangles with corner radius
 - [x] Shape tool: circles and ellipses
 - [ ] Shape tool: regular polygons (triangle, pentagon, etc.)

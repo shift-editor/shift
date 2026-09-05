@@ -10,6 +10,7 @@ const CUSTOM_CURSORS: CursorType[] = [
   { type: "default" },
   { type: "move" },
   { type: "copy" },
+  { type: "bend" },
   { type: "pen" },
   { type: "pen-add" },
   { type: "pen-end" },
