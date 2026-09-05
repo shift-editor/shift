@@ -88,7 +88,7 @@ User pointer/key
 
 - Crossing the screen-space threshold emits `dragStart` at the pointer-down origin, immediately followed by the first `drag` sample.
 - Every `drag.delta` is cumulative from pointer-down; the threshold classifies the gesture but does not become a new origin.
-- Pointer-up drains queued movement and emits the final `drag` sample before `dragEnd`.
+- Pointer-up drains queued movement and emits the final `drag` sample before `dragEnd`. Both release events use the final pointer position with the latest drag sample's modifiers, so releasing Shift just before mouseup does not change the preview's constraints. Modifier changes take effect on the next processed drag movement; clicks and double-clicks still use release-time modifiers. `GestureDetector.lastDragModifiers` is empty before dragging, follows each emitted drag movement, and clears on completion, cancellation, or a new pointer-down.
 - Behaviors initialize on `dragStart`, register rollback with `ctx.onCancel()`, preview from `drag`, and commit on `dragEnd` before dismissing rollback.
 - `BaseTool` runs any rollback left active at `dragEnd`, `dragCancel`, tool disposal, or after a handler throws.
 
