@@ -38,7 +38,7 @@ async function openGlyph(page: Page, glyphId: GlyphId): Promise<void> {
 }
 
 async function returnHome(page: Page): Promise<void> {
-  await page.getByRole("button", { name: "Display all glyphs" }).click();
+  await page.getByRole("button", { name: "Font overview" }).click();
   await page.waitForURL(/#\/home$/);
 }
 

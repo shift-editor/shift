@@ -66,7 +66,7 @@ test("keeps a useful stable UPM frame across empty and extreme glyphs", async ({
 
   await openGlyphRoute(page, firstGlyph.id);
   const expectedTransform = (await cameraFrame(page)).transform;
-  await page.getByRole("button", { name: "Display all glyphs" }).click();
+  await page.getByRole("button", { name: "Font overview" }).click();
   await page.waitForURL(/#\/home$/);
 
   for (const glyph of glyphs) {
@@ -81,7 +81,7 @@ test("keeps a useful stable UPM frame across empty and extreme glyphs", async ({
       expect(point.y).toBeLessThanOrEqual(frame.viewport.height);
     }
 
-    await page.getByRole("button", { name: "Display all glyphs" }).click();
+    await page.getByRole("button", { name: "Font overview" }).click();
     await page.waitForURL(/#\/home$/);
   }
 });

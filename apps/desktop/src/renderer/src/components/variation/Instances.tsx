@@ -8,6 +8,9 @@ import {
   MenuPositioner,
   MenuSeparator,
   MenuTrigger,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
 } from "@shift/ui";
 import VerticalEllipsis from "@/assets/general/vertical-ellipsis.svg";
 import { SidebarActionRow } from "@/components/sidebar";
@@ -67,18 +70,23 @@ interface InstanceActionsMenuProps {
 
 const InstanceActionsMenu = ({ instanceName, onEdit, onDelete }: InstanceActionsMenuProps) => (
   <Menu modal={false}>
-    <MenuTrigger
-      render={
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          className="h-6 w-6 p-0.5"
-          aria-label={`Actions for ${instanceName}`}
-        />
-      }
-    >
-      <VerticalEllipsis className="h-5 w-5" />
-    </MenuTrigger>
+    <Tooltip>
+      <TooltipTrigger>
+        <MenuTrigger
+          render={
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="h-6 w-6 p-0.5"
+              aria-label={`Actions for ${instanceName}`}
+            />
+          }
+        >
+          <VerticalEllipsis className="h-5 w-5" />
+        </MenuTrigger>
+      </TooltipTrigger>
+      <TooltipContent>{"Edit instance"}</TooltipContent>
+    </Tooltip>
     <MenuPortal>
       <MenuPositioner sideOffset={4} align="end">
         <MenuPopup>

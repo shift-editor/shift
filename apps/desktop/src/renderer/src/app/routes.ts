@@ -17,13 +17,13 @@ export const routes: NavRoute[] = [
     kind: "route",
     path: "/home",
     icon: GridSvg,
-    description: "Display all glyphs",
+    description: "Font overview",
   },
   {
     id: "info",
     kind: "dialog",
     dialogId: "settings",
     icon: InfoSvg,
-    description: "Display and edit font information, such as family name, weight, style, etc.",
+    description: "Settings",
   },
 ];

@@ -85,6 +85,28 @@ test.describe("Home view", () => {
     await expect(surface).toHaveAttribute("data-first-glyph-id", unencoded.id);
   });
 
+  test("keeps unavailable source creation discoverable without axes", async ({ page }) => {
+    await page.evaluate(async () => {
+      const font = window.shift?.font;
+      if (!font) throw new Error("Expected font");
+
+      for (const axis of font.getAxes()) font.deleteAxis(axis.id);
+      await font.editCoordinator.settled();
+    });
+
+    const createSource = page.getByRole("button", { name: "Create source", exact: true });
+    const tooltip = page.getByRole("tooltip");
+    await expect(createSource).toHaveAttribute("aria-disabled", "true");
+
+    await createSource.hover();
+    await expect(tooltip).toHaveText("Create source");
+
+    await page.mouse.move(600, 300);
+    await expect(tooltip).toBeHidden();
+    await createSource.focus();
+    await expect(tooltip).toHaveText("Create source");
+  });
+
   test("keeps a renamed glyph visible until the catalog confirms its new name", async ({
     page,
   }) => {
@@ -124,7 +146,7 @@ test.describe("Home view", () => {
 
     await expect(renderer).toBeAttached();
 
-    await page.getByRole("button", { name: "Display all glyphs" }).click();
+    await page.getByRole("button", { name: "Font overview" }).click();
     await page.waitForURL(/#\/home/);
     await afterNextPaint(page);
 

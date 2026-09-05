@@ -35,6 +35,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           "inline-flex cursor-pointer items-center justify-center gap-2 rounded transition-colors duration-200",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
           "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+          "aria-disabled:cursor-default aria-disabled:opacity-50",
           variantStyles[variant],
           sizeStyles[size],
           className,

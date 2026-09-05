@@ -86,7 +86,7 @@ test.describe("Resident Glyph Grid", () => {
       )
       .toEqual(initialSize);
 
-    await page.getByRole("button", { name: "Display all glyphs" }).click();
+    await page.getByRole("button", { name: "Font overview" }).click();
     await page.waitForURL(/#\/home/);
     await afterNextPaint(page);
 
@@ -225,7 +225,7 @@ test.describe("Resident Glyph Grid", () => {
       await editor.font.editCoordinator.settled();
     });
 
-    await page.getByRole("button", { name: "Display all glyphs" }).click();
+    await page.getByRole("button", { name: "Font overview" }).click();
     await page.waitForURL(/#\/home/);
     await expect(glyphCanvas).toBeVisible({ timeout: 30_000 });
     await expectCompleteResidency(glyphCanvas);
@@ -271,7 +271,7 @@ test.describe("Resident Glyph Grid", () => {
       await editor.font.editCoordinator.settled();
     });
 
-    await page.getByRole("button", { name: "Display all glyphs" }).click();
+    await page.getByRole("button", { name: "Font overview" }).click();
     await page.waitForURL(/#\/home/);
     await expect(glyphCanvas).toBeVisible({ timeout: 30_000 });
     await expectCompleteResidency(glyphCanvas);
@@ -393,7 +393,7 @@ test.describe("Resident Glyph Grid", () => {
       if (!inserted) throw new Error("Oversized contour insertion failed");
       await editor.font.editCoordinator.settled();
     });
-    await page.getByRole("button", { name: "Display all glyphs" }).click();
+    await page.getByRole("button", { name: "Font overview" }).click();
     await page.waitForURL(/#\/home/);
     await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
       timeout: 30_000,

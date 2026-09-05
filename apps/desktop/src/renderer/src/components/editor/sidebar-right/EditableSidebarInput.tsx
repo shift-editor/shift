@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from "react";
-import { cn, Input } from "@shift/ui";
+import { cn, Input, Tooltip, TooltipContent, TooltipTrigger } from "@shift/ui";
 import { NUDGES_VALUES, type NudgeMagnitude } from "@/types/nudge";
 import { useFocusZone } from "@/context/FocusZoneContext";
 
@@ -8,7 +8,7 @@ export interface EditableSidebarInputHandle {
 }
 
 interface EditableSidebarInputProps {
-  ariaLabel?: string;
+  ariaLabel: string;
   label?: string | React.ReactNode;
   labelPosition?: "left" | "right";
   className?: string;
@@ -132,27 +132,32 @@ export const EditableSidebarInput = forwardRef<
     }, []);
 
     return (
-      <Input
-        ref={inputRef}
-        aria-label={ariaLabel}
-        label={label}
-        labelPosition={labelPosition}
-        value={isEditing ? editValue : displayValue === null ? "" : `${displayValue}${suffix}`}
-        icon={icon}
-        iconPosition={iconPosition}
-        readOnly={!isEditing}
-        className={cn(
-          "w-full bg-[#f3f3f3]",
-          label && labelPosition !== "right" && "pl-6",
-          label && labelPosition === "right" && "pr-6",
-          className,
-        )}
-        onFocus={handleFocus}
-        onBlur={handleBlur}
-        onKeyDown={handleKeyDown}
-        onChange={handleChange}
-        disabled={disabled}
-      />
+      <Tooltip>
+        <TooltipTrigger>
+          <Input
+            ref={inputRef}
+            aria-label={ariaLabel}
+            label={label}
+            labelPosition={labelPosition}
+            value={isEditing ? editValue : displayValue === null ? "" : `${displayValue}${suffix}`}
+            icon={icon}
+            iconPosition={iconPosition}
+            readOnly={!isEditing}
+            className={cn(
+              "w-full bg-[#f3f3f3]",
+              label && labelPosition !== "right" && "pl-6",
+              label && labelPosition === "right" && "pr-6",
+              className,
+            )}
+            onFocus={handleFocus}
+            onBlur={handleBlur}
+            onKeyDown={handleKeyDown}
+            onChange={handleChange}
+            disabled={disabled}
+          />
+        </TooltipTrigger>
+        <TooltipContent>{ariaLabel}</TooltipContent>
+      </Tooltip>
     );
   },
 );

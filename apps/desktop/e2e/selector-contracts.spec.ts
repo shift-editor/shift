@@ -22,7 +22,7 @@ test("exposes stable semantic selectors for major application surfaces", async (
   await navigation.getByRole("button", { name: "Sources", exact: true }).click();
   await expect(page.getByTestId(`source-${defaultSourceId}`)).toBeVisible();
 
-  await page.getByLabel(/Display and edit font information/).click();
+  await page.getByRole("button", { name: "Settings" }).click();
   const settings = page.getByRole("dialog", { name: "Settings" });
   await expect(settings.getByRole("navigation", { name: "Settings categories" })).toBeVisible();
   await expect(settingsDetails(page)).toBeVisible();

@@ -98,6 +98,26 @@ test.describe("Editor view", () => {
     await expect(glyphProperties(page).getByText("Boolean", { exact: true })).toBeVisible();
   });
 
+  test("explains icon-only editor actions on hover", async ({ page }) => {
+    const toolbar = page.getByRole("toolbar", { name: "Editor tools" });
+    const selectTool = toolbar.getByRole("button", { name: "Select Tool (V)" });
+    await selectTool.hover();
+    await expect(page.getByRole("tooltip")).toHaveText("Select Tool (V)");
+
+    await page.keyboard.press("Meta+a");
+    const rotate = glyphProperties(page).getByRole("button", {
+      name: "Rotate 90 degrees clockwise",
+    });
+    await rotate.hover();
+    await expect(page.getByRole("tooltip")).toHaveText("Rotate 90 degrees clockwise");
+
+    const scaleAnchor = glyphProperties(page).getByRole("button", {
+      name: "Anchor top left",
+    });
+    await scaleAnchor.hover();
+    await expect(page.getByRole("tooltip")).toHaveText("Anchor top left");
+  });
+
   test("keeps advance width text current after a sidebar metrics edit", async ({ page }) => {
     const properties = glyphProperties(page);
     const advanceInput = properties.getByLabel("Advance width", { exact: true });
@@ -138,7 +158,7 @@ test.describe("Editor view", () => {
     const targetX = Math.round(initialBounds.x) + 25;
     const targetY = Math.round(initialBounds.y) + 30;
 
-    await properties.getByLabel("Top-left scale anchor", { exact: true }).click();
+    await properties.getByLabel("Anchor top left", { exact: true }).click();
     await setInputValue(xInput, targetX);
     await setInputValue(yInput, targetY);
 
@@ -150,7 +170,7 @@ test.describe("Editor view", () => {
     const properties = glyphProperties(page);
     const initialBounds = await selectionBounds(page);
 
-    await properties.getByLabel("Top-left scale anchor", { exact: true }).click();
+    await properties.getByLabel("Anchor top left", { exact: true }).click();
     const scaleInput = properties.getByLabel("Scale factor", { exact: true });
     await setInputValue(scaleInput, 2);
 
@@ -167,7 +187,7 @@ test.describe("Editor view", () => {
   test("keeps rotation and flipping centered regardless of the scale anchor", async ({ page }) => {
     await page.keyboard.press("Meta+a");
     const properties = glyphProperties(page);
-    await properties.getByLabel("Top-left scale anchor", { exact: true }).click();
+    await properties.getByLabel("Anchor top left", { exact: true }).click();
     const initialCenter = await selectionCenter(page);
 
     await properties.getByRole("button", { name: "Rotate 90 degrees clockwise" }).click();

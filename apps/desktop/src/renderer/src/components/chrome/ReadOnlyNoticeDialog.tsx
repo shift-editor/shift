@@ -7,6 +7,9 @@ import {
   DialogPopup,
   DialogPortal,
   DialogTitle,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
   X,
   cn,
 } from "@shift/ui";
@@ -55,15 +58,20 @@ export const ReadOnlyNoticeDialog = ({ canConvert }: ReadOnlyNoticeDialogProps) 
               ? "Save this source as a Shift document before making authoring changes."
               : "Compiled TTF and OTF fonts can be inspected here, but this preview cannot be edited or converted."}
           </p>
-          <DialogClose
-            className={cn(
-              "absolute right-2 top-2 inline-flex h-7 w-7 cursor-pointer items-center justify-center",
-              "rounded text-primary/70 transition-colors hover:bg-hover hover:text-primary",
-            )}
-            aria-label="Dismiss read-only notice"
-          >
-            <X className="h-4 w-4" />
-          </DialogClose>
+          <Tooltip>
+            <TooltipTrigger>
+              <DialogClose
+                className={cn(
+                  "absolute right-2 top-2 inline-flex h-7 w-7 cursor-pointer items-center justify-center",
+                  "rounded text-primary/70 transition-colors hover:bg-hover hover:text-primary",
+                )}
+                aria-label="Dismiss read-only notice"
+              >
+                <X className="h-4 w-4" />
+              </DialogClose>
+            </TooltipTrigger>
+            <TooltipContent>Dismiss read-only notice</TooltipContent>
+          </Tooltip>
           <div className="mt-5 flex justify-end">
             <DialogClose render={<Button>OK</Button>} />
           </div>

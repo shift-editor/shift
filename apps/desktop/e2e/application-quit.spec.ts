@@ -148,7 +148,7 @@ test("keeps authored document state isolated between windows", async ({ electron
   expect((await firstPage.evaluate(() => window.shift?.editor.selection.ids.length)) ?? 0).toBe(1);
   expect(await firstPage.evaluate(() => window.shift?.editor.hover.id)).not.toBeNull();
 
-  await firstPage.getByRole("button", { name: "Display all glyphs" }).click();
+  await firstPage.getByRole("button", { name: "Font overview" }).click();
   await firstPage.waitForURL(/#\/home$/);
   await firstPage.getByRole("button", { name: "Create glyph", exact: true }).click();
   await glyphIdForName(firstPage, "newGlyph.1");

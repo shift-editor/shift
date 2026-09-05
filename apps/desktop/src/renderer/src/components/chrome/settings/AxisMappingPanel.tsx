@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { Axis, AxisMapping, AxisMappingPoint } from "@shift/types";
 import { mintAxisMappingId } from "@shift/types";
-import { Button } from "@shift/ui";
+import { Button, Tooltip, TooltipContent, TooltipTrigger } from "@shift/ui";
 import MinusIcon from "@/assets/general/minus.svg";
 import PlusIcon from "@/assets/general/plus.svg";
 import { useSignalState } from "@/lib/signals";
@@ -110,18 +110,23 @@ export const AxisMappingPanel = ({ axis }: AxisMappingPanelProps) => {
                     onCommit={form.commit}
                   />
                   <td>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      className="mx-auto h-5 w-5 text-muted opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-icon-button-hover"
-                      aria-label={`Remove mapping point ${index + 1}`}
-                      onClick={async () => {
-                        await removePoint(index);
-                      }}
-                    >
-                      <MinusIcon className="h-2.5 w-2.5" />
-                    </Button>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          className="mx-auto h-5 w-5 text-muted opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-icon-button-hover"
+                          aria-label={`Remove mapping point ${index + 1}`}
+                          onClick={async () => {
+                            await removePoint(index);
+                          }}
+                        >
+                          <MinusIcon className="h-2.5 w-2.5" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>{`Remove mapping point ${index + 1}`}</TooltipContent>
+                    </Tooltip>
                   </td>
                 </tr>
               ))}
