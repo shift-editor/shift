@@ -1,7 +1,21 @@
 import { Curve, Vec2, type Bounds, type CurveType, type Point2D } from "@shift/geo";
 import type { PointId } from "@shift/types";
 import { Point } from "./Point";
-import type { ContourGeometry } from "./types/contour";
+import type {
+  ContourGeometry,
+  SegmentPoints,
+  LineSegmentPoints,
+  QuadSegmentPoints,
+  CubicSegmentPoints,
+} from "./types/contour";
+import { parseContourSegments } from "./parseContourSegments";
+
+export type {
+  SegmentPoints,
+  LineSegmentPoints,
+  QuadSegmentPoints,
+  CubicSegmentPoints,
+} from "./types/contour";
 
 declare const SegmentIdBrand: unique symbol;
 
@@ -74,29 +88,6 @@ export type CubicSegment = {
 
 export type SegmentType = LineSegment | QuadSegment | CubicSegment;
 
-export type LineSegmentPoints = {
-  readonly type: "line";
-  readonly start: Point;
-  readonly end: Point;
-};
-
-export type QuadSegmentPoints = {
-  readonly type: "quad";
-  readonly start: Point;
-  readonly control: Point;
-  readonly end: Point;
-};
-
-export type CubicSegmentPoints = {
-  readonly type: "cubic";
-  readonly start: Point;
-  readonly controlStart: Point;
-  readonly controlEnd: Point;
-  readonly end: Point;
-};
-
-export type SegmentPoints = LineSegmentPoints | QuadSegmentPoints | CubicSegmentPoints;
-
 export interface SegmentHit {
   readonly t: number;
   readonly closestPoint: Point2D;
@@ -126,85 +117,30 @@ export class Segment {
 
   /** Parse a contour's points into segment instances. */
   static parse(contour: ContourGeometry): Segment[] {
-    const { points, closed } = contour;
-    if (points.length < 2) {
-      return [];
-    }
-
-    const segments: Segment[] = [];
-    let index = 0;
-
-    const getPoint = (i: number): Point | null => {
-      if (i < points.length) {
-        return points[i];
-      }
-      if (closed) {
-        return points[i - points.length];
-      }
-
-      return null;
-    };
-
-    const limit = closed ? points.length : points.length - 1;
-
-    while (index < limit) {
-      const p1 = getPoint(index);
-      const p2 = getPoint(index + 1);
-
-      if (!p1 || !p2) {
-        break;
-      }
-
-      if (Point.isOnCurve(p1) && Point.isOnCurve(p2)) {
-        segments.push(
-          new Segment({
+    return parseContourSegments(contour).map((segment) => {
+      switch (segment.type) {
+        case "line":
+          return new Segment({
             type: "line",
-            points: { anchor1: p1, anchor2: p2 },
-          }),
-        );
-        index += 1;
-        continue;
+            points: { anchor1: segment.start, anchor2: segment.end },
+          });
+        case "quad":
+          return new Segment({
+            type: "quad",
+            points: { anchor1: segment.start, control: segment.control, anchor2: segment.end },
+          });
+        case "cubic":
+          return new Segment({
+            type: "cubic",
+            points: {
+              anchor1: segment.start,
+              control1: segment.controlStart,
+              control2: segment.controlEnd,
+              anchor2: segment.end,
+            },
+          });
       }
-
-      if (Point.isOnCurve(p1) && Point.isOffCurve(p2)) {
-        const p3 = getPoint(index + 2);
-
-        if (!p3) {
-          break;
-        }
-
-        if (Point.isOnCurve(p3)) {
-          segments.push(
-            new Segment({
-              type: "quad",
-              points: { anchor1: p1, control: p2, anchor2: p3 },
-            }),
-          );
-          index += 2;
-          continue;
-        }
-
-        if (Point.isOffCurve(p3)) {
-          const p4 = getPoint(index + 3);
-          if (!p4) {
-            break;
-          }
-
-          segments.push(
-            new Segment({
-              type: "cubic",
-              points: { anchor1: p1, control1: p2, control2: p3, anchor2: p4 },
-            }),
-          );
-          index += 3;
-          continue;
-        }
-      }
-
-      index += 1;
-    }
-
-    return segments;
+    });
   }
 
   get type(): SegmentType["type"] {

@@ -54,7 +54,7 @@ export const ToolButton: FC<ToolButtonProps> = ({
         <ToolbarButton
           render={
             <Button
-              className="h-8 w-8 rounded-md focus-visible:ring-0"
+              className="h-8 w-8 rounded-md transition-none focus-visible:ring-0"
               variant={isActive ? "primary" : "ghost"}
               icon={
                 <Icon
@@ -150,7 +150,7 @@ export const ToolsPane: FC = () => {
       >
         {Array.from(toolRegistry.entries())
           .filter(([, item]) => !item.hidden)
-          .map(([name, { icon, tooltip, onSelect, menuItems, disabled }]) => {
+          .map(([name, { icon, tooltip, menuItems, disabled }]) => {
             const activateTool = () => {
               editor.setActiveTool(name);
             };
@@ -160,10 +160,7 @@ export const ToolsPane: FC = () => {
               tooltip,
               activeTool,
               disabled,
-              onClick: () => {
-                if (onSelect) onSelect();
-                activateTool();
-              },
+              onClick: activateTool,
             };
 
             if (!menuItems) return <ToolButton key={name} {...buttonProps} />;

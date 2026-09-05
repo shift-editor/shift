@@ -203,7 +203,9 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
       this.editor.font.sourceAt(this.editor.externalLocation) === null;
 
     track(view.contoursCell);
-    const rootContours = view.contours.filter((contour) => contour.component === null);
+    const rootContours = view.contours.filter(
+      (contour) => contour.component === null && this.editor.handlesVisible(contour.contour.id),
+    );
     for (const contour of rootContours) contour.trackShape();
     view.trackAnchors();
 
@@ -225,6 +227,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
       this.editor.selection,
       this.editor.hover,
       interpolated,
+      (pointId, contourId) => this.editor.handlesVisible(pointId, contourId),
     );
     this.#anchors.draw(ctx.canvas, view.anchors, {
       selection: this.editor.selection,
@@ -251,7 +254,14 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     const sceneBounds = this.editor.camera.visibleSceneBounds(64);
     const origin = node.position;
 
-    this.#controlLines.draw(ctx.canvas, contours, (from, to) => {
+    this.#controlLines.draw(ctx.canvas, contours, (from, to, contourId) => {
+      if (
+        !this.editor.handlesVisible(from.id, contourId) ||
+        !this.editor.handlesVisible(to.id, contourId)
+      ) {
+        return false;
+      }
+
       const minX = Math.min(from.x, to.x) + origin.x;
       const maxX = Math.max(from.x, to.x) + origin.x;
       const minY = Math.min(from.y, to.y) + origin.y;
@@ -274,6 +284,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     for (const object of this.editor.objects(this.editor.selection.ids)) {
       if (object.kind !== "segment") continue;
       if (object.node.id !== node.id) continue;
+      if (!this.editor.handlesVisible(object.contourId)) continue;
 
       segmentIds.push(object.segmentId);
     }
@@ -288,6 +299,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     const object = this.editor.object(id);
     if (object?.kind !== "segment") return null;
     if (object.node.id !== node.id) return null;
+    if (!this.editor.handlesVisible(object.contourId)) return null;
 
     return object.segmentId;
   }

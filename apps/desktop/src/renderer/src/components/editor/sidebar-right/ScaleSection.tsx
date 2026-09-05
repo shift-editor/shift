@@ -9,7 +9,6 @@ import { useSignalState } from "@/lib/signals";
 import { Bounds } from "@shift/geo";
 import ScaleIcon from "@/assets/sidebar-right/scale.svg";
 import { useSelectionBounds } from "@/hooks/useSelectionBounds";
-import { isPointId } from "@shift/types";
 
 export const ScaleSection = () => {
   const editor = useEditor();
@@ -19,11 +18,13 @@ export const ScaleSection = () => {
 
   const widthRef = useRef<EditableSidebarInputHandle>(null);
   const heightRef = useRef<EditableSidebarInputHandle>(null);
-  const selectedPointIds = useMemo(() => selection.ids.filter(isPointId), [selection]);
-  const layer = useMemo(
-    () => editor.layerForGeometry({ points: selectedPointIds }),
-    [editor, selectedPointIds],
+  const positionSelection = useMemo(
+    () => editor.positionSelection(selection.ids),
+    [editor, selection],
   );
+  const selectedPointIds = positionSelection?.targets.points ?? [];
+  const isEditing = useSignalState(editor.isEditingCell);
+  const layer = isEditing ? null : (positionSelection?.layer ?? null);
   const editable = layer !== null;
 
   useEffect(() => {

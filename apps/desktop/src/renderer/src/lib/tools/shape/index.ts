@@ -1,2 +1,4 @@
-export { Shape } from "./Shape";
-export type { ShapeKind } from "./types";
+export { ShapeTool } from "./ShapeTool";
+export { Rectangle } from "./Rectangle";
+export { Ellipse } from "./Ellipse";
+export type { Shape, ShapeKind } from "./types";

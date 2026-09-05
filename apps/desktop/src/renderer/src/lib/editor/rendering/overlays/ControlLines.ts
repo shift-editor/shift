@@ -1,3 +1,5 @@
+import type { ContourId } from "@shift/types";
+import type { Point } from "@shift/glyph-state";
 import type { Canvas } from "../Canvas";
 import type { GlyphRenderContour } from "@/types/glyphRender";
 import { Validate } from "@shift/validation";
@@ -10,7 +12,7 @@ export class ControlLines {
   draw(
     canvas: Canvas,
     contours: readonly GlyphRenderContour[],
-    isLineVisible?: (from: { x: number; y: number }, to: { x: number; y: number }) => boolean,
+    isLineVisible?: (from: Point, to: Point, contourId: ContourId) => boolean,
   ): void {
     const { color, widthPx } = canvas.theme.controlLine;
     const lw = canvas.pxToUpm(widthPx);
@@ -36,7 +38,7 @@ export class ControlLines {
 
         const anchor = next && Validate.isOffCurve(next) ? prev : next;
         if (!anchor || Validate.isOffCurve(anchor)) continue;
-        if (isLineVisible && !isLineVisible(anchor, current)) continue;
+        if (isLineVisible && !isLineVisible(anchor, current, contour.id)) continue;
 
         canvas.ctx.moveTo(anchor.x, anchor.y);
         canvas.ctx.lineTo(current.x, current.y);

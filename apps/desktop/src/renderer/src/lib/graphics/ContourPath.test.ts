@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Mat } from "@shift/geo";
-import { Contour } from "@shift/glyph-state";
+import { Contour, Point } from "@shift/glyph-state";
 import { asContourId, asPointId } from "@shift/types";
 import { ContourPath } from "./ContourPath";
 
@@ -31,6 +31,33 @@ describe("contour path output", () => {
     expect(path.bounds?.min.y).toBeCloseTo(-4.886751);
     expect(path.bounds?.max).toEqual({ x: 45, y: 3 });
     expect(path.path).toBe(path.path);
+  });
+
+  it("renders uncommitted points identically to authored contour geometry", () => {
+    const points = mixedContour.points.map((point) =>
+      Point.create(point, point.pointType, point.smooth),
+    );
+    const preview = ContourPath.fromPoints(points, false);
+    const authored = ContourPath.fromContour(mixedContour, Mat.Identity());
+
+    expect(preview.commands).toEqual(authored.commands);
+    expect(preview.svgPath).toBe("M 0 0 L 10 0 Q 15 10 20 0 C 25 -10 35 10 40 0");
+    expect(preview.bounds).toEqual(authored.bounds);
+  });
+
+  it("closes an uncommitted cubic through its trailing controls", () => {
+    const path = ContourPath.fromPoints(
+      [
+        Point.onCurve({ x: 0, y: 0 }),
+        Point.onCurve({ x: 100, y: 0 }),
+        Point.offCurve({ x: 100, y: 100 }),
+        Point.offCurve({ x: 0, y: 100 }),
+      ],
+      true,
+    );
+
+    expect(path.svgPath).toBe("M 0 0 L 100 0 C 100 100 0 100 0 0 Z");
+    expect(path.bounds?.max).toEqual({ x: 100, y: 75 });
   });
 
   it("represents contours without drawable segments as empty paths", () => {

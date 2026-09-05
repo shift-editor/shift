@@ -85,6 +85,14 @@ editor/rendering/overlays/handles/
 
 `GlyphContour` owns the reactive boundary for a contour occurrence. When source points or its placement matrix change, it replaces the current `ContourPath`. SVG previews read only `svgPath`; Canvas rendering reads only `path`; bounds and sidebearings read only `bounds`. Every output is derived from the same transformed command stream, so these consumers cannot disagree about component placement or curve geometry.
 
+### Handle visibility
+
+`Editor.hideHandles(pointId | contourId)` creates an independent session-only hiding request and returns an idempotent release function. Point requests hide that marker and its attached control lines; contour requests hide every marker, control line, and segment highlight on the contour. Geometry, selection, hit testing, and inspector bounds are unchanged. Overlapping requests remain hidden until every applicable request is released.
+
+`GlyphNodeDefinition` consults `Editor.handlesVisible` during the controls pass. Handle-item filtering retains the original point neighbors and contour topology, and applies equally to accelerated markers and Canvas fallback. Tool drag scopes own release through `ctx.onCancel`; visibility state does not live on tools or node definitions.
+
+`ContourPath.fromPoints` accepts uncommitted point geometry without allocating IDs. This is the sole application-side adapter permitted to call `parseContourSegments` directly; authored contours continue through their domain-owned `segments()` traversal.
+
 ### Initialization
 
 `CanvasContextProvider` reports the marker canvas to `Editor`, which forwards the DOM canvas lifecycle to `Renderer`. `Renderer` owns the `MarkerLayer` backend and exposes that stable backend to `Handles`. REGL is initialized lazily on the first `resizeCanvas` call. If WebGL init fails (missing extensions, context lost), `#available` stays `false` and `Handles.draw` uses its CPU fallback path.

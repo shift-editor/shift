@@ -12,7 +12,7 @@ import type { ToolManifest } from "./core";
 import { Hand } from "./hand";
 import { Pen } from "./pen";
 import { Select } from "./select";
-import { Shape, type ShapeKind } from "./shape";
+import { ShapeTool, type ShapeKind } from "./shape";
 import { TextTool } from "./text/Text";
 
 function builtInToolManifests(): readonly ToolManifest[] {
@@ -20,8 +20,8 @@ function builtInToolManifests(): readonly ToolManifest[] {
   const selectRectangle = () => {
     shapeKindCell.set("rectangle");
   };
-  const selectCircle = () => {
-    shapeKindCell.set("circle");
+  const selectEllipse = () => {
+    shapeKindCell.set("ellipse");
   };
 
   return [
@@ -48,12 +48,12 @@ function builtInToolManifests(): readonly ToolManifest[] {
     },
     {
       id: "shape",
-      create: (api) => new Shape(api, shapeKindCell),
+      create: (api) => new ShapeTool(api, shapeKindCell),
       get icon() {
-        return shapeKindCell.peek() === "circle" ? CircleIcon : ShapeIcon;
+        return shapeKindCell.peek() === "ellipse" ? CircleIcon : ShapeIcon;
       },
       get tooltip() {
-        return shapeKindCell.peek() === "circle" ? "Circle Tool (O)" : "Rectangle Tool (R)";
+        return shapeKindCell.peek() === "ellipse" ? "Ellipse Tool (O)" : "Rectangle Tool (R)";
       },
       shortcut: "r",
       onSelect: selectRectangle,
@@ -70,14 +70,14 @@ function builtInToolManifests(): readonly ToolManifest[] {
           onSelect: selectRectangle,
         },
         {
-          id: "circle",
+          id: "ellipse",
           icon: CircleIcon,
-          label: "Circle",
+          label: "Ellipse",
           shortcut: "o",
           get selected() {
-            return shapeKindCell.peek() === "circle";
+            return shapeKindCell.peek() === "ellipse";
           },
-          onSelect: selectCircle,
+          onSelect: selectEllipse,
         },
       ],
     },
