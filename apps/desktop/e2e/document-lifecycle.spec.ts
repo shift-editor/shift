@@ -190,7 +190,7 @@ test.describe("opening a font through the application shell", () => {
     for (const label of ["Create glyph", "Create source", "Create instance", "Create axis"]) {
       await expect(workspacePage.getByRole("button", { name: label, exact: true })).toBeDisabled();
     }
-    for (const label of ["Pen Tool (P)", "Shape Tool (S)"]) {
+    for (const label of ["Pen Tool (P)", "Rectangle Tool (R)", "Rectangle Tool (R) options"]) {
       await expect(workspacePage.getByRole("button", { name: label, exact: true })).toBeDisabled();
     }
 
