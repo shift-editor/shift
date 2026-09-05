@@ -1,5 +1,6 @@
 import { Button, Separator } from "@shift/ui";
 import { isAnchorId, isContourId, isPointId } from "@shift/types";
+import { isSegmentId } from "@shift/glyph-state";
 import { TransformSection } from "./sidebar-right/TransformSection";
 import { ScaleSection } from "./sidebar-right/ScaleSection";
 import { TransformOriginProvider } from "@/context/TransformOriginContext";
@@ -23,7 +24,9 @@ export const RightSidebar = () => {
   const zoom = useSignalState(editor.zoomCell);
   const selection = useSignalState(editor.selection.stateCell);
 
-  const hasPointSelection = selection.ids.some(isPointId);
+  const hasGeometrySelection = selection.ids.some(
+    (id) => isPointId(id) || isContourId(id) || isSegmentId(id),
+  );
   const hasAnchorSelection = selection.ids.some(isAnchorId);
   const hasBooleanSelection = selection.ids.filter(isContourId).length >= 2;
 
@@ -51,26 +54,28 @@ export const RightSidebar = () => {
       </div>
       <Separator />
       <TransformOriginProvider>
-        <div className="px-3 py-3">
-          <GlyphSection />
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="px-3 py-3">
+            <GlyphSection />
+          </div>
+          <Separator />
+          {(hasGeometrySelection || hasBooleanSelection) && (
+            <div className="px-3 py-3 flex flex-col gap-4">
+              <BooleanOps />
+              {hasGeometrySelection && (
+                <>
+                  <TransformSection />
+                  <ScaleSection />
+                </>
+              )}
+            </div>
+          )}
+          {!hasGeometrySelection && hasAnchorSelection && (
+            <div className="px-3 py-3 flex flex-col gap-4">
+              <AnchorSection />
+            </div>
+          )}
         </div>
-        <Separator />
-        {(hasPointSelection || hasBooleanSelection) && (
-          <div className="px-3 py-3 flex flex-col gap-4">
-            <BooleanOps />
-            {hasPointSelection && (
-              <>
-                <TransformSection />
-                <ScaleSection />
-              </>
-            )}
-          </div>
-        )}
-        {!hasPointSelection && hasAnchorSelection && (
-          <div className="px-3 py-3 flex flex-col gap-4">
-            <AnchorSection />
-          </div>
-        )}
       </TransformOriginProvider>
     </aside>
   );

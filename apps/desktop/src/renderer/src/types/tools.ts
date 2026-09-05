@@ -5,4 +5,5 @@ export type { ToolManifest } from "@/lib/tools/core";
 export type ToolShortcutEntry = {
   toolId: ToolName;
   shortcut: string;
+  onSelect?: () => void;
 };

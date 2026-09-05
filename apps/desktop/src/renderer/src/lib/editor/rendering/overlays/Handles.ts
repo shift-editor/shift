@@ -1,3 +1,4 @@
+import type { PointId, ContourId } from "@shift/types";
 import type { GlyphContour } from "@/lib/model/ComponentGlyph";
 import type { Hover } from "@/lib/editor/Hover";
 import type { Selection } from "@/lib/editor/Selection";
@@ -25,6 +26,7 @@ export class Handles {
     selection: Selection,
     hover: Hover,
     interpolated: boolean,
+    isVisible?: (pointId: PointId, contourId: ContourId) => boolean,
   ): void {
     const list = this.#items.fromContours(
       contours.map((contour) => contour.contour),
@@ -33,6 +35,7 @@ export class Handles {
         hover,
         interpolated,
       },
+      isVisible,
     );
 
     if (this.#markers.draw(ctx.markers, list, ctx.canvas.camera, node.position)) return;

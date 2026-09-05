@@ -47,6 +47,9 @@ export const MenuPopup = React.forwardRef<React.ElementRef<typeof BaseMenu.Popup
 );
 MenuPopup.displayName = "MenuPopup";
 
+const menuItemStyles =
+  "flex h-7 cursor-pointer select-none items-center rounded px-2 text-sm text-primary outline-none data-[highlighted]:bg-hover/50 data-[disabled]:pointer-events-none data-[disabled]:opacity-50";
+
 export interface MenuItemProps extends React.ComponentPropsWithoutRef<typeof BaseMenu.Item> {
   variant?: "default" | "danger";
 }
@@ -56,11 +59,8 @@ export const MenuItem = React.forwardRef<React.ElementRef<typeof BaseMenu.Item>,
     <BaseMenu.Item
       ref={ref}
       className={cn(
-        "flex h-7 cursor-pointer select-none items-center rounded px-2 text-sm outline-none",
-        "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
-        variant === "danger"
-          ? "text-red-600 data-[highlighted]:bg-red-50"
-          : "text-primary data-[highlighted]:bg-hover/50",
+        menuItemStyles,
+        variant === "danger" && "text-red-600 data-[highlighted]:bg-red-50",
         className,
       )}
       {...props}
@@ -68,6 +68,34 @@ export const MenuItem = React.forwardRef<React.ElementRef<typeof BaseMenu.Item>,
   ),
 );
 MenuItem.displayName = "MenuItem";
+
+export interface MenuCheckboxItemProps extends React.ComponentPropsWithoutRef<
+  typeof BaseMenu.CheckboxItem
+> {}
+
+export const MenuCheckboxItem = React.forwardRef<
+  React.ElementRef<typeof BaseMenu.CheckboxItem>,
+  MenuCheckboxItemProps
+>(({ className, ...props }, ref) => (
+  <BaseMenu.CheckboxItem ref={ref} className={cn(menuItemStyles, className)} {...props} />
+));
+MenuCheckboxItem.displayName = "MenuCheckboxItem";
+
+export interface MenuCheckboxItemIndicatorProps extends React.ComponentPropsWithoutRef<
+  typeof BaseMenu.CheckboxItemIndicator
+> {}
+
+export const MenuCheckboxItemIndicator = React.forwardRef<
+  React.ElementRef<typeof BaseMenu.CheckboxItemIndicator>,
+  MenuCheckboxItemIndicatorProps
+>(({ className, ...props }, ref) => (
+  <BaseMenu.CheckboxItemIndicator
+    ref={ref}
+    className={cn("flex items-center justify-center", className)}
+    {...props}
+  />
+));
+MenuCheckboxItemIndicator.displayName = "MenuCheckboxItemIndicator";
 
 export interface MenuSeparatorProps extends React.ComponentPropsWithoutRef<
   typeof BaseMenu.Separator

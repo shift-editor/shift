@@ -22,6 +22,7 @@ packages/glyph-state/src/
   Anchor.ts             -- anchor reader and anchor value offsets
   Component.ts          -- component reader and decomposed transform matrix
   Segment.ts            -- id-aware segment class, hit testing, curve conversion
+  parseContourSegments.ts -- shared traversal retaining supplied points, with or without IDs
   Point.ts              -- id-aware point with on/off-curve predicates and factories
   IdIndex.ts            -- lazy id-to-object map over a supplied list
   types/contour.ts      -- minimal named contour geometry contract
@@ -35,7 +36,8 @@ packages/glyph-state/src/
 - **`Component`** -- reader for one component's base glyph and decomposed transform; exposes a simple affine matrix for outline composition.
 - **`Segment`** -- id-aware line/quad/cubic wrapper with `id`, endpoint/control accessors, `bounds`, `toCurve`, `splitAt`, and `hit`.
 - **`Point`** -- id-aware point record (`pointType`, `smooth`, coordinates) with on/off-curve predicates and `NewPoint` factories for authoring flows.
-- **`ContourGeometry`** -- minimal named `points + closed` contract accepted by segment parsing.
+- **`ContourGeometry<TPoint>`** -- minimal named `points + closed` contract accepted by segment parsing; defaults to authored `Point` but also accepts `NewPoint`.
+- **`parseContourSegments`** -- canonical structural traversal returning `SegmentPoints<TPoint>` descriptions without allocating identity. `Segment.parse` wraps these descriptions in ID-aware segment objects.
 - **`SegmentedContour`** -- contour geometry that exposes domain-owned segment traversal to renderer path derivation.
 - **`GlyphPosition` / `GlyphPositionTarget`** -- point/anchor position records used by `positionsFor`, `movePositions`, and `withPositionUpdates` so transform code stays independent of where the geometry came from.
 

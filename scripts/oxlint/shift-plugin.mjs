@@ -423,6 +423,15 @@ export default {
 
             // parseContourSegments(...)
             if (callee.type === "Identifier" && callee.name === "parseContourSegments") {
+              const method = containingMethod(node);
+              if (
+                filename.replace(/\\/g, "/").endsWith("/lib/graphics/ContourPath.ts") &&
+                methodName(method) === "fromPoints" &&
+                methodOwnerClass(method)?.id?.name === "ContourPath"
+              ) {
+                return;
+              }
+
               context.report({
                 node: callee,
                 messageId: "useGenerator",
