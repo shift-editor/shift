@@ -14,9 +14,12 @@ import os from "node:os";
 import * as path from "path";
 import { once } from "events";
 import { promisify } from "node:util";
-import type { Axis, NamedInstance, Source, Unicode } from "@shift/types";
-import type { DirtyDocumentChoice } from "../../src/main/document/types";
+import type { Unicode } from "@shift/types";
 import { createAuthoredDocument } from "./fontSource";
+import type { CanonicalVariableFont, RecoveryApp, ShiftFixtures, ShiftOptions } from "./types";
+import { collectWindowDiagnostics, prepareWindow } from "./window";
+
+export type { CanonicalVariableFont, RecoveryApp } from "./types";
 
 const APP_ROOT = path.resolve(__dirname, "../..");
 export const MAIN_JS = path.join(APP_ROOT, ".vite/build/main.js");
@@ -42,57 +45,17 @@ export const GLYPHSPACKAGE_FONT_PATH = path.resolve(
   "../../fixtures/fonts/PackageFont.glyphspackage",
 );
 
-/** Native launcher size before deterministic snapshot normalization. */
-const LAUNCHER_WIDTH = 800;
-const LAUNCHER_HEIGHT = 600;
-/** Fixed window size for deterministic snapshots. */
-const WINDOW_WIDTH = 1200;
-const WINDOW_HEIGHT = 600;
 const execFileAsync = promisify(execFile);
-
-// ---------------------------------------------------------------------------
-// Fixtures
-// ---------------------------------------------------------------------------
-
-type ShiftFixtures = {
-  electronApp: ElectronApplication;
-  page: Page;
-  testRoot: string;
-  saveShiftPath: string;
-  saveAsShiftPath: string;
-  copyShiftPath: string;
-  exportTtfPath: string;
-};
-
-type ShiftOptions = {
-  startupFontPath: string | undefined;
-  scriptedDialogs: boolean;
-  openFontPath: string | undefined;
-  saveShiftPaths: readonly string[] | undefined;
-  dirtyDocumentChoice: DirtyDocumentChoice;
-  dirtyDocumentChoices: readonly DirtyDocumentChoice[] | undefined;
-  dirtyDocumentDelayMs: number;
-  documentCrashChoice: "reopen" | "close";
-};
-
-export interface CanonicalVariableFont {
-  axes: Axis[];
-  sources: Source[];
-  namedInstances: NamedInstance[];
-}
-
-export type RecoveryApp = {
-  page: Page;
-  documentPath: string;
-  crashAndRecover: () => Promise<Page>;
-  crashAndReopenDocument: () => Promise<Page>;
-  canonicalGlyphNames: () => string[];
-  canonicalVariableFont: () => CanonicalVariableFont;
-};
 
 /** Base fixture for launcher tests; workspace tests override `startupFontPath`. */
 export const test = base.extend<ShiftFixtures & ShiftOptions>({
   startupFontPath: [undefined, { option: true }],
+  windowSizing: [
+    async ({}, use, testInfo) => {
+      await use(testInfo.project.name === "visual" ? "visual" : "native");
+    },
+    { option: true },
+  ],
   scriptedDialogs: [false, { option: true }],
   openFontPath: [undefined, { option: true }],
   saveShiftPaths: [undefined, { option: true }],
@@ -135,6 +98,7 @@ export const test = base.extend<ShiftFixtures & ShiftOptions>({
   electronApp: async (
     {
       startupFontPath,
+      windowSizing,
       scriptedDialogs,
       openFontPath,
       saveShiftPaths,
@@ -224,7 +188,6 @@ export const test = base.extend<ShiftFixtures & ShiftOptions>({
       for (const observedPage of app.windows()) observePage(observedPage);
       app.on("window", observePage);
 
-      // Size the window that owns the test page instead of whichever app window was created first.
       const page = await app.firstWindow();
       const activeUserDataDir = await app.evaluate(({ app: electronApp }) =>
         electronApp.getPath("userData"),
@@ -232,52 +195,14 @@ export const test = base.extend<ShiftFixtures & ShiftOptions>({
       if (fs.realpathSync(activeUserDataDir) !== fs.realpathSync(userDataDir)) {
         throw new Error(`Electron ignored isolated user data directory: ${activeUserDataDir}`);
       }
-      const browserWindow = await app.browserWindow(page);
-      if (workspacePath) {
-        await expect
-          .poll(() => browserWindow.evaluate((window) => window.isMaximized()), {
-            timeout: 20_000,
-          })
-          .toBe(true);
-      } else {
-        await expect
-          .poll(() => browserWindow.evaluate((window) => window.getSize()))
-          .toEqual([LAUNCHER_WIDTH, LAUNCHER_HEIGHT]);
-      }
 
-      await expect
-        .poll(() => browserWindow.evaluate((window) => window.isVisible()), { timeout: 20_000 })
-        .toBe(true);
-      await browserWindow.evaluate((window) => window.unmaximize());
-      await expect.poll(() => browserWindow.evaluate((window) => window.isMaximized())).toBe(false);
-      await browserWindow.evaluate(
-        (win, { w, h }) => {
-          // Hosted displays can be narrower than the deterministic snapshot size.
-          win.setMinimumSize(w, h);
-          win.setContentSize(w, h);
-          win.center();
-        },
-        { w: WINDOW_WIDTH, h: WINDOW_HEIGHT },
-      );
-      await browserWindow.dispose();
-      await page.waitForFunction(
-        ({ w, h }) => window.innerWidth === w && window.innerHeight === h,
-        { w: WINDOW_WIDTH, h: WINDOW_HEIGHT },
-      );
+      await prepareWindow(app, page, windowSizing);
 
       await use(app);
     } finally {
       if (testInfo.status !== testInfo.expectedStatus) {
         if (app) {
-          for (const [index, observedPage] of app.windows().entries()) {
-            try {
-              recordDiagnostic(
-                `final window ${index}: title=${await observedPage.title()}, url=${observedPage.url()}`,
-              );
-            } catch (error) {
-              recordDiagnostic(`final window ${index} unavailable: ${String(error)}`);
-            }
-          }
+          diagnostics.push(...(await collectWindowDiagnostics(app)));
         }
         await testInfo.attach("electron-diagnostics", {
           body: diagnostics.join("\n"),
@@ -306,8 +231,8 @@ export const documentTest = test.extend<ShiftOptions>({
 });
 
 /** Real Electron lifecycle fixture for sparse native recovery tests. */
-export const recoveryTest = base.extend<{ recoveryApp: RecoveryApp }>({
-  recoveryApp: async ({}, use) => {
+export const recoveryTest = test.extend<{ recoveryApp: RecoveryApp }>({
+  recoveryApp: async ({ windowSizing }, use, testInfo) => {
     const testRoot = fs.mkdtempSync(path.join(os.tmpdir(), "shift-recovery-e2e-"));
     const userDataDir = path.join(testRoot, "user-data");
     const documentPath = createAuthoredDocument(FONT_PATH, path.join(testRoot, "workspace"));
@@ -315,7 +240,7 @@ export const recoveryTest = base.extend<{ recoveryApp: RecoveryApp }>({
     let page: Page;
 
     try {
-      app = await launchShiftApp(userDataDir, documentPath);
+      app = await launchShiftApp(userDataDir, windowSizing, documentPath);
       page = await readyWorkspacePage(app);
       await use({
         page,
@@ -324,7 +249,7 @@ export const recoveryTest = base.extend<{ recoveryApp: RecoveryApp }>({
           if (!app) throw new Error("Electron application is not running");
 
           await killApp(app);
-          app = await launchShiftApp(userDataDir);
+          app = await launchShiftApp(userDataDir, windowSizing);
           page = await readyWorkspacePage(app);
           return page;
         },
@@ -332,7 +257,7 @@ export const recoveryTest = base.extend<{ recoveryApp: RecoveryApp }>({
           if (!app) throw new Error("Electron application is not running");
 
           await killApp(app);
-          app = await launchShiftApp(userDataDir, documentPath);
+          app = await launchShiftApp(userDataDir, windowSizing, documentPath);
           page = await readyWorkspacePage(app);
           return page;
         },
@@ -340,6 +265,13 @@ export const recoveryTest = base.extend<{ recoveryApp: RecoveryApp }>({
         canonicalVariableFont: () => readCanonicalVariableFont(documentPath, testRoot),
       });
     } finally {
+      if (app && testInfo.status !== testInfo.expectedStatus) {
+        await testInfo.attach("electron-diagnostics", {
+          body: (await collectWindowDiagnostics(app)).join("\n"),
+          contentType: "text/plain",
+        });
+      }
+
       if (app) await killApp(app);
       await fs.promises.rm(testRoot, {
         recursive: true,
@@ -386,6 +318,7 @@ export async function waitForWorkspaceReady(page: Page): Promise<void> {
 
 async function launchShiftApp(
   userDataDir: string,
+  windowSizing: ShiftOptions["windowSizing"],
   workspacePath?: string,
 ): Promise<ElectronApplication> {
   const environment = {
@@ -409,28 +342,14 @@ async function launchShiftApp(
       throw new Error(`Electron ignored isolated user data directory: ${activeUserDataDir}`);
     }
 
-    const browserWindow = await app.browserWindow(page);
-    await expect
-      .poll(() => browserWindow.evaluate((window) => window.isVisible()), { timeout: 20_000 })
-      .toBe(true);
-    await browserWindow.evaluate((window) => window.unmaximize());
-    await expect.poll(() => browserWindow.evaluate((window) => window.isMaximized())).toBe(false);
-    await browserWindow.evaluate(
-      (win, { w, h }) => {
-        win.setContentSize(w, h);
-        win.center();
-      },
-      { w: WINDOW_WIDTH, h: WINDOW_HEIGHT },
-    );
-    await browserWindow.dispose();
-    await page.waitForFunction(({ w, h }) => window.innerWidth === w && window.innerHeight === h, {
-      w: WINDOW_WIDTH,
-      h: WINDOW_HEIGHT,
-    });
+    await prepareWindow(app, page, windowSizing);
     return app;
   } catch (error) {
+    const diagnostics = await collectWindowDiagnostics(app);
     await killApp(app);
-    throw error;
+    throw new Error(`Electron recovery launch failed:\n${diagnostics.join("\n")}`, {
+      cause: error,
+    });
   }
 }
 
