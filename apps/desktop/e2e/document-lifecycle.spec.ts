@@ -147,6 +147,86 @@ workspaceTest(
   },
 );
 
+for (const sourcePath of [
+  FONT_PATH,
+  OTF_FONT_PATH,
+  GLYPHS_FONT_PATH,
+  GLYPHSPACKAGE_FONT_PATH,
+  UFO_FONT_PATH,
+  DESIGNSPACE_FONT_PATH,
+]) {
+  test.describe(`external ${path.extname(sourcePath)} activation`, () => {
+    test.describe("cold launch", () => {
+      test.use({ electronArgs: [sourcePath] });
+
+      test("opens the source preview instead of the launcher", async ({ electronApp, page }) => {
+        await expect(page.getByLabel("Glyph catalog", { exact: true })).toBeVisible();
+        await expect.poll(() => page.evaluate(() => window.shiftSession?.mode)).toBe("preview");
+        await expect(page).toHaveURL(/#\/home$/);
+        expect(electronApp.windows()).toHaveLength(1);
+      });
+    });
+
+    test("replaces a running launcher with the source preview", async ({
+      electronApp,
+      page,
+      testRoot,
+    }) => {
+      const workspaceWindow = electronApp.waitForEvent("window");
+      await launchSecondInstance(electronApp, testRoot, sourcePath);
+      const workspacePage = await workspaceWindow;
+
+      await expect(workspacePage.getByLabel("Glyph catalog", { exact: true })).toBeVisible();
+      await expect
+        .poll(() => workspacePage.evaluate(() => window.shiftSession?.mode))
+        .toBe("preview");
+      await expect.poll(() => page.isClosed()).toBe(true);
+      expect(electronApp.windows()).toHaveLength(1);
+    });
+  });
+}
+
+workspaceTest(
+  "source activation preserves an existing document",
+  async ({ electronApp, page, testRoot }) => {
+    const workspaceWindow = electronApp.waitForEvent("window");
+    await launchSecondInstance(electronApp, testRoot, FONT_PATH);
+    const workspacePage = await workspaceWindow;
+
+    await expect(workspacePage.getByLabel("Glyph catalog", { exact: true })).toBeVisible();
+    await expect
+      .poll(() => workspacePage.evaluate(() => window.shiftSession?.mode))
+      .toBe("preview");
+    expect(await page.evaluate(() => window.shiftSession?.mode)).toBe("authored");
+    expect(electronApp.windows()).toHaveLength(2);
+  },
+);
+
+test.describe("case-insensitive source activation", () => {
+  test.use({
+    electronArgs: async ({ testRoot }, use) => {
+      const sourcePath = path.join(testRoot, "Font With Spaces.TTF");
+      fs.copyFileSync(FONT_PATH, sourcePath);
+      await use([sourcePath]);
+    },
+  });
+
+  test("opens an uppercase source extension with spaces", async ({ page }) => {
+    await expect(page.getByLabel("Glyph catalog", { exact: true })).toBeVisible();
+    await expect.poll(() => page.evaluate(() => window.shiftSession?.mode)).toBe("preview");
+  });
+});
+
+test.describe("unsupported file activation", () => {
+  test.use({ electronArgs: [path.join(path.dirname(FONT_PATH), "ignored.txt")] });
+
+  test("keeps the launcher for unsupported extensions", async ({ electronApp, page }) => {
+    await expect(page.getByRole("button", { name: /Load font/ })).toBeVisible();
+    await expect(page).toHaveURL(/#\/launcher$/);
+    expect(electronApp.windows()).toHaveLength(1);
+  });
+});
+
 function createSecondDocument(testRoot: string): string {
   const generatedPath = createAuthoredDocument(FONT_PATH, path.join(testRoot, "second-workspace"));
   const secondPath = path.join(testRoot, "second.shift");
