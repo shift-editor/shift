@@ -14,6 +14,7 @@ export type ShiftFixtures = {
 
 export type ShiftOptions = {
   startupFontPath: string | undefined;
+  electronArgs: readonly string[];
   /** Preserves native geometry unless exact visual baseline dimensions are requested. */
   windowSizing: "native" | "visual";
   scriptedDialogs: boolean;

@@ -56,6 +56,7 @@ export const test = base.extend<ShiftFixtures & ShiftOptions>({
     },
     { option: true },
   ],
+  electronArgs: [[], { option: true }],
   scriptedDialogs: [false, { option: true }],
   openFontPath: [undefined, { option: true }],
   saveShiftPaths: [undefined, { option: true }],
@@ -99,6 +100,7 @@ export const test = base.extend<ShiftFixtures & ShiftOptions>({
     {
       startupFontPath,
       windowSizing,
+      electronArgs,
       scriptedDialogs,
       openFontPath,
       saveShiftPaths,
@@ -159,6 +161,7 @@ export const test = base.extend<ShiftFixtures & ShiftOptions>({
           MAIN_JS,
           `--user-data-dir=${userDataDir}`,
           "--force-device-scale-factor=1",
+          ...electronArgs,
           ...(workspacePath ? [workspacePath] : []),
         ],
         env: environment,

@@ -1,11 +1,10 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router";
-import { GlyphCatalogCanvas } from "./GlyphCatalogCanvas";
-import { GlyphCatalogLayout } from "./glyphCatalogLayout";
+import { GlyphCatalogBackendGate } from "./GlyphCatalogBackendGate";
 import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
 import { getShiftHost } from "@/host/shiftHost";
 
-/** Coordinates the native scroll viewport and its two canvas-owned catalog layers. */
+/** Coordinates shared catalog data and session-fixed backend selection. */
 export const GlyphGrid = memo(function GlyphGrid() {
   const catalogActive = useLocation().pathname === "/home";
   const {
@@ -15,44 +14,16 @@ export const GlyphGrid = memo(function GlyphGrid() {
     sourceId,
     atlasSource,
     observeAtlasInvalidation,
+    glyphPreviews,
     canAuthor,
     openGlyph,
   } = useGlyphCatalog();
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const [[viewportWidth, viewportHeight], setViewportSize] = useState<
-    readonly [width: number, height: number]
-  >([0, 0]);
   const [catalogReady, setCatalogReady] = useState(false);
-  const layout = useMemo(
-    () => new GlyphCatalogLayout(viewportWidth, viewportHeight, filteredGlyphs.length),
-    [filteredGlyphs.length, viewportHeight, viewportWidth],
-  );
-  const initialMeasurementLoggedRef = useRef(false);
-
-  useLayoutEffect(() => {
-    const container = scrollContainerRef.current;
-    if (!container) return undefined;
-
-    const activeContainer = container;
-
-    function measure(): void {
-      const nextWidth = activeContainer.clientWidth;
-      const nextHeight = activeContainer.clientHeight;
-      setViewportSize((current) =>
-        current[0] === nextWidth && current[1] === nextHeight ? current : [nextWidth, nextHeight],
-      );
-    }
-
-    const observer = new ResizeObserver(measure);
-    observer.observe(activeContainer);
-    measure();
-
-    return () => observer.disconnect();
-  }, []);
+  const workspaceReadyRef = useRef(false);
 
   const showMeasuredWorkspace = useCallback(async (): Promise<void> => {
-    if (initialMeasurementLoggedRef.current) return;
-    initialMeasurementLoggedRef.current = true;
+    if (workspaceReadyRef.current) return;
+    workspaceReadyRef.current = true;
 
     try {
       await getShiftHost().session.ready();
@@ -62,10 +33,10 @@ export const GlyphGrid = memo(function GlyphGrid() {
   }, []);
 
   useEffect(() => {
-    if (viewportWidth <= 0 || (!catalogReady && filteredGlyphs.length > 0)) return;
+    if (!catalogReady && filteredGlyphs.length > 0) return;
 
     void showMeasuredWorkspace();
-  }, [catalogReady, filteredGlyphs.length, showMeasuredWorkspace, viewportWidth]);
+  }, [catalogReady, filteredGlyphs.length, showMeasuredWorkspace]);
 
   const handleCatalogReady = useCallback(() => setCatalogReady(true), []);
   const handleCatalogUnavailable = useCallback(() => {
@@ -80,15 +51,7 @@ export const GlyphGrid = memo(function GlyphGrid() {
       data-first-glyph-id={filteredGlyphs[0]?.id}
       className="relative h-full min-h-0 w-full overflow-hidden font-ui text-primary"
     >
-      <div
-        ref={scrollContainerRef}
-        className="absolute inset-0 overflow-x-hidden overflow-y-auto"
-        aria-label="Glyph catalog"
-      >
-        <div aria-hidden="true" style={{ height: layout.totalHeight, width: 1 }} />
-      </div>
-      <GlyphCatalogCanvas
-        containerRef={scrollContainerRef}
+      <GlyphCatalogBackendGate
         glyphs={filteredGlyphs}
         location={location}
         metrics={metrics}
@@ -96,11 +59,17 @@ export const GlyphGrid = memo(function GlyphGrid() {
         active={catalogActive}
         atlasSource={atlasSource}
         observeAtlasInvalidation={observeAtlasInvalidation}
+        glyphPreviews={glyphPreviews}
         canAuthor={canAuthor}
         openGlyph={openGlyph}
         onFirstFrame={handleCatalogReady}
         onUnavailable={handleCatalogUnavailable}
       />
+      {filteredGlyphs.length === 0 ? (
+        <div className="pointer-events-none absolute inset-0 z-[4] flex items-center justify-center px-4 text-sm text-muted">
+          No glyphs match this filter.
+        </div>
+      ) : null}
     </section>
   );
 });

@@ -1056,12 +1056,14 @@ export class Font {
     glyphIds: readonly GlyphId[],
     location: DesignAxisLocation,
   ): Promise<readonly GlyphPreview[]> {
-    if (!this.#editCoordinator) return [];
+    if (this.#editCoordinator) {
+      return this.#editCoordinator.readGlyphPreviews(
+        glyphIds,
+        locationFromDesignAxisLocation(location),
+      );
+    }
 
-    return this.#editCoordinator.readGlyphPreviews(
-      glyphIds,
-      locationFromDesignAxisLocation(location),
-    );
+    return this.#reader?.glyphPreviews(glyphIds, location) ?? [];
   }
 
   async #readGlyphSnapshots(glyphIds: readonly GlyphId[]): Promise<readonly GlyphId[]> {

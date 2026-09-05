@@ -1,6 +1,12 @@
 import type { GlyphId, SourceId } from "@shift/types";
 import type { CatalogLocation } from "./glyphCatalog";
 
+/** Drawable SVG preview payload retained per glyph and design location. */
+export interface GlyphPreviewValue {
+  readonly svgPath: string;
+  readonly xAdvance: number;
+}
+
 /** One visible glyph preview and its destination rectangle in physical pixels. */
 export interface GlyphPreviewInstance {
   readonly glyphId: GlyphId;

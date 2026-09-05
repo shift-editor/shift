@@ -5,6 +5,7 @@ import type {
   ContourId,
   GlyphEntry,
   GlyphId,
+  GlyphPreview,
   GlyphProjection,
   GlyphSnapshot,
   PointId,
@@ -14,10 +15,15 @@ import type {
 import type { SegmentId } from "@shift/glyph-state";
 import type { Glyph, GlyphLayer } from "@/lib/model/Glyph";
 import type { Signal } from "@/lib/signals/signal";
+import type { DesignAxisLocation } from "./variation";
 
-/** Acquires complete root and component projections from the session boundary. */
+/** Acquires glyph projections and lightweight previews from the session boundary. */
 export interface GlyphReader {
   read(glyphIds: readonly GlyphId[]): Promise<readonly GlyphSnapshot[]>;
+  glyphPreviews(
+    glyphIds: readonly GlyphId[],
+    location: DesignAxisLocation,
+  ): Promise<readonly GlyphPreview[]>;
 }
 
 export interface GlyphGeometrySelection {
