@@ -27,6 +27,7 @@
 import type { Point2D } from "./types";
 import type { Bounds } from "./Bounds";
 import { Vec2 } from "./Vec2";
+import { fitCubic } from "./fitCubic";
 
 // ============================================
 // Types
@@ -92,6 +93,8 @@ const NEWTON_MAX_ITERATIONS = 8;
 // ============================================
 
 export const Curve = {
+  fitCubic,
+
   // ============================================
   // Construction
   // ============================================
