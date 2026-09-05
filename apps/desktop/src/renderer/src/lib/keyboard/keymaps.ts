@@ -118,6 +118,7 @@ export function createCanvasKeyDownBindings(handlers: KeymapHandlers): KeyBindin
             (entry) => entry.shortcut === event.key || entry.shortcut === event.key.toLowerCase(),
           );
         if (!shortcut) return false;
+        if (shortcut.onSelect) shortcut.onSelect();
         ctx.editor.setActiveTool(shortcut.toolId);
         return true;
       },

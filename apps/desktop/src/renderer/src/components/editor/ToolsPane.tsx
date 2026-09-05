@@ -2,8 +2,18 @@ import type { FC } from "react";
 
 import {
   Button,
+  Check,
+  ChevronDown,
+  Menu,
+  MenuCheckboxItem,
+  MenuCheckboxItemIndicator,
+  MenuPopup,
+  MenuPortal,
+  MenuPositioner,
+  MenuTrigger,
   Toolbar,
   ToolbarButton,
+  ToolbarGroup,
   Tooltip,
   TooltipContent,
   TooltipTrigger,
@@ -12,9 +22,9 @@ import {
 import { useSignalState } from "@/lib/signals";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import type { SVG } from "@/types/common";
-import type { ToolName } from "@/lib/tools/core";
+import type { ToolMenuItem, ToolName } from "@/lib/tools/core";
 
-interface ToolbarIconProps {
+interface ToolButtonProps {
   Icon: SVG;
   name: ToolName;
   tooltip: string;
@@ -22,7 +32,13 @@ interface ToolbarIconProps {
   disabled?: boolean;
   onClick?: () => void;
 }
-export const ToolbarIcon: FC<ToolbarIconProps> = ({
+
+interface ToolSplitButtonProps extends ToolButtonProps {
+  menuItems: readonly ToolMenuItem[];
+  onMenuItemSelect: (item: ToolMenuItem) => void;
+}
+
+export const ToolButton: FC<ToolButtonProps> = ({
   Icon,
   name,
   tooltip,
@@ -38,7 +54,7 @@ export const ToolbarIcon: FC<ToolbarIconProps> = ({
         <ToolbarButton
           render={
             <Button
-              className={cn("h-8 w-8 rounded-md", !isActive && "hover:bg-icon-button-hover")}
+              className="h-8 w-8 rounded-md transition-none focus-visible:ring-0"
               variant={isActive ? "primary" : "ghost"}
               icon={
                 <Icon
@@ -66,6 +82,62 @@ export const ToolbarIcon: FC<ToolbarIconProps> = ({
   );
 };
 
+export const ToolSplitButton: FC<ToolSplitButtonProps> = ({
+  menuItems,
+  onMenuItemSelect,
+  ...buttonProps
+}) => (
+  <ToolbarGroup className="flex items-center gap-0.5">
+    <ToolButton {...buttonProps} />
+    <Menu modal={false}>
+      <MenuTrigger
+        disabled={buttonProps.disabled}
+        render={
+          <ToolbarButton
+            disabled={buttonProps.disabled}
+            render={
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-4 rounded-sm focus-visible:ring-0 data-[popup-open]:bg-hover/50"
+                icon={<ChevronDown className="h-3.5 w-3.5 text-primary" strokeWidth={1.5} />}
+                aria-label={`${buttonProps.tooltip} options`}
+                disabled={buttonProps.disabled}
+              />
+            }
+          />
+        }
+      />
+      <MenuPortal>
+        <MenuPositioner align="start" sideOffset={4}>
+          <MenuPopup className="min-w-44">
+            {menuItems.map((item) => {
+              const Icon = item.icon;
+
+              return (
+                <MenuCheckboxItem
+                  key={item.id}
+                  className="grid grid-cols-[1rem_1.25rem_minmax(0,1fr)_auto] gap-2"
+                  checked={item.selected}
+                  closeOnClick
+                  onCheckedChange={() => onMenuItemSelect(item)}
+                >
+                  <MenuCheckboxItemIndicator keepMounted className="data-[unchecked]:invisible">
+                    <Check className="h-3.5 w-3.5" strokeWidth={1.75} />
+                  </MenuCheckboxItemIndicator>
+                  <Icon className="h-5 w-5 text-primary" strokeWidth={1.25} />
+                  <span>{item.label}</span>
+                  <kbd className="font-sans text-sm text-muted">{item.shortcut.toUpperCase()}</kbd>
+                </MenuCheckboxItem>
+              );
+            })}
+          </MenuPopup>
+        </MenuPositioner>
+      </MenuPortal>
+    </Menu>
+  </ToolbarGroup>
+);
+
 export const ToolsPane: FC = () => {
   const editor = useEditor();
   const activeTool = useSignalState(editor.toolCell)?.id ?? null;
@@ -79,19 +151,33 @@ export const ToolsPane: FC = () => {
       >
         {Array.from(toolRegistry.entries())
           .filter(([, item]) => !item.hidden)
-          .map(([name, { icon, tooltip, disabled }]) => (
-            <ToolbarIcon
-              key={name}
-              Icon={icon}
-              name={name}
-              tooltip={tooltip}
-              activeTool={activeTool}
-              disabled={disabled}
-              onClick={() => {
-                editor.setActiveTool(name);
-              }}
-            />
-          ))}
+          .map(([name, { icon, tooltip, menuItems, disabled }]) => {
+            const activateTool = () => {
+              editor.setActiveTool(name);
+            };
+            const buttonProps = {
+              Icon: icon,
+              name,
+              tooltip,
+              activeTool,
+              disabled,
+              onClick: activateTool,
+            };
+
+            if (!menuItems) return <ToolButton key={name} {...buttonProps} />;
+
+            return (
+              <ToolSplitButton
+                key={name}
+                {...buttonProps}
+                menuItems={menuItems}
+                onMenuItemSelect={(item) => {
+                  item.onSelect();
+                  activateTool();
+                }}
+              />
+            );
+          })}
       </Toolbar>
     </section>
   );

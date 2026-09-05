@@ -1,3 +1,4 @@
+import type { PointId, ContourId } from "@shift/types";
 import type { SelectableId } from "@/types";
 import type { HandleState } from "@/types/graphics";
 import type { Hover } from "@/lib/editor/Hover";
@@ -24,15 +25,20 @@ export class HandleItems {
   fromContours(
     contours: readonly GlyphRenderContour[],
     source: HandleStateSource,
+    isVisible?: (pointId: PointId, contourId: ContourId) => boolean,
   ): HandleDisplayList {
-    return this.#fromShapes(contours, (contourIndex, pointIndex) =>
-      this.#state(contours[contourIndex]!.points[pointIndex]!.id, source),
+    return this.#fromShapes(
+      contours,
+      (contourIndex, pointIndex) =>
+        this.#state(contours[contourIndex]!.points[pointIndex]!.id, source),
+      isVisible,
     );
   }
 
   #fromShapes(
     contours: readonly GlyphRenderContour[],
     stateForPoint: (contourIndex: number, pointIndex: number) => HandleState,
+    isVisible?: (pointId: PointId, contourId: ContourId) => boolean,
   ): HandleDisplayList {
     let itemCount = 0;
 
@@ -44,6 +50,8 @@ export class HandleItems {
 
       for (let index = 0; index < count; index++) {
         const point = points[index]!;
+        if (isVisible && !isVisible(point.id, contour.id)) continue;
+
         const prev = index > 0 ? points[index - 1]! : contour.closed ? points[count - 1]! : null;
         const next = index + 1 < count ? points[index + 1]! : contour.closed ? points[0]! : null;
         const state = stateForPoint(contourIndex, index);

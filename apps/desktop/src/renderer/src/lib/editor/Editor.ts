@@ -164,6 +164,9 @@ export class Editor {
   #dragging: Signal<boolean>;
   #isEditing: Signal<boolean>;
   #selectionBounds: Signal<Rect2D | null>;
+  readonly #handlesCell = signal<ReadonlyMap<symbol, PointId | ContourId>>(new Map(), {
+    name: "editor.handles",
+  });
 
   /**
    * Runtime services with lifecycle or side effects.
@@ -258,9 +261,22 @@ export class Editor {
       () => {
         const registry = new Map<ToolName, ToolRegistryItem>();
         for (const [id, manifest] of this.#toolManager.manifestsCell.value) {
-          const { icon, tooltip, shortcut, hidden, disabled } = manifest;
+          if (manifest.menuSelectionCell) track(manifest.menuSelectionCell);
+
+          const { icon, tooltip, shortcut, onSelect, menuItems, hidden, disabled } = manifest;
           const item: ToolRegistryItem = { icon, tooltip };
           if (shortcut) item.shortcut = shortcut;
+          if (onSelect) item.onSelect = onSelect;
+          if (menuItems) {
+            item.menuItems = menuItems.map(({ id, icon, label, shortcut, selected, onSelect }) => ({
+              id,
+              icon,
+              label,
+              shortcut,
+              selected,
+              onSelect,
+            }));
+          }
           if (hidden) item.hidden = true;
           if (disabled) item.disabled = true;
           registry.set(id, item);
@@ -341,9 +357,19 @@ export class Editor {
   public getToolShortcuts(): ToolShortcutEntry[] {
     const shortcuts: ToolShortcutEntry[] = [];
     for (const [toolId, manifest] of this.#toolManager.manifests) {
-      if (manifest.hidden || manifest.disabled || manifest.shortcut == null) continue;
+      if (manifest.hidden || manifest.disabled) continue;
 
-      shortcuts.push({ toolId, shortcut: manifest.shortcut });
+      if (manifest.shortcut != null) {
+        const shortcut: ToolShortcutEntry = { toolId, shortcut: manifest.shortcut };
+        if (manifest.onSelect) shortcut.onSelect = manifest.onSelect;
+        shortcuts.push(shortcut);
+      }
+
+      for (const item of manifest.menuItems ?? []) {
+        if (item.shortcut === manifest.shortcut) continue;
+
+        shortcuts.push({ toolId, shortcut: item.shortcut, onSelect: item.onSelect });
+      }
     }
     return shortcuts;
   }
@@ -785,6 +811,52 @@ export class Editor {
     }
 
     return bounds ? Bounds.toRect(bounds) : null;
+  }
+
+  /**
+   * Hides a point's or contour's editing handles without changing geometry or selection.
+   *
+   * @param id - A point marker and its attached control lines, or all handles and segment
+   * highlights belonging to a contour.
+   * @returns An idempotent function that releases this request. Overlapping requests remain
+   * independent; callers own cleanup, for example through a tool drag's cancellation scope.
+   */
+  public hideHandles(id: PointId | ContourId): () => void {
+    const key = Symbol("hidden handles");
+    const handles = new Map(this.#handlesCell.peek());
+    handles.set(key, id);
+    this.#handlesCell.set(handles);
+
+    return () => {
+      const handles = new Map(this.#handlesCell.peek());
+      if (!handles.delete(key)) return;
+
+      this.#handlesCell.set(handles);
+    };
+  }
+
+  /**
+   * Reports whether a point's or contour's editing handles may be rendered.
+   *
+   * @param id - Point or contour whose visibility is being queried.
+   * @param contourId - Known owning contour for a point, avoiding per-marker object resolution.
+   * @returns False while a matching point or parent-contour request is active; tracks rendering.
+   */
+  public handlesVisible(id: PointId | ContourId, contourId?: ContourId): boolean {
+    track(this.#handlesCell);
+    const handles = this.#handlesCell.peek();
+    if (handles.size === 0) return true;
+
+    if (isPointId(id) && contourId === undefined) {
+      const object = this.object(id);
+      if (object?.kind === "point") contourId = object.contourId;
+    }
+
+    for (const target of handles.values()) {
+      if (target === id || target === contourId) return false;
+    }
+
+    return true;
   }
 
   /** Reactive scene-space bounds for the current selection. */
@@ -1437,6 +1509,7 @@ export class Editor {
     this.#cameraMetricsEffect.dispose();
     this.#renderer.destroy();
     this.#toolManager.dispose();
+    this.#handlesCell.set(new Map());
     this.#events.dispose();
   }
 

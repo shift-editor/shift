@@ -21,7 +21,6 @@ import DistributeHorizontalIcon from "@/assets/sidebar-right/distribute-h.svg";
 import DistributeVerticalIcon from "@/assets/sidebar-right/distribute-v.svg";
 
 import { AlignmentType, DistributeType } from "@/lib/transform/types";
-import { isPointId } from "@shift/types";
 
 const AlignButtonsRow = React.memo(function AlignButtonsRow({
   onAlign,
@@ -104,16 +103,18 @@ const DistributeButtonsRow = React.memo(function DistributeButtonsRow({
 export const TransformSection = () => {
   const editor = useEditor();
   const selection = useSignalState(editor.selection.stateCell);
-  const selectedPointIds = useMemo(() => selection.ids.filter(isPointId), [selection]);
+  const positionSelection = useMemo(
+    () => editor.positionSelection(selection.ids),
+    [editor, selection],
+  );
+  const selectedPointIds = positionSelection?.targets.points ?? [];
+  const isEditing = useSignalState(editor.isEditingCell);
   const selectionBounds = useSelectionBounds();
   const [rotation, setRotation] = useState(0);
 
   const xRef = useRef<EditableSidebarInputHandle>(null);
   const yRef = useRef<EditableSidebarInputHandle>(null);
-  const layer = useMemo(
-    () => editor.layerForGeometry({ points: selectedPointIds }),
-    [editor, selectedPointIds],
-  );
+  const layer = isEditing ? null : (positionSelection?.layer ?? null);
 
   useEffect(() => {
     if (selectedPointIds.length === 0) {
@@ -128,7 +129,7 @@ export const TransformSection = () => {
     yRef.current?.setValue(Math.round(selectionBounds.min.y));
   }, [selectedPointIds, selectionBounds]);
 
-  const editable = layer !== null;
+  const editable = positionSelection !== null;
   const canDistribute = editable && selectedPointIds.length >= 3;
 
   const handleAlign = useCallback(

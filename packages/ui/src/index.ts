@@ -86,12 +86,16 @@ export {
   MenuPositioner,
   MenuPopup,
   MenuItem,
+  MenuCheckboxItem,
+  MenuCheckboxItemIndicator,
   MenuSeparator,
   type MenuProps,
   type MenuTriggerProps,
   type MenuPositionerProps,
   type MenuPopupProps,
   type MenuItemProps,
+  type MenuCheckboxItemProps,
+  type MenuCheckboxItemIndicatorProps,
   type MenuSeparatorProps,
 } from "./components/menu";
 export {
@@ -151,4 +155,4 @@ export {
   type ResizablePanelHandle,
 } from "./components/resizable";
 export { cn } from "./lib/utils";
-export { Search, X } from "lucide-react";
+export { Check, ChevronDown, Search, X } from "lucide-react";

@@ -46,7 +46,7 @@ tools/
   hand/                  — canvas panning (createBehavior style)
   pen/                   — bezier curve drawing (class-based behaviors)
   select/                — selection, translate/resize/rotate/bend; TranslateInteraction owns movement
-  shape/                 — rectangle creation (createBehavior style)
+  shape/                 — ShapeTool interaction; Shape interface with Rectangle/Ellipse authoring templates
   text/                  — text run editing
   tools.ts               — registerBuiltInTools (wires all tools + shortcuts)
 ```
@@ -91,6 +91,14 @@ User pointer/key
 - Pointer-up drains queued movement and emits the final `drag` sample before `dragEnd`. Both release events use the final pointer position with the latest drag sample's modifiers, so releasing Shift just before mouseup does not change the preview's constraints. Modifier changes take effect on the next processed drag movement; clicks and double-clicks still use release-time modifiers. `GestureDetector.lastDragModifiers` is empty before dragging, follows each emitted drag movement, and clears on completion, cancellation, or a new pointer-down.
 - Behaviors initialize on `dragStart`, register rollback with `ctx.onCancel()`, preview from `drag`, and commit on `dragEnd` before dismissing rollback.
 - `BaseTool` runs any rollback left active at `dragEnd`, `dragCancel`, tool disposal, or after a handler throws.
+
+### Shape authoring
+
+`ShapeTool` freezes one `Rectangle` or `Ellipse` template at drag start. Both implement `Shape.createPoints(bounds)` and return ordered `NewPoint` values; templates remain in `tools/shape/`, separate from the shared contour readers. Ellipse uses four cubic quarters with kappa-scaled handles. Shift constrains signed drag dimensions to equal magnitudes.
+
+A shape drag owns one `GlyphLayerEdit`: create and select a closed contour, then patch its existing points as the pointer or Shift changes. The normal glyph renderer and selection-bounds signal therefore expose the same live geometry to the canvas and sidebar. Release finishes one undoable edit and returns to Select; Escape, a tiny final drag, or tool disposal cancels the edit and restores the previous selection.
+
+The tool calls `editor.hideHandles(contourId)` and registers its returned `showHandles` function with `ctx.onCancel`. Visibility cleanup remains registered on success, while the edit rollback is dismissed after finishing. Only the new contour loses its markers and control lines; other glyph controls remain visible. The sidebar observes contour selections through `editor.positionSelection` and shows live dimensions without dimming during the drag; transform handlers ignore competing edits until the drag ends.
 
 ### Pen curve authoring invariant
 

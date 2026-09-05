@@ -23,6 +23,7 @@ import {
   killApp,
   quitApp,
   relaunchApp,
+  requestAppQuit,
   runCommand,
   windowTitle,
 } from "./fixtures/documentLifecycle";
@@ -270,7 +271,7 @@ test.describe("opening a font through the application shell", () => {
     for (const label of ["Create glyph", "Create source", "Create instance", "Create axis"]) {
       await expect(workspacePage.getByRole("button", { name: label, exact: true })).toBeDisabled();
     }
-    for (const label of ["Pen Tool (P)", "Shape Tool (S)"]) {
+    for (const label of ["Pen Tool (P)", "Rectangle Tool (R)", "Rectangle Tool (R) options"]) {
       await expect(workspacePage.getByRole("button", { name: label, exact: true })).toBeDisabled();
     }
 
@@ -697,9 +698,15 @@ discardTest(
 
     await workspacePage.getByRole("button", { name: "Create glyph", exact: true }).click();
     await expect.poll(() => windowTitle(workspacePage, electronApp)).toContain("saved.shift *");
+    const childProcess = electronApp.process();
     await closeWindow(workspacePage, electronApp);
     await expect.poll(() => workspacePage.isClosed()).toBe(true);
-    await quitApp(electronApp);
+
+    // macOS stays open without windows; other platforms quit after the last window closes.
+    if (process.platform === "darwin") await requestAppQuit(electronApp);
+
+    await expect.poll(() => childProcess.exitCode).toBe(0);
+    await quitApp(electronApp, childProcess);
 
     const relaunchedApp = await relaunchApp(testRoot, saveShiftPath);
     try {
