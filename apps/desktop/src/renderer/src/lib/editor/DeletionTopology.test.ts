@@ -41,7 +41,7 @@ describe("open contour deletion preserves surviving fragments", () => {
     expect(layer().state).toEqual(after);
   });
 
-  it("keeps disconnected deletion spans separate around a surviving point", async () => {
+  it("joins separate line-only spans without adding controls around a survivor", async () => {
     const ids = layer().allPoints.map((point) => point.id);
     editor.selection.select([ids[1], ids[3]]);
     await editor.deleteSelection();
@@ -54,7 +54,8 @@ describe("open contour deletion preserves surviving fragments", () => {
       layer()
         .contours[0].segments()
         .map((segment) => segment.type),
-    ).toEqual(["cubic", "cubic"]);
+    ).toEqual(["line", "line"]);
+    expect(layer().pointCount).toBe(3);
   });
 
   it("keeps isolated surviving points between multiple gaps", async () => {
@@ -110,7 +111,7 @@ describe("closed contour deletion treats the array boundary cyclically", () => {
     await editor.settle();
   });
 
-  it("fits a selected run crossing the stored start as one span", async () => {
+  it("joins a line-only run crossing the stored start without adding controls", async () => {
     const ids = layer().allPoints.map((point) => point.id);
     editor.selection.select([ids[4], ids[0]]);
     await editor.deleteSelection();
@@ -119,7 +120,8 @@ describe("closed contour deletion treats the array boundary cyclically", () => {
     expect(contour.points.filter(Point.isOnCurve).map((point) => point.id)).toEqual(
       ids.slice(1, 4),
     );
-    expect(contour.segments().map((segment) => segment.type)).toEqual(["line", "line", "cubic"]);
+    expect(contour.segments().map((segment) => segment.type)).toEqual(["line", "line", "line"]);
+    expect(contour.points).toHaveLength(3);
     expect(contour.segments()[2].endId).toBe(ids[1]);
   });
 
@@ -141,7 +143,7 @@ describe("closed contour deletion treats the array boundary cyclically", () => {
     expect(layer().allPoints.map((point) => point.id)).toEqual(ids.slice(1, 4));
   });
 
-  it("retains two surviving points as a closed contour with two fitted sides", async () => {
+  it("retains two surviving points as a closed contour with two straight sides", async () => {
     const ids = layer().allPoints.map((point) => point.id);
     editor.selection.select([ids[0], ids[2], ids[4]]);
     await editor.deleteSelection();
@@ -155,7 +157,8 @@ describe("closed contour deletion treats the array boundary cyclically", () => {
       layer()
         .contours[0].segments()
         .map((segment) => segment.type),
-    ).toEqual(["cubic", "cubic"]);
+    ).toEqual(["line", "line"]);
+    expect(layer().pointCount).toBe(2);
   });
 
   it.each(["fit", "gap"] as const)(

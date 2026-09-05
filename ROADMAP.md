@@ -356,7 +356,7 @@ These are allowed to jump around when energy is high, but they should not silent
 
 **Delete Operations**
 
-- [x] `Delete` / `Backspace` and native-menu Delete fit the original span between surviving endpoints
+- [x] `Delete` / `Backspace` and native-menu Delete reconnect surviving endpoints without increasing the original span's degree: lines stay lines, quadratics stay quadratic, and cubic spans are fitted
 - [x] `Shift+Delete` / `Shift+Backspace` remove spans without reconnecting surviving fragments
 - [x] Deleting a cubic handle converts its segment to a line
 - [x] Cyclic selections, whole-contour removal, and one-point survivors preserve valid topology

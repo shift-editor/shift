@@ -157,6 +157,48 @@ test("Delete fits a selected point and undo/redo restores the exact outline", as
   await expect.poll(() => outline(page)).toEqual(after);
 });
 
+test("Delete joins corner endpoints as a line without creating handles", async ({
+  page,
+}, testInfo) => {
+  await page.keyboard.press("ControlOrMeta+a");
+  await page.keyboard.press("Backspace");
+  await expect.poll(() => outline(page)).toEqual([]);
+  await page.getByRole("button", { name: "Pen Tool (P)" }).click();
+  const canvas = page.locator("#interactive-canvas");
+  const bounds = await canvas.boundingBox();
+  if (!bounds) throw new Error("Expected interactive canvas bounds");
+  for (const point of [
+    { x: 0.2, y: 0.6 },
+    { x: 0.5, y: 0.3 },
+    { x: 0.8, y: 0.6 },
+  ]) {
+    await canvas.click({ position: { x: point.x * bounds.width, y: point.y * bounds.height } });
+  }
+  await page.getByRole("button", { name: "Select Tool (V)" }).click();
+  await expect.poll(async () => (await outline(page))[0]?.segments).toEqual(["line", "line"]);
+  const before = await outline(page);
+  await clickPoint(page, before[0].points[1].id);
+  await page.screenshot({ path: testInfo.outputPath("before-line-delete.png") });
+  await testInfo.attach("before-line-delete", {
+    path: testInfo.outputPath("before-line-delete.png"),
+    contentType: "image/png",
+  });
+  await page.keyboard.press("Delete");
+  await expect.poll(async () => (await outline(page))[0]?.segments).toEqual(["line"]);
+  const after = await outline(page);
+  expect(after[0].points).toEqual([before[0].points[0], before[0].points[2]]);
+  await expect.poll(() => renderedSegments(page)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath("after-line-delete.png") });
+  await testInfo.attach("after-line-delete", {
+    path: testInfo.outputPath("after-line-delete.png"),
+    contentType: "image/png",
+  });
+  await page.keyboard.press("ControlOrMeta+z");
+  await expect.poll(() => outline(page)).toEqual(before);
+  await page.keyboard.press("ControlOrMeta+Shift+z");
+  await expect.poll(() => outline(page)).toEqual(after);
+});
+
 test("Shift+Backspace leaves two open fragments and survives save/reopen", async ({
   page,
   electronApp,

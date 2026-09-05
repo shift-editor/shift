@@ -135,6 +135,17 @@ export class DeletePoints {
           break;
         case "fit": {
           const curves: CurveType[] = span.map((segment) => segment.toCurve());
+          if (curves.every((curve) => curve.type === "line")) {
+            edges.push([]);
+            break;
+          }
+
+          if (!curves.some((curve) => curve.type === "cubic")) {
+            const fitted = Curve.fitQuadratic(curves);
+            edges.push([{ id: mintPointId(), ...fitted.c, pointType: "offCurve", smooth: false }]);
+            break;
+          }
+
           const fitted = Curve.fitCubic(curves);
           edges.push(
             [fitted.c0, fitted.c1].map((position) => ({
