@@ -85,7 +85,7 @@ test.describe("Home view", () => {
     await expect(surface).toHaveAttribute("data-first-glyph-id", unencoded.id);
   });
 
-  test("explains why source creation is unavailable without axes", async ({ page }) => {
+  test("keeps unavailable source creation discoverable without axes", async ({ page }) => {
     await page.evaluate(async () => {
       const font = window.shift?.font;
       if (!font) throw new Error("Expected font");
@@ -95,16 +95,16 @@ test.describe("Home view", () => {
     });
 
     const createSource = page.getByRole("button", { name: "Create source", exact: true });
-    const explanation = page.getByRole("tooltip");
+    const tooltip = page.getByRole("tooltip");
     await expect(createSource).toHaveAttribute("aria-disabled", "true");
 
     await createSource.hover();
-    await expect(explanation).toHaveText("Create an axis before adding another source");
+    await expect(tooltip).toHaveText("Create source");
 
     await page.mouse.move(600, 300);
-    await expect(explanation).toBeHidden();
+    await expect(tooltip).toBeHidden();
     await createSource.focus();
-    await expect(explanation).toHaveText("Create an axis before adding another source");
+    await expect(tooltip).toHaveText("Create source");
   });
 
   test("keeps a renamed glyph visible until the catalog confirms its new name", async ({
@@ -146,7 +146,7 @@ test.describe("Home view", () => {
 
     await expect(renderer).toBeAttached();
 
-    await page.getByRole("button", { name: "Display all glyphs" }).click();
+    await page.getByRole("button", { name: "Font overview" }).click();
     await page.waitForURL(/#\/home/);
     await afterNextPaint(page);
 

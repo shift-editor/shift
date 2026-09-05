@@ -70,12 +70,14 @@ export const ScaleSection = () => {
         <div className="flex gap-2">
           <EditableSidebarInput
             ref={widthRef}
+            ariaLabel="Width"
             label={<span className="text-xs text-secondary">W</span>}
             disabled={!editable}
             onValueChange={(v) => handleSizeChange("width", v)}
           />
           <EditableSidebarInput
             ref={heightRef}
+            ariaLabel="Height"
             label="H"
             disabled={!editable}
             onValueChange={(v) => handleSizeChange("height", v)}

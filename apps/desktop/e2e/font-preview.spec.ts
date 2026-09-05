@@ -184,7 +184,7 @@ test.describe("retained font source Grid preview", () => {
     await page.keyboard.press("Escape");
     await expect(page.getByText("Read-only preview")).toBeHidden();
 
-    await editorSurface.getByLabel("Display all glyphs").click();
+    await editorSurface.getByLabel("Font overview").click();
     await page.waitForURL(/#\/home$/);
     await expect(scrollViewport).toBeVisible({ timeout: 1_000 });
     await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
@@ -228,7 +228,7 @@ test.describe("retained font source Grid preview", () => {
   test("shows preview font settings with disabled authoring controls", async ({ page }) => {
     await expect.poll(() => page.evaluate(() => window.shiftSession?.mode)).toBe("preview");
 
-    await page.getByLabel(/Display and edit font information/).click();
+    await page.getByRole("button", { name: "Settings" }).click();
     const settingsDialog = page.getByRole("dialog", { name: "Settings" });
     await expect(settingsDialog).toBeVisible();
     await expect(page.getByText("Read-only preview")).toBeHidden();

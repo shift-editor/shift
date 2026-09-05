@@ -78,11 +78,7 @@ export const SourcesSettingsPanel = ({ initialSourceId, canAuthor }: SourcesSett
                 <Tooltip>
                   <TooltipTrigger>
                     <SidebarActionButton
-                      label={
-                        source.id === font.defaultSource.id
-                          ? `Cannot delete ${source.name}: default source`
-                          : `Delete ${source.name}`
-                      }
+                      label={`Delete ${source.name}`}
                       className="h-8 hover:bg-icon-button-hover"
                       aria-disabled={
                         !canAuthor || sources.length === 1 || source.id === font.defaultSource.id
@@ -105,11 +101,7 @@ export const SourcesSettingsPanel = ({ initialSourceId, canAuthor }: SourcesSett
                       <MinusIcon className="h-3 w-3" />
                     </SidebarActionButton>
                   </TooltipTrigger>
-                  <TooltipContent>
-                    {source.id === font.defaultSource.id
-                      ? `Cannot delete ${source.name}: default source`
-                      : `Delete ${source.name}`}
-                  </TooltipContent>
+                  <TooltipContent>{`Delete ${source.name}`}</TooltipContent>
                 </Tooltip>
               }
             >

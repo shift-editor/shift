@@ -85,7 +85,7 @@ const InstanceActionsMenu = ({ instanceName, onEdit, onDelete }: InstanceActions
           <VerticalEllipsis className="h-5 w-5" />
         </MenuTrigger>
       </TooltipTrigger>
-      <TooltipContent>{`Actions for ${instanceName}`}</TooltipContent>
+      <TooltipContent>{"Edit instance"}</TooltipContent>
     </Tooltip>
     <MenuPortal>
       <MenuPositioner sideOffset={4} align="end">

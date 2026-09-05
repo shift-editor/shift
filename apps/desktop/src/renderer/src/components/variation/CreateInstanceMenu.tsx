@@ -120,11 +120,11 @@ export const CreateInstanceMenu = ({
     return (
       <Tooltip>
         <TooltipTrigger>
-          <SidebarActionButton label="Add an axis before creating instances" aria-disabled="true">
+          <SidebarActionButton label="Create instance" aria-disabled="true">
             <PlusIcon className="h-3 w-3" />
           </SidebarActionButton>
         </TooltipTrigger>
-        <TooltipContent>Add an axis before creating instances</TooltipContent>
+        <TooltipContent>Create instance</TooltipContent>
       </Tooltip>
     );
   }

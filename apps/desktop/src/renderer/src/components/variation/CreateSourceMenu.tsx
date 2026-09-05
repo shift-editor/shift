@@ -136,7 +136,7 @@ export const CreateSourceMenu = ({ onSourceCreated, onOpenChange }: CreateSource
             <PlusIcon className="h-3 w-3" />
           </SidebarActionButton>
         </TooltipTrigger>
-        <TooltipContent>Create an axis before adding another source</TooltipContent>
+        <TooltipContent>Create source</TooltipContent>
       </Tooltip>
     );
   }

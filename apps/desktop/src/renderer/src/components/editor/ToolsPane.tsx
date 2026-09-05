@@ -1,4 +1,4 @@
-import { FC } from "react";
+import type { FC } from "react";
 
 import {
   Button,
@@ -6,13 +6,12 @@ import {
   ToolbarButton,
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
   cn,
 } from "@shift/ui";
 import { useSignalState } from "@/lib/signals";
 import { useEditor } from "@/workspace/WorkspaceContext";
-import { SVG } from "@/types/common";
+import type { SVG } from "@/types/common";
 import type { ToolName } from "@/lib/tools/core";
 
 interface ToolbarIconProps {
@@ -34,16 +33,12 @@ export const ToolbarIcon: FC<ToolbarIconProps> = ({
   const isActive = activeTool === name;
 
   return (
-    <Tooltip delayDuration={1500}>
+    <Tooltip>
       <TooltipTrigger>
         <ToolbarButton
           render={
             <Button
-              className={cn(
-                "h-8 w-8 rounded-md",
-                !isActive && "hover:bg-icon-button-hover",
-                disabled && "cursor-default opacity-50",
-              )}
+              className={cn("h-8 w-8 rounded-md", !isActive && "hover:bg-icon-button-hover")}
               variant={isActive ? "primary" : "ghost"}
               icon={
                 <Icon
@@ -65,12 +60,8 @@ export const ToolbarIcon: FC<ToolbarIconProps> = ({
           }
         />
       </TooltipTrigger>
-      <TooltipContent
-        side="bottom"
-        sideOffset={5}
-        className="bg-surface px-2 py-1 text-primary border shadow-sm"
-      >
-        <p className="mb-1 font-sans text-[0.6rem] font-light">{tooltip}</p>
+      <TooltipContent side="bottom" sideOffset={5}>
+        {tooltip}
       </TooltipContent>
     </Tooltip>
   );
@@ -83,28 +74,26 @@ export const ToolsPane: FC = () => {
 
   return (
     <section className="flex flex-col items-center justify-center gap-2">
-      <TooltipProvider delayDuration={2000}>
-        <Toolbar
-          aria-label="Editor tools"
-          className="flex h-[40px] items-center gap-2 overflow-hidden rounded-lg border-b border-line bg-white px-1"
-        >
-          {Array.from(toolRegistry.entries())
-            .filter(([, item]) => !item.hidden)
-            .map(([name, { icon, tooltip, disabled }]) => (
-              <ToolbarIcon
-                key={name}
-                Icon={icon}
-                name={name}
-                tooltip={tooltip}
-                activeTool={activeTool}
-                disabled={disabled}
-                onClick={() => {
-                  editor.setActiveTool(name);
-                }}
-              />
-            ))}
-        </Toolbar>
-      </TooltipProvider>
+      <Toolbar
+        aria-label="Editor tools"
+        className="flex h-[40px] items-center gap-2 overflow-hidden rounded-lg border-b border-line bg-white px-1"
+      >
+        {Array.from(toolRegistry.entries())
+          .filter(([, item]) => !item.hidden)
+          .map(([name, { icon, tooltip, disabled }]) => (
+            <ToolbarIcon
+              key={name}
+              Icon={icon}
+              name={name}
+              tooltip={tooltip}
+              activeTool={activeTool}
+              disabled={disabled}
+              onClick={() => {
+                editor.setActiveTool(name);
+              }}
+            />
+          ))}
+      </Toolbar>
     </section>
   );
 };
