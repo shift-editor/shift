@@ -57,7 +57,7 @@ import { Selection } from "./Selection";
 import type { Font } from "../model/Font";
 import type { FontStore } from "../model/FontStore";
 import type { Glyph, GlyphLayer } from "../model/Glyph";
-import type { GlyphGeometrySelection } from "@/types/glyph";
+import type { DeleteMode, GlyphGeometrySelection } from "@/types/glyph";
 import type { Modifiers } from "../tools/core/GestureDetector";
 import { Text } from "@/lib/text/Text";
 import { TextRuns } from "@/lib/text/TextRuns";
@@ -1344,17 +1344,17 @@ export class Editor {
     return true;
   }
 
-  public async deleteSelection(): Promise<boolean> {
+  public async deleteSelection(mode: DeleteMode = "fit"): Promise<boolean> {
     const selection = this.positionSelection(this.selection.ids);
     const pointIds = selection?.targets.points ?? [];
     if (!selection || pointIds.length === 0 || (selection.targets.anchors?.length ?? 0) > 0) {
       return false;
     }
 
-    this.transaction("Delete selection", () => {
-      selection.layer.removePoints(pointIds);
-    });
+    if (!selection.layer.deletePoints(pointIds, mode)) return false;
+
     this.selection.clear();
+    this.hover.clear();
     await this.font.editCoordinator.settled();
 
     return true;

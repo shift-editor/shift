@@ -127,7 +127,7 @@ export function createCanvasKeyDownBindings(handlers: KeymapHandlers): KeyBindin
       preventDefault: true,
       when: (ctx) => ctx.activeTool !== "text",
       match: (event) => event.key === "Delete" || event.key === "Backspace",
-      run: (ctx) => ctx.editor.deleteSelection(),
+      run: (ctx, event) => ctx.editor.deleteSelection(event.shiftKey ? "gap" : "fit"),
     },
     {
       id: "canvas.selectAll",

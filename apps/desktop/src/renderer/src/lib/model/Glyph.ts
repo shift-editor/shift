@@ -34,7 +34,7 @@ import {
   type Signal,
   type WritableSignal,
 } from "@/lib/signals";
-import type { GlyphOptions } from "@/types/glyph";
+import type { DeleteMode, GlyphOptions } from "@/types/glyph";
 import type { DesignAxisLocation, ExternalAxisLocation } from "@/types/variation";
 import {
   designAxisLocationFromLocation,
@@ -90,6 +90,7 @@ import {
 import { PositionList } from "./positions/PositionList";
 import { GlyphLayerPositionPatch } from "./GlyphLayerPositionPatch";
 import { GlyphLayerEdit } from "./GlyphLayerEdit";
+import { DeletePoints } from "./DeletePoints";
 import { GlyphLayerState } from "./GlyphLayerState";
 import type { ContourBuffer } from "./ContourBuffer";
 import type { LayerBuffers } from "./LayerBuffers";
@@ -235,11 +236,15 @@ class GlyphLayerWriter {
     return points.map((point) => point.id);
   }
 
-  addPointSeeds(contourId: ContourId, points: readonly PointSeed[]): void {
+  addPointSeeds(contourId: ContourId, points: readonly PointSeed[], before?: PointId): void {
     if (points.length === 0) return;
 
-    const editId = this.#intents.addPoints({ contourId, points: [...points] });
-    this.#state.state.addPoints(editId, points, contourId);
+    const editId = this.#intents.addPoints({
+      contourId,
+      points: [...points],
+      ...(before === undefined ? {} : { before }),
+    });
+    this.#state.state.addPoints(editId, points, contourId, before);
   }
 
   insertPointBefore(beforePointId: PointId, edit: NewPoint): PointId {
@@ -591,9 +596,15 @@ export class GlyphLayer {
     this.#writer.addContourSeed(contourId, closed);
   }
 
-  /** @internal Adds prepared point identities through the accepted workspace path. */
-  addPointSeeds(contourId: ContourId, points: readonly PointSeed[]): void {
-    this.#writer.addPointSeeds(contourId, points);
+  /**
+   * Inserts prepared point identities through the accepted workspace path.
+   * @internal
+   * @param contourId - Contour receiving the points.
+   * @param points - Points with identities not currently present in the font.
+   * @param before - Existing point to insert before; omitted to append.
+   */
+  addPointSeeds(contourId: ContourId, points: readonly PointSeed[], before?: PointId): void {
+    this.#writer.addPointSeeds(contourId, points, before);
   }
 
   /** @internal Adds prepared anchor identities through the accepted workspace path. */
@@ -824,6 +835,23 @@ export class GlyphLayer {
     operation: "union" | "subtract" | "intersect" | "difference",
   ): void {
     this.#writer.applyBooleanOp(contourIdA, contourIdB, operation);
+  }
+
+  /**
+   * Deletes selected points with contour-aware fitting or gap creation in one undoable edit.
+   *
+   * @remarks
+   * Adjacent selected on-curve points consume their original adjoining span.
+   * Selected handles outside those spans convert their segment to a line.
+   * Surviving point identities are retained, including across contour splits.
+   *
+   * @param pointIds - Explicit selected points in this authored layer.
+   * @param mode - Fit a replacement curve, or leave a gap between surviving endpoints.
+   * @returns Whether a nonempty, valid selection was processed.
+   * @throws {Error} When an affected contour span cannot be traversed; the edit is rolled back.
+   */
+  deletePoints(pointIds: readonly PointId[], mode: DeleteMode = "fit"): boolean {
+    return new DeletePoints(this, pointIds, mode).apply();
   }
 
   /**

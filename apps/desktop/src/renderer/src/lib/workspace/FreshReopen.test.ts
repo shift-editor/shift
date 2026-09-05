@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { Point } from "@shift/glyph-state";
 import { TestEditor } from "@/testing/TestEditor";
 
 function persistedGlyph(editor: TestEditor) {
@@ -43,6 +44,50 @@ describe("saved editor outcomes survive a fresh workspace stack", () => {
     await editor.closeSession();
     rmSync(outputRoot, { recursive: true, force: true });
   });
+
+  it.each([
+    ["fit", "line"],
+    ["fit", "quad"],
+    ["fit", "cubic"],
+    ["gap", "line"],
+  ] as const)(
+    "persists %s deletion of a %s span with exact geometry and identities",
+    async (mode, type) => {
+      const outputRoot = mkdtempSync(join(tmpdir(), "shift-deletion-reopen-"));
+      const savePath = join(outputRoot, "Deleted.shift");
+      const original = new TestEditor();
+      await original.startSession();
+      const points = await original.drawOpenContour([
+        { x: 0, y: 0 },
+        { x: 100, y: 100 },
+        { x: 200, y: 0 },
+      ]);
+      const layer = original.requireGlyphLayer();
+      if (type === "quad") {
+        layer.insertPointBefore(points[1], Point.offCurve({ x: 50, y: 100 }));
+      }
+      if (type === "cubic") layer.upgradeLineToCubic(layer.contours[0].segments()[0].id);
+      await original.settle();
+      original.selection.select([points[1]]);
+      await original.deleteSelection(mode);
+      expect(
+        layer.contours.flatMap((contour) => contour.segments().map((segment) => segment.type)),
+      ).toEqual(mode === "gap" ? [] : [type]);
+      const expected = layer.state;
+      await original.saveAs(savePath);
+      await original.closeSession();
+
+      const reopened = new TestEditor();
+      try {
+        await reopened.openSession(savePath, "A");
+        expect(reopened.requireGlyphLayer().state).toEqual(expected);
+        expect(reopened.requireGlyphLayer().point(points[1])).toBeNull();
+        await reopened.closeSession();
+      } finally {
+        rmSync(outputRoot, { recursive: true, force: true });
+      }
+    },
+  );
 
   it("reopens authored geometry and continues undoable editing", async () => {
     const outputRoot = mkdtempSync(join(tmpdir(), "shift-fresh-reopen-"));

@@ -17,6 +17,9 @@ import type { Glyph, GlyphLayer } from "@/lib/model/Glyph";
 import type { Signal } from "@/lib/signals/signal";
 import type { DesignAxisLocation } from "./variation";
 
+/** Determines whether on-curve deletion reconnects surviving endpoints or leaves a gap. */
+export type DeleteMode = "fit" | "gap";
+
 /** Acquires glyph projections and lightweight previews from the session boundary. */
 export interface GlyphReader {
   read(glyphIds: readonly GlyphId[]): Promise<readonly GlyphSnapshot[]>;

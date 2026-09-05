@@ -23,6 +23,7 @@
     "crates/shift-bridge/index.js",
     "crates/shift-bridge/index.d.ts",
     "**/vendor",
-    "packages/glyph-info/resources"
+    "packages/glyph-info/resources",
+    "apps/desktop/e2e/test-results"
   ]
 }
