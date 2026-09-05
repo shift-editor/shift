@@ -54,5 +54,11 @@ export const BUILT_IN_TOOL_MANIFESTS: readonly ToolManifest[] = [
 ];
 
 export function registerBuiltInTools(editor: Editor): void {
-  for (const manifest of BUILT_IN_TOOL_MANIFESTS) editor.registerTool(manifest);
+  for (const manifest of BUILT_IN_TOOL_MANIFESTS) {
+    const disabled =
+      manifest.disabled ||
+      (editor.sessionMode === "preview" && (manifest.id === "pen" || manifest.id === "shape"));
+
+    editor.registerTool({ ...manifest, disabled });
+  }
 }

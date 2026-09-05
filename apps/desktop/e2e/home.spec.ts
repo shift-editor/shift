@@ -5,11 +5,76 @@ import {
   clickFirstCatalogGlyphName,
   glyphCatalogRenderer,
   glyphCatalogSurface,
+  glyphProperties,
 } from "./fixtures/appLocators";
 
 test.describe("Home view", () => {
   test("glyph grid matches snapshot", async ({ page }) => {
     await expect(page).toHaveScreenshot("home-glyph-grid.png");
+  });
+
+  test("navigation highlights Home or Settings without leaving both active", async ({ page }) => {
+    const grid = page.getByRole("button", {
+      name: "Font overview",
+      exact: true,
+      includeHidden: true,
+    });
+    const info = page.getByRole("button", {
+      name: "Settings",
+      exact: true,
+      includeHidden: true,
+    });
+    await page.mouse.move(0, 0);
+    await expect(grid).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    const background = await grid.evaluate((element) => getComputedStyle(element).backgroundColor);
+    await expect(info).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+
+    await info.click();
+    await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
+    await page.mouse.move(0, 0);
+    await expect(info).toHaveCSS("background-color", background);
+    await expect(grid).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog", { name: "Settings" })).toBeHidden();
+    await expect(grid).toHaveCSS("background-color", background);
+    await expect(info).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+
+    await clickFirstCatalogGlyph(page);
+    await page.waitForURL(/#\/editor\//);
+    await page.mouse.move(0, 0);
+    await expect(page.getByRole("button", { name: "Font overview", exact: true })).toHaveCSS(
+      "background-color",
+      "rgba(0, 0, 0, 0)",
+    );
+    await expect(page.getByRole("button", { name: "Settings", exact: true })).toHaveCSS(
+      "background-color",
+      "rgba(0, 0, 0, 0)",
+    );
+  });
+
+  test("selected category uses one background across its heading and children", async ({
+    page,
+  }) => {
+    await page.getByText("Punctuation", { exact: true }).click();
+    await expect(page.getByRole("button", { name: "General", exact: true })).toBeVisible();
+    await page.mouse.move(0, 0);
+    const screenshot = await page.screenshot({
+      path: test.info().outputPath("home-category-active.png"),
+      animations: "disabled",
+    });
+    await expect(screenshot).toMatchSnapshot("home-category-active.png");
+  });
+
+  test("shows an empty Glyph section before a glyph is selected", async ({ page }) => {
+    const properties = glyphProperties(page);
+    const fields = ["Left sidebearing", "Right sidebearing", "Advance width"];
+
+    await expect(properties.getByRole("heading", { name: "Glyph", exact: true })).toBeVisible();
+    await expect(properties.getByText("—", { exact: true })).toHaveCount(2);
+    for (const field of fields) {
+      await expect(properties.getByLabel(field)).toBeDisabled();
+      await expect(properties.getByLabel(field)).toHaveValue("");
+    }
   });
 
   test("resets both sidebars to the same default width", async ({ page }) => {

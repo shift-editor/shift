@@ -15,6 +15,8 @@ export class Anchors {
   }
 
   #anchorState(anchor: GlyphRenderAnchor, source: HandleStateSource): HandleState {
+    if (source.interpolated) return "interpolated";
+
     if (source.selection.has(anchor.id)) return "selected";
 
     if (source.hover.has(anchor.id)) return "hovered";

@@ -27,7 +27,7 @@ export const SourcesSection = ({ defaultOpen = false }: SourcesSectionProps) => 
         ) : (
           <Tooltip>
             <TooltipTrigger>
-              <SidebarActionButton label="Create source" data-read-only-mutation>
+              <SidebarActionButton label="Create source" aria-disabled>
                 <PlusIcon className="h-3 w-3" />
               </SidebarActionButton>
             </TooltipTrigger>

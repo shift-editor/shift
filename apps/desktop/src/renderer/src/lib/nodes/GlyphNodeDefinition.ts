@@ -121,14 +121,17 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     track(view.xAdvanceCell);
 
     const advance = displayAdvance(view.xAdvanceCell.peek(), glyph.name, unicode);
+
     track(this.editor.externalLocationCell);
     track(this.editor.activeSourceIdCell);
     track(this.editor.font.sourceMetricsInterpolationCell);
+
     const activeSourceId = this.editor.activeSourceId;
     const metrics = activeSourceId
       ? this.editor.font.metricsForSource(activeSourceId)
       : this.editor.font.metricsAtLocation(this.editor.externalLocation);
-    this.#guides.draw(ctx.canvas, metrics, advance);
+
+    this.#guides.draw(ctx.canvas, metrics, advance, this.editor.sessionMode === "preview");
   }
 
   #drawContent(node: GlyphNode, ctx: RenderContext, editing: boolean): void {
@@ -190,6 +193,15 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     const view = this.#view(node);
     if (!view) return;
 
+    track(this.editor.font.axesCell);
+    track(this.editor.font.sourcesCell);
+    track(this.editor.font.committedFontCell);
+    track(this.editor.activeSourceIdCell);
+    track(this.editor.externalLocationCell);
+    const interpolated =
+      this.editor.activeSourceId === null &&
+      this.editor.font.sourceAt(this.editor.externalLocation) === null;
+
     track(view.contoursCell);
     const rootContours = view.contours.filter((contour) => contour.component === null);
     for (const contour of rootContours) contour.trackShape();
@@ -206,10 +218,18 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
       ctx,
       rootContours.map((contour) => contour.contour),
     );
-    this.#handles.draw(ctx, node, rootContours, this.editor.selection, this.editor.hover);
+    this.#handles.draw(
+      ctx,
+      node,
+      rootContours,
+      this.editor.selection,
+      this.editor.hover,
+      interpolated,
+    );
     this.#anchors.draw(ctx.canvas, view.anchors, {
       selection: this.editor.selection,
       hover: this.editor.hover,
+      interpolated,
     });
   }
 

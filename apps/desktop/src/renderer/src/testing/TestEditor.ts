@@ -31,7 +31,7 @@ import type { Contour } from "@shift/glyph-state";
 import type { SystemClipboard } from "@/lib/clipboard";
 import { createWorkspaceStack, type WorkspaceStack } from "./workspaceStack";
 import type { GlyphNode } from "@/types/node";
-import type { WorkspaceDocumentState } from "@shared/workspace/protocol";
+import type { FontSessionMode, WorkspaceDocumentState } from "@shared/workspace/protocol";
 
 const DEFAULT_MODIFIERS = { shiftKey: false, altKey: false, metaKey: false };
 
@@ -54,10 +54,15 @@ export class TestEditor extends Editor {
   readonly #clipboard: InMemorySystemClipboard;
   readonly #stack: WorkspaceStack;
 
-  constructor() {
+  /**
+   * Creates a real editor stack with the requested immutable session capability.
+   *
+   * @param sessionMode - Presentation and interaction capability under test.
+   */
+  constructor(sessionMode: FontSessionMode = "authored") {
     const stack = createWorkspaceStack();
     const clipboard = new InMemorySystemClipboard();
-    super({ font: stack.font, fontStore: stack.store, clipboard });
+    super({ font: stack.font, fontStore: stack.store, clipboard, sessionMode });
     this.#stack = stack;
     this.#clipboard = clipboard;
     registerBuiltInTools(this);

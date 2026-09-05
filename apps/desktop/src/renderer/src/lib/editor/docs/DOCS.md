@@ -1,12 +1,12 @@
 # Editor
 
-<!-- reviewed: 2026-08-18 -->
+<!-- reviewed: 2026-09-04 -->
 
 Central orchestrator for the canvas-based glyph editing surface, wiring viewport transforms, selection, rendering, hit testing, and tool management into a single facade.
 
 ## Architecture Invariants
 
-**Architecture Invariant:** `Editor` is a facade -- it delegates viewport, hover, rendering, and tool dispatch to named subsystem objects. Tools receive `Editor` directly but must not reach into private managers.
+**Architecture Invariant:** `Editor` is a facade -- it delegates viewport, hover, rendering, and tool dispatch to named subsystem objects. Tools receive `Editor` directly but must not reach into private managers. Its immutable `sessionMode` defines session-level preview interaction: Select consumes geometry hits without publishing hover or selection, marquee gestures publish no selection, and geometry clicks emit `previewMutationAttempted`. Main keeps Edit commands disabled in preview. Authored-layer resolution remains the final mutation boundary in authored sessions.
 
 **Architecture Invariant:** `Scene` owns generic, serializable `ShiftNode` records and placement only. It must not import or retain `Glyph`, `GlyphLayer`, or resolved geometry. Navigation finishes `Font.loadGlyph()` before entering the editor route, and the route synchronously confirms acquisition before publishing the ordinary ID-based glyph node.
 
@@ -26,7 +26,7 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 
 **Architecture Invariant:** `Editor.positionSelection(ids)` is the canonical boundary from generic selected object IDs to one active authored `GlyphLayer` plus normalized point/anchor targets. It expands segment and contour IDs, rejects unsupported or mixed-layer input, and carries no scene-node placement; pointer deltas and tool surfaces own coordinate context.
 
-**Architecture Invariant:** Lifecycle events (`EventEmitter`) are for one-shot imperative actions; `LifecycleEventMap` currently contains only `destroying`. Continuous state changes use signals. Do not mix the two patterns.
+**Architecture Invariant:** Lifecycle events (`EventEmitter`) are for one-shot imperative actions; `LifecycleEventMap` contains `destroying` and the one-shot `previewMutationAttempted` notice. Continuous state changes use signals. Do not mix the two patterns.
 
 **Architecture Invariant:** `Editor.toolCell` is the public active-tool state surface. It derives `{ id, state }` from the active tool instance and its `stateCell`; consumers use `toolIf(id)` for built-in state narrowing and do not reach through `ToolManager` for active state. Entering or leaving a glyph route resets the active tool instance, selection, hover, and editing scope so transient interaction state cannot cross glyphs.
 
@@ -40,14 +40,14 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 
 **Architecture Invariant:** Glyph-domain hit testing belongs to glyph geometry and editor glyph lookup helpers. Tool-specific controls, such as select bounding-box handles, are owned and hit-tested by the tool that renders them.
 
-**Architecture Invariant:** `Handles` tries the accelerated marker layer first and falls back to CPU canvas drawing if WebGL is unavailable. The marker-layer path packs all handle instances into a `Float32Array` for a single draw call.
+**Architecture Invariant:** `Handles` tries the accelerated marker layer first and falls back to CPU canvas drawing if WebGL is unavailable. The marker-layer path packs all handle instances into a `Float32Array` for a single draw call. Handle styling describes location, not session capability: exact sources retain ordinary styles in authored and preview sessions; locations between sources use the `interpolated` theme state, including named instances unless they coincide with a source. This state overrides hover and selection styling without hiding handles during scrubbing.
 
 ## Codemap
 
 ```
 editor/
   Editor.ts              -- Facade (~1373 lines), wires all subsystems
-  lifecycle.ts           -- EventEmitter for lifecycle events (currently `destroying`)
+  lifecycle.ts           -- EventEmitter for destruction and preview mutation notices
   managers/
     Camera.ts             -- UPM<->screen affine matrices, zoom, pan
   rendering/
@@ -65,7 +65,7 @@ editor/
 
 ## Key Types
 
-- **`Editor`** -- Facade class. Owns `Selection`, `Hover`, `Camera`, `Renderer`, `ToolManager`, `Clipboard`, `EventEmitter`, and the workspace transaction facade. Passed directly to tools and NodeDefinitions; `glyphForId()` exposes already-acquired canonical Glyphs without exposing FontStore.
+- **`Editor`** -- Facade class. Owns `Selection`, `Hover`, `Camera`, `Renderer`, `ToolManager`, `Clipboard`, `EventEmitter`, and the workspace transaction facade. Its immutable `sessionMode` lets Select suppress geometry interaction; geometry clicks publish `previewMutationAttempted` for presentation code. The canvas lock is display-only. Passed directly to tools and NodeDefinitions; `glyphForId()` exposes already-acquired canonical Glyphs without exposing FontStore.
 - **`Scene`** -- Owns generic, serializable placed-node records and node-level queries. Glyph acquisition and retained object ownership remain outside Scene.
 - **`ShiftStore<ShiftEditorRecord>`** -- Editor-owned generic record store for scene nodes, selection, editing, and text runs.
 - **`FontStore`** -- Workspace-owned renderer mirror injected privately into Editor for synchronous lookup of already-loaded Glyph objects.
@@ -80,7 +80,7 @@ editor/
 - **`Hover`** -- Tracks the currently hovered glyph-domain entity (point/anchor/segment). Tool-specific controls such as select bounding boxes stay with the owning tool.
 - **`Handles`** -- Handle renderer that tries the accelerated marker layer and falls back to CPU drawing internally.
 - **`FrameHandler`** -- Deduplicates `requestAnimationFrame` per render target. While a frame is pending, later requests are dropped without storing their callback -- the first callback wins.
-- **`EventEmitter`** -- Typed emitter for `LifecycleEventMap` (currently only `destroying`).
+- **`EventEmitter`** -- Typed emitter for destruction and preview mutation notices.
 - **`Theme`** -- Shared visual config for editor-rendered elements. Tool-owned controls keep their own local style constants.
 
 ## How it works
@@ -173,7 +173,7 @@ Glyph geometry exposes domain hit queries for points, anchors, and segments. Too
 - `pnpm test:desktop src/renderer/src/lib/model/positions/PositionEdits.test.ts` -- position-edit (move/rotate/scale) tests.
 - `pnpm test:desktop src/renderer/src/lib/editor/managers/Camera.test.ts` -- camera manager tests.
 - `pnpm test:e2e:visual e2e/glyph-navigation.spec.ts e2e/glyph-view.spec.ts e2e/tools.spec.ts` -- stale/transient navigation, stable UPM framing, and DOM cancellation evidence.
-- Manual: open a font, zoom/pan, select points, drag, toggle preview mode, verify GPU/CPU handle rendering toggle.
+- Manual: open a preview font, verify Pen and Shape are disabled, drag a selection marquee without selecting points, click geometry or the sidebar lock, and verify the notice offers conversion only for convertible sources. The canvas lock must not open a notice.
 
 ## Related
 

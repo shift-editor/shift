@@ -10,6 +10,8 @@
  * "the editor is being destroyed", etc.
  */
 export interface LifecycleEventMap {
+  /** A preview interaction attempted to mutate read-only font data. */
+  previewMutationAttempted: undefined;
   /** The editor is being torn down. Subsystems should dispose resources. */
   destroying: undefined;
 }

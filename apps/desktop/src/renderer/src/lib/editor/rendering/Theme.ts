@@ -77,6 +77,7 @@ export const DEFAULT_THEME: Theme = {
   controlLine: { color: "rgba(136, 136, 136, 0.65)", widthPx: 0.75 },
   handle: {
     corner: {
+      interpolated: { fill: "#ffffff", stroke: "rgba(0, 0, 0, 0.65)", size: 6, lineWidth: 0.5 },
       idle: { fill: "#ffffff", stroke: "#0C92F4", size: 6, lineWidth: 0.5 },
       hovered: {
         fill: "#ffffff",
@@ -88,6 +89,7 @@ export const DEFAULT_THEME: Theme = {
       selected: { fill: "#0C92F4", stroke: "#ffffff", size: 7, lineWidth: 1 },
     },
     smooth: {
+      interpolated: { fill: "#ffffff", stroke: "rgba(0, 0, 0, 0.65)", size: 2.5, lineWidth: 2 },
       idle: { fill: "#ffffff", stroke: "#0C92F4", size: 2.5, lineWidth: 2 },
       hovered: {
         fill: "#ffffff",
@@ -99,6 +101,7 @@ export const DEFAULT_THEME: Theme = {
       selected: { fill: "#0C92F4", stroke: "#ffffff", size: 3, lineWidth: 4 },
     },
     control: {
+      interpolated: { fill: "#ffffff", stroke: "rgba(0, 0, 0, 0.65)", size: 2, lineWidth: 2 },
       idle: { fill: "#ffffff", stroke: "#B0B0B0", size: 2, lineWidth: 2 },
       hovered: {
         fill: "#ffffff",
@@ -110,6 +113,7 @@ export const DEFAULT_THEME: Theme = {
       selected: { fill: "#B0B0B0", stroke: "#ffffff", size: 2.5, lineWidth: 3 },
     },
     anchor: {
+      interpolated: { fill: "#ffffff", stroke: "rgba(0, 0, 0, 0.65)", size: 6, lineWidth: 1 },
       idle: { fill: "#ffffff", stroke: "#6B15EC", size: 6, lineWidth: 1 },
       hovered: {
         fill: "#ffffff",
@@ -121,6 +125,7 @@ export const DEFAULT_THEME: Theme = {
       selected: { fill: "#6B15EC", stroke: "#ffffff", size: 6, lineWidth: 2 },
     },
     direction: {
+      interpolated: { fill: "#ffffff", stroke: "rgba(0, 0, 0, 0.65)", size: 6, lineWidth: 0.5 },
       idle: { fill: "#ffffff", stroke: "#0C92F4", size: 6, lineWidth: 0.5 },
       hovered: {
         fill: "#ffffff",
@@ -132,6 +137,14 @@ export const DEFAULT_THEME: Theme = {
       selected: { fill: "#0C92F4", stroke: "#ffffff", size: 7, lineWidth: 1 },
     },
     first: {
+      interpolated: {
+        fill: "#ffffff",
+        stroke: "rgba(0, 0, 0, 0.65)",
+        size: 6,
+        lineWidth: 0.5,
+        barSize: 18,
+        barStroke: "rgba(0, 0, 0, 0.65)",
+      },
       idle: {
         fill: "#ffffff",
         stroke: "#0C92F4",
@@ -159,6 +172,7 @@ export const DEFAULT_THEME: Theme = {
       },
     },
     last: {
+      interpolated: { fill: "#ffffff", stroke: "rgba(0, 0, 0, 0.65)", size: 12, lineWidth: 0.5 },
       idle: { fill: "#ffffff", stroke: "#0C92F4", size: 12, lineWidth: 0.5 },
       hovered: {
         fill: "#ffffff",

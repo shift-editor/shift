@@ -55,8 +55,9 @@ export type HandleType =
  * - `idle` -- default appearance.
  * - `hovered` -- mouse is over the handle; slightly enlarged or recoloured.
  * - `selected` -- handle is part of the active selection; filled with accent colour.
+ * - `interpolated` -- the location is between sources; overrides interaction styling independently of session editability.
  */
-export type HandleState = "idle" | "hovered" | "selected";
+export type HandleState = "idle" | "hovered" | "selected" | "interpolated";
 
 /** Stroke properties for shape rendering. */
 export interface StrokeStyle {

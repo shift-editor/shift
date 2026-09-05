@@ -65,7 +65,12 @@ async function createFontSession(
 
       const store = new FontStore({ font: source.font });
       const font = new Font({ store, reader: sourceGlyphReader(client) });
-      const editor = new Editor({ font, fontStore: store, clipboard: electronSystemClipboard });
+      const editor = new Editor({
+        font,
+        fontStore: store,
+        clipboard: electronSystemClipboard,
+        sessionMode: "preview",
+      });
       registerBuiltInTools(editor);
       editor.setActiveTool("select");
 

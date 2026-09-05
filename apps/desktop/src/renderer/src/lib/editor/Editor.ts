@@ -1,4 +1,5 @@
 import type { CursorType, ToolRegistryItem } from "@/types/editor";
+import type { FontSessionMode } from "@shared/workspace/protocol";
 import {
   isAnchorId,
   isContourId,
@@ -92,6 +93,7 @@ interface EditorOptions {
   font: Font;
   fontStore: FontStore;
   clipboard: SystemClipboard;
+  sessionMode: FontSessionMode;
   nodeDefinitions?: readonly NodeDefinitionConstructor[];
 }
 
@@ -139,6 +141,8 @@ export class Editor {
   readonly editing: Editing;
   readonly hover: Hover;
   readonly font: Font;
+  /** Immutable preview interaction capability; authored glyph edits still require an authored layer. */
+  readonly sessionMode: FontSessionMode;
   readonly scene: Scene;
   readonly text: Text;
   readonly #nodeDefinitions: Map<NodeKind, NodeDefinition> = new Map();
@@ -193,11 +197,13 @@ export class Editor {
    * Initializes all subsystems, wires signal dependencies, and sets up
    * reactive effects that schedule canvas redraws when state changes.
    *
+   * @param options - Session-scoped services and immutable presentation mode.
    */
   constructor(options: EditorOptions) {
     this.#camera = new Camera();
 
     this.font = options.font;
+    this.sessionMode = options.sessionMode;
     this.#store = new ShiftStore();
     this.#fontStore = options.fontStore;
     this.scene = new Scene(this.#store);
@@ -971,6 +977,13 @@ export class Editor {
 
   /** Subscribe to a lifecycle event. Returns an unsubscribe function. */
   public on: EventEmitter["on"] = (...args) => this.#events.on(...args);
+
+  /** Notifies presentation code that a preview interaction attempted to mutate font data. */
+  public notifyPreviewMutationAttempt(): void {
+    if (this.sessionMode !== "preview") return;
+
+    this.#events.emit("previewMutationAttempted");
+  }
 
   public get camera(): Camera {
     return this.#camera;

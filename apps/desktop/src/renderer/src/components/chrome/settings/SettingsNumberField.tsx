@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { NumberField, NumberFieldGroup, NumberFieldInput, cn } from "@shift/ui";
 
 interface SettingsNumberFieldProps {
@@ -18,20 +19,28 @@ export const SettingsNumberField = ({
   className,
   inputClassName,
   disabled,
-}: SettingsNumberFieldProps) => (
-  <NumberField
-    value={value}
-    onValueChange={onValueChange}
-    onValueCommitted={async () => {
-      await onValueCommitted();
-    }}
-    disabled={disabled}
-  >
-    <NumberFieldGroup className={cn("h-8 bg-white", className)}>
-      <NumberFieldInput
-        aria-label={ariaLabel}
-        className={cn("px-2 text-sm text-black", inputClassName)}
-      />
-    </NumberFieldGroup>
-  </NumberField>
-);
+}: SettingsNumberFieldProps) => {
+  const [isFocused, setIsFocused] = useState(false);
+
+  return (
+    <NumberField
+      format={{ maximumFractionDigits: 20, useGrouping: false }}
+      value={value}
+      onValueChange={onValueChange}
+      onValueCommitted={async () => {
+        await onValueCommitted();
+      }}
+      disabled={disabled}
+    >
+      <NumberFieldGroup className={cn("h-8 bg-white", className)}>
+        <NumberFieldInput
+          aria-label={ariaLabel}
+          {...(!isFocused && { value: value === null ? "" : String(Number(value.toFixed(2))) })}
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
+          className={cn("px-2 text-sm text-black", inputClassName)}
+        />
+      </NumberFieldGroup>
+    </NumberField>
+  );
+};

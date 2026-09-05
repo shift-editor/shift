@@ -1,6 +1,6 @@
 # Graphics
 
-<!-- reviewed: 2026-09-01 -->
+<!-- reviewed: 2026-09-04 -->
 
 Renderer vector-path values and the accelerated marker-layer backend for editor handle drawing.
 
@@ -101,7 +101,7 @@ Set `SHIFT_PROFILE_SLUG_ATLAS=1` for release measurements. Main propagates that 
 
 ### Imported selected-glyph rendering
 
-`GlyphCatalog.openGlyph` calls the common `Font.loadGlyph()` acquisition boundary. Imported reads validate and publish the root projection and complete component closure atomically; later location changes evaluate the retained projection synchronously. The regular editor scene draws guides, outlines, bounds, points, and components from source-neutral geometry. Editability follows exact authored-layer availability for the current glyph and location rather than a separate editor-wide read-only state. Controls without an authored target have no mutation handler and are marked `data-read-only-mutation` for `ReadOnlyNoticeDialog`.
+`GlyphCatalog.openGlyph` calls the common `Font.loadGlyph()` acquisition boundary. Imported reads validate and publish the root projection and complete component closure atomically; later location changes evaluate the retained projection synchronously. The regular editor scene draws guides, outlines, bounds, points, and components from source-neutral geometry. Authored editability still follows exact layer availability for the current glyph and location. Preview sessions suppress point and segment hover and selection publication, disable Pen and Shape, and draw a display-only fixed-size metric lock. Select consumes point, segment, and anchor clicks by emitting `previewMutationAttempted`, without selecting or editing geometry; dragging remains a visual-only marquee. Main keeps Edit commands disabled. Presentation code opens the read-only notice and offers the existing native Save-as-Shift flow only when the source is convertible.
 
 ### Per-frame draw pipeline
 

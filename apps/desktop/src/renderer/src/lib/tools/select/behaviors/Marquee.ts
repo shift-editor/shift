@@ -73,6 +73,11 @@ export class Marquee implements SelectBehavior {
   }
 
   private selectPointsInRect(rect: Rect2D, ctx: ToolContext<SelectState>): void {
+    if (ctx.editor.sessionMode === "preview") {
+      ctx.editor.selection.clear();
+      return;
+    }
+
     const pointIds = this.getPointsInRect(rect, ctx);
     ctx.editor.selection.select([...pointIds]);
   }

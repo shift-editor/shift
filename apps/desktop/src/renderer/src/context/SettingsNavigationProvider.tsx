@@ -10,7 +10,7 @@ export const SettingsNavigationProvider = ({ children }: { children: ReactNode }
   const session = useFontSession();
   const [target, setTarget] = useState<SettingsTarget | null>(null);
   const open = useCallback((next: SettingsTarget) => setTarget(next), []);
-  const navigation = useMemo<SettingsNavigation>(() => ({ open }), [open]);
+  const navigation = useMemo<SettingsNavigation>(() => ({ open, target }), [open, target]);
 
   useEffect(
     () =>

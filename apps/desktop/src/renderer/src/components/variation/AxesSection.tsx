@@ -27,7 +27,7 @@ export const AxesSection = ({ defaultOpen = false }: AxesSectionProps) => {
         ) : (
           <Tooltip>
             <TooltipTrigger>
-              <SidebarActionButton label="Create axis" data-read-only-mutation>
+              <SidebarActionButton label="Create axis" aria-disabled>
                 <PlusIcon className="h-3 w-3" />
               </SidebarActionButton>
             </TooltipTrigger>

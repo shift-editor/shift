@@ -8,6 +8,7 @@ import { PointHandleItem } from "./PointHandleItem";
 export interface HandleStateSource {
   readonly selection: Selection;
   readonly hover: Hover;
+  readonly interpolated?: boolean;
 }
 
 export class HandleDisplayList {
@@ -72,6 +73,8 @@ export class HandleItems {
   }
 
   #state(id: SelectableId, source: HandleStateSource): HandleState {
+    if (source.interpolated) return "interpolated";
+
     if (source.selection.has(id)) return "selected";
 
     if (source.hover.has(id)) return "hovered";

@@ -27,7 +27,7 @@ export const InstancesSection = ({ defaultOpen = false }: InstancesSectionProps)
         ) : (
           <Tooltip>
             <TooltipTrigger>
-              <SidebarActionButton label="Create instance" data-read-only-mutation>
+              <SidebarActionButton label="Create instance" aria-disabled>
                 <PlusIcon className="h-3 w-3" />
               </SidebarActionButton>
             </TooltipTrigger>

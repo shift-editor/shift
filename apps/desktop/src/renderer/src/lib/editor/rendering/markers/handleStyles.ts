@@ -114,6 +114,7 @@ function buildStyleByState(shape: MarkerShape): StyleByState {
     idle: build(shape as never, "idle"),
     hovered: build(shape as never, "hovered"),
     selected: build(shape as never, "selected"),
+    interpolated: build(shape as never, "interpolated"),
   };
 }
 
