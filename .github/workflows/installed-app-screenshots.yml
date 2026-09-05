@@ -5,9 +5,7 @@ on:
     paths:
       - .github/workflows/installed-app-screenshots.yml
       - apps/desktop/electron-builder.config.ts
-      - apps/desktop/src/shared/messages/en.json
       - scripts/capture-installed-app.mjs
-      - scripts/installed-app-screenshot-scenarios.mjs
       - scripts/run-with-virtual-desktop.mjs
   pull_request_target:
     types:
@@ -92,7 +90,7 @@ jobs:
       - name: Build desktop application
         env:
           SHIFT_DISTRIBUTION: release
-        run: pnpm --filter @shift/desktop build:e2e
+        run: pnpm --filter @shift/desktop build
 
       - name: Build installer
         env:
@@ -246,9 +244,23 @@ jobs:
           RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
-          mapfile -t screenshots < <(
-            find installed-app-screenshots -type f -name '*.png' -print | sort
+          screenshot_names=(
+            launcher.png
+            launcher-desktop.png
+            document.png
+            document-desktop.png
+            file-association.png
+            file-association-desktop.png
+            application-menu.png
+            native-dialog.png
           )
+          screenshots=()
+          for platform in macos-arm64 windows-x64 linux-x64; do
+            for name in "${screenshot_names[@]}"; do
+              screenshot="installed-app-screenshots/${platform}/${name}"
+              [[ -f "$screenshot" ]] && screenshots+=("$screenshot")
+            done
+          done
           if [[ ${#screenshots[@]} -eq 0 ]]; then
             echo "uploaded=false" >> "$GITHUB_OUTPUT"
             exit 0
@@ -347,16 +359,16 @@ jobs:
                 directory: "linux-x64",
               },
             ];
-            const manifestPath = platforms
-              .map((platform) =>
-                path.join("installed-app-screenshots", platform.directory, "metadata.json"),
-              )
-              .find((candidate) => fs.existsSync(candidate));
-            const screenshots = manifestPath
-              ? JSON.parse(fs.readFileSync(manifestPath, "utf8")).screenshots.map(
-                  ({ label, fileName }) => [label, fileName],
-                )
-              : [];
+            const screenshots = [
+              ["Launcher window", "launcher.png"],
+              ["Launcher desktop", "launcher-desktop.png"],
+              ["Document window", "document.png"],
+              ["Document desktop", "document-desktop.png"],
+              ["File association window", "file-association.png"],
+              ["File association desktop", "file-association-desktop.png"],
+              ["Application menu", "application-menu.png"],
+              ["Native dialog", "native-dialog.png"],
+            ];
             const statusFor = ({ jobName }) => {
               const job = jobs.find((candidate) => candidate.name === jobName);
               const result = job?.conclusion ?? job?.status ?? "not found";
