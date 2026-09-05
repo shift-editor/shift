@@ -216,7 +216,10 @@ async function hasWindowTitle(
 test.describe("opening a font through the application shell", () => {
   test.use({ openFontPath: FONT_PATH });
 
-  test("opens a selected font with disabled authoring controls", async ({ electronApp, page }) => {
+  test("opens a selected font with disabled authoring controls", async ({
+    electronApp,
+    page,
+  }, testInfo) => {
     const workspacePage = await openSelectedPreview(page, electronApp);
 
     for (const label of ["Create glyph", "Create source", "Create instance", "Create axis"]) {
@@ -233,7 +236,9 @@ test.describe("opening a font through the application shell", () => {
       "This font is read-only. You can inspect it, but editing and conversion aren’t supported.",
     );
     await expect(notice.getByRole("button", { name: "Save as Shift…" })).toHaveCount(0);
-    await expect(notice).toHaveScreenshot("read-only-preview-notice.png");
+    if (testInfo.project.name === "visual") {
+      await expect(notice).toHaveScreenshot("read-only-preview-notice.png");
+    }
     await notice.getByRole("button", { name: "OK" }).click();
     await expect(notice).toBeHidden();
   });
