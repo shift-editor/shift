@@ -6,18 +6,9 @@ import {
 } from "electron";
 import path from "node:path";
 import { errorToMessage } from "../../shared/errors";
+import { OPEN_FONT_EXTENSIONS } from "../../shared/openFontExtensions";
 import type { Window } from "../windows/Window";
 import type { NativeDialogs } from "./NativeDialogs";
-
-const OPEN_FONT_EXTENSIONS = [
-  "shift",
-  "ttf",
-  "otf",
-  "glyphs",
-  "glyphspackage",
-  "ufo",
-  "designspace",
-];
 
 async function showFailure(
   window: Window | null,
