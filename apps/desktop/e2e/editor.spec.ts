@@ -1,6 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 import { workspaceTest as test, expect, navigateToEditor } from "./fixtures/electronApp";
-import { glyphProperties } from "./fixtures/appLocators";
+import { glyphProperties, variationControls } from "./fixtures/appLocators";
 import { CanvasUtil } from "./fixtures/CanvasUtil";
 
 async function selectionBounds(page: Page) {
@@ -56,6 +56,62 @@ test.describe("Editor view", () => {
     await rightDivider.dispatchEvent("dblclick");
     await expect.poll(() => elementWidth(rightSidebar)).toBeCloseTo(defaultWidth, 0);
     await expect.poll(() => elementWidth(leftSidebar)).toBeCloseTo(defaultWidth, 0);
+  });
+
+  test("keeps custom cursors on the canvas while hovering and bending across sidebars", async ({
+    page,
+  }) => {
+    const canvas = page.locator("#interactive-canvas");
+    const canvasBounds = await canvas.boundingBox();
+    if (!canvasBounds) throw new Error("Expected interactive canvas bounds");
+    const down = await page.evaluate(() => {
+      const editor = window.shift!.editor;
+      const node = editor.scene.nodesOfKind("glyph")[0];
+      if (!node) throw new Error("Expected glyph node");
+      const layer = editor.glyphForId(node.glyphId)?.layerForSource(node.sourceId);
+      const segment = layer?.contours[0]?.segments()[0];
+      if (!segment) throw new Error("Expected segment");
+      const point = segment.pointAt(0.5);
+
+      return editor.projectSceneToScreen({
+        x: point.x + node.position.x,
+        y: point.y + node.position.y,
+      });
+    });
+
+    await canvas.hover({ position: down });
+    await expect(canvas).toHaveCSS("cursor", /cursor@32\.svg/);
+    await canvas.click({ position: down, modifiers: ["Alt"] });
+    await page.evaluate(async () => window.shift!.font.editCoordinator.settled());
+    await page.keyboard.down("Meta");
+    try {
+      await expect(canvas).toHaveCSS("cursor", /cursor@32-bend\.svg/);
+      for (const sidebar of [variationControls(page), glyphProperties(page)]) {
+        await sidebar.hover({ position: { x: 10, y: 10 } });
+        await expect(sidebar).not.toHaveCSS("cursor", /cursors\//);
+      }
+
+      await canvas.hover({ position: down });
+      await page.mouse.down();
+      for (const sidebar of [variationControls(page), glyphProperties(page)]) {
+        await expect(sidebar).not.toHaveCSS("cursor", /cursors\//);
+        const bounds = await sidebar.boundingBox();
+        if (!bounds) throw new Error("Expected sidebar bounds");
+        await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2, {
+          steps: 3,
+        });
+        await expect
+          .poll(() => page.evaluate(() => window.shift!.editor.toolIf("select")?.state.type))
+          .toBe("bending");
+        await expect(canvas).toHaveCSS("cursor", /cursor@32-bend\.svg/);
+        await expect(sidebar).not.toHaveCSS("cursor", /cursors\//);
+      }
+    } finally {
+      await page.keyboard.press("Escape");
+      await page.mouse.up();
+      await page.keyboard.up("Meta");
+    }
+    await expect(canvas).toHaveCSS("cursor", /cursor@32\.svg/);
   });
 
   test("remains interactive after a renderer reload", async ({ page }) => {

@@ -23,6 +23,13 @@ describe("Select bounding-box transforms preserve geometry outcomes", () => {
     editor.selectTool("select");
   });
 
+  it("does not offer bending on a straight segment inside the selection", () => {
+    const down = editor.projectSceneToScreen({ x: 150, y: 150 });
+    editor.pointerMove(down.x, down.y, { metaKey: true });
+
+    expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "move" });
+  });
+
   describe("resizing", () => {
     it("changes only X when dragging the right edge", async () => {
       const bounds = editor.selectionBounds();
@@ -261,6 +268,40 @@ describe("Select curve bending preserves edit lifecycle", () => {
     editor.selectTool("select");
   });
 
+  it("shows the bend cursor when Meta is pressed over a cubic, and clears it on release", () => {
+    const down = editor.projectSceneToScreen(bendPoint);
+    editor.pointerMove(down.x, down.y);
+    expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "default" });
+
+    editor.keyDown("Meta", { metaKey: true });
+    expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "bend" });
+
+    editor.pointerMove(down.x, down.y);
+    expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "default" });
+  });
+
+  it("does not offer bending on a point or empty canvas", () => {
+    const down = editor.projectSceneToScreen({ x: 100, y: 200 });
+    editor.pointerMove(down.x, down.y, { metaKey: true });
+    expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "default" });
+
+    editor.pointerMove(down.x + 300, down.y + 300, { metaKey: true });
+    expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "default" });
+  });
+
+  it("keeps the bend cursor during a drag even after Meta is released", async () => {
+    const down = editor.projectSceneToScreen(bendPoint);
+    editor.pointerDown(down.x, down.y, { metaKey: true });
+    editor.pointerMove(down.x + 4, down.y, { metaKey: true });
+    expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "bend" });
+
+    editor.pointerMove(down.x + 4, down.y + 40);
+    expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "bend" });
+    editor.pointerUp(down.x + 4, down.y + 40);
+    await editor.settle();
+    expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "default" });
+  });
+
   it("restores both controls when Escape cancels bending", () => {
     const oneBefore = editor.pointPosition(controlOneId);
     const twoBefore = editor.pointPosition(controlTwoId);
@@ -272,8 +313,10 @@ describe("Select curve bending preserves edit lifecycle", () => {
     editor.pointerMove(start.x, start.y, { metaKey: true });
     editor.pointerMove(end.x, end.y, { metaKey: true });
     expect(editor.pointPosition(controlOneId)).not.toEqual(oneBefore);
+    expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "bend" });
     editor.escape();
 
+    expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "default" });
     expect(editor.pointPosition(controlOneId)).toEqual(oneBefore);
     expect(editor.pointPosition(controlTwoId)).toEqual(twoBefore);
   });

@@ -4,15 +4,8 @@ body {
   overflow: hidden;
 }
 
-.shift-editor-shell {
+.shift-editor-shell #interactive-canvas {
   cursor: var(--shift-cursor);
-}
-
-.shift-editor-shell[data-gesture="pressed"],
-.shift-editor-shell[data-gesture="dragging"],
-.shift-editor-shell[data-gesture="pressed"] *,
-.shift-editor-shell[data-gesture="dragging"] * {
-  cursor: var(--shift-cursor) !important;
 }
 
 /* Custom pen cursor with retina support */

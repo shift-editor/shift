@@ -17,6 +17,7 @@ import {
 } from "./behaviors";
 import { TextRunHover } from "./behaviors/TextRunHover";
 import type { CursorType } from "@/types/editor";
+import { objectIsKindOf } from "@/types";
 import type { Canvas } from "@/lib/editor/rendering/Canvas";
 import { SelectBoundingBox } from "./BoundingBox";
 import { SelectMarquee } from "./Marquee";
@@ -47,22 +48,41 @@ export class Select extends BaseTool<SelectState, Select> {
   override getCursor(state: SelectState): CursorType {
     if (this.editor.sessionMode === "preview") return { type: "default" };
 
-    if (state.type === "translating") return { type: "move" };
-    if (state.type === "resizing") return edgeToCursor(state.resize.edge);
-    if (state.type === "rotating") {
-      return this.boundingBox.cursorForRotationCorner(state.rotate.corner);
+    switch (state.type) {
+      case "translating":
+        return { type: "move" };
+      case "resizing":
+        return edgeToCursor(state.resize.edge);
+      case "rotating":
+        return this.boundingBox.cursorForRotationCorner(state.rotate.corner);
+      case "bending":
+        return { type: "bend" };
     }
 
     const coords = this.editor.input.pointerCell.value;
     if (coords) {
       const cursor = this.boundingBox.cursor(coords);
       if (cursor) return cursor;
-
-      if (this.boundingBox.containsTranslationPoint(coords)) return { type: "move" };
     }
 
     const modifiers = this.editor.input.modifiersCell.value;
     const hover = this.editor.hover.entryCell.value;
+    if (state.type === "ready" && coords && modifiers.metaKey && hover) {
+      const object = this.editor.object(hover);
+      if (objectIsKindOf(object, "segment")) {
+        const layer = object.layer;
+        if (
+          layer &&
+          layer.sourceId === this.editor.activeSourceIdCell.value &&
+          layer.segment(object.segmentId)?.asCubic()
+        ) {
+          return { type: "bend" };
+        }
+      }
+    }
+
+    if (coords && this.boundingBox.containsTranslationPoint(coords)) return { type: "move" };
+
     if (modifiers.altKey && hover) {
       return { type: "copy" };
     }
