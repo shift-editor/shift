@@ -34,8 +34,8 @@ export class Handles {
         selection,
         hover,
         interpolated,
+        isVisible,
       },
-      isVisible,
     );
 
     if (this.#markers.draw(ctx.markers, list, ctx.canvas.camera, node.position)) return;

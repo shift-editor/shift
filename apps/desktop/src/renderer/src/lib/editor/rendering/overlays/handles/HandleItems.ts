@@ -10,6 +10,7 @@ export interface HandleStateSource {
   readonly selection: Selection;
   readonly hover: Hover;
   readonly interpolated?: boolean;
+  readonly isVisible?: (pointId: PointId, contourId: ContourId) => boolean;
 }
 
 export class HandleDisplayList {
@@ -25,20 +26,13 @@ export class HandleItems {
   fromContours(
     contours: readonly GlyphRenderContour[],
     source: HandleStateSource,
-    isVisible?: (pointId: PointId, contourId: ContourId) => boolean,
   ): HandleDisplayList {
-    return this.#fromShapes(
-      contours,
-      (contourIndex, pointIndex) =>
-        this.#state(contours[contourIndex]!.points[pointIndex]!.id, source),
-      isVisible,
-    );
+    return this.#fromShapes(contours, source);
   }
 
   #fromShapes(
     contours: readonly GlyphRenderContour[],
-    stateForPoint: (contourIndex: number, pointIndex: number) => HandleState,
-    isVisible?: (pointId: PointId, contourId: ContourId) => boolean,
+    source: HandleStateSource,
   ): HandleDisplayList {
     let itemCount = 0;
 
@@ -50,11 +44,11 @@ export class HandleItems {
 
       for (let index = 0; index < count; index++) {
         const point = points[index]!;
-        if (isVisible && !isVisible(point.id, contour.id)) continue;
+        if (source.isVisible && !source.isVisible(point.id, contour.id)) continue;
 
         const prev = index > 0 ? points[index - 1]! : contour.closed ? points[count - 1]! : null;
         const next = index + 1 < count ? points[index + 1]! : contour.closed ? points[0]! : null;
-        const state = stateForPoint(contourIndex, index);
+        const state = this.#state(point.id, source);
         const item = this.#pool[itemCount];
 
         if (item) {
