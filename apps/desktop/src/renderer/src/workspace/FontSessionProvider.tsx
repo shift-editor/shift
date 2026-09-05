@@ -44,7 +44,7 @@ export function FontSessionProvider({ children }: { children: ReactNode }) {
     };
   }, [session]);
 
-  if (connectionError) return <DocumentErrorScreen error={connectionError} />;
+  if (connectionError) return <DocumentErrorScreen />;
   if (!session) return null;
 
   return (

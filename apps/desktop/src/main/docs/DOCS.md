@@ -1,6 +1,6 @@
 # Main
 
-<!-- reviewed: 2026-09-01 -->
+<!-- reviewed: 2026-09-05 -->
 
 Electron main process: app startup, windows, menus, document dialogs, and workspace session ownership.
 
@@ -11,6 +11,7 @@ Electron main process: app startup, windows, menus, document dialogs, and worksp
 - **Architecture Invariant:** Every non-`.shift` font path opens as an immutable preview session. It uses the shared renderer sync lane and `/home` route, but never allocates a SQLite working document or authored Shift model.
 - **Architecture Invariant:** Save or Save As may convert UFO, Designspace, Glyphs, and Glyphspackage previews into a new authored session. The preview itself never changes mode: `workspace.createFromSource` fully imports and atomically publishes a separate canonical document, then main reattaches and reloads the active window. Cancel or failure leaves the preview and destination unchanged. TTF and OTF previews cannot convert.
 - **Architecture Invariant:** Dirty state and save targets come from the utility-owned workspace state. Main obtains native choices through `NativeDialogs`, but state reads, saves, and exports go through the renderer document lane so pending edits flush first. Production uses Electron dialogs; E2E injects deterministic choices at this outer boundary.
+- **Architecture Invariant:** Desktop dialog, update, crash, and settings-failure copy is keyed in `src/shared/messages/en.json` and formatted through `message()`. Raw errors and stack traces remain in logs or renderer error reports and are never interpolated into user-visible messages.
 - **Architecture Invariant:** TTF export snapshots the workspace in the ordered sync lane, then releases that lane before font compilation so subsequent editing is not blocked by fontc.
 - **Architecture Invariant:** Within one app instance, at most one live or in-flight session owns a `DocumentId`. Different documents open concurrently; a raw filesystem copy retains its identity and therefore reuses the existing session until Save As mints an independent `DocumentId`.
 - **Architecture Invariant:** `DocumentSession.prepareClose(reason)` may prompt and save, but it never closes a workspace. Overlapping Window Close, Quit, and Restart to Update requests for one document share one retained preparation; the first request owns the reason and native dialog until cancellation, failure, or commit cleanup resets it. Window close prepares and commits its one document. Quit and update restart prepare every document before committing any; cancellation calls `cancelClose()` on every prepared document. Joined `commitClose()` calls share one workspace close, which is the point of no return and clears recovery only for an explicit discard.

@@ -195,10 +195,10 @@ test.describe("opening a font through the application shell", () => {
     }
 
     await workspacePage.getByRole("button", { name: "Read-only preview", exact: true }).click();
-    const notice = workspacePage.getByRole("dialog", { name: "Read-only preview" });
+    const notice = workspacePage.getByRole("dialog", { name: "This font is view-only" });
     await expect(notice).toBeVisible();
     await expect(notice).toContainText(
-      "This font is read-only. You can inspect it, but editing and conversion aren’t supported.",
+      "You can inspect this font, but Shift can’t edit or convert it.",
     );
     await expect(notice.getByRole("button", { name: "Save as Shift…" })).toHaveCount(0);
     if (testInfo.project.name === "visual") {
@@ -248,7 +248,10 @@ test.describe("opening a font through the application shell", () => {
     });
     const bounds = await canvas.boundingBox();
     if (!bounds) throw new Error("Expected canvas bounds");
-    const notice = workspacePage.getByRole("dialog", { name: "Read-only preview", exact: true });
+    const notice = workspacePage.getByRole("dialog", {
+      name: "This font is view-only",
+      exact: true,
+    });
 
     for (const point of targets.slice(0, 2)) {
       await workspacePage.mouse.move(bounds.x + point.x, bounds.y + point.y);

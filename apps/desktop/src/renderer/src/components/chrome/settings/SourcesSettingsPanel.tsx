@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import type { Axis, MetricDefinition, Source, SourceId, SourceMetricValue } from "@shift/types";
 import { Input, Tooltip, TooltipContent, TooltipTrigger, cn } from "@shift/ui";
+import { message } from "@shared/messages";
 import MinusIcon from "@/assets/general/minus.svg";
 import PlusIcon from "@/assets/general/plus.svg";
 import { SidebarActionButton, SidebarActionRow } from "@/components/sidebar/SidebarActionRow";
@@ -137,7 +138,7 @@ const SourceEditor = ({ source, axes, definitions, canAuthor }: SourceEditorProp
   const font = useFont();
   const form = useSettingsForm<Source>({
     canonical: source,
-    errorMessage: "Unable to update source",
+    errorMessage: message("settings.sourceSaveFailed"),
     save: async (next) => {
       await font.updateSource(next);
       return font.source(next.id) ?? next;

@@ -588,7 +588,7 @@ export class App {
         window.window.webContents.reload();
       } catch (error) {
         this.#log.warn("preview save failed", error);
-        await this.#nativeDialogs.showSaveFailure(window, this.applicationName, error);
+        await this.#nativeDialogs.showSaveFailure(window, this.applicationName);
       }
     })();
 
@@ -648,7 +648,7 @@ export class App {
       this.#openWorkspaceWindow(opener, session);
     } catch (error) {
       this.#log.warn("new document failed", error);
-      await this.#nativeDialogs.showCreateFailure(opener, this.applicationName, error);
+      await this.#nativeDialogs.showCreateFailure(opener, this.applicationName);
     }
   }
 
@@ -663,7 +663,7 @@ export class App {
       this.#openWorkspaceWindow(opener, session);
     } catch (error) {
       this.#log.warn("open document failed", error);
-      await this.#nativeDialogs.showOpenFailure(opener, this.applicationName, error);
+      await this.#nativeDialogs.showOpenFailure(opener, this.applicationName);
     }
   }
 

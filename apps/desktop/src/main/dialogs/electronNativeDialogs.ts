@@ -5,7 +5,7 @@ import {
   type SaveDialogOptions,
 } from "electron";
 import path from "node:path";
-import { errorToMessage } from "../../shared/errors";
+import { message } from "../../shared/messages";
 import type { Window } from "../windows/Window";
 import type { NativeDialogs } from "./NativeDialogs";
 
@@ -22,16 +22,16 @@ const OPEN_FONT_EXTENSIONS = [
 async function showFailure(
   window: Window | null,
   applicationName: string,
-  message: string,
-  error: unknown,
+  messageText: string,
+  detail: string,
 ): Promise<void> {
   const options: MessageBoxOptions = {
     type: "error",
-    buttons: ["OK"],
+    buttons: [message("action.ok")],
     defaultId: 0,
     title: applicationName,
-    message,
-    detail: errorToMessage(error),
+    message: messageText,
+    detail,
   };
 
   if (window) {
@@ -46,13 +46,13 @@ async function showFailure(
 export const electronNativeDialogs: NativeDialogs = {
   async openFont(window) {
     const options: OpenDialogOptions = {
-      title: "Open Font",
+      title: message("file.open.title"),
       filters: [
-        { name: "Supported Fonts", extensions: OPEN_FONT_EXTENSIONS },
-        { name: "Shift Document", extensions: ["shift"] },
-        { name: "TrueType/OpenType", extensions: ["ttf", "otf"] },
-        { name: "Glyphs", extensions: ["glyphs", "glyphspackage"] },
-        { name: "UFO/Designspace", extensions: ["ufo", "designspace"] },
+        { name: message("file.open.filter.supported"), extensions: OPEN_FONT_EXTENSIONS },
+        { name: message("file.open.filter.shift"), extensions: ["shift"] },
+        { name: message("file.open.filter.outline"), extensions: ["ttf", "otf"] },
+        { name: message("file.open.filter.glyphs"), extensions: ["glyphs", "glyphspackage"] },
+        { name: message("file.open.filter.sources"), extensions: ["ufo", "designspace"] },
       ],
       properties: ["openFile", "openDirectory"],
     };
@@ -65,19 +65,29 @@ export const electronNativeDialogs: NativeDialogs = {
     return result.filePaths[0];
   },
 
-  async showCreateFailure(window, applicationName, error) {
-    await showFailure(window, applicationName, "A new document could not be created.", error);
+  async showCreateFailure(window, applicationName) {
+    await showFailure(
+      window,
+      applicationName,
+      message("document.createFailed.message"),
+      message("document.createFailed.detail", { applicationName }),
+    );
   },
 
-  async showOpenFailure(window, applicationName, error) {
-    await showFailure(window, applicationName, "The selected font could not be opened.", error);
+  async showOpenFailure(window, applicationName) {
+    await showFailure(
+      window,
+      applicationName,
+      message("document.openFailed.message"),
+      message("document.openFailed.detail"),
+    );
   },
 
   async saveShiftDocument(window, suggestedPath) {
     const options: SaveDialogOptions = {
-      title: "Save Shift Document",
+      title: message("file.saveShift.title"),
       defaultPath: suggestedPath ?? undefined,
-      filters: [{ name: "Shift Document", extensions: ["shift"] }],
+      filters: [{ name: message("file.saveShift.filter"), extensions: ["shift"] }],
       properties: ["createDirectory", "showOverwriteConfirmation"],
     };
     const result = window
@@ -90,11 +100,11 @@ export const electronNativeDialogs: NativeDialogs = {
   async exportTrueTypeFont(window, state) {
     const defaultPath = state.saveTarget
       ? path.join(path.dirname(state.saveTarget), `${path.parse(state.saveTarget).name}.ttf`)
-      : "Untitled.ttf";
+      : message("file.exportTrueType.untitledFilename");
     const options: SaveDialogOptions = {
-      title: "Export TrueType Font",
+      title: message("file.exportTrueType.title"),
       defaultPath,
-      filters: [{ name: "TrueType Font", extensions: ["ttf"] }],
+      filters: [{ name: message("file.exportTrueType.filter"), extensions: ["ttf"] }],
       properties: ["createDirectory", "showOverwriteConfirmation"],
     };
     const result = window
@@ -105,16 +115,18 @@ export const electronNativeDialogs: NativeDialogs = {
   },
 
   async confirmDirtyDocument(window, state, _reason, applicationName) {
-    const name = state.saveTarget ? path.basename(state.saveTarget) : "Untitled";
+    const name = state.saveTarget
+      ? path.basename(state.saveTarget)
+      : message("document.untitledName");
     const options: MessageBoxOptions = {
       type: "warning",
-      buttons: ["Save", "Don't Save", "Cancel"],
+      buttons: [message("action.save"), message("action.dontSave"), message("action.cancel")],
       defaultId: 0,
       cancelId: 2,
       noLink: true,
       title: applicationName,
-      message: `Save changes to ${name} before closing?`,
-      detail: "Your changes will be lost if you don't save them.",
+      message: message("document.unsaved.message", { documentName: name }),
+      detail: message("document.unsaved.detail"),
     };
     const result = window
       ? await dialog.showMessageBox(window.window, options)
@@ -133,19 +145,22 @@ export const electronNativeDialogs: NativeDialogs = {
   async confirmDocumentReopen(window, applicationName, failure) {
     const options: MessageBoxOptions = {
       type: failure === "crashed" ? "warning" : "error",
-      buttons: failure === "crashed" ? ["Reopen", "Close Window"] : ["Try Again", "Close Window"],
+      buttons:
+        failure === "crashed"
+          ? [message("action.reopenDocument"), message("action.closeWindow")]
+          : [message("action.tryAgain"), message("action.closeWindow")],
       defaultId: 0,
       cancelId: 1,
       noLink: true,
       title: applicationName,
       message:
         failure === "crashed"
-          ? "The document window closed unexpectedly."
-          : "The document could not be reopened.",
+          ? message("document.crashed.message")
+          : message("document.reopenFailed.message"),
       detail:
         failure === "crashed"
-          ? "Reopen the document to continue where you left off. Your unsaved changes have been preserved."
-          : "Your recovery data has been retained.",
+          ? message("document.crashed.detail")
+          : message("document.reopenFailed.detail"),
     };
     const result = window
       ? await dialog.showMessageBox(window.window, options)
@@ -154,11 +169,21 @@ export const electronNativeDialogs: NativeDialogs = {
     return result.response === 0 ? "reopen" : "close";
   },
 
-  async showSaveFailure(window, applicationName, error) {
-    await showFailure(window, applicationName, "The document could not be saved.", error);
+  async showSaveFailure(window, applicationName) {
+    await showFailure(
+      window,
+      applicationName,
+      message("document.saveFailed.message"),
+      message("document.saveFailed.detail"),
+    );
   },
 
-  async showExportFailure(window, applicationName, error) {
-    await showFailure(window, applicationName, "The TrueType font could not be exported.", error);
+  async showExportFailure(window, applicationName) {
+    await showFailure(
+      window,
+      applicationName,
+      message("document.exportFailed.message"),
+      message("document.exportFailed.detail"),
+    );
   },
 };

@@ -26,6 +26,7 @@ export type RendererErrorReport = {
   route: string;
   boundaryName: string;
   message: string;
+  stack: string | null;
   componentStack?: string;
 };
 

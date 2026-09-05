@@ -1,11 +1,12 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { Button } from "@shift/ui";
+import { message } from "@shared/messages";
 import { getShiftHost } from "@/host/shiftHost";
 import { ErrorDialog } from "./ErrorDialog";
 import { reportRendererError } from "./errorReporting";
 
 type Props = { children: ReactNode };
-type State = { error: Error | null; componentStack?: string };
+type State = { error: Error | null };
 
 export class AppErrorBoundary extends Component<Props, State> {
   state: State = { error: null };
@@ -15,9 +16,7 @@ export class AppErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
-    const componentStack = info.componentStack ?? undefined;
-    reportRendererError("AppErrorBoundary", error, componentStack);
-    this.setState({ componentStack });
+    reportRendererError("AppErrorBoundary", error, info.componentStack ?? undefined);
   }
 
   async closeWindow(): Promise<void> {
@@ -33,15 +32,13 @@ export class AppErrorBoundary extends Component<Props, State> {
 
     return (
       <ErrorDialog
-        title="Something went wrong"
-        description="Reload this window to continue."
-        error={this.state.error}
-        componentStack={this.state.componentStack}
+        title={message("error.app.title")}
+        description={message("error.app.description")}
       >
         <Button variant="primary" onClick={() => window.location.reload()}>
-          Reload Window
+          {message("action.reloadWindow")}
         </Button>
-        <Button onClick={this.closeWindow}>Close Window</Button>
+        <Button onClick={this.closeWindow}>{message("action.closeWindow")}</Button>
       </ErrorDialog>
     );
   }
