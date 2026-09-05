@@ -3,7 +3,12 @@ import { message } from "@shared/messages";
 import { getShiftHost } from "@/host/shiftHost";
 import { ErrorDialog } from "./ErrorDialog";
 
-export function DocumentErrorScreen() {
+type DocumentErrorScreenProps = {
+  error?: unknown;
+  componentStack?: string;
+};
+
+export function DocumentErrorScreen({ error, componentStack }: DocumentErrorScreenProps = {}) {
   async function reopenDocument(): Promise<void> {
     try {
       await getShiftHost().window.reopenDocument();
@@ -24,6 +29,8 @@ export function DocumentErrorScreen() {
     <ErrorDialog
       title={message("error.document.title")}
       description={message("error.document.description")}
+      error={error}
+      componentStack={componentStack}
     >
       <Button variant="primary" onClick={reopenDocument}>
         {message("action.reopenDocument")}

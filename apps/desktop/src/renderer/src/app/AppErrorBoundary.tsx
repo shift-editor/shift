@@ -6,7 +6,7 @@ import { ErrorDialog } from "./ErrorDialog";
 import { reportRendererError } from "./errorReporting";
 
 type Props = { children: ReactNode };
-type State = { error: Error | null };
+type State = { error: Error | null; componentStack?: string };
 
 export class AppErrorBoundary extends Component<Props, State> {
   state: State = { error: null };
@@ -16,7 +16,9 @@ export class AppErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
-    reportRendererError("AppErrorBoundary", error, info.componentStack ?? undefined);
+    const componentStack = info.componentStack ?? undefined;
+    reportRendererError("AppErrorBoundary", error, componentStack);
+    this.setState({ componentStack });
   }
 
   async closeWindow(): Promise<void> {
@@ -34,6 +36,8 @@ export class AppErrorBoundary extends Component<Props, State> {
       <ErrorDialog
         title={message("error.app.title")}
         description={message("error.app.description")}
+        error={this.state.error}
+        componentStack={this.state.componentStack}
       >
         <Button variant="primary" onClick={() => window.location.reload()}>
           {message("action.reloadWindow")}
