@@ -23,6 +23,7 @@ import {
   killApp,
   quitApp,
   relaunchApp,
+  requestAppQuit,
   runCommand,
   windowTitle,
 } from "./fixtures/documentLifecycle";
@@ -697,9 +698,15 @@ discardTest(
 
     await workspacePage.getByRole("button", { name: "Create glyph", exact: true }).click();
     await expect.poll(() => windowTitle(workspacePage, electronApp)).toContain("saved.shift *");
+    const childProcess = electronApp.process();
     await closeWindow(workspacePage, electronApp);
     await expect.poll(() => workspacePage.isClosed()).toBe(true);
-    await quitApp(electronApp);
+
+    // macOS stays open without windows; other platforms quit after the last window closes.
+    if (process.platform === "darwin") await requestAppQuit(electronApp);
+
+    await expect.poll(() => childProcess.exitCode).toBe(0);
+    await quitApp(electronApp, childProcess);
 
     const relaunchedApp = await relaunchApp(testRoot, saveShiftPath);
     try {

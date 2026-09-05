@@ -5,6 +5,7 @@ import {
   type Page,
 } from "@playwright/test";
 import type { CommandId } from "../../src/shared/commands";
+import type { ChildProcess } from "node:child_process";
 import { once } from "node:events";
 import path from "node:path";
 import { MAIN_JS, waitForWorkspaceReady } from "./electronApp";
@@ -106,10 +107,14 @@ export async function requestAppQuit(electronApp: ElectronApplication): Promise<
 /**
  * Ensures the Electron process exits after a quit request or last-window shutdown.
  *
- * @param electronApp - application that may already be exiting on non-macOS platforms.
+ * @param electronApp - application to quit if its process is still running.
+ * @param childProcess - process retained before closing the last window or requesting quit;
+ *   defaults to the application's process only while its Playwright connection is live.
  */
-export async function quitApp(electronApp: ElectronApplication): Promise<void> {
-  const childProcess = electronApp.process();
+export async function quitApp(
+  electronApp: ElectronApplication,
+  childProcess: ChildProcess = electronApp.process(),
+): Promise<void> {
   if (childProcess.exitCode !== null || childProcess.signalCode !== null) return;
 
   const exited = once(childProcess, "exit");
