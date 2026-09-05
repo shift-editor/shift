@@ -165,6 +165,58 @@ test.describe("Editor view", () => {
     await expect.poll(() => selectionBounds(page)).toMatchObject({ x: targetX, y: targetY });
   });
 
+  for (const releaseShiftFirst of [true, false]) {
+    test(`keeps constrained drag geometry when Shift is released ${releaseShiftFirst ? "before" : "after"} mouseup`, async ({
+      page,
+    }) => {
+      await page.keyboard.press("ControlOrMeta+a");
+      const initialBounds = await selectionBounds(page);
+      const canvas = page.locator("#interactive-canvas");
+      const canvasBounds = await canvas.boundingBox();
+      if (!canvasBounds) throw new Error("Expected interactive canvas bounds");
+      const { down, end } = await page.evaluate(() => {
+        const editor = window.shift!.editor;
+        const bounds = editor.selectionBounds();
+        if (!bounds) throw new Error("Expected selection bounds");
+
+        return {
+          down: editor.projectSceneToScreen({ x: bounds.right, y: bounds.bottom }),
+          end: editor.projectSceneToScreen({
+            x: bounds.right + bounds.width * 0.15,
+            y: bounds.bottom + bounds.height * 0.03,
+          }),
+        };
+      });
+
+      await page.mouse.move(canvasBounds.x + down.x, canvasBounds.y + down.y);
+      await page.keyboard.down("Shift");
+      await page.mouse.down();
+      try {
+        await page.mouse.move(canvasBounds.x + end.x, canvasBounds.y + end.y, { steps: 3 });
+        await page.evaluate(() => window.shift!.editor.toolManager.flushPointerMoves());
+        await expect
+          .poll(() => page.evaluate(() => window.shift!.editor.toolIf("select")?.state.type))
+          .toBe("resizing");
+        const preview = await selectionBounds(page);
+        expect(preview.width).toBeGreaterThan(initialBounds.width);
+        expect(preview.width / initialBounds.width).toBeCloseTo(
+          preview.height / initialBounds.height,
+        );
+
+        if (releaseShiftFirst) await page.keyboard.up("Shift");
+        await page.mouse.up();
+        if (!releaseShiftFirst) await page.keyboard.up("Shift");
+        await page.evaluate(async () => window.shift!.font.editCoordinator.settled());
+
+        expect(await selectionBounds(page)).toEqual(preview);
+        await expect(page.getByTestId("editor-shell")).toHaveAttribute("data-gesture", "idle");
+      } finally {
+        await page.mouse.up();
+        await page.keyboard.up("Shift");
+      }
+    });
+  }
+
   test("applies scaling around the selected scale anchor", async ({ page }) => {
     await page.keyboard.press("Meta+a");
     const properties = glyphProperties(page);
