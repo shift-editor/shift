@@ -25,7 +25,7 @@ export const ScaleSection = () => {
   const selectedPointIds = positionSelection?.targets.points ?? [];
   const isEditing = useSignalState(editor.isEditingCell);
   const layer = isEditing ? null : (positionSelection?.layer ?? null);
-  const editable = layer !== null;
+  const editable = positionSelection !== null;
 
   useEffect(() => {
     if (!widthRef.current || !heightRef.current) return;

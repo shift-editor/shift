@@ -129,7 +129,7 @@ export const TransformSection = () => {
     yRef.current?.setValue(Math.round(selectionBounds.min.y));
   }, [selectedPointIds, selectionBounds]);
 
-  const editable = layer !== null;
+  const editable = positionSelection !== null;
   const canDistribute = editable && selectedPointIds.length >= 3;
 
   const handleAlign = useCallback(

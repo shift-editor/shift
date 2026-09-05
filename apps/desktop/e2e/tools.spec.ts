@@ -245,7 +245,7 @@ test.describe("Toolbar tools", () => {
       await expect(properties.getByLabel("Height", { exact: true })).toHaveValue(
         String(Math.round(draft.bounds.height)),
       );
-      await expect(properties.getByLabel("Width", { exact: true })).toBeDisabled();
+      await expect(properties.getByLabel("Width", { exact: true })).toBeEnabled();
       await expect(page).toHaveScreenshot(`${kind}-draft.png`);
       await testInfo.attach(`${kind}-draft`, {
         body: await page.screenshot({ path: testInfo.outputPath(`${kind}-draft.png`) }),
