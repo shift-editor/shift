@@ -31,15 +31,17 @@ test("reopens after a document render failure", async ({ electronApp, page }) =>
   });
   await expect(
     page.getByRole("heading", {
-      name: "Something went wrong with this document",
+      name: "This document needs to be reopened",
     }),
   ).toBeVisible();
   await expect(
     page.getByText("Your completed edits are safe. Reopen the document to continue."),
   ).toBeVisible();
+  await page.getByRole("button", { name: "Show details" }).click();
+  await expect(page.getByLabel("Error details")).toContainText("E2E document render failure");
 
   const nextWindow = electronApp.waitForEvent("window");
-  await page.getByRole("button", { name: "Reopen Document" }).click();
+  await page.getByRole("button", { name: "Reopen document" }).click();
   const reopenedPage = await nextWindow;
   await waitForWorkspaceReady(reopenedPage);
   await waitForGlyph(reopenedPage, glyphName);
@@ -50,10 +52,11 @@ test("contains root route render failures", async ({ page }) => {
     window.location.hash = "/e2e-root-render-failure";
   });
 
-  await expect(page.getByRole("heading", { name: "Something went wrong" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Shift needs to reload this window" }),
+  ).toBeVisible();
   await expect(page.getByRole("dialog")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Reload Window" })).toBeVisible();
-
+  await expect(page.getByRole("button", { name: "Reload window" })).toBeVisible();
   await page.getByRole("button", { name: "Show details" }).click();
   await expect(page.getByLabel("Error details")).toContainText("E2E root render failure");
 });

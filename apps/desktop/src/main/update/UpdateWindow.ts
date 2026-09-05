@@ -1,4 +1,5 @@
 import { app, BrowserWindow } from "electron";
+import { message } from "../../shared/messages";
 import type { ShiftLogger } from "../logging";
 import { getRendererSource } from "../utils";
 import * as ipc from "../../shared/ipc/main";
@@ -105,7 +106,7 @@ export class UpdateWindow {
     const window = new BrowserWindow({
       width: 420,
       height: 320,
-      title: `Updating ${app.name}`,
+      title: message("update.window.title", { applicationName: app.name }),
       show: false,
       resizable: false,
       maximizable: false,

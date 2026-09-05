@@ -1,7 +1,7 @@
 import { app, dialog, shell, type MessageBoxOptions } from "electron";
 import electronUpdater from "electron-updater";
 import path from "node:path";
-import { errorToMessage } from "../../shared/errors";
+import { message } from "../../shared/messages";
 import type { UpdateProgress } from "../../shared/update/types";
 import { shiftDistribution, shiftProductVersion, shiftUpdateBaseUrl } from "../release";
 import { UpdateWindow } from "./UpdateWindow";
@@ -125,7 +125,7 @@ export class AppUpdater {
     } catch (error) {
       this.#status = { type: "idle" };
       this.#options.log.warn("application update check failed", error);
-      if (trigger === "manual") await this.#showFailure(error);
+      if (trigger === "manual") await this.#showFailure();
     }
   }
 
@@ -180,10 +180,10 @@ export class AppUpdater {
       this.#options.log.warn("update restart blocked by document close failure", error);
       await this.#showMessage({
         type: "error",
-        buttons: ["OK"],
+        buttons: [message("action.ok")],
         title: app.name,
-        message: "The update was not installed.",
-        detail: "Review and save your open documents, then try restarting to update again.",
+        message: message("update.restartBlocked.message"),
+        detail: message("update.restartBlocked.detail"),
       });
       return;
     }
@@ -222,10 +222,10 @@ export class AppUpdater {
 
     await this.#showMessage({
       type: "info",
-      buttons: ["OK"],
+      buttons: [message("action.ok")],
       title: app.name,
-      message: `${app.name} is up to date.`,
-      detail: `You are running ${app.name} ${shiftProductVersion}.`,
+      message: message("update.current.message", { applicationName: app.name }),
+      detail: message("update.current.detail", { version: shiftProductVersion }),
     });
   }
 
@@ -253,7 +253,7 @@ export class AppUpdater {
         const trigger = this.#status.trigger;
         this.#status = { type: "idle" };
         this.#options.log.warn("application update check failed", error);
-        if (trigger === "manual") await this.#showFailure(error);
+        if (trigger === "manual") await this.#showFailure();
         return;
       }
       case "downloading": {
@@ -262,7 +262,7 @@ export class AppUpdater {
         this.#downloadCancellationToken = null;
         this.#updateWindow.close();
         this.#options.log.warn("application update download failed", error);
-        await this.#showDownloadFailure(error);
+        await this.#showDownloadFailure();
         return;
       }
       case "idle":
@@ -288,30 +288,30 @@ export class AppUpdater {
     if (this.#status.type === "downloading") this.cancelDownload();
   }
 
-  async #showFailure(error: unknown): Promise<void> {
+  async #showFailure(): Promise<void> {
     const result = await this.#showMessage({
       type: "error",
-      buttons: ["View Downloads", "OK"],
+      buttons: [message("action.viewDownloads"), message("action.ok")],
       defaultId: 0,
       cancelId: 1,
       noLink: true,
       title: app.name,
-      message: `${app.name} couldn't check for updates.`,
-      detail: errorToMessage(error),
+      message: message("update.checkFailed.message", { applicationName: app.name }),
+      detail: message("update.checkFailed.detail"),
     });
     if (result.response === 0) await shell.openExternal(this.#downloadsUrl());
   }
 
-  async #showDownloadFailure(error: unknown): Promise<void> {
+  async #showDownloadFailure(): Promise<void> {
     const result = await this.#showMessage({
       type: "error",
-      buttons: ["View Downloads", "OK"],
+      buttons: [message("action.viewDownloads"), message("action.ok")],
       defaultId: 0,
       cancelId: 1,
       noLink: true,
       title: app.name,
-      message: `${app.name} couldn't download the update.`,
-      detail: errorToMessage(error),
+      message: message("update.downloadFailed.message", { applicationName: app.name }),
+      detail: message("update.downloadFailed.detail"),
     });
     if (result.response === 0) await shell.openExternal(this.#downloadsUrl());
   }
@@ -320,23 +320,23 @@ export class AppUpdater {
     if (!app.isPackaged) {
       await this.#showMessage({
         type: "info",
-        buttons: ["OK"],
+        buttons: [message("action.ok")],
         title: app.name,
-        message: "Updates aren't available in development builds.",
-        detail: "Package the application to exercise the update flow.",
+        message: message("update.developmentUnavailable.message"),
+        detail: message("update.developmentUnavailable.detail", { applicationName: app.name }),
       });
       return;
     }
 
     const result = await this.#showMessage({
       type: "info",
-      buttons: ["View Downloads", "Cancel"],
+      buttons: [message("action.viewDownloads"), message("action.cancel")],
       defaultId: 0,
       cancelId: 1,
       noLink: true,
       title: app.name,
-      message: "Automatic updates aren't available for this build.",
-      detail: "Download the matching package from GitHub Releases.",
+      message: message("update.manualOnly.message"),
+      detail: message("update.manualOnly.detail"),
     });
     if (result.response === 0) await shell.openExternal(this.#downloadsUrl());
   }

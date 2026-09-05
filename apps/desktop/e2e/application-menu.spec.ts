@@ -171,7 +171,7 @@ launcherTest("Update uses platform-appropriate window controls", async ({ page }
   await page.waitForURL(/#\/update\?state=ready&version=1\.2\.3$/);
 
   await expectCloseOnlyWindowControls(page);
-  await expect(page.getByRole("button", { name: "Restart and Install" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Restart and install" })).toBeVisible();
 });
 
 launcherTest("Feedback opens a modeless composer", async ({ electronApp, page }) => {

@@ -216,11 +216,7 @@ export class DocumentSession {
       this.#log.info("save document completed", { saveTarget: state.saveTarget });
     } catch (error) {
       this.#log.warn("save document failed", error);
-      await this.#nativeDialogs.showSaveFailure(
-        this.#dialogWindow(),
-        this.#applicationName(),
-        error,
-      );
+      await this.#nativeDialogs.showSaveFailure(this.#dialogWindow(), this.#applicationName());
     }
   }
 
@@ -238,11 +234,7 @@ export class DocumentSession {
       await this.#saveToNewPath(state);
     } catch (error) {
       this.#log.warn("save as failed", error);
-      await this.#nativeDialogs.showSaveFailure(
-        this.#dialogWindow(),
-        this.#applicationName(),
-        error,
-      );
+      await this.#nativeDialogs.showSaveFailure(this.#dialogWindow(), this.#applicationName());
     }
   }
 
@@ -275,11 +267,7 @@ export class DocumentSession {
       this.#log.info("TTF export completed", { path: outputPath });
     } catch (error) {
       this.#log.warn("TTF export failed", error);
-      await this.#nativeDialogs.showExportFailure(
-        this.#dialogWindow(),
-        this.#applicationName(),
-        error,
-      );
+      await this.#nativeDialogs.showExportFailure(this.#dialogWindow(), this.#applicationName());
     }
   }
 
@@ -353,11 +341,7 @@ export class DocumentSession {
         requestReason: ownerReason,
         error,
       });
-      await this.#nativeDialogs.showSaveFailure(
-        this.#dialogWindow(),
-        this.#applicationName(),
-        error,
-      );
+      await this.#nativeDialogs.showSaveFailure(this.#dialogWindow(), this.#applicationName());
       return false;
     }
   }
@@ -375,11 +359,7 @@ export class DocumentSession {
       }
 
       this.#log.warn("close guard could not read document state", error);
-      await this.#nativeDialogs.showSaveFailure(
-        this.#dialogWindow(),
-        this.#applicationName(),
-        error,
-      );
+      await this.#nativeDialogs.showSaveFailure(this.#dialogWindow(), this.#applicationName());
       return this.#state;
     }
   }

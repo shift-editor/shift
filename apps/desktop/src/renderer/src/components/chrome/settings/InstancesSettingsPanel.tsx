@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import type { Axis, NamedInstance, NamedInstanceId } from "@shift/types";
 import { Input, Tooltip, TooltipContent, TooltipTrigger, cn } from "@shift/ui";
+import { message } from "@shared/messages";
 import MinusIcon from "@/assets/general/minus.svg";
 import PlusIcon from "@/assets/general/plus.svg";
 import { SidebarActionButton, SidebarActionRow } from "@/components/sidebar/SidebarActionRow";
@@ -128,7 +129,7 @@ const InstanceEditor = ({ instance, axes, canAuthor }: InstanceEditorProps) => {
   const font = useFont();
   const form = useSettingsForm<NamedInstance>({
     canonical: instance,
-    errorMessage: "Unable to update instance",
+    errorMessage: message("settings.instanceSaveFailed"),
     save: async (next) => {
       await font.updateNamedInstance(next);
       return font.namedInstances.find((candidate) => candidate.id === next.id) ?? next;
