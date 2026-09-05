@@ -1,6 +1,6 @@
 # Tools
 
-<!-- reviewed: 2026-09-02 -->
+<!-- reviewed: 2026-09-05 -->
 
 State machine-based tool system for the Shift font editor: translates pointer/keyboard input into tool-specific state transitions and rendering.
 
@@ -51,7 +51,7 @@ tools/
 
 ## Key Types
 
-- `BaseTool<S, Settings>` — abstract base class all tools extend. Declares `id`, `behaviors`, `initialState`. Optional overrides: `preTransition`, `onStateChange`, `getCursor`, `activate`, `deactivate`, `drawOverlay`, `drawScene`, `drawBackground`. Permanent `dispose()` releases base computed signals after deactivation.
+- `BaseTool<S, TTool, Settings>` — abstract base class all tools extend. Declares `id`, `behaviors`, `initialState`. Optional overrides: `preTransition`, `onStateChange`, `getCursor`, `activate`, `deactivate`, `drawOverlay`, `drawScene`, `drawBackground`. Permanent `dispose()` releases base computed signals after deactivation.
 - `Behavior<S, TTool>` — interface with optional per-event handlers (`onClick`, `onDrag`, `onDragStart`, `onDragEnd`, `onDragCancel`, `onPointerMove`, `onDoubleClick`, `onKeyDown`, `onKeyUp`) plus lifecycle hooks (`onStateExit`, `onStateEnter`). Each handler receives `(state, ctx, event)` and returns `boolean` (true = handled).
 - `ToolContext<S, TTool>` — `{ editor, tool, getState, setState, onCancel }`. `tool: TTool` gives class-style behaviors access to their owning tool instance (e.g. `PenStroke.active(ctx.tool)`). `onCancel(callback)` registers rollback for the active drag and returns a function that dismisses it after successful completion.
 - `ToolEvent` — discriminated union of semantic events: `pointerMove`, `click`, `doubleClick`, `dragStart`, `drag`, `dragEnd`, `dragCancel`, `keyDown`, `keyUp`, `selectionChanged`. Pointer events include `coords: Coordinates`.
@@ -134,6 +134,10 @@ After `#runBehaviors`, if `next !== prev` (reference equality):
 Position transforms call `editor.positionSelection(ids)` once at interaction start, then create `selection.layer.positions.move(selection.targets)`, `.rotate(...)`, or `.scale(...)`. The behavior immediately registers `edit.discard()` with `ctx.onCancel()`. Preview methods always resolve from the operation's frozen position base; after `commit()` finishes the active `GlyphLayerEdit`, the behavior calls the returned function to dismiss rollback.
 
 Pen topology and non-affine position patches use `GlyphLayer.beginEdit()` directly and register `edit.cancel()` through the same drag scope. Pen constructs cubic point sequences with the generic `GlyphLayerEdit.addPoints()` primitive; `setPointSmooth()` and `setPositions()` mutate the ordinary reactive layer immediately. `finish(label)` restores the latest accepted base and replays the final operations through one workspace transaction in the same reactive batch; after finishing, the behavior dismisses rollback. An undismissed rollback restores the base without sending an intent.
+
+### Shape completion and selection
+
+On drag end, Shape commits a valid rectangle as one transaction, selects its new contour, and switches to Select. A too-small or unavailable-layer result returns Shape to ready without creating geometry. The Select bounding box draws its outline without visible corner squares; resize and rotation hit zones remain active.
 
 ### Rendering layers
 
@@ -256,7 +260,7 @@ onDragCancel(state, ctx) {
 
 ## Verification
 
-- `pnpm vitest run apps/desktop/src/renderer/src/lib/tools/` — unit tests.
+- `pnpm test:desktop src/renderer/src/lib/tools/` — real-editor tool tests.
 - `GestureDetector.test.ts` — drag threshold, double-click timing, event emission.
 - `ToolManager.test.ts` — tool activation, temporary override, rAF coalescing, modifier forwarding.
 - Per-tool tests: `hand/Hand.test.ts`, `shape/Shape.test.ts`, `Pen.test.ts`, `Select.test.ts`, `Text.test.ts`.

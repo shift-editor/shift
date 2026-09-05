@@ -1,13 +1,13 @@
 # Validation
 
-<!-- reviewed: 2026-08-18 review-every: 90d -->
+<!-- reviewed: 2026-09-05 review-every: 90d -->
 
 Point sequence and clipboard payload validation for the Shift font editor.
 
 ## Architecture Invariants
 
 - **Architecture Invariant:** Validators never throw. Detailed validators (`sequence`, `canFormSegments`, `hasAnchor`) return a `ValidationResult` discriminated union -- callers branch on `valid` and read `.errors` (structured `ValidationError[]`) on failure. In practice every use is `ValidationResult<void>`: these are check-only validators, no parsed payload is returned. The `Validate` predicates/shortcuts and both `ValidateClipboard` validators return plain `boolean`.
-- **Architecture Invariant:** Point sequences must start and end with `onCurve` points. At most 2 consecutive `offCurve` points are allowed (cubic bezier). 3+ consecutive off-curve points are always invalid.
+- **Architecture Invariant:** Point sequences must start and end with on-curve anchors (`onCurve` or `qCurve`). At most 2 consecutive `offCurve` points are allowed (cubic bezier). 3+ consecutive off-curve points are always invalid.
 - **Architecture Invariant:** `Validate` methods come in pairs: a `ValidationResult`-returning variant for detailed errors (e.g. `canFormSegments`) and a boolean shortcut for hot paths (e.g. `canFormValidSegments`). The boolean variants must enforce identical rules without allocating error objects.
 - **Architecture Invariant:** Clipboard validation checks serialized boundary payloads only. Editor/runtime glyph state validation belongs with the source-aware glyph model, not snapshot-era DTOs.
 
@@ -34,7 +34,7 @@ validation/src/
 
 ### Point sequence validation
 
-`Validate` enforces the rules that make a sequence of `PointLike` objects drawable as bezier curve segments. A valid sequence starts and ends with `onCurve` points, with at most 2 consecutive `offCurve` points between anchors (forming line, quadratic, or cubic segments).
+`Validate` enforces the rules that make a sequence of `PointLike` objects drawable as bezier curve segments. A valid sequence starts and ends with on-curve anchors (`onCurve` or `qCurve`), with at most 2 consecutive `offCurve` points between anchors (forming line, quadratic, or cubic segments).
 
 `Validate.sequence` checks structural validity (bookend on-curve, off-curve run length). `Validate.canFormSegments` additionally walks the sequence to verify every off-curve run is bounded by on-curve anchors -- i.e., the points can actually be decomposed into drawable segments.
 
@@ -54,18 +54,18 @@ Boolean shortcuts (`isValidSequence`, `canFormValidSegments`, `hasValidAnchor`) 
 
 ## Gotchas
 
-- `Validate.sequence` accepts a single `onCurve` point as valid, but `Validate.canFormSegments` requires at least 2 points. Use the right one depending on whether you need drawable segments or just a well-formed sequence.
+- `Validate.sequence` accepts a single `onCurve` or `qCurve` point as valid, but `Validate.canFormSegments` requires at least 2 points. Use the right one depending on whether you need drawable segments or just a well-formed sequence.
 - `ValidateClipboard.isClipboardPayload` hardcodes the format string `"shift/glyph-data"`. If the clipboard format changes, this must be updated in sync.
 - The `PointLike` interface only requires `pointType` -- validators do not check coordinates or IDs. Use clipboard validators at serialization boundaries when full structural validation is needed.
 
 ## Verification
 
 ```bash
-# Run all validation tests
-cd packages/validation && npx vitest run
+# Run validation tests through the root Turbo graph
+pnpm test --filter=@shift/validation
 
 # Type check
-cd packages/validation && npx tsc --noEmit
+pnpm --filter @shift/validation typecheck
 ```
 
 ## Related
@@ -73,4 +73,4 @@ cd packages/validation && npx tsc --noEmit
 - `ClipboardSelection` -- uses `Validate.hasValidAnchor` for copy eligibility and `Validate.isOnCurve`/`isOffCurve` for selection expansion
 - `Clipboard` -- uses `ValidateClipboard.isShiftContent` for paste parsing (imports nothing else from this package)
 - `Segment` (in `@shift/glyph-state`) -- segment decomposition uses glyph-state's own `Point.isOnCurve`/`Point.isOffCurve`, not this package; other `Validate` predicate callers are `ToggleSmooth`, `FontStore`, and `ControlLines`
-- `PointType` from `@shift/types` -- the underlying union (`"onCurve" | "offCurve"`) that `PointLike` wraps
+- `PointType` from `@shift/types` -- the underlying union (`"onCurve" | "offCurve" | "qCurve"`) that `PointLike` wraps
