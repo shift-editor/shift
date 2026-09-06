@@ -46,6 +46,7 @@ export type {
   ShiftRecord,
   ShiftRecordId,
 } from "./records";
+export type { SubmittedGeometry } from "./rendering";
 export type { TextRunRecord } from "./text";
 export type {
   DirectionPositionGuide,

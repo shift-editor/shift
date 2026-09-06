@@ -1,10 +1,14 @@
 import type { Point2D } from "@shift/geo";
+import { untracked } from "@/lib/signals/signal";
+import type { SubmittedGeometry } from "@/types/rendering";
 import type { CameraTransform } from "@/lib/editor/managers/Camera";
 import type { MarkerLayer } from "@/lib/graphics/backends/MarkerLayer";
 import { MARKER_INSTANCE_FLOATS } from "../../markers/types";
 import { STYLES, type CachedInstanceStyle } from "../../markers/handleStyles";
 import type { HandleDisplayList } from "./HandleItems";
 import type { PointHandleItem } from "./PointHandleItem";
+
+declare const __PLAYWRIGHT__: boolean;
 
 const EMPTY_PACKED_INSTANCES = new Float32Array(0);
 
@@ -47,13 +51,38 @@ export class MarkerHandleRenderer {
       this.#uploadedList = list;
     }
 
-    return layer.drawUploaded(
+    const rendered = layer.drawUploaded(
       this.#uploadedInstanceCount,
       camera,
       drawOffset,
       camera.centre.x * 2,
       camera.logicalHeight,
     );
+    if (!rendered) return false;
+
+    if (typeof __PLAYWRIGHT__ !== "undefined" && __PLAYWRIGHT__) {
+      const packed = this.#packedInstances;
+      const items = this.#uploadedList?.items;
+      const count = this.#uploadedInstanceCount;
+      if (packed && items && count > 0) {
+        const geometry: SubmittedGeometry = {
+          point(pointId) {
+            const index = items.findIndex((item) => item.point.id === pointId);
+            if (index < 0 || index >= count) return null;
+
+            const base = index * MARKER_INSTANCE_FLOATS;
+            return { x: packed[base]!, y: packed[base + 1]! };
+          },
+        };
+        untracked(() =>
+          window.dispatchEvent(
+            new CustomEvent<SubmittedGeometry>("shift:geometry-submitted", { detail: geometry }),
+          ),
+        );
+      }
+    }
+
+    return true;
   }
 
   #pack(list: HandleDisplayList): number {

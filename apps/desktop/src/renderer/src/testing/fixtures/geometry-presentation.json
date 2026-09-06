@@ -1,0 +1,485 @@
+{
+  "traceEvents": [
+    {
+      "args": {
+        "data": {
+          "callTime": 741811477155,
+          "navigationId": "BE406A032C275C8444F66F8732963156",
+          "sampleTraceId": 5133094351658301,
+          "startTime": 1492.200000047684
+        }
+      },
+      "cat": "blink.user_timing",
+      "name": "inputToGeometryFrameMs",
+      "ph": "I",
+      "pid": 18569,
+      "s": "t",
+      "tid": 7017524,
+      "ts": 741811470686,
+      "tts": 658596
+    },
+    {
+      "args": {
+        "data": {
+          "callTime": 741811495055,
+          "detail": "true",
+          "navigationId": "BE406A032C275C8444F66F8732963156",
+          "sampleTraceId": 5133094351658209,
+          "startTime": 1516.600000023842
+        }
+      },
+      "cat": "blink.user_timing",
+      "name": "shift:geometry-submitted",
+      "ph": "I",
+      "pid": 18569,
+      "s": "t",
+      "tid": 7017524,
+      "ts": 741811495049,
+      "tts": 674155
+    },
+    {
+      "args": {
+        "data": {
+          "callTime": 741811557151,
+          "detail": "true",
+          "navigationId": "BE406A032C275C8444F66F8732963156",
+          "sampleTraceId": 5133094351658145,
+          "startTime": 1578.700000047684
+        }
+      },
+      "cat": "blink.user_timing",
+      "name": "shift:geometry-submitted",
+      "ph": "I",
+      "pid": 18569,
+      "s": "t",
+      "tid": 7017524,
+      "ts": 741811557144,
+      "tts": 709428
+    },
+    {
+      "args": {
+        "data": {
+          "callTime": 741811587997,
+          "detail": "true",
+          "navigationId": "BE406A032C275C8444F66F8732963156",
+          "sampleTraceId": 5133094351658143,
+          "startTime": 1609.5
+        }
+      },
+      "cat": "blink.user_timing",
+      "name": "shift:geometry-submitted",
+      "ph": "I",
+      "pid": 18569,
+      "s": "t",
+      "tid": 7017524,
+      "ts": 741811587993,
+      "tts": 732937
+    },
+    {
+      "args": {
+        "animation_frame_timing_info": {
+          "begin_frame_id": {
+            "sequence_number": 91,
+            "source_id": 4294967296
+          },
+          "blocking_duration_ms": 0,
+          "duration_ms": 24,
+          "num_scripts": 0
+        },
+        "id": "07323c85a96ddd1c"
+      },
+      "cat": "devtools.timeline",
+      "id2": {
+        "local": "0x4"
+      },
+      "name": "AnimationFrame",
+      "ph": "b",
+      "pid": 18569,
+      "tid": 7017524,
+      "ts": 741811470616
+    },
+    {
+      "args": {},
+      "cat": "devtools.timeline",
+      "id2": {
+        "local": "0x4"
+      },
+      "name": "AnimationFrame",
+      "ph": "e",
+      "pid": 18569,
+      "tid": 7017524,
+      "ts": 741811495202
+    },
+    {
+      "args": {
+        "animation_frame_timing_info": {
+          "begin_frame_id": {
+            "sequence_number": 92,
+            "source_id": 4294967296
+          },
+          "blocking_duration_ms": 0,
+          "duration_ms": 0,
+          "num_scripts": 0
+        },
+        "id": "07323c85a96ddceb"
+      },
+      "cat": "devtools.timeline",
+      "id2": {
+        "local": "0x4"
+      },
+      "name": "AnimationFrame",
+      "ph": "b",
+      "pid": 18569,
+      "tid": 7017524,
+      "ts": 741811495423
+    },
+    {
+      "args": {},
+      "cat": "devtools.timeline",
+      "id2": {
+        "local": "0x4"
+      },
+      "name": "AnimationFrame",
+      "ph": "e",
+      "pid": 18569,
+      "tid": 7017524,
+      "ts": 741811495442
+    },
+    {
+      "args": {
+        "begin_frame_id": {
+          "sequence_number": 0,
+          "source_id": 0
+        },
+        "id": "07323c85a96ddceb"
+      },
+      "cat": "devtools.timeline",
+      "id2": {
+        "local": "0x4"
+      },
+      "name": "AnimationFrame::Presentation",
+      "ph": "n",
+      "pid": 18569,
+      "tid": 7017524,
+      "ts": 741811495460
+    },
+    {
+      "args": {
+        "animation_frame_timing_info": {
+          "begin_frame_id": {
+            "sequence_number": 93,
+            "source_id": 4294967296
+          },
+          "blocking_duration_ms": 0,
+          "duration_ms": 12,
+          "num_scripts": 0
+        },
+        "id": "07323c85a96ddcf3"
+      },
+      "cat": "devtools.timeline",
+      "id2": {
+        "local": "0x4"
+      },
+      "name": "AnimationFrame",
+      "ph": "b",
+      "pid": 18569,
+      "tid": 7017524,
+      "ts": 741811497821
+    },
+    {
+      "args": {},
+      "cat": "devtools.timeline",
+      "id2": {
+        "local": "0x4"
+      },
+      "name": "AnimationFrame",
+      "ph": "e",
+      "pid": 18569,
+      "tid": 7017524,
+      "ts": 741811510491
+    },
+    {
+      "args": {
+        "begin_frame_id": {
+          "sequence_number": 0,
+          "source_id": 0
+        },
+        "id": "07323c85a96ddcf3"
+      },
+      "cat": "devtools.timeline",
+      "id2": {
+        "local": "0x4"
+      },
+      "name": "AnimationFrame::Presentation",
+      "ph": "n",
+      "pid": 18569,
+      "tid": 7017524,
+      "ts": 741811510522
+    },
+    {
+      "args": {
+        "animation_frame_timing_info": {
+          "begin_frame_id": {
+            "sequence_number": 94,
+            "source_id": 4294967296
+          },
+          "blocking_duration_ms": 0,
+          "duration_ms": 46,
+          "num_scripts": 0
+        },
+        "id": "07323c85a96ddcce"
+      },
+      "cat": "devtools.timeline",
+      "id2": {
+        "local": "0x4"
+      },
+      "name": "AnimationFrame",
+      "ph": "b",
+      "pid": 18569,
+      "tid": 7017524,
+      "ts": 741811510533
+    },
+    {
+      "args": {
+        "begin_frame_id": {
+          "sequence_number": 92,
+          "source_id": 4294967296
+        },
+        "id": "07323c85a96ddd1c"
+      },
+      "cat": "devtools.timeline",
+      "id2": {
+        "local": "0x4"
+      },
+      "name": "AnimationFrame::Presentation",
+      "ph": "n",
+      "pid": 18569,
+      "tid": 7017524,
+      "ts": 741811516666
+    },
+    {
+      "args": {},
+      "cat": "devtools.timeline",
+      "id2": {
+        "local": "0x4"
+      },
+      "name": "AnimationFrame",
+      "ph": "e",
+      "pid": 18569,
+      "tid": 7017524,
+      "ts": 741811557446
+    },
+    {
+      "args": {
+        "animation_frame_timing_info": {
+          "begin_frame_id": {
+            "sequence_number": 95,
+            "source_id": 4294967296
+          },
+          "blocking_duration_ms": 0,
+          "duration_ms": 0,
+          "num_scripts": 0
+        },
+        "id": "07323c85a96ddcac"
+      },
+      "cat": "devtools.timeline",
+      "id2": {
+        "local": "0x4"
+      },
+      "name": "AnimationFrame",
+      "ph": "b",
+      "pid": 18569,
+      "tid": 7017524,
+      "ts": 741811557562
+    },
+    {
+      "args": {},
+      "cat": "devtools.timeline",
+      "id2": {
+        "local": "0x4"
+      },
+      "name": "AnimationFrame",
+      "ph": "e",
+      "pid": 18569,
+      "tid": 7017524,
+      "ts": 741811557600
+    },
+    {
+      "args": {
+        "begin_frame_id": {
+          "sequence_number": 0,
+          "source_id": 0
+        },
+        "id": "07323c85a96ddcac"
+      },
+      "cat": "devtools.timeline",
+      "id2": {
+        "local": "0x4"
+      },
+      "name": "AnimationFrame::Presentation",
+      "ph": "n",
+      "pid": 18569,
+      "tid": 7017524,
+      "ts": 741811557644
+    },
+    {
+      "args": {
+        "animation_frame_timing_info": {
+          "begin_frame_id": {
+            "sequence_number": 96,
+            "source_id": 4294967296
+          },
+          "blocking_duration_ms": 0,
+          "duration_ms": 0,
+          "num_scripts": 0
+        },
+        "id": "07323c85a96ddcb8"
+      },
+      "cat": "devtools.timeline",
+      "id2": {
+        "local": "0x4"
+      },
+      "name": "AnimationFrame",
+      "ph": "b",
+      "pid": 18569,
+      "tid": 7017524,
+      "ts": 741811561360
+    },
+    {
+      "args": {},
+      "cat": "devtools.timeline",
+      "id2": {
+        "local": "0x4"
+      },
+      "name": "AnimationFrame",
+      "ph": "e",
+      "pid": 18569,
+      "tid": 7017524,
+      "ts": 741811562312
+    },
+    {
+      "args": {
+        "animation_frame_timing_info": {
+          "begin_frame_id": {
+            "sequence_number": 97,
+            "source_id": 4294967296
+          },
+          "blocking_duration_ms": 0,
+          "duration_ms": 25,
+          "num_scripts": 0
+        },
+        "id": "07323c85a96ddc8a"
+      },
+      "cat": "devtools.timeline",
+      "id2": {
+        "local": "0x4"
+      },
+      "name": "AnimationFrame",
+      "ph": "b",
+      "pid": 18569,
+      "tid": 7017524,
+      "ts": 741811562763
+    },
+    {
+      "args": {
+        "begin_frame_id": {
+          "sequence_number": 95,
+          "source_id": 4294967296
+        },
+        "id": "07323c85a96ddcce"
+      },
+      "cat": "devtools.timeline",
+      "id2": {
+        "local": "0x4"
+      },
+      "name": "AnimationFrame::Presentation",
+      "ph": "n",
+      "pid": 18569,
+      "tid": 7017524,
+      "ts": 741811583332
+    },
+    {
+      "args": {
+        "begin_frame_id": {
+          "sequence_number": 96,
+          "source_id": 4294967296
+        },
+        "id": "07323c85a96ddcb8"
+      },
+      "cat": "devtools.timeline",
+      "id2": {
+        "local": "0x4"
+      },
+      "name": "AnimationFrame::Presentation",
+      "ph": "n",
+      "pid": 18569,
+      "tid": 7017524,
+      "ts": 741811583333
+    },
+    {
+      "args": {},
+      "cat": "devtools.timeline",
+      "id2": {
+        "local": "0x4"
+      },
+      "name": "AnimationFrame",
+      "ph": "e",
+      "pid": 18569,
+      "tid": 7017524,
+      "ts": 741811588090
+    },
+    {
+      "args": {
+        "animation_frame_timing_info": {
+          "begin_frame_id": {
+            "sequence_number": 98,
+            "source_id": 4294967296
+          },
+          "blocking_duration_ms": 0,
+          "duration_ms": 6,
+          "num_scripts": 0
+        },
+        "id": "07323c85a96ddc62"
+      },
+      "cat": "devtools.timeline",
+      "id2": {
+        "local": "0x4"
+      },
+      "name": "AnimationFrame",
+      "ph": "b",
+      "pid": 18569,
+      "tid": 7017524,
+      "ts": 741811588210
+    },
+    {
+      "args": {},
+      "cat": "devtools.timeline",
+      "id2": {
+        "local": "0x4"
+      },
+      "name": "AnimationFrame",
+      "ph": "e",
+      "pid": 18569,
+      "tid": 7017524,
+      "ts": 741811595156
+    },
+    {
+      "args": {
+        "begin_frame_id": {
+          "sequence_number": 0,
+          "source_id": 0
+        },
+        "id": "07323c85a96ddc62"
+      },
+      "cat": "devtools.timeline",
+      "id2": {
+        "local": "0x4"
+      },
+      "name": "AnimationFrame::Presentation",
+      "ph": "n",
+      "pid": 18569,
+      "tid": 7017524,
+      "ts": 741811595220
+    }
+  ]
+}

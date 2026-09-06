@@ -34,6 +34,7 @@
     "@electron-forge/plugin-vite": "8.0.0-alpha.10",
     "@electron-forge/shared-types": "8.0.0-alpha.10",
     "@electron-toolkit/tsconfig": "^1.0.1",
+    "@paulirish/trace_engine": "0.0.65",
     "@playwright/test": "^1.59.1",
     "@tailwindcss/vite": "^4.1.11",
     "@types/node": "^25.3.0",
