@@ -8,4 +8,7 @@ export interface WorkspaceEdit {
   readonly label?: string;
 }
 
+/** Observes one renderer edit when it enters the serialized workspace lane. */
+export type WorkspaceEditListener = (editId: PendingEditId) => void;
+
 export type WorkspaceApplyStatus = "idle" | "queued" | "applying";

@@ -61,7 +61,7 @@ export const Editor = () => {
 
     return () => {
       editor.toolManager.reset();
-      editor.selection.clear();
+      editor.history.reset();
       editor.hover.clear();
       if (editor.editing.has(nodeId)) editor.editing.clear();
       editor.scene.deleteNode(nodeId);
