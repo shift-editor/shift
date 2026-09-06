@@ -19,6 +19,7 @@ declare const ComponentIdBrand: unique symbol;
 declare const GuidelineIdBrand: unique symbol;
 declare const GlyphIdBrand: unique symbol;
 declare const LayerIdBrand: unique symbol;
+declare const LedgerEntryIdBrand: unique symbol;
 declare const MetricIdBrand: unique symbol;
 declare const NamedInstanceIdBrand: unique symbol;
 declare const NodeIdBrand: unique symbol;
@@ -90,6 +91,11 @@ export type GlyphId = string & { readonly [GlyphIdBrand]: typeof GlyphIdBrand };
  * Branded string type - can't be confused with other IDs or plain strings.
  */
 export type LayerId = string & { readonly [LayerIdBrand]: typeof LayerIdBrand };
+
+/** Stable identity of one entry in an open workspace's document ledger. */
+export type LedgerEntryId = string & {
+  readonly [LedgerEntryIdBrand]: typeof LedgerEntryIdBrand;
+};
 
 /** Stable identity of one font-owned metric definition. */
 export type MetricId = string & { readonly [MetricIdBrand]: typeof MetricIdBrand };

@@ -9,6 +9,7 @@ import type {
   GuidelineId,
   GlyphId,
   LayerId,
+  LedgerEntryId,
   MetricId,
   NamedInstanceId,
   SourceId,
@@ -61,11 +62,17 @@ export interface BridgeApi {
    * undo stack is empty.
    */
   undo(): AppliedChange | null
+  /** Replays one identified entry only when it is next in the undo stack. */
+  undoEntry(entryId: LedgerEntryId): AppliedChange | null
   /**
    * Replays the most recent undone entry's post states; `null` when the
    * redo stack is empty.
    */
   redo(): AppliedChange | null
+  /** Replays one identified entry only when it is next in the redo stack. */
+  redoEntry(entryId: LedgerEntryId): AppliedChange | null
+  /** Permanently removes every currently undone document entry. */
+  discardRedo(): void
   /** Glyph-addressed snapshots for renderer-local synchronous font state. */
   getGlyphSnapshots(requests: Array<GlyphSnapshotRequest>): Array<GlyphSnapshot>
   /**
@@ -204,6 +211,8 @@ export interface AnchorSeed {
 
 /** Pure-state response to `apply`: no change records cross to the renderer. */
 export interface AppliedChange {
+  /** Stable identity of the document ledger entry, absent for an empty apply. */
+  ledgerEntryId?: LedgerEntryId
   layers: Array<LayerReplaced>
   /** Present when the apply produced any font-level replacement collections. */
   next?: FontReplacement

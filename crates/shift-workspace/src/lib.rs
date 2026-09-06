@@ -8,6 +8,6 @@ mod workspace;
 
 pub use document_identity::DocumentIdentity;
 pub use import_pipeline::{ImportBatchProgress, stream_into};
-pub use ledger::{LayerPair, Ledger, LedgerEntry, LedgerStep};
+pub use ledger::{LayerPair, Ledger, LedgerEntry, LedgerEntryId, LedgerStep};
 pub use new_workspace::NewWorkspace;
 pub use workspace::{AcquireScope, FontWorkspace, WorkspaceError, WorkspaceSource};

@@ -7,7 +7,7 @@
 //! a renderer reload (it lives with the workspace process), not a utility
 //! crash; a SQLite ledger table is the later upgrade if that ever matters.
 
-use std::sync::Arc;
+use std::{fmt, str::FromStr, sync::Arc};
 
 use shift_font::{
     Axis, AxisId, AxisMapping, FontMetadata, Glyph, GlyphId, GlyphLayer, GlyphName, LayerId,
@@ -18,8 +18,27 @@ use shift_font::{
 /// the stack being extended falls off first; a fresh apply also clears redo.
 const MAX_ENTRIES_PER_STACK: usize = 100;
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-struct HistoryPosition(u64);
+/// Stable identity for one in-memory workspace ledger entry.
+///
+/// Identities remain valid for the lifetime of the open workspace. They let a
+/// renderer verify that a coordinated editor action replays the intended
+/// document entry without owning or duplicating its state pairs.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub struct LedgerEntryId(u64);
+
+impl fmt::Display for LedgerEntryId {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(formatter)
+    }
+}
+
+impl FromStr for LedgerEntryId {
+    type Err = std::num::ParseIntError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        value.parse().map(Self)
+    }
+}
 
 #[derive(Clone)]
 pub enum LedgerStep {
@@ -106,7 +125,7 @@ pub struct LayerPair {
 
 #[derive(Clone)]
 pub struct LedgerEntry {
-    position: HistoryPosition,
+    pub id: LedgerEntryId,
     pub label: Option<String>,
     pub steps: Vec<LedgerStep>,
 }
@@ -146,8 +165,8 @@ impl LedgerEntry {
 pub struct Ledger {
     undo: Vec<LedgerEntry>,
     redo: Vec<LedgerEntry>,
-    base_position: HistoryPosition,
-    saved_position: Option<HistoryPosition>,
+    base_position: LedgerEntryId,
+    saved_position: Option<LedgerEntryId>,
     next_position: u64,
 }
 
@@ -162,22 +181,36 @@ impl Ledger {
         Self {
             undo: Vec::new(),
             redo: Vec::new(),
-            base_position: HistoryPosition::default(),
-            saved_position: (!dirty).then_some(HistoryPosition::default()),
+            base_position: LedgerEntryId::default(),
+            saved_position: (!dirty).then_some(LedgerEntryId::default()),
             next_position: 1,
         }
     }
 
     /// Records an applied entry. A fresh apply truncates the redo stack.
-    pub fn push(&mut self, label: Option<String>, steps: Vec<LedgerStep>) {
+    pub fn push(&mut self, label: Option<String>, steps: Vec<LedgerStep>) -> LedgerEntryId {
         self.redo.clear();
-        let entry = LedgerEntry {
-            position: HistoryPosition(self.next_position),
-            label,
-            steps,
-        };
+        let id = LedgerEntryId(self.next_position);
+        let entry = LedgerEntry { id, label, steps };
         self.next_position += 1;
         push_undo_bounded(&mut self.undo, entry, &mut self.base_position);
+        id
+    }
+
+    /// Returns the next document entry that ordinary undo would replay.
+    pub fn next_undo_id(&self) -> Option<LedgerEntryId> {
+        self.undo.last().map(|entry| entry.id)
+    }
+
+    /// Returns the next document entry that ordinary redo would replay.
+    pub fn next_redo_id(&self) -> Option<LedgerEntryId> {
+        self.redo.last().map(|entry| entry.id)
+    }
+
+    /// Permanently removes every currently undone entry without changing the
+    /// current or saved document positions.
+    pub fn discard_redo(&mut self) {
+        self.redo.clear();
     }
 
     /// Pops the entry to undo; the caller replays its pre states and must
@@ -222,24 +255,24 @@ impl Ledger {
     }
 
     pub fn is_entry_dirty(&self, entry: &LedgerEntry) -> bool {
-        self.saved_position != Some(entry.position)
+        self.saved_position != Some(entry.id)
     }
 
-    fn current_position(&self) -> HistoryPosition {
+    fn current_position(&self) -> LedgerEntryId {
         self.undo
             .last()
-            .map_or(self.base_position, |entry| entry.position)
+            .map_or(self.base_position, |entry| entry.id)
     }
 }
 
 fn push_undo_bounded(
     stack: &mut Vec<LedgerEntry>,
     entry: LedgerEntry,
-    base_position: &mut HistoryPosition,
+    base_position: &mut LedgerEntryId,
 ) {
     stack.push(entry);
     if stack.len() > MAX_ENTRIES_PER_STACK {
-        *base_position = stack.remove(0).position;
+        *base_position = stack.remove(0).id;
     }
 }
 
@@ -270,6 +303,39 @@ mod tests {
         ledger.record_undone(entry(MAX_ENTRIES_PER_STACK + 1));
         assert_eq!(ledger.redo.len(), MAX_ENTRIES_PER_STACK);
         assert_eq!(ledger.redo[0].label.as_deref(), Some("2"));
+    }
+
+    #[test]
+    fn entries_keep_stable_monotonic_identities_across_replay() {
+        let mut ledger = Ledger::default();
+        let first = ledger.push(Some("first".into()), Vec::new());
+        let second = ledger.push(Some("second".into()), Vec::new());
+
+        assert_ne!(first, second);
+        assert_eq!(ledger.next_undo_id(), Some(second));
+
+        let entry = ledger.pop_undo().unwrap();
+        ledger.record_undone(entry);
+        assert_eq!(ledger.next_redo_id(), Some(second));
+
+        let entry = ledger.pop_redo().unwrap();
+        ledger.record_redone(entry);
+        assert_eq!(ledger.next_undo_id(), Some(second));
+    }
+
+    #[test]
+    fn discard_redo_preserves_the_current_document_position() {
+        let mut ledger = Ledger::default();
+        ledger.push(Some("saved".into()), Vec::new());
+        ledger.mark_saved();
+        let entry = ledger.pop_undo().unwrap();
+        ledger.record_undone(entry);
+        assert!(ledger.is_dirty());
+
+        ledger.discard_redo();
+
+        assert!(ledger.is_dirty());
+        assert_eq!(ledger.next_redo_id(), None);
     }
 
     #[test]
@@ -311,7 +377,7 @@ mod tests {
 
     fn entry(index: usize) -> LedgerEntry {
         LedgerEntry {
-            position: HistoryPosition(index as u64),
+            id: LedgerEntryId(index as u64),
             label: Some(index.to_string()),
             steps: Vec::new(),
         }

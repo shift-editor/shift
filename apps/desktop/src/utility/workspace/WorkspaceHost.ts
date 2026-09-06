@@ -1,5 +1,5 @@
 import { createBridge, type ShiftBridge } from "@shift/bridge";
-import type { GlyphSnapshot } from "@shift/types";
+import type { AppliedChange, GlyphSnapshot, LedgerEntryId } from "@shift/types";
 import fs from "node:fs";
 import path from "node:path";
 import { serveChannel, type ChannelServer, type Transport } from "../../shared/workspace/channel";
@@ -161,19 +161,14 @@ export class WorkspaceHost {
           this.#atlasCacheRevision = null;
           return { applied, documentState: this.#emitDocumentChanged() };
         }),
-      "workspace.undo": () =>
+      "workspace.undo": () => this.#serialize(() => this.#replay("undo")),
+      "workspace.undoEntry": ({ entryId }) => this.#serialize(() => this.#replay("undo", entryId)),
+      "workspace.redo": () => this.#serialize(() => this.#replay("redo")),
+      "workspace.redoEntry": ({ entryId }) => this.#serialize(() => this.#replay("redo", entryId)),
+      "workspace.discardRedo": () =>
         this.#serialize(() => {
-          const applied = this.#bridge.undo();
-          if (applied) this.#atlasCacheRevision = null;
-          const documentState = applied ? this.#emitDocumentChanged() : this.#documentState();
-          return { applied, documentState };
-        }),
-      "workspace.redo": () =>
-        this.#serialize(() => {
-          const applied = this.#bridge.redo();
-          if (applied) this.#atlasCacheRevision = null;
-          const documentState = applied ? this.#emitDocumentChanged() : this.#documentState();
-          return { applied, documentState };
+          this.#bridge.discardRedo();
+          return null;
         }),
       // Save rides the edit lane: the same #serialize queue orders it behind
       // every committed apply/undo/redo, so it never writes stale state.
@@ -794,6 +789,26 @@ export class WorkspaceHost {
     this.#sync?.emit("document.changed", null);
 
     return null;
+  }
+
+  #replay(
+    direction: "undo" | "redo",
+    entryId?: LedgerEntryId,
+  ): SyncCallMap["workspace.undo"]["response"] {
+    let applied: AppliedChange | null;
+
+    switch (direction) {
+      case "undo":
+        applied = entryId ? this.#bridge.undoEntry(entryId) : this.#bridge.undo();
+        break;
+      case "redo":
+        applied = entryId ? this.#bridge.redoEntry(entryId) : this.#bridge.redo();
+        break;
+    }
+
+    if (applied) this.#atlasCacheRevision = null;
+    const documentState = applied ? this.#emitDocumentChanged() : this.#documentState();
+    return { applied, documentState };
   }
 
   #documentState(): WorkspaceDocumentState | null {

@@ -10,6 +10,7 @@ import type {
   GlyphId,
   GlyphName,
   LayerId,
+  LedgerEntryId,
   MetricId,
   NamedInstanceId,
   SourceId,

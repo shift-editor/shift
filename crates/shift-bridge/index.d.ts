@@ -10,6 +10,7 @@ import type {
   GlyphId,
   GlyphName,
   LayerId,
+  LedgerEntryId,
   MetricId,
   NamedInstanceId,
   SourceId,
@@ -46,11 +47,17 @@ export declare class Bridge {
    * undo stack is empty.
    */
   undo(): NapiAppliedChange | null
+  /** Replays one identified entry only when it is next in the undo stack. */
+  undoEntry(entryId: LedgerEntryId): NapiAppliedChange | null
   /**
    * Replays the most recent undone entry's post states; `null` when the
    * redo stack is empty.
    */
   redo(): NapiAppliedChange | null
+  /** Replays one identified entry only when it is next in the redo stack. */
+  redoEntry(entryId: LedgerEntryId): NapiAppliedChange | null
+  /** Permanently removes every currently undone document entry. */
+  discardRedo(): void
   /** Glyph-addressed snapshots for renderer-local synchronous font state. */
   getGlyphSnapshots(requests: Array<NapiGlyphSnapshotRequest>): Array<NapiGlyphSnapshot>
   /**
@@ -189,6 +196,8 @@ export interface NapiAnchorSeed {
 
 /** Pure-state response to `apply`: no change records cross to the renderer. */
 export interface NapiAppliedChange {
+  /** Stable identity of the document ledger entry, absent for an empty apply. */
+  ledgerEntryId?: LedgerEntryId
   layers: Array<NapiLayerReplaced>
   /** Present when the apply produced any font-level replacement collections. */
   next?: NapiFontReplacement

@@ -5,6 +5,7 @@ import type {
   GlyphPreview,
   GlyphProjection,
   GlyphSnapshot,
+  LedgerEntryId,
   Location,
   SlugAtlas,
 } from "@shift/types";
@@ -174,10 +175,15 @@ export class WorkspaceEditCoordinator {
     });
   }
 
-  /** Replays the latest undo entry after pending pushes flush. */
-  undo(): Promise<AppliedChange | null> {
+  /**
+   * Replays the latest undo entry after pending pushes flush.
+   *
+   * @param entryId - Expected next entry; mismatch rejects without replaying another edit.
+   * @returns The applied replacement, or null when ordinary undo has no entry.
+   */
+  undo(entryId?: LedgerEntryId): Promise<AppliedChange | null> {
     return this.#withFlush(async () => {
-      const applied = await this.#session.undo();
+      const applied = await this.#session.undo(entryId);
       if (applied) await this.#applyChange(applied, null);
       return applied;
     });
@@ -259,13 +265,23 @@ export class WorkspaceEditCoordinator {
     return this.#withFlush(() => this.#session.mapLocation(location));
   }
 
-  /** Replays the latest redo entry after pending pushes flush. */
-  redo(): Promise<AppliedChange | null> {
+  /**
+   * Replays the latest redo entry after pending pushes flush.
+   *
+   * @param entryId - Expected next entry; mismatch rejects without replaying another edit.
+   * @returns The applied replacement, or null when ordinary redo has no entry.
+   */
+  redo(entryId?: LedgerEntryId): Promise<AppliedChange | null> {
     return this.#withFlush(async () => {
-      const applied = await this.#session.redo();
+      const applied = await this.#session.redo(entryId);
       if (applied) await this.#applyChange(applied, null);
       return applied;
     });
+  }
+
+  /** Permanently removes the current document redo branch after pending operations flush. */
+  discardRedo(): Promise<void> {
+    return this.#withFlush(() => this.#session.discardRedo());
   }
 
   /** Reads document state behind every queued and in-flight edit. */

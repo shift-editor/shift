@@ -24,6 +24,7 @@ import type {
   GlyphPreview,
   GlyphSnapshot,
   GlyphProjection,
+  LedgerEntryId,
   Location,
   SlugAtlas,
 } from "@shift/types";
@@ -106,22 +107,42 @@ export class FontSessionClient {
     return this.#fold(applied);
   }
 
-  /** Replays the latest ledger entry; null when nothing is undoable. */
-  async undo(): Promise<AppliedChange | null> {
+  /**
+   * Replays the latest ledger entry, optionally requiring its stable identity.
+   *
+   * @param entryId - Expected next entry; mismatch rejects without replaying another edit.
+   * @returns The applied replacement, or null when ordinary undo has no entry.
+   */
+  async undo(entryId?: LedgerEntryId): Promise<AppliedChange | null> {
     await this.connect();
 
-    const { applied, documentState } = await this.#require().call("workspace.undo", undefined);
-    this.documentStateCell.set(documentState);
-    return applied === null ? null : this.#fold(applied);
+    const response = entryId
+      ? await this.#require().call("workspace.undoEntry", { entryId })
+      : await this.#require().call("workspace.undo", undefined);
+    this.documentStateCell.set(response.documentState);
+    return response.applied === null ? null : this.#fold(response.applied);
   }
 
-  /** Replays the latest undone entry; null when nothing is redoable. */
-  async redo(): Promise<AppliedChange | null> {
+  /**
+   * Replays the latest undone entry, optionally requiring its stable identity.
+   *
+   * @param entryId - Expected next entry; mismatch rejects without replaying another edit.
+   * @returns The applied replacement, or null when ordinary redo has no entry.
+   */
+  async redo(entryId?: LedgerEntryId): Promise<AppliedChange | null> {
     await this.connect();
 
-    const { applied, documentState } = await this.#require().call("workspace.redo", undefined);
-    this.documentStateCell.set(documentState);
-    return applied === null ? null : this.#fold(applied);
+    const response = entryId
+      ? await this.#require().call("workspace.redoEntry", { entryId })
+      : await this.#require().call("workspace.redo", undefined);
+    this.documentStateCell.set(response.documentState);
+    return response.applied === null ? null : this.#fold(response.applied);
+  }
+
+  /** Permanently removes the current document redo branch without changing font state. */
+  async discardRedo(): Promise<void> {
+    await this.connect();
+    await this.#require().call("workspace.discardRedo", undefined);
   }
 
   async snapshot(): Promise<WorkspaceSnapshot | null> {

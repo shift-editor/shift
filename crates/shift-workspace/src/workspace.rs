@@ -21,7 +21,7 @@ use shift_store::{
 use crate::document_identity::{DocumentIdentity, document_identity};
 use crate::import_staging::{create_import_staging_path, install_import_store};
 use crate::layer_residency::LayerResidency;
-use crate::ledger::{GlyphIdentity, LayerPair, Ledger, LedgerEntry, LedgerStep};
+use crate::ledger::{GlyphIdentity, LayerPair, Ledger, LedgerEntry, LedgerEntryId, LedgerStep};
 use crate::{NewWorkspace, stream_into};
 
 #[derive(Debug, thiserror::Error)]
@@ -52,6 +52,13 @@ pub enum WorkspaceError {
 
     #[error("invalid UTF-8 in workspace path: {0}")]
     InvalidPathUtf8(PathBuf),
+
+    #[error("cannot {direction} ledger entry {expected}; next entry is {actual:?}")]
+    LedgerEntryMismatch {
+        direction: &'static str,
+        expected: LedgerEntryId,
+        actual: Option<LedgerEntryId>,
+    },
 
     #[error("workspace file-system error: {0}")]
     Io(#[from] io::Error),
@@ -243,15 +250,25 @@ impl FontWorkspace {
             .map_err(WorkspaceError::from)
     }
 
-    /// Applies a renderer intent set: validate + mutate via shift-font,
-    /// persist the canonical records, swap the live font, record one ledger
-    /// entry. One call = one SQLite transaction = one undo step — including
-    /// sets that batch several create intents.
+    /// Applies a renderer intent set as one persisted and undoable operation.
     pub fn apply(
         &mut self,
         set: FontIntentSet,
         label: Option<String>,
     ) -> Result<AppliedIntents, WorkspaceError> {
+        self.apply_with_entry_id(set, label)
+            .map(|(_, outcome)| outcome)
+    }
+
+    /// Applies one intent set and returns the stable identity of its ledger entry.
+    ///
+    /// One call performs one SQLite transaction and records one undo step,
+    /// including sets that batch several create intents.
+    pub fn apply_with_entry_id(
+        &mut self,
+        set: FontIntentSet,
+        label: Option<String>,
+    ) -> Result<(LedgerEntryId, AppliedIntents), WorkspaceError> {
         let required_layers = set
             .intents
             .iter()
@@ -286,8 +303,8 @@ impl FontWorkspace {
         })?;
 
         let steps = self.ledger_steps(&pre, &outcome);
-        self.ledger.push(label, steps);
-        Ok(outcome)
+        let entry_id = self.ledger.push(label, steps);
+        Ok((entry_id, outcome))
     }
 
     /// Derives the entry's state-pair steps from the applied change set,
@@ -509,11 +526,52 @@ impl FontWorkspace {
         steps
     }
 
+    /// Returns the stable identity of the entry ordinary undo would replay.
+    pub fn next_undo_entry_id(&self) -> Option<LedgerEntryId> {
+        self.ledger.next_undo_id()
+    }
+
+    /// Returns the stable identity of the entry ordinary redo would replay.
+    pub fn next_redo_entry_id(&self) -> Option<LedgerEntryId> {
+        self.ledger.next_redo_id()
+    }
+
     /// Replays the most recent entry's pre states in reverse step order.
     /// `None` when the undo stack is empty. The echo is the same
     /// replace-grade shape as `apply`. A failed replay hands the entry back
     /// so the step stays available for retry.
     pub fn undo(&mut self) -> Result<Option<AppliedIntents>, WorkspaceError> {
+        self.undo_expected(None)
+    }
+
+    /// Replays `expected` only when it is the next ordinary undo entry.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WorkspaceError::LedgerEntryMismatch`] without changing either
+    /// stack when another entry is next.
+    pub fn undo_entry(
+        &mut self,
+        expected: LedgerEntryId,
+    ) -> Result<Option<AppliedIntents>, WorkspaceError> {
+        self.undo_expected(Some(expected))
+    }
+
+    fn undo_expected(
+        &mut self,
+        expected: Option<LedgerEntryId>,
+    ) -> Result<Option<AppliedIntents>, WorkspaceError> {
+        if let Some(expected) = expected {
+            let actual = self.ledger.next_undo_id();
+            if actual != Some(expected) {
+                return Err(WorkspaceError::LedgerEntryMismatch {
+                    direction: "undo",
+                    expected,
+                    actual,
+                });
+            }
+        }
+
         let Some(entry) = self.ledger.pop_undo() else {
             return Ok(None);
         };
@@ -535,6 +593,37 @@ impl FontWorkspace {
     /// A failed replay hands the entry back so the step stays available
     /// for retry.
     pub fn redo(&mut self) -> Result<Option<AppliedIntents>, WorkspaceError> {
+        self.redo_expected(None)
+    }
+
+    /// Replays `expected` only when it is the next ordinary redo entry.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WorkspaceError::LedgerEntryMismatch`] without changing either
+    /// stack when another entry is next.
+    pub fn redo_entry(
+        &mut self,
+        expected: LedgerEntryId,
+    ) -> Result<Option<AppliedIntents>, WorkspaceError> {
+        self.redo_expected(Some(expected))
+    }
+
+    fn redo_expected(
+        &mut self,
+        expected: Option<LedgerEntryId>,
+    ) -> Result<Option<AppliedIntents>, WorkspaceError> {
+        if let Some(expected) = expected {
+            let actual = self.ledger.next_redo_id();
+            if actual != Some(expected) {
+                return Err(WorkspaceError::LedgerEntryMismatch {
+                    direction: "redo",
+                    expected,
+                    actual,
+                });
+            }
+        }
+
         let Some(entry) = self.ledger.pop_redo() else {
             return Ok(None);
         };
@@ -550,6 +639,12 @@ impl FontWorkspace {
                 Err(error)
             }
         }
+    }
+
+    /// Permanently removes every redo entry without changing live font state
+    /// or the current/saved document positions.
+    pub fn discard_redo(&mut self) {
+        self.ledger.discard_redo();
     }
 
     fn replay(

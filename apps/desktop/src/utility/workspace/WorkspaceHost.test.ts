@@ -1180,7 +1180,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     const contourId = mintContourId();
     const p1 = mintPointId();
 
-    await applyWorkspace(sync, {
+    const drawn = await applyWorkspace(sync, {
       intents: [
         { kind: "addContour", addContour: { layerId, contourId, closed: false } },
         {
@@ -1194,12 +1194,33 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
       ],
       label: "Draw",
     });
+    if (!drawn.ledgerEntryId) throw new Error("workspace apply did not identify its ledger entry");
 
-    const undone = await undoWorkspace(sync);
+    const undone = (await sync.call("workspace.undoEntry", { entryId: drawn.ledgerEntryId }))
+      .applied;
+    expect(undone?.ledgerEntryId).toBe(drawn.ledgerEntryId);
     expect(undone?.layers[0].structure?.contours).toEqual([]);
 
-    const redone = await redoWorkspace(sync);
+    const redone = (await sync.call("workspace.redoEntry", { entryId: drawn.ledgerEntryId }))
+      .applied;
+    expect(redone?.ledgerEntryId).toBe(drawn.ledgerEntryId);
     expect(redone?.layers[0].structure?.contours[0].points.map((point) => point.id)).toEqual([p1]);
+  });
+
+  it("discarding redo prevents replay without changing document state", async () => {
+    const sync = await connectSyncLane();
+    const snapshot = await createWorkspace(sync);
+    const created = await applyWorkspace(sync, {
+      intents: createGlyphALayer(snapshot.sources[0].id).intents,
+    });
+    expect(created.ledgerEntryId).toBeDefined();
+
+    await undoWorkspace(sync);
+    const before = await sync.call("document.state", undefined);
+    await sync.call("workspace.discardRedo", undefined);
+
+    await expect(redoWorkspace(sync)).resolves.toBeNull();
+    await expect(sync.call("document.state", undefined)).resolves.toEqual(before);
   });
 
   it("undo on an empty ledger answers null", async () => {

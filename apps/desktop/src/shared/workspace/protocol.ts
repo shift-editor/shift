@@ -15,6 +15,7 @@ import type {
   GlyphRecord,
   GlyphState,
   GlyphSnapshot,
+  LedgerEntryId,
   Location,
   MetricDefinition,
   SourceMetricsInterpolationSnapshot,
@@ -259,6 +260,14 @@ export type SyncCallMap = {
       documentState: WorkspaceDocumentState | null;
     };
   };
+  /** Replays `entryId` only when it is the next ordinary undo entry. */
+  "workspace.undoEntry": {
+    request: { entryId: LedgerEntryId };
+    response: {
+      applied: AppliedChange | null;
+      documentState: WorkspaceDocumentState | null;
+    };
+  };
   "workspace.redo": {
     request: void;
     response: {
@@ -266,6 +275,16 @@ export type SyncCallMap = {
       documentState: WorkspaceDocumentState | null;
     };
   };
+  /** Replays `entryId` only when it is the next ordinary redo entry. */
+  "workspace.redoEntry": {
+    request: { entryId: LedgerEntryId };
+    response: {
+      applied: AppliedChange | null;
+      documentState: WorkspaceDocumentState | null;
+    };
+  };
+  /** Permanently removes the current document redo branch without changing font state. */
+  "workspace.discardRedo": { request: void; response: null };
   /**
    * Saves to the current canonical document, or rejects when the workspace still
    * needs a path. Rides the edit lane so the utility serializes it behind every

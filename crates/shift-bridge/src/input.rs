@@ -4,6 +4,7 @@ use shift_font::{
   AnchorId, AxisId, AxisLabelId, AxisMappingId, ComponentId, ContourId, GlyphId, GuidelineId,
   LayerId, MetricId, NamedInstanceId, PointId, SourceId,
 };
+use shift_workspace::LedgerEntryId;
 
 use crate::errors::{BridgeError, BridgeResult};
 
@@ -72,4 +73,8 @@ impl BridgeParse for LayerId {
 
 impl BridgeParse for SourceId {
   const KIND: &'static str = "source ID";
+}
+
+impl BridgeParse for LedgerEntryId {
+  const KIND: &'static str = "ledger entry ID";
 }
