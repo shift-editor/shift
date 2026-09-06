@@ -157,6 +157,35 @@ test.describe("Toolbar tools", () => {
     });
   }
 
+  test("loads crosshair images before the first keyboard shape switch", async ({ page }) => {
+    const session = await page.context().newCDPSession(page);
+    const { frameTree } = await session.send("Page.getResourceTree");
+    await session.detach();
+    const loaded = frameTree.resources
+      .filter((resource) => resource.type === "Image")
+      .map((resource) => new URL(resource.url).pathname.split("/").at(-1));
+    expect(loaded).toEqual(
+      expect.arrayContaining([
+        "crosshair@32.svg",
+        "crosshair@64.svg",
+        "crosshair@32-circle.svg",
+        "crosshair@64-circle.svg",
+        "crosshair@32-square.svg",
+        "crosshair@64-square.svg",
+      ]),
+    );
+
+    const canvas = page.locator("#interactive-canvas");
+    await canvas.hover();
+    for (const key of ["o", "r", "o", "r"]) {
+      await page.keyboard.press(key);
+      await expect(canvas).toHaveCSS(
+        "cursor",
+        key === "o" ? /crosshair@32-circle\.svg/ : /crosshair@32-square\.svg/,
+      );
+    }
+  });
+
   test("selects shape kinds from the menu and keyboard", async ({ page }) => {
     await page.getByRole("button", { name: "Rectangle Tool (R) options" }).click();
     const rectangleItem = page.getByRole("menuitemcheckbox", { name: "Rectangle R" });
@@ -166,14 +195,19 @@ test.describe("Toolbar tools", () => {
     await expect(page).toHaveScreenshot("shape-menu.png");
     await ellipseItem.click();
     await expect(page.getByRole("button", { name: "Ellipse Tool (O)", exact: true })).toBeVisible();
+    const canvas = page.locator("#interactive-canvas");
+    await canvas.hover();
+    await expect(canvas).toHaveCSS("cursor", /crosshair@32-circle\.svg.*12 9, crosshair/);
 
     await page.keyboard.press("r");
     await expect(
       page.getByRole("button", { name: "Rectangle Tool (R)", exact: true }),
     ).toBeVisible();
+    await expect(canvas).toHaveCSS("cursor", /crosshair@32-square\.svg.*12 9, crosshair/);
 
     await page.keyboard.press("o");
     await expect(page.getByRole("button", { name: "Ellipse Tool (O)", exact: true })).toBeVisible();
+    await expect(canvas).toHaveCSS("cursor", /crosshair@32-circle\.svg.*12 9, crosshair/);
   });
 
   for (const label of ["Ellipse Tool (O)", "Select Tool (V)", "Pen Tool (P)", "Hand Tool (H)"]) {
@@ -232,6 +266,10 @@ test.describe("Toolbar tools", () => {
       });
       expect(draft.points).toBe(kind === "Ellipse" ? 12 : 4);
       expect(draft.handles).toBe(false);
+      await expect(canvas).toHaveCSS(
+        "cursor",
+        kind === "Ellipse" ? /crosshair@32-circle\.svg/ : /crosshair@32-square\.svg/,
+      );
       const properties = page.getByRole("complementary", { name: "Glyph properties" });
       await expect(properties.getByLabel("X position", { exact: true })).toHaveValue(
         String(Math.round(draft.bounds.x)),

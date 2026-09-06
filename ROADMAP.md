@@ -412,7 +412,7 @@ These are allowed to jump around when energy is high, but they should not silent
 - [x] Click on hovered segment → insert point at t parameter
 - [ ] Preview point position while hovering
 - [ ] Alt+click to split segment
-- [x] Option+click upgrade segment
+- [x] Cmd+click upgrade segment with handle-position previews
 
 **Visual Indicators**
 

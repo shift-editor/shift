@@ -8,14 +8,22 @@ export function cursorToCSS(cursor: CursorType): string {
       return `-webkit-image-set(url("../cursors/cursor@32-moving.svg") 1x, url("../cursors/cursor@64-moving.svg") 2x) 5 0, move`;
     case "copy":
       return `-webkit-image-set(url("../cursors/cursor@32-copy.svg") 1x, url("../cursors/cursor@64-copy.svg") 2x) 5 0, copy`;
+    case "add":
+      return `-webkit-image-set(url("../cursors/cursor@32-add.svg") 1x, url("../cursors/cursor@64-add.svg") 2x) 5 0, default`;
     case "bend":
       return `-webkit-image-set(url("../cursors/cursor@32-bend.svg") 1x, url("../cursors/cursor@64-bend.svg") 2x) 5 0, default`;
+    case "crosshair":
+      return `-webkit-image-set(url("../cursors/crosshair@32.svg") 1x, url("../cursors/crosshair@64.svg") 2x) 12 9, crosshair`;
+    case "crosshair-circle":
+      return `-webkit-image-set(url("../cursors/crosshair@32-circle.svg") 1x, url("../cursors/crosshair@64-circle.svg") 2x) 12 9, crosshair`;
+    case "crosshair-square":
+      return `-webkit-image-set(url("../cursors/crosshair@32-square.svg") 1x, url("../cursors/crosshair@64-square.svg") 2x) 12 9, crosshair`;
     case "pen":
-      return `-webkit-image-set(url("../cursors/pen@32.svg") 1x, url("../cursors/pen@64.svg") 2x) 8 8, crosshair`;
+      return `-webkit-image-set(url("../cursors/pen@32.svg") 1x, url("../cursors/pen@64.svg") 2x) 6 3, crosshair`;
     case "pen-add":
-      return `-webkit-image-set(url("../cursors/pen@32-add.svg") 1x, url("../cursors/pen@64-add.svg") 2x) 8 8, crosshair`;
+      return `-webkit-image-set(url("../cursors/pen@32-add.svg") 1x, url("../cursors/pen@64-add.svg") 2x) 6 3, crosshair`;
     case "pen-end":
-      return `-webkit-image-set(url("../cursors/pen@32-end.svg") 1x, url("../cursors/pen@64-end.svg") 2x) 8 8, crosshair`;
+      return `-webkit-image-set(url("../cursors/pen@32-end.svg") 1x, url("../cursors/pen@64-end.svg") 2x) 6 3, crosshair`;
     case "ew-resize":
       return `-webkit-image-set(url("../cursors/resize@32-ew.svg") 1x, url("../cursors/resize@64-ew.svg") 2x) 16 16, ew-resize`;
     case "ns-resize":

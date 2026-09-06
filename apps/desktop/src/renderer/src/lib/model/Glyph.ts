@@ -774,6 +774,10 @@ export class GlyphLayer {
     const points = segment.asLine();
     if (!points) return false;
 
+    const contourId = this.contourIdOfPoint(points.end.id);
+    const contour = contourId ? this.contour(contourId) : null;
+    if (!contour) return false;
+
     this.#writer.transaction("Upgrade line to cubic", () => {
       const control1Pos = {
         x: points.start.x + (points.end.x - points.start.x) / 3,
@@ -783,6 +787,14 @@ export class GlyphLayer {
         x: points.start.x + ((points.end.x - points.start.x) * 2) / 3,
         y: points.start.y + ((points.end.y - points.start.y) * 2) / 3,
       };
+
+      if (contour.closed && contour.points[0]?.id === points.end.id) {
+        this.#writer.addPoints(contour.id, [
+          Point.offCurve(control1Pos),
+          Point.offCurve(control2Pos),
+        ]);
+        return;
+      }
 
       const control2Id = this.insertPointBefore(points.end.id, Point.offCurve(control2Pos));
       this.insertPointBefore(control2Id, Point.offCurve(control1Pos));
