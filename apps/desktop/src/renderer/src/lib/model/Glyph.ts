@@ -277,6 +277,11 @@ class GlyphLayerWriter {
     this.#state.state.reverseContour(editId, contourId);
   }
 
+  setContourStart(contourId: ContourId, pointId: PointId): void {
+    const editId = this.#intents.setContourStart({ contourId, pointId });
+    this.#state.state.setContourStart(editId, contourId, pointId);
+  }
+
   applyBooleanOp(
     contourIdA: ContourId,
     contourIdB: ContourId,
@@ -739,6 +744,25 @@ export class GlyphLayer {
   }
 
   /**
+   * Makes an on-curve point the start of a closed contour without changing its shape or winding.
+   *
+   * @param contourId - Closed contour whose ordered point cycle is rotated.
+   * @param pointId - Existing on-curve point in that contour.
+   * @returns False for an invalid target or an unchanged start; otherwise records one undoable edit.
+   */
+  setContourStart(contourId: ContourId, pointId: PointId): boolean {
+    const contour = this.contour(contourId);
+    if (!contour?.closed || contour.points[0]?.id === pointId) return false;
+    const point = contour.points.find((point) => point.id === pointId);
+    if (!point || !Point.isOnCurve(point)) return false;
+
+    this.#writer.transaction("Make First Point", () => {
+      this.#writer.setContourStart(contourId, pointId);
+    });
+    return true;
+  }
+
+  /**
    * Splits a current segment and preserves its shape.
    *
    * @param segmentId - Segment in this layer's current geometry to split.
@@ -774,6 +798,10 @@ export class GlyphLayer {
     const points = segment.asLine();
     if (!points) return false;
 
+    const contourId = this.contourIdOfPoint(points.end.id);
+    const contour = contourId ? this.contour(contourId) : null;
+    if (!contour) return false;
+
     this.#writer.transaction("Upgrade line to cubic", () => {
       const control1Pos = {
         x: points.start.x + (points.end.x - points.start.x) / 3,
@@ -783,6 +811,14 @@ export class GlyphLayer {
         x: points.start.x + ((points.end.x - points.start.x) * 2) / 3,
         y: points.start.y + ((points.end.y - points.start.y) * 2) / 3,
       };
+
+      if (contour.closed && contour.points[0]?.id === points.end.id) {
+        this.#writer.addPoints(contour.id, [
+          Point.offCurve(control1Pos),
+          Point.offCurve(control2Pos),
+        ]);
+        return;
+      }
 
       const control2Id = this.insertPointBefore(points.end.id, Point.offCurve(control2Pos));
       this.insertPointBefore(control2Id, Point.offCurve(control1Pos));

@@ -2184,6 +2184,16 @@ fn map_intent(intent: NapiFontIntent) -> errors::Result<FontIntent> {
         contour_id: parse::<ContourId>(&payload.contour_id)?,
       })
     }
+    "setContourStart" => {
+      let payload = intent
+        .set_contour_start
+        .ok_or_else(|| missing("setContourStart"))?;
+      Ok(FontIntent::SetContourStart {
+        layer_id: parse::<LayerId>(&payload.layer_id)?,
+        contour_id: parse::<ContourId>(&payload.contour_id)?,
+        point_id: parse::<PointId>(&payload.point_id)?,
+      })
+    }
     "translatePoints" => {
       let payload = intent
         .translate_points
@@ -2591,6 +2601,7 @@ mod tests {
       move_anchors: None,
       remove_anchors: None,
       reverse_contour: None,
+      set_contour_start: None,
       translate_points: None,
       set_x_advance: None,
       apply_boolean_op: None,

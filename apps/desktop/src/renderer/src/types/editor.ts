@@ -9,8 +9,11 @@ export type CursorType =
   | { type: "grabbing" }
   | { type: "move" }
   | { type: "copy" }
+  | { type: "add" }
   | { type: "bend" }
   | { type: "crosshair" }
+  | { type: "crosshair-circle" }
+  | { type: "crosshair-square" }
   | { type: "pen" }
   | { type: "pen-add" }
   | { type: "pen-end" }

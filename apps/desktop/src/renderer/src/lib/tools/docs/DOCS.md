@@ -155,6 +155,10 @@ Tools can implement up to three rendering hooks, each tied to a different redraw
 
 All three receive a `Canvas` instance.
 
+### Line upgrade preview
+
+In Select's `ready` state, Cmd-hovering an active authored line shows the bend cursor and two solid grey circles at one-third and two-thirds of the segment. `SelectUpgradePreview.props()` tracks tool state, modifiers, pointer presence, hover, active source, and current geometry, deriving scene-space handle positions without mutating anything. `drawOverlay` delegates to this canvas item, which uses `UPGRADE_PREVIEW_STYLE` for a fixed screen-pixel radius. Releasing Cmd, leaving the segment or canvas, or starting a gesture removes the preview. Cmd-click upgrades the line into a shape-preserving cubic with handles at those positions; Alt-click no longer upgrades. Existing cubics retain Cmd-drag bending and do not show upgrade previews. Upgrading the closing line appends its handles in traversal order, preserving the original on-curve contour start.
+
 ### Cursor
 
 `BaseTool.cursorCell` is a computed signal derived from `getCursor(state)`. Override `getCursor` to return state-dependent cursors. Inside `getCursor`, reading `editor.getHoveredBoundingBoxHandle()`, `editor.getCurrentModifiers()`, or `editor.getIsHoveringNode()` makes the cursor reactive to hover and modifier changes.

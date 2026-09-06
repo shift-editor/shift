@@ -3,7 +3,7 @@ import type { ContourData, PointId, PointSeed } from "@shift/types";
 import {
   Contour,
   type GlyphPosition,
-  type Point,
+  Point,
   type Segment,
   type SegmentId,
 } from "@shift/glyph-state";
@@ -175,6 +175,29 @@ export class ContourBuffer {
       this.#dataCell.set({ ...data, points: [...data.points].reverse() });
       this.#coordinatesCell.set(coordinates);
     });
+  }
+
+  setContourStart(pointId: PointId): boolean {
+    const data = this.#dataCell.peek();
+    if (!data.closed) return false;
+
+    const index = this.pointIndex(pointId);
+    if (index <= 0 || !Point.isOnCurve(data.points[index])) return false;
+
+    const points = [...data.points.slice(index), ...data.points.slice(0, index)];
+    const coordinates = this.#coordinatesCell.peek();
+    const values: number[] = [];
+    for (let offset = 0; offset < points.length; offset++) {
+      const next = (index + offset) % points.length;
+      values.push(coordinates.getComponent(next, 0), coordinates.getComponent(next, 1));
+    }
+
+    batch(() => {
+      coordinates.replace(new Float64Array(values));
+      this.#dataCell.set({ ...data, points });
+      this.#coordinatesCell.set(coordinates);
+    });
+    return true;
   }
 
   patchPositions(updates: readonly GlyphPosition[]): void {

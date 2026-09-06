@@ -422,7 +422,7 @@ export interface FontIntent {
    * Discriminator naming the populated payload field. Editing kinds:
    * "addPoints" | "addContour" | "setContourClosed" | "movePoints" |
    * "setPointSmooth" | "removePoints" | "addAnchors" | "moveAnchors" |
-   * "removeAnchors" | "reverseContour" | "translatePoints" |
+   * "removeAnchors" | "reverseContour" | "setContourStart" | "translatePoints" |
    * "setXAdvance" | "applyBooleanOp".
    * Font-level kinds additionally include metadata replacement, axis
    * create/update/delete, mapping replacement, named-instance
@@ -440,6 +440,7 @@ export interface FontIntent {
   moveAnchors?: MoveAnchorsIntent
   removeAnchors?: RemoveAnchorsIntent
   reverseContour?: ReverseContourIntent
+  setContourStart?: SetContourStartIntent
   translatePoints?: TranslatePointsIntent
   setXAdvance?: SetXAdvanceIntent
   applyBooleanOp?: BooleanOpIntent
@@ -749,6 +750,13 @@ export interface SetContourClosedIntent {
   layerId: LayerId
   contourId: ContourId
   closed: boolean
+}
+
+/** Selects an existing on-curve start for a closed contour; does not move or convert points. */
+export interface SetContourStartIntent {
+  layerId: LayerId
+  contourId: ContourId
+  pointId: PointId
 }
 
 export interface SetMetricDefinitionsIntent {

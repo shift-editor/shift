@@ -175,7 +175,8 @@ describe("closed contour deletion treats the array boundary cyclically", () => {
 
   it("fits across leading off-curve controls without treating them as an open endpoint", async () => {
     const closing = layer().contours[0].segments().at(-1)!;
-    layer().upgradeLineToCubic(closing.id);
+    layer().insertPointBefore(closing.endId, Point.offCurve(closing.pointAt(1 / 3)));
+    layer().insertPointBefore(closing.endId, Point.offCurve(closing.pointAt(2 / 3)));
     await editor.settle();
     expect(Point.isOffCurve(layer().allPoints[0])).toBe(true);
     editor.selection.select([closing.endId]);
@@ -196,8 +197,10 @@ describe("closed contour deletion treats the array boundary cyclically", () => {
 
   it("converts the wrapped cubic to a line when a leading control is selected", async () => {
     const closing = layer().contours[0].segments().at(-1)!;
-    layer().upgradeLineToCubic(closing.id);
+    layer().insertPointBefore(closing.endId, Point.offCurve(closing.pointAt(1 / 3)));
+    layer().insertPointBefore(closing.endId, Point.offCurve(closing.pointAt(2 / 3)));
     await editor.settle();
+    expect(Point.isOffCurve(layer().allPoints[0])).toBe(true);
     editor.selection.select([layer().allPoints[0].id]);
     await editor.deleteSelection();
     expect(layer().allPoints.every(Point.isOnCurve)).toBe(true);
@@ -207,6 +210,22 @@ describe("closed contour deletion treats the array boundary cyclically", () => {
         .map((segment) => segment.type),
     ).toEqual(["line", "line", "line", "line", "line"]);
     expect(layer().contours[0].closed).toBe(true);
+  });
+
+  it("removes a closing cubic's handles without moving the preserved contour start", async () => {
+    const closing = layer().contours[0].segments().at(-1)!;
+    const before = layer().allPoints;
+    layer().upgradeLineToCubic(closing.id);
+    await editor.settle();
+    const cubic = layer().segment(closing.id)!.asCubic()!;
+    expect(layer().allPoints[0].id).toBe(before[0].id);
+    editor.selection.select([cubic.controlStart.id]);
+    await editor.deleteSelection();
+    expect(layer().allPoints).toEqual(before);
+    expect(layer().contours[0].closed).toBe(true);
+    await editor.undo();
+    expect(layer().segment(closing.id)?.type).toBe("cubic");
+    expect(layer().allPoints[0].id).toBe(before[0].id);
   });
 
   it("removes unselected handles when every on-curve point is selected", async () => {

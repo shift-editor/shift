@@ -161,6 +161,7 @@ export class ToolManager implements ToolSwitchHandler {
     const force = options?.force ?? false;
     if (
       !force &&
+      this.editor.input.pointerCell.peek() !== null &&
       this.lastScreenPoint &&
       screenPoint.x === this.lastScreenPoint.x &&
       screenPoint.y === this.lastScreenPoint.y

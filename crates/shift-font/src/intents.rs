@@ -93,6 +93,12 @@ pub enum FontIntent {
         layer_id: LayerId,
         contour_id: ContourId,
     },
+    /// Rotates a closed contour to an existing on-curve point without changing its geometry.
+    SetContourStart {
+        layer_id: LayerId,
+        contour_id: ContourId,
+        point_id: PointId,
+    },
     /// Affine move: O(selection-ids) wire instead of O(N) coords.
     TranslatePoints {
         layer_id: LayerId,
@@ -218,6 +224,7 @@ impl FontIntent {
             | Self::MoveAnchors { layer_id, .. }
             | Self::RemoveAnchors { layer_id, .. }
             | Self::ReverseContour { layer_id, .. }
+            | Self::SetContourStart { layer_id, .. }
             | Self::TranslatePoints { layer_id, .. }
             | Self::SetXAdvance { layer_id, .. }
             | Self::ApplyBooleanOp { layer_id, .. } => Some(layer_id),
@@ -260,6 +267,7 @@ impl FontIntent {
             | Self::MoveAnchors { layer_id, .. }
             | Self::RemoveAnchors { layer_id, .. }
             | Self::ReverseContour { layer_id, .. }
+            | Self::SetContourStart { layer_id, .. }
             | Self::TranslatePoints { layer_id, .. }
             | Self::SetXAdvance { layer_id, .. }
             | Self::ApplyBooleanOp { layer_id, .. } => vec![layer_id.clone()],
@@ -1083,6 +1091,16 @@ impl Font {
             } => {
                 let layer = self.layer_mut_or_err(layer_id)?;
                 layer.reverse_contour(contour_id.clone())?;
+
+                Ok(FontChange::layer_geometry_replaced(layer))
+            }
+            FontIntent::SetContourStart {
+                layer_id,
+                contour_id,
+                point_id,
+            } => {
+                let layer = self.layer_mut_or_err(layer_id)?;
+                layer.set_contour_start(contour_id.clone(), point_id.clone())?;
 
                 Ok(FontChange::layer_geometry_replaced(layer))
             }

@@ -191,6 +191,10 @@ export class GlyphLayerState {
     return this.#applyEdit(editId, () => this.#buffers.peek().reverseContour(contourId));
   }
 
+  setContourStart(editId: PendingEditId, contourId: ContourId, pointId: PointId): boolean {
+    return this.#applyEdit(editId, () => this.#buffers.peek().setContourStart(contourId, pointId));
+  }
+
   translatePoints(
     editId: PendingEditId,
     pointIds: readonly PointId[],

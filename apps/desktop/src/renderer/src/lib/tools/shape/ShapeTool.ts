@@ -32,7 +32,12 @@ export class ShapeTool extends BaseTool<ShapeState, ShapeTool> {
   }
 
   override getCursor(): CursorType {
-    return { type: "crosshair" };
+    switch (this.#shapeKindCell.value) {
+      case "rectangle":
+        return { type: "crosshair-square" };
+      case "ellipse":
+        return { type: "crosshair-circle" };
+    }
   }
 
   protected override isEditing(state: ShapeState): boolean {

@@ -82,6 +82,7 @@ export type {
   RemovePointsIntent,
   ReverseContourIntent,
   SetContourClosedIntent,
+  SetContourStartIntent,
   SetPointSmoothIntent,
   SetXAdvanceIntent,
   SlugAtlas,
