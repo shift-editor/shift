@@ -273,6 +273,91 @@ test.describe("Editor view", () => {
     });
   }
 
+  for (const dimension of ["width", "height"] as const) {
+    for (const anchor of ["Anchor top left", "Anchor bottom right"]) {
+      test(`changes dimension ${dimension} independently from visual top-left with ${anchor}`, async ({
+        page,
+      }, testInfo) => {
+        await page.keyboard.press("Meta+a");
+        const properties = glyphProperties(page);
+        const initialBounds = await selectionBounds(page);
+        await properties.getByLabel(anchor, { exact: true }).click();
+        await setInputValue(
+          properties.getByLabel(`Dimension ${dimension}`, { exact: true }),
+          initialBounds[dimension] * 2,
+        );
+
+        await expect
+          .poll(() => selectionBounds(page))
+          .toMatchObject({
+            x: initialBounds.x,
+            y: dimension === "height" ? initialBounds.y - initialBounds.height : initialBounds.y,
+            width: initialBounds.width * (dimension === "width" ? 2 : 1),
+            height: initialBounds.height * (dimension === "height" ? 2 : 1),
+          });
+        await expect(properties.getByLabel(`Dimension ${dimension}`, { exact: true })).toHaveValue(
+          String(Math.round(initialBounds[dimension] * 2)),
+        );
+        await expect(
+          properties.getByLabel(dimension === "width" ? "Width" : "Height", { exact: true }),
+        ).toHaveValue(String(Math.round(initialBounds[dimension] * 2)));
+        await properties.getByText("Dimensions", { exact: true }).scrollIntoViewIfNeeded();
+        await testInfo.attach(`independent-${dimension}`, {
+          body: await properties.screenshot({
+            path: testInfo.outputPath(`independent-${dimension}.png`),
+          }),
+          contentType: "image/png",
+        });
+        await page.evaluate(() => window.shift!.editor.undo());
+        await expect.poll(() => selectionBounds(page)).toEqual(initialBounds);
+        await expect(properties.getByLabel(`Dimension ${dimension}`, { exact: true })).toHaveValue(
+          String(Math.round(initialBounds[dimension])),
+        );
+      });
+    }
+
+    test(`resizes proportionally from the Scale ${dimension} field around the selected anchor`, async ({
+      page,
+    }, testInfo) => {
+      await page.keyboard.press("Meta+a");
+      const properties = glyphProperties(page);
+      const initialBounds = await selectionBounds(page);
+      await properties.getByLabel("Anchor top left", { exact: true }).click();
+      await setInputValue(
+        properties.getByLabel(dimension === "width" ? "Width" : "Height", { exact: true }),
+        initialBounds[dimension] * 2,
+      );
+
+      await expect
+        .poll(() => selectionBounds(page))
+        .toMatchObject({
+          x: initialBounds.x,
+          y: initialBounds.y,
+          width: initialBounds.width * 2,
+          height: initialBounds.height * 2,
+        });
+      await expect(properties.getByLabel("Width", { exact: true })).toHaveValue(
+        String(Math.round(initialBounds.width * 2)),
+      );
+      await expect(properties.getByLabel("Height", { exact: true })).toHaveValue(
+        String(Math.round(initialBounds.height * 2)),
+      );
+      await expect(properties.getByLabel("Dimension width", { exact: true })).toHaveValue(
+        String(Math.round(initialBounds.width * 2)),
+      );
+      await expect(properties.getByLabel("Dimension height", { exact: true })).toHaveValue(
+        String(Math.round(initialBounds.height * 2)),
+      );
+      await properties.getByText("Dimensions", { exact: true }).scrollIntoViewIfNeeded();
+      await testInfo.attach(`dimensions-${dimension}`, {
+        body: await properties.screenshot({
+          path: testInfo.outputPath(`dimensions-${dimension}.png`),
+        }),
+        contentType: "image/png",
+      });
+    });
+  }
+
   test("applies scaling around the selected scale anchor", async ({ page }) => {
     await page.keyboard.press("Meta+a");
     const properties = glyphProperties(page);

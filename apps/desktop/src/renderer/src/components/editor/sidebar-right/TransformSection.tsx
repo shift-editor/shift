@@ -112,6 +112,8 @@ export const TransformSection = () => {
   const selectionBounds = useSelectionBounds();
   const [rotation, setRotation] = useState(0);
 
+  const widthRef = useRef<EditableSidebarInputHandle>(null);
+  const heightRef = useRef<EditableSidebarInputHandle>(null);
   const xRef = useRef<EditableSidebarInputHandle>(null);
   const yRef = useRef<EditableSidebarInputHandle>(null);
   const layer = isEditing ? null : (positionSelection?.layer ?? null);
@@ -128,6 +130,38 @@ export const TransformSection = () => {
     xRef.current?.setValue(Math.round(selectionBounds.min.x));
     yRef.current?.setValue(Math.round(selectionBounds.min.y));
   }, [selectedPointIds, selectionBounds]);
+
+  useEffect(() => {
+    if (!widthRef.current || !heightRef.current) return;
+    if (!selectionBounds) return;
+
+    const width = Bounds.width(selectionBounds);
+    const height = Bounds.height(selectionBounds);
+
+    widthRef.current.setValue(Math.round(width));
+    heightRef.current.setValue(Math.round(height));
+  }, [selectionBounds]);
+
+  const handleDimensionsChange = useCallback(
+    (dimension: "width" | "height", value: number) => {
+      if (!layer) return;
+      if (!selectionBounds) return;
+
+      const current =
+        dimension === "width" ? Bounds.width(selectionBounds) : Bounds.height(selectionBounds);
+      if (current === 0) return;
+
+      const factor = value / current;
+      const anchorPoint = { x: selectionBounds.min.x, y: selectionBounds.max.y };
+      layer.scale(
+        selectedPointIds,
+        dimension === "width" ? factor : 1,
+        dimension === "height" ? factor : 1,
+        anchorPoint,
+      );
+    },
+    [layer, selectedPointIds, selectionBounds],
+  );
 
   const editable = positionSelection !== null;
   const canDistribute = editable && selectedPointIds.length >= 3;
@@ -205,6 +239,27 @@ export const TransformSection = () => {
         <div className="text-xs text-secondary">Distribute</div>
         <DistributeButtonsRow onDistribute={handleDistribute} canDistribute={canDistribute} />
       </div>
+
+      <div className="flex flex-col gap-2">
+        <div className="text-xs text-secondary">Dimensions</div>
+        <div className="flex gap-2">
+          <EditableSidebarInput
+            ref={widthRef}
+            ariaLabel="Dimension width"
+            label="W"
+            disabled={!editable}
+            onValueChange={(v) => handleDimensionsChange("width", v)}
+          />
+          <EditableSidebarInput
+            ref={heightRef}
+            ariaLabel="Dimension height"
+            label="H"
+            disabled={!editable}
+            onValueChange={(v) => handleDimensionsChange("height", v)}
+          />
+        </div>
+      </div>
+
       <div className="flex flex-col gap-2">
         <div className="text-xs text-secondary">Position</div>
         <div className="flex gap-2">
