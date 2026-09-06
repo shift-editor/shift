@@ -1,6 +1,6 @@
 # @shift/types
 
-<!-- reviewed: 2026-08-19 review-every: 90d -->
+<!-- reviewed: 2026-09-06 review-every: 90d -->
 
 Shared DTO TypeScript types for Shift. This package owns branded IDs and bridge DTOs generated from `shift-bridge`.
 
@@ -9,7 +9,7 @@ Shared DTO TypeScript types for Shift. This package owns branded IDs and bridge 
 - **Architecture Invariant: CRITICAL:** `src/bridge/generated.ts` is generated from `crates/shift-bridge/index.d.ts` by `scripts/generate-bridge-types.mjs`. Never edit it manually.
 - **Architecture Invariant: CRITICAL:** `@shift/types` is the canonical TypeScript DTO facade for the native bridge. It strips `Napi*` prefixes and exports type-only DTOs.
 - **Architecture Invariant:** Editor-owned state types (selection, tools, camera, command history, renderer snapshots) do not live here. `src/domain.ts` holds only small derived domain shapes built from bridge DTOs: `AxisDefinition` and `NamedInstanceDefinition` (definitions before the editor assigns stable identity) and resolved `SourceMetrics`.
-- **Architecture Invariant:** Entity IDs are branded string types. TypeScript mints IDs for synchronous create intents where the renderer must know identity immediately (for example `GlyphId`, `AxisId`, `AxisLabelId`, `AxisMappingId`, `NamedInstanceId`, and point/contour/anchor IDs); Rust validates and honors those IDs. Use `as*Id()` helpers to cast raw bridge strings into branded types. Compiled variation contributions never fabricate entity IDs.
+- **Architecture Invariant:** Entity IDs are branded string types. TypeScript mints IDs for synchronous create intents where the renderer must know identity immediately (for example `GlyphId`, `AxisId`, `AxisLabelId`, `AxisMappingId`, `NamedInstanceId`, and point/contour/anchor IDs); Rust validates and honors those IDs. Use `as*Id()` helpers to cast raw bridge strings into branded types. Compiled variation contributions never fabricate entity IDs. `LedgerEntryId` is different: Rust mints this process-local history identity and TypeScript may only transport it back for identified replay.
 - **Architecture Invariant:** This package ships raw `.ts` source. `package.json` points `main` and `types` directly at `src/index.ts`.
 
 ## Codemap
@@ -39,7 +39,8 @@ Import from `@shift/types`.
 - `AxisMappingBasis` -- mapping identity and ordered input/output axes plus a compiled normalized-adjustment basis.
 - `GlyphVariation` -- imported fallback-relative numeric variation without fabricated authored source identities.
 - `GlyphProjection` -- location-independent renderer backing with fallback shape, optional authored interpolation or imported variation, exact-source shapes, and component identities.
-- `AppliedChange` -- replace-grade mutation response returned by apply/undo/redo; its optional `next.metadata` is a complete replacement.
+- `AppliedChange` -- replace-grade mutation response returned by apply/undo/redo; `ledgerEntryId` identifies the Rust history entry and optional `next.metadata` is a complete replacement.
+- `LedgerEntryId` -- branded process-local identity for one Rust document ledger entry; it is not authored font identity or durable document state.
 - `Axis` / `AxisMapping` / `NamedInstance` -- generated variation authoring DTOs, keyed by branded entity IDs and expressed in Shift coordinate spaces.
 - `SourceMetricsInterpolationSnapshot` -- derived metric schema, reusable interpolation basis, and ordered source values; it is workspace transport state, not an authored source or named instance.
 - `LayerReplaced` -- one replaced glyph layer in an applied change.
