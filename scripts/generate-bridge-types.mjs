@@ -27,6 +27,7 @@ const idTypeNames = new Set([
   "AxisMappingId",
   "ComponentId",
   "GuidelineId",
+  "LedgerEntryId",
   "SourceId",
   "NamedInstanceId",
 ]);

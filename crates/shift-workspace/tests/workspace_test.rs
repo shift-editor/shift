@@ -2357,6 +2357,45 @@ fn create_source_undo_redo_removes_and_restores_source() {
 }
 
 #[test]
+fn identified_replay_rejects_a_different_next_entry_without_mutation() {
+    let temp = tempfile::tempdir().unwrap();
+    let store_path = temp.path().join("working.sqlite");
+    let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
+    let (first_id, _) = workspace
+        .apply_with_entry_id(
+            FontIntentSet {
+                intents: vec![create_glyph_intent("A", vec![65])],
+            },
+            None,
+        )
+        .unwrap();
+    let (second_id, _) = workspace
+        .apply_with_entry_id(
+            FontIntentSet {
+                intents: vec![create_glyph_intent("B", vec![66])],
+            },
+            None,
+        )
+        .unwrap();
+
+    let error = match workspace.undo_entry(first_id) {
+        Ok(_) => panic!("identified undo should reject a different next entry"),
+        Err(error) => error,
+    };
+
+    assert!(matches!(
+        error,
+        WorkspaceError::LedgerEntryMismatch {
+            direction: "undo",
+            expected,
+            actual: Some(actual),
+        } if expected == first_id && actual == second_id
+    ));
+    assert_eq!(workspace.font().glyph_count(), 2);
+    assert_eq!(workspace.next_undo_entry_id(), Some(second_id));
+}
+
+#[test]
 fn failed_undo_replay_hands_the_entry_back_for_retry() {
     let temp = tempfile::tempdir().unwrap();
     let store_path = temp.path().join("working.sqlite");

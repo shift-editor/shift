@@ -23,7 +23,7 @@ Backend runtime object for an open Shift font workspace.
 - **Architecture Invariant:** Source and axis topology entries retain complete pre/post identity order. Replay restores entities first, then restores collection order and the source collection's default identity; SQLite persists the same dense order in that transaction.
 - **Architecture Invariant:** `LedgerStep::GlyphAppend` represents the only authored glyph-topology transition. Redo appends in application order and undo pops in reverse order; persistence materializes and rewrites only those tail rows, never the complete glyph directory.
 - **Architecture Invariant:** After every successful apply, undo, or redo, loading the merged durable store produces the live `Font`; a failed transition changes neither live state, durable state, nor ledger availability.
-- **Architecture Invariant:** Undo and redo retain at most 100 entries per stack. Extending either stack drops that stack's oldest entry; a fresh apply clears redo.
+- **Architecture Invariant:** Undo and redo retain at most 100 entries per stack. Extending either stack drops that stack's oldest entry; a fresh apply clears redo. Every entry has a stable process-local `LedgerEntryId`; identified replay rejects rather than popping a different next entry, and explicit redo discard changes no live or saved document position.
 - **Architecture Invariant:** Document `dirty` compares the ledger's current history position with its saved position; the durable authored revision remains monotonic and is not an undo cursor. Undo/redo persist their resulting dirty value atomically with replay. A resumed dirty workspace has no reachable saved position because its in-memory ledger does not survive process restart.
 
 ## Codemap
@@ -45,6 +45,7 @@ crates/shift-workspace/examples/
 ## Key Types
 
 - `FontWorkspace` -- live backend object for one open font project.
+- `LedgerEntryId` -- stable identity for one in-memory document history entry; valid only for the lifetime of the open workspace.
 - `NewWorkspace` -- options used when creating a new app-owned working database.
 - `DocumentIdentity` -- canonical `DocumentId` and canonical path for one native `.shift` document address.
 - `WorkspaceSource` -- explicit source state: untitled, native document, or imported external file.
@@ -114,7 +115,7 @@ observations rather than CI assertions.
 
 - `font()` reflects only what has been acquired. A glyph present in the directory but never acquired shows placeholder layers with no error — forgetting acquisition produces silently empty geometry, not a crash.
 - One `apply` call = one SQLite transaction = one undo step, even for multi-intent sets. Batching intents into a single `FontIntentSet` is the only way to get one undo step; there is no separate ledger grouping API.
-- A failed undo/redo replay pushes the entry back onto its stack instead of half-applying, so a replay error is retryable — but code that pops the ledger around `replay` must preserve that restore-on-error contract.
+- A failed undo/redo replay pushes the entry back onto its stack instead of half-applying, so a replay error is retryable — but code that pops the ledger around `replay` must preserve that restore-on-error contract. Identified replay checks the next entry before popping, allowing renderer-owned history to coordinate without duplicating document snapshots.
 - The undo and redo stacks each cap at 100 entries and drop the oldest silently. Tests that build long histories and then unwind them fully will pass at small sizes and lie at scale.
 - Dirty is a ledger-position comparison, not a revision comparison. After `resume`, a workspace that was dirty at shutdown has no reachable saved position: no amount of undo makes it report clean.
 - `evict_glyphs` performs no committed-state check — it drops any loaded layer back to a directory placeholder. Eviction is still safe because `apply`, undo, and redo persist every authored edit before swapping the live font, so an uncommitted loaded layer cannot exist. Code that mutates the live font without persisting first would break that guarantee and make eviction lose work.

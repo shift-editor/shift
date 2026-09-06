@@ -1485,6 +1485,9 @@ pub struct NapiFontReplacement {
 /// Pure-state response to `apply`: no change records cross to the renderer.
 #[napi(object)]
 pub struct NapiAppliedChange {
+    /// Stable identity of the document ledger entry, absent for an empty apply.
+    #[napi(ts_type = "LedgerEntryId")]
+    pub ledger_entry_id: Option<String>,
     pub layers: Vec<NapiLayerReplaced>,
     /// Present when the apply produced any font-level replacement collections.
     pub next: Option<NapiFontReplacement>,

@@ -14,6 +14,7 @@ export type {
   GuidelineId,
   GlyphId,
   LayerId,
+  LedgerEntryId,
   MetricId,
   NamedInstanceId,
   NodeId,

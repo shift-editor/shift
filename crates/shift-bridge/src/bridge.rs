@@ -46,7 +46,8 @@ use shift_wire::{
   SourceMetricValue, SourceMetricsInterpolationSnapshot, VariationBasis, VariationDelta,
 };
 use shift_workspace::{
-  AcquireScope, DocumentIdentity, FontWorkspace, NewWorkspace, WorkspaceError, WorkspaceSource,
+  AcquireScope, DocumentIdentity, FontWorkspace, LedgerEntryId, NewWorkspace, WorkspaceError,
+  WorkspaceSource,
 };
 use std::{
   collections::{BTreeMap, HashMap, HashSet, VecDeque},
@@ -1306,6 +1307,7 @@ impl Bridge {
   ) -> errors::Result<NapiAppliedChange> {
     if intents.is_empty() {
       return Ok(NapiAppliedChange {
+        ledger_entry_id: None,
         layers: Vec::new(),
         next: None,
         dependents: Vec::new(),
@@ -1317,17 +1319,21 @@ impl Bridge {
       set.intents.push(map_intent(intent)?);
     }
 
-    let outcome = self.workspace_mut()?.apply(set, label)?;
+    let (entry_id, outcome) = self.workspace_mut()?.apply_with_entry_id(set, label)?;
     self.mark_font_changed();
 
-    self.applied_echo(outcome)
+    self.applied_echo(entry_id, outcome)
   }
 
   /// Assembles the pure-state echo for an applied outcome: replace-grade
   /// layers plus dependent composites. Shared by apply/undo/redo. The
   /// records grain (glyphs/axes/sources lists) rides along whenever the
   /// change set touched that structure.
-  fn applied_echo(&self, outcome: shift_font::AppliedIntents) -> errors::Result<NapiAppliedChange> {
+  fn applied_echo(
+    &self,
+    entry_id: LedgerEntryId,
+    outcome: shift_font::AppliedIntents,
+  ) -> errors::Result<NapiAppliedChange> {
     let mut metadata_changed = false;
     let mut glyphs_changed = false;
     let mut axes_changed = false;
@@ -1425,6 +1431,7 @@ impl Bridge {
       .transpose()?;
 
     Ok(NapiAppliedChange {
+      ledger_entry_id: Some(entry_id.to_string()),
       layers,
       next,
       dependents,
@@ -1435,24 +1442,83 @@ impl Bridge {
   /// undo stack is empty.
   #[napi]
   pub fn undo(&mut self) -> errors::Result<Option<NapiAppliedChange>> {
-    let Some(outcome) = self.workspace_mut()?.undo()? else {
+    self.undo_with_entry_id(None)
+  }
+
+  /// Replays one identified entry only when it is next in the undo stack.
+  #[napi(ts_args_type = "entryId: LedgerEntryId")]
+  pub fn undo_entry(&mut self, entry_id: String) -> errors::Result<Option<NapiAppliedChange>> {
+    self.undo_with_entry_id(Some(parse::<LedgerEntryId>(&entry_id)?))
+  }
+
+  fn undo_with_entry_id(
+    &mut self,
+    expected: Option<LedgerEntryId>,
+  ) -> errors::Result<Option<NapiAppliedChange>> {
+    let entry_id = match expected {
+      Some(entry_id) => entry_id,
+      None => {
+        let Some(entry_id) = self.workspace()?.next_undo_entry_id() else {
+          return Ok(None);
+        };
+        entry_id
+      }
+    };
+    let outcome = match expected {
+      Some(_) => self.workspace_mut()?.undo_entry(entry_id)?,
+      None => self.workspace_mut()?.undo()?,
+    };
+    let Some(outcome) = outcome else {
       return Ok(None);
     };
 
     self.mark_font_changed();
-    Ok(Some(self.applied_echo(outcome)?))
+    Ok(Some(self.applied_echo(entry_id, outcome)?))
   }
 
   /// Replays the most recent undone entry's post states; `null` when the
   /// redo stack is empty.
   #[napi]
   pub fn redo(&mut self) -> errors::Result<Option<NapiAppliedChange>> {
-    let Some(outcome) = self.workspace_mut()?.redo()? else {
+    self.redo_with_entry_id(None)
+  }
+
+  /// Replays one identified entry only when it is next in the redo stack.
+  #[napi(ts_args_type = "entryId: LedgerEntryId")]
+  pub fn redo_entry(&mut self, entry_id: String) -> errors::Result<Option<NapiAppliedChange>> {
+    self.redo_with_entry_id(Some(parse::<LedgerEntryId>(&entry_id)?))
+  }
+
+  fn redo_with_entry_id(
+    &mut self,
+    expected: Option<LedgerEntryId>,
+  ) -> errors::Result<Option<NapiAppliedChange>> {
+    let entry_id = match expected {
+      Some(entry_id) => entry_id,
+      None => {
+        let Some(entry_id) = self.workspace()?.next_redo_entry_id() else {
+          return Ok(None);
+        };
+        entry_id
+      }
+    };
+    let outcome = match expected {
+      Some(_) => self.workspace_mut()?.redo_entry(entry_id)?,
+      None => self.workspace_mut()?.redo()?,
+    };
+    let Some(outcome) = outcome else {
       return Ok(None);
     };
 
     self.mark_font_changed();
-    Ok(Some(self.applied_echo(outcome)?))
+    Ok(Some(self.applied_echo(entry_id, outcome)?))
+  }
+
+  /// Permanently removes every currently undone document entry.
+  #[napi]
+  pub fn discard_redo(&mut self) -> errors::Result<()> {
+    self.workspace_mut()?.discard_redo();
+    Ok(())
   }
 
   /// Glyph-addressed snapshots for renderer-local synchronous font state.
