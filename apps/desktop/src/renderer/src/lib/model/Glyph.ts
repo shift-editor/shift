@@ -646,6 +646,17 @@ export class GlyphLayer {
   }
 
   /**
+   * Appends an ordered group of points as one local and workspace operation.
+   *
+   * @param contourId - Existing contour receiving the points.
+   * @param edits - Portable point geometry in append order, with layer-local coordinates.
+   * @returns Fresh point identities in input order; empty input creates no edit.
+   */
+  addPoints(contourId: ContourId, edits: readonly NewPoint[]): PointId[] {
+    return this.#writer.addPoints(contourId, edits);
+  }
+
+  /**
    * Adds a complete cubic segment to an existing contour.
    *
    * The contour already owns `curve.p0`; both controls and the corner endpoint
