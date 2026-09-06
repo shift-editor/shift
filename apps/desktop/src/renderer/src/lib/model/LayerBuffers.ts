@@ -288,6 +288,10 @@ export class LayerBuffers {
     return true;
   }
 
+  setContourStart(contourId: ContourId, pointId: PointId): boolean {
+    return this.contour(contourId)?.setContourStart(pointId) ?? false;
+  }
+
   translatePoints(pointIds: readonly PointId[], dx: number, dy: number): boolean {
     const ids = [...new Set(pointIds)];
     const positions = this.positionsFor(ids.map((id) => ({ kind: "point", id })));

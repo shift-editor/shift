@@ -130,6 +130,12 @@ Local operations mutate the existing segmented `LayerBuffers`: advance, contours
 
 `GlyphLayerState.#applyEdit()` wraps pending operations. It captures the pre-edit snapshot once per `PendingEditId`, batches a typed operation closure, and records only successful changes. `beginEdit()`, `finishEdit()`, and `cancelEdit()` separately own the active local lifecycle. Their operation closures remain renderer-local and never cross `LayerIntents` or IPC.
 
+### Contour starts
+
+`GlyphLayer.setContourStart(contourId, pointId)` rotates a closed contour to an existing on-curve point in one undoable Make First Point transaction. Coordinates, point identities, smoothness, and directed segments remain unchanged. Open contours, off-curve targets, missing points, and an unchanged start are no-ops at this renderer boundary. `ContourBuffer` rotates point metadata and coordinates together; the matching Rust `SetContourStart` intent independently checks the target and persists the same ordering.
+
+Upgrading a closing line appends its two cubic controls in traversal order rather than inserting them ahead of the original first point. Existing contours with leading off-curve controls remain valid inputs for cyclic deletion; new upgrades do not create that ordering.
+
 ### Packed layout ownership
 
 The object that knows a packed layout must also own the logical metadata that interprets it. High-level editing code must not coordinate parallel structure and scalar buffers:

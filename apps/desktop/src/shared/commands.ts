@@ -30,6 +30,7 @@ export type CommandId =
   | "edit.selectAll"
   | "edit.deselect"
   | "glyph.reverseSelectedContour"
+  | "glyph.makeFirstPoint"
   | "window.showHome"
   | "window.close"
   | "window.minimise"
@@ -61,4 +62,5 @@ export type EditorCommandId =
   | "edit.deselect"
   | "view.zoomIn"
   | "view.zoomOut"
-  | "glyph.reverseSelectedContour";
+  | "glyph.reverseSelectedContour"
+  | "glyph.makeFirstPoint";

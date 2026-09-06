@@ -5,6 +5,7 @@ import { useDebugSafe } from "@/context/DebugContext";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { zoomMultiplierFromWheel } from "@/lib/transform";
 import { getShiftHost } from "@/host/shiftHost";
+import { objectIsKindOf } from "@/types";
 import { InteractiveScene } from "./InteractiveScene";
 import { StaticScene } from "./StaticScene";
 import { DebugPanel } from "../debug/DebugPanel";
@@ -52,7 +53,16 @@ export const Canvas: FC = () => {
       event.preventDefault();
 
       try {
-        await getShiftHost().menu.showCanvasContextMenu();
+        const [id] = editor.selection.ids;
+        const object = id ? editor.object(id) : null;
+        const makeFirstPoint =
+          editor.sessionMode !== "preview" &&
+          editor.selection.ids.length === 1 &&
+          objectIsKindOf(object, "point") &&
+          object.layer?.sourceId === editor.activeSourceId &&
+          object.geometry.point(object.pointId)?.isOnCurve === true &&
+          object.geometry.contour(object.contourId)?.closed === true;
+        await getShiftHost().menu.showCanvasContextMenu(makeFirstPoint);
       } catch (error) {
         console.error("canvas context menu failed", error);
       }

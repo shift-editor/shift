@@ -10,6 +10,7 @@ import type {
   RemovePointsIntent,
   ReverseContourIntent,
   SetContourClosedIntent,
+  SetContourStartIntent,
   SetPointSmoothIntent,
   SetXAdvanceIntent,
   TranslatePointsIntent,
@@ -76,6 +77,13 @@ export class LayerIntents {
     return this.#editCoordinator.push({
       kind: "reverseContour",
       reverseContour: { layerId: this.#layerId, ...payload },
+    });
+  }
+
+  setContourStart(payload: Payload<SetContourStartIntent>): PendingEditId {
+    return this.#editCoordinator.push({
+      kind: "setContourStart",
+      setContourStart: { layerId: this.#layerId, ...payload },
     });
   }
 
