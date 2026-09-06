@@ -125,11 +125,15 @@ export class MarkerLayer {
         : packedInstances.subarray(0, requiredLength);
 
     if (requiredLength > this.#instanceCapacity) {
-      this.#instanceCapacity = requiredLength;
-      this.#instanceBuffer({ usage: "dynamic", type: "float", data });
-    } else {
-      this.#instanceBuffer.subdata(data);
+      const capacity = Math.max(requiredLength, this.#instanceCapacity * 2);
+      this.#instanceBuffer({
+        usage: "dynamic",
+        type: "float",
+        length: capacity * Float32Array.BYTES_PER_ELEMENT,
+      });
+      this.#instanceCapacity = capacity;
     }
+    this.#instanceBuffer.subdata(data);
 
     return true;
   }

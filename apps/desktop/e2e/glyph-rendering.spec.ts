@@ -54,6 +54,71 @@ test.describe("Glyph rendering — S (quadratic curves)", () => {
     await expect(screenshot).toMatchSnapshot("handles-S-idle.png");
   });
 
+  test("culls offscreen markers while retaining edge overlap across zoom, node placement and pan", async ({
+    page,
+  }) => {
+    const result = await page.evaluate(async () => {
+      const editor = window.shift!.editor;
+      const node = editor.scene.nodesOfKind("glyph")[0]!;
+      const position = { x: 200, y: 300 };
+      editor.scene.updateNode({ id: node.id, position });
+      editor.zoomIn();
+      const camera = editor.getCameraTransform();
+      const width = camera.centre.x * 2;
+      const inserted = editor.insertContent({
+        contours: [
+          {
+            closed: false,
+            points: [-100, -2, width / 2, width + 100].map((x) => {
+              const scene = editor.projectScreenToScene({ x, y: camera.logicalHeight / 2 });
+              return {
+                x: scene.x - position.x,
+                y: scene.y - position.y,
+                pointType: "onCurve" as const,
+                smooth: false,
+              };
+            }),
+          },
+        ],
+      });
+      if (!inserted) throw new Error("Expected inserted points");
+      await editor.font.editCoordinator.settled();
+      const selection = editor.positionSelection(inserted);
+      if (!selection) throw new Error("Expected inserted point selection");
+      const pointIds = selection.targets.points ?? [];
+      const capture = (): boolean[] | null => {
+        let submitted: boolean[] | null = null;
+        const controller = new AbortController();
+        window.addEventListener(
+          "shift:geometry-submitted",
+          (event) => {
+            submitted = pointIds.map((id) => event.detail?.point(id) != null);
+          },
+          { signal: controller.signal },
+        );
+        try {
+          window.dispatchEvent(new Event("shift:request-scene-render"));
+          return submitted;
+        } finally {
+          controller.abort();
+        }
+      };
+      const before = capture();
+      editor.setPan({ x: editor.pan.x + 200, y: editor.pan.y });
+      const after = capture();
+      return {
+        before,
+        after,
+        retained: pointIds.every((id) => selection.layer.point(id) !== null),
+      };
+    });
+    expect(result).toEqual({
+      before: [false, true, true, false],
+      after: [true, true, true, false],
+      retained: true,
+    });
+  });
+
   test("background canvas shows guides and metrics", async ({ page }) => {
     const canvas = new CanvasUtil(page);
     const screenshot = await canvas.screenshotCanvasLayer("background-canvas");

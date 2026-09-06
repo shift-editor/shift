@@ -1,6 +1,7 @@
 export { Anchor, type AnchorHit } from "./Anchor";
 export { Component, type ComponentTransform, type Matrix } from "./Component";
 export { Contour } from "./Contour";
+export { glyphStructuresEqual } from "./glyphStructuresEqual";
 export { IdIndex } from "./IdIndex";
 export { Point, type NewPoint, type PointHit, type PointWithNeighbors } from "./Point";
 export type { ContourGeometry, SegmentedContour } from "./types/contour";

@@ -1,4 +1,4 @@
-import type { Point2D } from "@shift/geo";
+import { Bounds, type Bounds as BoundsType, type Point2D } from "@shift/geo";
 import type { Theme } from "./Theme";
 import { DEFAULT_THEME } from "./Theme";
 import type { CameraTransform } from "../managers/Camera";
@@ -27,6 +27,24 @@ export class Canvas {
   /** Convert screen pixels to UPM units at the current zoom level. */
   pxToUpm(px: number): number {
     return px / (this.camera.upmScale * this.camera.zoom);
+  }
+
+  /**
+   * Returns the padded canvas bounds in the current drawing coordinates.
+   *
+   * @param paddingPx - Outward margin in CSS pixels, before inverse transformation.
+   * @returns Fresh bounds accounting for the active camera, node transform and DPR.
+   */
+  visibleBounds(paddingPx: number): BoundsType {
+    const inverse = this.ctx.getTransform().inverse();
+    const { width, height } = this.ctx.canvas;
+    const padding = paddingPx * (width / (this.camera.centre.x * 2));
+    return Bounds.fromPoints([
+      inverse.transformPoint({ x: -padding, y: -padding }),
+      inverse.transformPoint({ x: width + padding, y: -padding }),
+      inverse.transformPoint({ x: width + padding, y: height + padding }),
+      inverse.transformPoint({ x: -padding, y: height + padding }),
+    ])!;
   }
 
   line(from: Point2D, to: Point2D, stroke: string, widthPx: number): void {

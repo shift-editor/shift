@@ -92,9 +92,9 @@ export class MarkerHandleRenderer {
 
     let packed = this.#packedInstances;
     if (!packed || requiredLength > this.#packedCapacity) {
-      packed = new Float32Array(requiredLength);
+      packed = new Float32Array(Math.max(requiredLength, this.#packedCapacity * 2));
       this.#packedInstances = packed;
-      this.#packedCapacity = requiredLength;
+      this.#packedCapacity = packed.length;
     }
 
     let index = 0;

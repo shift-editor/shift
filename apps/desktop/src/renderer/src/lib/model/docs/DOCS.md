@@ -129,6 +129,8 @@ Layer edits move through **active** (cancelable), **pending** (finished and queu
 
 Local operations mutate the existing segmented `LayerBuffers`: advance, contours, anchors, and components. Each logical record owns both the metadata and the `PackedArray` values needed to interpret it. `GlyphStructure` and the flat `Float64Array` are repacked lazily at geometry and wire boundaries. Renderer code does not parse `FontIntent.kind` or perform font-wide validation. While an edit is active, an arriving workspace replacement becomes its latest restoration base and the edit reapplies immediately in the same batch. Each loaded layer otherwise keeps a confirmed shadow only while edits are pending. Every echo advances that shadow, but visible pending geometry is replaced only after the layer's pending identities drain; workspace failure still discards renderer state through the existing full resync.
 
+`GlyphLayerState.#publish()` compares workspace topology with `glyphStructuresEqual`, rather than treating deserialized object identity as a topology change. Equivalent topology retains the segmented buffers; identical numeric values do not republish geometry. Different metadata still replaces topology, and changed values still update the buffers. Pending FIFO confirmation, rollback, and active-edit restoration/reapplication follow the same lifecycle in both cases.
+
 `GlyphLayerState.#applyEdit()` wraps pending operations. It captures the pre-edit snapshot once per `PendingEditId`, batches a typed operation closure, and records only successful changes. `beginEdit()`, `finishEdit()`, and `cancelEdit()` separately own the active local lifecycle. Their operation closures remain renderer-local and never cross `LayerIntents` or IPC.
 
 ### Packed layout ownership
