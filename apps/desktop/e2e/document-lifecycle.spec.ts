@@ -33,10 +33,10 @@ import { clickFirstCatalogGlyph } from "./fixtures/appLocators";
 const execFileAsync = promisify(execFile);
 
 const discardTest = test.extend({
-  dirtyDocumentChoice: ["discard", { option: true }],
+  dirtyDocumentChoice: "discard",
 });
 const saveOnCloseTest = test.extend({
-  dirtyDocumentChoice: ["save", { option: true }],
+  dirtyDocumentChoice: "save",
 });
 const saveAsTest = test.extend({
   saveShiftPaths: async ({ saveShiftPath, saveAsShiftPath }, use) => {
@@ -85,7 +85,7 @@ const failedExportTest = workspaceTest.extend({
   },
 });
 const convertiblePreviewTest = test.extend({
-  openFontPath: [UFO_FONT_PATH, { option: true }],
+  openFontPath: UFO_FONT_PATH,
 });
 const cancelPreviewSaveTest = convertiblePreviewTest.extend({
   saveShiftPath: async ({}, use) => {
@@ -100,7 +100,7 @@ const failedPreviewSaveTest = convertiblePreviewTest.extend({
   },
 });
 const otfPreviewTest = test.extend({
-  openFontPath: [OTF_FONT_PATH, { option: true }],
+  openFontPath: OTF_FONT_PATH,
 });
 
 async function openSelectedPreview(page: Page, electronApp: ElectronApplication): Promise<Page> {
@@ -476,7 +476,7 @@ for (const { format, sourcePath, sourceRoot } of [
   },
 ]) {
   const formatConversionTest = test.extend({
-    openFontPath: [sourcePath, { option: true }],
+    openFontPath: sourcePath,
   });
 
   formatConversionTest(

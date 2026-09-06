@@ -1,4 +1,5 @@
 import { expect, type ElectronApplication, type Page } from "@playwright/test";
+import type { GlyphId } from "@shift/types";
 import fs from "node:fs";
 import path from "node:path";
 import { documentTest as test, waitForWorkspaceReady } from "./fixtures/electronApp";
@@ -17,14 +18,14 @@ import {
 } from "./fixtures/documentLifecycle";
 
 const discardOnQuitTest = test.extend({
-  dirtyDocumentChoice: ["discard", { option: true }],
+  dirtyDocumentChoice: "discard",
 });
 const saveOnQuitTest = test.extend({
-  dirtyDocumentChoice: ["save", { option: true }],
+  dirtyDocumentChoice: "save",
 });
 const reentrantQuitTest = test.extend({
-  dirtyDocumentChoices: [["cancel", "discard"], { option: true }],
-  dirtyDocumentDelayMs: [150, { option: true }],
+  dirtyDocumentChoices: [["cancel", "discard"], { scope: "test" }],
+  dirtyDocumentDelayMs: 150,
 });
 
 async function dirtyNewFont(page: Page, electronApp: ElectronApplication): Promise<Page> {
@@ -44,7 +45,7 @@ async function createAnotherDirtyFont(page: Page, electronApp: ElectronApplicati
   return nextPage;
 }
 
-async function glyphIdForName(page: Page, name: string): Promise<string> {
+async function glyphIdForName(page: Page, name: string): Promise<GlyphId> {
   await expect
     .poll(() =>
       page.evaluate(

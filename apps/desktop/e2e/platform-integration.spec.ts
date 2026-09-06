@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import type { ElectronApplication, Page, TestInfo } from "@playwright/test";
+import type { GlyphId } from "@shift/types";
 import { documentTest as test, expect, waitForWorkspaceReady } from "./fixtures/electronApp";
 import { openGlyphRoute } from "./fixtures/appLocators";
 import {
@@ -49,7 +50,7 @@ async function createEvidenceDocument(
   electronApp: ElectronApplication,
   page: Page,
   testInfo: TestInfo,
-): Promise<{ workspacePage: Page; glyphId: string }> {
+): Promise<{ workspacePage: Page; glyphId: GlyphId }> {
   const workspacePage = await createNewFont(page, electronApp);
   await attachScreenshot(testInfo, "glyph-catalog", workspacePage);
   await workspacePage.getByRole("button", { name: "Create glyph", exact: true }).click();
@@ -89,7 +90,7 @@ async function reopenAndVerify(
   electronApp: ElectronApplication,
   testRoot: string,
   saveShiftPath: string,
-  glyphId: string,
+  glyphId: GlyphId,
   testInfo: TestInfo,
 ): Promise<void> {
   await quitApp(electronApp);
@@ -110,7 +111,7 @@ async function reopenAndVerify(
   }
 }
 
-async function glyphIdForName(page: Page, glyphName: string): Promise<string> {
+async function glyphIdForName(page: Page, glyphName: string): Promise<GlyphId> {
   await expect
     .poll(() =>
       page.evaluate(

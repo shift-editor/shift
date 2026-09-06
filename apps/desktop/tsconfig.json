@@ -5,7 +5,9 @@
     "src/renderer/env.d.ts",
     "src/renderer/**/*",
     "src/preload/*.d.ts",
-    "src/shared/**/*"
+    "src/shared/**/*",
+    "e2e/**/*.ts",
+    "playwright.config.ts"
   ],
   "compilerOptions": {
     "useDefineForClassFields": true,

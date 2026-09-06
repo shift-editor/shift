@@ -17,6 +17,8 @@ Run commands from the repository root:
 
 The default command runs `visual` and `gpu` on macOS, and `platform` on Linux and Windows. Performance measurements are always opt-in.
 
+`pnpm typecheck` checks every E2E spec and fixture plus `playwright.config.ts` through the desktop TypeScript configuration. Playwright transpiles tests without typechecking, so run this check before E2E execution to catch stale runtime API calls.
+
 ## Host setup
 
 - **Linux and macOS:** the Nix development shell supplies the pinned Node, pnpm, Rust, native build tools, and Linux virtual-desktop dependencies. Direnv enters it automatically after `.envrc` is allowed; otherwise prefix commands with `nix develop --command`.

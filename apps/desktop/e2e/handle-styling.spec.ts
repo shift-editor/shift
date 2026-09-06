@@ -10,7 +10,7 @@ import {
 import { clickFirstCatalogGlyph } from "./fixtures/appLocators";
 
 const authoredTest = workspaceTest.extend({ startupFontPath: DESIGNSPACE_FONT_PATH });
-const previewTest = documentTest.extend({ openFontPath: [FONT_PATH, { option: true }] });
+const previewTest = documentTest.extend({ openFontPath: FONT_PATH });
 
 async function handlePixels(page: Page, electronApp: ElectronApplication) {
   const screenshot = await page.locator("#marker-canvas").screenshot({
@@ -71,18 +71,22 @@ authoredTest(
   "named instances between sources use interpolated handle outlines",
   async ({ page, electronApp }) => {
     await navigateToEditor(page, "53");
-    const instance = await page.evaluate(() => {
-      const font = window.shiftSession!.font;
-      return font.namedInstances.find(
-        (instance) =>
-          !font.sourceAt(
-            new Map(
-              font
-                .getAxes()
-                .map((axis) => [axis.id, instance.location.values[axis.id] ?? axis.default]),
-            ),
-          ),
-      );
+    const instance = await page.evaluate(async () => {
+      const { font, editor, catalog } = window.shiftSession!;
+      const { externalLocation, activeSourceId } = editor;
+
+      try {
+        for (const instance of font.namedInstances) {
+          await catalog.setLocation(
+            font.getAxes().map((axis) => instance.location.values[axis.id] ?? axis.default),
+          );
+          if (!font.sourceAt(editor.externalLocation)) return instance;
+        }
+        return null;
+      } finally {
+        editor.setExternalLocation(externalLocation);
+        if (activeSourceId !== null) editor.selectSource(activeSourceId);
+      }
     });
     if (!instance) throw new Error("Expected an instance between sources");
     const controls = page.getByRole("complementary", { name: "Variation controls" });
@@ -99,9 +103,9 @@ authoredTest(
 previewTest(
   "TTF source handles retain their normal color without becoming selectable",
   async ({ page, electronApp }) => {
-    const window = electronApp.waitForEvent("window");
+    const workspaceWindow = electronApp.waitForEvent("window");
     await page.getByRole("button", { name: /Load font/ }).click();
-    const workspacePage = await window;
+    const workspacePage = await workspaceWindow;
     await workspacePage.waitForURL(/#\/home$/);
     await clickFirstCatalogGlyph(workspacePage);
     await expect
