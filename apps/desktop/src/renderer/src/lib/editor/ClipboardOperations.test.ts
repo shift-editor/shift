@@ -32,6 +32,37 @@ describe("editor clipboard operations", () => {
     expect(editor.toolIf("select")?.state).toEqual({ type: "ready" });
   });
 
+  it("inserts multiple contours with one undo step and preserves their returned identities", async () => {
+    const layer = editor.requireGlyphLayer();
+    const source = layer.contours[0]!;
+    const inserted = editor.insertContent(
+      {
+        contours: [
+          contourShape(source),
+          { ...contourShape(source), closed: false },
+          { closed: true, points: [] },
+        ],
+      },
+      { offset: { x: 7, y: -11 } },
+    );
+    await editor.settle();
+
+    expect(layer.contours.slice(1).map(contourShape)).toEqual([
+      offsetContour(source, 7, -11),
+      { ...offsetContour(source, 7, -11), closed: false },
+    ]);
+    expect(inserted).toEqual(
+      layer.contours.slice(1).flatMap((contour) => contour.points.map(({ id }) => id)),
+    );
+    expect(new Set(layer.allPoints.map(({ id }) => id)).size).toBe(12);
+    await editor.undo();
+    expect(layer.contours.map(({ id }) => id)).toEqual([source.id]);
+    await editor.redo();
+    expect(
+      layer.contours.slice(1).flatMap((contour) => contour.points.map(({ id }) => id)),
+    ).toEqual(inserted);
+  });
+
   it("compounds repeated paste offsets and undoes each insertion separately", async () => {
     const layer = editor.requireGlyphLayer();
     const source = layer.contours[0]!;
