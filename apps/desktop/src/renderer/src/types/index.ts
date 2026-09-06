@@ -17,6 +17,7 @@ export type {
 } from "./glyphCatalog";
 export type { EditingId, PendingEditId } from "./editing";
 export type { FontOptions, FontStoreOptions } from "./font";
+export type { EditorDiff, HistoryItem, SelectionListener, SequenceDiff } from "./history";
 export type { GlyphGeometrySelection, GlyphOptions, GlyphReader } from "./glyph";
 export type {
   GlyphAtlasGlyph,
@@ -59,7 +60,7 @@ export type {
   PositionSnapProvider,
   PositionTargets,
 } from "./positionEdit";
-export type { WorkspaceApplyStatus, WorkspaceEdit } from "./workspace";
+export type { WorkspaceApplyStatus, WorkspaceEdit, WorkspaceEditListener } from "./workspace";
 
 export interface GlyphObjectSegment {
   readonly id: SegmentId;

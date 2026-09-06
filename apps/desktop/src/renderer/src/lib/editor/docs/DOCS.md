@@ -1,6 +1,6 @@
 # Editor
 
-<!-- reviewed: 2026-09-04 -->
+<!-- reviewed: 2026-09-06 -->
 
 Central orchestrator for the canvas-based glyph editing surface, wiring viewport transforms, selection, rendering, hit testing, and tool management into a single facade.
 
@@ -38,6 +38,10 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 
 **Architecture Invariant:** `Selection` is a dumb ordered set of branded object IDs. Mutations go through `select()`, `add()`, `remove()`, and `toggle()`; behavior and live bounds come from resolving those IDs through `Editor.object()`.
 
+**Architecture Invariant:** `EditorHistory` is the renderer-owned undo timeline. A `HistoryItem` holds an optional `EditorDiff` and only a reference to an optional Rust ledger entry; document state pairs never move into the renderer. Selection uses a single-splice `SequenceDiff`, so Select All records only the changed range. Tool gestures, Delete, Cut, Paste, Duplicate, Pen, Shape, and boolean operations finish one `HistoryCapture` after both editor and document changes. Discarded gestures restore their starting selection and record nothing. Hover, camera, tool choice, and transient drag state are not undoable editor properties.
+
+**Architecture Invariant:** Pure editor actions do not create Rust ledger entries or dirty the document. Branching after undo calls the workspace's explicit redo discard only when needed. Entering or leaving an editor route resets renderer history and selection without changing document history.
+
 **Architecture Invariant:** Glyph-domain hit testing belongs to glyph geometry and editor glyph lookup helpers. Tool-specific controls, such as select bounding-box handles, are owned and hit-tested by the tool that renders them.
 
 **Architecture Invariant:** `Handles` tries the accelerated marker layer first and falls back to CPU canvas drawing if WebGL is unavailable. The marker-layer path packs all handle instances into a `Float32Array` for a single draw call. Handle styling describes location, not session capability: exact sources retain ordinary styles in authored and preview sessions; locations between sources use the `interpolated` theme state, including named instances unless they coincide with a source. This state overrides hover and selection styling without hiding handles during scrubbing.
@@ -47,6 +51,11 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 ```
 editor/
   Editor.ts              -- Facade (~1373 lines), wires all subsystems
+  EditorHistory.ts       -- Renderer diffs ordered with Rust ledger identities
+  HistoryCapture.ts      -- One finishable/discardable user action
+  Selection.ts           -- Ordered renderer-owned selected object identities
+  history/
+    sequenceDiff.ts      -- Minimal single-splice sequence difference
   lifecycle.ts           -- EventEmitter for destruction and preview mutation notices
   managers/
     Camera.ts             -- UPM<->screen affine matrices, zoom, pan
@@ -65,7 +74,7 @@ editor/
 
 ## Key Types
 
-- **`Editor`** -- Facade class. Owns `Selection`, `Hover`, `Camera`, `Renderer`, `ToolManager`, `Clipboard`, `EventEmitter`, and the workspace transaction facade. Its immutable `sessionMode` lets Select suppress geometry interaction; geometry clicks publish `previewMutationAttempted` for presentation code. The canvas lock is display-only. Passed directly to tools and NodeDefinitions; `glyphForId()` exposes already-acquired canonical Glyphs without exposing FontStore.
+- **`Editor`** -- Facade class. Owns `Selection`, `EditorHistory`, `Hover`, `Camera`, `Renderer`, `ToolManager`, `Clipboard`, `EventEmitter`, and the workspace transaction facade. Its immutable `sessionMode` lets Select suppress geometry interaction; geometry clicks publish `previewMutationAttempted` for presentation code. The canvas lock is display-only. Passed directly to tools and NodeDefinitions; `glyphForId()` exposes already-acquired canonical Glyphs without exposing FontStore.
 - **`Scene`** -- Owns generic, serializable placed-node records and node-level queries. Glyph acquisition and retained object ownership remain outside Scene.
 - **`ShiftStore<ShiftEditorRecord>`** -- Editor-owned generic record store for scene nodes, selection, editing, and text runs.
 - **`FontStore`** -- Workspace-owned renderer mirror injected privately into Editor for synchronous lookup of already-loaded Glyph objects.
@@ -73,7 +82,9 @@ editor/
 - **`Renderer`** -- Manages four stacked canvas layers (background, scene, markers/WebGL, overlay), their `FrameHandler` instances, and the canvas item layers that draw each pass.
 - **`Canvas`** -- Thin wrapper around `CanvasRenderingContext2D` with `pxToUpm()` conversion and themed drawing primitives. Carries `CameraTransform` and `Theme`.
 - **`CameraTransform`** -- Value object: `{ zoom, panX, panY, centre, upmScale, logicalHeight, layoutHeight, padding, descender }`. Snapshot of viewport state passed to rendering code.
-- **`Selection`** -- Ordered branded-ID selection state. It exposes `stateCell` and unwrapped ID getters; `Editor.selectionBoundsCell` resolves current live objects and their bounds.
+- **`Selection`** -- Ordered branded-ID selection state. It exposes `stateCell`, unwrapped ID getters, and replacement notifications; `Editor.selectionBoundsCell` resolves current live objects and their bounds.
+- **`EditorHistory`** -- Session-local ordering of selection diffs and stable document-ledger references. It owns undo/redo branching and falls back to ordinary Rust document replay when no renderer item is available.
+- **`HistoryCapture`** -- One open user action. `finish()` stores its net editor diff plus document reference; `discard()` restores its starting selection when no document entry was accepted.
 - **`SelectableId`** -- Branded identity accepted by selection regardless of the object's concrete kind.
 - **`Coordinates`** -- Pair of `{ screen, scene }` for a single pointer position. Node-local coordinates are derived after hit testing identifies the node being acted on.
 - **`PositionSelection`** -- One active authored `GlyphLayer` paired with normalized point/anchor targets. It contains edit ownership only, not scene placement or pointer coordinates.
@@ -88,6 +99,10 @@ editor/
 ### Construction and wiring
 
 Workspace constructs `Editor` with the public `Font` model and its matching private `FontStore`. Editor creates its own `ShiftStore<ShiftEditorRecord>`, then wires managers and reactive effects. The rendering effects each read a specific set of signals and schedule the matching canvas layer for redraw. A cursor effect reads tool/hover state and updates the CSS cursor.
+
+### Editor and document history
+
+`Selection` publishes complete ordered before/after values to `EditorHistory`, which stores only the minimal changed range. `WorkspaceEditCoordinator` synchronously publishes each accepted pending edit ID and resolves it to a stable Rust ledger ID after its serialized apply settles. A finished capture joins those two references into one `HistoryItem`; undo/redo asks Rust to replay exactly that document entry before applying the renderer diff in reverse/forward order. A selection-only branch clears Rust redo explicitly but neither applies an intent nor changes dirty state.
 
 ### Coordinate pipeline
 
@@ -172,7 +187,7 @@ Glyph geometry exposes domain hit queries for points, anchors, and segments. Too
 - Outcome tests treat editor actions as asynchronous: metric setters need `await editor.settle()` before asserting, clipboard and history actions (`copy`, `paste`, `undo`, `redo`) return promises that must be awaited, and drag helpers give every drag sample its cumulative delta from the pointer-down origin.
 - `pnpm test:desktop src/renderer/src/lib/model/positions/PositionEdits.test.ts` -- position-edit (move/rotate/scale) tests.
 - `pnpm test:desktop src/renderer/src/lib/editor/managers/Camera.test.ts` -- camera manager tests.
-- `pnpm test:e2e:visual e2e/glyph-navigation.spec.ts e2e/glyph-view.spec.ts e2e/tools.spec.ts` -- stale/transient navigation, stable UPM framing, and DOM cancellation evidence.
+- `pnpm test:e2e:visual e2e/glyph-navigation.spec.ts e2e/glyph-view.spec.ts e2e/tools.spec.ts e2e/selection-history.spec.ts` -- stale/transient navigation, stable UPM framing, DOM cancellation, and compound renderer/document history evidence.
 - Manual: open a preview font, verify Pen and Shape are disabled, drag a selection marquee without selecting points, click geometry or the sidebar lock, and verify the notice offers conversion only for convertible sources. The canvas lock must not open a notice.
 
 ## Related

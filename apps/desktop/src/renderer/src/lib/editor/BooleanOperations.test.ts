@@ -60,13 +60,16 @@ describe("editor boolean operations", () => {
       await editor.boolean(contourIdA, contourIdB, operation);
       const layer = editor.requireGlyphLayer();
       expectGeometry(layer, contourCount, area, bounds);
-      expect(editor.selection.ids).toEqual(layer.contours.map((contour) => contour.id));
+      const resultSelection = layer.contours.map((contour) => contour.id);
+      expect(editor.selection.ids).toEqual(resultSelection);
 
       await editor.undo();
       expectGeometry(editor.requireGlyphLayer(), 2, 16_200, [10, 10, 150, 150]);
+      expect(editor.selection.ids).toEqual([contourIdA, contourIdB]);
 
       await editor.redo();
       expectGeometry(editor.requireGlyphLayer(), contourCount, area, bounds);
+      expect(editor.selection.ids).toEqual(resultSelection);
     },
   );
 
@@ -105,7 +108,12 @@ describe("editor boolean operations", () => {
     expect(editor.selection.ids).toEqual([contourIdA, contourIdB]);
 
     await editor.undo();
+    expect(geometrySummary(layer)).toEqual(before);
+    expect(editor.selection.ids).toEqual([contourIdB]);
+
+    await editor.undo();
     expectGeometry(layer, 1, 8_100, [10, 10, 100, 100]);
+    expect(editor.selection.ids).toEqual([contourIdA]);
   });
 });
 

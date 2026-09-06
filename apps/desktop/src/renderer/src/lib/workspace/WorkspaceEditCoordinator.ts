@@ -19,10 +19,17 @@ import type {
 } from "@shared/workspace/protocol";
 import { batch, signal, type Signal, type WritableSignal } from "@/lib/signals/signal";
 import type { FontStore } from "@/lib/model/FontStore";
-import type { PendingEditId, WorkspaceApplyStatus, WorkspaceEdit } from "@/types";
+import type {
+  PendingEditId,
+  WorkspaceApplyStatus,
+  WorkspaceEdit,
+  WorkspaceEditListener,
+} from "@/types";
 import type { FontSessionClient } from "./FontSessionClient";
 
 export type { WorkspaceApplyStatus } from "@/types";
+
+const MAX_LEDGER_ENTRY_IDS = 100;
 
 /**
  * Tracks pending renderer edits until the utility workspace confirms them.
@@ -45,6 +52,9 @@ export class WorkspaceEditCoordinator {
   readonly #store: FontStore;
   readonly #settledCell: WritableSignal<boolean>;
   readonly #applyStatus: WritableSignal<WorkspaceApplyStatus>;
+  readonly #editListeners = new Set<WorkspaceEditListener>();
+  readonly #ledgerEntryIds = new Map<PendingEditId, LedgerEntryId>();
+  readonly #redoEntryIds: LedgerEntryId[] = [];
 
   #chain: Promise<unknown> = Promise.resolve();
   #busy = 0;
@@ -82,6 +92,32 @@ export class WorkspaceEditCoordinator {
    */
   get applyStatusCell(): Signal<WorkspaceApplyStatus> {
     return this.#applyStatus;
+  }
+
+  /** Whether coordinator-owned document replay currently has a redo branch. */
+  get hasRedo(): boolean {
+    return this.#redoEntryIds.length > 0 && this.#applyStatus.peek() === "idle";
+  }
+
+  /**
+   * Observes edits synchronously as they enter the serialized workspace lane.
+   *
+   * @param listener - Receives the renderer-local identity once per accepted operation.
+   * @returns A function that permanently removes this listener.
+   */
+  subscribeEdits(listener: WorkspaceEditListener): () => void {
+    this.#editListeners.add(listener);
+    return () => this.#editListeners.delete(listener);
+  }
+
+  /**
+   * Resolves a settled renderer edit to its stable document-ledger identity.
+   *
+   * @param editId - Renderer-local identity returned when the edit was accepted.
+   * @returns The ledger identity, or null when the edit is pending or failed.
+   */
+  ledgerEntryId(editId: PendingEditId): LedgerEntryId | null {
+    return this.#ledgerEntryIds.get(editId) ?? null;
   }
 
   /** Accepts one intent and returns its renderer-local pending identity. */
@@ -184,7 +220,10 @@ export class WorkspaceEditCoordinator {
   undo(entryId?: LedgerEntryId): Promise<AppliedChange | null> {
     return this.#withFlush(async () => {
       const applied = await this.#session.undo(entryId);
-      if (applied) await this.#applyChange(applied, null);
+      if (applied) {
+        await this.#applyChange(applied, null);
+        if (applied.ledgerEntryId) this.#redoEntryIds.push(applied.ledgerEntryId);
+      }
       return applied;
     });
   }
@@ -274,14 +313,25 @@ export class WorkspaceEditCoordinator {
   redo(entryId?: LedgerEntryId): Promise<AppliedChange | null> {
     return this.#withFlush(async () => {
       const applied = await this.#session.redo(entryId);
-      if (applied) await this.#applyChange(applied, null);
+      if (applied) {
+        await this.#applyChange(applied, null);
+        const expected = this.#redoEntryIds.at(-1);
+        if (expected === applied.ledgerEntryId) {
+          this.#redoEntryIds.pop();
+        } else {
+          this.#redoEntryIds.length = 0;
+        }
+      }
       return applied;
     });
   }
 
   /** Permanently removes the current document redo branch after pending operations flush. */
   discardRedo(): Promise<void> {
-    return this.#withFlush(() => this.#session.discardRedo());
+    return this.#withFlush(async () => {
+      await this.#session.discardRedo();
+      this.#redoEntryIds.length = 0;
+    });
   }
 
   /** Reads document state behind every queued and in-flight edit. */
@@ -353,6 +403,7 @@ export class WorkspaceEditCoordinator {
         this.#applyStatus.set("queued");
       }
     });
+    for (const listener of this.#editListeners) listener(edit.id);
     return edit;
   }
 
@@ -365,6 +416,16 @@ export class WorkspaceEditCoordinator {
   async #sendEdit(edit: WorkspaceEdit): Promise<AppliedChange> {
     this.#applyStatus.set("applying");
     const applied = await this.#session.apply(edit.intents, edit.label);
+    const ledgerEntryId = applied.ledgerEntryId;
+    if (!ledgerEntryId) throw new Error("workspace edit did not create a document ledger entry");
+
+    this.#redoEntryIds.length = 0;
+    this.#ledgerEntryIds.set(edit.id, ledgerEntryId);
+    if (this.#ledgerEntryIds.size > MAX_LEDGER_ENTRY_IDS) {
+      const oldestEditId = this.#ledgerEntryIds.keys().next().value;
+      if (oldestEditId !== undefined) this.#ledgerEntryIds.delete(oldestEditId);
+    }
+
     await this.#applyChange(applied, edit.id);
     return applied;
   }

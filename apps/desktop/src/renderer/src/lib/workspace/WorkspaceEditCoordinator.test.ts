@@ -14,6 +14,7 @@ import {
   type Unicode,
 } from "@shift/types";
 import { createWorkspaceStack, type WorkspaceStack } from "@/testing/workspaceStack";
+import type { PendingEditId } from "@/types";
 
 const createGlyph = (
   name: string,
@@ -156,6 +157,31 @@ describe("WorkspaceEditCoordinator issues save on the committed-op lane", () => 
 
     await editCoordinator.undo();
     expect(store.workspaceCell.peek()?.glyphs).toHaveLength(0);
+  });
+
+  it("publishes accepted edits and resolves their ledger identities after settling", async () => {
+    const { store, editCoordinator } = stack;
+    const accepted: PendingEditId[] = [];
+    const unsubscribe = editCoordinator.subscribeEdits((editId) => accepted.push(editId));
+
+    const editId = editCoordinator.push(createGlyph("A", 65));
+    expect(accepted).toEqual([editId]);
+
+    await editCoordinator.settled();
+    const ledgerEntryId = editCoordinator.ledgerEntryId(editId);
+    expect(ledgerEntryId).not.toBeNull();
+    if (!ledgerEntryId) throw new Error("Expected committed ledger identity");
+
+    await editCoordinator.undo(ledgerEntryId);
+    expect(store.workspaceCell.peek()?.glyphs).toHaveLength(0);
+    expect(editCoordinator.hasRedo).toBe(true);
+
+    await editCoordinator.discardRedo();
+    expect(editCoordinator.hasRedo).toBe(false);
+
+    unsubscribe();
+    editCoordinator.push(createGlyph("B", 66));
+    expect(accepted).toEqual([editId]);
   });
 
   it("groups transaction pushes into one undo entry", async () => {
