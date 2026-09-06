@@ -81,7 +81,13 @@ test.describe("Editor view", () => {
 
     await canvas.hover({ position: down });
     await expect(canvas).toHaveCSS("cursor", /cursor@32\.svg/);
-    await canvas.click({ position: down, modifiers: ["Alt"] });
+    await page.keyboard.down("Alt");
+    try {
+      await expect(canvas).toHaveCSS("cursor", /cursor@32\.svg/);
+    } finally {
+      await page.keyboard.up("Alt");
+    }
+    await canvas.click({ position: down, modifiers: ["Meta"] });
     await page.evaluate(async () => window.shift!.font.editCoordinator.settled());
     await page.keyboard.down("Meta");
     try {
@@ -112,6 +118,143 @@ test.describe("Editor view", () => {
       await page.keyboard.up("Meta");
     }
     await expect(canvas).toHaveCSS("cursor", /cursor@32\.svg/);
+  });
+
+  test("previews upgrade handles on Cmd-hover and commits those positions on Cmd-click", async ({
+    page,
+  }, testInfo) => {
+    const canvas = page.locator("#interactive-canvas");
+    const preview = await page.evaluate(() => {
+      const editor = window.shift!.editor;
+      const node = editor.scene.nodesOfKind("glyph")[0];
+      const layer = editor.glyphForId(node.glyphId)!.layerForSource(node.sourceId)!;
+      const segment = layer.contours[0].segments().find((segment) => segment.type === "line");
+      if (!segment) throw new Error("Expected line segment");
+      return {
+        id: segment.id,
+        controls: [1 / 3, 2 / 3].map((t) => segment.pointAt(t)),
+        screen: [1 / 3, 1 / 2, 2 / 3].map((t) => {
+          const point = segment.pointAt(t);
+          return editor.projectSceneToScreen({
+            x: point.x + node.position.x,
+            y: point.y + node.position.y,
+          });
+        }),
+      };
+    });
+    const pixels = () =>
+      canvas.evaluate(
+        (element, positions) => {
+          const canvas = element as HTMLCanvasElement;
+          const context = canvas.getContext("2d");
+          if (!context) throw new Error("Expected overlay context");
+          const scale = canvas.width / canvas.clientWidth;
+          return positions.map((point) =>
+            Array.from(
+              context.getImageData(Math.round(point.x * scale), Math.round(point.y * scale), 1, 1)
+                .data,
+            ),
+          );
+        },
+        [preview.screen[0], preview.screen[2]],
+      );
+    const visible = async () => {
+      const colors = await pixels();
+      return colors.every(
+        ([red, green, blue, alpha]) =>
+          red === green && green === blue && red >= 150 && red <= 200 && alpha === 255,
+      );
+    };
+
+    await canvas.hover({ position: preview.screen[1] });
+    await expect.poll(pixels).toEqual([
+      [0, 0, 0, 0],
+      [0, 0, 0, 0],
+    ]);
+    await page.keyboard.down("Meta");
+    try {
+      await expect(canvas).toHaveCSS("cursor", /cursor@32-bend\.svg/);
+      await expect.poll(visible).toBe(true);
+      await testInfo.attach("segment-upgrade-preview", {
+        body: await page.screenshot({ path: testInfo.outputPath("segment-upgrade-preview.png") }),
+        contentType: "image/png",
+      });
+      await page.keyboard.up("Meta");
+      await expect.poll(pixels).toEqual([
+        [0, 0, 0, 0],
+        [0, 0, 0, 0],
+      ]);
+      await page.keyboard.down("Meta");
+      await expect.poll(visible).toBe(true);
+      await glyphProperties(page).hover({ position: { x: 10, y: 10 } });
+      await expect.poll(pixels).toEqual([
+        [0, 0, 0, 0],
+        [0, 0, 0, 0],
+      ]);
+      await canvas.hover({ position: preview.screen[1] });
+      await expect.poll(visible).toBe(true);
+      await canvas.click({ position: preview.screen[1] });
+      await page.evaluate(async () => window.shift!.font.editCoordinator.settled());
+      const controls = await page.evaluate((id) => {
+        const object = window.shift!.editor.object(id);
+        if (object?.kind !== "segment") throw new Error("Expected upgraded segment");
+        const cubic = object.layer?.segment(id)?.asCubic();
+        if (!cubic) throw new Error("Expected cubic segment");
+        return [cubic.controlStart, cubic.controlEnd].map(({ x, y }) => ({ x, y }));
+      }, preview.id);
+      controls.forEach((point, index) => {
+        expect(point.x).toBeCloseTo(preview.controls[index].x, 6);
+        expect(point.y).toBeCloseTo(preview.controls[index].y, 6);
+      });
+      await expect.poll(pixels).toEqual([
+        [0, 0, 0, 0],
+        [0, 0, 0, 0],
+      ]);
+      await expect(canvas).toHaveCSS("cursor", /cursor@32-bend\.svg/);
+    } finally {
+      await page.keyboard.up("Meta");
+    }
+  });
+
+  test("shows the add cursor for Shift-hover and adds the point to the selection", async ({
+    page,
+  }) => {
+    const canvas = page.locator("#interactive-canvas");
+    const points = await page.evaluate(() => {
+      const editor = window.shift!.editor;
+      const node = editor.scene.nodesOfKind("glyph")[0];
+      const layer = editor.glyphForId(node.glyphId)!.layerForSource(node.sourceId)!;
+      return layer.contours[0].points.slice(0, 2).map((point) => ({
+        id: point.id,
+        position: editor.projectSceneToScreen({
+          x: point.x + node.position.x,
+          y: point.y + node.position.y,
+        }),
+      }));
+    });
+    await canvas.click({ position: points[0].position });
+    await canvas.hover({ position: points[1].position });
+    await expect(canvas).not.toHaveCSS("cursor", /cursor@32-add\.svg/);
+    await page.keyboard.down("Alt");
+    try {
+      await expect(canvas).toHaveCSS("cursor", /cursor@32\.svg/);
+    } finally {
+      await page.keyboard.up("Alt");
+    }
+    await page.keyboard.down("Shift");
+    try {
+      await expect(canvas).toHaveCSS("cursor", /cursor@32-add\.svg/);
+      await page.keyboard.up("Shift");
+      await expect(canvas).not.toHaveCSS("cursor", /cursor@32-add\.svg/);
+      await page.keyboard.down("Shift");
+      await canvas.click({ position: points[1].position });
+      await expect
+        .poll(() => page.evaluate(() => window.shift!.editor.selection.ids))
+        .toEqual(points.map((point) => point.id));
+      await expect(canvas).not.toHaveCSS("cursor", /cursor@32-add\.svg/);
+    } finally {
+      await page.keyboard.up("Shift");
+    }
   });
 
   test("remains interactive after a renderer reload", async ({ page }) => {

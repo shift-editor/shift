@@ -5,7 +5,7 @@ import { objectIsKindOf } from "@/types";
 
 export class UpgradeSegment implements SelectBehavior {
   onClick(state: SelectState, ctx: ToolContext<SelectState>, event: ClickEvent): boolean {
-    if (state.type !== "ready" || !event.altKey) return false;
+    if (state.type !== "ready" || !event.metaKey) return false;
     if (event.target.kind !== "segment") return false;
 
     const object = ctx.editor.object(event.target.id);

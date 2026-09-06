@@ -15,6 +15,76 @@ describe("Select tool", () => {
     editor.selectTool("select");
   });
 
+  describe("line upgrade feedback", () => {
+    beforeEach(async () => {
+      await editor.drawOpenContour([
+        { x: 100, y: 200 },
+        { x: 190, y: 230 },
+      ]);
+      editor.selectTool("select");
+    });
+
+    it("offers the bend cursor on Cmd-hover without changing the line", () => {
+      const point = editor.projectSceneToScreen({ x: 145, y: 215 });
+      editor.pointerMove(point.x, point.y);
+      editor.keyDown("Meta", { metaKey: true });
+      expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "bend" });
+      expect(editor.glyphContours[0].segments()[0].type).toBe("line");
+      expect(editor.pointCount).toBe(2);
+
+      editor.pointerMove(point.x, point.y);
+      expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "default" });
+    });
+
+    it("does not upgrade a line on Alt-click", async () => {
+      await editor.clickGlyphLocal(145, 215, { altKey: true });
+      expect(editor.glyphContours[0].segments()[0].type).toBe("line");
+      expect(editor.pointCount).toBe(2);
+    });
+
+    it("undoes and redoes Cmd-click as one shape-preserving upgrade", async () => {
+      await editor.clickGlyphLocal(145, 215, { metaKey: true });
+      const points = editor.glyphContours[0].points;
+      expect(points).toHaveLength(4);
+
+      await editor.undo();
+      expect(editor.glyphContours[0].segments()[0].type).toBe("line");
+      expect(editor.pointCount).toBe(2);
+
+      await editor.redo();
+      expect(editor.glyphContours[0].points).toEqual(points);
+    });
+  });
+
+  it("keeps the original on-curve start when Cmd-click upgrades the closing line", async () => {
+    editor.selectTool("pen");
+    await editor.clickGlyphLocal(100, 100);
+    await editor.clickGlyphLocal(400, 100);
+    await editor.clickGlyphLocal(400, 400);
+    await editor.clickGlyphLocal(100, 100);
+    const before = editor.glyphContours[0].points;
+    expect(editor.glyphContours[0].closed).toBe(true);
+    editor.selectTool("select");
+
+    await editor.clickGlyphLocal(250, 250, { metaKey: true });
+    const contour = editor.glyphContours[0];
+    expect(contour.points).toHaveLength(5);
+    expect(contour.points.slice(0, 3)).toEqual(before);
+    expect(contour.points[0].pointType).toBe("onCurve");
+    const cubic = contour.segments().at(-1)?.asCubic();
+    if (!cubic) throw new Error("Expected upgraded closing cubic");
+
+    expect(cubic.start.id).toBe(before[2].id);
+    expect(cubic.end.id).toBe(before[0].id);
+    expect(cubic.controlStart).toMatchObject({ x: 300, y: 300, pointType: "offCurve" });
+    expect(cubic.controlEnd).toMatchObject({ x: 200, y: 200, pointType: "offCurve" });
+
+    await editor.undo();
+    expect(editor.glyphContours[0].points).toEqual(before);
+    await editor.redo();
+    expect(editor.glyphContours[0].points).toEqual(contour.points);
+  });
+
   describe("selection", () => {
     it("selects a point when clicking on it", async () => {
       editor.selectTool("pen");
@@ -56,6 +126,60 @@ describe("Select tool", () => {
         expect(editor.selection.has(firstId)).toBe(true);
         expect(editor.selection.has(secondId)).toBe(true);
         expect(editor.selection.ids).toHaveLength(2);
+      });
+
+      it("keeps the normal cursor over an unselected point while Alt is held", async () => {
+        await editor.clickGlyphLocal(100, 100);
+        const point = editor.projectSceneToScreen({ x: 200, y: 200 });
+        editor.pointerMove(point.x, point.y);
+        editor.keyDown("Alt", { altKey: true });
+        expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "default" });
+      });
+
+      it("offers adding an unselected point only while Shift is held", async () => {
+        await editor.clickGlyphLocal(100, 100);
+        const point = editor.projectSceneToScreen({ x: 200, y: 200 });
+        editor.pointerMove(point.x, point.y);
+        expect(editor.toolManager.activeTool?.cursorCell.value).not.toEqual({ type: "add" });
+
+        editor.keyDown("Shift", { shiftKey: true });
+        expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "add" });
+
+        editor.pointerMove(point.x, point.y);
+        expect(editor.toolManager.activeTool?.cursorCell.value).not.toEqual({ type: "add" });
+      });
+
+      it("stops offering add when Shift-click selects the hovered point", async () => {
+        await editor.clickGlyphLocal(100, 100);
+        const point = editor.projectSceneToScreen({ x: 200, y: 200 });
+        editor.pointerMove(point.x, point.y, { shiftKey: true });
+        expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "add" });
+
+        await editor.clickGlyphLocal(200, 200, { shiftKey: true });
+        expect(editor.selection.ids).toEqual([firstId, secondId]);
+        expect(editor.toolManager.activeTool?.cursorCell.value).not.toEqual({ type: "add" });
+      });
+
+      it("does not offer adding on selected points, segments, or empty canvas", () => {
+        editor.selection.select([firstId, secondId]);
+        for (const position of [
+          { x: 100, y: 100 },
+          { x: 150, y: 150 },
+          { x: 500, y: 500 },
+        ]) {
+          const point = editor.projectSceneToScreen(position);
+          editor.pointerMove(point.x, point.y, { shiftKey: true });
+          expect(editor.toolManager.activeTool?.cursorCell.value).not.toEqual({ type: "add" });
+        }
+      });
+
+      it("keeps the move cursor during a Shift-constrained point drag", () => {
+        editor.selection.select([firstId]);
+        const point = editor.projectSceneToScreen({ x: 100, y: 100 });
+        editor.pointerDown(point.x, point.y, { shiftKey: true });
+        editor.pointerMove(point.x + 40, point.y + 40, { shiftKey: true });
+        expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "move" });
+        editor.escape();
       });
 
       it("removes a selected point while preserving the other selection", async () => {
@@ -552,7 +676,7 @@ describe("Select tool", () => {
       expect(editor.pointPosition(duplicatedSecond)).toEqual({ x: second.x, y: second.y });
     });
 
-    it("upgrades a line segment to a cubic with alt-click", async () => {
+    it("upgrades a line segment to a cubic with Cmd-click", async () => {
       editor.selectTool("pen");
       await editor.clickGlyphLocal(100, 200);
       await editor.clickGlyphLocal(190, 230);
@@ -561,10 +685,18 @@ describe("Select tool", () => {
       expect(layer.contours[0]?.segments()[0]?.type).toBe("line");
 
       editor.selectTool("select");
-      await editor.clickGlyphLocal(130, 210, { altKey: true });
+      await editor.clickGlyphLocal(130, 210, { metaKey: true });
 
       expect(layer.contours[0]?.segments()[0]?.type).toBe("cubic");
       expect(layer.allPoints).toHaveLength(4);
+      expect(layer.contours[0]?.segments()[0]?.asCubic()?.controlStart).toMatchObject({
+        x: 130,
+        y: 210,
+      });
+      expect(layer.contours[0]?.segments()[0]?.asCubic()?.controlEnd).toMatchObject({
+        x: 160,
+        y: 220,
+      });
     });
 
     it("bends a cubic segment with meta-drag", async () => {
