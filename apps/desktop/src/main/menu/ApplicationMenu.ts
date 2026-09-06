@@ -58,7 +58,7 @@ export class ApplicationMenu {
   }
 
   /** Opens the native editing menu for the glyph canvas under the current pointer. */
-  showCanvasContextMenu(window: BrowserWindow): void {
+  showCanvasContextMenu(window: BrowserWindow, makeFirstPoint: boolean): void {
     const menu = Menu.buildFromTemplate([
       this.#commandItem("edit.cut", window),
       this.#commandItem("edit.copy", window),
@@ -71,6 +71,10 @@ export class ApplicationMenu {
       this.#commandItem("edit.deselect", window),
       { type: "separator" },
       this.#commandItem("glyph.reverseSelectedContour", window),
+      {
+        ...this.#commandItem("glyph.makeFirstPoint", window),
+        enabled: makeFirstPoint && this.#isCommandEnabled("glyph.makeFirstPoint", window),
+      },
     ]);
 
     menu.popup({ window });

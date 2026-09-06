@@ -277,6 +277,11 @@ class GlyphLayerWriter {
     this.#state.state.reverseContour(editId, contourId);
   }
 
+  setContourStart(contourId: ContourId, pointId: PointId): void {
+    const editId = this.#intents.setContourStart({ contourId, pointId });
+    this.#state.state.setContourStart(editId, contourId, pointId);
+  }
+
   applyBooleanOp(
     contourIdA: ContourId,
     contourIdB: ContourId,
@@ -736,6 +741,25 @@ export class GlyphLayer {
    */
   reverseContour(contourId: ContourId): void {
     this.#writer.reverseContour(contourId);
+  }
+
+  /**
+   * Makes an on-curve point the start of a closed contour without changing its shape or winding.
+   *
+   * @param contourId - Closed contour whose ordered point cycle is rotated.
+   * @param pointId - Existing on-curve point in that contour.
+   * @returns False for an invalid target or an unchanged start; otherwise records one undoable edit.
+   */
+  setContourStart(contourId: ContourId, pointId: PointId): boolean {
+    const contour = this.contour(contourId);
+    if (!contour?.closed || contour.points[0]?.id === pointId) return false;
+    const point = contour.points.find((point) => point.id === pointId);
+    if (!point || !Point.isOnCurve(point)) return false;
+
+    this.#writer.transaction("Make First Point", () => {
+      this.#writer.setContourStart(contourId, pointId);
+    });
+    return true;
   }
 
   /**

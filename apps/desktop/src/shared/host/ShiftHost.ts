@@ -33,8 +33,8 @@ export interface ShiftHost {
   };
   /** Opens native menus owned by the app shell. */
   menu: {
-    /** Opens the glyph canvas context menu under the current pointer. */
-    showCanvasContextMenu: () => Promise<void>;
+    /** Opens the canvas menu with renderer-derived Make First Point eligibility; execution revalidates selection. */
+    showCanvasContextMenu: (makeFirstPoint: boolean) => Promise<void>;
   };
   /** Connects the renderer to main-owned document requests. */
   document: {

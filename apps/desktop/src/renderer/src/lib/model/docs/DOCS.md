@@ -140,6 +140,12 @@ Closed contours are traversed cyclically, including leading controls belonging t
 
 The [deletion behavior tests](../../editor/Deletion.test.ts), [degree-preservation tests](../../editor/DeletionDegree.test.ts), [contour-topology tests](../../editor/DeletionTopology.test.ts), and [fresh-reopen tests](../../workspace/FreshReopen.test.ts) verify geometry, identity, cyclic boundaries, refusal, local/confirmed parity, atomic undo/redo, and fresh-workspace persistence through the real editor and native bridge. The deletion Electron E2E suite drives canvas selection, keyboard and native-menu deletion, pixel-level rendering checks, and save/reopen.
 
+### Contour starts
+
+`GlyphLayer.setContourStart(contourId, pointId)` rotates a closed contour to an existing on-curve point in one undoable Make First Point transaction. Coordinates, point identities, smoothness, and directed segments remain unchanged. Open contours, off-curve targets, missing points, and an unchanged start are no-ops at this renderer boundary. `ContourBuffer` rotates point metadata and coordinates together; the matching Rust `SetContourStart` intent independently checks the target and persists the same ordering.
+
+Upgrading a closing line appends its two cubic controls in traversal order rather than inserting them ahead of the original first point. Existing contours with leading off-curve controls remain valid inputs for cyclic deletion; new upgrades do not create that ordering.
+
 ### Packed layout ownership
 
 The object that knows a packed layout must also own the logical metadata that interprets it. High-level editing code must not coordinate parallel structure and scalar buffers:

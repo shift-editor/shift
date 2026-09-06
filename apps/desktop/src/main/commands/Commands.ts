@@ -241,6 +241,12 @@ const editCommands: Command[] = [
 
 const glyphCommands: Command[] = [
   {
+    id: "glyph.makeFirstPoint",
+    label: "Make First Point",
+    enabled: (ctx) => ctx.document.hasWorkspace(),
+    run: (ctx) => ctx.renderer.run("glyph.makeFirstPoint"),
+  },
+  {
     id: "glyph.reverseSelectedContour",
     label: "Reverse Selected Contour",
     enabled: (ctx) => ctx.document.hasWorkspace(),
