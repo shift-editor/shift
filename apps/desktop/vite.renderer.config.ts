@@ -25,6 +25,8 @@ export default defineConfig(async () => {
     },
     publicDir: path.resolve(__dirname, "src/renderer/public"),
     build: {
+      // Electron 44 uses Chromium 152; preserve native private fields instead of WeakMap shims.
+      target: "chrome152",
       outDir: path.resolve(__dirname, ".vite/renderer/main_window"),
     },
     plugins: [
