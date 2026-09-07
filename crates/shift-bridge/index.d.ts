@@ -416,7 +416,7 @@ export interface NapiFontIntent {
    * Discriminator naming the populated payload field. Editing kinds:
    * "addPoints" | "addContour" | "setContourClosed" | "movePoints" |
    * "setPointSmooth" | "removePoints" | "addAnchors" | "moveAnchors" |
-   * "removeAnchors" | "reverseContour" | "translatePoints" |
+   * "removeAnchors" | "reverseContour" | "setContourStart" | "translatePoints" |
    * "setXAdvance" | "applyBooleanOp".
    * Font-level kinds additionally include metadata replacement, axis
    * create/update/delete, mapping replacement, named-instance
@@ -434,6 +434,7 @@ export interface NapiFontIntent {
   moveAnchors?: NapiMoveAnchorsIntent
   removeAnchors?: NapiRemoveAnchorsIntent
   reverseContour?: NapiReverseContourIntent
+  setContourStart?: NapiSetContourStartIntent
   translatePoints?: NapiTranslatePointsIntent
   setXAdvance?: NapiSetXAdvanceIntent
   applyBooleanOp?: NapiBooleanOpIntent
@@ -754,6 +755,13 @@ export interface NapiSetContourClosedIntent {
   layerId: LayerId
   contourId: ContourId
   closed: boolean
+}
+
+/** Selects an existing on-curve start for a closed contour; does not move or convert points. */
+export interface NapiSetContourStartIntent {
+  layerId: LayerId
+  contourId: ContourId
+  pointId: PointId
 }
 
 export interface NapiSetMetricDefinitionsIntent {

@@ -27,6 +27,21 @@ describe("Shape tool", () => {
     expect(editor.toolIf("select")?.state).toEqual({ type: "ready" });
   });
 
+  it("updates the cursor when the selected shape kind changes", () => {
+    expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "crosshair-square" });
+    editor.toolRegistry
+      .get("shape")!
+      .menuItems!.find((item) => item.id === "ellipse")!
+      .onSelect();
+    expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "crosshair-circle" });
+
+    editor.toolRegistry
+      .get("shape")!
+      .menuItems!.find((item) => item.id === "rectangle")!
+      .onSelect();
+    expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "crosshair-square" });
+  });
+
   it("drag then release commits a closed 4-point rectangle contour", async () => {
     const contoursBefore = contours().length;
 
@@ -142,6 +157,18 @@ describe.each(["rectangle", "ellipse"] as const)("%s drawing lifecycle", (kind) 
     const bounds = editor.glyphContours[0].bounds;
     expect(bounds?.min).toEqual({ x: Math.min(10, end.x), y: Math.min(20, end.y) });
     expect(bounds?.max).toEqual({ x: Math.max(10, end.x), y: Math.max(20, end.y) });
+  });
+
+  it("retains the shape cursor during drawing and after cancellation", () => {
+    editor.pointerDown(10, 10).pointerMove(100, 60);
+    expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({
+      type: kind === "ellipse" ? "crosshair-circle" : "crosshair-square",
+    });
+
+    editor.escape();
+    expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({
+      type: kind === "ellipse" ? "crosshair-circle" : "crosshair-square",
+    });
   });
 
   it("uses the same geometry for preview paths and committed contours", async () => {

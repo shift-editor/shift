@@ -21,6 +21,7 @@ import { objectIsKindOf } from "@/types";
 import type { Canvas } from "@/lib/editor/rendering/Canvas";
 import { SelectBoundingBox } from "./BoundingBox";
 import { SelectMarquee } from "./Marquee";
+import { SelectUpgradePreview } from "./SelectUpgradePreview";
 
 export type { BoundingRectEdge, SelectState };
 
@@ -28,6 +29,7 @@ export class Select extends BaseTool<SelectState, Select> {
   readonly id: ToolName = "select";
   readonly boundingBox = new SelectBoundingBox(this);
   readonly marquee = new SelectMarquee(this);
+  readonly upgradePreview = new SelectUpgradePreview(this);
 
   readonly behaviors: SelectBehavior[] = [
     new ToggleSmooth(),
@@ -60,32 +62,40 @@ export class Select extends BaseTool<SelectState, Select> {
     }
 
     const coords = this.editor.input.pointerCell.value;
-    if (coords) {
-      const cursor = this.boundingBox.cursor(coords);
-      if (cursor) return cursor;
-    }
-
     const modifiers = this.editor.input.modifiersCell.value;
     const hover = this.editor.hover.entryCell.value;
+    if (
+      state.type === "ready" &&
+      coords &&
+      modifiers.shiftKey &&
+      hover &&
+      objectIsKindOf(this.editor.object(hover), "point") &&
+      !this.editor.selection.stateCell.value.ids.includes(hover)
+    ) {
+      return { type: "add" };
+    }
+
     if (state.type === "ready" && coords && modifiers.metaKey && hover) {
       const object = this.editor.object(hover);
       if (objectIsKindOf(object, "segment")) {
         const layer = object.layer;
+        const segment = layer?.geometryCell.value.segment(object.segmentId);
         if (
           layer &&
           layer.sourceId === this.editor.activeSourceIdCell.value &&
-          layer.segment(object.segmentId)?.asCubic()
+          (segment?.type === "line" || segment?.type === "cubic")
         ) {
           return { type: "bend" };
         }
       }
     }
 
-    if (coords && this.boundingBox.containsTranslationPoint(coords)) return { type: "move" };
-
-    if (modifiers.altKey && hover) {
-      return { type: "copy" };
+    if (coords) {
+      const cursor = this.boundingBox.cursor(coords);
+      if (cursor) return cursor;
     }
+
+    if (coords && this.boundingBox.containsTranslationPoint(coords)) return { type: "move" };
 
     return { type: "default" };
   }
@@ -150,6 +160,11 @@ export class Select extends BaseTool<SelectState, Select> {
     this.setState({ type: "idle" });
   }
 
+  override dispose(): void {
+    this.upgradePreview.propsCell.dispose();
+    super.dispose();
+  }
+
   override drawScene(canvas: Canvas): void {
     void canvas;
   }
@@ -162,5 +177,6 @@ export class Select extends BaseTool<SelectState, Select> {
     }
 
     this.marquee.draw(canvas);
+    this.upgradePreview.draw(canvas);
   }
 }

@@ -80,6 +80,21 @@ export async function runRendererCommand(editor: Editor, id: EditorCommandId): P
       editor.zoomOut();
       return true;
 
+    case "glyph.makeFirstPoint": {
+      if (editor.sessionMode === "preview" || editor.selection.ids.length !== 1) return false;
+
+      const object = editor.object(editor.selection.ids[0]);
+      if (!objectIsKindOf(object, "point")) return false;
+
+      const layer = object.layer;
+      if (!layer || layer.sourceId !== editor.activeSourceId) return false;
+
+      const changed = layer.setContourStart(object.contourId, object.pointId);
+      if (changed) await editor.font.editCoordinator.settled();
+
+      return changed;
+    }
+
     case "glyph.reverseSelectedContour": {
       const contourIds = new Set<ContourId>();
 
@@ -151,6 +166,7 @@ async function runFocusedTextEditCommand(id: EditorCommandId): Promise<boolean |
     case "view.zoomIn":
     case "view.zoomOut":
     case "glyph.reverseSelectedContour":
+    case "glyph.makeFirstPoint":
       return null;
   }
 }

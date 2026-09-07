@@ -1253,7 +1253,7 @@ pub struct NapiFontIntent {
     /// Discriminator naming the populated payload field. Editing kinds:
     /// "addPoints" | "addContour" | "setContourClosed" | "movePoints" |
     /// "setPointSmooth" | "removePoints" | "addAnchors" | "moveAnchors" |
-    /// "removeAnchors" | "reverseContour" | "translatePoints" |
+    /// "removeAnchors" | "reverseContour" | "setContourStart" | "translatePoints" |
     /// "setXAdvance" | "applyBooleanOp".
     /// Font-level kinds additionally include metadata replacement, axis
     /// create/update/delete, mapping replacement, named-instance
@@ -1270,6 +1270,7 @@ pub struct NapiFontIntent {
     pub move_anchors: Option<NapiMoveAnchorsIntent>,
     pub remove_anchors: Option<NapiRemoveAnchorsIntent>,
     pub reverse_contour: Option<NapiReverseContourIntent>,
+    pub set_contour_start: Option<NapiSetContourStartIntent>,
     pub translate_points: Option<NapiTranslatePointsIntent>,
     pub set_x_advance: Option<NapiSetXAdvanceIntent>,
     pub apply_boolean_op: Option<NapiBooleanOpIntent>,
@@ -1605,6 +1606,17 @@ pub struct NapiReverseContourIntent {
     pub layer_id: String,
     #[napi(ts_type = "ContourId")]
     pub contour_id: String,
+}
+
+/// Selects an existing on-curve start for a closed contour; does not move or convert points.
+#[napi(object)]
+pub struct NapiSetContourStartIntent {
+    #[napi(ts_type = "LayerId")]
+    pub layer_id: String,
+    #[napi(ts_type = "ContourId")]
+    pub contour_id: String,
+    #[napi(ts_type = "PointId")]
+    pub point_id: String,
 }
 
 /// Affine move: O(selection-ids) wire instead of O(N) coords.

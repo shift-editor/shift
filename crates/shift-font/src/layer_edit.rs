@@ -378,6 +378,32 @@ impl GlyphLayer {
         Ok(())
     }
 
+    /// Rotates a closed contour's point cycle without changing identities, coordinates, or winding.
+    ///
+    /// Returns `false` for an open contour, an off-curve target, or an unchanged start.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the contour or its requested point does not exist.
+    pub fn set_contour_start(
+        &mut self,
+        contour_id: ContourId,
+        point_id: PointId,
+    ) -> CoreResult<bool> {
+        let contour = self.contour_mut_or_err(contour_id)?;
+        let index = contour
+            .points()
+            .iter()
+            .position(|point| point.id() == point_id)
+            .ok_or(CoreError::PointNotFound(point_id))?;
+        if !contour.is_closed() || index == 0 || !contour.points()[index].is_on_curve() {
+            return Ok(false);
+        }
+
+        contour.points_mut().rotate_left(index);
+        Ok(true)
+    }
+
     pub fn apply_boolean_op(
         &mut self,
         contour_id_a: ContourId,
@@ -594,6 +620,62 @@ mod tests {
     fn anchor_position(session: &GlyphLayer, anchor_id: AnchorId) -> (f64, f64) {
         let anchor = session.anchor(anchor_id).unwrap();
         (anchor.x(), anchor.y())
+    }
+
+    #[test]
+    fn set_contour_start_rotates_without_changing_points() {
+        let (mut session, contour_id) = session_with_contour();
+        add_point(&mut session, contour_id.clone(), 10.0, 20.0);
+        session
+            .add_point_to_contour(contour_id.clone(), 40.0, 80.0, PointType::OffCurve, false)
+            .unwrap();
+        let point_id = session
+            .add_point_to_contour(contour_id.clone(), 70.0, 20.0, PointType::QCurve, true)
+            .unwrap()
+            .point_id;
+        session.close_contour(contour_id.clone()).unwrap();
+        let before = session
+            .contour(contour_id.clone())
+            .unwrap()
+            .points()
+            .to_vec();
+
+        assert!(session
+            .set_contour_start(contour_id.clone(), point_id.clone())
+            .unwrap());
+        let after = session.contour(contour_id.clone()).unwrap();
+        assert!(after.is_closed());
+        assert_eq!(
+            after.points(),
+            &[before[2].clone(), before[0].clone(), before[1].clone()]
+        );
+        assert!(!session.set_contour_start(contour_id, point_id).unwrap());
+    }
+
+    #[test]
+    fn set_contour_start_rejects_ineligible_targets_without_mutating() {
+        let (mut session, contour_id) = session_with_contour();
+        add_point(&mut session, contour_id.clone(), 10.0, 20.0);
+        let point_id = add_point(&mut session, contour_id.clone(), 70.0, 20.0);
+        let handle_id = session
+            .add_point_to_contour(contour_id.clone(), 40.0, 80.0, PointType::OffCurve, false)
+            .unwrap()
+            .point_id;
+        let before = session.clone();
+        assert!(!session
+            .set_contour_start(contour_id.clone(), point_id)
+            .unwrap());
+        assert_eq!(session, before);
+
+        session.close_contour(contour_id.clone()).unwrap();
+        let before = session.clone();
+        assert!(!session
+            .set_contour_start(contour_id.clone(), handle_id)
+            .unwrap());
+        assert!(session
+            .set_contour_start(contour_id, PointId::new())
+            .is_err());
+        assert_eq!(session, before);
     }
 
     #[test]

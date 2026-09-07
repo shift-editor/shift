@@ -1883,6 +1883,29 @@ fn reverse_contour_undo_redo_restores_layer() {
 }
 
 #[test]
+fn set_contour_start_undo_redo_restores_layer() {
+    let (_temp, mut workspace, layer_id) = workspace_with_layer();
+    let (contour_id, point_ids) = add_square_contour(&mut workspace, &layer_id, (0.0, 0.0), 100.0);
+
+    assert_layer_undo_redo(
+        &mut workspace,
+        &layer_id,
+        vec![FontIntent::SetContourStart {
+            layer_id: layer_id.clone(),
+            contour_id: contour_id.clone(),
+            point_id: point_ids[2].clone(),
+        }],
+    );
+    let contour = workspace
+        .font()
+        .layer(layer_id)
+        .unwrap()
+        .contour(contour_id)
+        .unwrap();
+    assert_eq!(contour.points()[0].id(), point_ids[2]);
+}
+
+#[test]
 fn translate_points_undo_redo_restores_layer() {
     let (_temp, mut workspace, layer_id) = workspace_with_layer();
     let (_, point_ids) = add_square_contour(&mut workspace, &layer_id, (0.0, 0.0), 100.0);

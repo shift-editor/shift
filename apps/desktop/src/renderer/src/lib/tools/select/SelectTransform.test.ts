@@ -23,11 +23,20 @@ describe("Select bounding-box transforms preserve geometry outcomes", () => {
     editor.selectTool("select");
   });
 
-  it("does not offer bending on a straight segment inside the selection", () => {
+  it("offers moving on a straight segment inside the selection without Cmd", () => {
+    const down = editor.projectSceneToScreen({ x: 150, y: 150 });
+    editor.pointerMove(down.x, down.y);
+
+    expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "move" });
+  });
+
+  it("offers upgrading on Cmd-hover over a straight segment inside the selection", () => {
     const down = editor.projectSceneToScreen({ x: 150, y: 150 });
     editor.pointerMove(down.x, down.y, { metaKey: true });
 
-    expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "move" });
+    expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "bend" });
+    expect(layer.contours[0].segments()[0].type).toBe("line");
+    expect(editor.selection.ids).toEqual([firstId, secondId]);
   });
 
   describe("resizing", () => {
@@ -277,6 +286,15 @@ describe("Select curve bending preserves edit lifecycle", () => {
     expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "bend" });
 
     editor.pointerMove(down.x, down.y);
+    expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "default" });
+  });
+
+  it("keeps the normal cursor when Alt is pressed over a segment", () => {
+    const down = editor.projectSceneToScreen(bendPoint);
+    editor.pointerMove(down.x, down.y);
+    expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "default" });
+
+    editor.keyDown("Alt", { altKey: true });
     expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "default" });
   });
 
