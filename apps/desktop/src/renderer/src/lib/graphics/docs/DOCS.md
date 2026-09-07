@@ -1,6 +1,6 @@
 # Graphics
 
-<!-- reviewed: 2026-09-04 -->
+<!-- reviewed: 2026-09-05 -->
 
 Renderer vector-path values and the accelerated marker-layer backend for editor handle drawing.
 
