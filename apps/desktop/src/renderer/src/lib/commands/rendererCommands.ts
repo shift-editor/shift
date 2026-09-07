@@ -54,10 +54,21 @@ export async function runRendererCommand(editor: Editor, id: EditorCommandId): P
       return editor.deleteSelection();
 
     case "edit.duplicate": {
-      const inserted = editor.duplicateSelection();
-      if (inserted.length === 0) return false;
+      const capture = editor.history.beginCapture();
+      try {
+        const inserted = editor.duplicateSelection();
+        if (inserted.length === 0) {
+          capture.discard();
+          return false;
+        }
 
-      editor.selection.select(inserted);
+        editor.selection.select(inserted);
+        capture.finish();
+      } catch (error) {
+        capture.discard();
+        throw error;
+      }
+
       await editor.font.editCoordinator.settled();
       return true;
     }

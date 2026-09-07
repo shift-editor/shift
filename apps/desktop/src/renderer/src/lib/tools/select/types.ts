@@ -5,6 +5,7 @@ import type { CornerHandle } from "./BoundingBox";
 import type { Behavior } from "../core/Behavior";
 import type { Select } from "./Select";
 import type { SegmentId } from "@/types/indicator";
+import type { SelectableId } from "@/types";
 
 export interface DragTarget {
   pointIds: PointId[];
@@ -15,6 +16,7 @@ export interface DragTarget {
 export interface BrushingDrag {
   startPos: Point2D;
   currentPos: Point2D;
+  initialSelection: readonly SelectableId[];
 }
 
 /** Live state of a point-translate drag, including accumulated delta for undo grouping. */

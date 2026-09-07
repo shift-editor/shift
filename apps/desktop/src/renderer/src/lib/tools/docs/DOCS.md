@@ -1,6 +1,6 @@
 # Tools
 
-<!-- reviewed: 2026-09-02 -->
+<!-- reviewed: 2026-09-06 -->
 
 State machine-based tool system for the Shift font editor: translates pointer/keyboard input into tool-specific state transitions and rendering.
 
@@ -21,6 +21,8 @@ State machine-based tool system for the Shift font editor: translates pointer/ke
 - **Architecture Invariant:** Behaviors do NOT render. All rendering belongs in the tool's `drawOverlay` / `drawScene` / `drawBackground` methods.
 
 - **Architecture Invariant:** `ToolManager` coalesces pointer-move events via `requestAnimationFrame`. The synchronous pointer handler only stores input; projection, hit-test, and tool dispatch run in the rAF callback. **CRITICAL**: reading layout-dependent state synchronously in the pointer handler will see stale data.
+
+- **Architecture Invariant:** `ToolManager` brackets each click/key event and complete drag lifecycle in one `HistoryCapture`. `dragEnd` finishes it after tool commit; `dragCancel` or a thrown handler discards it after tool rollback. Behaviors mutate selection and document state normally and must not open nested history captures.
 
 - **Architecture Invariant:** `ToolContext.setState` inside a behavior's event handler updates a local `nextState` variable, not `this.state` on the tool. `BaseTool` commits the new state and fires lifecycle hooks (`onStateExit`, `onStateEnter`, `onStateChange`) only after the behavior loop returns. Calling `setState` multiple times within one handler is legal; only the final value is committed.
 
@@ -91,6 +93,7 @@ User pointer/key
 - Pointer-up drains queued movement and emits the final `drag` sample before `dragEnd`. Both release events use the final pointer position with the latest drag sample's modifiers, so releasing Shift just before mouseup does not change the preview's constraints. Modifier changes take effect on the next processed drag movement; clicks and double-clicks still use release-time modifiers. `GestureDetector.lastDragModifiers` is empty before dragging, follows each emitted drag movement, and clears on completion, cancellation, or a new pointer-down.
 - Behaviors initialize on `dragStart`, register rollback with `ctx.onCancel()`, preview from `drag`, and commit on `dragEnd` before dismissing rollback.
 - `BaseTool` runs any rollback left active at `dragEnd`, `dragCancel`, tool disposal, or after a handler throws.
+- `ToolManager` keeps the matching `HistoryCapture` open from `dragStart` through terminal dispatch, so initial selection, final document commit, and net selection are one undo step; cancellation restores the pre-drag selection and records nothing.
 
 ### Shape authoring
 

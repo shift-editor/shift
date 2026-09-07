@@ -1,5 +1,6 @@
 import { Rect, Vec2, type Rect2D } from "@shift/geo";
 import type { PointId } from "@shift/types";
+import type { SelectableId } from "@/types";
 import type { ToolContext } from "../../core/Behavior";
 import type { DragEndEvent, DragEvent, DragStartEvent } from "../../core/GestureDetector";
 import type { SelectBehavior, SelectState } from "../types";
@@ -8,7 +9,8 @@ export class Marquee implements SelectBehavior {
   onDragStart(state: SelectState, ctx: ToolContext<SelectState>, event: DragStartEvent): boolean {
     if (state.type !== "ready") return false;
 
-    if (ctx.editor.selection.hasSelection()) {
+    const initialSelection = ctx.editor.selection.ids;
+    if (!event.shiftKey && ctx.editor.selection.hasSelection()) {
       ctx.editor.selection.clear();
     }
 
@@ -17,6 +19,7 @@ export class Marquee implements SelectBehavior {
       selection: {
         startPos: event.origin.scene,
         currentPos: event.coords.scene,
+        initialSelection,
       },
     });
 
@@ -27,7 +30,7 @@ export class Marquee implements SelectBehavior {
     if (state.type !== "brushing") return false;
 
     const rect = Rect.fromPoints(state.selection.startPos, event.coords.scene);
-    this.selectPointsInRect(rect, ctx);
+    this.selectPointsInRect(rect, ctx, event.shiftKey ? state.selection.initialSelection : []);
 
     ctx.setState({
       type: "brushing",
@@ -40,7 +43,7 @@ export class Marquee implements SelectBehavior {
     if (state.type !== "brushing") return false;
 
     const rect = Rect.fromPoints(state.selection.startPos, event.coords.scene);
-    this.selectPointsInRect(rect, ctx);
+    this.selectPointsInRect(rect, ctx, event.shiftKey ? state.selection.initialSelection : []);
 
     ctx.setState({ type: "ready" });
     return true;
@@ -72,13 +75,17 @@ export class Marquee implements SelectBehavior {
     return pointIds;
   }
 
-  private selectPointsInRect(rect: Rect2D, ctx: ToolContext<SelectState>): void {
+  private selectPointsInRect(
+    rect: Rect2D,
+    ctx: ToolContext<SelectState>,
+    initialSelection: readonly SelectableId[],
+  ): void {
     if (ctx.editor.sessionMode === "preview") {
       ctx.editor.selection.clear();
       return;
     }
 
     const pointIds = this.getPointsInRect(rect, ctx);
-    ctx.editor.selection.select([...pointIds]);
+    ctx.editor.selection.select([...initialSelection, ...pointIds]);
   }
 }

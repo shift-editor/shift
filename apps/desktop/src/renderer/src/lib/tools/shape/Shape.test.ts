@@ -253,10 +253,13 @@ describe.each(["rectangle", "ellipse"] as const)("%s drawing lifecycle", (kind) 
       end: { x: 210, y: 120 },
     });
     const points = editor.glyphContours[0].points;
+    const selection = editor.selection.ids;
     await editor.undo();
     expect(editor.glyphContours).toHaveLength(0);
+    expect(editor.selection.ids).toEqual([]);
     await editor.redo();
     expect(editor.glyphContours[0].points).toEqual(points);
     expect(editor.glyphContours[0].closed).toBe(true);
+    expect(editor.selection.ids).toEqual(selection);
   });
 });

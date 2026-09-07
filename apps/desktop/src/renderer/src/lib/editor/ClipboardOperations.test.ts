@@ -38,15 +38,19 @@ describe("editor clipboard operations", () => {
     await editor.copy();
 
     await editor.paste();
+    const firstPasteSelection = editor.selection.ids;
     await editor.paste();
+    const secondPasteSelection = editor.selection.ids;
 
     expect(contourShape(layer.contours[1]!)).toEqual(offsetContour(source, 20, -20));
     expect(contourShape(layer.contours[2]!)).toEqual(offsetContour(source, 40, -40));
 
     await editor.undo();
     expect(layer.contours).toHaveLength(2);
+    expect(editor.selection.ids).toEqual(firstPasteSelection);
     await editor.redo();
     expect(contourShape(layer.contours[2]!)).toEqual(offsetContour(source, 40, -40));
+    expect(editor.selection.ids).toEqual(secondPasteSelection);
   });
 
   it("cuts and pastes with separate undoable workspace edits", async () => {
@@ -61,17 +65,22 @@ describe("editor clipboard operations", () => {
 
     expect(await editor.paste()).toBe(true);
     expect(contourShape(layer.contours[0]!)).toEqual(pasted);
+    const pastedSelection = editor.selection.ids;
 
     await editor.undo();
     expect(layer.contours).toHaveLength(0);
+    expect(editor.selection.ids).toEqual([]);
     await editor.undo();
     expect(layer.contours[0]?.id).toBe(source.id);
     expect(contourShape(layer.contours[0]!)).toEqual(original);
+    expect(editor.selection.ids).toEqual([source.id]);
 
     await editor.redo();
     expect(layer.contours).toHaveLength(0);
+    expect(editor.selection.ids).toEqual([]);
     await editor.redo();
     expect(contourShape(layer.contours[0]!)).toEqual(pasted);
+    expect(editor.selection.ids).toEqual(pastedSelection);
   });
 
   it("pastes copied geometry into another glyph without changing the source", async () => {

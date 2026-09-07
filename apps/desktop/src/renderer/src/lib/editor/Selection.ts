@@ -1,7 +1,12 @@
 import { computed, type Signal } from "@/lib/signals/signal";
 import type { ShiftStore } from "@/lib/store/ShiftStore";
 import { uniqueInOrder } from "@/lib/utils/utils";
-import { currentSelectionId, type SelectableId, type ShiftEditorRecord } from "@/types";
+import {
+  currentSelectionId,
+  type SelectableId,
+  type SelectionListener,
+  type ShiftEditorRecord,
+} from "@/types";
 
 export interface SelectionState {
   readonly ids: readonly SelectableId[];
@@ -22,6 +27,7 @@ function emptySelectionState(): SelectionState {
 export class Selection {
   readonly #store: ShiftStore<ShiftEditorRecord>;
   readonly #ids: Signal<ReadonlySet<SelectableId>>;
+  readonly #listeners = new Set<SelectionListener>();
   readonly stateCell: Signal<SelectionState>;
 
   constructor(store: ShiftStore<ShiftEditorRecord>) {
@@ -51,6 +57,17 @@ export class Selection {
    */
   get ids(): readonly SelectableId[] {
     return [...this.stateCell.peek().ids];
+  }
+
+  /**
+   * Observes complete ordered replacements after they are published.
+   *
+   * @param listener - Receives immutable before/after selection values.
+   * @returns A function that permanently removes this listener.
+   */
+  subscribe(listener: SelectionListener): () => void {
+    this.#listeners.add(listener);
+    return () => this.#listeners.delete(listener);
   }
 
   has(id: SelectableId): boolean {
@@ -97,9 +114,11 @@ export class Selection {
   }
 
   clear(): void {
-    if (!this.hasSelection()) return;
+    const before = this.stateCell.peek().ids;
+    if (before.length === 0) return;
 
     this.#store.delete(currentSelectionId);
+    this.#publish(before, []);
   }
 
   #write(ids: readonly SelectableId[]): void {
@@ -108,11 +127,17 @@ export class Selection {
       return;
     }
 
+    const before = this.stateCell.peek().ids;
     this.#store.put({
       id: currentSelectionId,
       type: "selection",
       scope: "session",
       ids,
     });
+    this.#publish(before, ids);
+  }
+
+  #publish(before: readonly SelectableId[], after: readonly SelectableId[]): void {
+    for (const listener of this.#listeners) listener(before, after);
   }
 }

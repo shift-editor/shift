@@ -1,5 +1,6 @@
 import type { Point2D } from "@shift/geo";
 import type { Editor } from "@/lib/editor/Editor";
+import type { HistoryCapture } from "@/lib/editor/HistoryCapture";
 import type { ToolSwitchHandler, TemporaryToolOptions } from "@/types/editor";
 import type { ToolName } from "./createContext";
 import {
@@ -36,6 +37,7 @@ export class ToolManager implements ToolSwitchHandler {
   private gesture = new GestureDetector();
   private editor: Editor;
   private pendingReplacements = new Set<ToolName>();
+  #historyCapture: HistoryCapture | null = null;
 
   private temporaryOptions: TemporaryToolOptions | null = null;
 
@@ -230,7 +232,7 @@ export class ToolManager implements ToolSwitchHandler {
     this.gesture.reset();
     this.editor.gesture.reset();
     if (wasDragging) {
-      this.activeTool?.handleEvent({ type: "dragCancel" });
+      this.#dispatchEvent({ type: "dragCancel" });
     }
     this.#flushPendingReplacements();
   }
@@ -249,13 +251,11 @@ export class ToolManager implements ToolSwitchHandler {
       return true;
     }
 
-    return (
-      this.activeTool?.handleEvent({
-        type: "keyDown",
-        key: e.key,
-        ...modifiers,
-      }) ?? false
-    );
+    return this.#dispatchEvent({
+      type: "keyDown",
+      key: e.key,
+      ...modifiers,
+    });
   }
 
   handleKeyUp(e: KeyboardEvent): boolean {
@@ -267,13 +267,11 @@ export class ToolManager implements ToolSwitchHandler {
     });
     this.editor.input.setModifiers(modifiers);
 
-    return (
-      this.activeTool?.handleEvent({
-        type: "keyUp",
-        key: e.key,
-        ...modifiers,
-      }) ?? false
-    );
+    return this.#dispatchEvent({
+      type: "keyUp",
+      key: e.key,
+      ...modifiers,
+    });
   }
 
   drawBackground(canvas: Canvas): void {
@@ -317,12 +315,79 @@ export class ToolManager implements ToolSwitchHandler {
   }
 
   notifySelectionChanged(): void {
-    this.activeTool?.handleEvent({ type: "selectionChanged" });
+    this.#dispatchEvent({ type: "selectionChanged" });
   }
 
   private dispatchEvents(events: GestureEvent[]): void {
     for (const event of events) {
-      this.activeTool?.handleEvent(this.withPointerTarget(event));
+      this.#dispatchEvent(this.withPointerTarget(event));
+    }
+  }
+
+  #dispatchEvent(event: ToolEvent): boolean {
+    switch (event.type) {
+      case "dragStart": {
+        this.#historyCapture?.discard();
+        const capture = this.editor.history.beginCapture();
+        this.#historyCapture = capture;
+
+        try {
+          return this.activeTool?.handleEvent(event) ?? false;
+        } catch (error) {
+          capture.discard();
+          this.#historyCapture = null;
+          throw error;
+        }
+      }
+
+      case "dragEnd": {
+        const capture = this.#historyCapture;
+        this.#historyCapture = null;
+
+        try {
+          const handled = this.activeTool?.handleEvent(event) ?? false;
+          capture?.finish();
+          return handled;
+        } catch (error) {
+          capture?.discard();
+          throw error;
+        }
+      }
+
+      case "dragCancel": {
+        const capture = this.#historyCapture;
+        this.#historyCapture = null;
+
+        try {
+          return this.activeTool?.handleEvent(event) ?? false;
+        } finally {
+          capture?.discard();
+        }
+      }
+
+      case "drag":
+      case "pointerMove":
+        return this.activeTool?.handleEvent(event) ?? false;
+
+      case "click":
+      case "doubleClick":
+      case "keyDown":
+      case "keyUp":
+      case "selectionChanged": {
+        if (this.editor.history.capturing) {
+          return this.activeTool?.handleEvent(event) ?? false;
+        }
+
+        const capture = this.editor.history.beginCapture();
+        try {
+          const handled = this.activeTool?.handleEvent(event) ?? false;
+          capture.finish();
+          return handled;
+        } catch (error) {
+          capture.discard();
+          throw error;
+        }
+      }
     }
   }
 

@@ -117,6 +117,147 @@ describe("Select tool", () => {
       });
     });
 
+    describe("marquee selection", () => {
+      let firstId: PointId;
+      let secondId: PointId;
+      let thirdId: PointId;
+
+      beforeEach(async () => {
+        const pointIds = await editor.drawOpenContour([
+          { x: 100, y: 100 },
+          { x: 200, y: 200 },
+          { x: 300, y: 300 },
+        ]);
+        if (!pointIds[0] || !pointIds[1] || !pointIds[2]) throw new Error("Expected three points");
+        [firstId, secondId, thirdId] = pointIds;
+        editor.selectTool("select");
+      });
+
+      it.each([false, true])(
+        "preserves the prior selection only with Shift: %s",
+        async (shiftKey) => {
+          editor.selection.select([secondId]);
+
+          await editor.dragScene({
+            down: { x: 60, y: 60 },
+            start: { x: 70, y: 60 },
+            end: { x: 130, y: 130 },
+            options: { shiftKey },
+          });
+
+          expect(editor.selection.ids).toEqual(shiftKey ? [secondId, firstId] : [firstId]);
+        },
+      );
+
+      it("preserves the selection when a Shift-marquee contains no points", async () => {
+        editor.selection.select([secondId]);
+
+        await editor.dragScene({
+          down: { x: 60, y: 60 },
+          start: { x: 70, y: 60 },
+          end: { x: 80, y: 80 },
+          options: { shiftKey: true },
+        });
+
+        expect(editor.selection.ids).toEqual([secondId]);
+      });
+
+      it("does not toggle off already-selected points inside a Shift-marquee", async () => {
+        editor.selection.select([firstId, secondId]);
+
+        await editor.dragScene({
+          down: { x: 60, y: 60 },
+          start: { x: 70, y: 60 },
+          end: { x: 130, y: 130 },
+          options: { shiftKey: true },
+        });
+
+        expect(editor.selection.ids).toEqual([firstId, secondId]);
+      });
+
+      it("drops only newly brushed points when a Shift-marquee shrinks", () => {
+        editor.selection.select([secondId]);
+        const down = editor.projectSceneToScreen({ x: 60, y: 60 });
+        const end = editor.projectSceneToScreen({ x: 130, y: 130 });
+        const start = editor.projectSceneToScreen({ x: 80, y: 80 });
+
+        editor.pointerDown(down.x, down.y, { shiftKey: true });
+        editor.pointerMove(end.x, end.y, { shiftKey: true });
+        expect(editor.selection.ids).toEqual([secondId, firstId]);
+        editor.pointerMove(start.x, start.y, { shiftKey: true });
+        expect(editor.selection.ids).toEqual([secondId]);
+        editor.pointerUp(start.x, start.y, { shiftKey: true });
+
+        expect(editor.selection.ids).toEqual([secondId]);
+      });
+
+      it.each([false, true])(
+        "keeps the selection box visible during Shift-marquee only: %s",
+        (shiftKey) => {
+          editor.selection.select([firstId, secondId]);
+          const select = editor.toolManager.activeTool;
+          if (!(select instanceof Select)) throw new Error("Expected Select tool");
+          const down = editor.projectSceneToScreen({ x: 60, y: 60 });
+          const end = editor.projectSceneToScreen({ x: 80, y: 80 });
+
+          expect(select.boundingBox.visible).toBe(true);
+          editor.pointerDown(down.x, down.y, { shiftKey });
+          expect(select.boundingBox.visible).toBe(true);
+          editor.pointerMove(end.x, end.y, { shiftKey });
+          expect(select.boundingBox.visible).toBe(shiftKey);
+          editor.pointerUp(end.x, end.y, { shiftKey });
+          expect(select.boundingBox.visible).toBe(shiftKey);
+        },
+      );
+
+      it("keeps the old box fixed until a Shift-marquee is released", () => {
+        editor.selection.select([secondId, thirdId]);
+        const select = editor.toolManager.activeTool;
+        if (!(select instanceof Select)) throw new Error("Expected Select tool");
+        const before = select.boundingBox.rect;
+        const down = editor.projectSceneToScreen({ x: 60, y: 60 });
+        const end = editor.projectSceneToScreen({ x: 130, y: 130 });
+
+        editor.pointerDown(down.x, down.y, { shiftKey: true });
+        expect(select.boundingBox.rect).toEqual(before);
+        editor.pointerMove(end.x, end.y, { shiftKey: true });
+        expect(editor.selection.ids).toEqual([secondId, thirdId, firstId]);
+        expect(select.boundingBox.rect).toEqual(before);
+        editor.pointerUp(end.x, end.y, { shiftKey: true });
+        expect(select.boundingBox.rect).toEqual(editor.selectionBounds());
+        expect(select.boundingBox.rect).not.toEqual(before);
+      });
+
+      it("waits for release to show a new box when Shift-marquee starts without a selection", () => {
+        const select = editor.toolManager.activeTool;
+        if (!(select instanceof Select)) throw new Error("Expected Select tool");
+        const down = editor.projectSceneToScreen({ x: 60, y: 60 });
+        const end = editor.projectSceneToScreen({ x: 230, y: 230 });
+
+        editor.pointerDown(down.x, down.y, { shiftKey: true });
+        editor.pointerMove(end.x, end.y, { shiftKey: true });
+        expect(editor.selection.ids).toEqual([firstId, secondId]);
+        expect(select.boundingBox.visible).toBe(false);
+        editor.pointerUp(end.x, end.y, { shiftKey: true });
+        expect(select.boundingBox.visible).toBe(true);
+      });
+
+      it("uses the pre-drag selection when Shift is pressed during a marquee", () => {
+        editor.selection.select([secondId]);
+        const down = editor.projectSceneToScreen({ x: 60, y: 60 });
+        const end = editor.projectSceneToScreen({ x: 130, y: 130 });
+
+        editor.pointerDown(down.x, down.y);
+        editor.pointerMove(end.x, end.y);
+        expect(editor.selection.ids).toEqual([firstId]);
+        editor.pointerMove(end.x, end.y, { shiftKey: true });
+        expect(editor.selection.ids).toEqual([secondId, firstId]);
+        editor.pointerUp(end.x, end.y, { shiftKey: true });
+
+        expect(editor.selection.ids).toEqual([secondId, firstId]);
+      });
+    });
+
     it("drags a selected point", async () => {
       editor.selectTool("pen");
       await editor.clickGlyphLocal(100, 200);

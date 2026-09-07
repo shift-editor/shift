@@ -51,10 +51,20 @@ describe("empty and invalid editor operations", () => {
       { x: 100, y: 0 },
     ]);
     editor.selectAll();
+    const originalSelection = editor.selection.ids;
 
     expect(await runRendererCommand(editor, "edit.duplicate")).toBe(true);
     expect(editor.pointCount).toBe(4);
-    expect(editor.selection.ids).toHaveLength(2);
+    const duplicateSelection = editor.selection.ids;
+    expect(duplicateSelection).toHaveLength(2);
+
+    await editor.undo();
+    expect(editor.pointCount).toBe(2);
+    expect(editor.selection.ids).toEqual(originalSelection);
+    await editor.redo();
+    expect(editor.pointCount).toBe(4);
+    expect(editor.selection.ids).toEqual(duplicateSelection);
+
     expect(await runRendererCommand(editor, "edit.deselect")).toBe(true);
     expect(editor.selection.ids).toEqual([]);
   });

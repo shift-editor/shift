@@ -153,8 +153,12 @@ test("Delete fits a selected point and undo/redo restores the exact outline", as
   });
   await page.keyboard.press("ControlOrMeta+z");
   await expect.poll(() => outline(page)).toEqual(before);
+  await expect
+    .poll(() => page.evaluate(() => window.shift?.editor.selection.ids))
+    .toEqual([selected.id]);
   await page.keyboard.press("ControlOrMeta+Shift+z");
   await expect.poll(() => outline(page)).toEqual(after);
+  await expect.poll(() => page.evaluate(() => window.shift?.editor.selection.ids)).toEqual([]);
 });
 
 test("Delete joins corner endpoints as a line without creating handles", async ({

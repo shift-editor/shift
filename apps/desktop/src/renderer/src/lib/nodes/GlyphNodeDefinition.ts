@@ -279,14 +279,24 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     const tool = this.editor.toolCell.peek();
     if (tool?.id === "select" && tool.state.type === "translating") return [];
 
+    const view = this.#view(node);
+    if (!view) return [];
+
     const segmentIds: SegmentId[] = [];
+    const selection = this.editor.selection;
 
-    for (const object of this.editor.objects(this.editor.selection.ids)) {
-      if (object.kind !== "segment") continue;
-      if (object.node.id !== node.id) continue;
-      if (!this.editor.handlesVisible(object.contourId)) continue;
+    for (const { contour, component } of view.contours) {
+      if (component !== null || !this.editor.handlesVisible(contour.id)) continue;
 
-      segmentIds.push(object.segmentId);
+      for (const segment of contour.segments()) {
+        if (
+          selection.has(contour.id) ||
+          selection.has(segment.id) ||
+          segment.pointIds.every((pointId) => selection.has(pointId))
+        ) {
+          segmentIds.push(segment.id);
+        }
+      }
     }
 
     return segmentIds;
