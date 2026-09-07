@@ -117,7 +117,11 @@ export class Select extends BaseTool<SelectState, Select> {
         return {
           state: {
             type: "brushing",
-            selection: { startPos: event.origin.scene, currentPos: event.coords.scene },
+            selection: {
+              startPos: event.origin.scene,
+              currentPos: event.coords.scene,
+              initialSelection: [],
+            },
           },
         };
 

@@ -788,19 +788,20 @@ export class Editor {
   }
 
   /**
-   * Returns the current selection bounds in scene coordinates.
+   * Returns scene-space bounds for selected object identities.
    *
    * @remarks
    * Selection stores IDs only. This method resolves those IDs against the
    * current scene and font, asks each object for its live bounds, and returns a
    * fresh axis-aligned rectangle enclosing the resolved objects.
    *
-   * @returns null when nothing is selected or no selected object has bounds.
+   * @param ids - Identities to bound, defaulting to the current selection; does not change selection.
+   * @returns null when no supplied object has bounds.
    */
-  public selectionBounds(): Rect2D | null {
+  public selectionBounds(ids: readonly SelectableId[] = this.selection.ids): Rect2D | null {
     let bounds: BoundsType | null = null;
 
-    for (const id of this.selection.ids) {
+    for (const id of ids) {
       const object = this.object(id);
       if (!object) continue;
 

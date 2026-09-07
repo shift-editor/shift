@@ -101,15 +101,20 @@ export class SelectBoundingBox extends CanvasItem<SelectBoundingBoxProps> {
 
   protected props(): SelectBoundingBoxProps | null {
     const state = this.#select.stateCell.value;
-    if (state.type === "brushing") return null;
+    if (state.type === "brushing" && !this.#editor.input.modifiersCell.value.shiftKey) return null;
 
     track(this.#editor.selection.stateCell);
-    const selection = this.#editor.positionSelection(this.#editor.selection.ids);
+    const ids =
+      state.type === "brushing" ? state.selection.initialSelection : this.#editor.selection.ids;
+    const selection = this.#editor.positionSelection(ids);
     const pointCount = selection?.targets.points?.length ?? 0;
     const anchorCount = selection?.targets.anchors?.length ?? 0;
     if (!selection || pointCount + anchorCount <= 1) return null;
 
-    const sceneRect = this.#editor.selectionBoundsCell.value;
+    const sceneRect =
+      state.type === "brushing"
+        ? this.#editor.selectionBounds(ids)
+        : this.#editor.selectionBoundsCell.value;
     if (!sceneRect) return null;
 
     this.#editor.camera.trackViewportTransform();
@@ -145,6 +150,8 @@ export class SelectBoundingBox extends CanvasItem<SelectBoundingBoxProps> {
   }
 
   hit(coords: Coordinates): BoundingBoxHitResult {
+    if (this.#select.stateCell.peek().type === "brushing") return null;
+
     const props = this.propsSnapshot();
     if (!props) return null;
 
@@ -193,6 +200,8 @@ export class SelectBoundingBox extends CanvasItem<SelectBoundingBoxProps> {
   }
 
   containsTranslationPoint(coords: Coordinates): boolean {
+    if (this.#select.stateCell.peek().type === "brushing") return false;
+
     const props = this.propsSnapshot();
     if (!props) return false;
 

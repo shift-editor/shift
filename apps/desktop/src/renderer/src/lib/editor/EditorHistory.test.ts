@@ -58,6 +58,38 @@ describe("editor history", () => {
     expect(editor.selection.ids).toEqual([firstId]);
   });
 
+  it("undoes and redoes a Shift-marquee as one additive selection action", async () => {
+    editor.selection.select([secondId]);
+    await editor.dragScene({
+      down: { x: 60, y: 60 },
+      start: { x: 70, y: 60 },
+      end: { x: 130, y: 130 },
+      options: { shiftKey: true },
+    });
+    expect(editor.selection.ids).toEqual([secondId, firstId]);
+
+    await editor.undo();
+    expect(editor.selection.ids).toEqual([secondId]);
+
+    await editor.redo();
+    expect(editor.selection.ids).toEqual([secondId, firstId]);
+  });
+
+  it("restores the original selection when Escape cancels a Shift-marquee", async () => {
+    editor.selection.select([secondId]);
+    const down = editor.projectSceneToScreen({ x: 60, y: 60 });
+    const end = editor.projectSceneToScreen({ x: 130, y: 130 });
+
+    editor.pointerDown(down.x, down.y, { shiftKey: true });
+    editor.pointerMove(end.x, end.y, { shiftKey: true });
+    expect(editor.selection.ids).toEqual([secondId, firstId]);
+    editor.escape();
+    expect(editor.selection.ids).toEqual([secondId]);
+
+    await editor.undo();
+    expect(editor.selection.ids).toEqual([]);
+  });
+
   it("compounds selecting and moving an unselected point", async () => {
     const before = editor.pointPosition(firstId);
     await editor.dragScene({
