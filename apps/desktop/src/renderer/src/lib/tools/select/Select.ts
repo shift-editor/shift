@@ -54,7 +54,7 @@ export class Select extends BaseTool<SelectState, Select> {
       case "translating":
         return { type: "move" };
       case "resizing":
-        return edgeToCursor(state.resize.edge);
+        return edgeToCursor(state.resize.edge, state.resize.flipX, state.resize.flipY);
       case "rotating":
         return this.boundingBox.cursorForRotationCorner(state.rotate.corner);
       case "bending":

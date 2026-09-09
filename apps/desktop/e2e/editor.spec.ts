@@ -1,7 +1,218 @@
 import type { Locator, Page } from "@playwright/test";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { workspaceTest as test, expect, navigateToEditor } from "./fixtures/electronApp";
 import { glyphProperties, variationControls } from "./fixtures/appLocators";
 import { CanvasUtil } from "./fixtures/CanvasUtil";
+
+test("aligns exactly two selected points while distribution still requires three", async ({
+  page,
+}, testInfo) => {
+  await navigateToEditor(page, "41");
+  const properties = glyphProperties(page);
+  // Native scrollbar preferences change the gutter width; normalize only the golden captures.
+  // Interaction and viewport assertions still exercise the unmodified native layout.
+  const screenshotStylePath = path.join(__dirname, "editor.screenshot.css");
+  const screenshotStyle = await readFile(screenshotStylePath, "utf8");
+  const canvas = page.locator("#interactive-canvas");
+  const alignLeft = properties.getByRole("button", { name: "Align left", exact: true });
+  const distribute = properties.getByRole("button", {
+    name: "Distribute horizontally",
+    exact: true,
+  });
+  const points = await page.evaluate(() => {
+    const editor = window.shift!.editor;
+    const node = editor.scene.nodesOfKind("glyph")[0];
+    if (!node) throw new Error("Expected glyph node");
+    const layer = editor.glyphForId(node.glyphId)?.layerForSource(node.sourceId);
+    const first = layer?.allPoints[0];
+    const second = layer?.allPoints.find((point) => point.x !== first?.x && point.y !== first?.y);
+    const third = layer?.allPoints.find(
+      (point) => point.id !== first?.id && point.id !== second?.id,
+    );
+    if (!first || !second || !third) throw new Error("Expected three distinct fixture points");
+
+    return [first, second, third].map((point) => ({
+      id: point.id,
+      x: point.x,
+      y: point.y,
+      screen: editor.projectSceneToScreen({
+        x: point.x + node.position.x,
+        y: point.y + node.position.y,
+      }),
+    }));
+  });
+  const selectedPositions = () =>
+    page.evaluate(
+      (ids) => {
+        const selection = window.shift!.editor.positionSelection(ids);
+        if (!selection) throw new Error("Expected editable selection");
+        return ids.map((id) => {
+          const point = selection.layer.point(id);
+          if (!point) throw new Error("Expected selected point");
+          return { x: point.x, y: point.y };
+        });
+      },
+      points.slice(0, 2).map((point) => point.id),
+    );
+
+  await expect(alignLeft).toHaveCount(0);
+  await canvas.click({ position: points[0].screen });
+  await expect(alignLeft).toBeDisabled();
+  await expect(distribute).toBeDisabled();
+  await properties
+    .getByRole("button", { name: "Flip vertically", exact: true })
+    .scrollIntoViewIfNeeded();
+  await expect(properties).toHaveScreenshot("one-point-alignment-disabled.png", {
+    stylePath: screenshotStylePath,
+  });
+  await testInfo.attach("one-point-alignment-disabled", {
+    body: await properties.screenshot({
+      path: testInfo.outputPath("one-point-alignment-disabled.png"),
+      style: screenshotStyle,
+    }),
+    contentType: "image/png",
+  });
+
+  await canvas.click({ position: points[1].screen, modifiers: ["Shift"] });
+  await expect
+    .poll(() => page.evaluate(() => window.shift!.editor.selection.ids))
+    .toEqual(points.slice(0, 2).map((point) => point.id));
+  for (const name of [
+    "Align left",
+    "Align horizontal centers",
+    "Align right",
+    "Align top",
+    "Align vertical centers",
+    "Align bottom",
+  ]) {
+    await expect(properties.getByRole("button", { name, exact: true })).toBeEnabled();
+    await expect(properties.getByRole("button", { name, exact: true })).toBeInViewport({
+      ratio: 1,
+    });
+  }
+  for (const name of ["Rotate 90 degrees clockwise", "Flip horizontally", "Flip vertically"]) {
+    await expect(properties.getByRole("button", { name, exact: true })).toBeInViewport({
+      ratio: 1,
+    });
+  }
+  await expect(distribute).toBeDisabled();
+  await expect(
+    properties.getByRole("button", { name: "Distribute vertically", exact: true }),
+  ).toBeDisabled();
+  await expect(properties).toHaveScreenshot("two-point-transform-controls.png", {
+    stylePath: screenshotStylePath,
+  });
+  await testInfo.attach("two-point-transform-controls", {
+    body: await properties.screenshot({
+      path: testInfo.outputPath("two-point-transform-controls.png"),
+      style: screenshotStyle,
+    }),
+    contentType: "image/png",
+  });
+
+  await alignLeft.click();
+  await page.evaluate(async () => window.shift!.font.editCoordinator.settled());
+  await expect
+    .poll(selectedPositions)
+    .toEqual(
+      points.slice(0, 2).map((point) => ({ x: Math.min(points[0].x, points[1].x), y: point.y })),
+    );
+  await page.evaluate(() => window.shift!.editor.undo());
+  await expect.poll(selectedPositions).toEqual(points.slice(0, 2).map(({ x, y }) => ({ x, y })));
+
+  await canvas.click({ position: points[2].screen, modifiers: ["Shift"] });
+  await expect(distribute).toBeEnabled();
+  await expect(
+    properties.getByRole("button", { name: "Distribute vertically", exact: true }),
+  ).toBeEnabled();
+});
+
+test("switches Alt during proportional resizing and preserves release geometry", async ({
+  page,
+}) => {
+  await navigateToEditor(page, "41");
+  await page.keyboard.press("ControlOrMeta+a");
+  const canvas = page.locator("#interactive-canvas");
+  const canvasBounds = await canvas.boundingBox();
+  if (!canvasBounds) throw new Error("Expected interactive canvas bounds");
+  const { initialBounds, down, normal, centered, crossed } = await page.evaluate(() => {
+    const editor = window.shift!.editor;
+    const initialBounds = editor.selectionBounds();
+    if (!initialBounds) throw new Error("Expected selection bounds");
+    return {
+      initialBounds,
+      down: editor.projectSceneToScreen({ x: initialBounds.right, y: initialBounds.bottom }),
+      normal: editor.projectSceneToScreen({
+        x: initialBounds.right + initialBounds.width * 0.1,
+        y: initialBounds.bottom + initialBounds.height * 0.02,
+      }),
+      centered: editor.projectSceneToScreen({
+        x: initialBounds.right + initialBounds.width * 0.15,
+        y: initialBounds.bottom + initialBounds.height * 0.03,
+      }),
+      crossed: editor.projectSceneToScreen({
+        x: initialBounds.x + initialBounds.width * 0.25,
+        y: initialBounds.bottom + initialBounds.height * 0.03,
+      }),
+    };
+  });
+
+  await page.mouse.move(canvasBounds.x + down.x, canvasBounds.y + down.y);
+  await page.keyboard.down("Shift");
+  await page.mouse.down();
+  try {
+    await page.mouse.move(canvasBounds.x + normal.x, canvasBounds.y + normal.y, { steps: 3 });
+    await page.evaluate(() => window.shift!.editor.toolManager.flushPointerMoves());
+    await expect
+      .poll(() => page.evaluate(() => window.shift!.editor.toolIf("select")?.state.type))
+      .toBe("resizing");
+
+    await page.keyboard.down("Alt");
+    await page.mouse.move(canvasBounds.x + centered.x, canvasBounds.y + centered.y, { steps: 3 });
+    await page.evaluate(() => window.shift!.editor.toolManager.flushPointerMoves());
+    const preview = await page.evaluate(() => window.shift!.editor.selectionBounds());
+    if (!preview) throw new Error("Expected centred resize preview");
+    expect(preview.width / initialBounds.width).toBeCloseTo(1.3);
+    expect(preview.height / initialBounds.height).toBeCloseTo(1.3);
+    expect(preview.x + preview.width / 2).toBeCloseTo(initialBounds.x + initialBounds.width / 2);
+    expect(preview.y + preview.height / 2).toBeCloseTo(initialBounds.y + initialBounds.height / 2);
+    await expect(canvas).toHaveCSS("cursor", /nesw-resize$/);
+
+    await page.mouse.move(canvasBounds.x + crossed.x, canvasBounds.y + crossed.y, { steps: 3 });
+    await page.evaluate(() => window.shift!.editor.toolManager.flushPointerMoves());
+    await expect(canvas).toHaveCSS("cursor", /nwse-resize$/);
+    await page.mouse.move(canvasBounds.x + centered.x, canvasBounds.y + centered.y, { steps: 3 });
+    await page.evaluate(() => window.shift!.editor.toolManager.flushPointerMoves());
+    await expect(canvas).toHaveCSS("cursor", /nesw-resize$/);
+    expect(await page.evaluate(() => window.shift!.editor.selectionBounds())).toEqual(preview);
+
+    await page.keyboard.up("Alt");
+    await page.mouse.move(canvasBounds.x + normal.x, canvasBounds.y + normal.y, { steps: 3 });
+    await page.evaluate(() => window.shift!.editor.toolManager.flushPointerMoves());
+    const uncentered = await page.evaluate(() => window.shift!.editor.selectionBounds());
+    if (!uncentered) throw new Error("Expected opposite-corner resize preview");
+    expect(uncentered.x).toBeCloseTo(initialBounds.x);
+    expect(uncentered.y).toBeCloseTo(initialBounds.y);
+    expect(uncentered.width / initialBounds.width).toBeCloseTo(1.1);
+    expect(uncentered.height / initialBounds.height).toBeCloseTo(1.1);
+
+    await page.keyboard.down("Alt");
+    await page.mouse.move(canvasBounds.x + centered.x, canvasBounds.y + centered.y, { steps: 3 });
+    await page.evaluate(() => window.shift!.editor.toolManager.flushPointerMoves());
+    expect(await page.evaluate(() => window.shift!.editor.selectionBounds())).toEqual(preview);
+    await page.keyboard.up("Alt");
+    await page.keyboard.up("Shift");
+    await page.mouse.up();
+    await page.evaluate(async () => window.shift!.font.editCoordinator.settled());
+    expect(await page.evaluate(() => window.shift!.editor.selectionBounds())).toEqual(preview);
+    await expect(page.getByTestId("editor-shell")).toHaveAttribute("data-gesture", "idle");
+  } finally {
+    await page.mouse.up();
+    await page.keyboard.up("Alt");
+    await page.keyboard.up("Shift");
+  }
+});
 
 async function selectionBounds(page: Page) {
   const bounds = await page.evaluate(() => window.shift?.editor.selectionBounds());

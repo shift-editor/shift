@@ -161,6 +161,316 @@ describe("Select bounding-box transforms preserve geometry outcomes", () => {
     });
   });
 
+  describe.each([false, true])("resize handle geometry with Alt held: %s", (altKey) => {
+    it.each([
+      {
+        handle: "left",
+        down: { x: 100, y: 150 },
+        end: { x: 50, y: 150 },
+        normal: [
+          { x: 50, y: 100 },
+          { x: 200, y: 200 },
+        ],
+        centered: [
+          { x: 50, y: 100 },
+          { x: 250, y: 200 },
+        ],
+      },
+      {
+        handle: "right",
+        down: { x: 200, y: 150 },
+        end: { x: 250, y: 150 },
+        normal: [
+          { x: 100, y: 100 },
+          { x: 250, y: 200 },
+        ],
+        centered: [
+          { x: 50, y: 100 },
+          { x: 250, y: 200 },
+        ],
+      },
+      {
+        handle: "top",
+        down: { x: 150, y: 200 },
+        end: { x: 150, y: 250 },
+        normal: [
+          { x: 100, y: 100 },
+          { x: 200, y: 250 },
+        ],
+        centered: [
+          { x: 100, y: 50 },
+          { x: 200, y: 250 },
+        ],
+      },
+      {
+        handle: "bottom",
+        down: { x: 150, y: 100 },
+        end: { x: 150, y: 50 },
+        normal: [
+          { x: 100, y: 50 },
+          { x: 200, y: 200 },
+        ],
+        centered: [
+          { x: 100, y: 50 },
+          { x: 200, y: 250 },
+        ],
+      },
+      {
+        handle: "top-left",
+        down: { x: 100, y: 200 },
+        end: { x: 50, y: 250 },
+        normal: [
+          { x: 50, y: 100 },
+          { x: 200, y: 250 },
+        ],
+        centered: [
+          { x: 50, y: 50 },
+          { x: 250, y: 250 },
+        ],
+      },
+      {
+        handle: "top-right",
+        down: { x: 200, y: 200 },
+        end: { x: 250, y: 250 },
+        normal: [
+          { x: 100, y: 100 },
+          { x: 250, y: 250 },
+        ],
+        centered: [
+          { x: 50, y: 50 },
+          { x: 250, y: 250 },
+        ],
+      },
+      {
+        handle: "bottom-left",
+        down: { x: 100, y: 100 },
+        end: { x: 50, y: 50 },
+        normal: [
+          { x: 50, y: 50 },
+          { x: 200, y: 200 },
+        ],
+        centered: [
+          { x: 50, y: 50 },
+          { x: 250, y: 250 },
+        ],
+      },
+      {
+        handle: "bottom-right",
+        down: { x: 200, y: 100 },
+        end: { x: 250, y: 50 },
+        normal: [
+          { x: 100, y: 50 },
+          { x: 250, y: 200 },
+        ],
+        centered: [
+          { x: 50, y: 50 },
+          { x: 250, y: 250 },
+        ],
+      },
+    ])("keeps the $handle handle under the pointer", async ({ down, end, normal, centered }) => {
+      await editor.dragScene({ down, start: end, end, options: { altKey } });
+
+      expect([editor.pointPosition(firstId), editor.pointPosition(secondId)]).toEqual(
+        altKey ? centered : normal,
+      );
+    });
+  });
+
+  describe("resize modifiers follow drag samples", () => {
+    it.each([true, false])("switches Alt to %s using the original geometry", (altKey) => {
+      const down = editor.projectSceneToScreen({ x: 200, y: 150 });
+      const first = editor.projectSceneToScreen({ x: 225, y: 150 });
+      const second = editor.projectSceneToScreen({ x: 250, y: 150 });
+
+      editor.pointerDown(down.x, down.y, { altKey: !altKey });
+      editor.pointerMove(first.x, first.y, { altKey: !altKey });
+      editor.pointerMove(second.x, second.y, { altKey });
+      expect(editor.pointPosition(firstId)).toEqual({ x: altKey ? 50 : 100, y: 100 });
+      expect(editor.pointPosition(secondId)).toEqual({ x: 250, y: 200 });
+      editor.escape();
+      expect(editor.pointPosition(firstId)).toEqual({ x: 100, y: 100 });
+      expect(editor.pointPosition(secondId)).toEqual({ x: 200, y: 200 });
+    });
+
+    it.each([true, false])(
+      "commits the release position with the last drag Alt value of %s",
+      async (altKey) => {
+        const down = editor.projectSceneToScreen({ x: 200, y: 150 });
+        const move = editor.projectSceneToScreen({ x: 240, y: 150 });
+        const end = editor.projectSceneToScreen({ x: 250, y: 150 });
+
+        editor.pointerDown(down.x, down.y, { altKey: !altKey });
+        editor.pointerMove(move.x, move.y, { altKey });
+        editor.pointerUp(end.x, end.y, { altKey: !altKey });
+        await editor.settle();
+        expect(editor.pointPosition(firstId)).toEqual({ x: altKey ? 50 : 100, y: 100 });
+        expect(editor.pointPosition(secondId)).toEqual({ x: 250, y: 200 });
+      },
+    );
+
+    it("switches Alt during a Shift resize and keeps one undoable edit", async () => {
+      const down = editor.projectSceneToScreen({ x: 200, y: 200 });
+      const move = editor.projectSceneToScreen({ x: 210, y: 205 });
+      const end = editor.projectSceneToScreen({ x: 250, y: 225 });
+
+      editor.pointerDown(down.x, down.y).pointerMove(move.x, move.y, { shiftKey: true });
+      editor.pointerMove(end.x, end.y, { altKey: true, shiftKey: true }).pointerUp(end.x, end.y);
+      await editor.settle();
+      expect(editor.pointPosition(firstId)).toEqual({ x: 50, y: 50 });
+      expect(editor.pointPosition(secondId)).toEqual({ x: 250, y: 250 });
+      await editor.undo();
+      expect(editor.pointPosition(firstId)).toEqual({ x: 100, y: 100 });
+      expect(editor.pointPosition(secondId)).toEqual({ x: 200, y: 200 });
+      await editor.redo();
+      expect(editor.pointPosition(firstId)).toEqual({ x: 50, y: 50 });
+      expect(editor.pointPosition(secondId)).toEqual({ x: 250, y: 250 });
+    });
+
+    it("switches pivots in glyph-local coordinates when the scene node is translated", async () => {
+      const node = editor.glyphNode;
+      if (!node) throw new Error("Expected glyph node");
+      editor.scene.updateNode({ id: node.id, position: { x: 400, y: 300 } });
+      const down = editor.projectSceneToScreen({ x: 600, y: 450 });
+      const move = editor.projectSceneToScreen({ x: 625, y: 450 });
+      const end = editor.projectSceneToScreen({ x: 650, y: 450 });
+
+      editor.pointerDown(down.x, down.y).pointerMove(move.x, move.y);
+      editor.pointerMove(end.x, end.y, { altKey: true }).pointerUp(end.x, end.y);
+      await editor.settle();
+      expect(editor.pointPosition(firstId)).toEqual({ x: 50, y: 100 });
+      expect(editor.pointPosition(secondId)).toEqual({ x: 250, y: 200 });
+    });
+  });
+
+  describe("centred resizing preserves preview and edit behavior", () => {
+    it("does not halve the shape on its first preview and cancels to the original positions", () => {
+      const down = editor.projectSceneToScreen({ x: 200, y: 150 });
+      const move = editor.projectSceneToScreen({ x: 210, y: 150 });
+
+      editor
+        .pointerDown(down.x, down.y, { altKey: true })
+        .pointerMove(move.x, move.y, { altKey: true });
+      expect(editor.pointPosition(firstId)).toEqual({ x: 90, y: 100 });
+      expect(editor.pointPosition(secondId)).toEqual({ x: 210, y: 200 });
+      editor.escape();
+      expect(editor.pointPosition(firstId)).toEqual({ x: 100, y: 100 });
+      expect(editor.pointPosition(secondId)).toEqual({ x: 200, y: 200 });
+    });
+
+    it("combines Alt with Shift and records one undoable resize", async () => {
+      await editor.dragScene({
+        down: { x: 200, y: 200 },
+        start: { x: 210, y: 205 },
+        end: { x: 250, y: 225 },
+        options: { altKey: true, shiftKey: true },
+      });
+      expect(editor.pointPosition(firstId)).toEqual({ x: 50, y: 50 });
+      expect(editor.pointPosition(secondId)).toEqual({ x: 250, y: 250 });
+      await editor.undo();
+      expect(editor.pointPosition(firstId)).toEqual({ x: 100, y: 100 });
+      expect(editor.pointPosition(secondId)).toEqual({ x: 200, y: 200 });
+      await editor.redo();
+      expect(editor.pointPosition(firstId)).toEqual({ x: 50, y: 50 });
+      expect(editor.pointPosition(secondId)).toEqual({ x: 250, y: 250 });
+    });
+  });
+
+  describe.each([false, true])("resize cursors follow mirrored geometry with Alt: %s", (altKey) => {
+    it.each([
+      {
+        corner: "top-left",
+        down: { x: 100, y: 200 },
+        normal: { x: 75, y: 225 },
+        acrossX: { x: 250, y: 225 },
+        acrossY: { x: 75, y: 50 },
+        acrossBoth: { x: 250, y: 50 },
+        cursor: "nwse-resize",
+        flippedCursor: "nesw-resize",
+      },
+      {
+        corner: "top-right",
+        down: { x: 200, y: 200 },
+        normal: { x: 225, y: 225 },
+        acrossX: { x: 50, y: 225 },
+        acrossY: { x: 225, y: 50 },
+        acrossBoth: { x: 50, y: 50 },
+        cursor: "nesw-resize",
+        flippedCursor: "nwse-resize",
+      },
+      {
+        corner: "bottom-left",
+        down: { x: 100, y: 100 },
+        normal: { x: 75, y: 75 },
+        acrossX: { x: 250, y: 75 },
+        acrossY: { x: 75, y: 250 },
+        acrossBoth: { x: 250, y: 250 },
+        cursor: "nesw-resize",
+        flippedCursor: "nwse-resize",
+      },
+      {
+        corner: "bottom-right",
+        down: { x: 200, y: 100 },
+        normal: { x: 225, y: 75 },
+        acrossX: { x: 50, y: 75 },
+        acrossY: { x: 225, y: 250 },
+        acrossBoth: { x: 50, y: 250 },
+        cursor: "nwse-resize",
+        flippedCursor: "nesw-resize",
+      },
+    ])(
+      "updates the $corner cursor when crossing either pivot axis and returning",
+      ({ down, normal, acrossX, acrossY, acrossBoth, cursor, flippedCursor }) => {
+        const start = editor.projectSceneToScreen(down);
+        const move = editor.projectSceneToScreen(normal);
+        editor.pointerDown(start.x, start.y, { altKey }).pointerMove(move.x, move.y, { altKey });
+        const positions = [editor.pointPosition(firstId), editor.pointPosition(secondId)];
+
+        for (const sample of [
+          { position: normal, cursor },
+          { position: acrossX, cursor: flippedCursor },
+          { position: acrossBoth, cursor },
+          { position: acrossY, cursor: flippedCursor },
+          { position: normal, cursor },
+        ]) {
+          const point = editor.projectSceneToScreen(sample.position);
+          editor.pointerMove(point.x, point.y, { altKey });
+          expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: sample.cursor });
+        }
+        expect([editor.pointPosition(firstId), editor.pointPosition(secondId)]).toEqual(positions);
+        editor.escape();
+      },
+    );
+
+    it.each([
+      { edge: "left", down: { x: 100, y: 150 }, end: { x: 250, y: 150 }, cursor: "ew-resize" },
+      { edge: "right", down: { x: 200, y: 150 }, end: { x: 50, y: 150 }, cursor: "ew-resize" },
+      { edge: "top", down: { x: 150, y: 200 }, end: { x: 150, y: 50 }, cursor: "ns-resize" },
+      { edge: "bottom", down: { x: 150, y: 100 }, end: { x: 150, y: 250 }, cursor: "ns-resize" },
+    ])("keeps the $edge cursor on its axis after flipping", ({ down, end, cursor }) => {
+      const start = editor.projectSceneToScreen(down);
+      const move = editor.projectSceneToScreen(end);
+      editor.pointerDown(start.x, start.y, { altKey }).pointerMove(move.x, move.y, { altKey });
+
+      expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: cursor });
+      editor.escape();
+    });
+
+    it("restores the original diagonal at zero scale and starts the next drag unflipped", () => {
+      const down = editor.projectSceneToScreen({ x: 200, y: 200 });
+      const crossed = editor.projectSceneToScreen({ x: 50, y: 200 });
+      const pivot = editor.projectSceneToScreen({ x: altKey ? 150 : 100, y: 200 });
+      editor.pointerDown(down.x, down.y, { altKey }).pointerMove(crossed.x, crossed.y, { altKey });
+      expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "nwse-resize" });
+      editor.pointerMove(pivot.x, pivot.y, { altKey });
+      expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "nesw-resize" });
+      editor.escape();
+      const next = editor.projectSceneToScreen({ x: 225, y: 225 });
+      editor.pointerDown(down.x, down.y).pointerMove(next.x, next.y);
+      expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "nesw-resize" });
+      editor.escape();
+    });
+  });
+
   describe("rotation", () => {
     async function rotateAcrossBottomEdge(): Promise<void> {
       const bounds = editor.selectionBounds();

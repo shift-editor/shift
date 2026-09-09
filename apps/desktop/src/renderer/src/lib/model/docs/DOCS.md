@@ -77,6 +77,7 @@ hooks/
 - `GlyphLayerWriter` -- internal committed mutation path that queues typed `LayerIntents` and applies matching pending changes to `GlyphLayerState`. Exact-identity seed methods let active edits replay IDs minted during preview.
 - `PositionEdits` -- authored-layer entry point for standalone `MoveEdit`, `RotateEdit`, and `ScaleEdit` values, or for one terminal position operation scoped within an existing `GlyphLayerEdit`.
 - `PositionList` -- ordered point and anchor positions captured from a layer and transformed from one frozen interaction base.
+- `ScaleEdit.preview(scale, origin)` -- accepts a glyph-local pivot per preview while preserving the original position base. Omitting the pivot uses the origin captured at construction; an override never changes that default. Changing the pivot does not create or complete a separate edit.
 - `MoveEdit` / `RotateEdit` / `ScaleEdit` -- per-interaction configuration and lifecycle objects backed by frozen positions and one active `GlyphLayerEdit`. `DirectionSnap`, `AngleSnap`, `MetricSnap`, `PositionReference`, and `PointRuleConstraint` are attached only where the operation supports them.
 - `LayerBuffers` -- renderer-owned advance, contour, anchor, and component records for one exact authored layer. Its structure and packed wire snapshot are derived outputs.
 - `PackedArray` -- dynamically-sized storage for fixed-width numeric records. Its item width is fixed while capacity grows without imposing a font-format limit.

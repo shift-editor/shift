@@ -3,8 +3,10 @@ import type { ToolContext } from "../../core/Behavior";
 import type { DragEvent, DragStartEvent } from "../../core/GestureDetector";
 import type { SelectBehavior, SelectState } from "../types";
 import type { Select } from "../Select";
-import type { BoundingRectEdge } from "../cursor";
+import type { BoundingRectEdge as NullableBoundingRectEdge } from "../cursor";
 import { PositionList, type ScaleEdit } from "@/lib/model/positions";
+
+type BoundingRectEdge = Exclude<NullableBoundingRectEdge, null>;
 
 export class Resize implements SelectBehavior {
   #edit: ScaleEdit | null = null;
@@ -32,8 +34,13 @@ export class Resize implements SelectBehavior {
 
     const edge = hit.edge;
     const startPos = event.origin.scene;
-    const anchorPoint = this.getAnchorPointForEdge(edge, hit.rect);
-    const localAnchorPoint = this.getAnchorPointForEdge(edge, Bounds.toRect(localBounds));
+
+    const anchorPoint = this.getAnchorPointForEdge(edge, hit.rect, event.altKey);
+    const localAnchorPoint = this.getAnchorPointForEdge(
+      edge,
+      Bounds.toRect(localBounds),
+      event.altKey,
+    );
 
     const edit = selection.layer.positions.scale(selection.targets, localAnchorPoint);
     this.#edit = edit;
@@ -46,8 +53,11 @@ export class Resize implements SelectBehavior {
         startPos,
         lastPos: startPos,
         initialBounds: hit.rect,
+        localBounds: Bounds.toRect(localBounds),
         anchorPoint,
         uniformScale: false,
+        flipX: false,
+        flipY: false,
       },
     });
 
@@ -101,28 +111,43 @@ export class Resize implements SelectBehavior {
 
     const uniformScale = event.shiftKey;
     const currentPos = event.coords.scene;
+    const anchorPoint = this.getAnchorPointForEdge(
+      state.resize.edge,
+      state.resize.initialBounds,
+      event.altKey,
+    );
+    const localAnchorPoint = this.getAnchorPointForEdge(
+      state.resize.edge,
+      state.resize.localBounds,
+      event.altKey,
+    );
+
     const { sx, sy } = this.calculateScaleFactors(
       state.resize.edge,
       currentPos,
-      state.resize.anchorPoint,
+      anchorPoint,
       state.resize.initialBounds,
       uniformScale,
     );
 
-    this.#edit.preview({ x: sx, y: sy });
+    this.#edit.preview({ x: sx, y: sy }, localAnchorPoint);
 
     return {
       type: "resizing",
       resize: {
         ...state.resize,
         lastPos: currentPos,
+        anchorPoint,
         uniformScale,
+        flipX: sx < 0,
+        flipY: sy < 0,
       },
     };
   }
 
-  private getAnchorPointForEdge(edge: Exclude<BoundingRectEdge, null>, rect: Rect2D): Point2D {
+  private getAnchorPointForEdge(edge: BoundingRectEdge, rect: Rect2D, useCentre: boolean): Point2D {
     const center = Vec2.midpoint({ x: rect.left, y: rect.top }, { x: rect.right, y: rect.bottom });
+    if (useCentre) return center;
 
     switch (edge) {
       case "top-left":
@@ -145,16 +170,13 @@ export class Resize implements SelectBehavior {
   }
 
   private calculateScaleFactors(
-    edge: Exclude<BoundingRectEdge, null>,
+    edge: BoundingRectEdge,
     currentPos: Point2D,
     anchorPoint: Point2D,
     initialBounds: Rect2D,
     uniform: boolean,
   ): { sx: number; sy: number } {
-    const initialWidth = initialBounds.right - initialBounds.left;
-    const initialHeight = initialBounds.bottom - initialBounds.top;
-
-    if (initialWidth === 0 || initialHeight === 0) {
+    if (initialBounds.width === 0 || initialBounds.height === 0) {
       return { sx: 1, sy: 1 };
     }
 
@@ -167,6 +189,17 @@ export class Resize implements SelectBehavior {
     const isCorner = edge.includes("-");
     const affectsX = edge === "left" || edge === "right" || isCorner;
     const affectsY = edge === "top" || edge === "bottom" || isCorner;
+
+    const initialWidth = Math.abs(
+      (edge.includes("left") ? initialBounds.left : initialBounds.right) - anchorPoint.x,
+    );
+    const initialHeight = Math.abs(
+      (edge.includes("top") ? initialBounds.bottom : initialBounds.top) - anchorPoint.y,
+    );
+
+    if ((affectsX && initialWidth === 0) || (affectsY && initialHeight === 0)) {
+      return { sx: 1, sy: 1 };
+    }
 
     if (affectsX) sx = newWidth / initialWidth;
     if (affectsY) sy = newHeight / initialHeight;

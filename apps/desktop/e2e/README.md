@@ -95,6 +95,14 @@ After an intentional visual change:
 2. Review every changed image under `e2e/__screenshots__/`.
 3. Run `pnpm test:e2e:visual` without update mode.
 
+### Capture determinism
+
+A fixed viewport and DPR do not fix native scrollbar preferences. Overlay and reserved-gutter scrollbars can give the same sidebar different usable widths. Normalize host-dependent decoration only during golden captures when it is not the behavior under test; keep interaction and visibility assertions on the unmodified layout.
+
+Playwright's capture APIs have different contracts: `toHaveScreenshot()` accepts **`stylePath`**, while `screenshot()` accepts **`style`** containing CSS text. Use the same stylesheet for assertions and attached captures, reading its contents for `screenshot()`. Check the installed API types rather than assuming options transfer between APIs; the application typecheck does not include E2E specs.
+
+After inspecting changed baselines, verify without snapshot updates and with `--retries=0`, then repeat the affected test. Reproduce the environmental difference that caused the failure: repeated passes with overlay scrollbars alone do not prove reserved-gutter layouts work. For gutter-related failures, also exercise a measured reserved gutter and verify that controls remain visible and usable. An update-mode pass is baseline generation, not verification; a skipped PR E2E job is not validation.
+
 A snapshot match alone does not prove GPU content exists. Rendering tests that can pass with a blank canvas must also compare frames with and without the relevant canvas or assert equivalent semantic output. Route-return tests must make that comparison after navigation because residency attributes do not prove Chromium retained or repainted the WebGPU presentation.
 
 ## Selector and interaction rules
