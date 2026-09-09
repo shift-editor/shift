@@ -4,7 +4,7 @@ import type { GlyphLayer } from "../Glyph";
 import type { GlyphLayerEdit } from "../GlyphLayerEdit";
 import { PositionList } from "./PositionList";
 
-/** Preview-backed scaling around one frozen layer-local origin. */
+/** Applies preview-backed scaling to one frozen position base. */
 export class ScaleEdit implements PositionEdit {
   readonly #layer: GlyphLayer;
   readonly #base: PositionList;
@@ -25,10 +25,21 @@ export class ScaleEdit implements PositionEdit {
     this.#edit = edit;
   }
 
-  preview(scale: Point2D): void {
+  /**
+   * Previews scaling from the original positions around a layer-local pivot.
+   *
+   * @remarks
+   * Changing the pivot does not replace the original position base or start a new
+   * edit. An explicit pivot applies only to this preview, not subsequent defaults.
+   *
+   * @param scale - Signed scale factors on each glyph-local axis.
+   * @param origin - Pivot for this preview; defaults to the origin captured at construction.
+   * @throws {Error} When the edit has already been committed or discarded.
+   */
+  preview(scale: Point2D, origin: Point2D = this.#origin): void {
     this.#beginPreview();
 
-    const positions = this.#base.scale(scale.x, scale.y, this.#origin).positions;
+    const positions = this.#base.scale(scale.x, scale.y, origin).positions;
     if (positions.length === 0) return;
 
     this.#edit ??= this.#layer.beginEdit();

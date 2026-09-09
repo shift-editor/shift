@@ -119,6 +119,19 @@ describe("fluent position edits preserve one frozen interaction base", () => {
     expect(editor.pointPosition(pointId)).toEqual({ x: 100, y: 100 });
   });
 
+  it("changes the scale pivot per preview without accumulating or replacing the default origin", () => {
+    const edit = editor.requireGlyphLayer().positions.scale({ points: [pointId] }, { x: 0, y: 0 });
+
+    edit.preview({ x: 2, y: 2 }, { x: 50, y: 50 });
+    expect(editor.pointPosition(pointId)).toEqual({ x: 150, y: 150 });
+    edit.preview({ x: 2, y: 2 });
+    expect(editor.pointPosition(pointId)).toEqual({ x: 200, y: 200 });
+    edit.preview({ x: 2, y: 2 }, { x: 100, y: 100 });
+    expect(editor.pointPosition(pointId)).toEqual({ x: 100, y: 100 });
+    edit.discard();
+    expect(editor.pointPosition(pointId)).toEqual({ x: 100, y: 100 });
+  });
+
   it("quantizes rotation independently from movement modifiers", () => {
     const edit = editor
       .requireGlyphLayer()

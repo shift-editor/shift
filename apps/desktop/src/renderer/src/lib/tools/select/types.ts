@@ -29,9 +29,17 @@ export interface ResizeDrag {
   edge: Exclude<BoundingRectEdge, null>;
   startPos: Point2D;
   lastPos: Point2D;
+  /** Original selection bounds in scene coordinates, used for pointer measurements. */
   initialBounds: Rect2D;
+  /** Original target-position bounds in glyph-local coordinates, used for transform pivots. */
+  localBounds: Rect2D;
+  /** Scene-space pivot chosen for the latest resize sample. */
   anchorPoint: Point2D;
   uniformScale: boolean;
+  /** Whether the latest X scale is negative; zero is unflipped. */
+  flipX: boolean;
+  /** Whether the latest Y scale is negative; zero is unflipped. */
+  flipY: boolean;
 }
 
 /** Live state of a rotation drag, tracking angles and initial point positions for the transform. */

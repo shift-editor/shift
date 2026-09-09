@@ -116,6 +116,92 @@ test("aligns exactly two selected points while distribution still requires three
   ).toBeEnabled();
 });
 
+test("switches Alt during proportional resizing and preserves release geometry", async ({
+  page,
+}) => {
+  await navigateToEditor(page, "41");
+  await page.keyboard.press("ControlOrMeta+a");
+  const canvas = page.locator("#interactive-canvas");
+  const canvasBounds = await canvas.boundingBox();
+  if (!canvasBounds) throw new Error("Expected interactive canvas bounds");
+  const { initialBounds, down, normal, centered, crossed } = await page.evaluate(() => {
+    const editor = window.shift!.editor;
+    const initialBounds = editor.selectionBounds();
+    if (!initialBounds) throw new Error("Expected selection bounds");
+    return {
+      initialBounds,
+      down: editor.projectSceneToScreen({ x: initialBounds.right, y: initialBounds.bottom }),
+      normal: editor.projectSceneToScreen({
+        x: initialBounds.right + initialBounds.width * 0.1,
+        y: initialBounds.bottom + initialBounds.height * 0.02,
+      }),
+      centered: editor.projectSceneToScreen({
+        x: initialBounds.right + initialBounds.width * 0.15,
+        y: initialBounds.bottom + initialBounds.height * 0.03,
+      }),
+      crossed: editor.projectSceneToScreen({
+        x: initialBounds.x + initialBounds.width * 0.25,
+        y: initialBounds.bottom + initialBounds.height * 0.03,
+      }),
+    };
+  });
+
+  await page.mouse.move(canvasBounds.x + down.x, canvasBounds.y + down.y);
+  await page.keyboard.down("Shift");
+  await page.mouse.down();
+  try {
+    await page.mouse.move(canvasBounds.x + normal.x, canvasBounds.y + normal.y, { steps: 3 });
+    await page.evaluate(() => window.shift!.editor.toolManager.flushPointerMoves());
+    await expect
+      .poll(() => page.evaluate(() => window.shift!.editor.toolIf("select")?.state.type))
+      .toBe("resizing");
+
+    await page.keyboard.down("Alt");
+    await page.mouse.move(canvasBounds.x + centered.x, canvasBounds.y + centered.y, { steps: 3 });
+    await page.evaluate(() => window.shift!.editor.toolManager.flushPointerMoves());
+    const preview = await page.evaluate(() => window.shift!.editor.selectionBounds());
+    if (!preview) throw new Error("Expected centred resize preview");
+    expect(preview.width / initialBounds.width).toBeCloseTo(1.3);
+    expect(preview.height / initialBounds.height).toBeCloseTo(1.3);
+    expect(preview.x + preview.width / 2).toBeCloseTo(initialBounds.x + initialBounds.width / 2);
+    expect(preview.y + preview.height / 2).toBeCloseTo(initialBounds.y + initialBounds.height / 2);
+    await expect(canvas).toHaveCSS("cursor", /nesw-resize$/);
+
+    await page.mouse.move(canvasBounds.x + crossed.x, canvasBounds.y + crossed.y, { steps: 3 });
+    await page.evaluate(() => window.shift!.editor.toolManager.flushPointerMoves());
+    await expect(canvas).toHaveCSS("cursor", /nwse-resize$/);
+    await page.mouse.move(canvasBounds.x + centered.x, canvasBounds.y + centered.y, { steps: 3 });
+    await page.evaluate(() => window.shift!.editor.toolManager.flushPointerMoves());
+    await expect(canvas).toHaveCSS("cursor", /nesw-resize$/);
+    expect(await page.evaluate(() => window.shift!.editor.selectionBounds())).toEqual(preview);
+
+    await page.keyboard.up("Alt");
+    await page.mouse.move(canvasBounds.x + normal.x, canvasBounds.y + normal.y, { steps: 3 });
+    await page.evaluate(() => window.shift!.editor.toolManager.flushPointerMoves());
+    const uncentered = await page.evaluate(() => window.shift!.editor.selectionBounds());
+    if (!uncentered) throw new Error("Expected opposite-corner resize preview");
+    expect(uncentered.x).toBeCloseTo(initialBounds.x);
+    expect(uncentered.y).toBeCloseTo(initialBounds.y);
+    expect(uncentered.width / initialBounds.width).toBeCloseTo(1.1);
+    expect(uncentered.height / initialBounds.height).toBeCloseTo(1.1);
+
+    await page.keyboard.down("Alt");
+    await page.mouse.move(canvasBounds.x + centered.x, canvasBounds.y + centered.y, { steps: 3 });
+    await page.evaluate(() => window.shift!.editor.toolManager.flushPointerMoves());
+    expect(await page.evaluate(() => window.shift!.editor.selectionBounds())).toEqual(preview);
+    await page.keyboard.up("Alt");
+    await page.keyboard.up("Shift");
+    await page.mouse.up();
+    await page.evaluate(async () => window.shift!.font.editCoordinator.settled());
+    expect(await page.evaluate(() => window.shift!.editor.selectionBounds())).toEqual(preview);
+    await expect(page.getByTestId("editor-shell")).toHaveAttribute("data-gesture", "idle");
+  } finally {
+    await page.mouse.up();
+    await page.keyboard.up("Alt");
+    await page.keyboard.up("Shift");
+  }
+});
+
 async function selectionBounds(page: Page) {
   const bounds = await page.evaluate(() => window.shift?.editor.selectionBounds());
   if (!bounds) throw new Error("Expected selection bounds");

@@ -149,6 +149,14 @@ Pen topology and non-affine position patches use `GlyphLayer.beginEdit()` direct
 
 On drag end, Shape commits a valid rectangle as one transaction, selects its new contour, and switches to Select. A too-small or unavailable-layer result returns Shape to ready without creating geometry. The Select bounding box draws its outline without visible corner squares; resize and rotation hit zones remain active.
 
+### Resize modifiers
+
+Resize resolves both pivots from the original bounds on each drag sample: `initialBounds` supplies the scene-space pivot for pointer measurements, while `localBounds` supplies the glyph-local pivot passed to `ScaleEdit.preview(scale, origin)`. Alt selects the original centre; without Alt, the opposite edge or corner remains fixed. Scale factors compare current and original handle-to-pivot distances on each affected axis. Visual top/bottom handle names follow screen directions, while scene rectangles store minimum Y as `top` and maximum Y as `bottom`.
+
+Shift constrains corner resizing to proportional magnitudes and composes with Alt. Both modifiers follow the processed drag event, including the final release-position sample, rather than querying global keyboard state. A modifier-only key event does not re-preview Resize until another drag sample. Pivot changes reuse the same frozen position base and active edit, so cancellation restores the original positions and completion records one undoable resize.
+
+Resize keeps its original `edge` for transform calculations. `flipX` and `flipY` follow the latest signed scale factors and become false at zero or positive scale. `edgeToCursor` swaps corner diagonals when exactly one axis is flipped; two flips restore the original diagonal, and side-handle cursors remain on their axis. A new resize starts with both flags false.
+
 ### Rendering layers
 
 Tools can implement up to three rendering hooks, each tied to a different redraw frequency:
