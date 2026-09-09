@@ -1,4 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { workspaceTest as test, expect, navigateToEditor } from "./fixtures/electronApp";
 import { glyphProperties, variationControls } from "./fixtures/appLocators";
 import { CanvasUtil } from "./fixtures/CanvasUtil";
@@ -8,6 +10,10 @@ test("aligns exactly two selected points while distribution still requires three
 }, testInfo) => {
   await navigateToEditor(page, "41");
   const properties = glyphProperties(page);
+  // Native scrollbar preferences change the gutter width; normalize only the golden captures.
+  // Interaction and viewport assertions still exercise the unmodified native layout.
+  const screenshotStylePath = path.join(__dirname, "editor.screenshot.css");
+  const screenshotStyle = await readFile(screenshotStylePath, "utf8");
   const canvas = page.locator("#interactive-canvas");
   const alignLeft = properties.getByRole("button", { name: "Align left", exact: true });
   const distribute = properties.getByRole("button", {
@@ -57,10 +63,13 @@ test("aligns exactly two selected points while distribution still requires three
   await properties
     .getByRole("button", { name: "Flip vertically", exact: true })
     .scrollIntoViewIfNeeded();
-  await expect(properties).toHaveScreenshot("one-point-alignment-disabled.png");
+  await expect(properties).toHaveScreenshot("one-point-alignment-disabled.png", {
+    stylePath: screenshotStylePath,
+  });
   await testInfo.attach("one-point-alignment-disabled", {
     body: await properties.screenshot({
       path: testInfo.outputPath("one-point-alignment-disabled.png"),
+      style: screenshotStyle,
     }),
     contentType: "image/png",
   });
@@ -91,10 +100,13 @@ test("aligns exactly two selected points while distribution still requires three
   await expect(
     properties.getByRole("button", { name: "Distribute vertically", exact: true }),
   ).toBeDisabled();
-  await expect(properties).toHaveScreenshot("two-point-transform-controls.png");
+  await expect(properties).toHaveScreenshot("two-point-transform-controls.png", {
+    stylePath: screenshotStylePath,
+  });
   await testInfo.attach("two-point-transform-controls", {
     body: await properties.screenshot({
       path: testInfo.outputPath("two-point-transform-controls.png"),
+      style: screenshotStyle,
     }),
     contentType: "image/png",
   });

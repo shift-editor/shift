@@ -1,0 +1,4 @@
+/* Native scrollbar preferences must not change the golden capture's content width. */
+[aria-label="Glyph properties"] * {
+  scrollbar-width: none !important;
+}

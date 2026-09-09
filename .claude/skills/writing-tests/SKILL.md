@@ -208,6 +208,15 @@ The codebase went through a deliberate sweep that deleted thousands of lines of 
 
 The replacement — real `Editor`, real Rust via NAPI, fake only at the outermost boundary (`SystemClipboard`, `NativeBridge`) — catches regressions mocks silently missed. Don't reintroduce what was deleted.
 
+## Visual E2E reliability
+
+Before adding or changing screenshot assertions, follow [Desktop E2E capture determinism](../../../apps/desktop/e2e/README.md#capture-determinism).
+
+- Control host-dependent capture inputs, including native scrollbar gutters; fixed viewport dimensions alone are insufficient.
+- Verify the installed capture API and use identical normalization for golden assertions and review attachments. Preserve behavioral and visibility checks on the unmodified layout.
+- Inspect baseline differences, then verify without snapshot updates or retries. Repeat under the environmental condition that caused the failure, not only the environment that already passed.
+- Do not use increased tolerance, retries, or replacement baselines as a substitute for explaining a mismatch. Skipped E2E checks do not establish merge readiness.
+
 ## Running
 
 ```bash
