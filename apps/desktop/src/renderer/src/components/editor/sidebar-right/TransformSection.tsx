@@ -24,31 +24,31 @@ import { AlignmentType, DistributeType } from "@/lib/transform/types";
 
 const AlignButtonsRow = React.memo(function AlignButtonsRow({
   onAlign,
-  canDistribute,
+  canAlign,
 }: {
   onAlign: (a: AlignmentType) => void;
-  canDistribute: boolean;
+  canAlign: boolean;
 }) {
   return (
-    <div className="flex gap-4">
+    <div className="flex flex-wrap gap-x-4 gap-y-2">
       <div className="flex gap-1">
         <IconButton
           ariaLabel="Align left"
           icon={AlignLeftIcon}
           onClick={() => onAlign("left")}
-          disabled={!canDistribute}
+          disabled={!canAlign}
         />
         <IconButton
           ariaLabel="Align horizontal centers"
           icon={AlignCenterHIcon}
           onClick={() => onAlign("center-h")}
-          disabled={!canDistribute}
+          disabled={!canAlign}
         />
         <IconButton
           ariaLabel="Align right"
           icon={AlignRightIcon}
           onClick={() => onAlign("right")}
-          disabled={!canDistribute}
+          disabled={!canAlign}
         />
       </div>
       <div className="flex gap-1">
@@ -56,19 +56,19 @@ const AlignButtonsRow = React.memo(function AlignButtonsRow({
           ariaLabel="Align top"
           icon={AlignTopIcon}
           onClick={() => onAlign("top")}
-          disabled={!canDistribute}
+          disabled={!canAlign}
         />
         <IconButton
           ariaLabel="Align vertical centers"
           icon={AlignCenterVIcon}
           onClick={() => onAlign("center-v")}
-          disabled={!canDistribute}
+          disabled={!canAlign}
         />
         <IconButton
           ariaLabel="Align bottom"
           icon={AlignBottomIcon}
           onClick={() => onAlign("bottom")}
-          disabled={!canDistribute}
+          disabled={!canAlign}
         />
       </div>
     </div>
@@ -165,6 +165,7 @@ export const TransformSection = () => {
 
   const editable = positionSelection !== null;
   const canDistribute = editable && selectedPointIds.length >= 3;
+  const canAlign = editable && selectedPointIds.length >= 2;
 
   const handleAlign = useCallback(
     (alignment: AlignmentType) => {
@@ -232,7 +233,7 @@ export const TransformSection = () => {
     <SidebarSection title="Transform">
       <div className="flex flex-col gap-2">
         <div className="text-xs text-secondary">Align</div>
-        <AlignButtonsRow onAlign={handleAlign} canDistribute={canDistribute} />
+        <AlignButtonsRow canAlign={canAlign} onAlign={handleAlign} />
       </div>
 
       <div className="flex flex-col gap-2">
@@ -282,31 +283,37 @@ export const TransformSection = () => {
 
       <div className="flex flex-col gap-2">
         <div className="text-xs text-secondary">Rotation</div>
-        <div className="flex gap-2 items-center">
-          <EditableSidebarInput
-            ariaLabel="Rotation"
-            className="max-w-32"
-            value={rotation}
-            suffix="°"
-            defaultValue={0}
-            disabled={!editable}
-            onValueChange={handleRotate}
-            icon={<RotateIcon className="w-5 h-5" />}
-          />
-          <div className="flex w-full items-center justify-start gap-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="w-24 shrink-0">
+            <EditableSidebarInput
+              ariaLabel="Rotation"
+              className="bg-input pl-8"
+              value={rotation}
+              suffix="°"
+              defaultValue={0}
+              disabled={!editable}
+              onValueChange={handleRotate}
+              iconPosition="left"
+              icon={<RotateIcon className="w-5 h-5 text-sidebar-icon" />}
+            />
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
             <IconButton
+              className="p-[3px]"
               ariaLabel="Rotate 90 degrees clockwise"
               icon={RotateCwIcon}
               disabled={!editable}
               onClick={handleRotate90}
             />
             <IconButton
+              className="p-[3px]"
               ariaLabel="Flip horizontally"
               icon={FlipHIcon}
               disabled={!editable}
               onClick={handleFlipH}
             />
             <IconButton
+              className="p-[3px]"
               ariaLabel="Flip vertically"
               icon={FlipVIcon}
               disabled={!editable}

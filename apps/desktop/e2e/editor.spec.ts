@@ -3,6 +3,119 @@ import { workspaceTest as test, expect, navigateToEditor } from "./fixtures/elec
 import { glyphProperties, variationControls } from "./fixtures/appLocators";
 import { CanvasUtil } from "./fixtures/CanvasUtil";
 
+test("aligns exactly two selected points while distribution still requires three", async ({
+  page,
+}, testInfo) => {
+  await navigateToEditor(page, "41");
+  const properties = glyphProperties(page);
+  const canvas = page.locator("#interactive-canvas");
+  const alignLeft = properties.getByRole("button", { name: "Align left", exact: true });
+  const distribute = properties.getByRole("button", {
+    name: "Distribute horizontally",
+    exact: true,
+  });
+  const points = await page.evaluate(() => {
+    const editor = window.shift!.editor;
+    const node = editor.scene.nodesOfKind("glyph")[0];
+    if (!node) throw new Error("Expected glyph node");
+    const layer = editor.glyphForId(node.glyphId)?.layerForSource(node.sourceId);
+    const first = layer?.allPoints[0];
+    const second = layer?.allPoints.find((point) => point.x !== first?.x && point.y !== first?.y);
+    const third = layer?.allPoints.find(
+      (point) => point.id !== first?.id && point.id !== second?.id,
+    );
+    if (!first || !second || !third) throw new Error("Expected three distinct fixture points");
+
+    return [first, second, third].map((point) => ({
+      id: point.id,
+      x: point.x,
+      y: point.y,
+      screen: editor.projectSceneToScreen({
+        x: point.x + node.position.x,
+        y: point.y + node.position.y,
+      }),
+    }));
+  });
+  const selectedPositions = () =>
+    page.evaluate(
+      (ids) => {
+        const selection = window.shift!.editor.positionSelection(ids);
+        if (!selection) throw new Error("Expected editable selection");
+        return ids.map((id) => {
+          const point = selection.layer.point(id);
+          if (!point) throw new Error("Expected selected point");
+          return { x: point.x, y: point.y };
+        });
+      },
+      points.slice(0, 2).map((point) => point.id),
+    );
+
+  await expect(alignLeft).toHaveCount(0);
+  await canvas.click({ position: points[0].screen });
+  await expect(alignLeft).toBeDisabled();
+  await expect(distribute).toBeDisabled();
+  await properties
+    .getByRole("button", { name: "Flip vertically", exact: true })
+    .scrollIntoViewIfNeeded();
+  await expect(properties).toHaveScreenshot("one-point-alignment-disabled.png");
+  await testInfo.attach("one-point-alignment-disabled", {
+    body: await properties.screenshot({
+      path: testInfo.outputPath("one-point-alignment-disabled.png"),
+    }),
+    contentType: "image/png",
+  });
+
+  await canvas.click({ position: points[1].screen, modifiers: ["Shift"] });
+  await expect
+    .poll(() => page.evaluate(() => window.shift!.editor.selection.ids))
+    .toEqual(points.slice(0, 2).map((point) => point.id));
+  for (const name of [
+    "Align left",
+    "Align horizontal centers",
+    "Align right",
+    "Align top",
+    "Align vertical centers",
+    "Align bottom",
+  ]) {
+    await expect(properties.getByRole("button", { name, exact: true })).toBeEnabled();
+    await expect(properties.getByRole("button", { name, exact: true })).toBeInViewport({
+      ratio: 1,
+    });
+  }
+  for (const name of ["Rotate 90 degrees clockwise", "Flip horizontally", "Flip vertically"]) {
+    await expect(properties.getByRole("button", { name, exact: true })).toBeInViewport({
+      ratio: 1,
+    });
+  }
+  await expect(distribute).toBeDisabled();
+  await expect(
+    properties.getByRole("button", { name: "Distribute vertically", exact: true }),
+  ).toBeDisabled();
+  await expect(properties).toHaveScreenshot("two-point-transform-controls.png");
+  await testInfo.attach("two-point-transform-controls", {
+    body: await properties.screenshot({
+      path: testInfo.outputPath("two-point-transform-controls.png"),
+    }),
+    contentType: "image/png",
+  });
+
+  await alignLeft.click();
+  await page.evaluate(async () => window.shift!.font.editCoordinator.settled());
+  await expect
+    .poll(selectedPositions)
+    .toEqual(
+      points.slice(0, 2).map((point) => ({ x: Math.min(points[0].x, points[1].x), y: point.y })),
+    );
+  await page.evaluate(() => window.shift!.editor.undo());
+  await expect.poll(selectedPositions).toEqual(points.slice(0, 2).map(({ x, y }) => ({ x, y })));
+
+  await canvas.click({ position: points[2].screen, modifiers: ["Shift"] });
+  await expect(distribute).toBeEnabled();
+  await expect(
+    properties.getByRole("button", { name: "Distribute vertically", exact: true }),
+  ).toBeEnabled();
+});
+
 async function selectionBounds(page: Page) {
   const bounds = await page.evaluate(() => window.shift?.editor.selectionBounds());
   if (!bounds) throw new Error("Expected selection bounds");
