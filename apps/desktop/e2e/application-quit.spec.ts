@@ -10,7 +10,9 @@ import {
 } from "./fixtures/editorInteractions";
 import {
   createNewFont,
+  killApp,
   quitApp,
+  relaunchApp,
   requestAppQuit,
   runCommand,
   windowTitle,
@@ -127,6 +129,70 @@ saveOnQuitTest(
   },
 );
 
+test.describe("terminal termination", () => {
+  test.use({ scriptedDialogs: false });
+
+  for (const signal of ["SIGINT", "SIGTERM"] as const) {
+    for (const target of ["main process", "process group"] as const) {
+      test(`${signal} to the ${target} exits without saving and recovers every dirty document`, async ({
+        electronApp,
+        page,
+        testRoot,
+        saveShiftPath,
+      }) => {
+        test.skip(process.platform === "win32", "POSIX terminal signal semantics");
+
+        const firstPage = await dirtyNewFont(page, electronApp);
+        const firstPath = path.join(testRoot, "first.shift");
+        const firstSaved = await saveThenDirty(firstPage, firstPath);
+        const secondPage = await createAnotherDirtyFont(firstPage, electronApp);
+        const secondPath = path.join(testRoot, "second.shift");
+        const secondSaved = await saveThenDirty(secondPage, secondPath);
+        for (const workspacePage of [firstPage, secondPage]) {
+          await workspacePage.waitForFunction(
+            () =>
+              window.shift?.applyStatusCell.peek() === "idle" &&
+              window.shift.documentStateCell.peek()?.dirty === true,
+          );
+        }
+
+        const childProcess = electronApp.process();
+        const pid = childProcess.pid;
+        if (pid === undefined) throw new Error("Electron process has no PID");
+
+        // Playwright launches Electron in its own POSIX process group. Signaling
+        // that group exercises Ctrl+C reaching renderers and utilities as well.
+        process.kill(target === "process group" ? -pid : pid, signal);
+        await expect.poll(() => childProcess.signalCode, { timeout: 10_000 }).toBe("SIGKILL");
+        expect(childProcess.exitCode).toBeNull();
+        expect(fs.readFileSync(firstPath).equals(firstSaved)).toBe(true);
+        expect(fs.readFileSync(secondPath).equals(secondSaved)).toBe(true);
+        expect(fs.existsSync(saveShiftPath)).toBe(false);
+
+        const restarted = await relaunchApp(testRoot, saveShiftPath);
+        try {
+          await expect.poll(() => restarted.windows().length).toBe(2);
+          for (const recoveredPage of restarted.windows()) {
+            await waitForWorkspaceReady(recoveredPage);
+            await expect
+              .poll(() =>
+                recoveredPage.evaluate(() => ({
+                  recovered: window.shift?.font
+                    .glyphRecords()
+                    .some((glyph) => glyph.name === "newGlyph.1"),
+                  dirty: window.shift?.documentStateCell.peek()?.dirty,
+                })),
+              )
+              .toEqual({ recovered: true, dirty: true });
+          }
+        } finally {
+          await killApp(restarted);
+        }
+      });
+    }
+  }
+});
+
 test("keeps authored document state isolated between windows", async ({ electronApp, page }) => {
   const firstPage = await dirtyNewFont(page, electronApp);
   const secondPage = await createAnotherDirtyFont(firstPage, electronApp);
@@ -157,6 +223,48 @@ test("keeps authored document state isolated between windows", async ({ electron
       window.shift?.font.glyphRecords().some((glyph) => glyph.name === "newGlyph.1"),
     ),
   ).toBe(false);
+});
+
+test.describe("terminal termination during quit preparation", () => {
+  test.use({ dirtyDocumentChoice: "save", dirtyDocumentDelayMs: 60_000 });
+
+  test("SIGINT supersedes a pending save decision without writing or discarding", async ({
+    electronApp,
+    page,
+    testRoot,
+    saveShiftPath,
+  }) => {
+    test.skip(process.platform === "win32", "POSIX terminal signal semantics");
+
+    const workspacePage = await dirtyNewFont(page, electronApp);
+    await workspacePage.waitForFunction(() => window.shift?.applyStatusCell.peek() === "idle");
+    await electronApp.evaluate(
+      ({ app }) =>
+        new Promise<void>((resolve) => {
+          app.once("before-quit", () => resolve());
+          app.quit();
+        }),
+    );
+
+    const childProcess = electronApp.process();
+    childProcess.kill("SIGINT");
+    await expect.poll(() => childProcess.signalCode, { timeout: 10_000 }).toBe("SIGKILL");
+    expect(fs.existsSync(saveShiftPath)).toBe(false);
+
+    const restarted = await relaunchApp(testRoot, saveShiftPath);
+    try {
+      const recoveredPage = await restarted.firstWindow();
+      await waitForWorkspaceReady(recoveredPage);
+      await expect.poll(() => windowTitle(recoveredPage, restarted)).toContain("Untitled *");
+      expect(
+        await recoveredPage.evaluate(() =>
+          window.shift?.font.glyphRecords().some((glyph) => glyph.name === "newGlyph"),
+        ),
+      ).toBe(true);
+    } finally {
+      await killApp(restarted);
+    }
+  });
 });
 
 reentrantQuitTest(

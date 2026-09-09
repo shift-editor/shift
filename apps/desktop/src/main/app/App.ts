@@ -287,6 +287,8 @@ export class App {
   }
 
   #handleDocumentCrash(session: FontSessionHost, failedWindow: Window | null): void {
+    if (this.#lifecycle.terminating) return;
+
     const existing = this.#documentCrashDecisions.get(session.workspaceId);
     if (existing) return;
 
@@ -306,7 +308,7 @@ export class App {
   async #documentCrashFlow(sessionId: string, failedWindow: Window | null): Promise<void> {
     let failure: "crashed" | "restoreFailed" = "crashed";
 
-    while (true) {
+    while (!this.#lifecycle.terminating) {
       const session = this.#workspaces.get(sessionId);
       const owner = failedWindow ?? session?.activeWindow() ?? null;
       const choice = await this.#nativeDialogs.confirmDocumentReopen(
@@ -314,6 +316,8 @@ export class App {
         this.applicationName,
         failure,
       );
+      if (this.#lifecycle.terminating) return;
+
       if (choice === "close") {
         for (const window of this.#crashedWindows(session, failedWindow)) {
           if (!window.window.isDestroyed()) window.window.destroy();
