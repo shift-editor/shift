@@ -24,6 +24,8 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 
 **Architecture Invariant:** `FrameHandler` deduplicates `requestAnimationFrame` calls per canvas layer. Multiple signal changes within a single frame coalesce into one render. Canvas lifecycle changes, such as replacing a layer context after resize, are represented as renderer surface signals so redraw causes remain inspectable.
 
+**Architecture Invariant:** E2E builds dispatch `shift:geometry-submitted` on `window` after a successful marker draw, exposing a synchronous borrowed `SubmittedGeometry.point(pointId)` view of uploaded coordinates; a marker clear reports `null`. Probes must not retain the view or its buffers. Dispatch is untracked and is neither pixel verification nor presentation acknowledgement. `shift:request-scene-render` requests an untimed synchronous baseline draw through `renderSceneForProbe`; its listener is removed on editor destruction. Performance tests require a non-matching final submitted baseline before input and correlate matching submissions with Chromium presentation feedback separately. Both hooks are absent from production builds.
+
 **Architecture Invariant:** `Editor.positionSelection(ids)` is the canonical boundary from generic selected object IDs to one active authored `GlyphLayer` plus normalized point/anchor targets. It expands segment and contour IDs, rejects unsupported or mixed-layer input, and carries no scene-node placement; pointer deltas and tool surfaces own coordinate context.
 
 **Architecture Invariant:** Lifecycle events (`EventEmitter`) are for one-shot imperative actions; `LifecycleEventMap` contains `destroying` and the one-shot `previewMutationAttempted` notice. Continuous state changes use signals. Do not mix the two patterns.
@@ -37,6 +39,8 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 **Architecture Invariant:** A newly created source becomes the editor's active source only after its workspace echo makes that identity readable from `Font`. While creation is pending, the editor exposes the requested external location with no active source ID, so catalog and rendering consumers cannot observe a dangling source.
 
 **Architecture Invariant:** `Selection` is a dumb ordered set of branded object IDs. Mutations go through `select()`, `add()`, `remove()`, and `toggle()`; behavior and live bounds come from resolving those IDs through `Editor.object()`.
+
+**Architecture Invariant:** `Editor.insertContent()` inserts each non-empty contour's points through one `GlyphLayer.addPoints(contourId, edits)` call. All contours share one workspace transaction and undo step; returned identities preserve contour and point order, and portable geometry receives the requested offset exactly once.
 
 **Architecture Invariant:** Glyph-domain hit testing belongs to glyph geometry and editor glyph lookup helpers. Tool-specific controls, such as select bounding-box handles, are owned and hit-tested by the tool that renders them.
 

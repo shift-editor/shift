@@ -1359,13 +1359,14 @@ export class Editor {
 
         const contourId = layer.addContour();
 
-        for (const point of contour.points) {
-          const pointId = layer.addPoint(contourId, {
+        for (const pointId of layer.addPoints(
+          contourId,
+          contour.points.map((point) => ({
             ...point,
             x: point.x + options.offset.x,
             y: point.y + options.offset.y,
-          });
-
+          })),
+        )) {
           inserted.push(pointId);
         }
 

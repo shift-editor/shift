@@ -1,9 +1,12 @@
 import REGL from "regl";
+import { untracked } from "@/lib/signals/signal";
 import { MARKER_INSTANCE_FLOATS } from "@/lib/editor/rendering/markers/types";
 import vert from "@/lib/editor/rendering/markers/shaders/handle.vert.glsl";
 import frag from "@/lib/editor/rendering/markers/shaders/handle.frag.glsl";
 import type { CameraTransform } from "@/lib/editor/managers/Camera";
 import type { Point2D } from "@shift/geo";
+
+declare const __PLAYWRIGHT__: boolean;
 
 const UNIT_QUAD = new Float32Array([-1, -1, 1, -1, -1, 1, 1, -1, 1, 1, -1, 1]);
 const CLEAR_OPTIONS = {
@@ -84,6 +87,12 @@ export class MarkerLayer {
   clear(): void {
     if (!this.#regl || !this.#available) return;
     this.#regl.clear(CLEAR_OPTIONS);
+
+    if (typeof __PLAYWRIGHT__ !== "undefined" && __PLAYWRIGHT__) {
+      untracked(() =>
+        window.dispatchEvent(new CustomEvent("shift:geometry-submitted", { detail: null })),
+      );
+    }
   }
 
   /** @knipclassignore */
@@ -116,11 +125,15 @@ export class MarkerLayer {
         : packedInstances.subarray(0, requiredLength);
 
     if (requiredLength > this.#instanceCapacity) {
-      this.#instanceCapacity = requiredLength;
-      this.#instanceBuffer({ usage: "dynamic", type: "float", data });
-    } else {
-      this.#instanceBuffer.subdata(data);
+      const capacity = Math.max(requiredLength, this.#instanceCapacity * 2);
+      this.#instanceBuffer({
+        usage: "dynamic",
+        type: "float",
+        length: capacity * Float32Array.BYTES_PER_ELEMENT,
+      });
+      this.#instanceCapacity = capacity;
     }
+    this.#instanceBuffer.subdata(data);
 
     return true;
   }
@@ -142,7 +155,7 @@ export class MarkerLayer {
       return true;
     }
 
-    this.#regl.clear(CLEAR_OPTIONS);
+    this.clear();
     this.#centre[0] = camera.centre.x;
     this.#centre[1] = camera.centre.y;
     this.#drawOffset[0] = drawOffset.x;

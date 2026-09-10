@@ -16,6 +16,7 @@ import os from "node:os";
 import * as path from "path";
 import { once } from "events";
 import type { Unicode } from "@shift/types";
+import type { ContourContent } from "@/lib/clipboard/types";
 import { copyImportedSource, createAuthoredDocument } from "./fontSource";
 
 const APP_ROOT = path.resolve(__dirname, "../..");
@@ -251,7 +252,7 @@ const POINTS_PER_CONTOUR = MUTATORSANS_S.length; // 44
 export function generateContourData(targetPoints: number) {
   const count = Math.ceil(targetPoints / POINTS_PER_CONTOUR);
   const cols = Math.ceil(Math.sqrt(count));
-  const contours = [];
+  const contours: ContourContent[] = [];
 
   for (let i = 0; i < count; i++) {
     const col = i % cols;

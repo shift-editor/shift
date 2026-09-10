@@ -1,0 +1,380 @@
+{
+  "traceEvents": [
+    {
+      "args": {
+        "data": {
+          "callTime": 747282049711,
+          "navigationId": "2AA52141FA709D46B6829F13DCF5CBCD",
+          "sampleTraceId": 8414710918425696,
+          "startTime": 2196.600000023842
+        }
+      },
+      "cat": "blink.user_timing",
+      "name": "inputToGeometryFrameMs",
+      "ph": "I",
+      "pid": 25025,
+      "s": "t",
+      "tid": 7102701,
+      "ts": 747282045157,
+      "tts": 1134073
+    },
+    {
+      "args": {
+        "data": {
+          "callTime": 747282067792,
+          "detail": "false",
+          "navigationId": "2AA52141FA709D46B6829F13DCF5CBCD",
+          "sampleTraceId": 8414710918426508,
+          "startTime": 2219.299999952316
+        }
+      },
+      "cat": "blink.user_timing",
+      "name": "shift:geometry-submitted",
+      "ph": "I",
+      "pid": 25025,
+      "s": "t",
+      "tid": 7102701,
+      "ts": 747282067786,
+      "tts": 1147508
+    },
+    {
+      "args": {
+        "data": {
+          "callTime": 747282068247,
+          "detail": "true",
+          "navigationId": "2AA52141FA709D46B6829F13DCF5CBCD",
+          "sampleTraceId": 8414710918426510,
+          "startTime": 2219.700000047684
+        }
+      },
+      "cat": "blink.user_timing",
+      "name": "shift:geometry-submitted",
+      "ph": "I",
+      "pid": 25025,
+      "s": "t",
+      "tid": 7102701,
+      "ts": 747282068244,
+      "tts": 1147961
+    },
+    {
+      "args": {
+        "data": {
+          "callTime": 747282123595,
+          "detail": "false",
+          "navigationId": "2AA52141FA709D46B6829F13DCF5CBCD",
+          "sampleTraceId": 8414710918426617,
+          "startTime": 2275.100000023842
+        }
+      },
+      "cat": "blink.user_timing",
+      "name": "shift:geometry-submitted",
+      "ph": "I",
+      "pid": 25025,
+      "s": "t",
+      "tid": 7102701,
+      "ts": 747282123589,
+      "tts": 1184204
+    },
+    {
+      "args": {
+        "data": {
+          "callTime": 747282124197,
+          "detail": "true",
+          "navigationId": "2AA52141FA709D46B6829F13DCF5CBCD",
+          "sampleTraceId": 8414710918426618,
+          "startTime": 2275.700000047684
+        }
+      },
+      "cat": "blink.user_timing",
+      "name": "shift:geometry-submitted",
+      "ph": "I",
+      "pid": 25025,
+      "s": "t",
+      "tid": 7102701,
+      "ts": 747282124195,
+      "tts": 1184805
+    },
+    {
+      "args": {
+        "animation_frame_timing_info": {
+          "begin_frame_id": {
+            "sequence_number": 132,
+            "source_id": 4294967296
+          },
+          "blocking_duration_ms": 0,
+          "duration_ms": 10,
+          "num_scripts": 0
+        },
+        "id": "677de5228f2e2c5e"
+      },
+      "cat": "devtools.timeline",
+      "id2": {
+        "local": "0x2"
+      },
+      "name": "AnimationFrame",
+      "ph": "b",
+      "pid": 25025,
+      "tid": 7102701,
+      "ts": 747282035305
+    },
+    {
+      "args": {},
+      "cat": "devtools.timeline",
+      "id2": {
+        "local": "0x2"
+      },
+      "name": "AnimationFrame",
+      "ph": "e",
+      "pid": 25025,
+      "tid": 7102701,
+      "ts": 747282045524
+    },
+    {
+      "args": {
+        "animation_frame_timing_info": {
+          "begin_frame_id": {
+            "sequence_number": 133,
+            "source_id": 4294967296
+          },
+          "blocking_duration_ms": 0,
+          "duration_ms": 22,
+          "num_scripts": 0
+        },
+        "id": "677de5228f2e2f84"
+      },
+      "cat": "devtools.timeline",
+      "id2": {
+        "local": "0x2"
+      },
+      "name": "AnimationFrame",
+      "ph": "b",
+      "pid": 25025,
+      "tid": 7102701,
+      "ts": 747282045640
+    },
+    {
+      "args": {
+        "begin_frame_id": {
+          "sequence_number": 132,
+          "source_id": 4294967296
+        },
+        "id": "677de5228f2e2c5e"
+      },
+      "cat": "devtools.timeline",
+      "id2": {
+        "local": "0x2"
+      },
+      "name": "AnimationFrame::Presentation",
+      "ph": "n",
+      "pid": 25025,
+      "tid": 7102701,
+      "ts": 747282066666
+    },
+    {
+      "args": {},
+      "cat": "devtools.timeline",
+      "id2": {
+        "local": "0x2"
+      },
+      "name": "AnimationFrame",
+      "ph": "e",
+      "pid": 25025,
+      "tid": 7102701,
+      "ts": 747282068377
+    },
+    {
+      "args": {
+        "animation_frame_timing_info": {
+          "begin_frame_id": {
+            "sequence_number": 134,
+            "source_id": 4294967296
+          },
+          "blocking_duration_ms": 0,
+          "duration_ms": 8,
+          "num_scripts": 0
+        },
+        "id": "677de5228f2e2fba"
+      },
+      "cat": "devtools.timeline",
+      "id2": {
+        "local": "0x2"
+      },
+      "name": "AnimationFrame",
+      "ph": "b",
+      "pid": 25025,
+      "tid": 7102701,
+      "ts": 747282068583
+    },
+    {
+      "args": {},
+      "cat": "devtools.timeline",
+      "id2": {
+        "local": "0x2"
+      },
+      "name": "AnimationFrame",
+      "ph": "e",
+      "pid": 25025,
+      "tid": 7102701,
+      "ts": 747282077117
+    },
+    {
+      "args": {
+        "begin_frame_id": {
+          "sequence_number": 0,
+          "source_id": 0
+        },
+        "id": "677de5228f2e2fba"
+      },
+      "cat": "devtools.timeline",
+      "id2": {
+        "local": "0x2"
+      },
+      "name": "AnimationFrame::Presentation",
+      "ph": "n",
+      "pid": 25025,
+      "tid": 7102701,
+      "ts": 747282077145
+    },
+    {
+      "args": {
+        "animation_frame_timing_info": {
+          "begin_frame_id": {
+            "sequence_number": 135,
+            "source_id": 4294967296
+          },
+          "blocking_duration_ms": 0,
+          "duration_ms": 45,
+          "num_scripts": 0
+        },
+        "id": "677de5228f2e2fca"
+      },
+      "cat": "devtools.timeline",
+      "id2": {
+        "local": "0x2"
+      },
+      "name": "AnimationFrame",
+      "ph": "b",
+      "pid": 25025,
+      "tid": 7102701,
+      "ts": 747282078656
+    },
+    {
+      "args": {
+        "begin_frame_id": {
+          "sequence_number": 133,
+          "source_id": 4294967296
+        },
+        "id": "677de5228f2e2f84"
+      },
+      "cat": "devtools.timeline",
+      "id2": {
+        "local": "0x2"
+      },
+      "name": "AnimationFrame::Presentation",
+      "ph": "n",
+      "pid": 25025,
+      "tid": 7102701,
+      "ts": 747282099999
+    },
+    {
+      "args": {},
+      "cat": "devtools.timeline",
+      "id2": {
+        "local": "0x2"
+      },
+      "name": "AnimationFrame",
+      "ph": "e",
+      "pid": 25025,
+      "tid": 7102701,
+      "ts": 747282124396
+    },
+    {
+      "args": {
+        "animation_frame_timing_info": {
+          "begin_frame_id": {
+            "sequence_number": 136,
+            "source_id": 4294967296
+          },
+          "blocking_duration_ms": 0,
+          "duration_ms": 0,
+          "num_scripts": 0
+        },
+        "id": "677de5228f2e2ffe"
+      },
+      "cat": "devtools.timeline",
+      "id2": {
+        "local": "0x2"
+      },
+      "name": "AnimationFrame",
+      "ph": "b",
+      "pid": 25025,
+      "tid": 7102701,
+      "ts": 747282124798
+    },
+    {
+      "args": {},
+      "cat": "devtools.timeline",
+      "id2": {
+        "local": "0x2"
+      },
+      "name": "AnimationFrame",
+      "ph": "e",
+      "pid": 25025,
+      "tid": 7102701,
+      "ts": 747282124826
+    },
+    {
+      "args": {
+        "animation_frame_timing_info": {
+          "begin_frame_id": {
+            "sequence_number": 137,
+            "source_id": 4294967296
+          },
+          "blocking_duration_ms": 0,
+          "duration_ms": 0,
+          "num_scripts": 0
+        },
+        "id": "677de5228f2e2f10"
+      },
+      "cat": "devtools.timeline",
+      "id2": {
+        "local": "0x2"
+      },
+      "name": "AnimationFrame",
+      "ph": "b",
+      "pid": 25025,
+      "tid": 7102701,
+      "ts": 747282128868
+    },
+    {
+      "args": {},
+      "cat": "devtools.timeline",
+      "id2": {
+        "local": "0x2"
+      },
+      "name": "AnimationFrame",
+      "ph": "e",
+      "pid": 25025,
+      "tid": 7102701,
+      "ts": 747282128958
+    },
+    {
+      "args": {
+        "begin_frame_id": {
+          "sequence_number": 0,
+          "source_id": 0
+        },
+        "id": "677de5228f2e2f10"
+      },
+      "cat": "devtools.timeline",
+      "id2": {
+        "local": "0x2"
+      },
+      "name": "AnimationFrame::Presentation",
+      "ph": "n",
+      "pid": 25025,
+      "tid": 7102701,
+      "ts": 747282128990
+    }
+  ]
+}

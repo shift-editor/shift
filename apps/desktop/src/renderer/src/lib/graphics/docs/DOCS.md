@@ -114,13 +114,13 @@ Set `SHIFT_PROFILE_SLUG_ATLAS=1` for release measurements. Main propagates that 
 ### Per-frame draw pipeline
 
 1. `Handles.draw` is called with the scene `Canvas`, glyph data, handle states, camera, and draw offset.
-2. `Handles` reuses `PointHandleItem` wrappers assembled into a `HandleDisplayList` and calls `MarkerHandleRenderer.draw`. Handles are not culled — every item is packed unconditionally (only control lines use `Camera.visibleSceneBounds` frustum culling).
+2. `Handles` derives `Canvas.visibleBounds(HANDLE_CULL_PADDING_PX)` from the current inverse drawing transform, including node placement, camera and DPR. `HandleItems` rejects offscreen point centres before constructing items or resolving selection/hover styles. The padding circumscribes every rotated marker quad, so partially visible endpoints remain drawn. Filtering preserves original contour indexes and neighbors, and the same display list feeds GPU rendering and Canvas fallback.
 3. `MarkerHandleRenderer.draw` caches uploads per display list. Only when the `HandleDisplayList` differs from the last uploaded one does it re-pack: it looks up `STYLES[shape][state]`, writes 25 floats per item into a reusable `Float32Array`, and calls `MarkerLayer.uploadInstances` (which reallocates the REGL buffer past `#instanceCapacity`, otherwise uses `subdata` for a zero-alloc update). An unchanged list re-draws with no upload. It then calls `MarkerLayer.drawUploaded` with the instance count, camera, draw offset, and logical canvas size.
 4. The REGL draw command runs instanced rendering: 6 vertices (unit quad) per instance. The vertex shader transforms each handle from scene coordinates to clip space, applying viewport pan/zoom/scale. The fragment shader dispatches on `v_shape` to the appropriate SDF (box for corner, circle for smooth/control, triangle for direction, a segment bar plus triangle composite for first, segment for last), computes fill/stroke coverage with anti-aliasing via `fwidth`, and composites an optional overlay color.
 
 ### Buffer growth strategy
 
-The instance buffer only grows, never shrinks. When `packedInstances.length > #instanceCapacity`, the entire buffer is replaced. Otherwise, `subdata` overwrites in place. This avoids per-frame allocation for stable glyph sizes.
+CPU packing and GPU instance buffers only grow, never shrink. On overflow each reserves the greater of the required float count and twice its previous capacity. GPU allocation uses byte length; uploads and draws still use only the active instance prefix. Single-point growth therefore reuses spare capacity rather than allocating an entire outline-sized buffer on every click.
 
 ## Workflow recipes
 

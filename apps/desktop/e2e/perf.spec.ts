@@ -205,7 +205,7 @@ test.describe("Performance — 50K points", () => {
           times.push(performance.now() - start);
         }
 
-        layer.commitPositionPatch(updates);
+        layer.applyPositionPatch(updates);
         await editor.font.editCoordinator.settled();
         return times;
       },
@@ -253,7 +253,7 @@ test.describe("Performance — 50K points", () => {
           times.push(performance.now() - start);
         }
 
-        layer.commitPositionPatch(updates);
+        layer.applyPositionPatch(updates);
         await editor.font.editCoordinator.settled();
         return times;
       },
@@ -301,7 +301,7 @@ test.describe("Performance — 50K points", () => {
           times.push(performance.now() - start);
         }
 
-        layer.commitPositionPatch(updates);
+        layer.applyPositionPatch(updates);
         await editor.font.editCoordinator.settled();
         return times;
       },
@@ -370,7 +370,7 @@ test.describe("Performance — 50K points", () => {
           y: index + 10,
         }));
         layer.previewPositionPatch(updates);
-        layer.commitPositionPatch(updates);
+        layer.applyPositionPatch(updates);
         await editor.font.editCoordinator.settled();
 
         const undoTimes: number[] = [];

@@ -142,8 +142,10 @@ test("persists axis topology", async ({ recoveryApp }) => {
 
 async function authorSourceTopology(page: Page): Promise<SourceFixture> {
   return page.evaluate(async () => {
-    const font = window.shift?.font;
-    if (!font) throw new Error("Expected authored font");
+    const session = window.shiftSession;
+    if (!session || session.mode !== "authored") throw new Error("Expected authored font");
+
+    const { font, editor, catalog } = session;
 
     const defaultSourceId = font.defaultSource.id;
     const axisId = font.createAxis({
@@ -159,39 +161,54 @@ async function authorSourceTopology(page: Page): Promise<SourceFixture> {
     });
     await font.editCoordinator.settled();
 
-    const mediumSourceId = font.createSource("Medium", new Map([[axisId, 600]]));
-    const boldSourceId = font.createSource("Bold", new Map([[axisId, 900]]));
-    const instanceId = font.createNamedInstance({
-      name: "Display",
-      postscriptName: "MutatorSans-Display",
-      location: { values: { [axisId]: 800 } },
-    });
-    await font.editCoordinator.settled();
+    const { externalLocation, activeSourceId } = editor;
 
-    const medium = font.source(mediumSourceId);
-    if (!medium) throw new Error("Expected Medium source");
+    try {
+      await catalog.setLocation(
+        font.getAxes().map((axis) => (axis.id === axisId ? 600 : axis.default)),
+      );
+      const mediumSourceId = font.createSource("Medium", editor.externalLocation);
+      await catalog.setLocation(
+        font.getAxes().map((axis) => (axis.id === axisId ? 900 : axis.default)),
+      );
+      const boldSourceId = font.createSource("Bold", editor.externalLocation);
+      const instanceId = font.createNamedInstance({
+        name: "Display",
+        postscriptName: "MutatorSans-Display",
+        location: { values: { [axisId]: 800 } },
+      });
+      await font.editCoordinator.settled();
 
-    const ascender = font.metricDefinitions.find(({ kind }) => kind === "ascender");
-    if (!ascender) throw new Error("Expected ascender metric");
+      const medium = font.source(mediumSourceId);
+      if (!medium) throw new Error("Expected Medium source");
 
-    await font.updateSource({
-      ...medium,
-      name: "Medium Master",
-      italicAngle: -2,
-      lineGap: 37,
-      metricValues: medium.metricValues.map((value) =>
-        value.metricId === ascender.id ? { ...value, position: value.position + 17 } : value,
-      ),
-    });
+      const ascender = font.metricDefinitions.find(({ kind }) => kind === "ascender");
+      if (!ascender) throw new Error("Expected ascender metric");
 
-    return { axisId, defaultSourceId, mediumSourceId, boldSourceId, instanceId };
+      await font.updateSource({
+        ...medium,
+        name: "Medium Master",
+        italicAngle: -2,
+        lineGap: 37,
+        metricValues: medium.metricValues.map((value) =>
+          value.metricId === ascender.id ? { ...value, position: value.position + 17 } : value,
+        ),
+      });
+
+      return { axisId, defaultSourceId, mediumSourceId, boldSourceId, instanceId };
+    } finally {
+      editor.setExternalLocation(externalLocation);
+      if (activeSourceId !== null) editor.selectSource(activeSourceId);
+    }
   });
 }
 
 async function authorAxisTopology(page: Page): Promise<AxisFixture> {
   return page.evaluate(async () => {
-    const font = window.shift?.font;
-    if (!font) throw new Error("Expected authored font");
+    const session = window.shiftSession;
+    if (!session || session.mode !== "authored") throw new Error("Expected authored font");
+
+    const { font, editor, catalog } = session;
 
     const defaultSourceId = font.defaultSource.id;
     const weightAxisId = font.createAxis({
@@ -231,35 +248,49 @@ async function authorAxisTopology(page: Page): Promise<AxisFixture> {
     });
     await font.editCoordinator.settled();
 
-    const boldSourceId = font.createSource(
-      "Bold Slanted",
-      new Map([
-        [weightAxisId, 900],
-        [widthAxisId, 150],
-        [slantAxisId, -8],
-      ]),
-    );
-    const instanceId = font.createNamedInstance({
-      name: "Display",
-      postscriptName: "MutatorSans-Display",
-      location: {
-        values: {
-          [weightAxisId]: 700,
-          [widthAxisId]: 120,
-          [slantAxisId]: -4,
-        },
-      },
-    });
-    await font.editCoordinator.settled();
+    const { externalLocation, activeSourceId } = editor;
 
-    return {
-      weightAxisId,
-      widthAxisId,
-      slantAxisId,
-      defaultSourceId,
-      boldSourceId,
-      instanceId,
-    };
+    try {
+      await catalog.setLocation(
+        font.getAxes().map((axis) => {
+          switch (axis.id) {
+            case weightAxisId:
+              return 900;
+            case widthAxisId:
+              return 150;
+            case slantAxisId:
+              return -8;
+            default:
+              return axis.default;
+          }
+        }),
+      );
+      const boldSourceId = font.createSource("Bold Slanted", editor.externalLocation);
+      const instanceId = font.createNamedInstance({
+        name: "Display",
+        postscriptName: "MutatorSans-Display",
+        location: {
+          values: {
+            [weightAxisId]: 700,
+            [widthAxisId]: 120,
+            [slantAxisId]: -4,
+          },
+        },
+      });
+      await font.editCoordinator.settled();
+
+      return {
+        weightAxisId,
+        widthAxisId,
+        slantAxisId,
+        defaultSourceId,
+        boldSourceId,
+        instanceId,
+      };
+    } finally {
+      editor.setExternalLocation(externalLocation);
+      if (activeSourceId !== null) editor.selectSource(activeSourceId);
+    }
   });
 }
 

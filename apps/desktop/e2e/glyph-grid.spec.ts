@@ -2,7 +2,6 @@ import type { ElectronApplication, Locator, Page } from "@playwright/test";
 import type { AxisId, SourceId } from "@shift/types";
 import { test, expect, navigateToEditor } from "./fixtures/perfApp";
 import {
-  clickFirstCatalogGlyph,
   glyphCatalogCanvas,
   glyphCatalogSurface,
   glyphCatalogViewport,
@@ -41,7 +40,7 @@ test.describe("Resident Glyph Grid", () => {
     await afterNextPaint(page);
     await expect
       .poll(() =>
-        glyphCanvas.evaluate((canvas) => {
+        glyphCanvas.evaluate((canvas: HTMLCanvasElement) => {
           const bounds = canvas.getBoundingClientRect();
           const scale = window.devicePixelRatio;
           return (
@@ -52,7 +51,7 @@ test.describe("Resident Glyph Grid", () => {
       )
       .toBe(true);
 
-    const initialSize = await glyphCanvas.evaluate((canvas) => ({
+    const initialSize = await glyphCanvas.evaluate((canvas: HTMLCanvasElement) => ({
       width: canvas.width,
       height: canvas.height,
     }));
@@ -70,7 +69,10 @@ test.describe("Resident Glyph Grid", () => {
     await expectCompleteResidency(glyphCanvas);
     await expect
       .poll(() =>
-        glyphCanvas.evaluate((canvas) => ({ width: canvas.width, height: canvas.height })),
+        glyphCanvas.evaluate((canvas: HTMLCanvasElement) => ({
+          width: canvas.width,
+          height: canvas.height,
+        })),
       )
       .toEqual(initialSize);
 
@@ -82,7 +84,10 @@ test.describe("Resident Glyph Grid", () => {
 
     await expect
       .poll(() =>
-        glyphCanvas.evaluate((canvas) => ({ width: canvas.width, height: canvas.height })),
+        glyphCanvas.evaluate((canvas: HTMLCanvasElement) => ({
+          width: canvas.width,
+          height: canvas.height,
+        })),
       )
       .toEqual(initialSize);
 
@@ -107,7 +112,10 @@ test.describe("Resident Glyph Grid", () => {
     expect(returnedFrame.equals(frameWithoutGlyphs)).toBe(false);
     await expect
       .poll(() =>
-        glyphCanvas.evaluate((canvas) => ({ width: canvas.width, height: canvas.height })),
+        glyphCanvas.evaluate((canvas: HTMLCanvasElement) => ({
+          width: canvas.width,
+          height: canvas.height,
+        })),
       )
       .toEqual(initialSize);
     await expectCompleteResidency(glyphCanvas);
@@ -314,7 +322,9 @@ test.describe("Resident Glyph Grid", () => {
       const workspace = window.shift;
       if (!workspace) throw new Error("Expected workspace");
 
-      workspace.editor.setExternalLocation(new Map([[axisId, 900]]));
+      await window.shiftSession!.catalog.setLocation(
+        workspace.font.getAxes().map((axis) => (axis.id === axisId ? 900 : axis.default)),
+      );
       workspace.font.deleteSource(sourceId);
       await workspace.font.editCoordinator.settled();
     }, variable);
@@ -342,7 +352,9 @@ test.describe("Resident Glyph Grid", () => {
       const workspace = window.shift;
       if (!workspace) throw new Error("Expected workspace");
 
-      workspace.editor.setExternalLocation(new Map([[axisId, 750]]));
+      await window.shiftSession!.catalog.setLocation(
+        workspace.font.getAxes().map((axis) => (axis.id === axisId ? 750 : axis.default)),
+      );
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       workspace.font.deleteAxis(axisId);
       await workspace.font.editCoordinator.settled();
@@ -417,7 +429,9 @@ test.describe("Resident Glyph Grid", () => {
 
       const samples: Array<{ previewHeight: number; scrollHeight: number }> = [];
       for (const value of [400, 500, 650, 800, 900, 650, 400]) {
-        workspace.editor.setExternalLocation(new Map([[axisId, value]]));
+        await window.shiftSession!.catalog.setLocation(
+          workspace.font.getAxes().map((axis) => (axis.id === axisId ? value : axis.default)),
+        );
         await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
         samples.push({
           previewHeight: Number(canvas.dataset.previewHeight),
@@ -449,8 +463,10 @@ async function createVariableDesignspace(
   page: Page,
 ): Promise<{ axisId: AxisId; sourceId: SourceId }> {
   return page.evaluate(async () => {
-    const font = window.shift?.font;
-    if (!font) throw new Error("Expected font");
+    const session = window.shiftSession;
+    if (!session || session.mode !== "authored") throw new Error("Expected authored font");
+
+    const { font, editor, catalog } = session;
 
     const axisId = font.createAxis({
       tag: "opsz",
@@ -464,21 +480,31 @@ async function createVariableDesignspace(
       hidden: false,
     });
     await font.editCoordinator.settled();
-    const sourceId = font.createSource("Bold", new Map([[axisId, 900]]));
-    await font.editCoordinator.settled();
-    const source = font.sources.find((candidate) => candidate.id === sourceId);
-    if (!source || source.metricValues.length === 0) {
-      throw new Error("Expected Bold source metrics");
+    const { externalLocation, activeSourceId } = editor;
+
+    try {
+      await catalog.setLocation(
+        font.getAxes().map((axis) => (axis.id === axisId ? 900 : axis.default)),
+      );
+      const sourceId = font.createSource("Bold", editor.externalLocation);
+      await font.editCoordinator.settled();
+      const source = font.sources.find((candidate) => candidate.id === sourceId);
+      if (!source || source.metricValues.length === 0) {
+        throw new Error("Expected Bold source metrics");
+      }
+      await font.updateSource({
+        ...source,
+        metricValues: source.metricValues.map((value) => ({
+          ...value,
+          position: value.position * 2,
+        })),
+      });
+      await font.editCoordinator.settled();
+      return { axisId, sourceId };
+    } finally {
+      editor.setExternalLocation(externalLocation);
+      if (activeSourceId !== null) editor.selectSource(activeSourceId);
     }
-    await font.updateSource({
-      ...source,
-      metricValues: source.metricValues.map((value) => ({
-        ...value,
-        position: value.position * 2,
-      })),
-    });
-    await font.editCoordinator.settled();
-    return { axisId, sourceId };
   });
 }
 
@@ -488,7 +514,6 @@ async function prepareCompleteGrid(electronApp: ElectronApplication, page: Page)
     BrowserWindow.getAllWindows()[0]?.setSize(760, 500);
   });
 
-  const scrollViewport = glyphCatalogViewport(page);
   const glyphCanvas = glyphCatalogCanvas(page);
   await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
     timeout: 30_000,

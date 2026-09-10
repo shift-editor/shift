@@ -6,9 +6,18 @@ import { FpsMonitor } from "./FpsMonitor";
 import { MarkerLayer } from "@/lib/graphics/backends/MarkerLayer";
 import type { Editor } from "../Editor";
 import type { Canvas2DSurface, MarkerCanvasSurface } from "./CanvasSurface";
-import { effect, signal, track, type Effect, type WritableSignal } from "@/lib/signals/signal";
+import {
+  effect,
+  signal,
+  track,
+  untracked,
+  type Effect,
+  type WritableSignal,
+} from "@/lib/signals/signal";
 import { BackgroundLayer, OverlayLayer, SceneLayer } from "./RenderFrame";
 import type { RenderContext } from "@/types/rendering";
+
+declare const __PLAYWRIGHT__: boolean;
 
 type RenderLayer = "background" | "scene" | "overlay";
 
@@ -66,6 +75,14 @@ export class Renderer {
     this.#backgroundLayer = new BackgroundLayer(editor);
     this.#sceneLayer = new SceneLayer(editor);
     this.#overlayLayer = new OverlayLayer(editor);
+
+    if (typeof __PLAYWRIGHT__ !== "undefined" && __PLAYWRIGHT__) {
+      const renderSceneForProbe = () => untracked(() => this.#renderScene());
+      window.addEventListener("shift:request-scene-render", renderSceneForProbe);
+      editor.on("destroying", () =>
+        window.removeEventListener("shift:request-scene-render", renderSceneForProbe),
+      );
+    }
 
     this.#backgroundEffect = effect(
       () => {

@@ -4,6 +4,7 @@ import type { Hover } from "@/lib/editor/Hover";
 import type { Selection } from "@/lib/editor/Selection";
 import type { GlyphNode } from "@/types/node";
 import type { RenderContext } from "@/types/rendering";
+import { HANDLE_CULL_PADDING_PX } from "../markers/handleStyles";
 import { HandleItems } from "./handles/HandleItems";
 import { MarkerHandleRenderer } from "./handles/MarkerHandleRenderer";
 import { CanvasHandleRenderer } from "./handles/CanvasHandleRenderer";
@@ -36,6 +37,7 @@ export class Handles {
         interpolated,
       },
       isVisible,
+      ctx.canvas.visibleBounds(HANDLE_CULL_PADDING_PX),
     );
 
     if (this.#markers.draw(ctx.markers, list, ctx.canvas.camera, node.position)) return;

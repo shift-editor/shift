@@ -20,6 +20,7 @@ packages/glyph-state/src/
   index.ts              -- public API barrel
   GlyphGeometry.ts      -- state reader, bounds, sidebearings, hit testing, preview updates
   Contour.ts            -- contour reader, point access, neighbors, selection bounds
+  glyphStructuresEqual.ts -- ordered topology/metadata equality across deserialization
   Anchor.ts             -- anchor reader and anchor value offsets
   Component.ts          -- component reader and decomposed transform matrix
   Segment.ts            -- id-aware segment class, hit testing, curve conversion
@@ -59,6 +60,8 @@ const point = geometry.point(pointId);
 const bounds = geometry.bounds;
 const preview = geometry.withPositionUpdates(positions);
 ```
+
+`Contour.pointAt` and endpoint getters read individual packed positions without materializing every point in the contour. On-curve endpoint searches inspect metadata first, including quadratic on-curve points; full `points` access remains lazily materialized. `glyphStructuresEqual` compares ordered contour, point, anchor and component identities/metadata without coordinates, allowing owners to recognize an unchanged workspace echo independently of object identity.
 
 Renderer code should keep using cached `GlyphGeometry` instances from the model layer. Creating a geometry object is fine on source/state changes; doing it per segment draw or per hit-test candidate is not.
 

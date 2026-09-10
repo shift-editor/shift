@@ -81,24 +81,22 @@ export class Contour {
   }
 
   get firstPoint(): Point | null {
-    return this.points[0] ?? null;
+    return this.pointAt(0, false);
   }
 
   get lastPoint(): Point | null {
-    const points = this.points;
-    return points[points.length - 1] ?? null;
+    return this.pointAt(this.#data.points.length - 1, false);
   }
 
   get firstOnCurvePoint(): Point | null {
-    return this.points.find(Point.isOnCurve) ?? null;
+    return this.pointAt(this.#data.points.findIndex(Point.isOnCurve), false);
   }
 
   get lastOnCurvePoint(): Point | null {
-    const points = this.points;
-    for (let index = points.length - 1; index >= 0; index--) {
-      const point = points[index];
-      if (point && Point.isOnCurve(point)) return point;
+    for (let index = this.#data.points.length - 1; index >= 0; index--) {
+      if (Point.isOnCurve(this.#data.points[index]!)) return this.pointAt(index, false);
     }
+
     return null;
   }
 
@@ -111,13 +109,16 @@ export class Contour {
   }
 
   pointAt(index: number, wrap = this.closed): Point | null {
-    const points = this.points;
-    if (index >= 0 && index < points.length) return points[index] ?? null;
-    if (!wrap || points.length === 0) return null;
+    if (!Number.isInteger(index)) return null;
 
-    const wrapped = ((index % points.length) + points.length) % points.length;
+    const count = this.#data.points.length;
+    if (index < 0 || index >= count) {
+      if (!wrap || count === 0) return null;
 
-    return points[wrapped] ?? null;
+      index = ((index % count) + count) % count;
+    }
+
+    return this.#points?.[index] ?? this.#pointAt(index);
   }
 
   /**

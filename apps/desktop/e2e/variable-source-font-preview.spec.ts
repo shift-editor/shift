@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+import type { GlyphId } from "@shift/types";
 import {
   designspacePreviewTest,
   expect,
@@ -13,7 +14,7 @@ interface VariationSample {
   readonly geometry: readonly number[];
 }
 
-async function openVariableGlyph(page: Page): Promise<string> {
+async function openVariableGlyph(page: Page): Promise<GlyphId> {
   await expect.poll(() => page.evaluate(() => window.shiftSession?.mode)).toBe("preview");
 
   const glyphId = await page.evaluate(async () => {
@@ -33,7 +34,7 @@ async function openVariableGlyph(page: Page): Promise<string> {
   return glyphId;
 }
 
-async function variationSample(page: Page, glyphId: string): Promise<VariationSample> {
+async function variationSample(page: Page, glyphId: GlyphId): Promise<VariationSample> {
   return page.evaluate((id) => {
     const session = window.shiftSession;
     const glyph = session?.editor.glyphForId(id);

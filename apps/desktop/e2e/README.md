@@ -17,6 +17,8 @@ Run commands from the repository root:
 
 The default command runs `visual` and `gpu` on macOS, and `platform` on Linux and Windows. Performance measurements are always opt-in.
 
+`pnpm typecheck` checks every E2E spec and fixture plus `playwright.config.ts` through the desktop TypeScript configuration. Playwright transpiles tests without typechecking, so run this check before E2E execution to catch stale runtime API calls.
+
 ## Host setup
 
 - **Linux and macOS:** the Nix development shell supplies the pinned Node, pnpm, Rust, native build tools, and Linux virtual-desktop dependencies. Direnv enters it automatically after `.envrc` is allowed; otherwise prefix commands with `nix develop --command`.
@@ -119,6 +121,22 @@ A snapshot match alone does not prove GPU content exists. Rendering tests that c
 - Use `waitForWorkspaceReady()` for authored workspace startup and `waitForEditorReady()`/`openCatalogGlyph()` for glyph routes. A matching URL alone does not mean React has published the requested scene node.
 - Keep negative asynchronous waits limited to behavior where elapsed time is the contract, such as proving a re-entrant quit does not open another confirmation while the first remains pending.
 - Do not force software rendering or a fixed DPR in GPU and performance tests.
+
+## Input-to-visible-geometry performance
+
+`geometry-presentation.perf.spec.ts` measures 100 real Pen clicks on a 50K-point glyph. The placement path avoids existing segments; the older mixed placement/splitting workload in `perf.spec.ts` remains covered separately. The new gate requires **p95 ≤ 33 ms** and **p99 ≤ 50 ms** for `inputToGeometryFrameMs`.
+
+`measureGeometryPresentation` first requests an untimed synchronous draw through the E2E-only `shift:request-scene-render` event. The final `shift:geometry-submitted` notification must not match the expected edit; an intermediate clear cannot satisfy the baseline if the subsequent draw already matches. The borrowed `SubmittedGeometry.point(pointId)` view reads actual uploaded marker coordinates, or returns `null` for an absent point. A marker clear reports a null view. The probe reads synchronously without retaining buffers or reading pixels. The model supplies point identity/count, not substitute coordinates. Existing visual tests independently verify pixel correctness.
+
+Timing starts at the trusted pointer-release timestamp (the input that commits a Pen click). The pinned dev-only `@paulirish/trace_engine@0.0.65` AnimationFramesHandler pairs Chromium frames and presentation feedback; `findGeometryPresentation` validates the relevant evidence. Calls run sequentially because the upstream handler uses shared tables. Coalesced frames use the final submission; zero-identity no-swap feedback does not count. Submissions after an already-verified presentation cannot invalidate that endpoint, even if their animation frame started earlier. Missing earlier evidence remains fatal, including engine pairs spanning another frame start. Neither model updates, workspace completion, rAF, nor screenshots are timing endpoints. Probe/tracing overhead is included; presentation timestamps are platform-dependent estimates, not physical scanout measurements.
+
+Saved-trace regressions live under `src/renderer/src/testing/fixtures/`. `geometry-presentation.json` is a 27-event renderer-thread excerpt of an Electron 44 / Chromium 152 capture: the first verified draw is presented at 45.980 ms, with a later redraw lacking feedback. Only its former probe name (`shift:scene-rendered`) was renamed to the submitted-geometry mark; timestamps, identities, and recorded verification values are unchanged. `geometry-submission-after-presentation.json` is an unmodified 21-event excerpt from the submitted-buffer probe: presentation at 54.842 ms precedes a submission at 79.038 ms whose frame began at 33.499 ms. Tests deliberately remove evidence or alter verification/identity fields to exercise fail-closed behavior; those variants are not claimed as separate browser captures. Revalidate these fixtures when upgrading Chromium or the trace engine.
+
+Each completed run writes timestamped `geometry-presentation-*.md` reports and matching JSON statistics/raw samples under `e2e/perf-results/`, so the existing CI perf-artifact upload retains them on success and failure. Per-input Chromium traces live in the test's `e2e/test-results/` directory; screenshots and computed latency are also attached to the Playwright result, with frame/timestamp identities retained in the raw trace. The older handler/workspace benchmarks are different measurements and must not be compared directly with this visibility metric. In particular, undo/redo visibility timing has not yet replaced the existing awaited-workspace measurements.
+
+```sh
+pnpm test:e2e:perf e2e/geometry-presentation.perf.spec.ts
+```
 
 ## Failures and artifacts
 

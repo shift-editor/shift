@@ -126,3 +126,10 @@ export const STYLES = {
   first: buildStyleByState("first"),
   last: buildStyleByState("last"),
 } as const;
+
+// Circumscribes every styled quad, including rotated endpoints and antialias padding.
+export const HANDLE_CULL_PADDING_PX = Math.max(
+  ...Object.values(STYLES).flatMap((states) =>
+    Object.values(states).map((style) => Math.hypot(style.extentX, style.extentY)),
+  ),
+);
