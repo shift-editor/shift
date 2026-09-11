@@ -20,7 +20,7 @@ export type WindowLifecycleOptions = {
   onClosed: () => void;
 };
 
-type QuitState = "idle" | "confirming" | "confirmed";
+type QuitState = "idle" | "confirming" | "confirmed" | "terminating";
 
 /** Coordinates window close, ordinary quit, and update restart around document vetoes. */
 export class AppLifecycle {
@@ -43,6 +43,40 @@ export class AppLifecycle {
   start(): void {
     this.#log.info("starting app lifecycle");
     app.on("before-quit", (event) => this.#handleBeforeQuit(event));
+
+    if (!app.isPackaged) {
+      // Electron installs its own POSIX signal handlers after loading main.
+      // Register after readiness so they cannot replace our forced-exit path.
+      app.once("ready", () => {
+        process.on("SIGINT", () => this.terminate());
+        process.on("SIGTERM", () => this.terminate());
+      });
+    }
+  }
+
+  /** Reports whether forced termination has permanently superseded document close flows. */
+  get terminating(): boolean {
+    return this.#quitState === "terminating";
+  }
+
+  /**
+   * Force-kills the process without saving, discarding, or preparing document closes.
+   *
+   * @remarks
+   * Terminal termination is irreversible from any quit state and bypasses Electron
+   * teardown. Completed recovery transactions remain on disk; edits still in flight
+   * are not guaranteed to survive. The parent observes SIGKILL rather than exit code 0.
+   *
+   * @throws {Error} when the operating system rejects the termination signal.
+   */
+  terminate(): void {
+    if (this.terminating) return;
+
+    this.#quitState = "terminating";
+    this.#log.info("terminal termination requested; preserving document recovery");
+    // app.exit() still runs Chromium teardown, which can restart already-killed
+    // child processes when a terminal signal reaches the whole process group.
+    process.kill(process.pid, "SIGKILL");
   }
 
   /** Registers close handling for one BrowserWindow wrapper. */
@@ -62,6 +96,7 @@ export class AppLifecycle {
   /** Prepares and commits every document before an ordinary quit or update restart. */
   async confirmQuit(reason: CloseReason): Promise<boolean> {
     this.#log.debug("quit confirmation requested", { reason, quitState: this.#quitState });
+    if (this.terminating) return false;
     if (this.#quitState === "confirmed") return true;
     if (this.#quitConfirmation) return this.#quitConfirmation;
 
@@ -72,13 +107,15 @@ export class AppLifecycle {
 
     try {
       const confirmed = await confirmation;
+      if (this.terminating) return false;
+
       this.#quitState = confirmed ? "confirmed" : "idle";
       this.#log.info(confirmed ? "quit preparation committed" : "quit preparation canceled", {
         reason,
       });
       return confirmed;
     } catch (error) {
-      this.#quitState = "idle";
+      if (!this.terminating) this.#quitState = "idle";
       this.#log.error("quit preparation failed", { reason, error });
       throw error;
     } finally {
@@ -89,7 +126,11 @@ export class AppLifecycle {
   #handleWindowClose(window: Window, event: Event): void {
     const windowId = window.window.id;
     this.#log.debug("window close requested", { windowId, quitState: this.#quitState });
-    if (this.#quitState === "confirmed" || this.#confirmedWindowCloses.has(windowId)) {
+    if (
+      this.terminating ||
+      this.#quitState === "confirmed" ||
+      this.#confirmedWindowCloses.has(windowId)
+    ) {
       this.#log.debug("window close allowed without guard", {
         windowId,
         quitState: this.#quitState,
@@ -136,6 +177,8 @@ export class AppLifecycle {
       return;
     }
 
+    if (this.terminating) return;
+
     if (!prepared) {
       document.cancelClose();
       this.#log.info("window close canceled by document guard", { windowId });
@@ -156,8 +199,8 @@ export class AppLifecycle {
 
   #handleBeforeQuit(event: Event): void {
     this.#log.debug("before quit received", { quitState: this.#quitState });
-    if (this.#quitState === "confirmed") {
-      this.#log.debug("quit allowed after confirmation");
+    if (this.terminating || this.#quitState === "confirmed") {
+      this.#log.debug("quit allowed without document preparation");
       return;
     }
     if (this.#documents().length === 0) {
@@ -186,6 +229,8 @@ export class AppLifecycle {
 
     try {
       for (const document of documents) {
+        if (this.terminating) return false;
+
         prepared.push(document);
         if (!(await document.prepareClose(reason))) {
           for (const candidate of prepared) candidate.cancelClose();
@@ -196,6 +241,8 @@ export class AppLifecycle {
       for (const document of prepared) document.cancelClose();
       throw error;
     }
+
+    if (this.terminating) return false;
 
     const results = await Promise.allSettled(prepared.map((document) => document.commitClose()));
     const failures: unknown[] = [];
