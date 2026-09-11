@@ -1,8 +1,8 @@
-version: 0.60.1
+version: 0.62.1
 files:
-  - url: https://releases.shift.graphics/nightly/259313f4b930ee0083beea992a79e2d96e055ec0/Shift-Nightly-0.60.1-Windows-x64-Setup.exe
-    sha512: /QaSDU6EAz7educaNJ4l8ouFUb0Vrn3vW8Puutod6CkKlADpsOCjutL4VilLPzyVN2dxMTEYvWF2D5vfv1pI3g==
-    size: 119526210
-path: https://releases.shift.graphics/nightly/259313f4b930ee0083beea992a79e2d96e055ec0/Shift-Nightly-0.60.1-Windows-x64-Setup.exe
-sha512: /QaSDU6EAz7educaNJ4l8ouFUb0Vrn3vW8Puutod6CkKlADpsOCjutL4VilLPzyVN2dxMTEYvWF2D5vfv1pI3g==
-releaseDate: '2026-09-09T21:21:57.907Z'
+  - url: https://releases.shift.graphics/nightly/31a5f54f25f02afdb218d27b9404290f820fba0f/Shift-Nightly-0.62.1-Windows-x64-Setup.exe
+    sha512: Y2uJCao7/sGgbraz4WP0z1lDU6P+FMjijPkdSSdYeJe/gjxQebHUTIOOmCfsBx9i49BrvQBx7MoQZsah0RVczA==
+    size: 119519034
+path: https://releases.shift.graphics/nightly/31a5f54f25f02afdb218d27b9404290f820fba0f/Shift-Nightly-0.62.1-Windows-x64-Setup.exe
+sha512: Y2uJCao7/sGgbraz4WP0z1lDU6P+FMjijPkdSSdYeJe/gjxQebHUTIOOmCfsBx9i49BrvQBx7MoQZsah0RVczA==
+releaseDate: '2026-09-11T09:13:32.577Z'
