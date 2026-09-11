@@ -1,6 +1,9 @@
-import { FC, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState, type FC } from "react";
+
+import { cn } from "@shift/ui";
 
 import { CanvasContextProvider } from "@/context/CanvasContextProvider";
+import { CanvasSurface } from "@/lib/editor/rendering/CanvasSurface";
 import { useDebugSafe } from "@/context/DebugContext";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { zoomMultiplierFromWheel } from "@/lib/transform";
@@ -12,41 +15,70 @@ import { DebugPanel } from "../debug/DebugPanel";
 import { TextInput } from "../text/HiddenTextInput";
 import { Vec2 } from "@shift/geo";
 
+const WHEEL_GESTURE_IDLE_MS = 120;
+
 export const Canvas: FC = () => {
   const editor = useEditor();
   const debug = useDebugSafe();
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const [viewportReady, setViewportReady] = useState(false);
+  const onViewportReady = useCallback(() => setViewportReady(true), []);
 
   useEffect(() => {
     const element = containerRef.current;
     if (!element) return undefined;
 
     const toolManager = editor.toolManager;
+    const interactiveCanvas = element.querySelector<HTMLCanvasElement>("#interactive-canvas");
+    if (!interactiveCanvas) return undefined;
+
+    let wheelGestureMode = "idle";
+    let wheelGestureEndTimer: number | null = null;
+
+    const scheduleWheelGestureEnd = () => {
+      if (wheelGestureEndTimer !== null) window.clearTimeout(wheelGestureEndTimer);
+
+      wheelGestureEndTimer = window.setTimeout(() => {
+        wheelGestureMode = "idle";
+        wheelGestureEndTimer = null;
+      }, WHEEL_GESTURE_IDLE_MS);
+    };
 
     const handleWheel = (e: WheelEvent) => {
+      const screenPos = CanvasSurface.localPoint(interactiveCanvas, { x: e.clientX, y: e.clientY });
       editor.updateMousePosition(e.clientX, e.clientY);
-      const screenPos = editor.getScreenMousePosition();
+      editor.flushMousePosition();
 
       if (e.metaKey || e.ctrlKey) {
         e.preventDefault();
+        wheelGestureMode = "zoom";
+        scheduleWheelGestureEnd();
+
         const zoomFactor = zoomMultiplierFromWheel(e.deltaY, e.deltaMode);
         editor.zoomToPoint(screenPos.x, screenPos.y, zoomFactor);
-      } else {
-        const currentPan = editor.pan;
-        const newPan = Vec2.sub(currentPan, { x: e.deltaX, y: e.deltaY });
-        editor.setPan(newPan);
-
-        toolManager.handlePointerMove(
-          screenPos,
-          {
-            shiftKey: e.shiftKey,
-            altKey: e.altKey,
-            metaKey: e.metaKey,
-          },
-          { force: true },
-        );
+        return;
       }
+
+      if (wheelGestureMode === "zoom") {
+        e.preventDefault();
+        scheduleWheelGestureEnd();
+        return;
+      }
+
+      const currentPan = editor.pan;
+      const newPan = Vec2.sub(currentPan, { x: e.deltaX, y: e.deltaY });
+      editor.setPan(newPan);
+
+      toolManager.handlePointerMove(
+        screenPos,
+        {
+          shiftKey: e.shiftKey,
+          altKey: e.altKey,
+          metaKey: e.metaKey,
+        },
+        { force: true },
+      );
     };
 
     const handleContextMenu = async (event: MouseEvent) => {
@@ -71,6 +103,7 @@ export const Canvas: FC = () => {
     element.addEventListener("wheel", handleWheel, { passive: false });
     element.addEventListener("contextmenu", handleContextMenu);
     return () => {
+      if (wheelGestureEndTimer !== null) window.clearTimeout(wheelGestureEndTimer);
       element.removeEventListener("wheel", handleWheel);
       element.removeEventListener("contextmenu", handleContextMenu);
     };
@@ -79,12 +112,12 @@ export const Canvas: FC = () => {
   return (
     <div
       ref={containerRef}
-      className="relative z-20 h-full w-full overflow-hidden"
+      className={cn("relative z-20 h-full w-full overflow-hidden", !viewportReady && "invisible")}
       onMouseMove={(e) => {
         editor.updateMousePosition(e.clientX, e.clientY);
       }}
     >
-      <CanvasContextProvider>
+      <CanvasContextProvider onViewportReady={onViewportReady}>
         <StaticScene />
         <InteractiveScene />
       </CanvasContextProvider>

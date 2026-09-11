@@ -3,6 +3,7 @@ import { isAnchorId, isContourId, isPointId } from "@shift/types";
 import { isSegmentId } from "@shift/glyph-state";
 import { TransformSection } from "./sidebar-right/TransformSection";
 import { ScaleSection } from "./sidebar-right/ScaleSection";
+import { ZoomMenu } from "./sidebar-right/ZoomMenu";
 import { TransformOriginProvider } from "@/context/TransformOriginContext";
 import { useEditor, useFontSession } from "@/workspace/WorkspaceContext";
 import { useSignalState } from "@/lib/signals";
@@ -21,7 +22,6 @@ export const RightSidebar = () => {
 
   const familyName = useSignalState(session.catalog.familyNameCell) ?? "Untitled";
 
-  const zoom = useSignalState(editor.zoomCell);
   const selection = useSignalState(editor.selection.stateCell);
 
   const hasGeometrySelection = selection.ids.some(
@@ -50,7 +50,7 @@ export const RightSidebar = () => {
             </Button>
           )}
         </div>
-        <span className="text-ui font-medium text-muted">{Math.round(zoom * 100)}%</span>
+        <ZoomMenu />
       </div>
       <Separator />
       <TransformOriginProvider>

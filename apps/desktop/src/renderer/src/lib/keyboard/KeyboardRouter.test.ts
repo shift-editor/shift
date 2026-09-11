@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { KeyboardRouter } from "./KeyboardRouter";
 import { TestEditor } from "@/testing";
+import type { Rect2D } from "@shift/geo";
 
 type KeyboardEventOptions = Partial<
   Pick<KeyboardEvent, "key" | "code" | "metaKey" | "ctrlKey" | "shiftKey" | "altKey" | "target">
@@ -52,7 +53,8 @@ describe("KeyboardRouter", () => {
   });
 
   describe("zoom shortcuts", () => {
-    it("zooms in on command/control + equal without shift", async () => {
+    it("zooms in outside the canvas focus zone", async () => {
+      canvasActive = false;
       const zoomBefore = editor.zoom;
       const e = createKeyboardEvent({ key: "=", code: "Equal", metaKey: true });
 
@@ -62,7 +64,8 @@ describe("KeyboardRouter", () => {
       expect(editor.zoom).toBeGreaterThan(zoomBefore);
     });
 
-    it("zooms out on command/control + minus without shift", async () => {
+    it("zooms out outside the canvas focus zone", async () => {
+      canvasActive = false;
       const zoomBefore = editor.zoom;
       const e = createKeyboardEvent({ key: "-", code: "Minus", ctrlKey: true });
 
@@ -70,6 +73,55 @@ describe("KeyboardRouter", () => {
 
       expect(handled).toBe(true);
       expect(editor.zoom).toBeLessThan(zoomBefore);
+    });
+
+    it("fits scene content with Shift+1 outside the canvas focus zone", async () => {
+      canvasActive = false;
+      editor.setCameraRect({ width: 1000, height: 800 } as Rect2D);
+      editor.selectTool("pen");
+      await editor.clickGlyphLocal(100, 100);
+      await editor.clickGlyphLocal(300, 100);
+      await editor.clickGlyphLocal(300, 300);
+      editor.escape();
+      editor.setZoom(0.25);
+
+      const handled = await router.handleKeyDown(
+        createKeyboardEvent({ key: "!", code: "Digit1", shiftKey: true }),
+      );
+
+      expect(handled).toBe(true);
+      expect(editor.zoom).toBeGreaterThan(0.25);
+    });
+
+    it("fits selected content with Shift+2 outside the canvas focus zone", async () => {
+      canvasActive = false;
+      editor.setCameraRect({ width: 1000, height: 800 } as Rect2D);
+      editor.selectTool("pen");
+      await editor.clickGlyphLocal(100, 100);
+      await editor.clickGlyphLocal(300, 100);
+      await editor.clickGlyphLocal(300, 300);
+      editor.escape();
+      editor.selectAll();
+      editor.setZoom(0.25);
+
+      const handled = await router.handleKeyDown(
+        createKeyboardEvent({ key: "@", code: "Digit2", shiftKey: true }),
+      );
+
+      expect(handled).toBe(true);
+      expect(editor.zoom).toBeGreaterThan(0.25);
+    });
+
+    it("returns to 100% with Shift+0 outside the canvas focus zone", async () => {
+      canvasActive = false;
+      editor.setZoom(2);
+
+      const handled = await router.handleKeyDown(
+        createKeyboardEvent({ key: ")", code: "Digit0", shiftKey: true }),
+      );
+
+      expect(handled).toBe(true);
+      expect(editor.zoom).toBe(1);
     });
 
     it("does not intercept shift+equal (leaves it for native UI zoom)", async () => {

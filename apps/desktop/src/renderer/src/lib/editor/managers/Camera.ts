@@ -1,5 +1,5 @@
 import { clamp } from "@/lib/utils/utils";
-import { Mat, type Point2D, type Rect2D } from "@shift/geo";
+import { Mat, Vec2, type Point2D, type Rect2D } from "@shift/geo";
 import {
   signal,
   computed,
@@ -26,7 +26,6 @@ export interface CameraTransform {
   panX: number;
   panY: number;
   centre: Point2D;
-  upmScale: number;
   logicalHeight: number;
   layoutHeight: number;
   padding: number;
@@ -77,6 +76,7 @@ export class Camera {
 
   #canvasRect: Rect2D;
   #layoutHeight: number;
+  #initialFitBounds: Rect2D | null | undefined;
 
   readonly #visibleSceneBounds = new VisibleSceneBounds(0, 0, 0, 0);
 
@@ -96,6 +96,7 @@ export class Camera {
     this.#upm = signal(1000, { name: "camera.upm" });
     this.#descender = signal(-200, { name: "camera.descender" });
     this.#layoutHeight = 0;
+    this.#initialFitBounds = undefined;
 
     this.#mouseX = 0;
     this.#mouseY = 0;
@@ -122,12 +123,11 @@ export class Camera {
     this.#upmToScreenMatrix = computed(
       () => {
         this.#upm.value;
-        const scale = this.upmScale;
         const padding = this.padding;
-        const baselineY = this.layoutHeight - padding - this.#descender.value * scale;
+        const baselineY = this.layoutHeight - padding - this.#descender.value;
         const zoom = this.#zoom.value;
 
-        const upmTransform = Mat.Identity().translate(padding, baselineY).scale(scale, -scale);
+        const upmTransform = Mat.Identity().translate(padding, baselineY).scale(1, -1);
 
         const panX = this.#panX.value + this.centre.x * (1 - zoom);
         const panY = this.#panY.value + this.centre.y * (1 - zoom);
@@ -157,13 +157,17 @@ export class Camera {
     this.#upmToScreenMatrix.invalidate();
     this.#screenToUpmMatrix.invalidate();
 
+    if (this.#initialFitBounds) {
+      this.fitToBounds(this.#initialFitBounds);
+      return;
+    }
+
     if (!before) return;
 
     const after = this.projectScreenToScene(0, 0);
-    const scale = this.upmScale;
     const zoom = this.zoomLevel;
-    this.#panX.update((panX) => panX - (before.x - after.x) * scale * zoom);
-    this.#panY.update((panY) => panY + (before.y - after.y) * scale * zoom);
+    this.#panX.update((panX) => panX - (before.x - after.x) * zoom);
+    this.#panY.update((panY) => panY + (before.y - after.y) * zoom);
   }
 
   /** @knipclassignore */
@@ -189,14 +193,6 @@ export class Camera {
   get padding(): number {
     const maxPadding = (this.layoutHeight - MIN_GLYPH_VIEW_HEIGHT) / 2;
     return Math.max(0, Math.min(DEFAULT_PADDING, maxPadding));
-  }
-
-  /** Pixels per UPM unit at zoom 1. */
-  get upmScale(): number {
-    const availableHeight = this.layoutHeight - 2 * this.padding;
-    const upm = this.#upm.peek();
-    if (availableHeight <= 0 || upm <= 0) return 1;
-    return availableHeight / upm;
   }
 
   get logicalWidth(): number {
@@ -298,6 +294,7 @@ export class Camera {
   }
 
   setPan(x: number, y: number): void {
+    this.#initialFitBounds = null;
     this.#panX.set(x);
     this.#panY.set(y);
   }
@@ -307,6 +304,7 @@ export class Camera {
    * point under the cursor stays fixed. Used for scroll-wheel zoom.
    */
   public zoomToPoint(screenX: number, screenY: number, zoomDelta: number): void {
+    this.#initialFitBounds = null;
     const before = this.projectScreenToScene(screenX, screenY);
 
     const newZoom = clamp(this.#zoom.peek() * zoomDelta, MIN_ZOOM, MAX_ZOOM);
@@ -314,9 +312,8 @@ export class Camera {
 
     const after = this.projectScreenToScene(screenX, screenY);
 
-    const scale = this.upmScale;
-    const deltaX = (before.x - after.x) * scale * newZoom;
-    const deltaY = (before.y - after.y) * scale * newZoom;
+    const deltaX = (before.x - after.x) * newZoom;
+    const deltaY = (before.y - after.y) * newZoom;
 
     this.#panX.update((panX) => panX - deltaX);
     this.#panY.update((panY) => panY + deltaY);
@@ -330,8 +327,62 @@ export class Camera {
     this.zoomToPoint(this.centre.x, this.centre.y, 0.8);
   }
 
+  /** Sets an absolute zoom level around the viewport centre. */
+  setZoom(zoom: number): void {
+    if (!Number.isFinite(zoom) || zoom <= 0) return;
+
+    this.zoomToPoint(this.centre.x, this.centre.y, zoom / this.zoomLevel);
+  }
+
+  /**
+   * Starts initial framing that follows canvas resizes until the user moves the camera.
+   *
+   * @param bounds - Scene-space bounds used for the first viewport frame.
+   */
+  fitInitialBounds(bounds: Rect2D): void {
+    this.#initialFitBounds = { ...bounds };
+    this.fitToBounds(this.#initialFitBounds);
+  }
+
+  /**
+   * Fits scene-space bounds into the current canvas as a one-time camera operation.
+   *
+   * @param bounds - Scene-space rectangle to centre and fit.
+   */
+  fitToBounds(bounds: Rect2D): void {
+    if (bounds !== this.#initialFitBounds) this.#initialFitBounds = null;
+
+    if (
+      !Number.isFinite(bounds.width) ||
+      !Number.isFinite(bounds.height) ||
+      bounds.width <= 0 ||
+      bounds.height <= 0 ||
+      this.logicalWidth <= 0 ||
+      this.logicalHeight <= 0
+    )
+      return;
+
+    const scale = clamp(
+      Math.min(this.logicalWidth / bounds.width, this.logicalHeight / bounds.height) * 0.85,
+      MIN_ZOOM,
+      MAX_ZOOM,
+    );
+    const boundsCentre = {
+      x: bounds.x + bounds.width / 2,
+      y: bounds.y + bounds.height / 2,
+    };
+
+    this.#zoom.set(scale);
+
+    const boundsCentreScreen = this.projectSceneToScreen(boundsCentre.x, boundsCentre.y);
+    const movement = Vec2.sub(this.centre, boundsCentreScreen);
+
+    this.#panX.update((panX) => panX + movement.x);
+    this.#panY.update((panY) => panY + movement.y);
+  }
+
   public screenToUpmDistance(screenDistance: number): number {
-    return screenDistance / (this.upmScale * this.zoomLevel);
+    return screenDistance / this.zoomLevel;
   }
 
   /** Returns a reusable bounds object for the current camera frame. Do not retain it. */
@@ -343,8 +394,8 @@ export class Camera {
     const zoom = this.zoomLevel;
     const viewTranslateX = this.panX + centreX * (1 - zoom);
     const viewTranslateY = this.panY + centreY * (1 - zoom);
-    const baselineY = this.layoutHeight - this.padding - this.descender * this.upmScale;
-    const zoomedScale = this.upmScale * zoom;
+    const baselineY = this.layoutHeight - this.padding - this.descender;
+    const zoomedScale = zoom;
     const minScreenX = -cullMarginPx;
     const maxScreenX = logicalWidth + cullMarginPx;
     const minScreenY = -cullMarginPx;

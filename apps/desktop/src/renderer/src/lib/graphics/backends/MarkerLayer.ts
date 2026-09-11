@@ -20,7 +20,6 @@ interface MarkerDrawProps {
   panX: number;
   panY: number;
   centre: [number, number];
-  upmScale: number;
   padding: number;
   descender: number;
   drawOffset: [number, number];
@@ -44,7 +43,6 @@ export class MarkerLayer {
     panX: 0,
     panY: 0,
     centre: this.#centre,
-    upmScale: 1,
     padding: 0,
     descender: 0,
     drawOffset: this.#drawOffset,
@@ -154,7 +152,6 @@ export class MarkerLayer {
     this.#drawProps.zoom = camera.zoom;
     this.#drawProps.panX = camera.panX;
     this.#drawProps.panY = camera.panY;
-    this.#drawProps.upmScale = camera.upmScale;
     this.#drawProps.padding = camera.padding;
     this.#drawProps.descender = camera.descender;
     this.#drawCommand(this.#drawProps);
@@ -222,7 +219,6 @@ export class MarkerLayer {
           u_pan_x: prop("panX"),
           u_pan_y: prop("panY"),
           u_centre: prop("centre"),
-          u_upm_scale: prop("upmScale"),
           u_logical_width: prop("logicalWidth"),
           u_logical_height: prop("logicalHeight"),
           u_layout_height: prop("layoutHeight"),

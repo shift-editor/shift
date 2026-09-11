@@ -3,7 +3,13 @@ import { useEditor } from "@/workspace/WorkspaceContext";
 import { Canvas2DSurface, MarkerCanvasSurface } from "@/lib/editor/rendering/CanvasSurface";
 import { CanvasContext } from "./CanvasContext";
 
-export const CanvasContextProvider = ({ children }: { children: ReactNode }) => {
+export const CanvasContextProvider = ({
+  children,
+  onViewportReady,
+}: {
+  children: ReactNode;
+  onViewportReady: () => void;
+}) => {
   const editor = useEditor();
   const markerCanvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -23,6 +29,7 @@ export const CanvasContextProvider = ({ children }: { children: ReactNode }) => 
       backgroundCanvas: HTMLCanvasElement;
     }) => {
       let resizeFrame: number | null = null;
+      let viewportReady = false;
 
       const resizeCanvases = () => {
         resizeFrame = null;
@@ -36,9 +43,12 @@ export const CanvasContextProvider = ({ children }: { children: ReactNode }) => 
         editor.setBackgroundSurface(backgroundSurface);
         editor.setSceneSurface(sceneSurface);
         editor.setOverlaySurface(overlaySurface);
-      };
 
-      resizeCanvases();
+        if (viewportReady) return;
+
+        viewportReady = true;
+        onViewportReady();
+      };
 
       const scheduleResizeCanvases = () => {
         if (resizeFrame !== null) return;
@@ -51,6 +61,7 @@ export const CanvasContextProvider = ({ children }: { children: ReactNode }) => 
       observer.observe(overlayCanvas);
       observer.observe(sceneCanvas);
       observer.observe(backgroundCanvas);
+      scheduleResizeCanvases();
 
       return () => {
         if (resizeFrame !== null) cancelAnimationFrame(resizeFrame);
@@ -76,7 +87,7 @@ export const CanvasContextProvider = ({ children }: { children: ReactNode }) => 
     });
 
     return cleanup;
-  }, [editor]);
+  }, [editor, onViewportReady]);
 
   return (
     <CanvasContext.Provider

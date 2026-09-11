@@ -47,19 +47,8 @@ export function createGlobalKeyDownBindings(): KeyBinding[] {
         return true;
       },
     },
-  ];
-}
-
-export function createTextKeyDownBindings(): KeyBinding[] {
-  // Text input is handled by the hidden textarea (HiddenTextInput component).
-  // No keybindings needed — the textarea handles IME, clipboard, and character input.
-  return [];
-}
-
-export function createCanvasKeyDownBindings(handlers: KeymapHandlers): KeyBinding[] {
-  return [
     {
-      id: "canvas.zoomIn",
+      id: "global.zoomIn",
       preventDefault: true,
       match: (event) =>
         event.primaryModifier &&
@@ -72,7 +61,7 @@ export function createCanvasKeyDownBindings(handlers: KeymapHandlers): KeyBindin
       },
     },
     {
-      id: "canvas.zoomOut",
+      id: "global.zoomOut",
       preventDefault: true,
       match: (event) =>
         event.primaryModifier &&
@@ -84,6 +73,47 @@ export function createCanvasKeyDownBindings(handlers: KeymapHandlers): KeyBindin
         return true;
       },
     },
+    {
+      id: "global.zoomToFit",
+      preventDefault: true,
+      match: (event) =>
+        event.shiftKey && !event.primaryModifier && !event.altKey && event.code === "Digit1",
+      run: (ctx) => {
+        ctx.editor.zoomToFit();
+        return true;
+      },
+    },
+    {
+      id: "global.zoomToSelection",
+      preventDefault: true,
+      match: (event) =>
+        event.shiftKey && !event.primaryModifier && !event.altKey && event.code === "Digit2",
+      run: (ctx) => {
+        ctx.editor.zoomToSelection();
+        return true;
+      },
+    },
+    {
+      id: "global.zoomToActualSize",
+      preventDefault: true,
+      match: (event) =>
+        event.shiftKey && !event.primaryModifier && !event.altKey && event.code === "Digit0",
+      run: (ctx) => {
+        ctx.editor.setZoom(1);
+        return true;
+      },
+    },
+  ];
+}
+
+export function createTextKeyDownBindings(): KeyBinding[] {
+  // Text input is handled by the hidden textarea (HiddenTextInput component).
+  // No keybindings needed — the textarea handles IME, clipboard, and character input.
+  return [];
+}
+
+export function createCanvasKeyDownBindings(handlers: KeymapHandlers): KeyBinding[] {
+  return [
     {
       id: "canvas.temporaryHand.activate",
       preventDefault: true,

@@ -1206,7 +1206,6 @@ export class Editor {
       panX: this.#camera.panX,
       panY: this.#camera.panY,
       centre: this.#camera.centre,
-      upmScale: this.#camera.upmScale,
       logicalHeight: this.#camera.logicalHeight,
       layoutHeight: this.#camera.layoutHeight,
       padding: this.#camera.padding,
@@ -1238,6 +1237,54 @@ export class Editor {
 
   public zoomOut(): void {
     this.#camera.zoomOut();
+  }
+
+  /**
+   * Frames the initial scene bounds until the user manually moves the camera.
+   *
+   * @param bounds - Scene-space bounds used for initial framing.
+   */
+  public fitInitialBounds(bounds: Rect2D): void {
+    this.#camera.fitInitialBounds(bounds);
+  }
+
+  /**
+   * Fits scene-space bounds into the current canvas once.
+   *
+   * @param bounds - Scene-space rectangle to centre and fit.
+   */
+  public fitBounds(bounds: Rect2D): void {
+    this.#camera.fitToBounds(bounds);
+  }
+
+  /** Fits every bounded scene node into the viewport. */
+  public zoomToFit(): void {
+    let bounds: BoundsType | null = null;
+
+    for (const node of this.scene.nodes()) {
+      const nodeBounds = this.nodeDefinition(node.kind)?.bounds(node);
+      if (!nodeBounds) continue;
+
+      const next = Bounds.fromXYWH(nodeBounds.x, nodeBounds.y, nodeBounds.width, nodeBounds.height);
+      bounds = bounds ? Bounds.union(bounds, next) : next;
+    }
+
+    if (!bounds) return;
+
+    this.fitBounds(Bounds.toRect(bounds));
+  }
+
+  /** Fits the current selection into the viewport. */
+  public zoomToSelection(): void {
+    const bounds = this.selectionBounds();
+    if (!bounds) return;
+
+    this.fitBounds(bounds);
+  }
+
+  /** Sets an absolute zoom level around the viewport centre. */
+  public setZoom(zoom: number): void {
+    this.#camera.setZoom(zoom);
   }
 
   public zoomToPoint(screenX: number, screenY: number, zoomDelta: number): void {

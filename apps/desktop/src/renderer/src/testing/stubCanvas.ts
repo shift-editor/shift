@@ -15,7 +15,6 @@ const DEFAULT_CAMERA: CameraTransform = {
   panX: 0,
   panY: 0,
   centre: { x: 500, y: 400 },
-  upmScale: 0.8,
   logicalHeight: 800,
   layoutHeight: 800,
   padding: 40,

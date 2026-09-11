@@ -62,7 +62,7 @@ export class DebugOverlays {
   }
 
   #drawHitRadii(canvas: Canvas, view: GlyphRenderModel, hitRadiusUpm: number, color: string): void {
-    const r = hitRadiusUpm * canvas.camera.upmScale * canvas.camera.zoom;
+    const r = hitRadiusUpm * canvas.camera.zoom;
     for (const point of view.allPoints) {
       canvas.strokeCircle({ x: point.x, y: point.y }, r, color, 1);
     }

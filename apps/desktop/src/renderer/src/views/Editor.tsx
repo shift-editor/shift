@@ -18,6 +18,7 @@ import { useFocusZone, ZoneContainer } from "@/context/FocusZoneContext";
 import { KeyboardRouter } from "@/lib/keyboard";
 import { useSignalState } from "@/lib/signals";
 import { asGlyphId, mintNodeId } from "@shift/types";
+import { Bounds } from "@shift/geo";
 
 export const Editor = () => {
   const { glyphId: glyphIdParam } = useParams();
@@ -44,6 +45,7 @@ export const Editor = () => {
     if (!glyph) return undefined;
 
     const nodeId = mintNodeId();
+    const sourceId = editor.activeSourceId ?? editor.font.defaultSource.id;
     editor.scene.setNodes([
       {
         id: nodeId,
@@ -52,10 +54,27 @@ export const Editor = () => {
         parentId: null,
         index: "a0",
         glyphId: glyph.id,
-        sourceId: editor.activeSourceId ?? editor.font.defaultSource.id,
+        sourceId,
         position: { x: 0, y: 0 },
       },
     ]);
+
+    const metrics = editor.font.metricsAtLocation(editor.externalLocation);
+    const outlineBounds = glyph.bounds;
+    const advance = glyph.layerForSource(sourceId)?.xAdvance ?? 0;
+
+    const glyphFrameBounds = Bounds.create(
+      {
+        x: Math.min(0, outlineBounds?.min.x ?? 0),
+        y: Math.min(metrics.descender, outlineBounds?.min.y ?? metrics.descender),
+      },
+      {
+        x: Math.max(advance, outlineBounds?.max.x ?? advance),
+        y: Math.max(metrics.ascender, outlineBounds?.max.y ?? metrics.ascender),
+      },
+    );
+
+    editor.fitInitialBounds(Bounds.toRect(glyphFrameBounds));
     editor.editing.enter(nodeId);
     editor.toolManager.reset();
 

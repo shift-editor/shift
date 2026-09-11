@@ -801,7 +801,7 @@ These are allowed to jump around when energy is high, but they should not silent
 
 **Workflow Improvements**
 
-- [ ] Zoom to selection (fit view to selected points)
+- [x] Zoom to selection (fit view to selected points)
 - [ ] Center glyph in view
 - [ ] Lock layers (prevent accidental edits)
 - [ ] Template/background layer (reference image)
