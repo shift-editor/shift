@@ -1,4 +1,4 @@
-import type { Rect2D } from "@shift/geo";
+import { Bounds, type Rect2D } from "@shift/geo";
 import type { SegmentId } from "@shift/glyph-state";
 import type { NodePoint } from "@/types/coordinates";
 import { SCREEN_HIT_RADIUS } from "@/lib/editor/rendering/constants";
@@ -31,8 +31,16 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
   readonly #handles = new Handles();
   readonly #guides = new Guides();
 
-  bounds(_node: GlyphNode): Rect2D | null {
-    return null;
+  bounds(node: GlyphNode): Rect2D | null {
+    const bounds = this.#view(node)?.bounds;
+    if (!bounds) return null;
+
+    return Bounds.toRect(
+      Bounds.create(
+        { x: bounds.min.x + node.position.x, y: bounds.min.y + node.position.y },
+        { x: bounds.max.x + node.position.x, y: bounds.max.y + node.position.y },
+      ),
+    );
   }
 
   hit(node: GlyphNode, point: NodePoint): PointerTarget | null {

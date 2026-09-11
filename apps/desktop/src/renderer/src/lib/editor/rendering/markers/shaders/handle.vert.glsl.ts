@@ -18,7 +18,6 @@ uniform float u_zoom;
 uniform float u_pan_x;
 uniform float u_pan_y;
 uniform vec2 u_centre;
-uniform float u_upm_scale;
 uniform float u_logical_width;
 uniform float u_logical_height;
 uniform float u_layout_height;
@@ -50,11 +49,11 @@ vec2 screenToClip(vec2 screen) {
 }
 
 void main() {
-  float baseline_y = u_layout_height - u_padding - u_descender * u_upm_scale;
+  float baseline_y = u_layout_height - u_padding - u_descender;
   vec2 scene = a_position + u_draw_offset;
   vec2 base_screen = vec2(
-    scene.x * u_upm_scale + u_padding,
-    baseline_y - scene.y * u_upm_scale
+    scene.x + u_padding,
+    baseline_y - scene.y
   );
   vec2 view_translate = vec2(
     u_pan_x + u_centre.x * (1.0 - u_zoom),

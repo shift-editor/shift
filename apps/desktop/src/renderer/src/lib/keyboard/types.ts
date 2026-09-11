@@ -6,6 +6,9 @@ import type { ToolShortcutEntry } from "@/types/tools";
 export interface KeyboardEditorActions {
   zoomIn(): void;
   zoomOut(): void;
+  zoomToFit(): void;
+  zoomToSelection(): void;
+  setZoom(zoom: number): void;
   copy(): Promise<boolean>;
   cut(): Promise<boolean>;
   paste(): Promise<boolean>;

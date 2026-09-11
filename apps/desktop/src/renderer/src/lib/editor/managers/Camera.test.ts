@@ -30,9 +30,11 @@ describe("Camera", () => {
       expect(camera.descender).toBe(-200);
     });
 
-    it("should have valid upmScale", () => {
-      const scale = camera.upmScale;
-      expect(scale).toBeGreaterThan(0);
+    it("uses one screen pixel per scene unit at zoom 1", () => {
+      const start = camera.projectSceneToScreen(0, 0);
+      const end = camera.projectSceneToScreen(1, 0);
+
+      expect(end.x - start.x).toBe(1);
     });
   });
 
@@ -185,6 +187,74 @@ describe("Camera", () => {
     });
   });
 
+  describe("fitting scene bounds", () => {
+    it("centres the bounds and fits them inside the viewport", () => {
+      const bounds = {
+        x: 50,
+        y: -100,
+        width: 200,
+        height: 400,
+        left: 50,
+        top: -100,
+        right: 250,
+        bottom: 300,
+      } as Rect2D;
+      camera.setPan(125, -75);
+
+      camera.fitToBounds(bounds);
+
+      const centre = camera.projectSceneToScreen(150, 100);
+      const min = camera.projectSceneToScreen(bounds.left, bounds.top);
+      const max = camera.projectSceneToScreen(bounds.right, bounds.bottom);
+      expect(camera.zoomLevel).toBe(1.7);
+      expect(centre).toEqual(camera.centre);
+      expect(Math.abs(max.x - min.x)).toBeCloseTo(340);
+      expect(Math.abs(max.y - min.y)).toBeCloseTo(680);
+    });
+
+    it("refits initial bounds on resize until manual camera movement", () => {
+      const bounds = {
+        x: 0,
+        y: -100,
+        width: 200,
+        height: 400,
+        left: 0,
+        top: -100,
+        right: 200,
+        bottom: 300,
+      } as Rect2D;
+      camera.fitInitialBounds(bounds);
+
+      camera.setRect({ width: 600, height: 600 } as Rect2D);
+      expect(camera.zoomLevel).toBe(1.275);
+      expect(camera.projectSceneToScreen(100, 100)).toEqual(camera.centre);
+
+      camera.setPan(camera.panX + 10, camera.panY);
+      camera.setRect({ width: 1200, height: 1000 } as Rect2D);
+      expect(camera.zoomLevel).toBe(1.275);
+    });
+
+    it("replaces initial framing when the displayed content changes", () => {
+      camera.fitInitialBounds({ x: 0, y: 0, width: 200, height: 400 } as Rect2D);
+      camera.fitInitialBounds({ x: 200, y: 100, width: 400, height: 200 } as Rect2D);
+
+      expect(camera.zoomLevel).toBe(2.125);
+      expect(camera.projectSceneToScreen(400, 200)).toEqual(camera.centre);
+    });
+
+    it("clamps the padded fit scale to the supported zoom range", () => {
+      camera.fitToBounds({ x: 0, y: 0, width: 1_000_000, height: 1_000_000 } as Rect2D);
+
+      expect(camera.zoomLevel).toBe(0.01);
+    });
+
+    it("ignores non-finite bounds", () => {
+      camera.fitToBounds({ x: 0, y: 0, width: Number.NaN, height: 400 } as Rect2D);
+
+      expect(camera.zoomLevel).toBe(1);
+    });
+  });
+
   describe("zoomToPoint cursor stability", () => {
     it("should keep UPM coordinate stable under cursor during zoom in", () => {
       const screenX = 700;
@@ -194,8 +264,8 @@ describe("Camera", () => {
       camera.zoomToPoint(screenX, screenY, 1.5);
 
       const upmAfter = camera.projectScreenToScene(screenX, screenY);
-      expect(upmAfter.x).toBeCloseTo(upmBefore.x, 0);
-      expect(upmAfter.y).toBeCloseTo(upmBefore.y, 0);
+      expect(upmAfter.x).toBeCloseTo(upmBefore.x, 10);
+      expect(upmAfter.y).toBeCloseTo(upmBefore.y, 10);
     });
 
     it("should keep UPM coordinate stable under cursor during zoom out", () => {
@@ -206,8 +276,8 @@ describe("Camera", () => {
       camera.zoomToPoint(screenX, screenY, 0.7);
 
       const upmAfter = camera.projectScreenToScene(screenX, screenY);
-      expect(Math.abs(upmAfter.x - upmBefore.x)).toBeLessThanOrEqual(1);
-      expect(Math.abs(upmAfter.y - upmBefore.y)).toBeLessThanOrEqual(1);
+      expect(upmAfter.x).toBeCloseTo(upmBefore.x, 10);
+      expect(upmAfter.y).toBeCloseTo(upmBefore.y, 10);
     });
 
     it("should maintain cursor stability through multiple zoom operations", () => {
@@ -221,8 +291,8 @@ describe("Camera", () => {
       camera.zoomToPoint(screenX, screenY, 1.2);
 
       const upmFinal = camera.projectScreenToScene(screenX, screenY);
-      expect(upmFinal.x).toBeCloseTo(upmInitial.x, 0);
-      expect(upmFinal.y).toBeCloseTo(upmInitial.y, 0);
+      expect(upmFinal.x).toBeCloseTo(upmInitial.x, 10);
+      expect(upmFinal.y).toBeCloseTo(upmInitial.y, 10);
     });
 
     it("should handle cursor at canvas edges", () => {
@@ -233,8 +303,8 @@ describe("Camera", () => {
       camera.zoomToPoint(screenX, screenY, 2.0);
 
       const upmAfter = camera.projectScreenToScene(screenX, screenY);
-      expect(upmAfter.x).toBeCloseTo(upmBefore.x, 0);
-      expect(upmAfter.y).toBeCloseTo(upmBefore.y, 0);
+      expect(upmAfter.x).toBeCloseTo(upmBefore.x, 10);
+      expect(upmAfter.y).toBeCloseTo(upmBefore.y, 10);
     });
 
     it("should work correctly after panning", () => {
@@ -247,8 +317,20 @@ describe("Camera", () => {
       camera.zoomToPoint(screenX, screenY, 1.5);
 
       const upmAfter = camera.projectScreenToScene(screenX, screenY);
-      expect(upmAfter.x).toBeCloseTo(upmBefore.x, 0);
-      expect(upmAfter.y).toBeCloseTo(upmBefore.y, 0);
+      expect(upmAfter.x).toBeCloseTo(upmBefore.x, 10);
+      expect(upmAfter.y).toBeCloseTo(upmBefore.y, 10);
+    });
+
+    it("keeps an off-centre point fixed across the full zoom range", () => {
+      const screen = { x: 723.75, y: 246.25 };
+      const scene = camera.projectScreenToScene(screen.x, screen.y);
+
+      for (let index = 0; index < 100; index++) camera.zoomToPoint(screen.x, screen.y, 0.8);
+      for (let index = 0; index < 100; index++) camera.zoomToPoint(screen.x, screen.y, 1.25);
+
+      expect(camera.zoomLevel).toBe(32);
+      expect(camera.projectSceneToScreen(scene.x, scene.y).x).toBeCloseTo(screen.x, 8);
+      expect(camera.projectSceneToScreen(scene.x, scene.y).y).toBeCloseTo(screen.y, 8);
     });
   });
 
@@ -263,14 +345,13 @@ describe("Camera", () => {
       expect(camera.descender).toBe(-250);
     });
 
-    it("should invalidate matrices when UPM changes", () => {
+    it("does not alter direct projection when UPM changes", () => {
       const screenPos = { x: 500, y: 400 };
-      const upmBefore = camera.projectScreenToScene(screenPos.x, screenPos.y);
+      const sceneBefore = camera.projectScreenToScene(screenPos.x, screenPos.y);
 
       camera.upm = 2000;
 
-      const upmAfter = camera.projectScreenToScene(screenPos.x, screenPos.y);
-      expect(upmAfter.x).not.toBeCloseTo(upmBefore.x, 0);
+      expect(camera.projectScreenToScene(screenPos.x, screenPos.y)).toEqual(sceneBefore);
     });
 
     it("should invalidate matrices when descender changes", () => {
@@ -350,16 +431,9 @@ describe("Camera", () => {
     });
   });
 
-  describe("upmScale", () => {
-    it("should calculate correct scale factor", () => {
-      const scale = camera.upmScale;
-      const expectedHeight = camera.layoutHeight - 2 * camera.padding;
-      const expectedScale = expectedHeight / camera.upm;
-      expect(scale).toBeCloseTo(expectedScale);
-    });
-
-    it("should keep scale and padding stable when the live viewport height shrinks", () => {
-      const scale = camera.upmScale;
+  describe("direct zoom scale", () => {
+    it("keeps zoom and padding stable when the live viewport height shrinks", () => {
+      const zoom = camera.zoomLevel;
       const padding = camera.padding;
 
       camera.setRect({
@@ -376,11 +450,11 @@ describe("Camera", () => {
       expect(camera.layoutHeight).toBe(800);
       expect(camera.logicalHeight).toBe(380);
       expect(camera.padding).toBe(padding);
-      expect(camera.upmScale).toBeCloseTo(scale);
+      expect(camera.zoomLevel).toBe(zoom);
     });
 
-    it("should keep scale when the live viewport is shorter than fixed padding", () => {
-      const scale = camera.upmScale;
+    it("keeps zoom when the live viewport is shorter than fixed padding", () => {
+      const zoom = camera.zoomLevel;
       const padding = camera.padding;
 
       camera.setRect({
@@ -395,11 +469,11 @@ describe("Camera", () => {
       } as Rect2D);
 
       expect(camera.padding).toBe(padding);
-      expect(camera.upmScale).toBeCloseTo(scale);
+      expect(camera.zoomLevel).toBe(zoom);
     });
 
-    it("should keep scale stable when the live viewport height is invalid after layout", () => {
-      const scale = camera.upmScale;
+    it("keeps zoom stable when the live viewport height is invalid after layout", () => {
+      const zoom = camera.zoomLevel;
 
       camera.setRect({
         x: 0,
@@ -411,7 +485,7 @@ describe("Camera", () => {
         right: 1000,
         bottom: 0,
       } as Rect2D);
-      expect(camera.upmScale).toBeCloseTo(scale);
+      expect(camera.zoomLevel).toBe(zoom);
     });
   });
 
@@ -419,8 +493,7 @@ describe("Camera", () => {
     it("should convert screen distance to UPM at default zoom", () => {
       const screenDistance = 10;
       const upmDistance = camera.screenToUpmDistance(screenDistance);
-      const expectedDistance = screenDistance / camera.upmScale;
-      expect(upmDistance).toBeCloseTo(expectedDistance);
+      expect(upmDistance).toBe(screenDistance);
     });
 
     it("should account for zoom level", () => {

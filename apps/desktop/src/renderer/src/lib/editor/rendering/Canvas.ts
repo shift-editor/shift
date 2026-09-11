@@ -26,7 +26,7 @@ export class Canvas {
 
   /** Convert screen pixels to UPM units at the current zoom level. */
   pxToUpm(px: number): number {
-    return px / (this.camera.upmScale * this.camera.zoom);
+    return px / this.camera.zoom;
   }
 
   line(from: Point2D, to: Point2D, stroke: string, widthPx: number): void {
@@ -113,8 +113,8 @@ export class Canvas {
       camera.panY + camera.centre.y * (1 - camera.zoom),
     );
 
-    const baselineY = camera.layoutHeight - camera.padding - camera.descender * camera.upmScale;
-    this.ctx.transform(camera.upmScale, 0, 0, -camera.upmScale, camera.padding, baselineY);
+    const baselineY = camera.layoutHeight - camera.padding - camera.descender;
+    this.ctx.transform(1, 0, 0, -1, camera.padding, baselineY);
     this.ctx.translate(drawOffset.x, drawOffset.y);
 
     try {
