@@ -60,8 +60,9 @@ export const Editor = () => {
     ]);
 
     const metrics = editor.font.metricsAtLocation(editor.externalLocation);
-    const outlineBounds = glyph.bounds;
-    const advance = glyph.layerForSource(sourceId)?.xAdvance ?? 0;
+    const view = glyph.renderModelAt(editor.externalLocationCell, editor.activeSourceIdCell);
+    const outlineBounds = view.bounds;
+    const advance = view.xAdvanceCell.peek();
 
     const glyphFrameBounds = Bounds.create(
       {

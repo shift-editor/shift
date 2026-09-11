@@ -333,6 +333,13 @@ test.describe("opening a font through the application shell", () => {
       name: "This font is view-only",
       exact: true,
     });
+    const targetContext = JSON.stringify({ targets, bounds });
+    for (const target of targets) {
+      expect(target.x, targetContext).toBeGreaterThanOrEqual(0);
+      expect(target.x, targetContext).toBeLessThanOrEqual(bounds.width);
+      expect(target.y, targetContext).toBeGreaterThanOrEqual(0);
+      expect(target.y, targetContext).toBeLessThanOrEqual(bounds.height);
+    }
 
     for (const point of targets.slice(0, 2)) {
       await workspacePage.mouse.move(bounds.x + point.x, bounds.y + point.y);
