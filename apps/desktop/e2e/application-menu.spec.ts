@@ -9,6 +9,7 @@ import {
   waitForWorkspaceReady,
 } from "./fixtures/electronApp";
 import { applicationMenuItemEnabled, clickApplicationMenuItem } from "./fixtures/documentLifecycle";
+import type { EditorDriver } from "./fixtures/EditorDriver";
 
 const binaryPreviewTest = launcherTest.extend({
   openFontPath: [FONT_PATH, { option: true }],
@@ -41,37 +42,13 @@ async function expectCloseOnlyWindowControls(page: Page): Promise<void> {
   await expect(windowControls.getByRole("button", { name: "maximize" })).toHaveCount(0);
 }
 
-async function openFirstAuthoredGlyph(page: Page): Promise<void> {
-  const glyphId = await page.evaluate(async () => {
-    const session = window.shiftSession;
-    const entry = session?.font.glyphEntries()[0];
-    if (!session || !entry) throw new Error("Expected authored glyph entry");
-
-    await session.font.loadGlyph(entry.id);
-    window.location.hash = `#/editor/${encodeURIComponent(entry.id)}`;
+async function openFirstAuthoredGlyph(editor: EditorDriver): Promise<void> {
+  const glyphId = await editor.page.evaluate(() => {
+    const entry = window.shiftSession?.font.glyphEntries()[0];
+    if (!entry) throw new Error("Expected authored glyph entry");
     return entry.id;
   });
-  await page.waitForURL(new RegExp(`#/editor/${encodeURIComponent(glyphId)}$`));
-  await expect
-    .poll(() =>
-      page.evaluate(() => {
-        const editor = window.shiftSession?.editor;
-        const node = editor?.scene.nodesOfKind("glyph")[0];
-        return Boolean(
-          editor && node && editor.glyphForId(node.glyphId)?.layerForSource(node.sourceId),
-        );
-      }),
-    )
-    .toBe(true);
-}
-
-async function canvasPointCount(page: Page): Promise<number> {
-  return page.evaluate(() => {
-    const editor = window.shiftSession?.editor;
-    const node = editor?.scene.nodesOfKind("glyph")[0];
-    if (!editor || !node) throw new Error("Expected active glyph editor");
-    return editor.glyphForId(node.glyphId)?.layerForSource(node.sourceId)?.pointCount ?? 0;
-  });
+  await editor.openGlyph(glyphId);
 }
 
 launcherTest("application menu exposes native shell actions", async ({ electronApp, page }) => {
@@ -390,7 +367,7 @@ convertiblePreviewTest(
 
 authoredTest(
   "native Edit menu targets text controls and canvas authoring",
-  async ({ electronApp, page }) => {
+  async ({ electronApp, page, editor }) => {
     await expect.poll(() => applicationMenuItemEnabled(page, electronApp, "file.save")).toBe(true);
     await expect
       .poll(() => applicationMenuItemEnabled(page, electronApp, "file.exportTtf"))
@@ -399,10 +376,7 @@ authoredTest(
 
     const search = page.getByPlaceholder("Search glyphs...");
     await search.fill("Alpha");
-    await search.evaluate((input) => {
-      input.focus();
-      input.setSelectionRange(0, input.value.length);
-    });
+    await search.evaluate((input) => input.select());
     await clickApplicationMenuItem(page, electronApp, "edit.copy");
     await expect
       .poll(() => electronApp.evaluate(({ clipboard }) => clipboard.readText()))
@@ -413,36 +387,34 @@ authoredTest(
     await expect(search).toHaveValue("Beta");
     await search.fill("");
 
-    await openFirstAuthoredGlyph(page);
-    const originalPointCount = await canvasPointCount(page);
+    await openFirstAuthoredGlyph(editor);
+    const originalPointCount = await editor.pointCount();
     expect(originalPointCount).toBeGreaterThan(0);
 
     await clickApplicationMenuItem(page, electronApp, "edit.selectAll");
-    await expect
-      .poll(() => page.evaluate(() => window.shiftSession?.editor.selection.ids.length ?? 0))
-      .toBe(originalPointCount);
+    await expect.poll(async () => (await editor.selectionIds()).length).toBe(originalPointCount);
     await clickApplicationMenuItem(page, electronApp, "edit.copy");
     await expect
       .poll(() => electronApp.evaluate(({ clipboard }) => clipboard.readText()))
       .not.toBe("");
 
     await clickApplicationMenuItem(page, electronApp, "edit.paste");
-    await expect.poll(() => canvasPointCount(page)).toBe(originalPointCount * 2);
+    await expect.poll(() => editor.pointCount()).toBe(originalPointCount * 2);
 
     await clickApplicationMenuItem(page, electronApp, "edit.undo");
-    await expect.poll(() => canvasPointCount(page)).toBe(originalPointCount);
+    await expect.poll(() => editor.pointCount()).toBe(originalPointCount);
     await clickApplicationMenuItem(page, electronApp, "edit.redo");
-    await expect.poll(() => canvasPointCount(page)).toBe(originalPointCount * 2);
+    await expect.poll(() => editor.pointCount()).toBe(originalPointCount * 2);
 
     await clickApplicationMenuItem(page, electronApp, "edit.deleteSelection");
-    await expect.poll(() => canvasPointCount(page)).toBe(originalPointCount);
+    await expect.poll(() => editor.pointCount()).toBe(originalPointCount);
     await clickApplicationMenuItem(page, electronApp, "edit.undo");
-    await expect.poll(() => canvasPointCount(page)).toBe(originalPointCount * 2);
+    await expect.poll(() => editor.pointCount()).toBe(originalPointCount * 2);
 
     await clickApplicationMenuItem(page, electronApp, "edit.selectAll");
     await clickApplicationMenuItem(page, electronApp, "edit.cut");
-    await expect.poll(() => canvasPointCount(page)).toBe(0);
+    await expect.poll(() => editor.pointCount()).toBe(0);
     await clickApplicationMenuItem(page, electronApp, "edit.undo");
-    await expect.poll(() => canvasPointCount(page)).toBe(originalPointCount * 2);
+    await expect.poll(() => editor.pointCount()).toBe(originalPointCount * 2);
   },
 );

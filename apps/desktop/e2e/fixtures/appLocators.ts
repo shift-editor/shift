@@ -44,7 +44,7 @@ export function settingsDetails(page: Page) {
 }
 
 export async function firstAxisSlider(page: Page) {
-  const axisName = await page.evaluate(() => window.shiftSession?.catalog.axesCell.value[0]?.name);
+  const axisName = await page.evaluate(() => window.shiftSession?.catalog.axesCell.peek()[0]?.name);
   if (!axisName) throw new Error("Expected a variable axis");
 
   return page.getByRole("slider", { name: axisName, exact: true });
@@ -71,11 +71,13 @@ export async function waitForEditorReady(page: Page, glyphId: string): Promise<v
   await expect(editorShell(page)).toBeVisible();
   await expect
     .poll(() =>
-      page.evaluate(
-        (expectedGlyphId) =>
-          window.shift?.editor.scene.nodesOfKind("glyph")[0]?.glyphId === expectedGlyphId,
-        glyphId,
-      ),
+      page.evaluate((expectedGlyphId) => {
+        const editor = window.shift?.editor;
+        const node = editor?.scene.nodesOfKind("glyph")[0];
+        if (!editor || !node || node.glyphId !== expectedGlyphId) return false;
+
+        return Boolean(editor.glyphForId(node.glyphId)?.layerForSource(node.sourceId));
+      }, glyphId),
     )
     .toBe(true);
 }

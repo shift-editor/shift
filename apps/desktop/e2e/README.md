@@ -85,7 +85,9 @@ test("deletes a selected point", async ({ editor }) => {
 });
 ```
 
-Actions that can persist geometry wait for the workspace edit pipeline before returning. `outline()`, `pointPosition()`, and `pointTargets()` also read confirmed geometry, so specs should not call `editCoordinator.settled()` directly. Live gesture methods such as `selectionBounds()` intentionally observe the current preview. Use `waitForIdle()` after a raw Playwright gesture that cannot be expressed as one driver action.
+Actions that can persist geometry wait for the workspace edit pipeline before returning. `activeGlyph()`, `outline()`, `pointPosition()`, and `pointTargets()` return fresh domain snapshots; specs should not call `editCoordinator.settled()` directly. A point target carries glyph-, canvas-, and page-space positions. Prefer `canvasBounds()`, `projectSceneToCanvas()`, `projectSceneToPage()`, and `projectCanvasToScene()` over repeating DOM offsets and renderer projections in specs.
+
+Pointer helpers use page coordinates for `pointerDown()`, `pointerMove()`, and `pointerUp()`. `dragCanvas()` accepts canvas-local endpoints. Gestures follow `idle → pressed → dragging → idle`; `cancelGesture()` returns a pressed or dragging gesture to `idle` after application rollback. Live observations such as `selectionBounds()`, `hoverId()`, and `toolState()` intentionally expose the current preview. Use `waitForIdle()` only after raw Playwright gestures that cannot be expressed as one driver action.
 
 Outside an active development shell, the portable Linux and macOS invocation is:
 

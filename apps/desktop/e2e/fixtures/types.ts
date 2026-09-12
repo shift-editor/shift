@@ -1,7 +1,17 @@
 import type { ElectronApplication, Page } from "@playwright/test";
 import type { Point2D } from "@shift/geo";
 import type { SegmentType } from "@shift/glyph-state";
-import type { Axis, ContourId, NamedInstance, PointId, PointSeed, Source } from "@shift/types";
+import type {
+  Axis,
+  ContourId,
+  GlyphId,
+  NamedInstance,
+  NodeId,
+  PointId,
+  PointSeed,
+  Source,
+  SourceId,
+} from "@shift/types";
 import type { DirtyDocumentChoice } from "../../src/main/document/types";
 import type { EditorDriver } from "./EditorDriver";
 
@@ -36,10 +46,35 @@ export interface CanonicalVariableFont {
   namedInstances: NamedInstance[];
 }
 
+export interface ActiveGlyph {
+  readonly glyphId: GlyphId;
+  readonly nodeId: NodeId;
+  readonly sourceId: SourceId;
+  readonly pointCount: number;
+  readonly contourCount: number;
+}
+
+export interface CanvasBounds {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+export type PointerModifier = "Alt" | "Control" | "ControlOrMeta" | "Meta" | "Shift";
+
+export interface CanvasDrag {
+  readonly from: Point2D;
+  readonly to: Point2D;
+  readonly modifiers?: readonly PointerModifier[];
+  readonly steps?: number;
+}
+
 export interface PointTarget {
   readonly id: PointId;
   readonly glyphPosition: Point2D;
   readonly canvasPosition: Point2D;
+  readonly pagePosition: Point2D;
 }
 
 export interface PointDrag {

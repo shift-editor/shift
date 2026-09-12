@@ -244,9 +244,7 @@ test.describe("Editor view", () => {
     page,
     editor,
   }) => {
-    const canvas = page.locator("#interactive-canvas");
-    const canvasBounds = await canvas.boundingBox();
-    if (!canvasBounds) throw new Error("Expected interactive canvas bounds");
+    const canvas = editor.canvas;
     const down = await page.evaluate(() => {
       const editor = window.shift!.editor;
       const node = editor.scene.nodesOfKind("glyph")[0];
@@ -307,7 +305,7 @@ test.describe("Editor view", () => {
     page,
     editor,
   }, testInfo) => {
-    const canvas = page.locator("#interactive-canvas");
+    const canvas = editor.canvas;
     const preview = await page.evaluate(() => {
       const editor = window.shift!.editor;
       const node = editor.scene.nodesOfKind("glyph")[0];
@@ -402,22 +400,16 @@ test.describe("Editor view", () => {
 
   test("shows the add cursor for Shift-hover and adds the point to the selection", async ({
     page,
+    editor,
   }) => {
-    const canvas = page.locator("#interactive-canvas");
-    const points = await page.evaluate(() => {
-      const editor = window.shift!.editor;
-      const node = editor.scene.nodesOfKind("glyph")[0];
-      const layer = editor.glyphForId(node.glyphId)!.layerForSource(node.sourceId)!;
-      return layer.contours[0].points.slice(0, 2).map((point) => ({
-        id: point.id,
-        position: editor.projectSceneToScreen({
-          x: point.x + node.position.x,
-          y: point.y + node.position.y,
-        }),
-      }));
-    });
-    await canvas.click({ position: points[0].position });
-    await canvas.hover({ position: points[1].position });
+    const canvas = editor.canvas;
+    const outline = await editor.outline();
+    const pointIds = outline[0]?.points.slice(0, 2).map((point) => point.id) ?? [];
+    const points = await editor.pointTargets(pointIds);
+    if (points.length !== 2) throw new Error("Expected two editable points");
+
+    await canvas.click({ position: points[0].canvasPosition });
+    await canvas.hover({ position: points[1].canvasPosition });
     await expect(canvas).not.toHaveCSS("cursor", /cursor@32-add\.svg/);
     await page.keyboard.down("Alt");
     try {
@@ -431,24 +423,20 @@ test.describe("Editor view", () => {
       await page.keyboard.up("Shift");
       await expect(canvas).not.toHaveCSS("cursor", /cursor@32-add\.svg/);
       await page.keyboard.down("Shift");
-      await canvas.click({ position: points[1].position });
-      await expect
-        .poll(() => page.evaluate(() => window.shift!.editor.selection.ids))
-        .toEqual(points.map((point) => point.id));
+      await canvas.click({ position: points[1].canvasPosition });
+      await expect.poll(() => editor.selectionIds()).toEqual(points.map((point) => point.id));
       await expect(canvas).not.toHaveCSS("cursor", /cursor@32-add\.svg/);
     } finally {
       await page.keyboard.up("Shift");
     }
   });
 
-  test("remains interactive after a renderer reload", async ({ page }) => {
+  test("remains interactive after a renderer reload", async ({ page, editor }) => {
     await page.reload();
     await expect(page.locator("#scene-canvas")).toBeVisible({ timeout: 15_000 });
 
-    await page.keyboard.press("Meta+a");
-    await expect
-      .poll(() => page.evaluate(() => window.shift?.editor.selection.ids.length ?? 0))
-      .toBeGreaterThan(0);
+    await editor.selectAll();
+    await expect.poll(async () => (await editor.selectionIds()).length).toBeGreaterThan(0);
   });
 
   test("composited canvas matches snapshot", async ({ page }) => {

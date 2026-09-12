@@ -53,8 +53,7 @@ test.beforeEach(async ({ page, editor }) => {
 
   await editor.selectTool("pen");
   const canvas = editor.canvas;
-  const bounds = await canvas.boundingBox();
-  if (!bounds) throw new Error("Expected interactive canvas bounds");
+  const bounds = await editor.canvasBounds();
   await canvas.click({ position: { x: bounds.width * 0.1, y: bounds.height * 0.6 } });
   for (const point of [
     { x: 0.3, y: 0.4, dy: -0.03 },
@@ -62,14 +61,11 @@ test.beforeEach(async ({ page, editor }) => {
     { x: 0.7, y: 0.4, dy: 0.03 },
     { x: 0.9, y: 0.6, dy: 0.04 },
   ]) {
-    await page.mouse.move(bounds.x + point.x * bounds.width, bounds.y + point.y * bounds.height);
-    await page.mouse.down();
-    await page.mouse.move(
-      bounds.x + (point.x + 0.04) * bounds.width,
-      bounds.y + (point.y + point.dy) * bounds.height,
-      { steps: 5 },
-    );
-    await page.mouse.up();
+    await editor.dragCanvas({
+      from: { x: point.x * bounds.width, y: point.y * bounds.height },
+      to: { x: (point.x + 0.04) * bounds.width, y: (point.y + point.dy) * bounds.height },
+      steps: 5,
+    });
   }
   await editor.selectTool("select");
   await expect

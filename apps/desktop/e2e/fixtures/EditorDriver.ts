@@ -1,9 +1,16 @@
 import type { Locator, Page } from "@playwright/test";
-import type { Bounds, Point2D } from "@shift/geo";
+import type { Point2D, Rect2D } from "@shift/geo";
 import type { Point } from "@shift/glyph-state";
 import type { PointId, Unicode } from "@shift/types";
 import { waitForEditorReady } from "./appLocators";
-import type { Outline, PointDrag, PointTarget } from "./types";
+import type {
+  ActiveGlyph,
+  CanvasBounds,
+  CanvasDrag,
+  Outline,
+  PointDrag,
+  PointTarget,
+} from "./types";
 
 const TOOL_LABELS = {
   select: "Select Tool (V)",
@@ -22,9 +29,8 @@ const TOOL_LABELS = {
  */
 export class EditorDriver {
   /**
-   * Creates an editor driver for one workspace page.
-   *
-   * @param page - Playwright page that owns the editor being exercised.
+   * Creates a driver for the editor owned by `page`.
+   * @param page - Workspace page under test.
    */
   constructor(readonly page: Page) {}
 
@@ -39,10 +45,8 @@ export class EditorDriver {
   }
 
   /**
-   * Opens the glyph mapped to a hexadecimal Unicode codepoint.
-   *
+   * Opens the glyph mapped to `hexCodepoint`; throws when none exists.
    * @param hexCodepoint - Hexadecimal scalar value, such as `41` for `A`.
-   * @throws {Error} when the loaded font has no matching glyph record.
    */
   async openGlyphByUnicode(hexCodepoint: string): Promise<void> {
     const unicode = Number.parseInt(hexCodepoint, 16) as Unicode;
@@ -76,10 +80,8 @@ export class EditorDriver {
   }
 
   /**
-   * Opens a glyph by its font-directory name.
-   *
-   * @param name - Exact glyph name in the loaded workspace.
-   * @throws {Error} when the loaded font has no matching glyph record.
+   * Opens the exact named glyph; throws when none exists.
+   * @param name - Glyph name in the loaded workspace.
    */
   async openGlyphByName(name: string): Promise<void> {
     const glyphId = await this.page.evaluate((glyphName) => {
@@ -92,10 +94,8 @@ export class EditorDriver {
   }
 
   /**
-   * Opens an already known glyph identity and waits for scene publication.
-   *
-   * @param glyphId - Glyph identity present in the loaded workspace.
-   * @throws {Error} when the workspace is unavailable or glyph acquisition fails.
+   * Opens a known glyph and waits for scene publication.
+   * @param glyphId - Glyph identity in the loaded workspace.
    */
   async openGlyph(glyphId: string): Promise<void> {
     await this.page.evaluate(async (id) => {
@@ -109,12 +109,59 @@ export class EditorDriver {
   }
 
   /**
-   * Selects an editor toolbar tool by its stable tool identity.
-   *
-   * @param tool - Tool whose primary toolbar action should be activated.
+   * Selects a toolbar tool by stable identity.
+   * @param tool - Primary tool action to activate.
    */
   async selectTool(tool: keyof typeof TOOL_LABELS): Promise<void> {
     await this.page.getByRole("button", { name: TOOL_LABELS[tool], exact: true }).click();
+  }
+
+  /**
+   * Returns fresh page-space canvas bounds; throws before canvas rendering.
+   */
+  async canvasBounds(): Promise<CanvasBounds> {
+    const bounds = await this.canvas.boundingBox();
+    if (!bounds) throw new Error("Expected interactive canvas bounds");
+
+    return bounds;
+  }
+
+  /**
+   * Projects a scene position into canvas-local coordinates.
+   * @param position - Editor scene position.
+   */
+  async projectSceneToCanvas(position: Point2D): Promise<Point2D> {
+    return this.page.evaluate((scenePosition) => {
+      const editor = window.shiftSession?.editor;
+      if (!editor) throw new Error("Expected editor");
+
+      return editor.projectSceneToScreen(scenePosition);
+    }, position);
+  }
+
+  /**
+   * Projects a scene position into Playwright page coordinates.
+   * @param position - Editor scene position.
+   */
+  async projectSceneToPage(position: Point2D): Promise<Point2D> {
+    const [canvasPosition, bounds] = await Promise.all([
+      this.projectSceneToCanvas(position),
+      this.canvasBounds(),
+    ]);
+    return { x: bounds.x + canvasPosition.x, y: bounds.y + canvasPosition.y };
+  }
+
+  /**
+   * Projects a canvas-local position into scene coordinates.
+   * @param position - Point relative to the canvas origin.
+   */
+  async projectCanvasToScene(position: Point2D): Promise<Point2D> {
+    return this.page.evaluate((canvasPosition) => {
+      const editor = window.shiftSession?.editor;
+      if (!editor) throw new Error("Expected editor");
+
+      return editor.projectScreenToScene(canvasPosition);
+    }, position);
   }
 
   /** Selects every editable object and waits for any resulting workspace edits. */
@@ -133,13 +180,68 @@ export class EditorDriver {
   }
 
   /**
-   * Sends a keyboard chord and waits for the workspace edit pipeline.
-   *
-   * @param key - Playwright keyboard chord delivered to the focused workspace.
+   * Sends a keyboard chord and waits for persisted edits.
+   * @param key - Playwright chord delivered to the workspace.
    */
   async press(key: string): Promise<void> {
     await this.page.keyboard.press(key);
     await this.#waitForEdits();
+  }
+
+  /**
+   * Starts a pointer gesture at an absolute page position.
+   * @param position - Point in Playwright page coordinates.
+   */
+  async pointerDown(position: Point2D): Promise<void> {
+    await this.page.mouse.move(position.x, position.y);
+    await this.page.mouse.down();
+  }
+
+  /**
+   * Advances and flushes the active pointer gesture.
+   * @param position - Destination in Playwright page coordinates.
+   * @param steps - Number of intermediate browser samples.
+   */
+  async pointerMove(position: Point2D, steps = 1): Promise<void> {
+    await this.page.mouse.move(position.x, position.y, { steps });
+    await this.flushPointerMoves();
+  }
+
+  /** Completes the active pointer gesture and waits for confirmed edits. */
+  async pointerUp(): Promise<void> {
+    await this.page.mouse.up();
+    await this.waitForIdle();
+  }
+
+  /**
+   * Drags between canvas-local points and waits for confirmed edits.
+   * @param input - Endpoints, held modifiers, and browser sample count.
+   */
+  async dragCanvas(input: CanvasDrag): Promise<void> {
+    const bounds = await this.canvasBounds();
+    const from = { x: bounds.x + input.from.x, y: bounds.y + input.from.y };
+    const to = { x: bounds.x + input.to.x, y: bounds.y + input.to.y };
+    const modifiers = input.modifiers ?? [];
+
+    let pressed = false;
+    for (const modifier of modifiers) await this.page.keyboard.down(modifier);
+    try {
+      await this.pointerDown(from);
+      pressed = true;
+      await this.pointerMove(to, input.steps ?? 5);
+      await this.pointerUp();
+      pressed = false;
+    } finally {
+      if (pressed) await this.page.mouse.up();
+      for (const modifier of [...modifiers].reverse()) await this.page.keyboard.up(modifier);
+    }
+  }
+
+  /** Cancels the active pointer gesture and waits for rollback to complete. */
+  async cancelGesture(): Promise<void> {
+    await this.page.keyboard.press("Escape");
+    await this.page.mouse.up();
+    await this.waitForIdle();
   }
 
   /** Flushes the latest coalesced pointer move into the active tool gesture. */
@@ -158,30 +260,63 @@ export class EditorDriver {
     await this.#waitForEdits();
   }
 
-  /** Returns a fresh snapshot of the current selection identities. */
-  async selectionIds(): Promise<readonly string[]> {
-    return this.page.evaluate(() => window.shift?.editor.selection.ids ?? []);
+  /** Returns the active glyph, or null until its authored layer is published. */
+  async activeGlyph(): Promise<ActiveGlyph | null> {
+    return this.page.evaluate(() => {
+      const editor = window.shiftSession?.editor;
+      const node = editor?.scene.nodesOfKind("glyph")[0];
+      if (!editor || !node) return null;
+
+      const glyph = editor.glyphForId(node.glyphId);
+      const layer = glyph?.layerForSource(node.sourceId);
+      if (!layer) return null;
+
+      return {
+        glyphId: node.glyphId,
+        nodeId: node.id,
+        sourceId: node.sourceId,
+        pointCount: layer.pointCount,
+        contourCount: layer.contours.length,
+      };
+    });
   }
 
-  /**
-   * Returns the current selection bounds, including live gesture previews.
-   *
-   * @returns a fresh bounds snapshot.
-   * @throws {Error} when the editor has no bounded selection.
-   */
-  async selectionBounds(): Promise<Bounds> {
+  /** Returns zero without an active glyph, otherwise its authored point count. */
+  async pointCount(): Promise<number> {
+    return (await this.activeGlyph())?.pointCount ?? 0;
+  }
+
+  /** Returns zero without an active glyph, otherwise its authored contour count. */
+  async contourCount(): Promise<number> {
+    return (await this.activeGlyph())?.contourCount ?? 0;
+  }
+
+  /** Returns a fresh snapshot of the current selection identities. */
+  async selectionIds(): Promise<readonly string[]> {
+    return this.page.evaluate(() => window.shiftSession?.editor.selection.ids ?? []);
+  }
+
+  /** Returns the hovered editor object identity, or null when nothing is hovered. */
+  async hoverId(): Promise<string | null> {
+    return this.page.evaluate(() => window.shiftSession?.editor.hover.id ?? null);
+  }
+
+  /** Returns the active tool's published state discriminator. */
+  async toolState(): Promise<string | null> {
+    return this.page.evaluate(
+      () => window.shiftSession?.editor.toolManager.activeTool?.getState().type ?? null,
+    );
+  }
+
+  /** Returns fresh live selection bounds; throws without a bounded selection. */
+  async selectionBounds(): Promise<Rect2D> {
     const bounds = await this.page.evaluate(() => window.shift?.editor.selectionBounds());
     if (!bounds) throw new Error("Expected selection bounds");
 
     return bounds;
   }
 
-  /**
-   * Returns confirmed geometry for every contour in the active authored layer.
-   *
-   * @returns a fresh serializable outline snapshot.
-   * @throws {Error} when no authored glyph layer is active.
-   */
+  /** Returns a fresh confirmed outline; throws without an authored layer. */
   async outline(): Promise<Outline> {
     await this.#waitForEdits();
 
@@ -210,11 +345,8 @@ export class EditorDriver {
   }
 
   /**
-   * Returns glyph-local and canvas positions for editable points.
-   *
-   * @param pointIds - Points in the active authored layer, in desired result order.
-   * @returns fresh point targets suitable for canvas interactions.
-   * @throws {Error} when any requested point is absent from the active layer.
+   * Returns fresh interaction targets; throws when a point is absent.
+   * @param pointIds - Active-layer point identities in desired order.
    */
   async pointTargets(pointIds: readonly PointId[]): Promise<readonly PointTarget[]> {
     await this.#waitForEdits();
@@ -223,30 +355,34 @@ export class EditorDriver {
       const editor = window.shift?.editor;
       const node = editor?.scene.nodesOfKind("glyph")[0];
       const layer = node ? editor?.glyphForId(node.glyphId)?.layerForSource(node.sourceId) : null;
-      if (!editor || !node || !layer) throw new Error("Expected editable glyph");
+      const canvas = document.querySelector<HTMLCanvasElement>("#interactive-canvas");
+      if (!editor || !node || !layer || !canvas) throw new Error("Expected editable glyph");
 
+      const bounds = canvas.getBoundingClientRect();
       return ids.map((id) => {
         const point = layer.point(id);
         if (!point) throw new Error(`Expected editable point ${id}`);
 
+        const canvasPosition = editor.projectSceneToScreen({
+          x: point.x + node.position.x,
+          y: point.y + node.position.y,
+        });
         return {
           id,
           glyphPosition: { x: point.x, y: point.y },
-          canvasPosition: editor.projectSceneToScreen({
-            x: point.x + node.position.x,
-            y: point.y + node.position.y,
-          }),
+          canvasPosition,
+          pagePosition: {
+            x: bounds.left + canvasPosition.x,
+            y: bounds.top + canvasPosition.y,
+          },
         };
       });
     }, pointIds);
   }
 
   /**
-   * Returns confirmed glyph-local coordinates for one editable point.
-   *
+   * Returns a confirmed glyph-local position; throws when absent.
    * @param pointId - Point in the active authored layer.
-   * @returns a fresh glyph-local position.
-   * @throws {Error} when the point is absent from the active layer.
    */
   async pointPosition(pointId: PointId): Promise<Point2D> {
     await this.#waitForEdits();
@@ -267,15 +403,13 @@ export class EditorDriver {
   }
 
   /**
-   * Selects one point through its rendered canvas position.
-   *
+   * Selects one point through its rendered position; throws when absent.
    * @param pointId - Point in the active authored layer.
-   * @throws {Error} when the point is absent from the active layer.
    */
   async clickPoint(pointId: PointId): Promise<void> {
     const [target] = await this.pointTargets([pointId]);
 
-    await this.canvas.click({ position: target.canvasPosition });
+    await this.page.mouse.click(target.pagePosition.x, target.pagePosition.y);
     await this.page.waitForFunction(
       (id) =>
         window.shift?.editor.selection.ids.length === 1 && window.shift.editor.selection.has(id),
@@ -283,12 +417,7 @@ export class EditorDriver {
     );
   }
 
-  /**
-   * Selects a visible on-curve point and returns a safe page-space drag.
-   *
-   * @returns drag coordinates and the expected glyph-local destination.
-   * @throws {Error} when the active layer has no safely visible on-curve point.
-   */
+  /** Returns a safe drag for a visible on-curve point; throws when none exists. */
   async selectVisiblePoint(): Promise<PointDrag> {
     const point = await this.page.evaluate(() => {
       const workspace = window.shift;
@@ -349,9 +478,8 @@ export class EditorDriver {
   }
 
   /**
-   * Drags one prepared point target and waits for confirmed workspace geometry.
-   *
-   * @param point - Page-space drag returned by {@link selectVisiblePoint}.
+   * Drags one prepared point and waits for confirmed geometry.
+   * @param point - Drag returned by {@link selectVisiblePoint}.
    */
   async dragPoint(point: PointDrag): Promise<void> {
     await this.page.mouse.move(point.startPagePosition.x, point.startPagePosition.y);
@@ -361,12 +489,7 @@ export class EditorDriver {
     await this.#waitForEdits();
   }
 
-  /**
-   * Hovers a visible unselected point and waits for editor hover publication.
-   *
-   * @returns identity of the hovered point.
-   * @throws {Error} when the active layer has no unselected on-curve point.
-   */
+  /** Returns a hovered visible point identity; throws when none exists. */
   async hoverVisibleUnselectedPoint(): Promise<PointId> {
     const target = await this.page.evaluate(() => {
       const workspace = window.shift;
