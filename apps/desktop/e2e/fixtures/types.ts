@@ -1,10 +1,14 @@
 import type { ElectronApplication, Page } from "@playwright/test";
-import type { Axis, NamedInstance, Source } from "@shift/types";
+import type { Point2D } from "@shift/geo";
+import type { SegmentType } from "@shift/glyph-state";
+import type { Axis, ContourId, NamedInstance, PointId, PointSeed, Source } from "@shift/types";
 import type { DirtyDocumentChoice } from "../../src/main/document/types";
+import type { EditorDriver } from "./EditorDriver";
 
 export type ShiftFixtures = {
   electronApp: ElectronApplication;
   page: Page;
+  editor: EditorDriver;
   testRoot: string;
   saveShiftPath: string;
   saveAsShiftPath: string;
@@ -31,6 +35,29 @@ export interface CanonicalVariableFont {
   sources: Source[];
   namedInstances: NamedInstance[];
 }
+
+export interface PointTarget {
+  readonly id: PointId;
+  readonly glyphPosition: Point2D;
+  readonly canvasPosition: Point2D;
+}
+
+export interface PointDrag {
+  readonly id: PointId;
+  readonly startPagePosition: Point2D;
+  readonly endPagePosition: Point2D;
+  readonly expectedGlyphPosition: Point2D;
+}
+
+export interface OutlineContour {
+  readonly id: ContourId;
+  readonly closed: boolean;
+  readonly points: readonly Readonly<PointSeed>[];
+  readonly onCurvePoints: readonly Readonly<PointSeed>[];
+  readonly segments: readonly SegmentType["type"][];
+}
+
+export type Outline = readonly OutlineContour[];
 
 export type RecoveryApp = {
   page: Page;
