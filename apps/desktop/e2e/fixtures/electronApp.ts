@@ -1,7 +1,6 @@
 import {
   test as base,
   _electron as electron,
-  expect,
   type Page,
   type ElectronApplication,
 } from "@playwright/test";
@@ -129,7 +128,7 @@ export const test = base.extend<ShiftFixtures & ShiftOptions>({
       workspacePath = createAuthoredDocument(startupFontPath, path.join(testRoot, "workspace"));
     }
 
-    const environment = {
+    const environment: Record<string, string> = {
       ...process.env,
       NODE_ENV: "test",
       // Force software rendering for deterministic GPU-free snapshots.
@@ -234,7 +233,7 @@ export const test = base.extend<ShiftFixtures & ShiftOptions>({
 
 /** Fixture whose native outer-dialog choices are supplied by deterministic E2E paths. */
 export const documentTest = test.extend<ShiftOptions>({
-  scriptedDialogs: [true, { option: true }],
+  scriptedDialogs: true,
 });
 
 /** Real Electron lifecycle fixture for sparse native recovery tests. */
@@ -328,7 +327,7 @@ async function launchShiftApp(
   windowSizing: ShiftOptions["windowSizing"],
   workspacePath?: string,
 ): Promise<ElectronApplication> {
-  const environment = {
+  const environment: Record<string, string> = {
     ...process.env,
     NODE_ENV: "test",
     LIBGL_ALWAYS_SOFTWARE: "1",

@@ -1,4 +1,5 @@
 import { expect, type Page } from "@playwright/test";
+import type { GlyphId } from "@shift/types";
 
 const FIRST_GLYPH_PREVIEW_POINT = { x: 50, y: 50 };
 const FIRST_GLYPH_NAME_POINT = { x: 50, y: 117 };
@@ -87,7 +88,7 @@ export async function waitForEditorReady(page: Page, glyphId: string): Promise<v
  * @param glyphId - catalog identity to acquire before publishing the route.
  * @throws {Error} when the workspace is unavailable or glyph acquisition fails.
  */
-export async function openGlyphRoute(page: Page, glyphId: string): Promise<void> {
+export async function openGlyphRoute(page: Page, glyphId: GlyphId): Promise<void> {
   await page.evaluate(async (id) => {
     const font = window.shift?.font;
     if (!font) throw new Error("Expected font workspace");

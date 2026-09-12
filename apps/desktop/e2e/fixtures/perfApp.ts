@@ -15,7 +15,8 @@ import fs from "node:fs";
 import os from "node:os";
 import * as path from "path";
 import { once } from "events";
-import type { Unicode } from "@shift/types";
+import type { ContourContent } from "@/lib/clipboard/types";
+import { EditorDriver } from "./EditorDriver";
 import { copyImportedSource, createAuthoredDocument } from "./fontSource";
 
 const APP_ROOT = path.resolve(__dirname, "../..");
@@ -45,6 +46,7 @@ export type PerfFixtures = {
   electronApp: ElectronApplication;
   page: Page;
   sourcePath: string;
+  editor: EditorDriver;
 };
 
 /**
@@ -134,6 +136,10 @@ function createAppTest(fontPath: string, prepareSource: typeof createAuthoredDoc
 
       await use(page);
     },
+
+    editor: async ({ page }, use) => {
+      await use(new EditorDriver(page));
+    },
   });
 }
 
@@ -145,51 +151,6 @@ export const ufoPreviewTest = createAppTest(UFO_PREVIEW_FONT_PATH, copyImportedS
 export const glyphsPreviewTest = createAppTest(GLYPHS_PREVIEW_FONT_PATH, copyImportedSource);
 
 export { expect } from "@playwright/test";
-
-/**
- * Navigate to the editor for a glyph and wait for the canvas.
- */
-export async function navigateToEditor(page: Page, hexCodepoint: string): Promise<void> {
-  const unicode = Number.parseInt(hexCodepoint, 16) as Unicode;
-  await page.waitForFunction(
-    (codepoint) => {
-      const font = window.shift?.font;
-      if (!font) return false;
-
-      const handle = font.glyphHandleForUnicode(codepoint as Unicode);
-      return font.recordForName(handle.name) !== null;
-    },
-    unicode,
-    { timeout: 20_000 },
-  );
-
-  await page.evaluate(async (codepoint) => {
-    const workspace = window.shift;
-    if (!workspace) throw new Error("Expected workspace");
-
-    const handle = workspace.font.glyphHandleForUnicode(codepoint as Unicode);
-    const record = workspace.font.recordForName(handle.name);
-    if (!record) throw new Error(`No glyph found for U+${codepoint.toString(16)}`);
-
-    await workspace.font.loadGlyph(record.id);
-    window.location.hash = `#/editor/${encodeURIComponent(record.id)}`;
-  }, unicode);
-
-  await page.waitForFunction(
-    () => {
-      const canvas = document.querySelector<HTMLCanvasElement>("#scene-canvas");
-      return Boolean(canvas && canvas.width > 1 && canvas.height > 1);
-    },
-    undefined,
-    { timeout: 10_000 },
-  );
-  await page.evaluate(
-    () =>
-      new Promise<void>((resolve) => {
-        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-      }),
-  );
-}
 
 /**
  * MutatorSans "S" contour data (44 points) for generating 50K-point glyphs.
@@ -251,7 +212,7 @@ const POINTS_PER_CONTOUR = MUTATORSANS_S.length; // 44
 export function generateContourData(targetPoints: number) {
   const count = Math.ceil(targetPoints / POINTS_PER_CONTOUR);
   const cols = Math.ceil(Math.sqrt(count));
-  const contours = [];
+  const contours: ContourContent[] = [];
 
   for (let i = 0; i < count; i++) {
     const col = i % cols;
