@@ -103,6 +103,66 @@ export class GlyphGeometry {
     return new GlyphGeometry(state.structure, state.values);
   }
 
+  /**
+   * Compares ordered glyph topology and metadata independently of object identity.
+   *
+   * @param left - First structure, including authored identities.
+   * @param right - Second structure, possibly deserialized from a workspace echo.
+   * @returns Whether both structures interpret the same numeric value layout and
+   * carry identical metadata. Coordinates are not part of this comparison.
+   */
+  static structuresEqual(left: GlyphStructure, right: GlyphStructure): boolean {
+    if (left === right) return true;
+    if (
+      left.contours.length !== right.contours.length ||
+      left.anchors.length !== right.anchors.length ||
+      left.components.length !== right.components.length
+    )
+      return false;
+
+    for (let index = 0; index < left.contours.length; index++) {
+      const contour = left.contours[index]!;
+      const other = right.contours[index]!;
+      if (contour === other) continue;
+      if (
+        contour.id !== other.id ||
+        contour.closed !== other.closed ||
+        contour.points.length !== other.points.length
+      )
+        return false;
+
+      for (let pointIndex = 0; pointIndex < contour.points.length; pointIndex++) {
+        const point = contour.points[pointIndex]!;
+        const otherPoint = other.points[pointIndex]!;
+        if (
+          point.id !== otherPoint.id ||
+          point.pointType !== otherPoint.pointType ||
+          point.smooth !== otherPoint.smooth
+        )
+          return false;
+      }
+    }
+
+    for (let index = 0; index < left.anchors.length; index++) {
+      const anchor = left.anchors[index]!;
+      const other = right.anchors[index]!;
+      if (anchor.id !== other.id || anchor.name !== other.name) return false;
+    }
+
+    for (let index = 0; index < left.components.length; index++) {
+      const component = left.components[index]!;
+      const other = right.components[index]!;
+      if (
+        component.id !== other.id ||
+        component.baseGlyphId !== other.baseGlyphId ||
+        component.baseGlyphName !== other.baseGlyphName
+      )
+        return false;
+    }
+
+    return true;
+  }
+
   get xAdvance(): number {
     return this.values[0] ?? 0;
   }

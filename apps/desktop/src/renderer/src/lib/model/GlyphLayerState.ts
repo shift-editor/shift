@@ -11,7 +11,6 @@ import type {
 } from "@shift/types";
 import {
   GlyphGeometry,
-  glyphStructuresEqual,
   type GlyphPosition,
   type GlyphPositionTarget,
   type GlyphPositions,
@@ -331,7 +330,7 @@ export class GlyphLayerState {
   #publish(state: GlyphState): void {
     batch(() => {
       const buffers = this.#buffers.peek();
-      if (glyphStructuresEqual(buffers.structure, state.structure)) {
+      if (GlyphGeometry.structuresEqual(buffers.structure, state.structure)) {
         const values = buffers.snapshot;
         if (
           values.length !== state.values.length ||
