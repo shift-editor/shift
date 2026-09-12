@@ -3,11 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { documentTest as test, waitForWorkspaceReady } from "./fixtures/electronApp";
 import { openGlyphRoute } from "./fixtures/appLocators";
-import {
-  addSquare,
-  hoverVisibleUnselectedPoint,
-  selectVisiblePoint,
-} from "./fixtures/editorInteractions";
+import { EditorDriver } from "./fixtures/EditorDriver";
+import { addSquare } from "./fixtures/editorInteractions";
 import {
   createNewFont,
   killApp,
@@ -205,13 +202,15 @@ test("keeps authored document state isolated between windows", async ({ electron
 
   await openGlyphRoute(firstPage, firstGlyphId);
   await addSquare(firstPage);
-  await selectVisiblePoint(firstPage);
-  await hoverVisibleUnselectedPoint(firstPage);
+  const firstEditor = new EditorDriver(firstPage);
+  await firstEditor.selectVisiblePoint();
+  await firstEditor.hoverVisibleUnselectedPoint();
   await openGlyphRoute(secondPage, secondGlyphId);
+  const secondEditor = new EditorDriver(secondPage);
 
-  expect(await secondPage.evaluate(() => window.shift?.editor.selection.ids)).toEqual([]);
+  expect(await secondEditor.selectionIds()).toEqual([]);
   expect(await secondPage.evaluate(() => window.shift?.editor.hover.id)).toBeNull();
-  expect((await firstPage.evaluate(() => window.shift?.editor.selection.ids.length)) ?? 0).toBe(1);
+  expect(await firstEditor.selectionIds()).toHaveLength(1);
   expect(await firstPage.evaluate(() => window.shift?.editor.hover.id)).not.toBeNull();
 
   await firstPage.getByRole("button", { name: "Font overview" }).click();

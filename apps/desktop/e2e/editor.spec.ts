@@ -1,63 +1,42 @@
-import type { Locator, Page } from "@playwright/test";
+import type { Locator } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { workspaceTest as test, expect, navigateToEditor } from "./fixtures/electronApp";
+import { workspaceTest as test, expect } from "./fixtures/electronApp";
+import type { EditorDriver } from "./fixtures/EditorDriver";
 import { glyphProperties, variationControls } from "./fixtures/appLocators";
 import { CanvasUtil } from "./fixtures/CanvasUtil";
 
 test("aligns exactly two selected points while distribution still requires three", async ({
   page,
+  editor,
 }, testInfo) => {
-  await navigateToEditor(page, "41");
+  await editor.openGlyphByUnicode("41");
   const properties = glyphProperties(page);
   // Native scrollbar preferences change the gutter width; normalize only the golden captures.
   // Interaction and viewport assertions still exercise the unmodified native layout.
   const screenshotStylePath = path.join(__dirname, "editor.screenshot.css");
   const screenshotStyle = await readFile(screenshotStylePath, "utf8");
-  const canvas = page.locator("#interactive-canvas");
+  const canvas = editor.canvas;
   const alignLeft = properties.getByRole("button", { name: "Align left", exact: true });
   const distribute = properties.getByRole("button", {
     name: "Distribute horizontally",
     exact: true,
   });
-  const points = await page.evaluate(() => {
-    const editor = window.shift!.editor;
-    const node = editor.scene.nodesOfKind("glyph")[0];
-    if (!node) throw new Error("Expected glyph node");
-    const layer = editor.glyphForId(node.glyphId)?.layerForSource(node.sourceId);
-    const first = layer?.allPoints[0];
-    const second = layer?.allPoints.find((point) => point.x !== first?.x && point.y !== first?.y);
-    const third = layer?.allPoints.find(
-      (point) => point.id !== first?.id && point.id !== second?.id,
-    );
-    if (!first || !second || !third) throw new Error("Expected three distinct fixture points");
+  const outline = await editor.outline();
+  const available = outline.flatMap((contour) => contour.points);
+  const first = available[0];
+  const second = available.find((point) => point.x !== first?.x && point.y !== first?.y);
+  const third = available.find((point) => point.id !== first?.id && point.id !== second?.id);
+  if (!first || !second || !third) throw new Error("Expected three distinct fixture points");
 
-    return [first, second, third].map((point) => ({
-      id: point.id,
-      x: point.x,
-      y: point.y,
-      screen: editor.projectSceneToScreen({
-        x: point.x + node.position.x,
-        y: point.y + node.position.y,
-      }),
-    }));
-  });
-  const selectedPositions = () =>
-    page.evaluate(
-      (ids) => {
-        const selection = window.shift!.editor.positionSelection(ids);
-        if (!selection) throw new Error("Expected editable selection");
-        return ids.map((id) => {
-          const point = selection.layer.point(id);
-          if (!point) throw new Error("Expected selected point");
-          return { x: point.x, y: point.y };
-        });
-      },
-      points.slice(0, 2).map((point) => point.id),
+  const points = await editor.pointTargets([first.id, second.id, third.id]);
+  const selectedPositions = async () =>
+    (await editor.pointTargets(points.slice(0, 2).map((point) => point.id))).map(
+      (point) => point.glyphPosition,
     );
 
   await expect(alignLeft).toHaveCount(0);
-  await canvas.click({ position: points[0].screen });
+  await canvas.click({ position: points[0].canvasPosition });
   await expect(alignLeft).toBeDisabled();
   await expect(distribute).toBeDisabled();
   await properties
@@ -74,9 +53,9 @@ test("aligns exactly two selected points while distribution still requires three
     contentType: "image/png",
   });
 
-  await canvas.click({ position: points[1].screen, modifiers: ["Shift"] });
+  await canvas.click({ position: points[1].canvasPosition, modifiers: ["Shift"] });
   await expect
-    .poll(() => page.evaluate(() => window.shift!.editor.selection.ids))
+    .poll(() => editor.selectionIds())
     .toEqual(points.slice(0, 2).map((point) => point.id));
   for (const name of [
     "Align left",
@@ -112,16 +91,18 @@ test("aligns exactly two selected points while distribution still requires three
   });
 
   await alignLeft.click();
-  await page.evaluate(async () => window.shift!.font.editCoordinator.settled());
+  await expect.poll(selectedPositions).toEqual(
+    points.slice(0, 2).map((point) => ({
+      x: Math.min(points[0].glyphPosition.x, points[1].glyphPosition.x),
+      y: point.glyphPosition.y,
+    })),
+  );
+  await editor.undo();
   await expect
     .poll(selectedPositions)
-    .toEqual(
-      points.slice(0, 2).map((point) => ({ x: Math.min(points[0].x, points[1].x), y: point.y })),
-    );
-  await page.evaluate(() => window.shift!.editor.undo());
-  await expect.poll(selectedPositions).toEqual(points.slice(0, 2).map(({ x, y }) => ({ x, y })));
+    .toEqual(points.slice(0, 2).map((point) => point.glyphPosition));
 
-  await canvas.click({ position: points[2].screen, modifiers: ["Shift"] });
+  await canvas.click({ position: points[2].canvasPosition, modifiers: ["Shift"] });
   await expect(distribute).toBeEnabled();
   await expect(
     properties.getByRole("button", { name: "Distribute vertically", exact: true }),
@@ -130,10 +111,11 @@ test("aligns exactly two selected points while distribution still requires three
 
 test("switches Alt during proportional resizing and preserves release geometry", async ({
   page,
+  editor,
 }) => {
-  await navigateToEditor(page, "41");
-  await page.keyboard.press("ControlOrMeta+a");
-  const canvas = page.locator("#interactive-canvas");
+  await editor.openGlyphByUnicode("41");
+  await editor.selectAll();
+  const canvas = editor.canvas;
   const canvasBounds = await canvas.boundingBox();
   if (!canvasBounds) throw new Error("Expected interactive canvas bounds");
   const { initialBounds, down, normal, centered, crossed } = await page.evaluate(() => {
@@ -163,16 +145,15 @@ test("switches Alt during proportional resizing and preserves release geometry",
   await page.mouse.down();
   try {
     await page.mouse.move(canvasBounds.x + normal.x, canvasBounds.y + normal.y, { steps: 3 });
-    await page.evaluate(() => window.shift!.editor.toolManager.flushPointerMoves());
+    await editor.flushPointerMoves();
     await expect
       .poll(() => page.evaluate(() => window.shift!.editor.toolIf("select")?.state.type))
       .toBe("resizing");
 
     await page.keyboard.down("Alt");
     await page.mouse.move(canvasBounds.x + centered.x, canvasBounds.y + centered.y, { steps: 3 });
-    await page.evaluate(() => window.shift!.editor.toolManager.flushPointerMoves());
-    const preview = await page.evaluate(() => window.shift!.editor.selectionBounds());
-    if (!preview) throw new Error("Expected centred resize preview");
+    await editor.flushPointerMoves();
+    const preview = await editor.selectionBounds();
     expect(preview.width / initialBounds.width).toBeCloseTo(1.3);
     expect(preview.height / initialBounds.height).toBeCloseTo(1.3);
     expect(preview.x + preview.width / 2).toBeCloseTo(initialBounds.x + initialBounds.width / 2);
@@ -180,18 +161,17 @@ test("switches Alt during proportional resizing and preserves release geometry",
     await expect(canvas).toHaveCSS("cursor", /nesw-resize$/);
 
     await page.mouse.move(canvasBounds.x + crossed.x, canvasBounds.y + crossed.y, { steps: 3 });
-    await page.evaluate(() => window.shift!.editor.toolManager.flushPointerMoves());
+    await editor.flushPointerMoves();
     await expect(canvas).toHaveCSS("cursor", /nwse-resize$/);
     await page.mouse.move(canvasBounds.x + centered.x, canvasBounds.y + centered.y, { steps: 3 });
-    await page.evaluate(() => window.shift!.editor.toolManager.flushPointerMoves());
+    await editor.flushPointerMoves();
     await expect(canvas).toHaveCSS("cursor", /nesw-resize$/);
-    expect(await page.evaluate(() => window.shift!.editor.selectionBounds())).toEqual(preview);
+    expect(await editor.selectionBounds()).toEqual(preview);
 
     await page.keyboard.up("Alt");
     await page.mouse.move(canvasBounds.x + normal.x, canvasBounds.y + normal.y, { steps: 3 });
-    await page.evaluate(() => window.shift!.editor.toolManager.flushPointerMoves());
-    const uncentered = await page.evaluate(() => window.shift!.editor.selectionBounds());
-    if (!uncentered) throw new Error("Expected opposite-corner resize preview");
+    await editor.flushPointerMoves();
+    const uncentered = await editor.selectionBounds();
     expect(uncentered.x).toBeCloseTo(initialBounds.x);
     expect(uncentered.y).toBeCloseTo(initialBounds.y);
     expect(uncentered.width / initialBounds.width).toBeCloseTo(1.1);
@@ -199,14 +179,13 @@ test("switches Alt during proportional resizing and preserves release geometry",
 
     await page.keyboard.down("Alt");
     await page.mouse.move(canvasBounds.x + centered.x, canvasBounds.y + centered.y, { steps: 3 });
-    await page.evaluate(() => window.shift!.editor.toolManager.flushPointerMoves());
-    expect(await page.evaluate(() => window.shift!.editor.selectionBounds())).toEqual(preview);
+    await editor.flushPointerMoves();
+    expect(await editor.selectionBounds()).toEqual(preview);
     await page.keyboard.up("Alt");
     await page.keyboard.up("Shift");
     await page.mouse.up();
-    await page.evaluate(async () => window.shift!.font.editCoordinator.settled());
-    expect(await page.evaluate(() => window.shift!.editor.selectionBounds())).toEqual(preview);
-    await expect(page.getByTestId("editor-shell")).toHaveAttribute("data-gesture", "idle");
+    await editor.waitForIdle();
+    expect(await editor.selectionBounds()).toEqual(preview);
   } finally {
     await page.mouse.up();
     await page.keyboard.up("Alt");
@@ -214,15 +193,8 @@ test("switches Alt during proportional resizing and preserves release geometry",
   }
 });
 
-async function selectionBounds(page: Page) {
-  const bounds = await page.evaluate(() => window.shift?.editor.selectionBounds());
-  if (!bounds) throw new Error("Expected selection bounds");
-
-  return bounds;
-}
-
-async function selectionCenter(page: Page) {
-  const bounds = await selectionBounds(page);
+async function selectionCenter(editor: EditorDriver) {
+  const bounds = await editor.selectionBounds();
   return { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
 }
 
@@ -237,9 +209,8 @@ async function elementWidth(element: Locator): Promise<number> {
 }
 
 test.describe("Editor view", () => {
-  test.beforeEach(async ({ page }) => {
-    // Navigate to glyph "A" (U+0041).
-    await navigateToEditor(page, "41");
+  test.beforeEach(async ({ editor }) => {
+    await editor.openGlyphByUnicode("41");
   });
 
   test("full editor matches snapshot", async ({ page }) => {
@@ -271,6 +242,7 @@ test.describe("Editor view", () => {
 
   test("keeps custom cursors on the canvas while hovering and bending across sidebars", async ({
     page,
+    editor,
   }) => {
     const canvas = page.locator("#interactive-canvas");
     const canvasBounds = await canvas.boundingBox();
@@ -299,7 +271,7 @@ test.describe("Editor view", () => {
       await page.keyboard.up("Alt");
     }
     await canvas.click({ position: down, modifiers: ["Meta"] });
-    await page.evaluate(async () => window.shift!.font.editCoordinator.settled());
+    await editor.waitForIdle();
     await page.keyboard.down("Meta");
     try {
       await expect(canvas).toHaveCSS("cursor", /cursor@32-bend\.svg/);
@@ -333,6 +305,7 @@ test.describe("Editor view", () => {
 
   test("previews upgrade handles on Cmd-hover and commits those positions on Cmd-click", async ({
     page,
+    editor,
   }, testInfo) => {
     const canvas = page.locator("#interactive-canvas");
     const preview = await page.evaluate(() => {
@@ -405,7 +378,7 @@ test.describe("Editor view", () => {
       await canvas.hover({ position: preview.screen[1] });
       await expect.poll(visible).toBe(true);
       await canvas.click({ position: preview.screen[1] });
-      await page.evaluate(async () => window.shift!.font.editCoordinator.settled());
+      await editor.waitForIdle();
       const controls = await page.evaluate((id) => {
         const object = window.shift!.editor.object(id);
         if (object?.kind !== "segment") throw new Error("Expected upgraded segment");
@@ -542,29 +515,33 @@ test.describe("Editor view", () => {
     await expect(advanceInput).toHaveValue(String(initialAdvance + 25));
   });
 
-  test("does not move a selection when its displayed position is reapplied", async ({ page }) => {
-    await page.keyboard.press("Meta+a");
+  test("does not move a selection when its displayed position is reapplied", async ({
+    page,
+    editor,
+  }) => {
+    await editor.selectAll();
     const properties = glyphProperties(page);
     const xInput = properties.getByLabel("X position", { exact: true });
     const yInput = properties.getByLabel("Y position", { exact: true });
-    const initialBounds = await selectionBounds(page);
+    const initialBounds = await editor.selectionBounds();
 
     await expect(xInput).toHaveValue(String(Math.round(initialBounds.x)));
     await expect(yInput).toHaveValue(String(Math.round(initialBounds.y)));
     await xInput.press("Enter");
     await yInput.press("Enter");
 
-    await expect.poll(() => selectionBounds(page)).toEqual(initialBounds);
+    await expect.poll(() => editor.selectionBounds()).toEqual(initialBounds);
   });
 
   test("positions a selection from its top-left independently of the scale anchor", async ({
     page,
+    editor,
   }) => {
-    await page.keyboard.press("Meta+a");
+    await editor.selectAll();
     const properties = glyphProperties(page);
     const xInput = properties.getByLabel("X position", { exact: true });
     const yInput = properties.getByLabel("Y position", { exact: true });
-    const initialBounds = await selectionBounds(page);
+    const initialBounds = await editor.selectionBounds();
     const targetX = Math.round(initialBounds.x) + 25;
     const targetY = Math.round(initialBounds.y) + 30;
 
@@ -572,17 +549,17 @@ test.describe("Editor view", () => {
     await setInputValue(xInput, targetX);
     await setInputValue(yInput, targetY);
 
-    await expect.poll(() => selectionBounds(page)).toMatchObject({ x: targetX, y: targetY });
+    await expect.poll(() => editor.selectionBounds()).toMatchObject({ x: targetX, y: targetY });
   });
 
   for (const releaseShiftFirst of [true, false]) {
     test(`keeps constrained drag geometry when Shift is released ${releaseShiftFirst ? "before" : "after"} mouseup`, async ({
       page,
+      editor,
     }) => {
-      await page.keyboard.press("ControlOrMeta+a");
-      const initialBounds = await selectionBounds(page);
-      const canvas = page.locator("#interactive-canvas");
-      const canvasBounds = await canvas.boundingBox();
+      await editor.selectAll();
+      const initialBounds = await editor.selectionBounds();
+      const canvasBounds = await editor.canvas.boundingBox();
       if (!canvasBounds) throw new Error("Expected interactive canvas bounds");
       const { down, end } = await page.evaluate(() => {
         const editor = window.shift!.editor;
@@ -603,11 +580,11 @@ test.describe("Editor view", () => {
       await page.mouse.down();
       try {
         await page.mouse.move(canvasBounds.x + end.x, canvasBounds.y + end.y, { steps: 3 });
-        await page.evaluate(() => window.shift!.editor.toolManager.flushPointerMoves());
+        await editor.flushPointerMoves();
         await expect
           .poll(() => page.evaluate(() => window.shift!.editor.toolIf("select")?.state.type))
           .toBe("resizing");
-        const preview = await selectionBounds(page);
+        const preview = await editor.selectionBounds();
         expect(preview.width).toBeGreaterThan(initialBounds.width);
         expect(preview.width / initialBounds.width).toBeCloseTo(
           preview.height / initialBounds.height,
@@ -616,10 +593,9 @@ test.describe("Editor view", () => {
         if (releaseShiftFirst) await page.keyboard.up("Shift");
         await page.mouse.up();
         if (!releaseShiftFirst) await page.keyboard.up("Shift");
-        await page.evaluate(async () => window.shift!.font.editCoordinator.settled());
+        await editor.waitForIdle();
 
-        expect(await selectionBounds(page)).toEqual(preview);
-        await expect(page.getByTestId("editor-shell")).toHaveAttribute("data-gesture", "idle");
+        expect(await editor.selectionBounds()).toEqual(preview);
       } finally {
         await page.mouse.up();
         await page.keyboard.up("Shift");
@@ -631,10 +607,11 @@ test.describe("Editor view", () => {
     for (const anchor of ["Anchor top left", "Anchor bottom right"]) {
       test(`changes dimension ${dimension} independently from visual top-left with ${anchor}`, async ({
         page,
+        editor,
       }, testInfo) => {
-        await page.keyboard.press("Meta+a");
+        await editor.selectAll();
         const properties = glyphProperties(page);
-        const initialBounds = await selectionBounds(page);
+        const initialBounds = await editor.selectionBounds();
         await properties.getByLabel(anchor, { exact: true }).click();
         await setInputValue(
           properties.getByLabel(`Dimension ${dimension}`, { exact: true }),
@@ -642,7 +619,7 @@ test.describe("Editor view", () => {
         );
 
         await expect
-          .poll(() => selectionBounds(page))
+          .poll(() => editor.selectionBounds())
           .toMatchObject({
             x: initialBounds.x,
             y: dimension === "height" ? initialBounds.y - initialBounds.height : initialBounds.y,
@@ -662,8 +639,9 @@ test.describe("Editor view", () => {
           }),
           contentType: "image/png",
         });
-        await page.evaluate(() => window.shift!.editor.undo());
-        await expect.poll(() => selectionBounds(page)).toEqual(initialBounds);
+
+        await editor.undo();
+        await expect.poll(() => editor.selectionBounds()).toEqual(initialBounds);
         await expect(properties.getByLabel(`Dimension ${dimension}`, { exact: true })).toHaveValue(
           String(Math.round(initialBounds[dimension])),
         );
@@ -672,10 +650,11 @@ test.describe("Editor view", () => {
 
     test(`resizes proportionally from the Scale ${dimension} field around the selected anchor`, async ({
       page,
+      editor,
     }, testInfo) => {
-      await page.keyboard.press("Meta+a");
+      await editor.selectAll();
       const properties = glyphProperties(page);
-      const initialBounds = await selectionBounds(page);
+      const initialBounds = await editor.selectionBounds();
       await properties.getByLabel("Anchor top left", { exact: true }).click();
       await setInputValue(
         properties.getByLabel(dimension === "width" ? "Width" : "Height", { exact: true }),
@@ -683,7 +662,7 @@ test.describe("Editor view", () => {
       );
 
       await expect
-        .poll(() => selectionBounds(page))
+        .poll(() => editor.selectionBounds())
         .toMatchObject({
           x: initialBounds.x,
           y: initialBounds.y,
@@ -712,17 +691,17 @@ test.describe("Editor view", () => {
     });
   }
 
-  test("applies scaling around the selected scale anchor", async ({ page }) => {
-    await page.keyboard.press("Meta+a");
+  test("applies scaling around the selected scale anchor", async ({ page, editor }) => {
+    await editor.selectAll();
     const properties = glyphProperties(page);
-    const initialBounds = await selectionBounds(page);
+    const initialBounds = await editor.selectionBounds();
 
     await properties.getByLabel("Anchor top left", { exact: true }).click();
     const scaleInput = properties.getByLabel("Scale factor", { exact: true });
     await setInputValue(scaleInput, 2);
 
     await expect
-      .poll(() => selectionBounds(page))
+      .poll(() => editor.selectionBounds())
       .toMatchObject({
         x: initialBounds.x,
         y: initialBounds.y,
@@ -731,17 +710,20 @@ test.describe("Editor view", () => {
       });
   });
 
-  test("keeps rotation and flipping centered regardless of the scale anchor", async ({ page }) => {
-    await page.keyboard.press("Meta+a");
+  test("keeps rotation and flipping centered regardless of the scale anchor", async ({
+    page,
+    editor,
+  }) => {
+    await editor.selectAll();
     const properties = glyphProperties(page);
     await properties.getByLabel("Anchor top left", { exact: true }).click();
-    const initialCenter = await selectionCenter(page);
+    const initialCenter = await selectionCenter(editor);
 
     await properties.getByRole("button", { name: "Rotate 90 degrees clockwise" }).click();
-    await expect.poll(() => selectionCenter(page)).toEqual(initialCenter);
-    const rotatedBounds = await selectionBounds(page);
+    await expect.poll(() => selectionCenter(editor)).toEqual(initialCenter);
+    const rotatedBounds = await editor.selectionBounds();
 
     await properties.getByRole("button", { name: "Flip horizontally" }).click();
-    await expect.poll(() => selectionBounds(page)).toEqual(rotatedBounds);
+    await expect.poll(() => editor.selectionBounds()).toEqual(rotatedBounds);
   });
 });

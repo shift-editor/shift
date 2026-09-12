@@ -2,11 +2,7 @@ import type { Page } from "@playwright/test";
 import type { GlyphId, GlyphName } from "@shift/types";
 import { expect, workspaceTest as test } from "./fixtures/electronApp";
 import { openCatalogGlyph } from "./fixtures/appLocators";
-import {
-  addSquare,
-  hoverVisibleUnselectedPoint,
-  selectVisiblePoint,
-} from "./fixtures/editorInteractions";
+import { addSquare } from "./fixtures/editorInteractions";
 
 interface NavigationGlyphs {
   firstId: GlyphId;
@@ -23,18 +19,6 @@ async function createNavigationGlyphs(page: Page): Promise<NavigationGlyphs> {
     await workspace.font.editCoordinator.settled();
     return { firstId: first.id, secondId: second.id };
   });
-}
-
-async function openGlyph(page: Page, glyphId: GlyphId): Promise<void> {
-  await page.evaluate(async (id) => {
-    const font = window.shift?.font;
-    if (!font) throw new Error("Expected workspace font");
-
-    await font.loadGlyph(id);
-    window.location.hash = `#/editor/${encodeURIComponent(id)}`;
-  }, glyphId);
-  await page.waitForURL(new RegExp(`#/editor/${encodeURIComponent(glyphId)}$`));
-  await expect(page.locator("#scene-canvas")).toBeVisible();
 }
 
 async function returnHome(page: Page): Promise<void> {
@@ -54,9 +38,12 @@ async function currentGlyph(page: Page) {
   });
 }
 
-test("preserves confirmed edits and document history across glyph navigation", async ({ page }) => {
+test("preserves confirmed edits and document history across glyph navigation", async ({
+  page,
+  editor,
+}) => {
   const glyphs = await createNavigationGlyphs(page);
-  await openGlyph(page, glyphs.firstId);
+  await editor.openGlyph(glyphs.firstId);
 
   const authored = await addSquare(page);
   expect(authored).toBe(4);
@@ -71,12 +58,12 @@ test("preserves confirmed edits and document history across glyph navigation", a
   await expect
     .poll(() => page.evaluate(() => window.shift?.editor.scene.nodesOfKind("glyph").length))
     .toBe(0);
-  await openGlyph(page, glyphs.secondId);
+  await editor.openGlyph(glyphs.secondId);
   const secondGlyph = await currentGlyph(page);
   expect(secondGlyph).toEqual({ glyphId: glyphs.secondId, contourCount: 0 });
 
   await returnHome(page);
-  await openGlyph(page, glyphs.firstId);
+  await editor.openGlyph(glyphs.firstId);
   expect((await currentGlyph(page)).contourCount).toBe(1);
 
   await page.evaluate(async () => {
@@ -90,7 +77,7 @@ test("preserves confirmed edits and document history across glyph navigation", a
   await expect.poll(async () => (await currentGlyph(page)).contourCount).toBe(1);
 });
 
-test("starts a fresh Pen context after navigating to another glyph", async ({ page }) => {
+test("starts a fresh Pen context after navigating to another glyph", async ({ page, editor }) => {
   const glyphs = await createNavigationGlyphs(page);
   await openCatalogGlyph(page, "navigationA", glyphs.firstId);
   await page.getByRole("button", { name: "Pen Tool (P)" }).click();
@@ -107,7 +94,7 @@ test("starts a fresh Pen context after navigating to another glyph", async ({ pa
     secondBounds.x + secondBounds.width / 2,
     secondBounds.y + secondBounds.height / 2,
   );
-  await page.evaluate(async () => window.shift?.font.editCoordinator.settled());
+  await editor.waitForIdle();
 
   const pointCounts = await page.evaluate(({ firstId, secondId }) => {
     const editor = window.shift?.editor;
@@ -122,12 +109,12 @@ test("starts a fresh Pen context after navigating to another glyph", async ({ pa
   expect(pointCounts).toEqual({ first: 1, second: 1 });
 });
 
-test("clears transient editor state when navigating between glyphs", async ({ page }) => {
+test("clears transient editor state when navigating between glyphs", async ({ page, editor }) => {
   const glyphs = await createNavigationGlyphs(page);
   await openCatalogGlyph(page, "navigationA", glyphs.firstId);
   await addSquare(page);
-  await selectVisiblePoint(page);
-  await hoverVisibleUnselectedPoint(page);
+  await editor.selectVisiblePoint();
+  await editor.hoverVisibleUnselectedPoint();
 
   await returnHome(page);
   await openCatalogGlyph(page, "navigationB", glyphs.secondId);

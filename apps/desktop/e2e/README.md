@@ -69,6 +69,24 @@ Post-merge `main` workflows do not repeat the E2E suites for the same commit. Ru
 
 The `platform` project concentrates on native desktop boundaries: document lifecycle, Save and Save As, recovery after forced termination, application quit, native menus, Unicode filesystem paths, and import/export persistence. On Linux, the E2E runner automatically creates an isolated `1920×1080×24` Xvfb display with Fluxbox so native maximize, focus, and window-placement behavior has a window manager. Both dependencies are available in the Nix dev shell. GPU and performance behavior remain separate and run directly against the host desktop and GPU.
 
+### Editor driver
+
+Workspace fixtures expose an `editor: EditorDriver` alongside the Playwright `page`. Use the driver for semantic editor actions and domain observations; keep visible UI assertions in the spec:
+
+```ts
+test("deletes a selected point", async ({ editor }) => {
+  await editor.openGlyphByName("I");
+  const before = await editor.outline();
+
+  await editor.clickPoint(before[0].points[1].id);
+  await editor.press("Delete");
+
+  expect(await editor.outline()).not.toEqual(before);
+});
+```
+
+Actions that can persist geometry wait for the workspace edit pipeline before returning. `outline()`, `pointPosition()`, and `pointTargets()` also read confirmed geometry, so specs should not call `editCoordinator.settled()` directly. Live gesture methods such as `selectionBounds()` intentionally observe the current preview. Use `waitForIdle()` after a raw Playwright gesture that cannot be expressed as one driver action.
+
 Outside an active development shell, the portable Linux and macOS invocation is:
 
 ```sh

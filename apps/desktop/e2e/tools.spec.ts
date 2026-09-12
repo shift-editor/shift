@@ -1,12 +1,12 @@
 import type { Page } from "@playwright/test";
-import { workspaceTest as test, expect, navigateToEditor } from "./fixtures/electronApp";
-import {
-  pointPosition,
-  selectVisiblePoint,
-  type EditablePointDrag,
-} from "./fixtures/editorInteractions";
+import { workspaceTest as test, expect } from "./fixtures/electronApp";
+import type { PointDrag } from "./fixtures/types";
 
-async function dragWithEarlyCaptureLoss(page: Page, point: EditablePointDrag): Promise<void> {
+async function dragWithSyntheticPointerEnd(
+  page: Page,
+  point: PointDrag,
+  type: "lostpointercapture" | "pointercancel",
+): Promise<void> {
   const canvas = page.locator("#interactive-canvas");
   await canvas.evaluate((element) => {
     element.addEventListener(
@@ -18,14 +18,14 @@ async function dragWithEarlyCaptureLoss(page: Page, point: EditablePointDrag): P
     );
   });
 
-  await page.mouse.move(point.start.x, point.start.y);
+  await page.mouse.move(point.startPagePosition.x, point.startPagePosition.y);
   await page.mouse.down();
-  await page.mouse.move(point.end.x, point.end.y, { steps: 5 });
+  await page.mouse.move(point.endPagePosition.x, point.endPagePosition.y, { steps: 5 });
   const pointerId = Number(await canvas.getAttribute("data-e2e-pointer-id"));
   await canvas.evaluate(
     (element, event) => {
       element.dispatchEvent(
-        new PointerEvent("lostpointercapture", {
+        new PointerEvent(event.type, {
           bubbles: true,
           pointerId: event.pointerId,
           pointerType: "mouse",
@@ -37,43 +37,12 @@ async function dragWithEarlyCaptureLoss(page: Page, point: EditablePointDrag): P
         }),
       );
     },
-    { pointerId, x: point.end.x, y: point.end.y },
-  );
-  await page.mouse.up();
-}
-
-async function dragWithPointerCancel(page: Page, point: EditablePointDrag): Promise<void> {
-  const canvas = page.locator("#interactive-canvas");
-  await canvas.evaluate((element) => {
-    element.addEventListener(
-      "pointerdown",
-      (event) => {
-        element.dataset.e2ePointerId = String((event as PointerEvent).pointerId);
-      },
-      { once: true },
-    );
-  });
-
-  await page.mouse.move(point.start.x, point.start.y);
-  await page.mouse.down();
-  await page.mouse.move(point.end.x, point.end.y, { steps: 5 });
-  const pointerId = Number(await canvas.getAttribute("data-e2e-pointer-id"));
-  await canvas.evaluate(
-    (element, event) => {
-      element.dispatchEvent(
-        new PointerEvent("pointercancel", {
-          bubbles: true,
-          pointerId: event.pointerId,
-          pointerType: "mouse",
-          isPrimary: true,
-          button: -1,
-          buttons: 0,
-          clientX: event.x,
-          clientY: event.y,
-        }),
-      );
+    {
+      type,
+      pointerId,
+      x: point.endPagePosition.x,
+      y: point.endPagePosition.y,
     },
-    { pointerId, x: point.end.x, y: point.end.y },
   );
   await page.mouse.up();
 }
@@ -87,8 +56,8 @@ const TOOL_LABELS: Record<string, string> = {
 };
 
 test.describe("Canvas pointer lifecycle", () => {
-  test.beforeEach(async ({ page }) => {
-    await navigateToEditor(page, "41");
+  test.beforeEach(async ({ editor }) => {
+    await editor.openGlyphByUnicode("41");
   });
 
   test("clears the idle pointer on leave but preserves it during capture", async ({ page }) => {
@@ -120,32 +89,30 @@ test.describe("Canvas pointer lifecycle", () => {
     await page.mouse.up();
   });
 
-  test("commits a point drag when capture is lost before pointerup", async ({ page }) => {
-    const point = await selectVisiblePoint(page);
+  test("commits a point drag when capture is lost before pointerup", async ({ page, editor }) => {
+    const point = await editor.selectVisiblePoint();
 
-    await dragWithEarlyCaptureLoss(page, point);
-    await page.evaluate(async () => window.shift?.font.editCoordinator.settled());
+    await dragWithSyntheticPointerEnd(page, point, "lostpointercapture");
 
-    const after = await pointPosition(page, point.id);
-    expect(after.x).toBeCloseTo(point.expected.x);
-    expect(after.y).toBeCloseTo(point.expected.y);
+    const after = await editor.pointPosition(point.id);
+    expect(after.x).toBeCloseTo(point.expectedGlyphPosition.x);
+    expect(after.y).toBeCloseTo(point.expectedGlyphPosition.y);
   });
 
-  test("rolls back a point drag canceled by the DOM", async ({ page }) => {
-    const point = await selectVisiblePoint(page);
-    const before = await pointPosition(page, point.id);
+  test("rolls back a point drag canceled by the DOM", async ({ page, editor }) => {
+    const point = await editor.selectVisiblePoint();
+    const before = await editor.pointPosition(point.id);
 
-    await dragWithPointerCancel(page, point);
-    await page.evaluate(async () => window.shift?.font.editCoordinator.settled());
+    await dragWithSyntheticPointerEnd(page, point, "pointercancel");
 
-    expect(await pointPosition(page, point.id)).toEqual(before);
+    expect(await editor.pointPosition(point.id)).toEqual(before);
     await expect(page.getByTestId("editor-shell")).toHaveAttribute("data-gesture", "idle");
   });
 });
 
 test.describe("Toolbar tools", () => {
-  test.beforeEach(async ({ page }) => {
-    await navigateToEditor(page, "41");
+  test.beforeEach(async ({ editor }) => {
+    await editor.openGlyphByUnicode("41");
   });
 
   for (const [tool, label] of Object.entries(TOOL_LABELS)) {
@@ -235,6 +202,7 @@ test.describe("Toolbar tools", () => {
   for (const kind of ["Rectangle", "Ellipse"]) {
     test(`inspects a live ${kind} draft and keeps its identity on release`, async ({
       page,
+      editor,
     }, testInfo) => {
       if (kind === "Ellipse") {
         await page.getByRole("button", { name: "Rectangle Tool (R) options" }).click();
@@ -291,13 +259,11 @@ test.describe("Toolbar tools", () => {
       });
 
       await page.mouse.up();
-      await page.evaluate(async () => window.shift!.font.editCoordinator.settled());
+      await editor.waitForIdle();
       await expect
         .poll(() => page.evaluate(() => window.shift!.editor.toolCell.peek()?.id))
         .toBe("select");
-      await expect
-        .poll(() => page.evaluate(() => window.shift!.editor.selection.ids))
-        .toEqual([draft.id]);
+      await expect.poll(() => editor.selectionIds()).toEqual([draft.id]);
       await expect(properties.getByLabel("Width", { exact: true })).toBeEnabled();
       await expect(properties.getByLabel("Width", { exact: true })).toHaveValue(
         String(Math.round(draft.bounds.width)),
@@ -312,9 +278,10 @@ test.describe("Toolbar tools", () => {
 
   test("updates an ellipse draft with Shift and restores the previous selection on Escape", async ({
     page,
+    editor,
   }) => {
-    await page.keyboard.press("Meta+a");
-    const selection = await page.evaluate(() => window.shift!.editor.selection.ids);
+    await editor.selectAll();
+    const selection = await editor.selectionIds();
     await page.getByRole("button", { name: "Rectangle Tool (R) options" }).click();
     await page.getByRole("menuitemcheckbox", { name: "Ellipse O" }).click();
     const canvas = page.locator("#interactive-canvas");
@@ -343,9 +310,7 @@ test.describe("Toolbar tools", () => {
     await expect(height).toHaveValue(String(Math.round(draft.bounds.height)));
     await page.keyboard.press("Escape");
     await page.mouse.up();
-    await expect
-      .poll(() => page.evaluate(() => window.shift!.editor.selection.ids))
-      .toEqual(selection);
+    await expect.poll(() => editor.selectionIds()).toEqual(selection);
     expect(await page.evaluate((id) => window.shift!.editor.object(id), draft.ids[0])).toBeNull();
   });
 

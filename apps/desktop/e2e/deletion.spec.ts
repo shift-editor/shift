@@ -5,7 +5,7 @@ import {
   expect,
   waitForWorkspaceReady,
 } from "./fixtures/electronApp";
-import { openGlyphRoute } from "./fixtures/appLocators";
+import { EditorDriver } from "./fixtures/EditorDriver";
 import {
   clickApplicationMenuItem,
   killApp,
@@ -13,49 +13,6 @@ import {
   relaunchApp,
   runCommand,
 } from "./fixtures/documentLifecycle";
-
-async function outline(page: Page) {
-  return page.evaluate(async () => {
-    const editor = window.shift?.editor;
-    if (!editor) throw new Error("Expected editor");
-    await editor.font.editCoordinator.settled();
-    const node = editor.scene.nodesOfKind("glyph")[0];
-    const layer = node ? editor.glyphForId(node.glyphId)?.layerForSource(node.sourceId) : null;
-    if (!layer) throw new Error("Expected authored layer");
-    return layer.contours.map((contour) => ({
-      id: contour.id,
-      closed: contour.closed,
-      points: contour.points.map((point) => ({
-        id: point.id,
-        x: point.x,
-        y: point.y,
-        pointType: point.pointType,
-        smooth: point.smooth,
-      })),
-      segments: contour.segments().map((segment) => segment.type),
-    }));
-  });
-}
-
-async function clickPoint(page: Page, id: string): Promise<void> {
-  const position = await page.evaluate((pointId) => {
-    const editor = window.shift?.editor;
-    const node = editor?.scene.nodesOfKind("glyph")[0];
-    const point = node
-      ? editor
-          ?.glyphForId(node.glyphId)
-          ?.layerForSource(node.sourceId)
-          ?.allPoints.find((candidate) => candidate.id === pointId)
-      : null;
-    if (!editor || !node || !point) throw new Error("Expected editable point");
-    return editor.projectSceneToScreen({
-      x: point.x + node.position.x,
-      y: point.y + node.position.y,
-    });
-  }, id);
-  await page.locator("#interactive-canvas").click({ position });
-  await expect.poll(() => page.evaluate(() => window.shift?.editor.selection.ids)).toEqual([id]);
-}
 
 async function renderedSegments(page: Page): Promise<boolean> {
   return page.evaluate(() => {
@@ -87,19 +44,15 @@ async function renderedSegments(page: Page): Promise<boolean> {
   });
 }
 
-test.beforeEach(async ({ page }) => {
-  const glyphId = await page.evaluate(
-    () => window.shift?.font.glyphRecords().find((glyph) => glyph.name === "I")?.id,
-  );
-  if (!glyphId) throw new Error("Expected I glyph");
-  await openGlyphRoute(page, glyphId);
-  await page.getByRole("button", { name: "Select Tool (V)" }).click();
-  await page.keyboard.press("ControlOrMeta+a");
-  await page.keyboard.press("Backspace");
-  await expect.poll(() => outline(page)).toEqual([]);
+test.beforeEach(async ({ page, editor }) => {
+  await editor.openGlyphByName("I");
+  await editor.selectTool("select");
+  await editor.selectAll();
+  await editor.press("Backspace");
+  await expect.poll(() => editor.outline()).toEqual([]);
 
-  await page.getByRole("button", { name: "Pen Tool (P)" }).click();
-  const canvas = page.locator("#interactive-canvas");
+  await editor.selectTool("pen");
+  const canvas = editor.canvas;
   const bounds = await canvas.boundingBox();
   if (!bounds) throw new Error("Expected interactive canvas bounds");
   await canvas.click({ position: { x: bounds.width * 0.1, y: bounds.height * 0.6 } });
@@ -118,32 +71,34 @@ test.beforeEach(async ({ page }) => {
     );
     await page.mouse.up();
   }
-  await page.getByRole("button", { name: "Select Tool (V)" }).click();
+  await editor.selectTool("select");
   await expect
-    .poll(async () => (await outline(page))[0]?.segments)
+    .poll(async () => (await editor.outline())[0]?.segments)
     .toEqual(["cubic", "cubic", "cubic", "cubic"]);
   await expect.poll(() => renderedSegments(page)).toBe(true);
 });
 
 test("Delete fits a selected point and undo/redo restores the exact outline", async ({
   page,
+  editor,
 }, testInfo) => {
-  const before = await outline(page);
-  const selected = before[0].points.filter((point) => point.pointType === "onCurve")[2];
-  await clickPoint(page, selected.id);
+  const before = await editor.outline();
+  const selected = before[0].onCurvePoints[2];
+  await editor.clickPoint(selected.id);
   await page.screenshot({ path: testInfo.outputPath("before-delete.png") });
   await testInfo.attach("before-delete", {
     path: testInfo.outputPath("before-delete.png"),
     contentType: "image/png",
   });
-  await page.keyboard.press("Delete");
+
+  await editor.press("Delete");
   await expect
-    .poll(async () => (await outline(page))[0].segments)
+    .poll(async () => (await editor.outline())[0].segments)
     .toEqual(["cubic", "cubic", "cubic"]);
-  const after = await outline(page);
+  const after = await editor.outline();
   expect(after[0].points.some((point) => point.id === selected.id)).toBe(false);
-  expect(after[0].points.filter((point) => point.pointType === "onCurve")).toEqual(
-    before[0].points.filter((point) => point.pointType === "onCurve" && point.id !== selected.id),
+  expect(after[0].onCurvePoints).toEqual(
+    before[0].onCurvePoints.filter((point) => point.id !== selected.id),
   );
   await expect.poll(() => renderedSegments(page)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath("after-fitted-delete.png") });
@@ -151,20 +106,22 @@ test("Delete fits a selected point and undo/redo restores the exact outline", as
     path: testInfo.outputPath("after-fitted-delete.png"),
     contentType: "image/png",
   });
-  await page.keyboard.press("ControlOrMeta+z");
-  await expect.poll(() => outline(page)).toEqual(before);
-  await page.keyboard.press("ControlOrMeta+Shift+z");
-  await expect.poll(() => outline(page)).toEqual(after);
+
+  await editor.undo();
+  await expect.poll(() => editor.outline()).toEqual(before);
+  await editor.redo();
+  await expect.poll(() => editor.outline()).toEqual(after);
 });
 
 test("Delete joins corner endpoints as a line without creating handles", async ({
   page,
+  editor,
 }, testInfo) => {
-  await page.keyboard.press("ControlOrMeta+a");
-  await page.keyboard.press("Backspace");
-  await expect.poll(() => outline(page)).toEqual([]);
-  await page.getByRole("button", { name: "Pen Tool (P)" }).click();
-  const canvas = page.locator("#interactive-canvas");
+  await editor.selectAll();
+  await editor.press("Backspace");
+  await expect.poll(() => editor.outline()).toEqual([]);
+  await editor.selectTool("pen");
+  const canvas = editor.canvas;
   const bounds = await canvas.boundingBox();
   if (!bounds) throw new Error("Expected interactive canvas bounds");
   for (const point of [
@@ -174,18 +131,19 @@ test("Delete joins corner endpoints as a line without creating handles", async (
   ]) {
     await canvas.click({ position: { x: point.x * bounds.width, y: point.y * bounds.height } });
   }
-  await page.getByRole("button", { name: "Select Tool (V)" }).click();
-  await expect.poll(async () => (await outline(page))[0]?.segments).toEqual(["line", "line"]);
-  const before = await outline(page);
-  await clickPoint(page, before[0].points[1].id);
+  await editor.selectTool("select");
+  await expect.poll(async () => (await editor.outline())[0]?.segments).toEqual(["line", "line"]);
+  const before = await editor.outline();
+  await editor.clickPoint(before[0].points[1].id);
   await page.screenshot({ path: testInfo.outputPath("before-line-delete.png") });
   await testInfo.attach("before-line-delete", {
     path: testInfo.outputPath("before-line-delete.png"),
     contentType: "image/png",
   });
-  await page.keyboard.press("Delete");
-  await expect.poll(async () => (await outline(page))[0]?.segments).toEqual(["line"]);
-  const after = await outline(page);
+
+  await editor.press("Delete");
+  await expect.poll(async () => (await editor.outline())[0]?.segments).toEqual(["line"]);
+  const after = await editor.outline();
   expect(after[0].points).toEqual([before[0].points[0], before[0].points[2]]);
   await expect.poll(() => renderedSegments(page)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath("after-line-delete.png") });
@@ -193,26 +151,28 @@ test("Delete joins corner endpoints as a line without creating handles", async (
     path: testInfo.outputPath("after-line-delete.png"),
     contentType: "image/png",
   });
-  await page.keyboard.press("ControlOrMeta+z");
-  await expect.poll(() => outline(page)).toEqual(before);
-  await page.keyboard.press("ControlOrMeta+Shift+z");
-  await expect.poll(() => outline(page)).toEqual(after);
+
+  await editor.undo();
+  await expect.poll(() => editor.outline()).toEqual(before);
+  await editor.redo();
+  await expect.poll(() => editor.outline()).toEqual(after);
 });
 
 test("Shift+Backspace leaves two open fragments and survives save/reopen", async ({
   page,
+  editor,
   electronApp,
   saveShiftPath,
   testRoot,
 }, testInfo) => {
-  const before = await outline(page);
-  const selected = before[0].points.filter((point) => point.pointType === "onCurve")[2];
-  await clickPoint(page, selected.id);
-  await page.keyboard.press("Shift+Backspace");
+  const before = await editor.outline();
+  const selected = before[0].onCurvePoints[2];
+  await editor.clickPoint(selected.id);
+  await editor.press("Shift+Backspace");
   await expect
-    .poll(async () => (await outline(page)).map((contour) => contour.segments))
+    .poll(async () => (await editor.outline()).map((contour) => contour.segments))
     .toEqual([["cubic"], ["cubic"]]);
-  const after = await outline(page);
+  const after = await editor.outline();
   expect(after.map((contour) => contour.closed)).toEqual([false, false]);
   expect(after.flatMap((contour) => contour.points)).toEqual([
     ...before[0].points.slice(0, 4),
@@ -224,10 +184,11 @@ test("Shift+Backspace leaves two open fragments and survives save/reopen", async
     path: testInfo.outputPath("after-gap-delete.png"),
     contentType: "image/png",
   });
-  await page.keyboard.press("ControlOrMeta+z");
-  await expect.poll(() => outline(page)).toEqual(before);
-  await page.keyboard.press("ControlOrMeta+Shift+z");
-  await expect.poll(() => outline(page)).toEqual(after);
+
+  await editor.undo();
+  await expect.poll(() => editor.outline()).toEqual(before);
+  await editor.redo();
+  await expect.poll(() => editor.outline()).toEqual(after);
   await runCommand(page, electronApp, "file.saveAs");
   await expect.poll(() => fs.existsSync(saveShiftPath)).toBe(true);
   const glyphId = await page.evaluate(
@@ -242,8 +203,9 @@ test("Shift+Backspace leaves two open fragments and survives save/reopen", async
     await launcher.getByRole("button", { name: /Load font/ }).click();
     const reopenedPage = await opened;
     await waitForWorkspaceReady(reopenedPage);
-    await openGlyphRoute(reopenedPage, glyphId);
-    expect(await outline(reopenedPage)).toEqual(after);
+    const reopenedEditor = new EditorDriver(reopenedPage);
+    await reopenedEditor.openGlyph(glyphId);
+    expect(await reopenedEditor.outline()).toEqual(after);
     await expect.poll(() => renderedSegments(reopenedPage)).toBe(true);
     await reopenedPage.screenshot({ path: testInfo.outputPath("reopened-gap-delete.png") });
     await testInfo.attach("reopened-gap-delete", {
@@ -258,14 +220,15 @@ test("Shift+Backspace leaves two open fragments and survives save/reopen", async
 for (const key of ["Backspace", "Shift+Delete"]) {
   test(`${key} on a cubic handle removes both controls without changing the next curve`, async ({
     page,
+    editor,
   }) => {
-    const before = await outline(page);
-    await clickPoint(page, before[0].points[1].id);
-    await page.keyboard.press(key);
+    const before = await editor.outline();
+    await editor.clickPoint(before[0].points[1].id);
+    await editor.press(key);
     await expect
-      .poll(async () => (await outline(page))[0].segments)
+      .poll(async () => (await editor.outline())[0].segments)
       .toEqual(["line", "cubic", "cubic", "cubic"]);
-    expect((await outline(page))[0].points).toEqual([
+    expect((await editor.outline())[0].points).toEqual([
       before[0].points[0],
       ...before[0].points.slice(3),
     ]);
@@ -275,15 +238,16 @@ for (const key of ["Backspace", "Shift+Delete"]) {
 
 test("native Delete uses fitted deletion rather than raw point removal", async ({
   page,
+  editor,
   electronApp,
 }) => {
-  const before = await outline(page);
-  const selected = before[0].points.filter((point) => point.pointType === "onCurve")[2];
-  await clickPoint(page, selected.id);
+  const before = await editor.outline();
+  const selected = before[0].onCurvePoints[2];
+  await editor.clickPoint(selected.id);
   await clickApplicationMenuItem(page, electronApp, "edit.deleteSelection");
   await expect
-    .poll(async () => (await outline(page))[0].segments)
+    .poll(async () => (await editor.outline())[0].segments)
     .toEqual(["cubic", "cubic", "cubic"]);
-  expect((await outline(page))[0].points.some((point) => point.id === selected.id)).toBe(false);
+  expect((await editor.outline())[0].points.some((point) => point.id === selected.id)).toBe(false);
   await expect.poll(() => renderedSegments(page)).toBe(true);
 });
