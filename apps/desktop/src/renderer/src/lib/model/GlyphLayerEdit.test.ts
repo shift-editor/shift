@@ -65,10 +65,12 @@ describe("glyph layer edits preserve committed preview bases", () => {
     await editor.settle();
     expect(layer.contour(acceptedContourId)).not.toBeNull();
     expect(layer.point(previewPointId!)).toMatchObject({ x: 400, y: 300 });
+    expect(layer.contourIdOfPoint(previewPointId!)).toBe(previewContourId);
 
     edit.cancel();
     expect(layer.contour(acceptedContourId)).not.toBeNull();
     expect(layer.contour(previewContourId)).toBeNull();
+    expect(layer.contourIdOfPoint(previewPointId!)).toBeNull();
   });
 
   it("previews, finishes, and undoes through the workspace ledger", async () => {

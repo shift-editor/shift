@@ -12,6 +12,7 @@ Fine-grained reactivity system providing automatic dependency tracking and effic
 - **Architecture Invariant:** During `batch`, only effects are deferred. Computed values remain available with fresh data inside the batch body.
 - **Architecture Invariant: CRITICAL:** The module-level `currentComputation` variable is the sole mechanism for dependency tracking. Any code that saves/restores it incorrectly will silently break the entire reactive graph. `untracked` and the internal `#recompute`/`execute` methods carefully save and restore this variable.
 - **Architecture Invariant: CRITICAL:** Re-entrant notification is guarded by the `isNotifying` flag. Signals written during notification are queued in `pendingNotifications` and flushed after the current notification pass. Without this, subscribers could see inconsistent state.
+- **Architecture Invariant:** Signal diagnostics never own reactive node lifetimes. `debugNodes` stores weak references; `debugNodeFinalizer` removes collected entries, and `liveDebugNodes()` enumerates reachable nodes while pruning dead entries. Disposed nodes remain inspectable while another owner retains them. Collection timing is nondeterministic, so registry-wide queries describe reachable graphs rather than historical allocations.
 - **Architecture Invariant:** Signal-bearing fields and accessors use the `*Cell` suffix. The plain noun is the unwrapped snapshot value: `zoomCell` is `Signal<number>`, `zoom` is `number`.
 - **Architecture Invariant: Convention:** `fooCell` accessors are for raw state or cheap computeds that are safe to subscribe to via `useSignalState`. Expensive derived values (bounds, paths, sidebearings) are exposed as plain getters and pulled on demand. For React live display of a derived value, write a purpose-specific hook (e.g. `useSelectionBounds`) that subscribes to the raw inputs and pulls the getter at render time.
 - **Architecture Invariant:** `ComputedSignal.dispose()` clears both its `dependencies` and its `#subscribers`. Anything that was reaching the source signal _through_ this computed loses that path. If the consumer needs to keep firing across the lifetime of the source, it must hold a **direct** subscription to the source — not rely on a chain that passes through a disposable intermediate (e.g. an LRU-cached object's computed).
@@ -23,7 +24,8 @@ signals/
   signal.ts          — signal, computed, effect, batch, untracked, isTracking
   useSignal.ts       — useSignalState (React bridge; optional frame scheduling)
   index.ts           — public re-exports
-  signal.test.ts     — unit tests (vitest)
+  signal.test.ts     — reactivity and graph-inspection tests (vitest)
+  signalCollection.test.ts — real-GC collection, disposal, and ownership tests
 ```
 
 A second React bridge, `useSignalEffect` (lifecycle-scoped effect), lives in `@/hooks/useSignalEffect`. Purpose-specific hooks for derived values live under `hooks/`:
@@ -100,11 +102,11 @@ Pass `{ equals: () => false }` as the second argument to `signal()`. This is use
 ## Verification
 
 ```bash
-# Run reactive module tests
-cd apps/desktop && npx vitest run src/renderer/src/lib/signals/signal.test.ts
+# Run reactive module tests, including collection through Node's real V8 inspector
+pnpm test:desktop src/renderer/src/lib/signals/
 
 # Run full test suite
-cd apps/desktop && npm test
+pnpm test
 ```
 
 ## Related

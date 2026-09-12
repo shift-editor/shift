@@ -13,7 +13,10 @@ let currentComputation: Computation | null = null;
 
 let nextDebugId = 1;
 let currentEpoch = 0;
-const debugNodes = new Map<number, DebugNode>();
+const debugNodes = new Map<number, WeakRef<DebugNode>>();
+const debugNodeFinalizer = new FinalizationRegistry<number>((debugId) => {
+  debugNodes.delete(debugId);
+});
 let traceSignalWrites = false;
 
 // Batch state
@@ -91,7 +94,20 @@ function computedDependency(dependency: SignalNode): Computation {
 }
 
 function registerDebugNode(node: DebugNode): void {
-  debugNodes.set(node.debugId, node);
+  debugNodes.set(node.debugId, new WeakRef(node));
+  debugNodeFinalizer.register(node, node.debugId);
+}
+
+function* liveDebugNodes(): IterableIterator<DebugNode> {
+  for (const [debugId, reference] of debugNodes) {
+    const node = reference.deref();
+    if (!node) {
+      debugNodes.delete(debugId);
+      continue;
+    }
+
+    yield node;
+  }
 }
 
 function debugSnapshot(node: DebugNode): SignalDebugSnapshot {
@@ -853,7 +869,12 @@ export function traceReactiveRun(options?: ReactiveRunTraceOptions): void {
 }
 
 /**
- * Development helper for inspecting the signal dependency graph.
+ * Inspects reachable signal dependency graphs without extending node lifetimes.
+ *
+ * @remarks
+ * Registry-wide queries include disposed nodes while another owner retains them,
+ * and omit collected nodes. Results reflect garbage-collection timing rather than
+ * a historical log; inspection snapshots do not retain the original nodes.
  */
 export const signalDebug = {
   traceWrites(enabled = true): void {
@@ -871,7 +892,7 @@ export const signalDebug = {
       return formatGraphNode(root, resolvedOptions, new Set(), 0);
     }
 
-    return Array.from(debugNodes.values())
+    return Array.from(liveDebugNodes())
       .map((debugNode) => formatGraphNode(debugNode, resolvedOptions, new Set(), 0))
       .join("\n\n");
   },
@@ -882,9 +903,7 @@ export const signalDebug = {
       depth: options?.depth ?? 4,
     };
 
-    const matches = Array.from(debugNodes.values()).filter((node) =>
-      matchesDebugQuery(node, query),
-    );
+    const matches = Array.from(liveDebugNodes()).filter((node) => matchesDebugQuery(node, query));
     if (matches.length === 0) return `No signal debug nodes matched ${String(query)}.`;
 
     return matches
@@ -893,7 +912,7 @@ export const signalDebug = {
   },
 
   find(query: string | RegExp): readonly SignalDebugSnapshot[] {
-    return Array.from(debugNodes.values())
+    return Array.from(liveDebugNodes())
       .filter((node) => matchesDebugQuery(node, query))
       .map(debugSnapshot);
   },
@@ -907,6 +926,6 @@ export const signalDebug = {
   },
 
   list(): readonly SignalDebugSnapshot[] {
-    return Array.from(debugNodes.values()).map(debugSnapshot);
+    return Array.from(liveDebugNodes()).map(debugSnapshot);
   },
 };

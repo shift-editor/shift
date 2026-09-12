@@ -38,6 +38,8 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 
 **Architecture Invariant:** `Selection` is a dumb ordered set of branded object IDs. Mutations go through `select()`, `add()`, `remove()`, and `toggle()`; behavior and live bounds come from resolving those IDs through `Editor.object()`.
 
+**Architecture Invariant:** `Editor.insertContent()` inserts each non-empty contour's points through one `GlyphLayer.addPoints(contourId, edits)` call. All contours share one workspace transaction and undo step; returned identities preserve contour and point order, and portable geometry receives the requested offset exactly once.
+
 **Architecture Invariant:** Glyph-domain hit testing belongs to glyph geometry and editor glyph lookup helpers. Tool-specific controls, such as select bounding-box handles, are owned and hit-tested by the tool that renders them.
 
 **Architecture Invariant:** `Handles` tries the accelerated marker layer first and falls back to CPU canvas drawing if WebGL is unavailable. The marker-layer path packs all handle instances into a `Float32Array` for a single draw call. Handle styling describes location, not session capability: exact sources retain ordinary styles in authored and preview sessions; locations between sources use the `interpolated` theme state, including named instances unless they coincide with a source. This state overrides hover and selection styling without hiding handles during scrubbing.

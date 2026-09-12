@@ -330,8 +330,14 @@ export class GlyphLayerState {
   #publish(state: GlyphState): void {
     batch(() => {
       const buffers = this.#buffers.peek();
-      if (buffers.structure === state.structure) {
-        buffers.replaceValues(state.values);
+      if (GlyphGeometry.structuresEqual(buffers.structure, state.structure)) {
+        const values = buffers.snapshot;
+        if (
+          values.length !== state.values.length ||
+          !values.every((value, index) => Object.is(value, state.values[index]))
+        ) {
+          buffers.replaceValues(state.values);
+        }
       } else {
         this.#buffers.set(LayerBuffers.fromState(state));
       }

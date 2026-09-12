@@ -1,7 +1,7 @@
 import type { Locator, Page } from "@playwright/test";
 import type { Point2D, Rect2D } from "@shift/geo";
 import type { Point } from "@shift/glyph-state";
-import type { PointId, Unicode } from "@shift/types";
+import type { GlyphId, PointId, Unicode } from "@shift/types";
 import { waitForEditorReady } from "./appLocators";
 import type {
   ActiveGlyph,
@@ -20,7 +20,7 @@ const TOOL_LABELS = {
   ellipse: "Ellipse Tool (O)",
 } as const;
 
-async function waitForActiveGlyph(page: Page, glyphId: string): Promise<void> {
+async function waitForActiveGlyph(page: Page, glyphId: GlyphId): Promise<void> {
   await page.waitForFunction((expectedGlyphId) => {
     const editor = window.shift?.editor;
     const node = editor?.scene.nodesOfKind("glyph")[0];
@@ -121,7 +121,7 @@ export class EditorDriver {
    * Opens a known glyph and waits for scene publication.
    * @param glyphId - Glyph identity in the loaded workspace.
    */
-  async openGlyph(glyphId: string): Promise<void> {
+  async openGlyph(glyphId: GlyphId): Promise<void> {
     await this.page.evaluate(async (id) => {
       const font = window.shift?.font;
       if (!font) throw new Error("Expected font workspace");

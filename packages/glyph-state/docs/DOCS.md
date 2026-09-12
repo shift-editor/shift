@@ -60,6 +60,8 @@ const bounds = geometry.bounds;
 const preview = geometry.withPositionUpdates(positions);
 ```
 
+`Contour.pointAt` and endpoint getters read individual packed positions without materializing every point in the contour. On-curve endpoint searches inspect metadata first, including quadratic on-curve points; full `points` access remains lazily materialized. `GlyphGeometry.structuresEqual` compares ordered contour, point, anchor and component identities/metadata without coordinates, allowing owners to recognize an unchanged workspace echo independently of object identity.
+
 Renderer code should keep using cached `GlyphGeometry` instances from the model layer. Creating a geometry object is fine on source/state changes; doing it per segment draw or per hit-test candidate is not.
 
 ## Workflow recipes

@@ -21,10 +21,10 @@ interface VariableNavigationFixture {
 
 async function createVariableNavigationFixture(page: Page): Promise<VariableNavigationFixture> {
   return page.evaluate(async () => {
-    const workspace = window.shift;
-    if (!workspace) throw new Error("Expected authored workspace");
+    const session = window.shiftSession;
+    if (!session || session.mode !== "authored") throw new Error("Expected authored workspace");
 
-    const { editor, font } = workspace;
+    const { editor, font, catalog } = session;
     const first = editor.createGlyph("navigationVariable" as GlyphName);
     const second = editor.createGlyph("navigationSparse" as GlyphName);
     await font.editCoordinator.settled();
@@ -63,45 +63,54 @@ async function createVariableNavigationFixture(page: Page): Promise<VariableNavi
       hidden: false,
     });
     await font.editCoordinator.settled();
-    const boldLocation = new Map([[axisId, 900]]);
-    const boldSourceId = font.createSource("Navigation Bold", boldLocation);
-    await font.editCoordinator.settled();
-    font.materializeGlyphLayer(
-      firstGlyph.id,
-      boldSourceId,
-      firstRegular.id,
-      firstGlyph.geometryAt(boldLocation).values,
-    );
-    await font.editCoordinator.settled();
+    const { externalLocation, activeSourceId } = editor;
 
-    const firstBold = firstGlyph.layerForSource(boldSourceId);
-    const firstPoint = firstBold?.allPoints[0];
-    if (!firstBold || !firstPoint) throw new Error("Expected Navigation Bold layer");
-    firstBold.applyPositionPatch([
-      { kind: "point", id: firstPoint.id, x: firstPoint.x + 80, y: firstPoint.y + 40 },
-    ]);
-    firstBold.setXAdvance(700);
+    try {
+      await catalog.setLocation(
+        font.getAxes().map((axis) => (axis.id === axisId ? 900 : axis.default)),
+      );
+      const boldSourceId = font.createSource("Navigation Bold", editor.externalLocation);
+      await font.editCoordinator.settled();
+      font.materializeGlyphLayer(
+        firstGlyph.id,
+        boldSourceId,
+        firstRegular.id,
+        firstGlyph.geometryAt(editor.externalLocation).values,
+      );
+      await font.editCoordinator.settled();
 
-    const instanceId = font.createNamedInstance({
-      name: "Navigation Preview",
-      location: {
-        values: Object.fromEntries(
-          font
-            .getAxes()
-            .filter((axis) => axis.role === "external")
-            .map((axis) => [axis.id, axis.id === axisId ? 700 : axis.default]),
-        ),
-      },
-    });
-    await font.editCoordinator.settled();
-    return {
-      axisId,
-      firstGlyphId: first.id,
-      secondGlyphId: second.id,
-      regularSourceId,
-      boldSourceId,
-      instanceId,
-    };
+      const firstBold = firstGlyph.layerForSource(boldSourceId);
+      const firstPoint = firstBold?.allPoints[0];
+      if (!firstBold || !firstPoint) throw new Error("Expected Navigation Bold layer");
+      firstBold.applyPositionPatch([
+        { kind: "point", id: firstPoint.id, x: firstPoint.x + 80, y: firstPoint.y + 40 },
+      ]);
+      firstBold.setXAdvance(700);
+
+      const instanceId = font.createNamedInstance({
+        name: "Navigation Preview",
+        location: {
+          values: Object.fromEntries(
+            font
+              .getAxes()
+              .filter((axis) => axis.role === "external")
+              .map((axis) => [axis.id, axis.id === axisId ? 700 : axis.default]),
+          ),
+        },
+      });
+      await font.editCoordinator.settled();
+      return {
+        axisId,
+        firstGlyphId: first.id,
+        secondGlyphId: second.id,
+        regularSourceId,
+        boldSourceId,
+        instanceId,
+      };
+    } finally {
+      editor.setExternalLocation(externalLocation);
+      if (activeSourceId !== null) editor.selectSource(activeSourceId);
+    }
   });
 }
 
@@ -120,12 +129,14 @@ async function expectPreview(
       page.evaluate(
         ({ axisId, glyphId }) => {
           const workspace = window.shift;
-          const glyph = workspace?.editor.glyphForId(glyphId);
+          if (!workspace) return null;
+
+          const glyph = workspace.editor.glyphForId(glyphId);
           const geometry = glyph?.geometryAt(workspace.editor.externalLocation);
           const point = geometry?.allPoints[0];
           return {
-            location: workspace?.editor.externalLocation.get(axisId),
-            activeSourceId: workspace?.editor.activeSourceId,
+            location: workspace.editor.externalLocation.get(axisId),
+            activeSourceId: workspace.editor.activeSourceId,
             xAdvance: geometry?.xAdvance,
             firstPoint: point && { x: point.x, y: point.y },
           };

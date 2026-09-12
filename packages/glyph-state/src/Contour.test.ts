@@ -19,6 +19,41 @@ function contour(closed = false): Contour {
 }
 
 describe("Contour", () => {
+  it("reads the same wrapped point before and after materializing all points", () => {
+    const c = contour(true);
+    const cold = c.pointAt(-1);
+    expect(cold).toMatchObject({ id: "p3", x: 50, y: 100 });
+    expect(c.points[2]).toEqual(cold);
+    expect(c.pointAt(-1)).toEqual(cold);
+    expect(c.pointAt(3)?.id).toBe("p1");
+    expect(c.pointAt(-1, false)).toBeNull();
+    expect(c.pointAt(0.5)).toBeNull();
+    expect(c.pointAt(Infinity)).toBeNull();
+  });
+
+  it("finds quadratic on-curve endpoints without treating controls as endpoints", () => {
+    const data = contourData();
+    data.points[0]!.pointType = "offCurve";
+    data.points[1]!.pointType = "qCurve";
+    data.points[2]!.pointType = "offCurve";
+    const c = new Contour(data, new Float64Array([500, 0, 0, 100, 0, 50, 100]), 1);
+    expect(c.firstOnCurvePoint).toMatchObject({ id: "p2", x: 100, y: 0 });
+    expect(c.lastOnCurvePoint).toEqual(c.firstOnCurvePoint);
+    expect(c.firstPoint).toEqual(c.points[0]);
+    expect(c.lastPoint).toEqual(c.points[2]);
+  });
+
+  it("returns null for every empty-contour endpoint query", () => {
+    const data = contourData(true);
+    data.points = [];
+    const c = new Contour(data, new Float64Array([500]), 1);
+    expect(c.firstPoint).toBeNull();
+    expect(c.lastPoint).toBeNull();
+    expect(c.firstOnCurvePoint).toBeNull();
+    expect(c.lastOnCurvePoint).toBeNull();
+    expect(c.pointAt(-1)).toBeNull();
+  });
+
   it("projects point data from the flat values buffer", () => {
     const points = contour().points;
 

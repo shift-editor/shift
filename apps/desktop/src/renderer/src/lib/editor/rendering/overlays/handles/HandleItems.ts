@@ -1,4 +1,5 @@
 import type { PointId, ContourId } from "@shift/types";
+import { Bounds, type Bounds as BoundsType } from "@shift/geo";
 import type { SelectableId } from "@/types";
 import type { HandleState } from "@/types/graphics";
 import type { Hover } from "@/lib/editor/Hover";
@@ -26,12 +27,14 @@ export class HandleItems {
     contours: readonly GlyphRenderContour[],
     source: HandleStateSource,
     isVisible?: (pointId: PointId, contourId: ContourId) => boolean,
+    visibleBounds?: BoundsType,
   ): HandleDisplayList {
     return this.#fromShapes(
       contours,
       (contourIndex, pointIndex) =>
         this.#state(contours[contourIndex]!.points[pointIndex]!.id, source),
       isVisible,
+      visibleBounds,
     );
   }
 
@@ -39,6 +42,7 @@ export class HandleItems {
     contours: readonly GlyphRenderContour[],
     stateForPoint: (contourIndex: number, pointIndex: number) => HandleState,
     isVisible?: (pointId: PointId, contourId: ContourId) => boolean,
+    visibleBounds?: BoundsType,
   ): HandleDisplayList {
     let itemCount = 0;
 
@@ -50,6 +54,7 @@ export class HandleItems {
 
       for (let index = 0; index < count; index++) {
         const point = points[index]!;
+        if (visibleBounds && !Bounds.containsPoint(visibleBounds, point)) continue;
         if (isVisible && !isVisible(point.id, contour.id)) continue;
 
         const prev = index > 0 ? points[index - 1]! : contour.closed ? points[count - 1]! : null;

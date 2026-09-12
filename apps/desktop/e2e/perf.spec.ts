@@ -21,7 +21,6 @@ import type { PointId } from "@shift/types";
 import {
   test,
   expect,
-  navigateToEditor,
   generateContourData,
   computeStats,
   formatPerfTable,
@@ -46,7 +45,7 @@ const THRESHOLDS: Record<string, number> = {
   "nudge (all pts)": 60, // Immediate local interaction path; persistence settles asynchronously.
   "undo (all pts)": 1_000, // Full renderer↔utility ledger replay for a 50K-point patch.
   "redo (all pts)": 1_000,
-  "pen-tool (100 clicks)": 500, // Spiky due to GC — tighten after optimization
+  "pen input-to-render (100 clicks)": 500, // Includes browser input, persistence, and two frames.
   "pan (all selected)": 5,
   "zoom (all selected)": 5,
 };
@@ -108,8 +107,8 @@ test.describe("Performance — 50K points", () => {
     }
   });
 
-  test.beforeEach(async ({ page }) => {
-    await navigateToEditor(page, "53");
+  test.beforeEach(async ({ editor }) => {
+    await editor.openGlyphByUnicode("53");
   });
 
   /**
@@ -205,7 +204,7 @@ test.describe("Performance — 50K points", () => {
           times.push(performance.now() - start);
         }
 
-        layer.commitPositionPatch(updates);
+        layer.applyPositionPatch(updates);
         await editor.font.editCoordinator.settled();
         return times;
       },
@@ -253,7 +252,7 @@ test.describe("Performance — 50K points", () => {
           times.push(performance.now() - start);
         }
 
-        layer.commitPositionPatch(updates);
+        layer.applyPositionPatch(updates);
         await editor.font.editCoordinator.settled();
         return times;
       },
@@ -301,7 +300,7 @@ test.describe("Performance — 50K points", () => {
           times.push(performance.now() - start);
         }
 
-        layer.commitPositionPatch(updates);
+        layer.applyPositionPatch(updates);
         await editor.font.editCoordinator.settled();
         return times;
       },
@@ -370,7 +369,7 @@ test.describe("Performance — 50K points", () => {
           y: index + 10,
         }));
         layer.previewPositionPatch(updates);
-        layer.commitPositionPatch(updates);
+        layer.applyPositionPatch(updates);
         await editor.font.editCoordinator.settled();
 
         const undoTimes: number[] = [];
@@ -398,40 +397,37 @@ test.describe("Performance — 50K points", () => {
     assertPerf(redoStats);
   });
 
-  test("pen tool — rapid point placement on complex glyph", async ({ page }) => {
-    const contours = generateContourData(TARGET_POINTS);
+  test("pen tool — real clicks reach rendered geometry", async ({ page, editor }) => {
+    await page.evaluate(async (contours) => {
+      const editor = window.shift!.editor;
+      const inserted = editor.insertContent({ contours });
+      if (!inserted) throw new Error("contour insertion failed");
 
-    const samples = await page.evaluate(
-      async ({ contours, clickCount }) => {
-        const editor = window.shift!.editor;
-        const inserted = editor.insertContent({ contours });
-        if (!inserted) throw new Error("contour insertion failed");
+      await editor.font.editCoordinator.settled();
+    }, generateContourData(TARGET_POINTS));
+    await editor.selectTool("pen");
+    await editor.waitForCanvasRender();
 
-        await editor.font.editCoordinator.settled();
-        editor.setActiveTool("pen");
+    const initialCount = await editor.pointCount();
+    const before = await page.locator("#marker-canvas").screenshot();
+    const bounds = await editor.canvasBounds();
+    const samples: number[] = [];
 
-        const times: number[] = [];
+    for (let index = 0; index < 100; index++) {
+      const x =
+        bounds.x + 25 + (Math.floor(index / 8) % 2 === 0 ? index % 8 : 7 - (index % 8)) * 20;
+      const y = bounds.y + 80 + Math.floor(index / 8) * 20;
+      const start = performance.now();
 
-        for (let index = 0; index < clickCount; index++) {
-          const x = 100 + (index % 50) * 10;
-          const y = 100 + Math.floor(index / 50) * 10;
+      await page.mouse.click(x, y);
+      await editor.waitForCanvasRender();
+      samples.push(performance.now() - start);
+    }
 
-          const start = performance.now();
-          editor.toolManager.handlePointerDown(
-            { x, y },
-            { shiftKey: false, altKey: false, metaKey: false },
-          );
-          editor.toolManager.handlePointerUp({ x, y });
-          times.push(performance.now() - start);
-        }
+    expect(await editor.pointCount()).toBe(initialCount + 100);
+    expect((await page.locator("#marker-canvas").screenshot()).equals(before)).toBe(false);
 
-        await editor.font.editCoordinator.settled();
-        return times;
-      },
-      { contours, clickCount: 100 },
-    );
-
-    const stats = computeStats("pen-tool (100 clicks)", samples);
+    const stats = computeStats("pen input-to-render (100 clicks)", samples);
     results.push(stats);
     assertPerf(stats);
   });
