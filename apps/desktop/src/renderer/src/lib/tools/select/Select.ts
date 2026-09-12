@@ -19,6 +19,7 @@ import { TextRunHover } from "./behaviors/TextRunHover";
 import type { CursorType } from "@/types/editor";
 import { objectIsKindOf } from "@/types";
 import type { Canvas } from "@/lib/editor/rendering/Canvas";
+import { SnapLines } from "@/lib/editor/rendering/overlays/SnapLines";
 import { SelectBoundingBox } from "./BoundingBox";
 import { SelectMarquee } from "./Marquee";
 import { SelectUpgradePreview } from "./SelectUpgradePreview";
@@ -30,6 +31,7 @@ export class Select extends BaseTool<SelectState, Select> {
   readonly boundingBox = new SelectBoundingBox(this);
   readonly marquee = new SelectMarquee(this);
   readonly upgradePreview = new SelectUpgradePreview(this);
+  readonly #snapLines = new SnapLines();
 
   readonly behaviors: SelectBehavior[] = [
     new ToggleSmooth(),
@@ -178,5 +180,13 @@ export class Select extends BaseTool<SelectState, Select> {
 
     this.marquee.draw(canvas);
     this.upgradePreview.draw(canvas);
+
+    const state = this.getState();
+    if (state.type !== "translating" || state.translate.guides.length === 0) return;
+
+    const object = this.editor.objects(this.editor.selection.ids)[0];
+    if (!object) return;
+
+    this.#snapLines.draw(canvas, state.translate.guides, object.node.position);
   }
 }

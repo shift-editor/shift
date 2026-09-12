@@ -28,7 +28,7 @@ export interface PositionCondition {
   readonly when: () => boolean;
 }
 
-/** Direction segment emitted while a movement vector is quantized. */
+/** Direction segment optionally emitted while a movement vector is quantized. */
 export interface DirectionPositionGuide {
   readonly kind: "direction";
   readonly from: Point2D;

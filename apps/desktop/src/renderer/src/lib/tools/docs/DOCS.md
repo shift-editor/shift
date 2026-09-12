@@ -104,8 +104,9 @@ The tool calls `editor.hideHandles(contourId)` and registers its returned `showH
 
 - `Pen.activeEndpointCell` is the Pen tool's derived continuation truth. It follows the active contour through `GlyphLayer.geometryCell`, so local edits, workspace echoes, undo, and redo all resolve the latest on-curve endpoint from the same authored topology. `PenContext` retains only the active contour identity and a point-keyed transient outgoing handle.
 - A corner endpoint has no authored outgoing tangent; extending it as a cubic seeds the untouched control one third of the way toward the new anchor. A smooth endpoint carries its outgoing handle position explicitly and never receives that default.
-- `Pen.resolveCurve()` on the tool itself is the single resolver from speculative `PenCurve` state to the exact cubic. `PenStroke` topology edits and `HandleBehavior` drag previews both call it, so previewed and committed geometry cannot diverge.
-- `anchored -> dragging` begins a `GlyphLayerEdit` and immediately adds one complete cubic to the reactive authored layer. Outline, control-line, bounds, and handle rendering therefore derive from one current topology throughout the gesture.
+- `Pen.resolveCurve()` seeds the complete cubic topology through `PenStroke.beginCurve()`. The incoming control initially coincides with the new endpoint; `HandleBehavior.#move` then moves only that control through `layer.positions.within(edit)`, leaving the endpoint and previous control fixed. The outgoing handle in `PenCurve` is mirrored from the resolved incoming preview, so rendering and continuation use the same snapped geometry.
+- `anchored -> dragging` begins a `GlyphLayerEdit`, adds one complete cubic, and transfers completion/cancellation to the scoped `MoveEdit`. Outline, control-line, bounds, and handle rendering therefore derive from one current topology throughout the gesture.
+- Pen's `dragging.shiftKey` follows the processed drag sample. `onStateEnter` previews after that sample is published; `DirectionSnap.everyDegrees(15).around(endpoint)` constrains the mirrored handle direction while preserving length. Modifier-only key changes do not re-preview; the final release sample retains the gesture's last drag modifiers. The scoped `move.commit("Add cubic")` commits topology and positions together, while `discard()` restores both. Active direction feedback is mirrored onto the visible outgoing handle and rendered as the standard solid red line with endpoint crosses; Pen retains that feedback for horizontal and vertical handle directions. Click-only placement is unchanged.
 - `dragEnd` finishes that already-visible edit as one pending workspace transaction; it does not replace preview geometry. `dragCancel` cancels the edit and restores the latest accepted topology, including when an older workspace echo arrived during the drag.
 - Current and confirmed open-contour topology always ends on an on-curve point. The latest endpoint's outgoing handle remains Pen interaction state until a following segment consumes it; `PenOverlay` draws only that non-topological handle plus ready-state cursor chrome.
 
@@ -143,11 +144,27 @@ After `#runBehaviors`, if `next !== prev` (reference equality):
 
 Position transforms call `editor.positionSelection(ids)` once at interaction start, then create `selection.layer.positions.move(selection.targets)`, `.rotate(...)`, or `.scale(...)`. The behavior immediately registers `edit.discard()` with `ctx.onCancel()`. Preview methods always resolve from the operation's frozen position base; after `commit()` finishes the active `GlyphLayerEdit`, the behavior calls the returned function to dismiss rollback.
 
-Pen topology and non-affine position patches use `GlyphLayer.beginEdit()` directly and register `edit.cancel()` through the same drag scope. Pen constructs cubic point sequences with the generic `GlyphLayerEdit.addPoints()` primitive; `setPointSmooth()` and `setPositions()` mutate the ordinary reactive layer immediately. `finish(label)` restores the latest accepted base and replays the final operations through one workspace transaction in the same reactive batch; after finishing, the behavior dismisses rollback. An undismissed rollback restores the base without sending an intent.
+Pen starts topology through `GlyphLayer.beginEdit()`, constructs cubic points with `addPoints()`, then binds the incoming-control movement through `layer.positions.within(edit).move(...)`. It registers the move's `discard()` with the drag scope and completes both creation and movement through `commit("Add cubic")`. Non-affine patches such as BendCurve continue to own `GlyphLayerEdit` directly and register `edit.cancel()`. `finish(label)` restores the latest accepted base and replays the final operations through one workspace transaction in the same reactive batch; after finishing, the behavior dismisses rollback. An undismissed rollback restores the base without sending an intent.
 
 ### Shape completion and selection
 
 On drag end, Shape commits a valid rectangle as one transaction, selects its new contour, and switches to Select. A too-small or unavailable-layer result returns Shape to ready without creating geometry. The Select bounding box draws its outline without visible corner squares; resize and rotation hit zones remain active.
+
+### Selection direction snapping
+
+Select configures `TranslateInteraction.move` once at drag start through `#configureDirectionSnap`. Single selected points use 15° increments and `from(...)` always identifies the moving point. `#pointSnapPivot` chooses the fixed `around(...)` reference:
+
+- Cubic handles use their owning on-curve endpoint (`controlStart` uses the start, `controlEnd` uses the end).
+- On-curve junctions shared by two lines use their original position.
+- Other on-curve points with an outgoing line use that line's next endpoint.
+- The final on-curve point of an open contour with an incoming line uses the previous endpoint.
+- Other on-curve points, including Bézier-only endpoints, use their original position.
+
+One or more selected segments use 90° increments. `#segmentSnapCentre` unions their glyph-local tight curve bounds; the frozen centre supplies both `from(...)` and `around(...)`, constraining translation rather than changing segment orientation. This segment-only configuration calls `withoutGuides()`, so horizontal and vertical constrained translation does not show snap lines. Constituent point IDs automatically selected with a segment remain part of that segment group. Extra independently selected points, anchors, contours, point-only multi-selections, Alt-copy, and quadratic controls retain their existing movement behavior. All snapping preserves candidate distance from the pivot before existing point rules preserve smooth tangency.
+
+Bounding-box edges and corners always retain resize priority, even when a selected point or segment occupies them. Movement snapping only applies when the existing interaction dispatch chooses translation; selection-interior drags may translate a segment group.
+
+`TranslateDrag.shiftKey` follows the processed drag sample. Translation previews run in `onStateEnter` after the sample is published, so the snap predicate reads the current tool state rather than a stale event context or global keyboard modifiers. This also preserves the final-release modifier contract. The preview's effective delta and semantic guides are then published into `totalDelta` and `guides`; cancellation, completion, Shift release, and tool replacement leave the next non-translating state with no guide feedback. Select draws active point and handle direction feedback through the shared solid red `SnapLines` overlay with endpoint crosses; horizontal and vertical point/handle directions remain visible.
 
 ### Resize modifiers
 

@@ -5,6 +5,7 @@ import type { CornerHandle } from "./BoundingBox";
 import type { Behavior } from "../core/Behavior";
 import type { Select } from "./Select";
 import type { SegmentId } from "@/types/indicator";
+import type { PositionGuide } from "@/types/positionEdit";
 
 export interface DragTarget {
   pointIds: PointId[];
@@ -19,9 +20,13 @@ export interface BrushingDrag {
 
 /** Live state of a point-translate drag, including accumulated delta for undo grouping. */
 export interface TranslateDrag {
+  /** Shift from the latest processed drag sample, not the global keyboard state. */
+  shiftKey: boolean;
   startPos: Point2D;
   lastPos: Point2D;
   totalDelta: Point2D;
+  /** Glyph-local feedback from the latest preview; empty when snapping is inactive. */
+  guides: readonly PositionGuide[];
 }
 
 /** Live state of a bounding-box resize operation, capturing the original geometry for proportional scaling. */

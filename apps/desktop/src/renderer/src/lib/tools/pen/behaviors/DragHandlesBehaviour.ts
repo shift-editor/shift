@@ -1,8 +1,8 @@
 import { Vec2 } from "@shift/geo";
 import type { PointId } from "@shift/types";
-import type { GlyphLayerEdit } from "@/lib/model/GlyphLayerEdit";
+import { DirectionSnap, PositionReference, type MoveEdit } from "@/lib/model/positions";
 import type { ToolContext } from "../../core/Behavior";
-import type { DragEvent, KeyDownEvent } from "../../core/GestureDetector";
+import type { DragEvent, KeyDownEvent, ToolEvent } from "../../core/GestureDetector";
 import type { PenCurve, PenState, PenBehavior } from "../types";
 import type { Pen } from "../Pen";
 import { PenStroke } from "../PenStroke";
@@ -10,10 +10,8 @@ import { PenStroke } from "../PenStroke";
 const DRAG_THRESHOLD = 3;
 
 export class HandleBehavior implements PenBehavior {
-  #edit: GlyphLayerEdit | null = null;
+  #move: MoveEdit | null = null;
   #done: (() => void) | null = null;
-  #controlStartId: PointId | null = null;
-  #controlEndId: PointId | null = null;
   #endpointId: PointId | null = null;
 
   onDrag(state: PenState, ctx: ToolContext<PenState, Pen>, event: DragEvent): boolean {
@@ -21,10 +19,10 @@ export class HandleBehavior implements PenBehavior {
       case "anchored": {
         const next = this.#nextAnchoredState(state, event, ctx.tool);
         if (next) {
-          const edit = this.#edit;
-          if (!edit) throw new Error("cannot guard Pen curve without an active edit");
+          const move = this.#move;
+          if (!move) throw new Error("cannot guard Pen curve without an active move");
 
-          this.#done = ctx.onCancel(() => edit.cancel());
+          this.#done = ctx.onCancel(() => move.discard());
           ctx.setState(next);
         }
         return true;
@@ -35,6 +33,17 @@ export class HandleBehavior implements PenBehavior {
       default:
         return false;
     }
+  }
+
+  onStateEnter(
+    _prev: PenState,
+    next: PenState,
+    ctx: ToolContext<PenState, Pen>,
+    event: ToolEvent,
+  ): void {
+    if (next.type !== "dragging" || event.type !== "drag") return;
+
+    ctx.setState(this.#setCurvePositions(next));
   }
 
   onDragEnd(state: PenState, ctx: ToolContext<PenState, Pen>): boolean {
@@ -93,13 +102,31 @@ export class HandleBehavior implements PenBehavior {
       anchorPosition: state.anchorPosition,
       handlePosition,
     };
-    const [edit, controlStartId, controlEndId, endpointId] = stroke.beginCurve(curve);
-    this.#edit = edit;
-    this.#controlStartId = controlStartId;
-    this.#controlEndId = controlEndId;
-    this.#endpointId = endpointId;
+    const [edit, , controlEndId, endpointId] = stroke.beginCurve({
+      ...curve,
+      handlePosition: curve.anchorPosition,
+    });
 
-    return { type: "dragging", curve };
+    try {
+      this.#move = stroke.layer.positions
+        .within(edit)
+        .move({ points: [controlEndId] })
+        .from(PositionReference.point(controlEndId))
+        .directionSnappedBy(
+          DirectionSnap.everyDegrees(15, {
+            when: () => {
+              const state = pen.getState();
+              return state.type === "dragging" && state.shiftKey;
+            },
+          }).around(PositionReference.point(endpointId)),
+        );
+    } catch (error) {
+      edit.cancel();
+      throw error;
+    }
+
+    this.#endpointId = endpointId;
+    return { type: "dragging", curve, shiftKey: event.shiftKey, guides: [] };
   }
 
   #nextDraggingState(
@@ -112,45 +139,48 @@ export class HandleBehavior implements PenBehavior {
 
     const handlePosition = pen.editor.getPointInNodeSpace(event.coords.scene, stroke.node.position);
     const curve = { ...state.curve, handlePosition };
-    this.#setCurvePositions(pen, curve);
 
-    return { ...state, curve };
+    return { ...state, curve, shiftKey: event.shiftKey };
   }
 
-  #setCurvePositions(pen: Pen, curve: PenCurve): void {
-    if (!this.#edit || !this.#controlStartId || !this.#controlEndId || !this.#endpointId) {
-      throw new Error("cannot update Pen curve without an active glyph layer edit");
-    }
+  #setCurvePositions(state: PenState & { type: "dragging" }): PenState & { type: "dragging" } {
+    if (!this.#move) throw new Error("cannot update Pen curve without an active move");
 
-    const geometry = pen.resolveCurve(curve);
-    this.#edit.setPositions([
-      { kind: "point", id: this.#controlStartId, x: geometry.c0.x, y: geometry.c0.y },
-      { kind: "point", id: this.#controlEndId, x: geometry.c1.x, y: geometry.c1.y },
-      { kind: "point", id: this.#endpointId, x: geometry.p1.x, y: geometry.p1.y },
-    ]);
+    const { curve } = state;
+    const feedback = this.#move.preview(Vec2.sub(curve.anchorPosition, curve.handlePosition));
+    const handlePosition = Vec2.sub(curve.anchorPosition, feedback.delta);
+    const guides = feedback.guides.map((guide) => {
+      if (guide.kind !== "direction") return guide;
+
+      return { ...guide, to: handlePosition };
+    });
+
+    return {
+      ...state,
+      curve: { ...curve, handlePosition },
+      guides,
+    };
   }
 
   #finishCurve(stroke: PenStroke, curve: PenCurve): void {
-    if (!this.#edit || !this.#endpointId) {
-      throw new Error("cannot finish Pen curve without an active glyph layer edit");
+    if (!this.#move || !this.#endpointId) {
+      throw new Error("cannot finish Pen curve without an active move");
     }
 
-    stroke.finishCurve(curve, this.#edit, this.#endpointId);
+    stroke.finishCurve(curve, this.#move, this.#endpointId);
     if (this.#done) this.#done();
     this.#clearCurve();
   }
 
   #cancelCurve(): void {
-    this.#edit?.cancel();
+    this.#move?.discard();
     if (this.#done) this.#done();
     this.#clearCurve();
   }
 
   #clearCurve(): void {
-    this.#edit = null;
+    this.#move = null;
     this.#done = null;
-    this.#controlStartId = null;
-    this.#controlEndId = null;
     this.#endpointId = null;
   }
 }
