@@ -43,8 +43,7 @@ export class HandleBehavior implements PenBehavior {
   ): void {
     if (next.type !== "dragging" || event.type !== "drag") return;
 
-    const curve = this.#setCurvePositions(next.curve);
-    ctx.setState({ ...next, curve });
+    ctx.setState(this.#setCurvePositions(next));
   }
 
   onDragEnd(state: PenState, ctx: ToolContext<PenState, Pen>): boolean {
@@ -127,7 +126,7 @@ export class HandleBehavior implements PenBehavior {
     }
 
     this.#endpointId = endpointId;
-    return { type: "dragging", curve, shiftKey: event.shiftKey };
+    return { type: "dragging", curve, shiftKey: event.shiftKey, guides: [] };
   }
 
   #nextDraggingState(
@@ -144,11 +143,23 @@ export class HandleBehavior implements PenBehavior {
     return { ...state, curve, shiftKey: event.shiftKey };
   }
 
-  #setCurvePositions(curve: PenCurve): PenCurve {
+  #setCurvePositions(state: PenState & { type: "dragging" }): PenState & { type: "dragging" } {
     if (!this.#move) throw new Error("cannot update Pen curve without an active move");
 
+    const { curve } = state;
     const feedback = this.#move.preview(Vec2.sub(curve.anchorPosition, curve.handlePosition));
-    return { ...curve, handlePosition: Vec2.sub(curve.anchorPosition, feedback.delta) };
+    const handlePosition = Vec2.sub(curve.anchorPosition, feedback.delta);
+    const guides = feedback.guides.map((guide) => {
+      if (guide.kind !== "direction") return guide;
+
+      return { ...guide, to: handlePosition };
+    });
+
+    return {
+      ...state,
+      curve: { ...curve, handlePosition },
+      guides,
+    };
   }
 
   #finishCurve(stroke: PenStroke, curve: PenCurve): void {

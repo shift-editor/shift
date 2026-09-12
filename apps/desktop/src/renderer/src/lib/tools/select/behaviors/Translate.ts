@@ -74,10 +74,11 @@ export class Translate implements SelectBehavior {
     if (prev.type !== "translating") ctx.editor.hover.clear();
     if (event.type !== "drag" || !this.#drag) return;
 
-    const totalDelta = this.#drag.preview(
-      Vec2.sub(next.translate.lastPos, next.translate.startPos),
-    );
-    ctx.setState({ ...next, translate: { ...next.translate, totalDelta } });
+    const feedback = this.#drag.preview(Vec2.sub(next.translate.lastPos, next.translate.startPos));
+    ctx.setState({
+      ...next,
+      translate: { ...next.translate, totalDelta: feedback.delta, guides: feedback.guides },
+    });
   }
 
   #configureDirectionSnap(editor: Editor, select: Select, drag: TranslateInteraction): void {
@@ -128,7 +129,7 @@ export class Translate implements SelectBehavior {
 
     drag.move
       .from(centre)
-      .directionSnappedBy(DirectionSnap.everyDegrees(90, condition).around(centre));
+      .directionSnappedBy(DirectionSnap.everyDegrees(90, condition).around(centre).withoutGuides());
   }
 
   #pointSnapPivot(object: ShiftObjectOf<"point">): PositionReference | null {
@@ -299,6 +300,7 @@ function translatingState(startPos: Point2D, shiftKey: boolean): TranslatingStat
       startPos,
       lastPos: startPos,
       totalDelta: { x: 0, y: 0 },
+      guides: [],
     },
   };
 }

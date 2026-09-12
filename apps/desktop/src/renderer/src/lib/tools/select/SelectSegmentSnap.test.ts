@@ -67,6 +67,21 @@ describe("Select translates segment selections in 90-degree directions", () => {
     expect(editor.pointPosition(lastId)).toEqual({ x: 400, y: 300 });
   });
 
+  it("omits guides for axis-aligned segment snapping", async () => {
+    await editor.clickGlyphLocal(150, 100);
+    await editor.clickGlyphLocal(300, 150, { shiftKey: true });
+    const down = editor.projectSceneToScreen({ x: 200, y: 200 });
+    const end = editor.projectSceneToScreen({ x: 280, y: 260 });
+    editor.pointerDown(down.x, down.y).pointerMove(end.x, end.y, { shiftKey: true });
+    editor.pointerMove(end.x, end.y, { shiftKey: true });
+    expect(editor.toolIf("select")?.state).toMatchObject({
+      type: "translating",
+      translate: { guides: [] },
+    });
+    editor.escape();
+    expect(editor.toolIf("select")?.state).toEqual({ type: "ready" });
+  });
+
   it("snaps cubic segment translation without changing its shape", async () => {
     const layer = editor.requireGlyphLayer();
     layer.upgradeLineToCubic(layer.contours[0]!.segments()[0]!.id);
@@ -150,6 +165,7 @@ describe("Select translates segment selections in 90-degree directions", () => {
     expect(editor.pointPosition(firstId)).toEqual({ x: 100, y: 200 });
     editor.pointerMove(end.x, end.y);
     expect(editor.pointPosition(firstId)).toEqual({ x: 160, y: 180 });
+    expect(editor.toolIf("select")?.state).toMatchObject({ translate: { guides: [] } });
     editor.pointerMove(end.x, end.y, { shiftKey: true });
     expect(editor.pointPosition(firstId)).toEqual({ x: 100, y: 200 });
     editor.escape();

@@ -93,6 +93,23 @@ describe("direction snapping distinguishes the moving reference from its fixed p
     edit.discard();
   });
 
+  it("allows a caller to suppress guides without disabling direction snapping", () => {
+    const edit = editor
+      .requireGlyphLayer()
+      .positions.move({ points: [pointId] })
+      .from(PositionReference.point(pointId))
+      .directionSnappedBy(
+        DirectionSnap.everyDegrees(90)
+          .around(PositionReference.position({ x: 0, y: 100 }))
+          .withoutGuides(),
+      );
+
+    const feedback = edit.preview({ x: 20, y: 50 });
+    expect(editor.pointPosition(pointId)).toEqual({ x: 130, y: 100 });
+    expect(feedback.guides).toEqual([]);
+    edit.discard();
+  });
+
   it("reevaluates activation without accumulating snapped previews", () => {
     let enabled = true;
     const edit = editor
@@ -204,15 +221,20 @@ describe("direction snapping distinguishes the moving reference from its fixed p
       .positions.move({ points: [pointId] })
       .from(PositionReference.point(pointId))
       .directionSnappedBy(
-        DirectionSnap.everyDegrees(90).around(PositionReference.position({ x: 0, y: 100 })),
+        DirectionSnap.everyDegrees(45).around(PositionReference.position({ x: 0, y: 100 })),
       );
 
-    const feedback = edit.preview({ x: 20, y: 50 });
+    const feedback = edit.preview({ x: 0, y: 100 });
     const guide = feedback.guides[0];
     if (guide?.kind !== "direction") throw new Error("Expected direction guide");
     guide.from.x = 100;
-    edit.preview({ x: 20, y: 50 });
-    expect(editor.pointPosition(pointId)).toEqual({ x: 130, y: 100 });
+    const nextGuide = edit.preview({ x: 0, y: 100 }).guides[0];
+    if (nextGuide?.kind !== "direction") throw new Error("Expected direction guide");
+    expect(nextGuide.from).toEqual({ x: 0, y: 100 });
+    expect(nextGuide.to.x).toBeCloseTo(100);
+    expect(nextGuide.to.y).toBeCloseTo(200);
+    expect(editor.pointPosition(pointId).x).toBeCloseTo(100);
+    expect(editor.pointPosition(pointId).y).toBeCloseTo(200);
     edit.discard();
   });
 

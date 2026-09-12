@@ -1,7 +1,7 @@
 import type { Point2D } from "@shift/geo";
 import type { GlyphLayerPositionTarget } from "@/lib/model/Glyph";
 import { PointRuleConstraint, PositionReference, type MoveEdit } from "@/lib/model/positions";
-import type { PositionSelection } from "@/types/positionEdit";
+import type { PositionFeedback, PositionSelection } from "@/types/positionEdit";
 
 export class TranslateInteraction {
   readonly move: MoveEdit;
@@ -35,8 +35,8 @@ export class TranslateInteraction {
 
   switchToCopy(): void {}
 
-  preview(delta: Point2D): Point2D {
-    return this.move.preview(delta).delta;
+  preview(delta: Point2D): PositionFeedback {
+    return this.move.preview(delta);
   }
 
   commit(): void {

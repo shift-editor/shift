@@ -45,6 +45,27 @@ describe("Select snaps only a single cubic handle around its owning endpoint", (
     },
   );
 
+  it.each(["controlStart", "controlEnd"] as const)(
+    "publishes a guide from the owning endpoint to the snapped %s on the first preview",
+    (handle) => {
+      const cubic = editor.requireGlyphLayer().contours[0]!.segments()[0]!.asCubic()!;
+      const pivot = handle === "controlStart" ? cubic.start : cubic.end;
+      const down = editor.projectSceneToScreen(cubic[handle]);
+      const end = editor.projectSceneToScreen({ x: handle === "controlStart" ? 180 : 320, y: 160 });
+      editor.pointerDown(down.x, down.y).pointerMove(end.x, end.y, { shiftKey: true });
+      expect(editor.toolIf("select")?.state).toMatchObject({
+        type: "translating",
+        translate: {
+          guides: [
+            { kind: "direction", from: pivot.position, to: editor.pointPosition(cubic[handle].id) },
+          ],
+        },
+      });
+      editor.escape();
+      expect(editor.toolIf("select")?.state).toEqual({ type: "ready" });
+    },
+  );
+
   it("leaves single-handle movement unconstrained without Shift", async () => {
     const cubic = editor.requireGlyphLayer().contours[0]!.segments()[0]!.asCubic()!;
     await editor.dragScene({
@@ -65,6 +86,7 @@ describe("Select snaps only a single cubic handle around its owning endpoint", (
     expect(editor.pointPosition(cubic.controlStart.id).x).toBeCloseTo(100 + 50 * Math.sqrt(3));
     editor.pointerMove(end.x, end.y);
     expect(editor.pointPosition(cubic.controlStart.id)).toEqual({ x: 180, y: 160 });
+    expect(editor.toolIf("select")?.state).toMatchObject({ translate: { guides: [] } });
     editor.escape();
     expect(editor.pointPosition(cubic.controlStart.id)).toEqual({ x: 200, y: 100 });
   });
@@ -78,6 +100,7 @@ describe("Select snaps only a single cubic handle around its owning endpoint", (
       editor.pointerDown(down.x, down.y).pointerMove(end.x, end.y, { shiftKey: true });
       editor.pointerUp(end.x, end.y, { shiftKey });
       await editor.settle();
+      expect(editor.toolIf("select")?.state).toEqual({ type: "ready" });
       expect(editor.pointPosition(cubic.controlStart.id).x).toBeCloseTo(100 + 50 * Math.sqrt(3));
       expect(editor.pointPosition(cubic.controlStart.id).y).toBeCloseTo(150);
     },
@@ -105,6 +128,7 @@ describe("Select snaps only a single cubic handle around its owning endpoint", (
     editor.selectTool("pen");
     expect(editor.pointPosition(cubic.controlStart.id)).toEqual({ x: 200, y: 100 });
     editor.selectTool("select");
+    expect(editor.toolIf("select")?.state).toEqual({ type: "ready" });
     await editor.dragScene({
       down: { x: 200, y: 100 },
       start: { x: 180, y: 160 },

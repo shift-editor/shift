@@ -1,6 +1,7 @@
 import { Vec2, type Point2D } from "@shift/geo";
 import type { Canvas } from "@/lib/editor/rendering/Canvas";
 import { CanvasItem } from "@/lib/editor/rendering/CanvasItem";
+import { SnapLines } from "@/lib/editor/rendering/overlays/SnapLines";
 import type { Editor } from "@/lib/editor/Editor";
 import type { Pen, PenState } from "./Pen";
 import type { PenOverlayProps } from "./types";
@@ -9,6 +10,7 @@ import type { PenOverlayProps } from "./types";
 export class PenOverlay extends CanvasItem<PenOverlayProps> {
   readonly #pen: Pen;
   readonly #editor: Editor;
+  readonly #snapLines = new SnapLines();
 
   constructor(pen: Pen) {
     super();
@@ -40,6 +42,9 @@ export class PenOverlay extends CanvasItem<PenOverlayProps> {
         return;
       case "dragging":
         this.#drawOutgoingHandle(canvas, props.state, props.nodePosition);
+        if (!props.nodePosition) return;
+
+        this.#snapLines.draw(canvas, props.state.guides, props.nodePosition);
         return;
       case "idle":
       case "anchored":

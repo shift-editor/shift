@@ -8,6 +8,7 @@ import { PositionReference } from "./PositionReference";
 export class DirectionSnap {
   readonly #angle: AngleSnap;
   #pivot: PositionReference | null = null;
+  #showsGuides = true;
 
   private constructor(angle: AngleSnap) {
     this.#angle = angle;
@@ -31,6 +32,21 @@ export class DirectionSnap {
   around(reference: PositionReference): this {
     this.#pivot = reference;
     return this;
+  }
+
+  /**
+   * Disables visual guide feedback without changing direction quantization.
+   *
+   * @returns This snap configuration for fluent chaining before attachment.
+   */
+  withoutGuides(): this {
+    this.#showsGuides = false;
+    return this;
+  }
+
+  /** Returns whether an attaching edit should emit direction guides. */
+  get showsGuides(): boolean {
+    return this.#showsGuides;
   }
 
   /**

@@ -30,9 +30,13 @@ describe("Pen snaps mirrored creation handles around the new endpoint", () => {
       expect(state.curve.handlePosition.x).toBeCloseTo(600 - cubic.controlEnd.x);
       expect(state.curve.handlePosition.y).toBeCloseTo(200 - cubic.controlEnd.y);
       expect(cubic.end.position).toEqual({ x: 300, y: 100 });
+      expect(state.guides).toEqual([
+        { kind: "direction", from: cubic.end.position, to: state.curve.handlePosition },
+      ]);
       expect(editor.pointCount).toBe(4);
       editor.escape();
       expect(editor.pointCount).toBe(1);
+      expect(editor.toolIf("pen")?.state).toEqual({ type: "ready" });
     },
   );
 
@@ -47,10 +51,23 @@ describe("Pen snaps mirrored creation handles around the new endpoint", () => {
     editor.pointerMove(end.x, end.y, { shiftKey: true });
     expect(editor.openContour!.segments()[0]!.asCubic()!.controlEnd.y).toBeCloseTo(50);
     editor.pointerMove(end.x, end.y);
+    expect(editor.toolIf("pen")?.state).toMatchObject({ type: "dragging", guides: [] });
     expect(editor.openContour!.segments()[0]!.asCubic()!.controlEnd.position).toEqual({
       x: 220,
       y: 40,
     });
+    editor.escape();
+  });
+
+  it("keeps visual feedback for horizontal Pen handle snapping", () => {
+    const down = editor.projectSceneToScreen({ x: 300, y: 100 });
+    const end = editor.projectSceneToScreen({ x: 380, y: 100 });
+    editor.pointerDown(down.x, down.y).pointerMove(end.x, end.y, { shiftKey: true });
+    const state = editor.toolIf("pen")?.state;
+    if (state?.type !== "dragging") throw new Error("Expected Pen drag preview");
+    expect(state.guides).toEqual([
+      { kind: "direction", from: { x: 300, y: 100 }, to: state.curve.handlePosition },
+    ]);
     editor.escape();
   });
 
@@ -65,6 +82,7 @@ describe("Pen snaps mirrored creation handles around the new endpoint", () => {
       expect(preview.y).toBeCloseTo(50);
       editor.pointerUp(end.x, end.y, { shiftKey });
       await editor.settle();
+      expect(editor.toolIf("pen")?.state).toEqual({ type: "ready" });
       expect(editor.openContour!.segments()[0]!.asCubic()!.controlEnd.position).toEqual(preview);
     },
   );
@@ -160,6 +178,8 @@ describe("Pen snaps mirrored creation handles around the new endpoint", () => {
     editor.selectTool("select");
     expect(editor.pointCount).toBe(1);
     expect(editor.openContour!.points[0]!.position).toEqual({ x: 100, y: 100 });
+    editor.selectTool("pen");
+    expect(editor.toolIf("pen")?.state).toEqual({ type: "ready" });
   });
 
   it("allows the pointer to return to the anchor without invalid coordinates", () => {

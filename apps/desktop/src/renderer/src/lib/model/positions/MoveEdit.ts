@@ -27,6 +27,7 @@ export class MoveEdit implements PositionEdit {
   #reference: Point2D | null = null;
   #directionSnap: DirectionSnap | null = null;
   #directionPivot: Point2D | null = null;
+  #directionGuides = true;
   #snapProvider: PositionSnapProvider | null = null;
   #pointRules: PointRuleConstraint | null = null;
 
@@ -69,6 +70,7 @@ export class MoveEdit implements PositionEdit {
   directionSnappedBy(snap: DirectionSnap): this {
     this.#assertConfiguring();
     this.#directionPivot = snap.resolvePivot(this.#layer);
+    this.#directionGuides = snap.showsGuides;
     this.#directionSnap = snap;
     return this;
   }
@@ -112,7 +114,7 @@ export class MoveEdit implements PositionEdit {
         this.#directionPivot && this.#reference
           ? Vec2.sub(Vec2.add(this.#directionPivot, directionDelta), this.#reference)
           : directionDelta;
-      if (this.#reference) {
+      if (this.#reference && this.#directionGuides) {
         guides.push({
           kind: "direction",
           from: { ...(this.#directionPivot ?? this.#reference) },
