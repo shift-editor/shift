@@ -1,6 +1,6 @@
 ---
 name: writing-tests
-description: Canonical rules for writing tests in the Shift codebase. Use whenever you add, rewrite, or review a `.test.ts` file — or any time you're about to mock, stub, or spy your way around a testing problem. This repo has deliberately swept mock-based testing out, and this skill is what keeps it out.
+description: Canonical rules for writing tests in the Shift codebase. Use whenever you add, rewrite, or review a `.test.ts` or `.spec.ts` file — or any time you're about to mock, stub, or spy your way around a testing problem. Covers TestEditor-based tests and desktop E2E tests driven through EditorDriver.
 ---
 
 # /writing-tests — How tests are written in this codebase
@@ -78,15 +78,17 @@ If you catch yourself doing any of the following, stop. You're about to write a 
 | **Command test**     | A `Command`'s execute/undo/redo round-trip                                 | `lib/commands/primitives/PointCommands.test.ts`                                             |
 | **Pure module test** | Stateless class or function with no `Editor` dependency                    | `lib/tools/text/TextRunController.test.ts`, `lib/editor/hit/boundingBox.test.ts`            |
 | **Bridge test**      | `NativeBridge` against the real Rust engine                                | `bridge/NativeBridge.test.ts`                                                               |
+| **Desktop E2E test** | Behavior requiring the real renderer, DOM, Electron, or visual output     | `e2e/editor.spec.ts`, `e2e/tools.spec.ts`, `e2e/application-menu.spec.ts`                  |
 
 If your target doesn't fit one of these, stop and ask — don't invent a new shape.
 
 ### Decision: which one
 
-1. Can a user trigger it with a click, drag, or key? → **Tool test** via `TestEditor`.
-2. Is it a single command's undo/redo contract? → **Command test**.
-3. Is it a pure function or pure class with no `Editor`? → **Pure module test**.
-4. Is it the NAPI boundary? → **Bridge test**.
+1. Does it require the real renderer, DOM, Electron, native menus, or visual output? → **Desktop E2E test** via `EditorDriver` and Playwright.
+2. Can its behavior be observed completely through editor domain state after a click, drag, or key? → **Tool test** via `TestEditor`.
+3. Is it a single command's undo/redo contract? → **Command test**.
+4. Is it a pure function or pure class with no `Editor`? → **Pure module test**.
+5. Is it the NAPI boundary? → **Bridge test**.
 
 ## Templates
 
@@ -167,6 +169,30 @@ describe("NativeBridge session lifecycle", () => {
 });
 ```
 
+### Desktop E2E test
+
+```ts
+import { workspaceTest as test, expect } from "./fixtures/electronApp";
+
+test("moves a point and supports undo", async ({ editor }) => {
+  await editor.openGlyphByName("A");
+  const point = await editor.selectVisiblePoint();
+  const before = await editor.pointPosition(point.id);
+
+  await editor.dragPoint(point);
+  expect(await editor.pointPosition(point.id)).toEqual(point.expectedGlyphPosition);
+
+  await editor.undo();
+  expect(await editor.pointPosition(point.id)).toEqual(before);
+});
+```
+
+Use `EditorDriver` for semantic editor actions and domain observations. Keep assertions in the spec, and use Playwright's `page` only for visible UI, browser, or Electron behavior. Driver actions that can persist geometry own edit settling; confirmed reads such as `outline()` and `pointPosition()` must not be preceded by direct `editCoordinator.settled()` calls.
+
+Coordinate spaces are explicit: pointer methods take page positions, `dragCanvas()` takes canvas-local positions, and projection helpers convert between scene, canvas, and page coordinates. `activeGlyph()` returns `null` until the scene node and authored layer are both published. Live observations such as `selectionBounds()` intentionally expose gesture previews before confirmation.
+
+Do not turn `EditorDriver` into a dumping ground. Native window/menu focus, variable-font construction, GPU residency, performance loops, and screenshot assertions remain at their owning fixture or spec boundary.
+
 ## The fake-test checklist
 
 Before committing a test, run through these. Any miss means the test is wrong.
@@ -175,13 +201,16 @@ Before committing a test, run through these. Any miss means the test is wrong.
 2. **User-facing surface.** You drove through a method a real user can trigger (pointer, keyboard, command, menu action), not a `#private` field or a tool-internal method.
 3. **Specific assertions.** `expect(editor.pointCount).toBe(4)` — yes. `expect(result).toBeDefined()` or `expect(spy).toHaveBeenCalled()` — no, those survive any implementation.
 4. **Correct code path.** If the real production path goes through command history + bridge + signals, your test goes through those too. You didn't reach behind the facade.
-5. **Under ~15 lines.** If a single `it()` body exceeds ~15 lines, it's testing too much at once, or its setup belongs in `beforeEach`.
+5. **Focused body.** Keep unit-test bodies under roughly 15 lines. E2E flows may be longer when the visible workflow requires it, but each test still protects one behavior and repeated plumbing belongs in `EditorDriver` or the owning fixture.
 
 ## Setup discipline
 
 - `beforeEach` is ≤ 5 lines: `new TestEditor()` + `startSession()` + `selectTool()` + optional fixture.
 - No wrapper factories around `TestEditor`. If you need a reusable helper, it belongs as a method on `TestEditor` itself (see `pointerMove`, `click`, `escape`).
 - If your test needs a pre-drawn shape, draw it with the pen/shape tool in `beforeEach` — don't construct glyph snapshots inline.
+- In E2E specs, prefer the shared `editor` fixture over constructing `EditorDriver` for the primary page. Construct a driver directly only for additional workspace windows.
+- Do not add one-off scene-node, glyph-layer, canvas-offset, or projection helpers when `EditorDriver` can express the same reusable boundary.
+- Use raw Playwright gestures only when the low-level browser lifecycle is itself under test; otherwise use `pointerDown()`, `pointerMove()`, `pointerUp()`, `dragCanvas()`, or `cancelGesture()`.
 
 ## Naming
 
@@ -193,9 +222,9 @@ Before committing a test, run through these. Any miss means the test is wrong.
 
 Some code resists clean unit testing — DOM event handlers, focus management, IME composition, React effect lifecycle.
 
-**Default move: extract the non-DOM logic into a pure function and test that.** Example: `HiddenTextInput` keyboard handling → `lib/tools/text/textInput.ts → handleTextKeyDown(event, editor)`. The component becomes a thin adapter; the extracted function is a normal tool test via `TestEditor`. The part that genuinely can't be tested cleanly shrinks to ~20 lines that rely on manual QA.
+**Default move: extract the non-DOM logic into a pure function and test that.** Example: `HiddenTextInput` keyboard handling → `lib/tools/text/textInput.ts → handleTextKeyDown(event, editor)`. The component becomes a thin adapter, and the extracted function is a normal tool test via `TestEditor`.
 
-If after extraction and research you're still reaching for jsdom + `@testing-library/react` + IPC mocks, pause and ask the user before introducing that infrastructure.
+When browser or Electron semantics are themselves the behavior, cover that thin adapter with a focused Desktop E2E test instead of recreating the environment with jsdom, global stubs, or IPC mocks. If extraction and a real E2E boundary still do not provide worthwhile automation, pause and ask before introducing new test infrastructure; otherwise record focused manual QA.
 
 ## Why these rules exist
 
@@ -220,10 +249,15 @@ Before adding or changing screenshot assertions, follow [Desktop E2E capture det
 ## Running
 
 ```bash
-pnpm test              # full vitest suite, runs against real Rust
-pnpm test:watch        # watch mode
-pnpm typecheck         # tsgo across all packages
-pnpm lint:check        # oxlint, includes no-raw-editor-in-tests and no-mock-call-assertions
+pnpm test                  # full vitest suite, runs against real Rust
+pnpm test:watch            # watch mode
+pnpm test:e2e:visual       # renderer, interaction, and software-rendered visual behavior
+pnpm test:e2e:platform     # native desktop and document lifecycle boundaries
+pnpm test:e2e:gpu          # hardware rendering and GPU residency behavior
+pnpm typecheck             # tsgo across all packages
+pnpm lint:check            # oxlint, includes test anti-pattern rules
 ```
 
-All three must pass before committing. If `no-mock-call-assertions` flags your test, it's caught you reaching for the banned pattern — fix the test, don't disable the rule.
+Run the smallest relevant test command and file/title filter while iterating. For broad fixture changes, run the complete affected E2E project. Record exact commands, passed checks, and host-bound failures separately; never present a skipped or blocked native/GPU check as passing.
+
+The relevant checks must pass before committing. If `no-mock-call-assertions` flags your test, it's caught you reaching for the banned pattern — fix the test, don't disable the rule.
