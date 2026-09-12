@@ -58,7 +58,7 @@ editor/
     Theme.ts             -- DEFAULT_THEME shared editor visual constants
     constants.ts         -- SCREEN_HIT_RADIUS (8px)
     markers/             -- WebGL marker shaders and instance packing
-    overlays/            -- Guides, ControlLines, Segments, Anchors,
+    overlays/            -- Guides, SnapLines, ControlLines, Segments, Anchors,
                             DebugOverlays, handleDrawing, and Handles
                             (marker-layer handle rendering with CPU fallback)
 ```
@@ -81,7 +81,8 @@ editor/
 - **`Handles`** -- Handle renderer that tries the accelerated marker layer and falls back to CPU drawing internally.
 - **`FrameHandler`** -- Deduplicates `requestAnimationFrame` per render target. While a frame is pending, later requests are dropped without storing their callback -- the first callback wins.
 - **`EventEmitter`** -- Typed emitter for destruction and preview mutation notices.
-- **`Theme`** -- Shared visual config for editor-rendered elements. Tool-owned controls keep their own local style constants.
+- **`Theme`** -- Shared visual config for editor-rendered elements, including the solid red, screen-pixel-sized snap line and cross treatment. Tool-owned controls keep their own local style constants.
+- **`SnapLines`** -- Stateless overlay renderer for semantic direction feedback. It translates glyph-local guide endpoints into scene space and draws the historical solid red line with crosses at its endpoints.
 
 ## How it works
 
@@ -156,7 +157,7 @@ Glyph geometry exposes domain hit queries for points, anchors, and segments. Too
 1. Create a class under `rendering/overlays/` with a `draw(canvas: Canvas, ...)` method.
 2. Instantiate it as a private field on `GlyphNodeDefinition` alongside the existing drawers (e.g. `#myIndicator = new MyIndicator()`), or on the owning tool if it is tool-specific.
 3. Call `#myIndicator.draw(canvas, ...)` from the appropriate canvas item layer or tool draw hook.
-4. If it depends on new state, read that state in the appropriate effect.
+4. If it depends on new state, read that state in the appropriate effect. Position interactions should publish semantic `PositionGuide` values and delegate their visual treatment to `SnapLines` rather than drawing snap geometry directly.
 
 ### Add a new selectable entity kind
 

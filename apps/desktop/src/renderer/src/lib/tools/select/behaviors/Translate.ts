@@ -1,9 +1,13 @@
-import { Vec2, type Point2D } from "@shift/geo";
+import { Bounds, Vec2, type Point2D } from "@shift/geo";
+import { Point, type Segment } from "@shift/glyph-state";
 
 import type { ToolContext } from "../../core/Behavior";
 import type { Editor } from "@/lib/editor/Editor";
 import type { GlyphLayerPositionTarget } from "@/lib/model/Glyph";
-import type { DragEvent, DragStartEvent } from "../../core/GestureDetector";
+import type { DragEvent, DragStartEvent, ToolEvent } from "../../core/GestureDetector";
+import { DirectionSnap, PositionReference } from "@/lib/model/positions";
+import { objectIsKindOf, type ShiftObjectOf } from "@/types";
+import type { PositionCondition } from "@/types/positionEdit";
 import type { SelectBehavior, SelectState } from "../types";
 import type { Select } from "../Select";
 import { TranslateInteraction } from "../TranslateInteraction";
@@ -26,7 +30,10 @@ export class Translate implements SelectBehavior {
 
     this.#drag = drag;
     this.#done = ctx.onCancel(() => drag.discard());
-    ctx.setState(translatingState(this.#drag.startPos));
+    ctx.setState(translatingState(this.#drag.startPos, event.shiftKey));
+
+    if (!event.altKey) this.#configureDirectionSnap(ctx.editor, ctx.tool, drag);
+
     return true;
   }
 
@@ -57,11 +64,111 @@ export class Translate implements SelectBehavior {
     return true;
   }
 
-  onStateEnter(prev: SelectState, next: SelectState, ctx: ToolContext<SelectState>): void {
-    const editor = ctx.editor;
-    if (prev.type !== "translating" && next.type === "translating") {
-      editor.hover.clear();
+  onStateEnter(
+    prev: SelectState,
+    next: SelectState,
+    ctx: ToolContext<SelectState>,
+    event: ToolEvent,
+  ): void {
+    if (next.type !== "translating") return;
+    if (prev.type !== "translating") ctx.editor.hover.clear();
+    if (event.type !== "drag" || !this.#drag) return;
+
+    const feedback = this.#drag.preview(Vec2.sub(next.translate.lastPos, next.translate.startPos));
+    ctx.setState({
+      ...next,
+      translate: { ...next.translate, totalDelta: feedback.delta, guides: feedback.guides },
+    });
+  }
+
+  #configureDirectionSnap(editor: Editor, select: Select, drag: TranslateInteraction): void {
+    const objects = editor.objects(editor.selection.ids);
+    const condition: PositionCondition = {
+      when: () => {
+        const state = select.getState();
+        return state.type === "translating" && state.translate.shiftKey;
+      },
+    };
+    const object = objects[0];
+
+    if (objects.length === 1 && objectIsKindOf(object, "point")) {
+      const pivot = this.#pointSnapPivot(object);
+      if (!pivot) return;
+
+      drag.move
+        .from(PositionReference.point(object.id))
+        .directionSnappedBy(DirectionSnap.everyDegrees(15, condition).around(pivot));
+      return;
     }
+
+    const segments: Segment[] = [];
+    for (const object of objects) {
+      switch (object.kind) {
+        case "segment": {
+          const segment = object.geometry.segment(object.segmentId);
+          if (!segment) return;
+
+          segments.push(segment);
+          break;
+        }
+        case "point":
+          break;
+        default:
+          return;
+      }
+    }
+
+    if (segments.length === 0) return;
+
+    // Direct segment drags also select their constituent point identities.
+    const pointIds = new Set(segments.flatMap((segment) => segment.pointIds));
+    if (objects.some((object) => object.kind === "point" && !pointIds.has(object.id))) return;
+
+    const centre = this.#segmentSnapCentre(segments);
+    if (!centre) return;
+
+    drag.move
+      .from(centre)
+      .directionSnappedBy(DirectionSnap.everyDegrees(90, condition).around(centre).withoutGuides());
+  }
+
+  #pointSnapPivot(object: ShiftObjectOf<"point">): PositionReference | null {
+    if (!object.layer) return null;
+
+    const point = object.geometry.point(object.pointId);
+    const contour = object.geometry.contour(object.contourId);
+    if (!point || !contour) return null;
+
+    const segments = contour.segments();
+    if (Point.isOnCurve(point)) {
+      const incoming = segments.find((segment) => segment.endId === point.id);
+      const outgoing = segments.find((segment) => segment.startId === point.id);
+      const self = PositionReference.point(point.id);
+
+      if (incoming?.type === "line" && outgoing?.type === "line") return self;
+      if (outgoing?.type === "line") return PositionReference.point(outgoing.endId);
+      if (!contour.closed && !outgoing && incoming?.type === "line") {
+        return PositionReference.point(incoming.startId);
+      }
+
+      return self;
+    }
+
+    for (const segment of segments) {
+      const cubic = segment.asCubic();
+      if (!cubic) continue;
+      if (cubic.controlStart.id === point.id) return PositionReference.point(cubic.start.id);
+      if (cubic.controlEnd.id === point.id) return PositionReference.point(cubic.end.id);
+    }
+
+    return null;
+  }
+
+  #segmentSnapCentre(segments: readonly Segment[]): PositionReference | null {
+    const bounds = Bounds.unionAll(segments.map((segment) => segment.bounds));
+    if (!bounds) return null;
+
+    return PositionReference.position(Bounds.center(bounds));
   }
 
   #cleanup(): void {
@@ -173,27 +280,27 @@ export class Translate implements SelectBehavior {
 
   #nextTranslatingState(state: TranslatingState, event: DragEvent): TranslatingState {
     const currentPos = event.coords.scene;
-    const rawDelta = Vec2.sub(currentPos, state.translate.startPos);
-    const totalDelta = this.#drag!.preview(rawDelta);
 
     return {
       type: "translating",
       translate: {
         ...state.translate,
         lastPos: currentPos,
-        totalDelta,
+        shiftKey: event.shiftKey,
       },
     };
   }
 }
 
-function translatingState(startPos: Point2D): TranslatingState {
+function translatingState(startPos: Point2D, shiftKey: boolean): TranslatingState {
   return {
     type: "translating",
     translate: {
+      shiftKey,
       startPos,
       lastPos: startPos,
       totalDelta: { x: 0, y: 0 },
+      guides: [],
     },
   };
 }

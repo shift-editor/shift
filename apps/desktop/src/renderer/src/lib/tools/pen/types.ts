@@ -4,6 +4,7 @@ import type { Behavior } from "../core/Behavior";
 import type { Pen } from "./Pen";
 import type { GlyphNode } from "@/types/node";
 import type { Coordinates } from "@/types/coordinates";
+import type { PositionGuide } from "@/types/positionEdit";
 
 export type PenEndpoint =
   | {
@@ -33,7 +34,13 @@ export type PenState =
   | { type: "idle" }
   | { type: "ready" }
   | { type: "anchored"; anchorPosition: Point2D }
-  | { type: "dragging"; curve: PenCurve };
+  | {
+      type: "dragging";
+      curve: PenCurve;
+      shiftKey: boolean;
+      /** Glyph-local incoming-handle feedback from the latest preview. */
+      guides: readonly PositionGuide[];
+    };
 
 export type PenBehavior = Behavior<PenState, Pen>;
 
