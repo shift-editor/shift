@@ -69,6 +69,26 @@ Post-merge `main` workflows do not repeat the E2E suites for the same commit. Ru
 
 The `platform` project concentrates on native desktop boundaries: document lifecycle, Save and Save As, recovery after forced termination, application quit, native menus, Unicode filesystem paths, and import/export persistence. On Linux, the E2E runner automatically creates an isolated `1920×1080×24` Xvfb display with Fluxbox so native maximize, focus, and window-placement behavior has a window manager. Both dependencies are available in the Nix dev shell. GPU and performance behavior remain separate and run directly against the host desktop and GPU.
 
+### Editor driver
+
+Workspace fixtures expose an `editor: EditorDriver` alongside the Playwright `page`. Use the driver for semantic editor actions and domain observations; keep visible UI assertions in the spec:
+
+```ts
+test("deletes a selected point", async ({ editor }) => {
+  await editor.openGlyphByName("I");
+  const before = await editor.outline();
+
+  await editor.clickPoint(before[0].points[1].id);
+  await editor.press("Delete");
+
+  expect(await editor.outline()).not.toEqual(before);
+});
+```
+
+Actions that can persist geometry wait for the workspace edit pipeline before returning. `activeGlyph()`, `outline()`, `pointPosition()`, and `pointTargets()` return fresh domain snapshots; specs should not call `editCoordinator.settled()` directly. Use `livePointPosition()` only for geometry previews during an active gesture. After setup changes geometry or camera state, call `waitForCanvasRender()` before projecting positions or sending pointer input; authored-layer readiness alone does not make the canvas transform and hit regions current. A point target carries glyph-, canvas-, and page-space positions. Prefer `canvasBounds()`, `projectSceneToCanvas()`, `projectSceneToPage()`, and `projectCanvasToScene()` over repeating DOM offsets and renderer projections in specs.
+
+Pointer helpers use page coordinates for `pointerDown()`, `pointerMove()`, and `pointerUp()`. `dragCanvas()` accepts canvas-local endpoints. Gestures follow `idle → pressed → dragging → idle`; `cancelGesture()` returns a pressed or dragging gesture to `idle` after application rollback. Live observations such as `selectionBounds()`, `hoverId()`, and `toolState()` intentionally expose the current preview. Use `waitForIdle()` only after raw Playwright gestures that cannot be expressed as one driver action.
+
 Outside an active development shell, the portable Linux and macOS invocation is:
 
 ```sh

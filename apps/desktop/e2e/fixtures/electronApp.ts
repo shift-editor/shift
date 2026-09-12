@@ -14,9 +14,9 @@ import os from "node:os";
 import * as path from "path";
 import { once } from "events";
 import { promisify } from "node:util";
-import type { Unicode } from "@shift/types";
 import { createAuthoredDocument } from "./fontSource";
 import type { CanonicalVariableFont, RecoveryApp, ShiftFixtures, ShiftOptions } from "./types";
+import { EditorDriver } from "./EditorDriver";
 import { collectWindowDiagnostics, prepareWindow } from "./window";
 
 export type { CanonicalVariableFont, RecoveryApp } from "./types";
@@ -226,6 +226,10 @@ export const test = base.extend<ShiftFixtures & ShiftOptions>({
 
     await use(page);
   },
+
+  editor: async ({ page }, use) => {
+    await use(new EditorDriver(page));
+  },
 });
 
 /** Fixture whose native outer-dialog choices are supplied by deterministic E2E paths. */
@@ -427,34 +431,7 @@ function readCanonicalVariableFont(documentPath: string, testRoot: string): Cano
  * Assumes a font is already loaded.
  */
 export async function navigateToEditor(page: Page, hexCodepoint: string): Promise<void> {
-  const unicode = Number.parseInt(hexCodepoint, 16) as Unicode;
-  await page.waitForFunction(
-    (codepoint) => {
-      const font = window.shift?.font;
-      if (!font) return false;
-
-      const handle = font.glyphHandleForUnicode(codepoint as Unicode);
-      return font.recordForName(handle.name) !== null;
-    },
-    unicode,
-    { timeout: 20_000 },
-  );
-
-  await page.evaluate(async (codepoint) => {
-    const workspace = window.shift;
-    if (!workspace) throw new Error("Expected workspace");
-
-    const handle = workspace.font.glyphHandleForUnicode(codepoint as Unicode);
-    const record = workspace.font.recordForName(handle.name);
-    if (!record) throw new Error(`No glyph found for U+${codepoint.toString(16)}`);
-
-    await workspace.font.loadGlyph(record.id);
-    window.location.hash = `#/editor/${encodeURIComponent(record.id)}`;
-  }, unicode);
-
-  // Wait for the editor canvas to mount and render.
-  await page.waitForSelector("#scene-canvas", { timeout: 10_000 });
-  await page.waitForTimeout(1000);
+  await new EditorDriver(page).openGlyphByUnicode(hexCodepoint);
 }
 
 export { expect } from "@playwright/test";

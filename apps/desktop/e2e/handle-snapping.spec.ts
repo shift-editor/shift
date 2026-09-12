@@ -1,11 +1,10 @@
 import type { GlyphName } from "@shift/types";
 import { workspaceTest as test, expect } from "./fixtures/electronApp";
-import { openGlyphRoute } from "./fixtures/appLocators";
-import { pointPosition } from "./fixtures/editorInteractions";
 
 for (const releaseShiftFirst of [true, false]) {
   test(`snaps a cubic handle every 15 degrees when Shift is released ${releaseShiftFirst ? "before" : "after"} mouseup`, async ({
     page,
+    editor,
   }) => {
     const glyphId = await page.evaluate(async () => {
       const workspace = window.shift!;
@@ -13,7 +12,7 @@ for (const releaseShiftFirst of [true, false]) {
       await workspace.font.editCoordinator.settled();
       return record.id;
     });
-    await openGlyphRoute(page, glyphId);
+    await editor.openGlyph(glyphId);
     await page.evaluate(async () => {
       const editor = window.shift!.editor;
       editor.insertContent({
@@ -36,9 +35,10 @@ for (const releaseShiftFirst of [true, false]) {
       editor.selection.clear();
       editor.zoomToFit();
     });
-    const canvas = page.locator("#interactive-canvas");
-    const bounds = await canvas.boundingBox();
-    if (!bounds) throw new Error("Expected editor canvas");
+    await editor.waitForCanvasRender();
+
+    const canvas = editor.canvas;
+    const bounds = await editor.canvasBounds();
     const drag = await page.evaluate(() => {
       const editor = window.shift!.editor;
       const node = editor.scene.nodesOfKind("glyph")[0]!;
@@ -81,16 +81,14 @@ for (const releaseShiftFirst of [true, false]) {
       expect(point.y).toBeLessThan(bounds.height);
     }
     await canvas.click({ position: drag.down });
-    await page.mouse.move(bounds.x + drag.down.x, bounds.y + drag.down.y);
     await page.keyboard.down("Shift");
-    await page.mouse.down();
+    await editor.pointerDown({ x: bounds.x + drag.down.x, y: bounds.y + drag.down.y });
     try {
-      await page.mouse.move(bounds.x + drag.end.x, bounds.y + drag.end.y, { steps: 3 });
-      await page.evaluate(() => window.shift!.editor.toolManager.flushPointerMoves());
-      const preview = await pointPosition(page, drag.id);
+      await editor.pointerMove({ x: bounds.x + drag.end.x, y: bounds.y + drag.end.y }, 3);
+      const preview = await editor.livePointPosition(drag.id);
       expect(preview.x).toBeCloseTo(drag.expected.x, 4);
       expect(preview.y).toBeCloseTo(drag.expected.y, 4);
-      expect(await pointPosition(page, drag.pivot)).toEqual({ x: 100, y: 100 });
+      expect(await editor.livePointPosition(drag.pivot)).toEqual({ x: 100, y: 100 });
       const guideScreen = await page.evaluate(() => {
         const editor = window.shift!.editor;
         const node = editor.scene.nodesOfKind("glyph")[0]!;
@@ -137,16 +135,15 @@ for (const releaseShiftFirst of [true, false]) {
         }, guideScreen);
       await expect.poll(redGuideVisible).toBe(true);
       if (releaseShiftFirst) await page.keyboard.up("Shift");
-      await page.mouse.up();
+      await editor.pointerUp();
       if (!releaseShiftFirst) await page.keyboard.up("Shift");
-      await page.evaluate(async () => window.shift!.font.editCoordinator.settled());
-      expect(await pointPosition(page, drag.id)).toEqual(preview);
-      await expect(page.getByTestId("editor-shell")).toHaveAttribute("data-gesture", "idle");
+      expect(await editor.pointPosition(drag.id)).toEqual(preview);
+      await expect(editor.shell).toHaveAttribute("data-gesture", "idle");
       await expect.poll(redGuideVisible).toBe(false);
-      await page.keyboard.press("ControlOrMeta+z");
-      await expect.poll(() => pointPosition(page, drag.id)).toEqual(drag.before);
-      await page.keyboard.press("ControlOrMeta+Shift+z");
-      await expect.poll(() => pointPosition(page, drag.id)).toEqual(preview);
+      await editor.undo();
+      await expect.poll(() => editor.pointPosition(drag.id)).toEqual(drag.before);
+      await editor.redo();
+      await expect.poll(() => editor.pointPosition(drag.id)).toEqual(preview);
     } finally {
       await page.mouse.up();
       await page.keyboard.up("Shift");

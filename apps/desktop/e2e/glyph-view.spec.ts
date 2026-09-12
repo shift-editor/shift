@@ -1,7 +1,6 @@
 import type { Page } from "@playwright/test";
 import type { GlyphId, GlyphName } from "@shift/types";
 import { expect, workspaceTest as test } from "./fixtures/electronApp";
-import { openGlyphRoute } from "./fixtures/appLocators";
 
 async function createViewGlyphs(page: Page): Promise<readonly { id: GlyphId; name: string }[]> {
   return page.evaluate(async () => {
@@ -60,42 +59,34 @@ async function cameraFrame(page: Page) {
   });
 }
 
-test("keeps the reported wheel position anchored across the full zoom range", async ({ page }) => {
+test("keeps the reported wheel position anchored across the full zoom range", async ({
+  page,
+  editor,
+}) => {
   const glyphs = await createViewGlyphs(page);
   const glyph = glyphs[2];
   if (!glyph) throw new Error("Expected a glyph with handles");
 
-  await openGlyphRoute(page, glyph.id);
-  const interactiveCanvas = page.locator("#interactive-canvas");
-  await expect(interactiveCanvas).toBeVisible();
+  await editor.openGlyph(glyph.id);
+  await expect(editor.canvas).toBeVisible();
 
-  const anchor = await page.evaluate(() => {
-    const editor = window.shift?.editor;
-    const node = editor?.scene.nodesOfKind("glyph")[0];
-    const canvas = document.querySelector<HTMLCanvasElement>("#interactive-canvas");
-    if (!editor || !node || !canvas) throw new Error("Expected editor canvas");
-
-    const point = editor
-      .glyphForId(node.glyphId)
-      ?.renderModelAt(editor.externalLocationCell, editor.activeSourceIdCell).allPoints[0];
-    if (!point) throw new Error("Expected glyph point");
-
-    const handle = editor.projectSceneToScreen({
-      x: point.x + node.position.x,
-      y: point.y + node.position.y,
-    });
-    const screen = { x: Math.round(handle.x), y: Math.round(handle.y) };
-    const scene = editor.projectScreenToScene(screen);
-    const rect = canvas.getBoundingClientRect();
-    return {
-      scene,
-      screen,
-      client: { x: rect.left + screen.x, y: rect.top + screen.y },
-    };
-  });
+  const point = (await editor.outline())[0]?.points[0];
+  if (!point) throw new Error("Expected glyph point");
+  const target = (await editor.pointTargets([point.id]))[0];
+  if (!target) throw new Error("Expected glyph point target");
+  const screen = {
+    x: Math.round(target.canvasPosition.x),
+    y: Math.round(target.canvasPosition.y),
+  };
+  const scene = await editor.projectCanvasToScene(screen);
+  const anchor = {
+    screen,
+    scene,
+    client: await editor.projectSceneToPage(scene),
+  };
 
   for (let index = 0; index < 60; index++) {
-    await interactiveCanvas.dispatchEvent("wheel", {
+    await editor.canvas.dispatchEvent("wheel", {
       bubbles: true,
       cancelable: true,
       clientX: anchor.client.x,
@@ -107,24 +98,20 @@ test("keeps the reported wheel position anchored across the full zoom range", as
   }
 
   await expect.poll(() => page.evaluate(() => window.shift?.editor.zoom)).toBe(32);
-  const projected = await page.evaluate(
-    (scene) => window.shift?.editor.projectSceneToScreen(scene),
-    anchor.scene,
-  );
-  expect(projected?.x).toBeCloseTo(anchor.screen.x, 6);
-  expect(projected?.y).toBeCloseTo(anchor.screen.y, 6);
+  const projected = await editor.projectSceneToCanvas(anchor.scene);
+  expect(projected.x).toBeCloseTo(anchor.screen.x, 6);
+  expect(projected.y).toBeCloseTo(anchor.screen.y, 6);
 });
 
-test("does not turn released-modifier zoom momentum into pan", async ({ page }) => {
+test("does not turn released-modifier zoom momentum into pan", async ({ page, editor }) => {
   const glyphs = await createViewGlyphs(page);
   const glyph = glyphs[2];
   if (!glyph) throw new Error("Expected a glyph with handles");
 
-  await openGlyphRoute(page, glyph.id);
-  const canvas = page.locator("#interactive-canvas");
+  await editor.openGlyph(glyph.id);
+  const canvas = editor.canvas;
   await expect(canvas).toBeVisible();
-  const bounds = await canvas.boundingBox();
-  if (!bounds) throw new Error("Expected canvas bounds");
+  const bounds = await editor.canvasBounds();
   const event = {
     bubbles: true,
     cancelable: true,
@@ -143,12 +130,12 @@ test("does not turn released-modifier zoom momentum into pan", async ({ page }) 
   expect((await page.evaluate(() => window.shift?.editor.pan))?.x).toBe((zoomPan?.x ?? 0) - 30);
 });
 
-test("keeps a useful UPM frame across empty and extreme glyphs", async ({ page }) => {
+test("keeps a useful UPM frame across empty and extreme glyphs", async ({ page, editor }) => {
   const glyphs = await createViewGlyphs(page);
 
   for (const glyph of glyphs) {
-    await openGlyphRoute(page, glyph.id);
-    await expect(page.locator("#interactive-canvas")).toBeVisible();
+    await editor.openGlyph(glyph.id);
+    await expect(editor.canvas).toBeVisible();
     const frame = await cameraFrame(page);
 
     const context = `${glyph.name}: ${JSON.stringify(frame)}`;

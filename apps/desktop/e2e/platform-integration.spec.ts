@@ -3,7 +3,6 @@ import fs from "node:fs";
 import path from "node:path";
 import type { ElectronApplication, Page, TestInfo } from "@playwright/test";
 import { documentTest as test, expect, waitForWorkspaceReady } from "./fixtures/electronApp";
-import { openGlyphRoute } from "./fixtures/appLocators";
 import {
   createNewFont,
   killApp,
@@ -11,6 +10,7 @@ import {
   relaunchApp,
   runCommand,
 } from "./fixtures/documentLifecycle";
+import { EditorDriver } from "./fixtures/EditorDriver";
 import { addSquare } from "./fixtures/editorInteractions";
 
 const platformTest = test.extend({
@@ -55,8 +55,9 @@ async function createEvidenceDocument(
   await workspacePage.getByRole("button", { name: "Create glyph", exact: true }).click();
   const glyphId = await glyphIdForName(workspacePage, "newGlyph");
   await workspacePage.waitForFunction(() => window.shift?.applyStatusCell.peek() === "idle");
-  await openGlyphRoute(workspacePage, glyphId);
-  expect(await activeGlyphPointCount(workspacePage)).toBe(0);
+  const editor = new EditorDriver(workspacePage);
+  await editor.openGlyph(glyphId);
+  expect(await editor.pointCount()).toBe(0);
   expect(await addSquare(workspacePage)).toBe(4);
   await attachScreenshot(testInfo, "editor", workspacePage);
   return { workspacePage, glyphId };
@@ -102,8 +103,9 @@ async function reopenAndVerify(
     await launcherPage.getByRole("button", { name: /Load font/ }).click();
     const workspacePage = await workspaceWindow;
     await waitForWorkspaceReady(workspacePage);
-    await openGlyphRoute(workspacePage, glyphId);
-    expect(await activeGlyphPointCount(workspacePage)).toBe(4);
+    const editor = new EditorDriver(workspacePage);
+    await editor.openGlyph(glyphId);
+    expect(await editor.pointCount()).toBe(4);
     await attachScreenshot(testInfo, "reopened-editor", workspacePage);
   } finally {
     await killApp(relaunchedApp);
@@ -125,16 +127,6 @@ async function glyphIdForName(page: Page, glyphName: string): Promise<string> {
   );
   if (!glyphId) throw new Error(`Expected ${glyphName} glyph`);
   return glyphId;
-}
-
-async function activeGlyphPointCount(page: Page): Promise<number> {
-  return page.evaluate(() => {
-    const editor = window.shift?.editor;
-    const node = editor?.scene.nodesOfKind("glyph")[0];
-    const glyph = node ? editor?.glyphForId(node.glyphId) : null;
-    if (!node || !glyph) throw new Error("Expected active glyph editor");
-    return glyph.layerForSource(node.sourceId)?.pointCount ?? 0;
-  });
 }
 
 async function attachScreenshot(testInfo: TestInfo, name: string, page: Page): Promise<void> {

@@ -1,10 +1,10 @@
 import type { GlyphName } from "@shift/types";
 import { workspaceTest as test, expect } from "./fixtures/electronApp";
-import { openGlyphRoute } from "./fixtures/appLocators";
 
 for (const releaseShiftFirst of [true, false]) {
   test(`snaps Pen creation handles when Shift is released ${releaseShiftFirst ? "before" : "after"} mouseup`, async ({
     page,
+    editor,
   }) => {
     const glyphId = await page.evaluate(async () => {
       const workspace = window.shift!;
@@ -12,10 +12,9 @@ for (const releaseShiftFirst of [true, false]) {
       await workspace.font.editCoordinator.settled();
       return record.id;
     });
-    await openGlyphRoute(page, glyphId);
-    const canvas = page.locator("#interactive-canvas");
-    const bounds = await canvas.boundingBox();
-    if (!bounds) throw new Error("Expected canvas");
+    await editor.openGlyph(glyphId);
+    const canvas = editor.canvas;
+    const bounds = await editor.canvasBounds();
     const first = { x: Math.round(bounds.width / 4), y: Math.round(bounds.height / 2) };
     const down = { x: Math.round(bounds.width / 2), y: first.y };
     const end = { x: down.x + 80, y: down.y - 60 };
@@ -25,9 +24,10 @@ for (const releaseShiftFirst of [true, false]) {
       expect(point.x).toBeLessThan(bounds.width);
       expect(point.y).toBeLessThan(bounds.height);
     }
-    await page.keyboard.press("p");
+    await editor.selectTool("pen");
     await canvas.click({ position: first });
-    await page.evaluate(async () => window.shift!.font.editCoordinator.settled());
+    await editor.waitForIdle();
+    await expect.poll(() => editor.pointCount()).toBe(1);
     const expected = await page.evaluate(
       ({ down, end }) => {
         const editor = window.shift!.editor;
@@ -59,12 +59,10 @@ for (const releaseShiftFirst of [true, false]) {
         return layer.allPoints.map((point) => ({ id: point.id, x: point.x, y: point.y }));
       });
     expect(await points()).toHaveLength(1);
-    await page.mouse.move(bounds.x + down.x, bounds.y + down.y);
     await page.keyboard.down("Shift");
-    await page.mouse.down();
+    await editor.pointerDown({ x: bounds.x + down.x, y: bounds.y + down.y });
     try {
-      await page.mouse.move(bounds.x + end.x, bounds.y + end.y);
-      await page.evaluate(() => window.shift!.editor.toolManager.flushPointerMoves());
+      await editor.pointerMove({ x: bounds.x + end.x, y: bounds.y + end.y });
       const preview = await points();
       expect(preview).toHaveLength(4);
       expect(preview[2]!.x).toBeCloseTo(expected.incoming.x, 4);
@@ -124,15 +122,14 @@ for (const releaseShiftFirst of [true, false]) {
         }, guideScreen);
       await expect.poll(redGuideVisible).toBe(true);
       if (releaseShiftFirst) await page.keyboard.up("Shift");
-      await page.mouse.up();
+      await editor.pointerUp();
       if (!releaseShiftFirst) await page.keyboard.up("Shift");
-      await page.evaluate(async () => window.shift!.font.editCoordinator.settled());
       expect(await points()).toEqual(preview);
-      await expect(page.getByTestId("editor-shell")).toHaveAttribute("data-gesture", "idle");
+      await expect(editor.shell).toHaveAttribute("data-gesture", "idle");
       await expect.poll(redGuideVisible).toBe(false);
-      await page.keyboard.press("ControlOrMeta+z");
+      await editor.undo();
       await expect.poll(points).toHaveLength(1);
-      await page.keyboard.press("ControlOrMeta+Shift+z");
+      await editor.redo();
       await expect.poll(points).toEqual(preview);
     } finally {
       await page.mouse.up();

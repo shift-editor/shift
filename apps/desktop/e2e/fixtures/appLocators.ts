@@ -44,7 +44,7 @@ export function settingsDetails(page: Page) {
 }
 
 export async function firstAxisSlider(page: Page) {
-  const axisName = await page.evaluate(() => window.shiftSession?.catalog.axesCell.value[0]?.name);
+  const axisName = await page.evaluate(() => window.shiftSession?.catalog.axesCell.peek()[0]?.name);
   if (!axisName) throw new Error("Expected a variable axis");
 
   return page.getByRole("slider", { name: axisName, exact: true });
