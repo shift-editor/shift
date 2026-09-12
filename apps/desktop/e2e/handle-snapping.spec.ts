@@ -35,6 +35,8 @@ for (const releaseShiftFirst of [true, false]) {
       editor.selection.clear();
       editor.zoomToFit();
     });
+    await editor.waitForCanvasRender();
+
     const canvas = editor.canvas;
     const bounds = await editor.canvasBounds();
     const drag = await page.evaluate(() => {

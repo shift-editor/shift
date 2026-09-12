@@ -27,6 +27,7 @@ test.beforeEach(async ({ page, editor }) => {
     editor.selection.clear();
     editor.zoomToFit();
   });
+  await editor.waitForCanvasRender();
 });
 
 for (const pointIndex of [0, 2]) {

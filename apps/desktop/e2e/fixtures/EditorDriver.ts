@@ -54,10 +54,7 @@ async function readLivePointPosition(page: Page, pointId: PointId): Promise<Poin
  * Live gesture observations remain available through methods such as {@link selectionBounds}.
  */
 export class EditorDriver {
-  /**
-   * Creates a driver for the editor owned by `page`.
-   * @param page - Workspace page under test.
-   */
+  /** Creates a driver for the editor owned by `page`. */
   constructor(readonly page: Page) {}
 
   /** Returns the interactive editor canvas locator. */
@@ -144,9 +141,19 @@ export class EditorDriver {
     await this.page.getByRole("button", { name: TOOL_LABELS[tool], exact: true }).click();
   }
 
-  /**
-   * Returns fresh page-space canvas bounds; throws before canvas rendering.
-   */
+  /** Waits for pending edits and two browser frames to reach the canvas. */
+  async waitForCanvasRender(): Promise<void> {
+    await this.#waitForEdits();
+    await this.canvas.waitFor({ state: "visible" });
+    await this.page.evaluate(
+      () =>
+        new Promise<void>((resolve) => {
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+        }),
+    );
+  }
+
+  /** Returns fresh page-space canvas bounds; throws before canvas rendering. */
   async canvasBounds(): Promise<CanvasBounds> {
     const bounds = await this.canvas.boundingBox();
     if (!bounds) throw new Error("Expected interactive canvas bounds");
@@ -154,10 +161,7 @@ export class EditorDriver {
     return bounds;
   }
 
-  /**
-   * Projects a scene position into canvas-local coordinates.
-   * @param position - Editor scene position.
-   */
+  /** Projects a scene position into canvas-local coordinates. */
   async projectSceneToCanvas(position: Point2D): Promise<Point2D> {
     return this.page.evaluate((scenePosition) => {
       const editor = window.shiftSession?.editor;
