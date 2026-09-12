@@ -455,7 +455,10 @@ These are allowed to jump around when energy is high, but they should not silent
 
 **Angle Constraint**
 
-- [x] Hold `Shift` to constrain to 0°/45°/90°
+- [x] Hold `Shift` to snap a single cubic Bézier handle in 15° increments around its owning endpoint
+- [x] Snap Pen Bézier-creation drags in 15° increments around the new endpoint, with mirrored handles and one undoable creation
+- [x] Snap single on-curve points in 15° increments around themselves or the adjacent line endpoint; two-line junctions use themselves
+- [x] Constrain one or multiple selected segments to 90° movement around their combined bounds centre; bounding-box edges and corners retain resize priority
 - [x] Perpendicular constraint for smooth points
 
 **Measurement & Guidelines**

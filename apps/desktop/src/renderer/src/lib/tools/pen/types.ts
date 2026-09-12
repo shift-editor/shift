@@ -33,7 +33,7 @@ export type PenState =
   | { type: "idle" }
   | { type: "ready" }
   | { type: "anchored"; anchorPosition: Point2D }
-  | { type: "dragging"; curve: PenCurve };
+  | { type: "dragging"; curve: PenCurve; shiftKey: boolean };
 
 export type PenBehavior = Behavior<PenState, Pen>;
 

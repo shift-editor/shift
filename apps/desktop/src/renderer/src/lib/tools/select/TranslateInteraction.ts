@@ -4,7 +4,7 @@ import { PointRuleConstraint, PositionReference, type MoveEdit } from "@/lib/mod
 import type { PositionSelection } from "@/types/positionEdit";
 
 export class TranslateInteraction {
-  readonly #move: MoveEdit;
+  readonly move: MoveEdit;
   readonly startPos: Point2D;
 
   constructor(
@@ -12,24 +12,22 @@ export class TranslateInteraction {
     reference: GlyphLayerPositionTarget | null,
     pointerStart: Point2D,
   ) {
-    this.#move = selection.layer.positions.move(selection.targets);
+    this.move = selection.layer.positions.move(selection.targets);
 
     if (reference) {
       switch (reference.kind) {
         case "point":
-          this.#move.from(PositionReference.point(reference.id));
+          this.move.from(PositionReference.point(reference.id));
           break;
         case "anchor":
-          this.#move.from(PositionReference.anchor(reference.id));
+          this.move.from(PositionReference.anchor(reference.id));
           break;
       }
     }
 
     const pointIds = selection.targets.points ?? [];
     if (pointIds.length > 0) {
-      this.#move.constrainedBy(
-        PointRuleConstraint.forSelection(selection.layer.geometry, pointIds),
-      );
+      this.move.constrainedBy(PointRuleConstraint.forSelection(selection.layer.geometry, pointIds));
     }
 
     this.startPos = pointerStart;
@@ -38,14 +36,14 @@ export class TranslateInteraction {
   switchToCopy(): void {}
 
   preview(delta: Point2D): Point2D {
-    return this.#move.preview(delta).delta;
+    return this.move.preview(delta).delta;
   }
 
   commit(): void {
-    this.#move.commit();
+    this.move.commit();
   }
 
   discard(): void {
-    this.#move.discard();
+    this.move.discard();
   }
 }

@@ -3,6 +3,7 @@ import type { ContourId, PointId } from "@shift/types";
 import { Point, type Contour, type SegmentId } from "@shift/glyph-state";
 import type { GlyphLayer } from "@/lib/model/Glyph";
 import type { GlyphLayerEdit } from "@/lib/model/GlyphLayerEdit";
+import type { MoveEdit } from "@/lib/model/positions";
 import type { GlyphNode } from "@/types/node";
 import type { Pen } from "./Pen";
 import type { PenCurve, PenEndpoint } from "./types";
@@ -103,8 +104,8 @@ export class PenStroke {
     }
   }
 
-  finishCurve(curve: PenCurve, edit: GlyphLayerEdit, endpointId: PointId): void {
-    edit.finish("Add cubic");
+  finishCurve(curve: PenCurve, move: MoveEdit, endpointId: PointId): void {
+    move.commit("Add cubic");
     this.#pen.setActiveEndpoint({
       kind: "smooth",
       pointId: endpointId,

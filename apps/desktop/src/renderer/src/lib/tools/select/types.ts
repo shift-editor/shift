@@ -19,6 +19,8 @@ export interface BrushingDrag {
 
 /** Live state of a point-translate drag, including accumulated delta for undo grouping. */
 export interface TranslateDrag {
+  /** Shift from the latest processed drag sample, not the global keyboard state. */
+  shiftKey: boolean;
   startPos: Point2D;
   lastPos: Point2D;
   totalDelta: Point2D;

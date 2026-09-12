@@ -2,7 +2,7 @@ import type { Point2D } from "@shift/geo";
 import type { AnchorId, PointId } from "@shift/types";
 import type { GlyphLayer, GlyphLayerPositionTarget } from "../Glyph";
 
-/** Frozen reference used to turn a movement delta into a snappable position. */
+/** Identifies a point, anchor, or glyph-local position to freeze as a moving reference or snap pivot. */
 export class PositionReference {
   readonly #target: GlyphLayerPositionTarget | null;
   readonly #position: Point2D | null;
