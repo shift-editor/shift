@@ -20,6 +20,32 @@ const TOOL_LABELS = {
   ellipse: "Ellipse Tool (O)",
 } as const;
 
+async function waitForActiveGlyph(page: Page, glyphId: string): Promise<void> {
+  await page.waitForFunction((expectedGlyphId) => {
+    const editor = window.shift?.editor;
+    const node = editor?.scene.nodesOfKind("glyph")[0];
+    if (!editor || !node || node.glyphId !== expectedGlyphId) return false;
+
+    return Boolean(editor.glyphForId(node.glyphId)?.layerForSource(node.sourceId));
+  }, glyphId);
+}
+
+async function readLivePointPosition(page: Page, pointId: PointId): Promise<Point2D> {
+  return page.evaluate((id) => {
+    const editor = window.shift?.editor;
+    const node = editor?.scene.nodesOfKind("glyph")[0];
+    const point = node
+      ? editor
+          ?.glyphForId(node.glyphId)
+          ?.layerForSource(node.sourceId)
+          ?.allPoints.find((candidate) => candidate.id === id)
+      : null;
+    if (!point) throw new Error("Expected editable point");
+
+    return { x: point.x, y: point.y };
+  }, pointId);
+}
+
 /**
  * Drives the real desktop editor through Playwright and reads its observable domain state.
  *
@@ -76,6 +102,7 @@ export class EditorDriver {
     }, unicode);
 
     await waitForEditorReady(this.page, glyphId);
+    await waitForActiveGlyph(this.page, glyphId);
     await this.page.waitForTimeout(1000);
   }
 
@@ -106,6 +133,7 @@ export class EditorDriver {
       window.location.hash = `#/editor/${encodeURIComponent(id)}`;
     }, glyphId);
     await waitForEditorReady(this.page, glyphId);
+    await waitForActiveGlyph(this.page, glyphId);
   }
 
   /**
@@ -386,20 +414,15 @@ export class EditorDriver {
    */
   async pointPosition(pointId: PointId): Promise<Point2D> {
     await this.#waitForEdits();
+    return readLivePointPosition(this.page, pointId);
+  }
 
-    return this.page.evaluate((id) => {
-      const editor = window.shift?.editor;
-      const node = editor?.scene.nodesOfKind("glyph")[0];
-      const point = node
-        ? editor
-            ?.glyphForId(node.glyphId)
-            ?.layerForSource(node.sourceId)
-            ?.allPoints.find((candidate) => candidate.id === id)
-        : null;
-      if (!point) throw new Error("Expected editable point");
-
-      return { x: point.x, y: point.y };
-    }, pointId);
+  /**
+   * Returns the current preview position without waiting for persistence.
+   * @param pointId - Point in the active authored layer.
+   */
+  async livePointPosition(pointId: PointId): Promise<Point2D> {
+    return readLivePointPosition(this.page, pointId);
   }
 
   /**

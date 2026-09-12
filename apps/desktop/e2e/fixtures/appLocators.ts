@@ -71,13 +71,11 @@ export async function waitForEditorReady(page: Page, glyphId: string): Promise<v
   await expect(editorShell(page)).toBeVisible();
   await expect
     .poll(() =>
-      page.evaluate((expectedGlyphId) => {
-        const editor = window.shift?.editor;
-        const node = editor?.scene.nodesOfKind("glyph")[0];
-        if (!editor || !node || node.glyphId !== expectedGlyphId) return false;
-
-        return Boolean(editor.glyphForId(node.glyphId)?.layerForSource(node.sourceId));
-      }, glyphId),
+      page.evaluate(
+        (expectedGlyphId) =>
+          window.shift?.editor.scene.nodesOfKind("glyph")[0]?.glyphId === expectedGlyphId,
+        glyphId,
+      ),
     )
     .toBe(true);
 }

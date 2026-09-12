@@ -189,7 +189,7 @@ test("moves a point and supports undo", async ({ editor }) => {
 
 Use `EditorDriver` for semantic editor actions and domain observations. Keep assertions in the spec, and use Playwright's `page` only for visible UI, browser, or Electron behavior. Driver actions that can persist geometry own edit settling; confirmed reads such as `outline()` and `pointPosition()` must not be preceded by direct `editCoordinator.settled()` calls.
 
-Coordinate spaces are explicit: pointer methods take page positions, `dragCanvas()` takes canvas-local positions, and projection helpers convert between scene, canvas, and page coordinates. `activeGlyph()` returns `null` until the scene node and authored layer are both published. Live observations such as `selectionBounds()` intentionally expose gesture previews before confirmation.
+Coordinate spaces are explicit: pointer methods take page positions, `dragCanvas()` takes canvas-local positions, and projection helpers convert between scene, canvas, and page coordinates. `activeGlyph()` returns `null` until the scene node and authored layer are both published. Use `livePointPosition()` and `selectionBounds()` for gesture previews; keep `pointPosition()` for confirmed geometry.
 
 Do not turn `EditorDriver` into a dumping ground. Native window/menu focus, variable-font construction, GPU residency, performance loops, and screenshot assertions remain at their owning fixture or spec boundary.
 

@@ -66,12 +66,14 @@ test("preserves confirmed edits and document history across glyph navigation", a
 test("starts a fresh Pen context after navigating to another glyph", async ({ page, editor }) => {
   const glyphs = await createNavigationGlyphs(page);
   await openCatalogGlyph(page, "navigationA", glyphs.firstId);
+  await expect.poll(() => editor.activeGlyph()).toMatchObject({ glyphId: glyphs.firstId });
   await page.getByRole("button", { name: "Pen Tool (P)" }).click();
   const bounds = await editor.canvasBounds();
   await page.mouse.click(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
 
   await returnHome(page);
   await openCatalogGlyph(page, "navigationB", glyphs.secondId);
+  await expect.poll(() => editor.activeGlyph()).toMatchObject({ glyphId: glyphs.secondId });
   const secondBounds = await editor.canvasBounds();
   await page.mouse.click(
     secondBounds.x + secondBounds.width / 2,
