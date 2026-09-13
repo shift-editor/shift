@@ -26,7 +26,7 @@ export const Toolbar = ({ toggleLeftSidebar, toggleRightSidebar }: ToolbarProps)
               aria-label="Toggle left sidebar"
               variant="ghost"
               size="icon"
-              className="text-sidebar-icon transition-none hover:bg-transparent hover:text-accent"
+              className="text-sidebar-icon hover:bg-icon-button-hover"
               onClick={toggleLeftSidebar}
             />
           </TooltipTrigger>
@@ -54,7 +54,7 @@ export const Toolbar = ({ toggleLeftSidebar, toggleRightSidebar }: ToolbarProps)
               aria-label="Toggle right sidebar"
               variant="ghost"
               size="icon"
-              className="text-sidebar-icon transition-none hover:bg-transparent hover:text-accent"
+              className="text-sidebar-icon hover:bg-icon-button-hover"
               onClick={toggleRightSidebar}
             />
           </TooltipTrigger>

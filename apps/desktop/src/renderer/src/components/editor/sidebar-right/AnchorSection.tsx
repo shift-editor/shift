@@ -54,7 +54,7 @@ export const AnchorSection = () => {
 
   return (
     <SidebarSection title="Anchor">
-      <div className="text-xs text-secondary">{anchorName ?? "Unnamed anchor"}</div>
+      <div className="text-ui text-secondary">{anchorName ?? "Unnamed anchor"}</div>
       <div className="flex gap-2">
         <EditableSidebarInput
           ref={xRef}

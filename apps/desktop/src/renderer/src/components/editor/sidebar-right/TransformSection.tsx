@@ -232,17 +232,17 @@ export const TransformSection = () => {
   return (
     <SidebarSection title="Transform">
       <div className="flex flex-col gap-2">
-        <div className="text-xs text-secondary">Align</div>
+        <div className="text-ui text-secondary">Align</div>
         <AlignButtonsRow canAlign={canAlign} onAlign={handleAlign} />
       </div>
 
       <div className="flex flex-col gap-2">
-        <div className="text-xs text-secondary">Distribute</div>
+        <div className="text-ui text-secondary">Distribute</div>
         <DistributeButtonsRow onDistribute={handleDistribute} canDistribute={canDistribute} />
       </div>
 
       <div className="flex flex-col gap-2">
-        <div className="text-xs text-secondary">Dimensions</div>
+        <div className="text-ui text-secondary">Dimensions</div>
         <div className="flex gap-2">
           <EditableSidebarInput
             ref={widthRef}
@@ -262,7 +262,7 @@ export const TransformSection = () => {
       </div>
 
       <div className="flex flex-col gap-2">
-        <div className="text-xs text-secondary">Position</div>
+        <div className="text-ui text-secondary">Position</div>
         <div className="flex gap-2">
           <EditableSidebarInput
             ref={xRef}
@@ -282,7 +282,7 @@ export const TransformSection = () => {
       </div>
 
       <div className="flex flex-col gap-2">
-        <div className="text-xs text-secondary">Rotation</div>
+        <div className="text-ui text-secondary">Rotation</div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="w-24 shrink-0">
             <EditableSidebarInput
