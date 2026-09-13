@@ -35,6 +35,18 @@ describe("canvas-owned Glyph catalog layout", () => {
     expect(result.totalHeight).toBe(655);
   });
 
+  it("keeps sparse rows at their nominal cell width as the viewport resizes", () => {
+    const glyphs = catalog(2);
+    const narrow = layout(500, 240, glyphs.length).frame(glyphs, 0);
+    const wide = layout(720, 240, glyphs.length).frame(glyphs, 0);
+
+    expect(narrow.layout.cellWidth).toBe(100);
+    expect(wide.layout.cellWidth).toBe(100);
+    expect(narrow.cells.map((cell) => cell.cellRect)).toEqual(
+      wide.cells.map((cell) => cell.cellRect),
+    );
+  });
+
   it("derives top, middle, and end cells from catalog order and scrollTop", () => {
     const glyphs = catalog(20);
     const result = layout(500, 200, glyphs.length);
@@ -58,7 +70,7 @@ describe("canvas-owned Glyph catalog layout", () => {
 
     expect(narrow.cells.map((cell) => cell.glyph.id)).toEqual(["glyph-2", "glyph-5", "glyph-7"]);
     expect(narrow.cells[2]?.previewRect).toMatchObject({ x: 36, y: 143, width: 100, height: 75 });
-    expect(wide.cells[2]?.previewRect).toMatchObject({ x: 254, y: 20, width: 101, height: 75 });
+    expect(wide.cells[2]?.previewRect).toMatchObject({ x: 252, y: 20, width: 100, height: 75 });
   });
 
   it("hits preview tiles but excludes labels, gaps, and viewport padding", () => {

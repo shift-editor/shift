@@ -240,6 +240,33 @@ test.describe("Editor view", () => {
     await expect.poll(() => elementWidth(leftSidebar)).toBeCloseTo(defaultWidth, 0);
   });
 
+  test("toolbar toggles both sidebars without reflowing their contents", async ({ page }) => {
+    const layout = page.getByTestId("editor-layout-panels");
+    const leftPanel = layout.getByTestId("left-sidebar-panel");
+    const rightPanel = layout.getByTestId("right-sidebar-panel");
+    const leftContent = page.getByRole("complementary", { name: "Variation controls" });
+    const rightContent = page.getByRole("complementary", { name: "Glyph properties" });
+    const leftWidth = await elementWidth(leftContent);
+    const rightWidth = await elementWidth(rightContent);
+
+    await page.getByRole("button", { name: "Toggle left sidebar" }).click();
+    await expect.poll(() => elementWidth(leftPanel)).toBe(0);
+    await expect
+      .poll(async () => Math.abs((await elementWidth(leftContent)) - leftWidth))
+      .toBeLessThanOrEqual(1);
+
+    await page.getByRole("button", { name: "Toggle right sidebar" }).click();
+    await expect.poll(() => elementWidth(rightPanel)).toBe(0);
+    await expect
+      .poll(async () => Math.abs((await elementWidth(rightContent)) - rightWidth))
+      .toBeLessThanOrEqual(1);
+    await page.getByRole("button", { name: "Toggle right sidebar" }).click();
+    await expect.poll(() => elementWidth(rightPanel)).toBeGreaterThan(0);
+
+    await page.getByRole("button", { name: "Toggle left sidebar" }).click();
+    await expect.poll(() => elementWidth(leftPanel)).toBeGreaterThan(0);
+  });
+
   test("keeps custom cursors on the canvas while hovering and bending across sidebars", async ({
     page,
     editor,

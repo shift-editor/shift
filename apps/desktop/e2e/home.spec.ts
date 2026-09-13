@@ -25,31 +25,31 @@ test.describe("Home view", () => {
       includeHidden: true,
     });
     await page.mouse.move(0, 0);
-    await expect(grid).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
-    const background = await grid.evaluate((element) => getComputedStyle(element).backgroundColor);
+    const activeColor = await grid.evaluate((element) => getComputedStyle(element).color);
+    const inactiveColor = await info.evaluate((element) => getComputedStyle(element).color);
+    expect(activeColor).not.toBe(inactiveColor);
+    await expect(grid).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
     await expect(info).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
 
     await info.click();
     await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
     await page.mouse.move(0, 0);
-    await expect(info).toHaveCSS("background-color", background);
-    await expect(grid).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    await expect(info).toHaveCSS("color", activeColor);
+    await expect(grid).toHaveCSS("color", inactiveColor);
     await page.keyboard.press("Escape");
     await expect(page.getByRole("dialog", { name: "Settings" })).toBeHidden();
-    await expect(grid).toHaveCSS("background-color", background);
-    await expect(info).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    await expect(grid).toHaveCSS("color", activeColor);
+    await expect(info).toHaveCSS("color", inactiveColor);
 
     await clickFirstCatalogGlyph(page);
     await page.waitForURL(/#\/editor\//);
+    const editorGrid = page.getByRole("button", { name: "Font overview", exact: true });
+    const editorInfo = page.getByRole("button", { name: "Settings", exact: true });
     await page.mouse.move(0, 0);
-    await expect(page.getByRole("button", { name: "Font overview", exact: true })).toHaveCSS(
-      "background-color",
-      "rgba(0, 0, 0, 0)",
-    );
-    await expect(page.getByRole("button", { name: "Settings", exact: true })).toHaveCSS(
-      "background-color",
-      "rgba(0, 0, 0, 0)",
-    );
+    await expect(editorGrid).toHaveCSS("color", inactiveColor);
+    await expect(editorInfo).toHaveCSS("color", inactiveColor);
+    await editorGrid.hover();
+    await expect(editorGrid).toHaveCSS("color", activeColor);
   });
 
   test("selected category uses one background across its heading and children", async ({
@@ -95,6 +95,70 @@ test.describe("Home view", () => {
 
     await expect.poll(() => elementWidth(leftSidebar)).toBeCloseTo(defaultWidth, 0);
     await expect.poll(() => elementWidth(rightSidebar)).toBeCloseTo(defaultWidth, 0);
+  });
+
+  test("toolbar toggles both sidebars without reflowing their contents", async ({ page }) => {
+    const layout = page.getByTestId("home-layout-panels");
+    const leftPanel = layout.getByTestId("left-sidebar-panel");
+    const rightPanel = layout.getByTestId("right-sidebar-panel");
+    const leftContent = page.getByRole("complementary", { name: "Font navigation" });
+    const rightContent = page.getByRole("complementary", { name: "Glyph properties" });
+    const catalogSurface = glyphCatalogSurface(page);
+    const leftWidth = await elementWidth(leftContent);
+    const rightWidth = await elementWidth(rightContent);
+
+    await page.getByRole("button", { name: "Toggle left sidebar" }).click();
+    await expect.poll(() => elementWidth(leftPanel)).toBe(0);
+    await expect
+      .poll(async () => Math.abs((await elementWidth(leftContent)) - leftWidth))
+      .toBeLessThanOrEqual(1);
+
+    const catalogSamples = await catalogSurface.evaluate(async (element) => {
+      const catalogPanel = element.parentElement;
+      const button = document.querySelector<HTMLButtonElement>(
+        'button[aria-label="Toggle right sidebar"]',
+      );
+      if (!catalogPanel || !button) {
+        throw new Error("Expected catalog panel and right sidebar toggle");
+      }
+
+      const samples: Array<{ catalogWidth: number; panelWidth: number }> = [];
+      const startedAt = performance.now();
+      button.click();
+      await new Promise<void>((resolve) => {
+        const sample = () => {
+          samples.push({
+            catalogWidth: element.getBoundingClientRect().width,
+            panelWidth: catalogPanel.getBoundingClientRect().width,
+          });
+          if (performance.now() - startedAt >= 250) {
+            resolve();
+            return;
+          }
+
+          requestAnimationFrame(sample);
+        };
+        requestAnimationFrame(sample);
+      });
+
+      return samples;
+    });
+    for (let index = 1; index < catalogSamples.length; index += 1) {
+      const previous = catalogSamples[index - 1];
+      const current = catalogSamples[index];
+      expect(current!.panelWidth).toBeGreaterThanOrEqual(previous!.panelWidth - 1);
+      expect(Math.abs(current!.catalogWidth - current!.panelWidth)).toBeLessThanOrEqual(1);
+    }
+    expect(catalogSamples.at(-1)!.panelWidth - catalogSamples[0]!.panelWidth).toBeGreaterThan(10);
+    await expect.poll(() => elementWidth(rightPanel)).toBe(0);
+    await expect
+      .poll(async () => Math.abs((await elementWidth(rightContent)) - rightWidth))
+      .toBeLessThanOrEqual(1);
+    await page.getByRole("button", { name: "Toggle right sidebar" }).click();
+    await expect.poll(() => elementWidth(rightPanel)).toBeGreaterThan(0);
+
+    await page.getByRole("button", { name: "Toggle left sidebar" }).click();
+    await expect.poll(() => elementWidth(leftPanel)).toBeGreaterThan(0);
   });
 
   test("glyph renderer contributes rendered outlines", async ({ page }) => {

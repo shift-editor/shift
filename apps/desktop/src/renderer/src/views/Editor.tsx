@@ -161,6 +161,85 @@ const EditorLayout = ({
 }) => {
   const leftSidebarPanelRef = useRef<ResizablePanelHandle>(null);
   const rightSidebarPanelRef = useRef<ResizablePanelHandle>(null);
+  const leftSidebarContentRef = useRef<HTMLDivElement>(null);
+  const rightSidebarContentRef = useRef<HTMLDivElement>(null);
+  const sidebarLayoutAnimationTimeoutRef = useRef<number | null>(null);
+
+  const toggleLeftSidebar = () => {
+    const panel = leftSidebarPanelRef.current;
+    const content = leftSidebarContentRef.current;
+    const panelElement = content?.parentElement;
+    const groupElement = panelElement?.parentElement;
+    if (!panel || !content || !panelElement || !groupElement) return;
+
+    const expanding = panel.isCollapsed();
+    if (!expanding && content.style.width === "") {
+      content.style.width = `${content.getBoundingClientRect().width}px`;
+    }
+
+    groupElement.classList.add("sidebar-layout-animating");
+    if (expanding) {
+      panel.expand();
+      if (content.style.width === "") {
+        const groupWidth = groupElement.getBoundingClientRect().width;
+        content.style.width = `${(groupWidth * panel.getSize()) / 100}px`;
+      }
+    } else {
+      panel.collapse();
+    }
+
+    if (sidebarLayoutAnimationTimeoutRef.current !== null) {
+      window.clearTimeout(sidebarLayoutAnimationTimeoutRef.current);
+    }
+    sidebarLayoutAnimationTimeoutRef.current = window.setTimeout(() => {
+      groupElement.classList.remove("sidebar-layout-animating");
+      if (leftSidebarPanelRef.current?.isExpanded() && leftSidebarContentRef.current) {
+        leftSidebarContentRef.current.style.width = "";
+      }
+      if (rightSidebarPanelRef.current?.isExpanded() && rightSidebarContentRef.current) {
+        rightSidebarContentRef.current.style.width = "";
+      }
+      sidebarLayoutAnimationTimeoutRef.current = null;
+    }, 150);
+  };
+
+  const toggleRightSidebar = () => {
+    const panel = rightSidebarPanelRef.current;
+    const content = rightSidebarContentRef.current;
+    const panelElement = content?.parentElement;
+    const groupElement = panelElement?.parentElement;
+    if (!panel || !content || !panelElement || !groupElement) return;
+
+    const expanding = panel.isCollapsed();
+    if (!expanding && content.style.width === "") {
+      content.style.width = `${content.getBoundingClientRect().width}px`;
+    }
+
+    groupElement.classList.add("sidebar-layout-animating");
+    if (expanding) {
+      panel.expand();
+      if (content.style.width === "") {
+        const groupWidth = groupElement.getBoundingClientRect().width;
+        content.style.width = `${(groupWidth * panel.getSize()) / 100}px`;
+      }
+    } else {
+      panel.collapse();
+    }
+
+    if (sidebarLayoutAnimationTimeoutRef.current !== null) {
+      window.clearTimeout(sidebarLayoutAnimationTimeoutRef.current);
+    }
+    sidebarLayoutAnimationTimeoutRef.current = window.setTimeout(() => {
+      groupElement.classList.remove("sidebar-layout-animating");
+      if (leftSidebarPanelRef.current?.isExpanded() && leftSidebarContentRef.current) {
+        leftSidebarContentRef.current.style.width = "";
+      }
+      if (rightSidebarPanelRef.current?.isExpanded() && rightSidebarContentRef.current) {
+        rightSidebarContentRef.current.style.width = "";
+      }
+      sidebarLayoutAnimationTimeoutRef.current = null;
+    }, 150);
+  };
 
   return (
     <div
@@ -169,7 +248,7 @@ const EditorLayout = ({
       data-gesture={gesture}
       style={{ "--shift-cursor": cursorStyle } as React.CSSProperties}
     >
-      <Toolbar />
+      <Toolbar toggleLeftSidebar={toggleLeftSidebar} toggleRightSidebar={toggleRightSidebar} />
       <ResizablePanelGroup
         data-testid="editor-layout-panels"
         direction="horizontal"
@@ -178,6 +257,7 @@ const EditorLayout = ({
       >
         <ResizablePanel
           ref={leftSidebarPanelRef}
+          className="sidebar-panel"
           data-testid="left-sidebar-panel"
           id="left-sidebar"
           order={1}
@@ -187,9 +267,11 @@ const EditorLayout = ({
           collapsible
           collapsedSize={0}
         >
-          <ZoneContainer zone="sidebar" className="h-full">
-            <LeftSidebar />
-          </ZoneContainer>
+          <div ref={leftSidebarContentRef} className="h-full">
+            <ZoneContainer zone="sidebar" className="h-full">
+              <LeftSidebar />
+            </ZoneContainer>
+          </div>
         </ResizablePanel>
         <ResizableHandle
           aria-label="Resize left sidebar"
@@ -208,6 +290,7 @@ const EditorLayout = ({
         />
         <ResizablePanel
           ref={rightSidebarPanelRef}
+          className="sidebar-panel"
           data-testid="right-sidebar-panel"
           id="right-sidebar"
           order={3}
@@ -217,9 +300,11 @@ const EditorLayout = ({
           collapsible
           collapsedSize={0}
         >
-          <ZoneContainer zone="sidebar" className="h-full">
-            <RightSidebar />
-          </ZoneContainer>
+          <div ref={rightSidebarContentRef} className="h-full">
+            <ZoneContainer zone="sidebar" className="h-full">
+              <RightSidebar />
+            </ZoneContainer>
+          </div>
         </ResizablePanel>
       </ResizablePanelGroup>
     </div>
