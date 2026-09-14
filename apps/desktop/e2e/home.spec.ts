@@ -48,8 +48,10 @@ test.describe("Home view", () => {
     await page.mouse.move(0, 0);
     await expect(editorGrid).toHaveCSS("color", inactiveColor);
     await expect(editorInfo).toHaveCSS("color", inactiveColor);
+    await expect(editorGrid).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
     await editorGrid.hover();
-    await expect(editorGrid).toHaveCSS("color", activeColor);
+    await expect(editorGrid).toHaveCSS("color", inactiveColor);
+    await expect(editorGrid).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
   });
 
   test("selected category uses one background across its heading and children", async ({
