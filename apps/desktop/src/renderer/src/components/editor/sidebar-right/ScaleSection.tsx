@@ -67,12 +67,12 @@ export const ScaleSection = () => {
   return (
     <SidebarSection title="Scale">
       <div className="flex flex-col gap-2">
-        <div className="text-xs text-secondary">Size</div>
+        <div className="text-ui text-secondary">Size</div>
         <div className="flex gap-2">
           <EditableSidebarInput
             ref={widthRef}
             ariaLabel="Width"
-            label={<span className="text-xs text-secondary">W</span>}
+            label={<span className="text-ui text-secondary">W</span>}
             disabled={!editable}
             onValueChange={(v) => handleSizeChange("width", v)}
           />
@@ -88,7 +88,7 @@ export const ScaleSection = () => {
 
       <div className="flex gap-4">
         <div className="flex flex-col gap-2">
-          <div className="text-xs text-secondary">Scale</div>
+          <div className="text-ui text-secondary">Scale</div>
           <EditableSidebarInput
             ariaLabel="Scale factor"
             className="max-w-18 pl-7"
@@ -102,7 +102,7 @@ export const ScaleSection = () => {
         </div>
 
         <div className="flex flex-col gap-2">
-          <div className="text-xs text-secondary">Anchor point</div>
+          <div className="text-ui text-secondary">Anchor point</div>
           <div className="w-full h-full bg-input p-1.5 rounded-sm">
             <TransformGrid activeAnchor={anchor} onChange={editable ? setAnchor : undefined} />
           </div>

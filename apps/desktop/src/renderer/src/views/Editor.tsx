@@ -1,14 +1,10 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 
 import { useParams } from "react-router";
 
-import {
-  ResizableHandle,
-  ResizablePanel,
-  ResizablePanelGroup,
-  type ResizablePanelHandle,
-} from "@shift/ui";
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@shift/ui";
 import { Toolbar } from "@/components/chrome/Toolbar";
+import { useSidebarLayout } from "@/components/chrome/useSidebarLayout";
 import { LeftSidebar } from "@/components/editor/LeftSidebar";
 import { RightSidebar } from "@/components/editor/RightSidebar";
 import { Canvas } from "@/components/editor/Canvas";
@@ -159,8 +155,14 @@ const EditorLayout = ({
   gesture: string;
   children: ReactNode;
 }) => {
-  const leftSidebarPanelRef = useRef<ResizablePanelHandle>(null);
-  const rightSidebarPanelRef = useRef<ResizablePanelHandle>(null);
+  const {
+    leftSidebarPanelRef,
+    rightSidebarPanelRef,
+    leftSidebarContentRef,
+    rightSidebarContentRef,
+    toggleLeftSidebar,
+    toggleRightSidebar,
+  } = useSidebarLayout();
 
   return (
     <div
@@ -169,7 +171,7 @@ const EditorLayout = ({
       data-gesture={gesture}
       style={{ "--shift-cursor": cursorStyle } as React.CSSProperties}
     >
-      <Toolbar />
+      <Toolbar toggleLeftSidebar={toggleLeftSidebar} toggleRightSidebar={toggleRightSidebar} />
       <ResizablePanelGroup
         data-testid="editor-layout-panels"
         direction="horizontal"
@@ -178,6 +180,7 @@ const EditorLayout = ({
       >
         <ResizablePanel
           ref={leftSidebarPanelRef}
+          className="sidebar-panel"
           data-testid="left-sidebar-panel"
           id="left-sidebar"
           order={1}
@@ -187,9 +190,11 @@ const EditorLayout = ({
           collapsible
           collapsedSize={0}
         >
-          <ZoneContainer zone="sidebar" className="h-full">
-            <LeftSidebar />
-          </ZoneContainer>
+          <div ref={leftSidebarContentRef} className="h-full">
+            <ZoneContainer zone="sidebar" className="h-full">
+              <LeftSidebar />
+            </ZoneContainer>
+          </div>
         </ResizablePanel>
         <ResizableHandle
           aria-label="Resize left sidebar"
@@ -208,6 +213,7 @@ const EditorLayout = ({
         />
         <ResizablePanel
           ref={rightSidebarPanelRef}
+          className="sidebar-panel"
           data-testid="right-sidebar-panel"
           id="right-sidebar"
           order={3}
@@ -217,9 +223,11 @@ const EditorLayout = ({
           collapsible
           collapsedSize={0}
         >
-          <ZoneContainer zone="sidebar" className="h-full">
-            <RightSidebar />
-          </ZoneContainer>
+          <div ref={rightSidebarContentRef} className="h-full">
+            <ZoneContainer zone="sidebar" className="h-full">
+              <RightSidebar />
+            </ZoneContainer>
+          </div>
         </ResizablePanel>
       </ResizablePanelGroup>
     </div>

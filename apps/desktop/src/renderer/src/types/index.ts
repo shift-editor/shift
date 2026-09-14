@@ -15,6 +15,7 @@ export type {
   SlugGlyphCatalogSurfaceProps,
   SvgGlyphCatalogGridProps,
 } from "./glyphCatalog";
+export type { ToolbarProps } from "./chrome";
 export type { EditingId, PendingEditId } from "./editing";
 export type { FontOptions, FontStoreOptions } from "./font";
 export type { GlyphGeometrySelection, GlyphOptions, GlyphReader } from "./glyph";

@@ -47,10 +47,14 @@ export class GlyphCatalogLayout implements GlyphCatalogLayoutMetrics {
       this.gridWidth > 0
         ? Math.max(1, Math.floor((this.gridWidth + COLUMN_GAP) / (NOMINAL_CELL_WIDTH + COLUMN_GAP)))
         : 0;
-    this.cellWidth =
-      this.columns > 0
-        ? (this.gridWidth - Math.max(0, this.columns - 1) * COLUMN_GAP) / this.columns
-        : 0;
+    if (this.columns === 0) {
+      this.cellWidth = 0;
+    } else if (this.glyphCount < this.columns) {
+      this.cellWidth = NOMINAL_CELL_WIDTH;
+    } else {
+      this.cellWidth = (this.gridWidth - Math.max(0, this.columns - 1) * COLUMN_GAP) / this.columns;
+    }
+
     this.rowCount = this.columns > 0 ? Math.ceil(this.glyphCount / this.columns) : 0;
     this.totalHeight = this.rowCount > 0 ? 2 * VIEWPORT_PADDING + this.rowCount * ROW_PITCH : 0;
   }

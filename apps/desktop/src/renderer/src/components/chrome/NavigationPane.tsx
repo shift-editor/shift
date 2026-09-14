@@ -11,8 +11,8 @@ export const NavigationPane = () => {
 
   return (
     <section className="h-full flex flex-1 items-center ml-1">
-      <div className="flex flex-1 items-center">
-        <div className="bg-white rounded-lg border-b border-line p-0.5">
+      <div className="flex flex-1 items-center gap-1">
+        <div className="rounded-lg border-b border-line p-0.5">
           {routes.map((route) => {
             if (!route.icon) return null;
             const Icon = route.icon;
@@ -34,9 +34,10 @@ export const NavigationPane = () => {
               <Tooltip key={route.id}>
                 <TooltipTrigger>
                   <Button
-                    icon={<Icon width={20} height={20} className="text-primary" />}
+                    icon={<Icon width={20} height={20} />}
                     aria-label={route.description}
                     variant="ghost"
+                    className="text-sidebar-icon hover:bg-icon-button-hover data-[active]:bg-transparent data-[active]:text-accent data-[active]:hover:bg-icon-button-hover"
                     isActive={
                       route.kind === "dialog"
                         ? settings.target !== null
