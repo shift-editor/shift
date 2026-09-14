@@ -1,100 +1,22 @@
-import { useRef } from "react";
-import {
-  ResizableHandle,
-  ResizablePanel,
-  ResizablePanelGroup,
-  type ResizablePanelHandle,
-} from "@shift/ui";
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@shift/ui";
 import { GlyphGrid } from "@/components/home/GlyphGrid";
 import { LeftSidebar } from "@/components/home/LeftSidebar";
 import { RightSidebar } from "@/components/editor/RightSidebar";
 import { Toolbar } from "@/components/chrome/Toolbar";
+import { useSidebarLayout } from "@/components/chrome/useSidebarLayout";
 
 const LEFT_SIDEBAR_DEFAULT_SIZE = 15;
 const RIGHT_SIDEBAR_DEFAULT_SIZE = 15;
 
 export const Home = () => {
-  const leftSidebarPanelRef = useRef<ResizablePanelHandle>(null);
-  const rightSidebarPanelRef = useRef<ResizablePanelHandle>(null);
-  const leftSidebarContentRef = useRef<HTMLDivElement>(null);
-  const rightSidebarContentRef = useRef<HTMLDivElement>(null);
-  const sidebarLayoutAnimationTimeoutRef = useRef<number | null>(null);
-
-  const toggleLeftSidebar = () => {
-    const panel = leftSidebarPanelRef.current;
-    const content = leftSidebarContentRef.current;
-    const panelElement = content?.parentElement;
-    const groupElement = panelElement?.parentElement;
-    if (!panel || !content || !panelElement || !groupElement) return;
-
-    const expanding = panel.isCollapsed();
-    if (!expanding && content.style.width === "") {
-      content.style.width = `${content.getBoundingClientRect().width}px`;
-    }
-
-    groupElement.classList.add("sidebar-layout-animating");
-    if (expanding) {
-      panel.expand();
-      if (content.style.width === "") {
-        const groupWidth = groupElement.getBoundingClientRect().width;
-        content.style.width = `${(groupWidth * panel.getSize()) / 100}px`;
-      }
-    } else {
-      panel.collapse();
-    }
-
-    if (sidebarLayoutAnimationTimeoutRef.current !== null) {
-      window.clearTimeout(sidebarLayoutAnimationTimeoutRef.current);
-    }
-    sidebarLayoutAnimationTimeoutRef.current = window.setTimeout(() => {
-      groupElement.classList.remove("sidebar-layout-animating");
-      if (leftSidebarPanelRef.current?.isExpanded() && leftSidebarContentRef.current) {
-        leftSidebarContentRef.current.style.width = "";
-      }
-      if (rightSidebarPanelRef.current?.isExpanded() && rightSidebarContentRef.current) {
-        rightSidebarContentRef.current.style.width = "";
-      }
-      sidebarLayoutAnimationTimeoutRef.current = null;
-    }, 150);
-  };
-
-  const toggleRightSidebar = () => {
-    const panel = rightSidebarPanelRef.current;
-    const content = rightSidebarContentRef.current;
-    const panelElement = content?.parentElement;
-    const groupElement = panelElement?.parentElement;
-    if (!panel || !content || !panelElement || !groupElement) return;
-
-    const expanding = panel.isCollapsed();
-    if (!expanding && content.style.width === "") {
-      content.style.width = `${content.getBoundingClientRect().width}px`;
-    }
-
-    groupElement.classList.add("sidebar-layout-animating");
-    if (expanding) {
-      panel.expand();
-      if (content.style.width === "") {
-        const groupWidth = groupElement.getBoundingClientRect().width;
-        content.style.width = `${(groupWidth * panel.getSize()) / 100}px`;
-      }
-    } else {
-      panel.collapse();
-    }
-
-    if (sidebarLayoutAnimationTimeoutRef.current !== null) {
-      window.clearTimeout(sidebarLayoutAnimationTimeoutRef.current);
-    }
-    sidebarLayoutAnimationTimeoutRef.current = window.setTimeout(() => {
-      groupElement.classList.remove("sidebar-layout-animating");
-      if (leftSidebarPanelRef.current?.isExpanded() && leftSidebarContentRef.current) {
-        leftSidebarContentRef.current.style.width = "";
-      }
-      if (rightSidebarPanelRef.current?.isExpanded() && rightSidebarContentRef.current) {
-        rightSidebarContentRef.current.style.width = "";
-      }
-      sidebarLayoutAnimationTimeoutRef.current = null;
-    }, 150);
-  };
+  const {
+    leftSidebarPanelRef,
+    rightSidebarPanelRef,
+    leftSidebarContentRef,
+    rightSidebarContentRef,
+    toggleLeftSidebar,
+    toggleRightSidebar,
+  } = useSidebarLayout();
 
   return (
     <main className="grid h-screen w-full grid-rows-[auto_minmax(0,1fr)]">
