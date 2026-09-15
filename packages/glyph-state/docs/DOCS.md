@@ -32,7 +32,7 @@ packages/glyph-state/src/
 ## Key Types
 
 - **`GlyphGeometry`** -- immutable reader over `GlyphStructure + Float64Array`; exposes `xAdvance`, `contours`, `segments`, `anchors`, `components`, `allPoints`, `bounds`, `sidebearings`, id lookups, hit testing (`hitAt`, `hitPoint`, `hitAnchor`, `hitSegment`), position reads (`positionsFor`), and preview updates (`withPositionUpdates`).
-- **`Contour`** -- reader for one contour's point records and point coordinates. Exposes endpoint/on-curve queries, wrapped `pointAt`, `withNeighbors`, `segments`, `selectionBounds`, and `canClose`.
+- **`Contour`** -- reader for one contour's point records and point coordinates. Exposes endpoint/on-curve queries, cubic-control ownership, wrapped `pointAt`, `withNeighbors`, `segments`, `selectionBounds`, and `canClose`.
 - **`Anchor`** -- reader for one anchor's metadata and coordinates.
 - **`Component`** -- reader for one component's base glyph and decomposed transform; exposes a simple affine matrix for outline composition.
 - **`Segment`** -- id-aware line/quad/cubic wrapper with `id`, endpoint/control accessors, `bounds`, `toCurve`, `splitAt`, and `hit`.

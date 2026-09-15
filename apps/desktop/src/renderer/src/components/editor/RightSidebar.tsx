@@ -9,6 +9,7 @@ import { useEditor, useFontSession } from "@/workspace/WorkspaceContext";
 import { useSignalState } from "@/lib/signals";
 import { GlyphSection } from "./sidebar-right/GlyphSection";
 import { AnchorSection } from "./sidebar-right/AnchorSection";
+import { HandleSection } from "./sidebar-right/HandleSection";
 import { BooleanOps } from "./BooleanOps";
 import { LockIcon } from "@/components/icons/LockIcon";
 import { usePreviewNotice } from "@/context/PreviewNoticeProvider";
@@ -64,6 +65,7 @@ export const RightSidebar = () => {
               <BooleanOps />
               {hasGeometrySelection && (
                 <>
+                  <HandleSection />
                   <TransformSection />
                   <ScaleSection />
                 </>
