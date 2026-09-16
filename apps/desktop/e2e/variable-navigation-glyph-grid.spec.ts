@@ -216,7 +216,7 @@ test("keeps variable preview and exact-source editability coherent across Grid n
     .poll(() =>
       page.evaluate((axisId) => window.shift?.editor.externalLocation.get(axisId), fixture.axisId),
     )
-    .toBe(700);
+    .toBe(900);
 
   await openCatalogGlyph(page, "navigationSparse", fixture.secondGlyphId);
   await expect

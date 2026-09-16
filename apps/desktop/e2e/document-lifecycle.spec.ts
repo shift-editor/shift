@@ -509,6 +509,24 @@ for (const { format, sourcePath, sourceRoot } of [
   );
 }
 
+convertiblePreviewTest(
+  "Save As replaces a preview glyph route with authored Home",
+  async ({ electronApp, page, saveShiftPath }) => {
+    const workspacePage = await openSelectedPreview(page, electronApp);
+    await clickFirstCatalogGlyph(workspacePage);
+    await workspacePage.waitForURL(/#\/editor\//);
+    await expect(workspacePage.locator("#interactive-canvas")).toBeVisible();
+
+    await runCommand(workspacePage, electronApp, "file.saveAs");
+    await waitForWorkspaceReady(workspacePage);
+
+    await expect
+      .poll(() => workspacePage.evaluate(() => window.shiftSession?.mode))
+      .toBe("authored");
+    expect(fs.existsSync(saveShiftPath)).toBe(true);
+  },
+);
+
 cancelPreviewSaveTest(
   "canceling preview Save leaves the source in preview mode",
   async ({ electronApp, page, testRoot }) => {

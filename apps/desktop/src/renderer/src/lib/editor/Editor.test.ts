@@ -159,6 +159,22 @@ describe("Editor scene bootstrap", () => {
     );
   });
 
+  it("keeps source selection and external axis location synchronized", async () => {
+    const axisId = editor.font.createAxis(weightAxis());
+    await editor.settle();
+    const sourceId = editor.createSource("Bold", externalAxisLocationFromRecord({ [axisId]: 700 }));
+    await editor.settle();
+
+    editor.selectSource(editor.font.defaultSource.id);
+    expect(editor.externalLocation.get(axisId)).toBe(400);
+    editor.selectSource(sourceId);
+    expect(editor.externalLocation.get(axisId)).toBe(700);
+    editor.setExternalLocation(externalAxisLocationFromRecord({ [axisId]: 550 }));
+    expect(editor.activeSourceId).toBeNull();
+    editor.setExternalLocation(externalAxisLocationFromRecord({ [axisId]: 700 }));
+    expect(editor.activeSourceId).toBe(sourceId);
+  });
+
   it("materializes the opened glyph when selecting a sparse source", async () => {
     editor.selectTool("pen");
     await editor.clickGlyphLocal(0, 0);

@@ -154,14 +154,8 @@ export class Translate implements SelectBehavior {
       return self;
     }
 
-    for (const segment of segments) {
-      const cubic = segment.asCubic();
-      if (!cubic) continue;
-      if (cubic.controlStart.id === point.id) return PositionReference.point(cubic.start.id);
-      if (cubic.controlEnd.id === point.id) return PositionReference.point(cubic.end.id);
-    }
-
-    return null;
+    const anchor = contour.cubicHandleAnchor(point.id);
+    return anchor ? PositionReference.point(anchor.id) : null;
   }
 
   #segmentSnapCentre(segments: readonly Segment[]): PositionReference | null {

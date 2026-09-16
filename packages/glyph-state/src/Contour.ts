@@ -152,6 +152,24 @@ export class Contour {
   }
 
   /**
+   * Returns the on-curve endpoint that owns a cubic control point.
+   *
+   * @param controlPointId - Off-curve point to resolve within this contour.
+   * @returns The associated cubic endpoint, or null when the point is not a cubic control.
+   */
+  cubicHandleAnchor(controlPointId: PointId): Point | null {
+    for (const segment of this.segments()) {
+      const cubic = segment.asCubic();
+      if (!cubic) continue;
+
+      if (cubic.controlStart.id === controlPointId) return cubic.start;
+      if (cubic.controlEnd.id === controlPointId) return cubic.end;
+    }
+
+    return null;
+  }
+
+  /**
    * Compute bounds for a point selection within this contour.
    *
    * Complete selected segments contribute curve bounds. Individual selected

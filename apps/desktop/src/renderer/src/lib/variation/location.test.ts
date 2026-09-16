@@ -2,7 +2,11 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { Axis, AxisMappingBasis } from "@shift/types";
-import { externalAxisLocationFromRecord, mapAxisLocation } from "./location";
+import {
+  externalAxisLocationForDesignLocation,
+  externalAxisLocationFromRecord,
+  mapAxisLocation,
+} from "./location";
 import type {
   CoordinateSpacesRemainDistinct,
   MappingAcceptsExternalLocation,
@@ -42,6 +46,21 @@ describe("external axis locations use Rust-compiled mapping bases", () => {
 
       for (const [axisId, expected] of Object.entries(mappingCase.expected)) {
         expect(mapped.get(axisId as Axis["id"])).toBeCloseTo(expected, 9);
+      }
+    }
+  });
+
+  it("recovers external controls from mapped design locations", () => {
+    const fixture = loadMappingFixture();
+
+    for (const mappingCase of fixture.cases) {
+      const bases = fixture.bases.filter((basis) => mappingCase.basisIds.includes(basis.mappingId));
+      const external = externalAxisLocationFromRecord(mappingCase.location);
+      const design = mapAxisLocation(external, fixture.axes, bases);
+      const recovered = externalAxisLocationForDesignLocation(design, fixture.axes, bases);
+
+      for (const axis of fixture.axes.filter((candidate) => candidate.role === "external")) {
+        expect(recovered.get(axis.id)).toBeCloseTo(external.get(axis.id) ?? axis.default, 9);
       }
     }
   });

@@ -455,7 +455,7 @@ jobs:
     name: E2E Build ${{ matrix.name }}
     needs: detect-changes
     if: >-
-      (github.event_name == 'merge_group' &&
+      ((github.event_name == 'pull_request' || github.event_name == 'merge_group') &&
         (needs.detect-changes.outputs.typescript == 'true' ||
           needs.detect-changes.outputs.rust == 'true')) ||
       (github.event_name == 'push' && needs.detect-changes.outputs.rust == 'true') ||

@@ -1,6 +1,6 @@
 import { asAxisId, type Axis, type AxisMappingBasis, type Location } from "@shift/types";
 import type { DesignAxisLocation, ExternalAxisLocation } from "@/types/variation";
-import { mapAxisMappings } from "./mapping";
+import { mapAxisMappings, unmapAxisMappings } from "./mapping";
 
 type AnyAxisLocation = ExternalAxisLocation | DesignAxisLocation;
 
@@ -59,6 +59,22 @@ export function mapAxisLocation(
   bases: readonly AxisMappingBasis[],
 ): DesignAxisLocation {
   return mapAxisMappings(location, axes, bases);
+}
+
+/**
+ * Resolves the user-control coordinates representing a design-space location.
+ *
+ * @param location - Design location to represent in external axis controls.
+ * @param axes - Complete axis definitions governing coordinate roles and ranges.
+ * @param bases - Rust-compiled mappings used by the corresponding forward mapping.
+ * @returns A fresh external location containing the user-controlled axes.
+ */
+export function externalAxisLocationForDesignLocation(
+  location: DesignAxisLocation,
+  axes: readonly Axis[],
+  bases: readonly AxisMappingBasis[],
+): ExternalAxisLocation {
+  return unmapAxisMappings(location, axes, bases);
 }
 
 export function designAxisLocationsEqual(

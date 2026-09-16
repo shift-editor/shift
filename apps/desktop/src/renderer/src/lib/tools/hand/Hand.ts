@@ -11,8 +11,8 @@ export class Hand extends BaseTool<HandState> {
 
   readonly behaviors = [HandReadyBehavior, HandDraggingBehavior];
 
-  override getCursor(state: HandState): CursorType {
-    if (state.type === "dragging") return { type: "grabbing" };
+  override getCursor(): CursorType {
+    if (this.editor.input.pointerDownCell.value) return { type: "grabbing" };
     return { type: "grab" };
   }
 

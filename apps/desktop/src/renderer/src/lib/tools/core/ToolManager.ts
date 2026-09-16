@@ -118,6 +118,7 @@ export class ToolManager implements ToolSwitchHandler {
     this.#disposePrimary();
     this.gesture.reset();
     this.editor.gesture.reset();
+    this.editor.input.setPointerDown(false);
 
     this.primaryTool = nextTool;
     if (this.primaryTool.activate) this.primaryTool.activate();
@@ -149,6 +150,7 @@ export class ToolManager implements ToolSwitchHandler {
     const coords = this.editor.fromScreen(screenPoint);
     this.editor.input.setModifiers(modifiers);
     this.editor.input.setPointer(coords);
+    this.editor.input.setPointerDown(true);
     this.editor.gesture.setPressed();
     this.gesture.pointerDown(coords, modifiers);
   }
@@ -221,14 +223,19 @@ export class ToolManager implements ToolSwitchHandler {
     this.editor.input.setModifiers(modifiers);
     this.editor.input.setPointer(coords);
     const events = this.gesture.pointerUp(coords, modifiers);
-    this.dispatchEvents(events);
-    this.editor.gesture.reset();
-    this.#flushPendingReplacements();
+    try {
+      this.dispatchEvents(events);
+    } finally {
+      this.editor.input.setPointerDown(false);
+      this.editor.gesture.reset();
+      this.#flushPendingReplacements();
+    }
   }
 
   cancelPointerGesture(): void {
     const wasDragging = this.gesture.isDragging;
     this.gesture.reset();
+    this.editor.input.setPointerDown(false);
     this.editor.gesture.reset();
     if (wasDragging) {
       this.activeTool?.handleEvent({ type: "dragCancel" });
@@ -292,6 +299,7 @@ export class ToolManager implements ToolSwitchHandler {
   /** Permanently disposes every resident instance and installed contribution. */
   dispose(): void {
     if (this.editor.isDragging) this.cancelPointerGesture();
+    this.editor.input.setPointerDown(false);
 
     this.#disposeOverride();
     this.#disposePrimary();
@@ -308,6 +316,7 @@ export class ToolManager implements ToolSwitchHandler {
       this.cancelPointerGesture();
     } else {
       this.gesture.reset();
+      this.editor.input.setPointerDown(false);
       this.editor.gesture.reset();
     }
 

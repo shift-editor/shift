@@ -16,6 +16,8 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 
 **Architecture Invariant:** Pointer events carry only `screen` and `scene` coordinates (`Coordinates`). Node-local conversion is not global: rendering enters a node's space via `ctx.canvas.withTranslation(node.position, ...)`, and hit-test paths derive node-local coordinates after identifying the target node.
 
+**Architecture Invariant:** `EditorInput` owns raw pointer position, modifiers, and primary-button state. `pointerDownCell` becomes true on accepted pointer-down and resets on release, cancellation, or an editor interaction reset. Gesture interpretation remains separate: a click is emitted on release only when the press never crossed the drag threshold.
+
 **Architecture Invariant:** `drawOffset` is derived render state. Text tools focus glyphs by `GlyphAnchor { runId, itemId }`; `Editor` resolves that anchor through `TextRuns` and `TextLayout.editOriginForItem()`. Tools must not set text-run edit placement coordinates directly.
 
 **Architecture Invariant: CRITICAL:** `Camera` owns the affine matrices as lazily computed cells. Anything that reads viewport-derived values inside a `computed` or `effect` will auto-track. Calling `setRect()`, changing zoom/pan, or changing UPM invalidates both matrices and triggers downstream redraws automatically. Never cache matrix results outside a signal.
@@ -35,6 +37,8 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 **Architecture Invariant:** Camera and text-layout metrics resolve from the active design location through `Font.metricsAtLocation()`. Exact master locations use authored source values; intermediate locations evaluate the Rust-built source-metric interpolation model. Glyph navigation preserves one stable UPM scale and origin rather than fitting each outline independently; empty, narrow, wide, and extreme glyphs therefore retain comparable editing scale.
 
 **Architecture Invariant:** A newly created source becomes the editor's active source only after its workspace echo makes that identity readable from `Font`. While creation is pending, the editor exposes the requested external location with no active source ID, so catalog and rendering consumers cannot observe a dangling source.
+
+**Architecture Invariant:** External axis location and exact source selection are bidirectionally synchronized. Scrubbing to an exact mapped source activates it, intermediate locations clear source identity, and selecting a source moves external controls to the location recovered from Rust-compiled mapping bases. Unreachable internal coordinates do not leak into external controls.
 
 **Architecture Invariant:** `Selection` is a dumb ordered set of branded object IDs. Mutations go through `select()`, `add()`, `remove()`, and `toggle()`; behavior and live bounds come from resolving those IDs through `Editor.object()`.
 

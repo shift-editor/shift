@@ -76,7 +76,7 @@ async function expectContinuousVariablePreview(page: Page): Promise<void> {
   const maximum = await variationSample(page, glyphId);
   const maximumFrame = await page.locator("#scene-canvas").screenshot();
 
-  expect(minimum.activeSourceId).toBeNull();
+  expect(minimum.activeSourceId).not.toBeNull();
   expect(nearMinimum.activeSourceId).toBeNull();
   expect(nearMinimum.location).not.toEqual(minimum.location);
   expect(nearMinimum.geometry).not.toEqual(minimum.geometry);

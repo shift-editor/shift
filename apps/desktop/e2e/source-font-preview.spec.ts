@@ -75,12 +75,14 @@ glyphsPreviewTest("Glyphs sources render a complete resident Grid", async ({ pag
     .toBe(targetSourceId);
   await expect
     .poll(() => page.evaluate(() => window.shiftSession?.catalog.locationCell.value))
-    .toEqual(beforeLocation);
+    .not.toEqual(beforeLocation);
   await expect
     .poll(async () => (await sceneCanvas.screenshot()).equals(beforeSourceFrame))
     .toBe(false);
 
-  await (await firstAxisSlider(page)).press("End");
+  const slider = await firstAxisSlider(page);
+  await slider.press("End");
+  await slider.press("ArrowLeft");
   await expect
     .poll(() => page.evaluate(() => window.shiftSession?.editor.activeSourceId))
     .toBeNull();

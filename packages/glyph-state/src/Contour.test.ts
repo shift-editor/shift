@@ -18,6 +18,23 @@ function contour(closed = false): Contour {
   return new Contour(contourData(closed), new Float64Array([500, 0, 0, 100, 0, 50, 100]), 1);
 }
 
+function cubicContour(): Contour {
+  return new Contour(
+    {
+      id: asContourId("cubic"),
+      closed: false,
+      points: [
+        { id: asPointId("start"), pointType: "onCurve", smooth: false },
+        { id: asPointId("control-start"), pointType: "offCurve", smooth: false },
+        { id: asPointId("control-end"), pointType: "offCurve", smooth: false },
+        { id: asPointId("end"), pointType: "onCurve", smooth: false },
+      ],
+    },
+    new Float64Array([500, 0, 0, 100, 0, 200, 100, 300, 100]),
+    1,
+  );
+}
+
 describe("Contour", () => {
   it("projects point data from the flat values buffer", () => {
     const points = contour().points;
@@ -50,6 +67,14 @@ describe("Contour", () => {
   it("parses segments and closed wrap-around segment", () => {
     expect(contour(false).segments()).toHaveLength(2);
     expect(contour(true).segments()).toHaveLength(3);
+  });
+
+  it("resolves each cubic control to its owning endpoint", () => {
+    const cubic = cubicContour();
+
+    expect(cubic.cubicHandleAnchor(asPointId("control-start"))?.id).toBe("start");
+    expect(cubic.cubicHandleAnchor(asPointId("control-end"))?.id).toBe("end");
+    expect(cubic.cubicHandleAnchor(asPointId("start"))).toBeNull();
   });
 
   it("computes contour and selection bounds", () => {
