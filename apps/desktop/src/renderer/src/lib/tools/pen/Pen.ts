@@ -6,7 +6,7 @@ import type { Canvas } from "@/lib/editor/rendering/Canvas";
 import type { Editor } from "@/lib/editor/Editor";
 import { PenTargets } from "./PenTargets";
 import { PenOverlay } from "./PenOverlay";
-import { Curve, Vec2, type CubicCurve } from "@shift/geo";
+import { Curve, Vec2, type CubicCurve, type Point2D } from "@shift/geo";
 import type { ContourId } from "@shift/types";
 import {
   computed,
@@ -16,6 +16,7 @@ import {
   type WritableSignal,
 } from "@/lib/signals";
 import { PenStroke } from "./PenStroke";
+import { DirectionSnap } from "@/lib/model/positions";
 
 export type { PenState };
 
@@ -106,6 +107,15 @@ export class Pen extends BaseTool<PenState, Pen> {
     if (!context) return;
 
     this.#ctx.set({ ...context, activeContourId: null, outgoingHandle: null });
+  }
+
+  resolveAnchorPosition(position: Point2D, shiftKey: boolean): Point2D {
+    const endpoint = this.activeEndpointCell.peek();
+    if (!shiftKey || !endpoint) return position;
+
+    const delta = Vec2.sub(position, endpoint.position);
+    const snappedDelta = DirectionSnap.everyDegrees(15).apply(delta);
+    return snappedDelta ? Vec2.add(endpoint.position, snappedDelta) : position;
   }
 
   resolveCurve(curve: PenCurve): CubicCurve {

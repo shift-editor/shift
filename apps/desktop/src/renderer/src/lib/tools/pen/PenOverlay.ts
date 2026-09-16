@@ -4,7 +4,10 @@ import { CanvasItem } from "@/lib/editor/rendering/CanvasItem";
 import { SnapLines } from "@/lib/editor/rendering/overlays/SnapLines";
 import type { Editor } from "@/lib/editor/Editor";
 import type { Pen, PenState } from "./Pen";
+import { PenStroke } from "./PenStroke";
+import { PenTargets } from "./PenTargets";
 import type { PenOverlayProps } from "./types";
+import { track } from "@/lib/signals";
 
 /** Draws Pen interaction chrome that is not part of glyph topology. */
 export class PenOverlay extends CanvasItem<PenOverlayProps> {
@@ -21,6 +24,7 @@ export class PenOverlay extends CanvasItem<PenOverlayProps> {
 
   protected props(): PenOverlayProps {
     const context = this.#pen.contextCell.value;
+    track(this.#editor.input.modifiersCell);
     const state = this.#pen.stateCell.value;
     const activeEndpoint = state.type === "ready" ? this.#pen.activeEndpointCell.value : null;
 
@@ -53,20 +57,43 @@ export class PenOverlay extends CanvasItem<PenOverlayProps> {
   }
 
   #drawReady(canvas: Canvas, props: PenOverlayProps): void {
-    const pos = props.pointer;
-    if (!pos) return;
+    const pointer = props.pointer;
+    if (!pointer) return;
 
+    let pointerPosition = pointer.scene;
     if (props.lastOnCurvePoint && props.nodePosition) {
+      const stroke = PenStroke.active(this.#pen);
+      const nodePoint = this.#editor.getPointInNodeSpace(pointer.scene, props.nodePosition);
+      const target = stroke
+        ? PenTargets.forGeometry(stroke.layer.geometry).at(nodePoint, this.#editor.hitRadius)
+        : null;
+      const anchorPosition =
+        target?.type === "empty"
+          ? this.#pen.resolveAnchorPosition(
+              nodePoint,
+              this.#editor.input.modifiersCell.peek().shiftKey,
+            )
+          : nodePoint;
+      pointerPosition = Vec2.add(props.nodePosition, anchorPosition);
+
       canvas.line(
         Vec2.add(props.nodePosition, props.lastOnCurvePoint),
-        pos.scene,
+        pointerPosition,
         canvas.theme.preview.color,
         canvas.theme.preview.widthPx,
       );
+
+      if (target?.type === "empty" && this.#editor.input.modifiersCell.peek().shiftKey) {
+        this.#snapLines.draw(
+          canvas,
+          [{ kind: "direction", from: props.lastOnCurvePoint, to: anchorPosition }],
+          props.nodePosition,
+        );
+      }
     }
 
     const { fill, stroke, size, widthPx } = canvas.theme.penReady;
-    canvas.filledStrokeCircle(pos.scene, size, fill, stroke, widthPx);
+    canvas.filledStrokeCircle(pointerPosition, size, fill, stroke, widthPx);
   }
 
   #drawOutgoingHandle(
