@@ -191,7 +191,7 @@ In Select's `ready` state, Cmd-hovering an active authored line shows the bend c
 
 ### Cursor
 
-`BaseTool.cursorCell` is a computed signal derived from `getCursor(state)`. Override `getCursor` to return state-dependent cursors. Inside `getCursor`, reading `editor.getHoveredBoundingBoxHandle()`, `editor.getCurrentModifiers()`, or `editor.getIsHoveringNode()` makes the cursor reactive to hover and modifier changes.
+`BaseTool.cursorCell` is a computed signal derived from `getCursor(state)`. Override `getCursor` to return state-dependent cursors and read semantic input cells for input-dependent cursors. Hand reads `editor.input.pointerDownCell`, so its cursor changes from `grab` to `grabbing` immediately on pointer-down while its `ready -> dragging` tool transition remains gated by the drag threshold.
 
 ## Workflow recipes
 

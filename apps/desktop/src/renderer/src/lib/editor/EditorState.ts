@@ -65,23 +65,31 @@ export class EditorGesture {
 
 export class EditorInput {
   readonly #pointer: WritableSignal<Coordinates | null>;
+  readonly #pointerDown: WritableSignal<boolean>;
   readonly #modifiers: WritableSignal<Modifiers>;
   readonly pointerCell: Signal<Coordinates | null>;
+  readonly pointerDownCell: Signal<boolean>;
   readonly modifiersCell: Signal<Modifiers>;
 
   constructor() {
     this.#pointer = signal<Coordinates | null>(null, {
       name: "editor.input.pointer",
     });
+    this.#pointerDown = signal(false, { name: "editor.input.pointerDown" });
     this.#modifiers = signal<Modifiers>(DEFAULT_MODIFIERS, {
       name: "editor.input.modifiers",
     });
     this.pointerCell = this.#pointer;
+    this.pointerDownCell = this.#pointerDown;
     this.modifiersCell = this.#modifiers;
   }
 
   get pointer(): Coordinates | null {
     return this.#pointer.peek();
+  }
+
+  get pointerDown(): boolean {
+    return this.#pointerDown.peek();
   }
 
   get modifiers(): Modifiers {
@@ -90,6 +98,10 @@ export class EditorInput {
 
   setPointer(pointer: Coordinates): void {
     this.#pointer.set(pointer);
+  }
+
+  setPointerDown(pointerDown: boolean): void {
+    this.#pointerDown.set(pointerDown);
   }
 
   clearPointer(): void {
