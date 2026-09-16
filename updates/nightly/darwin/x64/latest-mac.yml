@@ -1,11 +1,11 @@
-version: 0.68.1
+version: 0.71.1
 files:
-  - url: https://releases.shift.graphics/nightly/20e7f298d5770649f38f56fbfba7a234108a8355/Shift-Nightly-0.68.1-macOS-x64.zip
-    sha512: Il4Po5Z5NDOobV7isGDX3NZQRVmR3dQm6A267cxQyUw5GAheA0pp+0wX5n8P1uPMUV8pvkq0m5NrkTSWiJj4Jg==
-    size: 146920657
-  - url: https://releases.shift.graphics/nightly/20e7f298d5770649f38f56fbfba7a234108a8355/Shift-Nightly-0.68.1-macOS-x64.dmg
-    sha512: XoE15e7flX8A49HnXWjInhebFF5P6I7ReE75sB6KDvl78CnBTT+/H2uonvitR5L7rhJx3TWyK5wMFwRrdgnU0A==
-    size: 147289749
-path: https://releases.shift.graphics/nightly/20e7f298d5770649f38f56fbfba7a234108a8355/Shift-Nightly-0.68.1-macOS-x64.zip
-sha512: Il4Po5Z5NDOobV7isGDX3NZQRVmR3dQm6A267cxQyUw5GAheA0pp+0wX5n8P1uPMUV8pvkq0m5NrkTSWiJj4Jg==
-releaseDate: '2026-09-14T19:37:30.104Z'
+  - url: https://releases.shift.graphics/nightly/7391b6a1f3b679d816017afacd541ffba4e36e25/Shift-Nightly-0.71.1-macOS-x64.zip
+    sha512: CB6Pmls4F51FUhqriArR+9sYRldq/ROdOYnfOQQ91omkWF3SdxqpBzV5gWAo0vl355O8+MA/TTv76qxT3IzRKA==
+    size: 146918630
+  - url: https://releases.shift.graphics/nightly/7391b6a1f3b679d816017afacd541ffba4e36e25/Shift-Nightly-0.71.1-macOS-x64.dmg
+    sha512: FggNIswAGATZnSezfXQc1Jb0F+IGM2c8IBp5A6aLmU/sADJp9Z84RvZOsV56uLSi5WXE2iImzMEdo9nKh7UTTQ==
+    size: 147284372
+path: https://releases.shift.graphics/nightly/7391b6a1f3b679d816017afacd541ffba4e36e25/Shift-Nightly-0.71.1-macOS-x64.zip
+sha512: CB6Pmls4F51FUhqriArR+9sYRldq/ROdOYnfOQQ91omkWF3SdxqpBzV5gWAo0vl355O8+MA/TTv76qxT3IzRKA==
+releaseDate: '2026-09-16T18:01:28.912Z'
