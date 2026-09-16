@@ -38,6 +38,8 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 
 **Architecture Invariant:** A newly created source becomes the editor's active source only after its workspace echo makes that identity readable from `Font`. While creation is pending, the editor exposes the requested external location with no active source ID, so catalog and rendering consumers cannot observe a dangling source.
 
+**Architecture Invariant:** External axis location and exact source selection are bidirectionally synchronized. Scrubbing to an exact mapped source activates it, intermediate locations clear source identity, and selecting a source moves external controls to the location recovered from Rust-compiled mapping bases. Unreachable internal coordinates do not leak into external controls.
+
 **Architecture Invariant:** `Selection` is a dumb ordered set of branded object IDs. Mutations go through `select()`, `add()`, `remove()`, and `toggle()`; behavior and live bounds come from resolving those IDs through `Editor.object()`.
 
 **Architecture Invariant:** Glyph-domain hit testing belongs to glyph geometry and editor glyph lookup helpers. Tool-specific controls, such as select bounding-box handles, are owned and hit-tested by the tool that renders them.

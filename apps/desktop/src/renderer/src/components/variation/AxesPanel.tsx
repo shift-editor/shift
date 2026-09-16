@@ -26,7 +26,7 @@ import VerticalElipsis from "@/assets/general/vertical-ellipsis.svg";
 export const AxesPanel = () => {
   const font = useFont();
   const canAuthor = useFontSession().mode === "authored";
-  const axes = useAxes().filter(axisVaries);
+  const axes = useAxes().filter((axis) => axis.role === "external" && axisVaries(axis));
   const [location, setExternalLocation] = useExternalLocation();
   const settings = useSettingsNavigation();
 

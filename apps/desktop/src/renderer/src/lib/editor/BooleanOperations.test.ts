@@ -2,6 +2,7 @@ import { Polygon } from "@shift/geo";
 import { isContourId } from "@shift/types";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { GlyphLayer } from "@/lib/model/Glyph";
+import { externalAxisLocationFromRecord } from "@/lib/variation/location";
 import { TestEditor } from "@/testing/TestEditor";
 
 const operationCases = [
@@ -37,6 +38,8 @@ describe("editor boolean operations", () => {
   beforeEach(async () => {
     editor = new TestEditor();
     await editor.startSession();
+    editor.font.createAxis(weightAxis());
+    await editor.settle();
     editor.selectTool("shape");
     await editor.dragScene({
       down: { x: 10, y: 10 },
@@ -96,7 +99,9 @@ describe("editor boolean operations", () => {
     const layer = editor.requireGlyphLayer();
     const before = geometrySummary(layer);
     const [contourIdA, contourIdB] = selectedContours(editor);
-    editor.setSourceToDefault();
+    const axis = editor.font.getAxes()[0];
+    if (!axis) throw new Error("Expected a weight axis");
+    editor.setExternalLocation(externalAxisLocationFromRecord({ [axis.id]: 550 }));
 
     await editor.boolean(contourIdA, contourIdB, "union");
 
@@ -108,6 +113,20 @@ describe("editor boolean operations", () => {
     expectGeometry(layer, 1, 8_100, [10, 10, 100, 100]);
   });
 });
+
+function weightAxis() {
+  return {
+    tag: "wght",
+    name: "Weight",
+    role: "external" as const,
+    axisType: "continuous" as const,
+    minimum: 100,
+    default: 400,
+    maximum: 900,
+    labels: [],
+    hidden: false,
+  };
+}
 
 function selectedContours(editor: TestEditor) {
   const [contourIdA, contourIdB] = editor.selection.ids.filter(isContourId);

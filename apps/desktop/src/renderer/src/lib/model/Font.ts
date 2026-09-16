@@ -59,6 +59,7 @@ import {
   locationFromDesignAxisLocation,
   defaultExternalAxisLocation,
   emptyExternalAxisLocation,
+  externalAxisLocationForDesignLocation,
   mapAxisLocation,
 } from "@/lib/variation/location";
 import type { DesignAxisLocation, ExternalAxisLocation } from "@/types/variation";
@@ -1156,6 +1157,28 @@ export class Font {
     const sources = this.sources;
 
     return sourceById(sources, sourceId);
+  }
+
+  /**
+   * Resolves the external user-control location representing an authored source.
+   *
+   * @remarks
+   * Rust-compiled independent mappings are inverted exactly. Sources with
+   * unreachable internal coordinates retain the externally controlled portion
+   * of their design location so source selection always has stable slider values.
+   *
+   * @param sourceId - Existing source whose location should appear in axis controls.
+   * @returns A fresh external location, or `null` when the source does not exist.
+   */
+  externalLocationForSource(sourceId: SourceId): ExternalAxisLocation | null {
+    const source = this.source(sourceId);
+    if (!source) return null;
+
+    return externalAxisLocationForDesignLocation(
+      designAxisLocationFromLocation(source.location),
+      this.#axesCell.peek(),
+      this.#axisMappingBasesCell.peek(),
+    );
   }
 
   /**

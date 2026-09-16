@@ -29,6 +29,7 @@ import { Bounds, Vec2, type Bounds as BoundsType, type Point2D, type Rect2D } fr
 
 import { Camera } from "./managers";
 import {
+  batch,
   computed,
   effect,
   signal,
@@ -512,10 +513,18 @@ export class Editor {
     return this.#externalLocation.peek();
   }
 
-  /** Selects an interpolated external user-space location shared by editor views. */
+  /**
+   * Selects an external user-space location and activates any exact source there.
+   *
+   * @param location - User-control coordinates to publish across editor views.
+   */
   public setExternalLocation(location: ExternalAxisLocation): void {
-    this.#externalLocation.set(cloneExternalAxisLocation(location));
-    this.#activeSourceId.set(null);
+    const next = cloneExternalAxisLocation(location);
+
+    batch(() => {
+      this.#externalLocation.set(next);
+      this.#activeSourceId.set(this.font.sourceAt(next)?.id ?? null);
+    });
   }
 
   /**
@@ -887,11 +896,19 @@ export class Editor {
     this.selection.select(layer.allPoints.map((point) => point.id));
   }
 
-  /** Selects an existing exact source layer without changing the external location. */
+  /**
+   * Selects an exact source and moves external axis controls to its location.
+   *
+   * @param sourceId - Existing source to activate and represent in user controls.
+   */
   public selectSource(sourceId: SourceId): void {
-    if (!this.font.source(sourceId)) return;
+    const location = this.font.externalLocationForSource(sourceId);
+    if (!location) return;
 
-    this.#activeSourceId.set(sourceId);
+    batch(() => {
+      this.#externalLocation.set(location);
+      this.#activeSourceId.set(sourceId);
+    });
   }
 
   /**
