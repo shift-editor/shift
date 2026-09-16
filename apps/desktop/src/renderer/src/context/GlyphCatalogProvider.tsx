@@ -115,6 +115,7 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
         openGateRef.current.invalidate();
         openedGlyphKeyRef.current = null;
         setOpenedGlyph(null);
+        navigateRef.current("/home", { replace: true });
       }
       return;
     }
@@ -122,6 +123,7 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
       openGateRef.current.invalidate();
       openedGlyphKeyRef.current = null;
       setOpenedGlyph(null);
+      navigateRef.current("/home", { replace: true });
       return;
     }
     const glyphId = sourceGlyphId;

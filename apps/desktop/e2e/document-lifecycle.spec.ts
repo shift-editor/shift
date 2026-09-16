@@ -28,7 +28,7 @@ import {
   windowTitle,
 } from "./fixtures/documentLifecycle";
 import { createAuthoredDocument } from "./fixtures/fontSource";
-import { clickFirstCatalogGlyph } from "./fixtures/appLocators";
+import { clickFirstCatalogGlyph, glyphCatalogRenderer } from "./fixtures/appLocators";
 
 const execFileAsync = promisify(execFile);
 
@@ -86,6 +86,9 @@ const failedExportTest = workspaceTest.extend({
 });
 const convertiblePreviewTest = test.extend({
   openFontPath: [UFO_FONT_PATH, { option: true }],
+});
+const designspacePreviewTest = test.extend({
+  openFontPath: [DESIGNSPACE_FONT_PATH, { option: true }],
 });
 const cancelPreviewSaveTest = convertiblePreviewTest.extend({
   saveShiftPath: async ({}, use) => {
@@ -508,6 +511,29 @@ for (const { format, sourcePath, sourceRoot } of [
     },
   );
 }
+
+designspacePreviewTest(
+  "Save As replaces a preview glyph route with authored Home",
+  async ({ electronApp, page, saveShiftPath }) => {
+    const workspacePage = await openSelectedPreview(page, electronApp);
+    await expect(glyphCatalogRenderer(workspacePage)).toHaveAttribute(
+      "data-grid-readiness",
+      "Complete",
+      { timeout: 30_000 },
+    );
+    await clickFirstCatalogGlyph(workspacePage);
+    await workspacePage.waitForURL(/#\/editor\//);
+    await expect(workspacePage.locator("#interactive-canvas")).toBeVisible();
+
+    await runCommand(workspacePage, electronApp, "file.saveAs");
+    await waitForWorkspaceReady(workspacePage);
+
+    await expect
+      .poll(() => workspacePage.evaluate(() => window.shiftSession?.mode))
+      .toBe("authored");
+    expect(fs.existsSync(saveShiftPath)).toBe(true);
+  },
+);
 
 cancelPreviewSaveTest(
   "canceling preview Save leaves the source in preview mode",
