@@ -87,9 +87,6 @@ const failedExportTest = workspaceTest.extend({
 const convertiblePreviewTest = test.extend({
   openFontPath: [UFO_FONT_PATH, { option: true }],
 });
-const designspacePreviewTest = test.extend({
-  openFontPath: [DESIGNSPACE_FONT_PATH, { option: true }],
-});
 const cancelPreviewSaveTest = convertiblePreviewTest.extend({
   saveShiftPath: async ({}, use) => {
     await use("");
@@ -512,7 +509,7 @@ for (const { format, sourcePath, sourceRoot } of [
   );
 }
 
-designspacePreviewTest(
+convertiblePreviewTest(
   "Save As replaces a preview glyph route with authored Home",
   async ({ electronApp, page, saveShiftPath }) => {
     const workspacePage = await openSelectedPreview(page, electronApp);
