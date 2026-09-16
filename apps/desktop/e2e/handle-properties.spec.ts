@@ -1,8 +1,39 @@
+import type { GlyphName } from "@shift/types";
 import { workspaceTest as test, expect } from "./fixtures/electronApp";
 import { glyphProperties } from "./fixtures/appLocators";
 
 test("edits a selected cubic handle by angle and length", async ({ page, editor }) => {
-  await editor.openGlyphByUnicode("4f");
+  const glyphId = await page.evaluate(async () => {
+    const workspace = window.shift!;
+    const record = workspace.editor.createGlyph("handleProperties" as GlyphName);
+    await workspace.font.editCoordinator.settled();
+    return record.id;
+  });
+  await editor.openGlyph(glyphId);
+  await page.evaluate(async () => {
+    const workspace = window.shift!;
+    workspace.editor.insertContent({
+      contours: [
+        {
+          closed: false,
+          points: [
+            { x: 100, y: 100, pointType: "onCurve", smooth: false },
+            { x: 200, y: 100, pointType: "offCurve", smooth: false },
+            { x: 300, y: 100, pointType: "offCurve", smooth: false },
+            { x: 400, y: 100, pointType: "onCurve", smooth: true },
+            { x: 500, y: 100, pointType: "offCurve", smooth: false },
+            { x: 600, y: 100, pointType: "offCurve", smooth: false },
+            { x: 700, y: 100, pointType: "onCurve", smooth: false },
+          ],
+        },
+      ],
+    });
+    await workspace.font.editCoordinator.settled();
+    workspace.editor.selection.clear();
+    workspace.editor.zoomToFit();
+  });
+  await editor.waitForCanvasRender();
+
   const properties = glyphProperties(page);
   const handle = await page.evaluate(() => {
     const editor = window.shift!.editor;
