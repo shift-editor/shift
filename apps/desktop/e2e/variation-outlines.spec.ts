@@ -61,14 +61,14 @@ test("variation rows toggle source and instance outlines", async ({ page }) => {
   expect(eyeBounds.x).toBeLessThan(menuBounds.x);
 
   await sourceEye.click();
-  await page.locator("#scene-canvas").hover();
+  await page.locator("#interactive-canvas").hover();
   const activeSourceEye = sourceRow.getByLabel(`Hide ${fixture.source.name} outline`);
   await expect(activeSourceEye).toHaveCSS("opacity", "1");
   await expect(sourceMenu).toHaveCSS("opacity", "0");
   await expect.poll(() => outlinePixelCount(page)).toBeGreaterThan(baseline);
 
   await controls.getByLabel("Show all source outlines").click();
-  await page.locator("#scene-canvas").hover();
+  await page.locator("#interactive-canvas").hover();
   await expect(controls.getByLabel("Hide all source outlines")).toHaveCSS("opacity", "1");
   await expect(activeSourceEye).toHaveCSS("opacity", "1");
   await controls.getByLabel("Hide all source outlines").click();
