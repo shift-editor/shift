@@ -44,9 +44,9 @@ test("variation rows toggle source and instance outlines", async ({ page }) => {
   }
 
   const baseline = await outlinePixelCount(page);
-  const sourceRow = controls.getByTestId(`source-${fixture.source.id}`);
-  const sourceMenu = controls.getByLabel(`Actions for ${fixture.source.name}`);
-  const sourceEye = controls.getByLabel(`Show ${fixture.source.name} outline`);
+  const sourceRow = controls.getByTestId(`source-${fixture.source.id}`).locator("..");
+  const sourceMenu = sourceRow.getByLabel(`Actions for ${fixture.source.name}`);
+  const sourceEye = sourceRow.getByLabel(`Show ${fixture.source.name} outline`);
   await expect(sourceEye).toHaveCSS("opacity", "0");
   await expect(sourceMenu).toHaveCSS("opacity", "0");
   await expect(controls.getByLabel("Show all source outlines")).toHaveCSS("opacity", "0");
@@ -62,7 +62,7 @@ test("variation rows toggle source and instance outlines", async ({ page }) => {
 
   await sourceEye.click();
   await page.locator("#scene-canvas").hover();
-  const activeSourceEye = controls.getByLabel(`Hide ${fixture.source.name} outline`);
+  const activeSourceEye = sourceRow.getByLabel(`Hide ${fixture.source.name} outline`);
   await expect(activeSourceEye).toHaveCSS("opacity", "1");
   await expect(sourceMenu).toHaveCSS("opacity", "0");
   await expect.poll(() => outlinePixelCount(page)).toBeGreaterThan(baseline);
@@ -72,15 +72,15 @@ test("variation rows toggle source and instance outlines", async ({ page }) => {
   await expect(controls.getByLabel("Hide all source outlines")).toHaveCSS("opacity", "1");
   await expect(activeSourceEye).toHaveCSS("opacity", "1");
   await controls.getByLabel("Hide all source outlines").click();
-  const inactiveSourceEye = controls.getByLabel(`Show ${fixture.source.name} outline`);
+  const inactiveSourceEye = sourceRow.getByLabel(`Show ${fixture.source.name} outline`);
   await expect(inactiveSourceEye.locator("path")).toHaveAttribute("fill", "#585858");
   await expect(inactiveSourceEye).toHaveCSS("opacity", "0");
   await expect(inactiveSourceEye.locator("path")).toHaveAttribute("stroke", "#585858");
   await expect.poll(() => outlinePixelCount(page)).toBe(baseline);
 
-  const instanceRow = controls.getByTestId(`instance-${fixture.instance.id}`);
+  const instanceRow = controls.getByTestId(`instance-${fixture.instance.id}`).locator("..");
   await instanceRow.hover();
-  await controls.getByLabel(`Show ${fixture.instance.name} outline`).click();
+  await instanceRow.getByLabel(`Show ${fixture.instance.name} outline`).click();
   await expect.poll(() => outlinePixelCount(page)).toBeGreaterThan(baseline);
   const showAllInstances = controls.getByLabel("Show all instance outlines");
   if (await showAllInstances.count()) await showAllInstances.click();
