@@ -52,6 +52,6 @@ export abstract class NodeDefinition<N extends ShiftNode = ShiftNode> {
 }
 
 /** Constructs a node definition bound to one editor runtime. */
-export interface NodeDefinitionConstructor {
-  new (editor: Editor): NodeDefinition;
+export interface NodeDefinitionConstructor<Definition extends NodeDefinition = NodeDefinition> {
+  new (editor: Editor): Definition;
 }

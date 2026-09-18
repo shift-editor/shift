@@ -53,18 +53,18 @@ export const AxesPanel = () => {
             <span className="text-ui text-secondary">{axis.name}</span>
           </div>
 
-          <div className="grid grid-cols-[3.5rem_minmax(0,1fr)_1.5rem] items-center gap-4 pl-2">
-            <EditableSidebarInput
-              ariaLabel={`${axis.name} value`}
-              value={axisValue(location, axis)}
-              className="w-14"
-              onValueChange={(value) => onAxisChange(axis, value)}
-            />
+          <div className="grid grid-cols-[minmax(0,1fr)_3.5rem_1.5rem] items-center gap-2 pl-2">
             <AxisSlider
               axis={axis}
               value={axisValue(location, axis)}
               onChange={(value) => onAxisChange(axis, value)}
               onReset={() => resetAxis(axis)}
+            />
+            <EditableSidebarInput
+              ariaLabel={`${axis.name} value`}
+              value={axisValue(location, axis)}
+              className="w-14"
+              onValueChange={(value) => onAxisChange(axis, value)}
             />
             {canAuthor ? (
               <AxisActionsMenu

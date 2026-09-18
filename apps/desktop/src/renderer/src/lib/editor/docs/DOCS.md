@@ -1,6 +1,6 @@
 # Editor
 
-<!-- reviewed: 2026-09-05 -->
+<!-- reviewed: 2026-09-17 -->
 
 Central orchestrator for the canvas-based glyph editing surface, wiring viewport transforms, selection, rendering, hit testing, and tool management into a single facade.
 
@@ -9,6 +9,8 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 **Architecture Invariant:** `Editor` is a facade -- it delegates viewport, hover, rendering, and tool dispatch to named subsystem objects. Tools receive `Editor` directly but must not reach into private managers. Its immutable `sessionMode` defines session-level preview interaction: Select consumes geometry hits without publishing hover or selection, marquee gestures publish no selection, and geometry clicks emit `previewMutationAttempted`. Main keeps Edit commands disabled in preview. Authored-layer resolution remains the final mutation boundary in authored sessions.
 
 **Architecture Invariant:** `Scene` owns generic, serializable `ShiftNode` records and placement only. It must not import or retain `Glyph`, `GlyphLayer`, or resolved geometry. Navigation finishes `Font.loadGlyph()` before entering the editor route, and the route synchronously confirms acquisition before publishing the ordinary ID-based glyph node.
+
+**Architecture Invariant:** Node definitions are typed, editor-scoped behavior plugins shared by every scene node of their kind. Glyph-specific presentation state stays on `GlyphNodeDefinition`, not the generic `Editor`: its `GlyphOutlines` surface associates source and named-instance outline targets with a `NodeId`, while the definition resolves and strokes those locations during the ordinary content pass.
 
 **Architecture Invariant:** `Editor.#store` is the generic `ShiftStore<ShiftEditorRecord>` for scene and session records. The injected `Editor.#fontStore` owns canonical complete Glyph objects for those ID-based records. Neither store contains the other store's domain objects.
 
@@ -123,7 +125,7 @@ Background, scene, and overlays are drawn in UPM space (`Canvas.withSceneSpace()
 
 `Renderer.#renderScene()` draws `SceneLayer`, which runs three passes over the scene nodes:
 
-1. Content pass -- `GlyphNodeDefinition` draws distinct translucent fills for closed root and component contours, stroked outlines, and optional debug overlays while editing. Display rendering fills closed contours and strokes open contours; it never implicitly fills an open gap.
+1. Content pass -- `GlyphNodeDefinition` draws distinct translucent fills for closed root and component contours, stroked outlines, and optional debug overlays while editing. Display rendering fills closed contours and strokes open contours; it never implicitly fills an open gap. Registered source and named-instance references are then stroked directly as outline-only locations for that glyph node.
 2. Delegates to `ToolManager.drawScene()` inside each glyph node's transform.
 3. Controls pass -- draws hovered/selected segments, then control lines with frustum culling via `Camera.visibleSceneBounds()`, then handles (GPU marker rendering with CPU fallback), then anchors.
 
@@ -182,6 +184,7 @@ Glyph geometry exposes domain hit queries for points, anchors, and segments. Too
 ## Verification
 
 - `pnpm test:desktop src/renderer/src/lib/editor/` -- real-editor tests for managers, hit testing, sidebearings, lifecycle, plus editor-outcome suites for boolean operations, clipboard copy/paste, and glyph metrics that drive `TestEditor` through real tool gestures and assert resulting contours, selection, and history.
+- `pnpm test:desktop src/renderer/src/lib/nodes/GlyphOutlines.test.ts` -- node-scoped replacement and clearing semantics for the glyph definition's outline plugin state.
 - Outcome tests treat editor actions as asynchronous: metric setters need `await editor.settle()` before asserting, clipboard and history actions (`copy`, `paste`, `undo`, `redo`) return promises that must be awaited, and drag helpers give every drag sample its cumulative delta from the pointer-down origin.
 - [Deletion behavior](../Deletion.test.ts), [degree preservation](../DeletionDegree.test.ts), [contour topology](../DeletionTopology.test.ts), and [fresh-reopen tests](../../workspace/FreshReopen.test.ts) cover fitted/gap deletion, exact undo/redo, and saved geometry. Run them and the real-canvas Electron suite with:
 

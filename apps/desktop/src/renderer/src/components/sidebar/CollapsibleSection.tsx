@@ -37,7 +37,7 @@ export const CollapsibleSection = ({
     className={cn("flex flex-col", className)}
   >
     <div
-      className="group grid grid-cols-[minmax(0,1fr)_1.5rem] items-center rounded transition-colors hover:bg-hover/50 data-[active]:bg-hover"
+      className="group grid grid-cols-[minmax(0,1fr)_auto] items-center rounded transition-colors hover:bg-hover/50 data-[active]:bg-hover"
       data-active={isActive ? true : undefined}
     >
       <CollapsibleTrigger
