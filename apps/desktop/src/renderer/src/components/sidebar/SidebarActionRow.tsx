@@ -22,7 +22,7 @@ export const SidebarActionRow = ({
 }: SidebarActionRowProps) => (
   <div
     className={cn(
-      "group grid min-w-0 w-full grid-cols-[minmax(0,1fr)_1.5rem] items-center rounded transition-colors",
+      "group grid min-w-0 w-full grid-cols-[minmax(0,1fr)_auto] items-center rounded transition-colors",
       "hover:bg-hover/50 data-[active]:bg-hover/50",
       className,
     )}
@@ -59,9 +59,12 @@ export const SidebarActionSlot = ({
 }) => (
   <div
     className={cn(
-      "flex h-full w-6 shrink-0 items-center justify-center opacity-0 transition-opacity",
-      "group-hover:opacity-100 [&:has(:focus-visible)]:opacity-100",
-      isVisible && "opacity-100",
+      "flex h-full min-w-6 shrink-0 items-center justify-center",
+      "[&>*]:opacity-0 [&>*]:transition-opacity group-hover:[&>*]:opacity-100",
+      "[&>*:focus-visible]:opacity-100",
+      "[&>*[aria-disabled]]:!opacity-0 group-hover:[&>*[aria-disabled]]:!opacity-50",
+      "[&>*[aria-disabled]:focus-visible]:!opacity-50",
+      isVisible && "[&>*]:opacity-100",
     )}
   >
     {children}

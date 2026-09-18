@@ -32,14 +32,28 @@ test.describe("variable font preview projection", () => {
     await expect(slider).toBeVisible();
 
     const variationSidebar = variationControls(page);
+    const createSource = variationSidebar.getByLabel("Create source");
+    await expect(createSource).toHaveCSS("opacity", "0");
+    await createSource.locator("..").locator("..").hover();
+    await expect(createSource).toHaveCSS("opacity", "0.5");
     await expect(variationSidebar.getByText("Regular", { exact: true })).toHaveCount(2);
     const regularSourceId = await page.evaluate(
       () => window.shiftSession?.font.sources.find(({ name }) => name === "Regular")?.id,
     );
     if (!regularSourceId) throw new Error("Expected Regular source");
-    await expect(page.getByTestId(`source-${regularSourceId}`)).toBeEnabled();
+    const regularSource = page.getByTestId(`source-${regularSourceId}`);
+    await expect(regularSource).toBeEnabled();
+    const regularSourceRow = regularSource.locator("..");
+    const regularSourceActions = regularSourceRow.getByLabel("Actions for Regular");
+    await expect(regularSourceActions).toHaveAttribute("aria-disabled", "true");
+    await expect(regularSourceActions).toHaveCSS("opacity", "0");
+    await regularSource.hover();
+    await expect(regularSourceActions).toHaveCSS("opacity", "0.5");
     await expect(variationSidebar.getByText("Light", { exact: true })).toBeVisible();
-    await expect(variationSidebar.getByLabel("Actions for Medium")).toHaveCount(0);
+    await expect(variationSidebar.getByLabel("Actions for Medium")).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
     const mediumInstanceId = await page.evaluate(
       () => window.shiftSession?.font.namedInstances.find(({ name }) => name === "Medium")?.id,
     );

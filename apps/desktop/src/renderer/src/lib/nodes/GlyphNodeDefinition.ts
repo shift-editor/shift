@@ -12,13 +12,23 @@ import {
   Segments,
 } from "@/lib/editor/rendering/overlays";
 import { displayAdvance } from "@/lib/utils/unicode";
-import { track } from "@/lib/signals";
+import { computed, keyedCache, track } from "@/lib/signals";
 import type { GlyphRenderModel } from "@/lib/model/Glyph";
 import type { GlyphRenderContour } from "@/types/glyphRender";
 import { NodeDefinition } from "@/lib/nodes/NodeDefinition";
 import type { GlyphNode } from "@/types/node";
 import type { RenderContext, RenderPass } from "@/types/rendering";
 import type { PointerTarget } from "@/types/target";
+import type { GlyphOutlineTarget, ResolvedGlyphOutlineTarget } from "@/types/glyphOutline";
+import {
+  emptyExternalAxisLocation,
+  externalAxisLocationFromLocation,
+} from "@/lib/variation/location";
+import { GlyphOutlines } from "./GlyphOutlines";
+
+const EMPTY_OUTLINE_LOCATION = emptyExternalAxisLocation();
+const GLYPH_OUTLINE_COLOR = "rgba(139, 111, 207, 0.45)";
+const GLYPH_OUTLINE_WIDTH_PX = 1;
 
 export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
   readonly kind: GlyphNode["kind"] = "glyph";
@@ -30,6 +40,36 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
   readonly #segments = new Segments();
   readonly #handles = new Handles();
   readonly #guides = new Guides();
+  readonly #outlineViews = keyedCache({
+    name: "glyphNode.outlineViews",
+    key: (target: GlyphOutlineTarget) => {
+      switch (target.kind) {
+        case "source":
+          return `source:${target.sourceId}`;
+        case "instance":
+          return `instance:${target.instanceId}`;
+      }
+    },
+    create: (targetCell) => {
+      const resolvedCell = computed(() => this.#resolveOutlineTarget(targetCell.value), {
+        name: "glyphNode.outlineTarget",
+      });
+
+      return {
+        resolvedCell,
+        externalLocationCell: computed(
+          () => resolvedCell.value?.externalLocation ?? EMPTY_OUTLINE_LOCATION,
+          { name: "glyphNode.outlineLocation" },
+        ),
+        activeSourceIdCell: computed(() => resolvedCell.value?.activeSourceId ?? null, {
+          name: "glyphNode.outlineSource",
+        }),
+      };
+    },
+  });
+
+  /** Node-scoped variation outlines rendered by this glyph behavior plugin. */
+  readonly outlines = new GlyphOutlines();
 
   bounds(node: GlyphNode): Rect2D | null {
     const bounds = this.#view(node)?.bounds;
@@ -150,10 +190,52 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
 
     if (editing) {
       this.#drawEditableContent(node, ctx, view);
-      return;
+    } else {
+      this.#drawDisplayContent(ctx, view);
     }
 
-    this.#drawDisplayContent(ctx, view);
+    this.#drawOutlines(node, ctx);
+  }
+
+  #drawOutlines(node: GlyphNode, ctx: RenderContext): void {
+    const glyph = this.editor.glyphForId(node.glyphId);
+    if (!glyph) return;
+
+    for (const target of this.outlines.forNode(node.id)) {
+      const outline = this.#outlineViews.get(target);
+      track(outline.resolvedCell);
+      if (!outline.resolvedCell.peek()) continue;
+
+      const view = glyph.renderModelAt(outline.externalLocationCell, outline.activeSourceIdCell);
+      view.trackShape();
+      ctx.canvas.strokePath(view.drawPath, GLYPH_OUTLINE_COLOR, GLYPH_OUTLINE_WIDTH_PX);
+    }
+  }
+
+  #resolveOutlineTarget(target: GlyphOutlineTarget): ResolvedGlyphOutlineTarget | null {
+    switch (target.kind) {
+      case "source": {
+        track(this.editor.font.sourcesCell);
+        track(this.editor.font.committedFontCell);
+        const externalLocation = this.editor.font.externalLocationForSource(target.sourceId);
+        if (!externalLocation) return null;
+
+        return { externalLocation, activeSourceId: target.sourceId };
+      }
+
+      case "instance": {
+        track(this.editor.font.namedInstancesCell);
+        const instance = this.editor.font.namedInstancesCell
+          .peek()
+          .find((candidate) => candidate.id === target.instanceId);
+        if (!instance) return null;
+
+        return {
+          externalLocation: externalAxisLocationFromLocation(instance.location),
+          activeSourceId: null,
+        };
+      }
+    }
   }
 
   #drawEditableContent(node: GlyphNode, ctx: RenderContext, view: GlyphRenderModel): void {

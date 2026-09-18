@@ -81,21 +81,17 @@ import type {
 } from "@/types";
 import type { GlyphNode, NodeKind } from "@/types/node";
 import { AnchorObject, ContourObject, NodeObject, PointObject, SegmentObject } from "@/lib/objects";
-import type { NodeDefinition, NodeDefinitionConstructor } from "@/lib/nodes/NodeDefinition";
+import type { NodeDefinition } from "@/lib/nodes/NodeDefinition";
 import { GlyphNodeDefinition } from "../nodes/GlyphNodeDefinition";
 import { TextRunNodeDefinition } from "../nodes/TextRunNodeDefinition";
-
-const DEFAULT_NODE_DEFINITIONS: NodeDefinitionConstructor[] = [
-  GlyphNodeDefinition,
-  TextRunNodeDefinition,
-];
+import type { NodeDefinitionByKind, NodeDefinitionConstructors } from "@/types/nodeDefinition";
 
 interface EditorOptions {
   font: Font;
   fontStore: FontStore;
   clipboard: SystemClipboard;
   sessionMode: FontSessionMode;
-  nodeDefinitions?: readonly NodeDefinitionConstructor[];
+  nodeDefinitions?: Partial<NodeDefinitionConstructors>;
 }
 
 /**
@@ -146,7 +142,7 @@ export class Editor {
   readonly sessionMode: FontSessionMode;
   readonly scene: Scene;
   readonly text: Text;
-  readonly #nodeDefinitions: Map<NodeKind, NodeDefinition> = new Map();
+  readonly #nodeDefinitions: NodeDefinitionByKind;
   readonly #store: ShiftStore<ShiftEditorRecord>;
   readonly #fontStore: FontStore;
 
@@ -225,13 +221,12 @@ export class Editor {
     );
     this.text = new Text(this.#store, this);
 
-    const nodeDefs = new Map<NodeKind, NodeDefinition>();
-    for (const Def of options.nodeDefinitions ?? DEFAULT_NODE_DEFINITIONS) {
-      const def = new Def(this);
-      nodeDefs.set(def.kind, def);
-    }
-
-    this.#nodeDefinitions = nodeDefs;
+    const GlyphDefinition = options.nodeDefinitions?.glyph ?? GlyphNodeDefinition;
+    const TextRunDefinition = options.nodeDefinitions?.textRun ?? TextRunNodeDefinition;
+    this.#nodeDefinitions = {
+      glyph: new GlyphDefinition(this),
+      textRun: new TextRunDefinition(this),
+    };
 
     this.#view = new EditorViewState();
     this.input = new EditorInput();
@@ -769,8 +764,11 @@ export class Editor {
     return this.#fontStore.glyphForId(glyphId);
   }
 
-  nodeDefinition(kind: NodeKind): NodeDefinition | null {
-    return this.#nodeDefinitions.get(kind) ?? null;
+  nodeDefinition(kind: "glyph"): GlyphNodeDefinition;
+  nodeDefinition(kind: "textRun"): TextRunNodeDefinition;
+  nodeDefinition(kind: NodeKind): NodeDefinition;
+  nodeDefinition(kind: NodeKind): NodeDefinition {
+    return this.#nodeDefinitions[kind];
   }
 
   /**
