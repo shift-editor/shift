@@ -1,4 +1,7 @@
-import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useRef, useState } from "react";
+import { drag, type D3DragEvent } from "d3-drag";
+import { scaleLinear } from "d3-scale";
+import { select } from "d3-selection";
 import type { Axis, AxisMappingPoint } from "@shift/types";
 
 interface MappingGraphProps {
@@ -9,6 +12,7 @@ interface MappingGraphProps {
 }
 
 export const MappingGraph = ({ axis, points, onPointChange, onPointCommit }: MappingGraphProps) => {
+  const svgRef = useRef<SVGSVGElement>(null);
   const [draggingPointIndex, setDraggingPointIndex] = useState<number | null>(null);
   const didDragRef = useRef(false);
   const coordinates = points
@@ -20,77 +24,90 @@ export const MappingGraph = ({ axis, points, onPointChange, onPointCommit }: Map
     .filter(
       (point): point is { index: number; input: number; output: number } =>
         point.input !== undefined && point.output !== undefined,
-    )
-    .sort((left, right) => left.input - right.input);
+    );
 
   const values = coordinates.flatMap((point) => [point.input, point.output]);
   const minimum = Math.min(axis.minimum ?? axis.default, ...values);
   const maximum = Math.max(axis.maximum ?? axis.default, ...values);
-  const domainSpan = maximum - minimum;
-  const span = domainSpan === 0 ? 1 : domainSpan;
   const size = 220;
   const left = 36;
   const right = size - 16;
   const top = 16;
   const bottom = size - 26;
+  const xScale = scaleLinear().domain([minimum, maximum]).range([left, right]).clamp(true);
+  const yScale = scaleLinear().domain([minimum, maximum]).range([bottom, top]).clamp(true);
+  const path = [...coordinates]
+    .sort((leftPoint, rightPoint) => leftPoint.input - rightPoint.input)
+    .map((point) => `${xScale(point.input)},${yScale(point.output)}`)
+    .join(" ");
+  const ticks = xScale.ticks(5);
+  const dragContextRef = useRef({ xScale, yScale, onPointChange, onPointCommit });
+  dragContextRef.current = { xScale, yScale, onPointChange, onPointCommit };
 
-  const x = (value: number) => left + ((value - minimum) / span) * (right - left);
-  const y = (value: number) => bottom - ((value - minimum) / span) * (bottom - top);
-  const path = coordinates.map((point) => `${x(point.input)},${y(point.output)}`).join(" ");
-  const ticks = graphTicks(minimum, maximum);
-
-  const updatePointFromPointer = (pointIndex: number, event: ReactPointerEvent<SVGGElement>) => {
-    if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
-
-    const svg = event.currentTarget.ownerSVGElement;
+  useEffect(() => {
+    const svg = svgRef.current;
     if (!svg) return;
 
-    const bounds = svg.getBoundingClientRect();
-    if (bounds.width === 0 || bounds.height === 0) return;
+    const handles = select(svg).selectAll<SVGGElement, unknown>("[data-mapping-point-index]");
+    const pointDrag = drag<SVGGElement, unknown>()
+      .on("start", function () {
+        didDragRef.current = false;
+        setDraggingPointIndex(pointIndexFromHandle(this));
+      })
+      .on("drag", function (event: D3DragEvent<SVGGElement, unknown, unknown>) {
+        const {
+          xScale: currentXScale,
+          yScale: currentYScale,
+          onPointChange: changePoint,
+        } = dragContextRef.current;
+        didDragRef.current = true;
+        changePoint(
+          pointIndexFromHandle(this),
+          normalizeCoordinate(currentXScale.invert(event.x)),
+          normalizeCoordinate(currentYScale.invert(event.y)),
+        );
+      })
+      .on("end", () => {
+        setDraggingPointIndex(null);
+        if (!didDragRef.current) return;
 
-    const graphX = ((event.clientX - bounds.left) / bounds.width) * size;
-    const graphY = ((event.clientY - bounds.top) / bounds.height) * size;
-    const input = graphValue(graphX, left, right, minimum, domainSpan);
-    const output = graphValue(bottom - graphY + top, top, bottom, minimum, domainSpan);
+        didDragRef.current = false;
+        void dragContextRef.current.onPointCommit().catch((cause: unknown) => {
+          console.error("Failed to commit axis mapping drag", cause);
+        });
+      });
 
-    didDragRef.current = true;
-    onPointChange(pointIndex, input, output);
-  };
+    handles.call(pointDrag);
 
-  const finishDrag = async (event: ReactPointerEvent<SVGGElement>) => {
-    if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
-
-    event.currentTarget.releasePointerCapture(event.pointerId);
-    setDraggingPointIndex(null);
-
-    const shouldCommit = didDragRef.current;
-    didDragRef.current = false;
-    if (shouldCommit) await onPointCommit();
-  };
+    return () => {
+      handles.on(".drag", null);
+    };
+  }, [coordinates.length]);
 
   return (
     <figure className="m-0 flex min-w-0 flex-col gap-2">
       <figcaption className="text-sm text-primary">Mapping Graph</figcaption>
       <svg
+        ref={svgRef}
         viewBox={`0 0 ${size} ${size}`}
         role="img"
         aria-label={`${axis.name} external to source mapping`}
-        className="aspect-square w-full border border-line-subtle"
+        className={`aspect-square w-full border border-line-subtle ${draggingPointIndex === null ? "" : "cursor-grabbing"}`}
       >
         {ticks.map((value) => (
           <g key={`input-${value}`}>
             <line
-              x1={x(value)}
+              x1={xScale(value)}
               y1={top}
-              x2={x(value)}
+              x2={xScale(value)}
               y2={bottom}
               className="stroke-line-subtle"
               strokeDasharray="2 3"
             />
             <text
-              x={x(value)}
+              x={xScale(value)}
               y={size - 8}
-              textAnchor={tickAnchor(value, minimum, maximum)}
+              textAnchor={tickAnchor(value, ticks)}
               className="fill-secondary text-[9px]"
             >
               {formatCoordinate(value)}
@@ -101,15 +118,15 @@ export const MappingGraph = ({ axis, points, onPointChange, onPointCommit }: Map
           <g key={`output-${value}`}>
             <line
               x1={left}
-              y1={y(value)}
+              y1={yScale(value)}
               x2={right}
-              y2={y(value)}
+              y2={yScale(value)}
               className="stroke-line-subtle"
               strokeDasharray="2 3"
             />
             <text
               x={left - 6}
-              y={y(value)}
+              y={yScale(value)}
               textAnchor="end"
               dominantBaseline="middle"
               className="fill-secondary text-[9px]"
@@ -132,26 +149,19 @@ export const MappingGraph = ({ axis, points, onPointChange, onPointCommit }: Map
         {coordinates.map((point) => (
           <g
             key={point.index}
+            data-mapping-point-index={point.index}
             data-testid={`mapping-point-${point.index + 1}`}
             aria-hidden="true"
-            className="cursor-grab touch-none"
-            onPointerDown={(event) => {
-              if (!event.isPrimary || event.button !== 0) return;
-
-              event.preventDefault();
-              didDragRef.current = false;
-              setDraggingPointIndex(point.index);
-              event.currentTarget.setPointerCapture(event.pointerId);
-            }}
-            onPointerMove={(event) => updatePointFromPointer(point.index, event)}
-            onPointerUp={finishDrag}
-            onPointerCancel={finishDrag}
-            onLostPointerCapture={() => setDraggingPointIndex(null)}
+            className={
+              draggingPointIndex === point.index
+                ? "cursor-grabbing touch-none"
+                : "cursor-grab touch-none"
+            }
           >
-            <circle cx={x(point.input)} cy={y(point.output)} r={10} fill="transparent" />
+            <circle cx={xScale(point.input)} cy={yScale(point.output)} r={10} fill="transparent" />
             <circle
-              cx={x(point.input)}
-              cy={y(point.output)}
+              cx={xScale(point.input)}
+              cy={yScale(point.output)}
               r={draggingPointIndex === point.index ? 4 : 3}
               className="pointer-events-none fill-white stroke-accent"
               strokeWidth={2}
@@ -163,49 +173,20 @@ export const MappingGraph = ({ axis, points, onPointChange, onPointCommit }: Map
   );
 };
 
-function graphTicks(minimum: number, maximum: number): number[] {
-  if (minimum === maximum) return [minimum];
-
-  const maximumTickCount = 5;
-  const step = niceStep((maximum - minimum) / (maximumTickCount - 1));
-  const ticks = [minimum];
-  let value = Math.ceil(minimum / step) * step;
-
-  while (value < maximum) {
-    if (value > minimum) ticks.push(Number(value.toPrecision(12)));
-    value += step;
-  }
-
-  ticks.push(maximum);
-  return [...new Set(ticks)];
+function pointIndexFromHandle(handle: SVGGElement): number {
+  return Number(handle.dataset.mappingPointIndex);
 }
 
-function niceStep(minimumStep: number): number {
-  const magnitude = 10 ** Math.floor(Math.log10(minimumStep));
-  const normalized = minimumStep / magnitude;
-  const multiplier = [1, 2, 2.5, 5, 10].find((candidate) => candidate >= normalized) ?? 10;
-  return multiplier * magnitude;
-}
-
-function graphValue(
-  position: number,
-  start: number,
-  end: number,
-  minimum: number,
-  domainSpan: number,
-): number {
-  if (domainSpan === 0) return minimum;
-
-  const progress = Math.min(1, Math.max(0, (position - start) / (end - start)));
-  return Number((minimum + progress * domainSpan).toPrecision(12));
+function normalizeCoordinate(value: number): number {
+  return Number(value.toPrecision(12));
 }
 
 function formatCoordinate(value: number): string {
   return Number.isInteger(value) ? value.toString() : value.toFixed(2);
 }
 
-function tickAnchor(value: number, minimum: number, maximum: number): "start" | "middle" | "end" {
-  if (value === minimum) return "start";
-  if (value === maximum) return "end";
+function tickAnchor(value: number, ticks: readonly number[]): "start" | "middle" | "end" {
+  if (value === ticks[0]) return "start";
+  if (value === ticks.at(-1)) return "end";
   return "middle";
 }
