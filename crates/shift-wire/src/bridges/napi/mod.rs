@@ -5,16 +5,17 @@ use napi_derive::napi;
 use shift_font::{GlyphId, PointType as IrPointType};
 
 use crate::{
-    AnchorData, Axis, AxisLabel, AxisMapping, AxisMappingBasis, AxisMappingPoint,
+    AnchorData, AnchorMatch, Axis, AxisLabel, AxisMapping, AxisMappingBasis, AxisMappingPoint,
     ComponentAnchorAttachment, ComponentAnchorReference, ComponentData, ComponentGlyph,
-    ComponentTransformKind, ContourData, FontMetadata, FontMetrics, FontSnapshot,
-    GlyphChangedEntities, GlyphComponents, GlyphEntry, GlyphInterpolation, GlyphLayerRecord,
-    GlyphLayerShape, GlyphLayerSnapshot, GlyphProjection, GlyphRecord, GlyphSnapshot,
-    GlyphSnapshotRequest, GlyphSourceComponents, GlyphSourceShape, GlyphSourceValues, GlyphState,
-    GlyphStructure, GlyphVariation, InterpolationBasis, InterpolationSupport, Location,
-    MetricDefinition, MetricKind, NamedInstance, PointData, PointType, Source, SourceMetricField,
-    SourceMetricValue, SourceMetricValues, SourceMetricsInterpolationSnapshot, VariationBasis,
-    VariationDelta,
+    ComponentMatch, ComponentTransformKind, ContourData, ContourMatch, FontMetadata, FontMetrics,
+    FontSnapshot, GlyphChangedEntities, GlyphComponents, GlyphEntry, GlyphInterpolation,
+    GlyphLayerRecord, GlyphLayerShape, GlyphLayerSnapshot, GlyphProjection, GlyphRecord,
+    GlyphSnapshot, GlyphSnapshotRequest, GlyphSourceComponents, GlyphSourceShape,
+    GlyphSourceValues, GlyphState, GlyphStructure, GlyphVariation, InterpolationBasis,
+    InterpolationSupport, LayerDifference, LayerDifferenceKind, LayerMatch, Location,
+    MetricDefinition, MetricKind, NamedInstance, PointData, PointMatch, PointType, Source,
+    SourceMetricField, SourceMetricValue, SourceMetricValues, SourceMetricsInterpolationSnapshot,
+    VariationBasis, VariationDelta,
 };
 
 #[napi(object)]
@@ -524,6 +525,175 @@ impl From<GlyphLayerRecord> for NapiGlyphLayerRecord {
         Self {
             id: record.id.to_string(),
             source_id: record.source_id.to_string(),
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NapiContourMatch {
+    #[napi(ts_type = "ContourId")]
+    pub reference_id: String,
+    #[napi(ts_type = "ContourId")]
+    pub target_id: String,
+}
+
+impl From<ContourMatch> for NapiContourMatch {
+    fn from(pair: ContourMatch) -> Self {
+        Self {
+            reference_id: pair.reference_id.to_string(),
+            target_id: pair.target_id.to_string(),
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NapiPointMatch {
+    #[napi(ts_type = "PointId")]
+    pub reference_id: String,
+    #[napi(ts_type = "PointId")]
+    pub target_id: String,
+}
+
+impl From<PointMatch> for NapiPointMatch {
+    fn from(pair: PointMatch) -> Self {
+        Self {
+            reference_id: pair.reference_id.to_string(),
+            target_id: pair.target_id.to_string(),
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NapiAnchorMatch {
+    #[napi(ts_type = "AnchorId")]
+    pub reference_id: String,
+    #[napi(ts_type = "AnchorId")]
+    pub target_id: String,
+}
+
+impl From<AnchorMatch> for NapiAnchorMatch {
+    fn from(pair: AnchorMatch) -> Self {
+        Self {
+            reference_id: pair.reference_id.to_string(),
+            target_id: pair.target_id.to_string(),
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NapiComponentMatch {
+    #[napi(ts_type = "ComponentId")]
+    pub reference_id: String,
+    #[napi(ts_type = "ComponentId")]
+    pub target_id: String,
+}
+
+impl From<ComponentMatch> for NapiComponentMatch {
+    fn from(pair: ComponentMatch) -> Self {
+        Self {
+            reference_id: pair.reference_id.to_string(),
+            target_id: pair.target_id.to_string(),
+        }
+    }
+}
+
+#[napi(string_enum = "camelCase")]
+pub enum NapiLayerDifferenceKind {
+    ContourCount,
+    ContourClosed,
+    PointCount,
+    PointType,
+    AnchorCount,
+    AnchorSequence,
+    ComponentSequence,
+}
+
+impl From<LayerDifferenceKind> for NapiLayerDifferenceKind {
+    fn from(kind: LayerDifferenceKind) -> Self {
+        match kind {
+            LayerDifferenceKind::ContourCount => Self::ContourCount,
+            LayerDifferenceKind::ContourClosed => Self::ContourClosed,
+            LayerDifferenceKind::PointCount => Self::PointCount,
+            LayerDifferenceKind::PointType => Self::PointType,
+            LayerDifferenceKind::AnchorCount => Self::AnchorCount,
+            LayerDifferenceKind::AnchorSequence => Self::AnchorSequence,
+            LayerDifferenceKind::ComponentSequence => Self::ComponentSequence,
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NapiLayerDifference {
+    pub kind: NapiLayerDifferenceKind,
+    pub contour: Option<u32>,
+    pub point: Option<u32>,
+    pub reference_count: Option<u32>,
+    pub target_count: Option<u32>,
+    pub reference_closed: Option<bool>,
+    pub target_closed: Option<bool>,
+    pub reference_point_type: Option<NapiPointType>,
+    pub target_point_type: Option<NapiPointType>,
+    pub reference_anchor_names: Option<Vec<Option<String>>>,
+    pub target_anchor_names: Option<Vec<Option<String>>>,
+    #[napi(ts_type = "Array<GlyphId> | undefined")]
+    pub reference_component_ids: Option<Vec<String>>,
+    #[napi(ts_type = "Array<GlyphId> | undefined")]
+    pub target_component_ids: Option<Vec<String>>,
+}
+
+impl From<LayerDifference> for NapiLayerDifference {
+    fn from(difference: LayerDifference) -> Self {
+        Self {
+            kind: difference.kind.into(),
+            contour: difference.contour,
+            point: difference.point,
+            reference_count: difference.reference_count,
+            target_count: difference.target_count,
+            reference_closed: difference.reference_closed,
+            target_closed: difference.target_closed,
+            reference_point_type: difference.reference_point_type.map(Into::into),
+            target_point_type: difference.target_point_type.map(Into::into),
+            reference_anchor_names: difference.reference_anchor_names,
+            target_anchor_names: difference.target_anchor_names,
+            reference_component_ids: difference
+                .reference_component_ids
+                .map(|ids| ids.into_iter().map(|id| id.to_string()).collect()),
+            target_component_ids: difference
+                .target_component_ids
+                .map(|ids| ids.into_iter().map(|id| id.to_string()).collect()),
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NapiLayerMatch {
+    #[napi(ts_type = "LayerId")]
+    pub reference_layer_id: String,
+    #[napi(ts_type = "LayerId")]
+    pub target_layer_id: String,
+    pub complete: bool,
+    pub contours: Vec<NapiContourMatch>,
+    pub points: Vec<NapiPointMatch>,
+    pub anchors: Vec<NapiAnchorMatch>,
+    pub components: Vec<NapiComponentMatch>,
+    pub differences: Vec<NapiLayerDifference>,
+}
+
+impl From<LayerMatch> for NapiLayerMatch {
+    fn from(layer_match: LayerMatch) -> Self {
+        Self {
+            reference_layer_id: layer_match.reference_layer_id.to_string(),
+            target_layer_id: layer_match.target_layer_id.to_string(),
+            complete: layer_match.complete,
+            contours: layer_match.contours.into_iter().map(Into::into).collect(),
+            points: layer_match.points.into_iter().map(Into::into).collect(),
+            anchors: layer_match.anchors.into_iter().map(Into::into).collect(),
+            components: layer_match.components.into_iter().map(Into::into).collect(),
+            differences: layer_match
+                .differences
+                .into_iter()
+                .map(Into::into)
+                .collect(),
         }
     }
 }

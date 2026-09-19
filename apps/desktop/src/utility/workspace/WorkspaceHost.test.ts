@@ -1169,6 +1169,40 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     expect(applied.dependents).toEqual([]);
   });
 
+  it("workspace.layerMatch transports complete entity mappings", async () => {
+    const sync = await connectSyncLane();
+    const snapshot = await createWorkspace(sync);
+    const { layerId, intents } = createGlyphALayer(snapshot.sources[0].id);
+    const contourId = mintContourId();
+    const pointId = mintPointId();
+    await applyWorkspace(sync, {
+      intents: [
+        ...intents,
+        { kind: "addContour", addContour: { layerId, contourId, closed: false } },
+        {
+          kind: "addPoints",
+          addPoints: {
+            layerId,
+            contourId,
+            points: [
+              { id: pointId, x: 10, y: 20, pointType: "onCurve" as PointType, smooth: false },
+            ],
+          },
+        },
+      ],
+    });
+
+    const layerMatch = await sync.call("workspace.layerMatch", {
+      referenceLayerId: layerId,
+      targetLayerId: layerId,
+    });
+
+    expect(layerMatch.complete).toBe(true);
+    expect(layerMatch.contours).toEqual([{ referenceId: contourId, targetId: contourId }]);
+    expect(layerMatch.points).toEqual([{ referenceId: pointId, targetId: pointId }]);
+    expect(layerMatch.differences).toEqual([]);
+  });
+
   it("undo and redo replay ledger entries through the channel", async () => {
     const sync = await connectSyncLane();
     const snapshot = await createWorkspace(sync);
