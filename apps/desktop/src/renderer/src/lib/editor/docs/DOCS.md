@@ -140,7 +140,7 @@ Background, scene, and overlays are drawn in UPM space (`Canvas.withSceneSpace()
 
 ### Source editing selection
 
-A plain source-row click activates that source and collapses the editing set. Shift-click replaces the set with the authored-order range from the active reference to the clicked source; Cmd/Ctrl-click toggles a non-reference source. Cmd/Ctrl+E selects every source without changing the reference. Escape reaches source selection only after the active tool declines it, so gestures and geometry selection cancel first; it then collapses the set to the reference. Non-reference selected sources are published to `GlyphOutlines` automatically.
+A plain source-row click activates that source and collapses the editing set. Shift-click replaces the set with the authored-order range from the active reference to the clicked source; Cmd/Ctrl-click toggles a non-reference source. Cmd/Ctrl+E selects every source without changing the reference. Escape reaches source selection only after the active tool declines it, so gestures and geometry selection cancel first; it then collapses the set to the reference. Non-reference selected sources are published to `GlyphOutlines` automatically. Source eye controls independently add preview-only outlines, so a source can remain outside the editing set while still being visible for comparison.
 
 ### Editing result selection
 

@@ -2,6 +2,7 @@ import type { GlyphOutlineControls } from "@/types/glyphOutline";
 
 export interface SourcesProps {
   readonly canAuthor: boolean;
+  readonly outlineControls?: GlyphOutlineControls;
 }
 
 export interface InstancesProps {
