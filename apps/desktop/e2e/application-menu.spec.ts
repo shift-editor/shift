@@ -242,6 +242,111 @@ authoredTest(
   },
 );
 
+authoredTest(
+  "Mapping graph keeps a crossed-point drag as one undoable edit",
+  async ({ electronApp, page }) => {
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    const settings = page.getByRole("dialog", { name: "Settings" });
+    await settings.getByRole("button", { name: "Axes", exact: true }).click();
+    await settings.getByRole("button", { name: "Create axis", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Add custom axis" }).click();
+    await settings.getByRole("tab", { name: "Mapping", exact: true }).click();
+    await settings.getByRole("button", { name: "Add point", exact: true }).click();
+    await settings.getByRole("button", { name: "Add point", exact: true }).click();
+
+    const graph = settings.getByRole("img", {
+      name: "Custom Axis external to source mapping",
+    });
+    const handle = graph.getByTestId("mapping-point-2");
+    await expect(handle).toBeVisible();
+    expect(await graph.locator("text").allTextContents()).toEqual([
+      "0",
+      "20",
+      "40",
+      "60",
+      "80",
+      "100",
+      "0",
+      "20",
+      "40",
+      "60",
+      "80",
+      "100",
+    ]);
+
+    const mappingCoordinates = async (): Promise<readonly [number, number][]> =>
+      page.evaluate(() => {
+        const mapping = window.shiftSession!.font.getAxisMappings()[0];
+        const axisId = mapping?.inputs[0];
+        if (!mapping || !axisId) throw new Error("Expected an independent axis mapping");
+
+        return mapping.points.map((point) => [
+          point.input.values[axisId]!,
+          point.output.values[axisId]!,
+        ]);
+      });
+    const centerOf = async (testId: string): Promise<{ x: number; y: number }> => {
+      const bounds = await graph.getByTestId(testId).boundingBox();
+      if (!bounds) throw new Error(`Expected ${testId} to be visible`);
+
+      return { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
+    };
+
+    const userField = settings.getByLabel("User mapping point 2", { exact: true });
+    const sourceField = settings.getByLabel("Source mapping point 2", { exact: true });
+    const before = await mappingCoordinates();
+    const beforeCenter = await centerOf("mapping-point-2");
+    const neighborCenter = await centerOf("mapping-point-3");
+    const endpointCenter = await centerOf("mapping-point-4");
+    await expect(handle).toHaveCSS("cursor", "grab");
+
+    await page.mouse.move(beforeCenter.x, beforeCenter.y);
+    await page.mouse.down();
+    await expect(handle).toHaveCSS("cursor", "grabbing");
+    await expect(graph).toHaveCSS("cursor", "grabbing");
+
+    const crossedX = neighborCenter.x + (endpointCenter.x - neighborCenter.x) * 0.4;
+    await page.mouse.move(crossedX, beforeCenter.y - 15, { steps: 3 });
+    await expect
+      .poll(async () => Number(await userField.inputValue()))
+      .toBeGreaterThan(before[2]![0]);
+    const firstCrossedUser = Number(await userField.inputValue());
+    expect(await mappingCoordinates()).toEqual(before);
+
+    const continuedX = neighborCenter.x + (endpointCenter.x - neighborCenter.x) * 0.65;
+    await page.mouse.move(continuedX, beforeCenter.y - 25, { steps: 2 });
+    await expect
+      .poll(async () => Number(await userField.inputValue()))
+      .toBeGreaterThan(firstCrossedUser);
+    expect(Number(await sourceField.inputValue())).toBeGreaterThan(before[1]![1]);
+    await expect(handle).toHaveCSS("cursor", "grabbing");
+    await page.mouse.up();
+
+    await expect.poll(mappingCoordinates).not.toEqual(before);
+    const after = await mappingCoordinates();
+    const afterCenter = await centerOf("mapping-point-2");
+    expect(after[1]![0]).toBeGreaterThan(before[2]![0]);
+    expect(Number(await userField.inputValue())).toBeCloseTo(after[1]![0], 2);
+    expect(Number(await sourceField.inputValue())).toBeCloseTo(after[1]![1], 2);
+
+    await clickApplicationMenuItem(page, electronApp, "edit.undo");
+    await expect.poll(mappingCoordinates).toEqual(before);
+    await expect
+      .poll(async () => Number(await userField.inputValue()))
+      .toBeCloseTo(before[1]![0], 2);
+    await expect
+      .poll(async () => (await centerOf("mapping-point-2")).x)
+      .toBeCloseTo(beforeCenter.x);
+
+    await clickApplicationMenuItem(page, electronApp, "edit.redo");
+    await expect.poll(mappingCoordinates).toEqual(after);
+    await expect
+      .poll(async () => Number(await sourceField.inputValue()))
+      .toBeCloseTo(after[1]![1], 2);
+    await expect.poll(async () => (await centerOf("mapping-point-2")).x).toBeCloseTo(afterCenter.x);
+  },
+);
+
 convertiblePreviewTest(
   "View menu distinguishes canvas zoom from interface size",
   async ({ electronApp, page }) => {
