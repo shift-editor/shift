@@ -54,6 +54,15 @@ export declare class Bridge {
   /** Glyph-addressed snapshots for renderer-local synchronous font state. */
   getGlyphSnapshots(requests: Array<NapiGlyphSnapshotRequest>): Array<NapiGlyphSnapshot>
   /**
+   * Derives entity mappings and structural diagnostics between two layers.
+   *
+   * Both layers must belong to the same glyph. The read acquires that glyph's
+   * authored layers before matching, so sparse workspace residency cannot
+   * produce an incomplete result. Missing layers and cross-glyph requests are
+   * rejected rather than represented as compatibility differences.
+   */
+  getLayerMatch(referenceLayerId: LayerId, targetLayerId: LayerId): NapiLayerMatch
+  /**
    * Returns compact glyph projections without resolving a location.
    *
    * Missing glyph identities and glyphs without authored shapes are omitted.
@@ -174,6 +183,11 @@ export interface NapiAddPointsIntent {
 export interface NapiAnchorData {
   id: AnchorId
   name?: string
+}
+
+export interface NapiAnchorMatch {
+  referenceId: AnchorId
+  targetId: AnchorId
 }
 
 /**
@@ -339,6 +353,11 @@ export interface NapiComponentGlyph {
   attachment?: NapiComponentAnchorAttachment
 }
 
+export interface NapiComponentMatch {
+  referenceId: ComponentId
+  targetId: ComponentId
+}
+
 export declare const enum NapiComponentTransformKind {
   Decomposed = 'decomposed',
   Affine = 'affine'
@@ -348,6 +367,11 @@ export interface NapiContourData {
   id: ContourId
   points: Array<NapiPointData>
   closed: boolean
+}
+
+export interface NapiContourMatch {
+  referenceId: ContourId
+  targetId: ContourId
 }
 
 /**
@@ -645,6 +669,43 @@ export interface NapiInterpolationSupport {
   upper: number
 }
 
+export interface NapiLayerDifference {
+  kind: NapiLayerDifferenceKind
+  contour?: number
+  point?: number
+  referenceCount?: number
+  targetCount?: number
+  referenceClosed?: boolean
+  targetClosed?: boolean
+  referencePointType?: NapiPointType
+  targetPointType?: NapiPointType
+  referenceAnchorNames?: Array<string | undefined | null>
+  targetAnchorNames?: Array<string | undefined | null>
+  referenceComponentIds?: Array<GlyphId> | undefined
+  targetComponentIds?: Array<GlyphId> | undefined
+}
+
+export declare const enum NapiLayerDifferenceKind {
+  ContourCount = 'contourCount',
+  ContourClosed = 'contourClosed',
+  PointCount = 'pointCount',
+  PointType = 'pointType',
+  AnchorCount = 'anchorCount',
+  AnchorSequence = 'anchorSequence',
+  ComponentSequence = 'componentSequence'
+}
+
+export interface NapiLayerMatch {
+  referenceLayerId: LayerId
+  targetLayerId: LayerId
+  complete: boolean
+  contours: Array<NapiContourMatch>
+  points: Array<NapiPointMatch>
+  anchors: Array<NapiAnchorMatch>
+  components: Array<NapiComponentMatch>
+  differences: Array<NapiLayerDifference>
+}
+
 /**
  * Replace-grade state for one touched layer; the renderer folds by
  * substitution, never by interpreting changes.
@@ -712,6 +773,11 @@ export interface NapiPointData {
   id: PointId
   pointType: NapiPointType
   smooth: boolean
+}
+
+export interface NapiPointMatch {
+  referenceId: PointId
+  targetId: PointId
 }
 
 /**

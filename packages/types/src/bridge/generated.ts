@@ -69,6 +69,15 @@ export interface BridgeApi {
   /** Glyph-addressed snapshots for renderer-local synchronous font state. */
   getGlyphSnapshots(requests: Array<GlyphSnapshotRequest>): Array<GlyphSnapshot>
   /**
+   * Derives entity mappings and structural diagnostics between two layers.
+   *
+   * Both layers must belong to the same glyph. The read acquires that glyph's
+   * authored layers before matching, so sparse workspace residency cannot
+   * produce an incomplete result. Missing layers and cross-glyph requests are
+   * rejected rather than represented as compatibility differences.
+   */
+  getLayerMatch(referenceLayerId: LayerId, targetLayerId: LayerId): LayerMatch
+  /**
    * Returns compact glyph projections without resolving a location.
    *
    * Missing glyph identities and glyphs without authored shapes are omitted.
@@ -189,6 +198,11 @@ export interface AddPointsIntent {
 export interface AnchorData {
   id: AnchorId
   name?: string
+}
+
+export interface AnchorMatch {
+  referenceId: AnchorId
+  targetId: AnchorId
 }
 
 /**
@@ -348,12 +362,22 @@ export interface ComponentGlyph {
   attachment?: ComponentAnchorAttachment
 }
 
+export interface ComponentMatch {
+  referenceId: ComponentId
+  targetId: ComponentId
+}
+
 export type ComponentTransformKind = "decomposed" | "affine";
 
 export interface ContourData {
   id: ContourId
   points: Array<PointData>
   closed: boolean
+}
+
+export interface ContourMatch {
+  referenceId: ContourId
+  targetId: ContourId
 }
 
 /**
@@ -651,6 +675,35 @@ export interface InterpolationSupport {
   upper: number
 }
 
+export interface LayerDifference {
+  kind: LayerDifferenceKind
+  contour?: number
+  point?: number
+  referenceCount?: number
+  targetCount?: number
+  referenceClosed?: boolean
+  targetClosed?: boolean
+  referencePointType?: PointType
+  targetPointType?: PointType
+  referenceAnchorNames?: Array<string | undefined | null>
+  targetAnchorNames?: Array<string | undefined | null>
+  referenceComponentIds?: Array<GlyphId> | undefined
+  targetComponentIds?: Array<GlyphId> | undefined
+}
+
+export type LayerDifferenceKind = "contourCount" | "contourClosed" | "pointCount" | "pointType" | "anchorCount" | "anchorSequence" | "componentSequence";
+
+export interface LayerMatch {
+  referenceLayerId: LayerId
+  targetLayerId: LayerId
+  complete: boolean
+  contours: Array<ContourMatch>
+  points: Array<PointMatch>
+  anchors: Array<AnchorMatch>
+  components: Array<ComponentMatch>
+  differences: Array<LayerDifference>
+}
+
 /**
  * Replace-grade state for one touched layer; the renderer folds by
  * substitution, never by interpreting changes.
@@ -711,6 +764,11 @@ export interface PointData {
   id: PointId
   pointType: PointType
   smooth: boolean
+}
+
+export interface PointMatch {
+  referenceId: PointId
+  targetId: PointId
 }
 
 /**
