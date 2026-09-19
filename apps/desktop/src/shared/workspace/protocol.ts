@@ -15,6 +15,8 @@ import type {
   GlyphRecord,
   GlyphState,
   GlyphSnapshot,
+  LayerId,
+  LayerMatch,
   Location,
   MetricDefinition,
   SourceMetricsInterpolationSnapshot,
@@ -285,6 +287,10 @@ export type SyncCallMap = {
   "workspace.glyphSnapshots": {
     request: { requests: WorkspaceGlyphSnapshotRequest[] };
     response: GlyphSnapshot[];
+  };
+  "workspace.layerMatch": {
+    request: { referenceLayerId: LayerId; targetLayerId: LayerId };
+    response: LayerMatch;
   };
   "workspace.glyphProjections": {
     request: { glyphIds: GlyphId[] };
