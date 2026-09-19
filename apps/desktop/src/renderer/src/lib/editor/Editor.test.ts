@@ -205,7 +205,7 @@ describe("Editor scene bootstrap", () => {
     expect(editor.editingSourceIds).toEqual(new Set([referenceId, boldId, thinId]));
   });
 
-  it("selects every editing source and collapses to the reference", async () => {
+  it("toggles editing between every source and the reference", async () => {
     const axisId = editor.font.createAxis(weightAxis());
     await editor.settle();
     editor.createSource("Bold", externalAxisLocationFromRecord({ [axisId]: 700 }));
@@ -213,11 +213,11 @@ describe("Editor scene bootstrap", () => {
     const referenceId = editor.font.defaultSource.id;
     editor.selectSource(referenceId);
 
-    expect(editor.selectAllSourcesForEditing()).toBe(true);
+    expect(editor.toggleAllSourcesForEditing()).toBe(true);
     expect([...editor.editingSourceIds]).toEqual(editor.font.sources.map(({ id }) => id));
     expect(editor.activeSourceId).toBe(referenceId);
 
-    expect(editor.collapseEditingSources()).toBe(true);
+    expect(editor.toggleAllSourcesForEditing()).toBe(true);
     expect([...editor.editingSourceIds]).toEqual([referenceId]);
     expect(editor.collapseEditingSources()).toBe(false);
   });

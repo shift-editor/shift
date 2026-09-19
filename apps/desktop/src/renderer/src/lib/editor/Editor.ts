@@ -988,11 +988,22 @@ export class Editor {
     }
   }
 
-  /** Selects every source for editing while retaining the active reference source. */
-  public selectAllSourcesForEditing(): boolean {
-    if (this.sessionMode !== "authored" || !this.#activeSourceIdCell.peek()) return false;
+  /**
+   * Toggles between editing every source and editing only the active reference source.
+   *
+   * @returns `true` when the editing selection changed; otherwise `false`.
+   */
+  public toggleAllSourcesForEditing(): boolean {
+    const activeSourceId = this.#activeSourceIdCell.peek();
+    if (this.sessionMode !== "authored" || !activeSourceId) return false;
 
-    this.#editingSourceIdsCell.set(new Set(this.font.sources.map(({ id }) => id)));
+    const sourceIds = this.font.sources.map(({ id }) => id);
+    const editingSourceIds = this.#editingSourceIdsCell.peek();
+    if (sourceIds.every((sourceId) => editingSourceIds.has(sourceId))) {
+      return this.collapseEditingSources();
+    }
+
+    this.#editingSourceIdsCell.set(new Set(sourceIds));
     return true;
   }
 

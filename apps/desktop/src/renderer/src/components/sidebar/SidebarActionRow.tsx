@@ -37,9 +37,15 @@ export const SidebarActionRow = ({
         size="sm"
         data-testid={testId}
         aria-pressed={isSelected}
+        onPointerDown={(event) => {
+          event.currentTarget.dataset.pointerFocus = "true";
+        }}
+        onBlur={(event) => {
+          delete event.currentTarget.dataset.pointerFocus;
+        }}
         onClick={onClick}
         className={cn(
-          "min-w-0 flex-1 justify-start bg-transparent px-2 hover:bg-transparent data-[active]:bg-transparent",
+          "min-w-0 flex-1 justify-start bg-transparent px-2 hover:bg-transparent data-[pointer-focus]:focus-visible:ring-0 data-[active]:bg-transparent",
           contentClassName,
         )}
       >
