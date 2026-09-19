@@ -10,6 +10,7 @@ import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
+  cn,
 } from "@shift/ui";
 import type { SourceId } from "@shift/types";
 import { useSources } from "@/hooks/useSources";
@@ -55,18 +56,33 @@ export const Sources = ({ canAuthor, outlineControls }: SourcesProps) => {
 
   return (
     <div className="flex justify-start items-start flex-col gap-1">
-      {sources.map((source) => {
+      {sources.map((source, index) => {
+        const target = { kind: "source", sourceId: source.id } as const;
         const visible =
           outlineControls?.targets.some(
-            (target) => target.kind === "source" && target.sourceId === source.id,
+            (candidate) => candidate.kind === "source" && candidate.sourceId === source.id,
           ) ?? false;
+        const inherited =
+          outlineControls?.inheritedTargets.some(
+            (candidate) => candidate.kind === "source" && candidate.sourceId === source.id,
+          ) ?? false;
+        const selected = editingSourceIds.has(source.id);
+        const joinsPrevious = selected && index > 0 && editingSourceIds.has(sources[index - 1].id);
+        const joinsNext =
+          selected && index < sources.length - 1 && editingSourceIds.has(sources[index + 1].id);
 
         return (
           <SidebarActionRow
             key={source.id}
             data-testid={`source-${source.id}`}
             isActive={source.id === activeSourceId}
-            isSelected={editingSourceIds.has(source.id)}
+            isSelected={selected}
+            className={cn(
+              "relative isolate data-[selected]:bg-transparent data-[selected]:before:absolute data-[selected]:before:inset-0 data-[selected]:before:-z-10 data-[selected]:before:pointer-events-none data-[selected]:before:rounded data-[selected]:before:bg-hover/50 data-[selected]:before:content-['']",
+              joinsPrevious &&
+                "data-[selected]:before:-top-1 data-[selected]:before:rounded-t-none",
+              joinsNext && "data-[selected]:before:rounded-b-none",
+            )}
             onClick={(event) => {
               const mode: SourceSelectionMode = event.shiftKey
                 ? "range"
@@ -78,20 +94,12 @@ export const Sources = ({ canAuthor, outlineControls }: SourcesProps) => {
             contentClassName="h-6 text-ui"
             actions={
               <>
-                {outlineControls && (
+                {outlineControls && source.id !== activeSourceId && (
                   <OutlineVisibilityButton
                     visible={visible}
-                    label={`${source.name} outline`}
-                    onClick={() => {
-                      const remaining = outlineControls.targets.filter(
-                        (target) => target.kind !== "source" || target.sourceId !== source.id,
-                      );
-                      outlineControls.onChange(
-                        visible
-                          ? remaining
-                          : [...remaining, { kind: "source", sourceId: source.id }],
-                      );
-                    }}
+                    inherited={inherited}
+                    label="outline"
+                    onClick={() => outlineControls.onToggle(target)}
                   />
                 )}
                 <SourceActionsMenu

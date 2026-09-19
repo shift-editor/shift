@@ -39,7 +39,7 @@ test("source selection and visibility controls show comparison outlines", async 
       .find(({ role, minimum, maximum }) => role === "external" && minimum !== maximum);
     return { source, instance, axis, activeSourceId: editor.activeSourceId };
   });
-  if (!fixture.source || !fixture.instance || !fixture.axis) {
+  if (!fixture.source || !fixture.instance || !fixture.axis || !fixture.activeSourceId) {
     throw new Error("Expected variable source, instance, and axis fixtures");
   }
 
@@ -49,7 +49,9 @@ test("source selection and visibility controls show comparison outlines", async 
   const sourceMenu = sourceRow.getByLabel(`Actions for ${fixture.source.name}`);
   await expect(sourceButton).toHaveAttribute("aria-pressed", "false");
   await expect(sourceMenu).toHaveCSS("opacity", "0");
-  const showSourceOutline = sourceRow.getByLabel(`Show ${fixture.source.name} outline`);
+  const activeSourceRow = controls.getByTestId(`source-${fixture.activeSourceId}`).locator("..");
+  await expect(activeSourceRow.getByLabel(/^(Show|Hide) outline$/)).toHaveCount(0);
+  const showSourceOutline = sourceRow.getByLabel("Show outline");
   await expect(showSourceOutline).toHaveCount(1);
   await sourceRow.hover();
   await expect(sourceMenu).toHaveCSS("opacity", "1");
@@ -62,7 +64,7 @@ test("source selection and visibility controls show comparison outlines", async 
   await page.locator("#interactive-canvas").hover();
   await expect.poll(() => outlinePixelCount(page)).toBeGreaterThan(baseline);
   await sourceRow.hover();
-  await sourceRow.getByLabel(`Hide ${fixture.source.name} outline`).click();
+  await sourceRow.getByLabel("Hide outline").click();
   await page.locator("#interactive-canvas").hover();
   await expect.poll(() => outlinePixelCount(page)).toBe(baseline);
 
@@ -74,23 +76,75 @@ test("source selection and visibility controls show comparison outlines", async 
   await page.locator("#interactive-canvas").hover();
   await expect.poll(() => outlinePixelCount(page)).toBeGreaterThan(baseline);
 
+  await sourceRow.hover();
+  await sourceRow.getByLabel("Hide outline").click();
+  await expect(sourceButton).toHaveAttribute("aria-pressed", "true");
+  await page.locator("#interactive-canvas").hover();
+  await expect.poll(() => outlinePixelCount(page)).toBe(baseline);
+  const toggleSourceModifier = process.platform === "darwin" ? "Meta" : "Control";
+  await sourceButton.click({ modifiers: [toggleSourceModifier] });
+  await expect(sourceButton).toHaveAttribute("aria-pressed", "false");
+  await sourceButton.click({ modifiers: [toggleSourceModifier] });
+  await expect(sourceButton).toHaveAttribute("aria-pressed", "true");
+  await page.locator("#interactive-canvas").hover();
+  await expect.poll(() => outlinePixelCount(page)).toBeGreaterThan(baseline);
+
+  await sourceRow.hover();
+  await sourceRow.getByLabel("Hide outline").click();
+  await page.locator("#interactive-canvas").hover();
+  await expect.poll(() => outlinePixelCount(page)).toBe(baseline);
+  await sourceRow.hover();
+  await sourceRow.getByLabel("Show outline").click();
+  await page.locator("#interactive-canvas").hover();
+  await expect.poll(() => outlinePixelCount(page)).toBeGreaterThan(baseline);
+
+  await page.keyboard.down("Space");
+  await expect.poll(() => outlinePixelCount(page)).toBe(baseline);
+  await page.keyboard.up("Space");
+  await expect.poll(() => outlinePixelCount(page)).toBeGreaterThan(baseline);
+
   await page.keyboard.press("Escape");
+  await expect(sourceButton).toHaveAttribute("aria-pressed", "false");
+  await expect.poll(() => outlinePixelCount(page)).toBeGreaterThan(baseline);
+  await sourceRow.hover();
+  await sourceRow.getByLabel("Hide outline").click();
+  await page.locator("#interactive-canvas").hover();
+  await expect.poll(() => outlinePixelCount(page)).toBe(baseline);
+
+  const toggleAllSources = process.platform === "darwin" ? "Meta+e" : "Control+e";
+  await page.keyboard.press(toggleAllSources);
+  await expect(sourceButton).toHaveAttribute("aria-pressed", "true");
+  await expect.poll(() => outlinePixelCount(page)).toBeGreaterThan(baseline);
+  await page.keyboard.press(toggleAllSources);
   await expect(sourceButton).toHaveAttribute("aria-pressed", "false");
   await expect.poll(() => outlinePixelCount(page)).toBe(baseline);
 
-  await page.keyboard.press(process.platform === "darwin" ? "Meta+e" : "Control+e");
-  await expect(sourceButton).toHaveAttribute("aria-pressed", "true");
+  await controls.getByLabel("Show all source outlines").click();
   await expect.poll(() => outlinePixelCount(page)).toBeGreaterThan(baseline);
-  await page.keyboard.press("Escape");
+  const inheritedSourcePixelCount = await outlinePixelCount(page);
+  await sourceRow.getByLabel("Hide outline").click();
+  await expect.poll(() => outlinePixelCount(page)).toBeLessThan(inheritedSourcePixelCount);
+  await sourceRow.hover();
+  await sourceRow.getByLabel("Show outline").click();
+  await page.locator("#interactive-canvas").hover();
+  await expect.poll(() => outlinePixelCount(page)).toBeGreaterThan(baseline);
+  await controls.getByLabel("Hide all source outlines").click();
+  await expect.poll(() => outlinePixelCount(page)).toBeGreaterThan(baseline);
+  await sourceRow.hover();
+  await sourceRow.getByLabel("Hide outline").click();
+  await page.locator("#interactive-canvas").hover();
   await expect.poll(() => outlinePixelCount(page)).toBe(baseline);
 
   const instanceRow = controls.getByTestId(`instance-${fixture.instance.id}`).locator("..");
   await instanceRow.hover();
-  await instanceRow.getByLabel(`Show ${fixture.instance.name} outline`).click();
+  await instanceRow.getByLabel("Show outline").click();
   await expect.poll(() => outlinePixelCount(page)).toBeGreaterThan(baseline);
-  const showAllInstances = controls.getByLabel("Show all instance outlines");
-  if (await showAllInstances.count()) await showAllInstances.click();
+  await controls.getByLabel("Show all instance outlines").click();
   await controls.getByLabel("Hide all instance outlines").click();
+  await expect.poll(() => outlinePixelCount(page)).toBeGreaterThan(baseline);
+  await instanceRow.hover();
+  await instanceRow.getByLabel("Hide outline").click();
+  await page.locator("#interactive-canvas").hover();
   await expect.poll(() => outlinePixelCount(page)).toBe(baseline);
 
   const sliderBounds = await controls

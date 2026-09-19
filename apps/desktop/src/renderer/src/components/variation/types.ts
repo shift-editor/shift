@@ -12,6 +12,7 @@ export interface InstancesProps {
 
 export interface OutlineVisibilityButtonProps {
   readonly visible: boolean;
+  readonly inherited?: boolean;
   readonly alwaysOpen?: boolean;
   readonly label: string;
   readonly onClick: () => void;

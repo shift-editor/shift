@@ -9,7 +9,7 @@ export interface KeymapHandlers {
 export function createGlobalKeyDownBindings(): KeyBinding[] {
   return [
     {
-      id: "global.selectAllSourcesForEditing",
+      id: "global.toggleAllSourcesForEditing",
       preventDefault: true,
       match: (event) =>
         matchChord(event, {
@@ -18,7 +18,7 @@ export function createGlobalKeyDownBindings(): KeyBinding[] {
           shiftKey: false,
           altKey: false,
         }),
-      run: (ctx) => ctx.editor.selectAllSourcesForEditing(),
+      run: (ctx) => ctx.editor.toggleAllSourcesForEditing(),
     },
     {
       id: "global.collapseEditingSources",

@@ -26,22 +26,7 @@ export const InstancesSection = ({
     kind: "instance",
     instanceId: instance.id,
   }));
-  const allVisible =
-    instanceTargets.length > 0 &&
-    instanceTargets.every((target) => {
-      if (target.kind !== "instance") return false;
-
-      return outlineControls?.targets.some(
-        (visible) => visible.kind === "instance" && visible.instanceId === target.instanceId,
-      );
-    });
-
-  const toggleAll = () => {
-    if (!outlineControls) return;
-
-    const sources = outlineControls.targets.filter((target) => target.kind === "source");
-    outlineControls.onChange(allVisible ? sources : [...sources, ...instanceTargets]);
-  };
+  const toggleAll = () => outlineControls?.onToggleGroup(instanceTargets);
 
   return (
     <CollapsibleSection
@@ -53,7 +38,7 @@ export const InstancesSection = ({
         <>
           {outlineControls && instanceTargets.length > 0 && (
             <OutlineVisibilityButton
-              visible={allVisible}
+              visible={outlineControls.groupActive}
               alwaysOpen
               label="all instance outlines"
               onClick={toggleAll}
