@@ -1,11 +1,12 @@
 import { Button, cn, type ButtonProps } from "@shift/ui";
-import { forwardRef, type ReactNode } from "react";
+import { forwardRef, type MouseEvent, type ReactNode } from "react";
 
 interface SidebarActionRowProps {
   children: ReactNode;
   actions?: ReactNode;
   isActive?: boolean;
-  onClick?: () => void;
+  isSelected?: boolean;
+  onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
   className?: string;
   contentClassName?: string;
   "data-testid"?: string;
@@ -15,6 +16,7 @@ export const SidebarActionRow = ({
   children,
   actions,
   isActive,
+  isSelected,
   onClick,
   className,
   contentClassName,
@@ -23,16 +25,18 @@ export const SidebarActionRow = ({
   <div
     className={cn(
       "group grid min-w-0 w-full grid-cols-[minmax(0,1fr)_auto] items-center rounded transition-colors",
-      "hover:bg-hover/50 data-[active]:bg-hover/50",
+      "hover:bg-hover/50 data-[selected]:bg-hover/50 data-[active]:bg-hover",
       className,
     )}
     data-active={isActive ? true : undefined}
+    data-selected={isSelected ? true : undefined}
   >
     {onClick ? (
       <Button
         variant="ghost"
         size="sm"
         data-testid={testId}
+        aria-pressed={isSelected}
         onClick={onClick}
         className={cn(
           "min-w-0 flex-1 justify-start bg-transparent px-2 hover:bg-transparent data-[active]:bg-transparent",
