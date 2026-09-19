@@ -1,4 +1,5 @@
 import {
+  createCanvasFallbackKeyDownBindings,
   createCanvasKeyDownBindings,
   createGlobalKeyDownBindings,
   createGlobalKeyUpBindings,
@@ -26,6 +27,7 @@ export class KeyboardRouter {
   #globalKeyDown: KeyBinding[];
   #textKeyDown: KeyBinding[];
   #canvasKeyDown: KeyBinding[];
+  #canvasFallbackKeyDown: KeyBinding[];
   #globalKeyUp: KeyBinding[];
   #temporaryHandActive = false;
 
@@ -38,6 +40,7 @@ export class KeyboardRouter {
     this.#globalKeyDown = createGlobalKeyDownBindings();
     this.#textKeyDown = createTextKeyDownBindings();
     this.#canvasKeyDown = createCanvasKeyDownBindings(handlers);
+    this.#canvasFallbackKeyDown = createCanvasFallbackKeyDownBindings();
     this.#globalKeyUp = createGlobalKeyUpBindings(handlers);
   }
 
@@ -64,7 +67,11 @@ export class KeyboardRouter {
       return true;
     }
 
-    return ctx.toolManager.handleKeyDown(e);
+    if (ctx.toolManager.handleKeyDown(e)) {
+      return true;
+    }
+
+    return this.#runBindings(this.#canvasFallbackKeyDown, ctx, e);
   }
 
   async handleKeyUp(e: KeyboardEvent): Promise<boolean> {

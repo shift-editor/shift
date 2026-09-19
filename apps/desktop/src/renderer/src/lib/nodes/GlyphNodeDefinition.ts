@@ -198,6 +198,9 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
   }
 
   #drawOutlines(node: GlyphNode, ctx: RenderContext): void {
+    track(this.editor.toolCell);
+    if (this.editor.toolCell.peek()?.id === "hand") return;
+
     const glyph = this.editor.glyphForId(node.glyphId);
     if (!glyph) return;
 

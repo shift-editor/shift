@@ -10,29 +10,33 @@ import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
+  cn,
 } from "@shift/ui";
 import type { SourceId } from "@shift/types";
 import { useSources } from "@/hooks/useSources";
 import { useActiveSourceId } from "@/hooks/useActiveSourceId";
+import { useEditingSourceIds } from "@/hooks/useEditingSourceIds";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { SidebarActionButton, SidebarActionRow } from "@/components/sidebar";
 import { useSettingsNavigation } from "@/context/SettingsNavigationContext";
 import { OutlineVisibilityButton } from "./OutlineVisibilityButton";
 import type { SourcesProps } from "./types";
+import type { SourceSelectionMode } from "@/types/sourceSelection";
 
 import VerticalElipsis from "@/assets/general/vertical-ellipsis.svg";
 
 export const Sources = ({ canAuthor, outlineControls }: SourcesProps) => {
   const sources = useSources();
   const activeSourceId = useActiveSourceId();
+  const editingSourceIds = useEditingSourceIds();
   const editor = useEditor();
   const settings = useSettingsNavigation();
 
   if (sources.length === 0) return null;
 
-  const selectSource = (sourceId: SourceId) => {
+  const selectSource = (sourceId: SourceId, mode: SourceSelectionMode = "single") => {
     if (canAuthor) {
-      editor.selectSourceForEditing(sourceId);
+      editor.selectSourceForEditing(sourceId, mode);
       return;
     }
 
@@ -43,53 +47,73 @@ export const Sources = ({ canAuthor, outlineControls }: SourcesProps) => {
     const fallbackSource = sources.find((source) => source.id !== sourceId);
     if (activeSourceId === sourceId && fallbackSource) {
       selectSource(fallbackSource.id);
+    } else if (editingSourceIds.has(sourceId)) {
+      editor.selectSourceForEditing(sourceId, "toggle");
     }
+
     editor.font.deleteSource(sourceId);
   };
 
   return (
     <div className="flex justify-start items-start flex-col gap-1">
-      {sources.map((s) => {
+      {sources.map((source, index) => {
+        const target = { kind: "source", sourceId: source.id } as const;
         const visible =
           outlineControls?.targets.some(
-            (target) => target.kind === "source" && target.sourceId === s.id,
+            (candidate) => candidate.kind === "source" && candidate.sourceId === source.id,
           ) ?? false;
+        const inherited =
+          outlineControls?.inheritedTargets.some(
+            (candidate) => candidate.kind === "source" && candidate.sourceId === source.id,
+          ) ?? false;
+        const selected = editingSourceIds.has(source.id);
+        const joinsPrevious = selected && index > 0 && editingSourceIds.has(sources[index - 1].id);
+        const joinsNext =
+          selected && index < sources.length - 1 && editingSourceIds.has(sources[index + 1].id);
 
         return (
           <SidebarActionRow
-            key={s.id}
-            data-testid={`source-${s.id}`}
-            isActive={s.id === activeSourceId}
-            onClick={() => selectSource(s.id)}
+            key={source.id}
+            data-testid={`source-${source.id}`}
+            isActive={source.id === activeSourceId}
+            isSelected={selected}
+            className={cn(
+              "relative isolate data-[selected]:bg-transparent data-[selected]:before:absolute data-[selected]:before:inset-0 data-[selected]:before:-z-10 data-[selected]:before:pointer-events-none data-[selected]:before:rounded data-[selected]:before:bg-hover/50 data-[selected]:before:content-['']",
+              joinsPrevious &&
+                "data-[selected]:before:-top-1 data-[selected]:before:rounded-t-none",
+              joinsNext && "data-[selected]:before:rounded-b-none",
+            )}
+            onClick={(event) => {
+              const mode: SourceSelectionMode = event.shiftKey
+                ? "range"
+                : event.metaKey || event.ctrlKey
+                  ? "toggle"
+                  : "single";
+              selectSource(source.id, mode);
+            }}
             contentClassName="h-6 text-ui"
             actions={
               <>
-                {outlineControls && (
+                {outlineControls && source.id !== activeSourceId && (
                   <OutlineVisibilityButton
                     visible={visible}
-                    label={`${s.name} outline`}
-                    onClick={() => {
-                      const remaining = outlineControls.targets.filter(
-                        (target) => target.kind !== "source" || target.sourceId !== s.id,
-                      );
-                      outlineControls.onChange(
-                        visible ? remaining : [...remaining, { kind: "source", sourceId: s.id }],
-                      );
-                    }}
+                    inherited={inherited}
+                    label="outline"
+                    onClick={() => outlineControls.onToggle(target)}
                   />
                 )}
                 <SourceActionsMenu
-                  sourceName={s.name}
+                  sourceName={source.name}
                   disabled={!canAuthor}
-                  isDefaultSource={s.id === editor.font.defaultSource.id}
-                  canDelete={sources.length > 1 && s.id !== editor.font.defaultSource.id}
-                  onEdit={() => settings.open({ category: "sources", sourceId: s.id })}
-                  onDelete={() => deleteSource(s.id)}
+                  isDefaultSource={source.id === editor.font.defaultSource.id}
+                  canDelete={sources.length > 1 && source.id !== editor.font.defaultSource.id}
+                  onEdit={() => settings.open({ category: "sources", sourceId: source.id })}
+                  onDelete={() => deleteSource(source.id)}
                 />
               </>
             }
           >
-            <span className="min-w-0 flex-1 truncate text-left">{s.name}</span>
+            <span className="min-w-0 flex-1 truncate text-left">{source.name}</span>
           </SidebarActionRow>
         );
       })}

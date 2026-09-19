@@ -4,6 +4,7 @@ import { CollapsibleSection, SidebarActionButton } from "@/components/sidebar";
 import { CreateSourceMenu } from "./CreateSourceMenu";
 import { Sources } from "./Sources";
 import { OutlineVisibilityButton } from "./OutlineVisibilityButton";
+import { useActiveSourceId } from "@/hooks/useActiveSourceId";
 import { useSources } from "@/hooks/useSources";
 import type { GlyphOutlineControls, GlyphOutlineTarget } from "@/types/glyphOutline";
 import { useFontSession } from "@/workspace/WorkspaceContext";
@@ -18,27 +19,15 @@ export const SourcesSection = ({ defaultOpen = false, outlineControls }: Sources
   const [open, setOpen] = useState(defaultOpen);
   const [sourceMenuOpen, setSourceMenuOpen] = useState(false);
   const canAuthor = useFontSession().mode === "authored";
+  const activeSourceId = useActiveSourceId();
   const sources = useSources();
-  const sourceTargets: GlyphOutlineTarget[] = sources.map((source) => ({
-    kind: "source",
-    sourceId: source.id,
-  }));
-  const allVisible =
-    sourceTargets.length > 0 &&
-    sourceTargets.every((target) => {
-      if (target.kind !== "source") return false;
-
-      return outlineControls?.targets.some(
-        (visible) => visible.kind === "source" && visible.sourceId === target.sourceId,
-      );
-    });
-
-  const toggleAll = () => {
-    if (!outlineControls) return;
-
-    const instances = outlineControls.targets.filter((target) => target.kind === "instance");
-    outlineControls.onChange(allVisible ? instances : [...instances, ...sourceTargets]);
-  };
+  const sourceTargets: GlyphOutlineTarget[] = sources
+    .filter((source) => source.id !== activeSourceId)
+    .map((source) => ({
+      kind: "source",
+      sourceId: source.id,
+    }));
+  const toggleAll = () => outlineControls?.onToggleGroup(sourceTargets);
 
   return (
     <CollapsibleSection
@@ -50,7 +39,7 @@ export const SourcesSection = ({ defaultOpen = false, outlineControls }: Sources
         <>
           {outlineControls && sourceTargets.length > 0 && (
             <OutlineVisibilityButton
-              visible={allVisible}
+              visible={outlineControls.groupActive}
               alwaysOpen
               label="all source outlines"
               onClick={toggleAll}

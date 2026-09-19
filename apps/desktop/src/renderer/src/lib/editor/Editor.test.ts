@@ -169,10 +169,57 @@ describe("Editor scene bootstrap", () => {
     expect(editor.externalLocation.get(axisId)).toBe(400);
     editor.selectSource(sourceId);
     expect(editor.externalLocation.get(axisId)).toBe(700);
+    expect([...editor.editingSourceIds]).toEqual([sourceId]);
+
     editor.setExternalLocation(externalAxisLocationFromRecord({ [axisId]: 550 }));
     expect(editor.activeSourceId).toBeNull();
+    expect(editor.editingSourceIds.size).toBe(0);
+
     editor.setExternalLocation(externalAxisLocationFromRecord({ [axisId]: 700 }));
     expect(editor.activeSourceId).toBe(sourceId);
+    expect([...editor.editingSourceIds]).toEqual([sourceId]);
+  });
+
+  it("selects contiguous and noncontiguous editing sources around the reference", async () => {
+    const axisId = editor.font.createAxis(weightAxis());
+    await editor.settle();
+    const thinId = editor.createSource("Thin", externalAxisLocationFromRecord({ [axisId]: 100 }));
+    await editor.settle();
+    const boldId = editor.createSource("Bold", externalAxisLocationFromRecord({ [axisId]: 700 }));
+    await editor.settle();
+    const blackId = editor.createSource("Black", externalAxisLocationFromRecord({ [axisId]: 900 }));
+    await editor.settle();
+
+    const referenceId = editor.font.defaultSource.id;
+    editor.selectSource(referenceId);
+    editor.selectSourceForEditing(blackId, "range");
+    expect(editor.activeSourceId).toBe(referenceId);
+    expect([...editor.editingSourceIds]).toEqual(editor.font.sources.map(({ id }) => id));
+
+    editor.selectSource(referenceId);
+    editor.selectSourceForEditing(boldId, "toggle");
+    editor.selectSourceForEditing(thinId, "toggle");
+    expect(editor.editingSourceIds).toEqual(new Set([referenceId, boldId, thinId]));
+
+    editor.selectSourceForEditing(referenceId, "toggle");
+    expect(editor.editingSourceIds).toEqual(new Set([referenceId, boldId, thinId]));
+  });
+
+  it("toggles editing between every source and the reference", async () => {
+    const axisId = editor.font.createAxis(weightAxis());
+    await editor.settle();
+    editor.createSource("Bold", externalAxisLocationFromRecord({ [axisId]: 700 }));
+    await editor.settle();
+    const referenceId = editor.font.defaultSource.id;
+    editor.selectSource(referenceId);
+
+    expect(editor.toggleAllSourcesForEditing()).toBe(true);
+    expect([...editor.editingSourceIds]).toEqual(editor.font.sources.map(({ id }) => id));
+    expect(editor.activeSourceId).toBe(referenceId);
+
+    expect(editor.toggleAllSourcesForEditing()).toBe(true);
+    expect([...editor.editingSourceIds]).toEqual([referenceId]);
+    expect(editor.collapseEditingSources()).toBe(false);
   });
 
   it("materializes the opened glyph when selecting a sparse source", async () => {

@@ -40,7 +40,7 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 
 **Architecture Invariant:** A newly created source becomes the editor's active source only after its workspace echo makes that identity readable from `Font`. While creation is pending, the editor exposes the requested external location with no active source ID, so catalog and rendering consumers cannot observe a dangling source.
 
-**Architecture Invariant:** External axis location and exact source selection are bidirectionally synchronized. Scrubbing to an exact mapped source activates it, intermediate locations clear source identity, and selecting a source moves external controls to the location recovered from Rust-compiled mapping bases. Unreachable internal coordinates do not leak into external controls.
+**Architecture Invariant:** External axis location and exact source selection are bidirectionally synchronized. `activeSourceIdCell` is the reference source, while `editingSourceIdsCell` is the session-only multi-selection and always contains that reference when one exists. Scrubbing to an exact mapped source activates it and collapses the editing set; intermediate locations clear both. Selecting a source moves external controls to the location recovered from Rust-compiled mapping bases. Unreachable internal coordinates do not leak into external controls.
 
 **Architecture Invariant:** `Selection` is a dumb ordered set of branded object IDs. Mutations go through `select()`, `add()`, `remove()`, and `toggle()`; behavior and live bounds come from resolving those IDs through `Editor.object()`.
 
@@ -83,6 +83,7 @@ editor/
 - **`SelectableId`** -- Branded identity accepted by selection regardless of the object's concrete kind.
 - **`Coordinates`** -- Pair of `{ screen, scene }` for a single pointer position. Node-local coordinates are derived after hit testing identifies the node being acted on.
 - **`PositionSelection`** -- One active authored `GlyphLayer` paired with normalized point/anchor targets. It contains edit ownership only, not scene placement or pointer coordinates.
+- **`editingSourceIdsCell`** -- Session-only source selection for multi-source editing. The active source remains the reference; additional selected sources render as comparison outlines.
 - **`Hover`** -- Tracks the currently hovered glyph-domain entity (point/anchor/segment). Tool-specific controls such as select bounding boxes stay with the owning tool.
 - **`Handles`** -- Handle renderer that tries the accelerated marker layer and falls back to CPU drawing internally.
 - **`FrameHandler`** -- Deduplicates `requestAnimationFrame` per render target. While a frame is pending, later requests are dropped without storing their callback -- the first callback wins.
@@ -136,6 +137,10 @@ Background, scene, and overlays are drawn in UPM space (`Canvas.withSceneSpace()
 ### Position selection boundary
 
 `Editor.positionSelection(ids)` resolves points and anchors directly, expands selected segments and contours to points, and verifies that every target belongs to the active authored layer. Select-tool behaviors pass the returned targets to `GlyphLayer.positions.move`, `.rotate`, or `.scale`; scene-space gesture calculations remain in the tool layer.
+
+### Source editing selection
+
+A plain source-row click activates that source and collapses the editing set. Shift-click replaces the set with the authored-order range from the active reference to the clicked source; Cmd/Ctrl-click toggles a non-reference source. Cmd/Ctrl+E selects every source without changing the reference. Escape reaches source selection only after the active tool declines it, so gestures and geometry selection cancel first; it then collapses the set to the reference. Non-reference selected sources are published to `GlyphOutlines` automatically. Source eye controls independently add preview-only outlines, so a source can remain outside the editing set while still being visible for comparison.
 
 ### Editing result selection
 
