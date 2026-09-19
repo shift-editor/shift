@@ -26,7 +26,7 @@ async function outlinePixelCount(page: Page): Promise<number> {
   });
 }
 
-test("source selection and instance controls show comparison outlines", async ({ page }) => {
+test("source selection and visibility controls show comparison outlines", async ({ page }) => {
   await navigateToEditor(page, "53");
   const controls = page.getByRole("complementary", { name: "Variation controls" });
   const fixture = await page.evaluate(() => {
@@ -49,9 +49,22 @@ test("source selection and instance controls show comparison outlines", async ({
   const sourceMenu = sourceRow.getByLabel(`Actions for ${fixture.source.name}`);
   await expect(sourceButton).toHaveAttribute("aria-pressed", "false");
   await expect(sourceMenu).toHaveCSS("opacity", "0");
-  await expect(sourceRow.getByLabel(`Show ${fixture.source.name} outline`)).toHaveCount(0);
+  const showSourceOutline = sourceRow.getByLabel(`Show ${fixture.source.name} outline`);
+  await expect(showSourceOutline).toHaveCount(1);
   await sourceRow.hover();
   await expect(sourceMenu).toHaveCSS("opacity", "1");
+
+  await showSourceOutline.click();
+  await expect(sourceButton).toHaveAttribute("aria-pressed", "false");
+  expect(await page.evaluate(() => window.shiftSession!.editor.activeSourceId)).toBe(
+    fixture.activeSourceId,
+  );
+  await page.locator("#interactive-canvas").hover();
+  await expect.poll(() => outlinePixelCount(page)).toBeGreaterThan(baseline);
+  await sourceRow.hover();
+  await sourceRow.getByLabel(`Hide ${fixture.source.name} outline`).click();
+  await page.locator("#interactive-canvas").hover();
+  await expect.poll(() => outlinePixelCount(page)).toBe(baseline);
 
   await sourceButton.click({ modifiers: [process.platform === "darwin" ? "Meta" : "Control"] });
   await expect(sourceButton).toHaveAttribute("aria-pressed", "true");
