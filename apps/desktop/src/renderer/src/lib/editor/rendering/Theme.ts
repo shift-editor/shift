@@ -115,15 +115,15 @@ export const DEFAULT_THEME: Theme = {
     },
     anchor: {
       interpolated: { fill: "#ffffff", stroke: "rgba(0, 0, 0, 0.65)", size: 6, lineWidth: 1 },
-      idle: { fill: "#ffffff", stroke: "#6B15EC", size: 6, lineWidth: 1 },
+      idle: { fill: "#ffffff", stroke: "#6B15EC", size: 6, lineWidth: 2 },
       hovered: {
         fill: "#ffffff",
         stroke: "#6B15EC",
         size: 6,
-        lineWidth: 1,
-        overlayColor: hover(0.75),
+        lineWidth: 3,
+        overlayColor: hover(0.1),
       },
-      selected: { fill: "#6B15EC", stroke: "#ffffff", size: 6, lineWidth: 2 },
+      selected: { fill: "#6B15EC", stroke: "#ffffff", size: 6, lineWidth: 3 },
     },
     direction: {
       interpolated: { fill: "#ffffff", stroke: "rgba(0, 0, 0, 0.65)", size: 6, lineWidth: 0.5 },
