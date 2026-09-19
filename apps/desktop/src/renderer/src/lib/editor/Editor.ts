@@ -14,6 +14,7 @@ import {
   type GlyphName,
   type GlyphRecord,
   type LayerId,
+  type LayerMatch,
 } from "@shift/types";
 import { isSegmentId, type SegmentId } from "@shift/glyph-state";
 import type { ExternalAxisLocation } from "@/types/variation";
@@ -75,6 +76,7 @@ import { EditorGesture, EditorInput, EditorViewState } from "./EditorState";
 import type { PointerTarget } from "@/types/target";
 import type {
   PositionSelection,
+  PositionSelectionLayer,
   SelectableId,
   ShiftEditorRecord,
   ShiftId,
@@ -178,9 +180,13 @@ export class Editor {
   #externalLocation: WritableSignal<ExternalAxisLocation>;
   #activeSourceIdCell: WritableSignal<SourceId | null>;
   #editingSourceIdsCell: WritableSignal<ReadonlySet<SourceId>>;
+  #editingLayerMatchesCell: WritableSignal<ReadonlyMap<LayerId, LayerMatch>>;
+  #editingLayerMatchInputs: readonly unknown[] = [];
+  #editingLayerMatchRequest = 0;
 
   #cursorEffect: Effect;
   #cameraMetricsEffect: Effect;
+  #editingLayerMatchEffect: Effect;
 
   #clipboard: Clipboard;
 
@@ -223,6 +229,9 @@ export class Editor {
       initialSourceId ? new Set([initialSourceId]) : new Set(),
       { name: "editor.sources.editing" },
     );
+    this.#editingLayerMatchesCell = signal<ReadonlyMap<LayerId, LayerMatch>>(new Map(), {
+      name: "editor.layers.matches",
+    });
     this.text = new Text(this.#store, this);
 
     const GlyphDefinition = options.nodeDefinitions?.glyph ?? GlyphNodeDefinition;
@@ -310,6 +319,10 @@ export class Editor {
     this.#textRuns = new TextRuns(this, new Positioner());
 
     this.#renderer = new Renderer(this);
+
+    this.#editingLayerMatchEffect = effect(() => this.#prepareEditingLayerMatches(), {
+      name: "editor.layers.matching",
+    });
 
     this.#cameraMetricsEffect = effect(
       () => {
@@ -515,6 +528,20 @@ export class Editor {
     return this.#editingSourceIdsCell.peek();
   }
 
+  /**
+   * Returns the live topology matches for selected non-reference layers.
+   *
+   * @remarks
+   * The map is keyed by target layer ID and may contain incomplete matches for
+   * diagnostics. Coordinate-only edits preserve the current map identity;
+   * source, glyph, or structure changes clear it before asynchronous refresh.
+   *
+   * @returns Read-only reactive match state for the current editing source set.
+   */
+  public get editingLayerMatchesCell(): Signal<ReadonlyMap<LayerId, LayerMatch>> {
+    return this.#editingLayerMatchesCell;
+  }
+
   /** Current external user-space coordinate used for displayed font data. */
   public get externalLocation(): ExternalAxisLocation {
     return this.#externalLocation.peek();
@@ -663,11 +690,16 @@ export class Editor {
   }
 
   /**
-   * Normalizes editor object IDs into point and anchor targets on one editable layer.
+   * Resolves selected objects into reference and matched-layer position targets.
    *
-   * Segment and contour IDs expand to their constituent points. The selection is
-   * rejected when any ID is unresolved, unsupported, spans layers, or belongs to
-   * a layer outside the active authored source.
+   * @remarks
+   * Segment and contour IDs expand to their constituent points. Multi-source
+   * results require complete precomputed matches for every selected source; this
+   * method performs no matching or workspace I/O.
+   *
+   * @param ids - Selected object identities to normalize as one interaction.
+   * @returns Resolved layer targets, or `null` for unsupported, mixed, inactive,
+   * pending, or incompletely matched selections.
    */
   public positionSelection(ids: readonly SelectableId[]): PositionSelection | null {
     const objects = this.objects(ids);
@@ -703,13 +735,128 @@ export class Editor {
     const sourceId = this.activeSourceId;
     if (!layer || sourceId === null || layer.sourceId !== sourceId) return null;
 
-    return {
-      layer,
-      targets: {
-        points: [...points],
-        anchors: [...anchors],
-      },
+    const targets = {
+      points: [...points],
+      anchors: [...anchors],
     };
+    const editingSourceIds = this.#editingSourceIdsCell.peek();
+    if (editingSourceIds.size <= 1) return { layer, targets, additionalLayers: [] };
+
+    const node = this.#placedGlyphNodeForLayer(layer);
+    const glyph = node ? this.#fontStore.glyphForId(node.glyphId) : null;
+    if (!glyph) return null;
+
+    const matches = this.#editingLayerMatchesCell.peek();
+    const additionalLayers: PositionSelectionLayer[] = [];
+    for (const source of this.font.sources) {
+      if (source.id === sourceId || !editingSourceIds.has(source.id)) continue;
+
+      const targetLayer = glyph.layerForSource(source.id);
+      if (!targetLayer) return null;
+
+      const layerMatch = matches.get(targetLayer.id);
+      if (!layerMatch?.complete || layerMatch.referenceLayerId !== layer.id) return null;
+
+      const pointMatches = new Map(
+        layerMatch.points.map((pointMatch) => [pointMatch.referenceId, pointMatch.targetId]),
+      );
+      const anchorMatches = new Map(
+        layerMatch.anchors.map((anchorMatch) => [anchorMatch.referenceId, anchorMatch.targetId]),
+      );
+      const targetPoints: PointId[] = [];
+      for (const pointId of targets.points) {
+        const targetPointId = pointMatches.get(pointId);
+        if (!targetPointId) return null;
+        targetPoints.push(targetPointId);
+      }
+      const targetAnchors: AnchorId[] = [];
+      for (const anchorId of targets.anchors) {
+        const targetAnchorId = anchorMatches.get(anchorId);
+        if (!targetAnchorId) return null;
+        targetAnchors.push(targetAnchorId);
+      }
+
+      additionalLayers.push({
+        layer: targetLayer,
+        targets: { points: targetPoints, anchors: targetAnchors },
+      });
+    }
+
+    return { layer, targets, additionalLayers };
+  }
+
+  #prepareEditingLayerMatches(): void {
+    track(this.#activeSourceIdCell);
+    track(this.#editingSourceIdsCell);
+    track(this.scene.cell);
+    const activeSourceId = this.#activeSourceIdCell.peek();
+    const editingSourceIds = this.#editingSourceIdsCell.peek();
+
+    const inputs: unknown[] = [activeSourceId, ...editingSourceIds];
+    const layerPairs = new Map<LayerId, LayerId>();
+    let completeReadSet = activeSourceId !== null;
+    if (activeSourceId && editingSourceIds.size > 1) {
+      for (const node of this.scene.nodesOfKind("glyph")) {
+        inputs.push(node.glyphId);
+        const glyph = this.#fontStore.glyphForId(node.glyphId);
+        const referenceLayer = glyph?.layerForSource(activeSourceId);
+        inputs.push(referenceLayer?.id ?? null);
+        if (!glyph || !referenceLayer) {
+          completeReadSet = false;
+          break;
+        }
+        track(referenceLayer.structureCell);
+        inputs.push(referenceLayer.structureCell.peek());
+
+        for (const sourceId of editingSourceIds) {
+          if (sourceId === activeSourceId) continue;
+
+          const targetLayer = glyph.layerForSource(sourceId);
+          inputs.push(sourceId, targetLayer?.id ?? null);
+          if (!targetLayer) {
+            completeReadSet = false;
+            break;
+          }
+          track(targetLayer.structureCell);
+          inputs.push(targetLayer.structureCell.peek());
+          layerPairs.set(targetLayer.id, referenceLayer.id);
+        }
+        if (!completeReadSet) break;
+      }
+    }
+
+    const inputsChanged =
+      inputs.length !== this.#editingLayerMatchInputs.length ||
+      inputs.some((input, index) => !Object.is(input, this.#editingLayerMatchInputs[index]));
+    if (!inputsChanged) return;
+
+    this.#editingLayerMatchInputs = inputs;
+    const request = ++this.#editingLayerMatchRequest;
+    this.#editingLayerMatchesCell.set(new Map());
+    if (!completeReadSet || layerPairs.size === 0) return;
+
+    void this.#resolveEditingLayerMatches(request, layerPairs);
+  }
+
+  async #resolveEditingLayerMatches(
+    request: number,
+    layerPairs: ReadonlyMap<LayerId, LayerId>,
+  ): Promise<void> {
+    try {
+      const matches = await Promise.all(
+        Array.from(layerPairs, ([targetLayerId, referenceLayerId]) =>
+          this.font.matchLayers(referenceLayerId, targetLayerId),
+        ),
+      );
+      if (request !== this.#editingLayerMatchRequest) return;
+
+      this.#editingLayerMatchesCell.set(
+        new Map(matches.map((layerMatch) => [layerMatch.targetLayerId, layerMatch])),
+      );
+    } catch {
+      if (request !== this.#editingLayerMatchRequest) return;
+      this.#editingLayerMatchesCell.set(new Map());
+    }
   }
 
   #layerForPoint(pointId: PointId): GlyphLayer | null {
@@ -1658,6 +1805,7 @@ export class Editor {
     this.#events.emit("destroying");
     this.#cursorEffect.dispose();
     this.#cameraMetricsEffect.dispose();
+    this.#editingLayerMatchEffect.dispose();
     this.#renderer.destroy();
     this.#toolManager.dispose();
     this.#handlesCell.set(new Map());

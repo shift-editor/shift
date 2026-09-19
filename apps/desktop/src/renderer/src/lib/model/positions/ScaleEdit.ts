@@ -1,5 +1,10 @@
-import type { Point2D } from "@shift/geo";
-import type { PositionEdit, PositionEditPhase, PositionTargets } from "@/types/positionEdit";
+import { Bounds, type Point2D } from "@shift/geo";
+import type {
+  PositionEdit,
+  PositionEditPhase,
+  PositionSelectionLayer,
+  PositionTargets,
+} from "@/types/positionEdit";
 import type { GlyphLayer } from "../Glyph";
 import type { GlyphLayerEdit } from "../GlyphLayerEdit";
 import { PositionList } from "./PositionList";
@@ -9,8 +14,11 @@ export class ScaleEdit implements PositionEdit {
   readonly #layer: GlyphLayer;
   readonly #base: PositionList;
   readonly #origin: Point2D;
+  readonly #additionalLayers: readonly PositionSelectionLayer[];
+  readonly #additionalBases: readonly PositionList[];
 
   #edit: GlyphLayerEdit | null;
+  #additionalEdits: Array<GlyphLayerEdit | null>;
   #phase: PositionEditPhase = "configuring";
 
   constructor(
@@ -18,11 +26,17 @@ export class ScaleEdit implements PositionEdit {
     targets: PositionTargets,
     origin: Point2D,
     edit: GlyphLayerEdit | null = null,
+    additionalLayers: readonly PositionSelectionLayer[] = [],
   ) {
     this.#layer = layer;
     this.#base = PositionList.fromTargetGroups(layer, targets);
     this.#origin = { ...origin };
     this.#edit = edit;
+    this.#additionalLayers = additionalLayers;
+    this.#additionalBases = additionalLayers.map(({ layer, targets }) =>
+      PositionList.fromTargetGroups(layer, targets),
+    );
+    this.#additionalEdits = additionalLayers.map(() => null);
   }
 
   /**
@@ -40,17 +54,37 @@ export class ScaleEdit implements PositionEdit {
     this.#beginPreview();
 
     const positions = this.#base.scale(scale.x, scale.y, origin).positions;
-    if (positions.length === 0) return;
+    if (positions.length > 0) {
+      this.#edit ??= this.#layer.beginEdit();
+      this.#edit.setPositions(positions);
+    }
 
-    this.#edit ??= this.#layer.beginEdit();
-    this.#edit.setPositions(positions);
+    for (const [index, base] of this.#additionalBases.entries()) {
+      const selection = this.#additionalLayers[index];
+      if (!selection) continue;
+
+      const targetOrigin = this.#correspondingOrigin(base, origin);
+      const targetPositions = base.scale(scale.x, scale.y, targetOrigin).positions;
+      if (targetPositions.length === 0) continue;
+
+      const edit = this.#additionalEdits[index] ?? selection.layer.beginEdit();
+      this.#additionalEdits[index] = edit;
+      edit.setPositions(targetPositions);
+    }
   }
 
   commit(): void {
     if (this.#phase === "committed" || this.#phase === "discarded") return;
 
     this.#phase = "committed";
-    this.#edit?.finish("Scale positions");
+    const edits = [this.#edit, ...this.#additionalEdits].filter(
+      (edit): edit is GlyphLayerEdit => edit !== null,
+    );
+    if (edits.length === 0) return;
+
+    this.#layer.transaction("Scale positions", () => {
+      for (const edit of edits) edit.finish("Scale positions");
+    });
   }
 
   discard(): void {
@@ -58,6 +92,26 @@ export class ScaleEdit implements PositionEdit {
 
     this.#phase = "discarded";
     this.#edit?.cancel();
+    for (const edit of this.#additionalEdits) edit?.cancel();
+  }
+
+  #correspondingOrigin(base: PositionList, origin: Point2D): Point2D {
+    const referenceBounds = Bounds.fromPoints(this.#base.positions);
+    const targetBounds = Bounds.fromPoints(base.positions);
+    if (!referenceBounds || !targetBounds) return { ...origin };
+
+    const referenceWidth = referenceBounds.max.x - referenceBounds.min.x;
+    const referenceHeight = referenceBounds.max.y - referenceBounds.min.y;
+    const targetWidth = targetBounds.max.x - targetBounds.min.x;
+    const targetHeight = targetBounds.max.y - targetBounds.min.y;
+    const xRatio = referenceWidth === 0 ? 0.5 : (origin.x - referenceBounds.min.x) / referenceWidth;
+    const yRatio =
+      referenceHeight === 0 ? 0.5 : (origin.y - referenceBounds.min.y) / referenceHeight;
+
+    return {
+      x: targetBounds.min.x + targetWidth * xRatio,
+      y: targetBounds.min.y + targetHeight * yRatio,
+    };
   }
 
   #beginPreview(): void {

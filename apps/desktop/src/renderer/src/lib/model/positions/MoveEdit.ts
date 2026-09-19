@@ -8,6 +8,7 @@ import type {
   PositionEditPhase,
   PositionFeedback,
   PositionGuide,
+  PositionSelectionLayer,
   PositionSnapProvider,
   PositionTargets,
 } from "@/types/positionEdit";
@@ -19,9 +20,14 @@ import { PositionReference } from "./PositionReference";
 export class MoveEdit implements PositionEdit {
   readonly #layer: GlyphLayer;
   readonly #anchorIds: readonly AnchorId[];
+  readonly #additionalLayers: readonly PositionSelectionLayer[];
+  readonly #additionalAnchorIds: readonly (readonly AnchorId[])[];
 
   #base: PositionList;
   #edit: GlyphLayerEdit | null;
+  #additionalBases: PositionList[];
+  #additionalEdits: Array<GlyphLayerEdit | null>;
+  #additionalPointRules: Array<PointRuleConstraint | null>;
 
   #phase: PositionEditPhase = "configuring";
   #reference: Point2D | null = null;
@@ -31,11 +37,23 @@ export class MoveEdit implements PositionEdit {
   #snapProvider: PositionSnapProvider | null = null;
   #pointRules: PointRuleConstraint | null = null;
 
-  constructor(layer: GlyphLayer, targets: PositionTargets, edit: GlyphLayerEdit | null = null) {
+  constructor(
+    layer: GlyphLayer,
+    targets: PositionTargets,
+    edit: GlyphLayerEdit | null = null,
+    additionalLayers: readonly PositionSelectionLayer[] = [],
+  ) {
     this.#layer = layer;
     this.#base = PositionList.fromTargetGroups(layer, targets);
     this.#anchorIds = [...(targets.anchors ?? [])];
     this.#edit = edit;
+    this.#additionalLayers = additionalLayers;
+    this.#additionalBases = additionalLayers.map(({ layer, targets }) =>
+      PositionList.fromTargetGroups(layer, targets),
+    );
+    this.#additionalAnchorIds = additionalLayers.map(({ targets }) => [...(targets.anchors ?? [])]);
+    this.#additionalEdits = additionalLayers.map(() => null);
+    this.#additionalPointRules = additionalLayers.map(() => null);
   }
 
   /**
@@ -84,6 +102,12 @@ export class MoveEdit implements PositionEdit {
   constrainedBy(constraint: PointRuleConstraint): this {
     this.#assertConfiguring();
     this.#pointRules = constraint;
+    this.#additionalPointRules = this.#additionalLayers.map(({ layer, targets }) => {
+      const pointIds = targets.points ?? [];
+      return pointIds.length > 0
+        ? PointRuleConstraint.forSelection(layer.geometry, pointIds)
+        : null;
+    });
     return this;
   }
 
@@ -139,6 +163,14 @@ export class MoveEdit implements PositionEdit {
       this.#previewPositionPatch(this.#base.translate(delta).positions);
     }
 
+    for (const [index, base] of this.#additionalBases.entries()) {
+      const pointRules = this.#additionalPointRules[index];
+      const positions = pointRules
+        ? pointRules.positionsFor(base.positions, this.#additionalAnchorIds[index] ?? [], delta)
+        : base.translate(delta).positions;
+      this.#previewAdditionalPositionPatch(index, positions);
+    }
+
     return { delta, guides };
   }
 
@@ -151,7 +183,14 @@ export class MoveEdit implements PositionEdit {
     if (this.#phase === "committed" || this.#phase === "discarded") return;
 
     this.#phase = "committed";
-    this.#edit?.finish(label);
+    const edits = [this.#edit, ...this.#additionalEdits].filter(
+      (edit): edit is GlyphLayerEdit => edit !== null,
+    );
+    if (edits.length === 0) return;
+
+    this.#layer.transaction(label, () => {
+      for (const edit of edits) edit.finish(label);
+    });
   }
 
   discard(): void {
@@ -159,6 +198,7 @@ export class MoveEdit implements PositionEdit {
 
     this.#phase = "discarded";
     this.#edit?.cancel();
+    for (const edit of this.#additionalEdits) edit?.cancel();
   }
 
   #previewPositionPatch(positions: GlyphLayerPositions): void {
@@ -167,6 +207,19 @@ export class MoveEdit implements PositionEdit {
     this.#base = this.#base.includeFrom(this.#layer, positions);
     this.#edit ??= this.#layer.beginEdit();
     this.#edit.setPositions(positions);
+  }
+
+  #previewAdditionalPositionPatch(index: number, positions: GlyphLayerPositions): void {
+    if (positions.length === 0) return;
+
+    const selection = this.#additionalLayers[index];
+    const base = this.#additionalBases[index];
+    if (!selection || !base) return;
+
+    this.#additionalBases[index] = base.includeFrom(selection.layer, positions);
+    const edit = this.#additionalEdits[index] ?? selection.layer.beginEdit();
+    this.#additionalEdits[index] = edit;
+    edit.setPositions(positions);
   }
 
   #assertConfiguring(): void {

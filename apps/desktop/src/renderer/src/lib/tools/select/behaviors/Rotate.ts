@@ -4,7 +4,7 @@ import type { Editor } from "@/lib/editor/Editor";
 import type { DragEvent, DragStartEvent } from "../../core/GestureDetector";
 import type { SelectBehavior, SelectState } from "../types";
 import type { Select } from "../Select";
-import { PositionList, type RotateEdit } from "@/lib/model/positions";
+import { PositionEdits, PositionList, type RotateEdit } from "@/lib/model/positions";
 
 export class Rotate implements SelectBehavior {
   #edit: RotateEdit | null = null;
@@ -114,7 +114,7 @@ export class Rotate implements SelectBehavior {
     const center = hit.center;
     const startAngle = Vec2.angleTo(center, event.origin.scene);
 
-    this.#edit = selection.layer.positions.rotate(selection.targets, localCenter);
+    this.#edit = PositionEdits.fromSelection(selection).rotate(selection.targets, localCenter);
 
     return {
       type: "rotating",
