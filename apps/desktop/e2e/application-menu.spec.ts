@@ -242,6 +242,64 @@ authoredTest(
   },
 );
 
+authoredTest("Mapping graph drags user and source coordinates", async ({ page }) => {
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  const settings = page.getByRole("dialog", { name: "Settings" });
+  await settings.getByRole("button", { name: "Axes", exact: true }).click();
+  await settings.getByRole("button", { name: "Create axis", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Add custom axis" }).click();
+  await settings.getByRole("tab", { name: "Mapping", exact: true }).click();
+  await settings.getByRole("button", { name: "Add point", exact: true }).click();
+
+  const graph = settings.getByRole("img", {
+    name: "Custom Axis external to source mapping",
+  });
+  await expect(graph.getByTestId("mapping-point-2")).toBeVisible();
+  expect(await graph.locator("text").allTextContents()).toEqual([
+    "0",
+    "25",
+    "50",
+    "75",
+    "100",
+    "0",
+    "25",
+    "50",
+    "75",
+    "100",
+  ]);
+
+  const userField = settings.getByLabel("User mapping point 2", { exact: true });
+  const sourceField = settings.getByLabel("Source mapping point 2", { exact: true });
+  const beforeUser = Number(await userField.inputValue());
+  const beforeSource = Number(await sourceField.inputValue());
+  const bounds = await graph.getByTestId("mapping-point-2").boundingBox();
+  if (!bounds) throw new Error("Expected the middle mapping point to be visible");
+
+  const center = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
+  await page.mouse.move(center.x, center.y);
+  await page.mouse.down();
+  await page.mouse.move(center.x + 20, center.y - 15, { steps: 3 });
+  await page.mouse.up();
+
+  await expect
+    .poll(async () => {
+      const mapping = (await page.evaluate(() => window.shiftSession!.font.getAxisMappings()))[0];
+      if (!mapping) return false;
+
+      const axisId = mapping.inputs[0];
+      const point = mapping.points[1];
+      return (
+        point !== undefined &&
+        axisId !== undefined &&
+        (point.input.values[axisId] ?? beforeUser) > beforeUser &&
+        (point.output.values[axisId] ?? beforeSource) > beforeSource
+      );
+    })
+    .toBe(true);
+  expect(Number(await userField.inputValue())).toBeGreaterThan(beforeUser);
+  expect(Number(await sourceField.inputValue())).toBeGreaterThan(beforeSource);
+});
+
 convertiblePreviewTest(
   "View menu distinguishes canvas zoom from interface size",
   async ({ electronApp, page }) => {

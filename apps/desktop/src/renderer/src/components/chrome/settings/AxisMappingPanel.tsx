@@ -83,7 +83,29 @@ export const AxisMappingPanel = ({ axis }: AxisMappingPanelProps) => {
 
   return (
     <section className="grid grid-cols-[minmax(13rem,1fr)_minmax(12rem,0.9fr)] gap-5 p-5 pr-8">
-      <MappingGraph axis={axis} points={draft.points} />
+      <MappingGraph
+        axis={axis}
+        points={draft.points}
+        onPointChange={(index, input, output) => {
+          form.update((current) => ({
+            ...current,
+            points: current.points.map((point, pointIndex) => {
+              if (pointIndex !== index) return point;
+
+              return {
+                ...point,
+                input: {
+                  values: { ...point.input.values, [axis.id]: input },
+                },
+                output: {
+                  values: { ...point.output.values, [axis.id]: output },
+                },
+              };
+            }),
+          }));
+        }}
+        onPointCommit={form.commit}
+      />
 
       <div className="flex min-w-0 flex-col gap-2">
         <h3 className="text-sm text-primary">Source Mapping</h3>
