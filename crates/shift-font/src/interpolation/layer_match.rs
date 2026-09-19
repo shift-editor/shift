@@ -1,33 +1,35 @@
-//! Structural compatibility between ordered authored glyph layers.
+//! Structural matches between ordered authored glyph layers.
 
-use crate::{GlyphId, GlyphLayer, PointType};
+use std::collections::HashMap;
+
+use crate::{AnchorId, ComponentId, ContourId, GlyphId, GlyphLayer, LayerId, PointId, PointType};
 
 /// One structural difference that prevents two glyph layers from sharing values.
 ///
-/// Paths, nodes, anchors, and components are compared in authored order. This
-/// follows the positional correspondence required by outline interpolation and
+/// Contours, points, anchors, and components are compared in authored order.
+/// This follows the positional matching required by outline interpolation and
 /// by OpenType `gvar`, where composite variation indices address components in
 /// glyph order.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum LayerDifference {
-    /// The layers contain different numbers of paths.
-    PathCount { reference: usize, source: usize },
-    /// The path at the given position is open in one layer and closed in the other.
-    PathClosed {
-        path: usize,
+    /// The layers contain different numbers of contours.
+    ContourCount { reference: usize, source: usize },
+    /// The contour at the given position is open in one layer and closed in the other.
+    ContourClosed {
+        contour: usize,
         reference: bool,
         source: bool,
     },
-    /// Corresponding paths contain different numbers of nodes.
-    NodeCount {
-        path: usize,
+    /// Corresponding contours contain different numbers of points.
+    PointCount {
+        contour: usize,
         reference: usize,
         source: usize,
     },
-    /// Corresponding nodes have different authored point kinds.
-    NodeKind {
-        path: usize,
-        node: usize,
+    /// Corresponding points have different authored point types.
+    PointType {
+        contour: usize,
+        point: usize,
         reference: PointType,
         source: PointType,
     },
@@ -52,22 +54,60 @@ pub enum LayerDifference {
     },
 }
 
-/// Complete structural comparison of a source layer with a reference layer.
+/// Derived structural match from one reference layer to one target layer.
 ///
-/// An empty difference list means that both layers can share Shift's canonical
-/// structure-ordered interpolation values. Coordinates, advance width, smooth
-/// flags, anchor positions, and component transforms are values rather than
-/// structural compatibility constraints.
+/// A complete match means that both layers can share Shift's canonical
+/// structure-ordered interpolation values. Complete matches also map each
+/// reference contour, point, anchor, and component identity to its target
+/// identity. Incomplete matches retain diagnostic differences but expose no
+/// entity mappings, so callers cannot accidentally apply a partial edit.
+///
+/// Coordinates, advance width, smooth flags, anchor positions, and component
+/// transforms are values rather than structural matching constraints.
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[must_use]
-pub struct LayerCompatibility {
+pub struct LayerMatch {
+    reference_layer_id: LayerId,
+    target_layer_id: LayerId,
+    contours: HashMap<ContourId, ContourId>,
+    points: HashMap<PointId, PointId>,
+    anchors: HashMap<AnchorId, AnchorId>,
+    components: HashMap<ComponentId, ComponentId>,
     differences: Vec<LayerDifference>,
 }
 
-impl LayerCompatibility {
-    /// Returns whether the source can share the reference layer's structure.
-    pub fn is_compatible(&self) -> bool {
+impl LayerMatch {
+    /// Returns whether all required structure and entity mappings agree.
+    pub fn is_complete(&self) -> bool {
         self.differences.is_empty()
+    }
+
+    pub fn reference_layer_id(&self) -> &LayerId {
+        &self.reference_layer_id
+    }
+
+    pub fn target_layer_id(&self) -> &LayerId {
+        &self.target_layer_id
+    }
+
+    /// Returns the target identity for a matched reference contour.
+    pub fn contour_for(&self, reference: &ContourId) -> Option<&ContourId> {
+        self.contours.get(reference)
+    }
+
+    /// Returns the target identity for a matched reference point.
+    pub fn point_for(&self, reference: &PointId) -> Option<&PointId> {
+        self.points.get(reference)
+    }
+
+    /// Returns the target identity for a matched reference anchor.
+    pub fn anchor_for(&self, reference: &AnchorId) -> Option<&AnchorId> {
+        self.anchors.get(reference)
+    }
+
+    /// Returns the target identity for a matched reference component.
+    pub fn component_for(&self, reference: &ComponentId) -> Option<&ComponentId> {
+        self.components.get(reference)
     }
 
     /// Returns structural differences in deterministic authored order.
@@ -75,76 +115,116 @@ impl LayerCompatibility {
         &self.differences
     }
 
-    /// Consumes the comparison and returns its structural differences.
+    /// Consumes the match and returns its structural differences.
     pub fn into_differences(self) -> Vec<LayerDifference> {
         self.differences
     }
 }
 
 impl GlyphLayer {
-    /// Compares a source layer with this reference topology for interpolation.
+    /// Derives ordered entity matches from this reference layer to `target`.
     ///
     /// The comparison never sorts authored collections. Component identity at
     /// a given position is significant because OpenType `gvar` addresses
-    /// composite components by their glyph order. When an enclosing path or
-    /// node count differs, nested differences are omitted to avoid cascading
+    /// composite components by their glyph order. When an enclosing contour or
+    /// point count differs, nested differences are omitted to avoid cascading
     /// diagnostics.
-    pub fn interpolation_compatibility_with(&self, source: &Self) -> LayerCompatibility {
+    pub fn match_with(&self, target: &Self) -> LayerMatch {
         let mut differences = Vec::new();
 
-        compare_paths(self, source, &mut differences);
-        compare_anchors(self, source, &mut differences);
-        compare_components(self, source, &mut differences);
+        compare_contours(self, target, &mut differences);
+        compare_anchors(self, target, &mut differences);
+        compare_components(self, target, &mut differences);
 
-        LayerCompatibility { differences }
+        let mut layer_match = LayerMatch {
+            reference_layer_id: self.id(),
+            target_layer_id: target.id(),
+            contours: HashMap::new(),
+            points: HashMap::new(),
+            anchors: HashMap::new(),
+            components: HashMap::new(),
+            differences,
+        };
+        if layer_match.is_complete() {
+            layer_match.add_entity_matches(self, target);
+        }
+
+        layer_match
     }
 }
 
-fn compare_paths(
+impl LayerMatch {
+    fn add_entity_matches(&mut self, reference: &GlyphLayer, target: &GlyphLayer) {
+        for (reference_contour, target_contour) in
+            reference.contours_iter().zip(target.contours_iter())
+        {
+            self.contours
+                .insert(reference_contour.id(), target_contour.id());
+
+            for (reference_point, target_point) in reference_contour
+                .points()
+                .iter()
+                .zip(target_contour.points())
+            {
+                self.points.insert(reference_point.id(), target_point.id());
+            }
+        }
+
+        for (reference, target) in reference.anchors_iter().zip(target.anchors_iter()) {
+            self.anchors.insert(reference.id(), target.id());
+        }
+
+        for (reference, target) in reference.components_iter().zip(target.components_iter()) {
+            self.components.insert(reference.id(), target.id());
+        }
+    }
+}
+
+fn compare_contours(
     reference: &GlyphLayer,
     source: &GlyphLayer,
     differences: &mut Vec<LayerDifference>,
 ) {
     if reference.contours().len() != source.contours().len() {
-        differences.push(LayerDifference::PathCount {
+        differences.push(LayerDifference::ContourCount {
             reference: reference.contours().len(),
             source: source.contours().len(),
         });
         return;
     }
 
-    for (path, (reference, source)) in reference
+    for (contour, (reference, source)) in reference
         .contours_iter()
         .zip(source.contours_iter())
         .enumerate()
     {
         if reference.is_closed() != source.is_closed() {
-            differences.push(LayerDifference::PathClosed {
-                path,
+            differences.push(LayerDifference::ContourClosed {
+                contour,
                 reference: reference.is_closed(),
                 source: source.is_closed(),
             });
         }
 
         if reference.points().len() != source.points().len() {
-            differences.push(LayerDifference::NodeCount {
-                path,
+            differences.push(LayerDifference::PointCount {
+                contour,
                 reference: reference.points().len(),
                 source: source.points().len(),
             });
             continue;
         }
 
-        for (node, (reference, source)) in
+        for (point, (reference, source)) in
             reference.points().iter().zip(source.points()).enumerate()
         {
             if reference.point_type() == source.point_type() {
                 continue;
             }
 
-            differences.push(LayerDifference::NodeKind {
-                path,
-                node,
+            differences.push(LayerDifference::PointType {
+                contour,
+                point,
                 reference: reference.point_type(),
                 source: source.point_type(),
             });
@@ -237,88 +317,110 @@ mod tests {
     }
 
     #[test]
-    fn compatible_layers_may_change_interpolated_values_and_metadata() {
+    fn complete_match_maps_each_reference_entity_to_the_target() {
         let reference = layer();
-        let mut source = reference.clone_with_fresh_ids(
-            LayerId::from_raw("source-layer"),
+        let mut target = reference.clone_with_fresh_ids(
+            LayerId::from_raw("target-layer"),
             SourceId::from_raw("other-source"),
         );
-        source.set_width(900.0);
-        source.contours_iter_mut().next().unwrap().points_mut()[0].set_position(200.0, 300.0);
-        source.contours_iter_mut().next().unwrap().points_mut()[1].set_smooth(false);
-        source
+        target.set_width(900.0);
+        target.contours_iter_mut().next().unwrap().points_mut()[0].set_position(200.0, 300.0);
+        target.contours_iter_mut().next().unwrap().points_mut()[1].set_smooth(false);
+        target
             .anchors_iter_mut()
             .next()
             .unwrap()
             .set_position(300.0, 400.0);
-        source
+        target
             .components_iter_mut()
             .next()
             .unwrap()
             .translate(50.0, 60.0);
 
-        assert!(reference
-            .interpolation_compatibility_with(&source)
-            .is_compatible());
+        let layer_match = reference.match_with(&target);
+        let reference_contour = reference.contours_iter().next().unwrap();
+        let target_contour = target.contours_iter().next().unwrap();
+
+        assert!(layer_match.is_complete());
+        assert_eq!(layer_match.reference_layer_id(), &reference.id());
+        assert_eq!(layer_match.target_layer_id(), &target.id());
+        assert_eq!(
+            layer_match.contour_for(&reference_contour.id()),
+            Some(&target_contour.id())
+        );
+        for (reference_point, target_point) in reference_contour
+            .points()
+            .iter()
+            .zip(target_contour.points())
+        {
+            assert_eq!(
+                layer_match.point_for(&reference_point.id()),
+                Some(&target_point.id())
+            );
+        }
+        assert_eq!(
+            layer_match.anchor_for(&reference.anchors()[0].id()),
+            Some(&target.anchors()[0].id())
+        );
+        for (reference_component, target_component) in
+            reference.components_iter().zip(target.components_iter())
+        {
+            assert_eq!(
+                layer_match.component_for(&reference_component.id()),
+                Some(&target_component.id())
+            );
+        }
     }
 
     #[test]
     fn reports_each_hard_structural_difference() {
         let reference = layer();
 
-        let mut path_count = reference.clone();
-        path_count.add_contour(Contour::new());
+        let mut contour_count = reference.clone();
+        contour_count.add_contour(Contour::new());
         assert_eq!(
-            reference
-                .interpolation_compatibility_with(&path_count)
-                .differences(),
-            &[LayerDifference::PathCount {
+            reference.match_with(&contour_count).differences(),
+            &[LayerDifference::ContourCount {
                 reference: 1,
                 source: 2,
             }]
         );
 
-        let mut path_closed = reference.clone();
-        path_closed.contours_iter_mut().next().unwrap().open();
+        let mut contour_closed = reference.clone();
+        contour_closed.contours_iter_mut().next().unwrap().open();
         assert_eq!(
-            reference
-                .interpolation_compatibility_with(&path_closed)
-                .differences(),
-            &[LayerDifference::PathClosed {
-                path: 0,
+            reference.match_with(&contour_closed).differences(),
+            &[LayerDifference::ContourClosed {
+                contour: 0,
                 reference: true,
                 source: false,
             }]
         );
 
-        let mut node_count = reference.clone();
-        node_count
+        let mut point_count = reference.clone();
+        point_count
             .contours_iter_mut()
             .next()
             .unwrap()
             .points_mut()
             .pop();
         assert_eq!(
-            reference
-                .interpolation_compatibility_with(&node_count)
-                .differences(),
-            &[LayerDifference::NodeCount {
-                path: 0,
+            reference.match_with(&point_count).differences(),
+            &[LayerDifference::PointCount {
+                contour: 0,
                 reference: 3,
                 source: 2,
             }]
         );
 
-        let mut node_kind = reference.clone();
-        node_kind.contours_iter_mut().next().unwrap().points_mut()[0]
+        let mut point_type = reference.clone();
+        point_type.contours_iter_mut().next().unwrap().points_mut()[0]
             .set_point_type(PointType::QCurve);
         assert_eq!(
-            reference
-                .interpolation_compatibility_with(&node_kind)
-                .differences(),
-            &[LayerDifference::NodeKind {
-                path: 0,
-                node: 0,
+            reference.match_with(&point_type).differences(),
+            &[LayerDifference::PointType {
+                contour: 0,
+                point: 0,
                 reference: PointType::OnCurve,
                 source: PointType::QCurve,
             }]
@@ -327,9 +429,7 @@ mod tests {
         let mut anchor_count = reference.clone();
         anchor_count.clear_anchors();
         assert_eq!(
-            reference
-                .interpolation_compatibility_with(&anchor_count)
-                .differences(),
+            reference.match_with(&anchor_count).differences(),
             &[LayerDifference::AnchorCount {
                 reference: 1,
                 source: 0,
@@ -343,9 +443,7 @@ mod tests {
             .unwrap()
             .set_name(Some("bottom".to_string()));
         assert_eq!(
-            reference
-                .interpolation_compatibility_with(&anchor_sequence)
-                .differences(),
+            reference.match_with(&anchor_sequence).differences(),
             &[LayerDifference::AnchorSequence {
                 reference: vec![Some("top".to_string())],
                 source: vec![Some("bottom".to_string())],
@@ -362,9 +460,7 @@ mod tests {
             .add_component(Component::new(GlyphId::from_raw("caron.cap"), "caron.cap"));
         component_sequence.add_component(Component::new(GlyphId::from_raw("C"), "C"));
         assert_eq!(
-            reference
-                .interpolation_compatibility_with(&component_sequence)
-                .differences(),
+            reference.match_with(&component_sequence).differences(),
             &[LayerDifference::ComponentSequence {
                 reference: vec![GlyphId::from_raw("C"), GlyphId::from_raw("caron.cap")],
                 source: vec![GlyphId::from_raw("caron.cap"), GlyphId::from_raw("C")],
@@ -380,16 +476,25 @@ mod tests {
         contour.points_mut().pop();
         contour.points_mut()[0].set_point_type(PointType::OffCurve);
 
+        let layer_match = reference.match_with(&source);
+
         assert_eq!(
-            reference
-                .interpolation_compatibility_with(&source)
-                .differences(),
-            &[LayerDifference::NodeCount {
-                path: 0,
+            layer_match.differences(),
+            &[LayerDifference::PointCount {
+                contour: 0,
                 reference: 3,
                 source: 2,
             }]
         );
+        let reference_point_id = reference
+            .contours_iter()
+            .next()
+            .unwrap()
+            .points()
+            .first()
+            .unwrap()
+            .id();
+        assert!(layer_match.point_for(&reference_point_id).is_none());
     }
 
     #[test]
@@ -401,11 +506,9 @@ mod tests {
         );
 
         assert_eq!(
-            reference
-                .interpolation_compatibility_with(&source)
-                .into_differences(),
+            reference.match_with(&source).into_differences(),
             vec![
-                LayerDifference::PathCount {
+                LayerDifference::ContourCount {
                     reference: 1,
                     source: 0,
                 },
