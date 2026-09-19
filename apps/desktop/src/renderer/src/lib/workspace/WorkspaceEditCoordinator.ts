@@ -5,6 +5,8 @@ import type {
   GlyphPreview,
   GlyphProjection,
   GlyphSnapshot,
+  LayerId,
+  LayerMatch,
   Location,
   SlugAtlas,
 } from "@shift/types";
@@ -196,6 +198,11 @@ export class WorkspaceEditCoordinator {
     if (glyphIds.length === 0) return [];
 
     return this.#withFlush(() => this.#session.glyphProjections(glyphIds));
+  }
+
+  /** Derives cross-layer entity matches behind pending authored edits. */
+  matchLayers(referenceLayerId: LayerId, targetLayerId: LayerId): Promise<LayerMatch> {
+    return this.#withFlush(() => this.#session.layerMatch(referenceLayerId, targetLayerId));
   }
 
   /** Pulls drawable previews at one internal location behind pending edits. */

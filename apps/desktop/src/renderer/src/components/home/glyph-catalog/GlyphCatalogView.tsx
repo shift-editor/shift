@@ -90,7 +90,7 @@ export const GlyphCatalogView = () => {
             className={cn(
               "mt-1",
               isTopLevelCategorySelected && selectedCategory === categoryNode.category
-                ? "bg-hover/50 rounded-sm"
+                ? "bg-hover/50 rounded"
                 : null,
             )}
           >
@@ -104,7 +104,7 @@ export const GlyphCatalogView = () => {
                 />
               </CollapsibleTrigger>
               <CollapsiblePanel>
-                <div>
+                <div className="flex flex-col gap-1">
                   {categoryNode.subCategories.map((subCategory) => (
                     <SubCategory
                       key={subCategory.key}

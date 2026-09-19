@@ -17,10 +17,10 @@ use shift_font::{
     FontMetadata as IrFontMetadata, FontMetrics as IrFontMetrics, Glyph as IrGlyph, GlyphId,
     GlyphInterpolation as IrGlyphInterpolation, GlyphLayer, GlyphName,
     GlyphProjection as IrGlyphProjection, GlyphSourceComponents as IrGlyphSourceComponents,
-    GuidelineId, InterpolationBasis as IrInterpolationBasis, LayerId, Location as IrLocation,
-    MetricDefinition as IrMetricDefinition, MetricId, MetricKind as IrMetricKind,
-    NamedInstance as IrNamedInstance, NamedInstanceId, Point as IrPoint, PointId,
-    PointType as IrPointType, Source as IrSource, SourceId,
+    GuidelineId, InterpolationBasis as IrInterpolationBasis, LayerDifference as IrLayerDifference,
+    LayerId, Location as IrLocation, MetricDefinition as IrMetricDefinition, MetricId,
+    MetricKind as IrMetricKind, NamedInstance as IrNamedInstance, NamedInstanceId,
+    Point as IrPoint, PointId, PointType as IrPointType, Source as IrSource, SourceId,
     SourceMetricField as IrSourceMetricField,
     SourceMetricInterpolation as IrSourceMetricInterpolation, VariationBasis as IrVariationBasis,
 };
@@ -388,6 +388,306 @@ impl From<&GlyphLayer> for GlyphLayerRecord {
             id: layer.id(),
             source_id: layer.source_id(),
         }
+    }
+}
+
+/// Cross-layer identity pair for one structurally matched contour.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContourMatch {
+    pub reference_id: ContourId,
+    pub target_id: ContourId,
+}
+
+/// Cross-layer identity pair for one structurally matched point.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PointMatch {
+    pub reference_id: PointId,
+    pub target_id: PointId,
+}
+
+/// Cross-layer identity pair for one structurally matched anchor.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AnchorMatch {
+    pub reference_id: AnchorId,
+    pub target_id: AnchorId,
+}
+
+/// Cross-layer identity pair for one structurally matched component.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ComponentMatch {
+    pub reference_id: ComponentId,
+    pub target_id: ComponentId,
+}
+
+/// Stable discriminator for one transported structural mismatch.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum LayerDifferenceKind {
+    ContourCount,
+    ContourClosed,
+    PointCount,
+    PointType,
+    AnchorCount,
+    AnchorSequence,
+    ComponentSequence,
+}
+
+/// Transport-safe structural mismatch evidence.
+///
+/// Only fields relevant to `kind` are populated. Indices and counts are
+/// zero-based `u32` values so every NAPI consumer receives ordinary numbers.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LayerDifference {
+    pub kind: LayerDifferenceKind,
+    pub contour: Option<u32>,
+    pub point: Option<u32>,
+    pub reference_count: Option<u32>,
+    pub target_count: Option<u32>,
+    pub reference_closed: Option<bool>,
+    pub target_closed: Option<bool>,
+    pub reference_point_type: Option<PointType>,
+    pub target_point_type: Option<PointType>,
+    pub reference_anchor_names: Option<Vec<Option<String>>>,
+    pub target_anchor_names: Option<Vec<Option<String>>>,
+    pub reference_component_ids: Option<Vec<GlyphId>>,
+    pub target_component_ids: Option<Vec<GlyphId>>,
+}
+
+impl From<&IrLayerDifference> for LayerDifference {
+    fn from(difference: &IrLayerDifference) -> Self {
+        let mut wire = Self {
+            kind: LayerDifferenceKind::ContourCount,
+            contour: None,
+            point: None,
+            reference_count: None,
+            target_count: None,
+            reference_closed: None,
+            target_closed: None,
+            reference_point_type: None,
+            target_point_type: None,
+            reference_anchor_names: None,
+            target_anchor_names: None,
+            reference_component_ids: None,
+            target_component_ids: None,
+        };
+
+        match difference {
+            IrLayerDifference::ContourCount { reference, source } => {
+                wire.reference_count = Some(wire_index(*reference));
+                wire.target_count = Some(wire_index(*source));
+            }
+            IrLayerDifference::ContourClosed {
+                contour,
+                reference,
+                source,
+            } => {
+                wire.kind = LayerDifferenceKind::ContourClosed;
+                wire.contour = Some(wire_index(*contour));
+                wire.reference_closed = Some(*reference);
+                wire.target_closed = Some(*source);
+            }
+            IrLayerDifference::PointCount {
+                contour,
+                reference,
+                source,
+            } => {
+                wire.kind = LayerDifferenceKind::PointCount;
+                wire.contour = Some(wire_index(*contour));
+                wire.reference_count = Some(wire_index(*reference));
+                wire.target_count = Some(wire_index(*source));
+            }
+            IrLayerDifference::PointType {
+                contour,
+                point,
+                reference,
+                source,
+            } => {
+                wire.kind = LayerDifferenceKind::PointType;
+                wire.contour = Some(wire_index(*contour));
+                wire.point = Some(wire_index(*point));
+                wire.reference_point_type = Some(PointType::from(*reference));
+                wire.target_point_type = Some(PointType::from(*source));
+            }
+            IrLayerDifference::AnchorCount { reference, source } => {
+                wire.kind = LayerDifferenceKind::AnchorCount;
+                wire.reference_count = Some(wire_index(*reference));
+                wire.target_count = Some(wire_index(*source));
+            }
+            IrLayerDifference::AnchorSequence { reference, source } => {
+                wire.kind = LayerDifferenceKind::AnchorSequence;
+                wire.reference_anchor_names = Some(reference.clone());
+                wire.target_anchor_names = Some(source.clone());
+            }
+            IrLayerDifference::ComponentSequence { reference, source } => {
+                wire.kind = LayerDifferenceKind::ComponentSequence;
+                wire.reference_component_ids = Some(reference.clone());
+                wire.target_component_ids = Some(source.clone());
+            }
+        }
+
+        wire
+    }
+}
+
+/// Read-only cross-layer identity mappings and compatibility diagnostics.
+///
+/// Incomplete matches carry differences but no entity mappings, mirroring the
+/// domain contract that prevents consumers from applying partial edits.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LayerMatch {
+    pub reference_layer_id: LayerId,
+    pub target_layer_id: LayerId,
+    pub complete: bool,
+    pub contours: Vec<ContourMatch>,
+    pub points: Vec<PointMatch>,
+    pub anchors: Vec<AnchorMatch>,
+    pub components: Vec<ComponentMatch>,
+    pub differences: Vec<LayerDifference>,
+}
+
+impl LayerMatch {
+    /// Derives a transport value from two acquired authored layers.
+    pub fn from_layers(reference: &GlyphLayer, target: &GlyphLayer) -> Self {
+        let layer_match = reference.match_with(target);
+        let contours = reference
+            .contours_iter()
+            .filter_map(|contour| {
+                layer_match
+                    .contour_for(&contour.id())
+                    .cloned()
+                    .map(|target_id| ContourMatch {
+                        reference_id: contour.id(),
+                        target_id,
+                    })
+            })
+            .collect();
+        let points = reference
+            .contours_iter()
+            .flat_map(|contour| contour.points())
+            .filter_map(|point| {
+                layer_match
+                    .point_for(&point.id())
+                    .cloned()
+                    .map(|target_id| PointMatch {
+                        reference_id: point.id(),
+                        target_id,
+                    })
+            })
+            .collect();
+        let anchors = reference
+            .anchors_iter()
+            .filter_map(|anchor| {
+                layer_match
+                    .anchor_for(&anchor.id())
+                    .cloned()
+                    .map(|target_id| AnchorMatch {
+                        reference_id: anchor.id(),
+                        target_id,
+                    })
+            })
+            .collect();
+        let components = reference
+            .components_iter()
+            .filter_map(|component| {
+                layer_match
+                    .component_for(&component.id())
+                    .cloned()
+                    .map(|target_id| ComponentMatch {
+                        reference_id: component.id(),
+                        target_id,
+                    })
+            })
+            .collect();
+        let differences = layer_match
+            .differences()
+            .iter()
+            .map(LayerDifference::from)
+            .collect();
+
+        Self {
+            reference_layer_id: layer_match.reference_layer_id().clone(),
+            target_layer_id: layer_match.target_layer_id().clone(),
+            complete: layer_match.is_complete(),
+            contours,
+            points,
+            anchors,
+            components,
+            differences,
+        }
+    }
+}
+
+fn wire_index(value: usize) -> u32 {
+    u32::try_from(value).expect("glyph structure exceeds the wire index limit")
+}
+
+#[cfg(test)]
+mod layer_match_tests {
+    use super::*;
+    use shift_font::{Anchor, Component, Contour, Point};
+
+    fn reference_layer() -> GlyphLayer {
+        let mut layer = GlyphLayer::new(LayerId::from_raw("reference"), SourceId::from_raw("one"));
+        layer.add_contour(Contour::from_points(
+            vec![Point::on_curve(0.0, 0.0), Point::on_curve(100.0, 0.0)],
+            true,
+        ));
+        layer.add_anchor(Anchor::new(Some("top".to_string()), 50.0, 100.0));
+        layer.add_component(Component::new(GlyphId::from_raw("base"), "base"));
+        layer
+    }
+
+    #[test]
+    fn complete_layer_match_transports_every_entity_pair() {
+        let reference = reference_layer();
+        let target =
+            reference.clone_with_fresh_ids(LayerId::from_raw("target"), SourceId::from_raw("two"));
+
+        let layer_match = LayerMatch::from_layers(&reference, &target);
+
+        assert!(layer_match.complete);
+        assert_eq!(layer_match.reference_layer_id, reference.id());
+        assert_eq!(layer_match.target_layer_id, target.id());
+        assert_eq!(layer_match.contours.len(), 1);
+        assert_eq!(layer_match.points.len(), 2);
+        assert_eq!(layer_match.anchors.len(), 1);
+        assert_eq!(layer_match.components.len(), 1);
+        assert!(layer_match.differences.is_empty());
+    }
+
+    #[test]
+    fn incomplete_layer_match_transports_differences_without_pairs() {
+        let reference = reference_layer();
+        let mut target =
+            reference.clone_with_fresh_ids(LayerId::from_raw("target"), SourceId::from_raw("two"));
+        target
+            .contours_iter_mut()
+            .next()
+            .unwrap()
+            .points_mut()
+            .pop();
+
+        let layer_match = LayerMatch::from_layers(&reference, &target);
+
+        assert!(!layer_match.complete);
+        assert!(layer_match.contours.is_empty());
+        assert!(layer_match.points.is_empty());
+        assert!(layer_match.anchors.is_empty());
+        assert!(layer_match.components.is_empty());
+        assert_eq!(layer_match.differences.len(), 1);
+        assert_eq!(
+            layer_match.differences[0].kind,
+            LayerDifferenceKind::PointCount
+        );
+        assert_eq!(layer_match.differences[0].contour, Some(0));
+        assert_eq!(layer_match.differences[0].reference_count, Some(2));
+        assert_eq!(layer_match.differences[0].target_count, Some(1));
     }
 }
 

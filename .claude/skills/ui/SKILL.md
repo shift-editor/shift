@@ -67,7 +67,7 @@ If the reference is ambiguous or conflicts with an established interaction patte
 ## Accessibility and interaction
 
 - Every icon-only action needs an accessible name and a concise visible tooltip.
-- Tooltip text always names the action. Keep the same tooltip and accessible name when the action is unavailable; disabled styling and behavior communicate availability without replacing the action name with an explanation.
+- Tooltip text always names the action. Keep it concise and do not repeat the target's name when the surrounding row or control already identifies it (`Hide outline`, not `Hide Regular outline`). Keep the same tooltip and accessible name when the action is unavailable; disabled styling and behavior communicate availability without replacing the action name with an explanation.
 - If an unavailable control must retain its tooltip, use `aria-disabled`, guard its action, and style that state. Do not use native `disabled`, which removes focus and pointer interaction.
 - Preserve keyboard navigation supplied by Base UI. Verify `focus-visible`, not only pointer hover.
 - Use semantic roles and labels for toolbars, navigation, dialogs, groups, sliders, and form controls.

@@ -20,6 +20,7 @@ import type {
   AnchorId,
   ContourId,
   LayerId,
+  LayerMatch,
   Location,
   PointId,
   NamedInstance,
@@ -1038,6 +1039,16 @@ export class Font {
 
       return glyph;
     });
+  }
+
+  /**
+   * Derives Rust-owned entity mappings between two authored layers.
+   *
+   * Incomplete results contain structural diagnostics but no partial entity
+   * mappings. The layers must belong to the same glyph.
+   */
+  matchLayers(referenceLayerId: LayerId, targetLayerId: LayerId): Promise<LayerMatch> {
+    return this.editCoordinator.matchLayers(referenceLayerId, targetLayerId);
   }
 
   /**

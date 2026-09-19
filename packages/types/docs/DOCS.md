@@ -39,6 +39,7 @@ Import from `@shift/types`.
 - `AxisMappingBasis` -- mapping identity and ordered input/output axes plus a compiled normalized-adjustment basis.
 - `GlyphVariation` -- imported fallback-relative numeric variation without fabricated authored source identities.
 - `GlyphProjection` -- location-independent renderer backing with fallback shape, optional authored interpolation or imported variation, exact-source shapes, and component identities.
+- `LayerMatch` -- Rust-derived reference/target entity ID pairs plus structural differences; incomplete values intentionally contain no partial pairs.
 - `AppliedChange` -- replace-grade mutation response returned by apply/undo/redo; its optional `next.metadata` is a complete replacement.
 - `Axis` / `AxisMapping` / `NamedInstance` -- generated variation authoring DTOs, keyed by branded entity IDs and expressed in Shift coordinate spaces.
 - `SourceMetricsInterpolationSnapshot` -- derived metric schema, reusable interpolation basis, and ordered source values; it is workspace transport state, not an authored source or named instance.

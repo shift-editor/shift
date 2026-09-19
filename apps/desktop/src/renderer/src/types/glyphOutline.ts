@@ -15,7 +15,10 @@ export interface ResolvedGlyphOutlineTarget {
 /** Props shared by variation sections that edit one node's visible outlines. */
 export interface GlyphOutlineControls {
   readonly targets: readonly GlyphOutlineTarget[];
-  readonly onChange: (targets: readonly GlyphOutlineTarget[]) => void;
+  readonly inheritedTargets: readonly GlyphOutlineTarget[];
+  readonly groupActive: boolean;
+  readonly onToggle: (target: GlyphOutlineTarget) => void;
+  readonly onToggleGroup: (targets: readonly GlyphOutlineTarget[]) => void;
 }
 
 /** Node-scoped outline collection exposed by the glyph node definition. */

@@ -15,7 +15,7 @@ export const Category = ({
   isTopLevelCategorySelected,
   onSelectCategory,
 }: CategoryProps) => {
-  const isActive = selectedCategory === category;
+  const isActive = isTopLevelCategorySelected && selectedCategory === category;
 
   return (
     <Button
