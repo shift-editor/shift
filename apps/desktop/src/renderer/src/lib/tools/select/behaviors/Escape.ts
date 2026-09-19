@@ -3,7 +3,7 @@ import type { KeyDownEvent } from "../../core/GestureDetector";
 import type { SelectBehavior, SelectState } from "../types";
 
 export class Escape implements SelectBehavior {
-  onKeyDown(state: SelectState, ctx: ToolContext<SelectState>, event: KeyDownEvent): boolean {
+  onKeyDown(_state: SelectState, ctx: ToolContext<SelectState>, event: KeyDownEvent): boolean {
     if (event.key !== "Escape") return false;
 
     if (ctx.editor.selection.hasSelection()) {
@@ -12,6 +12,6 @@ export class Escape implements SelectBehavior {
       return true;
     }
 
-    return state.type === "ready";
+    return false;
   }
 }

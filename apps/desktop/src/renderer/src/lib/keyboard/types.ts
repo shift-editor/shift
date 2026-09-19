@@ -16,6 +16,8 @@ export interface KeyboardEditorActions {
   undo(): Promise<void>;
   redo(): Promise<void>;
   selectAll(): void;
+  selectAllSourcesForEditing(): boolean;
+  collapseEditingSources(): boolean;
   setActiveTool(toolName: ToolName): void;
   getToolShortcuts(): ToolShortcutEntry[];
   requestTemporaryTool(

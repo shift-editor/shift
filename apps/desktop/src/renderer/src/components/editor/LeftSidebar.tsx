@@ -4,6 +4,8 @@ import { AxesSection } from "@/components/variation/AxesSection";
 import { InstancesSection } from "@/components/variation/InstancesSection";
 import { SourcesSection } from "@/components/variation/SourcesSection";
 import { useSignalState } from "@/lib/signals";
+import { useActiveSourceId } from "@/hooks/useActiveSourceId";
+import { useEditingSourceIds } from "@/hooks/useEditingSourceIds";
 import type { GlyphOutlineTarget } from "@/types/glyphOutline";
 import { useEditor } from "@/workspace/WorkspaceContext";
 
@@ -12,10 +14,23 @@ export const LeftSidebar = () => {
   const scene = useSignalState(editor.scene.cell);
   const glyphNodeId = scene.nodes.find((node) => node.kind === "glyph")?.id ?? null;
   const glyphDefinition = editor.nodeDefinition("glyph");
-  const [visibleOutlines, setVisibleOutlines] = useState<readonly GlyphOutlineTarget[]>([]);
-  const outlineControls = useMemo(
-    () => ({ targets: visibleOutlines, onChange: setVisibleOutlines }),
-    [visibleOutlines],
+  const activeSourceId = useActiveSourceId();
+  const editingSourceIds = useEditingSourceIds();
+  const [visibleInstanceOutlines, setVisibleInstanceOutlines] = useState<
+    readonly GlyphOutlineTarget[]
+  >([]);
+  const instanceOutlineControls = useMemo(
+    () => ({ targets: visibleInstanceOutlines, onChange: setVisibleInstanceOutlines }),
+    [visibleInstanceOutlines],
+  );
+  const visibleOutlines = useMemo(
+    () => [
+      ...Array.from(editingSourceIds)
+        .filter((sourceId) => sourceId !== activeSourceId)
+        .map((sourceId): GlyphOutlineTarget => ({ kind: "source", sourceId })),
+      ...visibleInstanceOutlines,
+    ],
+    [activeSourceId, editingSourceIds, visibleInstanceOutlines],
   );
 
   useEffect(() => {
@@ -36,9 +51,9 @@ export const LeftSidebar = () => {
       className="h-full w-full min-w-0 bg-panel border-r border-line-subtle flex flex-col overflow-hidden"
     >
       <div className="px-1 py-3 flex flex-col gap-2">
-        <SourcesSection defaultOpen outlineControls={outlineControls} />
+        <SourcesSection defaultOpen />
         <Separator />
-        <InstancesSection defaultOpen outlineControls={outlineControls} />
+        <InstancesSection defaultOpen outlineControls={instanceOutlineControls} />
         <Separator />
         <AxesSection defaultOpen />
       </div>

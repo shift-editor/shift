@@ -17,6 +17,7 @@ import {
 } from "@shift/types";
 import { isSegmentId, type SegmentId } from "@shift/glyph-state";
 import type { ExternalAxisLocation } from "@/types/variation";
+import type { SourceSelectionMode } from "@/types/sourceSelection";
 import type { Coordinates, NodePoint, ScenePoint } from "@/types/coordinates";
 import {
   axisValue,
@@ -175,7 +176,8 @@ export class Editor {
   #camera: Camera;
 
   #externalLocation: WritableSignal<ExternalAxisLocation>;
-  #activeSourceId: WritableSignal<SourceId | null>;
+  #activeSourceIdCell: WritableSignal<SourceId | null>;
+  #editingSourceIdsCell: WritableSignal<ReadonlySet<SourceId>>;
 
   #cursorEffect: Effect;
   #cameraMetricsEffect: Effect;
@@ -210,14 +212,16 @@ export class Editor {
 
     const initialExternalLocation = emptyExternalAxisLocation();
 
+    const initialSourceId = this.font.sourceAt(initialExternalLocation)?.id ?? null;
     this.#externalLocation = signal(initialExternalLocation, {
       name: "editor.externalLocation",
     });
-    this.#activeSourceId = signal<SourceId | null>(
-      this.font.sourceAt(initialExternalLocation)?.id ?? null,
-      {
-        name: "editor.source.active",
-      },
+    this.#activeSourceIdCell = signal<SourceId | null>(initialSourceId, {
+      name: "editor.source.active",
+    });
+    this.#editingSourceIdsCell = signal<ReadonlySet<SourceId>>(
+      initialSourceId ? new Set([initialSourceId]) : new Set(),
+      { name: "editor.sources.editing" },
     );
     this.text = new Text(this.#store, this);
 
@@ -491,16 +495,24 @@ export class Editor {
   }
 
   public get activeSourceIdCell(): Signal<SourceId | null> {
-    return this.#activeSourceId;
+    return this.#activeSourceIdCell;
   }
 
   public get activeSourceId(): SourceId | null {
-    return this.#activeSourceId.peek();
+    return this.#activeSourceIdCell.peek();
   }
 
   public get activeSource(): Source | null {
-    const sourceId = this.#activeSourceId.peek();
+    const sourceId = this.#activeSourceIdCell.peek();
     return sourceId ? this.font.source(sourceId) : null;
+  }
+
+  public get editingSourceIdsCell(): Signal<ReadonlySet<SourceId>> {
+    return this.#editingSourceIdsCell;
+  }
+
+  public get editingSourceIds(): ReadonlySet<SourceId> {
+    return this.#editingSourceIdsCell.peek();
   }
 
   /** Current external user-space coordinate used for displayed font data. */
@@ -516,9 +528,12 @@ export class Editor {
   public setExternalLocation(location: ExternalAxisLocation): void {
     const next = cloneExternalAxisLocation(location);
 
+    const sourceId = this.font.sourceAt(next)?.id ?? null;
+
     batch(() => {
       this.#externalLocation.set(next);
-      this.#activeSourceId.set(this.font.sourceAt(next)?.id ?? null);
+      this.#activeSourceIdCell.set(sourceId);
+      this.#editingSourceIdsCell.set(sourceId ? new Set([sourceId]) : new Set());
     });
   }
 
@@ -895,7 +910,7 @@ export class Editor {
   }
 
   /**
-   * Selects an exact source and moves external axis controls to its location.
+   * Selects an exact source and makes it the sole editing source.
    *
    * @param sourceId - Existing source to activate and represent in user controls.
    */
@@ -905,29 +920,89 @@ export class Editor {
 
     batch(() => {
       this.#externalLocation.set(location);
-      this.#activeSourceId.set(sourceId);
+      this.#activeSourceIdCell.set(sourceId);
+      this.#editingSourceIdsCell.set(new Set([sourceId]));
     });
   }
 
   /**
-   * Selects a source for editing, materializing the current glyph layer when absent.
+   * Updates the editing-source selection around the active reference source.
    *
-   * @remarks
-   * This is the authored-only lazy glyph-layer materialization boundary. The
-   * current interpolated geometry is captured only for the opened glyph;
-   * unopened glyphs remain sparse.
+   * A single selection activates and materializes the requested source. Range
+   * and toggle selections preserve the active source and only change the
+   * session editing scope; the active source cannot be toggled out.
+   *
+   * @param sourceId - Source row receiving the selection interaction.
+   * @param mode - Standard list-selection behavior to apply.
    */
-  public selectSourceForEditing(sourceId: SourceId): void {
+  public selectSourceForEditing(sourceId: SourceId, mode: SourceSelectionMode = "single"): void {
     const source = this.font.source(sourceId);
     if (!source) return;
 
-    this.font.editCoordinator.transaction("Select source", () => {
-      this.#ensureCurrentGlyphLayer(
-        source.id,
-        (glyph) => glyph.geometryForSource(source.id).values,
-      );
-    });
-    this.selectSource(source.id);
+    switch (mode) {
+      case "single": {
+        this.font.editCoordinator.transaction("Select source", () => {
+          this.#ensureCurrentGlyphLayer(
+            source.id,
+            (glyph) => glyph.geometryForSource(source.id).values,
+          );
+        });
+        this.selectSource(source.id);
+        return;
+      }
+      case "range": {
+        const activeSourceId = this.#activeSourceIdCell.peek();
+        if (!activeSourceId) {
+          this.selectSourceForEditing(sourceId);
+          return;
+        }
+
+        const sourceIds = this.font.sources.map(({ id }) => id);
+        const activeIndex = sourceIds.indexOf(activeSourceId);
+        const selectedIndex = sourceIds.indexOf(sourceId);
+        if (activeIndex === -1 || selectedIndex === -1) return;
+
+        const start = Math.min(activeIndex, selectedIndex);
+        const end = Math.max(activeIndex, selectedIndex);
+        this.#editingSourceIdsCell.set(new Set(sourceIds.slice(start, end + 1)));
+        return;
+      }
+      case "toggle": {
+        const activeSourceId = this.#activeSourceIdCell.peek();
+        if (!activeSourceId) {
+          this.selectSourceForEditing(sourceId);
+          return;
+        }
+        if (sourceId === activeSourceId) return;
+
+        const editingSourceIds = new Set(this.#editingSourceIdsCell.peek());
+        if (editingSourceIds.has(sourceId)) {
+          editingSourceIds.delete(sourceId);
+        } else {
+          editingSourceIds.add(sourceId);
+        }
+        editingSourceIds.add(activeSourceId);
+        this.#editingSourceIdsCell.set(editingSourceIds);
+        return;
+      }
+    }
+  }
+
+  /** Selects every source for editing while retaining the active reference source. */
+  public selectAllSourcesForEditing(): boolean {
+    if (this.sessionMode !== "authored" || !this.#activeSourceIdCell.peek()) return false;
+
+    this.#editingSourceIdsCell.set(new Set(this.font.sources.map(({ id }) => id)));
+    return true;
+  }
+
+  /** Collapses a multi-source editing selection to its active reference source. */
+  public collapseEditingSources(): boolean {
+    const activeSourceId = this.#activeSourceIdCell.peek();
+    if (!activeSourceId || this.#editingSourceIdsCell.peek().size <= 1) return false;
+
+    this.#editingSourceIdsCell.set(new Set([activeSourceId]));
+    return true;
   }
 
   /**
@@ -965,7 +1040,7 @@ export class Editor {
     externalLocation: ExternalAxisLocation,
   ): Promise<void> {
     await this.font.editCoordinator.settled();
-    if (!this.font.source(sourceId) || this.#activeSourceId.peek() !== null) return;
+    if (!this.font.source(sourceId) || this.#activeSourceIdCell.peek() !== null) return;
 
     const axes = this.font.getAxes();
     const currentLocation = this.#externalLocation.peek();
@@ -974,7 +1049,10 @@ export class Editor {
     );
     if (locationChanged) return;
 
-    this.#activeSourceId.set(sourceId);
+    batch(() => {
+      this.#activeSourceIdCell.set(sourceId);
+      this.#editingSourceIdsCell.set(new Set([sourceId]));
+    });
   }
 
   #ensureCurrentGlyphLayer(sourceId: SourceId, valuesFor: (glyph: Glyph) => Float64Array): void {

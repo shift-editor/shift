@@ -9,6 +9,24 @@ export interface KeymapHandlers {
 export function createGlobalKeyDownBindings(): KeyBinding[] {
   return [
     {
+      id: "global.selectAllSourcesForEditing",
+      preventDefault: true,
+      match: (event) =>
+        matchChord(event, {
+          key: "e",
+          primaryModifier: true,
+          shiftKey: false,
+          altKey: false,
+        }),
+      run: (ctx) => ctx.editor.selectAllSourcesForEditing(),
+    },
+    {
+      id: "global.collapseEditingSources",
+      when: (ctx) => !ctx.canvasActive,
+      match: (event) => matchChord(event, { key: "Escape" }),
+      run: (ctx) => ctx.editor.collapseEditingSources(),
+    },
+    {
       id: "global.copy",
       preventDefault: true,
       when: (ctx) => ctx.activeTool !== "text",
@@ -168,6 +186,16 @@ export function createCanvasKeyDownBindings(handlers: KeymapHandlers): KeyBindin
         ctx.editor.selectAll();
         return true;
       },
+    },
+  ];
+}
+
+export function createCanvasFallbackKeyDownBindings(): KeyBinding[] {
+  return [
+    {
+      id: "canvas.collapseEditingSources",
+      match: (event) => matchChord(event, { key: "Escape" }),
+      run: (ctx) => ctx.editor.collapseEditingSources(),
     },
   ];
 }
