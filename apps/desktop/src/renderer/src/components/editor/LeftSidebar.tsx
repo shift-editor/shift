@@ -16,22 +16,36 @@ export const LeftSidebar = () => {
   const glyphDefinition = editor.nodeDefinition("glyph");
   const activeSourceId = useActiveSourceId();
   const editingSourceIds = useEditingSourceIds();
+  const [visibleSourceOutlines, setVisibleSourceOutlines] = useState<readonly GlyphOutlineTarget[]>(
+    [],
+  );
   const [visibleInstanceOutlines, setVisibleInstanceOutlines] = useState<
     readonly GlyphOutlineTarget[]
   >([]);
+  const sourceOutlineControls = useMemo(
+    () => ({ targets: visibleSourceOutlines, onChange: setVisibleSourceOutlines }),
+    [visibleSourceOutlines],
+  );
   const instanceOutlineControls = useMemo(
     () => ({ targets: visibleInstanceOutlines, onChange: setVisibleInstanceOutlines }),
     [visibleInstanceOutlines],
   );
-  const visibleOutlines = useMemo(
-    () => [
-      ...Array.from(editingSourceIds)
-        .filter((sourceId) => sourceId !== activeSourceId)
-        .map((sourceId): GlyphOutlineTarget => ({ kind: "source", sourceId })),
+  const visibleOutlines = useMemo(() => {
+    const editingSourceOutlineIds = new Set(
+      Array.from(editingSourceIds).filter((sourceId) => sourceId !== activeSourceId),
+    );
+    const editingSourceOutlines = Array.from(editingSourceOutlineIds).map(
+      (sourceId): GlyphOutlineTarget => ({ kind: "source", sourceId }),
+    );
+
+    return [
+      ...editingSourceOutlines,
+      ...visibleSourceOutlines.filter(
+        (target) => target.kind !== "source" || !editingSourceOutlineIds.has(target.sourceId),
+      ),
       ...visibleInstanceOutlines,
-    ],
-    [activeSourceId, editingSourceIds, visibleInstanceOutlines],
-  );
+    ];
+  }, [activeSourceId, editingSourceIds, visibleInstanceOutlines, visibleSourceOutlines]);
 
   useEffect(() => {
     if (!glyphNodeId) return;
@@ -51,7 +65,7 @@ export const LeftSidebar = () => {
       className="h-full w-full min-w-0 bg-panel border-r border-line-subtle flex flex-col overflow-hidden"
     >
       <div className="px-1 py-3 flex flex-col gap-2">
-        <SourcesSection defaultOpen />
+        <SourcesSection defaultOpen outlineControls={sourceOutlineControls} />
         <Separator />
         <InstancesSection defaultOpen outlineControls={instanceOutlineControls} />
         <Separator />
