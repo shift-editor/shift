@@ -342,20 +342,19 @@ fn inspect_sources(
         .iter()
         .map(|source| {
             let layer = glyph.layer_for_source(source.id());
-            let compatibility =
-                layer.map(|layer| reference.interpolation_compatibility_with(layer));
+            let layer_match = layer.map(|layer| reference.match_with(layer));
             SourceInspection {
                 id: source.id().to_string(),
                 name: source.name().to_string(),
                 master: source.is_master(),
                 location: location_values(source.location().as_untyped(), font.axes()),
                 layer: layer.map(inspect_layer),
-                compatible_with_reference: compatibility
+                compatible_with_reference: layer_match
                     .as_ref()
-                    .map(|compatibility| compatibility.is_compatible()),
-                differences: compatibility
-                    .map(|compatibility| {
-                        compatibility
+                    .map(|layer_match| layer_match.is_complete()),
+                differences: layer_match
+                    .map(|layer_match| {
+                        layer_match
                             .differences()
                             .iter()
                             .map(format_difference)
@@ -586,26 +585,26 @@ fn bounds_for_contours(contours: &[ResolvedContour]) -> Option<Bounds> {
 
 fn format_difference(difference: &LayerDifference) -> String {
     match difference {
-        LayerDifference::PathCount { reference, source } => {
+        LayerDifference::ContourCount { reference, source } => {
             format!("path count: reference {reference}, source {source}")
         }
-        LayerDifference::PathClosed {
-            path,
+        LayerDifference::ContourClosed {
+            contour,
             reference,
             source,
-        } => format!("path {path} closed: reference {reference}, source {source}"),
-        LayerDifference::NodeCount {
-            path,
+        } => format!("path {contour} closed: reference {reference}, source {source}"),
+        LayerDifference::PointCount {
+            contour,
             reference,
             source,
-        } => format!("path {path} node count: reference {reference}, source {source}"),
-        LayerDifference::NodeKind {
-            path,
-            node,
+        } => format!("path {contour} node count: reference {reference}, source {source}"),
+        LayerDifference::PointType {
+            contour,
+            point,
             reference,
             source,
         } => format!(
-            "path {path} node {node} kind: reference {}, source {}",
+            "path {contour} node {point} kind: reference {}, source {}",
             point_type_name(*reference),
             point_type_name(*source)
         ),

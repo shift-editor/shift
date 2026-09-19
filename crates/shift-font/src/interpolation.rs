@@ -15,11 +15,11 @@ use crate::{
     SourceId,
 };
 
-mod compatibility;
+mod layer_match;
 mod metrics;
 mod values;
 
-pub use compatibility::{LayerCompatibility, LayerDifference};
+pub use layer_match::{LayerDifference, LayerMatch};
 pub use metrics::{
     ResolvedSourceMetrics, SourceMetricField, SourceMetricInterpolation, SourceMetricValues,
 };
@@ -336,10 +336,7 @@ impl Font {
             let Some(layer) = glyph.layer_for_source(source.id()) else {
                 continue;
             };
-            if !reference_layer
-                .interpolation_compatibility_with(layer)
-                .is_compatible()
-            {
+            if !reference_layer.match_with(layer).is_complete() {
                 continue;
             }
 
@@ -652,9 +649,7 @@ mod tests {
             .unwrap();
         point.set_smooth(!point.is_smooth());
 
-        assert!(reference_layer
-            .interpolation_compatibility_with(&candidate)
-            .is_compatible());
+        assert!(reference_layer.match_with(&candidate).is_complete());
     }
 
     #[test]
