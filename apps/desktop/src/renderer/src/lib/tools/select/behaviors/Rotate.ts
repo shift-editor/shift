@@ -1,10 +1,11 @@
 import { Bounds, Vec2 } from "@shift/geo";
 import type { ToolContext } from "../../core/Behavior";
 import type { Editor } from "@/lib/editor/Editor";
-import type { DragEvent, DragStartEvent } from "../../core/GestureDetector";
+import type { DragEvent, DragStartEvent, ToolEvent } from "../../core/GestureDetector";
 import type { SelectBehavior, SelectState } from "../types";
 import type { Select } from "../Select";
-import { PositionEdits, PositionList, type RotateEdit } from "@/lib/model/positions";
+import { AngleSnap, PositionEdits, PositionList, type RotateEdit } from "@/lib/model/positions";
+import type { PositionCondition } from "@/types/positionEdit";
 
 export class Rotate implements SelectBehavior {
   #edit: RotateEdit | null = null;
@@ -56,7 +57,12 @@ export class Rotate implements SelectBehavior {
     return true;
   }
 
-  onStateEnter(prev: SelectState, next: SelectState, ctx: ToolContext<SelectState, Select>): void {
+  onStateEnter(
+    prev: SelectState,
+    next: SelectState,
+    ctx: ToolContext<SelectState, Select>,
+    event: ToolEvent,
+  ): void {
     const editor = ctx.editor;
     if (prev.type !== "rotating" && next.type === "rotating") {
       // editor.setHandlesVisible(false);
@@ -67,6 +73,17 @@ export class Rotate implements SelectBehavior {
       this.#cleanup();
       // editor.setHandlesVisible(true);
     }
+
+    if (next.type !== "rotating" || event.type !== "drag" || !this.#edit) return;
+
+    const deltaAngle = this.#edit.preview(next.rotate.currentAngle - next.rotate.startAngle);
+    ctx.setState({
+      ...next,
+      rotate: {
+        ...next.rotate,
+        currentAngle: next.rotate.startAngle + deltaAngle,
+      },
+    });
   }
 
   #cleanup(): void {
@@ -81,16 +98,14 @@ export class Rotate implements SelectBehavior {
     if (!this.#edit) return state;
 
     const currentPos = event.coords.scene;
-    const rawAngle = Vec2.angleTo(state.rotate.center, currentPos);
-    const deltaAngle = this.#edit.preview(rawAngle - state.rotate.startAngle);
-    const currentAngle = state.rotate.startAngle + deltaAngle;
 
     return {
       type: "rotating",
       rotate: {
         ...state.rotate,
         lastPos: currentPos,
-        currentAngle,
+        currentAngle: Vec2.angleTo(state.rotate.center, currentPos),
+        shiftKey: event.shiftKey,
       },
     };
   }
@@ -114,7 +129,15 @@ export class Rotate implements SelectBehavior {
     const center = hit.center;
     const startAngle = Vec2.angleTo(center, event.origin.scene);
 
-    this.#edit = PositionEdits.fromSelection(selection).rotate(selection.targets, localCenter);
+    const condition: PositionCondition = {
+      when: () => {
+        const state = tool.getState();
+        return state.type === "rotating" && state.rotate.shiftKey;
+      },
+    };
+    this.#edit = PositionEdits.fromSelection(selection)
+      .rotate(selection.targets, localCenter)
+      .angleSnappedBy(AngleSnap.everyDegrees(15, condition));
 
     return {
       type: "rotating",
@@ -125,6 +148,7 @@ export class Rotate implements SelectBehavior {
         center,
         startAngle,
         currentAngle: startAngle,
+        shiftKey: event.shiftKey,
       },
     };
   }
