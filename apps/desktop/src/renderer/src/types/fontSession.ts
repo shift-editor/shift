@@ -1,5 +1,5 @@
-import type { Editor } from "@shift/editor/lib/editor/Editor";
-import type { Font } from "@shift/editor/lib/model/Font";
+import type { Editor } from "@shift/editor";
+import type { Font } from "@shift/editor/model";
 import type { GlyphCatalog } from "@/lib/catalog/GlyphCatalog";
 import type { Workspace } from "@/workspace/Workspace";
 

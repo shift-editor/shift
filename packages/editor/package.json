@@ -11,13 +11,45 @@
       "types": "./src/index.ts",
       "import": "./src/index.ts"
     },
-    "./lib/*": {
-      "types": "./src/lib/*.ts",
-      "import": "./src/lib/*.ts"
+    "./clipboard": {
+      "types": "./src/clipboard.ts",
+      "import": "./src/clipboard.ts"
     },
-    "./types/*": {
-      "types": "./src/types/*.ts",
-      "import": "./src/types/*.ts"
+    "./model": {
+      "types": "./src/model.ts",
+      "import": "./src/model.ts"
+    },
+    "./rendering": {
+      "types": "./src/rendering.ts",
+      "import": "./src/rendering.ts"
+    },
+    "./signals": {
+      "types": "./src/signals.ts",
+      "import": "./src/signals.ts"
+    },
+    "./testing": {
+      "types": "./src/testing/index.ts",
+      "import": "./src/testing/index.ts"
+    },
+    "./text": {
+      "types": "./src/text.ts",
+      "import": "./src/text.ts"
+    },
+    "./tools": {
+      "types": "./src/tools.ts",
+      "import": "./src/tools.ts"
+    },
+    "./transform": {
+      "types": "./src/transform.ts",
+      "import": "./src/transform.ts"
+    },
+    "./types": {
+      "types": "./src/types.ts",
+      "import": "./src/types.ts"
+    },
+    "./variation": {
+      "types": "./src/variation.ts",
+      "import": "./src/variation.ts"
     }
   },
   "scripts": {
@@ -39,7 +71,6 @@
     "react": "^19.1.0"
   },
   "devDependencies": {
-    "@types/node": "^25.3.0",
     "@types/react": "^19.1.8",
     "oxlint": "^1.58.0",
     "oxlint-plugin-eslint": "^1.58.0",

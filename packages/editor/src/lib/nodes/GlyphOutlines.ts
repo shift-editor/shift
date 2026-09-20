@@ -1,5 +1,5 @@
 import type { NodeId } from "@shift/types";
-import { signal, track, type WritableSignal } from "@shift/editor/lib/signals/index";
+import { signal, track, type WritableSignal } from "../signals/index";
 import type { GlyphOutlinesByNode, GlyphOutlineTarget } from "../../types/glyphOutline";
 
 /** Owns session-only variation outlines associated with glyph scene nodes. */

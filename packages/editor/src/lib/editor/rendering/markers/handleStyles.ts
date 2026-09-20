@@ -1,4 +1,4 @@
-import type { HandleState } from "@shift/editor/types/graphics";
+import type { HandleState } from "../../../../types/graphics";
 import { DEFAULT_THEME, type FirstHandleStyle } from "../Theme";
 import { parseCssColor, TRANSPARENT, type GpuColor } from "./color";
 import type { MarkerShape } from "./types";

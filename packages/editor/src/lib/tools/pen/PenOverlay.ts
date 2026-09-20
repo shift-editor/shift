@@ -7,7 +7,7 @@ import type { Pen, PenState } from "./Pen";
 import { PenStroke } from "./PenStroke";
 import { PenTargets } from "./PenTargets";
 import type { PenOverlayProps } from "./types";
-import { track } from "@shift/editor/lib/signals/index";
+import { track } from "../../signals/index";
 
 /** Draws Pen interaction chrome that is not part of glyph topology. */
 export class PenOverlay extends CanvasItem<PenOverlayProps> {

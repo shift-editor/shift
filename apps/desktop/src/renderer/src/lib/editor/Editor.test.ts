@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { mintNodeId } from "@shift/types";
 import { TestEditor } from "@/testing/TestEditor";
-import { effect } from "@shift/editor/lib/signals/index";
+import { effect } from "@shift/editor/signals";
 import { runRendererCommand } from "@/lib/commands/rendererCommands";
-import { externalAxisLocationFromRecord } from "@shift/editor/lib/variation/location";
+import { externalAxisLocationFromRecord } from "@shift/editor/variation";
 
 describe("Editor scene bootstrap", () => {
   let editor: TestEditor;

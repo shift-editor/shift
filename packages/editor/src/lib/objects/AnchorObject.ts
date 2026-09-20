@@ -1,8 +1,8 @@
 import { Bounds, Vec2, type Rect2D } from "@shift/geo";
 import type { GlyphGeometry } from "@shift/glyph-state";
 import type { AnchorId } from "@shift/types";
-import { track } from "@shift/editor/lib/signals/index";
-import type { GlyphLayer } from "@shift/editor/lib/model/Glyph";
+import { track } from "../signals/index";
+import type { GlyphLayer } from "../model/Glyph";
 import type { ShiftObjectOf } from "../../types/object";
 import type { GlyphNode } from "../../types/node";
 

@@ -1,7 +1,7 @@
 import type { ContourId } from "@shift/types";
 import type { Point } from "@shift/glyph-state";
 import type { Canvas } from "../Canvas";
-import type { GlyphRenderContour } from "@shift/editor/types/glyphRender";
+import type { GlyphRenderContour } from "../../../../types/glyphRender";
 import { Validate } from "@shift/validation";
 
 /**

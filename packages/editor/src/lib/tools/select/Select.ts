@@ -115,6 +115,7 @@ export class Select extends BaseTool<SelectState, Select> {
           case "point":
           case "segment":
           case "anchor":
+          case "component":
             this.editor.notifyPreviewMutationAttempt();
         }
 

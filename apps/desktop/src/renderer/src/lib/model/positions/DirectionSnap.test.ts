@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { PointId } from "@shift/types";
 import { TestEditor } from "@/testing/TestEditor";
-import { DirectionSnap } from "@shift/editor/lib/model/positions/DirectionSnap";
-import { PositionReference } from "@shift/editor/lib/model/positions/PositionReference";
+import { DirectionSnap } from "@shift/editor/model";
+import { PositionReference } from "@shift/editor/model";
 
 describe("direction snapping distinguishes the moving reference from its fixed pivot", () => {
   let editor: TestEditor;

@@ -10,7 +10,7 @@ import {
   MenuTrigger,
 } from "@shift/ui";
 import { getShiftHost } from "@/host/shiftHost";
-import { useSignalState } from "@shift/editor/lib/signals/index";
+import { useSignalState } from "@shift/editor/signals";
 import { useEditor } from "@/workspace/WorkspaceContext";
 
 export const ZoomMenu = () => {

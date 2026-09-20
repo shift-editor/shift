@@ -1,6 +1,6 @@
 import type { Point2D } from "@shift/geo";
 import type { Canvas } from "../Canvas";
-import type { HandleState, HandleType } from "@shift/editor/types/graphics";
+import type { HandleState, HandleType } from "../../../../types/graphics";
 import type { HandleStyle } from "../Theme";
 import { Vec2 } from "@shift/geo";
 

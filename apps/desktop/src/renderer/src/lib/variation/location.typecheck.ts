@@ -1,5 +1,5 @@
-import type { DesignAxisLocation, ExternalAxisLocation } from "@shift/editor/types/variation";
-import type { mapAxisLocation } from "@shift/editor/lib/variation/location";
+import type { DesignAxisLocation, ExternalAxisLocation } from "@shift/editor/types";
+import type { mapAxisLocation } from "@shift/editor/variation";
 
 type Equal<Left, Right> =
   (<Value>() => Value extends Left ? 1 : 2) extends <Value>() => Value extends Right ? 1 : 2

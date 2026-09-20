@@ -18,9 +18,9 @@ import {
 } from "@shift/types";
 import { segmentIdFor } from "@shift/glyph-state";
 import type { WorkspaceSnapshot } from "@shared/workspace/protocol";
-import { effect, track } from "@shift/editor/lib/signals/index";
-import { Font } from "@shift/editor/lib/model/Font";
-import { FontStore } from "@shift/editor/lib/model/FontStore";
+import { effect, track } from "@shift/editor/signals";
+import { Font } from "@shift/editor/model";
+import { FontStore } from "@shift/editor/model";
 
 const GLYPH_ID = "glyph_shared" as GlyphId;
 const SOURCE_ID = "source_regular" as SourceId;

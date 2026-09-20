@@ -2,6 +2,7 @@ import type {
   AnchorId,
   Axis,
   AxisMappingBasis,
+  ComponentId,
   ContourId,
   GlyphEntry,
   GlyphId,
@@ -20,6 +21,11 @@ import type { DesignAxisLocation } from "./variation";
 
 /** Determines whether on-curve deletion reconnects surviving endpoints or leaves a gap. */
 export type DeleteMode = "fit" | "gap";
+
+/** Identifies one filled glyph occurrence hit in front-to-back paint order. */
+export type GlyphFillHit =
+  | { readonly kind: "root" }
+  | { readonly kind: "component"; readonly componentPath: readonly ComponentId[] };
 
 /** Acquires glyph projections and lightweight previews from the session boundary. */
 export interface GlyphReader {

@@ -4,7 +4,7 @@ import type { Behavior } from "../core/Behavior";
 import type { Pen } from "./Pen";
 import type { GlyphNode } from "../../../types/node";
 import type { Coordinates } from "../../../types/coordinates";
-import type { PositionGuide } from "@shift/editor/types/positionEdit";
+import type { PositionGuide } from "../../../types/positionEdit";
 
 export type PenEndpoint =
   | {

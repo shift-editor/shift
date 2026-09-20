@@ -14,13 +14,7 @@
  * previousLine so vertical motion preserves horizontal position across short
  * lines. goalX resets on horizontal nav, click, and edits.
  */
-import {
-  signal,
-  computed,
-  track,
-  type Signal,
-  type ComputedSignal,
-} from "@shift/editor/lib/signals/signal";
+import { signal, computed, track, type Signal, type ComputedSignal } from "../signals/signal";
 import { TextBuffer } from "./TextBuffer";
 import { TextInteraction } from "./TextInteraction";
 import { Caret, glyphTextItem, TextLayout } from "./layout";

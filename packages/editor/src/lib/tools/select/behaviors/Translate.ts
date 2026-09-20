@@ -1,13 +1,14 @@
-import { Bounds, Vec2, type Point2D } from "@shift/geo";
+import { Bounds, Mat, Vec2, type Point2D } from "@shift/geo";
 import { Point, type Segment } from "@shift/glyph-state";
 
 import type { ToolContext } from "../../core/Behavior";
 import type { Editor } from "../../../editor/Editor";
-import type { GlyphLayerPositionTarget } from "@shift/editor/lib/model/Glyph";
+import type { GlyphLayerPositionTarget } from "../../../model/Glyph";
+import type { ComponentTransformEdit } from "../../../model/ComponentTransformEdit";
 import type { DragEvent, DragStartEvent, ToolEvent } from "../../core/GestureDetector";
-import { DirectionSnap, PositionReference } from "@shift/editor/lib/model/positions/index";
+import { DirectionSnap, PositionReference } from "../../../model/positions";
 import { objectIsKindOf, type ShiftObjectOf } from "../../../../types/object";
-import type { PositionCondition } from "@shift/editor/types/positionEdit";
+import type { PositionCondition } from "../../../../types/positionEdit";
 import type { SelectBehavior, SelectState } from "../types";
 import type { Select } from "../Select";
 import { TranslateInteraction } from "../TranslateInteraction";
@@ -16,6 +17,7 @@ type TranslatingState = Extract<SelectState, { type: "translating" }>;
 
 export class Translate implements SelectBehavior {
   #drag: TranslateInteraction | null = null;
+  #componentEdit: ComponentTransformEdit | null = null;
   #done: (() => void) | null = null;
 
   onDragStart(
@@ -25,21 +27,26 @@ export class Translate implements SelectBehavior {
   ): boolean {
     if (state.type !== "idle" && state.type !== "ready") return false;
 
-    const drag = this.#fromDragStart(ctx.editor, ctx.tool, event);
-    if (!drag) return false;
+    const componentEdit = this.#fromComponentDragStart(ctx.editor, ctx.tool, event);
+    const drag = componentEdit ? null : this.#fromDragStart(ctx.editor, ctx.tool, event);
+    if (!drag && !componentEdit) return false;
 
     this.#drag = drag;
-    this.#done = ctx.onCancel(() => drag.discard());
-    ctx.setState(translatingState(this.#drag.startPos, event.shiftKey));
+    this.#componentEdit = componentEdit;
+    this.#done = ctx.onCancel(() => {
+      drag?.discard();
+      componentEdit?.discard();
+    });
+    ctx.setState(translatingState(event.origin.scene, event.shiftKey));
 
-    if (!event.altKey) this.#configureDirectionSnap(ctx.editor, ctx.tool, drag);
+    if (drag && !event.altKey) this.#configureDirectionSnap(ctx.editor, ctx.tool, drag);
 
     return true;
   }
 
   onDrag(state: SelectState, ctx: ToolContext<SelectState>, event: DragEvent): boolean {
     if (state.type !== "translating") return false;
-    if (!this.#drag) return false;
+    if (!this.#drag && !this.#componentEdit) return false;
 
     const nextState = this.#nextTranslatingState(state, event);
     ctx.setState(nextState);
@@ -50,6 +57,7 @@ export class Translate implements SelectBehavior {
     if (state.type !== "translating") return false;
 
     this.#drag?.commit();
+    this.#componentEdit?.commit("Move components");
     if (this.#done) this.#done();
 
     this.#cleanup();
@@ -72,9 +80,20 @@ export class Translate implements SelectBehavior {
   ): void {
     if (next.type !== "translating") return;
     if (prev.type !== "translating") ctx.editor.hover.clear();
-    if (event.type !== "drag" || !this.#drag) return;
+    if (event.type !== "drag") return;
 
-    const feedback = this.#drag.preview(Vec2.sub(next.translate.lastPos, next.translate.startPos));
+    const delta = Vec2.sub(next.translate.lastPos, next.translate.startPos);
+    if (this.#componentEdit) {
+      this.#componentEdit.preview(() => Mat.Translate(delta.x, delta.y));
+      ctx.setState({
+        ...next,
+        translate: { ...next.translate, totalDelta: delta, guides: [] },
+      });
+      return;
+    }
+    if (!this.#drag) return;
+
+    const feedback = this.#drag.preview(delta);
     ctx.setState({
       ...next,
       translate: { ...next.translate, totalDelta: feedback.delta, guides: feedback.guides },
@@ -167,7 +186,35 @@ export class Translate implements SelectBehavior {
 
   #cleanup(): void {
     this.#drag = null;
+    this.#componentEdit = null;
     this.#done = null;
+  }
+
+  #fromComponentDragStart(
+    editor: Editor,
+    select: Select,
+    event: DragStartEvent,
+  ): ComponentTransformEdit | null {
+    switch (event.target.kind) {
+      case "component":
+        if (!editor.selection.isSelected(event.target.id)) {
+          editor.selection.select([event.target.id]);
+        }
+        break;
+      case "node":
+      case "canvas":
+        if (!select.boundingBox.containsTranslationPoint(event.origin)) return null;
+        break;
+      case "point":
+      case "anchor":
+      case "segment":
+        return null;
+    }
+
+    const selection = editor.componentTransformSelection(editor.selection.ids);
+    if (!selection) return null;
+
+    return selection.layer.beginComponentTransformEdit(selection);
   }
 
   #fromDragStart(
@@ -182,6 +229,7 @@ export class Translate implements SelectBehavior {
         return this.#fromAnchorTarget(editor, event);
       case "segment":
         return this.#fromSegmentTarget(editor, event);
+      case "component":
       case "node":
       case "canvas":
         return this.#fromInsideSelectionBounds(editor, select, event);

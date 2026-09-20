@@ -1,4 +1,4 @@
-import { clamp } from "@shift/editor/lib/utils/utils";
+import { clamp } from "../utils/utils";
 
 const DOM_DELTA_LINE = 1;
 

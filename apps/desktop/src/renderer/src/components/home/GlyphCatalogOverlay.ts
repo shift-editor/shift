@@ -1,5 +1,5 @@
 import type { GlyphId } from "@shift/types";
-import { Canvas2DSurface } from "@shift/editor/lib/editor/rendering/CanvasSurface";
+import { Canvas2DSurface } from "@shift/editor/rendering";
 import { fitCanvasText } from "@/lib/graphics/canvasText";
 import type { GlyphCatalogFrame } from "@/types/glyphCatalog";
 

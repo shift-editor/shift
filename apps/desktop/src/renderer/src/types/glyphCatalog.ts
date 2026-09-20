@@ -8,8 +8,8 @@ import type {
   GlyphPreview,
   SourceId,
 } from "@shift/types";
-import type { RenderGlyph } from "@shift/editor/types/glyphRender";
-import type { ThemeName } from "@shift/editor/types/uiState";
+import type { RenderGlyph } from "@shift/editor/types";
+import type { ThemeName } from "@shift/editor/types";
 import type { GlyphAtlasSource } from "./glyphAtlas";
 
 export type GlyphCatalogCellArea = "preview" | "name";

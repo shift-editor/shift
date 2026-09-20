@@ -1,7 +1,7 @@
 use crate::{
-    Anchor, AnchorId, Axis, AxisId, AxisMapping, Contour, ContourId, FontMetadata, Glyph, GlyphId,
-    GlyphLayer, GlyphName, LayerId, MetricDefinition, NamedInstance, Point, PointId, PointType,
-    Source, SourceId,
+    Anchor, AnchorId, Axis, AxisId, AxisMapping, Component, Contour, ContourId, FontMetadata,
+    Glyph, GlyphId, GlyphLayer, GlyphName, LayerId, MetricDefinition, NamedInstance, Point,
+    PointId, PointType, Source, SourceId,
 };
 
 #[derive(Clone, Debug, Default)]
@@ -58,6 +58,8 @@ pub enum FontChange {
     PointPositionsChanged(PointPositionsChanged),
     AnchorPositionsChanged(AnchorPositionsChanged),
     LayerGeometryReplaced(LayerGeometryReplaced),
+    /// A component edit replaced the complete layer and its directory dependency edges.
+    LayerComponentsReplaced(LayerGeometryReplaced),
 }
 
 impl FontChange {
@@ -202,6 +204,14 @@ impl FontChange {
         })
     }
 
+    /// Builds a complete layer replacement whose component dependency edges changed.
+    pub fn layer_components_replaced(layer: &GlyphLayer) -> Self {
+        Self::LayerComponentsReplaced(LayerGeometryReplaced {
+            layer_id: layer.id(),
+            layer: GlyphLayerValue::from(layer),
+        })
+    }
+
     /// Layer identity touched by a payload-affecting change.
     ///
     /// Workspace persistence uses this exhaustive match as a safety boundary:
@@ -219,7 +229,9 @@ impl FontChange {
             Self::PointSmoothChanged(change) => Some(&change.layer_id),
             Self::PointPositionsChanged(change) => Some(&change.layer_id),
             Self::AnchorPositionsChanged(change) => Some(&change.layer_id),
-            Self::LayerGeometryReplaced(change) => Some(&change.layer_id),
+            Self::LayerGeometryReplaced(change) | Self::LayerComponentsReplaced(change) => {
+                Some(&change.layer_id)
+            }
             Self::FontMetadataUpdated(_)
             | Self::AxisCreated(_)
             | Self::AxisUpdated(_)
@@ -455,6 +467,7 @@ pub struct GlyphLayerValue {
     pub height: Option<f64>,
     pub contours: Vec<ContourValue>,
     pub anchors: Vec<AnchorValue>,
+    pub components: Vec<Component>,
 }
 
 impl From<&GlyphLayer> for GlyphLayerValue {
@@ -468,6 +481,7 @@ impl From<&GlyphLayer> for GlyphLayerValue {
                 .enumerate()
                 .map(|(order_index, anchor)| AnchorValue::from_anchor(order_index, anchor))
                 .collect(),
+            components: layer.components_iter().cloned().collect(),
         }
     }
 }

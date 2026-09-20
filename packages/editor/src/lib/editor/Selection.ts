@@ -1,6 +1,6 @@
-import { computed, type Signal } from "@shift/editor/lib/signals/signal";
+import { computed, type Signal } from "../signals/signal";
 import type { ShiftStore } from "../store/ShiftStore";
-import { uniqueInOrder } from "@shift/editor/lib/utils/utils";
+import { uniqueInOrder } from "../utils/utils";
 import { currentSelectionId, type SelectableId } from "../../types/object";
 import type { ShiftEditorRecord } from "../../types/records";
 

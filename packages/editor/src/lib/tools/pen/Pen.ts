@@ -14,9 +14,9 @@ import {
   type ComputedSignal,
   type Signal,
   type WritableSignal,
-} from "@shift/editor/lib/signals/index";
+} from "../../signals/index";
 import { PenStroke } from "./PenStroke";
-import { DirectionSnap } from "@shift/editor/lib/model/positions/index";
+import { DirectionSnap } from "../../model/positions/index";
 
 export type { PenState };
 

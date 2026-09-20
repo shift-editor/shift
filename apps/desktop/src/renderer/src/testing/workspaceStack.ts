@@ -5,8 +5,8 @@ import { MessageChannel, type MessagePort as NodeMessagePort } from "node:worker
 import { Channel, nodePortTransport } from "@shared/workspace/channel";
 import type { ShellCallMap, ShellEventMap } from "@shared/workspace/protocol";
 import { WorkspaceHost } from "../../../utility/workspace/WorkspaceHost";
-import { Font } from "@shift/editor/lib/model/Font";
-import { FontStore } from "@shift/editor/lib/model/FontStore";
+import { Font } from "@shift/editor/model";
+import { FontStore } from "@shift/editor/model";
 import { FontSessionClient } from "@/lib/workspace/FontSessionClient";
 import { WorkspaceEditCoordinator } from "@/lib/workspace/WorkspaceEditCoordinator";
 import { getGlyphInfo } from "@/workspace/glyphInfo";

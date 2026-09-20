@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { Point } from "@shift/glyph-state";
 import type { ContourId, GlyphState, LayerId, PointId, Source, SourceId } from "@shift/types";
 import { TestEditor } from "@/testing/TestEditor";
-import { GlyphLayer } from "@shift/editor/lib/model/Glyph";
-import { GlyphLayerState } from "@shift/editor/lib/model/GlyphLayerState";
+import { GlyphLayer } from "@shift/editor/model";
+import { GlyphLayerState } from "@shift/editor/model";
 
 describe("local glyph layer position edits", () => {
   it("retains a finished position edit without a workspace", () => {

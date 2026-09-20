@@ -1,4 +1,4 @@
-import { signal, type Signal, type WritableSignal } from "@shift/editor/lib/signals/index";
+import { signal, type Signal, type WritableSignal } from "../signals/index";
 import type { ShiftRecord } from "../../types/records";
 
 export class ShiftStore<R extends ShiftRecord = ShiftRecord> {

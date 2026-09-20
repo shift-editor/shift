@@ -11,9 +11,9 @@
  * change sets; until then the editor surface under test is tool/input state.
  */
 
-import { Editor } from "@shift/editor/lib/editor/Editor";
-import type { Glyph, GlyphRenderModel, GlyphLayer } from "@shift/editor/lib/model/Glyph";
-import type { ToolName } from "@shift/editor/lib/tools/core/index";
+import { Editor } from "@shift/editor";
+import type { Glyph, GlyphRenderModel, GlyphLayer } from "@shift/editor/model";
+import type { ToolName } from "@shift/editor/tools";
 import { registerBuiltInTools } from "@/lib/tools/tools";
 import type { Point2D } from "@shift/geo";
 import {
@@ -28,9 +28,9 @@ import {
   type Unicode,
 } from "@shift/types";
 import type { Contour } from "@shift/glyph-state";
-import type { SystemClipboard } from "@shift/editor/lib/clipboard/index";
+import type { SystemClipboard } from "@shift/editor/clipboard";
 import { createWorkspaceStack, type WorkspaceStack } from "./workspaceStack";
-import type { GlyphNode } from "@shift/editor/types/node";
+import type { GlyphNode } from "@shift/editor/types";
 import type { FontSessionMode, WorkspaceDocumentState } from "@shared/workspace/protocol";
 
 const DEFAULT_MODIFIERS = { shiftKey: false, altKey: false, metaKey: false };

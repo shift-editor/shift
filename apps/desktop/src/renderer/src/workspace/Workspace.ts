@@ -1,17 +1,17 @@
 import type { GlyphInfo } from "@shift/glyph-info";
 import type { ShiftHost } from "@shared/host/ShiftHost";
 import type { WorkspaceDocumentState } from "@shared/workspace/protocol";
-import type { SystemClipboard } from "@shift/editor/lib/clipboard/index";
-import { Editor } from "@shift/editor/lib/editor/Editor";
-import { Font } from "@shift/editor/lib/model/Font";
-import { FontStore } from "@shift/editor/lib/model/FontStore";
+import type { SystemClipboard } from "@shift/editor/clipboard";
+import { Editor } from "@shift/editor";
+import { Font } from "@shift/editor/model";
+import { FontStore } from "@shift/editor/model";
 import { registerBuiltInTools } from "@/lib/tools/tools";
 import type { FontSessionClient } from "@/lib/workspace/FontSessionClient";
 import {
   WorkspaceEditCoordinator,
   type WorkspaceApplyStatus,
 } from "@/lib/workspace/WorkspaceEditCoordinator";
-import type { Signal } from "@shift/editor/lib/signals/signal";
+import type { Signal } from "@shift/editor/signals";
 import { WorkspaceDocumentBridge } from "./WorkspaceDocumentBridge";
 
 export interface WorkspaceOptions {

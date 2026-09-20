@@ -23,13 +23,13 @@ export type {
   ScaleOptions,
   AlignmentType,
   DistributeType,
-} from "@shift/editor/lib/transform/types";
+} from "./types";
 
 // Pure transform functions
-export { Transform } from "@shift/editor/lib/transform/Transform";
+export { Transform } from "./Transform";
 
 // Alignment utilities
-export { Alignment } from "@shift/editor/lib/transform/Alignment";
+export { Alignment } from "./Alignment";
 
 // Anchor utilities
 export { anchorToPoint } from "./anchor";

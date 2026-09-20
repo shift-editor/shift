@@ -6,7 +6,7 @@ import { Sources } from "./Sources";
 import { OutlineVisibilityButton } from "./OutlineVisibilityButton";
 import { useActiveSourceId } from "@/hooks/useActiveSourceId";
 import { useSources } from "@/hooks/useSources";
-import type { GlyphOutlineControls, GlyphOutlineTarget } from "@shift/editor/types/glyphOutline";
+import type { GlyphOutlineControls, GlyphOutlineTarget } from "@shift/editor/types";
 import { useFontSession } from "@/workspace/WorkspaceContext";
 import PlusIcon from "@/assets/general/plus.svg";
 

@@ -5,7 +5,7 @@ import type { CornerHandle } from "./BoundingBox";
 import type { Behavior } from "../core/Behavior";
 import type { Select } from "./Select";
 import type { SegmentId } from "../../../types/indicator";
-import type { PositionGuide } from "@shift/editor/types/positionEdit";
+import type { PositionGuide } from "../../../types/positionEdit";
 
 export interface DragTarget {
   pointIds: PointId[];

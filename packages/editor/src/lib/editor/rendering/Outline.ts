@@ -1,4 +1,4 @@
-import type { GlyphOutline } from "@shift/editor/types/glyphRender";
+import type { GlyphOutline } from "../../../types/glyphRender";
 import type { Canvas } from "./Canvas";
 
 export interface OutlineStroke {

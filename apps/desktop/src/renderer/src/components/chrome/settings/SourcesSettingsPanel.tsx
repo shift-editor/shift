@@ -7,7 +7,7 @@ import PlusIcon from "@/assets/general/plus.svg";
 import { SidebarActionButton, SidebarActionRow } from "@/components/sidebar/SidebarActionRow";
 import { CreateSourceMenu } from "@/components/variation/CreateSourceMenu";
 import { useAxes } from "@/hooks/useAxes";
-import { useSignalState } from "@shift/editor/lib/signals/index";
+import { useSignalState } from "@shift/editor/signals";
 import { useFont } from "@/workspace/WorkspaceContext";
 import { SettingsNumberField } from "./SettingsNumberField";
 import { useSettingsForm } from "./useSettingsForm";

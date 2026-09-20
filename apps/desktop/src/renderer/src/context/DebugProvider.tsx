@@ -1,5 +1,4 @@
 import { useCallback, useEffect, type ReactNode } from "react";
-import { isDev } from "@shift/editor/lib/utils/utils";
 import { useFontSession } from "@/workspace/WorkspaceContext";
 import { DEFAULT_DEBUG_OVERLAYS, DebugContext } from "./DebugContext";
 
@@ -21,7 +20,7 @@ export function DebugProvider({ children }: DebugProviderProps) {
     workspace?.editor.setDebugOverlays(overlays);
   }, [overlays, workspace]);
 
-  if (!isDev) {
+  if (!import.meta.env.DEV) {
     return <>{children}</>;
   }
 

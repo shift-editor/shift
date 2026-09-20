@@ -2,7 +2,7 @@ import { Vec2 } from "@shift/geo";
 import type { ToolContext } from "../../core/Behavior";
 import type { DragEvent, DragStartEvent } from "../../core/GestureDetector";
 import type { SelectBehavior, SelectState } from "../types";
-import type { GlyphLayerEdit } from "@shift/editor/lib/model/GlyphLayerEdit";
+import type { GlyphLayerEdit } from "../../../model/GlyphLayerEdit";
 import { objectIsKindOf } from "../../../../types/object";
 
 export class BendCurve implements SelectBehavior {

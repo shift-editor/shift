@@ -14,7 +14,7 @@ import {
   type Signal,
   type WritableSignal,
   type ComputedSignal,
-} from "@shift/editor/lib/signals/signal";
+} from "../signals/signal";
 import { TextRun } from "./TextRun";
 import type { FocusedGlyph } from "./TextRun";
 import type { Positioner } from "./layout";

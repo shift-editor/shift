@@ -1,9 +1,4 @@
-import {
-  computed,
-  signal,
-  type Signal,
-  type WritableSignal,
-} from "@shift/editor/lib/signals/index";
+import { computed, signal, type Signal, type WritableSignal } from "../signals/index";
 import type { SelectableId } from "../../types/object";
 
 export type HoverEntry = SelectableId;

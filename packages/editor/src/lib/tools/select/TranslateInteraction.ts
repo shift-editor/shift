@@ -1,12 +1,12 @@
 import type { Point2D } from "@shift/geo";
-import type { GlyphLayerPositionTarget } from "@shift/editor/lib/model/Glyph";
+import type { GlyphLayerPositionTarget } from "../../model/Glyph";
 import {
   PointRuleConstraint,
   PositionEdits,
   PositionReference,
   type MoveEdit,
-} from "@shift/editor/lib/model/positions/index";
-import type { PositionFeedback, PositionSelection } from "@shift/editor/types/positionEdit";
+} from "../../model/positions/index";
+import type { PositionFeedback, PositionSelection } from "../../../types/positionEdit";
 
 export class TranslateInteraction {
   readonly move: MoveEdit;

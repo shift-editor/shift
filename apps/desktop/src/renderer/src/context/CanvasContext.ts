@@ -1,5 +1,5 @@
 import { createContext } from "react";
-import type { CanvasRef } from "@shift/editor/types/graphics";
+import type { CanvasRef } from "@shift/editor/types";
 
 interface CanvasContextValue {
   markerCanvasRef: CanvasRef;

@@ -5,7 +5,7 @@ import { NavigationPane } from "./NavigationPane";
 import { Titlebar } from "./Titlebar";
 import { ToolsPane } from "@/components/editor/ToolsPane";
 import { useDocumentChromeState } from "@/hooks/useDocumentChromeState";
-import { useSignalState } from "@shift/editor/lib/signals/index";
+import { useSignalState } from "@shift/editor/signals";
 import { useFont } from "@/workspace/WorkspaceContext";
 import type { ToolbarProps } from "@/types/chrome";
 

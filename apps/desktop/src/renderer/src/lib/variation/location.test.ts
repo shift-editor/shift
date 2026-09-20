@@ -6,7 +6,7 @@ import {
   externalAxisLocationForDesignLocation,
   externalAxisLocationFromRecord,
   mapAxisLocation,
-} from "@shift/editor/lib/variation/location";
+} from "@shift/editor/variation";
 import type {
   CoordinateSpacesRemainDistinct,
   MappingAcceptsExternalLocation,

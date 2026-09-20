@@ -6,7 +6,7 @@ import { ScaleSection } from "./sidebar-right/ScaleSection";
 import { ZoomMenu } from "./sidebar-right/ZoomMenu";
 import { TransformOriginProvider } from "@/context/TransformOriginContext";
 import { useEditor, useFontSession } from "@/workspace/WorkspaceContext";
-import { useSignalState } from "@shift/editor/lib/signals/index";
+import { useSignalState } from "@shift/editor/signals";
 import { GlyphSection } from "./sidebar-right/GlyphSection";
 import { AnchorSection } from "./sidebar-right/AnchorSection";
 import { HandleSection } from "./sidebar-right/HandleSection";

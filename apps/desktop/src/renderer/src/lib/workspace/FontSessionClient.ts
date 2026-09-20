@@ -29,7 +29,7 @@ import type {
   Location,
   SlugAtlas,
 } from "@shift/types";
-import { signal } from "@shift/editor/lib/signals/signal";
+import { signal } from "@shift/editor/signals";
 
 /**
  * Renderer side of the workspace sync lane.

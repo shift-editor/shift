@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { zoomMultiplierFromWheel } from "@shift/editor/lib/transform/zoomFromWheel";
+import { zoomMultiplierFromWheel } from "@shift/editor/transform";
 
 const DOM_DELTA_PIXEL = 0;
 const DOM_DELTA_LINE = 1;

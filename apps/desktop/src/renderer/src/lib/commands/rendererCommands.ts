@@ -1,8 +1,8 @@
 import type { EditorCommandId } from "@shared/commands";
 import type { ContourId } from "@shift/types";
-import type { Editor } from "@shift/editor/lib/editor/Editor";
+import type { Editor } from "@shift/editor";
 import { electronSystemClipboard } from "@/lib/clipboard/electronSystemClipboard";
-import { objectIsKindOf } from "@shift/editor/types/object";
+import { objectIsKindOf } from "@shift/editor/types";
 
 const TEXT_EDIT_COMMANDS = new Set<EditorCommandId>([
   "edit.undo",
@@ -107,6 +107,7 @@ export async function runRendererCommand(editor: Editor, id: EditorCommandId): P
             break;
 
           case "anchor":
+          case "component":
           case "node":
             break;
         }

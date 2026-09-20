@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SourceMetrics } from "@shift/types";
-import { MetricSnap } from "@shift/editor/lib/model/positions/MetricSnap";
+import { MetricSnap } from "@shift/editor/model";
 
 const metrics: SourceMetrics = {
   unitsPerEm: 1000,

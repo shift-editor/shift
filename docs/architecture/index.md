@@ -67,7 +67,7 @@ Central routing table for Shift's distributed documentation. Before creating new
 
 These modules have stricter change rules. Changes affect multiple layers and require `pnpm typecheck` to validate.
 
-- **`@shift/editor`** (`packages/editor/`) — browser-safe font model, editor, tools, and rendering runtime. It must not import Electron, native bridge modules, desktop host modules, or persistence adapters.
+- **`@shift/editor`** (`packages/editor/`) — browser-safe font model, editor, tools, and rendering runtime. It must not import Electron, native bridge modules, desktop host modules, persistence adapters, or its own package name. Internal modules use relative imports; consumers use the explicit root, clipboard, model, rendering, signals, testing, text, tools, transform, types, and variation exports.
 - **`@shift/types/bridge`** (`packages/types/src/bridge/`) — generated bridge DTO facade sourced from `crates/shift-bridge/index.d.ts`.
 - **`shared/workspace/protocol.ts`** — typed shell and renderer/utility session lanes. Changes affect main, utility, and renderer processes.
 - **`WorkspaceHost`** (`apps/desktop/src/utility/workspace/WorkspaceHost.ts`) — utility-process owner of the native bridge.

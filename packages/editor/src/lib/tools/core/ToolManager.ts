@@ -13,7 +13,7 @@ import type { BaseTool } from "./BaseTool";
 import type { Canvas } from "../../editor/rendering/Canvas";
 import type { ToolManifest } from "./ToolManifest";
 import { ToolRegistration } from "./ToolRegistration";
-import { signal, type Signal, type WritableSignal } from "@shift/editor/lib/signals/index";
+import { signal, type Signal, type WritableSignal } from "../../signals/index";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ToolInstance = BaseTool<any, any, any>;

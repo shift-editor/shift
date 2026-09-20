@@ -1,6 +1,6 @@
 import type { Source } from "@shift/types";
 import { useFont } from "@/workspace/WorkspaceContext";
-import { useSignalState } from "@shift/editor/lib/signals/index";
+import { useSignalState } from "@shift/editor/signals";
 
 /**
  * Variation sources/masters, or empty array when the font is not variable.

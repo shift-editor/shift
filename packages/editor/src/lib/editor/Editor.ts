@@ -3,6 +3,7 @@ import type { FontSessionMode } from "@shift/types";
 import {
   isAnchorId,
   isContourId,
+  isComponentId,
   isNodeId,
   isPointId,
   type AnchorId,
@@ -17,14 +18,14 @@ import {
   type LayerMatch,
 } from "@shift/types";
 import { isSegmentId, type SegmentId } from "@shift/glyph-state";
-import type { ExternalAxisLocation } from "@shift/editor/types/variation";
+import type { ExternalAxisLocation } from "../../types/variation";
 import type { SourceSelectionMode } from "../../types/sourceSelection";
 import type { Coordinates, NodePoint, ScenePoint } from "../../types/coordinates";
 import {
   axisValue,
   cloneExternalAxisLocation,
   emptyExternalAxisLocation,
-} from "@shift/editor/lib/variation/location";
+} from "../variation/location";
 import type { ActiveTool, ToolName, ToolRegistration } from "../tools/core";
 import { ToolManager } from "../tools/core/ToolManager";
 import { Bounds, Vec2, type Bounds as BoundsType, type Point2D, type Rect2D } from "@shift/geo";
@@ -39,7 +40,7 @@ import {
   type Effect,
   type Signal,
   type WritableSignal,
-} from "@shift/editor/lib/signals/signal";
+} from "../signals/signal";
 import {
   Clipboard,
   ClipboardSelection,
@@ -57,10 +58,10 @@ import type { DebugOverlays } from "../../types/uiState";
 import type { TemporaryToolOptions } from "../../types/editor";
 import { Editing } from "./Editing";
 import { Selection } from "./Selection";
-import type { Font } from "@shift/editor/lib/model/Font";
-import type { FontStore } from "@shift/editor/lib/model/FontStore";
-import type { Glyph, GlyphLayer } from "@shift/editor/lib/model/Glyph";
-import type { DeleteMode, GlyphGeometrySelection } from "@shift/editor/types/glyph";
+import type { Font } from "../model/Font";
+import type { FontStore } from "../model/FontStore";
+import type { Glyph, GlyphLayer } from "../model/Glyph";
+import type { DeleteMode, GlyphGeometrySelection } from "../../types/glyph";
 import type { Modifiers } from "../tools/core/GestureDetector";
 import { Text } from "../text/Text";
 import { TextRuns } from "../text/TextRuns";
@@ -74,11 +75,19 @@ import { EventEmitter } from "./lifecycle";
 import { ShiftStore } from "../store/ShiftStore";
 import { EditorGesture, EditorInput, EditorViewState } from "./EditorState";
 import type { PointerTarget } from "../../types/target";
+import type { ComponentTransformSelection } from "../../types/componentTransform";
 import type { PositionSelection } from "../../types/positionEdit";
 import type { SelectableId, ShiftId, ShiftObject } from "../../types/object";
 import type { ShiftEditorRecord } from "../../types/records";
 import type { GlyphNode, NodeKind } from "../../types/node";
-import { AnchorObject, ContourObject, NodeObject, PointObject, SegmentObject } from "../objects";
+import {
+  AnchorObject,
+  ComponentObject,
+  ContourObject,
+  NodeObject,
+  PointObject,
+  SegmentObject,
+} from "../objects";
 import type { NodeDefinition } from "../nodes/NodeDefinition";
 import { GlyphNodeDefinition } from "../nodes/GlyphNodeDefinition";
 import { TextRunNodeDefinition } from "../nodes/TextRunNodeDefinition";
@@ -647,6 +656,23 @@ export class Editor {
       return null;
     }
 
+    if (isComponentId(id)) {
+      for (const node of this.scene.nodesOfKind("glyph")) {
+        const glyph = this.glyphForId(node.glyphId);
+        const renderModel = glyph?.renderModelAt(
+          this.externalLocationCell,
+          this.activeSourceIdCell,
+        );
+        const component = renderModel?.componentAt([id]);
+        if (!glyph || !component) continue;
+
+        const layer =
+          node.sourceId === this.activeSourceId ? glyph.layerForSource(node.sourceId) : null;
+        return new ComponentObject(component, node, layer);
+      }
+      return null;
+    }
+
     return null;
   }
 
@@ -680,6 +706,48 @@ export class Editor {
     }
 
     return owner === null ? null : this.#layerForId(owner);
+  }
+
+  /**
+   * Resolves direct components into reference and matched-layer transform targets.
+   *
+   * @remarks
+   * Every selected source must have a complete precomputed component match.
+   * Bounds are captured in each source's glyph-local coordinates so scale and
+   * rotation can use corresponding pivots without workspace reads during drag.
+   *
+   * @param ids - Selected direct component identities.
+   * @returns The complete component selection, or `null` when any source cannot participate.
+   */
+  public componentTransformSelection(
+    ids: readonly SelectableId[],
+  ): ComponentTransformSelection | null {
+    const objects = this.objects(ids);
+    if (objects.length === 0 || objects.length !== ids.length) return null;
+
+    const components: ComponentObject[] = [];
+    for (const object of objects) {
+      if (object.kind !== "component") return null;
+
+      components.push(object);
+    }
+
+    const layer = components[0]?.layer;
+    const nodeId = components[0]?.node.id;
+    const sourceId = this.activeSourceId;
+    if (!layer || !nodeId || !sourceId || layer.sourceId !== sourceId) return null;
+    if (components.some((component) => component.layer !== layer || component.node.id !== nodeId)) {
+      return null;
+    }
+
+    const bounds = Bounds.unionAll(components.map((component) => component.component.bounds));
+    if (!bounds) return null;
+
+    return this.#multiSourceEditing.resolveComponents({
+      layer,
+      componentIds: components.map((component) => component.componentId),
+      bounds: Bounds.toRect(bounds),
+    });
   }
 
   /**
@@ -719,6 +787,7 @@ export class Editor {
           for (const point of contour.points) points.add(point.id);
           break;
         }
+        case "component":
         case "node":
           return null;
       }
@@ -1485,6 +1554,7 @@ export class Editor {
           break;
         }
         case "anchor":
+        case "component":
         case "node":
           return null;
       }

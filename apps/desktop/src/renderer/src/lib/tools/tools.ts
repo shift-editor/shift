@@ -5,15 +5,15 @@ import SelectIcon from "@/assets/toolbar/select.svg";
 import ShapeIcon from "@/assets/toolbar/shape.svg";
 import TextIcon from "@/assets/toolbar/text.svg";
 
-import type { Editor } from "@shift/editor/lib/editor/Editor";
-import { signal } from "@shift/editor/lib/signals/index";
-import type { ToolManifest } from "@shift/editor/lib/tools/core/index";
+import type { Editor } from "@shift/editor";
+import { signal } from "@shift/editor/signals";
+import type { ToolManifest } from "@shift/editor/tools";
 
-import { Hand } from "@shift/editor/lib/tools/hand/index";
-import { Pen } from "@shift/editor/lib/tools/pen/index";
-import { Select } from "@shift/editor/lib/tools/select/index";
-import { ShapeTool, type ShapeKind } from "@shift/editor/lib/tools/shape/index";
-import { TextTool } from "@shift/editor/lib/tools/text/Text";
+import { Hand } from "@shift/editor/tools";
+import { Pen } from "@shift/editor/tools";
+import { Select } from "@shift/editor/tools";
+import { ShapeTool, type ShapeKind } from "@shift/editor/tools";
+import { TextTool } from "@shift/editor/tools";
 
 function builtInToolManifests(): readonly ToolManifest[] {
   const shapeKindCell = signal<ShapeKind>("rectangle", { name: "tool.Shape.kind" });

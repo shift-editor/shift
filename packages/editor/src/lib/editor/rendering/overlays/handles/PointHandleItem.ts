@@ -1,6 +1,6 @@
 import { Vec2, type Point2D } from "@shift/geo";
 import { Point } from "@shift/glyph-state";
-import type { HandleState } from "@shift/editor/types/graphics";
+import type { HandleState } from "../../../../../types/graphics";
 import type { MarkerShape } from "../../markers/types";
 
 export class PointHandleItem {

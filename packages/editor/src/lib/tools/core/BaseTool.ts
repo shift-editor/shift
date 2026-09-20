@@ -10,7 +10,7 @@ import {
   type ComputedSignal,
   type Signal,
   type WritableSignal,
-} from "@shift/editor/lib/signals/signal";
+} from "../../signals/signal";
 import type { CursorType } from "../../../types/editor";
 
 export type { ToolName, ToolState };

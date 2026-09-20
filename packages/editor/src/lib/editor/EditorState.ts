@@ -1,7 +1,7 @@
 import type { Coordinates } from "../../types/coordinates";
 import type { DebugOverlays } from "../../types/uiState";
 import type { Modifiers } from "../tools/core/GestureDetector";
-import { signal, type Signal, type WritableSignal } from "@shift/editor/lib/signals/index";
+import { signal, type Signal, type WritableSignal } from "../signals/index";
 
 const DEFAULT_MODIFIERS: Modifiers = {
   shiftKey: false,

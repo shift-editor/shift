@@ -180,6 +180,12 @@ export interface AddAnchorsIntent {
   anchors: Array<AnchorSeed>
 }
 
+export interface AddComponentIntent {
+  layerId: LayerId
+  componentId: ComponentId
+  baseGlyphId: GlyphId
+}
+
 export interface AddContourIntent {
   layerId: LayerId
   contourId: ContourId
@@ -422,6 +428,11 @@ export interface CreateSourceIntent {
   location: Location
 }
 
+export interface DecomposeComponentsIntent {
+  layerId: LayerId
+  componentIds: Array<ComponentId>
+}
+
 /** Font-level axis deletion. Removing an axis also reshapes source locations. */
 export interface DeleteAxisIntent {
   axisId: AxisId
@@ -446,7 +457,9 @@ export interface FontIntent {
    * Discriminator naming the populated payload field. Editing kinds:
    * "addPoints" | "addContour" | "setContourClosed" | "movePoints" |
    * "setPointSmooth" | "removePoints" | "addAnchors" | "moveAnchors" |
-   * "removeAnchors" | "reverseContour" | "setContourStart" | "translatePoints" |
+   * "removeAnchors" | "addComponent" | "setComponentTransforms" |
+   * "removeComponents" | "decomposeComponents" |
+   * "reverseContour" | "setContourStart" | "translatePoints" |
    * "setXAdvance" | "applyBooleanOp".
    * Font-level kinds additionally include metadata replacement, axis
    * create/update/delete, mapping replacement, named-instance
@@ -463,6 +476,10 @@ export interface FontIntent {
   addAnchors?: AddAnchorsIntent
   moveAnchors?: MoveAnchorsIntent
   removeAnchors?: RemoveAnchorsIntent
+  addComponent?: AddComponentIntent
+  setComponentTransforms?: SetComponentTransformsIntent
+  removeComponents?: RemoveComponentsIntent
+  decomposeComponents?: DecomposeComponentsIntent
   reverseContour?: ReverseContourIntent
   setContourStart?: SetContourStartIntent
   translatePoints?: TranslatePointsIntent
@@ -790,6 +807,11 @@ export interface RemoveAnchorsIntent {
   anchorIds: Array<AnchorId>
 }
 
+export interface RemoveComponentsIntent {
+  layerId: LayerId
+  componentIds: Array<ComponentId>
+}
+
 export interface RemovePointsIntent {
   layerId: LayerId
   pointIds: Array<PointId>
@@ -802,6 +824,12 @@ export interface ReverseContourIntent {
 
 export interface SetAxisMappingsIntent {
   mappings: Array<AxisMapping>
+}
+
+export interface SetComponentTransformsIntent {
+  layerId: LayerId
+  componentIds: Array<ComponentId>
+  transforms: Array<number>
 }
 
 export interface SetContourClosedIntent {

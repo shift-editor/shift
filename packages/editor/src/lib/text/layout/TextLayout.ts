@@ -21,12 +21,12 @@ import type {
   SegmentedRun,
   TextItemId,
   TextRunId,
-} from "@shift/editor/lib/text/layout/types";
+} from "./types";
 import type { Positioner } from "./Positioner";
 import type { Editor } from "../../editor/Editor";
-import type { Font } from "@shift/editor/lib/model/Font";
-import type { Signal } from "@shift/editor/lib/signals/signal";
-import type { ExternalAxisLocation } from "@shift/editor/types/variation";
+import type { Font } from "../../model/Font";
+import type { Signal } from "../../signals/signal";
+import type { ExternalAxisLocation } from "../../../types/variation";
 
 export interface TextLayoutParams {
   items: readonly TextItem[];

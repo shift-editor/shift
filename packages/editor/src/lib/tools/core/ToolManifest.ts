@@ -1,6 +1,6 @@
 import type { BaseTool } from "./BaseTool";
 import type { Editor } from "../../editor/Editor";
-import type { Signal } from "@shift/editor/lib/signals/index";
+import type { Signal } from "../../signals/index";
 import type { ToolName } from "./createContext";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

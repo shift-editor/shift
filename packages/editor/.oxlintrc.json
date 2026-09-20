@@ -14,6 +14,10 @@
           {
             "group": ["@/bridge/native"],
             "message": "Do not import getNative() directly. Use NativeBridge instead."
+          },
+          {
+            "group": ["@shift/editor", "@shift/editor/*"],
+            "message": "Use relative imports within @shift/editor."
           }
         ]
       }

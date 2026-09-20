@@ -1,4 +1,4 @@
-import type { GlyphGuideMetrics } from "@shift/editor/types/glyphRender";
+import type { GlyphGuideMetrics } from "../../../../types/glyphRender";
 import {
   LOCK_COLOR,
   LOCK_GAP_PX,

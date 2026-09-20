@@ -1,6 +1,6 @@
 import { mintRunId, type GlyphName, type RunId, type Unicode } from "@shift/types";
 import type { Editor } from "../editor/Editor";
-import type { Font } from "@shift/editor/lib/model/Font";
+import type { Font } from "../model/Font";
 import type { ShiftStore } from "../store/ShiftStore";
 import type { ShiftEditorRecord } from "../../types/records";
 import type { TextRunRecord } from "../../types/text";

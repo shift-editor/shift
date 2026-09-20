@@ -1,5 +1,5 @@
 import { mintNodeId, type NodeId } from "@shift/types";
-import { computed, type Signal } from "@shift/editor/lib/signals/index";
+import { computed, type Signal } from "../signals/index";
 import type { ShiftStore } from "../store/ShiftStore";
 import type { ShiftEditorRecord, ShiftNodeRecord } from "../../types/records";
 import type { CreateNode, ShiftNode, UpdateNode } from "../../types/node";

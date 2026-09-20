@@ -1,4 +1,4 @@
-import { clamp } from "@shift/editor/lib/utils/utils";
+import { clamp } from "../../utils/utils";
 import { Mat, Vec2, type Point2D, type Rect2D } from "@shift/geo";
 import {
   signal,
@@ -6,7 +6,7 @@ import {
   type WritableSignal,
   type Signal,
   type ComputedSignal,
-} from "@shift/editor/lib/signals/signal";
+} from "../../signals/signal";
 import { SCREEN_HIT_RADIUS } from "../rendering/constants";
 
 /** Lower bound for zoom level. Prevents the glyph from becoming invisible. */

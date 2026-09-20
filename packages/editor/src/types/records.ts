@@ -1,5 +1,5 @@
 import type { NodeId, RunId } from "@shift/types";
-import type { EditingId } from "@shift/editor/types/editing";
+import type { EditingId } from "./editing";
 import type { GlyphNode, TextRunNode } from "./node";
 import type { SelectableId, SelectionId, ShiftId } from "./object";
 import type { TextRunRecord } from "./text";

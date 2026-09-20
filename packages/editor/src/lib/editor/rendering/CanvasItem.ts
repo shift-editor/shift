@@ -1,5 +1,5 @@
-import type { ComputedSignal } from "@shift/editor/lib/signals/index";
-import { computed } from "@shift/editor/lib/signals/index";
+import type { ComputedSignal } from "../../signals/index";
+import { computed } from "../../signals/index";
 
 /**
  * Base class for canvas items with reactive drawing/query props.

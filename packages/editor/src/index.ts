@@ -5,9 +5,11 @@ export { Glyph, GlyphLayer, GlyphRenderModel } from "./lib/model/Glyph";
 export { ComponentGlyph } from "./lib/model/ComponentGlyph";
 export { GlyphLayerEdit } from "./lib/model/GlyphLayerEdit";
 export { GlyphLayerState } from "./lib/model/GlyphLayerState";
+export { ComponentTransformEdit } from "./lib/model/ComponentTransformEdit";
 export { RenderGlyph } from "./lib/model/RenderGlyph";
 export { Select } from "./lib/tools/select/Select";
 export { ToolManager } from "./lib/tools/core/ToolManager";
+export { LatestRequest } from "./lib/utils/LatestRequest";
 export {
   batch,
   computed,

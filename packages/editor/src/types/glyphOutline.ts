@@ -1,5 +1,5 @@
 import type { NamedInstanceId, NodeId, SourceId } from "@shift/types";
-import type { ExternalAxisLocation } from "@shift/editor/types/variation";
+import type { ExternalAxisLocation } from "./variation";
 
 /** Identifies one variation location rendered as an outline around a glyph node. */
 export type GlyphOutlineTarget =

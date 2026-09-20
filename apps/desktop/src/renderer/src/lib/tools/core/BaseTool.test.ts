@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { BaseTool } from "@shift/editor/lib/tools/core/BaseTool";
-import type { ToolEvent } from "@shift/editor/lib/tools/core/GestureDetector";
+import { BaseTool } from "@shift/editor/tools";
+import type { ToolEvent } from "@shift/editor/tools";
 import { makeTestCoordinates, TestEditor } from "@/testing";
-import type { ToolName } from "@shift/editor/lib/tools/core/createContext";
-import type { Behavior } from "@shift/editor/lib/tools/core/Behavior";
-import { signal, type Signal } from "@shift/editor/lib/signals/index";
-import type { CursorType } from "@shift/editor/types/editor";
+import type { ToolName } from "@shift/editor/tools";
+import type { Behavior } from "@shift/editor/tools";
+import { signal, type Signal } from "@shift/editor/signals";
+import type { CursorType } from "@shift/editor/types";
 
 type ContractState = { type: "idle" } | { type: "ready" } | { type: "clicked" };
 

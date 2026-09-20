@@ -1,10 +1,6 @@
 import { Vec2 } from "@shift/geo";
 import type { PointId } from "@shift/types";
-import {
-  DirectionSnap,
-  PositionReference,
-  type MoveEdit,
-} from "@shift/editor/lib/model/positions/index";
+import { DirectionSnap, PositionReference, type MoveEdit } from "../../../model/positions/index";
 import type { ToolContext } from "../../core/Behavior";
 import type { DragEvent, KeyDownEvent, ToolEvent } from "../../core/GestureDetector";
 import type { PenCurve, PenState, PenBehavior } from "../types";

@@ -1,5 +1,5 @@
 import type { PointId, ContourId } from "@shift/types";
-import type { GlyphContour } from "@shift/editor/lib/model/ComponentGlyph";
+import type { GlyphContour } from "../../../model/ComponentGlyph";
 import type { Hover } from "../../Hover";
 import type { Selection } from "../../Selection";
 import type { GlyphNode } from "../../../../types/node";

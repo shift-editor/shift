@@ -7,8 +7,8 @@ import { ShapeReadyBehavior, ShapeDraggingBehavior } from "./behaviors";
 import { Ellipse } from "./Ellipse";
 import { Rectangle } from "./Rectangle";
 import type { Editor } from "../../editor/Editor";
-import type { GlyphLayerEdit } from "@shift/editor/lib/model/GlyphLayerEdit";
-import { batch, type Signal } from "@shift/editor/lib/signals/index";
+import type { GlyphLayerEdit } from "../../model/GlyphLayerEdit";
+import { batch, type Signal } from "../../signals/index";
 import type { CursorType } from "../../../types/editor";
 
 export class ShapeTool extends BaseTool<ShapeState, ShapeTool> {

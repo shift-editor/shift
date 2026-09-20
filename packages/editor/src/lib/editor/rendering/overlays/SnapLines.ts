@@ -1,5 +1,5 @@
 import { Vec2, type Point2D } from "@shift/geo";
-import type { PositionGuide } from "@shift/editor/types/positionEdit";
+import type { PositionGuide } from "../../../../types/positionEdit";
 import type { Canvas } from "../Canvas";
 
 /** Draws direction feedback as solid lines with screen-sized endpoint crosses. */

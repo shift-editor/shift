@@ -6,13 +6,7 @@ import { FpsMonitor } from "./FpsMonitor";
 import { MarkerLayer } from "../../graphics/backends/MarkerLayer";
 import type { Editor } from "../Editor";
 import type { Canvas2DSurface, MarkerCanvasSurface } from "./CanvasSurface";
-import {
-  effect,
-  signal,
-  track,
-  type Effect,
-  type WritableSignal,
-} from "@shift/editor/lib/signals/signal";
+import { effect, signal, track, type Effect, type WritableSignal } from "../../signals/signal";
 import { BackgroundLayer, OverlayLayer, SceneLayer } from "./RenderFrame";
 import type { RenderContext } from "../../../types/rendering";
 

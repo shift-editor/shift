@@ -6,7 +6,7 @@ import type { Coordinates } from "../../../types/coordinates";
 import type { CursorType } from "../../../types/editor";
 import { edgeToCursor, type BoundingRectEdge } from "./cursor";
 import type { Select } from "./Select";
-import { track } from "@shift/editor/lib/signals/index";
+import { track } from "../../signals/index";
 
 type YAxisDirection = "up" | "down";
 export type CornerHandle = "top-left" | "top-right" | "bottom-left" | "bottom-right";
@@ -39,7 +39,11 @@ interface SelectBoundingBoxStyle {
   readonly dashPx?: number[];
   readonly hitRadiusPx: number;
   readonly handle: {
+    readonly radiusPx: number;
     readonly offsetPx: number;
+    readonly fill: string;
+    readonly stroke: string;
+    readonly widthPx: number;
   };
   readonly rotationZoneOffsetPx: number;
 }
@@ -49,7 +53,11 @@ export const SELECT_BOUNDING_BOX_STYLE: SelectBoundingBoxStyle = {
   widthPx: 1,
   hitRadiusPx: 8,
   handle: {
+    radiusPx: 4,
     offsetPx: 0,
+    fill: "#ffffff",
+    stroke: "#1886D7",
+    widthPx: 1.25,
   },
   rotationZoneOffsetPx: 8,
 };
@@ -85,6 +93,7 @@ interface ExpandedHandleRect {
 export interface SelectBoundingBoxProps {
   readonly sceneRect: Rect2D;
   readonly screenRect: Rect2D;
+  readonly sceneHandles: HandlePositions | null;
   readonly screenHandles: HandlePositions;
   readonly hitRadiusPx: number;
 }
@@ -104,10 +113,19 @@ export class SelectBoundingBox extends CanvasItem<SelectBoundingBoxProps> {
     if (state.type === "brushing") return null;
 
     track(this.#editor.selection.stateCell);
-    const selection = this.#editor.positionSelection(this.#editor.selection.ids);
-    const pointCount = selection?.targets.points?.length ?? 0;
-    const anchorCount = selection?.targets.anchors?.length ?? 0;
-    if (!selection || pointCount + anchorCount <= 1) return null;
+    const ids = this.#editor.selection.ids;
+    const selection = this.#editor.positionSelection(ids);
+    let componentSelection = false;
+    if (selection) {
+      const pointCount = selection.targets.points?.length ?? 0;
+      const anchorCount = selection.targets.anchors?.length ?? 0;
+      if (pointCount + anchorCount <= 1) return null;
+    } else {
+      const objects = this.#editor.objects(ids);
+      if (objects.length === 0 || objects.some((object) => object.kind !== "component"))
+        return null;
+      componentSelection = true;
+    }
 
     const sceneRect = this.#editor.selectionBoundsCell.value;
     if (!sceneRect) return null;
@@ -117,6 +135,13 @@ export class SelectBoundingBox extends CanvasItem<SelectBoundingBoxProps> {
     const screenRect = this.#screenRect(sceneRect);
     if (!hasBoundingBoxArea(sceneRect)) return null;
 
+    const sceneHandles = componentSelection
+      ? getHandlePositions(
+          sceneRect,
+          this.#editor.screenToUpmDistance(SELECT_BOUNDING_BOX_STYLE.handle.offsetPx),
+          this.#editor.screenToUpmDistance(SELECT_BOUNDING_BOX_STYLE.rotationZoneOffsetPx),
+        )
+      : null;
     const screenHandles = getHandlePositions(
       screenRect,
       SELECT_BOUNDING_BOX_STYLE.handle.offsetPx,
@@ -127,6 +152,7 @@ export class SelectBoundingBox extends CanvasItem<SelectBoundingBoxProps> {
     return {
       sceneRect,
       screenRect,
+      sceneHandles,
       screenHandles,
       hitRadiusPx: SELECT_BOUNDING_BOX_STYLE.hitRadiusPx,
     };
@@ -219,6 +245,7 @@ export class SelectBoundingBox extends CanvasItem<SelectBoundingBoxProps> {
     if (!props) return;
 
     this.#drawRect(canvas, props.sceneRect);
+    if (props.sceneHandles) this.#drawHandles(canvas, props.sceneHandles);
   }
 
   #screenRect(rect: Rect2D): Rect2D {
@@ -235,6 +262,13 @@ export class SelectBoundingBox extends CanvasItem<SelectBoundingBoxProps> {
   #drawRect(canvas: Canvas, rect: Rect2D): void {
     const { stroke, widthPx, dashPx } = SELECT_BOUNDING_BOX_STYLE;
     canvas.strokeRect(rect.x, rect.y, rect.width, rect.height, stroke, widthPx, dashPx);
+  }
+
+  #drawHandles(canvas: Canvas, handles: HandlePositions): void {
+    const style = SELECT_BOUNDING_BOX_STYLE.handle;
+    const cornerKeys = ["topLeft", "topRight", "bottomLeft", "bottomRight"] as const;
+
+    for (const key of cornerKeys) drawHandle(canvas, handles.corners[key], style);
   }
 }
 
@@ -364,6 +398,24 @@ function rectFromPoints(points: readonly Point2D[]): Rect2D {
     right,
     bottom,
   };
+}
+
+function drawHandle(
+  canvas: Canvas,
+  center: Point2D,
+  style: SelectBoundingBoxStyle["handle"],
+): void {
+  canvas.ctx.save();
+
+  const radius = canvas.pxToUpm(style.radiusPx);
+  const size = radius * 2;
+  canvas.ctx.lineWidth = canvas.pxToUpm(style.widthPx);
+  canvas.ctx.fillStyle = style.fill;
+  canvas.ctx.strokeStyle = style.stroke;
+  canvas.ctx.fillRect(center.x - radius, center.y - radius, size, size);
+  canvas.ctx.strokeRect(center.x - radius, center.y - radius, size, size);
+
+  canvas.ctx.restore();
 }
 
 export function hitTestRotationZones(

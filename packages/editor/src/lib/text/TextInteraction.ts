@@ -18,7 +18,7 @@
  * will live in its own `CompositeInspection` class when that feature is
  * rebuilt — intentionally not folded in here.
  */
-import { signal, batch, type WritableSignal, type Signal } from "@shift/editor/lib/signals/signal";
+import { signal, batch, type WritableSignal, type Signal } from "../signals/signal";
 import type { TextItem } from "./layout";
 
 export interface EditingTarget {

@@ -1,9 +1,9 @@
 import type { PointId, ContourId } from "@shift/types";
 import type { SelectableId } from "../../../../../types/object";
-import type { HandleState } from "@shift/editor/types/graphics";
+import type { HandleState } from "../../../../../types/graphics";
 import type { Hover } from "../../../Hover";
 import type { Selection } from "../../../Selection";
-import type { GlyphRenderContour } from "@shift/editor/types/glyphRender";
+import type { GlyphRenderContour } from "../../../../../types/glyphRender";
 import { PointHandleItem } from "./PointHandleItem";
 
 export interface HandleStateSource {

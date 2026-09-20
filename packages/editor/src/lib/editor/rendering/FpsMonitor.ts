@@ -1,4 +1,4 @@
-import { signal, type Signal, type WritableSignal } from "@shift/editor/lib/signals/signal";
+import { signal, type Signal, type WritableSignal } from "../../signals/signal";
 
 const UPDATE_INTERVAL_MS = 250;
 

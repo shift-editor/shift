@@ -5,10 +5,10 @@ import { isPointId } from "@shift/types";
 import { EditableSidebarInput } from "./EditableSidebarInput";
 import { SidebarSection } from "./SidebarSection";
 import { useSignalEffect } from "@/hooks/useSignalEffect";
-import type { GlyphLayer } from "@shift/editor/lib/model/Glyph";
-import { PointRuleConstraint } from "@shift/editor/lib/model/positions/index";
-import { track } from "@shift/editor/lib/signals/index";
-import type { CubicHandle } from "@shift/editor/types/handle";
+import type { GlyphLayer } from "@shift/editor/model";
+import { PointRuleConstraint } from "@shift/editor/model";
+import { track } from "@shift/editor/signals";
+import type { CubicHandle } from "@shift/editor/types";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import RotateIcon from "@/assets/sidebar-right/rotate.svg";
 

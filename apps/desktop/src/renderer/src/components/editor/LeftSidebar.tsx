@@ -4,10 +4,10 @@ import type { SourceId } from "@shift/types";
 import { AxesSection } from "@/components/variation/AxesSection";
 import { InstancesSection } from "@/components/variation/InstancesSection";
 import { SourcesSection } from "@/components/variation/SourcesSection";
-import { useSignalState } from "@shift/editor/lib/signals/index";
+import { useSignalState } from "@shift/editor/signals";
 import { useActiveSourceId } from "@/hooks/useActiveSourceId";
 import { useEditingSourceIds } from "@/hooks/useEditingSourceIds";
-import type { GlyphOutlineTarget } from "@shift/editor/types/glyphOutline";
+import type { GlyphOutlineTarget } from "@shift/editor/types";
 import { useEditor } from "@/workspace/WorkspaceContext";
 
 export const LeftSidebar = () => {

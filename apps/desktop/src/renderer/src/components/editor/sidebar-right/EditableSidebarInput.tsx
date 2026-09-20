@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from "react";
 import { cn, Input, Tooltip, TooltipContent, TooltipTrigger } from "@shift/ui";
-import { NUDGES_VALUES, type NudgeMagnitude } from "@shift/editor/types/nudge";
+import { NUDGES_VALUES, type NudgeMagnitude } from "@shift/editor/types";
 import { useFocusZone } from "@/context/FocusZoneContext";
 
 export interface EditableSidebarInputHandle {

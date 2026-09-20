@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { TextInteraction } from "@shift/editor/lib/text/TextInteraction";
-import { glyphTextItem as glyph } from "@shift/editor/lib/text/layout/index";
+import { TextInteraction } from "@shift/editor/text";
+import { glyphTextItem as glyph } from "@shift/editor/text";
 
 describe("TextInteraction", () => {
   let ctx: TextInteraction;

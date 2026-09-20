@@ -3,11 +3,8 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Axis, AxisId, InterpolationBasis, SourceId } from "@shift/types";
 import { mintAxisId, mintSourceId } from "@shift/types";
-import { designAxisLocationFromLocation } from "@shift/editor/lib/variation/location";
-import {
-  interpolateSourceValues,
-  interpolationWeights,
-} from "@shift/editor/lib/interpolation/InterpolationBasis";
+import { designAxisLocationFromLocation } from "@shift/editor/variation";
+import { interpolateSourceValues, interpolationWeights } from "@shift/editor/variation";
 
 interface ParityMaster {
   readonly expected: number[];

@@ -4,7 +4,7 @@ import { Navigate, Outlet, Route, Routes, useLocation } from "react-router";
 import { Landing } from "@/views/Landing";
 import { Home } from "@/views/Home";
 import { Editor } from "@/views/Editor";
-import { useSignalState } from "@shift/editor/lib/signals/useSignal";
+import { useSignalState } from "@shift/editor/signals";
 import { useEditor, useFont, useFontSession } from "@/workspace/WorkspaceContext";
 import { FontSessionProvider } from "@/workspace/FontSessionProvider";
 import { DebugProvider } from "@/context/DebugProvider";

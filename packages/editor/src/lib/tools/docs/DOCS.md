@@ -1,6 +1,6 @@
 # Tools
 
-<!-- reviewed: 2026-09-05 -->
+<!-- reviewed: 2026-09-20 -->
 
 State machine-based tool system for the Shift font editor: translates pointer/keyboard input into tool-specific state transitions and rendering.
 
@@ -28,7 +28,9 @@ State machine-based tool system for the Shift font editor: translates pointer/ke
 
 - **Architecture Invariant:** `ToolEvent` pointer events carry a `coords: Coordinates` bundle (`screen`, `scene`). Use `event.coords.scene` for scene-space hit-testing and resolve node-local coordinates from the hit target when a tool needs them.
 
-In preview sessions, Select consumes point, segment, and anchor clicks to emit `previewMutationAttempted` without publishing hover or selection. Every drag starts the existing `brushing` state; the marquee draws normally but selects nothing. Pen and Shape are disabled in the toolbar and keyboard shortcuts. Native Edit commands remain disabled rather than opening the preview notice.
+Select gives editable root point, anchor, and segment proximity first priority, then tests component contours by proximity before filled occurrences. Component candidates follow front-to-back paint order; nested geometry selects the first component in its `componentPath`. Component-only selections expose occurrence bounds and route move, corner-scale, and rotation-zone drags through `ComponentTransformEdit` rather than point-position transforms. The bounding-box interior is a move target even where the component has no filled geometry.
+
+In preview sessions, Select consumes point, segment, anchor, and component clicks to emit `previewMutationAttempted` without publishing hover or selection. Every drag starts the existing `brushing` state; the marquee draws normally but selects nothing. Pen and Shape are disabled in the toolbar and keyboard shortcuts. Native Edit commands remain disabled rather than opening the preview notice.
 
 ## Codemap
 

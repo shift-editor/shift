@@ -5,7 +5,7 @@ import UnionIcon from "@/assets/sidebar-right/union.svg";
 import IntersectIcon from "@/assets/sidebar-right/intersect.svg";
 import SubtractIcon from "@/assets/sidebar-right/subtract.svg";
 import { useEditor } from "@/workspace/WorkspaceContext";
-import { useSignalState } from "@shift/editor/lib/signals/index";
+import { useSignalState } from "@shift/editor/signals";
 
 export const BooleanOps = () => {
   const editor = useEditor();

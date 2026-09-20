@@ -2,7 +2,7 @@ import type { ToolContext } from "../../core/Behavior";
 import type { KeyDownEvent } from "../../core/GestureDetector";
 import type { SelectBehavior, SelectState } from "../types";
 import { NUDGES_VALUES, type NudgeMagnitude } from "../../../../types/nudge";
-import { PointRuleConstraint, PositionEdits } from "@shift/editor/lib/model/positions/index";
+import { PointRuleConstraint, PositionEdits } from "../../../model/positions/index";
 
 export class Nudge implements SelectBehavior {
   onKeyDown(state: SelectState, ctx: ToolContext<SelectState>, event: KeyDownEvent): boolean {

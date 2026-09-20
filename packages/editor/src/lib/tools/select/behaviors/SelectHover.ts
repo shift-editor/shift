@@ -41,7 +41,8 @@ export class SelectHover implements SelectBehavior {
         return true;
       }
 
-      case "segment": {
+      case "segment":
+      case "component": {
         ctx.editor.hover.set(target.id);
         return true;
       }

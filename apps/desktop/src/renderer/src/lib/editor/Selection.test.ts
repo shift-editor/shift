@@ -1,9 +1,9 @@
 import type { NodeId, PointId } from "@shift/types";
 import { describe, expect, it } from "vitest";
-import { ShiftStore } from "@shift/editor/lib/store/ShiftStore";
-import { currentSelectionId } from "@shift/editor/types/object";
-import type { ShiftEditorRecord } from "@shift/editor/types/records";
-import { Selection } from "@shift/editor/lib/editor/Selection";
+import { ShiftStore } from "@shift/editor/testing";
+import { currentSelectionId } from "@shift/editor/types";
+import type { ShiftEditorRecord } from "@shift/editor/types";
+import { Selection } from "@shift/editor/testing";
 
 const asNodeId = (id: string): NodeId => id as NodeId;
 const asPointId = (id: string): PointId => id as PointId;

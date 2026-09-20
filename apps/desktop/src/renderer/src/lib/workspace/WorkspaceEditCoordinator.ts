@@ -18,9 +18,9 @@ import type {
   WorkspaceSlugAtlas,
   WorkspaceSlugAtlasPageRequest,
 } from "@shared/workspace/protocol";
-import { batch, signal, type Signal, type WritableSignal } from "@shift/editor/lib/signals/signal";
-import type { FontStore } from "@shift/editor/lib/model/FontStore";
-import type { PendingEditId } from "@shift/editor/types/editing";
+import { batch, signal, type Signal, type WritableSignal } from "@shift/editor/signals";
+import type { FontStore } from "@shift/editor/model";
+import type { PendingEditId } from "@shift/editor/types";
 import type { WorkspaceApplyStatus, WorkspaceEdit } from "@/types/workspace";
 import type { FontSessionClient } from "./FontSessionClient";
 

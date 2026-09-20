@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { TestEditor } from "@/testing/TestEditor";
-import { Ellipse } from "@shift/editor/lib/tools/shape/Ellipse";
-import { Rectangle } from "@shift/editor/lib/tools/shape/Rectangle";
+import { Ellipse } from "@shift/editor/tools";
+import { Rectangle } from "@shift/editor/tools";
 import { Mat, Rect } from "@shift/geo";
-import { ContourPath } from "@shift/editor/lib/graphics/ContourPath";
+import { ContourPath } from "@shift/editor/testing";
 
 // Restored from the WS6 behavioral inventory (git show ef037c6e^); asserts
 // confirmed (folded) geometry rather than the deleted currentGlyph getter.

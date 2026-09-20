@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { TestEditor } from "@/testing/TestEditor";
-import { HandleItems } from "@shift/editor/lib/editor/rendering/overlays/handles/HandleItems";
+import { HandleItems } from "@shift/editor/testing";
 
 describe("handle visibility is independent of geometry and selection", () => {
   let editor: TestEditor;

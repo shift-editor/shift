@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { SvgImporter } from "@shift/editor/lib/clipboard/importers/SvgImporter";
+import { SvgImporter } from "@shift/editor/clipboard";
 
 describe("SvgImporter", () => {
   const importer = new SvgImporter();

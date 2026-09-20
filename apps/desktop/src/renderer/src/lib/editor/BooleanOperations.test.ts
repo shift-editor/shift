@@ -1,8 +1,8 @@
 import { Polygon } from "@shift/geo";
 import { isContourId } from "@shift/types";
 import { beforeEach, describe, expect, it } from "vitest";
-import type { GlyphLayer } from "@shift/editor/lib/model/Glyph";
-import { externalAxisLocationFromRecord } from "@shift/editor/lib/variation/location";
+import type { GlyphLayer } from "@shift/editor/model";
+import { externalAxisLocationFromRecord } from "@shift/editor/variation";
 import { TestEditor } from "@/testing/TestEditor";
 
 const operationCases = [

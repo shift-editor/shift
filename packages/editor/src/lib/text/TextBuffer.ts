@@ -18,9 +18,9 @@
  * cursorVisible (transient UI state). Those live in `TextInteraction` /
  * `TextRun`.
  */
-import { signal, batch, type WritableSignal, type Signal } from "@shift/editor/lib/signals/signal";
+import { signal, batch, type WritableSignal, type Signal } from "../signals/signal";
 import type { TextItem, TextItemId } from "./layout";
-import { clamp } from "@shift/editor/lib/utils/utils";
+import { clamp } from "../utils/utils";
 
 export interface SelectionRange {
   start: number;

@@ -1,7 +1,7 @@
 import { cn, Tooltip, TooltipContent, TooltipTrigger } from "@shift/ui";
-import type { AnchorPosition } from "@shift/editor/types/transform";
+import type { AnchorPosition } from "@shift/editor/types";
 
-export type { AnchorPosition } from "@shift/editor/types/transform";
+export type { AnchorPosition } from "@shift/editor/types";
 
 export interface TransformGridProps {
   width?: number;

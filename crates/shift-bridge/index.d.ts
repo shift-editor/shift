@@ -165,6 +165,12 @@ export interface NapiAddAnchorsIntent {
   anchors: Array<NapiAnchorSeed>
 }
 
+export interface NapiAddComponentIntent {
+  layerId: LayerId
+  componentId: ComponentId
+  baseGlyphId: GlyphId
+}
+
 export interface NapiAddContourIntent {
   layerId: LayerId
   contourId: ContourId
@@ -416,6 +422,11 @@ export interface NapiCreateSourceIntent {
   location: NapiLocation
 }
 
+export interface NapiDecomposeComponentsIntent {
+  layerId: LayerId
+  componentIds: Array<ComponentId>
+}
+
 /** Font-level axis deletion. Removing an axis also reshapes source locations. */
 export interface NapiDeleteAxisIntent {
   axisId: AxisId
@@ -440,7 +451,9 @@ export interface NapiFontIntent {
    * Discriminator naming the populated payload field. Editing kinds:
    * "addPoints" | "addContour" | "setContourClosed" | "movePoints" |
    * "setPointSmooth" | "removePoints" | "addAnchors" | "moveAnchors" |
-   * "removeAnchors" | "reverseContour" | "setContourStart" | "translatePoints" |
+   * "removeAnchors" | "addComponent" | "setComponentTransforms" |
+   * "removeComponents" | "decomposeComponents" |
+   * "reverseContour" | "setContourStart" | "translatePoints" |
    * "setXAdvance" | "applyBooleanOp".
    * Font-level kinds additionally include metadata replacement, axis
    * create/update/delete, mapping replacement, named-instance
@@ -457,6 +470,10 @@ export interface NapiFontIntent {
   addAnchors?: NapiAddAnchorsIntent
   moveAnchors?: NapiMoveAnchorsIntent
   removeAnchors?: NapiRemoveAnchorsIntent
+  addComponent?: NapiAddComponentIntent
+  setComponentTransforms?: NapiSetComponentTransformsIntent
+  removeComponents?: NapiRemoveComponentsIntent
+  decomposeComponents?: NapiDecomposeComponentsIntent
   reverseContour?: NapiReverseContourIntent
   setContourStart?: NapiSetContourStartIntent
   translatePoints?: NapiTranslatePointsIntent
@@ -803,6 +820,11 @@ export interface NapiRemoveAnchorsIntent {
   anchorIds: Array<AnchorId>
 }
 
+export interface NapiRemoveComponentsIntent {
+  layerId: LayerId
+  componentIds: Array<ComponentId>
+}
+
 export interface NapiRemovePointsIntent {
   layerId: LayerId
   pointIds: Array<PointId>
@@ -815,6 +837,12 @@ export interface NapiReverseContourIntent {
 
 export interface NapiSetAxisMappingsIntent {
   mappings: Array<NapiAxisMapping>
+}
+
+export interface NapiSetComponentTransformsIntent {
+  layerId: LayerId
+  componentIds: Array<ComponentId>
+  transforms: Array<number>
 }
 
 export interface NapiSetContourClosedIntent {

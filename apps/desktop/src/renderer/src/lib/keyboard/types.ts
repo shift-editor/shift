@@ -1,6 +1,6 @@
-import type { ToolName } from "@shift/editor/lib/tools/core/index";
-import type { DeleteMode } from "@shift/editor/types/glyph";
-import type { ToolShortcutEntry } from "@shift/editor/types/tools";
+import type { ToolName } from "@shift/editor/tools";
+import type { DeleteMode } from "@shift/editor/types";
+import type { ToolShortcutEntry } from "@shift/editor/types";
 
 // TODO: probably remove this and just pass editor.
 export interface KeyboardEditorActions {

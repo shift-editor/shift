@@ -6,7 +6,7 @@
  * `cluster` is whole-buffer (matches HarfBuzz's monotonic guarantee). Valid
  * clusters are [0, layout.bufferLength]; `next()` and `previous()` clamp.
  */
-import type { CaretPosition, Point2D } from "@shift/editor/lib/text/layout/types";
+import type { CaretPosition, Point2D } from "./types";
 import type { TextLayout } from "./TextLayout";
 
 export class Caret {
