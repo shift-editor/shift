@@ -49,7 +49,7 @@ export type RendererToMain = {
    */
   "document.connect": () => void;
   /** Returns the backend capability selected for the sender's font session. */
-  "session.mode": () => FontSessionMode;
+  "session.mode": () => Exclude<FontSessionMode, "memory">;
   /**
    * Asks main to wire a sync lane to the font session process. The port itself
    * arrives separately on the `session.port` postMessage channel because ports

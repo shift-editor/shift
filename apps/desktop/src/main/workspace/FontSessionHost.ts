@@ -2,7 +2,6 @@ import { BrowserWindow } from "electron";
 import { DocumentClient } from "../document/DocumentClient";
 import { DocumentSession } from "../document/DocumentSession";
 import type { NativeDialogs } from "../dialogs/NativeDialogs";
-import type { FontSessionMode } from "../../shared/workspace/protocol";
 import type { Window } from "../windows/Window";
 import { WorkspaceProcess } from "./WorkspaceProcess";
 
@@ -11,7 +10,7 @@ export type FontSessionId = string;
 
 export type FontSessionHostOptions =
   | {
-      readonly mode: "authored";
+      readonly mode: "workspace";
       readonly sessionId: FontSessionId;
       readonly workspaceProcess: WorkspaceProcess;
       readonly documentClient: DocumentClient;
@@ -29,12 +28,12 @@ export type FontSessionHostOptions =
 /**
  * Groups the process, capabilities, and windows for one open font.
  *
- * Authored sessions additionally own document workflows. Retained source
+ * Workspace sessions additionally own document workflows. Retained source
  * sessions deliberately have no document client, persistence, dirty state, or
  * save target.
  */
 export class FontSessionHost {
-  readonly mode: FontSessionMode;
+  readonly mode: FontSessionHostOptions["mode"];
   readonly sessionId: FontSessionId;
   readonly sourcePath: string | null;
   readonly workspaceProcess: WorkspaceProcess;
@@ -52,7 +51,7 @@ export class FontSessionHost {
     this.workspaceProcess = options.workspaceProcess;
 
     switch (options.mode) {
-      case "authored":
+      case "workspace":
         this.documentClient = options.documentClient;
         this.document = new DocumentSession({
           document: this.documentClient,

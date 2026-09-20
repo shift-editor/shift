@@ -102,7 +102,7 @@ const ShiftSessionSetup = () => {
     if (!documentLoaded) return;
 
     editor.setExternalLocation(font.defaultLocation());
-    if (session.mode === "authored") editor.selectSource(font.defaultSource.id);
+    if (session.mode === "workspace") editor.selectSource(font.defaultSource.id);
   }, [documentLoaded, editor, font, session.mode]);
 
   return null;

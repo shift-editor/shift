@@ -20,7 +20,7 @@ export const InstancesSection = ({
 }: InstancesSectionProps) => {
   const [open, setOpen] = useState(defaultOpen);
   const [instanceMenuOpen, setInstanceMenuOpen] = useState(false);
-  const canAuthor = useFontSession().mode === "authored";
+  const canAuthor = useFontSession().mode === "workspace";
   const instances = useNamedInstances();
   const instanceTargets: GlyphOutlineTarget[] = instances.map((instance) => ({
     kind: "instance",

@@ -13,7 +13,7 @@ import type { GlyphReader } from "@/types/glyph";
 import { FontSessionClient } from "@/lib/workspace/FontSessionClient";
 import { getShiftHost } from "@/host/shiftHost";
 import { Workspace } from "./Workspace";
-import { createAuthoredFontSession, createPreviewFontSession } from "./FontSession";
+import { createPreviewFontSession, createWorkspaceFontSession } from "./FontSession";
 import type { FontSession } from "@/types/fontSession";
 import { getGlyphInfo } from "./glyphInfo";
 
@@ -46,7 +46,7 @@ async function createFontSession(
   glyphInfo: GlyphInfo,
 ): Promise<FontSession> {
   switch (client.mode) {
-    case "authored": {
+    case "workspace": {
       const host = getShiftHost();
       const workspace = new Workspace({
         host,
@@ -61,7 +61,7 @@ async function createFontSession(
         () => workspace.font.getAxisMappingBases(),
       );
       const catalog = new GlyphCatalog(workspace.editor, glyphInfo, atlas);
-      return createAuthoredFontSession(catalog, workspace, client);
+      return createWorkspaceFontSession(catalog, workspace, client);
     }
     case "preview": {
       await client.connect();

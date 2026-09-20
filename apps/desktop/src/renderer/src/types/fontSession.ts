@@ -10,9 +10,14 @@ interface FontSessionBase {
   dispose(): void;
 }
 
-export interface AuthoredFontSession extends FontSessionBase {
-  readonly mode: "authored";
+export interface WorkspaceFontSession extends FontSessionBase {
+  readonly mode: "workspace";
   readonly workspace: Workspace;
+}
+
+export interface MemoryFontSession extends FontSessionBase {
+  readonly mode: "memory";
+  readonly workspace: null;
 }
 
 export interface PreviewFontSession extends FontSessionBase {
@@ -21,4 +26,4 @@ export interface PreviewFontSession extends FontSessionBase {
   readonly workspace: null;
 }
 
-export type FontSession = AuthoredFontSession | PreviewFontSession;
+export type FontSession = PreviewFontSession | MemoryFontSession | WorkspaceFontSession;

@@ -141,7 +141,7 @@ export class Editor {
   readonly editing: Editing;
   readonly hover: Hover;
   readonly font: Font;
-  /** Immutable preview interaction capability; authored glyph edits still require an authored layer. */
+  /** Immutable persistence and editing capability; glyph edits still require an authored layer. */
   readonly sessionMode: FontSessionMode;
   readonly scene: Scene;
   readonly text: Text;
@@ -1024,7 +1024,7 @@ export class Editor {
    */
   public toggleAllSourcesForEditing(): boolean {
     const activeSourceId = this.#activeSourceIdCell.peek();
-    if (this.sessionMode !== "authored" || !activeSourceId) return false;
+    if (this.sessionMode !== "workspace" || !activeSourceId) return false;
 
     const sourceIds = this.font.sources.map(({ id }) => id);
     const editingSourceIds = this.#editingSourceIdsCell.peek();

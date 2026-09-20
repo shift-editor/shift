@@ -88,7 +88,7 @@ export type WorkspaceRecovery =
     };
 
 /** Immutable product mode for one live font session. */
-export type FontSessionMode = "authored" | "preview";
+export type FontSessionMode = "preview" | "memory" | "workspace";
 
 /** Main-visible identity for one retained, read-only foreign source session. */
 export type FontSourceSession = {

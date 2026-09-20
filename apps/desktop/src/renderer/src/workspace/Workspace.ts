@@ -51,7 +51,7 @@ export class Workspace {
       font: this.font,
       fontStore: this.#store,
       clipboard: options.clipboard,
-      sessionMode: "authored",
+      sessionMode: "workspace",
     });
     this.documentStateCell = this.#client.documentStateCell;
     this.applyStatusCell = this.#edits.applyStatusCell;

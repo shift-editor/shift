@@ -18,7 +18,7 @@ interface SourcesSectionProps {
 export const SourcesSection = ({ defaultOpen = false, outlineControls }: SourcesSectionProps) => {
   const [open, setOpen] = useState(defaultOpen);
   const [sourceMenuOpen, setSourceMenuOpen] = useState(false);
-  const canAuthor = useFontSession().mode === "authored";
+  const canAuthor = useFontSession().mode === "workspace";
   const activeSourceId = useActiveSourceId();
   const sources = useSources();
   const sourceTargets: GlyphOutlineTarget[] = sources

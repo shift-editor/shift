@@ -59,7 +59,7 @@ export class TestEditor extends Editor {
    *
    * @param sessionMode - Presentation and interaction capability under test.
    */
-  constructor(sessionMode: FontSessionMode = "authored") {
+  constructor(sessionMode: FontSessionMode = "workspace") {
     const stack = createWorkspaceStack();
     const clipboard = new InMemorySystemClipboard();
     super({ font: stack.font, fontStore: stack.store, clipboard, sessionMode });

@@ -459,7 +459,7 @@ convertiblePreviewTest(
     await waitForWorkspaceReady(workspacePage);
     await expect
       .poll(() => workspacePage.evaluate(() => window.shiftSession?.mode))
-      .toBe("authored");
+      .toBe("workspace");
     expect(fs.existsSync(saveShiftPath)).toBe(true);
     await expect
       .poll(() => applicationMenuItemEnabled(workspacePage, electronApp, "file.exportTtf"))

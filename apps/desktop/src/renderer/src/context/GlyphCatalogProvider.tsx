@@ -22,7 +22,7 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
   const routeLocation = useLocation();
   const glyphInfo = getGlyphInfo();
   const catalog = session.catalog;
-  const canAuthor = session.mode === "authored";
+  const canAuthor = session.mode === "workspace";
   const workspace = session.workspace;
 
   const availableGlyphs = useSignalState(catalog.glyphsCell);

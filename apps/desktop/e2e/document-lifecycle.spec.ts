@@ -198,7 +198,7 @@ workspaceTest(
     await expect
       .poll(() => workspacePage.evaluate(() => window.shiftSession?.mode))
       .toBe("preview");
-    expect(await page.evaluate(() => window.shiftSession?.mode)).toBe("authored");
+    expect(await page.evaluate(() => window.shiftSession?.mode)).toBe("workspace");
     expect(electronApp.windows()).toHaveLength(2);
   },
 );
@@ -439,7 +439,7 @@ convertiblePreviewTest(
     await waitForWorkspaceReady(workspacePage);
     await expect
       .poll(() => workspacePage.evaluate(() => window.shiftSession?.mode))
-      .toBe("authored");
+      .toBe("workspace");
 
     expect(fs.existsSync(saveShiftPath)).toBe(true);
     expect(sourceTreeSnapshot(UFO_FONT_PATH)).toEqual(sourceBefore);
@@ -498,7 +498,7 @@ for (const { format, sourcePath, sourceRoot } of [
       await waitForWorkspaceReady(workspacePage);
       await expect
         .poll(() => workspacePage.evaluate(() => window.shiftSession?.mode))
-        .toBe("authored");
+        .toBe("workspace");
 
       expect(fs.existsSync(saveShiftPath)).toBe(true);
       expect(
@@ -510,7 +510,7 @@ for (const { format, sourcePath, sourceRoot } of [
 }
 
 convertiblePreviewTest(
-  "Save As replaces a preview glyph route with authored Home",
+  "Save As replaces a preview glyph route with the new workspace Home",
   async ({ electronApp, page, saveShiftPath }) => {
     const workspacePage = await openSelectedPreview(page, electronApp);
     await clickFirstCatalogGlyph(workspacePage);
@@ -522,7 +522,7 @@ convertiblePreviewTest(
 
     await expect
       .poll(() => workspacePage.evaluate(() => window.shiftSession?.mode))
-      .toBe("authored");
+      .toBe("workspace");
     expect(fs.existsSync(saveShiftPath)).toBe(true);
   },
 );
