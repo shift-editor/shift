@@ -85,6 +85,7 @@ export type {
   RemoveComponentsIntent,
   RemovePointsIntent,
   ReverseContourIntent,
+  SetComponentTransformsIntent,
   SetContourClosedIntent,
   SetContourStartIntent,
   SetPointSmoothIntent,

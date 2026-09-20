@@ -1,6 +1,6 @@
 # Editor
 
-<!-- reviewed: 2026-09-17 -->
+<!-- reviewed: 2026-09-20 -->
 
 Central orchestrator for the canvas-based glyph editing surface, wiring viewport transforms, selection, rendering, hit testing, and tool management into a single facade.
 
@@ -126,7 +126,7 @@ Background, scene, and overlays are drawn in UPM space (`Canvas.withSceneSpace()
 
 `Renderer.#renderScene()` draws `SceneLayer`, which runs three passes over the scene nodes:
 
-1. Content pass -- `GlyphNodeDefinition` draws distinct translucent fills for closed root and component contours, stroked outlines, and optional debug overlays while editing. Display rendering fills closed contours and strokes open contours; it never implicitly fills an open gap. Registered source and named-instance references are then stroked directly as outline-only locations for that glyph node.
+1. Content pass -- `GlyphNodeDefinition` draws distinct translucent fills for closed root and component contours, stroked outlines, a themed blue outline over the full directly hovered component subtree, and optional debug overlays while editing. Display rendering fills closed contours and strokes open contours; it never implicitly fills an open gap. Registered source and named-instance references are then stroked directly as outline-only locations for that glyph node.
 2. Delegates to `ToolManager.drawScene()` inside each glyph node's transform.
 3. Controls pass -- draws hovered/selected segments, then control lines with frustum culling via `Camera.visibleSceneBounds()`, then handles (GPU marker rendering with CPU fallback), then anchors.
 

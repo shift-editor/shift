@@ -13,6 +13,7 @@ import type {
   RemovePointsIntent,
   ReverseContourIntent,
   SetContourClosedIntent,
+  SetComponentTransformsIntent,
   SetContourStartIntent,
   SetPointSmoothIntent,
   SetXAdvanceIntent,
@@ -136,6 +137,13 @@ export class LayerIntents {
     return this.#editCoordinator.push({
       kind: "addComponent",
       addComponent: { layerId: this.#layerId, ...payload },
+    });
+  }
+
+  setComponentTransforms(payload: Payload<SetComponentTransformsIntent>): PendingEditId {
+    return this.#editCoordinator.push({
+      kind: "setComponentTransforms",
+      setComponentTransforms: { layerId: this.#layerId, ...payload },
     });
   }
 

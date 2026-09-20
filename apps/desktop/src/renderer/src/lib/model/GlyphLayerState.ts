@@ -1,6 +1,7 @@
 import type {
   AnchorId,
   AnchorSeed,
+  ComponentId,
   ContourId,
   GlyphState,
   GlyphStructure,
@@ -16,7 +17,7 @@ import {
   type GlyphPositions,
   type GlyphSidebearings,
 } from "@shift/glyph-state";
-import type { Bounds } from "@shift/geo";
+import type { Bounds, DecomposedTransform } from "@shift/geo";
 import type { PendingEditId } from "@/types";
 import {
   batch,
@@ -222,6 +223,16 @@ export class GlyphLayerState {
 
   removeAnchors(editId: PendingEditId, anchorIds: readonly AnchorId[]): boolean {
     return this.#applyEdit(editId, () => this.#buffers.peek().removeAnchors(anchorIds));
+  }
+
+  setComponentTransforms(
+    editId: PendingEditId,
+    componentIds: readonly ComponentId[],
+    transforms: readonly DecomposedTransform[],
+  ): boolean {
+    return this.#applyEdit(editId, () =>
+      this.#buffers.peek().setComponentTransforms(componentIds, transforms),
+    );
   }
 
   replace(state: GlyphState): void {

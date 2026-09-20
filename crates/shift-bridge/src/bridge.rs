@@ -2231,6 +2231,16 @@ fn map_intent(intent: NapiFontIntent) -> errors::Result<FontIntent> {
         base_glyph_id: parse::<GlyphId>(&payload.base_glyph_id)?,
       })
     }
+    "setComponentTransforms" => {
+      let payload = intent
+        .set_component_transforms
+        .ok_or_else(|| missing("setComponentTransforms"))?;
+      Ok(FontIntent::SetComponentTransforms {
+        layer_id: parse::<LayerId>(&payload.layer_id)?,
+        component_ids: parse_id_list::<ComponentId>(&payload.component_ids)?,
+        transforms: payload.transforms,
+      })
+    }
     "removeComponents" => {
       let payload = intent
         .remove_components
@@ -2675,6 +2685,7 @@ mod tests {
       move_anchors: None,
       remove_anchors: None,
       add_component: None,
+      set_component_transforms: None,
       remove_components: None,
       decompose_components: None,
       reverse_contour: None,

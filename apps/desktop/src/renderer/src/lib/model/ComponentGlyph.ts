@@ -1,4 +1,4 @@
-import { Bounds, Mat, Vec2, type Bounds as BoundsType, type MatModel } from "@shift/geo";
+import { Bounds, Mat, type Bounds as BoundsType, type MatModel } from "@shift/geo";
 import { Point, Segment } from "@shift/glyph-state";
 import type {
   ComponentGlyph as ComponentGlyphDefinition,
@@ -81,11 +81,12 @@ export class ComponentGlyph {
       const target = targetGeometry.anchor(attachment.target.anchorId);
       if (!target) return explicit;
 
-      const sourcePosition = Mat.applyToPoint(explicit, source);
       const targetPosition = Mat.applyToPoint(targetComponent.#localTransformCell.value, target);
-      const attachmentDelta = Vec2.sub(targetPosition, sourcePosition);
-      const attachmentOffset = Mat.Translate(attachmentDelta.x, attachmentDelta.y);
-      return Mat.Compose(attachmentOffset, explicit);
+      const attachmentOffset = Mat.Translate(
+        targetPosition.x - source.x,
+        targetPosition.y - source.y,
+      );
+      return Mat.Compose(explicit, attachmentOffset);
     });
     this.resolvedTransformCell = computed(() => {
       const parent = this.#parent();

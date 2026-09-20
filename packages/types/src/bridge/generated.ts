@@ -457,7 +457,8 @@ export interface FontIntent {
    * Discriminator naming the populated payload field. Editing kinds:
    * "addPoints" | "addContour" | "setContourClosed" | "movePoints" |
    * "setPointSmooth" | "removePoints" | "addAnchors" | "moveAnchors" |
-   * "removeAnchors" | "addComponent" | "removeComponents" | "decomposeComponents" |
+   * "removeAnchors" | "addComponent" | "setComponentTransforms" |
+   * "removeComponents" | "decomposeComponents" |
    * "reverseContour" | "setContourStart" | "translatePoints" |
    * "setXAdvance" | "applyBooleanOp".
    * Font-level kinds additionally include metadata replacement, axis
@@ -476,6 +477,7 @@ export interface FontIntent {
   moveAnchors?: MoveAnchorsIntent
   removeAnchors?: RemoveAnchorsIntent
   addComponent?: AddComponentIntent
+  setComponentTransforms?: SetComponentTransformsIntent
   removeComponents?: RemoveComponentsIntent
   decomposeComponents?: DecomposeComponentsIntent
   reverseContour?: ReverseContourIntent
@@ -822,6 +824,12 @@ export interface ReverseContourIntent {
 
 export interface SetAxisMappingsIntent {
   mappings: Array<AxisMapping>
+}
+
+export interface SetComponentTransformsIntent {
+  layerId: LayerId
+  componentIds: Array<ComponentId>
+  transforms: Array<number>
 }
 
 export interface SetContourClosedIntent {

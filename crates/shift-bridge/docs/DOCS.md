@@ -1,6 +1,6 @@
 # shift-bridge
 
-<!-- reviewed: 2026-09-19 review-every: 90d -->
+<!-- reviewed: 2026-09-20 review-every: 90d -->
 
 NAPI bindings that expose the Rust font engine to Node.js and Electron as a `Bridge` class.
 
@@ -49,7 +49,7 @@ crates/shift-bridge/
 - `NapiAppliedChange` -- replace-grade mutation response returned by apply/undo/redo.
 - `NapiFontReplacement` -- selective complete font projections; metadata is present only when an edit replaced it.
 - `NapiUpdateFontMetadataIntent` -- complete authored metadata replacement payload that leaves metrics unchanged.
-- `NapiAddComponentIntent` / `NapiRemoveComponentsIntent` / `NapiDecomposeComponentsIntent` -- component-authoring payloads carrying stable layer, component, and base-glyph identities through the shared atomic apply path.
+- `NapiAddComponentIntent` / `NapiSetComponentTransformsIntent` / `NapiRemoveComponentsIntent` / `NapiDecomposeComponentsIntent` -- component-authoring payloads carrying stable layer, component, base-glyph, and decomposed-transform values through the shared atomic apply path.
 - `NapiLayerReplaced` -- NAPI adapter for one replaced glyph layer in an applied change.
 - `NapiAxis` / `NapiAxisMapping` -- authoring DTOs used by axis create/update, mapping replacement, and mapped-location queries.
 - `NapiVariationBasis` / `NapiVariationDelta` -- compiled normalized supports and numeric contributions translated without model reconstruction.

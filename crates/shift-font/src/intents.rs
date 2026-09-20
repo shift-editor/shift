@@ -11,9 +11,9 @@ use crate::error::{CoreError, CoreResult};
 use crate::interpolation::GlyphInterpolationValues;
 use crate::ir::{
     Anchor, AnchorId, Axis, AxisId, AxisMapping, BooleanOp, Component, ComponentId, Contour,
-    ContourId, DesignLocation, Font, FontMetadata, Glyph, GlyphId, GlyphLayer, GlyphName, LayerId,
-    MetricDefinition, MetricId, MetricValue, NamedInstance, NamedInstanceId, PointId, PointType,
-    Source, SourceId,
+    ContourId, DecomposedTransform, DesignLocation, Font, FontMetadata, Glyph, GlyphId, GlyphLayer,
+    GlyphName, LayerId, MetricDefinition, MetricId, MetricValue, NamedInstance, NamedInstanceId,
+    PointId, PointType, Source, SourceId,
 };
 use crate::layer_edit::BulkNodePositionUpdates;
 use crate::source::source_locations_equal;
@@ -94,6 +94,13 @@ pub enum FontIntent {
         layer_id: LayerId,
         component_id: ComponentId,
         base_glyph_id: GlyphId,
+    },
+    /// Replaces direct component transforms without changing component identity or order.
+    SetComponentTransforms {
+        layer_id: LayerId,
+        component_ids: Vec<ComponentId>,
+        /// Nine decomposed values per component in interpolation order.
+        transforms: Vec<f64>,
     },
     RemoveComponents {
         layer_id: LayerId,
@@ -238,6 +245,7 @@ impl FontIntent {
             | Self::MoveAnchors { layer_id, .. }
             | Self::RemoveAnchors { layer_id, .. }
             | Self::AddComponent { layer_id, .. }
+            | Self::SetComponentTransforms { layer_id, .. }
             | Self::RemoveComponents { layer_id, .. }
             | Self::DecomposeComponents { layer_id, .. }
             | Self::ReverseContour { layer_id, .. }
@@ -284,6 +292,7 @@ impl FontIntent {
             | Self::MoveAnchors { layer_id, .. }
             | Self::RemoveAnchors { layer_id, .. }
             | Self::AddComponent { layer_id, .. }
+            | Self::SetComponentTransforms { layer_id, .. }
             | Self::RemoveComponents { layer_id, .. }
             | Self::DecomposeComponents { layer_id, .. }
             | Self::ReverseContour { layer_id, .. }
@@ -327,6 +336,7 @@ impl FontIntent {
             self,
             Self::MovePoints { .. }
                 | Self::MoveAnchors { .. }
+                | Self::SetComponentTransforms { .. }
                 | Self::TranslatePoints { .. }
                 | Self::SetXAdvance { .. }
         )
@@ -1133,6 +1143,54 @@ impl Font {
                 self.rebuild_structure_index()?;
                 Ok(change)
             }
+            FontIntent::SetComponentTransforms {
+                layer_id,
+                component_ids,
+                transforms,
+            } => {
+                if transforms.len() != component_ids.len() * 9 {
+                    return Err(CoreError::InvalidPositionUpdateInput {
+                        kind: "component transforms",
+                        message: format!(
+                            "expected {} values for {} components, got {}",
+                            component_ids.len() * 9,
+                            component_ids.len(),
+                            transforms.len()
+                        ),
+                    });
+                }
+                if transforms.iter().any(|value| !value.is_finite()) {
+                    return Err(CoreError::InvalidPositionUpdateInput {
+                        kind: "component transforms",
+                        message: "values must be finite".to_string(),
+                    });
+                }
+
+                let layer = self.layer_mut_or_err(layer_id)?;
+                for component_id in component_ids {
+                    if layer.component(component_id.clone()).is_none() {
+                        return Err(CoreError::InvalidComponentId(component_id.to_string()));
+                    }
+                }
+                for (component_id, values) in component_ids.iter().zip(transforms.chunks_exact(9)) {
+                    layer.set_component_transform(
+                        component_id,
+                        DecomposedTransform {
+                            translate_x: values[0],
+                            translate_y: values[1],
+                            rotation: values[2],
+                            scale_x: values[3],
+                            scale_y: values[4],
+                            skew_x: values[5],
+                            skew_y: values[6],
+                            t_center_x: values[7],
+                            t_center_y: values[8],
+                        },
+                    )?;
+                }
+
+                Ok(FontChange::layer_geometry_replaced(layer))
+            }
             FontIntent::RemoveComponents {
                 layer_id,
                 component_ids,
@@ -1445,6 +1503,49 @@ mod tests {
         .unwrap();
 
         assert!(font.layer(root_layer_id).unwrap().components().is_empty());
+    }
+
+    #[test]
+    fn component_transform_intent_replaces_authored_values() {
+        let mut font = Font::new();
+        let source_id = font.default_source_id().unwrap();
+        let layer_id = LayerId::new();
+        let component_id = ComponentId::new();
+        let mut layer = GlyphLayer::new(layer_id.clone(), source_id);
+        layer.add_component(Component::with_id(
+            component_id.clone(),
+            GlyphId::new(),
+            "base",
+            DecomposedTransform::default(),
+        ));
+        let mut glyph = Glyph::new("root");
+        glyph.set_layer(layer);
+        font.insert_glyph(glyph).unwrap();
+
+        font.apply_intents(FontIntentSet {
+            intents: vec![FontIntent::SetComponentTransforms {
+                layer_id: layer_id.clone(),
+                component_ids: vec![component_id.clone()],
+                transforms: vec![12.0, -7.0, 30.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0],
+            }],
+        })
+        .unwrap();
+
+        let transform = font
+            .layer(layer_id)
+            .unwrap()
+            .component(component_id)
+            .unwrap()
+            .transform();
+        assert_eq!(transform.translate_x, 12.0);
+        assert_eq!(transform.translate_y, -7.0);
+        assert_eq!(transform.rotation, 30.0);
+        assert_eq!(transform.scale_x, 2.0);
+        assert_eq!(transform.scale_y, 3.0);
+        assert_eq!(transform.skew_x, 4.0);
+        assert_eq!(transform.skew_y, 5.0);
+        assert_eq!(transform.t_center_x, 6.0);
+        assert_eq!(transform.t_center_y, 7.0);
     }
 
     #[test]

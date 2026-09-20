@@ -1423,7 +1423,8 @@ pub struct NapiFontIntent {
     /// Discriminator naming the populated payload field. Editing kinds:
     /// "addPoints" | "addContour" | "setContourClosed" | "movePoints" |
     /// "setPointSmooth" | "removePoints" | "addAnchors" | "moveAnchors" |
-    /// "removeAnchors" | "addComponent" | "removeComponents" | "decomposeComponents" |
+    /// "removeAnchors" | "addComponent" | "setComponentTransforms" |
+    /// "removeComponents" | "decomposeComponents" |
     /// "reverseContour" | "setContourStart" | "translatePoints" |
     /// "setXAdvance" | "applyBooleanOp".
     /// Font-level kinds additionally include metadata replacement, axis
@@ -1441,6 +1442,7 @@ pub struct NapiFontIntent {
     pub move_anchors: Option<NapiMoveAnchorsIntent>,
     pub remove_anchors: Option<NapiRemoveAnchorsIntent>,
     pub add_component: Option<NapiAddComponentIntent>,
+    pub set_component_transforms: Option<NapiSetComponentTransformsIntent>,
     pub remove_components: Option<NapiRemoveComponentsIntent>,
     pub decompose_components: Option<NapiDecomposeComponentsIntent>,
     pub reverse_contour: Option<NapiReverseContourIntent>,
@@ -1782,6 +1784,15 @@ pub struct NapiAddComponentIntent {
     pub component_id: String,
     #[napi(ts_type = "GlyphId")]
     pub base_glyph_id: String,
+}
+
+#[napi(object)]
+pub struct NapiSetComponentTransformsIntent {
+    #[napi(ts_type = "LayerId")]
+    pub layer_id: String,
+    #[napi(ts_type = "Array<ComponentId>")]
+    pub component_ids: Vec<String>,
+    pub transforms: Vec<f64>,
 }
 
 #[napi(object)]

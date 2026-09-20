@@ -1,6 +1,6 @@
 # @shift/types
 
-<!-- reviewed: 2026-09-19 review-every: 90d -->
+<!-- reviewed: 2026-09-20 review-every: 90d -->
 
 Shared DTO TypeScript types for Shift. This package owns branded IDs and bridge DTOs generated from `shift-bridge`.
 
@@ -44,7 +44,7 @@ Import from `@shift/types`.
 - `Axis` / `AxisMapping` / `NamedInstance` -- generated variation authoring DTOs, keyed by branded entity IDs and expressed in Shift coordinate spaces.
 - `SourceMetricsInterpolationSnapshot` -- derived metric schema, reusable interpolation basis, and ordered source values; it is workspace transport state, not an authored source or named instance.
 - `LayerReplaced` -- one replaced glyph layer in an applied change.
-- `AddComponentIntent` / `RemoveComponentsIntent` / `DecomposeComponentsIntent` -- generated component-authoring DTOs using branded layer, component, and glyph identities.
+- `AddComponentIntent` / `SetComponentTransformsIntent` / `RemoveComponentsIntent` / `DecomposeComponentsIntent` -- generated component-authoring DTOs using branded layer, component, and glyph identities plus ordered decomposed-transform values.
 - `PointType` -- bridge point type union: `"onCurve" | "offCurve" | "qCurve"`. Quadratic endpoints remain distinct across transport even though anchor predicates accept both on-curve variants.
 
 ## How it works

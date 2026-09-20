@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { Point } from "@shift/glyph-state";
 import type { Point2D } from "@shift/geo";
-import { isPointId, type GlyphName, type PointId } from "@shift/types";
+import { isPointId, type ComponentId, type GlyphName, type PointId } from "@shift/types";
 import type { GlyphLayer } from "@/lib/model/Glyph";
 import { TestEditor } from "@/testing/TestEditor";
 import { SELECT_BOUNDING_BOX_STYLE } from "./BoundingBox";
@@ -905,6 +905,114 @@ describe("Select tool", () => {
       expect(editor.selection.ids).toEqual([componentId]);
       await editor.clickGlyphLocal(50, 75);
       expect(editor.selection.ids).toEqual([]);
+    });
+
+    describe("component transforms", () => {
+      let layer: GlyphLayer;
+      let componentId: ComponentId;
+
+      beforeEach(async () => {
+        await editor.addGlyph("transform-base", null);
+        const record = editor.font.recordForName("transform-base" as GlyphName)!;
+        const glyph = await editor.font.loadGlyph(record.id);
+        const baseLayer = glyph.layerForSource(editor.font.defaultSource.id)!;
+        addClosedContour(baseLayer, [
+          { x: 0, y: 0 },
+          { x: 100, y: 0 },
+          { x: 100, y: 100 },
+          { x: 0, y: 100 },
+        ]);
+        addClosedContour(baseLayer, [
+          { x: 25, y: 25 },
+          { x: 25, y: 75 },
+          { x: 75, y: 75 },
+          { x: 75, y: 25 },
+        ]);
+
+        layer = editor.requireGlyphLayer();
+        componentId = layer.addComponent(record.id);
+        await editor.settle();
+        await editor.clickGlyphLocal(10, 10);
+      });
+
+      it("moves from empty space inside the component bounds and preserves undo", async () => {
+        await editor.dragScene({
+          down: { x: 50, y: 50 },
+          start: { x: 55, y: 50 },
+          end: { x: 80, y: 70 },
+        });
+
+        expect(
+          layer.components.find((component) => component.id === componentId)?.transform,
+        ).toMatchObject({
+          translateX: 30,
+          translateY: 20,
+        });
+        expect(editor.selectionBounds()).toMatchObject({ x: 30, y: 20, width: 100, height: 100 });
+
+        await editor.undo();
+        expect(
+          layer.components.find((component) => component.id === componentId)?.transform,
+        ).toMatchObject({
+          translateX: 0,
+          translateY: 0,
+        });
+        await editor.redo();
+        expect(
+          layer.components.find((component) => component.id === componentId)?.transform,
+        ).toMatchObject({
+          translateX: 30,
+          translateY: 20,
+        });
+      });
+
+      it("discards a component move when the drag is canceled", () => {
+        const down = editor.projectSceneToScreen({ x: 50, y: 50 });
+        const move = editor.projectSceneToScreen({ x: 80, y: 70 });
+        editor.pointerDown(down.x, down.y).pointerMove(move.x, move.y);
+        expect(layer.components[0]?.transform).toMatchObject({ translateX: 30, translateY: 20 });
+
+        editor.escape();
+        expect(layer.components[0]?.transform).toMatchObject({ translateX: 0, translateY: 0 });
+      });
+
+      it("scales from a component corner handle", async () => {
+        const bounds = editor.selectionBounds();
+        if (!bounds) throw new Error("Expected component bounds");
+
+        await editor.dragScene({
+          down: { x: bounds.right, y: bounds.bottom },
+          start: { x: bounds.right + 5, y: bounds.bottom + 5 },
+          end: { x: bounds.right + 50, y: bounds.bottom + 50 },
+        });
+
+        expect(layer.components[0]?.transform).toMatchObject({ scaleX: 1.5, scaleY: 1.5 });
+        expect(editor.selectionBounds()).toMatchObject({ x: 0, y: 0, width: 150, height: 150 });
+      });
+
+      it("rotates from the active corner rotation zone", async () => {
+        const tool = editor.toolManager.activeTool as Select;
+        const rect = tool.boundingBox.screenRect;
+        const bounds = editor.selectionBounds();
+        if (!rect || !bounds) throw new Error("Expected component bounding box");
+
+        const downScreen = {
+          x: rect.right + SELECT_BOUNDING_BOX_STYLE.rotationZoneOffsetPx,
+          y: rect.top - SELECT_BOUNDING_BOX_STYLE.rotationZoneOffsetPx,
+        };
+        const down = editor.projectScreenToScene(downScreen);
+        const center = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
+        const offset = { x: down.x - center.x, y: down.y - center.y };
+        const end = { x: center.x - offset.y, y: center.y + offset.x };
+
+        await editor.dragScene({
+          down,
+          start: { x: down.x + (end.x - down.x) * 0.1, y: down.y + (end.y - down.y) * 0.1 },
+          end,
+        });
+
+        expect(Math.abs(layer.components[0]?.transform.rotation ?? 0)).toBeCloseTo(90);
+      });
     });
   });
 });

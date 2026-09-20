@@ -576,8 +576,8 @@ These are allowed to jump around when energy is high, but they should not silent
 
 **Component Editing**
 
-- [ ] Move components in editor
-- [ ] Scale/rotate components in editor
+- [x] Move components in editor
+- [x] Scale/rotate components in editor
 - [ ] Reset component transform
 - [ ] Replace base glyph while preserving the component transform
 - [ ] Duplicate component with a fresh identity
@@ -589,7 +589,7 @@ These are allowed to jump around when energy is high, but they should not silent
 **Component Display**
 
 - [ ] Render components dimmed/ghosted
-- [ ] Show component bounds
+- [x] Show component bounds
 - [ ] Open base glyph from the context menu or double-click
 
 **Decomposition**

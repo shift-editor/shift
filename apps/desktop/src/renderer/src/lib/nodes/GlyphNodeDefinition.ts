@@ -1,5 +1,6 @@
 import { Bounds, type Rect2D } from "@shift/geo";
 import type { SegmentId } from "@shift/glyph-state";
+import type { ComponentId } from "@shift/types";
 import type { NodePoint } from "@/types/coordinates";
 import { SCREEN_HIT_RADIUS } from "@/lib/editor/rendering/constants";
 import { OutlineRenderer } from "@/lib/editor/rendering/Outline";
@@ -313,6 +314,18 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
       }
     }
 
+    const hoveredComponentId = this.#hoveredComponentId(node);
+    if (hoveredComponentId) {
+      const style = ctx.canvas.theme.component.hoverOutline;
+      for (const component of view.components) {
+        if (component.componentPath[0] !== hoveredComponentId) continue;
+
+        for (const contour of component.contours) {
+          ctx.canvas.strokePath(contour.path, style.stroke, style.widthPx);
+        }
+      }
+    }
+
     this.#drawDebugOverlays(node, ctx, view);
   }
 
@@ -428,6 +441,16 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     }
 
     return segmentIds;
+  }
+
+  #hoveredComponentId(node: GlyphNode): ComponentId | null {
+    const id = this.editor.hover.id;
+    if (!id) return null;
+
+    const object = this.editor.object(id);
+    if (object?.kind !== "component" || object.node.id !== node.id) return null;
+
+    return object.componentId;
   }
 
   #hoveredSegmentId(node: GlyphNode): SegmentId | null {

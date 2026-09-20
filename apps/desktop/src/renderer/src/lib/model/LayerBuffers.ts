@@ -1,7 +1,8 @@
-import { Bounds, type Bounds as BoundsType } from "@shift/geo";
+import { Bounds, type Bounds as BoundsType, type DecomposedTransform } from "@shift/geo";
 import type {
   AnchorId,
   AnchorSeed,
+  ComponentId,
   ContourId,
   GlyphState,
   GlyphStructure,
@@ -199,6 +200,33 @@ export class LayerBuffers {
       }
     }
     return positions;
+  }
+
+  componentTransform(componentId: ComponentId): DecomposedTransform | null {
+    return (
+      this.components.find((component) => component.data.id === componentId)?.transform ?? null
+    );
+  }
+
+  setComponentTransforms(
+    componentIds: readonly ComponentId[],
+    transforms: readonly DecomposedTransform[],
+  ): boolean {
+    if (componentIds.length !== transforms.length) return false;
+
+    const components = componentIds.map((componentId) =>
+      this.components.find((component) => component.data.id === componentId),
+    );
+    if (components.some((component) => component === undefined)) return false;
+
+    batch(() => {
+      for (let index = 0; index < components.length; index++) {
+        const component = components[index];
+        const transform = transforms[index];
+        if (component && transform) component.setTransform(transform);
+      }
+    });
+    return true;
   }
 
   addContour(contourId: ContourId, closed: boolean): boolean {

@@ -1,6 +1,6 @@
 # shift-font
 
-<!-- reviewed: 2026-09-19 review-every: 90d -->
+<!-- reviewed: 2026-09-20 review-every: 90d -->
 
 First-class Rust font object model for Shift.
 
@@ -144,7 +144,7 @@ Transport and workspace layers should pass stable identity to find the model obj
 3. Bulk position paths take `BulkNodePositionUpdates` flat ID/coordinate slices; validate coordinate length against the ID count before mutating anything so a malformed batch never half-applies.
 4. Verify: `cargo test -p shift-font`.
 
-Component authoring uses `AddComponent`, `RemoveComponents`, and `DecomposeComponents`. Add creates an identity-transformed direct reference with caller-minted identity. Decomposition replaces selected direct references with fresh local contours, recursively flattening each selected subtree at the target layer's source location after component transforms and anchor attachment are resolved. Unselected siblings still participate in attachment resolution.
+Component authoring uses `AddComponent`, `SetComponentTransforms`, `RemoveComponents`, and `DecomposeComponents`. Add creates an identity-transformed direct reference with caller-minted identity. Transform replacement validates all direct component identities before mutating and records one values-only layer replacement. Anchor attachment establishes automatic placement first, then the authored transform composes on top as a user-controlled offset. Decomposition replaces selected direct references with fresh local contours, recursively flattening each selected subtree at the target layer's source location after component transforms and anchor attachment are resolved. Unselected siblings still participate in attachment resolution.
 
 ## Gotchas
 

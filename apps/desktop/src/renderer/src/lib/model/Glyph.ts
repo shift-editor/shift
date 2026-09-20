@@ -55,6 +55,7 @@ import {
   Vec2,
   type Bounds as BoundsType,
   type CubicCurve,
+  type DecomposedTransform,
   type MatModel,
   type Point2D,
   type QuadraticCurve,
@@ -91,6 +92,7 @@ import {
 import { PositionList } from "./positions/PositionList";
 import { GlyphLayerPositionPatch } from "./GlyphLayerPositionPatch";
 import { GlyphLayerEdit } from "./GlyphLayerEdit";
+import { ComponentTransformEdit } from "./ComponentTransformEdit";
 import { DeletePoints } from "./DeletePoints";
 import { GlyphLayerState } from "./GlyphLayerState";
 import type { ContourBuffer } from "./ContourBuffer";
@@ -332,6 +334,30 @@ class GlyphLayerWriter {
     const componentId = mintComponentId();
     this.#intents.addComponent({ componentId, baseGlyphId });
     return componentId;
+  }
+
+  setComponentTransforms(
+    componentIds: readonly ComponentId[],
+    transforms: readonly DecomposedTransform[],
+  ): void {
+    if (componentIds.length === 0) return;
+
+    const values = transforms.flatMap((transform) => [
+      transform.translateX,
+      transform.translateY,
+      transform.rotation,
+      transform.scaleX,
+      transform.scaleY,
+      transform.skewX,
+      transform.skewY,
+      transform.tCenterX,
+      transform.tCenterY,
+    ]);
+    const editId = this.#intents.setComponentTransforms({
+      componentIds: [...componentIds],
+      transforms: values,
+    });
+    this.#state.state.setComponentTransforms(editId, componentIds, transforms);
   }
 
   removeComponents(componentIds: readonly ComponentId[]): void {
@@ -608,6 +634,11 @@ export class GlyphLayer {
   /** Begins a reversible edit that mutates this layer's reactive topology directly. */
   beginEdit(): GlyphLayerEdit {
     return new GlyphLayerEdit(this, this.#writer.layerState);
+  }
+
+  /** Begins a reversible preview cycle for direct component transforms. */
+  beginComponentTransformEdit(componentIds: readonly ComponentId[]): ComponentTransformEdit {
+    return new ComponentTransformEdit(this, this.#writer.layerState, componentIds);
   }
 
   /** @internal Groups accepted edit operations into one workspace and undo transaction. */
@@ -946,6 +977,14 @@ export class GlyphLayer {
    */
   addComponent(baseGlyphId: GlyphId): ComponentId {
     return this.#writer.addComponent(baseGlyphId);
+  }
+
+  /** @internal Commits direct component transforms through the workspace path. */
+  setComponentTransforms(
+    componentIds: readonly ComponentId[],
+    transforms: readonly DecomposedTransform[],
+  ): void {
+    this.#writer.setComponentTransforms(componentIds, transforms);
   }
 
   /**
