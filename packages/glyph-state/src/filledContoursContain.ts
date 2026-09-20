@@ -1,4 +1,4 @@
-import { Bounds, Curve, type CurveType, type Point2D } from "@shift/geo";
+import { Bounds, Curve, Vec2, type CurveType, type Point2D } from "@shift/geo";
 import type { SegmentedContour } from "./types/contour";
 
 const FLATTEN_TOLERANCE = 0.25;
@@ -87,10 +87,5 @@ function flatness(curve: CurveType): number {
 }
 
 function pointLineDistance(point: Point2D, start: Point2D, end: Point2D): number {
-  const dx = end.x - start.x;
-  const dy = end.y - start.y;
-  const length = Math.hypot(dx, dy);
-  if (length === 0) return Math.hypot(point.x - start.x, point.y - start.y);
-
-  return Math.abs(dx * (start.y - point.y) - (start.x - point.x) * dy) / length;
+  return Vec2.len(Vec2.reject(Vec2.sub(point, start), Vec2.sub(end, start)));
 }
