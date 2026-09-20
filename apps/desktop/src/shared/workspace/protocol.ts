@@ -1,53 +1,28 @@
 import type {
   AppliedChange,
-  Axis,
-  AxisMapping,
-  AxisMappingBasis,
   CatalogAtlasPage,
   CatalogAtlasWeights,
   FontIntent,
   FontSnapshot,
-  FontMetadata,
-  FontMetrics,
   GlyphId,
   GlyphPreview,
   GlyphProjection,
-  GlyphRecord,
-  GlyphState,
   GlyphSnapshot,
   LayerId,
   LayerMatch,
   Location,
-  MetricDefinition,
-  SourceMetricsInterpolationSnapshot,
-  NamedInstance,
   SlugAtlas,
-  Source,
-  SourceId,
+  WorkspaceDocumentState,
+  WorkspaceSnapshot,
 } from "@shift/types";
 
-/**
- * Point-in-time view of the open workspace: identity and records, no geometry.
- */
-export type WorkspaceSnapshot = {
-  workspaceId: string;
-  metadata: FontMetadata;
-  metrics: FontMetrics;
-  metricDefinitions: MetricDefinition[];
-  sourceMetricsInterpolation: SourceMetricsInterpolationSnapshot | null;
-  glyphs: GlyphRecord[];
-  sources: Source[];
-  axes: Axis[];
-  axisMappings: AxisMapping[];
-  axisMappingBases: AxisMappingBasis[];
-  namedInstances: NamedInstance[];
-};
-
-export type WorkspaceGlyphLayerSnapshot = {
-  glyphId: GlyphId;
-  sourceId: SourceId;
-  state: GlyphState;
-};
+export type {
+  FontSessionMode,
+  WorkspaceDocumentSourceKind,
+  WorkspaceDocumentState,
+  WorkspaceGlyphLayerSnapshot,
+  WorkspaceSnapshot,
+} from "@shift/types";
 
 export type WorkspaceGlyphSnapshotRequest = {
   glyphId: GlyphId;
@@ -70,8 +45,6 @@ export type WorkspaceSlugAtlasPageRequest = {
   replacementPageIndices: number[];
 };
 
-export type WorkspaceDocumentSourceKind = "untitled" | "document" | "imported";
-
 /** Recoverable authored workspace discovered under the app-owned documents root. */
 export type WorkspaceRecovery =
   | {
@@ -86,9 +59,6 @@ export type WorkspaceRecovery =
       state: "recoverable";
       workspaceId: string;
     };
-
-/** Immutable product mode for one live font session. */
-export type FontSessionMode = "preview" | "memory" | "workspace";
 
 /** Main-visible identity for one retained, read-only foreign source session. */
 export type FontSourceSession = {
@@ -135,25 +105,6 @@ export interface ByteReadableStreamReader<T> {
 export type WorkspaceDocumentIdentity = {
   documentId: string;
   canonicalPath: string;
-};
-
-/**
- * Main-visible document lifecycle state owned by the utility workspace.
- *
- * @remarks
- * `dirty` is the single semantic answer to "are there unsaved changes"; the
- * utility owns the version arithmetic that derives it and never ships the raw
- * counters. `needsSaveAs` is likewise derived from the source kind. Main
- * treats both as utility-owned state, not renderer queue state.
- */
-export type WorkspaceDocumentState = {
-  workspaceId: string;
-  sourceKind: WorkspaceDocumentSourceKind;
-  documentId: string | null;
-  saveTarget: string | null;
-  canonicalPath: string | null;
-  dirty: boolean;
-  needsSaveAs: boolean;
 };
 
 /** Identifies the compiled font written by a workspace export. */

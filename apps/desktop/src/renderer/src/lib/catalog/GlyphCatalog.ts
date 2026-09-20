@@ -8,12 +8,15 @@ import type {
   GlyphPreview,
   SourceId,
 } from "@shift/types";
-import { computed, type ComputedSignal, type Signal } from "@/lib/signals";
-import type { Editor } from "@/lib/editor/Editor";
-import { externalAxisLocationFromRecord, mapAxisLocation } from "@/lib/variation/location";
+import { computed, type ComputedSignal, type Signal } from "@shift/editor/lib/signals/index";
+import type { Editor } from "@shift/editor/lib/editor/Editor";
+import {
+  externalAxisLocationFromRecord,
+  mapAxisLocation,
+} from "@shift/editor/lib/variation/location";
 import type { GlyphAtlasSource } from "@/types/glyphAtlas";
 import type { CatalogLocation, GlyphCatalogItem } from "@/types/glyphCatalog";
-import { RenderGlyph } from "@/lib/model/RenderGlyph";
+import { RenderGlyph } from "@shift/editor/lib/model/RenderGlyph";
 
 /** Projects the editor model into the source-independent catalog boundary. */
 export class GlyphCatalog {

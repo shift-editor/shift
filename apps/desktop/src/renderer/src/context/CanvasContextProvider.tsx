@@ -1,6 +1,9 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { useEditor } from "@/workspace/WorkspaceContext";
-import { Canvas2DSurface, MarkerCanvasSurface } from "@/lib/editor/rendering/CanvasSurface";
+import {
+  Canvas2DSurface,
+  MarkerCanvasSurface,
+} from "@shift/editor/lib/editor/rendering/CanvasSurface";
 import { CanvasContext } from "./CanvasContext";
 
 export const CanvasContextProvider = ({

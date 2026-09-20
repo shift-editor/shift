@@ -1,6 +1,6 @@
 import type { Axis } from "@shift/types";
 import { useFont } from "@/workspace/WorkspaceContext";
-import { useSignalState } from "@/lib/signals";
+import { useSignalState } from "@shift/editor/lib/signals/index";
 
 /**
  * Active variation axes, or empty array when the font is not variable.

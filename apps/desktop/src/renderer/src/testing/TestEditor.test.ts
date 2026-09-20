@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { asPointId, mintGlyphId, mintNodeId, type GlyphName } from "@shift/types";
-import { objectIsKindOf } from "@/types";
+import { objectIsKindOf } from "@shift/editor/types/object";
 import { TestEditor } from "./TestEditor";
 
 describe("TestEditor", () => {

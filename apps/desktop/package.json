@@ -55,6 +55,7 @@
   },
   "dependencies": {
     "@shift/bridge": "workspace:*",
+    "@shift/editor": "workspace:*",
     "@shift/geo": "workspace:*",
     "@shift/glyph-info": "workspace:*",
     "@shift/glyph-state": "workspace:*",

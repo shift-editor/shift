@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PackedArray } from "./PackedArray";
+import { PackedArray } from "@shift/editor/lib/model/PackedArray";
 
 describe("packed arrays preserve logical record boundaries", () => {
   it("reverses records without reversing their components", () => {

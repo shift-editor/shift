@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { PointId } from "@shift/types";
-import { externalAxisLocationFromRecord } from "@/lib/variation/location";
-import type { GlyphLayer } from "@/lib/model/Glyph";
+import { externalAxisLocationFromRecord } from "@shift/editor/lib/variation/location";
+import type { GlyphLayer } from "@shift/editor/lib/model/Glyph";
 import { TestEditor } from "@/testing/TestEditor";
 
 describe("Select movement preserves selected geometry", () => {

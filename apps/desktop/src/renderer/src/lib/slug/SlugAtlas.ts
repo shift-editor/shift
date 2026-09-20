@@ -1,6 +1,9 @@
 import type { GlyphId, SlugSection, SourceId } from "@shift/types";
-import { interpolationWeights } from "@/lib/interpolation/InterpolationBasis";
-import { externalAxisLocationFromRecord, mapAxisLocation } from "@/lib/variation/location";
+import { interpolationWeights } from "@shift/editor/lib/interpolation/InterpolationBasis";
+import {
+  externalAxisLocationFromRecord,
+  mapAxisLocation,
+} from "@shift/editor/lib/variation/location";
 import type { CatalogLocation } from "@/types/glyphCatalog";
 import type { GlyphPreviewInstance, PackedGlyphPreviewFrame } from "@/types/glyphPreview";
 import type { GlyphAtlasGlyph, GlyphAtlasPage } from "@/types/glyphAtlas";

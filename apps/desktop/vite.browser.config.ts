@@ -68,9 +68,10 @@ export default defineConfig({
     reportCompressedSize: true,
     lib: {
       entry: {
+        runtime: path.resolve(__dirname, "../../packages/editor/src/index.ts"),
         canvas: path.resolve(__dirname, "src/renderer/src/components/editor/Canvas.tsx"),
-        editor: path.resolve(__dirname, "src/renderer/src/lib/editor/Editor.ts"),
-        font: path.resolve(__dirname, "src/renderer/src/lib/model/Font.ts"),
+        editor: path.resolve(__dirname, "../../packages/editor/src/lib/editor/Editor.ts"),
+        font: path.resolve(__dirname, "../../packages/editor/src/lib/model/Font.ts"),
         tools: path.resolve(__dirname, "src/renderer/src/lib/tools/tools.ts"),
         context: path.resolve(__dirname, "src/renderer/src/workspace/WorkspaceContext.ts"),
       },

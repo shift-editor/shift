@@ -6,11 +6,11 @@
  * outline bounds flow through positioning. No fakes; tests assert against
  * values read back from the workspace, not hardcoded advances.
  */
-import { signal } from "@/lib/signals/signal";
+import { signal } from "@shift/editor/lib/signals/signal";
 import { TestEditor } from "@/testing/TestEditor";
-import { TextLayout } from "./TextLayout";
-import { Positioner } from "./Positioner";
-import type { TextItem, GlyphTextItem, SegmentedRun } from "./types";
+import { TextLayout } from "@shift/editor/lib/text/layout/TextLayout";
+import { Positioner } from "@shift/editor/lib/text/layout/Positioner";
+import type { TextItem, GlyphTextItem, SegmentedRun } from "@shift/editor/lib/text/layout/types";
 
 const GLYPHS: ReadonlyArray<readonly [string, number, number]> = [
   ["A", 65, 500],

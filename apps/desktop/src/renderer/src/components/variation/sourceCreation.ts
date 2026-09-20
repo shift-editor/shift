@@ -1,12 +1,12 @@
 import type { Axis, AxisMappingBasis, Source } from "@shift/types";
-import type { ExternalAxisLocation, SourceCreationIssue } from "@/types/variation";
+import type { ExternalAxisLocation, SourceCreationIssue } from "@shift/editor/types/variation";
 import {
   axisValue,
   designAxisLocationFromLocation,
   designAxisLocationsEqual,
   externalAxisLocationFromRecord,
   mapAxisLocation,
-} from "@/lib/variation/location";
+} from "@shift/editor/lib/variation/location";
 
 const LOCATION_TOLERANCE = 1e-6;
 

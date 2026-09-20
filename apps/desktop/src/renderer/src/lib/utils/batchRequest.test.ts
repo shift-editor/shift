@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createBatchRequest } from "./batchRequest";
+import { createBatchRequest } from "@shift/editor/lib/utils/batchRequest";
 
 describe("keyed batch requests", () => {
   it("combines same-turn requests and deduplicates keys", async () => {

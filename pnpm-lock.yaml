@@ -54,6 +54,9 @@ importers:
       '@shift/bridge':
         specifier: workspace:*
         version: link:../../packages/bridge
+      '@shift/editor':
+        specifier: workspace:*
+        version: link:../../packages/editor
       '@shift/geo':
         specifier: workspace:*
         version: link:../../packages/geo
@@ -204,6 +207,46 @@ importers:
         specifier: workspace:*
         version: link:../../crates/shift-bridge
     devDependencies:
+      typescript:
+        specifier: ^5.5.4
+        version: 5.9.3
+
+  packages/editor:
+    dependencies:
+      '@shift/geo':
+        specifier: workspace:*
+        version: link:../geo
+      '@shift/glyph-state':
+        specifier: workspace:*
+        version: link:../glyph-state
+      '@shift/rules':
+        specifier: workspace:*
+        version: link:../rules
+      '@shift/types':
+        specifier: workspace:*
+        version: link:../types
+      '@shift/validation':
+        specifier: workspace:*
+        version: link:../validation
+      react:
+        specifier: ^19.1.0
+        version: 19.2.8
+      regl:
+        specifier: ^2.1.1
+        version: 2.1.1
+    devDependencies:
+      '@types/node':
+        specifier: ^25.3.0
+        version: 25.3.0
+      '@types/react':
+        specifier: ^19.1.8
+        version: 19.2.17
+      oxlint:
+        specifier: ^1.58.0
+        version: 1.58.0
+      oxlint-plugin-eslint:
+        specifier: ^1.58.0
+        version: 1.58.0
       typescript:
         specifier: ^5.5.4
         version: 5.9.3

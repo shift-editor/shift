@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { useSignalText } from "@/hooks/useSignalText";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { Separator } from "@shift/ui";
-import { effect } from "@/lib/signals";
+import { effect } from "@shift/editor/lib/signals/index";
 
 function formatCoords(x: number, y: number): string {
   return `(${Math.round(x)}, ${Math.round(y)})`;

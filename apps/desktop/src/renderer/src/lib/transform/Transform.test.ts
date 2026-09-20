@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { Transform } from "./Transform";
+import { Transform } from "@shift/editor/lib/transform/Transform";
 import { Bounds } from "@shift/geo";
 import { asPointId } from "@shift/types";
 import { expectAt } from "@/testing";

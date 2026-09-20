@@ -3,11 +3,12 @@ import { useCallback, useEffect, useRef, useState, type FC } from "react";
 import { cn } from "@shift/ui";
 
 import { CanvasContextProvider } from "@/context/CanvasContextProvider";
-import { CanvasSurface } from "@/lib/editor/rendering/CanvasSurface";
+import { CanvasSurface } from "@shift/editor/lib/editor/rendering/CanvasSurface";
 import { useDebugSafe } from "@/context/DebugContext";
 import { useEditor } from "@/workspace/WorkspaceContext";
-import { zoomMultiplierFromWheel } from "@/lib/transform";
-import { objectIsKindOf, type CanvasProps } from "@/types";
+import { zoomMultiplierFromWheel } from "@shift/editor/lib/transform/index";
+import type { CanvasProps } from "@shift/editor/types/editor";
+import { objectIsKindOf } from "@shift/editor/types/object";
 import { InteractiveScene } from "./InteractiveScene";
 import { StaticScene } from "./StaticScene";
 import { DebugPanel } from "../debug/DebugPanel";

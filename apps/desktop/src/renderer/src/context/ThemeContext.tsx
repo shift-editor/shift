@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { lightTheme, applyThemeToCss, type ThemeTokens } from "@/lib/styles/theme";
 
-import type { ThemeName } from "@/types/uiState";
+import type { ThemeName } from "@shift/editor/types/uiState";
 export type { ThemeName };
 
 export interface ThemeContextValue {

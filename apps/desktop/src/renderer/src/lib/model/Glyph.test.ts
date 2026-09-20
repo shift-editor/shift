@@ -2,11 +2,11 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { GlyphName, GlyphRecord, PointId } from "@shift/types";
 import type { Point } from "@shift/glyph-state";
 import { Curve } from "@shift/geo";
-import { effect, signal, track } from "@/lib/signals/signal";
-import { emptyExternalAxisLocation } from "@/lib/variation/location";
+import { effect, signal, track } from "@shift/editor/lib/signals/signal";
+import { emptyExternalAxisLocation } from "@shift/editor/lib/variation/location";
 import { TestEditor } from "@/testing/TestEditor";
-import type { GlyphLayer } from "./Glyph";
-import { RenderGlyph } from "./RenderGlyph";
+import type { GlyphLayer } from "@shift/editor/lib/model/Glyph";
+import { RenderGlyph } from "@shift/editor/lib/model/RenderGlyph";
 
 /**
  * Restored from the WS6 behavioral inventory (git show ef037c6e^), rebuilt on

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { glyphTextItem as glyph, lineBreakTextItem } from "./types";
+import { glyphTextItem as glyph, lineBreakTextItem } from "@shift/editor/lib/text/layout/types";
 import { layoutTestEditor, makeLayout } from "./testUtils";
 import type { TestEditor } from "@/testing/TestEditor";
 

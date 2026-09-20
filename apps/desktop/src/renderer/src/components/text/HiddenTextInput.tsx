@@ -7,8 +7,8 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useEditor } from "@/workspace/WorkspaceContext";
-import { effect } from "@/lib/signals/signal";
-import { lineBreakTextItem } from "@/lib/text/layout";
+import { effect } from "@shift/editor/lib/signals/signal";
+import { lineBreakTextItem } from "@shift/editor/lib/text/layout/index";
 
 export function TextInput() {
   const editor = useEditor();

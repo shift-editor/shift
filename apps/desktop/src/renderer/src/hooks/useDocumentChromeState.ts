@@ -1,6 +1,6 @@
 import { useMemo, useSyncExternalStore } from "react";
 
-import { effect, useSignalState } from "@/lib/signals";
+import { effect, useSignalState } from "@shift/editor/lib/signals/index";
 import { useEditor, useFontSession } from "@/workspace/WorkspaceContext";
 
 import type { WorkspaceDocumentState } from "@shared/workspace/protocol";

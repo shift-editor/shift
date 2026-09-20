@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { Vec2, type Point2D } from "@shift/geo";
 import type { PointId } from "@shift/types";
-import type { GlyphLayer } from "@/lib/model/Glyph";
+import type { GlyphLayer } from "@shift/editor/lib/model/Glyph";
 import { TestEditor } from "@/testing/TestEditor";
-import { SELECT_BOUNDING_BOX_STYLE } from "./BoundingBox";
+import { SELECT_BOUNDING_BOX_STYLE } from "@shift/editor/lib/tools/select/BoundingBox";
 
 describe("Select bounding-box transforms preserve geometry outcomes", () => {
   let editor: TestEditor;

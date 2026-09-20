@@ -16,7 +16,7 @@ import VerticalEllipsis from "@/assets/general/vertical-ellipsis.svg";
 import { SidebarActionButton, SidebarActionRow } from "@/components/sidebar";
 import { useSettingsNavigation } from "@/context/SettingsNavigationContext";
 import { useNamedInstances } from "@/hooks/useNamedInstances";
-import { externalAxisLocationFromLocation } from "@/lib/variation/location";
+import { externalAxisLocationFromLocation } from "@shift/editor/lib/variation/location";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { OutlineVisibilityButton } from "./OutlineVisibilityButton";
 import type { InstancesProps } from "./types";

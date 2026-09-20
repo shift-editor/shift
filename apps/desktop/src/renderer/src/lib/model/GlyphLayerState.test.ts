@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { effect, track } from "@/lib/signals/signal";
+import { effect, track } from "@shift/editor/lib/signals/signal";
 import type { AnchorId, ContourId, GlyphState, LayerId, PointId } from "@shift/types";
-import { GlyphLayerState } from "./GlyphLayerState";
+import { GlyphLayerState } from "@shift/editor/lib/model/GlyphLayerState";
 
 const contourId = (index: number): ContourId => `contour-${index}` as ContourId;
 const pointId = (index: number): PointId => `point-${index}` as PointId;

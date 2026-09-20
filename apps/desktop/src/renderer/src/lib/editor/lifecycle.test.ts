@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { EventEmitter } from "./lifecycle";
+import { EventEmitter } from "@shift/editor/lib/editor/lifecycle";
 
 describe("EventEmitter", () => {
   it("delivers an emitted event to a registered handler", () => {

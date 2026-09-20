@@ -13,7 +13,7 @@ import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
 import { useFocusZone, ZoneContainer } from "@/context/FocusZoneContext";
 import { KeyboardRouter } from "@/lib/keyboard";
 import { getShiftHost } from "@/host/shiftHost";
-import { useSignalState } from "@/lib/signals";
+import { useSignalState } from "@shift/editor/lib/signals/index";
 import { asGlyphId, mintNodeId } from "@shift/types";
 import { Bounds } from "@shift/geo";
 

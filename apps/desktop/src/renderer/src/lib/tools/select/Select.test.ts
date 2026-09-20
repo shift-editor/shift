@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { isPointId, type PointId } from "@shift/types";
 import { TestEditor } from "@/testing/TestEditor";
-import { SELECT_BOUNDING_BOX_STYLE } from "./BoundingBox";
-import { Select } from "./Select";
-import { LOCK_GAP_PX, LOCK_SIZE_PX } from "@/lib/editor/rendering/icons/lock";
+import { SELECT_BOUNDING_BOX_STYLE } from "@shift/editor/lib/tools/select/BoundingBox";
+import { Select } from "@shift/editor/lib/tools/select/Select";
+import { LOCK_GAP_PX, LOCK_SIZE_PX } from "@shift/editor/lib/editor/rendering/icons/lock";
 
 // Restored from the WS6 behavioral inventory (git show ef037c6e^).
 describe("Select tool", () => {

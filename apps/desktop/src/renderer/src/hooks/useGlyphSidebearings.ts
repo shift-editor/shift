@@ -1,6 +1,6 @@
 import type { GlyphSidebearings } from "@shift/glyph-state";
 import { useMemo } from "react";
-import { computed, useSignalState } from "@/lib/signals";
+import { computed, useSignalState } from "@shift/editor/lib/signals/index";
 import { useEditor } from "@/workspace/WorkspaceContext";
 
 const EMPTY_SIDEBEARINGS: GlyphSidebearings = { lsb: null, rsb: null };

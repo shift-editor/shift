@@ -1,5 +1,5 @@
 import { useCallback, useEffect, type ReactNode } from "react";
-import { isDev } from "@/lib/utils/utils";
+import { isDev } from "@shift/editor/lib/utils/utils";
 import { useFontSession } from "@/workspace/WorkspaceContext";
 import { DEFAULT_DEBUG_OVERLAYS, DebugContext } from "./DebugContext";
 

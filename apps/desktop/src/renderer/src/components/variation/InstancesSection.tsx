@@ -5,7 +5,7 @@ import { CreateInstanceMenu } from "./CreateInstanceMenu";
 import { Instances } from "./Instances";
 import { OutlineVisibilityButton } from "./OutlineVisibilityButton";
 import { useNamedInstances } from "@/hooks/useNamedInstances";
-import type { GlyphOutlineControls, GlyphOutlineTarget } from "@/types/glyphOutline";
+import type { GlyphOutlineControls, GlyphOutlineTarget } from "@shift/editor/types/glyphOutline";
 import { useFontSession } from "@/workspace/WorkspaceContext";
 import PlusIcon from "@/assets/general/plus.svg";
 

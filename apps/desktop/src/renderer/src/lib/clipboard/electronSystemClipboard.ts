@@ -1,4 +1,4 @@
-import type { SystemClipboard } from "./types";
+import type { SystemClipboard } from "@shift/editor/lib/clipboard/types";
 import { getShiftHost } from "@/host/shiftHost";
 
 /**

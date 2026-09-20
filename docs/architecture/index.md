@@ -32,43 +32,47 @@ Central routing table for Shift's distributed documentation. Before creating new
 
 ### Desktop app — Renderer
 
-| Path pattern                                     | Canonical doc                                                                                                                | Purpose                                                            |
-| ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `apps/desktop/src/renderer/src/lib/editor/**`    | [`apps/desktop/src/renderer/src/lib/editor/docs/DOCS.md`](../../apps/desktop/src/renderer/src/lib/editor/docs/DOCS.md)       | Canvas-based glyph editor, viewport transforms, selection          |
-| `apps/desktop/src/renderer/src/lib/model/**`     | [`apps/desktop/src/renderer/src/lib/model/docs/DOCS.md`](../../apps/desktop/src/renderer/src/lib/model/docs/DOCS.md)         | Reactive font, acquired Glyphs, authored layers, and projections   |
-| `apps/desktop/src/renderer/src/lib/tools/**`     | [`apps/desktop/src/renderer/src/lib/tools/docs/DOCS.md`](../../apps/desktop/src/renderer/src/lib/tools/docs/DOCS.md)         | State machine-based tool system (BaseTool, behaviors, actions)     |
-| `apps/desktop/src/renderer/src/lib/graphics/**`  | [`apps/desktop/src/renderer/src/lib/graphics/docs/DOCS.md`](../../apps/desktop/src/renderer/src/lib/graphics/docs/DOCS.md)   | Rendering abstraction with Canvas 2D backend and path caching      |
-| `apps/desktop/src/renderer/src/lib/transform/**` | [`apps/desktop/src/renderer/src/lib/transform/docs/DOCS.md`](../../apps/desktop/src/renderer/src/lib/transform/docs/DOCS.md) | Geometry transforms: rotate, scale, reflect selected points        |
-| `apps/desktop/src/renderer/src/lib/signals/**`   | [`apps/desktop/src/renderer/src/lib/signals/docs/DOCS.md`](../../apps/desktop/src/renderer/src/lib/signals/docs/DOCS.md)     | Fine-grained reactivity: dependency tracking and efficient updates |
-| `apps/desktop/src/renderer/src/lib/text/**`      | [`apps/desktop/src/renderer/src/lib/text/docs/DOCS.md`](../../apps/desktop/src/renderer/src/lib/text/docs/DOCS.md)           | Text editing: stable item identity and derived layout geometry     |
+| Path pattern                                     | Purpose                                                                                   |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| `apps/desktop/src/renderer/src/components/**`    | React application shell and editor mounting surfaces                                      |
+| `apps/desktop/src/renderer/src/lib/workspace/**` | Workspace transport, durable edit queue, and native-backed reads                          |
+| `apps/desktop/src/renderer/src/lib/graphics/**`  | [Workspace atlas adapters](../../apps/desktop/src/renderer/src/lib/graphics/docs/DOCS.md) |
+| `apps/desktop/src/renderer/src/workspace/**`     | Desktop session composition and Electron host wiring                                      |
 
 ### Packages
 
-| Path pattern              | Canonical doc                                                                  | Purpose                                                            |
-| ------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------ |
-| `packages/types/**`       | [`packages/types/docs/DOCS.md`](../../packages/types/docs/DOCS.md)             | Branded IDs, generated bridge DTO facade, and shared domain types  |
-| `packages/geo/**`         | [`packages/geo/docs/DOCS.md`](../../packages/geo/docs/DOCS.md)                 | Geometry utilities (Vec2, Curve, Polygon, Mat)                     |
-| `packages/glyph-state/**` | [`packages/glyph-state/docs/DOCS.md`](../../packages/glyph-state/docs/DOCS.md) | Glyph-domain geometry (contour traversal, segment parsing, bounds) |
-| `packages/ui/**`          | [`packages/ui/docs/DOCS.md`](../../packages/ui/docs/DOCS.md)                   | UI component library wrapping Base UI primitives                   |
-| `packages/validation/**`  | [`packages/validation/docs/DOCS.md`](../../packages/validation/docs/DOCS.md)   | Point sequence validation and persistence schemas                  |
-| `packages/rules/**`       | [`packages/rules/docs/DOCS.md`](../../packages/rules/docs/DOCS.md)             | Point editing rules engine for geometric constraints               |
+| Path pattern                           | Canonical doc                                                                    | Purpose                                                            |
+| -------------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `packages/editor/src/lib/editor/**`    | [`editor/docs/DOCS.md`](../../packages/editor/src/lib/editor/docs/DOCS.md)       | Editor facade, viewport, selection, and rendering                  |
+| `packages/editor/src/lib/model/**`     | [`model/docs/DOCS.md`](../../packages/editor/src/lib/model/docs/DOCS.md)         | Reactive font, glyph layers, interpolation, and editing            |
+| `packages/editor/src/lib/tools/**`     | [`tools/docs/DOCS.md`](../../packages/editor/src/lib/tools/docs/DOCS.md)         | Tool state machines and interaction behaviors                      |
+| `packages/editor/src/lib/signals/**`   | [`signals/docs/DOCS.md`](../../packages/editor/src/lib/signals/docs/DOCS.md)     | Fine-grained reactive graph                                        |
+| `packages/editor/src/lib/text/**`      | [`text/docs/DOCS.md`](../../packages/editor/src/lib/text/docs/DOCS.md)           | Text records, interaction, and layout                              |
+| `packages/editor/src/lib/transform/**` | [`transform/docs/DOCS.md`](../../packages/editor/src/lib/transform/docs/DOCS.md) | Geometry transforms and alignment                                  |
+| `packages/types/**`                    | [`packages/types/docs/DOCS.md`](../../packages/types/docs/DOCS.md)               | Branded IDs, generated bridge DTO facade, and shared domain types  |
+| `packages/geo/**`                      | [`packages/geo/docs/DOCS.md`](../../packages/geo/docs/DOCS.md)                   | Geometry utilities (Vec2, Curve, Polygon, Mat)                     |
+| `packages/glyph-state/**`              | [`packages/glyph-state/docs/DOCS.md`](../../packages/glyph-state/docs/DOCS.md)   | Glyph-domain geometry (contour traversal, segment parsing, bounds) |
+| `packages/ui/**`                       | [`packages/ui/docs/DOCS.md`](../../packages/ui/docs/DOCS.md)                     | UI component library wrapping Base UI primitives                   |
+| `packages/validation/**`               | [`packages/validation/docs/DOCS.md`](../../packages/validation/docs/DOCS.md)     | Point sequence validation and persistence schemas                  |
+| `packages/rules/**`                    | [`packages/rules/docs/DOCS.md`](../../packages/rules/docs/DOCS.md)               | Point editing rules engine for geometric constraints               |
 
 ## Cross-cutting operations
 
-| Concern                    | Canonical doc                                                                                                  | Purpose                                                      |
-| -------------------------- | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| Canonical `.shift` format  | [`ADR 0001`](decisions/0001-canonical-sqlite-shift-documents.md)                                               | SQLite document, identity, Save, and recovery decision       |
-| Desktop releases           | [`docs/releases.md`](../releases.md)                                                                           | Release states, versioning, workflows, signing, and rollback |
+| Concern                   | Canonical doc                                                    | Purpose                                                      |
+| ------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------ |
+| Canonical `.shift` format | [`ADR 0001`](decisions/0001-canonical-sqlite-shift-documents.md) | SQLite document, identity, Save, and recovery decision       |
+| Desktop releases          | [`docs/releases.md`](../releases.md)                             | Release states, versioning, workflows, signing, and rollback |
 
 ## API Boundaries
 
 These modules have stricter change rules. Changes affect multiple layers and require `pnpm typecheck` to validate.
 
+- **`@shift/editor`** (`packages/editor/`) — browser-safe font model, editor, tools, and rendering runtime. It must not import Electron, native bridge modules, desktop host modules, or persistence adapters.
 - **`@shift/types/bridge`** (`packages/types/src/bridge/`) — generated bridge DTO facade sourced from `crates/shift-bridge/index.d.ts`.
 - **`shared/workspace/protocol.ts`** — typed shell and renderer/utility session lanes. Changes affect main, utility, and renderer processes.
 - **`WorkspaceHost`** (`apps/desktop/src/utility/workspace/WorkspaceHost.ts`) — utility-process owner of the native bridge.
 - **`FontSessionClient`** (`apps/desktop/src/renderer/src/lib/workspace/FontSessionClient.ts`) — renderer owner of the typed session connection.
-- **Browser editor check** (`apps/desktop/vite.browser.config.ts`) — build-only canary for the real model, tools, and React canvas. It is not a published API.
+- **Browser editor check** (`apps/desktop/vite.browser.config.ts`) — build-only canary for `@shift/editor` plus the current React canvas shell. It is not a published embedding API.
 
 ## Validation
 

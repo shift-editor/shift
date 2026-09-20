@@ -253,4 +253,4 @@ With no font argument, `benchmark_wgpu` only prints adapter capabilities. `--com
 
 - [`shift-font`](../../shift-font/docs/DOCS.md) -- owns authored layers, `GlyphComponents` order/ancestry/attachment, and the projections and variation model the authored path compiles
 - [`shift-bridge`](../../shift-bridge/docs/DOCS.md) -- NAPI boundary that acquires source geometry, chooses the acquisition path, and delivers packed Slug pages to Electron
-- [`Renderer font model`](../../../apps/desktop/src/renderer/src/lib/model/docs/DOCS.md) -- `GlyphCatalog` grid surface that consumes resident atlas pages for catalog previews
+- [`Renderer font model`](../../../packages/editor/src/lib/model/docs/DOCS.md) -- `GlyphCatalog` grid surface that consumes resident atlas pages for catalog previews

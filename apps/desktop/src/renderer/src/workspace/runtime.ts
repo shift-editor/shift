@@ -3,13 +3,13 @@ import type { GlyphId, GlyphSnapshot } from "@shift/types";
 import { electronSystemClipboard } from "@/lib/clipboard/electronSystemClipboard";
 import { AuthoredGlyphAtlasSource } from "@/lib/graphics/backends/AuthoredGlyphAtlasSource";
 import { ImportedGlyphAtlasSource } from "@/lib/graphics/backends/ImportedGlyphAtlasSource";
-import { Editor } from "@/lib/editor/Editor";
-import { Font } from "@/lib/model/Font";
-import { FontStore } from "@/lib/model/FontStore";
+import { Editor } from "@shift/editor/lib/editor/Editor";
+import { Font } from "@shift/editor/lib/model/Font";
+import { FontStore } from "@shift/editor/lib/model/FontStore";
 import { GlyphCatalog } from "@/lib/catalog/GlyphCatalog";
 import { registerBuiltInTools } from "@/lib/tools/tools";
-import { locationFromDesignAxisLocation } from "@/lib/variation/location";
-import type { GlyphReader } from "@/types/glyph";
+import { locationFromDesignAxisLocation } from "@shift/editor/lib/variation/location";
+import type { GlyphReader } from "@shift/editor/types/glyph";
 import { FontSessionClient } from "@/lib/workspace/FontSessionClient";
 import { getShiftHost } from "@/host/shiftHost";
 import { Workspace } from "./Workspace";
@@ -56,7 +56,7 @@ async function createFontSession(
       });
       await workspace.connect();
       const atlas = new AuthoredGlyphAtlasSource(
-        workspace.font.editCoordinator,
+        workspace.editCoordinator,
         () => workspace.font.getAxes(),
         () => workspace.font.getAxisMappingBases(),
       );

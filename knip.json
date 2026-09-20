@@ -33,6 +33,10 @@
       "project": ["src/**/*.{ts,tsx}", "*.config.ts", "e2e/**/*.ts", "!src/**/*.d.ts"],
       "ignoreDependencies": ["oxlint-plugin-eslint", "shift-bridge", "tailwindcss"]
     },
+    "packages/editor": {
+      "entry": ["src/index.ts"],
+      "project": ["src/**/*.{ts,tsx}"]
+    },
     "packages/geo": {
       "project": ["src/**/*.ts"]
     },

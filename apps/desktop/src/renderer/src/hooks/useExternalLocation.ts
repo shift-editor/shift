@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import { useEditor } from "@/workspace/WorkspaceContext";
-import { useSignalState } from "@/lib/signals";
-import type { ExternalAxisLocation } from "@/types/variation";
+import { useSignalState } from "@shift/editor/lib/signals/index";
+import type { ExternalAxisLocation } from "@shift/editor/types/variation";
 
 export const useExternalLocation = (): [
   ExternalAxisLocation,

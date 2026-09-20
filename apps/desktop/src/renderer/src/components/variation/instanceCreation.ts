@@ -1,5 +1,5 @@
 import type { Axis, Location, NamedInstance } from "@shift/types";
-import type { InstanceCreationIssue } from "@/types/variation";
+import type { InstanceCreationIssue } from "@shift/editor/types/variation";
 
 /** Parses editable external-axis fields into a complete named-instance location. */
 export function instanceLocation(

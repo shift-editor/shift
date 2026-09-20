@@ -8,7 +8,7 @@ import {
   isTracking,
   signalDebug,
   traceReactiveRun,
-} from "./signal";
+} from "@shift/editor/lib/signals/signal";
 
 describe("signal", () => {
   it("should store and return a value", () => {

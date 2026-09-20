@@ -3,7 +3,7 @@ import {
   fallbackGlyphNameForUnicode,
   resolveGlyphNameFromUnicode,
   textItemFromCodepoint,
-} from "./unicode";
+} from "@shift/editor/lib/utils/unicode";
 
 describe("resolveGlyphNameFromUnicode", () => {
   it("prefers existing glyph names from the loaded font", () => {

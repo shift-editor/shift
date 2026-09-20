@@ -2,7 +2,7 @@ import type { ChangeEvent, ReactNode } from "react";
 import type { FontMetadata } from "@shift/types";
 import { Field, FieldLabel, Input, Textarea } from "@shift/ui";
 import { message } from "@shared/messages";
-import { useSignalState } from "@/lib/signals";
+import { useSignalState } from "@shift/editor/lib/signals/index";
 import { useFont } from "@/workspace/WorkspaceContext";
 import { SettingsNumberField } from "./SettingsNumberField";
 import type { NumberMetadataKey, TextMetadataKey } from "./types";

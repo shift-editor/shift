@@ -2,10 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { useLocation, useNavigate } from "react-router";
 import type { GlyphCategory, GlyphCategoryCatalog } from "@shift/glyph-info";
 import { asGlyphId, type GlyphId, type GlyphName } from "@shift/types";
-import { effect, useSignalState } from "@/lib/signals";
+import { effect, useSignalState } from "@shift/editor/lib/signals/index";
 import { useFontSession } from "@/workspace/WorkspaceContext";
 import { getGlyphInfo } from "@/workspace/glyphInfo";
-import { LatestRequest } from "@/lib/utils/LatestRequest";
+import { LatestRequest } from "@shift/editor/lib/utils/LatestRequest";
 import { GlyphCatalogContext } from "./GlyphCatalogContext";
 import type { GlyphCatalogItem, GlyphCatalogSource } from "@/types/glyphCatalog";
 

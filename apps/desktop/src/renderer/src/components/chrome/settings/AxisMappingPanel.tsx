@@ -5,7 +5,7 @@ import { Button, Tooltip, TooltipContent, TooltipTrigger } from "@shift/ui";
 import { message } from "@shared/messages";
 import MinusIcon from "@/assets/general/minus.svg";
 import PlusIcon from "@/assets/general/plus.svg";
-import { useSignalState } from "@/lib/signals";
+import { useSignalState } from "@shift/editor/lib/signals/index";
 import { useFont } from "@/workspace/WorkspaceContext";
 import { MappingGraph } from "./MappingGraph";
 import { SettingsNumberField } from "./SettingsNumberField";

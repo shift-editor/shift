@@ -15,11 +15,11 @@ import {
   type Unicode,
 } from "@shift/types";
 import type { WorkspaceSnapshot } from "@shared/workspace/protocol";
-import { Font } from "./Font";
-import { FontStore } from "./FontStore";
+import { Font } from "@shift/editor/lib/model/Font";
+import { FontStore } from "@shift/editor/lib/model/FontStore";
 import { createWorkspaceStack } from "@/testing/workspaceStack";
-import { signal } from "@/lib/signals/signal";
-import { externalAxisLocationFromRecord } from "@/lib/variation/location";
+import { signal } from "@shift/editor/lib/signals/signal";
+import { externalAxisLocationFromRecord } from "@shift/editor/lib/variation/location";
 import { getGlyphInfo } from "@/workspace/glyphInfo";
 
 const SNAPSHOT: WorkspaceSnapshot = {

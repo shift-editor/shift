@@ -33,15 +33,18 @@ Renderer vector-path values and the accelerated marker-layer backend for editor 
 ## Codemap
 
 ```
-graphics/
-  ContourPath.ts              — transformed contour commands with lazy path outputs
-  canvasText.ts               — width-constrained Canvas2D label fitting
+packages/editor/src/lib/graphics/
+  ContourPath.ts                — transformed contour commands with lazy path outputs
   backends/
-    MarkerLayer.ts            — WebGL context: REGL init, instance buffer management, draw command
+    MarkerLayer.ts              — WebGL context: REGL init, instance buffer management, draw command
+packages/editor/src/lib/model/
+  Glyph.ts                      — common authored/imported location-bound render model
+apps/desktop/src/renderer/src/lib/graphics/
+  canvasText.ts                 — width-constrained Canvas2D label fitting
+  backends/
     AuthoredGlyphAtlasSource.ts — authored workspace page adapter
     ImportedGlyphAtlasSource.ts — imported source page adapter
     ResidentGlyphLayer.ts       — WebGPU catalog device, complete page-set uploads, atomic replacement, draw, and teardown
-  ../model/Glyph.ts             — common authored/imported location-bound render model
 ```
 
 Supporting files live in the editor rendering module:

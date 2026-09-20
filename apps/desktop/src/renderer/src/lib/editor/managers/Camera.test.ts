@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { Camera } from "./Camera";
+import { Camera } from "@shift/editor/lib/editor/managers/Camera";
 import type { Rect2D } from "@shift/geo";
 
 describe("Camera", () => {

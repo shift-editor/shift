@@ -67,6 +67,13 @@ export {
 } from "./ids";
 
 export type { AxisDefinition, NamedInstanceDefinition, SourceMetrics } from "./domain";
+export type {
+  FontSessionMode,
+  WorkspaceDocumentSourceKind,
+  WorkspaceDocumentState,
+  WorkspaceGlyphLayerSnapshot,
+  WorkspaceSnapshot,
+} from "./workspace";
 
 export type {
   AddAnchorsIntent,
