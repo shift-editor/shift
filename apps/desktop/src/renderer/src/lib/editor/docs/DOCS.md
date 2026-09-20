@@ -6,6 +6,8 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 
 ## Architecture Invariants
 
+**Architecture Invariant:** The React canvas receives host-owned context-menu behavior as an optional callback. Omitting it disables the native menu without changing canvas interaction; the canvas module never imports the desktop host bridge.
+
 **Architecture Invariant:** `Editor` is a facade -- it delegates viewport, hover, rendering, and tool dispatch to named subsystem objects. Tools receive `Editor` directly but must not reach into private managers. Its immutable `sessionMode` defines session-level preview interaction: Select consumes geometry hits without publishing hover or selection, marquee gestures publish no selection, and geometry clicks emit `previewMutationAttempted`. Main keeps Edit commands disabled in preview. Authored-layer resolution remains the final mutation boundary in authored sessions.
 
 **Architecture Invariant:** `Scene` owns generic, serializable `ShiftNode` records and placement only. It must not import or retain `Glyph`, `GlyphLayer`, or resolved geometry. Navigation finishes `Font.loadGlyph()` before entering the editor route, and the route synchronously confirms acquisition before publishing the ordinary ID-based glyph node.

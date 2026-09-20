@@ -9,6 +9,7 @@ import { Font } from "@/lib/model/Font";
 import { FontStore } from "@/lib/model/FontStore";
 import { FontSessionClient } from "@/lib/workspace/FontSessionClient";
 import { WorkspaceEditCoordinator } from "@/lib/workspace/WorkspaceEditCoordinator";
+import { getGlyphInfo } from "@/workspace/glyphInfo";
 
 export type WorkspaceStack = {
   client: FontSessionClient;
@@ -48,7 +49,7 @@ export function createWorkspaceStack(): WorkspaceStack {
   });
   const store = new FontStore();
   const editCoordinator = new WorkspaceEditCoordinator(client, store);
-  const font = new Font({ store, editCoordinator });
+  const font = new Font({ store, glyphInfo: getGlyphInfo(), editCoordinator });
 
   return {
     client,

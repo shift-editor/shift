@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "electron-forge start",
     "build": "tsx build.ts",
+    "check:browser": "vite build --config vite.browser.config.ts",
     "package": "electron-builder --config electron-builder.config.ts --dir --publish never",
     "make": "electron-builder --config electron-builder.config.ts --publish never",
     "typecheck": "tsgo --noEmit -p tsconfig.build.json && tsgo --noEmit -p tsconfig.config.json",

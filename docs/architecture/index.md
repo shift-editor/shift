@@ -68,7 +68,10 @@ These modules have stricter change rules. Changes affect multiple layers and req
 - **`shared/workspace/protocol.ts`** — typed shell and renderer/utility session lanes. Changes affect main, utility, and renderer processes.
 - **`WorkspaceHost`** (`apps/desktop/src/utility/workspace/WorkspaceHost.ts`) — utility-process owner of the native bridge.
 - **`FontSessionClient`** (`apps/desktop/src/renderer/src/lib/workspace/FontSessionClient.ts`) — renderer owner of the typed session connection.
+- **Browser editor check** (`apps/desktop/vite.browser.config.ts`) — build-only canary for the real model, tools, and React canvas. It is not a published API.
 
 ## Validation
+
+Run `pnpm check:browser` to produce a minified/gzip bundle report and reject Electron, Node, native bridge, desktop host, and complete glyph-info resource modules from the browser editor graph.
 
 Run `python scripts/context-drift-check.py` from the repo root to check for broken links, stale docs, and missing documentation.

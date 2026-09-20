@@ -20,6 +20,7 @@ import { FontStore } from "./FontStore";
 import { createWorkspaceStack } from "@/testing/workspaceStack";
 import { signal } from "@/lib/signals/signal";
 import { externalAxisLocationFromRecord } from "@/lib/variation/location";
+import { getGlyphInfo } from "@/workspace/glyphInfo";
 
 const SNAPSHOT: WorkspaceSnapshot = {
   workspaceId: "11111111-2222-3333-4444-555555555555",
@@ -73,6 +74,20 @@ describe("Font projects the workspace snapshot", () => {
     expect(font.hasGlyph(record!.id)).toBe(true);
     expect(font.nameForUnicode(65 as Unicode)).toBe("A");
     expect(font.sources.map((source) => source.name)).toEqual(["Regular"]);
+  });
+
+  it("uses injected glyph metadata only when the host provides it", () => {
+    const unicode = 0x00c0 as Unicode;
+    const lightweight = new Font({ store: new FontStore() });
+    const informed = new Font({ store: new FontStore(), glyphInfo: getGlyphInfo() });
+
+    expect(lightweight.nameForUnicode(unicode)).toBe("uni00C0");
+    expect(lightweight.glyphHandleForName("Agrave" as GlyphName)).toEqual({ name: "Agrave" });
+    expect(informed.nameForUnicode(unicode)).toBe("Agrave");
+    expect(informed.glyphHandleForName("Agrave" as GlyphName)).toEqual({
+      name: "Agrave",
+      unicode,
+    });
   });
 
   it("loadedCell flips reactively when the snapshot changes", () => {

@@ -64,7 +64,7 @@ import {
   mapAxisLocation,
 } from "@/lib/variation/location";
 import type { DesignAxisLocation, ExternalAxisLocation } from "@/types/variation";
-import { defaultResources, GlyphInfo } from "@shift/glyph-info";
+import type { GlyphInfo } from "@shift/glyph-info";
 import { uniqueInOrder } from "@/lib/utils/utils";
 import { fallbackGlyphNameForUnicode } from "../utils/unicode";
 import { createBatchRequest } from "../utils/batchRequest";
@@ -76,21 +76,11 @@ import { createBatchRequest } from "../utils/batchRequest";
  * `GlyphDirectory` is rebuilt whenever the bridge glyph list changes. It keeps
  * source-of-truth font records separate from fallback glyph database knowledge:
  * methods named `record*`, `has*`, and dependency lookups only describe glyphs
- * committed in the font, while handle/name resolution methods may fall back to
- * bundled glyph metadata so UI flows can address glyphs before they are created.
+ * committed in the font, while handle/name resolution methods may use injected
+ * glyph metadata so UI flows can address glyphs before they are created.
  */
-// One shared database for every directory rebuild: constructing GlyphInfo
-// indexes the full glyph dataset (~60k search docs) and must not run per
-// workspace snapshot.
-let glyphDatabase: GlyphInfo | null = null;
-
-function getGlyphDatabase(): GlyphInfo {
-  glyphDatabase ??= new GlyphInfo(defaultResources);
-  return glyphDatabase;
-}
-
 class GlyphDirectory {
-  #glyphDatabase = getGlyphDatabase();
+  readonly #glyphInfo: GlyphInfo | null;
 
   readonly entries: readonly GlyphEntry[];
   readonly records: readonly GlyphRecord[];
@@ -105,7 +95,13 @@ class GlyphDirectory {
   readonly componentBasesById: ReadonlyMap<GlyphId, readonly GlyphId[]> = new Map();
   readonly dependentsById: ReadonlyMap<GlyphId, ReadonlySet<GlyphId>> = new Map();
 
-  private constructor(entries: readonly GlyphEntry[], records: readonly GlyphRecord[]) {
+  private constructor(
+    entries: readonly GlyphEntry[],
+    records: readonly GlyphRecord[],
+    glyphInfo: GlyphInfo | null,
+  ) {
+    this.#glyphInfo = glyphInfo;
+
     const entriesByName = new Map<GlyphName, GlyphEntry>();
     const entriesById = new Map<GlyphId, GlyphEntry>();
     const recordsByName = new Map<GlyphName, GlyphRecord>();
@@ -161,16 +157,17 @@ class GlyphDirectory {
   static fromEntries(
     entries: readonly GlyphEntry[],
     records: readonly GlyphRecord[],
+    glyphInfo: GlyphInfo | null,
   ): GlyphDirectory {
-    return new GlyphDirectory(entries, records);
+    return new GlyphDirectory(entries, records, glyphInfo);
   }
 
   /**
    * Resolves the preferred glyph name for a Unicode scalar.
    *
    * @remarks
-   * Existing font mappings win. Missing codepoints fall back to bundled glyph
-   * metadata and finally to a deterministic `uniXXXX`-style name.
+   * Existing font mappings win. Missing codepoints use injected glyph metadata
+   * when available, then fall back to a deterministic `uniXXXX`-style name.
    *
    * @param unicode - Unicode scalar value to resolve.
    * @returns A production glyph name suitable for opening or creating a glyph.
@@ -179,7 +176,7 @@ class GlyphDirectory {
     const nameFromFont = this.nameByUnicode.get(unicode);
     if (nameFromFont) return nameFromFont;
 
-    const nameFromDatabase = this.#glyphDatabase.getGlyphName(unicode);
+    const nameFromDatabase = this.#glyphInfo?.getGlyphName(unicode);
     if (nameFromDatabase) return nameFromDatabase;
 
     const fallbackName = fallbackGlyphNameForUnicode(unicode);
@@ -287,7 +284,7 @@ class GlyphDirectory {
     const entry = this.entryForName(name);
     const unicode = entry
       ? this.primaryUnicodeForName(name)
-      : (this.#glyphDatabase.getGlyphByName(name)?.codepoint ?? null);
+      : (this.#glyphInfo?.getGlyphByName(name)?.codepoint ?? null);
     return unicode === null ? { name } : { name, unicode };
   }
 
@@ -346,6 +343,7 @@ export class Font {
     this.#readGlyphsIntoStore(glyphIds),
   );
   readonly #store: FontStore;
+  readonly #glyphInfo: GlyphInfo | null;
   readonly #reader: GlyphReader | null;
   readonly #editCoordinator: WorkspaceEditCoordinator | null;
   readonly #glyphsEffect: Effect;
@@ -354,11 +352,13 @@ export class Font {
    * Builds a font model over renderer-local workspace state.
    *
    * @param store - Renderer-local owner of committed records and concrete glyph layer state.
+   * @param glyphInfo - Optional complete glyph metadata supplied by hosts that need fallback naming.
    * @param editCoordinator - Optional sync lane used by authored layer edits to submit
    * committed changes to the utility workspace.
    */
-  constructor({ store, editCoordinator, reader }: FontOptions) {
+  constructor({ store, glyphInfo, editCoordinator, reader }: FontOptions) {
     this.#store = store;
+    this.#glyphInfo = glyphInfo ?? null;
     this.#reader = reader ?? null;
     this.#editCoordinator = editCoordinator ?? null;
 
@@ -407,7 +407,11 @@ export class Font {
     });
     this.#namedInstancesCell = computed(() => fontCell.value?.namedInstances ?? []);
     this.#directoryCell = computed(() =>
-      GlyphDirectory.fromEntries(fontCell.value?.glyphs ?? [], this.#store.records()),
+      GlyphDirectory.fromEntries(
+        fontCell.value?.glyphs ?? [],
+        this.#store.records(),
+        this.#glyphInfo,
+      ),
     );
     this.#unicodesCell = computed(() => [...this.#directoryCell.value.unicodes]);
     this.#glyphEntriesCell = computed(() => this.#directoryCell.value.entries);

@@ -1,6 +1,6 @@
 import type { GlyphInfo } from "@shift/glyph-info";
 import type { GlyphId, GlyphSnapshot } from "@shift/types";
-import { electronSystemClipboard } from "@/lib/clipboard";
+import { electronSystemClipboard } from "@/lib/clipboard/electronSystemClipboard";
 import { AuthoredGlyphAtlasSource } from "@/lib/graphics/backends/AuthoredGlyphAtlasSource";
 import { ImportedGlyphAtlasSource } from "@/lib/graphics/backends/ImportedGlyphAtlasSource";
 import { Editor } from "@/lib/editor/Editor";
@@ -48,7 +48,12 @@ async function createFontSession(
   switch (client.mode) {
     case "authored": {
       const host = getShiftHost();
-      const workspace = new Workspace({ host, client, clipboard: electronSystemClipboard });
+      const workspace = new Workspace({
+        host,
+        client,
+        clipboard: electronSystemClipboard,
+        glyphInfo,
+      });
       await workspace.connect();
       const atlas = new AuthoredGlyphAtlasSource(
         workspace.font.editCoordinator,
@@ -64,7 +69,11 @@ async function createFontSession(
       if (!source) throw new Error("font source connected without a snapshot");
 
       const store = new FontStore({ font: source.font });
-      const font = new Font({ store, reader: sourceGlyphReader(client) });
+      const font = new Font({
+        store,
+        glyphInfo,
+        reader: sourceGlyphReader(client),
+      });
       const editor = new Editor({
         font,
         fontStore: store,

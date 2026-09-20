@@ -1,3 +1,4 @@
+import type { GlyphInfo } from "@shift/glyph-info";
 import type { FontSnapshot } from "@shift/types";
 import type { WorkspaceSnapshot } from "@shared/workspace/protocol";
 import type { FontStore } from "@/lib/model/FontStore";
@@ -11,6 +12,7 @@ export interface FontStoreOptions {
 
 export interface FontOptions {
   readonly store: FontStore;
+  readonly glyphInfo?: GlyphInfo;
   readonly editCoordinator?: WorkspaceEditCoordinator;
   readonly reader?: GlyphReader;
 }

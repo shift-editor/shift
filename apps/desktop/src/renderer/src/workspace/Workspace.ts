@@ -1,3 +1,4 @@
+import type { GlyphInfo } from "@shift/glyph-info";
 import type { ShiftHost } from "@shared/host/ShiftHost";
 import type { WorkspaceDocumentState } from "@shared/workspace/protocol";
 import type { SystemClipboard } from "@/lib/clipboard";
@@ -17,6 +18,7 @@ export interface WorkspaceOptions {
   readonly host: ShiftHost;
   readonly client: FontSessionClient;
   readonly clipboard: SystemClipboard;
+  readonly glyphInfo: GlyphInfo;
 }
 
 export class Workspace {
@@ -40,7 +42,11 @@ export class Workspace {
       edits: this.#edits,
     });
 
-    this.font = new Font({ store: this.#store, editCoordinator: this.#edits });
+    this.font = new Font({
+      store: this.#store,
+      glyphInfo: options.glyphInfo,
+      editCoordinator: this.#edits,
+    });
     this.editor = new Editor({
       font: this.font,
       fontStore: this.#store,

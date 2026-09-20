@@ -25,6 +25,7 @@
         "forge.config.ts",
         "vite.main.config.ts",
         "vite.preload.config.ts",
+        "vite.browser.config.ts",
         "vite.renderer.config.ts",
         "e2e/**/*.ts",
         "src/**/*.bench.ts"

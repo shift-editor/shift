@@ -1,7 +1,7 @@
 import type { EditorCommandId } from "@shared/commands";
 import type { ContourId } from "@shift/types";
 import type { Editor } from "@/lib/editor/Editor";
-import { electronSystemClipboard } from "@/lib/clipboard";
+import { electronSystemClipboard } from "@/lib/clipboard/electronSystemClipboard";
 import { objectIsKindOf } from "@/types";
 
 const TEXT_EDIT_COMMANDS = new Set<EditorCommandId>([

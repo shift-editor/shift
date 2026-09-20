@@ -5,7 +5,6 @@ export {
   type ClipboardSelectionSource,
 } from "./ClipboardSelection";
 export { SvgImporter } from "./importers/SvgImporter";
-export { electronSystemClipboard } from "./electronSystemClipboard";
 export type {
   SystemClipboard,
   ClipboardImporter,
