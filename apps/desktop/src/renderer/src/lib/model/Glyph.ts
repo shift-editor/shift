@@ -132,13 +132,17 @@ interface GlyphRenderGeometry {
 }
 
 class GlyphLayerWriter {
-  readonly #editCoordinator: WorkspaceEditCoordinator;
-  readonly #intents: LayerIntents;
+  readonly #editCoordinator: WorkspaceEditCoordinator | null;
+  readonly #intents: LayerIntents | null;
   readonly #state: GlyphEditState;
 
-  constructor(editCoordinator: WorkspaceEditCoordinator, layerId: LayerId, state: GlyphEditState) {
+  constructor(
+    editCoordinator: WorkspaceEditCoordinator | null,
+    layerId: LayerId,
+    state: GlyphEditState,
+  ) {
     this.#editCoordinator = editCoordinator;
-    this.#intents = new LayerIntents(editCoordinator, layerId);
+    this.#intents = editCoordinator ? new LayerIntents(editCoordinator, layerId) : null;
     this.#state = state;
   }
 
@@ -155,17 +159,22 @@ class GlyphLayerWriter {
   }
 
   transaction<TResult>(label: string, body: () => TResult): TResult {
-    return this.#editCoordinator.transaction(label, body);
+    return this.#editCoordinator ? this.#editCoordinator.transaction(label, body) : body();
   }
 
   setXAdvance(width: number): void {
-    const editId = this.#intents.setXAdvance({ width });
+    const editId = this.#workspaceIntents.setXAdvance({ width });
     this.#state.state.setXAdvance(editId, width);
   }
 
   applyPositionPatch(updates: GlyphLayerPositions): void {
     const patch = GlyphLayerPositionPatch.from(updates);
     if (patch.isEmpty) return;
+
+    if (!this.#intents) {
+      this.#state.state.patchPositions(patch.positions);
+      return;
+    }
 
     const pointIds: PointId[] = [];
     const pointCoords: number[] = [];
@@ -183,12 +192,12 @@ class GlyphLayerWriter {
 
     const commit = () => {
       if (pointIds.length > 0) {
-        const editId = this.#intents.movePoints({ pointIds, coords: pointCoords });
+        const editId = this.#workspaceIntents.movePoints({ pointIds, coords: pointCoords });
         this.#state.state.movePoints(editId, pointIds, pointCoords);
       }
 
       if (anchorIds.length > 0) {
-        const editId = this.#intents.moveAnchors({ anchorIds, coords: anchorCoords });
+        const editId = this.#workspaceIntents.moveAnchors({ anchorIds, coords: anchorCoords });
         this.#state.state.moveAnchors(editId, anchorIds, anchorCoords);
       }
     };
@@ -206,7 +215,7 @@ class GlyphLayerWriter {
     const pointIds = this.geometry.allPoints.map((point) => point.id);
     if (pointIds.length === 0) return;
 
-    const editId = this.#intents.translatePoints({ pointIds, dx, dy });
+    const editId = this.#workspaceIntents.translatePoints({ pointIds, dx, dy });
     this.#state.state.translatePoints(editId, pointIds, dx, dy);
   }
 
@@ -217,7 +226,7 @@ class GlyphLayerWriter {
   }
 
   addContourSeed(contourId: ContourId, closed: boolean): void {
-    const editId = this.#intents.addContour({ contourId, closed });
+    const editId = this.#workspaceIntents.addContour({ contourId, closed });
     this.#state.state.addContour(editId, contourId, closed);
   }
 
@@ -239,7 +248,7 @@ class GlyphLayerWriter {
   addPointSeeds(contourId: ContourId, points: readonly PointSeed[], before?: PointId): void {
     if (points.length === 0) return;
 
-    const editId = this.#intents.addPoints({
+    const editId = this.#workspaceIntents.addPoints({
       contourId,
       points: [...points],
       ...(before === undefined ? {} : { before }),
@@ -253,7 +262,7 @@ class GlyphLayerWriter {
     // No contourId: Rust derives the contour from the anchor point — the
     // renderer never bookkeeps pending point→contour maps.
     const points = [this.#seed(pointId, edit)];
-    const editId = this.#intents.addPoints({
+    const editId = this.#workspaceIntents.addPoints({
       before: beforePointId,
       points,
     });
@@ -263,22 +272,22 @@ class GlyphLayerWriter {
   }
 
   openContour(contourId: ContourId): void {
-    const editId = this.#intents.setContourClosed({ contourId, closed: false });
+    const editId = this.#workspaceIntents.setContourClosed({ contourId, closed: false });
     this.#state.state.setContourClosed(editId, contourId, false);
   }
 
   closeContour(contourId: ContourId): void {
-    const editId = this.#intents.setContourClosed({ contourId, closed: true });
+    const editId = this.#workspaceIntents.setContourClosed({ contourId, closed: true });
     this.#state.state.setContourClosed(editId, contourId, true);
   }
 
   reverseContour(contourId: ContourId): void {
-    const editId = this.#intents.reverseContour({ contourId });
+    const editId = this.#workspaceIntents.reverseContour({ contourId });
     this.#state.state.reverseContour(editId, contourId);
   }
 
   setContourStart(contourId: ContourId, pointId: PointId): void {
-    const editId = this.#intents.setContourStart({ contourId, pointId });
+    const editId = this.#workspaceIntents.setContourStart({ contourId, pointId });
     this.#state.state.setContourStart(editId, contourId, pointId);
   }
 
@@ -288,14 +297,14 @@ class GlyphLayerWriter {
     operation: "union" | "subtract" | "intersect" | "difference",
   ): void {
     // Rust-only computation; the echo folds like any other intent.
-    this.#intents.applyBooleanOp({ contourIdA, contourIdB, operation });
+    this.#workspaceIntents.applyBooleanOp({ contourIdA, contourIdB, operation });
   }
 
   removePoints(pointIds: readonly PointId[]): void {
     if (pointIds.length === 0) return;
 
     const ids = [...pointIds];
-    const editId = this.#intents.removePoints({ pointIds: ids });
+    const editId = this.#workspaceIntents.removePoints({ pointIds: ids });
     this.#state.state.removePoints(editId, ids);
   }
 
@@ -315,7 +324,7 @@ class GlyphLayerWriter {
   addAnchorSeeds(anchors: readonly AnchorSeed[]): void {
     if (anchors.length === 0) return;
 
-    const editId = this.#intents.addAnchors({ anchors: [...anchors] });
+    const editId = this.#workspaceIntents.addAnchors({ anchors: [...anchors] });
     this.#state.state.addAnchors(editId, anchors);
   }
 
@@ -323,12 +332,12 @@ class GlyphLayerWriter {
     if (anchorIds.length === 0) return;
 
     const ids = [...anchorIds];
-    const editId = this.#intents.removeAnchors({ anchorIds: ids });
+    const editId = this.#workspaceIntents.removeAnchors({ anchorIds: ids });
     this.#state.state.removeAnchors(editId, ids);
   }
 
   setPointSmooth(pointId: PointId, smooth: boolean): void {
-    const editId = this.#intents.setPointSmooth({ pointId, smooth });
+    const editId = this.#workspaceIntents.setPointSmooth({ pointId, smooth });
     this.#state.state.setPointSmooth(editId, pointId, smooth);
   }
 
@@ -339,6 +348,11 @@ class GlyphLayerWriter {
     }
 
     this.setPointSmooth(pointId, !point.smooth);
+  }
+
+  get #workspaceIntents(): LayerIntents {
+    if (!this.#intents) throw new Error("glyph layer operation requires a workspace");
+    return this.#intents;
   }
 
   #seed(id: PointId, edit: NewPoint): PointSeed {
@@ -356,16 +370,20 @@ class GlyphLayerWriter {
  * Authored glyph layer data for one source.
  *
  * A source is the authored glyph at a designspace location. `GlyphLayer`
- * exposes the reactive geometry for that source and queues mutations with the
- * source layer's stable ID. Preview methods update renderer state only; accepted
- * edits also produce workspace intents.
+ * exposes the reactive geometry for that source and queues workspace mutations
+ * with the source layer's stable ID. Position edits can also finish locally when
+ * no workspace is present; structural commits remain workspace-only.
  */
 export class GlyphLayer {
   readonly positions: PositionEdits;
   readonly #sourceCell: WritableSignal<Source>;
   readonly #writer: GlyphLayerWriter;
 
-  constructor(source: Source, editCoordinator: WorkspaceEditCoordinator, state: GlyphLayerState) {
+  constructor(
+    source: Source,
+    editCoordinator: WorkspaceEditCoordinator | null,
+    state: GlyphLayerState,
+  ) {
     this.#sourceCell = signal(source, { name: "glyphLayer.source" });
     this.#writer = new GlyphLayerWriter(editCoordinator, state.layerId, {
       state,

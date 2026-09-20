@@ -916,7 +916,7 @@ export class Font {
       const stateCell = this.#store.layerStateCell(layerRecord.id);
       track(stateCell);
       const state = stateCell.peek();
-      if (!source || !state || !this.#editCoordinator) return null;
+      if (!source || !state) return null;
 
       const existingLayer = glyph?.layerForId(layerRecord.id);
       if (existingLayer && existingLayer.geometryCell === state.geometryCell) {
