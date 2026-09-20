@@ -4,6 +4,7 @@ import type {
   FontSnapshot,
   GlyphId,
   GlyphPreview,
+  GlyphRecord,
   GlyphSnapshot,
   GlyphSnapshotRequest,
   LayerId,
@@ -18,6 +19,7 @@ import type { GlyphReader } from "./glyph";
 
 export interface FontStoreOptions {
   readonly font?: FontSnapshot | null;
+  readonly records?: readonly GlyphRecord[];
   readonly workspace?: WorkspaceSnapshot | null;
 }
 

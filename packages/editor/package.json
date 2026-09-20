@@ -23,7 +23,9 @@
   "scripts": {
     "typecheck": "tsgo --noEmit",
     "lint": "oxlint --fix src/",
-    "lint:check": "oxlint --deny-warnings src/"
+    "lint:check": "oxlint --deny-warnings src/",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@shift/geo": "workspace:*",
@@ -41,6 +43,7 @@
     "@types/react": "^19.1.8",
     "oxlint": "^1.58.0",
     "oxlint-plugin-eslint": "^1.58.0",
-    "typescript": "^5.5.4"
+    "typescript": "^5.5.4",
+    "vitest": "^4.1.10"
   }
 }

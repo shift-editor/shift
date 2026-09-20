@@ -76,7 +76,7 @@ export class FontStore {
   readonly #projectionCells = new Map<GlyphId, WritableSignal<GlyphProjection | null>>();
   readonly #interpolationBases = new Map<string, InterpolationBasis>();
 
-  constructor({ font = null, workspace = null }: FontStoreOptions = {}) {
+  constructor({ font = null, records = [], workspace = null }: FontStoreOptions = {}) {
     this.#font = signal(font ?? (workspace ? fontSnapshotFromWorkspace(workspace) : null), {
       name: "fontStore.font",
     });
@@ -93,7 +93,7 @@ export class FontStore {
     if (workspace) {
       this.#indexWorkspace(workspace);
     } else if (font) {
-      this.#indexFont(font);
+      this.#indexFont(font, records);
     }
   }
 
@@ -565,12 +565,22 @@ export class FontStore {
     }
   }
 
-  #indexFont(snapshot: FontSnapshot): void {
+  #indexFont(snapshot: FontSnapshot, records: readonly GlyphRecord[] = []): void {
     this.#layerByGlyphSource.clear();
     this.#glyphByLayer.clear();
     this.#glyphById.clear();
     this.#recordsById.clear();
     for (const glyph of snapshot.glyphs) this.#glyphById.set(glyph.id, glyph);
+
+    for (const record of records) {
+      if (!this.#glyphById.has(record.id)) continue;
+
+      this.#recordsById.set(record.id, record);
+      for (const layer of record.layers) {
+        this.#layerByGlyphSource.set(glyphSourceKey(record.id, layer.sourceId), layer.id);
+        this.#glyphByLayer.set(layer.id, record.id);
+      }
+    }
   }
 }
 
