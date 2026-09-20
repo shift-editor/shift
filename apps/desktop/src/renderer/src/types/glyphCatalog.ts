@@ -23,11 +23,6 @@ export interface GlyphCatalogItem {
 
 export type PendingGlyphNames = ReadonlyMap<GlyphId, GlyphName>;
 
-/** Publication decision for an asynchronously opened glyph. */
-export type GlyphOpenResult<T> =
-  | { readonly status: "current"; readonly glyph: T }
-  | { readonly status: "stale" };
-
 /** Dense external-axis coordinates ordered like `GlyphCatalogSource.axesCell`. */
 export type CatalogLocation = readonly number[];
 

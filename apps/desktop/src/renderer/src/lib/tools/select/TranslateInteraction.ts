@@ -1,6 +1,11 @@
 import type { Point2D } from "@shift/geo";
 import type { GlyphLayerPositionTarget } from "@/lib/model/Glyph";
-import { PointRuleConstraint, PositionReference, type MoveEdit } from "@/lib/model/positions";
+import {
+  PointRuleConstraint,
+  PositionEdits,
+  PositionReference,
+  type MoveEdit,
+} from "@/lib/model/positions";
 import type { PositionFeedback, PositionSelection } from "@/types/positionEdit";
 
 export class TranslateInteraction {
@@ -12,7 +17,7 @@ export class TranslateInteraction {
     reference: GlyphLayerPositionTarget | null,
     pointerStart: Point2D,
   ) {
-    this.move = selection.layer.positions.move(selection.targets);
+    this.move = PositionEdits.fromSelection(selection).move(selection.targets);
 
     if (reference) {
       switch (reference.kind) {

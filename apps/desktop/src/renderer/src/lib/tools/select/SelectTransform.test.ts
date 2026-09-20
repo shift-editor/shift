@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import type { Point2D } from "@shift/geo";
+import { Vec2, type Point2D } from "@shift/geo";
 import type { PointId } from "@shift/types";
 import type { GlyphLayer } from "@/lib/model/Glyph";
 import { TestEditor } from "@/testing/TestEditor";
@@ -491,6 +491,34 @@ describe("Select bounding-box transforms preserve geometry outcomes", () => {
       expect(editor.pointPosition(firstId).y).toBeCloseTo(100);
       expect(editor.pointPosition(secondId).x).toBeCloseTo(100);
       expect(editor.pointPosition(secondId).y).toBeCloseTo(200);
+    });
+
+    it("samples Shift on every rotation drag preview", () => {
+      const bounds = editor.selectionBounds();
+      if (!bounds) throw new Error("Expected selection bounds");
+      const center = Vec2.midpoint(
+        { x: bounds.left, y: bounds.top },
+        { x: bounds.right, y: bounds.bottom },
+      );
+      const offset = SELECT_BOUNDING_BOX_STYLE.rotationZoneOffsetPx;
+      const down = { x: bounds.right + offset, y: bounds.bottom + offset };
+      const end = Vec2.add(center, Vec2.rotate(Vec2.sub(down, center), (20 * Math.PI) / 180));
+      const expected = Vec2.add(
+        center,
+        Vec2.rotate(Vec2.sub({ x: 100, y: 100 }, center), Math.PI / 12),
+      );
+      const downScreen = editor.projectSceneToScreen(down);
+      const endScreen = editor.projectSceneToScreen(end);
+
+      editor.pointerDown(downScreen.x, downScreen.y).pointerMove(endScreen.x, endScreen.y);
+      const raw = editor.pointPosition(firstId);
+      editor.pointerMove(endScreen.x, endScreen.y, { shiftKey: true });
+      expect(editor.pointPosition(firstId).x).toBeCloseTo(expected.x);
+      expect(editor.pointPosition(firstId).y).toBeCloseTo(expected.y);
+      editor.pointerMove(endScreen.x, endScreen.y);
+      expect(editor.pointPosition(firstId).x).toBeCloseTo(raw.x);
+      expect(editor.pointPosition(firstId).y).toBeCloseTo(raw.y);
+      editor.escape();
     });
 
     it("uses glyph-local geometry when the scene node has a non-zero position", async () => {

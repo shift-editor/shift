@@ -1,28 +1,59 @@
 import type { Point2D } from "@shift/geo";
 import type { GlyphLayer } from "../Glyph";
 import type { GlyphLayerEdit } from "../GlyphLayerEdit";
-import type { PositionTargets } from "@/types/positionEdit";
+import type {
+  PositionSelection,
+  PositionSelectionLayer,
+  PositionTargets,
+} from "@/types/positionEdit";
 import { MoveEdit } from "./MoveEdit";
 import { RotateEdit } from "./RotateEdit";
 import { ScaleEdit } from "./ScaleEdit";
 
 /**
- * Creates fluent position edits for one authored glyph layer.
+ * Creates fluent position edits for authored glyph layers.
  *
  * @remarks
  * Call `move`, `rotate`, or `scale` directly for a position-only interaction.
- * The returned position edit lazily creates and owns its `GlyphLayerEdit`.
+ * The returned position edit lazily creates and owns one `GlyphLayerEdit` per
+ * selected layer and commits them through one outer workspace transaction.
  *
  * Use {@link within} when an active `GlyphLayerEdit` already contains structural
- * changes that must commit or cancel with one position operation.
+ * changes that must commit or cancel with one single-layer position operation.
  */
 export class PositionEdits {
   readonly #layer: GlyphLayer;
   readonly #edit: GlyphLayerEdit | null;
+  readonly #additionalLayers: readonly PositionSelectionLayer[];
 
-  constructor(layer: GlyphLayer, edit: GlyphLayerEdit | null = null) {
+  /**
+   * Creates position operations rooted in one reference layer.
+   *
+   * @param layer - Authored layer that drives feedback and snapping.
+   * @param edit - Existing single-layer edit to own, when present.
+   * @param additionalLayers - Pre-matched target layers for atomic fan-out.
+   */
+  constructor(
+    layer: GlyphLayer,
+    edit: GlyphLayerEdit | null = null,
+    additionalLayers: readonly PositionSelectionLayer[] = [],
+  ) {
     this.#layer = layer;
     this.#edit = edit;
+    this.#additionalLayers = additionalLayers;
+  }
+
+  /**
+   * Creates transforms over one reference selection and its matched layers.
+   *
+   * The supplied identities are frozen for the returned interaction; preview
+   * frames never resolve layer matches or perform workspace reads.
+   *
+   * @param selection - Reference targets and complete matched-layer targets.
+   * @returns Position operations over the supplied layer set.
+   */
+  static fromSelection(selection: PositionSelection): PositionEdits {
+    return new PositionEdits(selection.layer, null, selection.additionalLayers);
   }
 
   /**
@@ -57,14 +88,14 @@ export class PositionEdits {
   }
 
   move(targets: PositionTargets): MoveEdit {
-    return new MoveEdit(this.#layer, targets, this.#edit);
+    return new MoveEdit(this.#layer, targets, this.#edit, this.#additionalLayers);
   }
 
   rotate(targets: PositionTargets, origin: Point2D): RotateEdit {
-    return new RotateEdit(this.#layer, targets, origin, this.#edit);
+    return new RotateEdit(this.#layer, targets, origin, this.#edit, this.#additionalLayers);
   }
 
   scale(targets: PositionTargets, origin: Point2D): ScaleEdit {
-    return new ScaleEdit(this.#layer, targets, origin, this.#edit);
+    return new ScaleEdit(this.#layer, targets, origin, this.#edit, this.#additionalLayers);
   }
 }

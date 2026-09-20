@@ -4,7 +4,7 @@ import type { DragEvent, DragStartEvent } from "../../core/GestureDetector";
 import type { SelectBehavior, SelectState } from "../types";
 import type { Select } from "../Select";
 import type { BoundingRectEdge as NullableBoundingRectEdge } from "../cursor";
-import { PositionList, type ScaleEdit } from "@/lib/model/positions";
+import { PositionEdits, PositionList, type ScaleEdit } from "@/lib/model/positions";
 
 type BoundingRectEdge = Exclude<NullableBoundingRectEdge, null>;
 
@@ -42,7 +42,7 @@ export class Resize implements SelectBehavior {
       event.altKey,
     );
 
-    const edit = selection.layer.positions.scale(selection.targets, localAnchorPoint);
+    const edit = PositionEdits.fromSelection(selection).scale(selection.targets, localAnchorPoint);
     this.#edit = edit;
     this.#done = ctx.onCancel(() => edit.discard());
 

@@ -14,6 +14,7 @@ import {
   type GlyphName,
   type GlyphRecord,
   type LayerId,
+  type LayerMatch,
 } from "@shift/types";
 import { isSegmentId, type SegmentId } from "@shift/glyph-state";
 import type { ExternalAxisLocation } from "@/types/variation";
@@ -86,6 +87,7 @@ import type { NodeDefinition } from "@/lib/nodes/NodeDefinition";
 import { GlyphNodeDefinition } from "../nodes/GlyphNodeDefinition";
 import { TextRunNodeDefinition } from "../nodes/TextRunNodeDefinition";
 import type { NodeDefinitionByKind, NodeDefinitionConstructors } from "@/types/nodeDefinition";
+import { MultiSourceEditing } from "./MultiSourceEditing";
 
 interface EditorOptions {
   font: Font;
@@ -178,6 +180,7 @@ export class Editor {
   #externalLocation: WritableSignal<ExternalAxisLocation>;
   #activeSourceIdCell: WritableSignal<SourceId | null>;
   #editingSourceIdsCell: WritableSignal<ReadonlySet<SourceId>>;
+  #multiSourceEditing: MultiSourceEditing;
 
   #cursorEffect: Effect;
   #cameraMetricsEffect: Effect;
@@ -222,6 +225,13 @@ export class Editor {
     this.#editingSourceIdsCell = signal<ReadonlySet<SourceId>>(
       initialSourceId ? new Set([initialSourceId]) : new Set(),
       { name: "editor.sources.editing" },
+    );
+    this.#multiSourceEditing = new MultiSourceEditing(
+      this.font,
+      this.scene,
+      (glyphId) => this.#fontStore.glyphForId(glyphId),
+      this.#activeSourceIdCell,
+      this.#editingSourceIdsCell,
     );
     this.text = new Text(this.#store, this);
 
@@ -515,6 +525,20 @@ export class Editor {
     return this.#editingSourceIdsCell.peek();
   }
 
+  /**
+   * Returns the live topology matches for selected non-reference layers.
+   *
+   * @remarks
+   * The map is keyed by target layer ID and may contain incomplete matches for
+   * diagnostics. Coordinate-only edits preserve the current map identity;
+   * source, glyph, or structure changes clear it before asynchronous refresh.
+   *
+   * @returns Read-only reactive match state for the current editing source set.
+   */
+  public get editingLayerMatchesCell(): Signal<ReadonlyMap<LayerId, LayerMatch>> {
+    return this.#multiSourceEditing.matchesCell;
+  }
+
   /** Current external user-space coordinate used for displayed font data. */
   public get externalLocation(): ExternalAxisLocation {
     return this.#externalLocation.peek();
@@ -663,11 +687,16 @@ export class Editor {
   }
 
   /**
-   * Normalizes editor object IDs into point and anchor targets on one editable layer.
+   * Resolves selected objects into reference and matched-layer position targets.
    *
-   * Segment and contour IDs expand to their constituent points. The selection is
-   * rejected when any ID is unresolved, unsupported, spans layers, or belongs to
-   * a layer outside the active authored source.
+   * @remarks
+   * Segment and contour IDs expand to their constituent points. Multi-source
+   * results require complete precomputed matches for every selected source; this
+   * method performs no matching or workspace I/O.
+   *
+   * @param ids - Selected object identities to normalize as one interaction.
+   * @returns Resolved layer targets, or `null` for unsupported, mixed, inactive,
+   * pending, or incompletely matched selections.
    */
   public positionSelection(ids: readonly SelectableId[]): PositionSelection | null {
     const objects = this.objects(ids);
@@ -703,13 +732,13 @@ export class Editor {
     const sourceId = this.activeSourceId;
     if (!layer || sourceId === null || layer.sourceId !== sourceId) return null;
 
-    return {
+    return this.#multiSourceEditing.resolve({
       layer,
       targets: {
         points: [...points],
         anchors: [...anchors],
       },
-    };
+    });
   }
 
   #layerForPoint(pointId: PointId): GlyphLayer | null {
@@ -1658,6 +1687,7 @@ export class Editor {
     this.#events.emit("destroying");
     this.#cursorEffect.dispose();
     this.#cameraMetricsEffect.dispose();
+    this.#multiSourceEditing.dispose();
     this.#renderer.destroy();
     this.#toolManager.dispose();
     this.#handlesCell.set(new Map());

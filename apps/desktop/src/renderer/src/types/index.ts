@@ -58,9 +58,11 @@ export type {
   PositionGuide,
   PositionSnap,
   PositionSelection,
+  PositionSelectionLayer,
   PositionSnapProvider,
   PositionTargets,
 } from "./positionEdit";
+export type { LatestRequestResult } from "./request";
 export type { WorkspaceApplyStatus, WorkspaceEdit } from "./workspace";
 
 export interface GlyphObjectSegment {

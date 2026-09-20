@@ -13,6 +13,7 @@ export const OutlineVisibilityButton = ({
   onClick,
 }: OutlineVisibilityButtonProps) => {
   const [showInheritedIndicator, setShowInheritedIndicator] = useState(inherited);
+  const [showVisibleIndicator, setShowVisibleIndicator] = useState(visible);
   const action = `${visible ? "Hide" : "Show"} ${label}`;
 
   useEffect(() => {
@@ -29,6 +30,17 @@ export const OutlineVisibilityButton = ({
     return () => clearTimeout(timeout);
   }, [inherited, showInheritedIndicator, visible]);
 
+  useEffect(() => {
+    if (visible) {
+      setShowVisibleIndicator(true);
+      return;
+    }
+    if (!showVisibleIndicator) return;
+
+    const timeout = setTimeout(() => setShowVisibleIndicator(false), 200);
+    return () => clearTimeout(timeout);
+  }, [showVisibleIndicator, visible]);
+
   return (
     <Tooltip>
       <TooltipTrigger>
@@ -36,6 +48,7 @@ export const OutlineVisibilityButton = ({
           label={action}
           onClick={() => {
             if (inherited) setShowInheritedIndicator(false);
+            if (visible) setShowVisibleIndicator(false);
             onClick();
           }}
           onTransitionEnd={(event) => {
@@ -43,12 +56,13 @@ export const OutlineVisibilityButton = ({
             if (getComputedStyle(event.currentTarget).opacity !== "0") return;
 
             setShowInheritedIndicator(false);
+            setShowVisibleIndicator(false);
           }}
           className={visible ? "!opacity-100" : undefined}
         >
           {showInheritedIndicator ? (
             <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-primary" />
-          ) : visible || alwaysOpen ? (
+          ) : visible || showVisibleIndicator || alwaysOpen ? (
             <EyeOpenIcon aria-hidden className="h-4 w-4" />
           ) : (
             <EyeClosedIcon aria-hidden className="h-4 w-4" />

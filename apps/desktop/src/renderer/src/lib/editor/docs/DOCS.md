@@ -1,6 +1,6 @@
 # Editor
 
-<!-- reviewed: 2026-09-17 -->
+<!-- reviewed: 2026-09-20 -->
 
 Central orchestrator for the canvas-based glyph editing surface, wiring viewport transforms, selection, rendering, hit testing, and tool management into a single facade.
 
@@ -14,7 +14,7 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 
 **Architecture Invariant:** `Editor.#store` is the generic `ShiftStore<ShiftEditorRecord>` for scene and session records. The injected `Editor.#fontStore` owns canonical complete Glyph objects for those ID-based records. Neither store contains the other store's domain objects.
 
-**Architecture Invariant:** `Font.loadGlyph()` is the only asynchronous Glyph acquisition API. `Editor.glyphForId()` is the synchronous runtime and NodeDefinition lookup: it returns the canonical complete Glyph when available, returns `null` otherwise, and never starts I/O. Use `Font.recordForId()` when code must distinguish a nonexistent current-font ID from a Glyph that has not been acquired. `GlyphOpenGate` permits only the latest asynchronous catalog request to publish; superseded or invalidated results never replace the requested route glyph.
+**Architecture Invariant:** `Font.loadGlyph()` is the only asynchronous Glyph acquisition API. `Editor.glyphForId()` is the synchronous runtime and NodeDefinition lookup: it returns the canonical complete Glyph when available, returns `null` otherwise, and never starts I/O. Use `Font.recordForId()` when code must distinguish a nonexistent current-font ID from a Glyph that has not been acquired. `LatestRequest` permits only the latest asynchronous catalog request to publish; superseded or invalidated results never replace the requested route glyph.
 
 **Architecture Invariant:** Pointer events carry only `screen` and `scene` coordinates (`Coordinates`). Node-local conversion is not global: rendering enters a node's space via `ctx.canvas.withTranslation(node.position, ...)`, and hit-test paths derive node-local coordinates after identifying the target node.
 
@@ -28,7 +28,7 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 
 **Architecture Invariant:** `FrameHandler` deduplicates `requestAnimationFrame` calls per canvas layer. Multiple signal changes within a single frame coalesce into one render. Canvas lifecycle changes, such as replacing a layer context after resize, are represented as renderer surface signals so redraw causes remain inspectable.
 
-**Architecture Invariant:** `Editor.positionSelection(ids)` is the canonical boundary from generic selected object IDs to one active authored `GlyphLayer` plus normalized point/anchor targets. It expands segment and contour IDs, rejects unsupported or mixed-layer input, and carries no scene-node placement; pointer deltas and tool surfaces own coordinate context.
+**Architecture Invariant:** `Editor.positionSelection(ids)` is the canonical boundary from generic selected object IDs to one active reference `GlyphLayer` plus normalized point/anchor targets for every selected source. It expands segment and contour IDs, rejects unsupported or mixed-layer input, and requires a complete precomputed `LayerMatch` for each additional source. It performs no matching or workspace I/O and carries no scene-node placement; pointer deltas and tool surfaces own coordinate context.
 
 **Architecture Invariant:** Lifecycle events (`EventEmitter`) are for one-shot imperative actions; `LifecycleEventMap` contains `destroying` and the one-shot `previewMutationAttempted` notice. Continuous state changes use signals. Do not mix the two patterns.
 
@@ -52,7 +52,8 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 
 ```
 editor/
-  Editor.ts              -- Facade (~1373 lines), wires all subsystems
+  Editor.ts              -- Facade, wires all subsystems
+  MultiSourceEditing.ts  -- Reactive cross-layer matching and target resolution
   lifecycle.ts           -- EventEmitter for destruction and preview mutation notices
   managers/
     Camera.ts             -- UPM<->screen affine matrices, zoom, pan
@@ -82,8 +83,9 @@ editor/
 - **`Selection`** -- Ordered branded-ID selection state. It exposes `stateCell` and unwrapped ID getters; `Editor.selectionBoundsCell` resolves current live objects and their bounds.
 - **`SelectableId`** -- Branded identity accepted by selection regardless of the object's concrete kind.
 - **`Coordinates`** -- Pair of `{ screen, scene }` for a single pointer position. Node-local coordinates are derived after hit testing identifies the node being acted on.
-- **`PositionSelection`** -- One active authored `GlyphLayer` paired with normalized point/anchor targets. It contains edit ownership only, not scene placement or pointer coordinates.
+- **`PositionSelection`** -- One active reference `GlyphLayer` and normalized point/anchor targets plus the corresponding targets on every completely matched editing layer. It contains edit ownership only, not scene placement or pointer coordinates.
 - **`editingSourceIdsCell`** -- Session-only source selection for multi-source editing. The active source remains the reference; additional selected sources render as comparison outlines.
+- **`MultiSourceEditing`** -- Owns cold topology matches keyed by target layer ID and resolves normalized reference targets across selected sources. Source, glyph, and `structureCell` changes invalidate matches; coordinate-only edits and preview frames preserve them. A latest-request boundary prevents superseded asynchronous results from publishing.
 - **`Hover`** -- Tracks the currently hovered glyph-domain entity (point/anchor/segment). Tool-specific controls such as select bounding boxes stay with the owning tool.
 - **`Handles`** -- Handle renderer that tries the accelerated marker layer and falls back to CPU drawing internally.
 - **`FrameHandler`** -- Deduplicates `requestAnimationFrame` per render target. While a frame is pending, later requests are dropped without storing their callback -- the first callback wins.
@@ -136,11 +138,13 @@ Background, scene, and overlays are drawn in UPM space (`Canvas.withSceneSpace()
 
 ### Position selection boundary
 
-`Editor.positionSelection(ids)` resolves points and anchors directly, expands selected segments and contours to points, and verifies that every target belongs to the active authored layer. Select-tool behaviors pass the returned targets to `GlyphLayer.positions.move`, `.rotate`, or `.scale`; scene-space gesture calculations remain in the tool layer.
+`Editor.positionSelection(ids)` resolves points and anchors directly, expands selected segments and contours to points, and verifies that every reference target belongs to the active authored layer. For each additional editing source it maps those identities through the current complete `LayerMatch`; pending or incomplete matches make the selection unavailable rather than producing a partial edit. Select-tool behaviors freeze the result with `PositionEdits.fromSelection(...)`; preview frames then perform local numeric mutations only, while scene-space gesture calculations remain in the tool layer.
 
 ### Source editing selection
 
 A plain source-row click activates that source and collapses the editing set. Shift-click replaces the set with the authored-order range from the active reference to the clicked source; Cmd/Ctrl-click toggles a non-reference source. Cmd/Ctrl+E selects every source without changing the reference. Escape reaches source selection only after the active tool declines it, so gestures and geometry selection cancel first; it then collapses the set to the reference. Non-reference selected sources are published to `GlyphOutlines` automatically. Source eye controls independently add preview-only outlines, so a source can remain outside the editing set while still being visible for comparison.
+
+`MultiSourceEditing` resolves `LayerMatch` values asynchronously before interactions. Its dependency snapshot includes the active glyph, reference and target layer IDs, and each layer's `structureCell`; coarse scene updates are ignored when those inputs are unchanged. `LatestRequest` prevents stale results from publishing after the editing source set changes. Move, nudge, scale, and rotate freeze the resolved targets, preview every layer without IPC, and finish all layer edits inside one workspace transaction and undo entry. Scale and rotate preserve reference-driven feedback while mapping the selection pivot proportionally into each target layer's bounds.
 
 ### Editing result selection
 
