@@ -16,9 +16,13 @@ export type {
   SvgGlyphCatalogGridProps,
 } from "./glyphCatalog";
 export type { ToolbarProps } from "./chrome";
+export type {
+  ComponentTransformSelection,
+  ComponentTransformSelectionLayer,
+} from "./componentTransform";
 export type { EditingId, PendingEditId } from "./editing";
 export type { FontOptions, FontStoreOptions } from "./font";
-export type { GlyphGeometrySelection, GlyphOptions, GlyphReader } from "./glyph";
+export type { GlyphFillHit, GlyphGeometrySelection, GlyphOptions, GlyphReader } from "./glyph";
 export type { CubicHandle } from "./handle";
 export type {
   GlyphAtlasGlyph,

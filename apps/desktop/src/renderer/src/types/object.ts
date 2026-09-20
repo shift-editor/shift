@@ -1,7 +1,8 @@
 import type { Rect2D } from "@shift/geo";
 import type { GlyphGeometry, SegmentId } from "@shift/glyph-state";
-import type { AnchorId, ContourId, NodeId, PointId } from "@shift/types";
+import type { AnchorId, ComponentId, ContourId, NodeId, PointId } from "@shift/types";
 import type { GlyphLayer } from "@/lib/model/Glyph";
+import type { ComponentGlyph } from "@/lib/model/ComponentGlyph";
 import type { GlyphNode, ShiftNode } from "./node";
 
 declare const SelectionIdBrand: unique symbol;
@@ -11,7 +12,7 @@ export type SelectionId = string & { readonly [SelectionIdBrand]: typeof Selecti
 export const currentSelectionId = "selection:current" as SelectionId;
 
 /** Identifies an editor-addressable scene node or glyph object. */
-export type ShiftId = NodeId | PointId | AnchorId | ContourId | SegmentId;
+export type ShiftId = NodeId | PointId | AnchorId | ContourId | SegmentId | ComponentId;
 
 /** Identifies objects that can be selected by the editor. */
 export type SelectableId = ShiftId;
@@ -123,6 +124,15 @@ export interface ShiftObjectKindMap {
     readonly geometry: GlyphGeometry;
     readonly layer: GlyphLayer | null;
     readonly contourId: ContourId;
+  };
+
+  /** Represents one directly editable component occurrence in a placed glyph. */
+  readonly component: ShiftObjectBase<"component", ComponentId> & {
+    readonly node: GlyphNode;
+    readonly layer: GlyphLayer | null;
+    readonly component: ComponentGlyph;
+    readonly componentId: ComponentId;
+    readonly componentPath: readonly ComponentId[];
   };
 }
 

@@ -22,7 +22,8 @@ export class Selection implements SelectBehavior {
         break;
       }
 
-      case "segment": {
+      case "segment":
+      case "component": {
         ids = [target.id];
         break;
       }

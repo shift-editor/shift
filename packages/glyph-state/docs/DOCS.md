@@ -1,6 +1,6 @@
 # Glyph State
 
-<!-- reviewed: 2026-09-05 review-every: 90d -->
+<!-- reviewed: 2026-09-20 review-every: 90d -->
 
 Pure readers and geometry helpers for `GlyphStructure + Float64Array` glyph state.
 
@@ -12,6 +12,7 @@ Pure readers and geometry helpers for `GlyphStructure + Float64Array` glyph stat
 - **Architecture Invariant:** On-curve predicates accept both `onCurve` and `qCurve`. Point factories preserve the requested endpoint type and smooth flag; only off-curve controls force smoothness off.
 - **Architecture Invariant:** Segment parsing is structural. Two on-curve points produce a line; onCurve/offCurve/onCurve produces a quad; onCurve/offCurve/offCurve/onCurve produces a cubic. Runs starting with an off-curve point are skipped only in open contours — closed contours wrap and consume leading off-curves as controls of the final wrapped segment — and runs of three or more off-curves after an on-curve point are emitted as mis-typed cubics rather than dropped (see Gotchas).
 - **Architecture Invariant:** `bounds` always means tight drawable curve bounds, and sidebearings derive only from those bounds plus advance width. Raw control-point extents are point bounds and must be exposed as `pointBounds` if a consumer needs them; `selectionBounds` may intentionally combine complete curve segments with individually selected points.
+- **Architecture Invariant:** Filled-contour hit testing uses the non-zero winding rule across one contour group. It skips open contours, rejects candidates through tight segment bounds, and adaptively flattens Bézier segments only for ray crossings.
 
 ## Codemap
 
@@ -24,6 +25,7 @@ packages/glyph-state/src/
   Component.ts          -- component reader and decomposed transform matrix
   Segment.ts            -- id-aware segment class, hit testing, curve conversion
   parseContourSegments.ts -- shared traversal retaining supplied points, with or without IDs
+  filledContoursContain.ts -- non-zero fill hit testing over segmented contours
   Point.ts              -- id-aware point with on/off-curve predicates and factories
   IdIndex.ts            -- lazy id-to-object map over a supplied list
   types/contour.ts      -- minimal named contour geometry contract
@@ -40,6 +42,7 @@ packages/glyph-state/src/
 - **`ContourGeometry<TPoint>`** -- minimal named `points + closed` contract accepted by segment parsing; defaults to authored `Point` but also accepts `NewPoint`.
 - **`parseContourSegments`** -- canonical structural traversal returning `SegmentPoints<TPoint>` descriptions without allocating identity. `Segment.parse` wraps these descriptions in ID-aware segment objects.
 - **`SegmentedContour`** -- contour geometry that exposes domain-owned segment traversal to renderer path derivation.
+- **`filledContoursContain`** -- pure non-zero winding query over a group of closed segmented contours; open contours do not contribute.
 - **`GlyphPosition` / `GlyphPositionTarget`** -- point/anchor position records used by `positionsFor`, `movePositions`, and `withPositionUpdates` so transform code stays independent of where the geometry came from.
 
 ## How it works

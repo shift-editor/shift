@@ -625,7 +625,8 @@ fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), S
                 Ok(())
             })
         }
-        font::FontChange::LayerGeometryReplaced(change) => {
+        font::FontChange::LayerGeometryReplaced(change)
+        | font::FontChange::LayerComponentsReplaced(change) => {
             update_packed_layer(tx, &change.layer_id, |layer| {
                 layer.set_width(change.layer.width);
                 layer.set_height(change.layer.height);
@@ -643,6 +644,10 @@ fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), S
                         anchor.x,
                         anchor.y,
                     ));
+                }
+                layer.clear_components();
+                for component in &change.layer.components {
+                    layer.add_component(component.clone());
                 }
                 Ok(())
             })
@@ -662,6 +667,7 @@ fn post_font_supersedes_incremental_layer_write(change: &font::FontChange) -> bo
             | font::FontChange::PointPositionsChanged(_)
             | font::FontChange::AnchorPositionsChanged(_)
             | font::FontChange::LayerGeometryReplaced(_)
+            | font::FontChange::LayerComponentsReplaced(_)
     )
 }
 

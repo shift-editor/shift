@@ -1,6 +1,6 @@
 # shift-font
 
-<!-- reviewed: 2026-09-05 review-every: 90d -->
+<!-- reviewed: 2026-09-20 review-every: 90d -->
 
 First-class Rust font object model for Shift.
 
@@ -18,6 +18,7 @@ First-class Rust font object model for Shift.
 - **Architecture Invariant:** Authored metadata and font metrics are independent. Metadata edits replace the complete metadata snapshot without rewriting metrics.
 - **Architecture Invariant:** UPM is font-global. Metric identities and semantic roles are font-owned; positions, overshoots, and optional technical metrics are authored on master sources.
 - **Architecture Invariant:** Point removal never leaves empty contour records. Removing a contour's final point prunes the contour and its stable identity from the font-wide structure index.
+- **Architecture Invariant:** Component add, removal, decomposition, undo, and redo publish component-specific layer replacements so persisted dependency edges and derived projections remain synchronized with authored layer structure.
 
 ## Codemap
 
@@ -118,6 +119,8 @@ Mutations should live on the model object being mutated:
 layer.add_empty_contour();
 layer.add_point_to_contour(contour_id, x, y, point_type, smooth)?;
 layer.remove_points(&point_ids)?;
+layer.add_component(component);
+layer.remove_component(component_id);
 layer.apply_bulk_node_positions(updates)?;
 ```
 
@@ -140,6 +143,8 @@ Transport and workspace layers should pass stable identity to find the model obj
 2. Never leave an empty contour record behind: follow `remove_points`, which prunes emptied contours and returns the pruned `ContourId` values so the font-wide structure index stays consistent.
 3. Bulk position paths take `BulkNodePositionUpdates` flat ID/coordinate slices; validate coordinate length against the ID count before mutating anything so a malformed batch never half-applies.
 4. Verify: `cargo test -p shift-font`.
+
+Component authoring uses `AddComponent`, `SetComponentTransforms`, `RemoveComponents`, and `DecomposeComponents`. Add creates an identity-transformed direct reference with caller-minted identity. Transform replacement validates all direct component identities before mutating and records one values-only layer replacement. Anchor attachment establishes automatic placement first, then the authored transform composes on top as a user-controlled offset. Decomposition replaces selected direct references with fresh local contours, recursively flattening each selected subtree at the target layer's source location after component transforms and anchor attachment are resolved. Unselected siblings still participate in attachment resolution.
 
 ## Gotchas
 

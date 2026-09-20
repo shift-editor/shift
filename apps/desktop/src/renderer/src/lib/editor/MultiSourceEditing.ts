@@ -1,8 +1,23 @@
-import type { GlyphId, LayerId, LayerMatch, PointId, AnchorId, SourceId } from "@shift/types";
+import { Bounds, type Rect2D } from "@shift/geo";
+import type {
+  AnchorId,
+  ComponentId,
+  GlyphId,
+  LayerId,
+  LayerMatch,
+  PointId,
+  SourceId,
+} from "@shift/types";
 import type { Font } from "@/lib/model/Font";
 import type { Glyph, GlyphLayer } from "@/lib/model/Glyph";
 import { effect, signal, track, type Effect, type Signal } from "@/lib/signals";
-import type { PositionSelection, PositionSelectionLayer, PositionTargets } from "@/types";
+import type {
+  ComponentTransformSelection,
+  ComponentTransformSelectionLayer,
+  PositionSelection,
+  PositionSelectionLayer,
+  PositionTargets,
+} from "@/types";
 import { LatestRequest } from "@/lib/utils/LatestRequest";
 import type { Scene } from "./Scene";
 
@@ -83,6 +98,47 @@ export class MultiSourceEditing {
       if (!targets) return null;
 
       additionalLayers.push({ layer: targetLayer, targets });
+    }
+
+    return { ...reference, additionalLayers };
+  }
+
+  /**
+   * Maps direct components onto every selected source layer.
+   *
+   * @param reference - Active-source component identities and resolved local bounds.
+   * @returns The complete matched selection, or `null` when any source cannot participate.
+   */
+  resolveComponents(
+    reference: ComponentTransformSelectionLayer,
+  ): ComponentTransformSelection | null {
+    const editingSourceIds = this.#editingSourceIdsCell.peek();
+    if (editingSourceIds.size <= 1) return { ...reference, additionalLayers: [] };
+
+    const glyph = this.#glyphForLayer(reference.layer);
+    if (!glyph) return null;
+
+    const activeSourceId = this.#activeSourceIdCell.peek();
+    if (!activeSourceId) return null;
+
+    const matches = this.#matchesCell.peek();
+    const additionalLayers: ComponentTransformSelectionLayer[] = [];
+    for (const source of this.#font.sources) {
+      if (source.id === activeSourceId || !editingSourceIds.has(source.id)) continue;
+
+      const targetLayer = glyph.layerForSource(source.id);
+      if (!targetLayer) return null;
+
+      const layerMatch = matches.get(targetLayer.id);
+      if (!layerMatch?.complete || layerMatch.referenceLayerId !== reference.layer.id) return null;
+
+      const componentIds = mapComponentIds(reference.componentIds, layerMatch);
+      if (!componentIds) return null;
+
+      const bounds = this.#componentBounds(glyph, source.id, targetLayer, componentIds);
+      if (!bounds) return null;
+
+      additionalLayers.push({ layer: targetLayer, componentIds, bounds });
     }
 
     return { ...reference, additionalLayers };
@@ -169,6 +225,30 @@ export class MultiSourceEditing {
     );
   }
 
+  #componentBounds(
+    glyph: Glyph,
+    sourceId: SourceId,
+    layer: GlyphLayer,
+    componentIds: readonly ComponentId[],
+  ): Rect2D | null {
+    const location = this.#font.externalLocationForSource(sourceId);
+    if (!location) return null;
+
+    const view = glyph.renderModelAt(signal(location), signal<SourceId | null>(sourceId));
+    // Render paths keep projection-stable identities even when exact-source authored IDs differ.
+    // Resolve the authored target IDs to their Rust-matched direct-component slots.
+    const directComponents = view.components.filter(
+      (component) => component.parentPath.length === 0,
+    );
+    const bounds = Bounds.unionAll(
+      componentIds.map((componentId) => {
+        const componentIndex = layer.components.findIndex(({ id }) => id === componentId);
+        return componentIndex === -1 ? null : (directComponents[componentIndex]?.bounds ?? null);
+      }),
+    );
+    return bounds ? Bounds.toRect(bounds) : null;
+  }
+
   #glyphForLayer(layer: GlyphLayer): Glyph | null {
     for (const node of this.#scene.nodesOfKind("glyph")) {
       if (node.sourceId !== layer.sourceId) continue;
@@ -179,6 +259,23 @@ export class MultiSourceEditing {
 
     return null;
   }
+}
+
+function mapComponentIds(
+  componentIds: readonly ComponentId[],
+  match: LayerMatch,
+): readonly ComponentId[] | null {
+  const componentMatches = new Map(
+    match.components.map((componentMatch) => [componentMatch.referenceId, componentMatch.targetId]),
+  );
+  const targets: ComponentId[] = [];
+  for (const componentId of componentIds) {
+    const targetId = componentMatches.get(componentId);
+    if (!targetId) return null;
+
+    targets.push(targetId);
+  }
+  return targets;
 }
 
 function mapTargets(reference: PositionSelectionLayer, match: LayerMatch): PositionTargets | null {

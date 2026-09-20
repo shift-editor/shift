@@ -1,5 +1,6 @@
 import { Bounds, type Rect2D } from "@shift/geo";
 import type { SegmentId } from "@shift/glyph-state";
+import type { ComponentId } from "@shift/types";
 import type { NodePoint } from "@/types/coordinates";
 import { SCREEN_HIT_RADIUS } from "@/lib/editor/rendering/constants";
 import { OutlineRenderer } from "@/lib/editor/rendering/Outline";
@@ -88,40 +89,85 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     if (!geometry) return null;
 
     const hit = geometry.hitAt(point, this.editor.hitRadius);
-    if (!hit) return null;
+    if (hit) {
+      switch (hit.kind) {
+        case "segment": {
+          const segment = geometry.segment(hit.id);
+          if (!segment) return null;
 
-    switch (hit.kind) {
-      case "segment": {
-        const segment = geometry.segment(hit.id);
-        if (!segment) return null;
+          return {
+            ...hit,
+            nodeId: node.id,
+            glyphId: node.glyphId,
+            point,
+            segmentId: hit.id,
+            pointIds: segment.pointIds,
+          };
+        }
+
+        case "point":
+          return {
+            ...hit,
+            nodeId: node.id,
+            glyphId: node.glyphId,
+            point,
+            pointId: hit.id,
+          };
+
+        case "anchor":
+          return {
+            ...hit,
+            nodeId: node.id,
+            glyphId: node.glyphId,
+            point,
+            anchorId: hit.id,
+          };
+      }
+    }
+
+    const contours = geometry.contours;
+    for (let index = contours.length - 1; index >= 0; index--) {
+      const contour = contours[index];
+      const component = contour?.component;
+      if (!component) continue;
+      if (!contour.segments().some((segment) => segment.hit(point, this.editor.hitRadius)))
+        continue;
+
+      const componentId = component.componentPath[0];
+      if (!componentId) continue;
+
+      return {
+        kind: "component",
+        id: componentId,
+        componentId,
+        componentPath: component.componentPath,
+        nodeId: node.id,
+        glyphId: node.glyphId,
+        point,
+      };
+    }
+
+    const fillHit = geometry.fillHitsAt(point)[0];
+    if (!fillHit) return null;
+
+    switch (fillHit.kind) {
+      case "root":
+        return { kind: "node", node, point };
+
+      case "component": {
+        const componentId = fillHit.componentPath[0];
+        if (!componentId) return null;
 
         return {
-          ...hit,
+          kind: "component",
+          id: componentId,
+          componentId,
+          componentPath: fillHit.componentPath,
           nodeId: node.id,
           glyphId: node.glyphId,
           point,
-          segmentId: hit.id,
-          pointIds: segment.pointIds,
         };
       }
-
-      case "point":
-        return {
-          ...hit,
-          nodeId: node.id,
-          glyphId: node.glyphId,
-          point,
-          pointId: hit.id,
-        };
-
-      case "anchor":
-        return {
-          ...hit,
-          nodeId: node.id,
-          glyphId: node.glyphId,
-          point,
-          anchorId: hit.id,
-        };
     }
   }
 
@@ -268,6 +314,18 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
       }
     }
 
+    const hoveredComponentId = this.#hoveredComponentId(node);
+    if (hoveredComponentId) {
+      const style = ctx.canvas.theme.component.hoverOutline;
+      for (const component of view.components) {
+        if (component.componentPath[0] !== hoveredComponentId) continue;
+
+        for (const contour of component.contours) {
+          ctx.canvas.strokePath(contour.path, style.stroke, style.widthPx);
+        }
+      }
+    }
+
     this.#drawDebugOverlays(node, ctx, view);
   }
 
@@ -383,6 +441,16 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     }
 
     return segmentIds;
+  }
+
+  #hoveredComponentId(node: GlyphNode): ComponentId | null {
+    const id = this.editor.hover.id;
+    if (!id) return null;
+
+    const object = this.editor.object(id);
+    if (object?.kind !== "component" || object.node.id !== node.id) return null;
+
+    return object.componentId;
   }
 
   #hoveredSegmentId(node: GlyphNode): SegmentId | null {

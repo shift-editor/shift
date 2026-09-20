@@ -20,7 +20,11 @@ export interface Theme {
   guides: { color: string; widthPx: number };
   selection: { fill: string; stroke: string; widthPx: number };
   glyph: { fill: string; editableFill: string; stroke: string; widthPx: number };
-  component: { fill: string; widthPx: number };
+  component: {
+    fill: string;
+    widthPx: number;
+    hoverOutline: { stroke: string; widthPx: number };
+  };
   controlLine: { color: string; widthPx: number };
   handle: {
     corner: HandleStateStyles;
@@ -74,7 +78,11 @@ export const DEFAULT_THEME: Theme = {
     stroke: "#000000",
     widthPx: 0.75,
   },
-  component: { fill: "rgba(231, 231, 231, 0.75)", widthPx: 1 },
+  component: {
+    fill: "rgba(231, 231, 231, 0.75)",
+    widthPx: 1,
+    hoverOutline: { stroke: "#1886D7", widthPx: 1.5 },
+  },
   controlLine: { color: "rgba(136, 136, 136, 0.65)", widthPx: 0.75 },
   handle: {
     corner: {

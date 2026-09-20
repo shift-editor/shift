@@ -1,3 +1,4 @@
+import type { DecomposedTransform } from "@shift/geo";
 import type { ComponentData } from "@shift/types";
 import { computed, signal, type ComputedSignal, type WritableSignal } from "@/lib/signals/signal";
 import { PackedArray } from "./PackedArray";
@@ -22,6 +23,37 @@ export class ComponentBuffer {
     this.valuesCell = computed(() => this.#transformCell.value.view, {
       name: `glyphLayer.component[${componentIndex}].values`,
     });
+  }
+
+  get transform(): DecomposedTransform {
+    const values = this.#transformCell.peek().view;
+    return {
+      translateX: values[0],
+      translateY: values[1],
+      rotation: values[2],
+      scaleX: values[3],
+      scaleY: values[4],
+      skewX: values[5],
+      skewY: values[6],
+      tCenterX: values[7],
+      tCenterY: values[8],
+    };
+  }
+
+  setTransform(transform: DecomposedTransform): void {
+    this.replaceValues(
+      Float64Array.of(
+        transform.translateX,
+        transform.translateY,
+        transform.rotation,
+        transform.scaleX,
+        transform.scaleY,
+        transform.skewX,
+        transform.skewY,
+        transform.tCenterX,
+        transform.tCenterY,
+      ),
+    );
   }
 
   replaceValues(values: Float64Array): void {

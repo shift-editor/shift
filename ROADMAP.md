@@ -110,19 +110,24 @@ Promise: Shift can represent and edit composite glyph workflows at an alpha leve
 
 Scope:
 
-- Component data model and snapshots.
-- Add component to glyph.
-- Move/transform component.
-- Render component bounds/ghosting.
-- Decompose component.
+- Component data model, snapshots, persistence, and undo/redo.
+- Generic glyph hit testing with stable root/component occurrence ownership.
+- Add components through a searchable glyph picker.
+- Select component occurrences from their rendered geometry.
+- Move, scale, rotate, and reset component transforms.
+- Replace base glyphs and duplicate, remove, or decompose components.
+- Render component bounds/ghosting and open a component's base glyph.
 - Basic anchors.
 - Simple accented glyph generation path.
 
 Acceptance tests:
 
-- Build an accented glyph from a base and mark component.
-- Move/transform a component and save/reopen.
-- Decompose a component and continue editing outlines.
+- Build an accented glyph from a base and mark component through the picker.
+- Select a component by its rendered geometry, transform it, and save/reopen.
+- Reset, duplicate, and replace a component with undo/redo preserving exact state.
+- Remove or recursively decompose a component and continue editing outlines.
+
+Sequencing constraint: complete component selection and editing before starting new text-mode, reference-image, OpenType-feature, or advanced-layout surfaces.
 
 ### 0.7.0 — Variable Font Alpha
 
@@ -551,16 +556,32 @@ These are allowed to jump around when energy is high, but they should not silent
 - [x] ComponentRef structure (glyph reference and transform)
 - [x] Add components array to Glyph struct
 - [x] Snapshot serialization for components
+- [x] Atomic add, remove, and recursive decomposition intents
+- [x] Component persistence and undo/redo dependency synchronization
 
 **Component Creation**
 
 - [ ] Drag glyph from grid as component
-- [ ] Component picker modal
+- [ ] Searchable component picker modal
 - [ ] Quick add: `Cmd+Shift+C` → type glyph name
+- [ ] Reject direct or indirect component cycles in the picker
+
+**Component Selection**
+
+- [x] Generic glyph hit tester with bounds broad phase and winding/ray casting
+- [x] Proximity testing for open contours
+- [x] Return paint-ordered root or component-path ownership
+- [x] Select the top-level component occurrence when nested geometry is hit
+- [ ] Cycle through overlapping component occurrences
 
 **Component Editing**
 
-- [ ] Move/transform components in editor
+- [x] Move components in editor
+- [x] Scale/rotate components in editor
+- [ ] Reset component transform
+- [ ] Replace base glyph while preserving the component transform
+- [ ] Duplicate component with a fresh identity
+- [ ] Remove selected components with Delete/Backspace
 - [ ] Numeric transform inputs in panel
 - [ ] "Use my metrics" toggle
 - [ ] Reorder components (stacking)
@@ -568,12 +589,12 @@ These are allowed to jump around when energy is high, but they should not silent
 **Component Display**
 
 - [ ] Render components dimmed/ghosted
-- [ ] Show component bounds
-- [ ] Jump to base glyph (double-click)
+- [x] Show component bounds
+- [ ] Open base glyph from the context menu or double-click
 
 **Decomposition**
 
-- [ ] Decompose single component → local contours
+- [ ] Decompose selected components → local contours
 - [ ] Decompose all → flatten glyph
 - [ ] Decompose on export option
 

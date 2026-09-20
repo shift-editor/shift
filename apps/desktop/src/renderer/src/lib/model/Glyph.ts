@@ -21,7 +21,7 @@ import type {
   SourceId,
   Unicode,
 } from "@shift/types";
-import { mintAnchorId, mintContourId, mintPointId } from "@shift/types";
+import { mintAnchorId, mintComponentId, mintContourId, mintPointId } from "@shift/types";
 import type { GlyphHandle } from "@shift/bridge";
 import {
   batch,
@@ -34,7 +34,7 @@ import {
   type Signal,
   type WritableSignal,
 } from "@/lib/signals";
-import type { DeleteMode, GlyphOptions } from "@/types/glyph";
+import type { DeleteMode, GlyphFillHit, GlyphOptions } from "@/types/glyph";
 import type { DesignAxisLocation, ExternalAxisLocation } from "@/types/variation";
 import {
   designAxisLocationFromLocation,
@@ -55,6 +55,7 @@ import {
   Vec2,
   type Bounds as BoundsType,
   type CubicCurve,
+  type DecomposedTransform,
   type MatModel,
   type Point2D,
   type QuadraticCurve,
@@ -65,6 +66,7 @@ import {
   Contour,
   GlyphGeometry,
   IdIndex,
+  filledContoursContain,
   type GeometryAnchorHit,
   type GeometryPointHit,
   type GeometrySegmentHit,
@@ -90,12 +92,14 @@ import {
 import { PositionList } from "./positions/PositionList";
 import { GlyphLayerPositionPatch } from "./GlyphLayerPositionPatch";
 import { GlyphLayerEdit } from "./GlyphLayerEdit";
+import { ComponentTransformEdit } from "./ComponentTransformEdit";
 import { DeletePoints } from "./DeletePoints";
 import { GlyphLayerState } from "./GlyphLayerState";
 import type { ContourBuffer } from "./ContourBuffer";
 import type { LayerBuffers } from "./LayerBuffers";
 import { LayerIntents } from "@/lib/workspace/LayerIntents";
 import type { WorkspaceEditCoordinator } from "@/lib/workspace/WorkspaceEditCoordinator";
+import type { ComponentTransformSelection } from "@/types/componentTransform";
 import { PositionEdits } from "./positions";
 
 export {
@@ -325,6 +329,48 @@ class GlyphLayerWriter {
     const ids = [...anchorIds];
     const editId = this.#intents.removeAnchors({ anchorIds: ids });
     this.#state.state.removeAnchors(editId, ids);
+  }
+
+  addComponent(baseGlyphId: GlyphId): ComponentId {
+    const componentId = mintComponentId();
+    this.#intents.addComponent({ componentId, baseGlyphId });
+    return componentId;
+  }
+
+  setComponentTransforms(
+    componentIds: readonly ComponentId[],
+    transforms: readonly DecomposedTransform[],
+  ): void {
+    if (componentIds.length === 0) return;
+
+    const values = transforms.flatMap((transform) => [
+      transform.translateX,
+      transform.translateY,
+      transform.rotation,
+      transform.scaleX,
+      transform.scaleY,
+      transform.skewX,
+      transform.skewY,
+      transform.tCenterX,
+      transform.tCenterY,
+    ]);
+    const editId = this.#intents.setComponentTransforms({
+      componentIds: [...componentIds],
+      transforms: values,
+    });
+    this.#state.state.setComponentTransforms(editId, componentIds, transforms);
+  }
+
+  removeComponents(componentIds: readonly ComponentId[]): void {
+    if (componentIds.length === 0) return;
+
+    this.#intents.removeComponents({ componentIds: [...componentIds] });
+  }
+
+  decomposeComponents(componentIds: readonly ComponentId[]): void {
+    if (componentIds.length === 0) return;
+
+    this.#intents.decomposeComponents({ componentIds: [...componentIds] });
   }
 
   setPointSmooth(pointId: PointId, smooth: boolean): void {
@@ -589,6 +635,13 @@ export class GlyphLayer {
   /** Begins a reversible edit that mutates this layer's reactive topology directly. */
   beginEdit(): GlyphLayerEdit {
     return new GlyphLayerEdit(this, this.#writer.layerState);
+  }
+
+  /** Begins one reversible preview cycle across matched component source layers. */
+  beginComponentTransformEdit(selection: ComponentTransformSelection): ComponentTransformEdit {
+    const layers = [selection, ...selection.additionalLayers];
+    const states = layers.map(({ layer }) => layer.#writer.layerState);
+    return new ComponentTransformEdit(selection, states);
   }
 
   /** @internal Groups accepted edit operations into one workspace and undo transaction. */
@@ -917,6 +970,47 @@ export class GlyphLayer {
    */
   removeAnchors(anchorIds: readonly AnchorId[]): void {
     this.#writer.removeAnchors(anchorIds);
+  }
+
+  /**
+   * Adds an identity-transformed component reference to this source.
+   *
+   * @param baseGlyphId - Existing glyph referenced by the new component.
+   * @returns Stable identity minted for the component before workspace confirmation.
+   */
+  addComponent(baseGlyphId: GlyphId): ComponentId {
+    return this.#writer.addComponent(baseGlyphId);
+  }
+
+  /** @internal Commits direct component transforms through the workspace path. */
+  setComponentTransforms(
+    componentIds: readonly ComponentId[],
+    transforms: readonly DecomposedTransform[],
+  ): void {
+    this.#writer.setComponentTransforms(componentIds, transforms);
+  }
+
+  /**
+   * Removes direct component references from this source.
+   *
+   * @param componentIds - Direct component occurrences owned by this layer.
+   */
+  removeComponents(componentIds: readonly ComponentId[]): void {
+    this.#writer.removeComponents(componentIds);
+  }
+
+  /**
+   * Replaces direct component references with editable local contours.
+   *
+   * @remarks
+   * Each selected occurrence is recursively flattened at this source's design
+   * location. Component transforms and anchor attachment are applied before the
+   * replacement contours are committed.
+   *
+   * @param componentIds - Direct component occurrences owned by this layer.
+   */
+  decomposeComponents(componentIds: readonly ComponentId[]): void {
+    this.#writer.decomposeComponents(componentIds);
   }
 
   /**
@@ -1424,6 +1518,29 @@ export class GlyphRenderModel {
 
   hitAt(pos: Point2D, radius: number): GlyphHit | null {
     return this.#geometry.hitAt(pos, radius);
+  }
+
+  /**
+   * Returns filled occurrence hits from frontmost paint to the root glyph.
+   *
+   * @param pos - Point in root-glyph coordinates.
+   * @returns A fresh front-to-back list retaining exact component ancestry.
+   */
+  fillHitsAt(pos: Point2D): readonly GlyphFillHit[] {
+    const hits: GlyphFillHit[] = [];
+    const components = this.#componentsCell.peek();
+
+    for (let index = components.length - 1; index >= 0; index--) {
+      const component = components[index];
+      if (!component || !filledContoursContain(component.contours, pos)) continue;
+
+      hits.push({ kind: "component", componentPath: component.componentPath });
+    }
+
+    const rootContours = this.#contoursCell.peek().filter((contour) => contour.component === null);
+    if (filledContoursContain(rootContours, pos)) hits.push({ kind: "root" });
+
+    return hits;
   }
 
   trackShape(): void {

@@ -1,14 +1,17 @@
-import { Bounds, Vec2 } from "@shift/geo";
+import { Bounds, Mat, Vec2 } from "@shift/geo";
 import type { ToolContext } from "../../core/Behavior";
 import type { Editor } from "@/lib/editor/Editor";
 import type { DragEvent, DragStartEvent, ToolEvent } from "../../core/GestureDetector";
 import type { SelectBehavior, SelectState } from "../types";
 import type { Select } from "../Select";
 import { AngleSnap, PositionEdits, PositionList, type RotateEdit } from "@/lib/model/positions";
+import type { ComponentTransformEdit } from "@/lib/model/ComponentTransformEdit";
 import type { PositionCondition } from "@/types/positionEdit";
 
 export class Rotate implements SelectBehavior {
   #edit: RotateEdit | null = null;
+  #componentEdit: ComponentTransformEdit | null = null;
+  #componentAngleSnap: AngleSnap | null = null;
   #done: (() => void) | null = null;
 
   onDragStart(
@@ -19,17 +22,21 @@ export class Rotate implements SelectBehavior {
     if (!ctx.editor.selection.hasSelection()) return false;
 
     const next = this.tryStartRotate(event, ctx.editor, ctx.tool);
-    const edit = this.#edit;
-    if (!next || !edit) return false;
+    if (!next || (!this.#edit && !this.#componentEdit)) return false;
 
-    this.#done = ctx.onCancel(() => edit.discard());
+    const edit = this.#edit;
+    const componentEdit = this.#componentEdit;
+    this.#done = ctx.onCancel(() => {
+      edit?.discard();
+      componentEdit?.discard();
+    });
     ctx.setState(next);
     return true;
   }
 
   onDrag(state: SelectState, ctx: ToolContext<SelectState, Select>, event: DragEvent): boolean {
     if (state.type !== "rotating") return false;
-    if (!this.#edit) return false;
+    if (!this.#edit && !this.#componentEdit) return false;
 
     const next = this.nextRotatingState(state, event);
     ctx.setState(next);
@@ -41,6 +48,7 @@ export class Rotate implements SelectBehavior {
     if (state.type !== "rotating") return false;
 
     this.#edit?.commit();
+    this.#componentEdit?.commit("Rotate components");
     if (this.#done) this.#done();
     this.#cleanup();
 
@@ -74,9 +82,26 @@ export class Rotate implements SelectBehavior {
       // editor.setHandlesVisible(true);
     }
 
-    if (next.type !== "rotating" || event.type !== "drag" || !this.#edit) return;
+    if (next.type !== "rotating" || event.type !== "drag") return;
+    if (!this.#edit && !this.#componentEdit) return;
 
-    const deltaAngle = this.#edit.preview(next.rotate.currentAngle - next.rotate.startAngle);
+    const rawAngle = next.rotate.currentAngle - next.rotate.startAngle;
+    let deltaAngle = rawAngle;
+    if (this.#componentEdit) {
+      deltaAngle = this.#componentAngleSnap?.apply(rawAngle) ?? rawAngle;
+      this.#componentEdit.preview((layer) => {
+        const center = Vec2.midpoint(
+          { x: layer.bounds.left, y: layer.bounds.top },
+          { x: layer.bounds.right, y: layer.bounds.bottom },
+        );
+        const fromOrigin = Mat.Translate(-center.x, -center.y);
+        const rotation = Mat.Rotate(deltaAngle);
+        const toOrigin = Mat.Translate(center.x, center.y);
+        return Mat.Compose(toOrigin, Mat.Compose(rotation, fromOrigin));
+      });
+    } else if (this.#edit) {
+      deltaAngle = this.#edit.preview(rawAngle);
+    }
     ctx.setState({
       ...next,
       rotate: {
@@ -88,6 +113,8 @@ export class Rotate implements SelectBehavior {
 
   #cleanup(): void {
     this.#edit = null;
+    this.#componentEdit = null;
+    this.#componentAngleSnap = null;
     this.#done = null;
   }
 
@@ -95,7 +122,7 @@ export class Rotate implements SelectBehavior {
     state: SelectState & { type: "rotating" },
     event: DragEvent,
   ): SelectState & { type: "rotating" } {
-    if (!this.#edit) return state;
+    if (!this.#edit && !this.#componentEdit) return state;
 
     const currentPos = event.coords.scene;
 
@@ -114,20 +141,9 @@ export class Rotate implements SelectBehavior {
     const hit = tool.boundingBox.hit(event.origin);
     if (hit?.type !== "rotate") return null;
 
-    const selection = editor.positionSelection(editor.selection.ids);
-    if (!selection) return null;
-
-    const localPositions = PositionList.fromTargetGroups(
-      selection.layer,
-      selection.targets,
-    ).positions;
-    const localBounds = Bounds.fromPoints(localPositions);
-    if (!localBounds) return null;
-
-    const corner = hit.corner;
-    const localCenter = Bounds.center(localBounds);
-    const center = hit.center;
-    const startAngle = Vec2.angleTo(center, event.origin.scene);
+    const componentSelection = editor.componentTransformSelection(editor.selection.ids);
+    const positionSelection = editor.positionSelection(editor.selection.ids);
+    if (!componentSelection && !positionSelection) return null;
 
     const condition: PositionCondition = {
       when: () => {
@@ -135,9 +151,30 @@ export class Rotate implements SelectBehavior {
         return state.type === "rotating" && state.rotate.shiftKey;
       },
     };
-    this.#edit = PositionEdits.fromSelection(selection)
-      .rotate(selection.targets, localCenter)
-      .angleSnappedBy(AngleSnap.everyDegrees(15, condition));
+
+    if (componentSelection) {
+      this.#componentAngleSnap = AngleSnap.everyDegrees(15, condition);
+      this.#componentEdit =
+        componentSelection.layer.beginComponentTransformEdit(componentSelection);
+    } else if (positionSelection) {
+      const localPositions = PositionList.fromTargetGroups(
+        positionSelection.layer,
+        positionSelection.targets,
+      ).positions;
+      const localBounds = Bounds.fromPoints(localPositions);
+      if (!localBounds) return null;
+
+      const center = Bounds.center(localBounds);
+      this.#edit = PositionEdits.fromSelection(positionSelection)
+        .rotate(positionSelection.targets, center)
+        .angleSnappedBy(AngleSnap.everyDegrees(15, condition));
+    } else {
+      return null;
+    }
+
+    const corner = hit.corner;
+    const center = hit.center;
+    const startAngle = Vec2.angleTo(center, event.origin.scene);
 
     return {
       type: "rotating",

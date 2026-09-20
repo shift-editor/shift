@@ -1,4 +1,4 @@
-import { Bounds, Mat, Vec2, type Bounds as BoundsType, type MatModel } from "@shift/geo";
+import { Bounds, Mat, type Bounds as BoundsType, type MatModel } from "@shift/geo";
 import { Point, Segment } from "@shift/glyph-state";
 import type {
   ComponentGlyph as ComponentGlyphDefinition,
@@ -81,11 +81,12 @@ export class ComponentGlyph {
       const target = targetGeometry.anchor(attachment.target.anchorId);
       if (!target) return explicit;
 
-      const sourcePosition = Mat.applyToPoint(explicit, source);
       const targetPosition = Mat.applyToPoint(targetComponent.#localTransformCell.value, target);
-      const attachmentDelta = Vec2.sub(targetPosition, sourcePosition);
-      const attachmentOffset = Mat.Translate(attachmentDelta.x, attachmentDelta.y);
-      return Mat.Compose(attachmentOffset, explicit);
+      const attachmentOffset = Mat.Translate(
+        targetPosition.x - source.x,
+        targetPosition.y - source.y,
+      );
+      return Mat.Compose(explicit, attachmentOffset);
     });
     this.resolvedTransformCell = computed(() => {
       const parent = this.#parent();
@@ -212,6 +213,18 @@ export class GlyphContour {
     return this.#contourCell.peek();
   }
 
+  get closed(): boolean {
+    return this.#contourCell.peek().closed;
+  }
+
+  get points(): readonly Point[] {
+    const matrix = this.#matrixCell.peek();
+    return this.#contourCell.peek().points.map((point) => {
+      const position = Mat.applyToPoint(matrix, point);
+      return new Point({ ...point, ...position });
+    });
+  }
+
   get component(): ComponentGlyph | null {
     return this.#component;
   }
@@ -242,13 +255,7 @@ export class GlyphContour {
 
   /** Returns this occurrence's segments in root-glyph coordinates. */
   segments(): readonly Segment[] {
-    const contour = this.#contourCell.peek();
-    const matrix = this.#matrixCell.peek();
-    const points = contour.points.map((point) => {
-      const position = Mat.applyToPoint(matrix, point);
-      return new Point({ ...point, ...position });
-    });
-    return Segment.parse({ closed: contour.closed, points });
+    return Segment.parse(this);
   }
 
   trackShape(): void {

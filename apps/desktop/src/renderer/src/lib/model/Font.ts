@@ -932,16 +932,31 @@ export class Font {
     glyphs?: ReadonlyMap<GlyphId, Glyph>,
   ): ReadonlyMap<GlyphId, Glyph> | null {
     const componentGlyphs = new Map<GlyphId, Glyph>();
-    const record = this.#directoryCell.peek().recordForId(glyphId);
-    const componentGlyphIds =
-      record?.componentBaseGlyphIds ?? this.#store.projection(glyphId)?.componentGlyphIds ?? [];
+    const directory = this.#directoryCell.peek();
+    const record = directory.recordForId(glyphId);
+    const pendingGlyphIds = [
+      ...(record?.componentBaseGlyphIds ??
+        this.#store.projection(glyphId)?.componentGlyphIds ??
+        []),
+    ];
+    const seenGlyphIds = new Set<GlyphId>([glyphId]);
 
-    for (const componentGlyphId of componentGlyphIds) {
+    while (pendingGlyphIds.length > 0) {
+      const componentGlyphId = pendingGlyphIds.shift()!;
+      if (seenGlyphIds.has(componentGlyphId)) continue;
+
+      seenGlyphIds.add(componentGlyphId);
       const componentGlyph =
         glyphs?.get(componentGlyphId) ?? this.#store.glyphForId(componentGlyphId);
       if (!componentGlyph) return null;
 
       componentGlyphs.set(componentGlyphId, componentGlyph);
+      const componentRecord = directory.recordForId(componentGlyphId);
+      pendingGlyphIds.push(
+        ...(componentRecord?.componentBaseGlyphIds ??
+          this.#store.projection(componentGlyphId)?.componentGlyphIds ??
+          []),
+      );
     }
 
     return componentGlyphs;

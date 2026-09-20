@@ -259,6 +259,32 @@ impl FontWorkspace {
             .collect::<Vec<_>>();
         self.acquire_layers(required_layers)?;
 
+        let mut component_roots = Vec::new();
+        for intent in &set.intents {
+            match intent {
+                FontIntent::AddComponent { base_glyph_id, .. } => {
+                    component_roots.push(base_glyph_id.clone());
+                }
+                FontIntent::DecomposeComponents {
+                    layer_id,
+                    component_ids,
+                } => {
+                    let Some(layer) = self.font.layer(layer_id.clone()) else {
+                        continue;
+                    };
+                    component_roots.extend(component_ids.iter().filter_map(|component_id| {
+                        layer
+                            .component(component_id.clone())
+                            .map(|component| component.base_glyph_id())
+                    }));
+                }
+                _ => {}
+            }
+        }
+        if !component_roots.is_empty() {
+            self.acquire_glyphs(&component_roots, AcquireScope::ComponentClosure)?;
+        }
+
         let mut pre = FontLevelPreState::default();
         for intent in &set.intents {
             let Some(layer_id) = intent.layer_id() else {
@@ -456,7 +482,8 @@ impl FontWorkspace {
                 | FontChange::PointSmoothChanged(_)
                 | FontChange::PointPositionsChanged(_)
                 | FontChange::AnchorPositionsChanged(_)
-                | FontChange::LayerGeometryReplaced(_) => {}
+                | FontChange::LayerGeometryReplaced(_)
+                | FontChange::LayerComponentsReplaced(_) => {}
             }
         }
 
@@ -1218,6 +1245,7 @@ fn replay_layer_pairs(
     let mut replayed = Vec::with_capacity(pairs.len());
     let mut structural_replacements = Vec::with_capacity(pairs.len());
     for pair in pairs {
+        let components_changed = pair.pre.components() != pair.post.components();
         let replacement = match side {
             ReplaySide::Pre => pair.pre,
             ReplaySide::Post => pair.post,
@@ -1227,14 +1255,16 @@ fn replay_layer_pairs(
         } else {
             font.replace_glyph_layer_values(replacement.id(), &replacement.interpolation_values())?;
         }
-        replayed.push((replacement, pair.structural));
+        replayed.push((replacement, pair.structural, components_changed));
     }
     font.replace_glyph_layers(structural_replacements)?;
 
-    for (layer, structural) in replayed {
-        // Geometry replace persists contours only; metrics ride their
-        // own change so width/height restores reach SQLite too.
-        changes.push(FontChange::layer_geometry_replaced(layer.as_ref()));
+    for (layer, structural, components_changed) in replayed {
+        if components_changed {
+            changes.push(FontChange::layer_components_replaced(layer.as_ref()));
+        } else {
+            changes.push(FontChange::layer_geometry_replaced(layer.as_ref()));
+        }
         changes.push(FontChange::layer_metrics_changed(layer.as_ref()));
         touched.push(TouchedLayer { layer, structural });
     }
