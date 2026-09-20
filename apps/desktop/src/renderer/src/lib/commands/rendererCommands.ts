@@ -107,6 +107,7 @@ export async function runRendererCommand(editor: Editor, id: EditorCommandId): P
             break;
 
           case "anchor":
+          case "component":
           case "node":
             break;
         }

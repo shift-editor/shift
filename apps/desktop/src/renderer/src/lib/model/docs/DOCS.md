@@ -1,6 +1,6 @@
 # Renderer font model
 
-<!-- reviewed: 2026-09-19 review-every: 90d -->
+<!-- reviewed: 2026-09-20 review-every: 90d -->
 
 Reactive TypeScript font, authored glyph-layer, and derived glyph-view surfaces.
 
@@ -14,6 +14,7 @@ Reactive TypeScript font, authored glyph-layer, and derived glyph-view surfaces.
 - **Architecture Invariant:** `GlyphProjection` is plain, location-independent backing owned internally by `FontStore`. It is not an open/ready/loading lifecycle and is not exposed as the renderer's user-facing glyph object.
 - **Architecture Invariant:** One `GlyphRenderModel` follows one location signal. Location changes lazily replace its current computed geometry; Shift never retains a cache keyed by historical location values.
 - **Architecture Invariant:** `GlyphRenderModel.contours` is the complete root-plus-component contour occurrence stream used by rendering, bounds, layout, and sidebearings. A contour's `component` is `null` only when the root glyph owns it.
+- **Architecture Invariant:** `GlyphRenderModel.fillHitsAt()` returns non-zero filled occurrences in front-to-back paint order. Component hits retain exact `componentPath` ancestry; selection may map nested paths to their first directly editable occurrence.
 - **Architecture Invariant:** Render paths distinguish closed contours from open contours. Root-only and component-owned closed paths support separate editable fills; display rendering fills all closed contours and strokes open contours without implicitly filling gaps.
 - **Architecture Invariant:** A render model shares one evaluated source-contour list per base glyph at its current location. Each component placement owns a distinct `GlyphContour` wrapper for transform and provenance; `GlyphRenderModel.contours` flattens references to those same occurrence objects rather than copying contour coordinates.
 - **Architecture Invariant:** Rust owns component order, ancestry, attachment selection, and cycle pruning through `GlyphComponents`. TypeScript only resolves current coordinates and composes matrices. Component paths preserve authored occurrence identity; numeric transforms are selected by the occurrence's parent-local `componentIndex`, because compatible exact-source layers may assign different `ComponentId` values to corresponding slots.

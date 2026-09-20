@@ -104,10 +104,17 @@ export class SelectBoundingBox extends CanvasItem<SelectBoundingBoxProps> {
     if (state.type === "brushing") return null;
 
     track(this.#editor.selection.stateCell);
-    const selection = this.#editor.positionSelection(this.#editor.selection.ids);
-    const pointCount = selection?.targets.points?.length ?? 0;
-    const anchorCount = selection?.targets.anchors?.length ?? 0;
-    if (!selection || pointCount + anchorCount <= 1) return null;
+    const ids = this.#editor.selection.ids;
+    const selection = this.#editor.positionSelection(ids);
+    if (selection) {
+      const pointCount = selection.targets.points?.length ?? 0;
+      const anchorCount = selection.targets.anchors?.length ?? 0;
+      if (pointCount + anchorCount <= 1) return null;
+    } else {
+      const objects = this.#editor.objects(ids);
+      if (objects.length === 0 || objects.some((object) => object.kind !== "component"))
+        return null;
+    }
 
     const sceneRect = this.#editor.selectionBoundsCell.value;
     if (!sceneRect) return null;

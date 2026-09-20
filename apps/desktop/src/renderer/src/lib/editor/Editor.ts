@@ -3,6 +3,7 @@ import type { FontSessionMode } from "@shared/workspace/protocol";
 import {
   isAnchorId,
   isContourId,
+  isComponentId,
   isNodeId,
   isPointId,
   type AnchorId,
@@ -81,7 +82,14 @@ import type {
   ShiftObject,
 } from "@/types";
 import type { GlyphNode, NodeKind } from "@/types/node";
-import { AnchorObject, ContourObject, NodeObject, PointObject, SegmentObject } from "@/lib/objects";
+import {
+  AnchorObject,
+  ComponentObject,
+  ContourObject,
+  NodeObject,
+  PointObject,
+  SegmentObject,
+} from "@/lib/objects";
 import type { NodeDefinition } from "@/lib/nodes/NodeDefinition";
 import { GlyphNodeDefinition } from "../nodes/GlyphNodeDefinition";
 import { TextRunNodeDefinition } from "../nodes/TextRunNodeDefinition";
@@ -627,6 +635,23 @@ export class Editor {
       return null;
     }
 
+    if (isComponentId(id)) {
+      for (const node of this.scene.nodesOfKind("glyph")) {
+        const glyph = this.glyphForId(node.glyphId);
+        const renderModel = glyph?.renderModelAt(
+          this.externalLocationCell,
+          this.activeSourceIdCell,
+        );
+        const component = renderModel?.componentAt([id]);
+        if (!glyph || !component) continue;
+
+        const layer =
+          node.sourceId === this.activeSourceId ? glyph.layerForSource(node.sourceId) : null;
+        return new ComponentObject(component, node, layer);
+      }
+      return null;
+    }
+
     return null;
   }
 
@@ -694,6 +719,7 @@ export class Editor {
           for (const point of contour.points) points.add(point.id);
           break;
         }
+        case "component":
         case "node":
           return null;
       }
@@ -1460,6 +1486,7 @@ export class Editor {
           break;
         }
         case "anchor":
+        case "component":
         case "node":
           return null;
       }

@@ -1,9 +1,18 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { isPointId, type PointId } from "@shift/types";
+import { Point } from "@shift/glyph-state";
+import type { Point2D } from "@shift/geo";
+import { isPointId, type GlyphName, type PointId } from "@shift/types";
+import type { GlyphLayer } from "@/lib/model/Glyph";
 import { TestEditor } from "@/testing/TestEditor";
 import { SELECT_BOUNDING_BOX_STYLE } from "./BoundingBox";
 import { Select } from "./Select";
 import { LOCK_GAP_PX, LOCK_SIZE_PX } from "@/lib/editor/rendering/icons/lock";
+
+function addClosedContour(layer: GlyphLayer, points: readonly Point2D[]): void {
+  const contourId = layer.addContour();
+  for (const point of points) layer.addPoint(contourId, Point.onCurve(point));
+  layer.closeContour(contourId);
+}
 
 // Restored from the WS6 behavioral inventory (git show ef037c6e^).
 describe("Select tool", () => {
@@ -790,6 +799,112 @@ describe("Select tool", () => {
 
       expect(editor.selection.has(inside.id)).toBe(true);
       expect(editor.selection.has(outside.id)).toBe(false);
+    });
+  });
+
+  describe("component fill selection", () => {
+    it("selects the frontmost overlapping component", async () => {
+      await editor.addGlyph("base", null);
+      const baseRecord = editor.font.recordForName("base" as GlyphName)!;
+      const base = await editor.font.loadGlyph(baseRecord.id);
+      addClosedContour(base.layerForSource(editor.font.defaultSource.id)!, [
+        { x: 0, y: 0 },
+        { x: 100, y: 0 },
+        { x: 100, y: 100 },
+        { x: 0, y: 100 },
+      ]);
+      editor.requireGlyphLayer().addComponent(baseRecord.id);
+      const frontId = editor.requireGlyphLayer().addComponent(baseRecord.id);
+      await editor.settle();
+
+      await editor.clickGlyphLocal(50, 50);
+      expect(editor.selection.ids).toEqual([frontId]);
+    });
+
+    it("selects the directly editable parent of nested geometry", async () => {
+      await editor.addGlyph("leaf", null);
+      await editor.addGlyph("middle", null);
+      const leafRecord = editor.font.recordForName("leaf" as GlyphName)!;
+      const leaf = await editor.font.loadGlyph(leafRecord.id);
+      addClosedContour(leaf.layerForSource(editor.font.defaultSource.id)!, [
+        { x: 0, y: 0 },
+        { x: 100, y: 0 },
+        { x: 100, y: 100 },
+        { x: 0, y: 100 },
+      ]);
+      const middleRecord = editor.font.recordForName("middle" as GlyphName)!;
+      const middle = await editor.font.loadGlyph(middleRecord.id);
+      middle.layerForSource(editor.font.defaultSource.id)!.addComponent(leafRecord.id);
+      await editor.settle();
+      const directId = editor.requireGlyphLayer().addComponent(middleRecord.id);
+      await editor.settle();
+
+      await editor.clickGlyphLocal(50, 50);
+      expect(editor.selection.ids).toEqual([directId]);
+      expect(editor.selectionBounds()).toMatchObject({ x: 0, y: 0, width: 100, height: 100 });
+      expect((editor.toolManager.activeTool as Select).boundingBox.visible).toBe(true);
+    });
+
+    it("does not select component fill through an opposite-winding hole", async () => {
+      await editor.addGlyph("counter", null);
+      const record = editor.font.recordForName("counter" as GlyphName)!;
+      const glyph = await editor.font.loadGlyph(record.id);
+      const layer = glyph.layerForSource(editor.font.defaultSource.id)!;
+      addClosedContour(layer, [
+        { x: 0, y: 0 },
+        { x: 100, y: 0 },
+        { x: 100, y: 100 },
+        { x: 0, y: 100 },
+      ]);
+      addClosedContour(layer, [
+        { x: 25, y: 25 },
+        { x: 25, y: 75 },
+        { x: 75, y: 75 },
+        { x: 75, y: 25 },
+      ]);
+      const componentId = editor.requireGlyphLayer().addComponent(record.id);
+      await editor.settle();
+
+      await editor.clickGlyphLocal(10, 10);
+      expect(editor.selection.ids).toEqual([componentId]);
+      await editor.clickGlyphLocal(50, 50);
+      expect(editor.selection.ids).toEqual([]);
+    });
+
+    it("selects an open component by segment proximity", async () => {
+      await editor.addGlyph("open", null);
+      const record = editor.font.recordForName("open" as GlyphName)!;
+      const glyph = await editor.font.loadGlyph(record.id);
+      const layer = glyph.layerForSource(editor.font.defaultSource.id)!;
+      const contourId = layer.addContour();
+      layer.addPoint(contourId, Point.onCurve({ x: 0, y: 0 }));
+      layer.addPoint(contourId, Point.onCurve({ x: 100, y: 0 }));
+      const componentId = editor.requireGlyphLayer().addComponent(record.id);
+      await editor.settle();
+
+      await editor.clickGlyphLocal(50, 0);
+      expect(editor.selection.ids).toEqual([componentId]);
+    });
+
+    it("uses curved component boundaries", async () => {
+      await editor.addGlyph("curve", null);
+      const record = editor.font.recordForName("curve" as GlyphName)!;
+      const glyph = await editor.font.loadGlyph(record.id);
+      const layer = glyph.layerForSource(editor.font.defaultSource.id)!;
+      const contourId = layer.addContour();
+      layer.addPoint(contourId, Point.onCurve({ x: 0, y: 0 }));
+      layer.addPoint(contourId, Point.offCurve({ x: 50, y: 100 }));
+      layer.addPoint(contourId, Point.onCurve({ x: 100, y: 0 }));
+      layer.addPoint(contourId, Point.onCurve({ x: 100, y: -10 }));
+      layer.addPoint(contourId, Point.onCurve({ x: 0, y: -10 }));
+      layer.closeContour(contourId);
+      const componentId = editor.requireGlyphLayer().addComponent(record.id);
+      await editor.settle();
+
+      await editor.clickGlyphLocal(50, 25);
+      expect(editor.selection.ids).toEqual([componentId]);
+      await editor.clickGlyphLocal(50, 75);
+      expect(editor.selection.ids).toEqual([]);
     });
   });
 });

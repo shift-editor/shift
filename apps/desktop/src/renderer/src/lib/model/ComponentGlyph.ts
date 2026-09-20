@@ -212,6 +212,18 @@ export class GlyphContour {
     return this.#contourCell.peek();
   }
 
+  get closed(): boolean {
+    return this.#contourCell.peek().closed;
+  }
+
+  get points(): readonly Point[] {
+    const matrix = this.#matrixCell.peek();
+    return this.#contourCell.peek().points.map((point) => {
+      const position = Mat.applyToPoint(matrix, point);
+      return new Point({ ...point, ...position });
+    });
+  }
+
   get component(): ComponentGlyph | null {
     return this.#component;
   }
@@ -242,13 +254,7 @@ export class GlyphContour {
 
   /** Returns this occurrence's segments in root-glyph coordinates. */
   segments(): readonly Segment[] {
-    const contour = this.#contourCell.peek();
-    const matrix = this.#matrixCell.peek();
-    const points = contour.points.map((point) => {
-      const position = Mat.applyToPoint(matrix, point);
-      return new Point({ ...point, ...position });
-    });
-    return Segment.parse({ closed: contour.closed, points });
+    return Segment.parse(this);
   }
 
   trackShape(): void {

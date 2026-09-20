@@ -182,6 +182,7 @@ export class Translate implements SelectBehavior {
         return this.#fromAnchorTarget(editor, event);
       case "segment":
         return this.#fromSegmentTarget(editor, event);
+      case "component":
       case "node":
       case "canvas":
         return this.#fromInsideSelectionBounds(editor, select, event);

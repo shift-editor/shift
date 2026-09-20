@@ -34,7 +34,7 @@ import {
   type Signal,
   type WritableSignal,
 } from "@/lib/signals";
-import type { DeleteMode, GlyphOptions } from "@/types/glyph";
+import type { DeleteMode, GlyphFillHit, GlyphOptions } from "@/types/glyph";
 import type { DesignAxisLocation, ExternalAxisLocation } from "@/types/variation";
 import {
   designAxisLocationFromLocation,
@@ -65,6 +65,7 @@ import {
   Contour,
   GlyphGeometry,
   IdIndex,
+  filledContoursContain,
   type GeometryAnchorHit,
   type GeometryPointHit,
   type GeometrySegmentHit,
@@ -1475,6 +1476,29 @@ export class GlyphRenderModel {
 
   hitAt(pos: Point2D, radius: number): GlyphHit | null {
     return this.#geometry.hitAt(pos, radius);
+  }
+
+  /**
+   * Returns filled occurrence hits from frontmost paint to the root glyph.
+   *
+   * @param pos - Point in root-glyph coordinates.
+   * @returns A fresh front-to-back list retaining exact component ancestry.
+   */
+  fillHitsAt(pos: Point2D): readonly GlyphFillHit[] {
+    const hits: GlyphFillHit[] = [];
+    const components = this.#componentsCell.peek();
+
+    for (let index = components.length - 1; index >= 0; index--) {
+      const component = components[index];
+      if (!component || !filledContoursContain(component.contours, pos)) continue;
+
+      hits.push({ kind: "component", componentPath: component.componentPath });
+    }
+
+    const rootContours = this.#contoursCell.peek().filter((contour) => contour.component === null);
+    if (filledContoursContain(rootContours, pos)) hits.push({ kind: "root" });
+
+    return hits;
   }
 
   trackShape(): void {

@@ -88,40 +88,85 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     if (!geometry) return null;
 
     const hit = geometry.hitAt(point, this.editor.hitRadius);
-    if (!hit) return null;
+    if (hit) {
+      switch (hit.kind) {
+        case "segment": {
+          const segment = geometry.segment(hit.id);
+          if (!segment) return null;
 
-    switch (hit.kind) {
-      case "segment": {
-        const segment = geometry.segment(hit.id);
-        if (!segment) return null;
+          return {
+            ...hit,
+            nodeId: node.id,
+            glyphId: node.glyphId,
+            point,
+            segmentId: hit.id,
+            pointIds: segment.pointIds,
+          };
+        }
+
+        case "point":
+          return {
+            ...hit,
+            nodeId: node.id,
+            glyphId: node.glyphId,
+            point,
+            pointId: hit.id,
+          };
+
+        case "anchor":
+          return {
+            ...hit,
+            nodeId: node.id,
+            glyphId: node.glyphId,
+            point,
+            anchorId: hit.id,
+          };
+      }
+    }
+
+    const contours = geometry.contours;
+    for (let index = contours.length - 1; index >= 0; index--) {
+      const contour = contours[index];
+      const component = contour?.component;
+      if (!component) continue;
+      if (!contour.segments().some((segment) => segment.hit(point, this.editor.hitRadius)))
+        continue;
+
+      const componentId = component.componentPath[0];
+      if (!componentId) continue;
+
+      return {
+        kind: "component",
+        id: componentId,
+        componentId,
+        componentPath: component.componentPath,
+        nodeId: node.id,
+        glyphId: node.glyphId,
+        point,
+      };
+    }
+
+    const fillHit = geometry.fillHitsAt(point)[0];
+    if (!fillHit) return null;
+
+    switch (fillHit.kind) {
+      case "root":
+        return { kind: "node", node, point };
+
+      case "component": {
+        const componentId = fillHit.componentPath[0];
+        if (!componentId) return null;
 
         return {
-          ...hit,
+          kind: "component",
+          id: componentId,
+          componentId,
+          componentPath: fillHit.componentPath,
           nodeId: node.id,
           glyphId: node.glyphId,
           point,
-          segmentId: hit.id,
-          pointIds: segment.pointIds,
         };
       }
-
-      case "point":
-        return {
-          ...hit,
-          nodeId: node.id,
-          glyphId: node.glyphId,
-          point,
-          pointId: hit.id,
-        };
-
-      case "anchor":
-        return {
-          ...hit,
-          nodeId: node.id,
-          glyphId: node.glyphId,
-          point,
-          anchorId: hit.id,
-        };
     }
   }
 
