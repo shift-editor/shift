@@ -5,7 +5,7 @@ import { asGlyphId, type GlyphId, type GlyphName } from "@shift/types";
 import { effect, useSignalState } from "@/lib/signals";
 import { useFontSession } from "@/workspace/WorkspaceContext";
 import { getGlyphInfo } from "@/workspace/glyphInfo";
-import { GlyphOpenGate } from "@/lib/catalog/GlyphOpenGate";
+import { LatestRequest } from "@/lib/utils/LatestRequest";
 import { GlyphCatalogContext } from "./GlyphCatalogContext";
 import type { GlyphCatalogItem, GlyphCatalogSource } from "@/types/glyphCatalog";
 
@@ -32,7 +32,7 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
   const sourceId = useSignalState(catalog.sourceIdCell);
   const [openedGlyph, setOpenedGlyph] = useState<GlyphCatalogSource["openedGlyph"]>(null);
   const openedGlyphKeyRef = useRef<GlyphCatalogItem["id"] | null>(null);
-  const openGateRef = useRef(new GlyphOpenGate());
+  const openRequestRef = useRef(new LatestRequest());
   const observeAtlasInvalidation = useCallback<GlyphCatalogSource["observeAtlasInvalidation"]>(
     (listener) => {
       const subscription = effect(
@@ -99,10 +99,10 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
   const openGlyph = useCallback<GlyphCatalogSource["openGlyph"]>(
     async (glyph) => {
       openedGlyphKeyRef.current = glyph.id;
-      const result = await openGateRef.current.open(() => catalog.openGlyph(glyph.id));
+      const result = await openRequestRef.current.run(() => catalog.openGlyph(glyph.id));
       if (result.status === "stale") return;
 
-      setOpenedGlyph(result.glyph);
+      setOpenedGlyph(result.result);
       navigateRef.current(`/editor/${encodeURIComponent(glyph.id)}`);
     },
     [catalog],
@@ -112,7 +112,7 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
     const sourceGlyphId = glyphIdFromPath(routeLocation.pathname);
     if (sourceGlyphId === null) {
       if (routeLocation.pathname.startsWith("/editor/")) {
-        openGateRef.current.invalidate();
+        openRequestRef.current.invalidate();
         openedGlyphKeyRef.current = null;
         setOpenedGlyph(null);
         navigateRef.current("/home", { replace: true });
@@ -120,7 +120,7 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
       return;
     }
     if (!availableGlyphs.some((glyph) => glyph.id === sourceGlyphId)) {
-      openGateRef.current.invalidate();
+      openRequestRef.current.invalidate();
       openedGlyphKeyRef.current = null;
       setOpenedGlyph(null);
       navigateRef.current("/home", { replace: true });
@@ -134,10 +134,10 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
 
     async function openRouteGlyph(): Promise<void> {
       try {
-        const result = await openGateRef.current.open(() => catalog.openGlyph(glyphId));
+        const result = await openRequestRef.current.run(() => catalog.openGlyph(glyphId));
         if (!active || result.status === "stale") return;
 
-        setOpenedGlyph(result.glyph);
+        setOpenedGlyph(result.result);
       } catch (error) {
         console.error("failed to open route glyph", error);
       }
@@ -157,10 +157,10 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
 
     async function refreshOpenedGlyph(): Promise<void> {
       try {
-        const result = await openGateRef.current.open(() => catalog.openGlyph(glyphId));
+        const result = await openRequestRef.current.run(() => catalog.openGlyph(glyphId));
         if (!active || result.status === "stale") return;
 
-        setOpenedGlyph(result.glyph);
+        setOpenedGlyph(result.result);
       } catch (error) {
         console.error("failed to refresh opened glyph", error);
       }

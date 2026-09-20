@@ -62,6 +62,7 @@ export type {
   PositionSnapProvider,
   PositionTargets,
 } from "./positionEdit";
+export type { LatestRequestResult } from "./request";
 export type { WorkspaceApplyStatus, WorkspaceEdit } from "./workspace";
 
 export interface GlyphObjectSegment {
