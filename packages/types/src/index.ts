@@ -56,6 +56,7 @@ export {
   mintAxisId,
   mintAxisLabelId,
   mintAxisMappingId,
+  mintComponentId,
   mintPointId,
   mintGlyphId,
   mintLayerId,
@@ -70,6 +71,7 @@ export type { AxisDefinition, NamedInstanceDefinition, SourceMetrics } from "./d
 
 export type {
   AddAnchorsIntent,
+  AddComponentIntent,
   AddContourIntent,
   AddPointsIntent,
   AnchorData,
@@ -80,6 +82,7 @@ export type {
   MoveAnchorsIntent,
   MovePointsIntent,
   RemoveAnchorsIntent,
+  RemoveComponentsIntent,
   RemovePointsIntent,
   ReverseContourIntent,
   SetContourClosedIntent,
@@ -113,6 +116,7 @@ export type {
   ComponentGlyph,
   ComponentMatch,
   ComponentTransformKind,
+  DecomposeComponentsIntent,
   ContourData,
   ContourMatch,
   CreateAxisIntent,

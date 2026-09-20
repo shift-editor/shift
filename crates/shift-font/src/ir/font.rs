@@ -2,7 +2,8 @@ use crate::axis::{Axis, AxisMapping, DesignLocation};
 use crate::binary_data::BinaryData;
 use crate::collection::EntityList;
 use crate::entity::{
-    AnchorId, AxisId, ContourId, GlyphEntityId, GlyphId, LayerId, MetricId, PointId, SourceId,
+    AnchorId, AxisId, ComponentId, ContourId, GlyphEntityId, GlyphId, LayerId, MetricId, PointId,
+    SourceId,
 };
 use crate::error::{CoreError, CoreResult};
 use crate::features::FeatureData;
@@ -1040,6 +1041,13 @@ impl Font {
         self.index()
             .entity_ids
             .contains(&GlyphEntityId::from(anchor_id.clone()))
+    }
+
+    /// Returns whether a component identity is already in use anywhere in the font.
+    pub(crate) fn has_component_id(&self, component_id: &ComponentId) -> bool {
+        self.index()
+            .entity_ids
+            .contains(&GlyphEntityId::from(component_id.clone()))
     }
 
     /// Records a contour minted by an in-place layer edit.

@@ -388,6 +388,11 @@ export function mintAxisMappingId(): AxisMappingId {
   return mintPrefixedId("axisMapping");
 }
 
+/** Mints a new component id. See {@link mintPointId}. */
+export function mintComponentId(): ComponentId {
+  return mintPrefixedId("component");
+}
+
 /** Mints a new glyph id. See {@link mintPointId}. */
 export function mintGlyphId(): GlyphId {
   return mintPrefixedId("glyph");

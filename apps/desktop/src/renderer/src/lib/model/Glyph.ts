@@ -21,7 +21,7 @@ import type {
   SourceId,
   Unicode,
 } from "@shift/types";
-import { mintAnchorId, mintContourId, mintPointId } from "@shift/types";
+import { mintAnchorId, mintComponentId, mintContourId, mintPointId } from "@shift/types";
 import type { GlyphHandle } from "@shift/bridge";
 import {
   batch,
@@ -325,6 +325,24 @@ class GlyphLayerWriter {
     const ids = [...anchorIds];
     const editId = this.#intents.removeAnchors({ anchorIds: ids });
     this.#state.state.removeAnchors(editId, ids);
+  }
+
+  addComponent(baseGlyphId: GlyphId): ComponentId {
+    const componentId = mintComponentId();
+    this.#intents.addComponent({ componentId, baseGlyphId });
+    return componentId;
+  }
+
+  removeComponents(componentIds: readonly ComponentId[]): void {
+    if (componentIds.length === 0) return;
+
+    this.#intents.removeComponents({ componentIds: [...componentIds] });
+  }
+
+  decomposeComponents(componentIds: readonly ComponentId[]): void {
+    if (componentIds.length === 0) return;
+
+    this.#intents.decomposeComponents({ componentIds: [...componentIds] });
   }
 
   setPointSmooth(pointId: PointId, smooth: boolean): void {
@@ -917,6 +935,39 @@ export class GlyphLayer {
    */
   removeAnchors(anchorIds: readonly AnchorId[]): void {
     this.#writer.removeAnchors(anchorIds);
+  }
+
+  /**
+   * Adds an identity-transformed component reference to this source.
+   *
+   * @param baseGlyphId - Existing glyph referenced by the new component.
+   * @returns Stable identity minted for the component before workspace confirmation.
+   */
+  addComponent(baseGlyphId: GlyphId): ComponentId {
+    return this.#writer.addComponent(baseGlyphId);
+  }
+
+  /**
+   * Removes direct component references from this source.
+   *
+   * @param componentIds - Direct component occurrences owned by this layer.
+   */
+  removeComponents(componentIds: readonly ComponentId[]): void {
+    this.#writer.removeComponents(componentIds);
+  }
+
+  /**
+   * Replaces direct component references with editable local contours.
+   *
+   * @remarks
+   * Each selected occurrence is recursively flattened at this source's design
+   * location. Component transforms and anchor attachment are applied before the
+   * replacement contours are committed.
+   *
+   * @param componentIds - Direct component occurrences owned by this layer.
+   */
+  decomposeComponents(componentIds: readonly ComponentId[]): void {
+    this.#writer.decomposeComponents(componentIds);
   }
 
   /**

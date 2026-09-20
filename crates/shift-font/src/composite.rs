@@ -435,6 +435,7 @@ fn local_transform_for_component(
 fn resolve_component_contours(
     layers: &HashMap<GlyphId, &GlyphLayer>,
     components: &GlyphComponents,
+    selected_root_components: Option<&HashSet<ComponentId>>,
 ) -> CoreResult<Vec<ResolvedContour>> {
     let mut local_transforms = HashMap::<ComponentPath, Transform>::new();
     let mut resolved_transforms = HashMap::<ComponentPath, Transform>::new();
@@ -459,11 +460,20 @@ fn resolve_component_contours(
             &component_glyph.component_id(),
             &component_glyph.base_glyph_id(),
         )?;
-        contours.extend(
-            layer
-                .contours_iter()
-                .map(|contour| transform_contour_points(contour, resolved_transform)),
-        );
+        let selected = selected_root_components.is_none_or(|selected| {
+            component_glyph
+                .component_path()
+                .as_slice()
+                .first()
+                .is_some_and(|component_id| selected.contains(component_id))
+        });
+        if selected {
+            contours.extend(
+                layer
+                    .contours_iter()
+                    .map(|contour| transform_contour_points(contour, resolved_transform)),
+            );
+        }
     }
 
     Ok(contours)
@@ -488,7 +498,26 @@ pub fn flatten_component_contours_from_layers(
 ) -> CoreResult<Vec<ResolvedContour>> {
     let view = layer_view(layers);
     let components = GlyphComponents::from_layers(root_glyph_id, &view)?;
-    resolve_component_contours(&view, &components)
+    resolve_component_contours(&view, &components, None)
+}
+
+/// Flattens selected direct component occurrences into local contours.
+///
+/// Descendant components are included recursively. Unselected siblings still
+/// participate in anchor attachment resolution but contribute no contours.
+///
+/// # Errors
+///
+/// Returns an error when `layers` does not contain the complete component
+/// closure or when its component and anchor identities are inconsistent.
+pub(crate) fn flatten_selected_component_contours_from_layers(
+    root_glyph_id: &GlyphId,
+    layers: &HashMap<GlyphId, GlyphLayer>,
+    component_ids: &HashSet<ComponentId>,
+) -> CoreResult<Vec<ResolvedContour>> {
+    let view = layer_view(layers);
+    let components = GlyphComponents::from_layers(root_glyph_id, &view)?;
+    resolve_component_contours(&view, &components, Some(component_ids))
 }
 
 /// Resolves root and component contours for one derived glyph layer.
@@ -512,7 +541,7 @@ pub fn resolved_contours_from_layers(
         .map(|contour| transform_contour_points(contour, Transform::identity()))
         .collect::<Vec<_>>();
     let components = GlyphComponents::from_layers(root_glyph_id, &view)?;
-    contours.extend(resolve_component_contours(&view, &components)?);
+    contours.extend(resolve_component_contours(&view, &components, None)?);
     Ok(contours)
 }
 

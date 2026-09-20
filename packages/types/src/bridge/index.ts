@@ -2,6 +2,7 @@ import type { GlyphName, Unicode } from "./generated";
 
 export type {
   AddAnchorsIntent,
+  AddComponentIntent,
   AddContourIntent,
   AddPointsIntent,
   AnchorData,
@@ -12,6 +13,7 @@ export type {
   MoveAnchorsIntent,
   MovePointsIntent,
   RemoveAnchorsIntent,
+  RemoveComponentsIntent,
   RemovePointsIntent,
   ReverseContourIntent,
   SetContourClosedIntent,
@@ -45,6 +47,7 @@ export type {
   ComponentGlyph,
   ComponentMatch,
   ComponentTransformKind,
+  DecomposeComponentsIntent,
   ContourData,
   ContourMatch,
   CreateAxisIntent,

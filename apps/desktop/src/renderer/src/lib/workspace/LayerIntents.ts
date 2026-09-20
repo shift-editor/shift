@@ -1,12 +1,15 @@
 import type {
   AddAnchorsIntent,
+  AddComponentIntent,
   AddContourIntent,
   AddPointsIntent,
   BooleanOpIntent,
+  DecomposeComponentsIntent,
   LayerId,
   MoveAnchorsIntent,
   MovePointsIntent,
   RemoveAnchorsIntent,
+  RemoveComponentsIntent,
   RemovePointsIntent,
   ReverseContourIntent,
   SetContourClosedIntent,
@@ -126,6 +129,27 @@ export class LayerIntents {
     return this.#editCoordinator.push({
       kind: "removeAnchors",
       removeAnchors: { layerId: this.#layerId, ...payload },
+    });
+  }
+
+  addComponent(payload: Payload<AddComponentIntent>): PendingEditId {
+    return this.#editCoordinator.push({
+      kind: "addComponent",
+      addComponent: { layerId: this.#layerId, ...payload },
+    });
+  }
+
+  removeComponents(payload: Payload<RemoveComponentsIntent>): PendingEditId {
+    return this.#editCoordinator.push({
+      kind: "removeComponents",
+      removeComponents: { layerId: this.#layerId, ...payload },
+    });
+  }
+
+  decomposeComponents(payload: Payload<DecomposeComponentsIntent>): PendingEditId {
+    return this.#editCoordinator.push({
+      kind: "decomposeComponents",
+      decomposeComponents: { layerId: this.#layerId, ...payload },
     });
   }
 }

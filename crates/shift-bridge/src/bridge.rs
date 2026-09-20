@@ -1343,7 +1343,8 @@ impl Bridge {
         | FontChange::GlyphPopped(_)
         | FontChange::GlyphIdentityChanged(_)
         | FontChange::GlyphLayerCreated(_)
-        | FontChange::GlyphLayerDeleted(_) => glyphs_changed = true,
+        | FontChange::GlyphLayerDeleted(_)
+        | FontChange::LayerComponentsReplaced(_) => glyphs_changed = true,
         // Axis structure reshapes every source location's design space.
         FontChange::AxisCreated(_) | FontChange::AxisUpdated(_) | FontChange::AxisDeleted(_) => {
           axes_changed = true;
@@ -2220,6 +2221,34 @@ fn map_intent(intent: NapiFontIntent) -> errors::Result<FontIntent> {
         anchor_ids: parse_id_list::<AnchorId>(&payload.anchor_ids)?,
       })
     }
+    "addComponent" => {
+      let payload = intent
+        .add_component
+        .ok_or_else(|| missing("addComponent"))?;
+      Ok(FontIntent::AddComponent {
+        layer_id: parse::<LayerId>(&payload.layer_id)?,
+        component_id: parse::<ComponentId>(&payload.component_id)?,
+        base_glyph_id: parse::<GlyphId>(&payload.base_glyph_id)?,
+      })
+    }
+    "removeComponents" => {
+      let payload = intent
+        .remove_components
+        .ok_or_else(|| missing("removeComponents"))?;
+      Ok(FontIntent::RemoveComponents {
+        layer_id: parse::<LayerId>(&payload.layer_id)?,
+        component_ids: parse_id_list::<ComponentId>(&payload.component_ids)?,
+      })
+    }
+    "decomposeComponents" => {
+      let payload = intent
+        .decompose_components
+        .ok_or_else(|| missing("decomposeComponents"))?;
+      Ok(FontIntent::DecomposeComponents {
+        layer_id: parse::<LayerId>(&payload.layer_id)?,
+        component_ids: parse_id_list::<ComponentId>(&payload.component_ids)?,
+      })
+    }
     "reverseContour" => {
       let payload = intent
         .reverse_contour
@@ -2645,6 +2674,9 @@ mod tests {
       add_anchors: None,
       move_anchors: None,
       remove_anchors: None,
+      add_component: None,
+      remove_components: None,
+      decompose_components: None,
       reverse_contour: None,
       set_contour_start: None,
       translate_points: None,
@@ -3192,7 +3224,7 @@ mod tests {
       .unwrap();
     assert_eq!(removed.layers.len(), 1);
     let state = glyph_state(&mut bridge, "A");
-    assert_eq!(state.structure.contours[0].points.len(), 0);
+    assert!(state.structure.contours.is_empty());
     assert!(state.structure.anchors.is_empty());
   }
 

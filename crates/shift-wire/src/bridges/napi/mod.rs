@@ -1423,7 +1423,8 @@ pub struct NapiFontIntent {
     /// Discriminator naming the populated payload field. Editing kinds:
     /// "addPoints" | "addContour" | "setContourClosed" | "movePoints" |
     /// "setPointSmooth" | "removePoints" | "addAnchors" | "moveAnchors" |
-    /// "removeAnchors" | "reverseContour" | "setContourStart" | "translatePoints" |
+    /// "removeAnchors" | "addComponent" | "removeComponents" | "decomposeComponents" |
+    /// "reverseContour" | "setContourStart" | "translatePoints" |
     /// "setXAdvance" | "applyBooleanOp".
     /// Font-level kinds additionally include metadata replacement, axis
     /// create/update/delete, mapping replacement, named-instance
@@ -1439,6 +1440,9 @@ pub struct NapiFontIntent {
     pub add_anchors: Option<NapiAddAnchorsIntent>,
     pub move_anchors: Option<NapiMoveAnchorsIntent>,
     pub remove_anchors: Option<NapiRemoveAnchorsIntent>,
+    pub add_component: Option<NapiAddComponentIntent>,
+    pub remove_components: Option<NapiRemoveComponentsIntent>,
+    pub decompose_components: Option<NapiDecomposeComponentsIntent>,
     pub reverse_contour: Option<NapiReverseContourIntent>,
     pub set_contour_start: Option<NapiSetContourStartIntent>,
     pub translate_points: Option<NapiTranslatePointsIntent>,
@@ -1768,6 +1772,32 @@ pub struct NapiRemoveAnchorsIntent {
     pub layer_id: String,
     #[napi(ts_type = "Array<AnchorId>")]
     pub anchor_ids: Vec<String>,
+}
+
+#[napi(object)]
+pub struct NapiAddComponentIntent {
+    #[napi(ts_type = "LayerId")]
+    pub layer_id: String,
+    #[napi(ts_type = "ComponentId")]
+    pub component_id: String,
+    #[napi(ts_type = "GlyphId")]
+    pub base_glyph_id: String,
+}
+
+#[napi(object)]
+pub struct NapiRemoveComponentsIntent {
+    #[napi(ts_type = "LayerId")]
+    pub layer_id: String,
+    #[napi(ts_type = "Array<ComponentId>")]
+    pub component_ids: Vec<String>,
+}
+
+#[napi(object)]
+pub struct NapiDecomposeComponentsIntent {
+    #[napi(ts_type = "LayerId")]
+    pub layer_id: String,
+    #[napi(ts_type = "Array<ComponentId>")]
+    pub component_ids: Vec<String>,
 }
 
 #[napi(object)]

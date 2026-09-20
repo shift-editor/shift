@@ -1,6 +1,6 @@
 # shift-bridge
 
-<!-- reviewed: 2026-09-01 review-every: 90d -->
+<!-- reviewed: 2026-09-19 review-every: 90d -->
 
 NAPI bindings that expose the Rust font engine to Node.js and Electron as a `Bridge` class.
 
@@ -49,6 +49,7 @@ crates/shift-bridge/
 - `NapiAppliedChange` -- replace-grade mutation response returned by apply/undo/redo.
 - `NapiFontReplacement` -- selective complete font projections; metadata is present only when an edit replaced it.
 - `NapiUpdateFontMetadataIntent` -- complete authored metadata replacement payload that leaves metrics unchanged.
+- `NapiAddComponentIntent` / `NapiRemoveComponentsIntent` / `NapiDecomposeComponentsIntent` -- component-authoring payloads carrying stable layer, component, and base-glyph identities through the shared atomic apply path.
 - `NapiLayerReplaced` -- NAPI adapter for one replaced glyph layer in an applied change.
 - `NapiAxis` / `NapiAxisMapping` -- authoring DTOs used by axis create/update, mapping replacement, and mapped-location queries.
 - `NapiVariationBasis` / `NapiVariationDelta` -- compiled normalized supports and numeric contributions translated without model reconstruction.
@@ -66,7 +67,7 @@ crates/shift-bridge/
 1. The renderer resolves glyph state with `GlyphHandle + SourceId` and receives a stable `layerId`.
 2. JS batches one or more `NapiFontIntent` values (kind discriminator plus one populated payload field, e.g. "setContourClosed") into a single `apply(intents, label?)` call; the optional `label` string names the resulting undo ledger entry. `apply`, `undo`, and `redo` are the only mutation entry points — there are no per-mutation NAPI methods.
 3. `Bridge` decodes each intent through `map_intent`, parsing boundary strings into typed IDs, and forwards the set as one atomic `FontWorkspace` apply: one SQLite transaction, one undo step.
-4. The bridge returns a pure-state `NapiAppliedChange` — replaced layers, optional font-level replacement collections, and `dependents: Array<GlyphId>` naming the composite glyphs that reference the touched layers; no change records cross to the renderer — and bumps the live version.
+4. The bridge returns a pure-state `NapiAppliedChange` — replaced layers, optional font-level replacement collections, and `dependents: Array<GlyphId>` naming the composite glyphs that reference the touched layers; no change records cross to the renderer — and bumps the live version. Component-list replacements also return refreshed glyph records so renderer dependency edges follow apply, undo, and redo.
 5. Full glyph snapshots first acquire requested layer payloads, then include authored state plus the same `GlyphProjection` used by lightweight reads. `getGlyphProjections()` and previews expand transitive component identities through SQLite indexes, acquire those layers, and only then project without further I/O. `getLayerMatch()` validates same-glyph ownership, acquires that glyph, and transports the Rust-owned complete mappings or mismatch diagnostics without renderer caching. Source reads expose master sources only; layer-only/background sources remain native authoring details and never enter renderer interpolation.
 6. `saveWorkspace()` applies a document's sparse recovery overlay to its canonical SQLite file. `saveWorkspaceAsDocument(path, recoveryPath)` publishes a new native document identity and adopts its fresh overlay; `discardWorkspaceChanges()` clears recovery and reloads canonical directory state.
 7. `inspectDocument(path)` exposes canonical identity without opening a live workspace. `openDocument(path, recoveryPath)` opens merged lazy views selected by the utility process.
