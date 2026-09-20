@@ -1,17 +1,19 @@
 import type { Point2D } from "@shift/geo";
 import type { GlyphLayer } from "../Glyph";
 import type { GlyphLayerEdit } from "../GlyphLayerEdit";
-import { PositionList } from "./PositionList";
-import type { PositionEdit, PositionEditPhase, PositionTargets } from "@/types/positionEdit";
+import { PositionEditGroup } from "./PositionEditGroup";
+import type {
+  PositionEdit,
+  PositionEditPhase,
+  PositionSelectionLayer,
+  PositionTargets,
+} from "@/types/positionEdit";
 import { AngleSnap } from "./AngleSnap";
 
 /** Preview-backed rotation configured with rotation-specific modifiers. */
 export class RotateEdit implements PositionEdit {
-  readonly #layer: GlyphLayer;
-  readonly #base: PositionList;
+  readonly #layers: PositionEditGroup;
   readonly #origin: Point2D;
-
-  #edit: GlyphLayerEdit | null;
   #phase: PositionEditPhase = "configuring";
   #angleSnap: AngleSnap | null = null;
 
@@ -20,11 +22,10 @@ export class RotateEdit implements PositionEdit {
     targets: PositionTargets,
     origin: Point2D,
     edit: GlyphLayerEdit | null = null,
+    additionalLayers: readonly PositionSelectionLayer[] = [],
   ) {
-    this.#layer = layer;
-    this.#base = PositionList.fromTargetGroups(layer, targets);
+    this.#layers = new PositionEditGroup(layer, targets, edit, additionalLayers);
     this.#origin = { ...origin };
-    this.#edit = edit;
   }
 
   angleSnappedBy(snap: AngleSnap): this {
@@ -37,10 +38,12 @@ export class RotateEdit implements PositionEdit {
     this.#beginPreview();
 
     const angle = this.#angleSnap?.apply(rawAngle) ?? rawAngle;
-    const positions = this.#base.rotate(angle, this.#origin).positions;
-    if (positions.length > 0) {
-      this.#edit ??= this.#layer.beginEdit();
-      this.#edit.setPositions(positions);
+    const reference = this.#layers.reference;
+    reference.setPositions(reference.base.rotate(angle, this.#origin).positions);
+
+    for (const layer of this.#layers.additional) {
+      const targetOrigin = reference.base.correspondingPoint(this.#origin, layer.base);
+      layer.setPositions(layer.base.rotate(angle, targetOrigin).positions);
     }
 
     return angle;
@@ -50,14 +53,14 @@ export class RotateEdit implements PositionEdit {
     if (this.#phase === "committed" || this.#phase === "discarded") return;
 
     this.#phase = "committed";
-    this.#edit?.finish("Rotate positions");
+    this.#layers.finish("Rotate positions");
   }
 
   discard(): void {
     if (this.#phase === "committed" || this.#phase === "discarded") return;
 
     this.#phase = "discarded";
-    this.#edit?.cancel();
+    this.#layers.cancel();
   }
 
   #assertConfiguring(): void {

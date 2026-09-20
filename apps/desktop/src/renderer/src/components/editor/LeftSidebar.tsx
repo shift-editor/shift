@@ -236,13 +236,13 @@ export const LeftSidebar = () => {
   const sourceOutlineControls = useMemo(
     () => ({
       targets: sourceOutlines,
-      inheritedTargets: inheritedSourceTargets,
+      inheritedTargets: inheritedSourceOutlines,
       groupActive: sourceOutlineGroupActive,
       onToggle: toggleSourceOutline,
       onToggleGroup: toggleSourceOutlineGroup,
     }),
     [
-      inheritedSourceTargets,
+      inheritedSourceOutlines,
       sourceOutlineGroupActive,
       sourceOutlines,
       toggleSourceOutline,

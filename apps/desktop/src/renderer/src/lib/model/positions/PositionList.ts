@@ -1,4 +1,4 @@
-import { Vec2, type Point2D } from "@shift/geo";
+import { Bounds, Vec2, type Point2D } from "@shift/geo";
 import type { AnchorId, PointId } from "@shift/types";
 import { Transform } from "@/lib/transform/Transform";
 import type { PositionTargets } from "@/types/positionEdit";
@@ -114,5 +114,31 @@ export class PositionList {
 
   scale(sx: number, sy: number, origin: Point2D): PositionList {
     return new PositionList(Transform.scalePoints(this.positions, sx, sy, origin));
+  }
+
+  /**
+   * Maps a point to the same normalized bounds position in another list.
+   *
+   * @param point - Point expressed relative to this list's bounds.
+   * @param target - Position list whose bounds receive the mapped point.
+   * @returns The corresponding target point, or a copy when either list is empty.
+   */
+  correspondingPoint(point: Point2D, target: PositionList): Point2D {
+    const referenceBounds = Bounds.fromPoints(this.positions);
+    const targetBounds = Bounds.fromPoints(target.positions);
+    if (!referenceBounds || !targetBounds) return { ...point };
+
+    const referenceWidth = referenceBounds.max.x - referenceBounds.min.x;
+    const referenceHeight = referenceBounds.max.y - referenceBounds.min.y;
+    const targetWidth = targetBounds.max.x - targetBounds.min.x;
+    const targetHeight = targetBounds.max.y - targetBounds.min.y;
+    const xRatio = referenceWidth === 0 ? 0.5 : (point.x - referenceBounds.min.x) / referenceWidth;
+    const yRatio =
+      referenceHeight === 0 ? 0.5 : (point.y - referenceBounds.min.y) / referenceHeight;
+
+    return {
+      x: targetBounds.min.x + targetWidth * xRatio,
+      y: targetBounds.min.y + targetHeight * yRatio,
+    };
   }
 }

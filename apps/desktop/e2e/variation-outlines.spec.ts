@@ -26,6 +26,81 @@ async function outlinePixelCount(page: Page): Promise<number> {
   });
 }
 
+test("moves matched points in every selected source as one edit", async ({ page, editor }) => {
+  await navigateToEditor(page, "53");
+  const controls = page.getByRole("complementary", { name: "Variation controls" });
+  const source = await page.evaluate(() => {
+    const session = window.shiftSession!;
+    return session.font.sources.find(({ id }) => id !== session.editor.activeSourceId);
+  });
+  if (!source) throw new Error("Expected comparison source");
+
+  await controls
+    .getByTestId(`source-${source.id}`)
+    .click({ modifiers: [process.platform === "darwin" ? "Meta" : "Control"] });
+  await expect
+    .poll(() =>
+      page.evaluate(() => window.shiftSession!.editor.editingLayerMatchesCell.peek().size),
+    )
+    .toBe(1);
+
+  const drag = await editor.selectVisiblePoint();
+  const referenceBefore = await editor.pointPosition(drag.id);
+  const target = await page.evaluate((referencePointId) => {
+    const session = window.shiftSession!;
+    const [layerMatch] = session.editor.editingLayerMatchesCell.peek().values();
+    if (!layerMatch?.complete) throw new Error("Expected complete layer match");
+    const targetPointId = layerMatch.points.find(
+      ({ referenceId }) => referenceId === referencePointId,
+    )?.targetId;
+    const node = session.editor.scene.nodesOfKind("glyph")[0];
+    const targetLayer = node
+      ? session.editor.glyphForId(node.glyphId)?.layerForId(layerMatch.targetLayerId)
+      : null;
+    const point = targetPointId ? targetLayer?.point(targetPointId) : null;
+    if (!targetPointId || !point) throw new Error("Expected matched target point");
+
+    return {
+      layerId: layerMatch.targetLayerId,
+      pointId: targetPointId,
+      position: { x: point.x, y: point.y },
+    };
+  }, drag.id);
+
+  await editor.dragPoint(drag);
+  const referenceAfter = await editor.pointPosition(drag.id);
+  const targetAfter = await page.evaluate(({ layerId, pointId }) => {
+    const node = window.shiftSession!.editor.scene.nodesOfKind("glyph")[0];
+    const point = node
+      ? window.shiftSession!.editor.glyphForId(node.glyphId)?.layerForId(layerId)?.point(pointId)
+      : null;
+    if (!point) throw new Error("Expected matched target point");
+
+    return { x: point.x, y: point.y };
+  }, target);
+  expect(targetAfter).toEqual({
+    x: target.position.x + referenceAfter.x - referenceBefore.x,
+    y: target.position.y + referenceAfter.y - referenceBefore.y,
+  });
+
+  await editor.undo();
+  await expect.poll(() => editor.pointPosition(drag.id)).toEqual(referenceBefore);
+  await expect
+    .poll(() =>
+      page.evaluate(({ layerId, pointId }) => {
+        const node = window.shiftSession!.editor.scene.nodesOfKind("glyph")[0];
+        const point = node
+          ? window
+              .shiftSession!.editor.glyphForId(node.glyphId)
+              ?.layerForId(layerId)
+              ?.point(pointId)
+          : null;
+        return point ? { x: point.x, y: point.y } : null;
+      }, target),
+    )
+    .toEqual(target.position);
+});
+
 test("source selection and visibility controls show comparison outlines", async ({ page }) => {
   await navigateToEditor(page, "53");
   const controls = page.getByRole("complementary", { name: "Variation controls" });

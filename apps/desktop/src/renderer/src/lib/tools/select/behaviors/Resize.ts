@@ -4,9 +4,8 @@ import type { DragEvent, DragStartEvent } from "../../core/GestureDetector";
 import type { SelectBehavior, SelectState } from "../types";
 import type { Select } from "../Select";
 import type { BoundingRectEdge as NullableBoundingRectEdge } from "../cursor";
-import { PositionList, type ScaleEdit } from "@/lib/model/positions";
+import { PositionEdits, PositionList, type ScaleEdit } from "@/lib/model/positions";
 import type { ComponentTransformEdit } from "@/lib/model/ComponentTransformEdit";
-import { selectedComponentObjects } from "../componentSelection";
 
 type BoundingRectEdge = Exclude<NullableBoundingRectEdge, null>;
 
@@ -25,25 +24,18 @@ export class Resize implements SelectBehavior {
     const hit = ctx.tool.boundingBox.hit(event.origin);
     if (hit?.type !== "resize") return false;
 
-    const components = selectedComponentObjects(ctx.editor);
-    const componentLayer = components[0]?.layer;
-    const componentNode = components[0]?.node;
-    const selection = ctx.editor.positionSelection(ctx.editor.selection.ids);
-    if (!componentLayer && !selection) return false;
+    const componentSelection = ctx.editor.componentTransformSelection(ctx.editor.selection.ids);
+    const positionSelection = ctx.editor.positionSelection(ctx.editor.selection.ids);
+    if (!componentSelection && !positionSelection) return false;
 
     let localBounds: Rect2D;
-    if (componentLayer && componentNode) {
-      localBounds = {
-        ...hit.rect,
-        x: hit.rect.x - componentNode.position.x,
-        y: hit.rect.y - componentNode.position.y,
-        left: hit.rect.left - componentNode.position.x,
-        right: hit.rect.right - componentNode.position.x,
-        top: hit.rect.top - componentNode.position.y,
-        bottom: hit.rect.bottom - componentNode.position.y,
-      };
-    } else if (selection) {
-      const positions = PositionList.fromTargetGroups(selection.layer, selection.targets).positions;
+    if (componentSelection) {
+      localBounds = componentSelection.bounds;
+    } else if (positionSelection) {
+      const positions = PositionList.fromTargetGroups(
+        positionSelection.layer,
+        positionSelection.targets,
+      ).positions;
       const bounds = Bounds.fromPoints(positions);
       if (!bounds) return false;
 
@@ -58,12 +50,14 @@ export class Resize implements SelectBehavior {
     const anchorPoint = this.getAnchorPointForEdge(edge, hit.rect, event.altKey);
     const localAnchorPoint = this.getAnchorPointForEdge(edge, localBounds, event.altKey);
 
-    if (componentLayer) {
-      this.#componentEdit = componentLayer.beginComponentTransformEdit(
-        components.map((component) => component.componentId),
+    if (componentSelection) {
+      this.#componentEdit =
+        componentSelection.layer.beginComponentTransformEdit(componentSelection);
+    } else if (positionSelection) {
+      this.#edit = PositionEdits.fromSelection(positionSelection).scale(
+        positionSelection.targets,
+        localAnchorPoint,
       );
-    } else if (selection) {
-      this.#edit = selection.layer.positions.scale(selection.targets, localAnchorPoint);
     }
     const edit = this.#edit;
     const componentEdit = this.#componentEdit;
@@ -159,10 +153,13 @@ export class Resize implements SelectBehavior {
     );
 
     if (this.#componentEdit) {
-      const scale = Mat.Scale(sx, sy);
-      const fromOrigin = Mat.Translate(-localAnchorPoint.x, -localAnchorPoint.y);
-      const toOrigin = Mat.Translate(localAnchorPoint.x, localAnchorPoint.y);
-      this.#componentEdit.preview(Mat.Compose(toOrigin, Mat.Compose(scale, fromOrigin)));
+      this.#componentEdit.preview((layer) => {
+        const origin = this.getAnchorPointForEdge(state.resize.edge, layer.bounds, event.altKey);
+        const scale = Mat.Scale(sx, sy);
+        const fromOrigin = Mat.Translate(-origin.x, -origin.y);
+        const toOrigin = Mat.Translate(origin.x, origin.y);
+        return Mat.Compose(toOrigin, Mat.Compose(scale, fromOrigin));
+      });
     } else {
       this.#edit?.preview({ x: sx, y: sy }, localAnchorPoint);
     }

@@ -12,7 +12,6 @@ import type { PositionCondition } from "@/types/positionEdit";
 import type { SelectBehavior, SelectState } from "../types";
 import type { Select } from "../Select";
 import { TranslateInteraction } from "../TranslateInteraction";
-import { selectedComponentObjects } from "../componentSelection";
 
 type TranslatingState = Extract<SelectState, { type: "translating" }>;
 
@@ -85,7 +84,7 @@ export class Translate implements SelectBehavior {
 
     const delta = Vec2.sub(next.translate.lastPos, next.translate.startPos);
     if (this.#componentEdit) {
-      this.#componentEdit.preview(Mat.Translate(delta.x, delta.y));
+      this.#componentEdit.preview(() => Mat.Translate(delta.x, delta.y));
       ctx.setState({
         ...next,
         translate: { ...next.translate, totalDelta: delta, guides: [] },
@@ -212,11 +211,10 @@ export class Translate implements SelectBehavior {
         return null;
     }
 
-    const components = selectedComponentObjects(editor);
-    const layer = components[0]?.layer;
-    if (!layer) return null;
+    const selection = editor.componentTransformSelection(editor.selection.ids);
+    if (!selection) return null;
 
-    return layer.beginComponentTransformEdit(components.map((component) => component.componentId));
+    return selection.layer.beginComponentTransformEdit(selection);
   }
 
   #fromDragStart(

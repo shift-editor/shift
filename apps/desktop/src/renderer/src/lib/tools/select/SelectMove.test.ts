@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { PointId } from "@shift/types";
+import { externalAxisLocationFromRecord } from "@/lib/variation/location";
 import type { GlyphLayer } from "@/lib/model/Glyph";
 import { TestEditor } from "@/testing/TestEditor";
 
@@ -191,6 +192,56 @@ describe("Select movement preserves selected geometry", () => {
     });
   });
 
+  it("moves matched source points through one undoable edit without rematching", async () => {
+    const referenceSourceId = editor.font.defaultSource.id;
+    const axisId = editor.font.createAxis(weightAxis());
+    await editor.settle();
+    const targetSourceId = editor.createSource(
+      "Bold",
+      externalAxisLocationFromRecord({ [axisId]: 700 }),
+    );
+    await editor.settle();
+    editor.selectSourceForEditing(referenceSourceId);
+    editor.selectSourceForEditing(targetSourceId, "toggle");
+    await expect.poll(() => editor.editingLayerMatchesCell.peek().size).toBe(1);
+
+    const [layerMatch] = editor.editingLayerMatchesCell.peek().values();
+    if (!layerMatch) throw new Error("Expected matched target layer");
+    const targetPointId = layerMatch.points.find(
+      ({ referenceId }) => referenceId === middleId,
+    )?.targetId;
+    if (!targetPointId) throw new Error("Expected matched target point");
+    const node = editor.glyphNode;
+    if (!node) throw new Error("Expected glyph node");
+    const targetLayer = editor.glyphForId(node.glyphId)?.layerForId(layerMatch.targetLayerId);
+    const targetPoint = targetLayer?.point(targetPointId);
+    if (!targetLayer || !targetPoint) throw new Error("Expected target layer point");
+    const targetBefore = { x: targetPoint.x, y: targetPoint.y };
+    const matchesBefore = editor.editingLayerMatchesCell.peek();
+    editor.selection.select([middleId]);
+    expect(editor.positionSelection([middleId])?.additionalLayers).toHaveLength(1);
+
+    const drag = await editor.dragScene({
+      down: editor.pointPosition(middleId),
+      start: { x: 154, y: 150 },
+      end: { x: 190, y: 180 },
+    });
+
+    expect(
+      editor.glyphForId(node.glyphId)?.layerForId(layerMatch.targetLayerId)?.point(targetPointId),
+    ).toMatchObject({
+      x: targetBefore.x + drag.delta.x,
+      y: targetBefore.y + drag.delta.y,
+    });
+    expect(editor.editingLayerMatchesCell.peek()).toBe(matchesBefore);
+
+    await editor.undo();
+    expect(editor.pointPosition(middleId)).toEqual({ x: 150, y: 150 });
+    expect(
+      editor.glyphForId(node.glyphId)?.layerForId(layerMatch.targetLayerId)?.point(targetPointId),
+    ).toMatchObject(targetBefore);
+  });
+
   it("does not move geometry before the drag threshold is crossed", async () => {
     const point = editor.projectSceneToScreen(editor.pointPosition(firstId));
 
@@ -204,3 +255,17 @@ describe("Select movement preserves selected geometry", () => {
     expect(editor.pointPosition(lastId)).toEqual({ x: 200, y: 200 });
   });
 });
+
+function weightAxis() {
+  return {
+    tag: "wght",
+    name: "Weight",
+    role: "external" as const,
+    axisType: "continuous" as const,
+    minimum: 100,
+    default: 400,
+    maximum: 900,
+    labels: [],
+    hidden: false,
+  };
+}

@@ -55,6 +55,7 @@ export interface RotateDrag {
   center: Point2D;
   startAngle: number;
   currentAngle: number;
+  shiftKey: boolean;
 }
 
 export interface BendDrag {

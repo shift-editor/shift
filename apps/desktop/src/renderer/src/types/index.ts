@@ -16,6 +16,10 @@ export type {
   SvgGlyphCatalogGridProps,
 } from "./glyphCatalog";
 export type { ToolbarProps } from "./chrome";
+export type {
+  ComponentTransformSelection,
+  ComponentTransformSelectionLayer,
+} from "./componentTransform";
 export type { EditingId, PendingEditId } from "./editing";
 export type { FontOptions, FontStoreOptions } from "./font";
 export type { GlyphFillHit, GlyphGeometrySelection, GlyphOptions, GlyphReader } from "./glyph";
@@ -58,9 +62,11 @@ export type {
   PositionGuide,
   PositionSnap,
   PositionSelection,
+  PositionSelectionLayer,
   PositionSnapProvider,
   PositionTargets,
 } from "./positionEdit";
+export type { LatestRequestResult } from "./request";
 export type { WorkspaceApplyStatus, WorkspaceEdit } from "./workspace";
 
 export interface GlyphObjectSegment {

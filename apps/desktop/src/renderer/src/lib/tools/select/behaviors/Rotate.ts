@@ -1,17 +1,17 @@
-import { Bounds, Mat, Vec2, type Point2D } from "@shift/geo";
+import { Bounds, Mat, Vec2 } from "@shift/geo";
 import type { ToolContext } from "../../core/Behavior";
 import type { Editor } from "@/lib/editor/Editor";
-import type { DragEvent, DragStartEvent } from "../../core/GestureDetector";
+import type { DragEvent, DragStartEvent, ToolEvent } from "../../core/GestureDetector";
 import type { SelectBehavior, SelectState } from "../types";
 import type { Select } from "../Select";
-import { PositionList, type RotateEdit } from "@/lib/model/positions";
+import { AngleSnap, PositionEdits, PositionList, type RotateEdit } from "@/lib/model/positions";
 import type { ComponentTransformEdit } from "@/lib/model/ComponentTransformEdit";
-import { selectedComponentObjects } from "../componentSelection";
+import type { PositionCondition } from "@/types/positionEdit";
 
 export class Rotate implements SelectBehavior {
   #edit: RotateEdit | null = null;
   #componentEdit: ComponentTransformEdit | null = null;
-  #componentCenter: Point2D = { x: 0, y: 0 };
+  #componentAngleSnap: AngleSnap | null = null;
   #done: (() => void) | null = null;
 
   onDragStart(
@@ -65,7 +65,12 @@ export class Rotate implements SelectBehavior {
     return true;
   }
 
-  onStateEnter(prev: SelectState, next: SelectState, ctx: ToolContext<SelectState, Select>): void {
+  onStateEnter(
+    prev: SelectState,
+    next: SelectState,
+    ctx: ToolContext<SelectState, Select>,
+    event: ToolEvent,
+  ): void {
     const editor = ctx.editor;
     if (prev.type !== "rotating" && next.type === "rotating") {
       // editor.setHandlesVisible(false);
@@ -76,12 +81,40 @@ export class Rotate implements SelectBehavior {
       this.#cleanup();
       // editor.setHandlesVisible(true);
     }
+
+    if (next.type !== "rotating" || event.type !== "drag") return;
+    if (!this.#edit && !this.#componentEdit) return;
+
+    const rawAngle = next.rotate.currentAngle - next.rotate.startAngle;
+    let deltaAngle = rawAngle;
+    if (this.#componentEdit) {
+      deltaAngle = this.#componentAngleSnap?.apply(rawAngle) ?? rawAngle;
+      this.#componentEdit.preview((layer) => {
+        const center = Vec2.midpoint(
+          { x: layer.bounds.left, y: layer.bounds.top },
+          { x: layer.bounds.right, y: layer.bounds.bottom },
+        );
+        const fromOrigin = Mat.Translate(-center.x, -center.y);
+        const rotation = Mat.Rotate(deltaAngle);
+        const toOrigin = Mat.Translate(center.x, center.y);
+        return Mat.Compose(toOrigin, Mat.Compose(rotation, fromOrigin));
+      });
+    } else if (this.#edit) {
+      deltaAngle = this.#edit.preview(rawAngle);
+    }
+    ctx.setState({
+      ...next,
+      rotate: {
+        ...next.rotate,
+        currentAngle: next.rotate.startAngle + deltaAngle,
+      },
+    });
   }
 
   #cleanup(): void {
     this.#edit = null;
     this.#componentEdit = null;
-    this.#componentCenter = { x: 0, y: 0 };
+    this.#componentAngleSnap = null;
     this.#done = null;
   }
 
@@ -92,25 +125,14 @@ export class Rotate implements SelectBehavior {
     if (!this.#edit && !this.#componentEdit) return state;
 
     const currentPos = event.coords.scene;
-    const rawAngle = Vec2.angleTo(state.rotate.center, currentPos);
-    const angle = rawAngle - state.rotate.startAngle;
-    let deltaAngle = angle;
-    if (this.#componentEdit) {
-      const fromOrigin = Mat.Translate(-this.#componentCenter.x, -this.#componentCenter.y);
-      const rotation = Mat.Rotate(angle);
-      const toOrigin = Mat.Translate(this.#componentCenter.x, this.#componentCenter.y);
-      this.#componentEdit.preview(Mat.Compose(toOrigin, Mat.Compose(rotation, fromOrigin)));
-    } else if (this.#edit) {
-      deltaAngle = this.#edit.preview(angle);
-    }
-    const currentAngle = state.rotate.startAngle + deltaAngle;
 
     return {
       type: "rotating",
       rotate: {
         ...state.rotate,
         lastPos: currentPos,
-        currentAngle,
+        currentAngle: Vec2.angleTo(state.rotate.center, currentPos),
+        shiftKey: event.shiftKey,
       },
     };
   }
@@ -119,29 +141,33 @@ export class Rotate implements SelectBehavior {
     const hit = tool.boundingBox.hit(event.origin);
     if (hit?.type !== "rotate") return null;
 
-    const components = selectedComponentObjects(editor);
-    const componentLayer = components[0]?.layer;
-    const componentNode = components[0]?.node;
-    const selection = editor.positionSelection(editor.selection.ids);
-    if (!componentLayer && !selection) return null;
+    const componentSelection = editor.componentTransformSelection(editor.selection.ids);
+    const positionSelection = editor.positionSelection(editor.selection.ids);
+    if (!componentSelection && !positionSelection) return null;
 
-    let localCenter: Point2D;
-    if (componentLayer && componentNode) {
-      localCenter = Vec2.sub(hit.center, componentNode.position);
-      this.#componentCenter = localCenter;
-      this.#componentEdit = componentLayer.beginComponentTransformEdit(
-        components.map((component) => component.componentId),
-      );
-    } else if (selection) {
+    const condition: PositionCondition = {
+      when: () => {
+        const state = tool.getState();
+        return state.type === "rotating" && state.rotate.shiftKey;
+      },
+    };
+
+    if (componentSelection) {
+      this.#componentAngleSnap = AngleSnap.everyDegrees(15, condition);
+      this.#componentEdit =
+        componentSelection.layer.beginComponentTransformEdit(componentSelection);
+    } else if (positionSelection) {
       const localPositions = PositionList.fromTargetGroups(
-        selection.layer,
-        selection.targets,
+        positionSelection.layer,
+        positionSelection.targets,
       ).positions;
       const localBounds = Bounds.fromPoints(localPositions);
       if (!localBounds) return null;
 
-      localCenter = Bounds.center(localBounds);
-      this.#edit = selection.layer.positions.rotate(selection.targets, localCenter);
+      const center = Bounds.center(localBounds);
+      this.#edit = PositionEdits.fromSelection(positionSelection)
+        .rotate(positionSelection.targets, center)
+        .angleSnappedBy(AngleSnap.everyDegrees(15, condition));
     } else {
       return null;
     }
@@ -159,6 +185,7 @@ export class Rotate implements SelectBehavior {
         center,
         startAngle,
         currentAngle: startAngle,
+        shiftKey: event.shiftKey,
       },
     };
   }

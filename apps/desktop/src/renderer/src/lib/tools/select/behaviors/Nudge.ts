@@ -2,7 +2,7 @@ import type { ToolContext } from "../../core/Behavior";
 import type { KeyDownEvent } from "../../core/GestureDetector";
 import type { SelectBehavior, SelectState } from "../types";
 import { NUDGES_VALUES, type NudgeMagnitude } from "@/types/nudge";
-import { PointRuleConstraint } from "@/lib/model/positions";
+import { PointRuleConstraint, PositionEdits } from "@/lib/model/positions";
 
 export class Nudge implements SelectBehavior {
   onKeyDown(state: SelectState, ctx: ToolContext<SelectState>, event: KeyDownEvent): boolean {
@@ -38,7 +38,7 @@ export class Nudge implements SelectBehavior {
         return false;
     }
 
-    const edit = selection.layer.positions.move(selection.targets);
+    const edit = PositionEdits.fromSelection(selection).move(selection.targets);
     if (pointIds.length > 0) {
       edit.constrainedBy(PointRuleConstraint.forSelection(selection.layer.geometry, pointIds));
     }

@@ -99,6 +99,7 @@ import type { ContourBuffer } from "./ContourBuffer";
 import type { LayerBuffers } from "./LayerBuffers";
 import { LayerIntents } from "@/lib/workspace/LayerIntents";
 import type { WorkspaceEditCoordinator } from "@/lib/workspace/WorkspaceEditCoordinator";
+import type { ComponentTransformSelection } from "@/types/componentTransform";
 import { PositionEdits } from "./positions";
 
 export {
@@ -636,9 +637,11 @@ export class GlyphLayer {
     return new GlyphLayerEdit(this, this.#writer.layerState);
   }
 
-  /** Begins a reversible preview cycle for direct component transforms. */
-  beginComponentTransformEdit(componentIds: readonly ComponentId[]): ComponentTransformEdit {
-    return new ComponentTransformEdit(this, this.#writer.layerState, componentIds);
+  /** Begins one reversible preview cycle across matched component source layers. */
+  beginComponentTransformEdit(selection: ComponentTransformSelection): ComponentTransformEdit {
+    const layers = [selection, ...selection.additionalLayers];
+    const states = layers.map(({ layer }) => layer.#writer.layerState);
+    return new ComponentTransformEdit(selection, states);
   }
 
   /** @internal Groups accepted edit operations into one workspace and undo transaction. */

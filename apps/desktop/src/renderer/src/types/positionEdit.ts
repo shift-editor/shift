@@ -8,10 +8,15 @@ export interface PositionTargets {
   readonly anchors?: readonly AnchorId[];
 }
 
-/** Normalized editable position targets that share one authored layer. */
-export interface PositionSelection {
+/** Normalized editable position targets for one authored layer. */
+export interface PositionSelectionLayer {
   readonly layer: GlyphLayer;
   readonly targets: PositionTargets;
+}
+
+/** Reference-layer position targets and their matched additional layers. */
+export interface PositionSelection extends PositionSelectionLayer {
+  readonly additionalLayers: readonly PositionSelectionLayer[];
 }
 
 /** Shared terminal operations exposed by every fluent position edit. */
