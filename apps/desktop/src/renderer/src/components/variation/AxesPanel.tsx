@@ -18,14 +18,14 @@ import { useSettingsNavigation } from "@/context/SettingsNavigationContext";
 import { useAxes } from "@/hooks/useAxes";
 import { useExternalLocation } from "@/hooks/useExternalLocation";
 import { axisVaries } from "@/lib/variation/axis";
-import { axisValue, withExternalAxisValue } from "@/lib/variation/location";
+import { axisValue, withExternalAxisValue } from "@shift/editor/variation";
 import { useFont, useFontSession } from "@/workspace/WorkspaceContext";
 
 import VerticalElipsis from "@/assets/general/vertical-ellipsis.svg";
 
 export const AxesPanel = () => {
   const font = useFont();
-  const canAuthor = useFontSession().mode === "authored";
+  const canAuthor = useFontSession().mode === "workspace";
   const axes = useAxes().filter((axis) => axis.role === "external" && axisVaries(axis));
   const [location, setExternalLocation] = useExternalLocation();
   const settings = useSettingsNavigation();

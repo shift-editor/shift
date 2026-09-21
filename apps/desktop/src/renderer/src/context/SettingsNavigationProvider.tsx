@@ -34,7 +34,7 @@ export const SettingsNavigationProvider = ({ children }: { children: ReactNode }
       {children}
       <SettingsDialog
         target={target}
-        canAuthor={session.mode === "authored"}
+        canAuthor={session.mode === "workspace"}
         onTargetChange={setTarget}
         onOpenChange={(open) => {
           if (!open) setTarget(null);

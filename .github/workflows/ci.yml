@@ -241,6 +241,9 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      - name: Check browser editor bundle
+        run: pnpm check:browser
+
   unit-test:
     name: Unit Tests
     needs: detect-changes

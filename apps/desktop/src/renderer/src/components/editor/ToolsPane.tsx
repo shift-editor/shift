@@ -19,10 +19,10 @@ import {
   TooltipTrigger,
   cn,
 } from "@shift/ui";
-import { useSignalState } from "@/lib/signals";
+import { useSignalState } from "@shift/editor/signals";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import type { SVG } from "@/types/common";
-import type { ToolMenuItem, ToolName } from "@/lib/tools/core";
+import type { ToolMenuItem, ToolName } from "@shift/editor/tools";
 
 interface ToolButtonProps {
   Icon: SVG;

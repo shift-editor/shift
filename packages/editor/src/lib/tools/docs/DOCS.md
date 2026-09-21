@@ -1,0 +1,319 @@
+# Tools
+
+<!-- reviewed: 2026-09-20 -->
+
+State machine-based tool system for the Shift font editor: translates pointer/keyboard input into tool-specific state transitions and rendering.
+
+## Architecture Invariants
+
+- **Architecture Invariant:** Every tool must call `activate()` to leave `"idle"` state. `BaseTool` skips the behavior loop entirely when `state.type === "idle"`, so a tool that forgets `activate()` will silently ignore all events.
+
+- **Architecture Invariant:** Lifecycle methods mutate tool state through `BaseTool.setState()`, never by assigning `this.state`. The method publishes one coherent value to `state` and `stateCell`; `Editor.toolCell` pulls the active instance's `stateCell`. Direct assignment leaves editor tool state, cursor, and editing computations stale.
+
+- **Architecture Invariant:** A temporary override masks the resident primary tool without deactivating or reactivating it. Returning from Hand must preserve tool-local editing scope such as Pen's active open contour. Replacing or removing the primary is a different, permanent transition and calls `deactivate()` followed by `dispose()`.
+
+- **Architecture Invariant:** A `ToolRegistration` exclusively owns one installed ID. Unrelated duplicate IDs are rejected; `replace()` keeps the ownership and selected ID, while `dispose()` is permanent and idempotent. Consumers must retain this handle for runtime update or removal.
+
+- **Architecture Invariant:** Behaviors are tried in **array order**; first handler that returns `true` wins. Reordering the `behaviors` array changes tool semantics. **CRITICAL**: placing a broad handler (e.g. `Selection`) before a narrow one (e.g. `ToggleSmooth`) will shadow the narrow handler.
+
+- **Architecture Invariant:** Behaviors are stateless transition rules. All mutable state lives in the tool state union `S` or on `Editor`. A behavior may retain an edit across drag events only when it registers rollback through `ToolContext.onCancel()` and dismisses that rollback after a successful commit.
+
+- **Architecture Invariant:** Behaviors do NOT render. All rendering belongs in the tool's `drawOverlay` / `drawScene` / `drawBackground` methods.
+
+- **Architecture Invariant:** `ToolManager` coalesces pointer-move events via `requestAnimationFrame`. The synchronous pointer handler only stores input; projection, hit-test, and tool dispatch run in the rAF callback. **CRITICAL**: reading layout-dependent state synchronously in the pointer handler will see stale data.
+
+- **Architecture Invariant:** `ToolContext.setState` inside a behavior's event handler updates a local `nextState` variable, not `this.state` on the tool. `BaseTool` commits the new state and fires lifecycle hooks (`onStateExit`, `onStateEnter`, `onStateChange`) only after the behavior loop returns. Calling `setState` multiple times within one handler is legal; only the final value is committed.
+
+- **Architecture Invariant:** Continuous position transforms use operation-specific fluent edits from `GlyphLayer.positions`: `move`, `rotate`, or `scale`. Arbitrary position patches such as BendCurve use `GlyphLayer.beginEdit()` directly. Every drag-owned edit registers `discard`/`cancel` through `ToolContext.onCancel()`; successful `commit`/`finish` dismisses that rollback.
+
+- **Architecture Invariant:** `ToolEvent` pointer events carry a `coords: Coordinates` bundle (`screen`, `scene`). Use `event.coords.scene` for scene-space hit-testing and resolve node-local coordinates from the hit target when a tool needs them.
+
+Select gives editable root point, anchor, and segment proximity first priority, then tests component contours by proximity before filled occurrences. Component candidates follow front-to-back paint order; nested geometry selects the first component in its `componentPath`. Component-only selections expose occurrence bounds and route move, corner-scale, and rotation-zone drags through `ComponentTransformEdit` rather than point-position transforms. The bounding-box interior is a move target even where the component has no filled geometry.
+
+In preview sessions, Select consumes point, segment, anchor, and component clicks to emit `previewMutationAttempted` without publishing hover or selection. Every drag starts the existing `brushing` state; the marquee draws normally but selects nothing. Pen and Shape are disabled in the toolbar and keyboard shortcuts. Native Edit commands remain disabled rather than opening the preview notice.
+
+## Codemap
+
+```
+tools/
+  core/
+    BaseTool.ts          — abstract base class; owns behavior loop and state lifecycle
+    Behavior.ts          — Behavior<S, TTool> interface and createBehavior helper
+    GestureDetector.ts   — pointer+timing -> ToolEvent (click, drag, doubleClick, ...)
+    ToolManager.ts       — tool orchestration, contribution ownership, replacement
+    ToolManifest.ts      — ToolManifest registration descriptor
+    ToolRegistration.ts  — ownership handle for replace/remove lifecycle
+    ToolStateMap.ts      — union map of all built-in tool states
+    createContext.ts     — ToolName, ToolState, BUILT_IN_TOOL_IDS
+  hand/                  — canvas panning (createBehavior style)
+  pen/                   — bezier curve drawing (class-based behaviors)
+  select/                — selection, translate/resize/rotate/bend; TranslateInteraction owns movement
+  shape/                 — ShapeTool interaction; Shape interface with Rectangle/Ellipse authoring templates
+  text/                  — text run editing
+apps/desktop/src/renderer/src/lib/tools/
+  tools.ts               — registerBuiltInTools (wires all tools + desktop icons and shortcuts)
+```
+
+## Key Types
+
+- `BaseTool<S, TTool, Settings>` — abstract base class all tools extend. Declares `id`, `behaviors`, `initialState`. Optional overrides: `preTransition`, `onStateChange`, `getCursor`, `activate`, `deactivate`, `drawOverlay`, `drawScene`, `drawBackground`. Permanent `dispose()` releases base computed signals after deactivation.
+- `Behavior<S, TTool>` — interface with optional per-event handlers (`onClick`, `onDrag`, `onDragStart`, `onDragEnd`, `onDragCancel`, `onPointerMove`, `onDoubleClick`, `onKeyDown`, `onKeyUp`) plus lifecycle hooks (`onStateExit`, `onStateEnter`). Each handler receives `(state, ctx, event)` and returns `boolean` (true = handled).
+- `ToolContext<S, TTool>` — `{ editor, tool, getState, setState, onCancel }`. `tool: TTool` gives class-style behaviors access to their owning tool instance (e.g. `PenStroke.active(ctx.tool)`). `onCancel(callback)` registers rollback for the active drag and returns a function that dismisses it after successful completion.
+- `ToolEvent` — discriminated union of semantic events: `pointerMove`, `click`, `doubleClick`, `dragStart`, `drag`, `dragEnd`, `dragCancel`, `keyDown`, `keyUp`, `selectionChanged`. Pointer events include `coords: Coordinates`.
+- `DragStartEvent` / `DragEvent` / `DragEndEvent` — concrete targeted pointer-event contracts used by drag handlers.
+- `ToolManager` — owns installed manifests, resident tool instances, `GestureDetector`, rAF pointer coalescing, replacement, removal, and temporary tool switching.
+- `ActiveTool<Id>` — editor-facing `{ id, state }` snapshot. `Editor.toolIf(id)` narrows built-in state through `ToolStateMap`; runtime IDs fall back to `ToolState`.
+- `GestureDetector` — stateful recognizer: drag threshold, double-click timing. Fed raw `pointerDown`/`Move`/`Up`, emits `ToolEvent[]`.
+- `ToolManifest` — `{ id, create, icon, tooltip, shortcut?, hidden?, disabled? }`. Registration descriptor passed to `editor.registerTool`. Hidden tools are omitted from the toolbar; disabled tools render as non-interactive controls; both suppress user keyboard shortcuts while remaining programmatically activatable.
+- `ToolRegistration` — exclusive ownership handle returned by `editor.registerTool`; exposes `replace(manifest)` and idempotent `dispose()`.
+- `ToolName` — `string` (not a fixed union; extensible for plugins).
+- `ToolState` — `{ type: string }` base interface for all tool state unions.
+- `Coordinates` — `{ screen, scene }` bundle on pointer events.
+- `Modifiers` — `{ shiftKey, altKey, metaKey? }`.
+
+## How it works
+
+### Event flow
+
+```
+User pointer/key
+  -> InteractiveScene (React)
+  -> ToolManager.handlePointerDown/Move/Up / handleKeyDown/Up
+  -> GestureDetector (raw pointer -> ToolEvent[])
+  -> BaseTool.handleEvent(event)
+  -> #runBehaviors (behavior loop)
+  -> state commit + lifecycle hooks
+  -> renderer dependency effects observe changed state
+  -> tool.drawOverlay / drawScene / drawBackground
+```
+
+### Drag lifecycle invariant
+
+- Crossing the screen-space threshold emits `dragStart` at the pointer-down origin, immediately followed by the first `drag` sample.
+- Every `drag.delta` is cumulative from pointer-down; the threshold classifies the gesture but does not become a new origin.
+- Pointer-up drains queued movement and emits the final `drag` sample before `dragEnd`. Both release events use the final pointer position with the latest drag sample's modifiers, so releasing Shift just before mouseup does not change the preview's constraints. Modifier changes take effect on the next processed drag movement; clicks and double-clicks still use release-time modifiers. `GestureDetector.lastDragModifiers` is empty before dragging, follows each emitted drag movement, and clears on completion, cancellation, or a new pointer-down.
+- Behaviors initialize on `dragStart`, register rollback with `ctx.onCancel()`, preview from `drag`, and commit on `dragEnd` before dismissing rollback.
+- `BaseTool` runs any rollback left active at `dragEnd`, `dragCancel`, tool disposal, or after a handler throws.
+
+### Shape authoring
+
+`ShapeTool` freezes one `Rectangle` or `Ellipse` template at drag start. Both implement `Shape.createPoints(bounds)` and return ordered `NewPoint` values; templates remain in `tools/shape/`, separate from the shared contour readers. Ellipse uses four cubic quarters with kappa-scaled handles. Shift constrains signed drag dimensions to equal magnitudes.
+
+A shape drag owns one `GlyphLayerEdit`: create and select a closed contour, then patch its existing points as the pointer or Shift changes. The normal glyph renderer and selection-bounds signal therefore expose the same live geometry to the canvas and sidebar. Release finishes one undoable edit and returns to Select; Escape, a tiny final drag, or tool disposal cancels the edit and restores the previous selection.
+
+The tool calls `editor.hideHandles(contourId)` and registers its returned `showHandles` function with `ctx.onCancel`. Visibility cleanup remains registered on success, while the edit rollback is dismissed after finishing. Only the new contour loses its markers and control lines; other glyph controls remain visible. The sidebar observes contour selections through `editor.positionSelection` and shows live dimensions without dimming during the drag; transform handlers ignore competing edits until the drag ends.
+
+### Pen curve authoring invariant
+
+- `Pen.activeEndpointCell` is the Pen tool's derived continuation truth. It follows the active contour through `GlyphLayer.geometryCell`, so local edits, workspace echoes, undo, and redo all resolve the latest on-curve endpoint from the same authored topology. `PenContext` retains only the active contour identity and a point-keyed transient outgoing handle.
+- A corner endpoint has no authored outgoing tangent; extending it as a cubic seeds the untouched control one third of the way toward the new anchor. A smooth endpoint carries its outgoing handle position explicitly and never receives that default.
+- In `ready`, Shift constrains the prospective next anchor through `Pen.resolveAnchorPosition()` in 15° increments around the active endpoint. The overlay and empty-canvas click or drag placement share that position and show the standard direction snap line with endpoint crosses; raw pointer hit-testing still gives terminals and segments priority.
+- `Pen.resolveCurve()` seeds the complete cubic topology through `PenStroke.beginCurve()`. The incoming control initially coincides with the new endpoint; `HandleBehavior.#move` then moves only that control through `layer.positions.within(edit)`, leaving the endpoint and previous control fixed. The outgoing handle in `PenCurve` is mirrored from the resolved incoming preview, so rendering and continuation use the same snapped geometry.
+- `anchored -> dragging` begins a `GlyphLayerEdit`, adds one complete cubic, and transfers completion/cancellation to the scoped `MoveEdit`. Outline, control-line, bounds, and handle rendering therefore derive from one current topology throughout the gesture.
+- Pen's `dragging.shiftKey` follows the processed drag sample. `onStateEnter` previews after that sample is published; `DirectionSnap.everyDegrees(15).around(endpoint)` constrains the mirrored handle direction while preserving length. Modifier-only key changes do not re-preview; the final release sample retains the gesture's last drag modifiers. The scoped `move.commit("Add cubic")` commits topology and positions together, while `discard()` restores both. Active direction feedback is mirrored onto the visible outgoing handle and rendered as the standard solid red line with endpoint crosses; Pen retains that feedback for horizontal and vertical handle directions.
+- `dragEnd` finishes that already-visible edit as one pending workspace transaction; it does not replace preview geometry. `dragCancel` cancels the edit and restores the latest accepted topology, including when an older workspace echo arrived during the drag.
+- Current and confirmed open-contour topology always ends on an on-curve point. The latest endpoint's outgoing handle remains Pen interaction state until a following segment consumes it; `PenOverlay` draws only that non-topological handle plus ready-state cursor chrome.
+
+### Behavior loop (`#runBehaviors`)
+
+1. If `state.type === "idle"`, return immediately (no handling).
+2. If `preTransition` is defined and returns non-null, short-circuit with that state.
+3. Create a `ToolContext` with a local `nextState` variable and access to the current drag's rollback scope.
+4. Iterate `behaviors` in array order. For each behavior, look up the handler matching `event.type` (e.g. `onClick` for a `"click"` event). If the handler exists and returns `true`, stop iteration.
+5. Return `{ state: nextState, handled }`.
+
+### State commit (`handleEvent`)
+
+After `#runBehaviors`, if `next !== prev` (reference equality):
+
+1. **Batch** all side effects inside a single reactive `batch()`.
+2. Call `onStateExit` on every behavior (receives `prev`, `next`, a pre-commit context).
+3. Commit through `setState(next)`, publishing `state` and `stateCell` together. `Editor.toolCell` invalidates through its direct dependency on the active tool's `stateCell`.
+4. Call `onStateEnter` on every behavior (receives `prev`, `next`, a post-commit context where `setState` updates `this.state`).
+5. Call `onStateChange(prev, next, event)` if defined on the tool.
+
+### Pointer coalescing
+
+`ToolManager.handlePointerMove` stores the latest screen point and schedules a single `requestAnimationFrame`. The rAF callback (`flushPointerMove`) does coordinate projection, feeds `GestureDetector`, dispatches resulting events, updates hover (when not dragging), and requests an overlay redraw.
+
+### Temporary tool override
+
+`ToolManager.requestTemporary(toolId, options?)` activates an override tool (e.g. Hand via Space bar). The primary instance remains resident and unchanged while masked. `returnFromTemporary()` disposes the override and reveals that same primary instance without another lifecycle transition. Requests are blocked during an active drag.
+
+### Runtime contribution lifecycle
+
+`editor.registerTool(manifest)` installs metadata and returns its `ToolRegistration`. `replace()` publishes new metadata immediately. Inactive tools use the new factory on their next activation; resident instances are reconstructed immediately unless they own an active drag, in which case reconstruction waits for `dragEnd` or `dragCancel`. Hidden tools are omitted from the toolbar, and disabled tools render as non-interactive controls. Both suppress user keyboard shortcuts while remaining programmatically activatable for internal flows and tests. Removing an active contribution cancels its gesture before disposal and falls back to Select when available. `Editor.destroy()` permanently disposes all resident instances and their computed signals.
+
+### Local edit patterns for drag mutations
+
+Position transforms call `editor.positionSelection(ids)` once at interaction start, then create `selection.layer.positions.move(selection.targets)`, `.rotate(...)`, or `.scale(...)`. The behavior immediately registers `edit.discard()` with `ctx.onCancel()`. Preview methods always resolve from the operation's frozen position base; after `commit()` finishes the active `GlyphLayerEdit`, the behavior calls the returned function to dismiss rollback.
+
+Pen starts topology through `GlyphLayer.beginEdit()`, constructs cubic points with `addPoints()`, then binds the incoming-control movement through `layer.positions.within(edit).move(...)`. It registers the move's `discard()` with the drag scope and completes both creation and movement through `commit("Add cubic")`. Non-affine patches such as BendCurve continue to own `GlyphLayerEdit` directly and register `edit.cancel()`. `finish(label)` restores the latest accepted base and replays the final operations through one workspace transaction in the same reactive batch; after finishing, the behavior dismisses rollback. An undismissed rollback restores the base without sending an intent.
+
+### Shape completion and selection
+
+On drag end, Shape commits a valid rectangle as one transaction, selects its new contour, and switches to Select. A too-small or unavailable-layer result returns Shape to ready without creating geometry. The Select bounding box draws its outline without visible corner squares; resize and rotation hit zones remain active.
+
+### Selection direction snapping
+
+Select configures `TranslateInteraction.move` once at drag start through `#configureDirectionSnap`. Single selected points use 15° increments and `from(...)` always identifies the moving point. `#pointSnapPivot` chooses the fixed `around(...)` reference:
+
+- Cubic handles use their owning on-curve endpoint (`controlStart` uses the start, `controlEnd` uses the end).
+- On-curve junctions shared by two lines use their original position.
+- Other on-curve points with an outgoing line use that line's next endpoint.
+- The final on-curve point of an open contour with an incoming line uses the previous endpoint.
+- Other on-curve points, including Bézier-only endpoints, use their original position.
+
+One or more selected segments use 90° increments. `#segmentSnapCentre` unions their glyph-local tight curve bounds; the frozen centre supplies both `from(...)` and `around(...)`, constraining translation rather than changing segment orientation. This segment-only configuration calls `withoutGuides()`, so horizontal and vertical constrained translation does not show snap lines. Constituent point IDs automatically selected with a segment remain part of that segment group. Extra independently selected points, anchors, contours, point-only multi-selections, Alt-copy, and quadratic controls retain their existing movement behavior. All snapping preserves candidate distance from the pivot before existing point rules preserve smooth tangency.
+
+Bounding-box edges and corners always retain resize priority, even when a selected point or segment occupies them. Movement snapping only applies when the existing interaction dispatch chooses translation; selection-interior drags may translate a segment group.
+
+`TranslateDrag.shiftKey` follows the processed drag sample. Translation previews run in `onStateEnter` after the sample is published, so the snap predicate reads the current tool state rather than a stale event context or global keyboard modifiers. This also preserves the final-release modifier contract. The preview's effective delta and semantic guides are then published into `totalDelta` and `guides`; cancellation, completion, Shift release, and tool replacement leave the next non-translating state with no guide feedback. Select draws active point and handle direction feedback through the shared solid red `SnapLines` overlay with endpoint crosses; horizontal and vertical point/handle directions remain visible.
+
+### Resize modifiers
+
+Resize resolves both pivots from the original bounds on each drag sample: `initialBounds` supplies the scene-space pivot for pointer measurements, while `localBounds` supplies the glyph-local pivot passed to `ScaleEdit.preview(scale, origin)`. Alt selects the original centre; without Alt, the opposite edge or corner remains fixed. Scale factors compare current and original handle-to-pivot distances on each affected axis. Visual top/bottom handle names follow screen directions, while scene rectangles store minimum Y as `top` and maximum Y as `bottom`.
+
+Shift constrains corner resizing to proportional magnitudes and composes with Alt. Both modifiers follow the processed drag event, including the final release-position sample, rather than querying global keyboard state. A modifier-only key event does not re-preview Resize until another drag sample. Pivot changes reuse the same frozen position base and active edit, so cancellation restores the original positions and completion records one undoable resize.
+
+Resize keeps its original `edge` for transform calculations. `flipX` and `flipY` follow the latest signed scale factors and become false at zero or positive scale. `edgeToCursor` swaps corner diagonals when exactly one axis is flipped; two flips restore the original diagonal, and side-handle cursors remain on their axis. A new resize starts with both flags false.
+
+### Rendering layers
+
+Tools can implement up to three rendering hooks, each tied to a different redraw frequency:
+
+- `drawBackground(canvas)` — layer 0, redraws on viewport/font change (e.g. text runs).
+- `drawScene(canvas)` — layer 1, redraws on edit/selection/hover change (e.g. guides, handles).
+- `drawOverlay(canvas)` — layer 2, redraws every mouse move (e.g. selection marquee, pen preview).
+
+All three receive a `Canvas` instance.
+
+### Line upgrade preview
+
+In Select's `ready` state, Cmd-hovering an active authored line shows the bend cursor and two solid grey circles at one-third and two-thirds of the segment. `SelectUpgradePreview.props()` tracks tool state, modifiers, pointer presence, hover, active source, and current geometry, deriving scene-space handle positions without mutating anything. `drawOverlay` delegates to this canvas item, which uses `UPGRADE_PREVIEW_STYLE` for a fixed screen-pixel radius. Releasing Cmd, leaving the segment or canvas, or starting a gesture removes the preview. Cmd-click upgrades the line into a shape-preserving cubic with handles at those positions; Alt-click no longer upgrades. Existing cubics retain Cmd-drag bending and do not show upgrade previews. Upgrading the closing line appends its handles in traversal order, preserving the original on-curve contour start.
+
+### Cursor
+
+`BaseTool.cursorCell` is a computed signal derived from `getCursor(state)`. Override `getCursor` to return state-dependent cursors and read semantic input cells for input-dependent cursors. Hand reads `editor.input.pointerDownCell`, so its cursor changes from `grab` to `grabbing` immediately on pointer-down while its `ready -> dragging` tool transition remains gated by the drag threshold.
+
+## Workflow recipes
+
+### Creating a new tool
+
+1. Define a state union type (must extend `ToolState`): `type MyState = { type: "idle" } | { type: "ready" } | ...`.
+2. Create the tool class extending `BaseTool<MyState>`:
+   - Set `readonly id: ToolName = "myTool"`.
+   - Declare `readonly behaviors: Behavior<MyState>[] = [...]`.
+   - Implement `initialState()` returning `{ type: "idle" }`.
+   - Implement `activate()` with `this.setState({ type: "ready" })`.
+3. Register in `registerBuiltInTools` (`tools.ts`): `editor.registerTool({ id, create, icon, tooltip, shortcut?, hidden?, disabled? })`.
+
+### Adding a behavior (createBehavior style)
+
+For simple tools (Hand, Shape):
+
+```typescript illustrative
+export const MyReadyBehavior = createBehavior<MyState>({
+  onDragStart(state, ctx, event) {
+    if (state.type !== "ready") return false;
+    ctx.setState({ type: "dragging", startPos: event.point });
+    return true;
+  },
+});
+```
+
+### Adding a behavior (class style)
+
+For complex tools (Select, Pen) where behaviors need private helper methods or hold resources:
+
+```typescript illustrative
+export class MyBehavior implements Behavior<MyState> {
+  onDragStart(state: MyState, ctx: ToolContext<MyState>, event: DragStartEvent): boolean {
+    if (state.type !== "ready") return false;
+    ctx.setState({ type: "dragging", startPos: event.point });
+    return true;
+  }
+
+  onStateEnter(prev: MyState, next: MyState, ctx: ToolContext<MyState>): void {
+    // cleanup when leaving the state this behavior manages
+  }
+}
+```
+
+### Adding a state
+
+1. Add a variant to the state union: `| { type: "newState"; data: Data }`.
+2. Create a behavior (or extend an existing one) with handlers that guard on `state.type === "newState"`.
+3. Insert the behavior at the right position in the tool's `behaviors` array.
+
+### Using a fluent position edit for drag mutations
+
+```typescript illustrative
+onDragStart(state, ctx) {
+  if (state.type !== "ready") return false;
+  const selection = ctx.editor.positionSelection(ctx.editor.selection.ids);
+  if (!selection) return false;
+
+  const edit = selection.layer.positions.move(selection.targets);
+  this.#edit = edit;
+  this.#done = ctx.onCancel(() => edit.discard());
+  ctx.setState({ type: "translating", totalDelta: { x: 0, y: 0 } });
+  return true;
+}
+
+onDrag(state, ctx, event) {
+  if (state.type !== "translating" || !this.#edit) return false;
+  const feedback = this.#edit.preview(event.delta.scene);
+  ctx.setState({ ...state, totalDelta: feedback.delta });
+  return true;
+}
+
+onDragEnd(state, ctx) {
+  if (state.type !== "translating") return false;
+  this.#edit?.commit();
+  if (this.#done) this.#done();
+  this.#edit = null;
+  this.#done = null;
+  ctx.setState({ type: "ready" });
+  return true;
+}
+
+onDragCancel(state, ctx) {
+  if (state.type !== "translating") return false;
+  this.#edit = null;
+  this.#done = null;
+  ctx.setState({ type: "ready" });
+  return true;
+}
+```
+
+## Gotchas
+
+- **`preTransition` short-circuits the entire behavior loop.** If it returns non-null, no behavior sees the event. Use sparingly for events that must be handled before any behavior (e.g. `selectionChanged` in Select, `pointerMove` in Pen ready state).
+
+- **Behavior handler return value matters.** Returning `false` (or `undefined`) means "I did not handle this"; the loop continues to the next behavior. Returning `true` stops the loop. Forgetting to return `true` after calling `ctx.setState` means another behavior may also handle the event and overwrite the state.
+
+- **State identity is reference equality.** `handleEvent` only fires lifecycle hooks when `next !== prev`. If a behavior calls `ctx.setState(state)` with the same object reference, no hooks fire. For no-op transitions, simply return `true` without calling `setState`.
+
+- **`onStateExit` / `onStateEnter` run on ALL behaviors**, not just the one that handled the event. Guard on the state types you care about.
+
+- **`ToolContext.onCancel()` is drag-only.** Register while handling `dragStart` or `drag`; calling it from click, key, drag-end, or cancellation events throws. Call the returned function only after successful commit.
+
+- **`ToolName` is `string`, not a fixed union.** The `BUILT_IN_TOOL_IDS` constant lists known IDs (`select`, `pen`, `hand`, `shape`, `text`, `disabled`) but the type is open for plugin tools.
+
+## Verification
+
+- `pnpm test:desktop src/renderer/src/lib/tools/` — real-editor tool tests.
+- `GestureDetector.test.ts` — drag threshold, double-click timing, event emission.
+- `ToolManager.test.ts` — tool activation, temporary override, rAF coalescing, modifier forwarding.
+- Per-tool tests: `hand/Hand.test.ts`, `shape/Shape.test.ts`, `Pen.test.ts`, `Select.test.ts`, `Text.test.ts`.
+
+## Related
+
+- `Editor` — provides all services tools access via `this.editor` (hit-testing, selection, hover, commands, viewport, glyph).
+- `Canvas` — rendering target passed to `drawOverlay` / `drawScene` / `drawBackground`.
+- `PositionEdits` — creates standalone or scoped fluent move, rotate, and scale interactions over normalized position targets.
+- `GlyphLayerEdit` — active preview/finish/cancel owner used by fluent edits and arbitrary BendCurve patches.
+- `Coordinates` — `{ screen, scene }` coordinate bundle on pointer events.
+- `TextTool` — text input tool backed by the editor's active text run.
+- `KeyboardRouter` — binds tool shortcuts registered via `getToolShortcuts`.

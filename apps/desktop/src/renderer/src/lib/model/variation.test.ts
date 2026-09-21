@@ -14,8 +14,8 @@ import {
   externalAxisLocationFromLocation,
   externalAxisLocationFromRecord,
   withExternalAxisValue,
-} from "@/lib/variation/location";
-import { signal } from "@/lib/signals/signal";
+} from "@shift/editor/variation";
+import { signal } from "@shift/editor/signals";
 import { TestEditor } from "@/testing/TestEditor";
 import { createWorkspaceStack, type WorkspaceStack } from "@/testing/workspaceStack";
 

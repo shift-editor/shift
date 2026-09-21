@@ -5,7 +5,7 @@ import { CreateInstanceMenu } from "./CreateInstanceMenu";
 import { Instances } from "./Instances";
 import { OutlineVisibilityButton } from "./OutlineVisibilityButton";
 import { useNamedInstances } from "@/hooks/useNamedInstances";
-import type { GlyphOutlineControls, GlyphOutlineTarget } from "@/types/glyphOutline";
+import type { GlyphOutlineControls, GlyphOutlineTarget } from "@shift/editor/types";
 import { useFontSession } from "@/workspace/WorkspaceContext";
 import PlusIcon from "@/assets/general/plus.svg";
 
@@ -20,7 +20,7 @@ export const InstancesSection = ({
 }: InstancesSectionProps) => {
   const [open, setOpen] = useState(defaultOpen);
   const [instanceMenuOpen, setInstanceMenuOpen] = useState(false);
-  const canAuthor = useFontSession().mode === "authored";
+  const canAuthor = useFontSession().mode === "workspace";
   const instances = useNamedInstances();
   const instanceTargets: GlyphOutlineTarget[] = instances.map((instance) => ({
     kind: "instance",

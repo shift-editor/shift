@@ -4,7 +4,7 @@ import { Navigate, Outlet, Route, Routes, useLocation } from "react-router";
 import { Landing } from "@/views/Landing";
 import { Home } from "@/views/Home";
 import { Editor } from "@/views/Editor";
-import { useSignalState } from "@/lib/signals/useSignal";
+import { useSignalState } from "@shift/editor/signals";
 import { useEditor, useFont, useFontSession } from "@/workspace/WorkspaceContext";
 import { FontSessionProvider } from "@/workspace/FontSessionProvider";
 import { DebugProvider } from "@/context/DebugProvider";
@@ -102,7 +102,7 @@ const ShiftSessionSetup = () => {
     if (!documentLoaded) return;
 
     editor.setExternalLocation(font.defaultLocation());
-    if (session.mode === "authored") editor.selectSource(font.defaultSource.id);
+    if (session.mode === "workspace") editor.selectSource(font.defaultSource.id);
   }, [documentLoaded, editor, font, session.mode]);
 
   return null;

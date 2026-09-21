@@ -1,8 +1,8 @@
 import type { EditorCommandId } from "@shared/commands";
 import type { ContourId } from "@shift/types";
-import type { Editor } from "@/lib/editor/Editor";
-import { electronSystemClipboard } from "@/lib/clipboard";
-import { objectIsKindOf } from "@/types";
+import type { Editor } from "@shift/editor";
+import { electronSystemClipboard } from "@/lib/clipboard/electronSystemClipboard";
+import { objectIsKindOf } from "@shift/editor/types";
 
 const TEXT_EDIT_COMMANDS = new Set<EditorCommandId>([
   "edit.undo",

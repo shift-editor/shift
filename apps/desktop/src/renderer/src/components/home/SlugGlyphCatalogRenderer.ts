@@ -3,9 +3,9 @@ import type { GlyphId } from "@shift/types";
 import { GlyphPreviewLayout } from "./GlyphPreviewLayout";
 import { GlyphCatalogLayout } from "./glyphCatalogLayout";
 import { GlyphCatalogOverlay } from "./GlyphCatalogOverlay";
-import { CanvasSurface } from "@/lib/editor/rendering/CanvasSurface";
-import { FrameHandler } from "@/lib/editor/rendering/FrameHandler";
-import { parseCssColor } from "@/lib/editor/rendering/markers/color";
+import { CanvasSurface } from "@shift/editor/rendering";
+import { FrameHandler } from "@shift/editor/rendering";
+import { parseCssColor } from "@shift/editor/rendering";
 import { ResidentGlyphLayer } from "@/lib/graphics/backends/ResidentGlyphLayer";
 import type {
   GlyphCatalogControllerFrame,

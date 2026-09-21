@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { computed, useSignalState } from "@/lib/signals";
+import { computed, useSignalState } from "@shift/editor/signals";
 import { useEditor } from "@/workspace/WorkspaceContext";
 
 export interface GlyphXAdvanceState {

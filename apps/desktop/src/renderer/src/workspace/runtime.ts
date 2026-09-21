@@ -1,19 +1,19 @@
 import type { GlyphInfo } from "@shift/glyph-info";
 import type { GlyphId, GlyphSnapshot } from "@shift/types";
-import { electronSystemClipboard } from "@/lib/clipboard";
+import { electronSystemClipboard } from "@/lib/clipboard/electronSystemClipboard";
 import { AuthoredGlyphAtlasSource } from "@/lib/graphics/backends/AuthoredGlyphAtlasSource";
 import { ImportedGlyphAtlasSource } from "@/lib/graphics/backends/ImportedGlyphAtlasSource";
-import { Editor } from "@/lib/editor/Editor";
-import { Font } from "@/lib/model/Font";
-import { FontStore } from "@/lib/model/FontStore";
+import { Editor } from "@shift/editor";
+import { Font } from "@shift/editor/model";
+import { FontStore } from "@shift/editor/model";
 import { GlyphCatalog } from "@/lib/catalog/GlyphCatalog";
 import { registerBuiltInTools } from "@/lib/tools/tools";
-import { locationFromDesignAxisLocation } from "@/lib/variation/location";
-import type { GlyphReader } from "@/types/glyph";
+import { locationFromDesignAxisLocation } from "@shift/editor/variation";
+import type { GlyphReader } from "@shift/editor/types";
 import { FontSessionClient } from "@/lib/workspace/FontSessionClient";
 import { getShiftHost } from "@/host/shiftHost";
 import { Workspace } from "./Workspace";
-import { createAuthoredFontSession, createPreviewFontSession } from "./FontSession";
+import { createPreviewFontSession, createWorkspaceFontSession } from "./FontSession";
 import type { FontSession } from "@/types/fontSession";
 import { getGlyphInfo } from "./glyphInfo";
 
@@ -46,17 +46,22 @@ async function createFontSession(
   glyphInfo: GlyphInfo,
 ): Promise<FontSession> {
   switch (client.mode) {
-    case "authored": {
+    case "workspace": {
       const host = getShiftHost();
-      const workspace = new Workspace({ host, client, clipboard: electronSystemClipboard });
+      const workspace = new Workspace({
+        host,
+        client,
+        clipboard: electronSystemClipboard,
+        glyphInfo,
+      });
       await workspace.connect();
       const atlas = new AuthoredGlyphAtlasSource(
-        workspace.font.editCoordinator,
+        workspace.editCoordinator,
         () => workspace.font.getAxes(),
         () => workspace.font.getAxisMappingBases(),
       );
       const catalog = new GlyphCatalog(workspace.editor, glyphInfo, atlas);
-      return createAuthoredFontSession(catalog, workspace, client);
+      return createWorkspaceFontSession(catalog, workspace, client);
     }
     case "preview": {
       await client.connect();
@@ -64,7 +69,11 @@ async function createFontSession(
       if (!source) throw new Error("font source connected without a snapshot");
 
       const store = new FontStore({ font: source.font });
-      const font = new Font({ store, reader: sourceGlyphReader(client) });
+      const font = new Font({
+        store,
+        glyphInfo,
+        reader: sourceGlyphReader(client),
+      });
       const editor = new Editor({
         font,
         fontStore: store,

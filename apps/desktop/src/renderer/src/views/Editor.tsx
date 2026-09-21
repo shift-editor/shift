@@ -12,9 +12,13 @@ import { useEditor } from "@/workspace/WorkspaceContext";
 import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
 import { useFocusZone, ZoneContainer } from "@/context/FocusZoneContext";
 import { KeyboardRouter } from "@/lib/keyboard";
-import { useSignalState } from "@/lib/signals";
+import { getShiftHost } from "@/host/shiftHost";
+import { useSignalState } from "@shift/editor/signals";
 import { asGlyphId, mintNodeId } from "@shift/types";
 import { Bounds } from "@shift/geo";
+
+const showCanvasContextMenu = (makeFirstPoint: boolean): Promise<void> =>
+  getShiftHost().menu.showCanvasContextMenu(makeFirstPoint);
 
 export const Editor = () => {
   const { glyphId: glyphIdParam } = useParams();
@@ -138,7 +142,7 @@ export const Editor = () => {
 
   return (
     <EditorLayout cursorStyle={cursorStyle} gesture={gesture.phase}>
-      <Canvas />
+      <Canvas showContextMenu={showCanvasContextMenu} />
     </EditorLayout>
   );
 };

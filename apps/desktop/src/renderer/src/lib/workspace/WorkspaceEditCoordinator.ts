@@ -18,12 +18,13 @@ import type {
   WorkspaceSlugAtlas,
   WorkspaceSlugAtlasPageRequest,
 } from "@shared/workspace/protocol";
-import { batch, signal, type Signal, type WritableSignal } from "@/lib/signals/signal";
-import type { FontStore } from "@/lib/model/FontStore";
-import type { PendingEditId, WorkspaceApplyStatus, WorkspaceEdit } from "@/types";
+import { batch, signal, type Signal, type WritableSignal } from "@shift/editor/signals";
+import type { FontStore } from "@shift/editor/model";
+import type { PendingEditId } from "@shift/editor/types";
+import type { WorkspaceApplyStatus, WorkspaceEdit } from "@/types/workspace";
 import type { FontSessionClient } from "./FontSessionClient";
 
-export type { WorkspaceApplyStatus } from "@/types";
+export type { WorkspaceApplyStatus } from "@/types/workspace";
 
 /**
  * Tracks pending renderer edits until the utility workspace confirms them.

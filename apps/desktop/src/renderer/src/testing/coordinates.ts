@@ -1,5 +1,5 @@
 import type { Point2D } from "@shift/geo";
-import type { Coordinates } from "@/types/coordinates";
+import type { Coordinates } from "@shift/editor/types";
 
 /** For tests: build Coordinates with the same point in all three spaces. */
 export function makeTestCoordinates(point: Point2D): Coordinates {

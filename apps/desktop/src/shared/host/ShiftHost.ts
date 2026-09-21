@@ -50,7 +50,7 @@ export interface ShiftHost {
   };
   /** Connects the renderer to its selected font-session backend. */
   session: {
-    mode: () => Promise<FontSessionMode>;
+    mode: () => Promise<Exclude<FontSessionMode, "memory">>;
     /**
      * Asks main to transfer a fresh sync-lane port to the session process.
      *

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Axis, AxisId, AxisMappingBasis, Source } from "@shift/types";
 import { mintAxisId, mintAxisLabelId, mintAxisMappingId, mintSourceId } from "@shift/types";
-import { externalAxisLocationFromLocation } from "@/lib/variation/location";
+import { externalAxisLocationFromLocation } from "@shift/editor/variation";
 import { sourceCreationIssue, sourceLocation, suggestedSourceName } from "./sourceCreation";
 
 function weightAxis(): Axis {

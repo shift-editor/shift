@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AngleSnap } from "./AngleSnap";
+import { AngleSnap } from "@shift/editor/model";
 
 const degrees = (value: number): number => (value * Math.PI) / 180;
 

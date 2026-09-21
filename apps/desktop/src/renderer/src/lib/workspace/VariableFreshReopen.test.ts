@@ -16,7 +16,7 @@ import {
   defaultExternalAxisLocation,
   externalAxisLocationFromRecord,
   withExternalAxisValue,
-} from "@/lib/variation/location";
+} from "@shift/editor/variation";
 import { TestEditor } from "@/testing/TestEditor";
 
 interface VariableFixture {

@@ -1,5 +1,5 @@
 import type { NamedInstance } from "@shift/types";
-import { useSignalState } from "@/lib/signals";
+import { useSignalState } from "@shift/editor/signals";
 import { useFont } from "@/workspace/WorkspaceContext";
 
 /** Returns explicit product presets in their authored order. */

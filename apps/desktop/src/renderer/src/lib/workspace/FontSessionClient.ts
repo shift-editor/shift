@@ -29,7 +29,7 @@ import type {
   Location,
   SlugAtlas,
 } from "@shift/types";
-import { signal } from "@/lib/signals/signal";
+import { signal } from "@shift/editor/signals";
 
 /**
  * Renderer side of the workspace sync lane.
@@ -45,7 +45,7 @@ export type FontSessionClientOptions = {
    * WorkspaceHost over node ports). Production uses the preload port relay.
    */
   transport?: () => Promise<Transport>;
-  mode?: FontSessionMode;
+  mode?: Exclude<FontSessionMode, "memory">;
 };
 
 export class FontSessionClient {
@@ -53,19 +53,19 @@ export class FontSessionClient {
   readonly sourceCell = signal<FontSourceSnapshot | null>(null);
   readonly documentStateCell = signal<WorkspaceDocumentState | null>(null);
 
-  readonly #mode: FontSessionMode;
+  readonly #mode: Exclude<FontSessionMode, "memory">;
   readonly #host: ShiftHost | null;
   readonly #transport: (() => Promise<Transport>) | null;
   #channel: Channel<SyncCallMap, SyncEventMap> | null = null;
   #connection: Promise<void> | null = null;
 
   constructor(host: ShiftHost | null, options: FontSessionClientOptions = {}) {
-    this.#mode = options.mode ?? "authored";
+    this.#mode = options.mode ?? "workspace";
     this.#host = host;
     this.#transport = options.transport ?? null;
   }
 
-  get mode(): FontSessionMode {
+  get mode(): Exclude<FontSessionMode, "memory"> {
     return this.#mode;
   }
 
@@ -430,7 +430,7 @@ export class FontSessionClient {
 
   async #catchUp(channel: Channel<SyncCallMap, SyncEventMap>): Promise<void> {
     switch (this.#mode) {
-      case "authored":
+      case "workspace":
         this.workspaceCell.set(await channel.call("workspace.snapshot", undefined));
         this.documentStateCell.set(await channel.call("document.state", undefined));
         return;

@@ -2,10 +2,10 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { Mat, Vec2, type Rect2D } from "@shift/geo";
 import { Point } from "@shift/glyph-state";
 import type { AxisId, ComponentId, GlyphName, SourceId } from "@shift/types";
-import { externalAxisLocationFromRecord } from "@/lib/variation/location";
+import { externalAxisLocationFromRecord } from "@shift/editor/variation";
 import { TestEditor } from "@/testing/TestEditor";
-import type { ComponentTransformSelection } from "@/types";
-import type { GlyphLayer } from "./Glyph";
+import type { ComponentTransformSelection } from "@shift/editor/types";
+import type { GlyphLayer } from "@shift/editor/model";
 
 describe("multi-source component transform edits", () => {
   let editor: TestEditor;

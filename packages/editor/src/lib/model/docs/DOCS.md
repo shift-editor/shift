@@ -1,0 +1,235 @@
+# Renderer font model
+
+<!-- reviewed: 2026-09-20 review-every: 90d -->
+
+Reactive TypeScript font, authored glyph-layer, and derived glyph-view surfaces.
+
+## Architecture Invariants
+
+- **Architecture Invariant:** `FontSession` is the renderer's discriminated union of immutable `PreviewFontSession`, `MemoryFontSession`, and `WorkspaceFontSession` compositions. Every mode uses `FontStore → Font → Editor → Scene → Renderer` and exposes one concrete `GlyphCatalog`. Preview is read-only; memory permits local editing without persistence; workspace owns a non-null `Workspace` and durable mutation coordinator. Desktop presentation and persistence code narrow authoring to the workspace variant until local edit completion no longer requires a workspace; the memory variant has no desktop host or persistence lane. Preview sessions eagerly receive stable session `GlyphId` values but no authored `GlyphRecord` or `GlyphLayer`.
+- **Architecture Invariant:** `Font.loadGlyph()` is the asynchronous acquisition boundary. It returns one canonical `Glyph` only after every authored layer and transitive component dependency is available; retained calls return that same object without workspace I/O. `Editor.glyphForId()` may synchronously expose that object to runtime and plugin code after acquisition, but never initiates loading.
+- **Architecture Invariant:** Complete `GlyphInfo` metadata is an optional `Font` construction input owned by the composition root. Without it, existing font mappings still resolve first and unknown codepoints use deterministic `uniXXXX` names; model modules never import the bundled resource payload at runtime.
+- **Architecture Invariant:** A loaded `Glyph` owns all authored `GlyphLayer` objects and its transitive component-Glyph closure. Its record, layer, and component collections update reactively without replacing the Glyph; its synchronous properties never initiate I/O.
+- **Architecture Invariant:** `FontStore.#glyphs` contains only completely assembled Glyphs. Failed assembly installs nothing, and workspace replacement clears the complete object graph.
+- **Architecture Invariant:** `GlyphLayer` is exact authored geometry. `GlyphRenderModel` is an internal location-bound render cache, not a second public Glyph concept. Named font instances are a separate product-preset concept.
+- **Architecture Invariant:** `GlyphProjection` is plain, location-independent backing owned internally by `FontStore`. It is not an open/ready/loading lifecycle and is not exposed as the renderer's user-facing glyph object.
+- **Architecture Invariant:** One `GlyphRenderModel` follows one location signal. Location changes lazily replace its current computed geometry; Shift never retains a cache keyed by historical location values.
+- **Architecture Invariant:** `GlyphRenderModel.contours` is the complete root-plus-component contour occurrence stream used by rendering, bounds, layout, and sidebearings. A contour's `component` is `null` only when the root glyph owns it.
+- **Architecture Invariant:** `GlyphRenderModel.fillHitsAt()` returns non-zero filled occurrences in front-to-back paint order. Component hits retain exact `componentPath` ancestry; selection may map nested paths to their first directly editable occurrence.
+- **Architecture Invariant:** Render paths distinguish closed contours from open contours. Root-only and component-owned closed paths support separate editable fills; display rendering fills all closed contours and strokes open contours without implicitly filling gaps.
+- **Architecture Invariant:** A render model shares one evaluated source-contour list per base glyph at its current location. Each component placement owns a distinct `GlyphContour` wrapper for transform and provenance; `GlyphRenderModel.contours` flattens references to those same occurrence objects rather than copying contour coordinates.
+- **Architecture Invariant:** Rust owns component order, ancestry, attachment selection, and cycle pruning through `GlyphComponents`. TypeScript only resolves current coordinates and composes matrices. Automatic anchor placement is composed first and the authored transform is applied on top as a visible user offset. Component paths preserve authored occurrence identity; numeric transforms are selected by the occurrence's parent-local `componentIndex`, because compatible exact-source layers may assign different `ComponentId` values to corresponding slots.
+- **Architecture Invariant:** `Font.matchLayers()` reads Rust-owned `LayerMatch` values through the serialized workspace lane after pending edits. `MultiSourceEditing` retains results only for the current glyph, reference source, editing source set, and layer-structure identities; it preserves them across coordinate-only edits. The renderer never infers point or component mappings and never uses incomplete matches for partial edits.
+- **Architecture Invariant:** Numeric authored edits flow through the existing `GlyphLayerState` signal graph. Do not add a revision signal, invalidate projections to `null`, or refetch native variation data for point, component-transform, advance, or metric value changes.
+- **Architecture Invariant:** Local point removal mirrors Rust structure semantics: removing a contour's final point removes the contour record immediately, before the workspace echo confirms it.
+- **Architecture Invariant:** Workspace-backed typed glyph-layer editing methods apply locally representable operations before workspace I/O and queue the matching `FontIntent` through `LayerIntents`. The renderer never reinterprets intent envelopes; Rust remains their sole authoritative interpreter and validator. Each renderer-local `PendingEditId` remains pending until its FIFO echo arrives, and older echoes update a hidden confirmed shadow without replacing newer pending geometry. Rust-only edits remain workspace-driven.
+- **Architecture Invariant:** `GlyphLayerEdit` mutates the ordinary reactive layer during a cancelable structural interaction, so rendering, bounds, hit testing, and object ownership observe one complete current topology. It exposes only generic layer primitives such as adding contours, points, anchors, and components or setting smoothness, positions, and component transforms; tool semantics remain outside the model. Workspace replacements update its restoration base and reapply the active edit in the same batch. Finishing replays final typed operations through `GlyphLayerWriter`; without a workspace, only position patches finish locally and structural commits remain unavailable. Canceling restores the latest accepted base.
+- **Architecture Invariant:** `ComponentTransformEdit` owns the equivalent cancelable lifecycle for direct component transform values. It freezes one reference selection plus pre-matched target-layer components and their local bounds. Every affine preview starts from frozen authored bases and writes through each `ComponentBuffer`; workspace-backed completion finishes every layer inside one outer transaction or discards every preview back to accepted state.
+- **Architecture Invariant:** `GlyphLayer.positions` creates operation-specific fluent edits backed by active `GlyphLayerEdit` values. `PositionEdits.fromSelection()` freezes one reference selection plus pre-matched target-layer selections; previews perform local numeric mutations with no matching or IPC, and completion finishes every layer through the writer's transaction boundary or cancels every preview. Direct single-layer operations lazily own one edit; `positions.within(edit)` binds one terminal operation to an existing edit so structural and positional changes finish or cancel together. Configuration is legal only before the first preview, and every preview resolves from frozen per-layer position bases. Tools may configure these edits but do not own their lifecycle mechanics.
+- **Architecture Invariant:** `Font.committedFontCell` is an invalidation-only dependency for resources derived from the complete native font, including unloaded glyphs. It carries the stable Font value and notifies after committed echoes or workspace replacement; consumers use `track(...)`, never a revision counter.
+- **Architecture Invariant:** Structural glyph, source, or axis changes rebuild retained native projections behind the workspace FIFO and publish replacements atomically. The previous projection remains usable until its replacement arrives. Component-list changes retain their component-specific replacement meaning through apply, undo, and redo so directory dependency edges and loaded component Glyph references refresh together.
+- **Architecture Invariant:** The renderer never offers deletion for the default source or the last source. Rust authoring intents enforce the same rule; UI gating is explanatory defense, not the semantic boundary.
+- **Architecture Invariant:** Imported selected-glyph geometry is acquired lazily by stable glyph identity, then retained with its complete component closure until session disposal. External slider coordinates evaluate Rust-compiled `AxisMappingBasis` values synchronously before exact-source matching and projection evaluation. Source selection inverts independent compiled bases at their piecewise-linear support boundaries so controls recover user coordinates without reading raw mapping points. Scrubbing and source selection are local basis evaluation, never a bridge, filesystem, or projection-acquisition request.
+- **Architecture Invariant:** TypeScript evaluates `VariationBasis` values but never constructs variation sample order, support regions, master influence, or deltas. Authored interpolation, imported glyph variation, source metrics, Slug weights, and axis mappings share this evaluator.
+- **Architecture Invariant:** Authored object IDs resolve through `FontStore` ownership indexes before imported-geometry fallback. Point, anchor, segment, and contour objects retain their authored `GlyphLayer` and read its live structure and coordinate signals, so object bounds and overlays remain reactive without rescanning complete geometry.
+- **Architecture Invariant:** Selected-glyph sidebearing and advance controls read the editor's single glyph scene node. Values stay live through the glyph model; mutations are available only when that glyph has an exact authored layer at the current location.
+- **Architecture Invariant:** Every model property named `bounds` represents tight drawable curve bounds. Authored packed buffers delegate contour bounds to `@shift/glyph-state` instead of scanning raw coordinates; sidebearings derive from those bounds and advance width. Raw control-point extents, if needed, are explicitly named `pointBounds`, while `selectionBounds` may include individual selected controls.
+
+## Codemap
+
+```text
+lib/model/
+  Font.ts                    -- eager metadata, authoring operations, and Glyph acquisition
+  FontStore.ts               -- workspace records, authored layer state, projections, canonical Glyph ownership
+  Glyph.ts                   -- Glyph, GlyphLayer, internal GlyphRenderModel, root lookup, composed metrics
+  GlyphLayerEdit.ts          -- reversible structural edits over the current reactive layer
+  ComponentTransformEdit.ts  -- reversible direct-component transform previews and commits
+  DeletePoints.ts            -- per-operation degree-preserving deletion, gaps, and handle conversion
+  ComponentGlyph.ts          -- component and contour occurrence provenance/reactivity
+  GlyphLayerState.ts         -- local edit lifecycle and pending confirmation
+  positions/                 -- PositionEdits, PositionList, transforms, references, and modifiers
+  LayerBuffers.ts            -- renderer-owned logical layer records and local operations
+  ContourBuffer.ts           -- contour metadata plus packed point coordinates
+  AnchorBuffer.ts            -- anchor metadata plus packed coordinates
+  ComponentBuffer.ts         -- component metadata plus packed transform values
+  PackedArray.ts             -- dynamically-sized fixed-width numeric records
+  RenderGlyph.ts             -- source-independent live selected-glyph view
+lib/graphics/
+  ContourPath.ts             -- canonical transformed commands and lazy path outputs
+lib/interpolation/
+  VariationBasis.ts          -- local evaluation of Rust/Fontdrasil-compiled numeric bases
+  InterpolationBasis.ts      -- source-weight evaluation and source-value combination
+types/
+  glyph.ts                   -- GlyphReader and model construction contracts
+  glyphRender.ts             -- renderer contour/anchor contracts plus passive RenderGlyph
+apps/desktop/src/renderer/src/workspace/
+  FontSession.ts             -- authored and preview composition factories
+  FontSessionProvider.tsx    -- one renderer bootstrap and discriminated session context
+apps/desktop/src/renderer/src/lib/catalog/
+  GlyphCatalog.ts            -- common Font/Editor projection consumed by the resident Grid
+apps/desktop/src/renderer/src/components/home/
+  SvgGlyphCatalogGrid.tsx    -- shared virtualized catalog consumer
+apps/desktop/src/renderer/src/hooks/
+  useGlyphSidebearings.ts    -- live selected-glyph sidebearing values and layer availability
+  useGlyphXAdvance.ts        -- live selected-glyph advance and layer availability
+```
+
+## Key Types
+
+- `Glyph` -- stable, completely loaded renderer domain object containing zero or more authored layers, direct references to its loaded component dependencies, and synchronous location-specific geometry backing.
+- `GlyphLayer` -- editable geometry for one glyph/source pair. Its `positions` surface creates fluent movement, rotation, and scaling edits without exposing sparse patches to transform-tool integrations.
+- `GlyphLayerEdit` -- one reversible active interaction applied directly to the current layer, then finished through one workspace transaction or canceled back to the latest accepted state. Its generic contour, point, anchor, smoothness, and position primitives are shared by structural Pen edits, arbitrary BendCurve patches, and fluent position transforms.
+- `ComponentTransformEdit` -- one reversible direct-component affine preview evaluated from frozen authored transforms, committed as one workspace intent, or discarded to restore the accepted layer.
+- `GlyphLayerWriter` -- internal committed mutation path that queues typed `LayerIntents` and applies matching pending changes to `GlyphLayerState`. Exact-identity seed methods let active edits replay IDs minted during preview.
+- `PositionEdits` -- authored-layer entry point for standalone `MoveEdit`, `RotateEdit`, and `ScaleEdit` values, atomic transforms over a pre-matched `PositionSelection`, or one terminal single-layer operation scoped within an existing `GlyphLayerEdit`.
+- `PositionEditGroup` / `PositionEditLayer` -- shared multi-layer lifecycle: frozen per-layer bases, lazy layer edits, one outer finish transaction, and all-layer cancellation.
+- `PositionList` -- ordered point and anchor positions captured from a layer and transformed from one frozen interaction base. `correspondingPoint()` maps a reference pivot to the same normalized position in another list's bounds.
+- `ScaleEdit.preview(scale, origin)` -- accepts a glyph-local pivot per preview while preserving the original position base. Omitting the pivot uses the origin captured at construction; an override never changes that default. Changing the pivot does not create or complete a separate edit.
+- `MoveEdit` / `RotateEdit` / `ScaleEdit` -- per-interaction configuration and lifecycle objects backed by frozen positions and one active `GlyphLayerEdit` per selected layer. The reference layer owns snapping and feedback; scale and rotate map the reference pivot proportionally into each target selection's bounds. `DirectionSnap`, `AngleSnap`, `MetricSnap`, `PositionReference`, and `PointRuleConstraint` are attached only where the operation supports them.
+- `MoveEdit.from(reference)` -- freezes the moving reference whose initial position plus the preview delta becomes the snap candidate. `DirectionSnap.around(reference)` supplies a separate fixed pivot, resolved and frozen when attached with `directionSnappedBy(...)`. Pivoted previews require `from(...)`, quantize the pivot-to-candidate direction while preserving its length, and emit guides from the pivot unless the snap configuration calls `withoutGuides()`; without `around(...)`, direction snapping continues to quantize the drag delta. Both references use glyph-local coordinates and must resolve in the edit's layer. Activation is reevaluated per preview, but geometry always derives from the frozen base.
+- `LayerBuffers` -- renderer-owned advance, contour, anchor, and component records for one exact authored layer. Its structure and packed wire snapshot are derived outputs.
+- `PackedArray` -- dynamically-sized storage for fixed-width numeric records. Its item width is fixed while capacity grows without imposing a font-format limit.
+- `GlyphProjection` -- generated bridge DTO retained as compact backing: fallback, compatible interpolation, incompatible exact-source shapes, and component identities.
+- `VariationBasis` -- normalized supports and numeric vectors compiled in Rust and evaluated locally without bridge traffic.
+- `InterpolationBasis` -- real source identities plus a `VariationBasis` producing source contribution weights.
+- `AxisMappingBasis` -- mapping input/output identities plus a `VariationBasis` producing normalized output adjustments.
+- `ExternalAxisLocation` / `DesignAxisLocation` -- nominally distinct renderer maps. `mapAxisLocation` is the one-way external-to-design boundary; source matching and interpolation receive only the appropriate space.
+- `GlyphVariation` -- imported fallback-relative numeric variation with no fabricated authored source identities.
+- `GlyphRenderModel` -- internal reactive render cache bound to a location signal. Its contours, bounds, paths, advance, and sidebearings describe the complete displayed Glyph; root point/segment lookup remains root-owned.
+- `ComponentGlyph` -- one ordered component occurrence with a full `ComponentId[]` ancestry, a parent-local correspondence index, current local/resolved transforms, direct contours, children, and bounds.
+- `GlyphContour` -- one displayed contour occurrence over a source contour, a current transform, and optional owning `ComponentGlyph`; it replaces a `ContourPath` when reactive geometry changes.
+- `ContourPath` -- non-reactive commands plus independently lazy SVG, Canvas path, and bounds for one transformed contour occurrence.
+
+## How it works
+
+The model is a one-way pipeline from workspace records to displayed geometry. `FontStore` owns renderer-local backing (records, layer state, projections) and the canonical loaded `Glyph` objects; `Font` is the eager metadata and authoring surface plus the asynchronous acquisition boundary; a loaded `Glyph` composes its authored `GlyphLayer` objects and component dependencies into location-specific render models. Acquisition is async exactly once per glyph, and everything downstream — resolution, scrubbing, editing previews — is synchronous and reactive. This shape exists because render and tool code cannot tolerate I/O or bridge round-trips in the frame path: Rust is consulted at acquisition and commit boundaries only, never per frame.
+
+### Resolution and loading
+
+`Font.loadGlyph()` is the sole public asynchronous Glyph acquisition API. Authored reads acquire complete layer snapshots; imported reads acquire a location-independent root projection plus its complete transitive component closure. The full response is validated before one batched `FontStore` publication, so failures publish nothing and remain retryable. Each successful Glyph and dependency stays resident for the session, and later calls return through the same Promise API without another source read.
+
+Once acquired, `Glyph.layerForSource()`, `Glyph.layerForId()`, `Glyph.layerAt()`, and `Glyph.geometryAt()` are synchronous. `geometryAt()` prefers exact live authored geometry, then uses the Rust-computed projection for exact generated shapes or interpolation, and finally falls back to default or empty geometry. It never initiates workspace I/O.
+
+`Editor.glyphForId()` is the synchronous runtime availability boundary. It returns the canonical acquired Glyph or `null`; use `Font.recordForId()` to distinguish a missing catalog record from a known but unacquired Glyph.
+
+For a location, `Glyph` resolves geometry in this order:
+
+1. a loaded exact authored `GlyphLayer`;
+2. an incompatible exact-source shape retained in the projection;
+3. compatible interpolation using live authored source values when resident and projection source values otherwise;
+4. the projection fallback.
+
+A font source can exist without a glyph layer. At that exact location the Glyph remains visible through interpolation or fallback, while `Glyph.layerAt()` returns `null` until geometry is authored there.
+
+Every component Glyph follows that same resolution order independently at the
+root render model's location. A sparse component can therefore interpolate between its
+own masters even when it has no layer at the root glyph's exact source. When no
+viable interpolation exists, it uses a deterministic master-backed fallback;
+layer-only/background sources never participate.
+
+### Scrubbing and reuse
+
+`Glyph.renderModelAt()` retains one render model per live location signal through a `WeakMap`. Changing a signal reevaluates the same model; historical location values are not retained as cache keys.
+
+Only observed render output is evaluated. Virtualized offscreen models do not subscribe to paths, and no sequence of scrubbed locations increases retained geometry. Component occurrence objects are reused by their Rust-supplied paths.
+
+### Pending authored edits
+
+Layer edits move through **active** (cancelable), **pending** (finished and queued), and **confirmed** (workspace-echoed) vocabulary. `GlyphLayerEdit` owns active structural interaction state while mutating the ordinary reactive `LayerBuffers`. `GlyphLayerWriter` queues finished wire intents through `LayerIntents`, receives a renderer-local `PendingEditId`, and applies the same typed operations to `GlyphLayerState`. Transactions share one pending identity and run inside one signal batch, so finishing an edit changes persistence ownership without changing visible geometry. A throwing transaction restores each touched layer and sends nothing.
+
+Local operations mutate the existing segmented `LayerBuffers`: advance, contours, anchors, and components. Each logical record owns both the metadata and the `PackedArray` values needed to interpret it. `GlyphStructure` and the flat `Float64Array` are repacked lazily at geometry and wire boundaries. Renderer code does not parse `FontIntent.kind` or perform font-wide validation. While an edit is active, an arriving workspace replacement becomes its latest restoration base and the edit reapplies immediately in the same batch. Each loaded layer otherwise keeps a confirmed shadow only while edits are pending. Every echo advances that shadow, but visible pending geometry is replaced only after the layer's pending identities drain; workspace failure still discards renderer state through the existing full resync.
+
+`GlyphLayer.addComponent`, `removeComponents`, and `decomposeComponents` are Rust-confirmed structural edits. Add returns caller-minted identity immediately and creates an identity transform. Decomposition recursively flattens selected direct component subtrees at the authored source location, applying transforms and anchor attachment before replacing them with fresh local contour and point identities. Their workspace echoes update the complete layer, glyph-directory component edges, and retained projections atomically.
+
+`GlyphLayerState.#applyEdit()` wraps pending operations. It captures the pre-edit snapshot once per `PendingEditId`, batches a typed operation closure, and records only successful changes. `beginEdit()`, `finishEdit()`, and `cancelEdit()` separately own the active local lifecycle. Their operation closures remain renderer-local and never cross `LayerIntents` or IPC.
+
+### Contour-aware deletion
+
+`GlyphLayer.deletePoints(pointIds, mode)` creates a per-operation `DeletePoints` and calls `apply()` to interpret explicit selected point IDs against the original contours in one workspace transaction. The operation holds the layer, copied selection, and mode; private helpers separate handle removal, original-span traversal, surviving-fragment construction, and identity-preserving contour replacement. `DeleteMode` is `"fit"` for degree-preserving reconnection and `"gap"` for disconnected surviving fragments. Line-only spans join surviving endpoints directly without controls. Spans containing quadratics but no cubics fit one quadratic control with exact endpoints, without constraining endpoint tangents. Only spans containing cubics use endpoint-tangent-constrained cubic fitting. Each span between surviving on-curve points is processed once; selected handles within a removed span are consumed by that span's policy, while selected handles outside it convert their segment to a line. Raw `removePoints` remains a separate primitive and clipboard cut behavior is unchanged.
+
+Closed contours are traversed cyclically, including leading controls belonging to the wrapped segment. Gaps open or split them into valid open fragments. No surviving on-curve points removes the contour; one survivor becomes an open one-point contour. The original contour retains the fragment containing its first surviving on-curve identity; additional fragments receive new contour IDs and append to the layer without reordering unrelated contours. Surviving points keep their IDs and authored values; new fitted controls receive new IDs. A retained point keeps the original contour from being pruned while the other points are reinserted through the existing seeded mutation primitives. Intermediate mutations stay inside the reactive/workspace transaction; the local result and confirmed echo have identical topology.
+
+The [deletion behavior tests](../../../../../../apps/desktop/src/renderer/src/lib/editor/Deletion.test.ts), [degree-preservation tests](../../../../../../apps/desktop/src/renderer/src/lib/editor/DeletionDegree.test.ts), [contour-topology tests](../../../../../../apps/desktop/src/renderer/src/lib/editor/DeletionTopology.test.ts), and [fresh-reopen tests](../../../../../../apps/desktop/src/renderer/src/lib/workspace/FreshReopen.test.ts) verify geometry, identity, cyclic boundaries, refusal, local/confirmed parity, atomic undo/redo, and fresh-workspace persistence through the real editor and native bridge. The deletion Electron E2E suite drives canvas selection, keyboard and native-menu deletion, pixel-level rendering checks, and save/reopen.
+
+### Contour starts
+
+`GlyphLayer.setContourStart(contourId, pointId)` rotates a closed contour to an existing on-curve point in one undoable Make First Point transaction. Coordinates, point identities, smoothness, and directed segments remain unchanged. Open contours, off-curve targets, missing points, and an unchanged start are no-ops at this renderer boundary. `ContourBuffer` rotates point metadata and coordinates together; the matching Rust `SetContourStart` intent independently checks the target and persists the same ordering.
+
+Upgrading a closing line appends its two cubic controls in traversal order rather than inserting them ahead of the original first point. Existing contours with leading off-curve controls remain valid inputs for cyclic deletion; new upgrades do not create that ordering.
+
+### Packed layout ownership
+
+The object that knows a packed layout must also own the logical metadata that interprets it. High-level editing code must not coordinate parallel structure and scalar buffers:
+
+```ts illustrative
+// Wrong: two owners can drift and callers must know the x/y stride.
+contour.points.reverse();
+reverseCoordinatePairs(values);
+```
+
+Put both changes behind the logical record instead:
+
+```ts illustrative
+// Correct: ContourBuffer owns point metadata and its itemSize=2 PackedArray.
+contour.reverse();
+```
+
+`PackedArray` exposes item indexes through `setItem()`, `splice()`, and `reverse()`. Its backing capacity is an implementation detail. Structural glyph limits come from Rust and export formats, not renderer allocation choices.
+
+### Boundaries
+
+- `FontSessionClient` owns the one renderer/utility channel and catches up from either the existing workspace snapshot or retained source snapshot according to immutable session mode.
+- `GlyphCatalog` is the only font-wide surface consumed by Home/Grid. Imported `GlyphEntry` directory values populate `FontStore`, while imported authored-record and layer collections remain empty.
+- Rust/Fontdrasil owns source compatibility and constructs every variation and axis-mapping basis.
+- `shift-wire` and the workspace bridge translate those values without inventing samples, source identities, support regions, or a UI location.
+- Raw `AxisMapping` values are available only to the `Font` authoring surface and mapping settings UI. Glyph/runtime contracts receive `AxisMappingBasis` values. A TypeScript helper that consumes mapping points to answer a renderer query is an architecture violation even when its output matches Rust fixtures.
+- `FontStore` owns renderer-local backing, reactive authored state, and canonical completely loaded Glyph objects; do not wrap it in another manager/store/cache.
+- `GlyphRenderModel` owns no editable source identity and cannot commit edits.
+- `GlyphNodeDefinition` owns handle policy. It filters `GlyphRenderModel.contours` to root-owned occurrences and uses `GlyphRenderModel.anchors`; inherited component points never become editable root points.
+- React controls acquisition demand but does not own font truth or interpolation caches.
+
+## Workflow recipes
+
+### Displaying a glyph in a new view
+
+1. Acquire the glyph once with `await font.loadGlyph(glyphId)` (or `Font.loadGlyphs` for a batch). Never poll `Editor.glyphForId()` hoping a load happens — it only reads.
+2. Build the render surface with `glyph.renderModelAt(externalLocationCell, activeSourceIdCell)`, passing the editor's _stable_ location signals, not freshly created ones.
+3. Consume geometry through the model's reactive signals — `contoursCell`, `boundsCell`, `xAdvanceCell` (or `trackShape()` when you need per-contour coordinate dependencies) — inside a `computed`/`effect`. The bare `contours`/`bounds`/`xAdvance` getters `peek()` and register no dependency, so reading only them leaves the view stale when the location scrubs; alternatively track the location cell explicitly, the way `TextRun`'s layout computed does.
+4. Verify: `pnpm typecheck && pnpm test:desktop src/renderer/src/lib/model/Glyph.test.ts`
+
+### Adding a typed glyph-layer editing operation
+
+1. Add the local operation to `LayerBuffers` (or the owning `ContourBuffer`/`AnchorBuffer`/`ComponentBuffer`) so metadata and packed values change behind one logical record.
+2. Wrap it in `GlyphLayerState` through the pending-edit path (`#applyEdit` captures the pre-edit snapshot per `PendingEditId`), and expose a public method on `GlyphLayer` that applies it locally and queues the matching `FontIntent` through `LayerIntents`.
+3. Do not parse `FontIntent.kind` in the renderer or add font-wide validation — Rust interprets and validates the intent.
+4. Verify: `pnpm test:desktop src/renderer/src/lib/model/GlyphLayerState.test.ts` and `pnpm test:desktop src/renderer/src/lib/model/GlyphLayerGeometry.test.ts`
+
+### Building a cancelable structural interaction (tools)
+
+1. Open the interaction with `glyphLayer.beginEdit()`; the returned `GlyphLayerEdit` mutates the live reactive layer, so rendering and hit testing see the in-progress topology without a preview overlay.
+2. Apply structural changes (`addCubic`, `setPointSmooth`) and previews (`setPositions`) on the edit object; call `finish(label)` to replay the final operations through one workspace transaction, or `cancel()` to restore the latest accepted base.
+3. Verify: `pnpm typecheck && pnpm test:unit`
+
+## Gotchas
+
+- `Editor.glyphForId()` returns `null` both for glyphs that don't exist and for glyphs that simply haven't been acquired yet. Use `Font.recordForId()` to tell the cases apart before concluding a glyph is missing.
+- `renderModelAt()` caches per _location-signal identity_ (a `WeakMap` keyed by the signal object). Creating a new signal per call defeats reuse and re-derives geometry every time; pass the editor's long-lived cells.
+- A glyph can be visible at a location where `Glyph.layerAt()` returns `null` (interpolation or fallback rendering). Editing affordances must gate on layer presence, not on whether geometry renders.
+- `Font.committedFontCell` fires on every committed change and is invalidation-only — the underlying `FontStore` committed-font signal is declared with `equals: () => false`, and `committedFontCell` is a computed wrapper that propagates each notification. Subscribe with `track(...)`; reading data from it instead of the Font surface is a smell.
+- Removing the last point of a contour deletes the contour record immediately, before the workspace echo confirms it. Code holding a `ContourId` across an edit must tolerate the id disappearing.
+- `GlyphLayerEdit.addCubic` may be called at most once per edit; a second call throws. A throw inside `finish()`'s transaction restores every touched layer and sends nothing to the workspace.
+
+## Verification
+
+```bash
+pnpm typecheck
+pnpm test:unit
+cargo test -p shift-font -p shift-wire -p shift-bridge
+python3 scripts/context-drift-check.py
+```
+
+## Related
+
+- [`shift-font`](../../../../../../crates/shift-font/docs/DOCS.md)
+- [`shift-bridge`](../../../../../../crates/shift-bridge/docs/DOCS.md)
+- [`signals`](../../signals/docs/DOCS.md)

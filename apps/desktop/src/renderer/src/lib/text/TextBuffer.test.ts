@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { TextBuffer } from "./TextBuffer";
-import { glyphTextItem as glyph } from "./layout";
+import { TextBuffer } from "@shift/editor/text";
+import { glyphTextItem as glyph } from "@shift/editor/text";
 
 describe("TextBuffer", () => {
   let buffer: TextBuffer;

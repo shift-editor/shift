@@ -6,7 +6,7 @@ import { Sources } from "./Sources";
 import { OutlineVisibilityButton } from "./OutlineVisibilityButton";
 import { useActiveSourceId } from "@/hooks/useActiveSourceId";
 import { useSources } from "@/hooks/useSources";
-import type { GlyphOutlineControls, GlyphOutlineTarget } from "@/types/glyphOutline";
+import type { GlyphOutlineControls, GlyphOutlineTarget } from "@shift/editor/types";
 import { useFontSession } from "@/workspace/WorkspaceContext";
 import PlusIcon from "@/assets/general/plus.svg";
 
@@ -18,7 +18,7 @@ interface SourcesSectionProps {
 export const SourcesSection = ({ defaultOpen = false, outlineControls }: SourcesSectionProps) => {
   const [open, setOpen] = useState(defaultOpen);
   const [sourceMenuOpen, setSourceMenuOpen] = useState(false);
-  const canAuthor = useFontSession().mode === "authored";
+  const canAuthor = useFontSession().mode === "workspace";
   const activeSourceId = useActiveSourceId();
   const sources = useSources();
   const sourceTargets: GlyphOutlineTarget[] = sources

@@ -21,7 +21,7 @@ import { SidebarActionButton, SidebarActionRow } from "@/components/sidebar";
 import { useSettingsNavigation } from "@/context/SettingsNavigationContext";
 import { OutlineVisibilityButton } from "./OutlineVisibilityButton";
 import type { SourcesProps } from "./types";
-import type { SourceSelectionMode } from "@/types/sourceSelection";
+import type { SourceSelectionMode } from "@shift/editor/types";
 
 import VerticalElipsis from "@/assets/general/vertical-ellipsis.svg";
 

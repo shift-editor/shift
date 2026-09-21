@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Curve, Vec2 } from "@shift/geo";
 import { Point } from "@shift/glyph-state";
 import { mintPointId } from "@shift/types";
-import { externalAxisLocationFromRecord } from "@/lib/variation/location";
+import { externalAxisLocationFromRecord } from "@shift/editor/variation";
 import { TestEditor } from "@/testing/TestEditor";
 
 let editor: TestEditor;

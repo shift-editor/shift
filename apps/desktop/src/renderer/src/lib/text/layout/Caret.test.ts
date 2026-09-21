@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import type { TestEditor } from "@/testing/TestEditor";
-import { Caret } from "./Caret";
-import { glyphTextItem as glyph, lineBreakTextItem } from "./types";
+import { Caret } from "@shift/editor/testing";
+import { glyphTextItem as glyph, lineBreakTextItem } from "@shift/editor/text";
 import { layoutTestEditor, makeLayout } from "./testUtils";
 
 describe("Caret", () => {

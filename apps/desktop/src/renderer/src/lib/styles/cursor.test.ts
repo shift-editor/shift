@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { CursorType } from "@/types/editor";
-import { cursorToCSS } from "./cursor";
+import type { CursorType } from "@shift/editor/types";
+import { cursorToCSS } from "@shift/editor/rendering";
 
 const PACKAGED_STYLESHEET_URL = new URL(
   "file:///Applications/Shift.app/Contents/Resources/app.asar/.vite/renderer/main_window/assets/index.css",

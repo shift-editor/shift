@@ -5,7 +5,7 @@ import PlaceholderGlyph from "@/assets/sidebar-right/placeholder-glyph.svg";
 import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
 import { useGlyphSidebearings } from "@/hooks/useGlyphSidebearings";
 import { useGlyphXAdvance } from "@/hooks/useGlyphXAdvance";
-import { formatCodepointAsUPlus } from "@/lib/utils/unicode";
+import { formatCodepointAsUPlus } from "@shift/editor/text";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { EditableSidebarInput } from "./EditableSidebarInput";
 import { SidebarSection } from "./SidebarSection";

@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { Point } from "@shift/glyph-state";
 import type { AnchorId, AxisId, PointId, SourceId } from "@shift/types";
-import { externalAxisLocationFromRecord } from "@/lib/variation/location";
-import type { GlyphLayer } from "@/lib/model/Glyph";
+import { externalAxisLocationFromRecord } from "@shift/editor/variation";
+import type { GlyphLayer } from "@shift/editor/model";
 import { TestEditor } from "@/testing/TestEditor";
-import type { PositionSelection, SelectableId } from "@/types";
-import { PositionEdits } from "./PositionEdits";
+import type { SelectableId } from "@shift/editor/types";
+import type { PositionSelection } from "@shift/editor/types";
+import { PositionEdits } from "@shift/editor/model";
 
 describe("multi-source position edits", () => {
   let editor: TestEditor;

@@ -1,0 +1,64 @@
+{
+  "jsPlugins": ["oxlint-plugin-eslint", "../../scripts/oxlint/shift-plugin.mjs"],
+  "rules": {
+    "eslint/no-unused-expressions": "off",
+    "typescript/no-useless-empty-export": "off",
+    "eslint/no-restricted-imports": [
+      "error",
+      {
+        "patterns": [
+          {
+            "group": ["@shift/types/src/generated/*"],
+            "message": "Import from @shift/types, not from generated/ directly."
+          },
+          {
+            "group": ["@/bridge/native"],
+            "message": "Do not import getNative() directly. Use NativeBridge instead."
+          },
+          {
+            "group": ["@shift/editor", "@shift/editor/*"],
+            "message": "Use relative imports within @shift/editor."
+          }
+        ]
+      }
+    ],
+    "eslint-js/no-restricted-syntax": [
+      "error",
+      {
+        "selector": "ExpressionStatement > ChainExpression > CallExpression[optional=true]",
+        "message": "Do not use foo?.() as a statement. Use an explicit guard: if (foo) foo();"
+      },
+      {
+        "selector": "ExpressionStatement > ChainExpression > MemberExpression[optional=true]",
+        "message": "Do not use foo?.bar as a statement (unused). Either call it or remove it."
+      },
+      {
+        "selector": "ExportAllDeclaration",
+        "message": "Do not use export *. Use named exports to keep the public API explicit."
+      }
+    ],
+    "shift/prefer-instance-method-on-glyph": "error",
+    "shift/no-raw-segment-parse": "error",
+    "shift/no-get-signal-value-method": "error",
+    "shift/no-reactive-value-outside-boundary": "error",
+    "shift/no-unbranded-ids": "error",
+    "shift/no-snapshot-in-domain": "error",
+    "shift/no-raw-point-type-check": "error",
+    "shift/no-nested-ternary-map": "error",
+    "shift/no-inline-coordinate-math": "off",
+    "shift/no-repeated-optional-chain": "warn",
+    "shift/no-section-divider-comments": "error",
+    "shift/no-bridge-import": "error",
+    "shift/no-raw-editor-in-tests": "error",
+    "shift/no-vi-stub-global-in-tests": "error",
+    "shift/no-vitest-mock-primitives": "error"
+  },
+  "overrides": [
+    {
+      "files": ["src/**/*.test.ts", "src/renderer/src/testing/**/*.ts"],
+      "rules": {
+        "typescript/no-explicit-any": "error"
+      }
+    }
+  ]
+}

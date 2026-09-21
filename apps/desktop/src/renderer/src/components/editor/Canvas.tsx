@@ -3,12 +3,12 @@ import { useCallback, useEffect, useRef, useState, type FC } from "react";
 import { cn } from "@shift/ui";
 
 import { CanvasContextProvider } from "@/context/CanvasContextProvider";
-import { CanvasSurface } from "@/lib/editor/rendering/CanvasSurface";
+import { CanvasSurface } from "@shift/editor/rendering";
 import { useDebugSafe } from "@/context/DebugContext";
 import { useEditor } from "@/workspace/WorkspaceContext";
-import { zoomMultiplierFromWheel } from "@/lib/transform";
-import { getShiftHost } from "@/host/shiftHost";
-import { objectIsKindOf } from "@/types";
+import { zoomMultiplierFromWheel } from "@shift/editor/transform";
+import type { CanvasProps } from "@shift/editor/types";
+import { objectIsKindOf } from "@shift/editor/types";
 import { InteractiveScene } from "./InteractiveScene";
 import { StaticScene } from "./StaticScene";
 import { DebugPanel } from "../debug/DebugPanel";
@@ -17,7 +17,7 @@ import { Vec2 } from "@shift/geo";
 
 const WHEEL_GESTURE_IDLE_MS = 120;
 
-export const Canvas: FC = () => {
+export const Canvas: FC<CanvasProps> = ({ showContextMenu }) => {
   const editor = useEditor();
   const debug = useDebugSafe();
 
@@ -83,6 +83,7 @@ export const Canvas: FC = () => {
 
     const handleContextMenu = async (event: MouseEvent) => {
       event.preventDefault();
+      if (!showContextMenu) return;
 
       try {
         const [id] = editor.selection.ids;
@@ -94,7 +95,7 @@ export const Canvas: FC = () => {
           object.layer?.sourceId === editor.activeSourceId &&
           object.geometry.point(object.pointId)?.isOnCurve === true &&
           object.geometry.contour(object.contourId)?.closed === true;
-        await getShiftHost().menu.showCanvasContextMenu(makeFirstPoint);
+        await showContextMenu(makeFirstPoint);
       } catch (error) {
         console.error("canvas context menu failed", error);
       }
@@ -107,7 +108,7 @@ export const Canvas: FC = () => {
       element.removeEventListener("wheel", handleWheel);
       element.removeEventListener("contextmenu", handleContextMenu);
     };
-  }, []);
+  }, [editor, showContextMenu]);
 
   return (
     <div

@@ -11,9 +11,9 @@
  * change sets; until then the editor surface under test is tool/input state.
  */
 
-import { Editor } from "@/lib/editor/Editor";
-import type { Glyph, GlyphRenderModel, GlyphLayer } from "@/lib/model/Glyph";
-import type { ToolName } from "@/lib/tools/core";
+import { Editor } from "@shift/editor";
+import type { Glyph, GlyphRenderModel, GlyphLayer } from "@shift/editor/model";
+import type { ToolName } from "@shift/editor/tools";
 import { registerBuiltInTools } from "@/lib/tools/tools";
 import type { Point2D } from "@shift/geo";
 import {
@@ -28,9 +28,9 @@ import {
   type Unicode,
 } from "@shift/types";
 import type { Contour } from "@shift/glyph-state";
-import type { SystemClipboard } from "@/lib/clipboard";
+import type { SystemClipboard } from "@shift/editor/clipboard";
 import { createWorkspaceStack, type WorkspaceStack } from "./workspaceStack";
-import type { GlyphNode } from "@/types/node";
+import type { GlyphNode } from "@shift/editor/types";
 import type { FontSessionMode, WorkspaceDocumentState } from "@shared/workspace/protocol";
 
 const DEFAULT_MODIFIERS = { shiftKey: false, altKey: false, metaKey: false };
@@ -59,7 +59,7 @@ export class TestEditor extends Editor {
    *
    * @param sessionMode - Presentation and interaction capability under test.
    */
-  constructor(sessionMode: FontSessionMode = "authored") {
+  constructor(sessionMode: FontSessionMode = "workspace") {
     const stack = createWorkspaceStack();
     const clipboard = new InMemorySystemClipboard();
     super({ font: stack.font, fontStore: stack.store, clipboard, sessionMode });

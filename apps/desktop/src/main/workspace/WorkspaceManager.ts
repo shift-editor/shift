@@ -177,7 +177,7 @@ export class WorkspaceManager {
       throw new Error(`Workspace session already registered: ${session.workspaceId}`);
     }
 
-    if (session.mode === "authored") this.#documentSessions.track(session);
+    if (session.mode === "workspace") this.#documentSessions.track(session);
     this.#sessionsById.set(session.workspaceId, session);
   }
 
@@ -297,7 +297,7 @@ export class WorkspaceManager {
     state: WorkspaceDocumentState,
   ): FontSessionHost {
     const session = new FontSessionHost({
-      mode: "authored",
+      mode: "workspace",
       sessionId: state.workspaceId,
       workspaceProcess,
       documentClient: new DocumentClient(),
@@ -333,7 +333,7 @@ export class WorkspaceManager {
 
   async reopenSession(sessionId: FontSessionId): Promise<FontSessionHost> {
     const session = this.#requireWorkspace(sessionId);
-    if (session.mode !== "authored") {
+    if (session.mode !== "workspace") {
       throw new Error(`Cannot reopen preview session: ${sessionId}`);
     }
     if (session.workspaceProcess.running) return session;

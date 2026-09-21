@@ -1,5 +1,5 @@
 import type { SVG } from "@/types/common";
-import { LOCK_PATH_DATA, LOCK_VIEW_BOX_SIZE } from "@/lib/editor/rendering/icons/lock";
+import { LOCK_PATH_DATA, LOCK_VIEW_BOX_SIZE } from "@shift/editor/rendering";
 
 export const LockIcon: SVG = (props) => (
   <svg

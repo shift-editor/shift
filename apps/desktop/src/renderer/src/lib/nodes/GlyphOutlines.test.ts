@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { asNamedInstanceId, asNodeId, asSourceId } from "@shift/types";
-import { GlyphOutlines } from "./GlyphOutlines";
+import { GlyphOutlines } from "@shift/editor/testing";
 
 describe("glyph outlines remain scoped to their scene node", () => {
   it("replaces and clears one node without changing another", () => {

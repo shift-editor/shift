@@ -5,8 +5,8 @@
  * not pixel output. The setup.ts Path2D stub handles path construction.
  */
 
-import { Canvas } from "@/lib/editor/rendering/Canvas";
-import type { CameraTransform } from "@/lib/editor/managers/Camera";
+import { Canvas } from "@shift/editor/testing";
+import type { CameraTransform } from "@shift/editor/testing";
 
 const noop = () => {};
 

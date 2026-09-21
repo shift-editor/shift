@@ -2,10 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { useLocation, useNavigate } from "react-router";
 import type { GlyphCategory, GlyphCategoryCatalog } from "@shift/glyph-info";
 import { asGlyphId, type GlyphId, type GlyphName } from "@shift/types";
-import { effect, useSignalState } from "@/lib/signals";
+import { effect, useSignalState } from "@shift/editor/signals";
 import { useFontSession } from "@/workspace/WorkspaceContext";
 import { getGlyphInfo } from "@/workspace/glyphInfo";
-import { LatestRequest } from "@/lib/utils/LatestRequest";
+import { LatestRequest } from "@shift/editor";
 import { GlyphCatalogContext } from "./GlyphCatalogContext";
 import type { GlyphCatalogItem, GlyphCatalogSource } from "@/types/glyphCatalog";
 
@@ -22,7 +22,7 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
   const routeLocation = useLocation();
   const glyphInfo = getGlyphInfo();
   const catalog = session.catalog;
-  const canAuthor = session.mode === "authored";
+  const canAuthor = session.mode === "workspace";
   const workspace = session.workspace;
 
   const availableGlyphs = useSignalState(catalog.glyphsCell);

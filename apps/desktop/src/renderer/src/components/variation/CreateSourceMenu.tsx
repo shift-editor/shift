@@ -24,8 +24,8 @@ import { SidebarActionButton } from "@/components/sidebar";
 import { useAxes } from "@/hooks/useAxes";
 import { useExternalLocation } from "@/hooks/useExternalLocation";
 import { useSources } from "@/hooks/useSources";
-import { axisValue } from "@/lib/variation/location";
-import type { ExternalAxisLocation } from "@/types/variation";
+import { axisValue } from "@shift/editor/variation";
+import type { ExternalAxisLocation } from "@shift/editor/types";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { sourceCreationIssue, sourceLocation, suggestedSourceName } from "./sourceCreation";
 

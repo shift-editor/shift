@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { effect } from "@/lib/signals";
+import { effect } from "@shift/editor/signals";
 
 export function useSignalEffect(fn: () => void) {
   useEffect(() => {

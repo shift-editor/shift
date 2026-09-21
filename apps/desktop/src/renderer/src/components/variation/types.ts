@@ -1,4 +1,4 @@
-import type { GlyphOutlineControls } from "@/types/glyphOutline";
+import type { GlyphOutlineControls } from "@shift/editor/types";
 
 export interface SourcesProps {
   readonly canAuthor: boolean;

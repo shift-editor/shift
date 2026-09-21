@@ -106,4 +106,4 @@ Renderer code should keep using cached `GlyphGeometry` instances from the model 
 
 - [`@shift/geo`](../../geo/docs/DOCS.md) -- coordinate, curve, matrix, and bounds primitives
 - [`@shift/types`](../../types/docs/DOCS.md) -- canonical glyph structure and identity types
-- [Renderer font model](../../../apps/desktop/src/renderer/src/lib/model/docs/DOCS.md) -- reactive ownership over glyph-state readers
+- [Renderer font model](../../editor/src/lib/model/docs/DOCS.md) -- reactive ownership over glyph-state readers

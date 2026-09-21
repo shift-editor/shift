@@ -2,11 +2,11 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { Point } from "@shift/glyph-state";
 import type { Point2D } from "@shift/geo";
 import { isPointId, type ComponentId, type GlyphName, type PointId } from "@shift/types";
-import type { GlyphLayer } from "@/lib/model/Glyph";
+import type { GlyphLayer } from "@shift/editor/model";
 import { TestEditor } from "@/testing/TestEditor";
-import { SELECT_BOUNDING_BOX_STYLE } from "./BoundingBox";
-import { Select } from "./Select";
-import { LOCK_GAP_PX, LOCK_SIZE_PX } from "@/lib/editor/rendering/icons/lock";
+import { SELECT_BOUNDING_BOX_STYLE } from "@shift/editor/testing";
+import { Select } from "@shift/editor/tools";
+import { LOCK_GAP_PX, LOCK_SIZE_PX } from "@shift/editor/rendering";
 
 function addClosedContour(layer: GlyphLayer, points: readonly Point2D[]): void {
   const contourId = layer.addContour();
