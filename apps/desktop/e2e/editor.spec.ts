@@ -6,6 +6,8 @@ import type { EditorDriver } from "./fixtures/EditorDriver";
 import { editorSidebar, glyphProperties } from "./fixtures/appLocators";
 import { CanvasUtil } from "./fixtures/CanvasUtil";
 
+const screenshotStylePath = path.join(__dirname, "editor.screenshot.css");
+
 test("aligns exactly two selected points while distribution still requires three", async ({
   page,
   editor,
@@ -14,7 +16,6 @@ test("aligns exactly two selected points while distribution still requires three
   const properties = glyphProperties(page);
   // Native scrollbar preferences change the gutter width; normalize only the golden captures.
   // Interaction and viewport assertions still exercise the unmodified native layout.
-  const screenshotStylePath = path.join(__dirname, "editor.screenshot.css");
   const screenshotStyle = await readFile(screenshotStylePath, "utf8");
   const canvas = editor.canvas;
   const alignLeft = properties.getByRole("button", { name: "Align left", exact: true });
@@ -228,7 +229,9 @@ test.describe("Editor view", () => {
       "aria-selected",
       "true",
     );
-    await expect(sidebar).toHaveScreenshot("objects-sidebar.png");
+    await expect(sidebar).toHaveScreenshot("objects-sidebar.png", {
+      stylePath: screenshotStylePath,
+    });
     await sidebar.getByTestId(`object-${firstPoint.id}`).click();
     await expect.poll(() => editor.selectionIds()).toEqual([firstPoint.id]);
 
@@ -240,7 +243,9 @@ test.describe("Editor view", () => {
     await expect
       .poll(() => editor.selectionIds())
       .toEqual([firstPoint.id, secondPoint.id, thirdPoint.id, fourthPoint.id]);
-    await expect(sidebar).toHaveScreenshot("objects-sidebar-selection.png");
+    await expect(sidebar).toHaveScreenshot("objects-sidebar-selection.png", {
+      stylePath: screenshotStylePath,
+    });
 
     await sidebar.getByTestId(`object-${contour.id}`).click();
     await expect.poll(() => editor.selectionIds()).toEqual([contour.id]);

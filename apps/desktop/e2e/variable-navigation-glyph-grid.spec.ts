@@ -174,6 +174,7 @@ test("keeps variable preview and exact-source editability coherent across Grid n
     firstPoint: { x: 40, y: 20 },
   });
 
+  const variationControls = await openVariationControls(page);
   await page.getByTestId(`instance-${fixture.instanceId}`).click();
   await expectPreview(page, fixture, {
     location: 700,
@@ -219,6 +220,7 @@ test("keeps variable preview and exact-source editability coherent across Grid n
     .toBe(900);
 
   await openCatalogGlyph(page, "navigationSparse", fixture.secondGlyphId);
+  await openVariationControls(page);
   await expect
     .poll(() =>
       page.evaluate(
@@ -242,7 +244,6 @@ test("keeps variable preview and exact-source editability coherent across Grid n
     .toBe(fixture.boldSourceId);
   await expect(glyphProperties(page).getByLabel("Advance width", { exact: true })).toBeEnabled();
 
-  const variationControls = await openVariationControls(page);
   const editorAxisInput = variationControls.getByLabel("Navigation Weight value", {
     exact: true,
   });

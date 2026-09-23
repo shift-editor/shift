@@ -96,10 +96,11 @@ test.describe("variable font preview projection", () => {
       .poll(() =>
         slider.evaluate((input) => {
           const thumbBounds = input.parentElement?.getBoundingClientRect();
-          const trackBounds = input.parentElement?.parentElement?.getBoundingClientRect();
-          if (!thumbBounds || !trackBounds) return false;
+          const controlBounds =
+            input.parentElement?.parentElement?.parentElement?.getBoundingClientRect();
+          if (!thumbBounds || !controlBounds) return false;
 
-          return thumbBounds.left >= trackBounds.left && thumbBounds.right <= trackBounds.right;
+          return thumbBounds.left >= controlBounds.left && thumbBounds.right <= controlBounds.right;
         }),
       )
       .toBe(true);
