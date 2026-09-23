@@ -4,9 +4,8 @@ import { EditableSidebarInput, type EditableSidebarInputHandle } from "./Editabl
 import { IconButton } from "./IconButton";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { useSignalState } from "@shift/editor/signals";
-import { Bounds, Mat } from "@shift/geo";
+import { Bounds, Mat, Vec2, type PointAxis } from "@shift/geo";
 import { useSelectionBounds } from "@/hooks/useSelectionBounds";
-import { commitComponentTransform } from "./componentTransforms";
 
 import RotateIcon from "@/assets/sidebar-right/rotate.svg";
 import RotateCwIcon from "@/assets/sidebar-right/rotate-cw.svg";
@@ -161,13 +160,17 @@ export const TransformSection = () => {
       const sy = dimension === "height" ? factor : 1;
 
       if (componentSelection && !isEditing) {
-        commitComponentTransform(componentSelection, "Resize components", ({ bounds }) => {
-          const origin = { x: bounds.x, y: bounds.y + bounds.height };
-          return Mat.Compose(
-            Mat.Translate(origin.x, origin.y),
-            Mat.Compose(Mat.Scale(sx, sy), Mat.Translate(-origin.x, -origin.y)),
-          );
-        });
+        componentSelection.layer.transformComponents(
+          componentSelection,
+          "Resize components",
+          ({ bounds }) => {
+            const origin = { x: bounds.x, y: bounds.y + bounds.height };
+            return Mat.Compose(
+              Mat.Translate(origin.x, origin.y),
+              Mat.Compose(Mat.Scale(sx, sy), Mat.Translate(-origin.x, -origin.y)),
+            );
+          },
+        );
         return;
       }
 
@@ -209,13 +212,17 @@ export const TransformSection = () => {
     if (!editable || !origin) return;
 
     if (componentSelection && !isEditing) {
-      commitComponentTransform(componentSelection, "Rotate components", ({ bounds }) => {
-        const center = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
-        return Mat.Compose(
-          Mat.Translate(center.x, center.y),
-          Mat.Compose(Mat.Rotate(-Math.PI / 2), Mat.Translate(-center.x, -center.y)),
-        );
-      });
+      componentSelection.layer.transformComponents(
+        componentSelection,
+        "Rotate components",
+        ({ bounds }) => {
+          const center = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
+          return Mat.Compose(
+            Mat.Translate(center.x, center.y),
+            Mat.Compose(Mat.Rotate(-Math.PI / 2), Mat.Translate(-center.x, -center.y)),
+          );
+        },
+      );
       return;
     }
 
@@ -230,13 +237,17 @@ export const TransformSection = () => {
     const wrapped = angle % 360;
     const radians = (wrapped * Math.PI) / 180;
     if (componentSelection && !isEditing) {
-      commitComponentTransform(componentSelection, "Rotate components", ({ bounds }) => {
-        const center = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
-        return Mat.Compose(
-          Mat.Translate(center.x, center.y),
-          Mat.Compose(Mat.Rotate(radians), Mat.Translate(-center.x, -center.y)),
-        );
-      });
+      componentSelection.layer.transformComponents(
+        componentSelection,
+        "Rotate components",
+        ({ bounds }) => {
+          const center = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
+          return Mat.Compose(
+            Mat.Translate(center.x, center.y),
+            Mat.Compose(Mat.Rotate(radians), Mat.Translate(-center.x, -center.y)),
+          );
+        },
+      );
     } else if (layer) {
       layer.rotate(selectedPointIds, radians, origin);
     }
@@ -247,13 +258,17 @@ export const TransformSection = () => {
     if (!editable || !origin) return;
 
     if (componentSelection && !isEditing) {
-      commitComponentTransform(componentSelection, "Flip components horizontally", ({ bounds }) => {
-        const center = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
-        return Mat.Compose(
-          Mat.Translate(center.x, center.y),
-          Mat.Compose(Mat.ReflectVertical(), Mat.Translate(-center.x, -center.y)),
-        );
-      });
+      componentSelection.layer.transformComponents(
+        componentSelection,
+        "Flip components horizontally",
+        ({ bounds }) => {
+          const center = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
+          return Mat.Compose(
+            Mat.Translate(center.x, center.y),
+            Mat.Compose(Mat.ReflectVertical(), Mat.Translate(-center.x, -center.y)),
+          );
+        },
+      );
       return;
     }
 
@@ -266,13 +281,17 @@ export const TransformSection = () => {
     if (!editable || !origin) return;
 
     if (componentSelection && !isEditing) {
-      commitComponentTransform(componentSelection, "Flip components vertically", ({ bounds }) => {
-        const center = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
-        return Mat.Compose(
-          Mat.Translate(center.x, center.y),
-          Mat.Compose(Mat.ReflectHorizontal(), Mat.Translate(-center.x, -center.y)),
-        );
-      });
+      componentSelection.layer.transformComponents(
+        componentSelection,
+        "Flip components vertically",
+        ({ bounds }) => {
+          const center = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
+          return Mat.Compose(
+            Mat.Translate(center.x, center.y),
+            Mat.Compose(Mat.ReflectHorizontal(), Mat.Translate(-center.x, -center.y)),
+          );
+        },
+      );
       return;
     }
 
@@ -282,14 +301,13 @@ export const TransformSection = () => {
   };
 
   const handlePositionChange = useCallback(
-    (axis: "x" | "y", value: number) => {
+    (axis: PointAxis, value: number) => {
       if (!editable || !selectionBounds) return;
 
       const position = selectionBounds.min;
       if (componentSelection && !isEditing) {
-        const delta =
-          axis === "x" ? { x: value - position.x, y: 0 } : { x: 0, y: value - position.y };
-        commitComponentTransform(componentSelection, "Move components", () =>
+        const delta = Vec2.fromAxis(axis, value - position[axis]);
+        componentSelection.layer.transformComponents(componentSelection, "Move components", () =>
           Mat.Translate(delta.x, delta.y),
         );
         return;
@@ -297,7 +315,7 @@ export const TransformSection = () => {
 
       if (!layer) return;
 
-      const target = axis === "x" ? { x: value, y: position.y } : { x: position.x, y: value };
+      const target = Vec2.setAxis(position, axis, value);
       layer.moveSelectionTo([...selectedPointIds], target, position);
     },
     [componentSelection, editable, isEditing, layer, selectedPointIds, selectionBounds],

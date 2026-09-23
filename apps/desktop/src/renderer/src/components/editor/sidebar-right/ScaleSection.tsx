@@ -9,7 +9,6 @@ import { useSignalState } from "@shift/editor/signals";
 import { Bounds, Mat } from "@shift/geo";
 import ScaleIcon from "@/assets/sidebar-right/scale.svg";
 import { useSelectionBounds } from "@/hooks/useSelectionBounds";
-import { commitComponentTransform } from "./componentTransforms";
 
 export const ScaleSection = () => {
   const editor = useEditor();
@@ -53,14 +52,18 @@ export const ScaleSection = () => {
 
       const factor = value / current;
       if (componentSelection && !isEditing) {
-        commitComponentTransform(componentSelection, "Scale components", ({ bounds }) => {
-          const localBounds = Bounds.fromXYWH(bounds.x, bounds.y, bounds.width, bounds.height);
-          const anchorPoint = anchorToPoint(anchor, localBounds);
-          return Mat.Compose(
-            Mat.Translate(anchorPoint.x, anchorPoint.y),
-            Mat.Compose(Mat.Scale(factor, factor), Mat.Translate(-anchorPoint.x, -anchorPoint.y)),
-          );
-        });
+        componentSelection.layer.transformComponents(
+          componentSelection,
+          "Scale components",
+          ({ bounds }) => {
+            const localBounds = Bounds.fromXYWH(bounds.x, bounds.y, bounds.width, bounds.height);
+            const anchorPoint = anchorToPoint(anchor, localBounds);
+            return Mat.Compose(
+              Mat.Translate(anchorPoint.x, anchorPoint.y),
+              Mat.Compose(Mat.Scale(factor, factor), Mat.Translate(-anchorPoint.x, -anchorPoint.y)),
+            );
+          },
+        );
         return;
       }
 
@@ -77,14 +80,18 @@ export const ScaleSection = () => {
       if (!editable || !selectionBounds) return;
 
       if (componentSelection && !isEditing) {
-        commitComponentTransform(componentSelection, "Scale components", ({ bounds }) => {
-          const localBounds = Bounds.fromXYWH(bounds.x, bounds.y, bounds.width, bounds.height);
-          const anchorPoint = anchorToPoint(anchor, localBounds);
-          return Mat.Compose(
-            Mat.Translate(anchorPoint.x, anchorPoint.y),
-            Mat.Compose(Mat.Scale(scale, scale), Mat.Translate(-anchorPoint.x, -anchorPoint.y)),
-          );
-        });
+        componentSelection.layer.transformComponents(
+          componentSelection,
+          "Scale components",
+          ({ bounds }) => {
+            const localBounds = Bounds.fromXYWH(bounds.x, bounds.y, bounds.width, bounds.height);
+            const anchorPoint = anchorToPoint(anchor, localBounds);
+            return Mat.Compose(
+              Mat.Translate(anchorPoint.x, anchorPoint.y),
+              Mat.Compose(Mat.Scale(scale, scale), Mat.Translate(-anchorPoint.x, -anchorPoint.y)),
+            );
+          },
+        );
         return;
       }
 

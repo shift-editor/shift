@@ -3,6 +3,7 @@ import { isAnchorId, type AnchorId } from "@shift/types";
 import { useSignalEffect } from "@/hooks/useSignalEffect";
 import { track } from "@shift/editor/signals";
 import { PositionEdits, type GlyphLayer } from "@shift/editor/model";
+import { Vec2, type PointAxis } from "@shift/geo";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { EditableSidebarInput, type EditableSidebarInputHandle } from "./EditableSidebarInput";
 import { SidebarSection } from "./SidebarSection";
@@ -38,15 +39,14 @@ export const AnchorSection = () => {
     yRef.current?.setValue(Math.round(anchor.y));
   });
 
-  const handlePositionChange = (axis: "x" | "y", value: number) => {
+  const handlePositionChange = (axis: PointAxis, value: number) => {
     if (!anchorId || !layer) return;
 
     const positionSelection = editor.positionSelection([anchorId]);
     const currentAnchor = positionSelection?.layer.anchor(anchorId);
     if (!positionSelection || !currentAnchor) return;
 
-    const delta =
-      axis === "x" ? { x: value - currentAnchor.x, y: 0 } : { x: 0, y: value - currentAnchor.y };
+    const delta = Vec2.fromAxis(axis, value - currentAnchor[axis]);
     const move = PositionEdits.fromSelection(positionSelection).move(positionSelection.targets);
     move.preview(delta);
     move.commit("Move anchor");
