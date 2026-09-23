@@ -1,0 +1,79 @@
+{
+  "name": "@shift-editor/sdk",
+  "version": "0.0.0-development",
+  "private": true,
+  "description": "Browser SDK for the Shift font editor",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./clipboard": {
+      "types": "./dist/clipboard.d.ts",
+      "import": "./dist/clipboard.js"
+    },
+    "./model": {
+      "types": "./dist/model.d.ts",
+      "import": "./dist/model.js"
+    },
+    "./rendering": {
+      "types": "./dist/rendering.d.ts",
+      "import": "./dist/rendering.js"
+    },
+    "./ui": {
+      "types": "./dist/ui.d.ts",
+      "import": "./dist/ui.js"
+    },
+    "./style.css": "./dist/style.css",
+    "./signals": {
+      "types": "./dist/signals.d.ts",
+      "import": "./dist/signals.js"
+    },
+    "./text": {
+      "types": "./dist/text.d.ts",
+      "import": "./dist/text.js"
+    },
+    "./tools": {
+      "types": "./dist/tools.d.ts",
+      "import": "./dist/tools.js"
+    },
+    "./transform": {
+      "types": "./dist/transform.d.ts",
+      "import": "./dist/transform.js"
+    },
+    "./types": {
+      "types": "./dist/types.d.ts",
+      "import": "./dist/types.js"
+    },
+    "./variation": {
+      "types": "./dist/variation.d.ts",
+      "import": "./dist/variation.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsgo --noEmit",
+    "generate:inter-a-fixture": "node scripts/generate-inter-a-fixture.mjs",
+    "test:packed": "pnpm build && node scripts/test-packed-consumers.mjs"
+  },
+  "peerDependencies": {
+    "react": "^19.1.0"
+  },
+  "devDependencies": {
+    "@shift/editor": "workspace:*",
+    "@shift/types": "workspace:*",
+    "@shift/ui": "workspace:*",
+    "@playwright/test": "^1.59.1",
+    "@tailwindcss/vite": "^4.1.11",
+    "tailwindcss": "^4.1.11",
+    "tsdown": "0.23.0",
+    "typescript": "^5.5.4",
+    "vite": "^6.4.3"
+  }
+}
