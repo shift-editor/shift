@@ -1,3 +1,4 @@
+export { createMemoryFontSession } from "./createMemoryFontSession";
 export { Editor } from "./lib/editor/Editor";
 export { Font } from "./lib/model/Font";
 export { FontStore } from "./lib/model/FontStore";
@@ -35,6 +36,11 @@ export type {
   WritableSignal,
 } from "./lib/signals";
 export type { FontOptions, FontStoreOptions, WorkspaceEditCoordinator } from "./types/font";
+export type {
+  MemoryFontSession,
+  MemoryFontSessionOptions,
+  MemoryFontSource,
+} from "./types/fontSession";
 export type {
   DeleteMode,
   GlyphGeometrySelection,

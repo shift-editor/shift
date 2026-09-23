@@ -7,7 +7,13 @@ import {
   LOCK_VIEW_BOX_SIZE,
 } from "../icons/lock";
 import type { Canvas } from "../Canvas";
-const LOCK_PATH = new Path2D(LOCK_PATH_DATA);
+
+let lockPath: Path2D | null = null;
+
+function getLockPath(): Path2D {
+  lockPath ??= new Path2D(LOCK_PATH_DATA);
+  return lockPath;
+}
 
 export class Guides {
   draw(canvas: Canvas, metrics: GlyphGuideMetrics, advance: number, readOnly: boolean): void {
@@ -52,7 +58,7 @@ export class Guides {
     canvas.ctx.translate((advance - size) / 2, descender - gap);
     canvas.ctx.scale(size / LOCK_VIEW_BOX_SIZE, -size / LOCK_VIEW_BOX_SIZE);
     canvas.ctx.fillStyle = LOCK_COLOR;
-    canvas.ctx.fill(LOCK_PATH);
+    canvas.ctx.fill(getLockPath());
     canvas.ctx.restore();
   }
 }

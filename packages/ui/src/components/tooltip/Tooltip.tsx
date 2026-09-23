@@ -54,7 +54,7 @@ function TooltipContent({
         <BaseTooltip.Popup
           role="tooltip"
           className={cn(
-            "relative z-50 rounded-md bg-surface-inverse px-3 py-1.5 text-ui text-on-surface-inverse shadow-lg",
+            "shift-ui-tooltip relative z-50 rounded-md bg-surface-inverse px-3 py-1.5 text-ui text-on-surface-inverse shadow-lg",
             "animate-in fade-in-0 zoom-in-95",
             className,
           )}

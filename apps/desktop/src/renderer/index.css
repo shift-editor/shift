@@ -3,7 +3,8 @@
 
 @font-face {
   font-family: "Inter";
-  src: url("./src/assets/fonts/Inter-VariableFont.ttf") format("truetype");
+  src: url("../../../../packages/editor/src/ui/assets/fonts/Inter-VariableFont.ttf")
+    format("truetype");
   font-weight: 100 900;
   font-style: normal;
   font-display: swap;
@@ -11,7 +12,8 @@
 
 @font-face {
   font-family: "Host Grotesk";
-  src: url("./src/assets/fonts/HostGrotesk-VariableFont_wght.ttf") format("truetype");
+  src: url("../../../../packages/editor/src/ui/assets/fonts/HostGrotesk-VariableFont_wght.ttf")
+    format("truetype");
   font-weight: 100 900;
   font-style: normal;
   font-display: swap;
@@ -19,7 +21,8 @@
 
 @font-face {
   font-family: "JetBrains Mono";
-  src: url("./src/assets/fonts/JetBrainsMono[wght].ttf") format("truetype");
+  src: url("../../../../packages/editor/src/ui/assets/fonts/JetBrainsMono[wght].ttf")
+    format("truetype");
   font-weight: 100 800;
   font-style: normal;
   font-display: swap;

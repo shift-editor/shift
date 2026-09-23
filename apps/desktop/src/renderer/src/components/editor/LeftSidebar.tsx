@@ -1,17 +1,30 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Separator } from "@shift/ui";
+import { VariationSidebar } from "@shift/editor/ui";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@shift/ui";
 import type { SourceId } from "@shift/types";
-import { AxesSection } from "@/components/variation/AxesSection";
-import { InstancesSection } from "@/components/variation/InstancesSection";
-import { SourcesSection } from "@/components/variation/SourcesSection";
+import PlusIcon from "@/assets/general/plus.svg";
+import { SidebarActionButton } from "@/components/sidebar";
+import { AxesPanel } from "@/components/variation/AxesPanel";
+import { CreateAxisMenu } from "@/components/variation/CreateAxisMenu";
+import { CreateInstanceMenu } from "@/components/variation/CreateInstanceMenu";
+import { CreateSourceMenu } from "@/components/variation/CreateSourceMenu";
+import { Instances } from "@/components/variation/Instances";
+import { OutlineVisibilityButton } from "@/components/variation/OutlineVisibilityButton";
+import { Sources } from "@/components/variation/Sources";
 import { useSignalState } from "@shift/editor/signals";
 import { useActiveSourceId } from "@/hooks/useActiveSourceId";
 import { useEditingSourceIds } from "@/hooks/useEditingSourceIds";
+import { useNamedInstances } from "@/hooks/useNamedInstances";
+import { useSources } from "@/hooks/useSources";
 import type { GlyphOutlineTarget } from "@shift/editor/types";
-import { useEditor } from "@/workspace/WorkspaceContext";
+import { useEditor, useFontSession } from "@/workspace/WorkspaceContext";
 
 export const LeftSidebar = () => {
+  const session = useFontSession();
   const editor = useEditor();
+  const canAuthor = session.mode === "workspace";
+  const sources = useSources();
+  const instances = useNamedInstances();
   const scene = useSignalState(editor.scene.cell);
   const glyphNodeId = scene.nodes.find((node) => node.kind === "glyph")?.id ?? null;
   const glyphDefinition = editor.nodeDefinition("glyph");
@@ -31,6 +44,9 @@ export const LeftSidebar = () => {
     readonly GlyphOutlineTarget[]
   >([]);
   const [instanceOutlineGroupActive, setInstanceOutlineGroupActive] = useState(false);
+  const [sourceMenuOpen, setSourceMenuOpen] = useState(false);
+  const [instanceMenuOpen, setInstanceMenuOpen] = useState(false);
+  const [axisMenuOpen, setAxisMenuOpen] = useState(false);
   const [hiddenSelectedSourceIds, setHiddenSelectedSourceIds] = useState<ReadonlySet<SourceId>>(
     new Set(),
   );
@@ -269,6 +285,13 @@ export const LeftSidebar = () => {
     () => [...sourceOutlines, ...instanceOutlines],
     [instanceOutlines, sourceOutlines],
   );
+  const sourceTargets: GlyphOutlineTarget[] = sources
+    .filter((source) => source.id !== activeSourceId)
+    .map((source) => ({ kind: "source", sourceId: source.id }));
+  const instanceTargets: GlyphOutlineTarget[] = instances.map((instance) => ({
+    kind: "instance",
+    instanceId: instance.id,
+  }));
 
   useEffect(() => {
     if (!glyphNodeId) return;
@@ -283,17 +306,72 @@ export const LeftSidebar = () => {
   }, [glyphDefinition, glyphNodeId]);
 
   return (
-    <aside
-      aria-label="Variation controls"
-      className="h-full w-full min-w-0 bg-panel border-r border-line-subtle flex flex-col overflow-hidden"
-    >
-      <div className="px-1 py-3 flex flex-col gap-2">
-        <SourcesSection defaultOpen outlineControls={sourceOutlineControls} />
-        <Separator />
-        <InstancesSection defaultOpen outlineControls={instanceOutlineControls} />
-        <Separator />
-        <AxesSection defaultOpen />
-      </div>
-    </aside>
+    <VariationSidebar
+      session={session}
+      host={{
+        sources: {
+          active: sourceMenuOpen,
+          content: <Sources canAuthor={canAuthor} outlineControls={sourceOutlineControls} />,
+          actions: (
+            <>
+              {sourceTargets.length > 0 ? (
+                <OutlineVisibilityButton
+                  visible={sourceOutlineControls.groupActive}
+                  alwaysOpen
+                  label="all source outlines"
+                  onClick={() => sourceOutlineControls.onToggleGroup(sourceTargets)}
+                />
+              ) : null}
+              {canAuthor ? (
+                <CreateSourceMenu onOpenChange={setSourceMenuOpen} />
+              ) : (
+                <UnavailableCreateAction label="Create source" />
+              )}
+            </>
+          ),
+        },
+        instances: {
+          active: instanceMenuOpen,
+          content: <Instances canAuthor={canAuthor} outlineControls={instanceOutlineControls} />,
+          actions: (
+            <>
+              {instanceTargets.length > 0 ? (
+                <OutlineVisibilityButton
+                  visible={instanceOutlineControls.groupActive}
+                  alwaysOpen
+                  label="all instance outlines"
+                  onClick={() => instanceOutlineControls.onToggleGroup(instanceTargets)}
+                />
+              ) : null}
+              {canAuthor ? (
+                <CreateInstanceMenu onOpenChange={setInstanceMenuOpen} />
+              ) : (
+                <UnavailableCreateAction label="Create instance" />
+              )}
+            </>
+          ),
+        },
+        axes: {
+          active: axisMenuOpen,
+          content: <AxesPanel />,
+          actions: canAuthor ? (
+            <CreateAxisMenu onOpenChange={setAxisMenuOpen} />
+          ) : (
+            <UnavailableCreateAction label="Create axis" />
+          ),
+        },
+      }}
+    />
   );
 };
+
+const UnavailableCreateAction = ({ label }: { label: string }) => (
+  <Tooltip>
+    <TooltipTrigger>
+      <SidebarActionButton label={label} aria-disabled>
+        <PlusIcon className="h-3 w-3" />
+      </SidebarActionButton>
+    </TooltipTrigger>
+    <TooltipContent>{label}</TooltipContent>
+  </Tooltip>
+);
