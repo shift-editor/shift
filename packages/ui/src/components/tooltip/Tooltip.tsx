@@ -53,6 +53,7 @@ function TooltipContent({
       <BaseTooltip.Positioner side={side} sideOffset={sideOffset}>
         <BaseTooltip.Popup
           role="tooltip"
+          data-shift-ui-tooltip=""
           className={cn(
             "relative z-50 rounded-md bg-surface-inverse px-3 py-1.5 text-ui text-on-surface-inverse shadow-lg",
             className,

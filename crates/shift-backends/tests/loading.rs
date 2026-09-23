@@ -47,7 +47,7 @@ fn host_grotesk_variable_ttf_path() -> PathBuf {
         .unwrap()
         .parent()
         .unwrap()
-        .join("apps/desktop/src/renderer/src/assets/fonts/HostGrotesk-VariableFont_wght.ttf")
+        .join("packages/editor/src/ui/assets/fonts/HostGrotesk-VariableFont_wght.ttf")
 }
 
 fn homenaje_glyphs_path() -> PathBuf {

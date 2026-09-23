@@ -431,7 +431,7 @@ fn imports_external_fonts_without_a_save_target() {
 #[test]
 fn large_ttf_reopens_directory_first_and_acquires_only_requested_layers() {
     let temp = tempfile::tempdir().unwrap();
-    let source_path = fixture("apps/desktop/src/renderer/src/assets/fonts/Inter-VariableFont.ttf");
+    let source_path = fixture("packages/editor/src/ui/assets/fonts/Inter-VariableFont.ttf");
     let store_path = temp.path().join("inter.sqlite");
 
     let mut workspace = FontWorkspace::open(&source_path, &store_path).unwrap();

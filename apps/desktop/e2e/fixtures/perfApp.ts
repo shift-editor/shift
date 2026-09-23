@@ -30,7 +30,10 @@ const PREVIEW_FONT_PATH =
   path.resolve(APP_ROOT, "../../fixtures/fonts/mutatorsans/MutatorSans.ttf");
 const VARIABLE_PREVIEW_FONT_PATH =
   process.env.SHIFT_E2E_VARIABLE_PREVIEW_FONT_PATH ??
-  path.resolve(APP_ROOT, "src/renderer/src/assets/fonts/HostGrotesk-VariableFont_wght.ttf");
+  path.resolve(
+    APP_ROOT,
+    "../../packages/editor/src/ui/assets/fonts/HostGrotesk-VariableFont_wght.ttf",
+  );
 const UFO_PREVIEW_FONT_PATH = path.resolve(
   APP_ROOT,
   "../../fixtures/fonts/mutatorsans/MutatorSansLightCondensed.ufo",

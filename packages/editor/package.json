@@ -23,6 +23,11 @@
       "types": "./src/rendering.ts",
       "import": "./src/rendering.ts"
     },
+    "./ui": {
+      "types": "./src/ui.ts",
+      "import": "./src/ui.ts"
+    },
+    "./style.css": "./src/ui/style.css",
     "./signals": {
       "types": "./src/signals.ts",
       "import": "./src/signals.ts"
@@ -64,6 +69,7 @@
     "@shift/glyph-state": "workspace:*",
     "@shift/rules": "workspace:*",
     "@shift/types": "workspace:*",
+    "@shift/ui": "workspace:*",
     "@shift/validation": "workspace:*",
     "regl": "^2.1.1"
   },

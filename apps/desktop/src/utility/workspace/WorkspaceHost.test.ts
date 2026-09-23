@@ -37,7 +37,7 @@ type ShellChannel = Channel<ShellCallMap, ShellEventMap>;
 
 const retainedFontPath = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
-  "../../renderer/src/assets/fonts/HostGrotesk-VariableFont_wght.ttf",
+  "../../../../../packages/editor/src/ui/assets/fonts/HostGrotesk-VariableFont_wght.ttf",
 );
 const convertibleFontPath = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),

@@ -2,7 +2,7 @@ import { Button, cn, type ButtonProps } from "@shift/ui";
 import { forwardRef, type KeyboardEventHandler, type MouseEvent, type ReactNode } from "react";
 import { SidebarRowButton } from "./SidebarRowButton";
 
-interface SidebarActionRowProps {
+export interface SidebarActionRowProps {
   children: ReactNode;
   leading?: ReactNode;
   actions?: ReactNode;
@@ -95,7 +95,10 @@ export const SidebarActionSlot = ({
   </div>
 );
 
-interface SidebarActionButtonProps extends Omit<ButtonProps, "children" | "size" | "variant"> {
+export interface SidebarActionButtonProps extends Omit<
+  ButtonProps,
+  "children" | "size" | "variant"
+> {
   label: string;
   children: ReactNode;
 }
