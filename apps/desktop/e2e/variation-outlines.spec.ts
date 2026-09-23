@@ -5,6 +5,7 @@ import {
   DESIGNSPACE_FONT_PATH,
   navigateToEditor,
 } from "./fixtures/electronApp";
+import { editorSidebar, openVariationControls } from "./fixtures/appLocators";
 
 const test = workspaceTest.extend({ startupFontPath: DESIGNSPACE_FONT_PATH });
 
@@ -28,7 +29,7 @@ async function outlinePixelCount(page: Page): Promise<number> {
 
 test("moves matched points in every selected source as one edit", async ({ page, editor }) => {
   await navigateToEditor(page, "53");
-  const controls = page.getByRole("complementary", { name: "Variation controls" });
+  const controls = await openVariationControls(page);
   const source = await page.evaluate(() => {
     const session = window.shiftSession!;
     return session.font.sources.find(({ id }) => id !== session.editor.activeSourceId);
@@ -101,9 +102,48 @@ test("moves matched points in every selected source as one edit", async ({ page,
     .toEqual(target.position);
 });
 
+test("selects displayed objects at an interpolated instance", async ({ page, editor }) => {
+  await navigateToEditor(page, "53");
+  const controls = await openVariationControls(page);
+  const instanceId = await page.evaluate(() => {
+    const font = window.shiftSession!.font;
+    return font.namedInstances.find(
+      (instance) =>
+        !font.sourceAt(
+          new Map(
+            font
+              .getAxes()
+              .map((axis) => [axis.id, instance.location.values[axis.id] ?? axis.default]),
+          ),
+        ),
+    )?.id;
+  });
+  if (!instanceId) throw new Error("Expected an interpolated instance");
+
+  await controls.getByTestId(`instance-${instanceId}`).click();
+  await expect
+    .poll(() => page.evaluate(() => window.shiftSession!.editor.activeSourceId))
+    .toBeNull();
+  const pointId = await page.evaluate(() => {
+    const editor = window.shiftSession!.editor;
+    const node = editor.scene.nodesOfKind("glyph")[0];
+    const point = node
+      ? editor.glyphForId(node.glyphId)?.geometryAt(editor.externalLocation).allPoints[0]
+      : null;
+    if (!point) throw new Error("Expected an interpolated point");
+
+    return point.id;
+  });
+
+  const sidebar = editorSidebar(page);
+  await sidebar.getByRole("tab", { name: "Objects", exact: true }).click();
+  await sidebar.getByTestId(`object-${pointId}`).click();
+  await expect.poll(() => editor.selectionIds()).toEqual([pointId]);
+});
+
 test("source selection and visibility controls show comparison outlines", async ({ page }) => {
   await navigateToEditor(page, "53");
-  const controls = page.getByRole("complementary", { name: "Variation controls" });
+  const controls = await openVariationControls(page);
   const fixture = await page.evaluate(() => {
     const editor = window.shiftSession!.editor;
     const font = window.shiftSession!.font;

@@ -30,6 +30,7 @@ import type { ActiveTool, ToolName, ToolRegistration } from "../tools/core";
 import { ToolManager } from "../tools/core/ToolManager";
 import { Bounds, Vec2, type Bounds as BoundsType, type Point2D, type Rect2D } from "@shift/geo";
 
+import { applyListSelection } from "./listSelection";
 import { Camera } from "./managers";
 import {
   batch,
@@ -1044,7 +1045,8 @@ export class Editor {
         this.selectSource(source.id);
         return;
       }
-      case "range": {
+      case "range":
+      case "toggle": {
         const activeSourceId = this.#activeSourceIdCell.peek();
         if (!activeSourceId) {
           this.selectSourceForEditing(sourceId);
@@ -1052,31 +1054,17 @@ export class Editor {
         }
 
         const sourceIds = this.font.sources.map(({ id }) => id);
-        const activeIndex = sourceIds.indexOf(activeSourceId);
-        const selectedIndex = sourceIds.indexOf(sourceId);
-        if (activeIndex === -1 || selectedIndex === -1) return;
-
-        const start = Math.min(activeIndex, selectedIndex);
-        const end = Math.max(activeIndex, selectedIndex);
-        this.#editingSourceIdsCell.set(new Set(sourceIds.slice(start, end + 1)));
-        return;
-      }
-      case "toggle": {
-        const activeSourceId = this.#activeSourceIdCell.peek();
-        if (!activeSourceId) {
-          this.selectSourceForEditing(sourceId);
-          return;
-        }
-        if (sourceId === activeSourceId) return;
-
-        const editingSourceIds = new Set(this.#editingSourceIdsCell.peek());
-        if (editingSourceIds.has(sourceId)) {
-          editingSourceIds.delete(sourceId);
-        } else {
-          editingSourceIds.add(sourceId);
-        }
-        editingSourceIds.add(activeSourceId);
-        this.#editingSourceIdsCell.set(editingSourceIds);
+        const editingSourceIds = [...this.#editingSourceIdsCell.peek()];
+        const nextIds = applyListSelection(
+          sourceIds,
+          editingSourceIds,
+          activeSourceId,
+          sourceId,
+          mode,
+        );
+        const nextEditingSourceIds = new Set(nextIds);
+        nextEditingSourceIds.add(activeSourceId);
+        this.#editingSourceIdsCell.set(nextEditingSourceIds);
         return;
       }
     }

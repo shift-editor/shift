@@ -52,7 +52,6 @@ export const Instances = ({ canAuthor, outlineControls }: InstancesProps) => {
             key={instance.id}
             data-testid={`instance-${instance.id}`}
             onClick={() => previewInstance(instance)}
-            contentClassName="h-6 text-ui"
             actions={
               <>
                 {outlineControls && (

@@ -33,11 +33,11 @@ export const Slider = React.forwardRef<HTMLDivElement, SliderProps>(
       <BaseSlider.Root
         ref={ref}
         className={cn("relative flex items-center w-full select-none touch-none", className)}
-        thumbAlignment="edge"
+        thumbAlignment="center"
         onValueChange={onValueChange ? (value) => onValueChange(value as number) : undefined}
         {...props}
       >
-        <BaseSlider.Control className="flex items-center w-full h-3.5 cursor-pointer">
+        <BaseSlider.Control className="flex h-3.5 w-full cursor-pointer items-center px-1.75">
           <BaseSlider.Track
             className={cn("relative w-full h-1.5 bg-canvas rounded-full", trackClassName)}
           >

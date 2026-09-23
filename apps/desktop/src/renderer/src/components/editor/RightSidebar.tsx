@@ -1,5 +1,5 @@
 import { Button, Separator } from "@shift/ui";
-import { isAnchorId, isContourId, isPointId } from "@shift/types";
+import { isAnchorId, isComponentId, isContourId, isPointId } from "@shift/types";
 import { isSegmentId } from "@shift/glyph-state";
 import { TransformSection } from "./sidebar-right/TransformSection";
 import { ScaleSection } from "./sidebar-right/ScaleSection";
@@ -25,8 +25,8 @@ export const RightSidebar = () => {
 
   const selection = useSignalState(editor.selection.stateCell);
 
-  const hasGeometrySelection = selection.ids.some(
-    (id) => isPointId(id) || isContourId(id) || isSegmentId(id),
+  const hasTransformSelection = selection.ids.some(
+    (id) => isPointId(id) || isContourId(id) || isSegmentId(id) || isComponentId(id),
   );
   const hasAnchorSelection = selection.ids.some(isAnchorId);
   const hasBooleanSelection = selection.ids.filter(isContourId).length >= 2;
@@ -60,10 +60,10 @@ export const RightSidebar = () => {
             <GlyphSection />
           </div>
           <Separator />
-          {(hasGeometrySelection || hasBooleanSelection) && (
+          {(hasTransformSelection || hasBooleanSelection) && (
             <div className="px-3 py-3 flex flex-col gap-4">
               <BooleanOps />
-              {hasGeometrySelection && (
+              {hasTransformSelection && (
                 <>
                   <HandleSection />
                   <TransformSection />
@@ -72,7 +72,7 @@ export const RightSidebar = () => {
               )}
             </div>
           )}
-          {!hasGeometrySelection && hasAnchorSelection && (
+          {!hasTransformSelection && hasAnchorSelection && (
             <div className="px-3 py-3 flex flex-col gap-4">
               <AnchorSection />
             </div>

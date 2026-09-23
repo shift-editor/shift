@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { workspaceTest as test, expect } from "./fixtures/electronApp";
 import type { EditorDriver } from "./fixtures/EditorDriver";
-import { glyphProperties, variationControls } from "./fixtures/appLocators";
+import { editorSidebar, glyphProperties } from "./fixtures/appLocators";
 import { CanvasUtil } from "./fixtures/CanvasUtil";
 
 test("aligns exactly two selected points while distribution still requires three", async ({
@@ -213,6 +213,87 @@ test.describe("Editor view", () => {
     await editor.openGlyphByUnicode("41");
   });
 
+  test("selects displayed glyph objects from the Objects tab", async ({ page, editor }) => {
+    const sidebar = editorSidebar(page);
+    const contour = (await editor.outline())[0];
+    const firstPoint = contour?.points[0];
+    const secondPoint = contour?.points[1];
+    const thirdPoint = contour?.points[2];
+    const fourthPoint = contour?.points[3];
+    if (!contour || !firstPoint || !secondPoint || !thirdPoint || !fourthPoint) {
+      throw new Error("Expected contour fixture points");
+    }
+
+    await expect(sidebar.getByRole("tab", { name: "Objects" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await expect(sidebar).toHaveScreenshot("objects-sidebar.png");
+    await sidebar.getByTestId(`object-${firstPoint.id}`).click();
+    await expect.poll(() => editor.selectionIds()).toEqual([firstPoint.id]);
+
+    await sidebar.getByTestId(`object-${thirdPoint.id}`).click({ modifiers: ["Meta"] });
+    await expect.poll(() => editor.selectionIds()).toEqual([firstPoint.id, thirdPoint.id]);
+
+    await sidebar.getByTestId(`object-${firstPoint.id}`).click();
+    await sidebar.getByTestId(`object-${fourthPoint.id}`).click({ modifiers: ["Shift"] });
+    await expect
+      .poll(() => editor.selectionIds())
+      .toEqual([firstPoint.id, secondPoint.id, thirdPoint.id, fourthPoint.id]);
+    await expect(sidebar).toHaveScreenshot("objects-sidebar-selection.png");
+
+    await sidebar.getByTestId(`object-${contour.id}`).click();
+    await expect.poll(() => editor.selectionIds()).toEqual([contour.id]);
+    await expect(sidebar.getByTestId(`object-${contour.id}`)).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  test("edits anchor X and Y positions without restoring stale coordinates", async ({
+    page,
+    editor,
+  }) => {
+    await editor.openGlyphByName("E");
+    const anchorId = await page.evaluate(() => {
+      const editor = window.shift!.editor;
+      const node = editor.scene.nodesOfKind("glyph")[0];
+      if (!node) throw new Error("Expected glyph node");
+      const layer = editor.glyphForId(node.glyphId)?.layerForSource(node.sourceId);
+      if (!layer) throw new Error("Expected editable glyph layer");
+
+      return layer.addAnchor("top", { x: 200, y: 700 });
+    });
+    await editor.waitForIdle();
+    const anchorRow = editorSidebar(page).getByTestId(`object-${anchorId}`);
+    await expect(anchorRow).toBeVisible();
+    await anchorRow.click();
+
+    const anchorPosition = () =>
+      page.evaluate(() => {
+        const editor = window.shift!.editor;
+        const id = editor.selection.ids[0];
+        const object = id ? editor.object(id) : null;
+        if (object?.kind !== "anchor") throw new Error("Expected selected anchor");
+        const anchor = object.geometry.anchor(object.anchorId);
+        if (!anchor) throw new Error("Expected anchor geometry");
+
+        return { x: anchor.x, y: anchor.y };
+      });
+    const initialPosition = await anchorPosition();
+    const properties = glyphProperties(page);
+    const targetX = Math.round(initialPosition.x) + 25;
+    const targetY = Math.round(initialPosition.y) + 30;
+
+    await setInputValue(properties.getByLabel("Anchor X position", { exact: true }), targetX);
+    await setInputValue(properties.getByLabel("Anchor Y position", { exact: true }), targetY);
+
+    await expect.poll(anchorPosition).toEqual({ x: targetX, y: targetY });
+    await editor.undo();
+    await editor.undo();
+    await expect.poll(anchorPosition).toEqual(initialPosition);
+  });
+
   test("full editor matches snapshot", async ({ page }) => {
     await expect(page).toHaveScreenshot("editor-glyph-A.png");
   });
@@ -244,7 +325,7 @@ test.describe("Editor view", () => {
     const layout = page.getByTestId("editor-layout-panels");
     const leftPanel = layout.getByTestId("left-sidebar-panel");
     const rightPanel = layout.getByTestId("right-sidebar-panel");
-    const leftContent = page.getByRole("complementary", { name: "Variation controls" });
+    const leftContent = editorSidebar(page);
     const rightContent = page.getByRole("complementary", { name: "Glyph properties" });
     const leftWidth = await elementWidth(leftContent);
     const rightWidth = await elementWidth(rightContent);
@@ -300,14 +381,14 @@ test.describe("Editor view", () => {
     await page.keyboard.down("Meta");
     try {
       await expect(canvas).toHaveCSS("cursor", /cursor@32-bend\.svg/);
-      for (const sidebar of [variationControls(page), glyphProperties(page)]) {
+      for (const sidebar of [editorSidebar(page), glyphProperties(page)]) {
         await sidebar.hover({ position: { x: 10, y: 10 } });
         await expect(sidebar).not.toHaveCSS("cursor", /cursors\//);
       }
 
       await canvas.hover({ position: down });
       await page.mouse.down();
-      for (const sidebar of [variationControls(page), glyphProperties(page)]) {
+      for (const sidebar of [editorSidebar(page), glyphProperties(page)]) {
         await expect(sidebar).not.toHaveCSS("cursor", /cursors\//);
         const bounds = await sidebar.boundingBox();
         if (!bounds) throw new Error("Expected sidebar bounds");

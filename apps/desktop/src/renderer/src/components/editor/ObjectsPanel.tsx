@@ -1,0 +1,150 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { applyListSelection } from "@shift/editor";
+import { computed, track, useSignalState } from "@shift/editor/signals";
+import type { SelectableId } from "@shift/editor/types";
+import { useEditor } from "@/workspace/WorkspaceContext";
+import type { ObjectTreeSectionId, ObjectTreeSelectionHandler } from "@/types/objectTree";
+import { createObjectTree } from "./object-tree/createObjectTree";
+import { flattenVisibleObjectRows } from "./object-tree/flattenVisibleObjectRows";
+import { ObjectRow } from "./object-tree/ObjectRow";
+import { ObjectSectionRow } from "./object-tree/ObjectSectionRow";
+
+export const ObjectsPanel = () => {
+  const editor = useEditor();
+  const objectTreeCell = useMemo(
+    () =>
+      computed(() => {
+        const node = editor.scene.cell.value.nodes.find((candidate) => candidate.kind === "glyph");
+        const externalLocation = editor.externalLocationCell.value;
+        const activeSourceId = editor.activeSourceIdCell.value;
+        if (!node) return [];
+
+        const glyph = editor.glyphForId(node.glyphId);
+        if (!glyph) return [];
+
+        const layer = activeSourceId
+          ? glyph.layerForSource(activeSourceId)
+          : glyph.layerAt(externalLocation);
+        if (layer) track(layer.geometryCell);
+
+        return createObjectTree(layer?.geometry ?? glyph.geometryAt(externalLocation));
+      }),
+    [editor],
+  );
+  const objectTree = useSignalState(objectTreeCell, { schedule: "frame" });
+  const selection = useSignalState(editor.selection.stateCell);
+  const selectedIds = useMemo(() => new Set(selection.ids), [selection.ids]);
+  const [collapsedSectionIds, setCollapsedSectionIds] = useState<ReadonlySet<ObjectTreeSectionId>>(
+    () => new Set(),
+  );
+  const [collapsedObjectIds, setCollapsedObjectIds] = useState<ReadonlySet<SelectableId>>(
+    () => new Set(),
+  );
+  const selectionAnchorId = useRef<SelectableId | null>(null);
+  const objectRowsBySection = useMemo(() => {
+    const result = new Map(
+      objectTree.map((section) => [
+        section.id,
+        flattenVisibleObjectRows(section.items, collapsedObjectIds),
+      ]),
+    );
+
+    return result;
+  }, [collapsedObjectIds, objectTree]);
+  const visibleObjectIdsBySection = useMemo(() => {
+    const result = new Map<ObjectTreeSectionId, readonly SelectableId[]>();
+
+    for (const section of objectTree) {
+      const rows = objectRowsBySection.get(section.id) ?? [];
+      result.set(
+        section.id,
+        collapsedSectionIds.has(section.id) ? [] : rows.map((row) => row.item.id),
+      );
+    }
+
+    return result;
+  }, [collapsedSectionIds, objectRowsBySection, objectTree]);
+  const visibleObjectIds = useMemo(
+    () => objectTree.flatMap((section) => visibleObjectIdsBySection.get(section.id) ?? []),
+    [objectTree, visibleObjectIdsBySection],
+  );
+
+  useEffect(() => {
+    const [onlySelectedId] = selection.ids;
+    if (selection.ids.length !== 1 || !onlySelectedId) return;
+    if (!visibleObjectIds.includes(onlySelectedId)) return;
+
+    selectionAnchorId.current = onlySelectedId;
+  }, [selection.ids, visibleObjectIds]);
+
+  const selectObject = useCallback<ObjectTreeSelectionHandler>(
+    (id, mode) => {
+      let anchorId = selectionAnchorId.current;
+      if (anchorId !== null && !visibleObjectIds.includes(anchorId)) anchorId = null;
+
+      const nextIds = applyListSelection(visibleObjectIds, selection.ids, anchorId, id, mode);
+      editor.selection.select(nextIds);
+      if (mode === "single" || anchorId === null) selectionAnchorId.current = id;
+    },
+    [editor, selection.ids, visibleObjectIds],
+  );
+
+  const setObjectOpen = useCallback((id: SelectableId, open: boolean) => {
+    setCollapsedObjectIds((previous) => {
+      const next = new Set(previous);
+      if (open) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  return (
+    <nav aria-label="Glyph objects" className="flex flex-col gap-2">
+      {objectTree.map((section) => {
+        const rows = objectRowsBySection.get(section.id) ?? [];
+        const visibleIds = visibleObjectIdsBySection.get(section.id) ?? [];
+
+        return (
+          <ObjectSectionRow
+            key={section.id}
+            title={section.label}
+            open={!collapsedSectionIds.has(section.id)}
+            onOpenChange={(open) => {
+              setCollapsedSectionIds((previous) => {
+                const next = new Set(previous);
+                if (open) next.delete(section.id);
+                else next.add(section.id);
+                return next;
+              });
+            }}
+          >
+            {section.items.length > 0 ? (
+              <div className="flex flex-col gap-1">
+                {rows.map((row, index) => {
+                  const previousId = visibleIds[index - 1];
+                  const nextId = visibleIds[index + 1];
+                  const isSelected = selectedIds.has(row.item.id);
+
+                  return (
+                    <ObjectRow
+                      key={row.item.id}
+                      row={row}
+                      isCollapsed={collapsedObjectIds.has(row.item.id)}
+                      isSelected={isSelected}
+                      joinsPrevious={
+                        isSelected && previousId !== undefined && selectedIds.has(previousId)
+                      }
+                      joinsNext={isSelected && nextId !== undefined && selectedIds.has(nextId)}
+                      onOpenChange={setObjectOpen}
+                      selectObject={selectObject}
+                    />
+                  );
+                })}
+              </div>
+            ) : null}
+          </ObjectSectionRow>
+        );
+      })}
+    </nav>
+  );
+};

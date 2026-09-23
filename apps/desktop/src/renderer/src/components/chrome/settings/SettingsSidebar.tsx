@@ -1,4 +1,4 @@
-import { Button, cn } from "@shift/ui";
+import { SidebarRowButton } from "@/components/sidebar";
 import AxesIcon from "@assets/settings/axes.svg";
 import FontIcon from "@assets/settings/font.svg";
 import InstancesIcon from "@assets/settings/instances.svg";
@@ -21,28 +21,17 @@ const categories: { id: SettingsCategory; label: string; icon: SVG }[] = [
 export const SettingsSidebar = ({ category, onCategoryChange }: SettingsSidebarProps) => (
   <nav
     aria-label="Settings categories"
-    className="flex min-h-0 flex-col gap-0.5 border-r border-line-subtle bg-white p-2"
+    className="flex min-h-0 flex-col gap-1 border-r border-line-subtle bg-white p-2"
   >
     {categories.map((item) => {
       const Icon = item.icon;
       const active = item.id === category;
 
       return (
-        <Button
-          key={item.id}
-          type="button"
-          variant="ghost"
-          size="sm"
-          isActive={active}
-          className={cn(
-            "h-8 w-full justify-start rounded-sm px-2 text-sm font-normal",
-            active && "bg-hover hover:bg-hover data-[active]:bg-hover",
-          )}
-          onClick={() => onCategoryChange(item.id)}
-        >
-          <Icon className="h-4 w-4 shrink-0" />
+        <SidebarRowButton key={item.id} isActive={active} onClick={() => onCategoryChange(item.id)}>
+          <Icon className="h-3 w-3 shrink-0" />
           {item.label}
-        </Button>
+        </SidebarRowButton>
       );
     })}
   </nav>

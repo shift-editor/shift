@@ -1,5 +1,4 @@
 import {
-  Button,
   Collapsible,
   CollapsibleChevron,
   CollapsiblePanel,
@@ -8,6 +7,7 @@ import {
 } from "@shift/ui";
 import type { ReactNode } from "react";
 import { SidebarActionSlot } from "./SidebarActionRow";
+import { SidebarRowButton } from "./SidebarRowButton";
 
 export interface CollapsibleSectionProps {
   title: string;
@@ -42,18 +42,14 @@ export const CollapsibleSection = ({
     >
       <CollapsibleTrigger
         render={
-          <Button
-            variant="ghost"
-            size="sm"
-            className="min-w-0 flex-1 justify-start gap-1 bg-transparent hover:bg-transparent data-[active]:bg-transparent"
-          />
+          <SidebarRowButton className="w-auto flex-1 bg-transparent hover:bg-transparent data-[active]:bg-transparent" />
         }
       >
         <CollapsibleChevron />
-        <h3 className="truncate text-ui font-medium text-[#232323]">{title}</h3>
+        <h3 className="truncate text-ui font-medium text-primary">{title}</h3>
       </CollapsibleTrigger>
       {actions && <SidebarActionSlot isVisible={isActive}>{actions}</SidebarActionSlot>}
     </div>
-    <CollapsiblePanel className="pt-2">{children}</CollapsiblePanel>
+    {children && <CollapsiblePanel className="pt-2">{children}</CollapsiblePanel>}
   </Collapsible>
 );

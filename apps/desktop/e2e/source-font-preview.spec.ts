@@ -7,7 +7,7 @@ import {
   glyphCatalogCanvas,
   glyphCatalogSurface,
   glyphCatalogViewport,
-  variationControls,
+  openVariationControls,
 } from "./fixtures/appLocators";
 
 async function expectRenderedGrid(page: Page): Promise<void> {
@@ -62,7 +62,8 @@ glyphsPreviewTest("Glyphs sources render a complete resident Grid", async ({ pag
 
   const sceneCanvas = page.locator("#scene-canvas");
   const beforeSourceFrame = await sceneCanvas.screenshot();
-  const sourceButtons = variationControls(page).getByRole("button", {
+  const variationControls = await openVariationControls(page);
+  const sourceButtons = variationControls.getByRole("button", {
     name: "Regular",
     exact: true,
   });

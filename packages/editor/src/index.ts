@@ -1,4 +1,5 @@
 export { Editor } from "./lib/editor/Editor";
+export { applyListSelection } from "./lib/editor/listSelection";
 export { Font } from "./lib/model/Font";
 export { FontStore } from "./lib/model/FontStore";
 export { Glyph, GlyphLayer, GlyphRenderModel } from "./lib/model/Glyph";
@@ -35,6 +36,7 @@ export type {
   WritableSignal,
 } from "./lib/signals";
 export type { FontOptions, FontStoreOptions, WorkspaceEditCoordinator } from "./types/font";
+export type { ListSelectionMode } from "./types/listSelection";
 export type {
   DeleteMode,
   GlyphGeometrySelection,

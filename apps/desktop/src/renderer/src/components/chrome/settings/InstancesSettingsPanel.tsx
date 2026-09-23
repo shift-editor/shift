@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import type { Axis, NamedInstance, NamedInstanceId } from "@shift/types";
-import { Input, Tooltip, TooltipContent, TooltipTrigger, cn } from "@shift/ui";
+import { Input, Tooltip, TooltipContent, TooltipTrigger } from "@shift/ui";
 import { message } from "@shared/messages";
 import MinusIcon from "@/assets/general/minus.svg";
 import PlusIcon from "@/assets/general/plus.svg";
@@ -65,25 +65,19 @@ export const InstancesSettingsPanel = ({
           )}
         </div>
 
-        <div className="scrollbar-hidden min-h-0 overflow-y-auto px-2 pb-2">
+        <div className="scrollbar-hidden flex min-h-0 flex-col gap-1 overflow-y-auto px-2 pb-2">
           {instances.map((instance) => (
             <SidebarActionRow
               key={instance.id}
               data-testid={`settings-instance-${instance.id}`}
               isActive={instance.id === selectedInstance?.id}
-              className={cn(
-                "h-8",
-                instance.id === selectedInstance?.id &&
-                  "bg-hover hover:bg-hover data-[active]:bg-hover",
-              )}
               onClick={() => setSelectedInstanceId(instance.id)}
-              contentClassName="h-8 text-sm font-normal"
               actions={
                 <Tooltip>
                   <TooltipTrigger>
                     <SidebarActionButton
                       label={`Delete ${instance.name}`}
-                      className="h-8 hover:bg-icon-button-hover"
+                      className="hover:bg-icon-button-hover"
                       aria-disabled={!canAuthor || undefined}
                       onClick={(event) => {
                         event.stopPropagation();

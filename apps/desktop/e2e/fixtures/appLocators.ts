@@ -31,8 +31,18 @@ export function fontNavigation(page: Page) {
   return page.getByRole("complementary", { name: "Font navigation" });
 }
 
+export function editorSidebar(page: Page) {
+  return page.getByRole("complementary", { name: "Glyph objects and variations" });
+}
+
 export function variationControls(page: Page) {
-  return page.getByRole("complementary", { name: "Variation controls" });
+  return editorSidebar(page).getByRole("tabpanel", { name: "Variations" });
+}
+
+export async function openVariationControls(page: Page) {
+  const sidebar = editorSidebar(page);
+  await sidebar.getByRole("tab", { name: "Variations", exact: true }).click();
+  return variationControls(page);
 }
 
 export function glyphProperties(page: Page) {

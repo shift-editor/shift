@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import type { Axis, MetricDefinition, Source, SourceId, SourceMetricValue } from "@shift/types";
-import { Input, Tooltip, TooltipContent, TooltipTrigger, cn } from "@shift/ui";
+import { Input, Tooltip, TooltipContent, TooltipTrigger } from "@shift/ui";
 import { message } from "@shared/messages";
 import MinusIcon from "@/assets/general/minus.svg";
 import PlusIcon from "@/assets/general/plus.svg";
@@ -62,25 +62,19 @@ export const SourcesSettingsPanel = ({ initialSourceId, canAuthor }: SourcesSett
           )}
         </div>
 
-        <div className="scrollbar-hidden min-h-0 overflow-y-auto px-2 pb-2">
+        <div className="scrollbar-hidden flex min-h-0 flex-col gap-1 overflow-y-auto px-2 pb-2">
           {sources.map((source) => (
             <SidebarActionRow
               key={source.id}
               data-testid={`settings-source-${source.id}`}
               isActive={source.id === selectedSource?.id}
-              className={cn(
-                "h-8",
-                source.id === selectedSource?.id &&
-                  "bg-hover hover:bg-hover data-[active]:bg-hover",
-              )}
               onClick={() => setSelectedSourceId(source.id)}
-              contentClassName="h-8 text-sm font-normal"
               actions={
                 <Tooltip>
                   <TooltipTrigger>
                     <SidebarActionButton
                       label={`Delete ${source.name}`}
-                      className="h-8 hover:bg-icon-button-hover"
+                      className="hover:bg-icon-button-hover"
                       aria-disabled={
                         !canAuthor || sources.length === 1 || source.id === font.defaultSource.id
                           ? true

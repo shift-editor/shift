@@ -7,7 +7,7 @@ import {
   glyphCatalogCanvas,
   glyphProperties,
   openCatalogGlyph,
-  variationControls,
+  openVariationControls,
 } from "./fixtures/appLocators";
 
 interface VariableNavigationFixture {
@@ -242,7 +242,8 @@ test("keeps variable preview and exact-source editability coherent across Grid n
     .toBe(fixture.boldSourceId);
   await expect(glyphProperties(page).getByLabel("Advance width", { exact: true })).toBeEnabled();
 
-  const editorAxisInput = variationControls(page).getByLabel("Navigation Weight value", {
+  const variationControls = await openVariationControls(page);
+  const editorAxisInput = variationControls.getByLabel("Navigation Weight value", {
     exact: true,
   });
   await editorAxisInput.click();

@@ -1,5 +1,5 @@
 import { GlyphCategory } from "@shift/glyph-info";
-import { Button } from "@shift/ui";
+import { SidebarRowButton } from "@/components/sidebar";
 
 export interface SubCategoryProps {
   category: GlyphCategory;
@@ -18,15 +18,13 @@ export const SubCategory = ({
   const isActive = selectedCategory === category && selectedSubCategoryKey === subCategory;
 
   return (
-    <Button
+    <SidebarRowButton
       key={`${category}:${subCategory}`}
-      className="w-full justify-between pl-4"
-      variant="ghost"
-      size="sm"
+      className="pl-7"
       onClick={() => onSelectSubCategory(category, subCategory)}
       isActive={isActive}
     >
-      <span className="text-sm">{subCategory}</span>
-    </Button>
+      <span className="truncate">{subCategory}</span>
+    </SidebarRowButton>
   );
 };

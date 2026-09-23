@@ -1,9 +1,8 @@
 import { useRef, useState } from "react";
-import type { Point2D } from "@shift/geo";
 import { isAnchorId, type AnchorId } from "@shift/types";
 import { useSignalEffect } from "@/hooks/useSignalEffect";
 import { track } from "@shift/editor/signals";
-import type { GlyphLayer } from "@shift/editor/model";
+import { PositionEdits, type GlyphLayer } from "@shift/editor/model";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { EditableSidebarInput, type EditableSidebarInputHandle } from "./EditableSidebarInput";
 import { SidebarSection } from "./SidebarSection";
@@ -12,7 +11,6 @@ export const AnchorSection = () => {
   const editor = useEditor();
   const [anchorId, setAnchorId] = useState<AnchorId | null>(null);
   const [anchorName, setAnchorName] = useState<string | null>(null);
-  const [anchorPosition, setAnchorPosition] = useState<Point2D | null>(null);
   const [layer, setLayer] = useState<GlyphLayer | null>(null);
   const xRef = useRef<EditableSidebarInputHandle>(null);
   const yRef = useRef<EditableSidebarInputHandle>(null);
@@ -27,7 +25,6 @@ export const AnchorSection = () => {
     if (!object || object.kind !== "anchor" || !anchor) {
       setAnchorId(null);
       setAnchorName(null);
-      setAnchorPosition(null);
       setLayer(null);
       xRef.current?.setValue(0);
       yRef.current?.setValue(0);
@@ -36,18 +33,23 @@ export const AnchorSection = () => {
 
     setAnchorId(anchor.id);
     setAnchorName(anchor.name ?? null);
-    setAnchorPosition({ x: anchor.x, y: anchor.y });
     setLayer(object.layer);
     xRef.current?.setValue(Math.round(anchor.x));
     yRef.current?.setValue(Math.round(anchor.y));
   });
 
   const handlePositionChange = (axis: "x" | "y", value: number) => {
-    if (!anchorId || !anchorPosition || !layer) return;
+    if (!anchorId || !layer) return;
 
-    const next =
-      axis === "x" ? { x: value, y: anchorPosition.y } : { x: anchorPosition.x, y: value };
-    layer.applyPositionPatch([{ kind: "anchor", id: anchorId, ...next }]);
+    const positionSelection = editor.positionSelection([anchorId]);
+    const currentAnchor = positionSelection?.layer.anchor(anchorId);
+    if (!positionSelection || !currentAnchor) return;
+
+    const delta =
+      axis === "x" ? { x: value - currentAnchor.x, y: 0 } : { x: 0, y: value - currentAnchor.y };
+    const move = PositionEdits.fromSelection(positionSelection).move(positionSelection.targets);
+    move.preview(delta);
+    move.commit("Move anchor");
   };
 
   const editable = anchorId !== null && layer !== null;

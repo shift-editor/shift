@@ -2,6 +2,7 @@ import path from "node:path";
 import type { MatModel } from "@shift/geo";
 import { workspaceTest as test, expect, navigateToEditor } from "./fixtures/electronApp";
 import { CanvasUtil } from "./fixtures/CanvasUtil";
+import { editorSidebar, glyphProperties } from "./fixtures/appLocators";
 
 const VARIABLE_FONT_PATH = path.resolve(
   __dirname,
@@ -64,4 +65,47 @@ test("exact sources keep ordered component transforms when authored IDs differ",
   const canvas = new CanvasUtil(page);
   const screenshot = await canvas.screenshotCanvasLayer("scene-canvas");
   await expect(screenshot).toMatchSnapshot("canvas-Aacute-bold-wide-components.png");
+});
+
+test("selected components expose editable transforms in the properties sidebar", async ({
+  page,
+  editor,
+}) => {
+  await navigateToEditor(page, "C1");
+  await editor.openGlyphByName("Aacute");
+  const component = editorSidebar(page).locator('[data-testid^="object-component"]').first();
+  await expect(component).toBeVisible();
+  await component.click();
+
+  const properties = glyphProperties(page);
+  const initialBounds = await editor.selectionBounds();
+  const xInput = properties.getByLabel("X position", { exact: true });
+  await expect(properties.getByText("Transform", { exact: true })).toBeVisible();
+  await expect(properties.getByLabel("Scale factor", { exact: true })).toBeVisible();
+  await expect(xInput).toHaveValue(String(Math.round(initialBounds.x)));
+
+  const center = {
+    x: initialBounds.x + initialBounds.width / 2,
+    y: initialBounds.y + initialBounds.height / 2,
+  };
+  const dragStart = await editor.projectSceneToPage(center);
+  await editor.pointerDown(dragStart);
+  try {
+    await editor.pointerMove({ x: dragStart.x + 25, y: dragStart.y + 15 }, 3);
+    const previewBounds = await editor.selectionBounds();
+    await expect(xInput).toHaveValue(String(Math.round(previewBounds.x)));
+  } finally {
+    await editor.pointerUp();
+  }
+  await editor.undo();
+  await expect.poll(() => editor.selectionBounds()).toEqual(initialBounds);
+
+  const targetX = Math.round(initialBounds.x) + 25;
+  await xInput.click();
+  await xInput.fill(String(targetX));
+  await xInput.press("Enter");
+  await expect.poll(() => editor.selectionBounds()).toMatchObject({ x: targetX });
+
+  await editor.undo();
+  await expect.poll(() => editor.selectionBounds()).toEqual(initialBounds);
 });
