@@ -1,28 +1,25 @@
-import { Button, Separator } from "@shift/ui";
-import { isAnchorId, isContourId, isPointId } from "@shift/types";
-import { isSegmentId } from "@shift/glyph-state";
-import { TransformSection } from "./sidebar-right/TransformSection";
-import { ScaleSection } from "./sidebar-right/ScaleSection";
-import { ZoomMenu } from "./sidebar-right/ZoomMenu";
-import { TransformOriginProvider } from "@/context/TransformOriginContext";
-import { useEditor, useFontSession } from "@/workspace/WorkspaceContext";
+import { GlyphSidebar } from "@shift/editor/ui";
 import { useSignalState } from "@shift/editor/signals";
-import { GlyphSection } from "./sidebar-right/GlyphSection";
+import { isSegmentId } from "@shift/glyph-state";
+import { isAnchorId, isContourId, isPointId } from "@shift/types";
+import { Button, Separator } from "@shift/ui";
+import { BooleanOps } from "./BooleanOps";
 import { AnchorSection } from "./sidebar-right/AnchorSection";
 import { HandleSection } from "./sidebar-right/HandleSection";
-import { BooleanOps } from "./BooleanOps";
+import { ScaleSection } from "./sidebar-right/ScaleSection";
+import { TransformSection } from "./sidebar-right/TransformSection";
+import { ZoomMenu } from "./sidebar-right/ZoomMenu";
 import { LockIcon } from "@/components/icons/LockIcon";
+import { TransformOriginProvider } from "@/context/TransformOriginContext";
 import { usePreviewNotice } from "@/context/PreviewNoticeProvider";
+import { useEditor, useFontSession } from "@/workspace/WorkspaceContext";
 
 export const RightSidebar = () => {
   const session = useFontSession();
   const showPreviewNotice = usePreviewNotice();
   const readOnlyFont = session.mode === "preview";
-
   const editor = useEditor();
-
   const familyName = useSignalState(session.catalog.familyNameCell) ?? "Untitled";
-
   const selection = useSignalState(editor.selection.stateCell);
 
   const hasGeometrySelection = selection.ids.some(
@@ -32,53 +29,56 @@ export const RightSidebar = () => {
   const hasBooleanSelection = selection.ids.filter(isContourId).length >= 2;
 
   return (
-    <aside
-      aria-label="Glyph properties"
-      className="h-full w-full min-w-0 bg-panel border-l border-line-subtle flex flex-col overflow-hidden"
-    >
-      <div className="px-3 py-2 flex items-center justify-between">
-        <div className="flex items-center gap-1.5">
-          <span className="text-ui font-medium text-primary truncate">{familyName}</span>
-          {readOnlyFont && (
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label="Read-only preview"
-              className="h-5 w-5 p-0 text-sidebar-icon"
-              onClick={showPreviewNotice}
-            >
-              <LockIcon aria-hidden className="h-3.5 w-3.5" />
-            </Button>
-          )}
-        </div>
-        <ZoomMenu />
-      </div>
-      <Separator />
-      <TransformOriginProvider>
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className="px-3 py-3">
-            <GlyphSection />
-          </div>
-          <Separator />
-          {(hasGeometrySelection || hasBooleanSelection) && (
-            <div className="px-3 py-3 flex flex-col gap-4">
-              <BooleanOps />
-              {hasGeometrySelection && (
-                <>
-                  <HandleSection />
-                  <TransformSection />
-                  <ScaleSection />
-                </>
-              )}
+    <GlyphSidebar
+      session={session}
+      host={{
+        header: (
+          <>
+            <div className="flex min-w-0 items-center gap-1.5">
+              <span className="truncate text-ui font-medium text-primary">{familyName}</span>
+              {readOnlyFont ? (
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Read-only preview"
+                  className="h-5 w-5 p-0 text-sidebar-icon"
+                  onClick={showPreviewNotice}
+                >
+                  <LockIcon aria-hidden className="h-3.5 w-3.5" />
+                </Button>
+              ) : null}
             </div>
-          )}
-          {!hasGeometrySelection && hasAnchorSelection && (
-            <div className="px-3 py-3 flex flex-col gap-4">
-              <AnchorSection />
-            </div>
-          )}
-        </div>
-      </TransformOriginProvider>
-    </aside>
+            <ZoomMenu />
+          </>
+        ),
+        selection: (
+          <TransformOriginProvider>
+            {hasGeometrySelection || hasBooleanSelection ? (
+              <>
+                <Separator />
+                <div className="flex flex-col gap-4 px-3 py-3">
+                  <BooleanOps />
+                  {hasGeometrySelection ? (
+                    <>
+                      <HandleSection />
+                      <TransformSection />
+                      <ScaleSection />
+                    </>
+                  ) : null}
+                </div>
+              </>
+            ) : null}
+            {!hasGeometrySelection && hasAnchorSelection ? (
+              <>
+                <Separator />
+                <div className="flex flex-col gap-4 px-3 py-3">
+                  <AnchorSection />
+                </div>
+              </>
+            ) : null}
+          </TransformOriginProvider>
+        ),
+      }}
+    />
   );
 };

@@ -119,18 +119,12 @@ pub(crate) fn validate_named_instances(
     axes: &[Axis],
 ) -> CoreResult<()> {
     let mut ids = HashSet::new();
-    let mut names = HashSet::new();
     let mut postscript_names = HashSet::new();
 
     for (index, instance) in instances.iter().enumerate() {
         instance.validate(axes)?;
         if !ids.insert(instance.id()) {
             return Err(CoreError::DuplicateNamedInstanceId(instance.id()));
-        }
-        if !names.insert(instance.name()) {
-            return Err(CoreError::DuplicateNamedInstanceName(
-                instance.name().to_string(),
-            ));
         }
         if let Some(name) = instance.postscript_name() {
             if !postscript_names.insert(name) {
@@ -242,6 +236,19 @@ mod tests {
             Err(CoreError::InvalidNamedInstance { message, .. })
                 if message.contains("PostScript name")
         ));
+    }
+
+    #[test]
+    fn collection_allows_repeated_display_names_at_distinct_locations() {
+        let axis = Axis::weight();
+        let mut regular_location = ExternalLocation::new();
+        regular_location.set(axis.id(), 400.0);
+        let mut display_location = ExternalLocation::new();
+        display_location.set(axis.id(), 700.0);
+        let regular = NamedInstance::new("Text".to_string(), regular_location, None);
+        let display = NamedInstance::new("Text".to_string(), display_location, None);
+
+        assert!(validate_named_instances(&[regular, display], &[axis]).is_ok());
     }
 
     #[test]

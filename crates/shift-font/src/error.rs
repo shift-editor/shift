@@ -153,9 +153,6 @@ pub enum CoreError {
     #[error("named instance {0} already exists")]
     DuplicateNamedInstanceId(NamedInstanceId),
 
-    #[error("named instance name {0:?} already exists")]
-    DuplicateNamedInstanceName(String),
-
     #[error("named instance PostScript name {0:?} already exists")]
     DuplicateNamedInstancePostscriptName(String),
 

@@ -1280,15 +1280,35 @@ impl Bridge {
   #[napi]
   pub fn get_glyphs(&self) -> errors::Result<Vec<NapiGlyphRecord>> {
     let workspace = self.workspace()?;
+    let font = workspace.font();
+    let source_order = font
+      .sources()
+      .iter()
+      .enumerate()
+      .map(|(index, source)| (source.id().to_string(), index))
+      .collect::<HashMap<_, _>>();
     let mut component_references = workspace.glyph_component_references()?;
-    let mut records = workspace
-      .font()
+    let mut records = font
       .glyphs()
       .map(|glyph| {
         let mut record = GlyphRecord::from(glyph);
         record.component_base_glyph_ids =
           component_references.remove(&glyph.id()).unwrap_or_default();
-        NapiGlyphRecord::from(record)
+        let mut record = NapiGlyphRecord::from(record);
+        record.layers.sort_by(|left, right| {
+          source_order
+            .get(&left.source_id)
+            .copied()
+            .unwrap_or(usize::MAX)
+            .cmp(
+              &source_order
+                .get(&right.source_id)
+                .copied()
+                .unwrap_or(usize::MAX),
+            )
+            .then_with(|| left.id.cmp(&right.id))
+        });
+        record
       })
       .collect::<Vec<_>>();
     records.sort_by(|a, b| a.name.cmp(&b.name));
@@ -1472,6 +1492,12 @@ impl Bridge {
       .map(|request| request.glyph_id.clone())
       .collect::<Vec<_>>();
     let font = self.acquire_and_font(&glyph_ids, AcquireScope::Glyphs)?;
+    let source_order = font
+      .sources()
+      .iter()
+      .enumerate()
+      .map(|(index, source)| (source.id(), index))
+      .collect::<HashMap<_, _>>();
     let mut snapshots = Vec::new();
     for request in requests {
       let glyph_id = request.glyph_id;
@@ -1481,10 +1507,26 @@ impl Bridge {
 
       let projection = font.glyph_projection(&glyph_id)?.as_ref().map(Into::into);
 
-      let layers = glyph
+      let mut layers = glyph
         .layers()
         .values()
         .map(|layer| layer.as_ref())
+        .collect::<Vec<_>>();
+      layers.sort_by(|left, right| {
+        source_order
+          .get(&left.source_id())
+          .copied()
+          .unwrap_or(usize::MAX)
+          .cmp(
+            &source_order
+              .get(&right.source_id())
+              .copied()
+              .unwrap_or(usize::MAX),
+          )
+          .then_with(|| left.id().as_str().cmp(right.id().as_str()))
+      });
+      let layers = layers
+        .into_iter()
         .map(|layer| GlyphLayerSnapshot {
           glyph_id: glyph_id.clone(),
           source_id: layer.source_id(),
@@ -2001,16 +2043,36 @@ impl Bridge {
 
   #[napi]
   pub fn get_sources(&self) -> errors::Result<Vec<NapiSource>> {
-    Ok(
-      self
-        .font()?
-        .sources()
-        .iter()
-        .filter(|source| source.is_master())
-        .map(Source::from)
-        .map(Into::into)
-        .collect(),
-    )
+    let font = self.font()?;
+    let metric_order = font
+      .metric_definitions()
+      .iter()
+      .enumerate()
+      .map(|(index, definition)| (definition.id().to_string(), index))
+      .collect::<HashMap<_, _>>();
+    let mut sources = font
+      .sources()
+      .iter()
+      .filter(|source| source.is_master())
+      .map(Source::from)
+      .map(NapiSource::from)
+      .collect::<Vec<_>>();
+    for source in &mut sources {
+      source.metric_values.sort_by(|left, right| {
+        metric_order
+          .get(&left.metric_id)
+          .copied()
+          .unwrap_or(usize::MAX)
+          .cmp(
+            &metric_order
+              .get(&right.metric_id)
+              .copied()
+              .unwrap_or(usize::MAX),
+          )
+          .then_with(|| left.metric_id.cmp(&right.metric_id))
+      });
+    }
+    Ok(sources)
   }
 
   fn save_snapshot(&mut self) -> BridgeResult<FontSaveSnapshot> {

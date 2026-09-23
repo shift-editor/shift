@@ -91,6 +91,7 @@ typings/
 
 # Vite
 .vite/
+packages/sdk/dist/
 
 # Playwright
 apps/desktop/e2e/test-results/

@@ -71,9 +71,9 @@ pub(super) fn named_instances_from_designspace(
         let candidate = NamedInstance::new(name, location, postscript_name);
 
         if candidate.validate(axes).is_err()
-            || imported.iter().any(|existing: &NamedInstance| {
-                existing.name() == candidate.name() || existing.location() == candidate.location()
-            })
+            || imported
+                .iter()
+                .any(|existing: &NamedInstance| existing.location() == candidate.location())
         {
             continue;
         }
