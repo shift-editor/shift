@@ -6,7 +6,7 @@ import { useTransformOrigin } from "@/context/TransformOriginContext";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { anchorToPoint } from "@shift/editor/transform";
 import { useSignalState } from "@shift/editor/signals";
-import { Bounds } from "@shift/geo";
+import { Bounds, Mat } from "@shift/geo";
 import ScaleIcon from "@/assets/sidebar-right/scale.svg";
 import { useSelectionBounds } from "@/hooks/useSelectionBounds";
 
@@ -22,10 +22,14 @@ export const ScaleSection = () => {
     () => editor.positionSelection(selection.ids),
     [editor, selection],
   );
+  const componentSelection = useMemo(
+    () => editor.componentTransformSelection(selection.ids),
+    [editor, selection],
+  );
   const selectedPointIds = positionSelection?.targets.points ?? [];
   const isEditing = useSignalState(editor.isEditingCell);
   const layer = isEditing ? null : (positionSelection?.layer ?? null);
-  const editable = positionSelection !== null;
+  const editable = positionSelection !== null || componentSelection !== null;
 
   useEffect(() => {
     if (!widthRef.current || !heightRef.current) return;
@@ -40,28 +44,63 @@ export const ScaleSection = () => {
 
   const handleSizeChange = useCallback(
     (dimension: "width" | "height", value: number) => {
-      if (!layer) return;
-      if (!selectionBounds) return;
+      if (!editable || !selectionBounds) return;
 
       const current =
         dimension === "width" ? Bounds.width(selectionBounds) : Bounds.height(selectionBounds);
       if (current === 0) return;
 
       const factor = value / current;
+      if (componentSelection && !isEditing) {
+        componentSelection.layer.transformComponents(
+          componentSelection,
+          "Scale components",
+          ({ bounds }) => {
+            const localBounds = Bounds.fromXYWH(bounds.x, bounds.y, bounds.width, bounds.height);
+            const anchorPoint = anchorToPoint(anchor, localBounds);
+            return Mat.Compose(
+              Mat.Translate(anchorPoint.x, anchorPoint.y),
+              Mat.Compose(Mat.Scale(factor, factor), Mat.Translate(-anchorPoint.x, -anchorPoint.y)),
+            );
+          },
+        );
+        return;
+      }
+
+      if (!layer) return;
+
       const anchorPoint = anchorToPoint(anchor, selectionBounds);
       layer.scale(selectedPointIds, factor, factor, anchorPoint);
     },
-    [anchor, layer, selectedPointIds, selectionBounds],
+    [anchor, componentSelection, editable, isEditing, layer, selectedPointIds, selectionBounds],
   );
 
   const handleScaleChange = useCallback(
     (scale: number) => {
+      if (!editable || !selectionBounds) return;
+
+      if (componentSelection && !isEditing) {
+        componentSelection.layer.transformComponents(
+          componentSelection,
+          "Scale components",
+          ({ bounds }) => {
+            const localBounds = Bounds.fromXYWH(bounds.x, bounds.y, bounds.width, bounds.height);
+            const anchorPoint = anchorToPoint(anchor, localBounds);
+            return Mat.Compose(
+              Mat.Translate(anchorPoint.x, anchorPoint.y),
+              Mat.Compose(Mat.Scale(scale, scale), Mat.Translate(-anchorPoint.x, -anchorPoint.y)),
+            );
+          },
+        );
+        return;
+      }
+
       if (!layer) return;
-      if (!selectionBounds) return;
+
       const anchorPoint = anchorToPoint(anchor, selectionBounds);
       layer.scale(selectedPointIds, scale, scale, anchorPoint);
     },
-    [anchor, layer, selectedPointIds, selectionBounds],
+    [anchor, componentSelection, editable, isEditing, layer, selectedPointIds, selectionBounds],
   );
 
   return (

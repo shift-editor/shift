@@ -96,7 +96,10 @@ import { GlyphLayerState } from "./GlyphLayerState";
 import type { ContourBuffer } from "./ContourBuffer";
 import type { LayerBuffers } from "./LayerBuffers";
 import { LayerIntents } from "../workspace/LayerIntents";
-import type { ComponentTransformSelection } from "../../types/componentTransform";
+import type {
+  ComponentTransformSelection,
+  ComponentTransformSelectionLayer,
+} from "../../types/componentTransform";
 import { PositionEdits } from "./positions";
 
 export {
@@ -657,6 +660,30 @@ export class GlyphLayer {
     const layers = [selection, ...selection.additionalLayers];
     const states = layers.map(({ layer }) => layer.#writer.layerState);
     return new ComponentTransformEdit(selection, states);
+  }
+
+  /**
+   * Applies one affine transform to matched components as one undoable edit.
+   *
+   * @param selection - Reference components and their complete source-layer matches.
+   * @param label - User-facing command history label for the accepted edit.
+   * @param deltaForLayer - Returns the glyph-local delta around each layer's corresponding bounds.
+   * @throws {Error} When previewing or committing any participating layer fails.
+   */
+  transformComponents(
+    selection: ComponentTransformSelection,
+    label: string,
+    deltaForLayer: (layer: ComponentTransformSelectionLayer) => MatModel,
+  ): void {
+    const edit = this.beginComponentTransformEdit(selection);
+
+    try {
+      edit.preview(deltaForLayer);
+      edit.commit(label);
+    } catch (error) {
+      edit.discard();
+      throw error;
+    }
   }
 
   /** @internal Groups accepted edit operations into one workspace and undo transaction. */

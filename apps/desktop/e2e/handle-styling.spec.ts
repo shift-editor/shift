@@ -7,7 +7,7 @@ import {
   DESIGNSPACE_FONT_PATH,
   navigateToEditor,
 } from "./fixtures/electronApp";
-import { clickFirstCatalogGlyph } from "./fixtures/appLocators";
+import { clickFirstCatalogGlyph, openVariationControls } from "./fixtures/appLocators";
 
 const authoredTest = workspaceTest.extend({ startupFontPath: DESIGNSPACE_FONT_PATH });
 const previewTest = documentTest.extend({ openFontPath: [FONT_PATH, { option: true }] });
@@ -37,7 +37,7 @@ authoredTest(
   async ({ page, electronApp }) => {
     await navigateToEditor(page, "53");
     await expect.poll(async () => (await handlePixels(page, electronApp)).blue).toBeGreaterThan(0);
-    const controls = page.getByRole("complementary", { name: "Variation controls" });
+    const controls = await openVariationControls(page);
     await controls.getByRole("button", { name: "Sources", exact: true }).click();
     await controls.getByRole("button", { name: "Instances", exact: true }).click();
     const slider = controls.getByRole("slider", { name: "width", exact: true });
@@ -85,7 +85,7 @@ authoredTest(
       );
     });
     if (!instance) throw new Error("Expected an instance between sources");
-    const controls = page.getByRole("complementary", { name: "Variation controls" });
+    const controls = await openVariationControls(page);
     await controls.getByRole("button", { name: "Sources", exact: true }).click();
     await controls.getByTestId(`instance-${instance.id}`).click();
 

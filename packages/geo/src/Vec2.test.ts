@@ -23,6 +23,11 @@ describe("Vec2", () => {
       expect(v.y).toBeCloseTo(1);
     });
 
+    it("creates a vector on one axis", () => {
+      expect(Vec2.fromAxis("x", 7)).toEqual({ x: 7, y: 0 });
+      expect(Vec2.fromAxis("y", -3)).toEqual({ x: 0, y: -3 });
+    });
+
     it("clones a vector", () => {
       const v = { x: 5, y: 7 };
       const cloned = Vec2.clone(v);
@@ -32,6 +37,11 @@ describe("Vec2", () => {
   });
 
   describe("basic operations", () => {
+    it("replaces one coordinate", () => {
+      expect(Vec2.setAxis({ x: 2, y: 4 }, "x", 8)).toEqual({ x: 8, y: 4 });
+      expect(Vec2.setAxis({ x: 2, y: 4 }, "y", 9)).toEqual({ x: 2, y: 9 });
+    });
+
     it("adds two vectors", () => {
       expect(Vec2.add({ x: 1, y: 2 }, { x: 3, y: 4 })).toEqual({ x: 4, y: 6 });
     });

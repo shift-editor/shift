@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import { variablePreviewTest as test, expect } from "./fixtures/perfApp";
-import { firstAxisSlider, glyphCatalogCanvas, variationControls } from "./fixtures/appLocators";
+import { firstAxisSlider, glyphCatalogCanvas, openVariationControls } from "./fixtures/appLocators";
 
 test.describe("variable font preview projection", () => {
   test("scrubs retained glyph geometry without source reads or projection acquisition", async ({
@@ -28,10 +28,10 @@ test.describe("variable font preview projection", () => {
 
     const sceneCanvas = page.locator("#scene-canvas");
     await expect(sceneCanvas).toBeVisible();
+    const variationSidebar = await openVariationControls(page);
     const slider = await firstAxisSlider(page);
     await expect(slider).toBeVisible();
 
-    const variationSidebar = variationControls(page);
     const createSource = variationSidebar.getByLabel("Create source");
     await expect(createSource).toHaveCSS("opacity", "0");
     await createSource.locator("..").locator("..").hover();
@@ -96,10 +96,11 @@ test.describe("variable font preview projection", () => {
       .poll(() =>
         slider.evaluate((input) => {
           const thumbBounds = input.parentElement?.getBoundingClientRect();
-          const trackBounds = input.parentElement?.parentElement?.getBoundingClientRect();
-          if (!thumbBounds || !trackBounds) return false;
+          const controlBounds =
+            input.parentElement?.parentElement?.parentElement?.getBoundingClientRect();
+          if (!thumbBounds || !controlBounds) return false;
 
-          return thumbBounds.left >= trackBounds.left && thumbBounds.right <= trackBounds.right;
+          return thumbBounds.left >= controlBounds.left && thumbBounds.right <= controlBounds.right;
         }),
       )
       .toBe(true);

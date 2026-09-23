@@ -10,7 +10,6 @@ import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-  cn,
 } from "@shift/ui";
 import type { SourceId } from "@shift/types";
 import { useSources } from "@/hooks/useSources";
@@ -77,12 +76,8 @@ export const Sources = ({ canAuthor, outlineControls }: SourcesProps) => {
             data-testid={`source-${source.id}`}
             isActive={source.id === activeSourceId}
             isSelected={selected}
-            className={cn(
-              "relative isolate data-[selected]:bg-transparent data-[selected]:before:absolute data-[selected]:before:inset-0 data-[selected]:before:-z-10 data-[selected]:before:pointer-events-none data-[selected]:before:rounded data-[selected]:before:bg-hover/50 data-[selected]:before:content-['']",
-              joinsPrevious &&
-                "data-[selected]:before:-top-1 data-[selected]:before:rounded-t-none",
-              joinsNext && "data-[selected]:before:rounded-b-none",
-            )}
+            joinsPrevious={joinsPrevious}
+            joinsNext={joinsNext}
             onClick={(event) => {
               const mode: SourceSelectionMode = event.shiftKey
                 ? "range"
@@ -91,7 +86,6 @@ export const Sources = ({ canAuthor, outlineControls }: SourcesProps) => {
                   : "single";
               selectSource(source.id, mode);
             }}
-            contentClassName="h-6 text-ui"
             actions={
               <>
                 {outlineControls && source.id !== activeSourceId && (

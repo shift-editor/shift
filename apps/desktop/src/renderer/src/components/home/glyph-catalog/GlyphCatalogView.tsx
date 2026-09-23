@@ -6,6 +6,7 @@ import {
   CollapsibleTrigger,
   Input,
   Search,
+  Separator,
   Tooltip,
   TooltipContent,
   TooltipTrigger,
@@ -14,6 +15,7 @@ import {
 import AllIcon from "@/assets/sidebar-left/all.svg";
 import PlusIcon from "@/assets/general/plus.svg";
 
+import { SidebarRowButton } from "@/components/sidebar";
 import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
 import { Category } from "./Category";
 import { SubCategory } from "./SubCategory";
@@ -49,6 +51,8 @@ export const GlyphCatalogView = () => {
         icon={<Search className="w-3 h-3 text-muted" />}
         iconPosition="left"
       />
+      <Separator className="-mx-3 w-auto" />
+
       <div className="flex-1 overflow-y-auto scrollbar-hidden">
         <div className="flex items-center justify-between font-sans mb-2">
           <span className="text-ui font-medium text-primary">Glyphs</span>
@@ -68,58 +72,48 @@ export const GlyphCatalogView = () => {
           </Tooltip>
         </div>
 
-        <div className="w-full">
-          <Button
-            className="w-full justify-between"
-            variant="ghost"
-            size="sm"
-            onClick={selectAll}
-            isActive={allGlyphsSelected}
-          >
-            <div className="flex gap-2 items-center justify-center">
-              <AllIcon className="w-4 h-4" />
-              <span className="text-sm">All</span>
-            </div>
+        <div className="flex flex-col gap-1">
+          <SidebarRowButton onClick={selectAll} isActive={allGlyphsSelected}>
+            <AllIcon className="h-3 w-3 shrink-0" />
+            <span className="min-w-0 flex-1 truncate text-left">All</span>
             <span className="text-xs">{`${filteredGlyphCount}/${allGlyphCount}`}</span>
-          </Button>
-        </div>
+          </SidebarRowButton>
 
-        {categories.map((categoryNode) => (
-          <div
-            key={categoryNode.category}
-            className={cn(
-              "mt-1",
-              isTopLevelCategorySelected && selectedCategory === categoryNode.category
-                ? "bg-hover/50 rounded"
-                : null,
-            )}
-          >
-            <Collapsible>
-              <CollapsibleTrigger render={<div className="w-full" />}>
-                <Category
-                  category={categoryNode.category}
-                  selectedCategory={selectedCategory}
-                  isTopLevelCategorySelected={isTopLevelCategorySelected}
-                  onSelectCategory={selectCategory}
-                />
-              </CollapsibleTrigger>
-              <CollapsiblePanel>
-                <div className="flex flex-col gap-1">
-                  {categoryNode.subCategories.map((subCategory) => (
-                    <SubCategory
-                      key={subCategory.key}
-                      category={categoryNode.category}
-                      subCategory={subCategory.label}
-                      selectedCategory={selectedCategory}
-                      selectedSubCategoryKey={selectedSubCategoryKey}
-                      onSelectSubCategory={selectSubCategory}
-                    />
-                  ))}
-                </div>
-              </CollapsiblePanel>
-            </Collapsible>
-          </div>
-        ))}
+          {categories.map((categoryNode) => {
+            const active = isTopLevelCategorySelected && selectedCategory === categoryNode.category;
+
+            return (
+              <div key={categoryNode.category} className={cn(active && "rounded bg-hover/50")}>
+                <Collapsible className="flex flex-col gap-1">
+                  <CollapsibleTrigger
+                    render={
+                      <SidebarRowButton
+                        isActive={active}
+                        onClick={() => selectCategory(categoryNode.category)}
+                      />
+                    }
+                  >
+                    <Category category={categoryNode.category} />
+                  </CollapsibleTrigger>
+                  <CollapsiblePanel>
+                    <div className="flex flex-col gap-1">
+                      {categoryNode.subCategories.map((subCategory) => (
+                        <SubCategory
+                          key={subCategory.key}
+                          category={categoryNode.category}
+                          subCategory={subCategory.label}
+                          selectedCategory={selectedCategory}
+                          selectedSubCategoryKey={selectedSubCategoryKey}
+                          onSelectSubCategory={selectSubCategory}
+                        />
+                      ))}
+                    </div>
+                  </CollapsiblePanel>
+                </Collapsible>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

@@ -1,11 +1,15 @@
 import { Button, cn, type ButtonProps } from "@shift/ui";
 import { forwardRef, type MouseEvent, type ReactNode } from "react";
+import { SidebarRowButton } from "./SidebarRowButton";
 
 interface SidebarActionRowProps {
   children: ReactNode;
+  leading?: ReactNode;
   actions?: ReactNode;
   isActive?: boolean;
   isSelected?: boolean;
+  joinsPrevious?: boolean;
+  joinsNext?: boolean;
   onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
   className?: string;
   contentClassName?: string;
@@ -14,9 +18,12 @@ interface SidebarActionRowProps {
 
 export const SidebarActionRow = ({
   children,
+  leading,
   actions,
   isActive,
   isSelected,
+  joinsPrevious,
+  joinsNext,
   onClick,
   className,
   contentClassName,
@@ -24,17 +31,20 @@ export const SidebarActionRow = ({
 }: SidebarActionRowProps) => (
   <div
     className={cn(
-      "group grid min-w-0 w-full grid-cols-[minmax(0,1fr)_auto] items-center rounded transition-colors",
-      "hover:bg-hover/50 data-[selected]:bg-hover/50 data-[active]:bg-hover",
+      "group gap-0.5 flex h-7 w-full min-w-0 items-center rounded transition-colors",
+      "hover:bg-hover/50 data-[active]:bg-hover",
+      isSelected &&
+        "relative isolate bg-transparent before:pointer-events-none before:absolute before:inset-0 before:-z-10 before:rounded before:bg-hover/50 before:content-['']",
+      joinsPrevious && "before:-top-1 before:rounded-t-none",
+      joinsNext && "before:rounded-b-none",
       className,
     )}
     data-active={isActive ? true : undefined}
     data-selected={isSelected ? true : undefined}
   >
+    {leading}
     {onClick ? (
-      <Button
-        variant="ghost"
-        size="sm"
+      <SidebarRowButton
         data-testid={testId}
         aria-pressed={isSelected}
         onPointerDown={(event) => {
@@ -45,14 +55,17 @@ export const SidebarActionRow = ({
         }}
         onClick={onClick}
         className={cn(
-          "min-w-0 flex-1 justify-start bg-transparent px-2 hover:bg-transparent data-[pointer-focus]:focus-visible:ring-0 data-[active]:bg-transparent",
+          "w-auto flex-1 bg-transparent hover:bg-transparent data-[pointer-focus]:focus-visible:ring-0 data-[active]:bg-transparent",
           contentClassName,
         )}
       >
         {children}
-      </Button>
+      </SidebarRowButton>
     ) : (
-      <div data-testid={testId} className={cn("min-w-0 flex-1 px-2", contentClassName)}>
+      <div
+        data-testid={testId}
+        className={cn("flex h-7 min-w-0 flex-1 items-center px-2 text-ui", contentClassName)}
+      >
         {children}
       </div>
     )}

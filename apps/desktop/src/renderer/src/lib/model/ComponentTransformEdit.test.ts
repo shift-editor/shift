@@ -93,9 +93,9 @@ describe("multi-source component transform edits", () => {
     await editor.settle();
 
     const selection = requireSelection(editor, referenceComponentId);
-    const edit = selection.layer.beginComponentTransformEdit(selection);
-    edit.preview((layer) => scaleAroundCenter(layer.bounds, 2));
-    edit.commit("Scale components");
+    selection.layer.transformComponents(selection, "Scale components", (layer) =>
+      scaleAroundCenter(layer.bounds, 2),
+    );
     await editor.settle();
 
     const reference = componentTransform(referenceLayer, referenceComponentId);
@@ -142,6 +142,19 @@ describe("multi-source component transform edits", () => {
     expect(target.translateY - reference.translateY).toBeCloseTo(50);
 
     edit.discard();
+  });
+
+  it("releases every source edit when a one-shot transform fails", () => {
+    const selection = requireSelection(editor, referenceComponentId);
+
+    expect(() =>
+      selection.layer.transformComponents(selection, "Move components", () => {
+        throw new Error("invalid transform");
+      }),
+    ).toThrow("invalid transform");
+
+    const nextEdit = selection.layer.beginComponentTransformEdit(selection);
+    nextEdit.discard();
   });
 
   it("refuses a transform when any editing source lacks a complete component match", async () => {

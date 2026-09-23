@@ -10,6 +10,7 @@ import {
   glyphCatalogSurface,
   glyphCatalogViewport,
   glyphProperties,
+  openVariationControls,
   settingsDetails,
 } from "./fixtures/appLocators";
 
@@ -156,6 +157,7 @@ test.describe("retained font source Grid preview", () => {
       () => window.shiftSession?.catalog.axesCell.value.length ?? 0,
     );
     if (axisCount > 0) {
+      await openVariationControls(page);
       const axisSlider = await firstAxisSlider(page);
       const beforeScrub = await sceneCanvas.screenshot();
       const beforeLocation = await page.evaluate(() =>

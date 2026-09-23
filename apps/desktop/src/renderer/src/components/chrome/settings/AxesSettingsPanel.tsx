@@ -9,7 +9,6 @@ import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-  cn,
 } from "@shift/ui";
 import MinusIcon from "@/assets/general/minus.svg";
 import PlusIcon from "@/assets/general/plus.svg";
@@ -68,24 +67,19 @@ export const AxesSettingsPanel = ({ initialAxisId, canAuthor }: AxesSettingsPane
           )}
         </div>
 
-        <nav className="scrollbar-hidden flex min-h-0 flex-col gap-0.5 overflow-y-auto px-2 pb-2">
+        <nav className="scrollbar-hidden flex min-h-0 flex-col gap-1 overflow-y-auto px-2 pb-2">
           {axes.map((axis) => (
             <SidebarActionRow
               key={axis.id}
               data-testid={`settings-axis-${axis.id}`}
               isActive={axis.id === selectedAxisId}
-              className={cn(
-                "h-8",
-                axis.id === selectedAxisId && "bg-hover hover:bg-hover data-[active]:bg-hover",
-              )}
               onClick={() => setSelectedAxisId(axis.id)}
-              contentClassName="h-8 text-sm font-normal"
               actions={
                 <Tooltip>
                   <TooltipTrigger>
                     <SidebarActionButton
                       label={`Delete ${axis.name}`}
-                      className="h-8 hover:bg-icon-button-hover"
+                      className="hover:bg-icon-button-hover"
                       aria-disabled={!canAuthor || undefined}
                       onClick={(event) => {
                         event.stopPropagation();

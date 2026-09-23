@@ -1,1 +1,3 @@
-export type SourceSelectionMode = "single" | "range" | "toggle";
+import type { ListSelectionMode } from "./listSelection";
+
+export type SourceSelectionMode = ListSelectionMode;

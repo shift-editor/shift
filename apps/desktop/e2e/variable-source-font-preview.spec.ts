@@ -5,7 +5,7 @@ import {
   glyphsPreviewTest,
   variablePreviewTest,
 } from "./fixtures/perfApp";
-import { firstAxisSlider } from "./fixtures/appLocators";
+import { firstAxisSlider, openVariationControls } from "./fixtures/appLocators";
 
 interface VariationSample {
   readonly activeSourceId: string | null;
@@ -28,6 +28,7 @@ async function openVariableGlyph(page: Page): Promise<string> {
     return entry.id;
   });
   await page.waitForURL(new RegExp(`#/editor/${encodeURIComponent(glyphId)}$`));
+  await openVariationControls(page);
   await expect(await firstAxisSlider(page)).toBeVisible();
 
   return glyphId;
