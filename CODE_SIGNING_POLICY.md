@@ -2,7 +2,7 @@
 
 ## Current status
 
-Shift's Windows artifacts are currently unsigned. This policy defines the controls that will apply to versioned Windows releases after the project is accepted for SignPath Foundation's open-source code-signing service. Nightly builds remain outside the initial signing scope.
+Shift's published Windows artifacts are currently unsigned. A manual GitHub Actions workflow may produce test-signed Windows installers solely to validate the SignPath integration; those workflow artifacts are not releases. This policy defines the controls that will apply to versioned Windows releases through SignPath Foundation's open-source code-signing service. Nightly builds remain outside the initial signing scope.
 
 For releases signed under this policy: Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
 

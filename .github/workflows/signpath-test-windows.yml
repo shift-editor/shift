@@ -1,0 +1,119 @@
+name: Test Sign Windows
+
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  sign-windows:
+    name: Build and test-sign Windows x64
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+          submodules: true
+
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Install Rust toolchain
+        run: rustup show
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Build native bridge
+        run: pnpm build:native
+
+      - name: Build desktop application
+        env:
+          SHIFT_DISTRIBUTION: release
+        run: pnpm --filter @shift/desktop build
+
+      - name: Build unsigned Windows installer
+        env:
+          SHIFT_BUILD_ARCH: x64
+          SHIFT_DISTRIBUTION: release
+        run: pnpm --filter @shift/desktop exec electron-builder --config electron-builder.config.ts --win nsis --x64 --publish never
+
+      - name: Resolve and smoke-test packaged application
+        id: package
+        shell: pwsh
+        run: |
+          $executable = Get-ChildItem -Path apps/desktop/out/win32-x64 -Recurse -Filter shift.exe |
+            Where-Object { $_.DirectoryName -like "*win-unpacked*" } |
+            Select-Object -First 1
+          if (-not $executable) { throw "Packaged shift.exe was not found." }
+
+          $installer = Get-ChildItem -Path apps/desktop/out/win32-x64 -File -Filter "Shift-*-Windows-x64-Setup.exe" |
+            Select-Object -First 1
+          if (-not $installer) { throw "Windows installer was not found." }
+
+          "package_path=$($executable.DirectoryName)" >> $env:GITHUB_OUTPUT
+          "installer_path=$($installer.FullName)" >> $env:GITHUB_OUTPUT
+          "installer_name=$($installer.Name)" >> $env:GITHUB_OUTPUT
+
+      - name: Smoke-test packaged application
+        run: node scripts/smoke-packaged.mjs "${{ steps.package.outputs.package_path }}"
+
+      - name: Upload unsigned installer to GitHub
+        id: unsigned-installer
+        uses: actions/upload-artifact@v7
+        with:
+          path: ${{ steps.package.outputs.installer_path }}
+          archive: false
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Submit SignPath test-signing request
+        id: signpath
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: abba6744-d7db-4338-8c56-574ea76854ac
+          project-slug: shift
+          signing-policy-slug: test-signing
+          github-artifact-id: ${{ steps.unsigned-installer.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed-installer
+          skip-decompress: true
+
+      - name: Verify signed installer
+        id: signed-installer
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem -Path signed-installer -File -Filter "*.exe" | Select-Object -First 1
+          if (-not $installer) { throw "SignPath did not return a signed installer." }
+
+          $signature = Get-AuthenticodeSignature -FilePath $installer.FullName
+          if (-not $signature.SignerCertificate) { throw "The returned installer has no Authenticode signer certificate." }
+          if ($signature.Status -eq "NotSigned" -or $signature.Status -eq "HashMismatch") {
+            throw "Invalid Authenticode signature status: $($signature.Status)"
+          }
+
+          New-Item -ItemType Directory -Path signed-release -Force | Out-Null
+          Copy-Item -Path $installer.FullName -Destination "signed-release/${{ steps.package.outputs.installer_name }}"
+          "path=signed-release/${{ steps.package.outputs.installer_name }}" >> $env:GITHUB_OUTPUT
+
+          @"
+          ## SignPath Windows test signing
+
+          - Signing request: ${{ steps.signpath.outputs.signing-request-web-url }}
+          - Subject: $($signature.SignerCertificate.Subject)
+          - Signature status: $($signature.Status)
+          "@ >> $env:GITHUB_STEP_SUMMARY
+
+      - name: Upload signed Windows installer
+        uses: actions/upload-artifact@v7
+        with:
+          name: signpath-test-windows-x64
+          path: ${{ steps.signed-installer.outputs.path }}
+          if-no-files-found: error
+          retention-days: 14
