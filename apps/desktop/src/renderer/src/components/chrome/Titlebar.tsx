@@ -13,6 +13,7 @@ interface TitlebarProps {
 }
 
 const TrafficLightButton = ({ color, onClick, isHovered }: TrafficLightButtonProps) => {
+  // These values reproduce native macOS traffic lights and are intentionally exempt from theme colors.
   const colors = {
     close: {
       bg: "#FF5F57",
@@ -63,7 +64,9 @@ const TrafficLightButton = ({ color, onClick, isHovered }: TrafficLightButtonPro
       style={{ backgroundColor: bg }}
       aria-label={color}
     >
-      <span className="transition-opacity duration-150" style={{ opacity: isHovered ? 1 : 0 }}>
+      <span
+        className={`transition-opacity duration-150 ${isHovered ? "opacity-100" : "opacity-0"}`}
+      >
         {icon}
       </span>
     </button>

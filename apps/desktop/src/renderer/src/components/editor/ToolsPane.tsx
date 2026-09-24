@@ -147,7 +147,7 @@ export const ToolsPane: FC = () => {
     <section className="flex flex-col items-center justify-center gap-2">
       <Toolbar
         aria-label="Editor tools"
-        className="flex h-[40px] items-center gap-2 overflow-hidden rounded-lg border-b border-line bg-white px-1"
+        className="flex h-10 items-center gap-2 overflow-hidden rounded-lg border-b border-line bg-background px-1"
       >
         {Array.from(toolRegistry.entries())
           .filter(([, item]) => !item.hidden)

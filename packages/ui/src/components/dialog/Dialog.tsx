@@ -28,7 +28,7 @@ export const DialogPopup = React.forwardRef<HTMLDivElement, DialogPopupProps>(
     <BaseDialog.Popup
       ref={ref}
       className={cn(
-        "fixed left-1/2 top-[20%] z-50 w-full max-w-lg -translate-x-1/2 rounded-md bg-surface shadow-sm",
+        "fixed left-1/2 top-1/5 z-50 w-full max-w-lg -translate-x-1/2 rounded-lg bg-surface shadow-lg",
         className,
       )}
       {...props}
@@ -46,4 +46,18 @@ export const DialogTitle = React.forwardRef<HTMLHeadingElement, DialogTitleProps
 );
 DialogTitle.displayName = "DialogTitle";
 
-export const DialogClose = BaseDialog.Close;
+export const DialogClose = React.forwardRef<
+  React.ElementRef<typeof BaseDialog.Close>,
+  React.ComponentPropsWithoutRef<typeof BaseDialog.Close> & { variant?: "icon" }
+>(({ className, variant, ...props }, ref) => (
+  <BaseDialog.Close
+    ref={ref}
+    className={cn(
+      variant === "icon" &&
+        "inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded text-primary/70 transition-colors hover:bg-hover hover:text-primary",
+      className,
+    )}
+    {...props}
+  />
+));
+DialogClose.displayName = "DialogClose";

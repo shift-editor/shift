@@ -16,17 +16,25 @@ NumberField.displayName = "NumberField";
 
 export interface NumberFieldGroupProps extends React.ComponentPropsWithoutRef<
   typeof BaseNumberField.Group
-> {}
+> {
+  variant?: "filled" | "plain";
+}
+
+const groupVariantStyles = {
+  filled: "bg-input",
+  plain: "bg-background",
+};
 
 export const NumberFieldGroup = React.forwardRef<
   React.ElementRef<typeof BaseNumberField.Group>,
   NumberFieldGroupProps
->(({ className, ...props }, ref) => (
+>(({ className, variant = "filled", ...props }, ref) => (
   <BaseNumberField.Group
     ref={ref}
     className={cn(
-      "flex h-7 min-w-0 items-center overflow-hidden rounded bg-input",
-      "focus-within:ring-1 focus-within:ring-accent data-[invalid]:ring-1 data-[invalid]:ring-red-500",
+      "flex h-7 min-w-0 items-center overflow-hidden rounded",
+      "focus-within:ring-1 focus-within:ring-accent data-[invalid]:ring-1 data-[invalid]:ring-error-ring",
+      groupVariantStyles[variant],
       className,
     )}
     {...props}

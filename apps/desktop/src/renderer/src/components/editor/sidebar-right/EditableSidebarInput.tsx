@@ -143,12 +143,7 @@ export const EditableSidebarInput = forwardRef<
             icon={icon}
             iconPosition={iconPosition}
             readOnly={!isEditing}
-            className={cn(
-              "w-full bg-[#f3f3f3]",
-              label && labelPosition !== "right" && "pl-6",
-              label && labelPosition === "right" && "pr-6",
-              className,
-            )}
+            className={cn("w-full", className)}
             onFocus={handleFocus}
             onBlur={handleBlur}
             onKeyDown={handleKeyDown}

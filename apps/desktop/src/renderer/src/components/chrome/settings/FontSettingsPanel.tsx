@@ -40,14 +40,15 @@ export const FontSettingsPanel = ({ canAuthor }: { canAuthor: boolean }) => {
   return (
     <fieldset disabled={!canAuthor} className="flex min-w-0 flex-col gap-4 p-5 pr-8">
       <h2 className="text-sm font-medium text-primary">Font</h2>
-      {form.error && <p className="text-xs text-red-600">{form.error}</p>}
+      {form.error && <p className="text-xs text-error">{form.error}</p>}
 
       <MetadataField label="Family Name">
         <Input
           value={draft.familyName ?? ""}
           onChange={updateText("familyName")}
           onBlur={commit}
-          className="h-8 bg-white text-sm text-black"
+          size="md"
+          variant="plain"
         />
       </MetadataField>
 
@@ -56,7 +57,8 @@ export const FontSettingsPanel = ({ canAuthor }: { canAuthor: boolean }) => {
           value={draft.styleName ?? ""}
           onChange={updateText("styleName")}
           onBlur={commit}
-          className="h-8 bg-white text-sm text-black"
+          size="md"
+          variant="plain"
         />
       </MetadataField>
 
@@ -84,7 +86,8 @@ export const FontSettingsPanel = ({ canAuthor }: { canAuthor: boolean }) => {
           value={draft.copyright ?? ""}
           onChange={updateText("copyright")}
           onBlur={commit}
-          className="h-8 bg-white text-sm text-black"
+          size="md"
+          variant="plain"
         />
       </MetadataField>
 
@@ -93,7 +96,8 @@ export const FontSettingsPanel = ({ canAuthor }: { canAuthor: boolean }) => {
           value={draft.trademark ?? ""}
           onChange={updateText("trademark")}
           onBlur={commit}
-          className="h-8 bg-white text-sm text-black"
+          size="md"
+          variant="plain"
         />
       </MetadataField>
 
@@ -102,7 +106,8 @@ export const FontSettingsPanel = ({ canAuthor }: { canAuthor: boolean }) => {
           value={draft.license ?? ""}
           onChange={updateText("license")}
           onBlur={commit}
-          className="min-h-24 bg-white text-sm text-black"
+          variant="plain"
+          className="min-h-24"
         />
       </MetadataField>
 
@@ -111,7 +116,8 @@ export const FontSettingsPanel = ({ canAuthor }: { canAuthor: boolean }) => {
           value={draft.manufacturer ?? ""}
           onChange={updateText("manufacturer")}
           onBlur={commit}
-          className="h-8 bg-white text-sm text-black"
+          size="md"
+          variant="plain"
         />
       </MetadataField>
 
@@ -120,7 +126,8 @@ export const FontSettingsPanel = ({ canAuthor }: { canAuthor: boolean }) => {
           value={draft.licenseUrl ?? ""}
           onChange={updateText("licenseUrl")}
           onBlur={commit}
-          className="h-8 bg-white text-sm text-black"
+          size="md"
+          variant="plain"
         />
       </MetadataField>
 
@@ -129,7 +136,8 @@ export const FontSettingsPanel = ({ canAuthor }: { canAuthor: boolean }) => {
           value={draft.designer ?? ""}
           onChange={updateText("designer")}
           onBlur={commit}
-          className="h-8 bg-white text-sm text-black"
+          size="md"
+          variant="plain"
         />
       </MetadataField>
 
@@ -138,7 +146,8 @@ export const FontSettingsPanel = ({ canAuthor }: { canAuthor: boolean }) => {
           value={draft.designerUrl ?? ""}
           onChange={updateText("designerUrl")}
           onBlur={commit}
-          className="h-8 bg-white text-sm text-black"
+          size="md"
+          variant="plain"
         />
       </MetadataField>
 
@@ -147,7 +156,8 @@ export const FontSettingsPanel = ({ canAuthor }: { canAuthor: boolean }) => {
           value={draft.manufacturerUrl ?? ""}
           onChange={updateText("manufacturerUrl")}
           onBlur={commit}
-          className="h-8 bg-white text-sm text-black"
+          size="md"
+          variant="plain"
         />
       </MetadataField>
 
@@ -156,7 +166,8 @@ export const FontSettingsPanel = ({ canAuthor }: { canAuthor: boolean }) => {
           value={draft.description ?? ""}
           onChange={updateText("description")}
           onBlur={commit}
-          className="min-h-20 bg-white text-sm text-black"
+          variant="plain"
+          className="min-h-20"
         />
       </MetadataField>
 
@@ -165,7 +176,8 @@ export const FontSettingsPanel = ({ canAuthor }: { canAuthor: boolean }) => {
           value={draft.note ?? ""}
           onChange={updateText("note")}
           onBlur={commit}
-          className="min-h-20 bg-white text-sm text-black"
+          variant="plain"
+          className="min-h-20"
         />
       </MetadataField>
     </fieldset>
@@ -174,7 +186,9 @@ export const FontSettingsPanel = ({ canAuthor }: { canAuthor: boolean }) => {
 
 const MetadataField = ({ label, children }: { label: string; children: ReactNode }) => (
   <Field className="gap-1.5">
-    <FieldLabel className="text-sm text-primary">{label}</FieldLabel>
+    <FieldLabel tone="primary" className="text-sm">
+      {label}
+    </FieldLabel>
     {children}
   </Field>
 );

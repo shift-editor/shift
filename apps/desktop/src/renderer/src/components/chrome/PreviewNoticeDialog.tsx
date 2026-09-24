@@ -29,8 +29,8 @@ export const PreviewNoticeDialog = ({
       <DialogBackdrop />
       <DialogPopup
         className={cn(
-          "fixed left-1/2 top-1/2 w-[320px] -translate-x-1/2 -translate-y-1/2",
-          "rounded-lg border border-line-subtle bg-canvas p-4 shadow-lg",
+          "fixed left-1/2 top-1/2 w-80 -translate-x-1/2 -translate-y-1/2",
+          "border border-line-subtle bg-surface-muted p-4",
         )}
       >
         <DialogTitle className="text-base font-medium text-primary">

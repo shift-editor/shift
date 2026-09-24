@@ -13,7 +13,6 @@ import {
   SelectPositioner,
   SelectTrigger,
   SelectValue,
-  cn,
 } from "@shift/ui";
 import { isRegisteredOpenTypeAxisTag } from "@/lib/variation/registeredAxes";
 import { SettingsNumberField } from "./SettingsNumberField";
@@ -35,7 +34,7 @@ export const AxisDefinitionPanel = ({ draft }: AxisDefinitionPanelProps) => {
 
   return (
     <section className="flex flex-col gap-5 p-5 pr-8">
-      {draft.error && <p className="text-xs text-red-600">{draft.error}</p>}
+      {draft.error && <p className="text-xs text-error">{draft.error}</p>}
 
       <div className="grid grid-cols-[minmax(0,1fr)_7rem] gap-3">
         <label className="flex flex-col gap-1.5 text-sm text-primary">
@@ -49,7 +48,8 @@ export const AxisDefinitionPanel = ({ draft }: AxisDefinitionPanelProps) => {
             onBlur={async () => {
               await draft.commit();
             }}
-            className="h-8 bg-white text-sm text-black"
+            size="md"
+            variant="plain"
           />
         </label>
 
@@ -65,10 +65,9 @@ export const AxisDefinitionPanel = ({ draft }: AxisDefinitionPanelProps) => {
             onBlur={async () => {
               await draft.commit();
             }}
-            className={cn(
-              "h-8 font-mono text-sm text-black",
-              registeredTag ? "bg-input" : "bg-white",
-            )}
+            size="md"
+            variant={registeredTag ? "filled" : "plain"}
+            className="font-mono"
           />
         </label>
       </div>
@@ -100,7 +99,7 @@ export const AxisDefinitionPanel = ({ draft }: AxisDefinitionPanelProps) => {
           <label className="flex flex-col gap-1.5 text-sm text-secondary">
             Type
             <Select value={axis.axisType} onValueChange={changeType}>
-              <SelectTrigger className="h-8 bg-white text-sm text-black">
+              <SelectTrigger variant="plain" className="h-8">
                 <SelectValue />
                 <SelectIcon />
               </SelectTrigger>

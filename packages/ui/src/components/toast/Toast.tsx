@@ -42,7 +42,7 @@ function ToastRoot({ toast, children, className }: ToastRootProps) {
       toast={toast}
       style={{ boxShadow: "0 2px 5px -1px rgba(50,50,93,.25),0 1px 3px -1px rgba(0,0,0,.3)" }}
       className={cn(
-        "bg-panel rounded-sm p-2 text-sm text-black",
+        "bg-surface rounded-sm p-2 text-sm text-primary",
         "data-[ending-style]:opacity-0 data-[starting-style]:opacity-0",
         "transition-opacity duration-200",
         className,
@@ -69,7 +69,7 @@ interface ToastDescriptionProps {
 
 function ToastDescription({ children, className }: ToastDescriptionProps) {
   return (
-    <BaseToast.Description className={cn("text-neutral-300", className)}>
+    <BaseToast.Description className={cn("text-secondary", className)}>
       {children}
     </BaseToast.Description>
   );
@@ -78,7 +78,7 @@ function ToastDescription({ children, className }: ToastDescriptionProps) {
 function ToastClose({ className }: { className?: string }) {
   return (
     <BaseToast.Close
-      className={cn("absolute top-2 right-2 text-neutral-400 hover:text-white", className)}
+      className={cn("absolute top-2 right-2 text-secondary hover:text-primary", className)}
     >
       ×
     </BaseToast.Close>

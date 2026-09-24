@@ -45,10 +45,10 @@ export const SettingsDialog = ({
         <DialogBackdrop />
         <DialogPopup
           className={cn(
-            "fixed left-1/2 top-1/2 h-[500px]",
-            "w-[800px] max-w-none -translate-x-1/2 -translate-y-1/2",
-            "grid grid-cols-[9.5rem_minmax(0,1fr)] overflow-hidden rounded-lg",
-            "border border-line-subtle bg-canvas shadow-lg",
+            "fixed left-1/2 top-1/2 h-125",
+            "w-200 max-w-none -translate-x-1/2 -translate-y-1/2",
+            "grid grid-cols-[9.5rem_minmax(0,1fr)] overflow-hidden",
+            "border border-line-subtle bg-surface-muted",
           )}
         >
           <DialogTitle className="sr-only">{message("settings.dialog.title")}</DialogTitle>
@@ -61,16 +61,13 @@ export const SettingsDialog = ({
 
           <main
             aria-label="Settings details"
-            className="relative min-h-0 min-w-0 overflow-hidden bg-canvas"
+            className="relative min-h-0 min-w-0 overflow-hidden bg-surface-muted"
           >
             <Tooltip>
               <TooltipTrigger>
                 <DialogClose
-                  className={cn(
-                    "absolute right-2 top-2 z-10 inline-flex h-7 w-7 cursor-pointer",
-                    "items-center justify-center rounded text-primary/70 transition-colors",
-                    "hover:bg-hover hover:text-primary",
-                  )}
+                  variant="icon"
+                  className="absolute right-2 top-2 z-10 h-7 w-7"
                   aria-label={message("settings.dialog.close")}
                 >
                   <X className="h-4 w-4" />

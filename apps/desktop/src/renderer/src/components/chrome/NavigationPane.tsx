@@ -36,8 +36,7 @@ export const NavigationPane = () => {
                   <Button
                     icon={<Icon width={20} height={20} />}
                     aria-label={route.description}
-                    variant="ghost"
-                    className="text-sidebar-icon hover:bg-icon-button-hover data-[active]:bg-transparent data-[active]:text-accent data-[active]:hover:bg-icon-button-hover"
+                    variant="toolbar"
                     isActive={
                       route.kind === "dialog"
                         ? settings.target !== null

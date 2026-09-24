@@ -41,7 +41,7 @@ export const TransformGrid = ({
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
     >
-      <rect x="4" y="4" width="54" height="44" stroke="#C2C2C2" strokeWidth="2" />
+      <rect x="4" y="4" width="54" height="44" className="stroke-control-muted" strokeWidth="2" />
       {anchorPositions.map(({ id, label, cx, cy }) => (
         <Tooltip key={id}>
           <TooltipTrigger>
@@ -53,10 +53,10 @@ export const TransformGrid = ({
               r="4"
               className={cn(
                 "transition-colors",
-                activeAnchor === id ? "fill-accent" : "fill-[#c2c2c2]",
+                onChange ? "cursor-pointer" : "cursor-default",
+                activeAnchor === id ? "fill-accent" : "fill-control-muted",
                 onChange && activeAnchor !== id && "hover:fill-accent/70",
               )}
-              style={{ cursor: onChange ? "pointer" : "default" }}
               onClick={() => {
                 if (onChange) onChange(id);
               }}

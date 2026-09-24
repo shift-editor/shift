@@ -47,7 +47,7 @@ export const GlyphCatalogView = () => {
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Search glyphs..."
-        className="h-8 text-sm bg-input"
+        size="md"
         icon={<Search className="w-3 h-3 text-muted" />}
         iconPosition="left"
       />
@@ -84,7 +84,7 @@ export const GlyphCatalogView = () => {
 
             return (
               <div key={categoryNode.category} className={cn(active && "rounded bg-hover/50")}>
-                <Collapsible className="flex flex-col gap-1">
+                <Collapsible className="flex flex-col">
                   <CollapsibleTrigger
                     render={
                       <SidebarRowButton
@@ -96,7 +96,7 @@ export const GlyphCatalogView = () => {
                     <Category category={categoryNode.category} />
                   </CollapsibleTrigger>
                   <CollapsiblePanel>
-                    <div className="flex flex-col gap-1">
+                    <div className="flex flex-col gap-1 pt-1">
                       {categoryNode.subCategories.map((subCategory) => (
                         <SubCategory
                           key={subCategory.key}

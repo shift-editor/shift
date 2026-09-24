@@ -153,10 +153,10 @@ export const UpdateScreen = () => {
   }
 
   return (
-    <main className="flex h-screen flex-col bg-surface text-primary">
+    <main className="flex h-screen flex-col bg-background text-primary">
       <Titlebar closeOnly onClose={later} />
       <section
-        className="flex min-h-0 flex-1 flex-col items-center justify-center gap-[22px] px-6 pb-6 text-center"
+        className="flex min-h-0 flex-1 flex-col items-center justify-center gap-5.5 px-6 pb-6 text-center"
         aria-live="polite"
       >
         <img src={appIcon} alt="" className="h-20 w-20 drop-shadow-md" />

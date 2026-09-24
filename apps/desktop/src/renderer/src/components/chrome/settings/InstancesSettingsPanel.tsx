@@ -48,7 +48,7 @@ export const InstancesSettingsPanel = ({
 
   return (
     <div className="grid h-full min-h-0 grid-cols-[10rem_minmax(0,1fr)]">
-      <aside className="flex min-h-0 flex-col border-r border-r-toolbar bg-canvas">
+      <aside className="flex min-h-0 flex-col border-r border-r-chrome bg-surface-muted">
         <div className="flex h-11 shrink-0 items-center justify-between px-2">
           <h2 className="pl-1 text-sm font-medium text-primary">Instances</h2>
           {canAuthor ? (
@@ -140,7 +140,7 @@ const InstanceEditor = ({ instance, axes, canAuthor }: InstanceEditorProps) => {
         <h2 className="truncate text-sm font-medium text-primary">{draft.name || "Instance"}</h2>
       </div>
 
-      {form.error && <p className="mb-4 text-xs text-red-600">{form.error}</p>}
+      {form.error && <p className="mb-4 text-xs text-error">{form.error}</p>}
 
       <SettingsSection title="Name">
         <Input
@@ -151,7 +151,8 @@ const InstanceEditor = ({ instance, axes, canAuthor }: InstanceEditorProps) => {
             form.update((current) => ({ ...current, name }));
           }}
           onBlur={commit}
-          className="h-8 bg-white text-sm text-black"
+          size="md"
+          variant="plain"
         />
       </SettingsSection>
 

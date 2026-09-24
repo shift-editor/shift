@@ -1,5 +1,15 @@
 {
-  "jsPlugins": ["oxlint-plugin-eslint", "../../scripts/oxlint/shift-plugin.mjs"],
+  "jsPlugins": [
+    { "name": "eslint-js", "specifier": "oxlint-plugin-eslint" },
+    "@shadcn/lint",
+    "../../scripts/oxlint/shift-plugin.mjs"
+  ],
+  "settings": {
+    "shadcn": {
+      "ui": "@shift/ui",
+      "note": "Shared appearance belongs in packages/ui; application call sites own contextual placement."
+    }
+  },
   "rules": {
     "eslint/no-unused-expressions": "off",
     "typescript/no-useless-empty-export": "off",
@@ -47,13 +57,237 @@
     "shift/no-bridge-import": "error",
     "shift/no-raw-editor-in-tests": "error",
     "shift/no-vi-stub-global-in-tests": "error",
-    "shift/no-vitest-mock-primitives": "error"
+    "shift/no-vitest-mock-primitives": "error",
+    "shadcn/no-unknown-classes": ["error", { "allow": ["shift-editor-shell"] }],
+    "shadcn/no-arbitrary-values": [
+      "error",
+      {
+        "allow": [
+          "max-h-[calc(100vh-4rem)]",
+          "w-[min(40rem,calc(100vw-4rem))]",
+          "grid-cols-[minmax(0,1fr)_auto]",
+          "grid-cols-[1rem_1.25rem_minmax(0,1fr)_auto]",
+          "grid-cols-[minmax(0,1fr)_6rem]",
+          "grid-cols-[minmax(0,1fr)_3.5rem_1.5rem]",
+          "grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]",
+          "grid-rows-[auto_minmax(0,1fr)]",
+          "grid-cols-[10rem_minmax(0,1fr)]",
+          "grid-cols-[minmax(0,1fr)_minmax(0,1fr)]",
+          "grid-cols-[9.5rem_minmax(0,1fr)]",
+          "grid-cols-[minmax(13rem,1fr)_minmax(12rem,0.9fr)]",
+          "grid-cols-[minmax(0,1fr)_7rem]",
+          "grid-cols-[repeat(3,minmax(0,1fr))_7rem]",
+          "grid-cols-[1rem_minmax(0,1fr)]",
+          "size-[calc(6px*sqrt(2))]",
+          "content-['']",
+          "before:[transform:translate(-50%,50%)_rotate(45deg)]",
+          "transition-[width]",
+          "transition-[left,width]",
+          "text-[9px]"
+        ]
+      }
+    ],
+    "shadcn/no-raw-colors": "error",
+    "shadcn/no-restyle": [
+      "error",
+      {
+        "allow": ["layout"],
+        "contracts": [
+          {
+            "pattern": "^Button$",
+            "allow": [
+              "layout",
+              "hover:bg-icon-button-hover",
+              "!opacity-100",
+              "p-0.75",
+              "text-ui",
+              "text-muted",
+              "font-medium",
+              "gap-1",
+              "px-2",
+              "focus-visible:ring-0",
+              "data-[popup-open]:bg-hover/50",
+              "p-0",
+              "text-sidebar-icon",
+              "hover:bg-hover",
+              "text-sm",
+              "opacity-0",
+              "transition-opacity",
+              "pl-4",
+              "rounded-md",
+              "transition-none",
+              "rounded-sm",
+              "truncate",
+              "bg-input",
+              "font-ui",
+              "text-xs",
+              "font-normal",
+              "bg-icon-button",
+              "p-1",
+              "px-1",
+              "text-primary",
+              "px-4",
+              "data-[pointer-focus]:focus-visible:ring-0"
+            ]
+          },
+          {
+            "pattern": "^DialogPopup$",
+            "allow": ["layout", "border", "border-line-subtle", "bg-surface-muted", "p-4", "p-6"]
+          },
+          {
+            "pattern": "^FieldLabel$",
+            "allow": ["layout", "text-ui", "truncate", "text-sm"]
+          },
+          {
+            "pattern": "^Toolbar$",
+            "allow": [
+              "layout",
+              "gap-2",
+              "rounded-lg",
+              "border-b",
+              "border-line",
+              "bg-background",
+              "px-1"
+            ]
+          },
+          {
+            "pattern": "^MenuItem$",
+            "allow": ["layout", "gap-6"]
+          },
+          {
+            "pattern": "^DialogTitle$",
+            "allow": [
+              "layout",
+              "text-base",
+              "font-medium",
+              "text-primary",
+              "text-lg",
+              "font-semibold"
+            ]
+          },
+          {
+            "pattern": "^FieldControl$",
+            "allow": ["layout", "text-ui"]
+          },
+          {
+            "pattern": "^Input$",
+            "allow": [
+              "layout",
+              "truncate",
+              "text-muted",
+              "font-mono",
+              "text-sm",
+              "pl-8",
+              "pl-7",
+              "bg-input"
+            ]
+          },
+          {
+            "pattern": "^NumberFieldGroup$",
+            "allow": ["layout", "bg-transparent"]
+          },
+          {
+            "pattern": "^TabsList$",
+            "allow": [
+              "layout",
+              "gap-2",
+              "gap-0",
+              "rounded-md",
+              "border-0",
+              "border-chrome",
+              "bg-input",
+              "p-0.5",
+              "px-5",
+              "pr-8"
+            ]
+          },
+          {
+            "pattern": "^TabsTab$",
+            "allow": [
+              "layout",
+              "rounded-sm",
+              "px-2",
+              "text-ui",
+              "data-[active]:bg-surface",
+              "data-[active]:font-medium",
+              "data-[active]:shadow-sm"
+            ]
+          },
+          {
+            "pattern": "^TabsPanel$",
+            "allow": ["layout", "px-1", "py-2"]
+          },
+          {
+            "pattern": "^ResizablePanel$",
+            "allow": ["layout", "sidebar-panel"]
+          },
+          {
+            "pattern": "^PopoverPopup$",
+            "allow": ["layout", "p-0"]
+          },
+          {
+            "pattern": "^Progress$",
+            "allow": ["layout", "bg-secondary/30", "duration-200"]
+          },
+          {
+            "pattern": "^Textarea$",
+            "allow": ["layout", "p-3", "font-normal"]
+          },
+          {
+            "pattern": "^CollapsiblePanel$",
+            "allow": ["layout", "pt-2"]
+          },
+          {
+            "pattern": "^CollapsibleTrigger$",
+            "allow": ["layout", "text-secondary", "hover:text-primary"]
+          },
+          {
+            "pattern": "^ToolbarGroup$",
+            "allow": ["layout", "gap-0.5"]
+          },
+          {
+            "pattern": "^ChevronDown$",
+            "allow": ["layout", "text-primary"]
+          },
+          {
+            "pattern": "^MenuCheckboxItem$",
+            "allow": ["layout", "gap-2"]
+          },
+          {
+            "pattern": "^MenuPopup$",
+            "allow": ["layout", "p-2"]
+          },
+          {
+            "pattern": "^Search$",
+            "allow": ["layout", "text-muted"]
+          },
+          {
+            "pattern": "^DialogBackdrop$",
+            "allow": ["layout", "bg-surface-muted"]
+          },
+          {
+            "pattern": "^Field$",
+            "allow": ["layout", "gap-1.5"]
+          },
+          {
+            "pattern": "^Separator$",
+            "allow": ["layout", "bg-secondary/30"]
+          }
+        ]
+      }
+    ]
   },
   "overrides": [
     {
       "files": ["src/**/*.test.ts", "src/renderer/src/testing/**/*.ts"],
       "rules": {
         "typescript/no-explicit-any": "error"
+      }
+    },
+    {
+      "files": ["src/renderer/src/components/chrome/Titlebar.tsx"],
+      "rules": {
+        "shadcn/no-raw-colors": "off"
       }
     }
   ]

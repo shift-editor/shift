@@ -41,9 +41,7 @@ export const CollapsibleSection = ({
       data-active={isActive ? true : undefined}
     >
       <CollapsibleTrigger
-        render={
-          <SidebarRowButton className="w-auto flex-1 bg-transparent hover:bg-transparent data-[active]:bg-transparent" />
-        }
+        render={<SidebarRowButton variant="transparent" className="w-auto flex-1" />}
       >
         <CollapsibleChevron />
         <h3 className="truncate text-ui font-medium text-primary">{title}</h3>

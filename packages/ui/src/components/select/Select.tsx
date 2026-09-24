@@ -16,18 +16,26 @@ export function Select<Value, Multiple extends boolean | undefined = false>(
 
 export interface SelectTriggerProps extends React.ComponentPropsWithoutRef<
   typeof BaseSelect.Trigger
-> {}
+> {
+  variant?: "filled" | "plain";
+}
+
+const triggerVariantStyles = {
+  filled: "bg-input",
+  plain: "bg-background",
+};
 
 export const SelectTrigger = React.forwardRef<
   React.ElementRef<typeof BaseSelect.Trigger>,
   SelectTriggerProps
->(({ className, ...props }, ref) => (
+>(({ className, variant = "filled", ...props }, ref) => (
   <BaseSelect.Trigger
     ref={ref}
     className={cn(
-      "flex h-7 min-w-0 cursor-pointer items-center justify-between gap-2 rounded bg-input px-2",
+      "flex h-7 min-w-0 cursor-pointer items-center justify-between gap-2 rounded px-2",
       "text-sm text-primary outline-none focus-visible:ring-1 focus-visible:ring-accent",
       "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+      triggerVariantStyles[variant],
       className,
     )}
     {...props}
@@ -72,7 +80,7 @@ export const SelectPopup = React.forwardRef<
   <BaseSelect.Popup
     ref={ref}
     className={cn(
-      "min-w-[var(--anchor-width)] rounded-md border border-line-subtle bg-surface p-1 shadow-lg outline-none",
+      "min-w-(--anchor-width) rounded-md border border-line-subtle bg-surface p-1 shadow-lg outline-none",
       className,
     )}
     {...props}

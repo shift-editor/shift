@@ -12,7 +12,7 @@ export const FeedbackScreen = () => {
   const feedbackEmailUrl = `mailto:${SHIFT_FEEDBACK_EMAIL}?body=${encodeURIComponent(feedback)}`;
 
   return (
-    <main className="fixed inset-0 flex min-h-0 flex-col bg-surface text-primary">
+    <main className="fixed inset-0 flex min-h-0 flex-col bg-background text-primary">
       <Titlebar closeOnly onClose={() => window.close()} />
       <section className="flex min-h-0 flex-1 flex-col px-4 pb-4">
         <header className="shrink-0">

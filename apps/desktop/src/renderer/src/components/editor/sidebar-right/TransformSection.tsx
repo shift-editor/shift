@@ -391,21 +391,21 @@ export const TransformSection = () => {
           </div>
           <div className="flex shrink-0 items-center gap-1">
             <IconButton
-              className="p-[3px]"
+              className="p-0.75"
               ariaLabel="Rotate 90 degrees clockwise"
               icon={RotateCwIcon}
               disabled={!editable}
               onClick={handleRotate90}
             />
             <IconButton
-              className="p-[3px]"
+              className="p-0.75"
               ariaLabel="Flip horizontally"
               icon={FlipHIcon}
               disabled={!editable}
               onClick={handleFlipH}
             />
             <IconButton
-              className="p-[3px]"
+              className="p-0.75"
               ariaLabel="Flip vertically"
               icon={FlipVIcon}
               disabled={!editable}

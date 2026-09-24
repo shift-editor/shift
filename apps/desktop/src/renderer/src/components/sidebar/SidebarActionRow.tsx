@@ -45,6 +45,7 @@ export const SidebarActionRow = ({
     {leading}
     {onClick ? (
       <SidebarRowButton
+        variant="transparent"
         data-testid={testId}
         aria-pressed={isSelected}
         onPointerDown={(event) => {
@@ -54,10 +55,7 @@ export const SidebarActionRow = ({
           delete event.currentTarget.dataset.pointerFocus;
         }}
         onClick={onClick}
-        className={cn(
-          "w-auto flex-1 bg-transparent hover:bg-transparent data-[pointer-focus]:focus-visible:ring-0 data-[active]:bg-transparent",
-          contentClassName,
-        )}
+        className={cn("w-auto flex-1 data-[pointer-focus]:focus-visible:ring-0", contentClassName)}
       >
         {children}
       </SidebarRowButton>
@@ -103,10 +101,10 @@ export const SidebarActionButton = forwardRef<HTMLButtonElement, SidebarActionBu
   ({ label, children, className, ...props }, ref) => (
     <Button
       ref={ref}
-      variant="ghost"
+      variant="muted"
       size="icon-sm"
       aria-label={label}
-      className={cn("h-6 w-6 p-0.5 text-muted hover:text-primary", className)}
+      className={className}
       {...props}
     >
       {children}

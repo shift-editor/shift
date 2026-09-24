@@ -15,7 +15,6 @@ import {
   TooltipContent,
   TooltipTrigger,
   X,
-  cn,
 } from "@shift/ui";
 import type { Axis, AxisId, Source, SourceId } from "@shift/types";
 import PlusIcon from "@/assets/general/plus.svg";
@@ -159,18 +158,10 @@ export const CreateSourceMenu = ({ onSourceCreated, onOpenChange }: CreateSource
         <PopoverPositioner sideOffset={4} align="start">
           <PopoverPopup className="w-50 p-0" initialFocus={nameInputRef}>
             <div className="flex h-8 items-center justify-between border-b border-line-subtle px-2">
-              <PopoverTitle className="text-ui font-medium text-primary">
-                Create Source
-              </PopoverTitle>
+              <PopoverTitle>Create Source</PopoverTitle>
               <Tooltip>
                 <TooltipTrigger>
-                  <PopoverClose
-                    className={cn(
-                      "inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded",
-                      "text-primary/70 transition-colors hover:bg-hover hover:text-primary",
-                    )}
-                    aria-label="Close"
-                  >
+                  <PopoverClose variant="icon" aria-label="Close">
                     <X className="h-4 w-4" />
                   </PopoverClose>
                 </TooltipTrigger>
@@ -181,7 +172,7 @@ export const CreateSourceMenu = ({ onSourceCreated, onOpenChange }: CreateSource
             <form onSubmit={handleSubmit}>
               <div className="grid grid-cols-[minmax(0,1fr)_6rem] items-center gap-x-2 px-2 py-1">
                 <Field className="contents" invalid={!!nameIssue}>
-                  <FieldLabel htmlFor="create-source-name" className="text-ui text-primary">
+                  <FieldLabel htmlFor="create-source-name" tone="primary" className="text-ui">
                     Name
                   </FieldLabel>
                   <FieldControl
@@ -190,7 +181,8 @@ export const CreateSourceMenu = ({ onSourceCreated, onOpenChange }: CreateSource
                     value={values.name}
                     onChange={updateName}
                     aria-describedby={nameIssue ? SOURCE_CREATION_ERROR_ID : undefined}
-                    className="h-7 min-w-0 max-w-full bg-white px-2 text-right text-ui text-black"
+                    variant="plain"
+                    className="min-w-0 max-w-full text-right text-ui"
                   />
                 </Field>
 
@@ -203,7 +195,7 @@ export const CreateSourceMenu = ({ onSourceCreated, onOpenChange }: CreateSource
                 >
                   {locationIssue && (
                     <div
-                      className="pointer-events-none absolute inset-y-0 right-0 z-10 w-24 rounded ring-1 ring-inset ring-red-500"
+                      className="pointer-events-none absolute inset-y-0 right-0 z-10 w-24 rounded ring-1 ring-inset ring-error-ring"
                       aria-hidden="true"
                     />
                   )}
@@ -220,7 +212,8 @@ export const CreateSourceMenu = ({ onSourceCreated, onOpenChange }: CreateSource
                       <Field key={axis.id} className="contents" invalid={!!axisIssue}>
                         <FieldLabel
                           htmlFor={`create-source-${axis.id}`}
-                          className="min-w-0 truncate text-ui text-primary"
+                          tone="primary"
+                          className="min-w-0 truncate text-ui"
                           title={axis.name}
                         >
                           {axis.name}
@@ -238,7 +231,8 @@ export const CreateSourceMenu = ({ onSourceCreated, onOpenChange }: CreateSource
                           value={values.location[axis.id] ?? ""}
                           onChange={updateAxisValue(axis.id)}
                           aria-describedby={axisIssue ? SOURCE_CREATION_ERROR_ID : undefined}
-                          className="h-7 min-w-0 max-w-full bg-white px-2 text-right text-ui text-black"
+                          variant="plain"
+                          className="min-w-0 max-w-full text-right text-ui"
                           inputMode="decimal"
                         />
                       </Field>
@@ -251,12 +245,9 @@ export const CreateSourceMenu = ({ onSourceCreated, onOpenChange }: CreateSource
                 <div
                   id={SOURCE_CREATION_ERROR_ID}
                   role="alert"
-                  className="flex items-start gap-1.5 px-2 pb-1.5 text-ui text-red-600"
+                  className="flex items-start gap-1.5 px-2 pb-1.5 text-ui text-error"
                 >
-                  <WarningIcon
-                    className="mt-0.5 h-3 w-3 shrink-0 text-red-600"
-                    aria-hidden="true"
-                  />
+                  <WarningIcon className="mt-0.5 h-3 w-3 shrink-0 text-error" aria-hidden="true" />
                   <span>{visibleIssue.message}</span>
                 </div>
               )}
@@ -264,7 +255,7 @@ export const CreateSourceMenu = ({ onSourceCreated, onOpenChange }: CreateSource
               <div className="grid grid-cols-2 gap-2 px-2 pb-2 pt-1.5">
                 <PopoverClose
                   render={
-                    <Button type="button" className="h-[30px] text-ui">
+                    <Button type="button" className="h-7.5 text-ui">
                       Cancel
                     </Button>
                   }
@@ -272,7 +263,7 @@ export const CreateSourceMenu = ({ onSourceCreated, onOpenChange }: CreateSource
                 <Button
                   type="submit"
                   variant="primary"
-                  className="h-[30px] text-ui"
+                  className="h-7.5 text-ui"
                   disabled={!!visibleIssue}
                 >
                   Create

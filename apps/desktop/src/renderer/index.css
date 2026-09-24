@@ -26,21 +26,18 @@
 }
 
 @theme {
-  /* Background colors: bg-app, bg-canvas, bg-toolbar, etc. */
-  --color-app: #ffffff;
-  --color-canvas: #f2f2f2;
-  --color-toolbar: #e2e2e2;
-  --color-hover: #e5e5e5;
+  /* Background layers: background, surfaces, chrome, and controls. */
+  --color-background: #ffffff;
   --color-surface: #ffffff;
+  --color-surface-muted: #f2f2f2;
+  --color-chrome: #e2e2e2;
+  --color-hover: #e5e5e5;
   --color-surface-hover: #f5f5f5;
   --color-surface-inverse: #232323;
   --color-on-surface-inverse: #ffffff;
-  --color-panel: #ffffff;
   --color-input: #ededed;
   --color-icon-button: #f3f3f3;
   --color-icon-button-hover: #d9d9d9;
-
-  --color-input-bg: #f3f3f3;
 
   /* Border colors: border-line, border-line-subtle */
   --color-line: #2c2c2c;
@@ -53,6 +50,16 @@
   --color-sidebar-icon: #585858;
 
   --color-accent: #0c92f4;
+
+  /* Status and action colors */
+  --color-error: #dc2626;
+  --color-error-ring: #ef4444;
+  --color-destructive: #dc2626;
+  --color-destructive-hover: #fef2f2;
+
+  /* Low-emphasis icon and control colors */
+  --color-icon-subtle: #9f9f9f;
+  --color-control-muted: #c2c2c2;
 
   /* Canvas accent colors */
   --color-canvas-purple: #8b5cf6;

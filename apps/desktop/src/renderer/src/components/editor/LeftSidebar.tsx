@@ -5,19 +5,19 @@ import { VariationPanel } from "./VariationPanel";
 export const LeftSidebar = () => (
   <aside
     aria-label="Glyph objects and variations"
-    className="h-full w-full min-w-0 bg-panel border-r border-line-subtle overflow-hidden"
+    className="h-full w-full min-w-0 overflow-hidden border-r border-line-subtle bg-surface"
   >
     <Tabs defaultValue="objects" className="flex h-full min-h-0 flex-col">
       <TabsList className="mx-2 mt-2 h-6 shrink-0 gap-0 rounded-md border-0 bg-input p-0.5">
         <TabsTab
           value="objects"
-          className="h-5 flex-1 rounded-sm px-2 text-ui data-[active]:bg-panel data-[active]:font-medium data-[active]:shadow-sm"
+          className="h-5 flex-1 rounded-sm px-2 text-ui data-[active]:bg-surface data-[active]:font-medium data-[active]:shadow-sm"
         >
           Objects
         </TabsTab>
         <TabsTab
           value="variations"
-          className="h-5 flex-1 rounded-sm px-2 text-ui data-[active]:bg-panel data-[active]:font-medium data-[active]:shadow-sm"
+          className="h-5 flex-1 rounded-sm px-2 text-ui data-[active]:bg-surface data-[active]:font-medium data-[active]:shadow-sm"
         >
           Variations
         </TabsTab>

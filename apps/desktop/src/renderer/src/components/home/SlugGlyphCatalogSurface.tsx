@@ -183,18 +183,18 @@ export function SlugGlyphCatalogSurface({
         data-testid="glyph-catalog-canvas"
         data-glyph-catalog-renderer="slug"
         data-first-glyph-name={glyphs[0]?.displayName}
-        className="pointer-events-none absolute left-0 top-0 z-[2] h-full w-full bg-transparent"
+        className="pointer-events-none absolute left-0 top-0 z-2 h-full w-full bg-transparent"
         style={{ visibility: ready ? "visible" : "hidden" }}
       />
       <canvas
         ref={overlayCanvasRef}
         aria-hidden="true"
-        className="pointer-events-none absolute left-0 top-0 z-[1] h-full w-full bg-transparent"
+        className="pointer-events-none absolute left-0 top-0 z-1 h-full w-full bg-transparent"
       />
       {editingGlyph ? (
         <div
           ref={inputContainerRef}
-          className="absolute left-0 top-0 z-[3]"
+          className="absolute left-0 top-0 z-3"
           style={{ height: 28, transform: "translate(-10000px, -10000px)", width: 0 }}
         >
           <GlyphNameInput

@@ -39,7 +39,7 @@ export const Slider = React.forwardRef<HTMLDivElement, SliderProps>(
       >
         <BaseSlider.Control className="flex h-3.5 w-full cursor-pointer items-center px-1.75">
           <BaseSlider.Track
-            className={cn("relative w-full h-1.5 bg-canvas rounded-full", trackClassName)}
+            className={cn("relative w-full h-1.5 bg-surface-muted rounded-full", trackClassName)}
           >
             <BaseSlider.Indicator
               className={cn("absolute h-full bg-accent rounded-full", indicatorClassName)}

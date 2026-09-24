@@ -51,7 +51,7 @@ const menuItemStyles =
   "flex h-7 cursor-pointer select-none items-center rounded px-2 text-sm text-primary outline-none data-[highlighted]:bg-hover/50 data-[disabled]:pointer-events-none data-[disabled]:opacity-50";
 
 export interface MenuItemProps extends React.ComponentPropsWithoutRef<typeof BaseMenu.Item> {
-  variant?: "default" | "danger";
+  variant?: "default" | "danger" | "outlined";
 }
 
 export const MenuItem = React.forwardRef<React.ElementRef<typeof BaseMenu.Item>, MenuItemProps>(
@@ -60,7 +60,9 @@ export const MenuItem = React.forwardRef<React.ElementRef<typeof BaseMenu.Item>,
       ref={ref}
       className={cn(
         menuItemStyles,
-        variant === "danger" && "text-red-600 data-[highlighted]:bg-red-50",
+        variant === "danger" && "text-destructive data-[highlighted]:bg-destructive-hover",
+        variant === "outlined" &&
+          "h-8 justify-center gap-2 border border-line-subtle bg-surface-muted hover:bg-hover data-[highlighted]:bg-hover",
         className,
       )}
       {...props}

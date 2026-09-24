@@ -72,13 +72,13 @@ export const ObjectRow = ({
 };
 
 function itemIcon(icon: ObjectTreeIcon, iconPath?: string) {
-  const className = "h-3 w-3 text-[#9f9f9f] [&_path]:stroke-current";
+  const className = "h-3 w-3 text-icon-subtle [&_path]:stroke-current";
 
   if (icon === "contour" && iconPath) {
     return (
       <svg
         aria-hidden
-        className="h-3.5 w-3.5 shrink-0 text-[#9f9f9f]"
+        className="h-3.5 w-3.5 shrink-0 text-icon-subtle"
         viewBox="0 0 14 14"
         fill="none"
       >

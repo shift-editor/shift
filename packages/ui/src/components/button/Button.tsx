@@ -6,16 +6,21 @@ import {
 import { cn } from "../../lib/utils";
 
 export type ButtonProps = BaseButtonProps & {
-  variant?: "default" | "ghost" | "primary";
+  variant?: "default" | "ghost" | "primary" | "toolbar" | "row" | "muted" | "transparent";
   size?: "sm" | "md" | "lg" | "icon" | "icon-sm";
   isActive?: boolean;
   icon?: React.ReactNode;
 };
 
 const variantStyles = {
-  primary: "bg-accent text-white hover:bg-accent/90 rounded-md",
-  default: "bg-surface border border-line-subtle hover:bg-surface-hover",
+  primary: "rounded-md bg-accent text-white hover:bg-accent/90",
+  default: "border border-line-subtle bg-background hover:bg-surface-hover",
   ghost: "hover:bg-hover/50 data-[active]:bg-hover/50",
+  toolbar:
+    "text-sidebar-icon hover:bg-icon-button-hover data-[active]:bg-transparent data-[active]:text-accent data-[active]:hover:bg-icon-button-hover",
+  row: "w-full justify-start rounded-sm px-2 text-sm font-normal hover:bg-hover/50 data-[active]:bg-hover data-[active]:hover:bg-hover",
+  muted: "text-muted hover:bg-hover/50 hover:text-primary",
+  transparent: "bg-transparent hover:bg-transparent data-[active]:bg-transparent",
 };
 
 const sizeStyles = {
