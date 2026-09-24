@@ -20,11 +20,10 @@ export const SubCategory = ({
   return (
     <SidebarRowButton
       key={`${category}:${subCategory}`}
-      className="pl-7"
       onClick={() => onSelectSubCategory(category, subCategory)}
       isActive={isActive}
     >
-      <span className="truncate">{subCategory}</span>
+      <span className="truncate pl-5">{subCategory}</span>
     </SidebarRowButton>
   );
 };

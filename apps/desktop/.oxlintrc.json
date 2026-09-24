@@ -126,7 +126,8 @@
               "p-1",
               "px-1",
               "text-primary",
-              "px-4"
+              "px-4",
+              "data-[pointer-focus]:focus-visible:ring-0"
             ]
           },
           {
@@ -187,7 +188,34 @@
           },
           {
             "pattern": "^TabsList$",
-            "allow": ["layout", "gap-2", "border-chrome", "px-5", "pr-8"]
+            "allow": [
+              "layout",
+              "gap-2",
+              "gap-0",
+              "rounded-md",
+              "border-0",
+              "border-chrome",
+              "bg-input",
+              "p-0.5",
+              "px-5",
+              "pr-8"
+            ]
+          },
+          {
+            "pattern": "^TabsTab$",
+            "allow": [
+              "layout",
+              "rounded-sm",
+              "px-2",
+              "text-ui",
+              "data-[active]:bg-surface",
+              "data-[active]:font-medium",
+              "data-[active]:shadow-sm"
+            ]
+          },
+          {
+            "pattern": "^TabsPanel$",
+            "allow": ["layout", "px-1", "py-2"]
           },
           {
             "pattern": "^ResizablePanel$",
@@ -208,6 +236,10 @@
           {
             "pattern": "^CollapsiblePanel$",
             "allow": ["layout", "pt-2"]
+          },
+          {
+            "pattern": "^CollapsibleTrigger$",
+            "allow": ["layout", "text-secondary", "hover:text-primary"]
           },
           {
             "pattern": "^ToolbarGroup$",

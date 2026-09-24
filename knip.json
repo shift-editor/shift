@@ -35,7 +35,8 @@
     },
     "packages/editor": {
       "entry": ["src/index.ts"],
-      "project": ["src/**/*.{ts,tsx}"]
+      "project": ["src/**/*.{ts,tsx}"],
+      "ignoreDependencies": ["oxlint-plugin-eslint"]
     },
     "packages/geo": {
       "project": ["src/**/*.ts"]
