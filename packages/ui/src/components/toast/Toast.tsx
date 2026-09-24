@@ -69,7 +69,7 @@ interface ToastDescriptionProps {
 
 function ToastDescription({ children, className }: ToastDescriptionProps) {
   return (
-    <BaseToast.Description className={cn("text-neutral-300", className)}>
+    <BaseToast.Description className={cn("text-secondary", className)}>
       {children}
     </BaseToast.Description>
   );
@@ -78,7 +78,7 @@ function ToastDescription({ children, className }: ToastDescriptionProps) {
 function ToastClose({ className }: { className?: string }) {
   return (
     <BaseToast.Close
-      className={cn("absolute top-2 right-2 text-neutral-400 hover:text-white", className)}
+      className={cn("absolute top-2 right-2 text-secondary hover:text-primary", className)}
     >
       ×
     </BaseToast.Close>

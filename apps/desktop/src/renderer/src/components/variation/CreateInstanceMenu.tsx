@@ -191,7 +191,7 @@ export const CreateInstanceMenu = ({
                 >
                   {locationIssue && (
                     <div
-                      className="pointer-events-none absolute inset-y-0 right-0 z-10 w-24 rounded ring-1 ring-inset ring-red-500"
+                      className="pointer-events-none absolute inset-y-0 right-0 z-10 w-24 rounded ring-1 ring-inset ring-error-ring"
                       aria-hidden="true"
                     />
                   )}
@@ -239,12 +239,9 @@ export const CreateInstanceMenu = ({
                 <div
                   id={INSTANCE_CREATION_ERROR_ID}
                   role="alert"
-                  className="flex items-start gap-1.5 px-2 pb-1.5 text-ui text-red-600"
+                  className="flex items-start gap-1.5 px-2 pb-1.5 text-ui text-error"
                 >
-                  <WarningIcon
-                    className="mt-0.5 h-3 w-3 shrink-0 text-red-600"
-                    aria-hidden="true"
-                  />
+                  <WarningIcon className="mt-0.5 h-3 w-3 shrink-0 text-error" aria-hidden="true" />
                   <span>{visibleIssue.message}</span>
                 </div>
               )}
@@ -252,7 +249,7 @@ export const CreateInstanceMenu = ({
               <div className="grid grid-cols-2 gap-2 px-2 pb-2 pt-1.5">
                 <PopoverClose
                   render={
-                    <Button type="button" className="h-[30px] text-ui">
+                    <Button type="button" className="h-7.5 text-ui">
                       Cancel
                     </Button>
                   }
@@ -260,7 +257,7 @@ export const CreateInstanceMenu = ({
                 <Button
                   type="submit"
                   variant="primary"
-                  className="h-[30px] text-ui"
+                  className="h-7.5 text-ui"
                   disabled={!!visibleIssue}
                 >
                   Create

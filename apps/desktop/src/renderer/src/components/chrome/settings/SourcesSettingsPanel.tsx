@@ -149,7 +149,7 @@ const SourceEditor = ({ source, axes, definitions, canAuthor }: SourceEditorProp
         <h2 className="text-sm font-medium text-primary">{draft.name || "Source"}</h2>
       </div>
 
-      {form.error && <p className="mb-4 text-xs text-red-600">{form.error}</p>}
+      {form.error && <p className="mb-4 text-xs text-error">{form.error}</p>}
 
       <SettingsSection title="Name">
         <Input
@@ -160,7 +160,8 @@ const SourceEditor = ({ source, axes, definitions, canAuthor }: SourceEditorProp
             form.update((current) => ({ ...current, name }));
           }}
           onBlur={commit}
-          className="h-8 bg-white text-sm text-black"
+          size="md"
+          variant="plain"
         />
       </SettingsSection>
 

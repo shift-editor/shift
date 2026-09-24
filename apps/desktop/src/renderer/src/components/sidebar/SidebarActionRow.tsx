@@ -103,10 +103,10 @@ export const SidebarActionButton = forwardRef<HTMLButtonElement, SidebarActionBu
   ({ label, children, className, ...props }, ref) => (
     <Button
       ref={ref}
-      variant="ghost"
+      variant="muted"
       size="icon-sm"
       aria-label={label}
-      className={cn("h-6 w-6 p-0.5 text-muted hover:text-primary", className)}
+      className={className}
       {...props}
     >
       {children}

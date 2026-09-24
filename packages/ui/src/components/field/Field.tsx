@@ -34,7 +34,7 @@ export const FieldControl = React.forwardRef<
     className={cn(
       "h-7 w-full rounded bg-input px-2 text-sm text-primary outline-none",
       "focus:ring-1 focus:ring-inset focus:ring-accent",
-      "data-[invalid]:ring-1 data-[invalid]:ring-inset data-[invalid]:ring-red-500",
+      "data-[invalid]:ring-1 data-[invalid]:ring-inset data-[invalid]:ring-error-ring",
       "data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50",
       className,
     )}
@@ -61,6 +61,6 @@ export const FieldError = React.forwardRef<
   React.ElementRef<typeof BaseField.Error>,
   FieldErrorProps
 >(({ className, ...props }, ref) => (
-  <BaseField.Error ref={ref} className={cn("text-xs text-red-600", className)} {...props} />
+  <BaseField.Error ref={ref} className={cn("text-xs text-error", className)} {...props} />
 ));
 FieldError.displayName = "FieldError";

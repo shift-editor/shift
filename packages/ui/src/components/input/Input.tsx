@@ -2,12 +2,25 @@ import * as React from "react";
 import { Input as BaseInput } from "@base-ui-components/react/input";
 import { cn } from "../../lib/utils";
 
-export interface InputProps extends React.ComponentProps<typeof BaseInput> {
+export interface InputProps extends Omit<React.ComponentProps<typeof BaseInput>, "size"> {
+  size?: "compact" | "sm" | "md";
+  variant?: "filled" | "plain";
   label?: React.ReactNode;
   labelPosition?: "left" | "right";
   icon?: React.ReactNode;
   iconPosition?: "left" | "right";
 }
+
+const sizeStyles = {
+  compact: "h-6 text-ui",
+  sm: "h-7 text-xs",
+  md: "h-8 text-sm",
+};
+
+const variantStyles = {
+  filled: "bg-input",
+  plain: "bg-surface",
+};
 
 type InputKeyDownEvent = Parameters<NonNullable<InputProps["onKeyDown"]>>[0];
 
@@ -17,14 +30,24 @@ function isSelectAllShortcut(event: InputKeyDownEvent): boolean {
 
 export const Input = React.forwardRef<HTMLInputElement, InputProps>(
   (
-    { className, label, labelPosition = "left", icon, iconPosition = "right", onKeyDown, ...props },
+    {
+      className,
+      size = "compact",
+      variant = "filled",
+      label,
+      labelPosition = "left",
+      icon,
+      iconPosition = "right",
+      onKeyDown,
+      ...props
+    },
     ref,
   ) => {
     const iconOnLeft = iconPosition === "left";
     const labelOnRight = labelPosition === "right";
 
     const handleKeyDown: InputProps["onKeyDown"] = (event) => {
-      onKeyDown?.(event);
+      if (onKeyDown) onKeyDown(event);
       if (event.defaultPrevented) return;
 
       if (isSelectAllShortcut(event)) {
@@ -39,7 +62,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
         {label && (
           <span
             className={cn(
-              "absolute text-muted text-[11px] font-medium pointer-events-none",
+              "absolute text-muted text-ui font-medium pointer-events-none",
               labelOnRight ? "right-2" : "left-2",
             )}
           >
@@ -50,11 +73,13 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
         <BaseInput
           ref={ref}
           className={cn(
-            "w-full h-6 px-2 text-[11px] text-primary bg-input rounded",
+            "w-full rounded px-2 text-primary",
             "focus:outline-none focus:ring-1 focus:ring-inset focus:ring-accent",
+            sizeStyles[size],
+            variantStyles[variant],
             "disabled:opacity-50 disabled:cursor-not-allowed",
-            label && !labelOnRight && "pl-5",
-            label && labelOnRight && "pr-5",
+            label && !labelOnRight && "pl-6",
+            label && labelOnRight && "pr-6",
             icon && iconOnLeft && "pl-6",
             icon && !iconOnLeft && "pr-6",
             className,

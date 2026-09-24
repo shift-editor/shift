@@ -45,8 +45,8 @@ export const SettingsDialog = ({
         <DialogBackdrop />
         <DialogPopup
           className={cn(
-            "fixed left-1/2 top-1/2 h-[500px]",
-            "w-[800px] max-w-none -translate-x-1/2 -translate-y-1/2",
+            "fixed left-1/2 top-1/2 h-125",
+            "w-200 max-w-none -translate-x-1/2 -translate-y-1/2",
             "grid grid-cols-[9.5rem_minmax(0,1fr)] overflow-hidden rounded-lg",
             "border border-line-subtle bg-canvas shadow-lg",
           )}

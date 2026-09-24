@@ -24,7 +24,7 @@ export const AxisStylesPanel = ({ draft }: AxisStylesPanelProps) => {
         {labelsDisabled && (
           <p className="mt-1 text-xs text-secondary">Internal axes cannot own external labels.</p>
         )}
-        {draft.error && <p className="mt-1 text-xs text-red-600">{draft.error}</p>}
+        {draft.error && <p className="mt-1 text-xs text-error">{draft.error}</p>}
       </div>
 
       <StyleSection

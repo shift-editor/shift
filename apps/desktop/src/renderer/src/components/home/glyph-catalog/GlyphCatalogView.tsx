@@ -47,7 +47,7 @@ export const GlyphCatalogView = () => {
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Search glyphs..."
-        className="h-8 text-sm bg-input"
+        size="md"
         icon={<Search className="w-3 h-3 text-muted" />}
         iconPosition="left"
       />

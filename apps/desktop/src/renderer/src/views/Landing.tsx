@@ -29,10 +29,10 @@ export const Landing = () => {
       <Titlebar />
       <section className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4">
         <div className="flex flex-col items-center gap-2">
-          <LauncherLogo aria-hidden="true" className="h-auto w-[240px] text-primary" />
+          <LauncherLogo aria-hidden="true" className="h-auto w-60 text-primary" />
           <h1 className="sr-only">{shiftProductName}</h1>
         </div>
-        <div className="flex flex-col items-start w-[200px]">
+        <div className="flex flex-col items-start w-50">
           <Button
             className="w-full flex justify-between items-center font-medium"
             onClick={handleNewFont}

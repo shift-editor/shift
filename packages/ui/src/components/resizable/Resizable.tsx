@@ -73,7 +73,7 @@ export const ResizableHandle = ({
       {withVisual ? (
         <div
           className={cn(
-            "rounded-full bg-line-accent",
+            "rounded-full bg-line-subtle",
             "data-[panel-group-direction=horizontal]:h-8 data-[panel-group-direction=horizontal]:w-0.5",
             "data-[panel-group-direction=vertical]:h-0.5 data-[panel-group-direction=vertical]:w-8",
           )}

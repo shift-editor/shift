@@ -1,5 +1,15 @@
 {
-  "jsPlugins": ["oxlint-plugin-eslint", "../../scripts/oxlint/shift-plugin.mjs"],
+  "jsPlugins": [
+    { "name": "eslint-js", "specifier": "oxlint-plugin-eslint" },
+    "@shadcn/lint",
+    "../../scripts/oxlint/shift-plugin.mjs"
+  ],
+  "settings": {
+    "shadcn": {
+      "ui": "@shift/ui",
+      "note": "Shared appearance belongs in packages/ui; application call sites own contextual placement."
+    }
+  },
   "rules": {
     "eslint/no-unused-expressions": "off",
     "typescript/no-useless-empty-export": "off",
@@ -47,13 +57,49 @@
     "shift/no-bridge-import": "error",
     "shift/no-raw-editor-in-tests": "error",
     "shift/no-vi-stub-global-in-tests": "error",
-    "shift/no-vitest-mock-primitives": "error"
+    "shift/no-vitest-mock-primitives": "error",
+    "shadcn/no-unknown-classes": ["error", { "allow": ["shift-editor-shell"] }],
+    "shadcn/no-arbitrary-values": [
+      "error",
+      {
+        "allow": [
+          "max-h-[calc(100vh-4rem)]",
+          "w-[min(40rem,calc(100vw-4rem))]",
+          "grid-cols-[minmax(0,1fr)_auto]",
+          "grid-cols-[1rem_1.25rem_minmax(0,1fr)_auto]",
+          "grid-cols-[minmax(0,1fr)_6rem]",
+          "grid-cols-[minmax(0,1fr)_3.5rem_1.5rem]",
+          "grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]",
+          "grid-rows-[auto_minmax(0,1fr)]",
+          "grid-cols-[10rem_minmax(0,1fr)]",
+          "grid-cols-[minmax(0,1fr)_minmax(0,1fr)]",
+          "grid-cols-[9.5rem_minmax(0,1fr)]",
+          "grid-cols-[minmax(13rem,1fr)_minmax(12rem,0.9fr)]",
+          "grid-cols-[minmax(0,1fr)_7rem]",
+          "grid-cols-[repeat(3,minmax(0,1fr))_7rem]",
+          "grid-cols-[1rem_minmax(0,1fr)]",
+          "size-[calc(6px*sqrt(2))]",
+          "content-['']",
+          "before:[transform:translate(-50%,50%)_rotate(45deg)]",
+          "transition-[width]",
+          "transition-[left,width]",
+          "text-[9px]"
+        ]
+      }
+    ],
+    "shadcn/no-raw-colors": "error"
   },
   "overrides": [
     {
       "files": ["src/**/*.test.ts", "src/renderer/src/testing/**/*.ts"],
       "rules": {
         "typescript/no-explicit-any": "error"
+      }
+    },
+    {
+      "files": ["src/renderer/src/components/chrome/Titlebar.tsx"],
+      "rules": {
+        "shadcn/no-raw-colors": "off"
       }
     }
   ]

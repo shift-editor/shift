@@ -109,7 +109,7 @@ export const AxisMappingPanel = ({ axis }: AxisMappingPanelProps) => {
 
       <div className="flex min-w-0 flex-col gap-2">
         <h3 className="text-sm text-primary">Source Mapping</h3>
-        {form.error && <p className="text-xs text-red-600">{form.error}</p>}
+        {form.error && <p className="text-xs text-error">{form.error}</p>}
         <div className="overflow-hidden rounded border border-line-subtle bg-white">
           <table className="w-full table-fixed border-collapse text-center text-sm">
             <thead className="bg-input text-secondary">

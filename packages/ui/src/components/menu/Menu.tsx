@@ -60,7 +60,7 @@ export const MenuItem = React.forwardRef<React.ElementRef<typeof BaseMenu.Item>,
       ref={ref}
       className={cn(
         menuItemStyles,
-        variant === "danger" && "text-red-600 data-[highlighted]:bg-red-50",
+        variant === "danger" && "text-destructive data-[highlighted]:bg-destructive-hover",
         className,
       )}
       {...props}

@@ -40,8 +40,6 @@
   --color-icon-button: #f3f3f3;
   --color-icon-button-hover: #d9d9d9;
 
-  --color-input-bg: #f3f3f3;
-
   /* Border colors: border-line, border-line-subtle */
   --color-line: #2c2c2c;
   --color-line-subtle: #f0f0f0;
@@ -53,6 +51,16 @@
   --color-sidebar-icon: #585858;
 
   --color-accent: #0c92f4;
+
+  /* Status and action colors */
+  --color-error: #dc2626;
+  --color-error-ring: #ef4444;
+  --color-destructive: #dc2626;
+  --color-destructive-hover: #fef2f2;
+
+  /* Low-emphasis icon and control colors */
+  --color-icon-subtle: #9f9f9f;
+  --color-control-muted: #c2c2c2;
 
   /* Canvas accent colors */
   --color-canvas-purple: #8b5cf6;

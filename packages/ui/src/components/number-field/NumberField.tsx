@@ -26,7 +26,7 @@ export const NumberFieldGroup = React.forwardRef<
     ref={ref}
     className={cn(
       "flex h-7 min-w-0 items-center overflow-hidden rounded bg-input",
-      "focus-within:ring-1 focus-within:ring-accent data-[invalid]:ring-1 data-[invalid]:ring-red-500",
+      "focus-within:ring-1 focus-within:ring-accent data-[invalid]:ring-1 data-[invalid]:ring-error-ring",
       className,
     )}
     {...props}

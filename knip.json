@@ -31,7 +31,7 @@
         "src/**/*.bench.ts"
       ],
       "project": ["src/**/*.{ts,tsx}", "*.config.ts", "e2e/**/*.ts", "!src/**/*.d.ts"],
-      "ignoreDependencies": ["oxlint-plugin-eslint", "shift-bridge", "tailwindcss"]
+      "ignoreDependencies": ["@shadcn/lint", "oxlint-plugin-eslint", "shift-bridge", "tailwindcss"]
     },
     "packages/editor": {
       "entry": ["src/index.ts"],

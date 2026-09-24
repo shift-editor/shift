@@ -72,7 +72,7 @@ export const SelectPopup = React.forwardRef<
   <BaseSelect.Popup
     ref={ref}
     className={cn(
-      "min-w-[var(--anchor-width)] rounded-md border border-line-subtle bg-surface p-1 shadow-lg outline-none",
+      "min-w-(--anchor-width) rounded-md border border-line-subtle bg-surface p-1 shadow-lg outline-none",
       className,
     )}
     {...props}
