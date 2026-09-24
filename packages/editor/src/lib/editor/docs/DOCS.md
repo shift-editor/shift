@@ -92,7 +92,7 @@ editor/
 - **`Handles`** -- Handle renderer that tries the accelerated marker layer and falls back to CPU drawing internally.
 - **`FrameHandler`** -- Deduplicates `requestAnimationFrame` per render target. While a frame is pending, later requests are dropped without storing their callback -- the first callback wins.
 - **`EventEmitter`** -- Typed emitter for destruction and preview mutation notices.
-- **`EditorRenderTheme`** -- Shared visual config for editor-rendered elements. `readEditorRenderTheme` combines renderer-owned geometry with the active `--editor-*` CSS palette. `lib/themes/index.ts` maps the selected terminal-style palette into both UI and editor variables; tool-owned controls retain local geometry constants.
+- **`EditorRenderTheme`** -- Shared visual config for editor-rendered elements. `readEditorRenderTheme` combines renderer-owned geometry with the active `--editor-*` CSS palette. The desktop theme registry maps the selected terminal-style palette into both UI and editor variables; tool-owned controls retain local geometry constants.
 - **`SnapLines`** -- Stateless overlay renderer for semantic direction feedback. It translates glyph-local guide endpoints into scene space and draws the historical solid red line with crosses at its endpoints.
 
 ## How it works

@@ -19,7 +19,7 @@ export type { ShiftEditorRecord } from "./types/records";
 export type { SourceSelectionMode } from "./types/sourceSelection";
 export type { ToolShortcutEntry } from "./types/tools";
 export type { AnchorPosition } from "./types/transform";
-export type { DebugOverlays, ThemeName } from "./types/uiState";
+export type { DebugOverlays } from "./types/uiState";
 export type {
   DesignAxisLocation,
   ExternalAxisLocation,

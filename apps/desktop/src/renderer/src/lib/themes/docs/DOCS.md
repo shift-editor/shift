@@ -63,6 +63,6 @@ Selecting Shift Light removes runtime overrides so `index.css` remains the first
 ## Related
 
 - [`@shift/ui` documentation](../../../../../../../../packages/ui/docs/DOCS.md)
-- [`Editor` documentation](../../editor/docs/DOCS.md)
+- [`Editor` documentation](../../../../../../../../packages/editor/src/lib/editor/docs/DOCS.md)
 - [`Graphics` documentation](../../graphics/docs/DOCS.md)
 - [`Third-party theme notices`](../../../../../../THIRD_PARTY_THEMES.md)
