@@ -1,6 +1,7 @@
 import { useEffect, useRef, type ReactNode } from "react";
+import { Canvas2DSurface, MarkerCanvasSurface, readEditorRenderTheme } from "@shift/editor/rendering";
 import { useEditor } from "@/workspace/WorkspaceContext";
-import { Canvas2DSurface, MarkerCanvasSurface } from "@shift/editor/rendering";
+import { useTheme } from "./ThemeContext";
 import { CanvasContext } from "./CanvasContext";
 
 export const CanvasContextProvider = ({
@@ -11,10 +12,15 @@ export const CanvasContextProvider = ({
   onViewportReady: () => void;
 }) => {
   const editor = useEditor();
+  const { resolvedTheme } = useTheme();
   const markerCanvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const sceneCanvasRef = useRef<HTMLCanvasElement>(null);
   const backgroundCanvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    editor.setRenderTheme(readEditorRenderTheme());
+  }, [editor, resolvedTheme]);
 
   useEffect(() => {
     const setUpContexts = ({

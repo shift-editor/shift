@@ -3,6 +3,7 @@ import AxesIcon from "@assets/settings/axes.svg";
 import FontIcon from "@assets/settings/font.svg";
 import InstancesIcon from "@assets/settings/instances.svg";
 import SourcesIcon from "@assets/settings/sources.svg";
+import AppearanceIcon from "@assets/settings/settings.svg";
 import type { SVG } from "@/types/common";
 import type { SettingsCategory } from "@/types/settings";
 
@@ -12,6 +13,7 @@ interface SettingsSidebarProps {
 }
 
 const categories: { id: SettingsCategory; label: string; icon: SVG }[] = [
+  { id: "appearance", label: "Appearance", icon: AppearanceIcon },
   { id: "font", label: "Font", icon: FontIcon },
   { id: "sources", label: "Sources", icon: SourcesIcon },
   { id: "instances", label: "Instances", icon: InstancesIcon },

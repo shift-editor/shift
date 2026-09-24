@@ -64,7 +64,7 @@ editor/
     Canvas.ts            -- 2D drawing API wrapping CanvasRenderingContext2D
     FrameHandler.ts      -- RAF deduplication per render target
     FpsMonitor.ts        -- Rolling-window FPS measurement
-    Theme.ts             -- DEFAULT_THEME shared editor visual constants
+    Theme.ts             -- EditorRenderTheme geometry and active CSS palette reader
     constants.ts         -- SCREEN_HIT_RADIUS (8px)
     markers/             -- WebGL marker shaders and instance packing
     overlays/            -- Guides, SnapLines, ControlLines, Segments, Anchors,
@@ -80,7 +80,7 @@ editor/
 - **`FontStore`** -- Session-owned font state injected privately into Editor for synchronous lookup of already-loaded Glyph objects.
 - **`Camera`** -- Owns zoom/pan/UPM signals, computed affine matrices (`Mat`), and all coordinate projection methods (`projectScreenToScene`, `projectSceneToScreen`, `screenToUpmDistance`).
 - **`Renderer`** -- Manages four stacked canvas layers (background, scene, markers/WebGL, overlay), their `FrameHandler` instances, and the canvas item layers that draw each pass.
-- **`Canvas`** -- Thin wrapper around `CanvasRenderingContext2D` with `pxToUpm()` conversion and themed drawing primitives. Carries `CameraTransform` and `Theme`.
+- **`Canvas`** -- Thin wrapper around `CanvasRenderingContext2D` with `pxToUpm()` conversion and themed drawing primitives. Carries `CameraTransform` and `EditorRenderTheme`.
 - **`CameraTransform`** -- Value object: `{ zoom, panX, panY, centre, upmScale, logicalHeight, layoutHeight, padding, descender }`. Snapshot of viewport state passed to rendering code.
 - **`Selection`** -- Ordered branded-ID selection state. It exposes `stateCell` and unwrapped ID getters; `Editor.selectionBoundsCell` resolves current live objects and their bounds.
 - **`SelectableId`** -- Branded identity accepted by selection regardless of the object's concrete kind.
@@ -92,7 +92,7 @@ editor/
 - **`Handles`** -- Handle renderer that tries the accelerated marker layer and falls back to CPU drawing internally.
 - **`FrameHandler`** -- Deduplicates `requestAnimationFrame` per render target. While a frame is pending, later requests are dropped without storing their callback -- the first callback wins.
 - **`EventEmitter`** -- Typed emitter for destruction and preview mutation notices.
-- **`Theme`** -- Shared visual config for editor-rendered elements, including the solid red, screen-pixel-sized snap line and cross treatment. Tool-owned controls keep their own local style constants.
+- **`EditorRenderTheme`** -- Shared visual config for editor-rendered elements. `readEditorRenderTheme` combines renderer-owned geometry with the active `--editor-*` CSS palette. `lib/themes/index.ts` maps the selected terminal-style palette into both UI and editor variables; tool-owned controls retain local geometry constants.
 - **`SnapLines`** -- Stateless overlay renderer for semantic direction feedback. It translates glyph-local guide endpoints into scene space and draws the historical solid red line with crosses at its endpoints.
 
 ## How it works

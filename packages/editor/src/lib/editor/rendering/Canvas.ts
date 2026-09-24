@@ -1,6 +1,5 @@
 import type { Point2D } from "@shift/geo";
-import type { Theme } from "./Theme";
-import { DEFAULT_THEME } from "./Theme";
+import { readEditorRenderTheme, type EditorRenderTheme } from "./Theme";
 import type { CameraTransform } from "../managers/Camera";
 
 /**
@@ -11,13 +10,13 @@ import type { CameraTransform } from "../managers/Camera";
  */
 export class Canvas {
   readonly ctx: CanvasRenderingContext2D;
-  readonly theme: Theme;
+  readonly theme: EditorRenderTheme;
   camera: CameraTransform;
 
   constructor(
     ctx: CanvasRenderingContext2D,
     camera: CameraTransform,
-    theme: Theme = DEFAULT_THEME,
+    theme: EditorRenderTheme = readEditorRenderTheme(),
   ) {
     this.ctx = ctx;
     this.camera = camera;

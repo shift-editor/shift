@@ -32,12 +32,13 @@ Central routing table for Shift's distributed documentation. Before creating new
 
 ### Desktop app — Renderer
 
-| Path pattern                                     | Purpose                                                                                   |
-| ------------------------------------------------ | ----------------------------------------------------------------------------------------- |
-| `apps/desktop/src/renderer/src/components/**`    | React application shell and editor mounting surfaces                                      |
-| `apps/desktop/src/renderer/src/lib/workspace/**` | Workspace transport, durable edit queue, and native-backed reads                          |
-| `apps/desktop/src/renderer/src/lib/graphics/**`  | [Workspace atlas adapters](../../apps/desktop/src/renderer/src/lib/graphics/docs/DOCS.md) |
-| `apps/desktop/src/renderer/src/workspace/**`     | Desktop session composition and Electron host wiring                                      |
+| Path pattern                                     | Purpose                                                                                                   |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
+| `apps/desktop/src/renderer/src/components/**`    | React application shell and editor mounting surfaces                                                     |
+| `apps/desktop/src/renderer/src/lib/workspace/**` | Workspace transport, durable edit queue, and native-backed reads                                         |
+| `apps/desktop/src/renderer/src/lib/graphics/**`  | [Workspace atlas adapters](../../apps/desktop/src/renderer/src/lib/graphics/docs/DOCS.md)                |
+| `apps/desktop/src/renderer/src/lib/themes/**`    | [Application color themes](../../apps/desktop/src/renderer/src/lib/themes/docs/DOCS.md)                  |
+| `apps/desktop/src/renderer/src/workspace/**`     | Desktop session composition and Electron host wiring                                                     |
 
 ### Packages
 

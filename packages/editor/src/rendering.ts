@@ -12,4 +12,8 @@ export {
   LOCK_VIEW_BOX_SIZE,
 } from "./lib/editor/rendering/icons/lock";
 export { parseCssColor } from "./lib/editor/rendering/markers/color";
+export {
+  readEditorRenderTheme,
+  type EditorRenderTheme,
+} from "./lib/editor/rendering/Theme";
 export { cursorToCSS } from "./lib/styles/cursor";

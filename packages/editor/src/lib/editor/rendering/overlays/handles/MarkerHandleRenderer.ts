@@ -2,7 +2,8 @@ import type { Point2D } from "@shift/geo";
 import type { CameraTransform } from "../../../managers/Camera";
 import type { MarkerLayer } from "../../../../graphics/backends/MarkerLayer";
 import { MARKER_INSTANCE_FLOATS } from "../../markers/types";
-import { STYLES, type CachedInstanceStyle } from "../../markers/handleStyles";
+import { buildMarkerStyles, type CachedInstanceStyle } from "../../markers/handleStyles";
+import type { EditorRenderTheme } from "../../Theme";
 import type { HandleDisplayList } from "./HandleItems";
 import type { PointHandleItem } from "./PointHandleItem";
 
@@ -14,6 +15,8 @@ export class MarkerHandleRenderer {
   #uploadedLayer: MarkerLayer | null = null;
   #uploadedList: HandleDisplayList | null = null;
   #uploadedInstanceCount = 0;
+  #theme: EditorRenderTheme | null = null;
+  #styles: ReturnType<typeof buildMarkerStyles> | null = null;
 
   #resetUpload(): void {
     this.#uploadedList = null;
@@ -25,6 +28,7 @@ export class MarkerHandleRenderer {
     list: HandleDisplayList,
     camera: CameraTransform,
     drawOffset: Point2D,
+    theme: EditorRenderTheme,
   ): boolean {
     if (!layer) return false;
     if (!layer.isAvailable()) return false;
@@ -34,8 +38,14 @@ export class MarkerHandleRenderer {
       this.#resetUpload();
     }
 
+    if (theme !== this.#theme) {
+      this.#theme = theme;
+      this.#styles = buildMarkerStyles(theme);
+      this.#resetUpload();
+    }
+
     if (list !== this.#uploadedList) {
-      this.#uploadedInstanceCount = this.#pack(list);
+      this.#uploadedInstanceCount = this.#pack(list, this.#styles);
       if (
         !layer.uploadInstances(
           this.#packedInstances ?? EMPTY_PACKED_INSTANCES,
@@ -56,10 +66,10 @@ export class MarkerHandleRenderer {
     );
   }
 
-  #pack(list: HandleDisplayList): number {
+  #pack(list: HandleDisplayList, styles: ReturnType<typeof buildMarkerStyles> | null): number {
     const { items } = list;
     const requiredLength = items.length * MARKER_INSTANCE_FLOATS;
-    if (requiredLength === 0) return 0;
+    if (requiredLength === 0 || !styles) return 0;
 
     let packed = this.#packedInstances;
     if (!packed || requiredLength > this.#packedCapacity) {
@@ -70,7 +80,7 @@ export class MarkerHandleRenderer {
 
     let index = 0;
     for (const item of items) {
-      this.#writeInstance(packed, index, item, STYLES[item.shape][item.state]);
+      this.#writeInstance(packed, index, item, styles[item.shape][item.state]);
       index++;
     }
 

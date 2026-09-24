@@ -78,6 +78,46 @@
   --text-xs: 0.625rem /* 10px */;
 }
 
+/* Shift Light fallback palette consumed by the 2D and WebGL editor renderers. */
+:root {
+  --editor-cursor-color: #0c92f4;
+  --editor-guides-color: rgba(37, 99, 235, 0.5);
+  --editor-selection-fill: rgba(59, 130, 246, 0.1);
+  --editor-selection-stroke: rgba(59, 130, 246, 0.5);
+  --editor-glyph-fill: #000000;
+  --editor-glyph-editable-fill: rgba(225, 225, 225, 0.2);
+  --editor-glyph-stroke: #000000;
+  --editor-component-fill: rgba(231, 231, 231, 0.75);
+  --editor-control-line-color: rgba(136, 136, 136, 0.65);
+  --editor-handle-fill: #ffffff;
+  --editor-handle-interpolated-stroke: rgba(0, 0, 0, 0.65);
+  --editor-handle-primary-stroke: #0c92f4;
+  --editor-handle-control-stroke: #b0b0b0;
+  --editor-handle-anchor-stroke: #6b15ec;
+  --editor-handle-overlay-subtle: rgba(255, 255, 255, 0.1);
+  --editor-handle-overlay-first: rgba(255, 255, 255, 0.3);
+  --editor-handle-overlay-last: rgba(255, 255, 255, 0.5);
+  --editor-handle-overlay-anchor: rgba(255, 255, 255, 0.75);
+  --editor-snap-color: #ff3b30;
+  --editor-segment-hover-color: #1886d7;
+  --editor-segment-selected-color: #1886d7;
+  --editor-preview-color: #1886d7;
+  --editor-pen-ready-fill: #ffffff;
+  --editor-pen-ready-stroke: #3b82f6;
+  --editor-debug-tight-bounds: #ff0000;
+  --editor-debug-hit-radii: #2196f3;
+  --editor-debug-segment-bounds: #ff9800;
+  --editor-debug-glyph-bbox: #ff00fb;
+  --editor-text-cursor-color: #0c92f4;
+  --editor-text-selection-fill: rgba(12, 146, 244, 0.2);
+  --editor-text-hover-outline: #0c92f4;
+  --editor-text-composite-arm-fill: rgba(128, 128, 128, 0.22);
+  --editor-text-component-overlay-a: rgba(169, 236, 183, 0.26);
+  --editor-text-component-overlay-b: rgba(255, 182, 207, 0.26);
+  --editor-text-component-overlay-hover-a: rgba(124, 220, 150, 0.4);
+  --editor-text-component-overlay-hover-b: rgba(255, 151, 186, 0.4);
+}
+
 /* Hide scrollbar while preserving scroll behavior */
 @utility scrollbar-hidden {
   scrollbar-width: none;

@@ -54,6 +54,7 @@ import { Hover } from "./Hover";
 import { Renderer } from "./rendering/Renderer";
 import { Scene } from "./Scene";
 import type { Canvas2DSurface, MarkerCanvasSurface } from "./rendering/CanvasSurface";
+import type { EditorRenderTheme } from "./rendering/Theme";
 import type { CameraTransform } from "./managers";
 import type { DebugOverlays } from "../../types/uiState";
 import type { TemporaryToolOptions } from "../../types/editor";
@@ -473,6 +474,10 @@ export class Editor {
 
   public setDebugOverlays(overlays: DebugOverlays): void {
     this.#view.debugOverlaysCell.set(overlays);
+  }
+
+  public setRenderTheme(theme: EditorRenderTheme): void {
+    this.#renderer.setRenderTheme(theme);
   }
 
   public setBackgroundSurface(surface: Canvas2DSurface): void {

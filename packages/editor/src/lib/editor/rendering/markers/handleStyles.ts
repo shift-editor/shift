@@ -1,5 +1,5 @@
 import type { HandleState } from "../../../../types/graphics";
-import { DEFAULT_THEME, type FirstHandleStyle } from "../Theme";
+import type { EditorRenderTheme, FirstHandleStyle } from "../Theme";
 import { parseCssColor, TRANSPARENT, type GpuColor } from "./color";
 import type { MarkerShape } from "./types";
 
@@ -30,10 +30,11 @@ export interface CachedInstanceStyle {
 type StyleByState = Record<HandleState, CachedInstanceStyle>;
 
 function buildSimpleStyle(
+  theme: EditorRenderTheme,
   shape: "corner" | "smooth" | "control",
   state: HandleState,
 ): CachedInstanceStyle {
-  const style = DEFAULT_THEME.handle[shape][state];
+  const style = theme.handle[shape][state];
   const halfSize = shape === "corner" ? style.size / 2 : style.size;
   const padding = Math.max(style.lineWidth, 2);
 
@@ -52,11 +53,12 @@ function buildSimpleStyle(
 }
 
 function buildDirectionalStyle(
+  theme: EditorRenderTheme,
   shape: "direction" | "first" | "last",
   state: HandleState,
 ): CachedInstanceStyle {
   if (shape === "direction") {
-    const style = DEFAULT_THEME.handle.direction[state];
+    const style = theme.handle.direction[state];
     return {
       shapeId: SHAPE_IDS[shape],
       size: style.size,
@@ -72,7 +74,7 @@ function buildDirectionalStyle(
   }
 
   if (shape === "first") {
-    const style = DEFAULT_THEME.handle.first[state] as FirstHandleStyle;
+    const style = theme.handle.first[state] as FirstHandleStyle;
     const halfBar = style.barSize / 2;
     const triangleTip = FIRST_HANDLE_GAP_PX + style.size * 2;
 
@@ -90,7 +92,7 @@ function buildDirectionalStyle(
     };
   }
 
-  const style = DEFAULT_THEME.handle.last[state];
+  const style = theme.handle.last[state];
   return {
     shapeId: SHAPE_IDS[shape],
     size: style.size,
@@ -105,24 +107,26 @@ function buildDirectionalStyle(
   };
 }
 
-function buildStyleByState(shape: MarkerShape): StyleByState {
+function buildStyleByState(theme: EditorRenderTheme, shape: MarkerShape): StyleByState {
   const build =
     shape === "corner" || shape === "smooth" || shape === "control"
       ? buildSimpleStyle
       : buildDirectionalStyle;
   return {
-    idle: build(shape as never, "idle"),
-    hovered: build(shape as never, "hovered"),
-    selected: build(shape as never, "selected"),
-    interpolated: build(shape as never, "interpolated"),
+    idle: build(theme, shape as never, "idle"),
+    hovered: build(theme, shape as never, "hovered"),
+    selected: build(theme, shape as never, "selected"),
+    interpolated: build(theme, shape as never, "interpolated"),
   };
 }
 
-export const STYLES = {
-  corner: buildStyleByState("corner"),
-  smooth: buildStyleByState("smooth"),
-  control: buildStyleByState("control"),
-  direction: buildStyleByState("direction"),
-  first: buildStyleByState("first"),
-  last: buildStyleByState("last"),
-} as const;
+export function buildMarkerStyles(theme: EditorRenderTheme) {
+  return {
+    corner: buildStyleByState(theme, "corner"),
+    smooth: buildStyleByState(theme, "smooth"),
+    control: buildStyleByState(theme, "control"),
+    direction: buildStyleByState(theme, "direction"),
+    first: buildStyleByState(theme, "first"),
+    last: buildStyleByState(theme, "last"),
+  } as const;
+}

@@ -78,6 +78,12 @@ export {
   type SelectItemIndicatorProps,
 } from "./components/select";
 export { Slider, type SliderProps } from "./components/slider";
+export {
+  RadioGroup,
+  RadioCard,
+  type RadioGroupProps,
+  type RadioCardProps,
+} from "./components/radio";
 export { Progress, type ProgressProps } from "./components/progress";
 export {
   Menu,

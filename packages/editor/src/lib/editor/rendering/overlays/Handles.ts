@@ -38,7 +38,8 @@ export class Handles {
       isVisible,
     );
 
-    if (this.#markers.draw(ctx.markers, list, ctx.canvas.camera, node.position)) return;
+    if (this.#markers.draw(ctx.markers, list, ctx.canvas.camera, node.position, ctx.canvas.theme))
+      return;
 
     this.#canvas.draw(ctx.canvas, list.items);
   }

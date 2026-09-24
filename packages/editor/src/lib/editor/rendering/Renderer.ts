@@ -1,5 +1,4 @@
-import type { Theme } from "./Theme";
-import { DEFAULT_THEME } from "./Theme";
+import { readEditorRenderTheme, type EditorRenderTheme } from "./Theme";
 import { Canvas } from "./Canvas";
 import { FrameHandler } from "./FrameHandler";
 import { FpsMonitor } from "./FpsMonitor";
@@ -55,7 +54,7 @@ export class Renderer {
   #overlayEffect: Effect | null = null;
 
   #fpsMonitor = new FpsMonitor();
-  #theme: Theme = DEFAULT_THEME;
+  #theme: EditorRenderTheme = readEditorRenderTheme();
   #editor: Editor;
   #backgroundLayer: BackgroundLayer;
   #sceneLayer: SceneLayer;
@@ -107,6 +106,14 @@ export class Renderer {
 
   get fpsMonitor(): FpsMonitor {
     return this.#fpsMonitor;
+  }
+
+  setRenderTheme(theme: EditorRenderTheme): void {
+    this.#theme = theme;
+    this.#canvases = { background: null, scene: null, overlay: null };
+    this.#backgroundFrame.requestUpdate(() => this.#renderBackground());
+    this.#sceneFrame.requestUpdate(() => this.#renderScene());
+    this.#overlayFrame.requestUpdate(() => this.#renderOverlay());
   }
 
   setBackgroundSurface(surface: Canvas2DSurface): void {
