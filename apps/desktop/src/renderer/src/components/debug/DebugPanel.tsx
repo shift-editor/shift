@@ -46,7 +46,7 @@ export function DebugPanel() {
   const cellClass = "px-2 py-1 border";
 
   return (
-    <div className="absolute bottom-4 left-4 z-100 max-w-100 border border-app/5 min-h-50 bg-surface p-3 shadow-md">
+    <div className="absolute bottom-4 left-4 z-100 max-w-100 border border-background/5 min-h-50 bg-surface p-3 shadow-md">
       <section className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
           <span className="text-sm font-medium text-primary">Debug Panel</span>

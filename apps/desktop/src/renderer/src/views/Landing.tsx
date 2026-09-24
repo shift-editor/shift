@@ -25,7 +25,7 @@ export const Landing = () => {
   };
 
   return (
-    <main className="flex h-screen flex-col bg-surface">
+    <main className="flex h-screen flex-col bg-background">
       <Titlebar />
       <section className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4">
         <div className="flex flex-col items-center gap-2">

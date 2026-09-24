@@ -65,7 +65,7 @@ const StyleSection = ({ title, onAdd, disabled, children }: StyleSectionProps) =
       type="button"
       variant="primary"
       size="sm"
-      className="h-7 self-start px-2 text-sm"
+      className="self-start text-sm"
       disabled={disabled}
       onClick={onAdd}
     >
@@ -158,9 +158,9 @@ const RangeLabelsTable = ({ labels, draft }: { labels: AxisLabel[]; draft: AxisD
 );
 
 const StyleTable = ({ headings, children }: { headings: string[]; children: ReactNode }) => (
-  <div className="overflow-hidden rounded border border-line-subtle bg-white">
+  <div className="overflow-hidden rounded border border-line-subtle bg-surface">
     <table className="w-full table-fixed border-collapse text-center text-sm">
-      <thead className="bg-input text-black">
+      <thead className="bg-input text-primary">
         <tr>
           {headings.map((heading, index) => (
             <th key={`${heading}-${index}`} className="h-7 px-1 text-center font-medium">
@@ -185,7 +185,8 @@ const NameCell = ({ label, draft }: { label: AxisLabel; draft: AxisDraft }) => (
       onBlur={async () => {
         await draft.commit();
       }}
-      className="h-6 bg-transparent text-center text-sm text-black"
+      variant="plain"
+      className="text-center text-sm"
     />
   </td>
 );

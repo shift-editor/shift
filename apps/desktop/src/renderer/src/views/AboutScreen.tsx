@@ -10,7 +10,7 @@ export const AboutScreen = () => {
   const version = searchParams.get("version") ?? "";
 
   return (
-    <main className="flex h-screen flex-col bg-surface text-primary">
+    <main className="flex h-screen flex-col bg-background text-primary">
       <Titlebar closeOnly onClose={() => window.close()} />
       <section className="flex min-h-0 flex-1 flex-col items-center justify-center px-6 pb-6 text-center">
         <img src={appIcon} alt="" className="h-24 w-24 drop-shadow-md" />

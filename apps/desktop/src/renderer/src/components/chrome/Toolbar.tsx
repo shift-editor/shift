@@ -16,7 +16,7 @@ export const Toolbar = ({ toggleLeftSidebar, toggleRightSidebar }: ToolbarProps)
   const editedFilename = `${filename} — Edited`;
 
   return (
-    <header className="titlebar-drag grid h-12.5 w-screen grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center bg-toolbar">
+    <header className="titlebar-drag grid h-12.5 w-screen grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center bg-chrome">
       <div className="flex min-w-0 items-center">
         <Titlebar />
         <Tooltip>

@@ -19,7 +19,7 @@ const sizeStyles = {
 
 const variantStyles = {
   filled: "bg-input",
-  plain: "bg-surface",
+  plain: "bg-background",
 };
 
 type InputKeyDownEvent = Parameters<NonNullable<InputProps["onKeyDown"]>>[0];

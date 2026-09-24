@@ -16,7 +16,6 @@ import {
   TooltipContent,
   TooltipTrigger,
   X,
-  cn,
 } from "@shift/ui";
 import PlusIcon from "@/assets/general/plus.svg";
 import WarningIcon from "@/assets/general/warning.svg";
@@ -147,18 +146,10 @@ export const CreateInstanceMenu = ({
         <PopoverPositioner sideOffset={4} align="start">
           <PopoverPopup className="w-50 p-0" initialFocus={nameInputRef}>
             <div className="flex h-8 items-center justify-between border-b border-line-subtle px-2">
-              <PopoverTitle className="text-ui font-medium text-primary">
-                Create Instance
-              </PopoverTitle>
+              <PopoverTitle>Create Instance</PopoverTitle>
               <Tooltip>
                 <TooltipTrigger>
-                  <PopoverClose
-                    className={cn(
-                      "inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded",
-                      "text-primary/70 transition-colors hover:bg-hover hover:text-primary",
-                    )}
-                    aria-label="Close"
-                  >
+                  <PopoverClose variant="icon" aria-label="Close">
                     <X className="h-4 w-4" />
                   </PopoverClose>
                 </TooltipTrigger>
@@ -169,7 +160,7 @@ export const CreateInstanceMenu = ({
             <form onSubmit={handleSubmit}>
               <div className="grid grid-cols-[minmax(0,1fr)_6rem] items-center gap-x-2 px-2 py-1">
                 <Field className="contents" invalid={!!nameIssue}>
-                  <FieldLabel htmlFor="create-instance-name" className="text-ui text-primary">
+                  <FieldLabel htmlFor="create-instance-name" tone="primary" className="text-ui">
                     Name
                   </FieldLabel>
                   <FieldControl
@@ -178,7 +169,8 @@ export const CreateInstanceMenu = ({
                     value={values.name}
                     onChange={updateName}
                     aria-describedby={nameIssue ? INSTANCE_CREATION_ERROR_ID : undefined}
-                    className="h-7 min-w-0 max-w-full bg-white px-2 text-right text-ui text-black"
+                    variant="plain"
+                    className="min-w-0 max-w-full text-right text-ui"
                   />
                 </Field>
 
@@ -208,7 +200,8 @@ export const CreateInstanceMenu = ({
                       <Field key={axis.id} className="contents" invalid={!!axisIssue}>
                         <FieldLabel
                           htmlFor={`create-instance-${axis.id}`}
-                          className="min-w-0 truncate text-ui text-primary"
+                          tone="primary"
+                          className="min-w-0 truncate text-ui"
                           title={axis.name}
                         >
                           {axis.name}
@@ -226,7 +219,8 @@ export const CreateInstanceMenu = ({
                           value={values.location[axis.id] ?? ""}
                           onChange={updateAxisValue(axis.id)}
                           aria-describedby={axisIssue ? INSTANCE_CREATION_ERROR_ID : undefined}
-                          className="h-7 min-w-0 max-w-full bg-white px-2 text-right text-ui text-black"
+                          variant="plain"
+                          className="min-w-0 max-w-full text-right text-ui"
                           inputMode="decimal"
                         />
                       </Field>

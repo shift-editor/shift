@@ -50,7 +50,7 @@ export const AxesSettingsPanel = ({ initialAxisId, canAuthor }: AxesSettingsPane
 
   return (
     <div className="grid h-full flex-1 grid-cols-[10rem_minmax(0,1fr)]">
-      <aside className="flex min-h-0 flex-col border-r border-r-toolbar bg-canvas">
+      <aside className="flex min-h-0 flex-col border-r border-r-chrome bg-surface-muted">
         <div className="flex h-11 shrink-0 items-center justify-between px-2">
           <h2 className="pl-1 text-sm font-medium text-primary">Axes</h2>
           {canAuthor ? (
@@ -129,14 +129,14 @@ const AxisEditor = ({ axis, canAuthor }: { axis: Axis; canAuthor: boolean }) => 
         <div className="flex h-11 items-center px-5 pr-8">
           <h2 className="truncate text-sm font-medium text-primary">{draft.axis.name}</h2>
         </div>
-        <TabsList className="h-8 w-full gap-2 border-toolbar px-5 pr-8">
-          <TabsTab value="definition" className="h-8 px-2.5 text-sm">
+        <TabsList className="h-8 w-full gap-2 border-chrome px-5 pr-8">
+          <TabsTab value="definition" size="md">
             Definition
           </TabsTab>
-          <TabsTab value="mapping" className="h-8 px-2.5 text-sm">
+          <TabsTab value="mapping" size="md">
             Mapping
           </TabsTab>
-          <TabsTab value="styles" className="h-8 px-2.5 text-sm">
+          <TabsTab value="styles" size="md">
             Styles
           </TabsTab>
           <TabsIndicator />

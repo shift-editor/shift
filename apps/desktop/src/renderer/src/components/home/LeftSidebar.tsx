@@ -7,7 +7,7 @@ import { GlyphCatalogView } from "./glyph-catalog";
 export const LeftSidebar = () => (
   <aside
     aria-label="Font navigation"
-    className="flex h-full w-full min-w-0 gap-1.5 flex-col bg-panel px-3 overflow-hidden border-r border-line-subtle"
+    className="flex h-full w-full min-w-0 gap-1.5 flex-col bg-surface px-3 overflow-hidden border-r border-line-subtle"
   >
     <Separator />
     <GlyphCatalogView />

@@ -110,12 +110,12 @@ export const AxisMappingPanel = ({ axis }: AxisMappingPanelProps) => {
       <div className="flex min-w-0 flex-col gap-2">
         <h3 className="text-sm text-primary">Source Mapping</h3>
         {form.error && <p className="text-xs text-error">{form.error}</p>}
-        <div className="overflow-hidden rounded border border-line-subtle bg-white">
+        <div className="overflow-hidden rounded border border-line-subtle bg-surface">
           <table className="w-full table-fixed border-collapse text-center text-sm">
             <thead className="bg-input text-secondary">
               <tr>
-                <th className="h-7 px-1 font-medium text-black">User</th>
-                <th className="h-7 px-1 font-medium text-black">Source</th>
+                <th className="h-7 px-1 font-medium text-primary">User</th>
+                <th className="h-7 px-1 font-medium text-primary">Source</th>
                 <th className="w-7" />
               </tr>
             </thead>
@@ -163,7 +163,7 @@ export const AxisMappingPanel = ({ axis }: AxisMappingPanelProps) => {
           type="button"
           variant="primary"
           size="sm"
-          className="h-7 self-start px-2 text-sm"
+          className="self-start text-sm"
           disabled={nextPoint === null}
           onClick={async () => {
             await form.updateAndCommit((current) => {

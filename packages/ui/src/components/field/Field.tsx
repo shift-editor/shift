@@ -11,31 +11,50 @@ export const Field = React.forwardRef<React.ElementRef<typeof BaseField.Root>, F
 );
 Field.displayName = "Field";
 
-export interface FieldLabelProps extends React.ComponentPropsWithoutRef<typeof BaseField.Label> {}
+export interface FieldLabelProps extends React.ComponentPropsWithoutRef<typeof BaseField.Label> {
+  tone?: "primary" | "secondary";
+}
+
+const fieldLabelToneStyles = {
+  primary: "text-primary",
+  secondary: "text-secondary",
+};
 
 export const FieldLabel = React.forwardRef<
   React.ElementRef<typeof BaseField.Label>,
   FieldLabelProps
->(({ className, ...props }, ref) => (
-  <BaseField.Label ref={ref} className={cn("text-xs text-secondary", className)} {...props} />
+>(({ className, tone = "secondary", ...props }, ref) => (
+  <BaseField.Label
+    ref={ref}
+    className={cn("text-xs", fieldLabelToneStyles[tone], className)}
+    {...props}
+  />
 ));
 FieldLabel.displayName = "FieldLabel";
 
 export interface FieldControlProps extends React.ComponentPropsWithoutRef<
   typeof BaseField.Control
-> {}
+> {
+  variant?: "filled" | "plain";
+}
+
+const fieldControlVariantStyles = {
+  filled: "bg-input",
+  plain: "bg-background",
+};
 
 export const FieldControl = React.forwardRef<
   React.ElementRef<typeof BaseField.Control>,
   FieldControlProps
->(({ className, ...props }, ref) => (
+>(({ className, variant = "filled", ...props }, ref) => (
   <BaseField.Control
     ref={ref}
     className={cn(
-      "h-7 w-full rounded bg-input px-2 text-sm text-primary outline-none",
+      "h-7 w-full rounded px-2 text-sm text-primary outline-none",
       "focus:ring-1 focus:ring-inset focus:ring-accent",
       "data-[invalid]:ring-1 data-[invalid]:ring-inset data-[invalid]:ring-error-ring",
       "data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50",
+      fieldControlVariantStyles[variant],
       className,
     )}
     {...props}

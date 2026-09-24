@@ -106,7 +106,8 @@ export const FontSettingsPanel = ({ canAuthor }: { canAuthor: boolean }) => {
           value={draft.license ?? ""}
           onChange={updateText("license")}
           onBlur={commit}
-          className="min-h-24 bg-white text-sm text-black"
+          variant="plain"
+          className="min-h-24"
         />
       </MetadataField>
 
@@ -165,7 +166,8 @@ export const FontSettingsPanel = ({ canAuthor }: { canAuthor: boolean }) => {
           value={draft.description ?? ""}
           onChange={updateText("description")}
           onBlur={commit}
-          className="min-h-20 bg-white text-sm text-black"
+          variant="plain"
+          className="min-h-20"
         />
       </MetadataField>
 
@@ -174,7 +176,8 @@ export const FontSettingsPanel = ({ canAuthor }: { canAuthor: boolean }) => {
           value={draft.note ?? ""}
           onChange={updateText("note")}
           onBlur={commit}
-          className="min-h-20 bg-white text-sm text-black"
+          variant="plain"
+          className="min-h-20"
         />
       </MetadataField>
     </fieldset>
@@ -183,7 +186,9 @@ export const FontSettingsPanel = ({ canAuthor }: { canAuthor: boolean }) => {
 
 const MetadataField = ({ label, children }: { label: string; children: ReactNode }) => (
   <Field className="gap-1.5">
-    <FieldLabel className="text-sm text-primary">{label}</FieldLabel>
+    <FieldLabel tone="primary" className="text-sm">
+      {label}
+    </FieldLabel>
     {children}
   </Field>
 );

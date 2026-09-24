@@ -149,12 +149,7 @@ const SourceActionsMenu = ({
         <TooltipTrigger>
           <MenuTrigger
             render={
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                className="h-6 w-6 p-0.5"
-                aria-label={`Actions for ${sourceName}`}
-              />
+              <Button variant="ghost" size="icon-sm" aria-label={`Actions for ${sourceName}`} />
             }
           >
             <VerticalElipsis className="h-5 w-5" />

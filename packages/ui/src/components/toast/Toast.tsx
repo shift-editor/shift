@@ -42,7 +42,7 @@ function ToastRoot({ toast, children, className }: ToastRootProps) {
       toast={toast}
       style={{ boxShadow: "0 2px 5px -1px rgba(50,50,93,.25),0 1px 3px -1px rgba(0,0,0,.3)" }}
       className={cn(
-        "bg-panel rounded-sm p-2 text-sm text-black",
+        "bg-surface rounded-sm p-2 text-sm text-primary",
         "data-[ending-style]:opacity-0 data-[starting-style]:opacity-0",
         "transition-opacity duration-200",
         className,

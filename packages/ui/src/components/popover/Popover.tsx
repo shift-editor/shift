@@ -60,18 +60,32 @@ export const PopoverTitle = React.forwardRef<
   React.ElementRef<typeof BasePopover.Title>,
   PopoverTitleProps
 >(({ className, ...props }, ref) => (
-  <BasePopover.Title ref={ref} className={cn(className)} {...props} />
+  <BasePopover.Title
+    ref={ref}
+    className={cn("text-ui font-medium text-primary", className)}
+    {...props}
+  />
 ));
 PopoverTitle.displayName = "PopoverTitle";
 
 export interface PopoverCloseProps extends React.ComponentPropsWithoutRef<
   typeof BasePopover.Close
-> {}
+> {
+  variant?: "icon";
+}
 
 export const PopoverClose = React.forwardRef<
   React.ElementRef<typeof BasePopover.Close>,
   PopoverCloseProps
->(({ className, ...props }, ref) => (
-  <BasePopover.Close ref={ref} className={cn(className)} {...props} />
+>(({ className, variant, ...props }, ref) => (
+  <BasePopover.Close
+    ref={ref}
+    className={cn(
+      variant === "icon" &&
+        "inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded text-primary/70 transition-colors hover:bg-hover hover:text-primary",
+      className,
+    )}
+    {...props}
+  />
 ));
 PopoverClose.displayName = "PopoverClose";

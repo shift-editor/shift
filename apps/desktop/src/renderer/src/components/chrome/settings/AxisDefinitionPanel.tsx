@@ -99,7 +99,7 @@ export const AxisDefinitionPanel = ({ draft }: AxisDefinitionPanelProps) => {
           <label className="flex flex-col gap-1.5 text-sm text-secondary">
             Type
             <Select value={axis.axisType} onValueChange={changeType}>
-              <SelectTrigger className="h-8 bg-white text-sm text-black">
+              <SelectTrigger variant="plain" className="h-8">
                 <SelectValue />
                 <SelectIcon />
               </SelectTrigger>

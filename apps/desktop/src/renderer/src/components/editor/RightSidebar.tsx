@@ -34,7 +34,7 @@ export const RightSidebar = () => {
   return (
     <aside
       aria-label="Glyph properties"
-      className="h-full w-full min-w-0 bg-panel border-l border-line-subtle flex flex-col overflow-hidden"
+      className="h-full w-full min-w-0 bg-surface border-l border-line-subtle flex flex-col overflow-hidden"
     >
       <div className="px-3 py-2 flex items-center justify-between">
         <div className="flex items-center gap-1.5">
