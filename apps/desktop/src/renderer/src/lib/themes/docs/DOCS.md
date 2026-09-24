@@ -19,8 +19,8 @@ Terminal-style color themes for the desktop UI and native editor renderers.
 - `lib/themes/index.ts` — theme types, built-in palette registry, selection resolution, and CSS-variable mapping
 - `context/ThemeContext.tsx` — persisted selection, OS appearance observation, and cross-window storage synchronization
 - `components/chrome/settings/AppearanceSettingsPanel.tsx` — accessible preset gallery
-- `lib/editor/rendering/Theme.ts` — reads the resolved `--editor-*` variables into `EditorRenderTheme`
-- `apps/desktop/THIRD_PARTY_THEMES.md` — upstream attribution and licenses
+- `packages/editor/src/lib/editor/rendering/Theme.ts` — reads the resolved `--editor-*` variables into `EditorRenderTheme`
+- `apps/desktop/THIRD_PARTY_THEMES.md` — packaged upstream attribution and licenses
 
 ## Key Types
 
