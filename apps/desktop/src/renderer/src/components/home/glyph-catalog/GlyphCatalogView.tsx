@@ -19,6 +19,7 @@ import PlusIcon from "@/assets/general/plus.svg";
 import { SidebarRowButton } from "@/components/sidebar";
 import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
 import { Category } from "./Category";
+import { LanguageScript } from "./LanguageScript";
 import { SubCategory } from "./SubCategory";
 
 export const GlyphCatalogView = () => {
@@ -26,7 +27,9 @@ export const GlyphCatalogView = () => {
     availableGlyphs: allGlyphs,
     filteredGlyphs,
     categories,
+    languageScripts,
     categoryFilters,
+    selectedLanguageId,
     visibleCategoryFilters,
     expandedCategories,
     setExpandedCategories,
@@ -37,6 +40,7 @@ export const GlyphCatalogView = () => {
     selectAll,
     selectCategory,
     selectSubCategory,
+    selectLanguage,
   } = useGlyphCatalog();
 
   const selectedFilterIndexes = useMemo(
@@ -56,7 +60,7 @@ export const GlyphCatalogView = () => {
   );
   const allGlyphCount = allGlyphs.length;
   const filteredGlyphCount = filteredGlyphs.length;
-  const allGlyphsSelected = categoryFilters.length === 0;
+  const allGlyphsSelected = categoryFilters.length === 0 && selectedLanguageId === null;
 
   return (
     <div className="flex flex-col gap-2">
@@ -181,6 +185,17 @@ export const GlyphCatalogView = () => {
               </div>
             );
           })}
+
+          <Separator className="my-1" />
+          <div className="px-2 py-1 text-ui font-medium text-primary">Languages</div>
+          {languageScripts.map((group) => (
+            <LanguageScript
+              key={group.script}
+              group={group}
+              selectedLanguageId={selectedLanguageId}
+              onSelectLanguage={selectLanguage}
+            />
+          ))}
         </div>
       </div>
     </div>

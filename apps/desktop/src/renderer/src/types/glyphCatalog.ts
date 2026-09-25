@@ -1,4 +1,4 @@
-import type { GlyphCategory, GlyphCategorySummary } from "@shift/glyph-info";
+import type { GlyphCategory, GlyphCategorySummary, LanguageScript } from "@shift/glyph-info";
 import type { Rect2D } from "@shift/geo";
 import type {
   CatalogAxis,
@@ -36,7 +36,9 @@ export interface GlyphCatalogSource {
   availableGlyphs: GlyphCatalogItem[];
   filteredGlyphs: GlyphCatalogItem[];
   categories: GlyphCategorySummary[];
+  languageScripts: LanguageScript[];
   categoryFilters: readonly GlyphCategoryFilter[];
+  selectedLanguageId: string | null;
   visibleCategoryFilters: readonly GlyphCategoryFilter[];
   expandedCategories: ReadonlySet<GlyphCategory>;
   setExpandedCategories: Dispatch<SetStateAction<ReadonlySet<GlyphCategory>>>;
@@ -50,6 +52,7 @@ export interface GlyphCatalogSource {
     subCategoryKey: string,
     mode: ListSelectionMode,
   ) => void;
+  selectLanguage: (languageId: string) => void;
   atlasSource: GlyphAtlasSource;
   observeAtlasInvalidation: (
     listener: (glyphIds: readonly GlyphId[] | null, directory: readonly GlyphId[]) => void,
