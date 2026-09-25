@@ -184,43 +184,40 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
     return record.name;
   }, [workspace]);
 
-  const selectCategoryFilter = useCallback(
-    (
-      target: GlyphCategoryFilter,
-      mode: Parameters<GlyphCatalogSource["selectCategory"]>[1],
-      visibleFilters: readonly GlyphCategoryFilter[],
-    ) => {
-      const matches = (left: GlyphCategoryFilter, right: GlyphCategoryFilter) =>
-        left.category === right.category && left.subCategoryKey === right.subCategoryKey;
-      const visibleIndexes = visibleFilters.map((_, index) => index);
-      const selectedIndexes = categoryFilters.flatMap((filter) => {
-        const index = visibleFilters.findIndex((candidate) => matches(candidate, filter));
-        return index === -1 ? [] : [index];
-      });
-      const hiddenFilters = categoryFilters.filter(
-        (filter) => !visibleFilters.some((candidate) => matches(candidate, filter)),
-      );
-      const anchor = categoryFilterAnchor.current;
-      const anchorIndex = anchor
-        ? visibleFilters.findIndex((candidate) => matches(candidate, anchor))
-        : -1;
-      const targetIndex = visibleFilters.findIndex((candidate) => matches(candidate, target));
-      if (targetIndex === -1) return;
+  const selectCategoryFilter = (
+    target: GlyphCategoryFilter,
+    mode: Parameters<GlyphCatalogSource["selectCategory"]>[1],
+    visibleFilters: readonly GlyphCategoryFilter[],
+  ) => {
+    const matches = (left: GlyphCategoryFilter, right: GlyphCategoryFilter) =>
+      left.category === right.category && left.subCategoryKey === right.subCategoryKey;
+    const visibleIndexes = visibleFilters.map((_, index) => index);
+    const selectedIndexes = categoryFilters.flatMap((filter) => {
+      const index = visibleFilters.findIndex((candidate) => matches(candidate, filter));
+      return index === -1 ? [] : [index];
+    });
+    const hiddenFilters = categoryFilters.filter(
+      (filter) => !visibleFilters.some((candidate) => matches(candidate, filter)),
+    );
+    const anchor = categoryFilterAnchor.current;
+    const anchorIndex = anchor
+      ? visibleFilters.findIndex((candidate) => matches(candidate, anchor))
+      : -1;
+    const targetIndex = visibleFilters.findIndex((candidate) => matches(candidate, target));
+    if (targetIndex === -1) return;
 
-      const nextIndexes = applyListSelection(
-        visibleIndexes,
-        selectedIndexes,
-        anchorIndex === -1 ? null : anchorIndex,
-        targetIndex,
-        mode,
-      );
-      const nextFilters = nextIndexes.map((index) => visibleFilters[index]!);
-      setCategoryFilters(mode === "toggle" ? [...hiddenFilters, ...nextFilters] : nextFilters);
+    const nextIndexes = applyListSelection(
+      visibleIndexes,
+      selectedIndexes,
+      anchorIndex === -1 ? null : anchorIndex,
+      targetIndex,
+      mode,
+    );
+    const nextFilters = nextIndexes.map((index) => visibleFilters[index]!);
+    setCategoryFilters(mode === "toggle" ? [...hiddenFilters, ...nextFilters] : nextFilters);
 
-      if (mode === "single" || anchorIndex === -1) categoryFilterAnchor.current = target;
-    },
-    [categoryFilters],
-  );
+    if (mode === "single" || anchorIndex === -1) categoryFilterAnchor.current = target;
+  };
 
   return {
     availableGlyphs: [...availableGlyphs],
