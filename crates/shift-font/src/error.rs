@@ -70,6 +70,15 @@ pub enum CoreError {
         base_glyph_id: GlyphId,
     },
 
+    /// Adding the base glyph would make the component dependency graph cyclic.
+    #[error(
+        "glyph {glyph_id} cannot reference {base_glyph_id} because it would create a component cycle"
+    )]
+    CyclicComponentReference {
+        glyph_id: GlyphId,
+        base_glyph_id: GlyphId,
+    },
+
     #[error("source {0} not found")]
     SourceNotFound(SourceId),
 

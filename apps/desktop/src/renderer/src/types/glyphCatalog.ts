@@ -145,4 +145,5 @@ export interface SlugGlyphCatalogSurfaceProps extends GlyphCatalogViewProps {
 
 export interface SvgGlyphCatalogGridProps extends GlyphCatalogViewProps {
   readonly glyphPreviews: GlyphCatalogSource["glyphPreviews"];
+  readonly glyphActionLabel?: (glyph: GlyphCatalogItem) => string;
 }

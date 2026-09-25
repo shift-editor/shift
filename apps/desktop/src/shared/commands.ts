@@ -29,6 +29,7 @@ export type CommandId =
   | "edit.duplicate"
   | "edit.selectAll"
   | "edit.deselect"
+  | "glyph.addComponent"
   | "glyph.reverseSelectedContour"
   | "glyph.makeFirstPoint"
   | "window.showHome"
@@ -47,7 +48,7 @@ export type CommandId =
  * Renderer command IDs are sent from main to the focused font window. Main
  * owns native menu routing; renderer UI owns the resulting surface or edit.
  */
-export type RendererCommandId = EditorCommandId | "app.showSettings";
+export type RendererCommandId = EditorCommandId | "app.showSettings" | "glyph.addComponent";
 
 /** Identifies a renderer command that acts on the current editor or text focus. */
 export type EditorCommandId =

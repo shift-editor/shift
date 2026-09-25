@@ -15,6 +15,7 @@ import type {
   ComponentTransformSelection,
   ComponentTransformSelectionLayer,
 } from "../../types/componentTransform";
+import type { ComponentLayerTargets, ComponentTargets } from "../../types/componentTargets";
 import type {
   PositionSelection,
   PositionSelectionLayer,
@@ -106,14 +107,12 @@ export class MultiSourceEditing {
   }
 
   /**
-   * Maps direct components onto every selected source layer.
+   * Matches direct component targets across every selected editing source.
    *
-   * @param reference - Active-source component identities and resolved local bounds.
-   * @returns The complete matched selection, or `null` when any source cannot participate.
+   * @param reference - Active-source component identities to map through precomputed layer matches.
+   * @returns Complete source-layer targets, or `null` when any selected source cannot participate.
    */
-  resolveComponents(
-    reference: ComponentTransformSelectionLayer,
-  ): ComponentTransformSelection | null {
+  matchComponentTargets(reference: ComponentLayerTargets): ComponentTargets | null {
     const editingSourceIds = this.#editingSourceIdsCell.peek();
     if (editingSourceIds.size <= 1) return { ...reference, additionalLayers: [] };
 
@@ -124,7 +123,7 @@ export class MultiSourceEditing {
     if (!activeSourceId) return null;
 
     const matches = this.#matchesCell.peek();
-    const additionalLayers: ComponentTransformSelectionLayer[] = [];
+    const additionalLayers: ComponentLayerTargets[] = [];
     for (const source of this.#font.sources) {
       if (source.id === activeSourceId || !editingSourceIds.has(source.id)) continue;
 
@@ -137,10 +136,38 @@ export class MultiSourceEditing {
       const componentIds = mapComponentIds(reference.componentIds, layerMatch);
       if (!componentIds) return null;
 
-      const bounds = this.#componentBounds(glyph, source.id, targetLayer, componentIds);
+      additionalLayers.push({ layer: targetLayer, componentIds });
+    }
+
+    return { ...reference, additionalLayers };
+  }
+
+  /**
+   * Maps direct components onto every selected source layer and resolves transform pivots.
+   *
+   * @param reference - Active-source component identities and resolved local bounds.
+   * @returns The complete matched selection, or `null` when any source cannot participate.
+   */
+  resolveComponents(
+    reference: ComponentTransformSelectionLayer,
+  ): ComponentTransformSelection | null {
+    const targets = this.matchComponentTargets(reference);
+    if (!targets) return null;
+
+    const glyph = this.#glyphForLayer(reference.layer);
+    if (!glyph) return null;
+
+    const additionalLayers: ComponentTransformSelectionLayer[] = [];
+    for (const target of targets.additionalLayers) {
+      const bounds = this.#componentBounds(
+        glyph,
+        target.layer.sourceId,
+        target.layer,
+        target.componentIds,
+      );
       if (!bounds) return null;
 
-      additionalLayers.push({ layer: targetLayer, componentIds, bounds });
+      additionalLayers.push({ ...target, bounds });
     }
 
     return { ...reference, additionalLayers };

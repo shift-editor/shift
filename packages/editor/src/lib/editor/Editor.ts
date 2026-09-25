@@ -7,6 +7,7 @@ import {
   isNodeId,
   isPointId,
   type AnchorId,
+  type ComponentId,
   type PointId,
   type ContourId,
   type Source,
@@ -78,6 +79,7 @@ import { ShiftStore } from "../store/ShiftStore";
 import { EditorGesture, EditorInput, EditorViewState } from "./EditorState";
 import type { PointerTarget } from "../../types/target";
 import type { ComponentTransformSelection } from "../../types/componentTransform";
+import type { ComponentTargets } from "../../types/componentTargets";
 import type { PositionSelection } from "../../types/positionEdit";
 import type { SelectableId, ShiftId, ShiftObject } from "../../types/object";
 import type { ShiftEditorRecord } from "../../types/records";
@@ -504,6 +506,54 @@ export class Editor {
     return this.font.createGlyph(name);
   }
 
+  /**
+   * Adds one component occurrence to every selected editing source.
+   *
+   * @remarks
+   * The selected-source insertions commit as one undoable workspace operation.
+   * Once committed, the active source occurrence becomes the current selection.
+   *
+   * @param baseGlyphId - Existing glyph to reference from the active glyph.
+   * @returns The selected active-source component, or `null` when the current
+   * glyph cannot be edited across the complete selected source set.
+   * @throws {Error} when the workspace rejects the component reference.
+   */
+  public async addComponent(baseGlyphId: GlyphId): Promise<ComponentId | null> {
+    const activeSourceId = this.activeSourceId;
+    if (this.sessionMode !== "workspace" || !activeSourceId || !this.font.hasGlyph(baseGlyphId)) {
+      return null;
+    }
+
+    const glyphNodes = this.scene.nodesOfKind("glyph");
+    const [node] = glyphNodes;
+    if (!node || glyphNodes.length !== 1 || node.glyphId === baseGlyphId) return null;
+
+    const glyph = this.#fontStore.glyphForId(node.glyphId);
+    if (!glyph) return null;
+
+    const editingSourceIds = this.#editingSourceIdsCell.peek();
+    const layers = this.font.sources
+      .filter(({ id }) => editingSourceIds.has(id))
+      .map(({ id }) => glyph.layerForSource(id));
+    if (layers.length !== editingSourceIds.size || layers.some((layer) => layer === null)) {
+      return null;
+    }
+
+    const componentIds = this.transaction("Add Component", () =>
+      layers.map((layer) => {
+        if (!layer) throw new Error("validated component layer is unavailable");
+        return [layer.sourceId, layer.addComponent(baseGlyphId)] as const;
+      }),
+    );
+    const activeComponentId = componentIds.find(([sourceId]) => sourceId === activeSourceId)?.[1];
+    if (!activeComponentId) return null;
+
+    await this.font.editCoordinator.settled();
+    this.selection.select([activeComponentId]);
+    this.setActiveTool("select");
+    return activeComponentId;
+  }
+
   public get externalLocationCell(): Signal<ExternalAxisLocation> {
     return this.#externalLocation;
   }
@@ -707,20 +757,7 @@ export class Editor {
     return owner === null ? null : this.#layerForId(owner);
   }
 
-  /**
-   * Resolves direct components into reference and matched-layer transform targets.
-   *
-   * @remarks
-   * Every selected source must have a complete precomputed component match.
-   * Bounds are captured in each source's glyph-local coordinates so scale and
-   * rotation can use corresponding pivots without workspace reads during drag.
-   *
-   * @param ids - Selected direct component identities.
-   * @returns The complete component selection, or `null` when any source cannot participate.
-   */
-  public componentTransformSelection(
-    ids: readonly SelectableId[],
-  ): ComponentTransformSelection | null {
+  #componentTargets(ids: readonly SelectableId[]): ComponentTargets | null {
     const objects = this.objects(ids);
     if (objects.length === 0 || objects.length !== ids.length) return null;
 
@@ -739,12 +776,38 @@ export class Editor {
       return null;
     }
 
+    return this.#multiSourceEditing.matchComponentTargets({
+      layer,
+      componentIds: components.map((component) => component.componentId),
+    });
+  }
+
+  /**
+   * Resolves direct components into reference and matched-layer transform targets.
+   *
+   * @remarks
+   * Every selected source must have a complete precomputed component match.
+   * Bounds are captured in each source's glyph-local coordinates so scale and
+   * rotation can use corresponding pivots without workspace reads during drag.
+   *
+   * @param ids - Selected direct component identities.
+   * @returns The complete component selection, or `null` when any source cannot participate.
+   */
+  public componentTransformSelection(
+    ids: readonly SelectableId[],
+  ): ComponentTransformSelection | null {
+    const targets = this.#componentTargets(ids);
+    if (!targets) return null;
+
+    const components = this.objects(ids).filter(
+      (object): object is ComponentObject => object.kind === "component",
+    );
     const bounds = Bounds.unionAll(components.map((component) => component.component.bounds));
     if (!bounds) return null;
 
     return this.#multiSourceEditing.resolveComponents({
-      layer,
-      componentIds: components.map((component) => component.componentId),
+      layer: targets.layer,
+      componentIds: targets.componentIds,
       bounds: Bounds.toRect(bounds),
     });
   }
@@ -1649,6 +1712,21 @@ export class Editor {
   }
 
   public async deleteSelection(mode: DeleteMode = "fit"): Promise<boolean> {
+    const componentTargets = this.#componentTargets(this.selection.ids);
+    if (componentTargets) {
+      this.transaction("Delete Components", () => {
+        componentTargets.layer.removeComponents(componentTargets.componentIds);
+        for (const target of componentTargets.additionalLayers) {
+          target.layer.removeComponents(target.componentIds);
+        }
+      });
+
+      this.selection.clear();
+      this.hover.clear();
+      await this.font.editCoordinator.settled();
+      return true;
+    }
+
     const selection = this.positionSelection(this.selection.ids);
     const pointIds = selection?.targets.points ?? [];
     if (!selection || pointIds.length === 0 || (selection.targets.anchors?.length ?? 0) > 0) {

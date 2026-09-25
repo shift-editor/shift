@@ -1,3 +1,4 @@
+export type { ComponentLayerTargets, ComponentTargets } from "./types/componentTargets";
 export type {
   ComponentTransformSelection,
   ComponentTransformSelectionLayer,

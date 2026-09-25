@@ -241,6 +241,13 @@ const editCommands: Command[] = [
 
 const glyphCommands: Command[] = [
   {
+    id: "glyph.addComponent",
+    label: "Add Component…",
+    accelerator: "CmdOrCtrl+Shift+C",
+    enabled: (ctx) => ctx.document.hasWorkspace(),
+    run: (ctx) => ctx.renderer.run("glyph.addComponent"),
+  },
+  {
     id: "glyph.makeFirstPoint",
     label: "Make First Point",
     enabled: (ctx) => ctx.document.hasWorkspace(),
