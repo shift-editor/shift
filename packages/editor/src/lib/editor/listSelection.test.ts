@@ -21,4 +21,20 @@ describe("list selection follows desktop modifier behavior", () => {
   it("falls back to the target when the range anchor is unavailable", () => {
     expect(applyListSelection(orderedIds, ["a"], "missing", "c", "range")).toEqual(["c"]);
   });
+
+  it("supports value equality for non-primitive items", () => {
+    const orderedItems = [{ id: "a" }, { id: "b" }, { id: "c" }];
+    const isSameItem = (left: { id: string }, right: { id: string }) => left.id === right.id;
+
+    expect(
+      applyListSelection(
+        orderedItems,
+        [{ id: "a" }],
+        { id: "a" },
+        { id: "c" },
+        "range",
+        isSameItem,
+      ),
+    ).toEqual(orderedItems);
+  });
 });

@@ -9,6 +9,7 @@ import type {
   SourceId,
 } from "@shift/types";
 import type { ListSelectionMode, RenderGlyph } from "@shift/editor/types";
+import type { Dispatch, SetStateAction } from "react";
 import type { ColorTheme } from "@/lib/themes";
 import type { GlyphAtlasSource } from "./glyphAtlas";
 
@@ -36,20 +37,18 @@ export interface GlyphCatalogSource {
   filteredGlyphs: GlyphCatalogItem[];
   categories: GlyphCategorySummary[];
   categoryFilters: readonly GlyphCategoryFilter[];
+  visibleCategoryFilters: readonly GlyphCategoryFilter[];
+  expandedCategories: ReadonlySet<GlyphCategory>;
+  setExpandedCategories: Dispatch<SetStateAction<ReadonlySet<GlyphCategory>>>;
   query: string;
   setQuery: (nextQuery: string) => void;
   createQuickGlyph: () => GlyphName;
   selectAll: () => void;
-  selectCategory: (
-    category: GlyphCategory,
-    mode: ListSelectionMode,
-    visibleFilters: readonly GlyphCategoryFilter[],
-  ) => void;
+  selectCategory: (category: GlyphCategory, mode: ListSelectionMode) => void;
   selectSubCategory: (
     category: GlyphCategory,
     subCategoryKey: string,
     mode: ListSelectionMode,
-    visibleFilters: readonly GlyphCategoryFilter[],
   ) => void;
   atlasSource: GlyphAtlasSource;
   observeAtlasInvalidation: (
