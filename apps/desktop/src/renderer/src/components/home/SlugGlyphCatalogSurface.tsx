@@ -28,7 +28,7 @@ export function SlugGlyphCatalogSurface({
   onFirstFrame,
   onUnavailable,
 }: SlugGlyphCatalogSurfaceProps) {
-  const { themeName } = useTheme();
+  const { resolvedTheme } = useTheme();
   const containerRef = useRef<HTMLDivElement>(null);
   const glyphCanvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -47,11 +47,11 @@ export function SlugGlyphCatalogSurface({
       location,
       metrics,
       sourceId,
-      themeName,
+      resolvedTheme,
       active,
       editingGlyphId: editingGlyph?.id ?? null,
     }),
-    [active, editingGlyph, glyphs, location, metrics, sourceId, themeName],
+    [active, editingGlyph, glyphs, location, metrics, resolvedTheme, sourceId],
   );
   const controllerFrameRef = useRef(controllerFrame);
   controllerFrameRef.current = controllerFrame;

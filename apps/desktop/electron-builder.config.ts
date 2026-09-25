@@ -160,6 +160,7 @@ const config: Configuration = {
   extraResources: [
     { from: `../../icons/${iconName}.png`, to: `${iconName}.png` },
     { from: "../../LICENSE", to: "LICENSE" },
+    { from: "THIRD_PARTY_THEMES.md", to: "THIRD_PARTY_THEMES.md" },
   ],
   asar: true,
   asarUnpack: ["**/*.node"],

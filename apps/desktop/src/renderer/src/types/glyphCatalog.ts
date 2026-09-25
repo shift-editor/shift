@@ -9,7 +9,7 @@ import type {
   SourceId,
 } from "@shift/types";
 import type { RenderGlyph } from "@shift/editor/types";
-import type { ThemeName } from "@shift/editor/types";
+import type { ColorTheme } from "@/lib/themes";
 import type { GlyphAtlasSource } from "./glyphAtlas";
 
 export type GlyphCatalogCellArea = "preview" | "name";
@@ -98,7 +98,7 @@ export interface GlyphCatalogControllerFrame {
   readonly location: CatalogLocation;
   readonly metrics: CatalogMetrics;
   readonly sourceId: SourceId | null;
-  readonly themeName: ThemeName;
+  readonly resolvedTheme: ColorTheme;
   readonly active: boolean;
   readonly editingGlyphId: GlyphId | null;
 }

@@ -12,7 +12,7 @@ export const NavigationPane = () => {
   return (
     <section className="h-full flex flex-1 items-center ml-1">
       <div className="flex flex-1 items-center gap-1">
-        <div className="rounded-lg border-b border-line p-0.5">
+        <div className="rounded-lg p-0.5">
           {routes.map((route) => {
             if (!route.icon) return null;
             const Icon = route.icon;

@@ -173,7 +173,7 @@ export class SlugGlyphCatalogRenderer implements GlyphCatalogRenderer {
       !sameCoordinates(previousTarget.location, frame.location) ||
       previousTarget.metrics !== frame.metrics ||
       previousTarget.sourceId !== frame.sourceId ||
-      previousTarget.themeName !== frame.themeName
+      previousTarget.resolvedTheme !== frame.resolvedTheme
     ) {
       this.#needsRedraw = true;
     }

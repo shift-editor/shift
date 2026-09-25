@@ -15,6 +15,7 @@ import {
 import { message } from "@shared/messages";
 import type { SettingsCategory, SettingsTarget } from "@/types/settings";
 import { useFont } from "@/workspace/WorkspaceContext";
+import { AppearanceSettingsPanel } from "./AppearanceSettingsPanel";
 import { AxesSettingsPanel } from "./AxesSettingsPanel";
 import { FontSettingsPanel } from "./FontSettingsPanel";
 import { InstancesSettingsPanel } from "./InstancesSettingsPanel";
@@ -91,6 +92,12 @@ interface SettingsCategoryPanelProps {
 
 const SettingsCategoryPanel = ({ target, canAuthor }: SettingsCategoryPanelProps) => {
   switch (target.category) {
+    case "appearance":
+      return (
+        <ScrollablePanel>
+          <AppearanceSettingsPanel />
+        </ScrollablePanel>
+      );
     case "font":
       return (
         <ScrollablePanel>
@@ -126,6 +133,8 @@ const SettingsCategoryPanel = ({ target, canAuthor }: SettingsCategoryPanelProps
 
 function targetForCategory(category: SettingsCategory): SettingsTarget {
   switch (category) {
+    case "appearance":
+      return { category: "appearance" };
     case "font":
       return { category: "font" };
     case "sources":

@@ -1,12 +1,18 @@
-import type { Theme } from "./Theme";
-import { DEFAULT_THEME } from "./Theme";
+import { readEditorRenderTheme, type EditorRenderTheme } from "./Theme";
 import { Canvas } from "./Canvas";
 import { FrameHandler } from "./FrameHandler";
 import { FpsMonitor } from "./FpsMonitor";
 import { MarkerLayer } from "../../graphics/backends/MarkerLayer";
 import type { Editor } from "../Editor";
 import type { Canvas2DSurface, MarkerCanvasSurface } from "./CanvasSurface";
-import { effect, signal, track, type Effect, type WritableSignal } from "../../signals/signal";
+import {
+  batch,
+  effect,
+  signal,
+  track,
+  type Effect,
+  type WritableSignal,
+} from "../../signals/signal";
 import { BackgroundLayer, OverlayLayer, SceneLayer } from "./RenderFrame";
 import type { RenderContext } from "../../../types/rendering";
 
@@ -55,7 +61,9 @@ export class Renderer {
   #overlayEffect: Effect | null = null;
 
   #fpsMonitor = new FpsMonitor();
-  #theme: Theme = DEFAULT_THEME;
+  #themeCell = signal<EditorRenderTheme>(readEditorRenderTheme(), {
+    name: "renderer.theme",
+  });
   #editor: Editor;
   #backgroundLayer: BackgroundLayer;
   #sceneLayer: SceneLayer;
@@ -71,6 +79,7 @@ export class Renderer {
       () => {
         // traceReactiveRun();
         track(this.#surface.background);
+        track(this.#themeCell);
         this.#renderBackground();
       },
       {
@@ -84,6 +93,7 @@ export class Renderer {
         // traceReactiveRun();
         track(this.#surface.scene);
         track(this.#markerSurface);
+        track(this.#themeCell);
         this.#renderScene();
       },
       {
@@ -96,6 +106,7 @@ export class Renderer {
       () => {
         // traceReactiveRun();
         track(this.#surface.overlay);
+        track(this.#themeCell);
         this.#renderOverlay();
       },
       {
@@ -109,31 +120,38 @@ export class Renderer {
     return this.#fpsMonitor;
   }
 
-  setBackgroundSurface(surface: Canvas2DSurface): void {
-    this.#surface.background.set(surface);
-    this.#canvases.background = null;
+  setRenderTheme(theme: EditorRenderTheme): void {
+    this.#canvases = { background: null, scene: null, overlay: null };
+    this.#themeCell.set(theme);
+  }
+
+  attachRenderSurfaces(
+    background: Canvas2DSurface,
+    scene: Canvas2DSurface,
+    overlay: Canvas2DSurface,
+    markers: MarkerCanvasSurface,
+  ): void {
+    this.#canvases = { background: null, scene: null, overlay: null };
+    batch(() => {
+      this.#surface.background.set(background);
+      this.#surface.scene.set(scene);
+      this.#surface.overlay.set(overlay);
+      this.#markerSurface.set(markers);
+    });
+    this.#markerLayer.resizeCanvas(markers.canvas);
     this.#renderBackground();
-  }
-
-  setSceneSurface(surface: Canvas2DSurface): void {
-    this.#surface.scene.set(surface);
-    this.#canvases.scene = null;
     this.#renderScene();
-  }
-
-  setOverlaySurface(surface: Canvas2DSurface): void {
-    this.#surface.overlay.set(surface);
-    this.#canvases.overlay = null;
     this.#renderOverlay();
   }
 
-  setMarkerSurface(surface: MarkerCanvasSurface): void {
-    this.#markerSurface.set(surface);
-    this.#markerLayer.resizeCanvas(surface.canvas);
-  }
-
-  clearMarkerCanvas(): void {
-    this.#markerSurface.set(null);
+  detachRenderSurfaces(): void {
+    this.#canvases = { background: null, scene: null, overlay: null };
+    batch(() => {
+      this.#surface.background.set(null);
+      this.#surface.scene.set(null);
+      this.#surface.overlay.set(null);
+      this.#markerSurface.set(null);
+    });
     this.#markerLayer.destroy();
     this.#markerLayer = new MarkerLayer();
   }
@@ -195,7 +213,7 @@ export class Renderer {
 
     let canvas = this.#canvases[layer];
     if (!canvas || canvas.ctx !== ctx) {
-      canvas = new Canvas(ctx, camera, this.#theme);
+      canvas = new Canvas(ctx, camera, this.#themeCell.peek());
       this.#canvases[layer] = canvas;
     } else {
       canvas.camera = camera;
