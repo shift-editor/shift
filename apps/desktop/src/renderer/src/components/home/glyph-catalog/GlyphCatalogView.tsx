@@ -1,5 +1,4 @@
-import { useMemo, useState } from "react";
-import type { GlyphCategory } from "@shift/glyph-info";
+import { useMemo } from "react";
 import {
   Button,
   cn,
@@ -18,7 +17,6 @@ import AllIcon from "@/assets/sidebar-left/all.svg";
 import PlusIcon from "@/assets/general/plus.svg";
 
 import { SidebarRowButton } from "@/components/sidebar";
-import type { GlyphCategoryFilter } from "@/types/glyphCatalog";
 import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
 import { Category } from "./Category";
 import { SubCategory } from "./SubCategory";
@@ -29,6 +27,9 @@ export const GlyphCatalogView = () => {
     filteredGlyphs,
     categories,
     categoryFilters,
+    visibleCategoryFilters,
+    expandedCategories,
+    setExpandedCategories,
     query,
     setQuery,
     createQuickGlyph,
@@ -38,22 +39,6 @@ export const GlyphCatalogView = () => {
     selectSubCategory,
   } = useGlyphCatalog();
 
-  const [expandedCategories, setExpandedCategories] = useState<ReadonlySet<GlyphCategory>>(
-    () => new Set(),
-  );
-  const visibleCategoryFilters = useMemo<readonly GlyphCategoryFilter[]>(
-    () =>
-      categories.flatMap((category) => [
-        { category: category.category, subCategoryKey: null },
-        ...(expandedCategories.has(category.category)
-          ? category.subCategories.map((subCategory) => ({
-              category: category.category,
-              subCategoryKey: subCategory.key,
-            }))
-          : []),
-      ]),
-    [categories, expandedCategories],
-  );
   const selectedFilterIndexes = useMemo(
     () =>
       new Set(
@@ -154,7 +139,6 @@ export const GlyphCatalogView = () => {
                               : event.metaKey || event.ctrlKey
                                 ? "toggle"
                                 : "single",
-                            visibleCategoryFilters,
                           )
                         }
                       />
@@ -186,12 +170,7 @@ export const GlyphCatalogView = () => {
                               selectedFilterIndexes.has(subCategoryFilterIndex + 1)
                             }
                             onSelect={(mode) =>
-                              selectSubCategory(
-                                categoryNode.category,
-                                subCategory.key,
-                                mode,
-                                visibleCategoryFilters,
-                              )
+                              selectSubCategory(categoryNode.category, subCategory.key, mode)
                             }
                           />
                         );

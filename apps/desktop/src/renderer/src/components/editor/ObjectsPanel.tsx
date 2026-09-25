@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { applyListSelection } from "@shift/editor";
+import { useCallback, useMemo, useState } from "react";
 import { computed, track, useSignalState } from "@shift/editor/signals";
 import type { SelectableId } from "@shift/editor/types";
 import { useEditor } from "@/workspace/WorkspaceContext";
-import type { ObjectTreeSectionId, ObjectTreeSelectionHandler } from "@/types/objectTree";
+import type { ObjectTreeSectionId } from "@/types/objectTree";
+import { useListSelection } from "@/hooks/useListSelection";
 import { createObjectTree } from "./object-tree/createObjectTree";
 import { flattenVisibleObjectRows } from "./object-tree/flattenVisibleObjectRows";
 import { ObjectRow } from "./object-tree/ObjectRow";
@@ -40,7 +40,6 @@ export const ObjectsPanel = () => {
   const [collapsedObjectIds, setCollapsedObjectIds] = useState<ReadonlySet<SelectableId>>(
     () => new Set(),
   );
-  const selectionAnchorId = useRef<SelectableId | null>(null);
   const objectRowsBySection = useMemo(() => {
     const result = new Map(
       objectTree.map((section) => [
@@ -69,24 +68,8 @@ export const ObjectsPanel = () => {
     [objectTree, visibleObjectIdsBySection],
   );
 
-  useEffect(() => {
-    const [onlySelectedId] = selection.ids;
-    if (selection.ids.length !== 1 || !onlySelectedId) return;
-    if (!visibleObjectIds.includes(onlySelectedId)) return;
-
-    selectionAnchorId.current = onlySelectedId;
-  }, [selection.ids, visibleObjectIds]);
-
-  const selectObject = useCallback<ObjectTreeSelectionHandler>(
-    (id, mode) => {
-      let anchorId = selectionAnchorId.current;
-      if (anchorId !== null && !visibleObjectIds.includes(anchorId)) anchorId = null;
-
-      const nextIds = applyListSelection(visibleObjectIds, selection.ids, anchorId, id, mode);
-      editor.selection.select(nextIds);
-      if (mode === "single" || anchorId === null) selectionAnchorId.current = id;
-    },
-    [editor, selection.ids, visibleObjectIds],
+  const { selectItem: selectObject } = useListSelection(visibleObjectIds, selection.ids, (ids) =>
+    editor.selection.select(ids),
   );
 
   const setObjectOpen = useCallback((id: SelectableId, open: boolean) => {
