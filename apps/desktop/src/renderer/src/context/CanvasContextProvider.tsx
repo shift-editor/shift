@@ -49,10 +49,12 @@ export const CanvasContextProvider = ({
         const overlaySurface = Canvas2DSurface.from(overlayCanvas);
 
         editor.setCameraRect(sceneSurface.rect);
-        editor.setMarkerSurface(MarkerCanvasSurface.from(markerCanvas));
-        editor.setBackgroundSurface(backgroundSurface);
-        editor.setSceneSurface(sceneSurface);
-        editor.setOverlaySurface(overlaySurface);
+        editor.attachRenderSurfaces(
+          backgroundSurface,
+          sceneSurface,
+          overlaySurface,
+          MarkerCanvasSurface.from(markerCanvas),
+        );
 
         if (viewportReady) return;
 
@@ -76,7 +78,7 @@ export const CanvasContextProvider = ({
       return () => {
         if (resizeFrame !== null) cancelAnimationFrame(resizeFrame);
         observer.disconnect();
-        editor.clearMarkerCanvas();
+        editor.detachRenderSurfaces();
       };
     };
 

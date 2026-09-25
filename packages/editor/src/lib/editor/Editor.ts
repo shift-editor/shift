@@ -480,24 +480,17 @@ export class Editor {
     this.#renderer.setRenderTheme(theme);
   }
 
-  public setBackgroundSurface(surface: Canvas2DSurface): void {
-    this.#renderer.setBackgroundSurface(surface);
+  public attachRenderSurfaces(
+    background: Canvas2DSurface,
+    scene: Canvas2DSurface,
+    overlay: Canvas2DSurface,
+    markers: MarkerCanvasSurface,
+  ): void {
+    this.#renderer.attachRenderSurfaces(background, scene, overlay, markers);
   }
 
-  public setSceneSurface(surface: Canvas2DSurface): void {
-    this.#renderer.setSceneSurface(surface);
-  }
-
-  public setOverlaySurface(surface: Canvas2DSurface): void {
-    this.#renderer.setOverlaySurface(surface);
-  }
-
-  public setMarkerSurface(surface: MarkerCanvasSurface): void {
-    this.#renderer.setMarkerSurface(surface);
-  }
-
-  public clearMarkerCanvas(): void {
-    this.#renderer.clearMarkerCanvas();
+  public detachRenderSurfaces(): void {
+    this.#renderer.detachRenderSurfaces();
   }
 
   /**
