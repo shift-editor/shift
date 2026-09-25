@@ -54,7 +54,7 @@ export const GlyphSection = () => {
             />
           </div>
           <div className="px-2">
-            <PlaceholderGlyph />
+            <PlaceholderGlyph className="text-primary" />
           </div>
           <div className="contents">
             <EditableSidebarInput
