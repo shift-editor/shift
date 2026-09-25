@@ -562,9 +562,9 @@ These are allowed to jump around when energy is high, but they should not silent
 **Component Creation**
 
 - [ ] Drag glyph from grid as component
-- [ ] Searchable component picker modal
-- [ ] Quick add: `Cmd+Shift+C` → type glyph name
-- [ ] Reject direct or indirect component cycles in the picker
+- [x] Searchable component picker modal
+- [x] Quick add: `Cmd+Shift+C` → type glyph name
+- [x] Reject direct or indirect component cycles in the picker
 
 **Component Selection**
 
@@ -581,7 +581,7 @@ These are allowed to jump around when energy is high, but they should not silent
 - [ ] Reset component transform
 - [ ] Replace base glyph while preserving the component transform
 - [ ] Duplicate component with a fresh identity
-- [ ] Remove selected components with Delete/Backspace
+- [x] Remove selected components with Delete/Backspace
 - [ ] Numeric transform inputs in panel
 - [ ] "Use my metrics" toggle
 - [ ] Reorder components (stacking)

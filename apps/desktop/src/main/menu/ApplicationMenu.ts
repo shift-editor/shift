@@ -211,7 +211,11 @@ export class ApplicationMenu {
   }
 
   #glyphItems(): MenuItemConstructorOptions[] {
-    return [this.#commandItem("glyph.reverseSelectedContour")];
+    return [
+      this.#commandItem("glyph.addComponent"),
+      { type: "separator" },
+      this.#commandItem("glyph.reverseSelectedContour"),
+    ];
   }
 
   /** Builds a menu item from the command registry's metadata. */

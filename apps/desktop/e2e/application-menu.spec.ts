@@ -74,7 +74,10 @@ launcherTest("application menu exposes native shell actions", async ({ electronA
         items.find((item) => item.label === "View")?.submenu?.items.map((item) => item.label) ?? [],
       fileIds: submenuIds("File"),
       editIds: submenuIds("Edit"),
+      glyphIds: submenuIds("Glyph"),
       settingsInstalled: Menu.getApplicationMenu()?.getMenuItemById("app.showSettings") !== null,
+      addComponentAccelerator:
+        Menu.getApplicationMenu()?.getMenuItemById("glyph.addComponent")?.accelerator,
     };
   });
 
@@ -99,6 +102,8 @@ launcherTest("application menu exposes native shell actions", async ({ electronA
   expect(menu.settingsInstalled).toBe(true);
   expect(menu.fileIds).not.toContain("app.showSettings");
   expect(menu.editIds.includes("app.showSettings")).toBe(menu.platform !== "darwin");
+  expect(menu.glyphIds).toContain("glyph.addComponent");
+  expect(menu.addComponentAccelerator).toBe("CmdOrCtrl+Shift+C");
   expect(menu.viewLabels.includes("Developer")).toBe(!menu.packaged && menu.platform === "darwin");
 });
 
@@ -175,6 +180,117 @@ authoredTest("Settings opens the active font configuration", async ({ electronAp
   await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Font", exact: true })).toBeVisible();
 });
+
+authoredTest(
+  "Add Component picks, selects, deletes, and restores a glyph reference",
+  async ({ electronApp, editor, page }) => {
+    await openFirstAuthoredGlyph(editor);
+
+    const candidate = await page.evaluate(() => {
+      const session = window.shiftSession;
+      const editor = window.shift?.editor;
+      const glyphNodes = editor?.scene.nodesOfKind("glyph") ?? [];
+      const currentGlyphId = glyphNodes.length === 1 ? glyphNodes[0]?.glyphId : null;
+      if (!session || !editor || !currentGlyphId) throw new Error("Expected active glyph editor");
+
+      const recordsById = new Map(session.font.glyphRecords().map((record) => [record.id, record]));
+      const referencesCurrentGlyph = (candidateId: string): boolean => {
+        const pending = [candidateId];
+        const visited = new Set<string>();
+
+        while (pending.length > 0) {
+          const glyphId = pending.pop();
+          if (!glyphId || visited.has(glyphId)) continue;
+          if (glyphId === currentGlyphId) return true;
+
+          visited.add(glyphId);
+          pending.push(...(recordsById.get(glyphId)?.componentBaseGlyphIds ?? []));
+        }
+
+        return false;
+      };
+      const item = session.catalog.glyphsCell
+        .peek()
+        .find((glyph) => glyph.id !== currentGlyphId && !referencesCurrentGlyph(glyph.id));
+      if (!item) throw new Error("Expected eligible component glyph");
+
+      const activeSourceId = editor.activeSourceId;
+      const glyph = editor.glyphForId(currentGlyphId);
+      if (!activeSourceId || !glyph) throw new Error("Expected active glyph layer");
+
+      return {
+        id: item.id,
+        name: item.name,
+        displayName: item.displayName,
+        initialCount: glyph.layerForSource(activeSourceId)?.components.length ?? 0,
+      };
+    });
+
+    await clickApplicationMenuItem(page, electronApp, "glyph.addComponent");
+    const picker = page.getByRole("dialog", { name: "Add Component" });
+    await expect(picker).toBeVisible();
+    const search = picker.getByRole("textbox", { name: "Search components" });
+    await search.fill(candidate.name);
+    await expect(
+      picker.getByRole("button", { name: `Add ${candidate.displayName} as a component` }),
+    ).toBeVisible();
+    await search.press("Enter");
+
+    await expect(picker).not.toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const editor = window.shift!.editor;
+          const [node] = editor.scene.nodesOfKind("glyph");
+          return node
+            ? editor.glyphForId(node.glyphId)?.layerForSource(editor.activeSourceId!)?.components
+                .length
+            : undefined;
+        }),
+      )
+      .toBe(candidate.initialCount + 1);
+    await expect
+      .poll(() =>
+        page.evaluate(
+          (baseGlyphId) =>
+            window.shift!.editor.objects(window.shift!.editor.selection.ids)[0]?.kind ===
+              "component" &&
+            window.shift!.editor.objects(window.shift!.editor.selection.ids)[0]?.component
+              .glyphId === baseGlyphId,
+          candidate.id,
+        ),
+      )
+      .toBe(true);
+
+    await clickApplicationMenuItem(page, electronApp, "edit.deleteSelection");
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const editor = window.shift!.editor;
+          const [node] = editor.scene.nodesOfKind("glyph");
+          return node
+            ? editor.glyphForId(node.glyphId)?.layerForSource(editor.activeSourceId!)?.components
+                .length
+            : undefined;
+        }),
+      )
+      .toBe(candidate.initialCount);
+
+    await clickApplicationMenuItem(page, electronApp, "edit.undo");
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const editor = window.shift!.editor;
+          const [node] = editor.scene.nodesOfKind("glyph");
+          return node
+            ? editor.glyphForId(node.glyphId)?.layerForSource(editor.activeSourceId!)?.components
+                .length
+            : undefined;
+        }),
+      )
+      .toBe(candidate.initialCount + 1);
+  },
+);
 
 authoredTest(
   "Settings rounds mapping display without losing editing precision",
