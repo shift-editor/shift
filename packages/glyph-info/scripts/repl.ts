@@ -12,6 +12,7 @@ const resources: GlyphInfoResources = {
   glyphData: JSON.parse(readFileSync(join(resourcesDir, "glyph-data.json"), "utf-8")),
   decomposition: JSON.parse(readFileSync(join(resourcesDir, "decomposition.json"), "utf-8")),
   charsets: JSON.parse(readFileSync(join(resourcesDir, "charsets.json"), "utf-8")),
+  languages: JSON.parse(readFileSync(join(resourcesDir, "languages.json"), "utf-8")).languages,
   searchData: JSON.parse(readFileSync(join(resourcesDir, "search-data.json"), "utf-8")),
 };
 
@@ -23,6 +24,7 @@ console.log("     db.getGlyph(0x41)");
 console.log("     db.getDecomposition(0xE9)");
 console.log('     db.search("dollar")');
 console.log("     db.listCharsets()");
+console.log("     db.createLanguageCatalog([0x41, 0x42])");
 console.log();
 
 const r = start({ prompt: "> " });

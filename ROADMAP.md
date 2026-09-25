@@ -504,7 +504,7 @@ These are allowed to jump around when energy is high, but they should not silent
 - [ ] Multiple charset definitions (Adobe Latin 1-5, Google Fonts Latin, etc.)
 - [ ] Charset selector dropdown
 - [ ] Custom charset creation
-- [ ] Language coverage checker
+- [x] Language coverage checker
 
 **Glyph Operations**
 

@@ -10,6 +10,9 @@ import type {
   GlyphCodepointCategory,
   Glyph,
   GlyphInfoResources,
+  Language,
+  LanguageCatalog,
+  LanguageScript,
   SearchResult,
 } from "./types.js";
 
@@ -117,8 +120,8 @@ function toSortedCategorySummaries(
 /**
  * In-memory Unicode glyph information database.
  *
- * Provides constant-time lookups for glyph metadata, codepoint
- * decomposition, charset membership, and prefix-based full-text search
+ * Provides constant-time lookups for glyph metadata, codepoint decomposition,
+ * charset membership, language coverage, and prefix-based full-text search
  * powered by MiniSearch.
  *
  * Construct with a {@link GlyphInfoResources} bundle. Call {@link close}
@@ -131,6 +134,7 @@ export class GlyphInfo {
   #decomposed: Map<number, number[]>;
   #usedBy: Map<number, number[]>;
   #charsets: CharsetDefinition[];
+  #languages: Language[];
   #searchData: Record<string, unknown>[];
   #searchIndex: MiniSearch | null = null;
 
@@ -159,6 +163,7 @@ export class GlyphInfo {
     );
 
     this.#charsets = resources.charsets;
+    this.#languages = resources.languages;
     this.#searchData = resources.searchData;
   }
 
@@ -316,6 +321,63 @@ export class GlyphInfo {
   getCharsetCodepoints(id: string): number[] {
     const charset = this.#charsets.find((c) => c.id === id);
     return charset?.codepoints ?? [];
+  }
+
+  // --- Languages ---
+
+  /**
+   * Builds language coverage grouped by script for a font's encoded repertoire.
+   *
+   * @param codepoints - Unicode values encoded by the font; duplicates do not increase coverage.
+   * @returns A reusable catalog whose filter preserves the input codepoint order.
+   */
+  createLanguageCatalog(codepoints: number[]): LanguageCatalog {
+    const available = new Set(codepoints);
+    const scripts = new Map<string, LanguageScript>();
+    const languagesById = new Map<string, Set<number>>();
+
+    for (const language of this.#languages) {
+      const required = new Set(language.baseCodepoints);
+      languagesById.set(language.id, required);
+
+      let script = scripts.get(language.script);
+      if (!script) {
+        script = { script: language.script, languages: [] };
+        scripts.set(language.script, script);
+      }
+
+      let presentCount = 0;
+      for (const codepoint of required) {
+        if (available.has(codepoint)) presentCount += 1;
+      }
+
+      script.languages.push({
+        language,
+        presentCount,
+        requiredCount: required.size,
+      });
+    }
+
+    const sortedScripts = [...scripts.values()].sort((left, right) =>
+      left.script.localeCompare(right.script),
+    );
+    for (const script of sortedScripts) {
+      script.languages.sort(
+        (left, right) =>
+          left.language.name.localeCompare(right.language.name) ||
+          left.language.id.localeCompare(right.language.id),
+      );
+    }
+
+    return {
+      scripts: sortedScripts,
+      filter: (languageId) => {
+        const required = languagesById.get(languageId);
+        if (!required) return [];
+
+        return codepoints.filter((codepoint) => required.has(codepoint));
+      },
+    };
   }
 
   // --- Search (MiniSearch) ---

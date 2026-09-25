@@ -387,6 +387,37 @@ describe("getCharsetCodepoints", () => {
   });
 });
 
+describe("language coverage catalogs", () => {
+  it("reports required base-character coverage for primary orthographies", () => {
+    const catalog = db.createLanguageCatalog([0x41, 0x42, 0x61, 0x24]);
+    const latin = catalog.scripts.find((script) => script.script === "Latin");
+    const english = latin?.languages.find(({ language }) => language.id === "eng-latin");
+
+    expect(english?.language.name).toBe("English");
+    expect(english?.presentCount).toBe(3);
+    expect(english?.requiredCount).toBe(56);
+  });
+
+  it("filters the font repertoire by language while preserving input order", () => {
+    const catalog = db.createLanguageCatalog([0x42, 0x24, 0x41, 0x61]);
+
+    expect(catalog.filter("eng-latin")).toEqual([0x42, 0x41, 0x61]);
+    expect(catalog.filter("unknown-language")).toEqual([]);
+  });
+
+  it("sorts scripts and languages alphabetically", () => {
+    const catalog = db.createLanguageCatalog([]);
+    const scripts = catalog.scripts.map(({ script }) => script);
+    const latin = catalog.scripts.find((script) => script.script === "Latin");
+    const languageNames = latin?.languages.map(({ language }) => language.name) ?? [];
+
+    expect(scripts).toEqual([...scripts].sort((left, right) => left.localeCompare(right)));
+    expect(languageNames).toEqual(
+      [...languageNames].sort((left, right) => left.localeCompare(right)),
+    );
+  });
+});
+
 describe("search", () => {
   it("finds dollar sign by name", () => {
     const results = db.search("dollar");

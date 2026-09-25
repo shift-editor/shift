@@ -19,27 +19,33 @@ import { SidebarRowButton } from "@/components/sidebar";
 import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
 import { Category } from "./Category";
 import { SubCategory } from "./SubCategory";
+import { LanguageScript } from "./LanguageScript";
 
 export const GlyphCatalogView = () => {
   const {
     availableGlyphs: allGlyphs,
     filteredGlyphs,
     categories,
+    languageScripts,
     query,
-    selectedCategory,
-    selectedSubCategoryKey,
+    selection,
     setQuery,
     createQuickGlyph,
     canAuthor,
     selectAll,
     selectCategory,
     selectSubCategory,
+    selectLanguage,
   } = useGlyphCatalog();
 
   const allGlyphCount = allGlyphs.length;
   const filteredGlyphCount = filteredGlyphs.length;
-  const allGlyphsSelected = selectedCategory === null && selectedSubCategoryKey === null;
-  const isTopLevelCategorySelected = selectedCategory !== null && selectedSubCategoryKey === null;
+  const allGlyphsSelected = selection.kind === "all";
+  const selectedCategory = selection.kind === "category" ? selection.category : null;
+  const selectedSubCategoryKey = selection.kind === "category" ? selection.subCategoryKey : null;
+  const selectedLanguageId = selection.kind === "language" ? selection.languageId : null;
+  const isTopLevelCategorySelected =
+    selection.kind === "category" && selection.subCategoryKey === null;
 
   return (
     <div className="flex min-h-0 flex-col gap-2">
@@ -113,6 +119,17 @@ export const GlyphCatalogView = () => {
               </div>
             );
           })}
+
+          <Separator className="my-1" />
+          <div className="px-2 py-1 text-ui font-medium text-primary">Languages</div>
+          {languageScripts.map((group) => (
+            <LanguageScript
+              key={group.script}
+              group={group}
+              selectedLanguageId={selectedLanguageId}
+              onSelectLanguage={selectLanguage}
+            />
+          ))}
         </div>
       </div>
     </div>

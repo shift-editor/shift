@@ -37,6 +37,31 @@ export interface CharsetSummary {
   count: number;
 }
 
+/** Represents a primary Hyperglot orthography and its required base-character repertoire. */
+export interface Language {
+  id: string;
+  name: string;
+  autonym: string | null;
+  script: string;
+  baseCodepoints: number[];
+}
+
+export interface LanguageCoverage {
+  language: Language;
+  presentCount: number;
+  requiredCount: number;
+}
+
+export interface LanguageScript {
+  script: string;
+  languages: LanguageCoverage[];
+}
+
+export interface LanguageCatalog {
+  scripts: LanguageScript[];
+  filter(languageId: string): number[];
+}
+
 export interface SearchResult {
   codepoint: number;
   glyphName: string | null;
@@ -93,5 +118,6 @@ export interface GlyphInfoResources {
   glyphData: Glyph[];
   decomposition: Decomposition;
   charsets: CharsetDefinition[];
+  languages: Language[];
   searchData: Record<string, unknown>[];
 }

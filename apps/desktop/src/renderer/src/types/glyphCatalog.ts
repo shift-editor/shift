@@ -1,4 +1,4 @@
-import type { GlyphCategory, GlyphCategorySummary } from "@shift/glyph-info";
+import type { GlyphCategory, GlyphCategorySummary, LanguageScript } from "@shift/glyph-info";
 import type { Rect2D } from "@shift/geo";
 import type {
   CatalogAxis,
@@ -23,6 +23,11 @@ export interface GlyphCatalogItem {
 
 export type PendingGlyphNames = ReadonlyMap<GlyphId, GlyphName>;
 
+export type GlyphCatalogSelection =
+  | { kind: "all" }
+  | { kind: "category"; category: GlyphCategory; subCategoryKey: string | null }
+  | { kind: "language"; languageId: string };
+
 /** Dense external-axis coordinates ordered like `GlyphCatalogSource.axesCell`. */
 export type CatalogLocation = readonly number[];
 
@@ -30,14 +35,15 @@ export interface GlyphCatalogSource {
   availableGlyphs: GlyphCatalogItem[];
   filteredGlyphs: GlyphCatalogItem[];
   categories: GlyphCategorySummary[];
-  selectedCategory: GlyphCategory | null;
-  selectedSubCategoryKey: string | null;
+  languageScripts: LanguageScript[];
+  selection: GlyphCatalogSelection;
   query: string;
   setQuery: (nextQuery: string) => void;
   createQuickGlyph: () => GlyphName;
   selectAll: () => void;
   selectCategory: (category: GlyphCategory) => void;
   selectSubCategory: (category: GlyphCategory, subCategoryKey: string) => void;
+  selectLanguage: (languageId: string) => void;
   atlasSource: GlyphAtlasSource;
   observeAtlasInvalidation: (
     listener: (glyphIds: readonly GlyphId[] | null, directory: readonly GlyphId[]) => void,

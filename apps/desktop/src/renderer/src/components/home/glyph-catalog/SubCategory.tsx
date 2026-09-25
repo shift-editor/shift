@@ -1,4 +1,4 @@
-import { GlyphCategory } from "@shift/glyph-info";
+import type { GlyphCategory } from "@shift/glyph-info";
 import { SidebarRowButton } from "@/components/sidebar";
 
 export interface SubCategoryProps {

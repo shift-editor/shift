@@ -1,6 +1,6 @@
 /**
- * `@shift/glyph-info` -- Unicode glyph metadata, decomposition, charset
- * membership, and full-text search.
+ * `@shift/glyph-info` -- Unicode glyph metadata, decomposition, charset and
+ * language coverage, and full-text search.
  *
  * Instantiate {@link GlyphInfo} with a {@link GlyphInfoResources} bundle
  * (produced by the `generate:glyph-info` script) to get fast, in-memory
@@ -9,7 +9,7 @@
  *
  * ```ts
  * import { GlyphInfo, defaultResources } from "@shift/glyph-info";
- * const info = new GlyphInfo(defaultResources());
+ * const info = new GlyphInfo(defaultResources);
  * info.search("latin capital");
  * ```
  *
@@ -47,6 +47,14 @@ export type {
   Glyph,
   /** Bundle of all resources needed to construct a {@link GlyphInfo} instance. */
   GlyphInfoResources,
+  /** Represents a primary language orthography and its required base-character repertoire. */
+  Language,
+  /** Provides reusable language coverage grouped by script. */
+  LanguageCatalog,
+  /** Reports coverage of one language orthography within a font. */
+  LanguageCoverage,
+  /** Groups language coverage entries sharing a script. */
+  LanguageScript,
   /** A single hit from `GlyphInfo.search()`, ranked by relevance. */
   SearchResult,
 } from "./types.js";

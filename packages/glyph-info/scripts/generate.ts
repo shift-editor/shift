@@ -4,11 +4,13 @@ import { fileURLToPath } from "node:url";
 import { generateGlyph } from "./generators/glyphData.js";
 import { generateDecomposition } from "./generators/decomposition.js";
 import { generateCharsets } from "./generators/charsets.js";
+import { generateLanguages } from "./generators/languages.js";
 import { generateSearchIndex } from "./generators/search.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const RESOURCES_DIR = join(__dirname, "..", "resources");
-const VENDOR_DIR = join(__dirname, "..", "vendor", "GlyphsInfo");
+const GLYPHS_INFO_DIR = join(__dirname, "..", "vendor", "GlyphsInfo");
+const HYPERGLOT_DIR = join(__dirname, "..", "vendor", "Hyperglot");
 
 function ensureDir(dir: string) {
   if (!existsSync(dir)) {
@@ -31,7 +33,7 @@ function generate() {
 
   // Step 1: glyph-data.json
   const glyphDataPath = join(RESOURCES_DIR, "glyph-data.json");
-  const xmlPath = join(VENDOR_DIR, "GlyphData.xml");
+  const xmlPath = join(GLYPHS_INFO_DIR, "GlyphData.xml");
   const glyphCount = generateGlyph(xmlPath, glyphDataPath);
   console.log(`  glyph-data.json: ${glyphCount} entries (${formatSize(glyphDataPath)})`);
 
@@ -47,7 +49,12 @@ function generate() {
   const charsetCount = generateCharsets(charsetsPath);
   console.log(`  charsets.json: ${charsetCount} charsets (${formatSize(charsetsPath)})`);
 
-  // Step 4: search-data.json (depends on glyph-data.json)
+  // Step 4: languages.json
+  const languagesPath = join(RESOURCES_DIR, "languages.json");
+  const languageCount = generateLanguages(HYPERGLOT_DIR, languagesPath);
+  console.log(`  languages.json: ${languageCount} languages (${formatSize(languagesPath)})`);
+
+  // Step 5: search-data.json (depends on glyph-data.json)
   const searchDataPath = join(RESOURCES_DIR, "search-data.json");
   const searchCount = generateSearchIndex(glyphDataPath, searchDataPath);
   console.log(`  search-data.json: ${searchCount} entries (${formatSize(searchDataPath)})`);
