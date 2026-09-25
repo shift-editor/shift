@@ -16,6 +16,7 @@ test.describe("Theme", () => {
 
   test("selects and persists a classic color theme", async ({ page }) => {
     await page.getByRole("button", { name: "Settings" }).click();
+    await page.getByRole("button", { name: "Appearance", exact: true }).click();
     await page.getByRole("radio", { name: /Nord/ }).click();
 
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
@@ -49,6 +50,7 @@ test.describe("Theme", () => {
     await clickFirstCatalogGlyph(page);
     await waitForEditorReady(page, glyphId);
     await page.getByRole("button", { name: "Settings" }).click();
+    await page.getByRole("button", { name: "Appearance", exact: true }).click();
     await page.getByRole("radio", { name: /Dracula/ }).click();
     await page.getByRole("button", { name: "Close settings" }).click();
     await page.getByRole("button", { name: "Font overview" }).click();
@@ -131,6 +133,7 @@ test.describe("Theme", () => {
     }, markersBefore.toString("base64"));
 
     await page.getByRole("button", { name: "Settings" }).click();
+    await page.getByRole("button", { name: "Appearance", exact: true }).click();
     await page.getByRole("radio", { name: /Nord/ }).click();
     await page.getByRole("button", { name: "Close settings" }).click();
 

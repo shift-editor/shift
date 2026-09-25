@@ -16,7 +16,7 @@ export const SettingsNavigationProvider = ({ children }: { children: ReactNode }
     () =>
       getShiftHost().commands.onRunRendererCommand(async (id) => {
         if (id === "app.showSettings") {
-          setTarget({ category: "appearance" });
+          setTarget({ category: "font" });
           return;
         }
 

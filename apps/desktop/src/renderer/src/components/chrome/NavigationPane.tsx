@@ -24,7 +24,7 @@ export const NavigationPane = () => {
                   return;
                 case "dialog":
                   if (route.dialogId === "settings") {
-                    settings.open({ category: "appearance" });
+                    settings.open({ category: "font" });
                   }
                   return;
               }

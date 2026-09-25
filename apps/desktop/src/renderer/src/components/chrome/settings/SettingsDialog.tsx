@@ -36,7 +36,7 @@ export const SettingsDialog = ({
   onOpenChange,
 }: SettingsDialogProps) => {
   const font = useFont();
-  const activeTarget: SettingsTarget = target ?? { category: "appearance" };
+  const activeTarget: SettingsTarget = target ?? { category: "font" };
 
   if (!font.loaded) return null;
 
