@@ -13,6 +13,26 @@ test.describe("Home view", () => {
     await expect(page).toHaveScreenshot("home-glyph-grid.png");
   });
 
+  test("language coverage filters the glyph grid", async ({ page }) => {
+    await page.getByRole("button", { name: "Latin", exact: true }).click();
+    const english = page
+      .getByRole("button")
+      .filter({ has: page.getByText("English", { exact: true }) });
+    await expect(english).toContainText(/\d+\/\d+/);
+    await expect(page).toHaveScreenshot("home-language-coverage.png");
+
+    const presentCount = (await english.textContent())?.match(/(\d+)\/\d+/)?.[1];
+    if (!presentCount) throw new Error("Expected English coverage count");
+
+    await english.click();
+    await expect(english).toHaveAttribute("data-active", "true");
+    await expect(glyphCatalogSurface(page)).toHaveAttribute(
+      "data-filtered-glyph-count",
+      presentCount,
+    );
+    await expect(page).toHaveScreenshot("home-language-filtered.png");
+  });
+
   test("navigation highlights Home or Settings without leaving both active", async ({ page }) => {
     const grid = page.getByRole("button", {
       name: "Font overview",
