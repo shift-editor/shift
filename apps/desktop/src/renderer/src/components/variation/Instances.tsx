@@ -102,7 +102,7 @@ const InstanceActionsMenu = ({
       <Tooltip>
         <TooltipTrigger>
           <SidebarActionButton label={`Actions for ${instanceName}`} aria-disabled>
-            <VerticalEllipsis className="h-5 w-5" />
+            <VerticalEllipsis className="h-5 w-5 text-icon-subtle" />
           </SidebarActionButton>
         </TooltipTrigger>
         <TooltipContent>Instance actions unavailable in preview mode</TooltipContent>
@@ -119,7 +119,7 @@ const InstanceActionsMenu = ({
               <Button variant="ghost" size="icon-sm" aria-label={`Actions for ${instanceName}`} />
             }
           >
-            <VerticalEllipsis className="h-5 w-5" />
+            <VerticalEllipsis className="h-5 w-5 text-icon-subtle" />
           </MenuTrigger>
         </TooltipTrigger>
         <TooltipContent>{"Edit instance"}</TooltipContent>

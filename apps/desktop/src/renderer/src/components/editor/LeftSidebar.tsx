@@ -24,15 +24,15 @@ export const LeftSidebar = () => (
         <TabsIndicator className="hidden" />
       </TabsList>
       <Separator className="mt-2 shrink-0" />
-      <TabsPanel value="objects" keepMounted className="min-h-0 flex-1 overflow-y-auto px-1 py-2">
-        <ObjectsPanel />
+      <TabsPanel value="objects" keepMounted className="min-h-0 flex-1 overflow-hidden">
+        <div className="scrollbar-themed h-full overflow-y-auto px-1 pb-2">
+          <ObjectsPanel />
+        </div>
       </TabsPanel>
-      <TabsPanel
-        value="variations"
-        keepMounted
-        className="min-h-0 flex-1 overflow-y-auto px-1 py-2"
-      >
-        <VariationPanel />
+      <TabsPanel value="variations" keepMounted className="min-h-0 flex-1 overflow-hidden">
+        <div className="scrollbar-themed h-full overflow-y-auto px-1 pb-2">
+          <VariationPanel />
+        </div>
       </TabsPanel>
     </Tabs>
   </aside>

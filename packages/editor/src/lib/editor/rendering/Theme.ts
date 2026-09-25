@@ -43,6 +43,8 @@ export interface EditorRenderTheme {
     selectedWidthPx: number;
   };
   preview: { color: string; widthPx: number };
+  variationOutline: { color: string; widthPx: number };
+  readOnlyLock: { color: string };
   penReady: { fill: string; stroke: string; size: number; widthPx: number };
   debug: {
     tightBounds: string;
@@ -201,6 +203,8 @@ const DEFAULT_EDITOR_RENDER_THEME: EditorRenderTheme = {
     selectedWidthPx: 1.75,
   },
   preview: { color: "#1886D7", widthPx: 1 },
+  variationOutline: { color: "rgba(12, 146, 244, 0.45)", widthPx: 1 },
+  readOnlyLock: { color: "#171717" },
   penReady: { fill: "#ffffff", stroke: "#3b82f6", size: 3, widthPx: 2 },
   debug: {
     tightBounds: "red",
@@ -328,6 +332,11 @@ export function readEditorRenderTheme(
     theme.segment.selectedColor,
   );
   theme.preview.color = readColor("--editor-preview-color", theme.preview.color);
+  theme.variationOutline.color = readColor(
+    "--editor-variation-outline-color",
+    theme.variationOutline.color,
+  );
+  theme.readOnlyLock.color = readColor("--editor-read-only-lock-color", theme.readOnlyLock.color);
   theme.penReady.fill = readColor("--editor-pen-ready-fill", theme.penReady.fill);
   theme.penReady.stroke = readColor("--editor-pen-ready-stroke", theme.penReady.stroke);
 

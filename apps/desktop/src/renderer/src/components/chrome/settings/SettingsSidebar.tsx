@@ -31,7 +31,7 @@ export const SettingsSidebar = ({ category, onCategoryChange }: SettingsSidebarP
 
       return (
         <SidebarRowButton key={item.id} isActive={active} onClick={() => onCategoryChange(item.id)}>
-          <Icon className="h-3 w-3 shrink-0 text-primary" />
+          <Icon className="h-4 w-4 shrink-0 text-primary" />
           {item.label}
         </SidebarRowButton>
       );

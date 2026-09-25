@@ -102,6 +102,8 @@
   --editor-segment-hover-color: #1886d7;
   --editor-segment-selected-color: #1886d7;
   --editor-preview-color: #1886d7;
+  --editor-variation-outline-color: rgba(12, 146, 244, 0.45);
+  --editor-read-only-lock-color: #171717;
   --editor-pen-ready-fill: #ffffff;
   --editor-pen-ready-stroke: #3b82f6;
   --editor-debug-tight-bounds: #ff0000;
@@ -124,6 +126,25 @@
   -ms-overflow-style: none;
   &::-webkit-scrollbar {
     display: none;
+  }
+}
+
+/* Keep scrollbars legible without introducing a host-defined track color. */
+@utility scrollbar-themed {
+  scrollbar-color: var(--color-control-muted) var(--color-surface);
+
+  &::-webkit-scrollbar {
+    width: 10px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: var(--color-surface);
+  }
+
+  &::-webkit-scrollbar-thumb {
+    border: 2px solid var(--color-surface);
+    border-radius: 9999px;
+    background: var(--color-control-muted);
   }
 }
 

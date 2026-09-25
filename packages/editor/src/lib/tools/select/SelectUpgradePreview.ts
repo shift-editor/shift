@@ -4,7 +4,7 @@ import type { Canvas } from "../../editor/rendering/Canvas";
 import { objectIsKindOf } from "../../../types/object";
 import type { Select } from "./Select";
 
-const UPGRADE_PREVIEW_STYLE = { radiusPx: 3, fill: "#B0B0B0" } as const;
+const UPGRADE_PREVIEW_RADIUS_PX = 3;
 
 /** Draws prospective cubic handles without changing authored geometry. */
 export class SelectUpgradePreview extends CanvasItem<readonly Point2D[]> {
@@ -41,7 +41,7 @@ export class SelectUpgradePreview extends CanvasItem<readonly Point2D[]> {
     if (!points) return;
 
     for (const point of points) {
-      canvas.circle(point, UPGRADE_PREVIEW_STYLE.radiusPx, UPGRADE_PREVIEW_STYLE.fill);
+      canvas.circle(point, UPGRADE_PREVIEW_RADIUS_PX, canvas.theme.handle.control.idle.stroke);
     }
   }
 }

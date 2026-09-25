@@ -39,7 +39,7 @@ export const Slider = React.forwardRef<HTMLDivElement, SliderProps>(
       >
         <BaseSlider.Control className="flex h-3.5 w-full cursor-pointer items-center px-1.75">
           <BaseSlider.Track
-            className={cn("relative w-full h-1.5 bg-surface-muted rounded-full", trackClassName)}
+            className={cn("relative h-1.5 w-full rounded-full bg-control-muted", trackClassName)}
           >
             <BaseSlider.Indicator
               className={cn("absolute h-full bg-accent rounded-full", indicatorClassName)}
@@ -47,7 +47,7 @@ export const Slider = React.forwardRef<HTMLDivElement, SliderProps>(
             <BaseSlider.Thumb
               aria-label={ariaLabel}
               className={cn(
-                "w-3.5 h-3.5 rounded-full bg-white border-2 border-black shadow-sm",
+                "h-3.5 w-3.5 rounded-full border-2 border-primary bg-surface shadow-sm",
                 "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent",
                 thumbClassName,
               )}

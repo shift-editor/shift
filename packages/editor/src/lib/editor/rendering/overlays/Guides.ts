@@ -1,11 +1,5 @@
 import type { GlyphGuideMetrics } from "../../../../types/glyphRender";
-import {
-  LOCK_COLOR,
-  LOCK_GAP_PX,
-  LOCK_PATH_DATA,
-  LOCK_SIZE_PX,
-  LOCK_VIEW_BOX_SIZE,
-} from "../icons/lock";
+import { LOCK_GAP_PX, LOCK_PATH_DATA, LOCK_SIZE_PX, LOCK_VIEW_BOX_SIZE } from "../icons/lock";
 import type { Canvas } from "../Canvas";
 const LOCK_PATH = new Path2D(LOCK_PATH_DATA);
 
@@ -51,7 +45,7 @@ export class Guides {
     canvas.ctx.save();
     canvas.ctx.translate((advance - size) / 2, descender - gap);
     canvas.ctx.scale(size / LOCK_VIEW_BOX_SIZE, -size / LOCK_VIEW_BOX_SIZE);
-    canvas.ctx.fillStyle = LOCK_COLOR;
+    canvas.ctx.fillStyle = canvas.theme.readOnlyLock.color;
     canvas.ctx.fill(LOCK_PATH);
     canvas.ctx.restore();
   }

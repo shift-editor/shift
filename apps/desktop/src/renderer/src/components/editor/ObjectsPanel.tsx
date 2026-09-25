@@ -99,7 +99,7 @@ export const ObjectsPanel = () => {
   }, []);
 
   return (
-    <nav aria-label="Glyph objects" className="flex flex-col gap-2">
+    <nav aria-label="Glyph objects" className="flex flex-col gap-2 pt-2">
       {objectTree.map((section) => {
         const rows = objectRowsBySection.get(section.id) ?? [];
         const visibleIds = visibleObjectIdsBySection.get(section.id) ?? [];

@@ -45,6 +45,7 @@ describe("color themes", () => {
     expect(properties.get("--editor-handle-primary-stroke")).toBe("#81a1c1");
 
     applyResolvedTheme(resolveThemeSelection("dracula", "light"), root);
+    expect(properties.get("--color-chrome")).not.toBe(properties.get("--color-surface"));
     expect(properties.get("--color-input")).not.toBe(properties.get("--color-surface"));
     expect(properties.get("--color-icon-button")).not.toBe(properties.get("--color-surface"));
     expect(properties.get("--color-icon-button-hover")).not.toBe(
@@ -53,6 +54,8 @@ describe("color themes", () => {
     expect(properties.get("--color-hover")).not.toBe(properties.get("--color-surface"));
     expect(properties.get("--color-surface-hover")).not.toBe(properties.get("--color-surface"));
     expect(properties.get("--color-line-subtle")).not.toBe(properties.get("--color-surface"));
+    expect(properties.get("--editor-variation-outline-color")).toBe("rgba(139, 233, 253, 0.45)");
+    expect(properties.get("--editor-read-only-lock-color")).toBe("#f8f8f2");
 
     applyResolvedTheme(resolveThemeSelection("shift-light", "dark"), root);
     expect(root.dataset.theme).toBe("light");
