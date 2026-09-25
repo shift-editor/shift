@@ -1,3 +1,5 @@
+import { useMemo, useState } from "react";
+import type { GlyphCategory } from "@shift/glyph-info";
 import {
   Button,
   cn,
@@ -16,6 +18,7 @@ import AllIcon from "@/assets/sidebar-left/all.svg";
 import PlusIcon from "@/assets/general/plus.svg";
 
 import { SidebarRowButton } from "@/components/sidebar";
+import type { GlyphCategoryFilter } from "@/types/glyphCatalog";
 import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
 import { Category } from "./Category";
 import { SubCategory } from "./SubCategory";
@@ -25,9 +28,8 @@ export const GlyphCatalogView = () => {
     availableGlyphs: allGlyphs,
     filteredGlyphs,
     categories,
+    categoryFilters,
     query,
-    selectedCategory,
-    selectedSubCategoryKey,
     setQuery,
     createQuickGlyph,
     canAuthor,
@@ -36,10 +38,40 @@ export const GlyphCatalogView = () => {
     selectSubCategory,
   } = useGlyphCatalog();
 
+  const [expandedCategories, setExpandedCategories] = useState<ReadonlySet<GlyphCategory>>(
+    () => new Set(),
+  );
+  const visibleCategoryFilters = useMemo<readonly GlyphCategoryFilter[]>(
+    () =>
+      categories.flatMap((category) => [
+        { category: category.category, subCategoryKey: null },
+        ...(expandedCategories.has(category.category)
+          ? category.subCategories.map((subCategory) => ({
+              category: category.category,
+              subCategoryKey: subCategory.key,
+            }))
+          : []),
+      ]),
+    [categories, expandedCategories],
+  );
+  const selectedFilterIndexes = useMemo(
+    () =>
+      new Set(
+        visibleCategoryFilters.flatMap((filter, index) =>
+          categoryFilters.some(
+            (selected) =>
+              selected.category === filter.category &&
+              selected.subCategoryKey === filter.subCategoryKey,
+          )
+            ? [index]
+            : [],
+        ),
+      ),
+    [categoryFilters, visibleCategoryFilters],
+  );
   const allGlyphCount = allGlyphs.length;
   const filteredGlyphCount = filteredGlyphs.length;
-  const allGlyphsSelected = selectedCategory === null && selectedSubCategoryKey === null;
-  const isTopLevelCategorySelected = selectedCategory !== null && selectedSubCategoryKey === null;
+  const allGlyphsSelected = categoryFilters.length === 0;
 
   return (
     <div className="flex flex-col gap-2">
@@ -80,30 +112,90 @@ export const GlyphCatalogView = () => {
           </SidebarRowButton>
 
           {categories.map((categoryNode) => {
-            const active = isTopLevelCategorySelected && selectedCategory === categoryNode.category;
+            const filterIndex = visibleCategoryFilters.findIndex(
+              (filter) =>
+                filter.category === categoryNode.category && filter.subCategoryKey === null,
+            );
+            const active = selectedFilterIndexes.has(filterIndex);
 
             return (
-              <div key={categoryNode.category} className={cn(active && "rounded bg-hover/50")}>
-                <Collapsible className="flex flex-col">
+              <div
+                key={categoryNode.category}
+                className={cn(
+                  active &&
+                    "relative isolate rounded bg-transparent before:pointer-events-none before:absolute before:inset-0 before:-z-10 before:rounded before:bg-hover/50 before:content-['']",
+                  active &&
+                    selectedFilterIndexes.has(filterIndex - 1) &&
+                    "before:-top-1 before:rounded-t-none",
+                  active && selectedFilterIndexes.has(filterIndex + 1) && "before:rounded-b-none",
+                )}
+              >
+                <Collapsible
+                  open={expandedCategories.has(categoryNode.category)}
+                  onOpenChange={(open) => {
+                    setExpandedCategories((previous) => {
+                      const next = new Set(previous);
+                      if (open) next.add(categoryNode.category);
+                      else next.delete(categoryNode.category);
+                      return next;
+                    });
+                  }}
+                  className="flex flex-col"
+                >
                   <CollapsibleTrigger
                     render={
-                      <SidebarRowButton onClick={() => selectCategory(categoryNode.category)} />
+                      <SidebarRowButton
+                        aria-pressed={active}
+                        onClick={(event) =>
+                          selectCategory(
+                            categoryNode.category,
+                            event.shiftKey
+                              ? "range"
+                              : event.metaKey || event.ctrlKey
+                                ? "toggle"
+                                : "single",
+                            visibleCategoryFilters,
+                          )
+                        }
+                      />
                     }
                   >
                     <Category category={categoryNode.category} />
                   </CollapsibleTrigger>
                   <CollapsiblePanel>
                     <div className="flex flex-col gap-1 pt-1">
-                      {categoryNode.subCategories.map((subCategory) => (
-                        <SubCategory
-                          key={subCategory.key}
-                          category={categoryNode.category}
-                          subCategory={subCategory.label}
-                          selectedCategory={selectedCategory}
-                          selectedSubCategoryKey={selectedSubCategoryKey}
-                          onSelectSubCategory={selectSubCategory}
-                        />
-                      ))}
+                      {categoryNode.subCategories.map((subCategory) => {
+                        const subCategoryFilterIndex = visibleCategoryFilters.findIndex(
+                          (filter) =>
+                            filter.category === categoryNode.category &&
+                            filter.subCategoryKey === subCategory.key,
+                        );
+                        const subCategoryActive = selectedFilterIndexes.has(subCategoryFilterIndex);
+
+                        return (
+                          <SubCategory
+                            key={subCategory.key}
+                            label={subCategory.label}
+                            active={subCategoryActive}
+                            joinsPrevious={
+                              subCategoryActive &&
+                              selectedFilterIndexes.has(subCategoryFilterIndex - 1)
+                            }
+                            joinsNext={
+                              subCategoryActive &&
+                              selectedFilterIndexes.has(subCategoryFilterIndex + 1)
+                            }
+                            onSelect={(mode) =>
+                              selectSubCategory(
+                                categoryNode.category,
+                                subCategory.key,
+                                mode,
+                                visibleCategoryFilters,
+                              )
+                            }
+                          />
+                        );
+                      })}
                     </div>
                   </CollapsiblePanel>
                 </Collapsible>
