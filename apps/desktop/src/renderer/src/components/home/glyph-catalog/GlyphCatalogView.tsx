@@ -42,7 +42,7 @@ export const GlyphCatalogView = () => {
   const isTopLevelCategorySelected = selectedCategory !== null && selectedSubCategoryKey === null;
 
   return (
-    <div className="flex min-h-0 flex-col gap-2">
+    <div className="flex flex-col gap-2">
       <Input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
@@ -53,7 +53,7 @@ export const GlyphCatalogView = () => {
       />
       <Separator className="-mx-3 w-auto" />
 
-      <div className="flex-1 overflow-y-auto scrollbar-hidden">
+      <div>
         <div className="flex items-center justify-between font-sans mb-2">
           <span className="text-ui font-medium text-primary">Glyphs</span>
           <Tooltip>
@@ -74,7 +74,7 @@ export const GlyphCatalogView = () => {
 
         <div className="flex flex-col gap-1">
           <SidebarRowButton onClick={selectAll} isActive={allGlyphsSelected}>
-            <AllIcon className="h-3 w-3 shrink-0" />
+            <AllIcon className="h-4 w-4 shrink-0 text-primary" />
             <span className="min-w-0 flex-1 truncate text-left">All</span>
             <span className="text-xs">{`${filteredGlyphCount}/${allGlyphCount}`}</span>
           </SidebarRowButton>
@@ -87,10 +87,7 @@ export const GlyphCatalogView = () => {
                 <Collapsible className="flex flex-col">
                   <CollapsibleTrigger
                     render={
-                      <SidebarRowButton
-                        isActive={active}
-                        onClick={() => selectCategory(categoryNode.category)}
-                      />
+                      <SidebarRowButton onClick={() => selectCategory(categoryNode.category)} />
                     }
                   >
                     <Category category={categoryNode.category} />

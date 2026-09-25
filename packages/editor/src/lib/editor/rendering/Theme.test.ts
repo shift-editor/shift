@@ -11,13 +11,20 @@ describe("editor render theme", () => {
   });
 
   it("reads the active editor palette from CSS", () => {
+    const colors = new Map([
+      ["--editor-guides-color", "#123456"],
+      ["--editor-variation-outline-color", "#654321"],
+      ["--editor-read-only-lock-color", "#abcdef"],
+    ]);
     const style = {
-      getPropertyValue: (name: string) => (name === "--editor-guides-color" ? "#123456" : ""),
+      getPropertyValue: (name: string) => colors.get(name) ?? "",
     };
 
     const theme = readEditorRenderTheme({} as Element, style);
 
     expect(theme.guides.color).toBe("#123456");
+    expect(theme.variationOutline.color).toBe("#654321");
+    expect(theme.readOnlyLock.color).toBe("#abcdef");
   });
 
   it("builds GPU marker colors from the active render theme", () => {

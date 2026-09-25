@@ -7,15 +7,17 @@ import { GlyphCatalogView } from "./glyph-catalog";
 export const LeftSidebar = () => (
   <aside
     aria-label="Font navigation"
-    className="flex h-full w-full min-w-0 gap-1.5 flex-col bg-surface px-3 overflow-hidden border-r border-line-subtle"
+    className="scrollbar-themed h-full w-full min-w-0 overflow-y-auto border-r border-line-subtle bg-surface"
   >
-    <Separator />
-    <GlyphCatalogView />
-    <Separator className="-mx-3 w-auto" />
-    <SourcesSection />
-    <Separator className="-mx-3 w-auto" />
-    <InstancesSection />
-    <Separator className="-mx-3 w-auto" />
-    <AxesSection />
+    <div className="min-h-full space-y-1.5 px-3">
+      <Separator />
+      <GlyphCatalogView />
+      <Separator className="-mx-3 w-auto" />
+      <SourcesSection />
+      <Separator className="-mx-3 w-auto" />
+      <InstancesSection />
+      <Separator className="-mx-3 w-auto" />
+      <AxesSection />
+    </div>
   </aside>
 );
