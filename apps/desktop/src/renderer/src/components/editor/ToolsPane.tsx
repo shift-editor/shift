@@ -58,7 +58,7 @@ export const ToolButton: FC<ToolButtonProps> = ({
               variant={isActive ? "primary" : "ghost"}
               icon={
                 <Icon
-                  className={cn("h-5.5 w-5.5", isActive ? "text-white" : "text-primary")}
+                  className={cn("h-5.5 w-5.5", isActive ? "text-background" : "text-primary")}
                   strokeWidth={1.25}
                 />
               }
@@ -147,7 +147,7 @@ export const ToolsPane: FC = () => {
     <section className="flex flex-col items-center justify-center gap-2">
       <Toolbar
         aria-label="Editor tools"
-        className="flex h-10 items-center gap-2 overflow-hidden rounded-lg border-b border-line bg-background px-1"
+        className="flex h-10 items-center gap-2 overflow-hidden rounded-lg bg-background px-1"
       >
         {Array.from(toolRegistry.entries())
           .filter(([, item]) => !item.hidden)

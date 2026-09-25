@@ -1,39 +1,41 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { lightTheme, applyThemeToCss, type ThemeTokens } from "@/lib/styles/theme";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useInsertionEffect,
+  useState,
+  type ReactNode,
+} from "react";
 
-import type { ThemeName } from "@shift/editor/types";
-export type { ThemeName };
+import {
+  applyResolvedTheme,
+  colorThemes,
+  resolveThemeSelection,
+  type ColorTheme,
+  type ThemeAppearance,
+  type ThemeSelection,
+} from "@/lib/themes";
+export type { ColorTheme, ThemeAppearance, ThemeId, ThemeSelection } from "@/lib/themes";
 
 export interface ThemeContextValue {
-  themeName: ThemeName;
-  theme: ThemeTokens;
-  setThemeName: (name: ThemeName) => void;
+  themeSelection: ThemeSelection;
+  resolvedTheme: ColorTheme;
+  setThemeSelection: (selection: ThemeSelection) => void;
 }
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
-const themes: Record<Exclude<ThemeName, "system">, ThemeTokens> = {
-  light: lightTheme,
-  dark: lightTheme, // TODO: Replace with darkTheme when implemented
-};
-
-function getSystemTheme(): "light" | "dark" {
+function getSystemAppearance(): ThemeAppearance {
   if (typeof window !== "undefined" && window.matchMedia) {
     return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   }
   return "light";
 }
 
-function resolveTheme(themeName: ThemeName): ThemeTokens {
-  if (themeName === "system") {
-    return themes[getSystemTheme()];
-  }
-  return themes[themeName];
-}
-
 interface ThemeProviderProps {
   children: ReactNode;
-  defaultTheme?: ThemeName;
+  defaultTheme?: ThemeSelection;
 }
 
 export function useTheme(): ThemeContextValue {
@@ -42,32 +44,49 @@ export function useTheme(): ThemeContextValue {
   return context;
 }
 
-export function ThemeProvider({ children, defaultTheme = "light" }: ThemeProviderProps) {
-  const [themeName, setThemeName] = useState<ThemeName>(defaultTheme);
-  const [theme, setTheme] = useState<ThemeTokens>(() => resolveTheme(defaultTheme));
+export function ThemeProvider({ children, defaultTheme = "shift-light" }: ThemeProviderProps) {
+  const [themeSelection, setThemeSelectionState] = useState<ThemeSelection>(() => {
+    if (typeof localStorage === "undefined") return defaultTheme;
+    const stored = localStorage.getItem("themeSelection");
+    if (stored === "system" || colorThemes.some((theme) => theme.id === stored)) {
+      return stored as ThemeSelection;
+    }
+    return defaultTheme;
+  });
+  const [systemAppearance, setSystemAppearance] = useState<ThemeAppearance>(getSystemAppearance);
+  const resolvedTheme = resolveThemeSelection(themeSelection, systemAppearance);
+
+  const setThemeSelection = useCallback((selection: ThemeSelection) => {
+    setThemeSelectionState(selection);
+    localStorage.setItem("themeSelection", selection);
+  }, []);
+
+  useInsertionEffect(() => {
+    applyResolvedTheme(resolvedTheme);
+  }, [resolvedTheme]);
 
   useEffect(() => {
-    const resolved = resolveTheme(themeName);
-    setTheme(resolved);
-    applyThemeToCss(resolved);
-  }, [themeName]);
-
-  useEffect(() => {
-    if (themeName !== "system") return undefined;
-
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-    const handleChange = () => {
-      const resolved = resolveTheme("system");
-      setTheme(resolved);
-      applyThemeToCss(resolved);
-    };
+    const handleChange = () => setSystemAppearance(mediaQuery.matches ? "dark" : "light");
 
     mediaQuery.addEventListener("change", handleChange);
     return () => mediaQuery.removeEventListener("change", handleChange);
-  }, [themeName]);
+  }, []);
+
+  useEffect(() => {
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== "themeSelection" || !event.newValue) return;
+      if (event.newValue === "system" || colorThemes.some((theme) => theme.id === event.newValue)) {
+        setThemeSelectionState(event.newValue as ThemeSelection);
+      }
+    };
+
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, []);
 
   return (
-    <ThemeContext.Provider value={{ themeName, theme, setThemeName }}>
+    <ThemeContext.Provider value={{ themeSelection, resolvedTheme, setThemeSelection }}>
       {children}
     </ThemeContext.Provider>
   );

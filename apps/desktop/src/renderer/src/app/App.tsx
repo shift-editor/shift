@@ -30,7 +30,7 @@ export const App = () => {
   }, []);
 
   return (
-    <ThemeProvider defaultTheme="light">
+    <ThemeProvider defaultTheme="shift-light">
       <TooltipProvider delayDuration={500}>
         <ZoomToast>
           <FocusZoneProvider defaultZone="canvas">

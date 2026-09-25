@@ -131,15 +131,15 @@ The instance buffer only grows, never shrinks. When `packedInstances.length > #i
 
 1. Add the shape name to `MarkerShape` union in `types.ts`.
 2. Add its integer ID to `SHAPE_IDS` in `handleStyles.ts`.
-3. Add a theme entry in `Theme` and a style builder function in `handleStyles.ts`.
-4. Add the entry to the `STYLES` object.
+3. Add a theme entry to `EditorRenderTheme` and a style builder function in `handleStyles.ts`.
+4. Add the entry to `buildMarkerStyles`.
 5. Add a new `else if (v_shape < N.5)` branch in `handle.frag.glsl.ts` with the SDF.
 6. Add classification logic on `PointHandleItem`.
 7. If the shape needs new SDF primitives, add them to `sdf.glsl.ts`.
 
 ### Changing handle colors or sizes
 
-Modify the theme values in `Theme`. `handleStyles.ts` reads from `DEFAULT_THEME` at module load, so changes take effect on next app start (or HMR reload). No shader changes needed.
+Modify handle sizes in `Theme.ts`. Built-in colors come from `lib/themes/index.ts`; `index.css` contains the Shift Light fallback shown before React resolves the persisted selection. `readEditorRenderTheme` resolves the active CSS palette, and `buildMarkerStyles` rebuilds GPU-ready colors when the render theme changes. No shader changes are needed.
 
 ### Debugging GPU rendering issues
 
@@ -149,7 +149,7 @@ Set a breakpoint or add logging in `MarkerHandleRenderer.draw` or `MarkerLayer.d
 
 - **Silent CPU fallback**: If WebGL init fails, `Handles` silently falls back to Canvas 2D drawing. There is only a `console.warn` in `MarkerLayer.#initialize`. Check the browser console if GPU markers are not rendering.
 
-- **Styles are module-level constants**: `STYLES` is built once from `DEFAULT_THEME` when `handleStyles.ts` loads. Runtime theme changes will not update GPU marker styles without a module reload.
+- **Theme changes invalidate marker uploads**: `MarkerHandleRenderer` rebuilds marker styles and repacks its cached display list when the `EditorRenderTheme` identity changes. Preserve that invalidation when changing marker caches.
 
 - **Instance buffer never shrinks**: If a glyph temporarily has many points (e.g., during a paste), the GPU buffer stays at peak size until the context is destroyed.
 
@@ -178,4 +178,6 @@ Set a breakpoint or add logging in `MarkerHandleRenderer.draw` or `MarkerLayer.d
 - `SvgGlyphCatalogGrid` -- virtualized React fallback with native DOM interaction
 - `useGlyphPreviewFrame` -- complete-frame SVG publication with bounded preview residency
 - `SlugAtlas` / `SlugRenderer` -- internal packed-atlas and shader implementation behind `ResidentGlyphLayer`
-- `DEFAULT_THEME` -- theme object whose handle styles feed into `STYLES` at load time
+- `EditorRenderTheme` -- typed 2D/WebGL appearance and geometry contract
+- `readEditorRenderTheme` -- resolves the active `--editor-*` CSS palette into that contract
+- `buildMarkerStyles` -- converts handle colors into GPU-ready values for the active theme

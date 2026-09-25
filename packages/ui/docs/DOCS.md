@@ -10,6 +10,7 @@ Shared UI component library for Shift, wrapping Base UI primitives with Tailwind
 - **Architecture Invariant:** All application state and business logic live in the consuming app, not in this package. Components add Tailwind classes via `cn`; small self-contained interaction behavior that belongs to the widget itself is allowed (e.g. `Input`'s Cmd/Ctrl+A select-all).
 - **Architecture Invariant:** Each component lives in its own directory with a barrel `index.ts`. The package root `index.ts` re-exports everything -- consumers import from `@shift/ui`, never from deep paths.
 - **Architecture Invariant:** The `cn` utility (clsx + tailwind-merge) must be used for all className composition. This ensures Tailwind class conflicts are resolved correctly when consumers pass overrides.
+- **Architecture Invariant:** Components consume semantic utilities rather than named palettes. The desktop theme registry maps terminal-style palettes into the shared `--color-*` variables at runtime.
 - **Architecture Invariant:** The package is source-only (`main` and `exports` both point to `./src/index.ts`). There is no build step -- consuming apps bundle it directly via their own bundler.
 
 ## Codemap
@@ -31,6 +32,7 @@ packages/ui/
       number-field/        -- Numeric root, input, step controls, and scrub area
       popover/             -- Popover trigger, portal, positioner, popup, title, and close
       progress/            -- Progress root with styled track and indicator
+      radio/               -- RadioGroup and selectable RadioCard preset control
       resizable/           -- ResizablePanelGroup, ResizablePanel, ResizableHandle over react-resizable-panels
       select/              -- Select trigger, popup, list, item, and indicator primitives
       separator/           -- Separator (horizontal/vertical)

@@ -54,6 +54,7 @@ import { Hover } from "./Hover";
 import { Renderer } from "./rendering/Renderer";
 import { Scene } from "./Scene";
 import type { Canvas2DSurface, MarkerCanvasSurface } from "./rendering/CanvasSurface";
+import type { EditorRenderTheme } from "./rendering/Theme";
 import type { CameraTransform } from "./managers";
 import type { DebugOverlays } from "../../types/uiState";
 import type { TemporaryToolOptions } from "../../types/editor";
@@ -475,24 +476,21 @@ export class Editor {
     this.#view.debugOverlaysCell.set(overlays);
   }
 
-  public setBackgroundSurface(surface: Canvas2DSurface): void {
-    this.#renderer.setBackgroundSurface(surface);
+  public setRenderTheme(theme: EditorRenderTheme): void {
+    this.#renderer.setRenderTheme(theme);
   }
 
-  public setSceneSurface(surface: Canvas2DSurface): void {
-    this.#renderer.setSceneSurface(surface);
+  public attachRenderSurfaces(
+    background: Canvas2DSurface,
+    scene: Canvas2DSurface,
+    overlay: Canvas2DSurface,
+    markers: MarkerCanvasSurface,
+  ): void {
+    this.#renderer.attachRenderSurfaces(background, scene, overlay, markers);
   }
 
-  public setOverlaySurface(surface: Canvas2DSurface): void {
-    this.#renderer.setOverlaySurface(surface);
-  }
-
-  public setMarkerSurface(surface: MarkerCanvasSurface): void {
-    this.#renderer.setMarkerSurface(surface);
-  }
-
-  public clearMarkerCanvas(): void {
-    this.#renderer.clearMarkerCanvas();
+  public detachRenderSurfaces(): void {
+    this.#renderer.detachRenderSurfaces();
   }
 
   /**
