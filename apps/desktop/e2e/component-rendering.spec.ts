@@ -1,8 +1,8 @@
 import path from "node:path";
 import type { MatModel } from "@shift/geo";
 import { workspaceTest as test, expect, navigateToEditor } from "./fixtures/electronApp";
-import { CanvasUtil } from "./fixtures/CanvasUtil";
-import { editorSidebar, glyphProperties } from "./fixtures/appLocators";
+import { editorSidebar, glyphProperties, openVariationControls } from "./fixtures/appLocators";
+import { expectCanvasSnapshot } from "./fixtures/snapshots";
 
 const VARIABLE_FONT_PATH = path.resolve(
   __dirname,
@@ -13,8 +13,16 @@ test.use({ startupFontPath: VARIABLE_FONT_PATH });
 
 test("exact sources keep ordered component transforms when authored IDs differ", async ({
   page,
+  editor,
 }) => {
   await navigateToEditor(page, "C1");
+  const sourceId = await page.evaluate(
+    () => window.shift?.font.sources.find((candidate) => candidate.name === "BoldWide")?.id,
+  );
+  if (!sourceId) throw new Error("Expected BoldWide fixture source");
+  await openVariationControls(page);
+  await page.getByTestId(`source-${sourceId}`).click();
+  await expect.poll(() => page.evaluate(() => window.shift?.editor.activeSourceId)).toBe(sourceId);
 
   const sample = await page.evaluate(() => {
     const workspace = window.shift;
@@ -27,7 +35,6 @@ test("exact sources keep ordered component transforms when authored IDs differ",
     const glyph = workspace.editor.glyphForId(record.id);
     if (!glyph) throw new Error("Expected loaded Aacute glyph");
 
-    workspace.editor.selectSource(source.id);
     const renderModel = glyph.renderModelAt(
       workspace.editor.externalLocationCell,
       workspace.editor.activeSourceIdCell,
@@ -56,15 +63,7 @@ test("exact sources keep ordered component transforms when authored IDs differ",
   expect(sample.renderedIds).not.toEqual(sample.exactIds);
   expect(sample.renderedTransforms).toEqual(sample.exactTransforms);
 
-  await page.evaluate(
-    () =>
-      new Promise<void>((resolve) => {
-        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-      }),
-  );
-  const canvas = new CanvasUtil(page);
-  const screenshot = await canvas.screenshotCanvasLayer("scene-canvas");
-  await expect(screenshot).toMatchSnapshot("canvas-Aacute-bold-wide-components.png");
+  await expectCanvasSnapshot(editor, "canvas-Aacute-bold-wide-components.png");
 });
 
 test("selected components expose editable transforms in the properties sidebar", async ({

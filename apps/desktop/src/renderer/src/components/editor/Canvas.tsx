@@ -100,6 +100,7 @@ export const Canvas: FC<CanvasProps> = ({ showContextMenu }) => {
   return (
     <div
       ref={containerRef}
+      data-testid="editor-canvas-stack"
       className={cn("relative z-20 h-full w-full overflow-hidden", !viewportReady && "invisible")}
       onMouseMove={(e) => {
         editor.updateMousePosition(e.clientX, e.clientY);

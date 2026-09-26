@@ -1,28 +1,16 @@
 import type { Locator } from "@playwright/test";
-import { readFile } from "node:fs/promises";
-import path from "node:path";
 import { workspaceTest as test, expect } from "./fixtures/electronApp";
 import type { EditorDriver } from "./fixtures/EditorDriver";
 import { editorSidebar, glyphProperties } from "./fixtures/appLocators";
-import { CanvasUtil } from "./fixtures/CanvasUtil";
+import {
+  expectCanvasSnapshot,
+  expectPanelSnapshot,
+  PAGE_SNAPSHOT_OPTIONS,
+} from "./fixtures/snapshots";
 
-const screenshotStylePath = path.join(__dirname, "editor.screenshot.css");
-
-test("aligns exactly two selected points while distribution still requires three", async ({
-  page,
-  editor,
-}, testInfo) => {
+/** Opens A and returns three distinct fixture points for alignment scenarios. */
+async function alignmentFixture(editor: EditorDriver) {
   await editor.openGlyphByUnicode("41");
-  const properties = glyphProperties(page);
-  // Native scrollbar preferences change the gutter width; normalize only the golden captures.
-  // Interaction and viewport assertions still exercise the unmodified native layout.
-  const screenshotStyle = await readFile(screenshotStylePath, "utf8");
-  const canvas = editor.canvas;
-  const alignLeft = properties.getByRole("button", { name: "Align left", exact: true });
-  const distribute = properties.getByRole("button", {
-    name: "Distribute horizontally",
-    exact: true,
-  });
   const outline = await editor.outline();
   const available = outline.flatMap((contour) => contour.points);
   const first = available[0];
@@ -30,11 +18,21 @@ test("aligns exactly two selected points while distribution still requires three
   const third = available.find((point) => point.id !== first?.id && point.id !== second?.id);
   if (!first || !second || !third) throw new Error("Expected three distinct fixture points");
 
-  const points = await editor.pointTargets([first.id, second.id, third.id]);
-  const selectedPositions = async () =>
-    (await editor.pointTargets(points.slice(0, 2).map((point) => point.id))).map(
-      (point) => point.glyphPosition,
-    );
+  return editor.pointTargets([first.id, second.id, third.id]);
+}
+
+test("enables alignment for two selected points while distribution still requires three", async ({
+  page,
+  editor,
+}) => {
+  const points = await alignmentFixture(editor);
+  const properties = glyphProperties(page);
+  const canvas = editor.canvas;
+  const alignLeft = properties.getByRole("button", { name: "Align left", exact: true });
+  const distribute = properties.getByRole("button", {
+    name: "Distribute horizontally",
+    exact: true,
+  });
 
   await expect(alignLeft).toHaveCount(0);
   await canvas.click({ position: points[0].canvasPosition });
@@ -43,16 +41,7 @@ test("aligns exactly two selected points while distribution still requires three
   await properties
     .getByRole("button", { name: "Flip vertically", exact: true })
     .scrollIntoViewIfNeeded();
-  await expect(properties).toHaveScreenshot("one-point-alignment-disabled.png", {
-    stylePath: screenshotStylePath,
-  });
-  await testInfo.attach("one-point-alignment-disabled", {
-    body: await properties.screenshot({
-      path: testInfo.outputPath("one-point-alignment-disabled.png"),
-      style: screenshotStyle,
-    }),
-    contentType: "image/png",
-  });
+  await expectPanelSnapshot(properties, "one-point-alignment-disabled.png");
 
   await canvas.click({ position: points[1].canvasPosition, modifiers: ["Shift"] });
   await expect
@@ -80,34 +69,36 @@ test("aligns exactly two selected points while distribution still requires three
   await expect(
     properties.getByRole("button", { name: "Distribute vertically", exact: true }),
   ).toBeDisabled();
-  await expect(properties).toHaveScreenshot("two-point-transform-controls.png", {
-    stylePath: screenshotStylePath,
-  });
-  await testInfo.attach("two-point-transform-controls", {
-    body: await properties.screenshot({
-      path: testInfo.outputPath("two-point-transform-controls.png"),
-      style: screenshotStyle,
-    }),
-    contentType: "image/png",
-  });
-
-  await alignLeft.click();
-  await expect.poll(selectedPositions).toEqual(
-    points.slice(0, 2).map((point) => ({
-      x: Math.min(points[0].glyphPosition.x, points[1].glyphPosition.x),
-      y: point.glyphPosition.y,
-    })),
-  );
-  await editor.undo();
-  await expect
-    .poll(selectedPositions)
-    .toEqual(points.slice(0, 2).map((point) => point.glyphPosition));
+  await expectPanelSnapshot(properties, "two-point-transform-controls.png");
 
   await canvas.click({ position: points[2].canvasPosition, modifiers: ["Shift"] });
   await expect(distribute).toBeEnabled();
   await expect(
     properties.getByRole("button", { name: "Distribute vertically", exact: true }),
   ).toBeEnabled();
+});
+
+test("aligns two selected points left as one undoable edit", async ({ page, editor }) => {
+  const points = await alignmentFixture(editor);
+  const selected = points.slice(0, 2);
+  const selectedPositions = async () =>
+    (await editor.pointTargets(selected.map((point) => point.id))).map(
+      (point) => point.glyphPosition,
+    );
+
+  await editor.canvas.click({ position: selected[0].canvasPosition });
+  await editor.canvas.click({ position: selected[1].canvasPosition, modifiers: ["Shift"] });
+  await expect.poll(() => editor.selectionIds()).toEqual(selected.map((point) => point.id));
+
+  await glyphProperties(page).getByRole("button", { name: "Align left", exact: true }).click();
+  await expect.poll(selectedPositions).toEqual(
+    selected.map((point) => ({
+      x: Math.min(selected[0].glyphPosition.x, selected[1].glyphPosition.x),
+      y: point.glyphPosition.y,
+    })),
+  );
+  await editor.undo();
+  await expect.poll(selectedPositions).toEqual(selected.map((point) => point.glyphPosition));
 });
 
 test("switches Alt during proportional resizing and preserves release geometry", async ({
@@ -229,9 +220,7 @@ test.describe("Editor view", () => {
       "aria-selected",
       "true",
     );
-    await expect(sidebar).toHaveScreenshot("objects-sidebar.png", {
-      stylePath: screenshotStylePath,
-    });
+    await expectPanelSnapshot(sidebar, "objects-sidebar.png");
     await sidebar.getByTestId(`object-${firstPoint.id}`).click();
     await expect.poll(() => editor.selectionIds()).toEqual([firstPoint.id]);
 
@@ -243,9 +232,7 @@ test.describe("Editor view", () => {
     await expect
       .poll(() => editor.selectionIds())
       .toEqual([firstPoint.id, secondPoint.id, thirdPoint.id, fourthPoint.id]);
-    await expect(sidebar).toHaveScreenshot("objects-sidebar-selection.png", {
-      stylePath: screenshotStylePath,
-    });
+    await expectPanelSnapshot(sidebar, "objects-sidebar-selection.png");
 
     await sidebar.getByTestId(`object-${contour.id}`).click();
     await expect.poll(() => editor.selectionIds()).toEqual([contour.id]);
@@ -299,8 +286,10 @@ test.describe("Editor view", () => {
     await expect.poll(anchorPosition).toEqual(initialPosition);
   });
 
-  test("full editor matches snapshot", async ({ page }) => {
-    await expect(page).toHaveScreenshot("editor-glyph-A.png");
+  test("full editor matches snapshot", async ({ page, editor }) => {
+    await editor.waitForCanvasRender();
+    await page.mouse.move(0, 0);
+    await expect(page).toHaveScreenshot("editor-glyph-A.png", PAGE_SNAPSHOT_OPTIONS);
   });
 
   test("resets sidebars to their default width on divider double-click", async ({ page }) => {
@@ -417,7 +406,7 @@ test.describe("Editor view", () => {
   test("previews upgrade handles on Cmd-hover and commits those positions on Cmd-click", async ({
     page,
     editor,
-  }, testInfo) => {
+  }) => {
     const canvas = editor.canvas;
     const preview = await page.evaluate(() => {
       const editor = window.shift!.editor;
@@ -425,70 +414,49 @@ test.describe("Editor view", () => {
       const layer = editor.glyphForId(node.glyphId)!.layerForSource(node.sourceId)!;
       const segment = layer.contours[0].segments().find((segment) => segment.type === "line");
       if (!segment) throw new Error("Expected line segment");
+      const middle = segment.pointAt(1 / 2);
       return {
         id: segment.id,
         controls: [1 / 3, 2 / 3].map((t) => segment.pointAt(t)),
-        screen: [1 / 3, 1 / 2, 2 / 3].map((t) => {
+        sceneControls: [1 / 3, 2 / 3].map((t) => {
           const point = segment.pointAt(t);
-          return editor.projectSceneToScreen({
-            x: point.x + node.position.x,
-            y: point.y + node.position.y,
-          });
+          return { x: point.x + node.position.x, y: point.y + node.position.y };
+        }),
+        hover: editor.projectSceneToScreen({
+          x: middle.x + node.position.x,
+          y: middle.y + node.position.y,
         }),
       };
     });
-    const pixels = () =>
-      canvas.evaluate(
-        (element, positions) => {
-          const canvas = element as HTMLCanvasElement;
-          const context = canvas.getContext("2d");
-          if (!context) throw new Error("Expected overlay context");
-          const scale = canvas.width / canvas.clientWidth;
-          return positions.map((point) =>
-            Array.from(
-              context.getImageData(Math.round(point.x * scale), Math.round(point.y * scale), 1, 1)
-                .data,
-            ),
-          );
-        },
-        [preview.screen[0], preview.screen[2]],
-      );
-    const visible = async () => {
-      const colors = await pixels();
-      return colors.every(
-        ([red, green, blue, alpha]) =>
-          red === green && green === blue && red >= 150 && red <= 200 && alpha === 255,
-      );
-    };
+    // The Select tool's upgrade preview item publishes the scene positions it draws;
+    // null means no preview is rendered.
+    const previewHandles = () =>
+      page.evaluate(() => {
+        const tool = window.shift?.editor.toolManager.activeTool;
+        if (tool?.id !== "select" || !("upgradePreview" in tool)) return null;
 
-    await canvas.hover({ position: preview.screen[1] });
-    await expect.poll(pixels).toEqual([
-      [0, 0, 0, 0],
-      [0, 0, 0, 0],
-    ]);
+        const preview = tool.upgradePreview as { propsSnapshot(): unknown };
+        return preview.propsSnapshot() ?? null;
+      });
+
+    await canvas.hover({ position: preview.hover });
+    await expect.poll(previewHandles).toBeNull();
     await page.keyboard.down("Meta");
     try {
       await expect(canvas).toHaveCSS("cursor", /cursor@32-bend\.svg/);
-      await expect.poll(visible).toBe(true);
-      await testInfo.attach("segment-upgrade-preview", {
-        body: await page.screenshot({ path: testInfo.outputPath("segment-upgrade-preview.png") }),
-        contentType: "image/png",
-      });
+      await expect.poll(previewHandles).toEqual(preview.sceneControls);
+      await expectCanvasSnapshot(editor, "segment-upgrade-preview.png");
+
       await page.keyboard.up("Meta");
-      await expect.poll(pixels).toEqual([
-        [0, 0, 0, 0],
-        [0, 0, 0, 0],
-      ]);
+      await expect.poll(previewHandles).toBeNull();
       await page.keyboard.down("Meta");
-      await expect.poll(visible).toBe(true);
+      await expect.poll(previewHandles).toEqual(preview.sceneControls);
       await glyphProperties(page).hover({ position: { x: 10, y: 10 } });
-      await expect.poll(pixels).toEqual([
-        [0, 0, 0, 0],
-        [0, 0, 0, 0],
-      ]);
-      await canvas.hover({ position: preview.screen[1] });
-      await expect.poll(visible).toBe(true);
-      await canvas.click({ position: preview.screen[1] });
+      await expect.poll(previewHandles).toBeNull();
+      await canvas.hover({ position: preview.hover });
+      await expect.poll(previewHandles).toEqual(preview.sceneControls);
+
+      await canvas.click({ position: preview.hover });
       await editor.waitForIdle();
       const controls = await page.evaluate((id) => {
         const object = window.shift!.editor.object(id);
@@ -501,10 +469,7 @@ test.describe("Editor view", () => {
         expect(point.x).toBeCloseTo(preview.controls[index].x, 6);
         expect(point.y).toBeCloseTo(preview.controls[index].y, 6);
       });
-      await expect.poll(pixels).toEqual([
-        [0, 0, 0, 0],
-        [0, 0, 0, 0],
-      ]);
+      await expect.poll(previewHandles).toBeNull();
       await expect(canvas).toHaveCSS("cursor", /cursor@32-bend\.svg/);
     } finally {
       await page.keyboard.up("Meta");
@@ -552,28 +517,8 @@ test.describe("Editor view", () => {
     await expect.poll(async () => (await editor.selectionIds()).length).toBeGreaterThan(0);
   });
 
-  test("composited canvas matches snapshot", async ({ page }) => {
-    const canvas = new CanvasUtil(page);
-    const screenshot = await canvas.screenshotCanvasContainer();
-    await expect(screenshot).toMatchSnapshot("editor-canvas-A.png");
-  });
-
-  test("scene canvas layer matches snapshot", async ({ page }) => {
-    const canvas = new CanvasUtil(page);
-    const screenshot = await canvas.screenshotCanvasLayer("scene-canvas");
-    await expect(screenshot).toMatchSnapshot("scene-canvas-A.png");
-  });
-
-  test("background canvas layer matches snapshot", async ({ page }) => {
-    const canvas = new CanvasUtil(page);
-    const screenshot = await canvas.screenshotCanvasLayer("background-canvas");
-    await expect(screenshot).toMatchSnapshot("bg-canvas-A.png");
-  });
-
-  test("GPU handles layer matches snapshot", async ({ page }) => {
-    const canvas = new CanvasUtil(page);
-    const screenshot = await canvas.screenshotCanvasLayer("marker-canvas");
-    await expect(screenshot).toMatchSnapshot("handles-canvas-A.png");
+  test("composited canvas matches snapshot", async ({ editor }) => {
+    await expectCanvasSnapshot(editor, "editor-canvas-A.png");
   });
 
   test("shows Boolean operations for two completely selected contours", async ({ page }) => {
@@ -709,7 +654,7 @@ test.describe("Editor view", () => {
       test(`changes dimension ${dimension} independently from visual top-left with ${anchor}`, async ({
         page,
         editor,
-      }, testInfo) => {
+      }) => {
         await editor.selectAll();
         const properties = glyphProperties(page);
         const initialBounds = await editor.selectionBounds();
@@ -733,13 +678,6 @@ test.describe("Editor view", () => {
         await expect(
           properties.getByLabel(dimension === "width" ? "Width" : "Height", { exact: true }),
         ).toHaveValue(String(Math.round(initialBounds[dimension] * 2)));
-        await properties.getByText("Dimensions", { exact: true }).scrollIntoViewIfNeeded();
-        await testInfo.attach(`independent-${dimension}`, {
-          body: await properties.screenshot({
-            path: testInfo.outputPath(`independent-${dimension}.png`),
-          }),
-          contentType: "image/png",
-        });
 
         await editor.undo();
         await expect.poll(() => editor.selectionBounds()).toEqual(initialBounds);
@@ -752,7 +690,7 @@ test.describe("Editor view", () => {
     test(`resizes proportionally from the Scale ${dimension} field around the selected anchor`, async ({
       page,
       editor,
-    }, testInfo) => {
+    }) => {
       await editor.selectAll();
       const properties = glyphProperties(page);
       const initialBounds = await editor.selectionBounds();
@@ -783,12 +721,6 @@ test.describe("Editor view", () => {
         String(Math.round(initialBounds.height * 2)),
       );
       await properties.getByText("Dimensions", { exact: true }).scrollIntoViewIfNeeded();
-      await testInfo.attach(`dimensions-${dimension}`, {
-        body: await properties.screenshot({
-          path: testInfo.outputPath(`dimensions-${dimension}.png`),
-        }),
-        contentType: "image/png",
-      });
     });
   }
 

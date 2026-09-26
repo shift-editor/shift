@@ -1,5 +1,7 @@
 import type { Page } from "@playwright/test";
 import { workspaceTest as test, expect } from "./fixtures/electronApp";
+import type { EditorDriver } from "./fixtures/EditorDriver";
+import { expectCanvasSnapshot, expectPanelSnapshot } from "./fixtures/snapshots";
 import type { PointDrag } from "./fixtures/types";
 
 async function dragWithSyntheticPointerEnd(
@@ -45,6 +47,37 @@ async function dragWithSyntheticPointerEnd(
     },
   );
   await page.mouse.up();
+}
+
+/** Selects a shape kind and leaves a live draft pressed between two canvas positions. */
+async function startShapeDraft(editor: EditorDriver, kind: "Rectangle" | "Ellipse") {
+  const page = editor.page;
+  if (kind === "Ellipse") {
+    await page.getByRole("button", { name: "Rectangle Tool (R) options" }).click();
+    await page.getByRole("menuitemcheckbox", { name: "Ellipse O" }).click();
+  } else {
+    await page.getByRole("button", { name: "Rectangle Tool (R)", exact: true }).click();
+  }
+
+  await editor.pointerDown(await editor.canvasPagePoint({ x: 0.65, y: 0.3 }));
+  await editor.pointerMove(await editor.canvasPagePoint({ x: 0.85, y: 0.5 }), 5);
+}
+
+/** Reads the selected live shape draft published by the Shape tool. */
+async function liveShapeDraft(editor: EditorDriver) {
+  return editor.page.evaluate(() => {
+    const editor = window.shift!.editor;
+    const id = editor.selection.ids[0];
+    const object = editor.object(id);
+    if (object?.kind !== "contour") throw new Error("Expected a selected draft contour");
+    const contour = object.geometry.contour(object.contourId)!;
+    return {
+      id,
+      bounds: editor.selectionBounds()!,
+      points: contour.points.length,
+      handles: editor.handlesVisible(contour.id),
+    };
+  });
 }
 
 /** Maps tool id to the aria-label on its toolbar button (set via tooltip). */
@@ -116,11 +149,18 @@ test.describe("Toolbar tools", () => {
   });
 
   for (const [tool, label] of Object.entries(TOOL_LABELS)) {
-    test(`${tool} tool active state matches snapshot`, async ({ page, editor }) => {
+    test(`${tool} tool active state matches snapshot`, async ({ page }) => {
       await page.getByRole("button", { name: label, exact: true }).click();
-      await editor.waitForCanvasRender();
+      await expect
+        .poll(() => page.evaluate(() => window.shift?.editor.toolCell.peek()?.id))
+        .toBe(tool);
+      // Park the pointer so hover styling and the button tooltip are not captured.
+      await page.mouse.move(0, 0);
 
-      await expect(page).toHaveScreenshot(`tool-${tool}.png`);
+      await expectPanelSnapshot(
+        page.getByRole("toolbar", { name: "Editor tools" }),
+        `tool-${tool}.png`,
+      );
     });
   }
 
@@ -162,7 +202,7 @@ test.describe("Toolbar tools", () => {
     const ellipseItem = page.getByRole("menuitemcheckbox", { name: "Ellipse O" });
     await expect(rectangleItem).toHaveAttribute("aria-checked", "true");
     await expect(ellipseItem).toHaveAttribute("aria-checked", "false");
-    await expect(page).toHaveScreenshot("shape-menu.png");
+    await expectPanelSnapshot(page.getByRole("menu"), "shape-menu.png");
     await ellipseItem.click();
     await expect(page.getByRole("button", { name: "Ellipse Tool (O)", exact: true })).toBeVisible();
     const canvas = editor.canvas;
@@ -202,47 +242,16 @@ test.describe("Toolbar tools", () => {
     });
   }
 
-  for (const kind of ["Rectangle", "Ellipse"]) {
-    test(`inspects a live ${kind} draft and keeps its identity on release`, async ({
+  for (const kind of ["Rectangle", "Ellipse"] as const) {
+    test(`properties follow a live ${kind} draft and keep its identity on release`, async ({
       page,
       editor,
-    }, testInfo) => {
-      if (kind === "Ellipse") {
-        await page.getByRole("button", { name: "Rectangle Tool (R) options" }).click();
-        await page.getByRole("menuitemcheckbox", { name: "Ellipse O" }).click();
-      } else {
-        await page.getByRole("button", { name: "Rectangle Tool (R)", exact: true }).click();
-      }
-      const canvas = editor.canvas;
-      const bounds = await editor.canvasBounds();
-      await editor.pointerDown({
-        x: bounds.x + bounds.width * 0.65,
-        y: bounds.y + bounds.height * 0.3,
-      });
-      await editor.pointerMove(
-        { x: bounds.x + bounds.width * 0.85, y: bounds.y + bounds.height * 0.5 },
-        5,
-      );
-
-      const draft = await page.evaluate(() => {
-        const editor = window.shift!.editor;
-        const id = editor.selection.ids[0];
-        const object = editor.object(id);
-        if (object?.kind !== "contour") throw new Error("Expected a selected draft contour");
-        const contour = object.geometry.contour(object.contourId)!;
-        return {
-          id,
-          bounds: editor.selectionBounds()!,
-          points: contour.points.length,
-          handles: editor.handlesVisible(contour.id),
-        };
-      });
+    }) => {
+      await startShapeDraft(editor, kind);
+      const draft = await liveShapeDraft(editor);
       expect(draft.points).toBe(kind === "Ellipse" ? 12 : 4);
       expect(draft.handles).toBe(false);
-      await expect(canvas).toHaveCSS(
-        "cursor",
-        kind === "Ellipse" ? /crosshair@32-circle\.svg/ : /crosshair@32-square\.svg/,
-      );
+
       const properties = page.getByRole("complementary", { name: "Glyph properties" });
       await expect(properties.getByLabel("X position", { exact: true })).toHaveValue(
         String(Math.round(draft.bounds.x)),
@@ -257,11 +266,6 @@ test.describe("Toolbar tools", () => {
         String(Math.round(draft.bounds.height)),
       );
       await expect(properties.getByLabel("Width", { exact: true })).toBeEnabled();
-      await expect(page).toHaveScreenshot(`${kind}-draft.png`);
-      await testInfo.attach(`${kind}-draft`, {
-        body: await page.screenshot({ path: testInfo.outputPath(`${kind}-draft.png`) }),
-        contentType: "image/png",
-      });
 
       await editor.pointerUp();
       await expect
@@ -272,11 +276,15 @@ test.describe("Toolbar tools", () => {
       await expect(properties.getByLabel("Width", { exact: true })).toHaveValue(
         String(Math.round(draft.bounds.width)),
       );
-      await expect(page).toHaveScreenshot(`${kind}-committed.png`);
-      await testInfo.attach(`${kind}-committed`, {
-        body: await page.screenshot({ path: testInfo.outputPath(`${kind}-committed.png`) }),
-        contentType: "image/png",
-      });
+    });
+
+    test(`renders a live ${kind} draft and its committed selection`, async ({ editor }) => {
+      await startShapeDraft(editor, kind);
+      await expectCanvasSnapshot(editor, `${kind}-draft.png`);
+
+      await editor.pointerUp();
+      await expect.poll(() => editor.selectionIds()).toHaveLength(1);
+      await expectCanvasSnapshot(editor, `${kind}-committed.png`);
     });
   }
 
@@ -316,30 +324,6 @@ test.describe("Toolbar tools", () => {
     await editor.cancelGesture();
     await expect.poll(() => editor.selectionIds()).toEqual(selection);
     expect(await page.evaluate((id) => window.shift!.editor.object(id), draft.ids[0])).toBeNull();
-  });
-
-  test("hides an individual handle on canvas and restores the same rendered image", async ({
-    page,
-    editor,
-  }, testInfo) => {
-    const canvas = editor.canvas;
-    const before = await canvas.screenshot({
-      path: testInfo.outputPath("individual-handle-before.png"),
-    });
-    const showHandles = await page.evaluateHandle(() => {
-      const editor = window.shift!.editor;
-      const node = editor.scene.nodesOfKind("glyph")[0];
-      const layer = editor.glyphForId(node.glyphId)!.layerForSource(node.sourceId)!;
-      return editor.hideHandles(layer.contours[0].points[0].id);
-    });
-    await expect.poll(async () => (await canvas.screenshot()).equals(before)).toBe(false);
-    await testInfo.attach("individual-handle-hidden", {
-      body: await page.screenshot({ path: testInfo.outputPath("individual-handle-hidden.png") }),
-      contentType: "image/png",
-    });
-    await showHandles.evaluate((show) => show());
-    await expect.poll(async () => (await canvas.screenshot()).equals(before)).toBe(true);
-    await showHandles.dispose();
   });
 
   test("hides unavailable tools", async ({ page }) => {

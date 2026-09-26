@@ -113,9 +113,21 @@ The visual fixture forces a fixed device scale and sizes the `BrowserWindow` tha
 
 After an intentional visual change:
 
-1. Run `pnpm test:e2e:visual:update`.
+1. Run `pnpm test:e2e:visual:update`, optionally with a file and `--grep` filter.
 2. Review every changed image under `e2e/__screenshots__/`.
-3. Run `pnpm test:e2e:visual` without update mode.
+3. Run the same visual scope without update mode.
+
+### Writing golden assertions
+
+Golden captures are the final assertion of a behavioral test, taken with the helpers in `fixtures/snapshots.ts`:
+
+- `expectCanvasSnapshot(editor, name)` waits for pending edits and two rendered frames, then compares the composited canvas stack (`editorCanvasStack()`) exactly. Thin strokes and handles occupy few pixels, so canvas goldens never use a ratio tolerance. Individual canvas layers are not captured separately: an element screenshot of one stacked layer includes the layers above it.
+- `expectPanelSnapshot(locator, name)` captures the smallest panel, menu, or toolbar that owns the visual contract with scrollbar gutters normalized, animations disabled, and the caret hidden. Full-page goldens use the same `PAGE_SNAPSHOT_OPTIONS`.
+- Always use `toHaveScreenshot()`. It waits for two identical consecutive captures; `toMatchSnapshot()` on a screenshot buffer does not stabilize and ignores the configured screenshot tolerance.
+- Prove the state that owns the pixels before capturing it: the authored point count after each Pen gesture, the tool state during a drag, or the published render state of a preview.
+- Express canvas gestures with `editor.canvasPagePoint()` fractions of the interactive canvas, and choose positions away from existing geometry so a click cannot hit an unintended target.
+- Park the pointer off the target before capturing toolbars and menus so hover styling and tooltips are not part of the golden.
+- Do not count or sample palette colours. Assert the render state the editor publishes, or capture a golden of the state.
 
 ### Capture determinism
 

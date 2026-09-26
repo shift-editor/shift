@@ -27,6 +27,11 @@ export function editorShell(page: Page) {
   return page.getByTestId("editor-shell");
 }
 
+/** Element compositing the background, scene, marker, and interactive editor canvases. */
+export function editorCanvasStack(page: Page) {
+  return page.getByTestId("editor-canvas-stack");
+}
+
 export function fontNavigation(page: Page) {
   return page.getByRole("complementary", { name: "Font navigation" });
 }

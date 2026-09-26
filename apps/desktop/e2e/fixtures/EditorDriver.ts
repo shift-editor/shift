@@ -547,6 +547,27 @@ export class EditorDriver {
     return target.id;
   }
 
+  /**
+   * Converts a position normalized to the interactive canvas into page coordinates.
+   *
+   * @remarks
+   * Keeps gesture geometry independent of sidebar widths and toolbar height.
+   * @param fraction - Fractions from zero to one along the canvas width and height.
+   * @returns Rounded page coordinates for pointer input.
+   * @throws {Error} when a fraction lies outside the canvas.
+   */
+  async canvasPagePoint(fraction: Point2D): Promise<Point2D> {
+    if (fraction.x < 0 || fraction.x > 1 || fraction.y < 0 || fraction.y > 1) {
+      throw new Error("Canvas positions must be normalized between zero and one");
+    }
+
+    const bounds = await this.canvasBounds();
+    return {
+      x: Math.round(bounds.x + bounds.width * fraction.x),
+      y: Math.round(bounds.y + bounds.height * fraction.y),
+    };
+  }
+
   async #waitForEdits(): Promise<void> {
     await this.page.evaluate(async () => window.shift?.font.editCoordinator.settled());
   }
