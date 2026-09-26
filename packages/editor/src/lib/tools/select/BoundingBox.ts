@@ -104,10 +104,11 @@ export class SelectBoundingBox extends CanvasItem<SelectBoundingBoxProps> {
 
   protected props(): SelectBoundingBoxProps | null {
     const state = this.#select.stateCell.value;
-    if (state.type === "brushing") return null;
+    if (state.type === "brushing" && !this.#editor.input.modifiersCell.value.shiftKey) return null;
 
     track(this.#editor.selection.stateCell);
-    const ids = this.#editor.selection.ids;
+    const ids =
+      state.type === "brushing" ? state.selection.initialSelection : this.#editor.selection.ids;
     const selection = this.#editor.positionSelection(ids);
     let componentSelection = false;
     if (selection) {
@@ -121,7 +122,10 @@ export class SelectBoundingBox extends CanvasItem<SelectBoundingBoxProps> {
       componentSelection = true;
     }
 
-    const sceneRect = this.#editor.selectionBoundsCell.value;
+    const sceneRect =
+      state.type === "brushing"
+        ? this.#editor.selectionBounds(ids)
+        : this.#editor.selectionBoundsCell.value;
     if (!sceneRect) return null;
 
     this.#editor.camera.trackViewportTransform();
@@ -165,6 +169,8 @@ export class SelectBoundingBox extends CanvasItem<SelectBoundingBoxProps> {
   }
 
   hit(coords: Coordinates): BoundingBoxHitResult {
+    if (this.#select.stateCell.peek().type === "brushing") return null;
+
     const props = this.propsSnapshot();
     if (!props) return null;
 

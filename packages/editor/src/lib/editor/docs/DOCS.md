@@ -1,6 +1,6 @@
 # Editor
 
-<!-- reviewed: 2026-09-20 -->
+<!-- reviewed: 2026-09-26 -->
 
 Central orchestrator for the canvas-based glyph editing surface, wiring viewport transforms, selection, rendering, hit testing, and tool management into a single facade.
 
@@ -14,7 +14,11 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 
 **Architecture Invariant:** Node definitions are typed, editor-scoped behavior plugins shared by every scene node of their kind. Glyph-specific presentation state stays on `GlyphNodeDefinition`, not the generic `Editor`: its `GlyphOutlines` surface associates source and named-instance outline targets with a `NodeId`, while the definition resolves and strokes those locations during the ordinary content pass.
 
-**Architecture Invariant:** `Editor.#store` is the generic `ShiftStore<ShiftEditorRecord>` for scene and session records. The injected `Editor.#fontStore` owns canonical complete Glyph objects for those ID-based records. Neither store contains the other store's domain objects.
+**Architecture Invariant:** `Editor.#store` is the generic `ShiftStore<ShiftEditorRecord>` for scene and session records. The injected `Editor.#fontStore` owns canonical complete Glyph objects for those ID-based records. Neither store contains the other store's domain objects. `EditorHistory` captures only whole-record before/after replacements from the generic store; glyph geometry and workspace snapshots never enter editor-record history.
+
+**Architecture Invariant:** `EditorHistory` is the workspace-lifetime ordering authority for completed user actions. A `HistoryEntry` composes TypeScript `RecordChange` effects with ordered workspace markers; Rust remains the sole owner of document snapshots and document undo/redo. Replay restores workspace effects before editor records, waits for pending edits, validates stale session IDs, and uses `WorkspaceEditCoordinator.discardRedo()` only when a TypeScript-only action abandons a document redo branch.
+
+**Architecture Invariant:** History boundaries are explicit actions, not store subscriptions or raw input events. Clicks, double-clicks, completed pointer drags, selection commands, and completed editor commands seal captures; pointer cancellation restores the capture's starting records and records nothing. Hover, camera, tool state, route hydration, and intermediate drag frames are never history entries.
 
 **Architecture Invariant:** `Font.loadGlyph()` is the only asynchronous Glyph acquisition API. `Editor.glyphForId()` is the synchronous runtime and NodeDefinition lookup: it returns the canonical complete Glyph when available, returns `null` otherwise, and never starts I/O. Use `Font.recordForId()` when code must distinguish a nonexistent current-font ID from a Glyph that has not been acquired. `LatestRequest` permits only the latest asynchronous catalog request to publish; superseded or invalidated results never replace the requested route glyph.
 
@@ -34,7 +38,7 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 
 **Architecture Invariant:** Lifecycle events (`EventEmitter`) are for one-shot imperative actions; `LifecycleEventMap` contains `destroying` and the one-shot `previewMutationAttempted` notice. Continuous state changes use signals. Do not mix the two patterns.
 
-**Architecture Invariant:** `Editor.toolCell` is the public active-tool state surface. It derives `{ id, state }` from the active tool instance and its `stateCell`; consumers use `toolIf(id)` for built-in state narrowing and do not reach through `ToolManager` for active state. Entering or leaving a glyph route resets the active tool instance, selection, hover, and editing scope so transient interaction state cannot cross glyphs.
+**Architecture Invariant:** `Editor.toolCell` is the public active-tool state surface. It derives `{ id, state }` from the active tool instance and its `stateCell`; consumers use `toolIf(id)` for built-in state narrowing and do not reach through `ToolManager` for active state. Entering or leaving a glyph route resets the active tool instance, selection, hover, and editing scope so transient interaction state cannot cross glyphs. Route changes do not reset `EditorHistory`; replay filters stale session identities while preserving the workspace timeline.
 
 **Architecture Invariant:** `ToolManager` is authoritative for installed manifests. `Editor.toolRegistryCell` derives reactive toolbar metadata, including hidden and disabled flags, from that collection. Both flags suppress user tool shortcuts while preserving programmatic activation, and `registerTool()` returns the `ToolRegistration` that exclusively owns replacement and removal of the contributed ID.
 
@@ -77,6 +81,9 @@ editor/
 - **`Editor`** -- Facade class. Owns `Selection`, `Hover`, `Camera`, `Renderer`, `ToolManager`, `Clipboard`, `EventEmitter`, and the workspace transaction facade. Its immutable `sessionMode` lets Select suppress geometry interaction; geometry clicks publish `previewMutationAttempted` for presentation code. The canvas lock is display-only. Passed directly to tools and NodeDefinitions; `glyphForId()` exposes already-acquired canonical Glyphs without exposing FontStore.
 - **`Scene`** -- Owns generic, serializable placed-node records and node-level queries. Glyph acquisition and retained object ownership remain outside Scene.
 - **`ShiftStore<ShiftEditorRecord>`** -- Editor-owned generic record store for scene nodes, selection, editing, and text runs.
+- **`EditorHistory`** -- TypeScript action timeline over whole editor records plus ordered workspace markers. Captures finish synchronously; undo and redo await the workspace queue.
+- **`HistoryCapture`** -- One explicit action boundary. `finish()` records its net effects; `cancel()` restores its starting records unless committed workspace effects must remain replayable.
+- **`RecordChange`** -- Stable record identity with complete `before` and `after` values; `null` represents creation or deletion.
 - **`FontStore`** -- Session-owned font state injected privately into Editor for synchronous lookup of already-loaded Glyph objects.
 - **`Camera`** -- Owns zoom/pan/UPM signals, computed affine matrices (`Mat`), and all coordinate projection methods (`projectScreenToScene`, `projectSceneToScreen`, `screenToUpmDistance`).
 - **`Renderer`** -- Manages four stacked canvas layers (background, scene, markers/WebGL, overlay), their `FrameHandler` instances, and the canvas item layers that draw each pass.
@@ -148,13 +155,21 @@ A plain source-row click activates that source and collapses the editing set. Sh
 
 `MultiSourceEditing` resolves `LayerMatch` values asynchronously before interactions. Its dependency snapshot includes the active glyph, reference and target layer IDs, and each layer's `structureCell`; coarse scene updates are ignored when those inputs are unchanged. `LatestRequest` prevents stale results from publishing after the editing source set changes. Move, nudge, scale, and rotate freeze the resolved targets, preview every layer without IPC, and finish all layer edits inside one workspace transaction and undo entry. Scale and rotate preserve reference-driven feedback while mapping the selection pivot proportionally into each target layer's bounds.
 
+### Unified action history
+
+`HistoryCapture` retains the immutable editor-store map at action start and compares it with the final map when `finish()` is called. One-shot actions use `EditorHistory.capture()` or `captureAsync()`, which finish successful work and cancel failed work before rethrowing. Direct `begin()` handles only actions whose lifetime spans separate events, such as pointer drag start through end or cancellation. The diff visits the union of record IDs, uses semantic value equality to drop net-zero writes, and stores complete records rather than field-specific commands. Replay batches non-session records first and selection/editing records second, after any workspace undo or redo has restored document geometry.
+
+`WorkspaceEditCoordinator.onEdit()` publishes renderer-local `accepted`, `committed`, and `failed` events keyed by `PendingEditId`. Accepted edits attach to the open capture or create a workspace-only entry. Undo and redo wait for every pending operation. A failed apply is removed after workspace resynchronization; later changes to the same editor record have their first `before` value rebased, so failure rollback cannot overwrite a newer user action or shift the Rust undo stack.
+
+A new editor-only entry clears editor redo immediately. If the abandoned redo branch contains workspace effects, history serializes `discardRedo()` behind pending applies. Entries may contain multiple accepted workspace operations, but ordinary transaction boundaries should group related intents into one document operation.
+
 ### Editing result selection
 
-Paste selects inserted objects and activates Select before awaiting the workspace echo. Boolean operations await their committed geometry and select every newly created result contour, including an empty selection when the result has no contours.
+Paste selects inserted objects and activates Select before awaiting the workspace echo. Boolean operations await their committed geometry and select every newly created result contour, including an empty selection when the result has no contours. Paste, Boolean, Cut, Delete, Duplicate, Select All, and Deselect own explicit capture boundaries so their document and record effects replay as one action.
 
 ### Deletion
 
-`Editor.deleteSelection(mode)` normalizes point, segment, and contour selection against the active authored layer and delegates to `GlyphLayer.deletePoints`. Delete and Backspace use `"fit"`; Shift selects `"gap"`. Native-menu Delete uses the same default reconnection behavior. Reconnection never raises the original span's highest degree: lines stay lines, quadratic/line mixtures stay quadratic, and spans containing cubics are fitted as cubics. Selecting a segment is equivalent to selecting all of its points. Unsupported, missing, or mixed-anchor selections refuse without mutation. Successful deletion clears selection and hover and awaits the workspace echo; the entire geometry edit is one undo step.
+`Editor.deleteSelection(mode)` normalizes point, segment, and contour selection against the active authored layer and delegates to `GlyphLayer.deletePoints`. Delete and Backspace use `"fit"`; Shift selects `"gap"`. Native-menu Delete uses the same default reconnection behavior. Reconnection never raises the original span's highest degree: lines stay lines, quadratic/line mixtures stay quadratic, and spans containing cubics are fitted as cubics. Selecting a segment is equivalent to selecting all of its points. Unsupported, missing, or mixed-anchor selections refuse without mutation. Successful deletion clears selection and hover and awaits the workspace echo; geometry removal and selection clearing are one unified undo step.
 
 ### Hit testing
 
@@ -194,7 +209,7 @@ Glyph geometry exposes domain hit queries for points, anchors, and segments. Too
 
 ## Verification
 
-- `pnpm test:desktop src/renderer/src/lib/editor/` -- real-editor tests for managers, hit testing, sidebearings, lifecycle, plus editor-outcome suites for boolean operations, clipboard copy/paste, and glyph metrics that drive `TestEditor` through real tool gestures and assert resulting contours, selection, and history.
+- `pnpm test:desktop src/renderer/src/lib/editor/` -- real-editor tests for managers, hit testing, sidebearings, lifecycle, plus editor-outcome suites for boolean operations, clipboard copy/paste, glyph metrics, and unified editor history. `EditorHistory.test.ts` covers selection-only actions, compound geometry/selection actions, marquee coalescing and cancellation, redo branching, and failed-apply rebasing through the real workspace.
 - `pnpm test:desktop src/renderer/src/lib/nodes/GlyphOutlines.test.ts` -- node-scoped replacement and clearing semantics for the glyph definition's outline plugin state.
 - Outcome tests treat editor actions as asynchronous: metric setters need `await editor.settle()` before asserting, clipboard and history actions (`copy`, `paste`, `undo`, `redo`) return promises that must be awaited, and drag helpers give every drag sample its cumulative delta from the pointer-down origin.
 - [Deletion behavior](../../../../../../apps/desktop/src/renderer/src/lib/editor/Deletion.test.ts), [degree preservation](../../../../../../apps/desktop/src/renderer/src/lib/editor/DeletionDegree.test.ts), [contour topology](../../../../../../apps/desktop/src/renderer/src/lib/editor/DeletionTopology.test.ts), and [fresh-reopen tests](../../../../../../apps/desktop/src/renderer/src/lib/workspace/FreshReopen.test.ts) cover fitted/gap deletion, exact undo/redo, and saved geometry. Run them and the real-canvas Electron suite with:

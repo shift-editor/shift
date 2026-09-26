@@ -15,6 +15,7 @@ import type {
 } from "@shift/types";
 import type { FontStore } from "../lib/model/FontStore";
 import type { PendingEditId } from "./editing";
+import type { WorkspaceEditListener } from "./history";
 import type { GlyphReader } from "./glyph";
 
 export interface FontStoreOptions {
@@ -35,6 +36,7 @@ export interface WorkspaceEditCoordinator {
   undo(): Promise<AppliedChange | null>;
   redo(): Promise<AppliedChange | null>;
   discardRedo(): Promise<void>;
+  onEdit(listener: WorkspaceEditListener): () => void;
   state(): Promise<WorkspaceDocumentState | null>;
   readonly settledCell: { readonly value: boolean };
 }

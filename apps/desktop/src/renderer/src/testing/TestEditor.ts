@@ -122,24 +122,26 @@ export class TestEditor extends Editor {
   async #createAndOpenGlyph(name: string, unicode: number | null): Promise<Glyph> {
     const glyphId = mintGlyphId();
     const sourceId = this.font.defaultSource.id;
-    const applied = await this.#stack.editCoordinator.apply([
-      {
-        kind: "createGlyph",
-        createGlyph: {
-          glyphId,
-          name: name as GlyphName,
-          unicodes: (unicode === null ? [] : [unicode]) as Unicode[],
+    const applied = await this.history.withoutRecording(() =>
+      this.#stack.editCoordinator.apply([
+        {
+          kind: "createGlyph",
+          createGlyph: {
+            glyphId,
+            name: name as GlyphName,
+            unicodes: (unicode === null ? [] : [unicode]) as Unicode[],
+          },
         },
-      },
-      {
-        kind: "createGlyphLayer",
-        createGlyphLayer: {
-          layerId: mintLayerId(),
-          glyphId,
-          sourceId,
+        {
+          kind: "createGlyphLayer",
+          createGlyphLayer: {
+            layerId: mintLayerId(),
+            glyphId,
+            sourceId,
+          },
         },
-      },
-    ]);
+      ]),
+    );
 
     const record = applied.next?.glyphs?.find((glyph) => glyph.name === name);
     if (!record) throw new Error("createGlyph did not echo the new record");

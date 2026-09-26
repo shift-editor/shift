@@ -60,6 +60,7 @@ import type { DebugOverlays } from "../../types/uiState";
 import type { TemporaryToolOptions } from "../../types/editor";
 import { Editing } from "./Editing";
 import { Selection } from "./Selection";
+import { EditorHistory } from "./history/EditorHistory";
 import type { Font } from "../model/Font";
 import type { FontStore } from "../model/FontStore";
 import type { Glyph, GlyphLayer } from "../model/Glyph";
@@ -146,6 +147,7 @@ export class Editor {
    */
   readonly selection: Selection;
   readonly editing: Editing;
+  readonly history: EditorHistory;
   readonly hover: Hover;
   readonly font: Font;
   /** Immutable persistence and editing capability; glyph edits still require an authored layer. */
@@ -260,6 +262,11 @@ export class Editor {
 
     this.selection = new Selection(this.#store);
     this.editing = new Editing(this.#store);
+    this.history = new EditorHistory(
+      this,
+      this.#store,
+      this.sessionMode === "workspace" ? this.font.editCoordinator : null,
+    );
     this.hover = new Hover();
     this.#selectionBounds = computed(
       () => {
@@ -904,12 +911,13 @@ export class Editor {
    * current scene and font, asks each object for its live bounds, and returns a
    * fresh axis-aligned rectangle enclosing the resolved objects.
    *
-   * @returns null when nothing is selected or no selected object has bounds.
+   * @param ids - Identities to bound, defaulting to the current selection; does not change selection.
+   * @returns null when no supplied object has bounds.
    */
-  public selectionBounds(): Rect2D | null {
+  public selectionBounds(ids: readonly SelectableId[] = this.selection.ids): Rect2D | null {
     let bounds: BoundsType | null = null;
 
-    for (const id of this.selection.ids) {
+    for (const id of ids) {
       const object = this.object(id);
       if (!object) continue;
 
@@ -999,7 +1007,9 @@ export class Editor {
     const layer = this.#fontStore.glyphForId(node.glyphId)?.layerForSource(sourceId);
     if (!layer) return;
 
-    this.selection.select(layer.allPoints.map((point) => point.id));
+    this.history.capture("Select all", () => {
+      this.selection.select(layer.allPoints.map((point) => point.id));
+    });
   }
 
   /**
@@ -1246,12 +1256,11 @@ export class Editor {
   }
 
   public async undo(): Promise<void> {
-    // One undo authority: the workspace ledger (state-pair replay).
-    await this.font.editCoordinator.undo();
+    await this.history.undo();
   }
 
   public async redo(): Promise<void> {
-    await this.font.editCoordinator.redo();
+    await this.history.redo();
   }
 
   /**
@@ -1639,12 +1648,13 @@ export class Editor {
     const written = await this.#clipboard.write(content);
     if (!written) return false;
 
-    this.transaction("Cut", () => {
-      selection.layer.removePoints(pointIds);
+    this.history.capture("Cut", () => {
+      this.transaction("Cut", () => {
+        selection.layer.removePoints(pointIds);
+      });
+      this.selection.clear();
     });
-    this.selection.clear();
     await this.font.editCoordinator.settled();
-
     return true;
   }
 
@@ -1655,12 +1665,16 @@ export class Editor {
       return false;
     }
 
-    if (!selection.layer.deletePoints(pointIds, mode)) return false;
+    const deleted = this.history.capture("Delete", () => {
+      if (!selection.layer.deletePoints(pointIds, mode)) return false;
 
-    this.selection.clear();
-    this.hover.clear();
+      this.selection.clear();
+      this.hover.clear();
+      return true;
+    });
+    if (!deleted) return false;
+
     await this.font.editCoordinator.settled();
-
     return true;
   }
 
@@ -1674,13 +1688,18 @@ export class Editor {
 
     switch (result.kind) {
       case "content": {
-        const inserted = this.insertContent(result.content, {
-          offset: this.#clipboard.nextPasteOffset(),
+        const inserted = this.history.capture("Paste", () => {
+          const ids = this.insertContent(result.content, {
+            offset: this.#clipboard.nextPasteOffset(),
+          });
+          if (!ids) return false;
+
+          this.selection.select(ids);
+          this.setActiveTool("select");
+          return true;
         });
         if (!inserted) return false;
 
-        this.selection.select(inserted);
-        this.setActiveTool("select");
         await this.font.editCoordinator.settled();
         return true;
       }
@@ -1715,14 +1734,16 @@ export class Editor {
     const layer = this.#fontStore.glyphForId(node.glyphId)?.layerForSource(sourceId);
     if (!layer || !layer.contour(contourIdA) || !layer.contour(contourIdB)) return;
 
-    const previousContourIds = new Set(layer.contours.map((contour) => contour.id));
-    layer.applyBooleanOp(contourIdA, contourIdB, operation);
-    await this.font.editCoordinator.settled();
+    await this.history.captureAsync("Boolean operation", async () => {
+      const previousContourIds = new Set(layer.contours.map((contour) => contour.id));
+      layer.applyBooleanOp(contourIdA, contourIdB, operation);
+      await this.font.editCoordinator.settled();
 
-    const resultContourIds = layer.contours
-      .filter((contour) => !previousContourIds.has(contour.id))
-      .map((contour) => contour.id);
-    this.selection.select(resultContourIds);
+      const resultContourIds = layer.contours
+        .filter((contour) => !previousContourIds.has(contour.id))
+        .map((contour) => contour.id);
+      this.selection.select(resultContourIds);
+    });
   }
 
   public duplicateSelection(): PointId[] {
@@ -1742,6 +1763,7 @@ export class Editor {
     this.#multiSourceEditing.dispose();
     this.#renderer.destroy();
     this.#toolManager.dispose();
+    this.history.dispose();
     this.#handlesCell.set(new Map());
     this.#events.dispose();
   }

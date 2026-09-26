@@ -68,9 +68,9 @@ export const ObjectsPanel = () => {
     [objectTree, visibleObjectIdsBySection],
   );
 
-  const { selectItem: selectObject } = useListSelection(visibleObjectIds, selection.ids, (ids) =>
-    editor.selection.select(ids),
-  );
+  const { selectItem: selectObject } = useListSelection(visibleObjectIds, selection.ids, (ids) => {
+    editor.history.capture("Select object", () => editor.selection.select(ids));
+  });
 
   const setObjectOpen = useCallback((id: SelectableId, open: boolean) => {
     setCollapsedObjectIds((previous) => {

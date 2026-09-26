@@ -1,4 +1,6 @@
 export { Editor } from "./lib/editor/Editor";
+export { EditorHistory } from "./lib/editor/history/EditorHistory";
+export { HistoryCapture } from "./lib/editor/history/HistoryCapture";
 export { applyListSelection } from "./lib/editor/listSelection";
 export { Font } from "./lib/model/Font";
 export { FontStore } from "./lib/model/FontStore";
@@ -36,6 +38,13 @@ export type {
   WritableSignal,
 } from "./lib/signals";
 export type { FontOptions, FontStoreOptions, WorkspaceEditCoordinator } from "./types/font";
+export type {
+  HistoryEffect,
+  HistoryEntry,
+  RecordChange,
+  WorkspaceEditEvent,
+  WorkspaceEffect,
+} from "./types/history";
 export type { ListSelectionMode } from "./types/listSelection";
 export type {
   DeleteMode,

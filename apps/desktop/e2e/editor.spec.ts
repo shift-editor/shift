@@ -8,6 +8,53 @@ import {
   expectPageSnapshot,
 } from "./fixtures/snapshots";
 
+test("undoes and redoes Shift-click selection", async ({ editor }) => {
+  await editor.openGlyphByUnicode("41");
+  const outline = await editor.outline();
+  const points = await editor.pointTargets(
+    outline
+      .flatMap((contour) => contour.points)
+      .slice(0, 2)
+      .map((point) => point.id),
+  );
+  if (!points[0] || !points[1]) throw new Error("Expected two fixture points");
+
+  await editor.canvas.click({ position: points[0].canvasPosition });
+  await editor.canvas.click({ position: points[1].canvasPosition, modifiers: ["Shift"] });
+  await expect.poll(() => editor.selectionIds()).toEqual([points[0].id, points[1].id]);
+
+  await editor.undo();
+  await expect.poll(() => editor.selectionIds()).toEqual([points[0].id]);
+
+  await editor.redo();
+  await expect.poll(() => editor.selectionIds()).toEqual([points[0].id, points[1].id]);
+});
+
+test("undoes selecting and dragging an unselected point as one action", async ({ editor }) => {
+  await editor.openGlyphByUnicode("41");
+  const outline = await editor.outline();
+  const point = outline.flatMap((contour) => contour.points)[0];
+  if (!point) throw new Error("Expected a fixture point");
+
+  const [target] = await editor.pointTargets([point.id]);
+  if (!target) throw new Error("Expected a visible fixture point");
+  await editor.dragCanvas({
+    from: target.canvasPosition,
+    to: { x: target.canvasPosition.x + 30, y: target.canvasPosition.y + 20 },
+  });
+  const moved = await editor.pointPosition(point.id);
+  expect(moved).not.toEqual(target.glyphPosition);
+  expect(await editor.selectionIds()).toEqual([point.id]);
+
+  await editor.undo();
+  await expect.poll(() => editor.pointPosition(point.id)).toEqual(target.glyphPosition);
+  await expect.poll(() => editor.selectionIds()).toEqual([]);
+
+  await editor.redo();
+  await expect.poll(() => editor.pointPosition(point.id)).toEqual(moved);
+  await expect.poll(() => editor.selectionIds()).toEqual([point.id]);
+});
+
 /** Opens A and returns three distinct fixture points for alignment scenarios. */
 async function alignmentFixture(editor: EditorDriver) {
   await editor.openGlyphByUnicode("41");
@@ -232,6 +279,14 @@ test.describe("Editor view", () => {
       "aria-pressed",
       "true",
     );
+
+    await editor.undo();
+    await expect
+      .poll(() => editor.selectionIds())
+      .toEqual([firstPoint.id, secondPoint.id, thirdPoint.id, fourthPoint.id]);
+
+    await editor.redo();
+    await expect.poll(() => editor.selectionIds()).toEqual([contour.id]);
   });
 
   test("edits anchor X and Y positions without restoring stale coordinates", async ({
