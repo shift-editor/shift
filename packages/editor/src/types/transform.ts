@@ -24,3 +24,14 @@ export type AlignmentType = "left" | "center-h" | "right" | "top" | "center-v" |
 
 /** Axis along which to evenly distribute selected points. */
 export type DistributeType = "horizontal" | "vertical";
+
+/** Wheel sample classified by {@link WheelGesture}. */
+export interface WheelGestureSample {
+  /** Event time in milliseconds on a monotonic clock, such as `WheelEvent.timeStamp`. */
+  readonly timeStamp: number;
+  /** Whether the zoom modifier (Meta or Control) was held for this sample. */
+  readonly zoomModifier: boolean;
+}
+
+/** Viewport response to one wheel sample: zoom, ignore trailing zoom momentum, or pan. */
+export type WheelGestureAction = "zoom" | "ignore" | "pan";
