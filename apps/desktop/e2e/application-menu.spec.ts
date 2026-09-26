@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import type { ElectronApplication, Page } from "@playwright/test";
+import type { GlyphId } from "@shift/types";
 import {
   documentTest as launcherTest,
   documentWorkspaceTest as authoredTest,
@@ -194,9 +195,9 @@ authoredTest(
       if (!session || !editor || !currentGlyphId) throw new Error("Expected active glyph editor");
 
       const recordsById = new Map(session.font.glyphRecords().map((record) => [record.id, record]));
-      const referencesCurrentGlyph = (candidateId: string): boolean => {
+      const referencesCurrentGlyph = (candidateId: GlyphId): boolean => {
         const pending = [candidateId];
-        const visited = new Set<string>();
+        const visited = new Set<GlyphId>();
 
         while (pending.length > 0) {
           const glyphId = pending.pop();
@@ -258,14 +259,10 @@ authoredTest(
       .toBe(candidate.initialCount + 1);
     await expect
       .poll(() =>
-        page.evaluate(
-          (baseGlyphId) =>
-            window.shift!.editor.objects(window.shift!.editor.selection.ids)[0]?.kind ===
-              "component" &&
-            window.shift!.editor.objects(window.shift!.editor.selection.ids)[0]?.component
-              .glyphId === baseGlyphId,
-          candidate.id,
-        ),
+        page.evaluate((baseGlyphId) => {
+          const [object] = window.shift!.editor.objects(window.shift!.editor.selection.ids);
+          return object?.kind === "component" && object.component.glyphId === baseGlyphId;
+        }, candidate.id),
       )
       .toBe(true);
 
