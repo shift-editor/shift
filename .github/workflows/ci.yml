@@ -529,6 +529,10 @@ jobs:
         if: github.event_name != 'push'
         run: pnpm --filter @shift/desktop build:e2e
 
+      - name: Check E2E project membership
+        if: github.event_name != 'push' && runner.os == 'Linux'
+        run: node scripts/check-e2e-projects.mjs
+
       - name: Upload E2E app
         if: github.event_name != 'push'
         uses: actions/upload-artifact@v7
@@ -607,6 +611,9 @@ jobs:
 
       - name: Run E2E tests
         if: runner.os != 'Linux'
+        env:
+          PLAYWRIGHT_BLOB_OUTPUT_DIR: ${{ github.workspace }}/apps/desktop/blob-report
+          PLAYWRIGHT_BLOB_OUTPUT_NAME: report-${{ matrix.target }}-${{ matrix.shard }}.zip
         run: >-
           pnpm --dir apps/desktop exec playwright test
           --project=${{ matrix.project }}
@@ -615,12 +622,24 @@ jobs:
 
       - name: Run E2E tests with virtual desktop
         if: runner.os == 'Linux'
+        env:
+          PLAYWRIGHT_BLOB_OUTPUT_DIR: ${{ github.workspace }}/apps/desktop/blob-report
+          PLAYWRIGHT_BLOB_OUTPUT_NAME: report-${{ matrix.target }}-${{ matrix.shard }}.zip
         run: >-
           node scripts/run-with-virtual-desktop.mjs --
           pnpm --dir apps/desktop exec playwright test
           --project=${{ matrix.project }}
           --fully-parallel
           --shard=${{ matrix.shard }}/${{ matrix.shard-total }}
+
+      - name: Upload blob report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: blob-report-${{ matrix.target }}-${{ matrix.shard }}
+          path: apps/desktop/blob-report/
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Upload platform evidence
         if: always() && matrix.project == 'platform'
@@ -638,6 +657,65 @@ jobs:
           name: playwright-${{ matrix.target }}-${{ matrix.shard }}-of-${{ matrix.shard-total }}-results
           path: apps/desktop/e2e/test-results/
           retention-days: 7
+
+  # Merges shard blob reports into one HTML report and summarizes failed, flaky
+  # (passed only on retry), and slow tests. Informational: not part of ci-passed.
+  e2e-report:
+    name: E2E Report
+    needs: e2e
+    if: always() && needs.e2e.result != 'skipped'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Cache node_modules
+        uses: actions/cache@v6
+        with:
+          path: |
+            node_modules
+            apps/*/node_modules
+            packages/*/node_modules
+            crates/*/node_modules
+          key: node-modules-v3-node24-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Download blob reports
+        uses: actions/download-artifact@v8
+        with:
+          pattern: blob-report-*
+          path: all-blob-reports
+          merge-multiple: true
+
+      - name: Merge reports
+        env:
+          PLAYWRIGHT_HTML_OPEN: never
+          PLAYWRIGHT_HTML_OUTPUT_DIR: ${{ github.workspace }}/playwright-report
+          PLAYWRIGHT_JSON_OUTPUT_FILE: ${{ github.workspace }}/playwright-report/results.json
+        run: >-
+          pnpm --dir apps/desktop exec playwright merge-reports
+          --reporter html,json
+          ${{ github.workspace }}/all-blob-reports
+
+      - name: Summarize flaky and slow tests
+        run: node scripts/summarize-e2e-report.mjs playwright-report/results.json
+
+      - name: Upload merged report
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report-${{ github.run_id }}
+          path: playwright-report/
+          retention-days: 14
 
   # ---------------------------------------------------------------------------
   # Gate: all required checks must pass

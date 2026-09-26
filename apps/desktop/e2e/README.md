@@ -34,7 +34,7 @@ pnpm test:e2e:gpu e2e/glyph-grid.spec.ts --grep "source switching"
 Use repeat mode to reproduce a suspected flake without running the rest of the project:
 
 ```sh
-pnpm test:e2e:gpu e2e/variable-navigation-glyph-grid.spec.ts \
+pnpm test:e2e:visual e2e/variable-navigation.spec.ts \
   --grep "keeps variable preview" --repeat-each=10
 ```
 
@@ -60,6 +60,8 @@ Do not update snapshots merely to make a failure pass. Inspect the diff and conf
 | `platform` | `fixtures/electronApp.ts` | Software rendering, DPR 1, native window geometry | Required on Windows/Linux in the merge queue |
 | `gpu`      | `fixtures/perfApp.ts`     | Hardware GPU, host scale, stable content size     | Required on macOS in the merge queue         |
 | `perf`     | `fixtures/perfApp.ts`     | Hardware GPU, host scale, stable content size     | Nightly and manual only                      |
+
+Project membership is an explicit list of spec files in `apps/desktop/playwright.config.ts` (`VISUAL_SPECS`, `PLATFORM_SPECS`, `GPU_SPECS`, `PERF_SPECS`). Add a new spec to the list for the environment it needs: `visual` for renderer, interaction, and golden behavior; `platform` for native desktop boundaries; `gpu` only for hardware rendering and residency. Platform specs also run in `visual`, because macOS has no separate platform job. `node scripts/check-e2e-projects.mjs` runs in the Linux E2E build job and fails when a spec belongs to no project or a golden bypasses `fixtures/snapshots.ts`.
 
 The shared fixture option `windowSizing` defaults to `"visual"` in the visual project and `"native"` elsewhere. `prepareWindow` waits for visibility and DOM readiness in both modes, but only visual mode unmaximizes and normalizes the renderer viewport. Platform workflows wait for their relevant controls or workspace readiness without depending on exact snapshot dimensions. Recovery launches use the same policy on every restart. GPU and performance fixture sizing is unchanged.
 
@@ -130,8 +132,10 @@ After an intentional visual change:
 Golden captures are the final assertion of a behavioral test, taken with the helpers in `fixtures/snapshots.ts`:
 
 - `expectCanvasSnapshot(editor, name)` waits for pending edits and two rendered frames, then compares the composited canvas stack (`editorCanvasStack()`) exactly. Thin strokes and handles occupy few pixels, so canvas goldens never use a ratio tolerance. Individual canvas layers are not captured separately: an element screenshot of one stacked layer includes the layers above it.
-- `expectPanelSnapshot(locator, name)` captures the smallest panel, menu, or toolbar that owns the visual contract with scrollbar gutters normalized, animations disabled, and the caret hidden. Full-page goldens use the same `PAGE_SNAPSHOT_OPTIONS`.
-- Always use `toHaveScreenshot()`. It waits for two identical consecutive captures; `toMatchSnapshot()` on a screenshot buffer does not stabilize and ignores the configured screenshot tolerance.
+- `expectPanelSnapshot(locator, name)` captures the smallest panel, menu, or toolbar that owns the visual contract with scrollbar gutters normalized, animations disabled, and the caret hidden. `expectPageSnapshot(page, name)` applies the same options to a whole window; reserve it for overall composition.
+- Never call `toHaveScreenshot()` directly in a spec. The helpers are the only golden path, and `scripts/check-e2e-projects.mjs` enforces it.
+- Goldens do not pass on retry. CI retries a failed test once to collect a second trace, but every snapshot helper throws on a retry attempt, so a test with a golden that failed once stays failed. Explain the first failure instead of rerunning it.
+- The helpers use `toHaveScreenshot()`. It waits for two identical consecutive captures; `toMatchSnapshot()` on a screenshot buffer does not stabilize and ignores the configured screenshot tolerance.
 - Prove the state that owns the pixels before capturing it: the authored point count after each Pen gesture, the tool state during a drag, or the published render state of a preview.
 - Express canvas gestures with `editor.canvasPagePoint()` fractions of the interactive canvas, and choose positions away from existing geometry so a click cannot hit an unintended target.
 - Park the pointer off the target before capturing toolbars and menus so hover styling and tooltips are not part of the golden.
@@ -170,5 +174,15 @@ Local failures are written to `apps/desktop/e2e/test-results/`. CI uploads the s
 ```sh
 pnpm --filter @shift/desktop exec playwright show-trace apps/desktop/e2e/test-results/<test>/trace.zip
 ```
+
+### Retries, flaky tests, and reports
+
+CI runs with `retries: 1` so a failure collects a second trace; traces are kept for every failed attempt (`retain-on-failure`) because the first failure of a flaky test is the evidence. A test that passes only on retry is flaky, not green:
+
+- Each shard writes a blob report, uploaded as `blob-report-<target>-<shard>`.
+- The informational `E2E Report` job merges every shard into one HTML report (artifact `playwright-report-<run>`) and runs `scripts/summarize-e2e-report.mjs`. The job summary lists failed, flaky, and slow tests per project, and each flaky test gets a `::warning` annotation on its spec line.
+- `reportSlowTests` lists spec files slower than 20 seconds in each shard log.
+
+Summarize a local JSON report with `node scripts/summarize-e2e-report.mjs <report.json>`.
 
 The project definitions and retry policy live in `apps/desktop/playwright.config.ts`.
