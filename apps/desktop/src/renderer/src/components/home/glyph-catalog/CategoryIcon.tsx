@@ -24,5 +24,5 @@ export interface CategoryIconProps {
 }
 export const CategoryIcon = ({ category }: CategoryIconProps) => {
   const Icon = CATEGORY_ICON_MAP[category];
-  return Icon ? <Icon className="h-3 w-3 shrink-0" /> : null;
+  return Icon ? <Icon className="h-4 w-4 shrink-0 text-primary" /> : null;
 };

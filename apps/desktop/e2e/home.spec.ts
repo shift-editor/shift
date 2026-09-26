@@ -69,6 +69,30 @@ test.describe("Home view", () => {
     await expectPanelSnapshot(fontNavigation(page), "home-category-active.png");
   });
 
+  test("shift-selects glyph categories as a visible range", async ({ page }) => {
+    const sidebar = page.getByRole("complementary", { name: "Font navigation" });
+    const categoryNames = ["Letter", "Mark", "Punctuation"];
+
+    await sidebar.getByRole("button", { name: "Letter", exact: true }).click();
+    await sidebar
+      .getByRole("button", { name: "Punctuation", exact: true })
+      .click({ modifiers: ["Shift"] });
+
+    for (const name of categoryNames) {
+      await expect(sidebar.getByRole("button", { name, exact: true })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+    }
+    await expect
+      .poll(() => sidebar.locator('button[aria-pressed="true"]').count())
+      .toBeGreaterThan(3);
+    await expect(sidebar.getByRole("button", { name: "Separator", exact: true })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+  });
+
   test("shows an empty Glyph section before a glyph is selected", async ({ page }) => {
     const properties = glyphProperties(page);
     const fields = ["Left sidebearing", "Right sidebearing", "Advance width"];

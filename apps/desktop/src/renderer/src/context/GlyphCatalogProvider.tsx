@@ -5,9 +5,14 @@ import { asGlyphId, type GlyphId, type GlyphName } from "@shift/types";
 import { effect, useSignalState } from "@shift/editor/signals";
 import { useFontSession } from "@/workspace/WorkspaceContext";
 import { getGlyphInfo } from "@/workspace/glyphInfo";
+import { useListSelection } from "@/hooks/useListSelection";
 import { LatestRequest } from "@shift/editor";
 import { GlyphCatalogContext } from "./GlyphCatalogContext";
-import type { GlyphCatalogItem, GlyphCatalogSource } from "@/types/glyphCatalog";
+import type {
+  GlyphCatalogItem,
+  GlyphCatalogSource,
+  GlyphCategoryFilter,
+} from "@/types/glyphCatalog";
 
 export const GlyphCatalogProvider = ({ children }: { children: ReactNode }) => {
   const value = useGlyphCatalogSource();
@@ -50,8 +55,10 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
   );
 
   const [query, setQuery] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState<GlyphCategory | null>(null);
-  const [selectedSubCategoryKey, setSelectedSubCategoryKey] = useState<string | null>(null);
+  const [categoryFilters, setCategoryFilters] = useState<readonly GlyphCategoryFilter[]>([]);
+  const [expandedCategories, setExpandedCategories] = useState<ReadonlySet<GlyphCategory>>(
+    () => new Set(),
+  );
 
   const availableUnicodes = useMemo(
     () => availableGlyphs.flatMap((glyph) => (glyph.unicode === null ? [] : [glyph.unicode])),
@@ -62,19 +69,43 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
     () => glyphInfo.createCategoryCatalog(availableUnicodes),
     [availableUnicodes, glyphInfo],
   );
+  const visibleCategoryFilters = useMemo<readonly GlyphCategoryFilter[]>(
+    () =>
+      categoryCatalog.categories.flatMap((category) => [
+        { category: category.category, subCategoryKey: null },
+        ...(expandedCategories.has(category.category)
+          ? category.subCategories.map((subCategory) => ({
+              category: category.category,
+              subCategoryKey: subCategory.key,
+            }))
+          : []),
+      ]),
+    [categoryCatalog.categories, expandedCategories],
+  );
+  const { selectItem: selectCategoryFilter } = useListSelection(
+    visibleCategoryFilters,
+    categoryFilters,
+    setCategoryFilters,
+    sameCategoryFilter,
+  );
 
   const filteredGlyphs = useMemo(() => {
+    const searchLimit = Math.max(availableUnicodes.length, 200);
     const categoryFilteredUnicodes = new Set(
-      categoryCatalog.filter({
-        query,
-        category: selectedCategory,
-        subCategoryKey: selectedSubCategoryKey,
-        searchLimit: Math.max(availableUnicodes.length, 200),
-      }),
+      categoryFilters.length === 0
+        ? categoryCatalog.filter({ query, searchLimit })
+        : categoryFilters.flatMap((filter) =>
+            categoryCatalog.filter({
+              query,
+              category: filter.category,
+              subCategoryKey: filter.subCategoryKey,
+              searchLimit,
+            }),
+          ),
     );
 
     const normalizedQuery = query.trim().toLowerCase();
-    const filteringByCategory = selectedCategory !== null || selectedSubCategoryKey !== null;
+    const filteringByCategory = categoryFilters.length > 0;
 
     return availableGlyphs.filter((glyph) => {
       const unicodeMatched = glyph.unicode !== null && categoryFilteredUnicodes.has(glyph.unicode);
@@ -87,14 +118,7 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
       if (normalizedQuery !== "") return unicodeMatched || nameMatched;
       return true;
     });
-  }, [
-    availableGlyphs,
-    availableUnicodes.length,
-    categoryCatalog,
-    query,
-    selectedCategory,
-    selectedSubCategoryKey,
-  ]);
+  }, [availableGlyphs, availableUnicodes.length, categoryCatalog, categoryFilters, query]);
 
   const openGlyph = useCallback<GlyphCatalogSource["openGlyph"]>(
     async (glyph) => {
@@ -177,8 +201,7 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
 
     const record = workspace.editor.createGlyph("newGlyph" as GlyphName);
     setQuery("");
-    setSelectedCategory(null);
-    setSelectedSubCategoryKey(null);
+    setCategoryFilters([]);
     return record.name;
   }, [workspace]);
 
@@ -186,9 +209,11 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
     availableGlyphs: [...availableGlyphs],
     filteredGlyphs,
     categories: categoryCatalog.categories,
+    categoryFilters,
+    visibleCategoryFilters,
+    expandedCategories,
+    setExpandedCategories,
     query,
-    selectedCategory,
-    selectedSubCategoryKey,
     setQuery,
     atlasSource: catalog.atlas,
     observeAtlasInvalidation,
@@ -201,23 +226,22 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
     openedGlyph,
     openGlyph,
     createQuickGlyph,
-    selectAll: () => {
-      setSelectedCategory(null);
-      setSelectedSubCategoryKey(null);
+    selectAll: () => setCategoryFilters([]),
+    selectCategory: (category, mode) => {
+      selectCategoryFilter({ category, subCategoryKey: null }, mode);
     },
-    selectCategory: (category) => {
-      setSelectedCategory(category);
-      setSelectedSubCategoryKey(null);
-    },
-    selectSubCategory: (category, subCategoryKey) => {
-      setSelectedCategory(category);
-      setSelectedSubCategoryKey(subCategoryKey);
+    selectSubCategory: (category, subCategoryKey, mode) => {
+      selectCategoryFilter({ category, subCategoryKey }, mode);
     },
   };
 };
 
 function glyphId(glyph: GlyphCatalogItem) {
   return glyph.id;
+}
+
+function sameCategoryFilter(left: GlyphCategoryFilter, right: GlyphCategoryFilter) {
+  return left.category === right.category && left.subCategoryKey === right.subCategoryKey;
 }
 
 function glyphIdFromPath(pathname: string): GlyphId | null {

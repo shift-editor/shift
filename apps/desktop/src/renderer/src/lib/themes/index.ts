@@ -284,12 +284,15 @@ function colorThemeVariables(theme: ColorTheme): Record<string, string> {
   const secondary = dark ? withAlpha(palette.base05, 0.78) : palette.base04;
   const muted = dark ? withAlpha(palette.base05, 0.6) : palette.base03;
   const handleOverlay = dark ? palette.base07 : palette.base00;
+  const surface = dark ? palette.base01 : palette.base00;
+  const chrome =
+    palette.base02 === surface ? withAlpha(palette.base05, dark ? 0.08 : 0.12) : palette.base02;
 
   return {
     "--color-background": palette.base00,
-    "--color-surface": dark ? palette.base01 : palette.base00,
+    "--color-surface": surface,
     "--color-surface-muted": palette.base01,
-    "--color-chrome": palette.base02,
+    "--color-chrome": chrome,
     "--color-hover": dark ? withAlpha(palette.base05, 0.16) : palette.base02,
     "--color-surface-hover": dark ? withAlpha(palette.base05, 0.12) : palette.base01,
     "--color-surface-inverse": palette.base07,
@@ -324,7 +327,7 @@ function colorThemeVariables(theme: ColorTheme): Record<string, string> {
     "--editor-glyph-editable-fill": withAlpha(glyphForeground, 0.14),
     "--editor-glyph-stroke": glyphForeground,
     "--editor-component-fill": withAlpha(palette.base04, 0.38),
-    "--editor-control-line-color": withAlpha(palette.base03, 0.72),
+    "--editor-control-line-color": muted,
     "--editor-handle-fill": palette.base00,
     "--editor-handle-interpolated-stroke": withAlpha(glyphForeground, 0.65),
     "--editor-handle-primary-stroke": palette.base0D,
@@ -338,6 +341,8 @@ function colorThemeVariables(theme: ColorTheme): Record<string, string> {
     "--editor-segment-hover-color": palette.base0D,
     "--editor-segment-selected-color": palette.base0D,
     "--editor-preview-color": palette.base0D,
+    "--editor-variation-outline-color": withAlpha(palette.base0D, 0.45),
+    "--editor-read-only-lock-color": palette.base05,
     "--editor-pen-ready-fill": palette.base00,
     "--editor-pen-ready-stroke": palette.base0D,
     "--editor-debug-tight-bounds": palette.base08,

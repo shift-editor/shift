@@ -19,7 +19,7 @@ export const VariationPanel = () => {
   useGlyphOutlineTargets(glyphNodeId, outlines.targets);
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2 pt-2">
       <SourcesSection defaultOpen outlineControls={outlines.sourceControls} />
       <Separator />
       <InstancesSection defaultOpen outlineControls={outlines.instanceControls} />

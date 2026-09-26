@@ -27,8 +27,6 @@ import { emptyExternalAxisLocation, externalAxisLocationFromLocation } from "../
 import { GlyphOutlines } from "./GlyphOutlines";
 
 const EMPTY_OUTLINE_LOCATION = emptyExternalAxisLocation();
-const GLYPH_OUTLINE_COLOR = "rgba(139, 111, 207, 0.45)";
-const GLYPH_OUTLINE_WIDTH_PX = 1;
 
 export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
   readonly kind: GlyphNode["kind"] = "glyph";
@@ -274,7 +272,8 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
       const outline = this.#outlineViews.get(target);
       const view = glyph.renderModelAt(outline.externalLocationCell, outline.activeSourceIdCell);
       view.trackShape();
-      ctx.canvas.strokePath(view.drawPath, GLYPH_OUTLINE_COLOR, GLYPH_OUTLINE_WIDTH_PX);
+      const { color, widthPx } = ctx.canvas.theme.variationOutline;
+      ctx.canvas.strokePath(view.drawPath, color, widthPx);
     }
   }
 
