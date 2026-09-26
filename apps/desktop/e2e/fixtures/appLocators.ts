@@ -67,17 +67,20 @@ export async function firstAxisSlider(page: Page) {
 }
 
 /**
- * Waits until the catalog has laid out and painted its first cell.
+ * Waits until the catalog has laid out its first cell and its preview frame has settled.
  *
  * @remarks
- * Catalog cells have no DOM identity, so coordinate clicks before the Grid is complete can
- * land on an empty surface and never navigate.
+ * Catalog cells have no DOM identity, so coordinate clicks before the Grid settles can land on
+ * an empty surface and never navigate. `Unavailable` is settled too: cells remain laid out and
+ * clickable when a host cannot paint previews, as on software-rendered platform runners.
  */
 async function waitForCatalogCells(page: Page): Promise<void> {
   await expect(glyphCatalogSurface(page)).toHaveAttribute("data-first-glyph-id", /.+/);
-  await expect(glyphCatalogRenderer(page)).toHaveAttribute("data-grid-readiness", "Complete", {
-    timeout: 30_000,
-  });
+  await expect(glyphCatalogRenderer(page)).toHaveAttribute(
+    "data-grid-readiness",
+    /^(Complete|Unavailable)$/,
+    { timeout: 30_000 },
+  );
 }
 
 /** Keeps the catalog preview coordinate contract in one place. */
