@@ -69,14 +69,7 @@ export const ObjectsPanel = () => {
   );
 
   const { selectItem: selectObject } = useListSelection(visibleObjectIds, selection.ids, (ids) => {
-    const capture = editor.history.begin("Select object");
-    try {
-      editor.selection.select(ids);
-      capture.finish();
-    } catch (error) {
-      capture.cancel();
-      throw error;
-    }
+    editor.history.capture("Select object", () => editor.selection.select(ids));
   });
 
   const setObjectOpen = useCallback((id: SelectableId, open: boolean) => {

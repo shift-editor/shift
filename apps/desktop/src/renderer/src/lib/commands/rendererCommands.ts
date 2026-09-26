@@ -54,22 +54,15 @@ export async function runRendererCommand(editor: Editor, id: EditorCommandId): P
       return editor.deleteSelection();
 
     case "edit.duplicate": {
-      const capture = editor.history.begin("Duplicate");
-      try {
-        const inserted = editor.duplicateSelection();
-        if (inserted.length === 0) {
-          capture.cancel();
-          return false;
-        }
+      const inserted = editor.history.capture("Duplicate", () => {
+        const ids = editor.duplicateSelection();
+        if (ids.length > 0) editor.selection.select(ids);
+        return ids;
+      });
+      if (inserted.length === 0) return false;
 
-        editor.selection.select(inserted);
-        capture.finish();
-        await editor.font.editCoordinator.settled();
-        return true;
-      } catch (error) {
-        capture.cancel();
-        throw error;
-      }
+      await editor.font.editCoordinator.settled();
+      return true;
     }
 
     case "edit.selectAll": {
@@ -80,9 +73,7 @@ export async function runRendererCommand(editor: Editor, id: EditorCommandId): P
     case "edit.deselect": {
       if (!editor.selection.hasSelection()) return false;
 
-      const capture = editor.history.begin("Deselect");
-      editor.selection.clear();
-      capture.finish();
+      editor.history.capture("Deselect", () => editor.selection.clear());
       return true;
     }
 

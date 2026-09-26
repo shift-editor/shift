@@ -85,6 +85,54 @@ export class EditorHistory {
     return capture;
   }
 
+  /**
+   * Runs one synchronous editor action and records its completed effects.
+   *
+   * @remarks
+   * Cancels the capture before rethrowing when the body fails. Successful work
+   * with no effects creates no history entry.
+   *
+   * @param label - Human-readable action name retained with the history entry.
+   * @param body - Synchronous action that owns the capture's complete lifetime.
+   * @returns the body's result.
+   * @throws {Error} when another capture is open or the body throws.
+   */
+  capture<T>(label: string, body: () => T): T {
+    const capture = this.begin(label);
+    try {
+      const result = body();
+      capture.finish();
+      return result;
+    } catch (error) {
+      capture.cancel();
+      throw error;
+    }
+  }
+
+  /**
+   * Runs one asynchronous editor action and records its completed effects.
+   *
+   * @remarks
+   * The capture remains open until the returned promise settles. A rejected
+   * body cancels the capture before propagating its failure.
+   *
+   * @param label - Human-readable action name retained with the history entry.
+   * @param body - Asynchronous action that owns the capture's complete lifetime.
+   * @returns the body's fulfilled result.
+   * @throws {Error} when another capture is open or the body rejects.
+   */
+  async captureAsync<T>(label: string, body: () => Promise<T>): Promise<T> {
+    const capture = this.begin(label);
+    try {
+      const result = await body();
+      capture.finish();
+      return result;
+    } catch (error) {
+      capture.cancel();
+      throw error;
+    }
+  }
+
   /** Reverses the latest editor action after all pending workspace edits settle. */
   async undo(): Promise<boolean> {
     this.#assertNoCapture("undo");

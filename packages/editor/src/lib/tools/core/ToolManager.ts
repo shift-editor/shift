@@ -334,17 +334,11 @@ export class ToolManager implements ToolSwitchHandler {
     for (const event of events) {
       switch (event.type) {
         case "click":
-        case "doubleClick": {
-          const capture = this.editor.history.begin("Pointer selection");
-          try {
+        case "doubleClick":
+          this.editor.history.capture("Pointer selection", () => {
             this.activeTool?.handleEvent(this.withPointerTarget(event));
-            capture.finish();
-          } catch (error) {
-            capture.cancel();
-            throw error;
-          }
+          });
           break;
-        }
         case "dragStart":
           this.#pointerCapture = this.editor.history.begin("Pointer drag");
           try {

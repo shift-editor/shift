@@ -1007,9 +1007,9 @@ export class Editor {
     const layer = this.#fontStore.glyphForId(node.glyphId)?.layerForSource(sourceId);
     if (!layer) return;
 
-    const capture = this.history.begin("Select all");
-    this.selection.select(layer.allPoints.map((point) => point.id));
-    capture.finish();
+    this.history.capture("Select all", () => {
+      this.selection.select(layer.allPoints.map((point) => point.id));
+    });
   }
 
   /**
@@ -1648,19 +1648,14 @@ export class Editor {
     const written = await this.#clipboard.write(content);
     if (!written) return false;
 
-    const capture = this.history.begin("Cut");
-    try {
+    this.history.capture("Cut", () => {
       this.transaction("Cut", () => {
         selection.layer.removePoints(pointIds);
       });
       this.selection.clear();
-      capture.finish();
-      await this.font.editCoordinator.settled();
-      return true;
-    } catch (error) {
-      capture.cancel();
-      throw error;
-    }
+    });
+    await this.font.editCoordinator.settled();
+    return true;
   }
 
   public async deleteSelection(mode: DeleteMode = "fit"): Promise<boolean> {
@@ -1670,22 +1665,17 @@ export class Editor {
       return false;
     }
 
-    const capture = this.history.begin("Delete");
-    try {
-      if (!selection.layer.deletePoints(pointIds, mode)) {
-        capture.cancel();
-        return false;
-      }
+    const deleted = this.history.capture("Delete", () => {
+      if (!selection.layer.deletePoints(pointIds, mode)) return false;
 
       this.selection.clear();
       this.hover.clear();
-      capture.finish();
-      await this.font.editCoordinator.settled();
       return true;
-    } catch (error) {
-      capture.cancel();
-      throw error;
-    }
+    });
+    if (!deleted) return false;
+
+    await this.font.editCoordinator.settled();
+    return true;
   }
 
   /**
@@ -1698,25 +1688,20 @@ export class Editor {
 
     switch (result.kind) {
       case "content": {
-        const capture = this.history.begin("Paste");
-        try {
-          const inserted = this.insertContent(result.content, {
+        const inserted = this.history.capture("Paste", () => {
+          const ids = this.insertContent(result.content, {
             offset: this.#clipboard.nextPasteOffset(),
           });
-          if (!inserted) {
-            capture.cancel();
-            return false;
-          }
+          if (!ids) return false;
 
-          this.selection.select(inserted);
+          this.selection.select(ids);
           this.setActiveTool("select");
-          capture.finish();
-          await this.font.editCoordinator.settled();
           return true;
-        } catch (error) {
-          capture.cancel();
-          throw error;
-        }
+        });
+        if (!inserted) return false;
+
+        await this.font.editCoordinator.settled();
+        return true;
       }
 
       case "empty":
@@ -1749,8 +1734,7 @@ export class Editor {
     const layer = this.#fontStore.glyphForId(node.glyphId)?.layerForSource(sourceId);
     if (!layer || !layer.contour(contourIdA) || !layer.contour(contourIdB)) return;
 
-    const capture = this.history.begin("Boolean operation");
-    try {
+    await this.history.captureAsync("Boolean operation", async () => {
       const previousContourIds = new Set(layer.contours.map((contour) => contour.id));
       layer.applyBooleanOp(contourIdA, contourIdB, operation);
       await this.font.editCoordinator.settled();
@@ -1759,11 +1743,7 @@ export class Editor {
         .filter((contour) => !previousContourIds.has(contour.id))
         .map((contour) => contour.id);
       this.selection.select(resultContourIds);
-      capture.finish();
-    } catch (error) {
-      capture.cancel();
-      throw error;
-    }
+    });
   }
 
   public duplicateSelection(): PointId[] {

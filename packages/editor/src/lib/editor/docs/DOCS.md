@@ -157,7 +157,7 @@ A plain source-row click activates that source and collapses the editing set. Sh
 
 ### Unified action history
 
-`HistoryCapture` retains the immutable editor-store map at action start and compares it with the final map when `finish()` is called. The diff visits the union of record IDs, uses semantic value equality to drop net-zero writes, and stores complete records rather than field-specific commands. Replay batches non-session records first and selection/editing records second, after any workspace undo or redo has restored document geometry.
+`HistoryCapture` retains the immutable editor-store map at action start and compares it with the final map when `finish()` is called. One-shot actions use `EditorHistory.capture()` or `captureAsync()`, which finish successful work and cancel failed work before rethrowing. Direct `begin()` handles only actions whose lifetime spans separate events, such as pointer drag start through end or cancellation. The diff visits the union of record IDs, uses semantic value equality to drop net-zero writes, and stores complete records rather than field-specific commands. Replay batches non-session records first and selection/editing records second, after any workspace undo or redo has restored document geometry.
 
 `WorkspaceEditCoordinator.onEdit()` publishes renderer-local `accepted`, `committed`, and `failed` events keyed by `PendingEditId`. Accepted edits attach to the open capture or create a workspace-only entry. Undo and redo wait for every pending operation. A failed apply is removed after workspace resynchronization; later changes to the same editor record have their first `before` value rebased, so failure rollback cannot overwrite a newer user action or shift the Rust undo stack.
 

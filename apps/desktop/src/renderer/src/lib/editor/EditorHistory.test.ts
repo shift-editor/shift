@@ -31,6 +31,53 @@ describe("editor actions share one undo timeline", () => {
     expect(editor.selection.ids).toEqual([firstId]);
   });
 
+  it("captures a synchronous action and returns its result", async () => {
+    const result = editor.history.capture("Select", () => {
+      editor.selection.select([firstId]);
+      return firstId;
+    });
+
+    expect(result).toBe(firstId);
+    await editor.undo();
+    expect(editor.selection.ids).toEqual([]);
+  });
+
+  it("cancels a synchronous action that throws", () => {
+    expect(() =>
+      editor.history.capture("Rejected selection", () => {
+        editor.selection.select([firstId]);
+        throw new Error("selection failed");
+      }),
+    ).toThrow("selection failed");
+
+    expect(editor.selection.ids).toEqual([]);
+    expect(editor.history.capturing).toBe(false);
+  });
+
+  it("captures an asynchronous action and returns its result", async () => {
+    const result = await editor.history.captureAsync("Select", async () => {
+      await Promise.resolve();
+      editor.selection.select([firstId]);
+      return firstId;
+    });
+
+    expect(result).toBe(firstId);
+    await editor.undo();
+    expect(editor.selection.ids).toEqual([]);
+  });
+
+  it("cancels an asynchronous action that rejects", async () => {
+    const action = editor.history.captureAsync("Rejected selection", async () => {
+      editor.selection.select([firstId]);
+      await Promise.resolve();
+      throw new Error("selection failed");
+    });
+
+    await expect(action).rejects.toThrow("selection failed");
+    expect(editor.selection.ids).toEqual([]);
+    expect(editor.history.capturing).toBe(false);
+  });
+
   it("undoes Shift-click selection independently", async () => {
     await editor.clickGlyphLocal(100, 100);
     await editor.clickGlyphLocal(200, 200, { shiftKey: true });
