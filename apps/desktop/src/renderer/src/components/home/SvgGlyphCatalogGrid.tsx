@@ -20,6 +20,7 @@ export function SvgGlyphCatalogGrid({
   onPendingGlyphName,
   onFirstFrame,
   onUnavailable,
+  glyphActionLabel,
 }: SvgGlyphCatalogGridProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const editingInputRef = useRef<HTMLInputElement>(null);
@@ -118,7 +119,7 @@ export function SvgGlyphCatalogGrid({
               }}
             >
               <Button
-                aria-label={`Open ${cell.glyph.displayName}`}
+                aria-label={glyphActionLabel?.(cell.glyph) ?? `Open ${cell.glyph.displayName}`}
                 variant="ghost"
                 className="flex w-full items-center justify-center overflow-hidden p-0 hover:bg-hover"
                 style={{ height: cell.previewRect.height }}

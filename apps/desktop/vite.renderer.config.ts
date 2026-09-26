@@ -54,8 +54,16 @@ export default defineConfig(async () => {
       },
     },
     optimizeDeps: {
-      include: ["use-sync-external-store/shim", "use-sync-external-store/shim/with-selector"],
+      // Serve editor workspace source directly so API changes participate in HMR instead of
+      // remaining trapped in Vite's dependency cache. Its CommonJS regl dependency still needs
+      // prebundling to provide the default export expected by the editor's rendering modules.
+      include: [
+        "regl",
+        "use-sync-external-store/shim",
+        "use-sync-external-store/shim/with-selector",
+      ],
       exclude: [
+        "@shift/editor",
         "@shift/ui",
         "@shift/geo",
         "@shift/types",

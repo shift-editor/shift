@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import type { ElectronApplication, Page } from "@playwright/test";
+import type { GlyphId } from "@shift/types";
 import {
   documentTest as launcherTest,
   documentWorkspaceTest as authoredTest,
@@ -74,7 +75,10 @@ launcherTest("application menu exposes native shell actions", async ({ electronA
         items.find((item) => item.label === "View")?.submenu?.items.map((item) => item.label) ?? [],
       fileIds: submenuIds("File"),
       editIds: submenuIds("Edit"),
+      glyphIds: submenuIds("Glyph"),
       settingsInstalled: Menu.getApplicationMenu()?.getMenuItemById("app.showSettings") !== null,
+      addComponentAccelerator:
+        Menu.getApplicationMenu()?.getMenuItemById("glyph.addComponent")?.accelerator,
     };
   });
 
@@ -99,6 +103,8 @@ launcherTest("application menu exposes native shell actions", async ({ electronA
   expect(menu.settingsInstalled).toBe(true);
   expect(menu.fileIds).not.toContain("app.showSettings");
   expect(menu.editIds.includes("app.showSettings")).toBe(menu.platform !== "darwin");
+  expect(menu.glyphIds).toContain("glyph.addComponent");
+  expect(menu.addComponentAccelerator).toBe("CmdOrCtrl+Shift+C");
   expect(menu.viewLabels.includes("Developer")).toBe(!menu.packaged && menu.platform === "darwin");
 });
 
@@ -175,6 +181,355 @@ authoredTest("Settings opens the active font configuration", async ({ electronAp
   await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Font", exact: true })).toBeVisible();
 });
+
+authoredTest(
+  "Add Component picks, selects, deletes, and restores a glyph reference",
+  async ({ editor, page }) => {
+    await openFirstAuthoredGlyph(editor);
+
+    const candidate = await page.evaluate(async () => {
+      const session = window.shiftSession;
+      const editor = window.shift?.editor;
+      const glyphNodes = editor?.scene.nodesOfKind("glyph") ?? [];
+      const currentGlyphId = glyphNodes.length === 1 ? glyphNodes[0]?.glyphId : null;
+      if (!session || !editor || !currentGlyphId) throw new Error("Expected active glyph editor");
+
+      const recordsById = new Map(session.font.glyphRecords().map((record) => [record.id, record]));
+      const referencesCurrentGlyph = (candidateId: GlyphId): boolean => {
+        const pending = [candidateId];
+        const visited = new Set<GlyphId>();
+
+        while (pending.length > 0) {
+          const glyphId = pending.pop();
+          if (!glyphId || visited.has(glyphId)) continue;
+          if (glyphId === currentGlyphId) return true;
+
+          visited.add(glyphId);
+          pending.push(...(recordsById.get(glyphId)?.componentBaseGlyphIds ?? []));
+        }
+
+        return false;
+      };
+      let item = null;
+      for (const candidate of session.catalog.glyphsCell.peek()) {
+        if (candidate.id === currentGlyphId || referencesCurrentGlyph(candidate.id)) continue;
+
+        const candidateGlyph = await editor.font.loadGlyph(candidate.id);
+        if (candidateGlyph.geometryAt(editor.externalLocation).contours.length === 0) continue;
+
+        item = candidate;
+        break;
+      }
+      if (!item) throw new Error("Expected eligible component glyph with visible contours");
+
+      const activeSourceId = editor.activeSourceId;
+      const glyph = editor.glyphForId(currentGlyphId);
+      if (!activeSourceId || !glyph) throw new Error("Expected active glyph layer");
+
+      return {
+        id: item.id,
+        name: item.name,
+        displayName: item.displayName,
+        initialCount: glyph.layerForSource(activeSourceId)?.components.length ?? 0,
+      };
+    });
+
+    await editor.press(process.platform === "darwin" ? "Meta+Shift+C" : "Control+Shift+C");
+    const picker = page.getByRole("dialog", { name: "Add Component" });
+    await expect(picker).toBeVisible();
+    const search = picker.getByRole("textbox", { name: "Search components" });
+    await search.fill(candidate.name);
+    await expect(
+      picker.getByRole("button", { name: `Add ${candidate.displayName} as a component` }),
+    ).toBeVisible();
+    await search.press("Enter");
+
+    await expect(picker).not.toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const editor = window.shift!.editor;
+          const [node] = editor.scene.nodesOfKind("glyph");
+          return node
+            ? editor.glyphForId(node.glyphId)?.layerForSource(editor.activeSourceId!)?.components
+                .length
+            : undefined;
+        }),
+      )
+      .toBe(candidate.initialCount + 1);
+    await expect
+      .poll(() =>
+        page.evaluate((baseGlyphId) => {
+          const [object] = window.shift!.editor.objects(window.shift!.editor.selection.ids);
+          return object?.kind === "component" && object.component.glyphId === baseGlyphId;
+        }, candidate.id),
+      )
+      .toBe(true);
+
+    const contextTarget = await page.evaluate(() => {
+      const editor = window.shift!.editor;
+      const [componentId] = editor.selection.ids;
+      const object = componentId ? editor.object(componentId) : null;
+      const bounds = object?.kind === "component" ? object.bounds() : null;
+      const canvas = document.querySelector<HTMLCanvasElement>("#interactive-canvas");
+      if (!componentId || !bounds || !canvas) throw new Error("Expected selected component bounds");
+
+      const canvasBounds = canvas.getBoundingClientRect();
+      for (let row = 1; row < 20; row += 1) {
+        for (let column = 1; column < 20; column += 1) {
+          const scene = {
+            x: bounds.left + (bounds.width * column) / 20,
+            y: bounds.top + (bounds.height * row) / 20,
+          };
+          const target = editor.getPointerTarget(scene);
+          if (target.kind !== "component" || target.id !== componentId) continue;
+
+          const screen = editor.projectSceneToScreen(scene);
+          return {
+            componentId,
+            x: canvasBounds.left + screen.x,
+            y: canvasBounds.top + screen.y,
+          };
+        }
+      }
+
+      throw new Error("Expected a hittable component position");
+    });
+    await page.evaluate(() => window.shift!.editor.selection.clear());
+    await page.mouse.click(contextTarget.x, contextTarget.y, { button: "right" });
+    await expect
+      .poll(() => page.evaluate(() => window.shift!.editor.selection.ids))
+      .toEqual([contextTarget.componentId]);
+
+    const contextMenuDelete = page.getByRole("menuitem", { name: "Delete", exact: true });
+    await expect(contextMenuDelete).toBeVisible();
+    await contextMenuDelete.click();
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const editor = window.shift!.editor;
+          const [node] = editor.scene.nodesOfKind("glyph");
+          return node
+            ? editor.glyphForId(node.glyphId)?.layerForSource(editor.activeSourceId!)?.components
+                .length
+            : undefined;
+        }),
+      )
+      .toBe(candidate.initialCount);
+
+    await editor.undo();
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const editor = window.shift!.editor;
+          const [node] = editor.scene.nodesOfKind("glyph");
+          return node
+            ? editor.glyphForId(node.glyphId)?.layerForSource(editor.activeSourceId!)?.components
+                .length
+            : undefined;
+        }),
+      )
+      .toBe(candidate.initialCount + 1);
+
+    await page.evaluate(
+      (componentId) => window.shift!.editor.selection.select([componentId]),
+      contextTarget.componentId,
+    );
+    await editor.press("Delete");
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const editor = window.shift!.editor;
+          const [node] = editor.scene.nodesOfKind("glyph");
+          return node
+            ? editor.glyphForId(node.glyphId)?.layerForSource(editor.activeSourceId!)?.components
+                .length
+            : undefined;
+        }),
+      )
+      .toBe(candidate.initialCount);
+
+    await editor.undo();
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const editor = window.shift!.editor;
+          const [node] = editor.scene.nodesOfKind("glyph");
+          return node
+            ? editor.glyphForId(node.glyphId)?.layerForSource(editor.activeSourceId!)?.components
+                .length
+            : undefined;
+        }),
+      )
+      .toBe(candidate.initialCount + 1);
+
+    const componentRow = page.getByTestId(`object-${contextTarget.componentId}`);
+    await expect(componentRow).toBeVisible();
+    await page.evaluate(() => window.shift!.editor.selection.clear());
+    await componentRow.click({ button: "right" });
+    await expect
+      .poll(() => page.evaluate(() => window.shift!.editor.selection.ids))
+      .toEqual([contextTarget.componentId]);
+    await expect(contextMenuDelete).toBeVisible();
+    await contextMenuDelete.click();
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const editor = window.shift!.editor;
+          const [node] = editor.scene.nodesOfKind("glyph");
+          return node
+            ? editor.glyphForId(node.glyphId)?.layerForSource(editor.activeSourceId!)?.components
+                .length
+            : undefined;
+        }),
+      )
+      .toBe(candidate.initialCount);
+
+    await editor.undo();
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const editor = window.shift!.editor;
+          const [node] = editor.scene.nodesOfKind("glyph");
+          return node
+            ? editor.glyphForId(node.glyphId)?.layerForSource(editor.activeSourceId!)?.components
+                .length
+            : undefined;
+        }),
+      )
+      .toBe(candidate.initialCount + 1);
+
+    await componentRow.click();
+    await componentRow.press("Backspace");
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const editor = window.shift!.editor;
+          const [node] = editor.scene.nodesOfKind("glyph");
+          return node
+            ? editor.glyphForId(node.glyphId)?.layerForSource(editor.activeSourceId!)?.components
+                .length
+            : undefined;
+        }),
+      )
+      .toBe(candidate.initialCount);
+
+    await editor.undo();
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const editor = window.shift!.editor;
+          const [node] = editor.scene.nodesOfKind("glyph");
+          return node
+            ? editor.glyphForId(node.glyphId)?.layerForSource(editor.activeSourceId!)?.components
+                .length
+            : undefined;
+        }),
+      )
+      .toBe(candidate.initialCount + 1);
+  },
+);
+
+authoredTest(
+  "Add Component creates a missing glyph after confirmation",
+  async ({ electronApp, editor, page }) => {
+    await openFirstAuthoredGlyph(editor);
+
+    const candidate = await page.evaluate(() => {
+      const session = window.shiftSession;
+      const editor = window.shift?.editor;
+      const [node] = editor?.scene.nodesOfKind("glyph") ?? [];
+      const activeSourceId = editor?.activeSourceId;
+      if (!session || !editor || !node || !activeSourceId) {
+        throw new Error("Expected active glyph editor");
+      }
+
+      const choices = [
+        { name: "aacute", unicode: 0x00e1 },
+        { name: "arrowleft", unicode: 0x2190 },
+        { name: "Omega", unicode: 0x03a9 },
+      ];
+      const entries = session.font.glyphEntries();
+      const candidate = choices.find(
+        ({ name, unicode }) =>
+          !entries.some(
+            (glyph) =>
+              glyph.name.toLowerCase() === name.toLowerCase() || glyph.unicodes.includes(unicode),
+          ),
+      );
+      if (!candidate) throw new Error("Expected a missing Unicode glyph");
+
+      const glyph = editor.glyphForId(node.glyphId);
+      return {
+        ...candidate,
+        initialCount: glyph?.layerForSource(activeSourceId)?.components.length ?? 0,
+      };
+    });
+
+    await clickApplicationMenuItem(page, electronApp, "glyph.addComponent");
+    const picker = page.getByRole("dialog", { name: "Add Component" });
+    const search = picker.getByRole("textbox", { name: "Search components" });
+    await search.fill(candidate.name);
+    await expect
+      .poll(() =>
+        picker
+          .getByRole("button")
+          .evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-label"))),
+      )
+      .toContain(`Create and add ${candidate.name} as a component`);
+    await search.press("Enter");
+
+    const confirmation = page.getByRole("dialog", { name: `Create ${candidate.name}?` });
+    await expect(confirmation).toBeVisible();
+    await confirmation.getByRole("button", { name: "Create", exact: true }).click();
+
+    await expect
+      .poll(() =>
+        page.evaluate(({ name, initialCount }) => {
+          const session = window.shiftSession!;
+          const editor = window.shift!.editor;
+          const record = session.font.glyphEntries().find((glyph) => glyph.name === name);
+          const [node] = editor.scene.nodesOfKind("glyph");
+          const components = node
+            ? (editor.glyphForId(node.glyphId)?.layerForSource(editor.activeSourceId!)
+                ?.components ?? [])
+            : [];
+
+          return (
+            record !== undefined &&
+            components.length === initialCount + 1 &&
+            components.some(({ baseGlyphId }) => baseGlyphId === record.id)
+          );
+        }, candidate),
+      )
+      .toBe(true);
+
+    await clickApplicationMenuItem(page, electronApp, "edit.undo");
+    await expect
+      .poll(() =>
+        page.evaluate(({ name, initialCount }) => {
+          const session = window.shiftSession!;
+          const editor = window.shift!.editor;
+          const [node] = editor.scene.nodesOfKind("glyph");
+          const componentCount = node
+            ? (editor.glyphForId(node.glyphId)?.layerForSource(editor.activeSourceId!)?.components
+                .length ?? 0)
+            : 0;
+
+          return {
+            componentCount,
+            glyphExists: session.font.glyphEntries().some((glyph) => glyph.name === name),
+            initialCount,
+          };
+        }, candidate),
+      )
+      .toEqual({
+        componentCount: candidate.initialCount,
+        glyphExists: false,
+        initialCount: candidate.initialCount,
+      });
+  },
+);
 
 authoredTest(
   "Settings rounds mapping display without losing editing precision",

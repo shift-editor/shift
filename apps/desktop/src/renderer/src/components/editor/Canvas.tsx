@@ -7,15 +7,13 @@ import { CanvasSurface } from "@shift/editor/rendering";
 import { useDebugSafe } from "@/context/DebugContext";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { WheelGesture, zoomMultiplierFromWheel } from "@shift/editor/transform";
-import type { CanvasProps } from "@shift/editor/types";
-import { objectIsKindOf } from "@shift/editor/types";
 import { InteractiveScene } from "./InteractiveScene";
 import { StaticScene } from "./StaticScene";
 import { DebugPanel } from "../debug/DebugPanel";
 import { TextInput } from "../text/HiddenTextInput";
 import { Vec2 } from "@shift/geo";
 
-export const Canvas: FC<CanvasProps> = ({ showContextMenu }) => {
+export const Canvas: FC = () => {
   const editor = useEditor();
   const debug = useDebugSafe();
 
@@ -69,33 +67,11 @@ export const Canvas: FC<CanvasProps> = ({ showContextMenu }) => {
       );
     };
 
-    const handleContextMenu = async (event: MouseEvent) => {
-      event.preventDefault();
-      if (!showContextMenu) return;
-
-      try {
-        const [id] = editor.selection.ids;
-        const object = id ? editor.object(id) : null;
-        const makeFirstPoint =
-          editor.sessionMode !== "preview" &&
-          editor.selection.ids.length === 1 &&
-          objectIsKindOf(object, "point") &&
-          object.layer?.sourceId === editor.activeSourceId &&
-          object.geometry.point(object.pointId)?.isOnCurve === true &&
-          object.geometry.contour(object.contourId)?.closed === true;
-        await showContextMenu(makeFirstPoint);
-      } catch (error) {
-        console.error("canvas context menu failed", error);
-      }
-    };
-
     element.addEventListener("wheel", handleWheel, { passive: false });
-    element.addEventListener("contextmenu", handleContextMenu);
     return () => {
       element.removeEventListener("wheel", handleWheel);
-      element.removeEventListener("contextmenu", handleContextMenu);
     };
-  }, [editor, showContextMenu]);
+  }, [editor]);
 
   return (
     <div

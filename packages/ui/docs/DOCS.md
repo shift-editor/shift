@@ -1,6 +1,6 @@
 # Shared UI (`@shift/ui`)
 
-<!-- reviewed: 2026-09-05 review-every: 90d -->
+<!-- reviewed: 2026-09-26 review-every: 90d -->
 
 Shared UI component library for Shift, wrapping Base UI primitives with Tailwind styling and Shift design tokens.
 
@@ -25,6 +25,7 @@ packages/ui/
       button/Button.tsx    -- Button with variant/size/isActive/icon props
       checkbox/            -- Checkbox and indicator
       collapsible/         -- Collapsible, CollapsibleTrigger, CollapsiblePanel, CollapsibleChevron
+      context-menu/        -- Right-click trigger, portal, positioner, popup, item, and separator
       dialog/              -- Dialog, DialogBackdrop, DialogPortal, DialogPopup, DialogTitle, DialogClose
       field/               -- Field root, label, control, description, and error
       input/Input.tsx      -- Input with label/icon positioning and select-all shortcut
@@ -67,7 +68,7 @@ Each component follows the same pattern: import the Base UI primitive, wrap it i
 
 **Input** adds label and icon positioning logic (left/right for each) on top of the Base UI input, adjusting padding classes dynamically. Its visual `size` replaces the native numeric HTML size attribute: `compact` is the dense 24px default, `sm` is 28px, and `md` is 32px. Its variants are `filled` for the standard input background and `plain` for controls that match the containing surface.
 
-**MenuItem** provides default, danger, and outlined visual variants. Dialog and popover close primitives remain unstyled by default so they can render text buttons, while their `icon` variant owns compact close-button styling.
+**MenuItem** and **ContextMenuItem** provide default, danger, and outlined visual variants. Menu and context-menu popups and items share the same styling source so kebab and right-click menus remain visually identical. Dialog and popover close primitives remain unstyled by default so they can render text buttons, while their `icon` variant owns compact close-button styling.
 
 **Field**, **Checkbox**, **NumberField**, **Select**, **Tabs**, and **Textarea** are composable primitive families for settings and inspector forms. Validation and application state remain in the consumer; these wrappers only provide accessible structure, behavior, and Shift styling. `FieldLabel` uses `tone` for primary or secondary emphasis. `FieldControl`, `Textarea`, `SelectTrigger`, and `NumberFieldGroup` use `filled` for standard control backgrounds and `plain` for controls that match the application background. `Textarea` renders a native textarea through Base UI Field's `Control` slot so it participates in the same label, validation, and disabled-state contract. `Slider` forwards its `aria-label` to Base UI's interactive thumb rather than leaving the accessible name on the non-interactive root. `Progress` composes Base UI's root, track, and indicator while allowing a consumer to override each visual layer.
 

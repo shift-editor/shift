@@ -1,6 +1,6 @@
 # Main
 
-<!-- reviewed: 2026-09-05 -->
+<!-- reviewed: 2026-09-26 -->
 
 Electron main process: app startup, windows, menus, document dialogs, and workspace session ownership.
 
@@ -98,11 +98,11 @@ On macOS, closing the last window leaves Shift running. A later Dock activation 
 
 ### Application Commands
 
-Native menu items carry the shared `CommandId`, label, accelerator, and current `CommandRegistry` capability. `ApplicationMenu.updateCommandStates()` refreshes enabled state when window focus or session ownership changes and after a command settles. `app.showAbout` opens or focuses the singleton fixed-size custom About window; it displays the embedded `SHIFT_BUILD_COMMIT`, links that identifier to GitHub, and opens renderer-declared HTTPS destinations through Electron's shell boundary. Save and Save As are enabled for authored documents and convertible previews; Export and Edit commands require an authored document.
+Native menu items combine the shared `CommandId` and `commandShortcuts` chord with the label and current capability from `CommandRegistry`. `toElectronAccelerator` converts that platform-neutral chord for Electron, while renderer keyboard routing consumes the same chord when web content has focus. `ApplicationMenu.updateCommandStates()` refreshes enabled state when window focus or session ownership changes and after a command settles. `app.showAbout` opens or focuses the singleton fixed-size custom About window; it displays the embedded `SHIFT_BUILD_COMMIT`, links that identifier to GitHub, and opens renderer-declared HTTPS destinations through Electron's shell boundary. Save and Save As are enabled for authored documents and convertible previews; Export and Edit commands require an authored document.
 
 Edit-menu accelerators and clicks send `RendererCommandId` operations to the active authored renderer instead of using Electron's DOM-only roles. The renderer preserves conventional behavior for a focused text input; otherwise Undo, Redo, Cut, Copy, Paste, Delete, and Select All operate on Shift's canvas editor and canonical workspace history. Commands may remain enabled within an authored document when its current selection, clipboard, or history makes a particular invocation a safe no-op.
 
-The View menu reserves conventional Zoom In and Zoom Out labels and shortcuts for the glyph canvas. Browser-window scaling is exposed separately as Interface Size with Alt-modified shortcuts, preventing native accelerators from intercepting canvas zoom. The renderer requests the native canvas context menu through `menu.showCanvasContextMenu`; main resolves the sender's authored workspace and binds Cut, Copy, Paste, Duplicate, Delete, Select All, Deselect, Reverse Selected Contour, and Make First Point to that same sender window. The renderer supplies Make First Point eligibility for exactly one selected on-curve point in an active authored closed contour; command execution revalidates the current selection before rotating the contour's point order.
+The View menu reserves conventional Zoom In and Zoom Out labels and shortcuts for the glyph canvas. Browser-window scaling is exposed separately as Interface Size with Alt-modified shortcuts, preventing native accelerators from intercepting canvas zoom. Canvas and object-tree context menus are renderer-owned Base UI surfaces that reuse the shared menu styling; their items invoke the same command registry used by the native application menu. The canvas derives Make First Point eligibility for exactly one selected on-curve point in an active authored closed contour, and command execution revalidates the current selection before rotating the contour's point order. Object-tree rows establish or preserve their editor selection before opening their Delete menu; focused rows also route Backspace and Delete through the same editor deletion path.
 
 The macOS Window menu is registered through Electron's native `windowMenu` role so AppKit owns system placement, tiling, and open-window affordances. **Home** focuses an existing launcher or creates one without replacing the current document window. **Settings…** sends `app.showSettings` to the active font renderer and opens the existing document-scoped settings surface at Font; it remains unavailable on the launcher until Shift has app-wide settings.
 
@@ -144,7 +144,7 @@ Message lanes reject in-flight calls when their remote port closes. An unexpecte
 
 ### IPC
 
-Renderer IPC in `App` is limited to shell capabilities: command execution, native context-menu presentation, clipboard, update-window progress/actions, optional document-lane port transfer, immutable session mode, readiness, and shared session sync-lane port transfer. Font data stays on that sync lane between renderer and utility.
+Renderer IPC in `App` is limited to shell capabilities: command execution, clipboard, update-window progress/actions, optional document-lane port transfer, immutable session mode, readiness, and shared session sync-lane port transfer. Font data stays on that sync lane between renderer and utility.
 
 ## Workflow recipes
 
@@ -185,7 +185,7 @@ Renderer IPC in `App` is limited to shell capabilities: command execution, nativ
 - Electron E2E fixtures materialize a native startup document under a fresh `testRoot`, launch with a fresh `userDataDir`, assert Electron honored that path, and remove the root after force-closing the disposable process.
 - `document-lifecycle.spec.ts` injects ordered scripted paths/choices and verifies New/Open, convertible-preview Save and authored handoff, TTF/OTF exclusion, first and ordinary Save, independent Save As, saved-document discard/reopen, raw-copy identity reuse, Save cancellation/failure safety, dirty-close choices, clean quit/relaunch/reopen, and Export safety through application commands.
 - `application-menu.spec.ts` invokes actual native menu items and verifies Help, Settings, canvas/interface zoom, launcher/binary/convertible/authored capability states, focused-text Copy/Paste, and canvas Select All, Copy, Paste, Undo, Redo, Delete, and Cut behavior.
-- Manual: right-click an authored glyph canvas and verify the native menu opens at the pointer, each action targets that window, and no canvas menu appears on launcher or preview surfaces.
+- Manual: right-click an authored glyph canvas or object-tree row and verify the shared Base UI menu opens at the pointer, its actions target the current editor selection, and no canvas menu appears on launcher or preview surfaces.
 - `application-quit.spec.ts` verifies dirty Save/Discard/Cancel, every dirty document in a multi-document quit, re-entrant quit suppression, and document isolation across windows. Ordered scripted choices are consumed once per actual confirmation. POSIX signal cases exercise `SIGINT` and `SIGTERM` against main and its entire process group with native dialogs enabled, verifying prompt-free forced exit, unchanged canonical files, and recovery of both dirty documents. Another case interrupts an outstanding quit preparation and verifies recovery without saving or discarding.
 - `document-recovery.spec.ts` force-terminates Electron, reopens the same document and user-data directory, verifies recovery, then verifies explicit Save changes the canonical document.
 - Standard workspace E2E fixtures launch Electron with a `.shift` command-line argument, so document activation owns the same document lifecycle coverage as File -> Open. `document-lifecycle.spec.ts` also covers all six source formats through cold-start arguments and real second-instance launches, launcher replacement, existing-document preservation, uppercase extensions with spaces, and unsupported-extension fallback.

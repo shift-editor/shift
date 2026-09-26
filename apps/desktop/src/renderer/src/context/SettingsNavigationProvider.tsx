@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { SettingsDialog } from "@/components/chrome/settings/SettingsDialog";
+import { ComponentPickerDialog } from "@/components/editor/ComponentPickerDialog";
 import { getShiftHost } from "@/host/shiftHost";
 import { runRendererCommand } from "@/lib/commands/rendererCommands";
 import type { SettingsTarget } from "@/types/settings";
@@ -9,6 +10,7 @@ import { SettingsNavigationContext, type SettingsNavigation } from "./SettingsNa
 export const SettingsNavigationProvider = ({ children }: { children: ReactNode }) => {
   const session = useFontSession();
   const [target, setTarget] = useState<SettingsTarget | null>(null);
+  const [componentPickerOpen, setComponentPickerOpen] = useState(false);
   const open = useCallback((next: SettingsTarget) => setTarget(next), []);
   const navigation = useMemo<SettingsNavigation>(() => ({ open, target }), [open, target]);
 
@@ -19,6 +21,15 @@ export const SettingsNavigationProvider = ({ children }: { children: ReactNode }
           setTarget({ category: "font" });
           return;
         }
+        if (id === "glyph.addComponent") {
+          if (
+            session.mode === "workspace" &&
+            session.editor.scene.nodesOfKind("glyph").length === 1
+          ) {
+            setComponentPickerOpen(true);
+          }
+          return;
+        }
 
         try {
           await runRendererCommand(session.editor, id);
@@ -26,12 +37,13 @@ export const SettingsNavigationProvider = ({ children }: { children: ReactNode }
           console.error("renderer command failed", id, error);
         }
       }),
-    [session.editor],
+    [session.editor, session.mode],
   );
 
   return (
     <SettingsNavigationContext.Provider value={navigation}>
       {children}
+      <ComponentPickerDialog open={componentPickerOpen} onOpenChange={setComponentPickerOpen} />
       <SettingsDialog
         target={target}
         canAuthor={session.mode === "workspace"}
