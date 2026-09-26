@@ -54,40 +54,29 @@ async function openFirstAuthoredGlyph(editor: EditorDriver): Promise<void> {
 launcherTest("application menu exposes native shell actions", async ({ electronApp, page }) => {
   await expect.poll(() => applicationMenuItemEnabled(page, electronApp, "window.close")).toBe(true);
 
-  const menu = await electronApp.evaluate(({ app, Menu }) => ({
-    packaged: app.isPackaged,
-    platform: process.platform,
-    topLevelLabels: Menu.getApplicationMenu()?.items.map((item) => item.label) ?? [],
-    topLevelRoles: Menu.getApplicationMenu()?.items.map((item) => item.role?.toLowerCase()) ?? [],
-    roles:
-      Menu.getApplicationMenu()?.items.flatMap(
+  // Item identities, labels, and accelerators are unit-tested in menuItems.test.ts; this
+  // test owns the platform-specific native roles and menu placement.
+  const menu = await electronApp.evaluate(({ app, Menu }) => {
+    const items = Menu.getApplicationMenu()?.items ?? [];
+    const submenuIds = (label: string) =>
+      items.find((item) => item.label === label)?.submenu?.items.map((item) => item.id) ?? [];
+
+    return {
+      packaged: app.isPackaged,
+      platform: process.platform,
+      topLevelLabels: items.map((item) => item.label),
+      topLevelRoles: items.map((item) => item.role?.toLowerCase()),
+      roles: items.flatMap(
         (item) =>
           item.submenu?.items.map((child) => child.role?.toLowerCase()).filter(Boolean) ?? [],
-      ) ?? [],
-    viewLabels:
-      Menu.getApplicationMenu()
-        ?.items.find((item) => item.label === "View")
-        ?.submenu?.items.map((item) => item.label) ?? [],
-    interfaceSizeLabels:
-      Menu.getApplicationMenu()
-        ?.items.find((item) => item.label === "View")
-        ?.submenu?.items.find((item) => item.label === "Interface Size")
-        ?.submenu?.items.map((item) => item.label) ?? [],
-    fileIds:
-      Menu.getApplicationMenu()
-        ?.items.find((item) => item.label === "File")
-        ?.submenu?.items.map((item) => item.id) ?? [],
-    editIds:
-      Menu.getApplicationMenu()
-        ?.items.find((item) => item.label === "Edit")
-        ?.submenu?.items.map((item) => item.id) ?? [],
-    helpIds:
-      Menu.getApplicationMenu()
-        ?.items.find((item) => item.label === "Help")
-        ?.submenu?.items.map((item) => item.id) ?? [],
-    settingsAccelerator:
-      Menu.getApplicationMenu()?.getMenuItemById("app.showSettings")?.accelerator,
-  }));
+      ),
+      viewLabels:
+        items.find((item) => item.label === "View")?.submenu?.items.map((item) => item.label) ?? [],
+      fileIds: submenuIds("File"),
+      editIds: submenuIds("Edit"),
+      settingsInstalled: Menu.getApplicationMenu()?.getMenuItemById("app.showSettings") !== null,
+    };
+  });
 
   if (menu.platform === "darwin") {
     expect(menu.topLevelLabels).toContain("Window");
@@ -107,23 +96,9 @@ launcherTest("application menu exposes native shell actions", async ({ electronA
     expect(menu.roles).toContain("quit");
   }
 
+  expect(menu.settingsInstalled).toBe(true);
   expect(menu.fileIds).not.toContain("app.showSettings");
   expect(menu.editIds.includes("app.showSettings")).toBe(menu.platform !== "darwin");
-  expect(menu.helpIds).toEqual(
-    expect.arrayContaining([
-      "help.openWebsite",
-      "help.openDiscord",
-      "help.openX",
-      "help.reportIssue",
-      "help.showLogs",
-      "help.emailFeedback",
-    ]),
-  );
-  expect(menu.settingsAccelerator).toBe("CmdOrCtrl+,");
-  expect(menu.viewLabels).toEqual(
-    expect.arrayContaining(["Zoom In", "Zoom Out", "Interface Size"]),
-  );
-  expect(menu.interfaceSizeLabels).toEqual(["Increase", "Decrease", "Reset"]);
   expect(menu.viewLabels.includes("Developer")).toBe(!menu.packaged && menu.platform === "darwin");
 });
 

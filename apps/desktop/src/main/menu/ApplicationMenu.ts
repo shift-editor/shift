@@ -1,6 +1,12 @@
 import { app, Menu, type BrowserWindow, type MenuItemConstructorOptions } from "electron";
 import type { CommandId } from "../../shared/commands";
-import { commandMenuItem, fileMenuItems } from "./menuItems";
+import {
+  commandMenuItem,
+  editMenuItems,
+  fileMenuItems,
+  helpMenuItems,
+  viewMenuItems,
+} from "./menuItems";
 import { commands } from "../commands/Commands";
 
 const isMac = process.platform === "darwin";
@@ -166,19 +172,7 @@ export class ApplicationMenu {
   }
 
   #viewItems(includeDeveloper: boolean): MenuItemConstructorOptions[] {
-    const items: MenuItemConstructorOptions[] = [
-      this.#commandItem("view.zoomIn"),
-      this.#commandItem("view.zoomOut"),
-      { type: "separator" },
-      {
-        label: "Interface Size",
-        submenu: [
-          this.#commandItem("ui.increaseSize", undefined, "Increase"),
-          this.#commandItem("ui.decreaseSize", undefined, "Decrease"),
-          this.#commandItem("ui.resetSize", undefined, "Reset"),
-        ],
-      },
-    ];
+    const items = viewMenuItems(this.#runCommand, this.#isCommandEnabled);
     if (app.isPackaged || !includeDeveloper) return items;
 
     return [
@@ -209,41 +203,11 @@ export class ApplicationMenu {
   }
 
   #editItems(includeSettings: boolean): MenuItemConstructorOptions[] {
-    const items: MenuItemConstructorOptions[] = [
-      this.#commandItem("edit.undo"),
-      this.#commandItem("edit.redo"),
-      { type: "separator" },
-      this.#commandItem("edit.cut"),
-      this.#commandItem("edit.copy"),
-      this.#commandItem("edit.paste"),
-      this.#commandItem("edit.deleteSelection"),
-      { type: "separator" },
-      this.#commandItem("edit.selectAll"),
-    ];
-    if (!includeSettings) return items;
-
-    return [...items, { type: "separator" }, this.#commandItem("app.showSettings")];
+    return editMenuItems(includeSettings, this.#runCommand, this.#isCommandEnabled);
   }
 
   #helpItems(includeApplicationItems: boolean): MenuItemConstructorOptions[] {
-    const items: MenuItemConstructorOptions[] = [
-      this.#commandItem("help.openWebsite"),
-      this.#commandItem("help.openDiscord"),
-      this.#commandItem("help.openX"),
-      { type: "separator" },
-      this.#commandItem("help.reportIssue"),
-      this.#commandItem("help.showLogs"),
-      this.#commandItem("help.emailFeedback"),
-    ];
-    if (!includeApplicationItems) return items;
-
-    return [
-      ...items,
-      { type: "separator" },
-      this.#commandItem("app.checkForUpdates"),
-      { type: "separator" },
-      this.#commandItem("app.showAbout"),
-    ];
+    return helpMenuItems(includeApplicationItems, this.#runCommand, this.#isCommandEnabled);
   }
 
   #glyphItems(): MenuItemConstructorOptions[] {
