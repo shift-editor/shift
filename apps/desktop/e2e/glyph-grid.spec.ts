@@ -2,7 +2,6 @@ import type { ElectronApplication, Locator, Page } from "@playwright/test";
 import type { AxisId, SourceId } from "@shift/types";
 import { test, expect, navigateToEditor } from "./fixtures/perfApp";
 import {
-  clickFirstCatalogGlyph,
   glyphCatalogCanvas,
   glyphCatalogSurface,
   glyphCatalogViewport,
