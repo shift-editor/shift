@@ -83,8 +83,15 @@ export const ObjectsPanel = () => {
       if (anchorId !== null && !visibleObjectIds.includes(anchorId)) anchorId = null;
 
       const nextIds = applyListSelection(visibleObjectIds, selection.ids, anchorId, id, mode);
-      editor.selection.select(nextIds);
-      if (mode === "single" || anchorId === null) selectionAnchorId.current = id;
+      const capture = editor.history.begin("Select object");
+      try {
+        editor.selection.select(nextIds);
+        if (mode === "single" || anchorId === null) selectionAnchorId.current = id;
+        capture.finish();
+      } catch (error) {
+        capture.cancel();
+        throw error;
+      }
     },
     [editor, selection.ids, visibleObjectIds],
   );

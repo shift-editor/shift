@@ -7,8 +7,15 @@ export class Escape implements SelectBehavior {
     if (event.key !== "Escape") return false;
 
     if (ctx.editor.selection.hasSelection()) {
-      ctx.editor.selection.clear();
-      ctx.setState({ type: "ready" });
+      const capture = ctx.editor.history.begin("Deselect");
+      try {
+        ctx.editor.selection.clear();
+        ctx.setState({ type: "ready" });
+        capture.finish();
+      } catch (error) {
+        capture.cancel();
+        throw error;
+      }
       return true;
     }
 

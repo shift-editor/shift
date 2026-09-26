@@ -54,22 +54,36 @@ export async function runRendererCommand(editor: Editor, id: EditorCommandId): P
       return editor.deleteSelection();
 
     case "edit.duplicate": {
-      const inserted = editor.duplicateSelection();
-      if (inserted.length === 0) return false;
+      const capture = editor.history.begin("Duplicate");
+      try {
+        const inserted = editor.duplicateSelection();
+        if (inserted.length === 0) {
+          capture.cancel();
+          return false;
+        }
 
-      editor.selection.select(inserted);
-      await editor.font.editCoordinator.settled();
-      return true;
+        editor.selection.select(inserted);
+        capture.finish();
+        await editor.font.editCoordinator.settled();
+        return true;
+      } catch (error) {
+        capture.cancel();
+        throw error;
+      }
     }
 
-    case "edit.selectAll":
+    case "edit.selectAll": {
       editor.selectAll();
       return editor.selection.ids.length > 0;
+    }
 
     case "edit.deselect": {
-      const hadSelection = editor.selection.hasSelection();
+      if (!editor.selection.hasSelection()) return false;
+
+      const capture = editor.history.begin("Deselect");
       editor.selection.clear();
-      return hadSelection;
+      capture.finish();
+      return true;
     }
 
     case "view.zoomIn":

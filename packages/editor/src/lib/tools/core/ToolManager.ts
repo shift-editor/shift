@@ -14,6 +14,7 @@ import type { Canvas } from "../../editor/rendering/Canvas";
 import type { ToolManifest } from "./ToolManifest";
 import { ToolRegistration } from "./ToolRegistration";
 import { signal, type Signal, type WritableSignal } from "../../signals/index";
+import type { HistoryCapture } from "../../editor/history/HistoryCapture";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ToolInstance = BaseTool<any, any, any>;
@@ -36,6 +37,7 @@ export class ToolManager implements ToolSwitchHandler {
   private gesture = new GestureDetector();
   private editor: Editor;
   private pendingReplacements = new Set<ToolName>();
+  #pointerCapture: HistoryCapture | null = null;
 
   private temporaryOptions: TemporaryToolOptions | null = null;
 
@@ -237,9 +239,7 @@ export class ToolManager implements ToolSwitchHandler {
     this.gesture.reset();
     this.editor.input.setPointerDown(false);
     this.editor.gesture.reset();
-    if (wasDragging) {
-      this.activeTool?.handleEvent({ type: "dragCancel" });
-    }
+    if (wasDragging) this.dispatchEvents([{ type: "dragCancel" }]);
     this.#flushPendingReplacements();
   }
 
@@ -332,8 +332,59 @@ export class ToolManager implements ToolSwitchHandler {
 
   private dispatchEvents(events: GestureEvent[]): void {
     for (const event of events) {
-      this.activeTool?.handleEvent(this.withPointerTarget(event));
+      switch (event.type) {
+        case "click":
+        case "doubleClick": {
+          const capture = this.editor.history.begin("Pointer selection");
+          try {
+            this.activeTool?.handleEvent(this.withPointerTarget(event));
+            capture.finish();
+          } catch (error) {
+            capture.cancel();
+            throw error;
+          }
+          break;
+        }
+        case "dragStart":
+          this.#pointerCapture = this.editor.history.begin("Pointer drag");
+          try {
+            this.activeTool?.handleEvent(this.withPointerTarget(event));
+          } catch (error) {
+            this.#cancelPointerCapture();
+            throw error;
+          }
+          break;
+        case "dragEnd":
+          try {
+            this.activeTool?.handleEvent(this.withPointerTarget(event));
+            this.#pointerCapture?.finish();
+            this.#pointerCapture = null;
+          } catch (error) {
+            this.#cancelPointerCapture();
+            throw error;
+          }
+          break;
+        case "dragCancel":
+          try {
+            this.activeTool?.handleEvent(event);
+          } finally {
+            this.#cancelPointerCapture();
+          }
+          break;
+        default:
+          try {
+            this.activeTool?.handleEvent(this.withPointerTarget(event));
+          } catch (error) {
+            this.#cancelPointerCapture();
+            throw error;
+          }
+      }
     }
+  }
+
+  #cancelPointerCapture(): void {
+    this.#pointerCapture?.cancel();
+    this.#pointerCapture = null;
   }
 
   private withPointerTarget(event: GestureEvent): ToolEvent {

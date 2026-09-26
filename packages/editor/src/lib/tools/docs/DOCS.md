@@ -1,6 +1,6 @@
 # Tools
 
-<!-- reviewed: 2026-09-20 -->
+<!-- reviewed: 2026-09-26 -->
 
 State machine-based tool system for the Shift font editor: translates pointer/keyboard input into tool-specific state transitions and rendering.
 
@@ -21,6 +21,8 @@ State machine-based tool system for the Shift font editor: translates pointer/ke
 - **Architecture Invariant:** Behaviors do NOT render. All rendering belongs in the tool's `drawOverlay` / `drawScene` / `drawBackground` methods.
 
 - **Architecture Invariant:** `ToolManager` coalesces pointer-move events via `requestAnimationFrame`. The synchronous pointer handler only stores input; projection, hit-test, and tool dispatch run in the rAF callback. **CRITICAL**: reading layout-dependent state synchronously in the pointer handler will see stale data.
+
+- **Architecture Invariant:** `ToolManager` opens editor-history captures only at semantic pointer boundaries: one capture around a click or double-click, and one capture from `dragStart` through `dragEnd` or `dragCancel`. It never captures pointer moves, key-up events, or every key-down globally. Keyboard behaviors and renderer commands that mutate TypeScript records own their explicit captures.
 
 - **Architecture Invariant:** `ToolContext.setState` inside a behavior's event handler updates a local `nextState` variable, not `this.state` on the tool. `BaseTool` commits the new state and fires lifecycle hooks (`onStateExit`, `onStateEnter`, `onStateChange`) only after the behavior loop returns. Calling `setState` multiple times within one handler is legal; only the final value is committed.
 
@@ -61,7 +63,7 @@ apps/desktop/src/renderer/src/lib/tools/
 - `ToolContext<S, TTool>` — `{ editor, tool, getState, setState, onCancel }`. `tool: TTool` gives class-style behaviors access to their owning tool instance (e.g. `PenStroke.active(ctx.tool)`). `onCancel(callback)` registers rollback for the active drag and returns a function that dismisses it after successful completion.
 - `ToolEvent` — discriminated union of semantic events: `pointerMove`, `click`, `doubleClick`, `dragStart`, `drag`, `dragEnd`, `dragCancel`, `keyDown`, `keyUp`, `selectionChanged`. Pointer events include `coords: Coordinates`.
 - `DragStartEvent` / `DragEvent` / `DragEndEvent` — concrete targeted pointer-event contracts used by drag handlers.
-- `ToolManager` — owns installed manifests, resident tool instances, `GestureDetector`, rAF pointer coalescing, replacement, removal, and temporary tool switching.
+- `ToolManager` — owns installed manifests, resident tool instances, `GestureDetector`, rAF pointer coalescing, semantic pointer-action history captures, replacement, removal, and temporary tool switching.
 - `ActiveTool<Id>` — editor-facing `{ id, state }` snapshot. `Editor.toolIf(id)` narrows built-in state through `ToolStateMap`; runtime IDs fall back to `ToolState`.
 - `GestureDetector` — stateful recognizer: drag threshold, double-click timing. Fed raw `pointerDown`/`Move`/`Up`, emits `ToolEvent[]`.
 - `ToolManifest` — `{ id, create, icon, tooltip, shortcut?, hidden?, disabled? }`. Registration descriptor passed to `editor.registerTool`. Hidden tools are omitted from the toolbar; disabled tools render as non-interactive controls; both suppress user keyboard shortcuts while remaining programmatically activatable.
@@ -94,6 +96,7 @@ User pointer/key
 - Pointer-up drains queued movement and emits the final `drag` sample before `dragEnd`. Both release events use the final pointer position with the latest drag sample's modifiers, so releasing Shift just before mouseup does not change the preview's constraints. Modifier changes take effect on the next processed drag movement; clicks and double-clicks still use release-time modifiers. `GestureDetector.lastDragModifiers` is empty before dragging, follows each emitted drag movement, and clears on completion, cancellation, or a new pointer-down.
 - Behaviors initialize on `dragStart`, register rollback with `ctx.onCancel()`, preview from `drag`, and commit on `dragEnd` before dismissing rollback.
 - `BaseTool` runs any rollback left active at `dragEnd`, `dragCancel`, tool disposal, or after a handler throws.
+- `ToolManager` keeps the matching `HistoryCapture` open across that complete drag lifecycle. Successful release records the net editor records and attached workspace operations as one action; cancellation or a thrown handler restores the pre-drag records and records no editor effect.
 
 ### Shape authoring
 
@@ -153,6 +156,10 @@ Pen starts topology through `GlyphLayer.beginEdit()`, constructs cubic points wi
 ### Shape completion and selection
 
 On drag end, Shape commits a valid rectangle as one transaction, selects its new contour, and switches to Select. A too-small or unavailable-layer result returns Shape to ready without creating geometry. The Select bounding box draws its outline without visible corner squares; resize and rotation hit zones remain active.
+
+### Marquee selection history
+
+Marquee captures the ordered selection present at `dragStart`. A plain marquee clears and replaces it; a Shift-marquee preserves those IDs and appends points inside the current rectangle. Intermediate selection writes remain preview state inside one open history capture. `dragEnd` seals one selection action, while Escape, tool replacement, or pointer cancellation restores the exact starting selection and records nothing. The bounding box continues to display the preserved selection during a Shift-marquee but is never itself a hit target while brushing.
 
 ### Selection direction snapping
 
@@ -306,6 +313,7 @@ onDragCancel(state, ctx) {
 - `pnpm test:desktop src/renderer/src/lib/tools/` — real-editor tool tests.
 - `GestureDetector.test.ts` — drag threshold, double-click timing, event emission.
 - `ToolManager.test.ts` — tool activation, temporary override, rAF coalescing, modifier forwarding.
+- `EditorHistory.test.ts` — click, Shift-click, marquee, Shift-marquee, cancellation, compound selection/document replay, redo branching, and failed workspace apply rebasing through real tools and the real workspace.
 - Per-tool tests: `hand/Hand.test.ts`, `shape/Shape.test.ts`, `Pen.test.ts`, `Select.test.ts`, `Text.test.ts`.
 
 ## Related

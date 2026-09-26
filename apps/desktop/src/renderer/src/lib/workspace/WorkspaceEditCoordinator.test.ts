@@ -13,6 +13,7 @@ import {
   type GlyphName,
   type Unicode,
 } from "@shift/types";
+import type { WorkspaceEditEvent } from "@shift/editor/types";
 import { createWorkspaceStack, type WorkspaceStack } from "@/testing/workspaceStack";
 
 const createGlyph = (
@@ -138,6 +139,33 @@ describe("WorkspaceEditCoordinator issues save on the committed-op lane", () => 
     await editCoordinator.settled();
     expect(editCoordinator.applyStatusCell.peek()).toBe("idle");
     expect(client.documentStateCell.peek()).toMatchObject({ dirty: true });
+  });
+
+  it("publishes accepted and committed edit identities", async () => {
+    const events: WorkspaceEditEvent[] = [];
+    const unsubscribe = stack.editCoordinator.onEdit((event) => events.push(event));
+
+    const id = stack.editCoordinator.push(createGlyph("A", 65));
+    expect(events).toEqual([{ kind: "accepted", id }]);
+
+    await stack.editCoordinator.settled();
+    unsubscribe();
+    expect(events).toEqual([
+      { kind: "accepted", id },
+      { kind: "committed", id },
+    ]);
+  });
+
+  it("publishes a failure after restoring workspace truth", async () => {
+    await stack.editCoordinator.apply([createGlyph("A", 65)]);
+    const events: WorkspaceEditEvent[] = [];
+    stack.editCoordinator.onEdit((event) => events.push(event));
+
+    const applying = stack.editCoordinator.apply([createGlyph("A", 66)]);
+    await expect(applying).rejects.toThrow();
+
+    expect(events.map((event) => event.kind)).toEqual(["accepted", "failed"]);
+    expect(stack.store.workspaceCell.peek()?.glyphs).toHaveLength(1);
   });
 
   it("keeps separate pushes as separate undo entries", async () => {
