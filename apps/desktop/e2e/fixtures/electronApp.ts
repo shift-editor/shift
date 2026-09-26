@@ -1,28 +1,24 @@
-import {
-  test as base,
-  _electron as electron,
-  expect,
-  type Page,
-  type ElectronApplication,
-} from "@playwright/test";
+import { test as base, type ElectronApplication, type Page } from "@playwright/test";
 import { createBridge } from "@shift/bridge";
-import { execFile } from "node:child_process";
-import type { ChildProcess } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import * as path from "path";
-import { once } from "events";
-import { promisify } from "node:util";
 import { createAuthoredDocument } from "./fontSource";
-import type { CanonicalVariableFont, RecoveryApp, ShiftFixtures, ShiftOptions } from "./types";
+import type {
+  CanonicalVariableFont,
+  RecordedDialog,
+  RecoveryApp,
+  ShiftFixtures,
+  ShiftOptions,
+} from "./types";
 import { EditorDriver } from "./EditorDriver";
-import { collectWindowDiagnostics, prepareWindow } from "./window";
+import { ElectronProcesses, killApp } from "./electronProcesses";
 
 export type { CanonicalVariableFont, RecoveryApp } from "./types";
+export { killApp, MAIN_JS } from "./electronProcesses";
 
 const APP_ROOT = path.resolve(__dirname, "../..");
-export const MAIN_JS = path.join(APP_ROOT, ".vite/build/main.js");
 export const FONT_PATH = path.resolve(APP_ROOT, "../../fixtures/fonts/mutatorsans/MutatorSans.ttf");
 export const OTF_FONT_PATH = path.resolve(
   APP_ROOT,
@@ -44,8 +40,6 @@ export const GLYPHSPACKAGE_FONT_PATH = path.resolve(
   APP_ROOT,
   "../../fixtures/fonts/PackageFont.glyphspackage",
 );
-
-const execFileAsync = promisify(execFile);
 
 /**
  * Builds a software-rendered test environment that inherits no Shift E2E settings.
@@ -92,6 +86,7 @@ export const test = base.extend<ShiftFixtures & ShiftOptions>({
   dirtyDocumentChoices: [undefined, { option: true }],
   dirtyDocumentDelayMs: [0, { option: true }],
   documentCrashChoice: ["reopen", { option: true }],
+  allowRendererDialogs: [false, { option: true }],
 
   testRoot: async ({}, use) => {
     const testRoot = fs.mkdtempSync(path.join(os.tmpdir(), "shift-e2e-"));
@@ -124,8 +119,22 @@ export const test = base.extend<ShiftFixtures & ShiftOptions>({
     await use(path.join(testRoot, "exported.ttf"));
   },
 
+  electronProcesses: async ({ testRoot: _testRoot }, use, testInfo) => {
+    // Depends on testRoot so every process exits before its directory is removed.
+    const processes = new ElectronProcesses();
+    try {
+      await use(processes);
+    } finally {
+      if (testInfo.status !== testInfo.expectedStatus) {
+        await processes.attachDiagnostics(testInfo);
+      }
+      await processes.terminateAll();
+    }
+  },
+
   electronApp: async (
     {
+      electronProcesses,
       startupFontPath,
       windowSizing,
       electronArgs,
@@ -141,22 +150,10 @@ export const test = base.extend<ShiftFixtures & ShiftOptions>({
       exportTtfPath,
     },
     use,
-    testInfo,
   ) => {
-    const userDataDir = path.join(testRoot, "user-data");
-    let workspacePath: string | undefined;
-    let app: ElectronApplication | null = null;
-    let childProcess: ChildProcess | null = null;
-    const diagnostics: string[] = [];
-    const recordDiagnostic = (message: string) => {
-      diagnostics.push(`${new Date().toISOString()} ${message}`);
-      if (diagnostics.length > 500) diagnostics.shift();
-    };
-
-    if (startupFontPath) {
-      workspacePath = createAuthoredDocument(startupFontPath, path.join(testRoot, "workspace"));
-    }
-
+    const workspacePath = startupFontPath
+      ? createAuthoredDocument(startupFontPath, path.join(testRoot, "workspace"))
+      : undefined;
     const environment = shiftTestEnvironment();
 
     if (scriptedDialogs) {
@@ -177,76 +174,55 @@ export const test = base.extend<ShiftFixtures & ShiftOptions>({
       environment.SHIFT_E2E_DOCUMENT_CRASH_CHOICE = documentCrashChoice;
     }
 
-    try {
-      app = await electron.launch({
-        args: [
-          MAIN_JS,
-          `--user-data-dir=${userDataDir}`,
-          "--force-device-scale-factor=1",
-          ...electronArgs,
-          ...(workspacePath ? [workspacePath] : []),
-        ],
-        env: environment,
-      });
-      childProcess = app.process();
-      childProcess.once("exit", (code, signal) => {
-        recordDiagnostic(`Electron exited: code=${code ?? "null"}, signal=${signal ?? "null"}`);
-      });
-      childProcess.stdout?.on("data", (data) =>
-        recordDiagnostic(`main stdout: ${String(data).trim()}`),
-      );
-      childProcess.stderr?.on("data", (data) =>
-        recordDiagnostic(`main stderr: ${String(data).trim()}`),
-      );
-
-      const observePage = (observedPage: Page) => {
-        recordDiagnostic(`window opened: ${observedPage.url()}`);
-        observedPage.on("console", (message) => {
-          if (message.type() === "error" || message.type() === "warning") {
-            recordDiagnostic(`renderer ${message.type()}: ${message.text()}`);
-          }
-        });
-        observedPage.on("pageerror", (error) => recordDiagnostic(`renderer error: ${error.stack}`));
-        observedPage.on("crash", () => recordDiagnostic(`renderer crashed: ${observedPage.url()}`));
-        observedPage.on("close", () => recordDiagnostic(`window closed: ${observedPage.url()}`));
-      };
-      for (const observedPage of app.windows()) observePage(observedPage);
-      app.on("window", observePage);
-
-      const page = await app.firstWindow();
-      const activeUserDataDir = await app.evaluate(({ app: electronApp }) =>
-        electronApp.getPath("userData"),
-      );
-      if (fs.realpathSync(activeUserDataDir) !== fs.realpathSync(userDataDir)) {
-        throw new Error(`Electron ignored isolated user data directory: ${activeUserDataDir}`);
-      }
-
-      await prepareWindow(app, page, windowSizing);
-
-      await use(app);
-    } finally {
-      if (testInfo.status !== testInfo.expectedStatus) {
-        if (app) {
-          diagnostics.push(...(await collectWindowDiagnostics(app)));
-        }
-        await testInfo.attach("electron-diagnostics", {
-          body: diagnostics.join("\n"),
-          contentType: "text/plain",
-        });
-      }
-
-      if (childProcess) await terminateProcessTree(childProcess);
-    }
+    const app = await electronProcesses.launch({
+      label: "initial",
+      userDataDir: path.join(testRoot, "user-data"),
+      args: [...electronArgs, ...(workspacePath ? [workspacePath] : [])],
+      env: environment,
+      windowSizing,
+    });
+    await use(app);
   },
 
-  page: async ({ electronApp }, use) => {
+  relaunch: async ({ electronProcesses, testRoot, saveShiftPath, windowSizing }, use) => {
+    let launches = 0;
+    await use(async (options = {}) => {
+      launches += 1;
+      return electronProcesses.launch({
+        label: `relaunch-${launches}`,
+        userDataDir: path.join(testRoot, "user-data"),
+        args: options.args,
+        env: shiftTestEnvironment({
+          SHIFT_E2E_NATIVE_DIALOGS: "1",
+          SHIFT_E2E_OPEN_FONT_PATH: saveShiftPath,
+          SHIFT_E2E_SAVE_SHIFT_PATH: saveShiftPath,
+          ...options.env,
+        }),
+        windowSizing,
+      });
+    });
+  },
+
+  page: async ({ electronApp, allowRendererDialogs }, use) => {
+    const dialogs: RecordedDialog[] = [];
+    const recordDialogs = (observedPage: Page) => {
+      observedPage.on("dialog", async (dialog) => {
+        dialogs.push({ type: dialog.type(), message: dialog.message() });
+        await dialog.dismiss();
+      });
+    };
+    for (const observedPage of electronApp.windows()) recordDialogs(observedPage);
+    electronApp.on("window", recordDialogs);
+
     const page = await electronApp.firstWindow();
     await page.waitForLoadState("domcontentloaded");
 
-    // Auto-dismiss native save dialogs that interrupt tests.
-    page.on("dialog", (dialog) => dialog.dismiss());
-
     await use(page);
+
+    // A renderer dialog blocks the window until dismissed; an unexpected one hides a bug.
+    if (dialogs.length > 0 && !allowRendererDialogs) {
+      throw new Error(`Unexpected renderer dialogs: ${JSON.stringify(dialogs)}`);
+    }
   },
 
   editor: async ({ page }, use) => {
@@ -256,59 +232,45 @@ export const test = base.extend<ShiftFixtures & ShiftOptions>({
 
 /** Fixture whose native outer-dialog choices are supplied by deterministic E2E paths. */
 export const documentTest = test.extend<ShiftOptions>({
-  scriptedDialogs: [true, { option: true }],
+  scriptedDialogs: true,
 });
 
 /** Real Electron lifecycle fixture for sparse native recovery tests. */
 export const recoveryTest = test.extend<{ recoveryApp: RecoveryApp }>({
-  recoveryApp: async ({ windowSizing }, use, testInfo) => {
-    const testRoot = fs.mkdtempSync(path.join(os.tmpdir(), "shift-recovery-e2e-"));
+  recoveryApp: async ({ electronProcesses, testRoot, windowSizing }, use) => {
     const userDataDir = path.join(testRoot, "user-data");
     const documentPath = createAuthoredDocument(FONT_PATH, path.join(testRoot, "workspace"));
-    let app: ElectronApplication | null = null;
-    let page: Page;
-
-    try {
-      app = await launchShiftApp(userDataDir, windowSizing, documentPath);
-      page = await readyWorkspacePage(app);
-      await use({
-        page,
-        documentPath,
-        crashAndRecover: async () => {
-          if (!app) throw new Error("Electron application is not running");
-
-          await killApp(app);
-          app = await launchShiftApp(userDataDir, windowSizing);
-          page = await readyWorkspacePage(app);
-          return page;
-        },
-        crashAndReopenDocument: async () => {
-          if (!app) throw new Error("Electron application is not running");
-
-          await killApp(app);
-          app = await launchShiftApp(userDataDir, windowSizing, documentPath);
-          page = await readyWorkspacePage(app);
-          return page;
-        },
-        canonicalGlyphNames: () => readCanonicalGlyphNames(documentPath, testRoot),
-        canonicalVariableFont: () => readCanonicalVariableFont(documentPath, testRoot),
+    let launches = 0;
+    const launch = async (openDocument: boolean): Promise<ElectronApplication> => {
+      launches += 1;
+      return electronProcesses.launch({
+        label: launches === 1 ? "initial" : `recovery-${launches - 1}`,
+        userDataDir,
+        env: shiftTestEnvironment(openDocument ? { SHIFT_E2E_FONT_PATH: documentPath } : {}),
+        windowSizing,
       });
-    } finally {
-      if (app && testInfo.status !== testInfo.expectedStatus) {
-        await testInfo.attach("electron-diagnostics", {
-          body: (await collectWindowDiagnostics(app)).join("\n"),
-          contentType: "text/plain",
-        });
-      }
+    };
 
-      if (app) await killApp(app);
-      await fs.promises.rm(testRoot, {
-        recursive: true,
-        force: true,
-        maxRetries: 10,
-        retryDelay: 100,
-      });
-    }
+    let app = await launch(true);
+    let page = await readyWorkspacePage(app);
+    await use({
+      page,
+      documentPath,
+      crashAndRecover: async () => {
+        await killApp(app);
+        app = await launch(false);
+        page = await readyWorkspacePage(app);
+        return page;
+      },
+      crashAndReopenDocument: async () => {
+        await killApp(app);
+        app = await launch(true);
+        page = await readyWorkspacePage(app);
+        return page;
+      },
+      canonicalGlyphNames: () => readCanonicalGlyphNames(documentPath, testRoot),
+      canonicalVariableFont: () => readCanonicalVariableFont(documentPath, testRoot),
+    });
   },
 });
 
@@ -345,76 +307,11 @@ export async function waitForWorkspaceReady(page: Page): Promise<void> {
   await page.getByLabel("Glyph catalog", { exact: true }).waitFor({ state: "visible" });
 }
 
-async function launchShiftApp(
-  userDataDir: string,
-  windowSizing: ShiftOptions["windowSizing"],
-  workspacePath?: string,
-): Promise<ElectronApplication> {
-  const environment = shiftTestEnvironment(
-    workspacePath ? { SHIFT_E2E_FONT_PATH: workspacePath } : {},
-  );
-
-  const app = await electron.launch({
-    args: [MAIN_JS, `--user-data-dir=${userDataDir}`, "--force-device-scale-factor=1"],
-    env: environment,
-  });
-
-  try {
-    const page = await app.firstWindow();
-    const activeUserDataDir = await app.evaluate(({ app: electronApp }) =>
-      electronApp.getPath("userData"),
-    );
-    if (fs.realpathSync(activeUserDataDir) !== fs.realpathSync(userDataDir)) {
-      throw new Error(`Electron ignored isolated user data directory: ${activeUserDataDir}`);
-    }
-
-    await prepareWindow(app, page, windowSizing);
-    return app;
-  } catch (error) {
-    const diagnostics = await collectWindowDiagnostics(app);
-    await killApp(app);
-    throw new Error(`Electron recovery launch failed:\n${diagnostics.join("\n")}`, {
-      cause: error,
-    });
-  }
-}
-
 async function readyWorkspacePage(app: ElectronApplication): Promise<Page> {
   const page = await app.firstWindow();
   await page.waitForLoadState("domcontentloaded");
   await waitForWorkspaceReady(page);
   return page;
-}
-
-/**
- * Force-terminates the application and all descendant processes.
- *
- * @param app - application whose process tree must release test resources.
- * @throws {Error} when the platform termination command cannot stop a running application.
- */
-export async function killApp(app: ElectronApplication): Promise<void> {
-  await terminateProcessTree(app.process());
-}
-
-/** Terminates an Electron process tree through a handle that survives Playwright disconnection. */
-async function terminateProcessTree(childProcess: ChildProcess): Promise<void> {
-  if (childProcess.exitCode !== null || childProcess.signalCode !== null) return;
-
-  const exited = once(childProcess, "exit");
-  if (process.platform === "win32") {
-    const pid = childProcess.pid;
-    if (pid === undefined) throw new Error("Electron process has no PID");
-
-    try {
-      await execFileAsync("taskkill", ["/F", "/PID", String(pid), "/T"]);
-    } catch (error) {
-      if (childProcess.exitCode === null && childProcess.signalCode === null) throw error;
-    }
-  } else {
-    childProcess.kill("SIGKILL");
-  }
-
-  await exited;
 }
 
 function readCanonicalGlyphNames(documentPath: string, testRoot: string): string[] {

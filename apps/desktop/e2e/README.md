@@ -103,6 +103,14 @@ SHIFT_E2E_PREVIEW_FONT_PATH=/path/to/font.ttf pnpm test:e2e:gpu e2e/font-preview
 SHIFT_E2E_VARIABLE_PREVIEW_FONT_PATH=/path/to/variable.ttf pnpm test:e2e:gpu e2e/variable-font-preview.spec.ts
 ```
 
+### Process and dialog ownership
+
+Every Electron process a test starts belongs to the `electronProcesses` fixture. The initial launch, `relaunch()`, and the recovery fixture's restarts verify the isolated user-data directory, prepare the first window with the project's sizing, and record main-process output and renderer failures. Teardown attaches `electron-diagnostics-<launch>` for failed tests and terminates every process tree, including launches left running by a timed-out test. Specs never kill applications they obtained from a fixture; use `killApp()` only to simulate a crash before a relaunch.
+
+Renderer `alert`, `confirm`, `prompt`, and `beforeunload` dialogs are dismissed and recorded. A test that opens one fails at teardown unless it sets `allowRendererDialogs: true`. Native dialogs are scripted through `NativeDialogs` instead.
+
+GPU and preview fixtures in `fixtures/perfApp.ts` also expose `editor: EditorDriver` for the primary page. Construct a driver directly only for additional windows.
+
 Every Electron launch, relaunch, and second instance builds its environment with `shiftTestEnvironment()`, which drops inherited `SHIFT_E2E_*` variables before applying the fixture's own. A shell-exported `SHIFT_E2E_FONT_PATH` for GPU runs therefore cannot open extra documents in visual or platform tests.
 
 Authored fixtures import their source into a canonical native document under a temporary test root. Tests must not depend on a developer's existing Shift workspace or user-data directory. Document-lifecycle tests inject deterministic Open, ordered Save As destinations, Export, and dirty-document choices through `NativeDialogs`; ordered choices exercise preview-to-`.shift` conversion, first-Save replacement of a selected existing destination, Save As adoption, multi-document quit, and re-entrant quit without automating OS pickers. Preview conversion E2E proves successful authored-session handoff and reopen, all four convertible source formats, cancellation and failure cleanup, original-source preservation, and TTF/OTF exclusion. Application-menu tests invoke native Electron menu items rather than bypassing them through the host API, covering command capability and focused text/canvas routing. The recovery fixture restarts Electron with the same isolated user-data directory and document, allowing forced-termination recovery to be tested without touching developer state.
@@ -133,7 +141,7 @@ Golden captures are the final assertion of a behavioral test, taken with the hel
 
 A fixed viewport and DPR do not fix native scrollbar preferences. Overlay and reserved-gutter scrollbars can give the same sidebar different usable widths. Normalize host-dependent decoration only during golden captures when it is not the behavior under test; keep interaction and visibility assertions on the unmodified layout.
 
-Playwright's capture APIs have different contracts: `toHaveScreenshot()` accepts **`stylePath`**, while `screenshot()` accepts **`style`** containing CSS text. Use the same stylesheet for assertions and attached captures, reading its contents for `screenshot()`. Check the installed API types rather than assuming options transfer between APIs; the application typecheck does not include E2E specs.
+Playwright's capture APIs have different contracts: `toHaveScreenshot()` accepts **`stylePath`**, while `screenshot()` accepts **`style`** containing CSS text. Use the same stylesheet for assertions and attached captures, reading its contents for `screenshot()`. Check the installed API types rather than assuming options transfer between APIs. `pnpm typecheck` includes the E2E project through `pnpm --filter @shift/desktop typecheck:e2e`, so specs are checked against the renderer's `window.shift` and `window.shiftSession` declarations.
 
 After inspecting changed baselines, verify without snapshot updates and with `--retries=0`, then repeat the affected test. Reproduce the environmental difference that caused the failure: repeated passes with overlay scrollbars alone do not prove reserved-gutter layouts work. For gutter-related failures, also exercise a measured reserved gutter and verify that controls remain visible and usable. An update-mode pass is baseline generation, not verification; a skipped PR E2E job is not validation.
 

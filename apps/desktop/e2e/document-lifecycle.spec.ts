@@ -21,13 +21,12 @@ import {
   closeWindow,
   createNewFont,
   dirtyDocumentDecisions,
-  killApp,
   quitApp,
-  relaunchApp,
   requestAppQuit,
   runCommand,
   windowTitle,
 } from "./fixtures/documentLifecycle";
+import { EditorDriver } from "./fixtures/EditorDriver";
 import { createAuthoredDocument } from "./fixtures/fontSource";
 import { exportedGlyphNames, savedGlyphNames } from "./fixtures/savedDocument";
 import { clickFirstCatalogGlyph } from "./fixtures/appLocators";
@@ -35,10 +34,10 @@ import { clickFirstCatalogGlyph } from "./fixtures/appLocators";
 const execFileAsync = promisify(execFile);
 
 const discardTest = test.extend({
-  dirtyDocumentChoice: ["discard", { option: true }],
+  dirtyDocumentChoice: "discard",
 });
 const saveOnCloseTest = test.extend({
-  dirtyDocumentChoice: ["save", { option: true }],
+  dirtyDocumentChoice: "save",
 });
 const saveAsTest = test.extend({
   saveShiftPaths: async ({ saveShiftPath, saveAsShiftPath }, use) => {
@@ -87,7 +86,7 @@ const failedExportTest = workspaceTest.extend({
   },
 });
 const convertiblePreviewTest = test.extend({
-  openFontPath: [UFO_FONT_PATH, { option: true }],
+  openFontPath: UFO_FONT_PATH,
 });
 const cancelPreviewSaveTest = convertiblePreviewTest.extend({
   saveShiftPath: async ({}, use) => {
@@ -357,21 +356,14 @@ test.describe("opening a font through the application shell", () => {
     await workspacePage.mouse.move(bounds.x + point.x, bounds.y + point.y);
     await workspacePage.mouse.down();
     await workspacePage.mouse.move(bounds.x + point.x + 30, bounds.y + point.y + 30, { steps: 5 });
-    await expect
-      .poll(() =>
-        workspacePage.evaluate(() => window.shiftSession!.editor.toolCell.peek()?.state.type),
-      )
-      .toBe("brushing");
+    const previewEditor = new EditorDriver(workspacePage);
+    await expect.poll(() => previewEditor.toolState()).toBe("brushing");
     await expect
       .poll(() => workspacePage.evaluate(() => window.shiftSession!.editor.selection.ids.length))
       .toBe(0);
     await expect(notice).toBeHidden();
     await workspacePage.mouse.up();
-    await expect
-      .poll(() =>
-        workspacePage.evaluate(() => window.shiftSession!.editor.toolCell.peek()?.state.type),
-      )
-      .toBe("ready");
+    await expect.poll(() => previewEditor.toolState()).toBe("ready");
     await expect
       .poll(() => workspacePage.evaluate(() => window.shiftSession!.editor.selection.ids.length))
       .toBe(0);
@@ -390,7 +382,7 @@ for (const { format, fontPath } of [
   { format: "OTF", fontPath: OTF_FONT_PATH },
 ]) {
   const binaryPreviewTest = test.extend({
-    openFontPath: [fontPath, { option: true }],
+    openFontPath: fontPath,
   });
 
   binaryPreviewTest(
@@ -419,7 +411,7 @@ convertiblePreviewTest(
 
 convertiblePreviewTest(
   "Save converts a preview to an editable Shift document that reopens",
-  async ({ electronApp, page, saveShiftPath, testRoot }) => {
+  async ({ relaunch, electronApp, page, saveShiftPath, testRoot }) => {
     const sourceBefore = sourceTreeSnapshot(UFO_FONT_PATH);
     const workspacePage = await openSelectedPreview(page, electronApp);
 
@@ -440,23 +432,19 @@ convertiblePreviewTest(
     expect(sourceTreeSnapshot(UFO_FONT_PATH)).toEqual(sourceBefore);
 
     await quitApp(electronApp);
-    const relaunchedApp = await relaunchApp(testRoot, saveShiftPath);
-    try {
-      const launcherPage = await relaunchedApp.firstWindow();
-      await launcherPage.waitForURL(/#\/launcher$/);
-      const reopenedWindow = relaunchedApp.waitForEvent("window");
-      await launcherPage.getByRole("button", { name: /Load font/ }).click();
-      const reopenedPage = await reopenedWindow;
-      await waitForWorkspaceReady(reopenedPage);
+    const relaunchedApp = await relaunch();
+    const launcherPage = await relaunchedApp.firstWindow();
+    await launcherPage.waitForURL(/#\/launcher$/);
+    const reopenedWindow = relaunchedApp.waitForEvent("window");
+    await launcherPage.getByRole("button", { name: /Load font/ }).click();
+    const reopenedPage = await reopenedWindow;
+    await waitForWorkspaceReady(reopenedPage);
 
-      expect(
-        await reopenedPage.evaluate(() =>
-          window.shift?.font.glyphRecords().some((glyph) => glyph.name === "newGlyph"),
-        ),
-      ).toBe(true);
-    } finally {
-      await killApp(relaunchedApp);
-    }
+    expect(
+      await reopenedPage.evaluate(() =>
+        window.shift?.font.glyphRecords().some((glyph) => glyph.name === "newGlyph"),
+      ),
+    ).toBe(true);
   },
 );
 
@@ -474,7 +462,7 @@ for (const { format, sourcePath, sourceRoot } of [
   },
 ]) {
   const formatConversionTest = test.extend({
-    openFontPath: [sourcePath, { option: true }],
+    openFontPath: sourcePath,
   });
 
   formatConversionTest(
@@ -561,10 +549,10 @@ function findShiftDocuments(rootPath: string): string[] {
 
 test.describe("document lifecycle through the application shell", () => {
   test("first Save writes an independent shift document that reopens", async ({
+    relaunch,
     electronApp,
     page,
     saveShiftPath,
-    testRoot,
   }) => {
     const workspacePage = await createNewFont(page, electronApp);
     await workspacePage.getByRole("button", { name: "Create glyph", exact: true }).click();
@@ -583,30 +571,26 @@ test.describe("document lifecycle through the application shell", () => {
 
     await quitApp(electronApp);
 
-    const relaunchedApp = await relaunchApp(testRoot, saveShiftPath);
-    try {
-      const launcherPage = await relaunchedApp.firstWindow();
-      await launcherPage.waitForURL(/#\/launcher$/);
+    const relaunchedApp = await relaunch();
+    const launcherPage = await relaunchedApp.firstWindow();
+    await launcherPage.waitForURL(/#\/launcher$/);
 
-      const reopenedWindow = relaunchedApp.waitForEvent("window");
-      await launcherPage.getByRole("button", { name: /Load font/ }).click();
-      const reopenedPage = await reopenedWindow;
-      await reopenedPage.waitForURL(/#\/home$/);
-      await expect(reopenedPage.getByLabel("Glyph catalog", { exact: true })).toBeVisible();
-      await expect
-        .poll(() =>
-          reopenedPage.evaluate(() =>
-            window.shift?.font.glyphRecords().some((glyph) => glyph.name === "newGlyph.1"),
-          ),
-        )
-        .toBe(true);
-      await reopenedPage.getByPlaceholder("Search glyphs...").fill("newGlyph.1");
-      await expect(
-        reopenedPage.getByRole("region", { name: "Glyph catalog surface", exact: true }),
-      ).toHaveAttribute("data-filtered-glyph-count", "1");
-    } finally {
-      await killApp(relaunchedApp);
-    }
+    const reopenedWindow = relaunchedApp.waitForEvent("window");
+    await launcherPage.getByRole("button", { name: /Load font/ }).click();
+    const reopenedPage = await reopenedWindow;
+    await reopenedPage.waitForURL(/#\/home$/);
+    await expect(reopenedPage.getByLabel("Glyph catalog", { exact: true })).toBeVisible();
+    await expect
+      .poll(() =>
+        reopenedPage.evaluate(() =>
+          window.shift?.font.glyphRecords().some((glyph) => glyph.name === "newGlyph.1"),
+        ),
+      )
+      .toBe(true);
+    await reopenedPage.getByPlaceholder("Search glyphs...").fill("newGlyph.1");
+    await expect(
+      reopenedPage.getByRole("region", { name: "Glyph catalog surface", exact: true }),
+    ).toHaveAttribute("data-filtered-glyph-count", "1");
   });
 
   test("canceling dirty close keeps the document open and dirty", async ({ electronApp, page }) => {
@@ -696,7 +680,7 @@ discardTest(
 
 discardTest(
   "discarding edits to a saved document reopens its last clean snapshot",
-  async ({ electronApp, page, saveShiftPath, testRoot }) => {
+  async ({ relaunch, electronApp, page, saveShiftPath }) => {
     const workspacePage = await createNewFont(page, electronApp);
     await workspacePage.getByRole("button", { name: "Create glyph", exact: true }).click();
     await runCommand(workspacePage, electronApp, "file.save");
@@ -714,29 +698,25 @@ discardTest(
     await expect.poll(() => childProcess.exitCode).toBe(0);
     await quitApp(electronApp, childProcess);
 
-    const relaunchedApp = await relaunchApp(testRoot, saveShiftPath);
-    try {
-      const launcherPage = await relaunchedApp.firstWindow();
-      await launcherPage.waitForURL(/#\/launcher$/);
-      const reopenedWindow = relaunchedApp.waitForEvent("window");
-      await launcherPage.getByRole("button", { name: /Load font/ }).click();
-      const reopenedPage = await reopenedWindow;
-      await waitForWorkspaceReady(reopenedPage);
+    const relaunchedApp = await relaunch();
+    const launcherPage = await relaunchedApp.firstWindow();
+    await launcherPage.waitForURL(/#\/launcher$/);
+    const reopenedWindow = relaunchedApp.waitForEvent("window");
+    await launcherPage.getByRole("button", { name: /Load font/ }).click();
+    const reopenedPage = await reopenedWindow;
+    await waitForWorkspaceReady(reopenedPage);
 
-      expect(
-        await reopenedPage.evaluate(() =>
-          window.shift?.font.glyphRecords().map((glyph) => glyph.name),
-        ),
-      ).toContain("newGlyph");
-      expect(
-        await reopenedPage.evaluate(() =>
-          window.shift?.font.glyphRecords().map((glyph) => glyph.name),
-        ),
-      ).not.toContain("newGlyph.1");
-      expect(await windowTitle(reopenedPage, relaunchedApp)).not.toContain(" *");
-    } finally {
-      await killApp(relaunchedApp);
-    }
+    expect(
+      await reopenedPage.evaluate(() =>
+        window.shift?.font.glyphRecords().map((glyph) => glyph.name),
+      ),
+    ).toContain("newGlyph");
+    expect(
+      await reopenedPage.evaluate(() =>
+        window.shift?.font.glyphRecords().map((glyph) => glyph.name),
+      ),
+    ).not.toContain("newGlyph.1");
+    expect(await windowTitle(reopenedPage, relaunchedApp)).not.toContain(" *");
   },
 );
 

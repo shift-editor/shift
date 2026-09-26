@@ -7,9 +7,7 @@ import {
   createAnotherDirtyFont,
   dirtyDocumentDecisions,
   dirtyDocumentRequests,
-  killApp,
   quitApp,
-  relaunchApp,
   dirtyNewFont,
   requestAppQuit,
   windowTitle,
@@ -17,14 +15,14 @@ import {
 import { savedGlyphNames } from "./fixtures/savedDocument";
 
 const discardOnQuitTest = test.extend({
-  dirtyDocumentChoice: ["discard", { option: true }],
+  dirtyDocumentChoice: "discard",
 });
 const saveOnQuitTest = test.extend({
-  dirtyDocumentChoice: ["save", { option: true }],
+  dirtyDocumentChoice: "save",
 });
 const reentrantQuitTest = test.extend({
-  dirtyDocumentChoices: [["cancel", "discard"], { option: true }],
-  dirtyDocumentDelayMs: [150, { option: true }],
+  dirtyDocumentChoices: ["cancel", "discard"],
+  dirtyDocumentDelayMs: 150,
 });
 
 function processExited(childProcess: ChildProcess): boolean {
@@ -33,7 +31,7 @@ function processExited(childProcess: ChildProcess): boolean {
 
 async function saveThenDirty(page: Page, savePath: string): Promise<Buffer> {
   await page.evaluate(async (target) => {
-    const coordinator = window.shift?.font.editCoordinator;
+    const coordinator = window.shift?.editCoordinator;
     if (!coordinator) throw new Error("Expected edit coordinator");
 
     await coordinator.save(target);
@@ -110,6 +108,7 @@ test.describe("terminal termination", () => {
 
   for (const { signal, target } of terminations) {
     test(`${signal} to the ${target} exits without saving and recovers every dirty document`, async ({
+      relaunch,
       electronApp,
       page,
       testRoot,
@@ -143,24 +142,20 @@ test.describe("terminal termination", () => {
       expect(fs.readFileSync(secondPath).equals(secondSaved)).toBe(true);
       expect(fs.existsSync(saveShiftPath)).toBe(false);
 
-      const restarted = await relaunchApp(testRoot, saveShiftPath);
-      try {
-        await expect.poll(() => restarted.windows().length).toBe(2);
-        for (const recoveredPage of restarted.windows()) {
-          await waitForWorkspaceReady(recoveredPage);
-          await expect
-            .poll(() =>
-              recoveredPage.evaluate(() => ({
-                recovered: window.shift?.font
-                  .glyphRecords()
-                  .some((glyph) => glyph.name === "newGlyph.1"),
-                dirty: window.shift?.documentStateCell.peek()?.dirty,
-              })),
-            )
-            .toEqual({ recovered: true, dirty: true });
-        }
-      } finally {
-        await killApp(restarted);
+      const restarted = await relaunch();
+      await expect.poll(() => restarted.windows().length).toBe(2);
+      for (const recoveredPage of restarted.windows()) {
+        await waitForWorkspaceReady(recoveredPage);
+        await expect
+          .poll(() =>
+            recoveredPage.evaluate(() => ({
+              recovered: window.shift?.font
+                .glyphRecords()
+                .some((glyph) => glyph.name === "newGlyph.1"),
+              dirty: window.shift?.documentStateCell.peek()?.dirty,
+            })),
+          )
+          .toEqual({ recovered: true, dirty: true });
       }
     });
   }
@@ -170,9 +165,9 @@ test.describe("terminal termination during quit preparation", () => {
   test.use({ dirtyDocumentChoice: "save", dirtyDocumentDelayMs: 60_000 });
 
   test("SIGINT supersedes a pending save decision without writing or discarding", async ({
+    relaunch,
     electronApp,
     page,
-    testRoot,
     saveShiftPath,
   }) => {
     test.skip(process.platform === "win32", "POSIX terminal signal semantics");
@@ -192,19 +187,15 @@ test.describe("terminal termination during quit preparation", () => {
     await expect.poll(() => processExited(childProcess), { timeout: 10_000 }).toBe(true);
     expect(fs.existsSync(saveShiftPath)).toBe(false);
 
-    const restarted = await relaunchApp(testRoot, saveShiftPath);
-    try {
-      const recoveredPage = await restarted.firstWindow();
-      await waitForWorkspaceReady(recoveredPage);
-      await expect.poll(() => windowTitle(recoveredPage, restarted)).toContain("Untitled *");
-      expect(
-        await recoveredPage.evaluate(() =>
-          window.shift?.font.glyphRecords().some((glyph) => glyph.name === "newGlyph"),
-        ),
-      ).toBe(true);
-    } finally {
-      await killApp(restarted);
-    }
+    const restarted = await relaunch();
+    const recoveredPage = await restarted.firstWindow();
+    await waitForWorkspaceReady(recoveredPage);
+    await expect.poll(() => windowTitle(recoveredPage, restarted)).toContain("Untitled *");
+    expect(
+      await recoveredPage.evaluate(() =>
+        window.shift?.font.glyphRecords().some((glyph) => glyph.name === "newGlyph"),
+      ),
+    ).toBe(true);
   });
 });
 

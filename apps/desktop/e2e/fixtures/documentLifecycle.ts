@@ -1,18 +1,11 @@
-import {
-  _electron as electron,
-  expect,
-  type ElectronApplication,
-  type Page,
-} from "@playwright/test";
+import { expect, type ElectronApplication, type Page } from "@playwright/test";
 import type { DirtyDocumentChoice } from "../../src/main/document/types";
 import type {} from "../../src/main/dialogs/NativeDialogs";
 import type { CommandId } from "../../src/shared/commands";
+import type { GlyphId } from "@shift/types";
 import type { ChildProcess } from "node:child_process";
 import { once } from "node:events";
-import path from "node:path";
-import { MAIN_JS, shiftTestEnvironment, waitForWorkspaceReady } from "./electronApp";
-
-export { killApp } from "./electronApp";
+import { waitForWorkspaceReady } from "./electronApp";
 
 export async function createNewFont(page: Page, electronApp: ElectronApplication): Promise<Page> {
   const workspaceWindow = electronApp.waitForEvent("window");
@@ -46,7 +39,7 @@ export async function createAnotherDirtyFont(
 }
 
 /** Waits for a named glyph in the page's authored workspace and returns its identity. */
-export async function glyphIdForName(page: Page, name: string): Promise<string> {
+export async function glyphIdForName(page: Page, name: string): Promise<GlyphId> {
   await expect
     .poll(() =>
       page.evaluate(
@@ -185,22 +178,4 @@ export async function quitApp(
     return;
   }
   await exited;
-}
-
-export async function relaunchApp(
-  testRoot: string,
-  saveShiftPath: string,
-): Promise<ElectronApplication> {
-  return electron.launch({
-    args: [
-      MAIN_JS,
-      `--user-data-dir=${path.join(testRoot, "user-data")}`,
-      "--force-device-scale-factor=1",
-    ],
-    env: shiftTestEnvironment({
-      SHIFT_E2E_NATIVE_DIALOGS: "1",
-      SHIFT_E2E_OPEN_FONT_PATH: saveShiftPath,
-      SHIFT_E2E_SAVE_SHIFT_PATH: saveShiftPath,
-    }),
-  });
 }
