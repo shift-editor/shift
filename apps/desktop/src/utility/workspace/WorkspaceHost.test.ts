@@ -1236,6 +1236,19 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     expect(redone?.layers[0].structure?.contours[0].points.map((point) => point.id)).toEqual([p1]);
   });
 
+  it("discarding redo prevents replay without changing document state", async () => {
+    const sync = await connectSyncLane();
+    const snapshot = await createWorkspace(sync);
+    await applyWorkspace(sync, createGlyphALayer(snapshot.sources[0].id));
+    await undoWorkspace(sync);
+    const before = await sync.call("document.state", undefined);
+
+    await sync.call("workspace.discardRedo", undefined);
+
+    await expect(redoWorkspace(sync)).resolves.toBeNull();
+    await expect(sync.call("document.state", undefined)).resolves.toEqual(before);
+  });
+
   it("undo on an empty ledger answers null", async () => {
     const sync = await connectSyncLane();
     await createWorkspace(sync);

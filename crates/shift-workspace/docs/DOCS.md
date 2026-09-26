@@ -1,6 +1,6 @@
 # shift-workspace
 
-<!-- reviewed: 2026-09-19 review-every: 90d -->
+<!-- reviewed: 2026-09-26 review-every: 90d -->
 
 Backend runtime object for an open Shift font workspace.
 
@@ -23,7 +23,7 @@ Backend runtime object for an open Shift font workspace.
 - **Architecture Invariant:** Source and axis topology entries retain complete pre/post identity order. Replay restores entities first, then restores collection order and the source collection's default identity; SQLite persists the same dense order in that transaction.
 - **Architecture Invariant:** `LedgerStep::GlyphAppend` represents the only authored glyph-topology transition. Redo appends in application order and undo pops in reverse order; persistence materializes and rewrites only those tail rows, never the complete glyph directory.
 - **Architecture Invariant:** After every successful apply, undo, or redo, loading the merged durable store produces the live `Font`; a failed transition changes neither live state, durable state, nor ledger availability.
-- **Architecture Invariant:** Undo and redo retain at most 100 entries per stack. Extending either stack drops that stack's oldest entry; a fresh apply clears redo.
+- **Architecture Invariant:** Undo and redo retain at most 100 entries per stack. Extending either stack drops that stack's oldest entry; a fresh apply or explicit `discard_redo` clears redo. Discarding redo changes neither live font state nor the current/saved history positions.
 - **Architecture Invariant:** Document `dirty` compares the ledger's current history position with its saved position; the durable authored revision remains monotonic and is not an undo cursor. Undo/redo persist their resulting dirty value atomically with replay. A resumed dirty workspace has no reachable saved position because its in-memory ledger does not survive process restart.
 
 ## Codemap

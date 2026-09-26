@@ -1457,6 +1457,13 @@ impl Bridge {
     Ok(Some(self.applied_echo(outcome)?))
   }
 
+  /// Permanently removes every redo entry without changing font or dirty state.
+  #[napi]
+  pub fn discard_redo(&mut self) -> errors::Result<()> {
+    self.workspace_mut()?.discard_redo();
+    Ok(())
+  }
+
   /// Glyph-addressed snapshots for renderer-local synchronous font state.
   #[napi]
   pub fn get_glyph_snapshots(

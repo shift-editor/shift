@@ -126,6 +126,12 @@ export class FontSessionClient {
     return applied === null ? null : this.#fold(applied);
   }
 
+  /** Permanently removes the current redo branch without changing document state. */
+  async discardRedo(): Promise<void> {
+    await this.connect();
+    await this.#require().call("workspace.discardRedo", undefined);
+  }
+
   async snapshot(): Promise<WorkspaceSnapshot | null> {
     await this.connect();
 

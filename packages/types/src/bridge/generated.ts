@@ -66,6 +66,8 @@ export interface BridgeApi {
    * redo stack is empty.
    */
   redo(): AppliedChange | null
+  /** Permanently removes every redo entry without changing font or dirty state. */
+  discardRedo(): void
   /** Glyph-addressed snapshots for renderer-local synchronous font state. */
   getGlyphSnapshots(requests: Array<GlyphSnapshotRequest>): Array<GlyphSnapshot>
   /**

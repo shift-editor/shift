@@ -1,6 +1,6 @@
 # @shift/types
 
-<!-- reviewed: 2026-09-20 review-every: 90d -->
+<!-- reviewed: 2026-09-26 review-every: 90d -->
 
 Shared DTO TypeScript types for Shift. This package owns branded IDs and bridge DTOs generated from `shift-bridge`.
 
@@ -28,7 +28,7 @@ packages/types/src/
 
 Import from `@shift/types`.
 
-- `BridgeApi` -- type-only native bridge API surface, including canonical document open/save/discard and recoverable workspace resume operations.
+- `BridgeApi` -- type-only native bridge API surface, including canonical document open/save/discard, recoverable workspace resume operations, and redo-branch discard.
 - `FontMetadata` / `FontMetrics` -- independent font-level DTOs; metadata mutation replaces the complete `FontMetadata` snapshot without changing metrics.
 - `GlyphRecord` -- committed glyph list record: stable id, name, unicodes, component base glyph IDs.
 - `DocumentIdentity` -- canonical `DocumentId` and canonical path used by the desktop to deduplicate native document sessions before Open.

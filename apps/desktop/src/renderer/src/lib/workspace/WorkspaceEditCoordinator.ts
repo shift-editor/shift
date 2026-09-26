@@ -276,6 +276,11 @@ export class WorkspaceEditCoordinator {
     });
   }
 
+  /** Permanently removes the current redo branch after pending operations settle. */
+  discardRedo(): Promise<void> {
+    return this.#withFlush(() => this.#session.discardRedo());
+  }
+
   /** Reads document state behind every queued and in-flight edit. */
   state(): Promise<WorkspaceDocumentState | null> {
     return this.#withFlush(() => this.#session.documentState());
