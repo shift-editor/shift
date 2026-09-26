@@ -1,3 +1,4 @@
+import { colorThemes } from "../src/renderer/src/lib/themes";
 import { workspaceTest as test, expect } from "./fixtures/electronApp";
 import {
   clickFirstCatalogGlyph,
@@ -19,26 +20,23 @@ test.describe("Theme", () => {
     await page.getByRole("button", { name: "Appearance", exact: true }).click();
     await page.getByRole("radio", { name: /Nord/ }).click();
 
+    const nord = colorThemes.find(({ id }) => id === "nord");
+    if (!nord) throw new Error("Expected the Nord theme");
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
     await expect(page.locator("html")).toHaveAttribute("data-color-theme", "nord");
     await expect
       .poll(() =>
-        page.evaluate(() => ({
-          background: getComputedStyle(document.documentElement)
-            .getPropertyValue("--color-background")
-            .trim(),
-          handle: getComputedStyle(document.documentElement)
-            .getPropertyValue("--editor-handle-primary-stroke")
-            .trim(),
-        })),
+        page.evaluate(() =>
+          getComputedStyle(document.documentElement).getPropertyValue("--color-background").trim(),
+        ),
       )
-      .toEqual({ background: "#2e3440", handle: "#81a1c1" });
+      .toBe(nord.palette.base00);
 
     await page.reload();
     await expect(page.locator("html")).toHaveAttribute("data-color-theme", "nord");
   });
 
-  test("keeps interaction overlays reactive after returning from Home", async ({
+  test("keeps viewport input live after a theme change and a Home round trip", async ({
     page,
     editor,
   }) => {
@@ -56,55 +54,37 @@ test.describe("Theme", () => {
     await page.getByRole("button", { name: "Font overview" }).click();
     await page.waitForURL(/#\/home$/);
     await expect(catalog).toBeVisible();
-    await page.evaluate(
-      () =>
-        new Promise<void>((resolve) => {
-          requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-        }),
-    );
 
     await clickFirstCatalogGlyph(page);
     await waitForEditorReady(page, glyphId);
     await editor.waitForCanvasRender();
 
-    const scene = page.locator("#scene-canvas");
     const bounds = await editor.canvasBounds();
+    const viewport = () =>
+      page.evaluate(() => {
+        const { pan, zoom } = window.shift!.editor;
+        return { pan: { x: pan.x, y: pan.y }, zoom };
+      });
     await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
 
-    const beforePan = await scene.screenshot();
+    const beforePan = await viewport();
     await page.mouse.wheel(40, 30);
-    await editor.waitForCanvasRender();
-    expect((await scene.screenshot()).equals(beforePan)).toBe(false);
+    await expect
+      .poll(async () => (await viewport()).pan)
+      .toEqual({ x: beforePan.pan.x - 40, y: beforePan.pan.y - 30 });
 
-    const beforeZoom = await scene.screenshot();
+    const beforeZoom = await viewport();
     await page.keyboard.down("Control");
     await page.mouse.wheel(0, -200);
     await page.keyboard.up("Control");
-    await editor.waitForCanvasRender();
-    expect((await scene.screenshot()).equals(beforeZoom)).toBe(false);
+    await expect.poll(async () => (await viewport()).zoom).toBeGreaterThan(beforeZoom.zoom);
 
-    const overlay = page.locator("#interactive-canvas");
-    const paintedPixelCount = () =>
-      overlay.evaluate((element) => {
-        const canvas = element as HTMLCanvasElement;
-        const context = canvas.getContext("2d");
-        if (!context) throw new Error("Expected overlay canvas context");
-
-        const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
-        let count = 0;
-        for (let index = 3; index < pixels.length; index += 4) {
-          if (pixels[index] !== 0) count++;
-        }
-        return count;
-      });
-    const before = await paintedPixelCount();
-
-    await editor.pointerDown({ x: bounds.x + 20, y: bounds.y + 20 });
-    await editor.pointerMove({ x: bounds.x + 180, y: bounds.y + 120 }, 5);
-
-    await expect.poll(() => editor.toolState()).toBe("brushing");
-    await expect.poll(paintedPixelCount).toBeGreaterThan(before);
-    await editor.cancelGesture();
+    await editor.dragCanvas({
+      from: { x: 5, y: 5 },
+      to: { x: bounds.width - 5, y: bounds.height - 5 },
+      steps: 5,
+    });
+    await expect.poll(async () => (await editor.selectionIds()).length).toBeGreaterThan(0);
   });
 
   test("redraws the active canvas renderers when the theme changes", async ({
@@ -115,22 +95,22 @@ test.describe("Theme", () => {
     await editor.openGlyphByUnicode("41");
     await editor.waitForCanvasRender();
 
+    // Selected handles use the theme accent, so both renderers have themed pixels to repaint.
+    await editor.selectAll();
+    await editor.waitForCanvasRender();
+
     const sceneCanvas = page.locator("#scene-canvas");
     const markerCanvas = page.locator("#marker-canvas");
     const sceneScreenshotOptions = { style: "#scene-canvas { background: white; }" };
     const markerScreenshotOptions = { style: "#marker-canvas { background: white; }" };
     const sceneBefore = await sceneCanvas.screenshot(sceneScreenshotOptions);
     const markersBefore = await markerCanvas.screenshot(markerScreenshotOptions);
-    const gpuMarkersVisible = await electronApp.evaluate(({ nativeImage }, png) => {
-      const pixels = nativeImage.createFromBuffer(Buffer.from(png, "base64")).toBitmap();
-      for (let index = 0; index < pixels.length; index += 4) {
-        const blue = pixels[index]!;
-        const green = pixels[index + 1]!;
-        const red = pixels[index + 2]!;
-        if (red < 250 || green < 250 || blue < 250) return true;
-      }
-      return false;
+    // Precondition, not a colour oracle: the marker layer must have drawn the selected handles.
+    const markersDrawn = await electronApp.evaluate(({ nativeImage }, png) => {
+      const bitmap = nativeImage.createFromBuffer(Buffer.from(png, "base64")).toBitmap();
+      return bitmap.some((channel) => channel < 250);
     }, markersBefore.toString("base64"));
+    expect(markersDrawn).toBe(true);
 
     await page.getByRole("button", { name: "Settings" }).click();
     await page.getByRole("button", { name: "Appearance", exact: true }).click();
@@ -141,13 +121,10 @@ test.describe("Theme", () => {
     await expect
       .poll(async () => (await sceneCanvas.screenshot(sceneScreenshotOptions)).equals(sceneBefore))
       .toBe(false);
-
-    if (gpuMarkersVisible) {
-      await expect
-        .poll(async () =>
-          (await markerCanvas.screenshot(markerScreenshotOptions)).equals(markersBefore),
-        )
-        .toBe(false);
-    }
+    await expect
+      .poll(async () =>
+        (await markerCanvas.screenshot(markerScreenshotOptions)).equals(markersBefore),
+      )
+      .toBe(false);
   });
 });

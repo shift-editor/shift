@@ -158,7 +158,8 @@ test("keeps a useful UPM frame across empty and extreme glyphs", async ({ page, 
 
   for (const glyph of glyphs) {
     await editor.openGlyph(glyph.id);
-    await expect(editor.canvas).toBeVisible();
+    // Fit-on-open publishes after the scene node; read the projection from a rendered frame.
+    await editor.waitForCanvasRender();
     const frame = await cameraFrame(page);
 
     const context = `${glyph.name}: ${JSON.stringify(frame)}`;
