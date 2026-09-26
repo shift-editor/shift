@@ -249,6 +249,44 @@ describe("KeyboardRouter", () => {
       expect(editor.pointCount).toBe(0);
       expect(editor.selection.hasSelection()).toBe(false);
     });
+
+    it.each(["Delete", "Backspace"])(
+      "%s joins the neighbours of a deleted point into one contour",
+      async (key) => {
+        const [, middle] = await editor.drawOpenContour([
+          { x: 100, y: 100 },
+          { x: 200, y: 150 },
+          { x: 300, y: 100 },
+        ]);
+        editor.selectTool("select");
+        editor.selection.select([middle!]);
+
+        await router.handleKeyDown(createKeyboardEvent({ key, code: key }));
+        await editor.settle();
+
+        expect(editor.requireGlyphLayer().contours).toHaveLength(1);
+        expect(editor.pointCount).toBe(2);
+      },
+    );
+
+    it.each(["Delete", "Backspace"])(
+      "Shift+%s leaves a gap instead of joining the neighbours",
+      async (key) => {
+        const [, middle] = await editor.drawOpenContour([
+          { x: 100, y: 100 },
+          { x: 200, y: 150 },
+          { x: 300, y: 100 },
+        ]);
+        editor.selectTool("select");
+        editor.selection.select([middle!]);
+
+        await router.handleKeyDown(createKeyboardEvent({ key, code: key, shiftKey: true }));
+        await editor.settle();
+
+        expect(editor.requireGlyphLayer().contours).toHaveLength(2);
+        expect(editor.pointCount).toBe(2);
+      },
+    );
   });
 
   describe("temporary hand tool (space)", () => {
