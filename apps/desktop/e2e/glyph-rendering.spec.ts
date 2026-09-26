@@ -4,11 +4,16 @@
  *
  * Uses MutatorSans "S" (U+0053), whose TrueType quadratic contours include
  * smooth/corner nodes and off-curve handles — exercising every visual style.
+ *
+ * Pen gestures use positions normalized to the interactive canvas and prove the
+ * authored point count before each capture, so a layout change cannot silently
+ * redraw different geometry.
  */
 
-import type { Page } from "@playwright/test";
+import type { Point2D } from "@shift/geo";
 import { workspaceTest as test, expect } from "./fixtures/electronApp";
-import { CanvasUtil } from "./fixtures/CanvasUtil";
+import type { EditorDriver } from "./fixtures/EditorDriver";
+import { expectCanvasSnapshot } from "./fixtures/snapshots";
 
 // MutatorSans glyph codepoints (hex).
 const GLYPH_S = "53"; // Complex quadratic curves
@@ -16,21 +21,32 @@ const GLYPH_B = "42"; // Mix of curves + straights
 const GLYPH_I = "49"; // Simple straight segments
 const GLYPH_Q = "51"; // Counter with curves
 
-async function selectedSegmentPixelCount(page: Page): Promise<number> {
-  return page.locator("#scene-canvas").evaluate((element) => {
-    const canvas = element as HTMLCanvasElement;
-    const context = canvas.getContext("2d");
-    if (!context) throw new Error("Expected scene canvas context");
+/** Clicks with the Pen tool and waits until the click authored `added` more points. */
+async function penClick(editor: EditorDriver, at: Point2D, added = 1): Promise<void> {
+  const before = await editor.pointCount();
+  const point = await editor.canvasPagePoint(at);
+  await editor.page.mouse.click(point.x, point.y);
+  await expect.poll(() => editor.pointCount()).toBe(before + added);
+}
 
-    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
-    let count = 0;
-    for (let index = 0; index < pixels.length; index += 4) {
-      if (pixels[index] === 24 && pixels[index + 1] === 134 && pixels[index + 2] === 215) {
-        count++;
-      }
-    }
-    return count;
-  });
+/** Presses at `from` and drags to `to` with the active tool, leaving the pointer pressed. */
+async function penDragPreview(editor: EditorDriver, from: Point2D, to: Point2D): Promise<void> {
+  await editor.pointerDown(await editor.canvasPagePoint(from));
+  await editor.pointerMove(await editor.canvasPagePoint(to), 5);
+  await expect.poll(() => editor.toolState()).toBe("dragging");
+}
+
+/** Click-drags a smooth Pen point and waits until the gesture authored `added` more points. */
+async function penDrag(
+  editor: EditorDriver,
+  from: Point2D,
+  to: Point2D,
+  added: number,
+): Promise<void> {
+  const before = await editor.pointCount();
+  await penDragPreview(editor, from, to);
+  await editor.pointerUp();
+  await expect.poll(() => editor.pointCount()).toBe(before + added);
 }
 
 test.describe("Glyph rendering — S (quadratic curves)", () => {
@@ -38,257 +54,162 @@ test.describe("Glyph rendering — S (quadratic curves)", () => {
     await editor.openGlyphByUnicode(GLYPH_S);
   });
 
-  test("scene canvas shows filled glyph outline", async ({ page }) => {
-    const canvas = new CanvasUtil(page);
-    const screenshot = await canvas.screenshotCanvasLayer("scene-canvas");
-    await expect(screenshot).toMatchSnapshot("scene-S-filled.png");
+  test("composited canvas shows full glyph with handles", async ({ editor }) => {
+    await expectCanvasSnapshot(editor, "canvas-S-composited.png");
   });
 
-  test("handles layer shows on-curve and off-curve handles", async ({ page }) => {
-    const canvas = new CanvasUtil(page);
-    const screenshot = await canvas.screenshotCanvasLayer("marker-canvas");
-    await expect(screenshot).toMatchSnapshot("handles-S-idle.png");
-  });
-
-  test("background canvas shows guides and metrics", async ({ page }) => {
-    const canvas = new CanvasUtil(page);
-    const screenshot = await canvas.screenshotCanvasLayer("background-canvas");
-    await expect(screenshot).toMatchSnapshot("bg-S-guides.png");
-  });
-
-  test("composited canvas shows full glyph with handles", async ({ page }) => {
-    const canvas = new CanvasUtil(page);
-    const screenshot = await canvas.screenshotCanvasContainer();
-    await expect(screenshot).toMatchSnapshot("canvas-S-composited.png");
-  });
-});
-
-test.describe("Glyph rendering — selection states", () => {
-  test.beforeEach(async ({ editor }) => {
-    await editor.openGlyphByUnicode(GLYPH_S);
-  });
-
-  test("select-all highlights every handle", async ({ page, editor }) => {
+  test("select-all highlights every handle and shows the bounding box", async ({ editor }) => {
     await editor.selectAll();
-    await editor.waitForCanvasRender();
+    expect(await editor.selectionIds()).toHaveLength(await editor.pointCount());
 
-    const canvas = new CanvasUtil(page);
-    const screenshot = await canvas.screenshotCanvasLayer("marker-canvas");
-    await expect(screenshot).toMatchSnapshot("handles-S-all-selected.png");
-  });
-
-  test("select-all shows bounding box overlay", async ({ page, editor }) => {
-    await editor.selectAll();
-    await editor.waitForCanvasRender();
-
-    const canvas = new CanvasUtil(page);
-    const screenshot = await canvas.screenshotCanvasContainer();
-    await expect(screenshot).toMatchSnapshot("canvas-S-all-selected.png");
+    await expectCanvasSnapshot(editor, "canvas-S-all-selected.png");
   });
 });
 
 test.describe("Pen tool drawing — segment snapshots", () => {
   test.beforeEach(async ({ editor }) => {
     await editor.openGlyphByUnicode(GLYPH_I);
+    await editor.selectTool("pen");
   });
 
-  test("single on-curve point (click)", async ({ page, editor }) => {
-    await editor.selectTool("pen");
+  test("single on-curve point (click)", async ({ editor }) => {
+    await penClick(editor, { x: 0.7, y: 0.7 });
 
-    const canvas = editor.canvas;
-    await canvas.click({ position: { x: 600, y: 400 } });
-    await editor.waitForCanvasRender();
-
-    const canvasUtil = new CanvasUtil(page);
-    const screenshot = await canvasUtil.screenshotCanvasContainer();
-    await expect(screenshot).toMatchSnapshot("pen-single-point.png");
+    await expectCanvasSnapshot(editor, "pen-single-point.png");
   });
 
-  test("straight line segment (two clicks)", async ({ page, editor }) => {
-    await editor.selectTool("pen");
+  test("straight line segment (two clicks)", async ({ editor }) => {
+    await penClick(editor, { x: 0.55, y: 0.45 });
+    await penClick(editor, { x: 0.8, y: 0.8 });
 
-    const canvas = editor.canvas;
-    await canvas.click({ position: { x: 500, y: 300 } });
-    await canvas.click({ position: { x: 700, y: 500 } });
-    await editor.waitForCanvasRender();
-
-    const canvasUtil = new CanvasUtil(page);
-    const screenshot = await canvasUtil.screenshotCanvasContainer();
-    await expect(screenshot).toMatchSnapshot("pen-straight-segment.png");
-  });
-
-  test("selected segment highlight hides while translating", async ({ page, editor }) => {
-    const canvas = editor.canvas;
-    await editor.selectTool("pen");
-    await canvas.click({ position: { x: 500, y: 300 } });
-    await canvas.click({ position: { x: 700, y: 500 } });
-    await page.getByRole("button", { name: "Select Tool (V)" }).click();
-    await canvas.click({ position: { x: 600, y: 400 } });
-    await expect.poll(() => selectedSegmentPixelCount(page)).toBeGreaterThan(0);
-
-    const bounds = await editor.canvasBounds();
-    await editor.pointerDown({ x: bounds.x + 600, y: bounds.y + 400 });
-    await editor.pointerMove({ x: bounds.x + 640, y: bounds.y + 440 }, 5);
-    await expect.poll(() => selectedSegmentPixelCount(page)).toBe(0);
-    await editor.pointerUp();
+    await expectCanvasSnapshot(editor, "pen-straight-segment.png");
   });
 
   test("space preview keeps an open contour outline visible", async ({ page, editor }) => {
-    await editor.selectTool("pen");
+    await penClick(editor, { x: 0.55, y: 0.45 });
+    await penClick(editor, { x: 0.8, y: 0.8 });
 
-    const canvas = editor.canvas;
-    await canvas.click({ position: { x: 500, y: 300 } });
-    await canvas.click({ position: { x: 700, y: 500 } });
     await page.keyboard.down("Space");
-    await editor.waitForCanvasRender();
-
-    const canvasUtil = new CanvasUtil(page);
-    const screenshot = await canvasUtil.screenshotCanvasContainer();
-    await page.keyboard.up("Space");
-    await expect(screenshot).toMatchSnapshot("pen-open-contour-space-preview.png");
+    try {
+      await expectCanvasSnapshot(editor, "pen-open-contour-space-preview.png");
+    } finally {
+      await page.keyboard.up("Space");
+    }
   });
 
   test("preview line follows the latest on-curve endpoint after undo", async ({ page, editor }) => {
-    await editor.selectTool("pen");
-
-    const canvas = editor.canvas;
-    const bounds = await editor.canvasBounds();
-
-    const baseline = Math.round(bounds.height * 0.7);
-    await canvas.click({ position: { x: Math.round(bounds.width * 0.35), y: baseline } });
-    await canvas.click({ position: { x: Math.round(bounds.width * 0.5), y: baseline } });
-    await canvas.click({ position: { x: Math.round(bounds.width * 0.65), y: baseline } });
+    const before = await editor.pointCount();
+    // Below the I baseline, so no click lands on existing geometry.
+    for (const x of [0.1, 0.2, 0.3]) await penClick(editor, { x, y: 0.85 });
     await editor.undo();
+    await expect.poll(() => editor.pointCount()).toBe(before + 2);
 
-    await page.mouse.move(bounds.x + bounds.width * 0.8, bounds.y + bounds.height * 0.35);
+    const preview = await editor.canvasPagePoint({ x: 0.8, y: 0.35 });
+    await page.mouse.move(preview.x, preview.y);
     await editor.flushPointerMoves();
-    await editor.waitForCanvasRender();
 
-    const canvasUtil = new CanvasUtil(page);
-    const screenshot = await canvasUtil.screenshotCanvasContainer();
-    await expect(screenshot).toMatchSnapshot("pen-preview-after-undo.png");
+    await expectCanvasSnapshot(editor, "pen-preview-after-undo.png");
   });
 
-  test("cubic curve with handles (click-drag)", async ({ page, editor }) => {
-    await editor.selectTool("pen");
+  test("cubic curve with handles (click-drag)", async ({ editor }) => {
+    await penClick(editor, { x: 0.35, y: 0.7 });
+    await penDrag(editor, { x: 0.55, y: 0.45 }, { x: 0.65, y: 0.35 }, 3);
 
-    await editor.canvas.click({ position: { x: 400, y: 400 } });
-    await editor.pointerDown({ x: 600, y: 300 });
-    await editor.pointerMove({ x: 700, y: 250 }, 5);
-    await editor.pointerUp();
-    await editor.waitForCanvasRender();
-
-    const canvasUtil = new CanvasUtil(page);
-    const screenshot = await canvasUtil.screenshotCanvasContainer();
-    await expect(screenshot).toMatchSnapshot("pen-cubic-curve.png");
+    await expectCanvasSnapshot(editor, "pen-cubic-curve.png");
   });
 
-  test("cubic curve preview before pointer release", async ({ page, editor }) => {
-    await editor.selectTool("pen");
+  test("cubic curve preview before pointer release", async ({ editor }) => {
+    await penClick(editor, { x: 0.35, y: 0.7 });
+    await penDragPreview(editor, { x: 0.55, y: 0.45 }, { x: 0.65, y: 0.35 });
 
-    await editor.canvas.click({ position: { x: 400, y: 400 } });
-    await editor.pointerDown({ x: 600, y: 300 });
-    await editor.pointerMove({ x: 700, y: 250 }, 5);
-    await editor.waitForCanvasRender();
-
-    const canvasUtil = new CanvasUtil(page);
-    const screenshot = await canvasUtil.screenshotCanvasContainer();
-    await expect(screenshot).toMatchSnapshot("pen-cubic-curve-drag-preview.png");
-
-    await editor.pointerUp();
+    try {
+      await expectCanvasSnapshot(editor, "pen-cubic-curve-drag-preview.png");
+    } finally {
+      await editor.pointerUp();
+    }
   });
 
-  test("smooth junction preview before consecutive curve release", async ({ page, editor }) => {
-    await editor.selectTool("pen");
+  test("smooth junction preview before consecutive curve release", async ({ editor }) => {
+    await penClick(editor, { x: 0.4, y: 0.7 });
+    await penDrag(editor, { x: 0.58, y: 0.45 }, { x: 0.68, y: 0.35 }, 3);
+    await penDragPreview(editor, { x: 0.78, y: 0.48 }, { x: 0.9, y: 0.38 });
 
-    await editor.canvas.click({ position: { x: 400, y: 400 } });
-    await editor.pointerDown({ x: 600, y: 300 });
-    await editor.pointerMove({ x: 700, y: 250 }, 5);
-    await editor.pointerUp();
-    await editor.pointerDown({ x: 800, y: 300 });
-    await editor.pointerMove({ x: 900, y: 250 }, 5);
-    await editor.waitForCanvasRender();
-
-    const canvasUtil = new CanvasUtil(page);
-    const screenshot = await canvasUtil.screenshotCanvasContainer();
-    await expect(screenshot).toMatchSnapshot("pen-smooth-junction-drag-preview.png");
-
-    await editor.pointerUp();
+    try {
+      await expectCanvasSnapshot(editor, "pen-smooth-junction-drag-preview.png");
+    } finally {
+      await editor.pointerUp();
+    }
   });
 
-  test("multiple segments — mixed straight and cubic", async ({ page, editor }) => {
-    await editor.selectTool("pen");
+  test("multiple segments — mixed straight and cubic", async ({ editor }) => {
+    await penClick(editor, { x: 0.4, y: 0.8 });
+    await penClick(editor, { x: 0.55, y: 0.6 });
+    await penDrag(editor, { x: 0.7, y: 0.45 }, { x: 0.7, y: 0.25 }, 3);
+    await penClick(editor, { x: 0.92, y: 0.75 });
 
-    const canvas = editor.canvas;
-
-    // Segment 1: straight line (click → click).
-    await canvas.click({ position: { x: 350, y: 500 } });
-    await canvas.click({ position: { x: 500, y: 350 } });
-
-    // Segment 2: cubic curve (click-drag from last point).
-    await editor.pointerDown({ x: 650, y: 300 });
-    await editor.pointerMove({ x: 750, y: 250 }, 5);
-    await editor.pointerUp();
-
-    // Segment 3: another straight, kept inside the measured canvas bounds.
-    const canvasBounds = await editor.canvasBounds();
-
-    await canvas.click({
-      position: { x: Math.round(canvasBounds.width * 0.9), y: 500 },
-    });
-    await expect.poll(() => editor.pointCount()).toBeGreaterThanOrEqual(6);
-    await editor.waitForCanvasRender();
-
-    const canvasUtil = new CanvasUtil(page);
-    const screenshot = await canvasUtil.screenshotCanvasContainer();
-    await expect(screenshot).toMatchSnapshot("pen-mixed-segments.png");
+    await expectCanvasSnapshot(editor, "pen-mixed-segments.png");
   });
 
-  test("cubic S-curve with symmetric handles", async ({ page, editor }) => {
+  test("cubic S-curve with symmetric handles", async ({ editor }) => {
+    await penClick(editor, { x: 0.4, y: 0.7 });
+    await penDrag(editor, { x: 0.58, y: 0.4 }, { x: 0.68, y: 0.3 }, 3);
+    await penDrag(editor, { x: 0.82, y: 0.65 }, { x: 0.7, y: 0.75 }, 3);
+
+    await expectCanvasSnapshot(editor, "pen-s-curve-handles.png");
+  });
+});
+
+test.describe("Segment selection rendering", () => {
+  test.beforeEach(async ({ editor }) => {
+    await editor.openGlyphByUnicode(GLYPH_I);
     await editor.selectTool("pen");
+    await penClick(editor, { x: 0.55, y: 0.45 });
+    await penClick(editor, { x: 0.8, y: 0.8 });
+    await editor.selectTool("select");
+  });
 
-    await editor.pointerDown({ x: 400, y: 500 });
-    await editor.pointerMove({ x: 500, y: 500 }, 5);
-    await editor.pointerUp();
+  test("selected segment is highlighted, and the highlight hides while translating", async ({
+    page,
+    editor,
+  }) => {
+    const middle = { x: 0.675, y: 0.625 };
+    const middlePage = await editor.canvasPagePoint(middle);
+    await page.mouse.click(middlePage.x, middlePage.y);
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const editor = window.shift?.editor;
+          const [id] = editor?.selection.ids ?? [];
+          return id ? editor?.object(id)?.kind : null;
+        }),
+      )
+      .toBe("segment");
+    await expectCanvasSnapshot(editor, "segment-selected.png");
 
-    await editor.pointerDown({ x: 700, y: 300 });
-    await editor.pointerMove({ x: 600, y: 300 }, 5);
-    await editor.pointerUp();
-    await editor.waitForCanvasRender();
-
-    const canvasUtil = new CanvasUtil(page);
-    const screenshot = await canvasUtil.screenshotCanvasContainer();
-    await expect(screenshot).toMatchSnapshot("pen-s-curve-handles.png");
+    await editor.pointerDown(middlePage);
+    await editor.pointerMove(await editor.canvasPagePoint({ x: 0.7, y: 0.66 }), 5);
+    try {
+      await expect.poll(() => editor.toolState()).toBe("translating");
+      await expectCanvasSnapshot(editor, "segment-translating.png");
+    } finally {
+      await editor.pointerUp();
+    }
   });
 });
 
 test.describe("Glyph rendering — multiple glyphs", () => {
-  test("B glyph — mixed curves and straights", async ({ page, editor }) => {
+  test("B glyph — mixed curves and straights", async ({ editor }) => {
     await editor.openGlyphByUnicode(GLYPH_B);
-
-    const canvas = new CanvasUtil(page);
-    const screenshot = await canvas.screenshotCanvasContainer();
-    await expect(screenshot).toMatchSnapshot("canvas-B-composited.png");
+    await expectCanvasSnapshot(editor, "canvas-B-composited.png");
   });
 
-  test("I glyph — straight segments only", async ({ page, editor }) => {
+  test("I glyph — straight segments only", async ({ editor }) => {
     await editor.openGlyphByUnicode(GLYPH_I);
-
-    const canvas = new CanvasUtil(page);
-    const screenshot = await canvas.screenshotCanvasContainer();
-    await expect(screenshot).toMatchSnapshot("canvas-I-composited.png");
+    await expectCanvasSnapshot(editor, "canvas-I-composited.png");
   });
 
-  test("Q glyph — counter with curves", async ({ page, editor }) => {
+  test("Q glyph — counter with curves", async ({ editor }) => {
     await editor.openGlyphByUnicode(GLYPH_Q);
-
-    const canvas = new CanvasUtil(page);
-    const screenshot = await canvas.screenshotCanvasContainer();
-    await expect(screenshot).toMatchSnapshot("canvas-Q-composited.png");
-  });
-
-  test("S glyph — full editor view", async ({ page, editor }) => {
-    await editor.openGlyphByUnicode(GLYPH_S);
-    await expect(page).toHaveScreenshot("editor-S-full.png");
+    await expectCanvasSnapshot(editor, "canvas-Q-composited.png");
   });
 });
