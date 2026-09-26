@@ -36,7 +36,9 @@ test("recovers batched glyph undo", async ({ recoveryApp }) => {
     });
   }, glyphNames);
   await waitForGlyphsAndState(recoveryApp.page, glyphNames, true, true);
-  expect(recoveryApp.canonicalGlyphNames()).not.toEqual(expect.arrayContaining(glyphNames));
+  expect(
+    recoveryApp.canonicalGlyphNames().filter((name) => glyphNames.includes(name as GlyphName)),
+  ).toEqual([]);
 
   await recoveryApp.page.evaluate(async () => {
     await window.shift?.font.editCoordinator.undo();
@@ -60,7 +62,9 @@ test("recovers batched glyph undo", async ({ recoveryApp }) => {
   await waitForGlyphsAndState(recovered, glyphNames, false, true);
   expect(recoveryApp.canonicalGlyphNames()).toEqual(expect.arrayContaining(glyphNames));
   await save(recovered);
-  expect(recoveryApp.canonicalGlyphNames()).not.toEqual(expect.arrayContaining(glyphNames));
+  expect(
+    recoveryApp.canonicalGlyphNames().filter((name) => glyphNames.includes(name as GlyphName)),
+  ).toEqual([]);
 
   const followupGlyph = "recoveryAfterSave" as GlyphName;
   await recovered.evaluate((name) => {
