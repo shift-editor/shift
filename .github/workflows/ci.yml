@@ -704,6 +704,7 @@ jobs:
           PLAYWRIGHT_JSON_OUTPUT_FILE: ${{ github.workspace }}/playwright-report/results.json
         run: >-
           pnpm --dir apps/desktop exec playwright merge-reports
+          --config playwright.merge.config.ts
           --reporter html,json
           ${{ github.workspace }}/all-blob-reports
 
