@@ -93,6 +93,7 @@ export const Sources = ({ canAuthor, outlineControls }: SourcesProps) => {
                     visible={visible}
                     inherited={inherited}
                     label="outline"
+                    subject={`${source.name} source`}
                     onClick={() => outlineControls.onToggle(target)}
                   />
                 )}
@@ -135,7 +136,7 @@ const SourceActionsMenu = ({
       <Tooltip>
         <TooltipTrigger>
           <SidebarActionButton label={`Actions for ${sourceName}`} aria-disabled>
-            <VerticalElipsis className="h-5 w-5" />
+            <VerticalElipsis className="h-5 w-5 text-icon-subtle" />
           </SidebarActionButton>
         </TooltipTrigger>
         <TooltipContent>Source actions unavailable in preview mode</TooltipContent>
@@ -152,7 +153,7 @@ const SourceActionsMenu = ({
               <Button variant="ghost" size="icon-sm" aria-label={`Actions for ${sourceName}`} />
             }
           >
-            <VerticalElipsis className="h-5 w-5" />
+            <VerticalElipsis className="h-5 w-5 text-icon-subtle" />
           </MenuTrigger>
         </TooltipTrigger>
         <TooltipContent>{`Edit source`}</TooltipContent>

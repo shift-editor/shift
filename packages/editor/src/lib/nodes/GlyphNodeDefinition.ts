@@ -1,6 +1,6 @@
 import { Bounds, type Rect2D } from "@shift/geo";
 import type { SegmentId } from "@shift/glyph-state";
-import type { ComponentId } from "@shift/types";
+import type { ComponentId, NodeId, PointId } from "@shift/types";
 import type { NodePoint } from "../../types/coordinates";
 import { SCREEN_HIT_RADIUS } from "../editor/rendering/constants";
 import { OutlineRenderer } from "../editor/rendering/Outline";
@@ -15,6 +15,8 @@ import {
 import { displayAdvance } from "../utils/unicode";
 import { computed, keyedCache, track } from "../signals/index";
 import type { GlyphRenderModel } from "../model/Glyph";
+import type { GlyphContour } from "../model/ComponentGlyph";
+import type { HandleState } from "../../types/graphics";
 import type { GlyphRenderContour } from "../../types/glyphRender";
 import { NodeDefinition } from "./NodeDefinition";
 import type { GlyphNode } from "../../types/node";
@@ -25,8 +27,6 @@ import { emptyExternalAxisLocation, externalAxisLocationFromLocation } from "../
 import { GlyphOutlines } from "./GlyphOutlines";
 
 const EMPTY_OUTLINE_LOCATION = emptyExternalAxisLocation();
-const GLYPH_OUTLINE_COLOR = "rgba(139, 111, 207, 0.45)";
-const GLYPH_OUTLINE_WIDTH_PX = 1;
 
 export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
   readonly kind: GlyphNode["kind"] = "glyph";
@@ -240,21 +240,40 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     this.#drawOutlines(node, ctx);
   }
 
-  #drawOutlines(node: GlyphNode, ctx: RenderContext): void {
+  /**
+   * Returns the variation outlines drawn around a glyph node.
+   *
+   * @remarks
+   * Published targets are hidden while the hand tool pans, and a target whose source or
+   * instance no longer resolves is skipped. Tracks every input so render effects rerun.
+   *
+   * @param nodeId - Glyph scene occurrence being rendered.
+   * @returns Drawn targets in published order.
+   */
+  visibleOutlines(nodeId: NodeId): readonly GlyphOutlineTarget[] {
     track(this.editor.toolCell);
-    if (this.editor.toolCell.peek()?.id === "hand") return;
+    if (this.editor.toolCell.peek()?.id === "hand") return [];
+
+    return this.outlines.forNode(nodeId).filter((target) => {
+      const outline = this.#outlineViews.get(target);
+      track(outline.resolvedCell);
+      return outline.resolvedCell.peek() !== null;
+    });
+  }
+
+  #drawOutlines(node: GlyphNode, ctx: RenderContext): void {
+    const targets = this.visibleOutlines(node.id);
+    if (targets.length === 0) return;
 
     const glyph = this.editor.glyphForId(node.glyphId);
     if (!glyph) return;
 
-    for (const target of this.outlines.forNode(node.id)) {
+    for (const target of targets) {
       const outline = this.#outlineViews.get(target);
-      track(outline.resolvedCell);
-      if (!outline.resolvedCell.peek()) continue;
-
       const view = glyph.renderModelAt(outline.externalLocationCell, outline.activeSourceIdCell);
       view.trackShape();
-      ctx.canvas.strokePath(view.drawPath, GLYPH_OUTLINE_COLOR, GLYPH_OUTLINE_WIDTH_PX);
+      const { color, widthPx } = ctx.canvas.theme.variationOutline;
+      ctx.canvas.strokePath(view.drawPath, color, widthPx);
     }
   }
 
@@ -337,10 +356,34 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     );
   }
 
-  #drawControls(node: GlyphNode, ctx: RenderContext): void {
+  /**
+   * Returns the point handles drawn for a glyph node and the visual state of each.
+   *
+   * @remarks
+   * Handles at a location between sources use the `interpolated` state instead of
+   * selection or hover styling. Hidden handles are omitted.
+   *
+   * @param node - Glyph scene occurrence whose controls are rendered.
+   * @returns Handle state keyed by point; empty when the node has no render model.
+   */
+  handleStates(node: GlyphNode): ReadonlyMap<PointId, HandleState> {
     const view = this.#view(node);
-    if (!view) return;
+    if (!view) return new Map();
 
+    const { interpolated, rootContours } = this.#controlContours(view);
+    return this.#handles.states(
+      rootContours,
+      this.editor.selection,
+      this.editor.hover,
+      interpolated,
+      (pointId, contourId) => this.editor.handlesVisible(pointId, contourId),
+    );
+  }
+
+  #controlContours(view: GlyphRenderModel): {
+    interpolated: boolean;
+    rootContours: readonly GlyphContour[];
+  } {
     track(this.editor.font.axesCell);
     track(this.editor.font.sourcesCell);
     track(this.editor.font.committedFontCell);
@@ -354,6 +397,14 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     const rootContours = view.contours.filter(
       (contour) => contour.component === null && this.editor.handlesVisible(contour.contour.id),
     );
+    return { interpolated, rootContours };
+  }
+
+  #drawControls(node: GlyphNode, ctx: RenderContext): void {
+    const view = this.#view(node);
+    if (!view) return;
+
+    const { interpolated, rootContours } = this.#controlContours(view);
     for (const contour of rootContours) contour.trackShape();
     view.trackAnchors();
 

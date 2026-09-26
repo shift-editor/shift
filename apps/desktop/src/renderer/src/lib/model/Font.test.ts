@@ -8,6 +8,7 @@ import {
   mintLayerId,
   mintSourceId,
   type Axis,
+  type AxisDefinition,
   type AxisId,
   type GlyphId,
   type GlyphName,
@@ -318,6 +319,91 @@ describe("font-level intents make the font variable", () => {
 
     await stack.editCoordinator.undo();
     expect(stack.font.getAxisMappings()).toEqual([]);
+  });
+
+  it("deletes a source without touching axes or named instances, and undo restores it", async () => {
+    const stack = createWorkspaceStack();
+    await stack.createWorkspace();
+    const axisId = stack.font.createAxis(weightAxis());
+    await stack.editCoordinator.settled();
+    const mediumSourceId = stack.font.createSource(
+      "Medium",
+      externalAxisLocationFromRecord({ [axisId]: 600 }),
+    );
+    const boldSourceId = stack.font.createSource(
+      "Bold",
+      externalAxisLocationFromRecord({ [axisId]: 900 }),
+    );
+    stack.font.createNamedInstance({
+      name: "Display",
+      postscriptName: "UntitledFont-Display",
+      location: { values: { [axisId]: 800 } as Record<AxisId, number> },
+    });
+    await stack.editCoordinator.settled();
+    const axes = stack.font.getAxes();
+    const namedInstances = stack.font.namedInstances;
+    const defaultSourceId = stack.font.defaultSource.id;
+
+    stack.font.deleteSource(mediumSourceId);
+    await stack.editCoordinator.settled();
+
+    expect(stack.font.sources.map(({ id }) => id)).toEqual([defaultSourceId, boldSourceId]);
+    expect(stack.font.getAxes()).toEqual(axes);
+    expect(stack.font.namedInstances).toEqual(namedInstances);
+
+    await stack.editCoordinator.undo();
+    expect(stack.font.sources.map(({ id }) => id)).toEqual([
+      defaultSourceId,
+      mediumSourceId,
+      boldSourceId,
+    ]);
+  });
+
+  it("removes a deleted axis from source and instance locations, and undo restores them", async () => {
+    const stack = createWorkspaceStack();
+    await stack.createWorkspace();
+    const weightAxisId = stack.font.createAxis(weightAxis());
+    await stack.editCoordinator.settled();
+    const widthAxisId = stack.font.createAxis({
+      ...weightAxis(),
+      tag: "wdth",
+      name: "Width",
+      minimum: 50,
+      default: 100,
+      maximum: 200,
+    });
+    await stack.editCoordinator.settled();
+    const boldSourceId = stack.font.createSource(
+      "Bold Wide",
+      externalAxisLocationFromRecord({ [weightAxisId]: 900, [widthAxisId]: 150 }),
+    );
+    const instanceId = stack.font.createNamedInstance({
+      name: "Display",
+      postscriptName: "UntitledFont-Display",
+      location: {
+        values: { [weightAxisId]: 700, [widthAxisId]: 120 } as Record<AxisId, number>,
+      },
+    });
+    await stack.editCoordinator.settled();
+    const sources = stack.font.sources;
+    const namedInstances = stack.font.namedInstances;
+
+    stack.font.deleteAxis(widthAxisId);
+    await stack.editCoordinator.settled();
+
+    expect(stack.font.getAxes().map(({ id }) => id)).toEqual([weightAxisId]);
+    expect(stack.font.sources.every(({ location }) => !(widthAxisId in location.values))).toBe(
+      true,
+    );
+    expect(stack.font.source(boldSourceId)?.location.values).toEqual({ [weightAxisId]: 900 });
+    expect(stack.font.namedInstances).toEqual([
+      expect.objectContaining({ id: instanceId, location: { values: { [weightAxisId]: 700 } } }),
+    ]);
+
+    await stack.editCoordinator.undo();
+    expect(stack.font.getAxes().map(({ id }) => id)).toEqual([weightAxisId, widthAxisId]);
+    expect(stack.font.sources).toEqual(sources);
+    expect(stack.font.namedInstances).toEqual(namedInstances);
   });
 
   it("projects stable axis labels and explicit named instances", async () => {
@@ -736,5 +822,19 @@ function mappingPoint(axisId: AxisId, input: number, output: number) {
   return {
     input: { values: { [axisId]: input } as Record<AxisId, number> },
     output: { values: { [axisId]: output } as Record<AxisId, number> },
+  };
+}
+
+function weightAxis(): AxisDefinition {
+  return {
+    tag: "wght",
+    name: "Weight",
+    role: "external",
+    axisType: "continuous",
+    minimum: 100,
+    default: 400,
+    maximum: 900,
+    labels: [],
+    hidden: false,
   };
 }

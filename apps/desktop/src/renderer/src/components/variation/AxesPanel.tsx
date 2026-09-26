@@ -123,7 +123,7 @@ const AxisActionsMenu = ({ axis, onEdit, onReset, onDelete }: AxisActionsMenuPro
         <MenuTrigger
           render={<Button variant="ghost" size="icon-sm" aria-label={`Actions for ${axis.name}`} />}
         >
-          <VerticalElipsis className="h-5 w-5" />
+          <VerticalElipsis className="h-5 w-5 text-icon-subtle" />
         </MenuTrigger>
       </TooltipTrigger>
       <TooltipContent>{`Actions for ${axis.name}`}</TooltipContent>

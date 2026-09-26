@@ -1,11 +1,13 @@
 import type { Page } from "@playwright/test";
+import type { GlyphId } from "@shift/types";
 import {
   designspacePreviewTest,
   expect,
   glyphsPreviewTest,
   variablePreviewTest,
 } from "./fixtures/perfApp";
-import { firstAxisSlider, openVariationControls } from "./fixtures/appLocators";
+import { firstAxisSlider, openVariationControls, waitForEditorReady } from "./fixtures/appLocators";
+import type { EditorDriver } from "./fixtures/EditorDriver";
 
 interface VariationSample {
   readonly activeSourceId: string | null;
@@ -13,7 +15,7 @@ interface VariationSample {
   readonly geometry: readonly number[];
 }
 
-async function openVariableGlyph(page: Page): Promise<string> {
+async function openVariableGlyph(page: Page): Promise<GlyphId> {
   await expect.poll(() => page.evaluate(() => window.shiftSession?.mode)).toBe("preview");
 
   const glyphId = await page.evaluate(async () => {
@@ -27,14 +29,14 @@ async function openVariableGlyph(page: Page): Promise<string> {
     window.location.hash = `#/editor/${encodeURIComponent(entry.id)}`;
     return entry.id;
   });
-  await page.waitForURL(new RegExp(`#/editor/${encodeURIComponent(glyphId)}$`));
+  await waitForEditorReady(page, glyphId);
   await openVariationControls(page);
   await expect(await firstAxisSlider(page)).toBeVisible();
 
   return glyphId;
 }
 
-async function variationSample(page: Page, glyphId: string): Promise<VariationSample> {
+async function variationSample(page: Page, glyphId: GlyphId): Promise<VariationSample> {
   return page.evaluate((id) => {
     const session = window.shiftSession;
     const glyph = session?.editor.glyphForId(id);
@@ -59,7 +61,14 @@ async function moveSliderToMiddle(page: Page): Promise<void> {
   await page.mouse.click(track.left + track.width / 2, track.top + track.height / 2);
 }
 
-async function expectContinuousVariablePreview(page: Page): Promise<void> {
+/** Captures the scene layer after the latest location has been rendered. */
+async function renderedSceneFrame(editor: EditorDriver): Promise<Buffer> {
+  await editor.waitForCanvasRender();
+  return editor.page.locator("#scene-canvas").screenshot();
+}
+
+async function expectContinuousVariablePreview(editor: EditorDriver): Promise<void> {
+  const page = editor.page;
   const glyphId = await openVariableGlyph(page);
   const slider = await firstAxisSlider(page);
 
@@ -71,11 +80,11 @@ async function expectContinuousVariablePreview(page: Page): Promise<void> {
 
   await moveSliderToMiddle(page);
   const middle = await variationSample(page, glyphId);
-  const middleFrame = await page.locator("#scene-canvas").screenshot();
+  const middleFrame = await renderedSceneFrame(editor);
 
   await slider.press("End");
   const maximum = await variationSample(page, glyphId);
-  const maximumFrame = await page.locator("#scene-canvas").screenshot();
+  const maximumFrame = await renderedSceneFrame(editor);
 
   expect(minimum.activeSourceId).not.toBeNull();
   expect(nearMinimum.activeSourceId).toBeNull();
@@ -86,14 +95,14 @@ async function expectContinuousVariablePreview(page: Page): Promise<void> {
   expect(maximumFrame.equals(middleFrame)).toBe(false);
 }
 
-variablePreviewTest("OpenType variables interpolate continuously", async ({ page }) => {
-  await expectContinuousVariablePreview(page);
+variablePreviewTest("OpenType variables interpolate continuously", async ({ editor }) => {
+  await expectContinuousVariablePreview(editor);
 });
 
-designspacePreviewTest("Designspace sources interpolate continuously", async ({ page }) => {
-  await expectContinuousVariablePreview(page);
+designspacePreviewTest("Designspace sources interpolate continuously", async ({ editor }) => {
+  await expectContinuousVariablePreview(editor);
 });
 
-glyphsPreviewTest("Glyphs sources interpolate continuously", async ({ page }) => {
-  await expectContinuousVariablePreview(page);
+glyphsPreviewTest("Glyphs sources interpolate continuously", async ({ editor }) => {
+  await expectContinuousVariablePreview(editor);
 });

@@ -22,7 +22,7 @@ export type { GlyphNode } from "./types/node";
 export { NUDGES_VALUES, type NudgeMagnitude } from "./types/nudge";
 export { currentSelectionId, objectIsKindOf, type SelectableId } from "./types/object";
 export type { ListSelectionMode } from "./types/listSelection";
-export type { PositionSelection } from "./types/positionEdit";
+export type { PositionGuide, PositionSelection } from "./types/positionEdit";
 export type { ShiftEditorRecord } from "./types/records";
 export type { SourceSelectionMode } from "./types/sourceSelection";
 export type { ToolShortcutEntry } from "./types/tools";

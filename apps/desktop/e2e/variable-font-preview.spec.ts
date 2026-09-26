@@ -1,59 +1,36 @@
 import fs from "node:fs";
+import type { Page } from "@playwright/test";
+import type { GlyphId } from "@shift/types";
 import { variablePreviewTest as test, expect } from "./fixtures/perfApp";
-import { firstAxisSlider, glyphCatalogCanvas, openVariationControls } from "./fixtures/appLocators";
+import {
+  firstAxisSlider,
+  glyphCatalogCanvas,
+  openVariationControls,
+  waitForEditorReady,
+} from "./fixtures/appLocators";
 
 test.describe("variable font preview projection", () => {
-  test("scrubs retained glyph geometry without source reads or projection acquisition", async ({
-    page,
-    sourcePath,
-  }) => {
-    await expect.poll(() => page.evaluate(() => window.shiftSession?.mode)).toBe("preview");
-
-    const glyphCanvas = glyphCatalogCanvas(page);
-    await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
-      timeout: 30_000,
-    });
-
-    const glyphId = await page.evaluate(async () => {
-      const session = window.shiftSession;
-      if (!session) throw new Error("Expected preview font session");
-
-      const entry = session.font.entryForName("A");
-      if (!entry) throw new Error("Variable fixture should contain A");
-      await session.font.loadGlyph(entry.id);
-      window.location.hash = `#/editor/${encodeURIComponent(entry.id)}`;
-      return entry.id;
-    });
-    await page.waitForURL(new RegExp(`#/editor/${encodeURIComponent(glyphId)}$`));
-
-    const sceneCanvas = page.locator("#scene-canvas");
-    await expect(sceneCanvas).toBeVisible();
+  test("offers source and instance navigation without authoring actions", async ({ page }) => {
+    await openPreviewGlyph(page, "A");
     const variationSidebar = await openVariationControls(page);
-    const slider = await firstAxisSlider(page);
-    await expect(slider).toBeVisible();
 
-    const createSource = variationSidebar.getByLabel("Create source");
-    await expect(createSource).toHaveCSS("opacity", "0");
-    await createSource.locator("..").locator("..").hover();
-    await expect(createSource).toHaveCSS("opacity", "0.5");
-    await expect(variationSidebar.getByText("Regular", { exact: true })).toHaveCount(2);
+    await expect(variationSidebar.getByLabel("Create source")).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
     const regularSourceId = await page.evaluate(
       () => window.shiftSession?.font.sources.find(({ name }) => name === "Regular")?.id,
     );
     if (!regularSourceId) throw new Error("Expected Regular source");
-    const regularSource = page.getByTestId(`source-${regularSourceId}`);
-    await expect(regularSource).toBeEnabled();
-    const regularSourceRow = regularSource.locator("..");
-    const regularSourceActions = regularSourceRow.getByLabel("Actions for Regular");
-    await expect(regularSourceActions).toHaveAttribute("aria-disabled", "true");
-    await expect(regularSourceActions).toHaveCSS("opacity", "0");
-    await regularSource.hover();
-    await expect(regularSourceActions).toHaveCSS("opacity", "0.5");
+    await expect(page.getByTestId(`source-${regularSourceId}`)).toBeEnabled();
     await expect(variationSidebar.getByText("Light", { exact: true })).toBeVisible();
-    await expect(variationSidebar.getByLabel("Actions for Medium")).toHaveAttribute(
-      "aria-disabled",
-      "true",
-    );
+    // Source and instance rows both expose actions; every one is unavailable in a preview.
+    const rowActions = variationSidebar.getByLabel(/^Actions for (Regular|Medium)$/);
+    await expect.poll(() => rowActions.count()).toBeGreaterThanOrEqual(2);
+    for (const action of await rowActions.all()) {
+      await expect(action).toHaveAttribute("aria-disabled", "true");
+    }
+
     const mediumInstanceId = await page.evaluate(
       () => window.shiftSession?.font.namedInstances.find(({ name }) => name === "Medium")?.id,
     );
@@ -64,20 +41,26 @@ test.describe("variable font preview projection", () => {
         page.evaluate(() => window.shiftSession?.editor.externalLocation.values().next().value),
       )
       .toBe(500);
-    await page.evaluate(() => window.shiftSession?.editor.setSourceToDefault());
+  });
 
-    const before = await page.evaluate((selectedGlyphId) => {
-      const session = window.shiftSession;
-      const glyph = session?.editor.glyphForId(selectedGlyphId);
-      if (!session || !glyph) throw new Error("Expected resident variable glyph");
+  test("scrubs retained glyph geometry without source reads or projection acquisition", async ({
+    page,
+    editor,
+    sourcePath,
+  }) => {
+    const glyphId = await openPreviewGlyph(page, "A");
+    await openVariationControls(page);
+    const slider = await firstAxisSlider(page);
+    await expect(slider).toBeVisible();
+    await slider.press("Home");
 
-      return {
-        location: Array.from(session.editor.externalLocation.values()),
-        values: Array.from(glyph.geometryAt(session.editor.externalLocation).values),
-      };
-    }, glyphId);
+    const before = await glyphSample(page, glyphId);
+    const sceneCanvas = page.locator("#scene-canvas");
+    await editor.waitForCanvasRender();
     const beforeFrame = await sceneCanvas.screenshot();
 
+    // A removed source exposes filesystem reads; rejecting acquisition exposes any
+    // attempt to rebuild the retained projection while scrubbing.
     fs.rmSync(sourcePath);
     await page.evaluate(() => {
       const font = window.shiftSession?.font;
@@ -93,41 +76,47 @@ test.describe("variable font preview projection", () => {
 
     await slider.press("End");
     await expect
-      .poll(() =>
-        slider.evaluate((input) => {
-          const thumbBounds = input.parentElement?.getBoundingClientRect();
-          const controlBounds =
-            input.parentElement?.parentElement?.parentElement?.getBoundingClientRect();
-          if (!thumbBounds || !controlBounds) return false;
-
-          return thumbBounds.left >= controlBounds.left && thumbBounds.right <= controlBounds.right;
-        }),
-      )
-      .toBe(true);
-    await expect
-      .poll(() =>
-        page.evaluate(() =>
-          Array.from(window.shiftSession?.editor.externalLocation.values() ?? []),
-        ),
-      )
+      .poll(async () => (await glyphSample(page, glyphId)).location)
       .not.toEqual(before.location);
-    await page.evaluate(
-      () =>
-        new Promise<void>((resolve) => {
-          requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-        }),
-    );
+    expect((await glyphSample(page, glyphId)).values).not.toEqual(before.values);
 
-    const afterValues = await page.evaluate((selectedGlyphId) => {
-      const session = window.shiftSession;
-      const glyph = session?.editor.glyphForId(selectedGlyphId);
-      if (!session || !glyph) throw new Error("Expected resident variable glyph");
-
-      return Array.from(glyph.geometryAt(session.editor.externalLocation).values);
-    }, glyphId);
-    expect(afterValues).not.toEqual(before.values);
-
-    const afterFrame = await sceneCanvas.screenshot();
-    expect(afterFrame.equals(beforeFrame)).toBe(false);
+    await editor.waitForCanvasRender();
+    expect((await sceneCanvas.screenshot()).equals(beforeFrame)).toBe(false);
   });
 });
+
+async function openPreviewGlyph(page: Page, name: string): Promise<GlyphId> {
+  await expect.poll(() => page.evaluate(() => window.shiftSession?.mode)).toBe("preview");
+  await expect(glyphCatalogCanvas(page)).toHaveAttribute("data-grid-readiness", "Complete", {
+    timeout: 30_000,
+  });
+
+  const glyphId = await page.evaluate(async (glyphName) => {
+    const session = window.shiftSession;
+    if (!session) throw new Error("Expected preview font session");
+
+    const entry = session.font.entryForName(glyphName);
+    if (!entry) throw new Error(`Variable fixture should contain ${glyphName}`);
+    await session.font.loadGlyph(entry.id);
+    window.location.hash = `#/editor/${encodeURIComponent(entry.id)}`;
+    return entry.id;
+  }, name);
+  await waitForEditorReady(page, glyphId);
+  return glyphId;
+}
+
+async function glyphSample(
+  page: Page,
+  glyphId: GlyphId,
+): Promise<{ location: number[]; values: number[] }> {
+  return page.evaluate((selectedGlyphId) => {
+    const session = window.shiftSession;
+    const glyph = session?.editor.glyphForId(selectedGlyphId);
+    if (!session || !glyph) throw new Error("Expected resident variable glyph");
+
+    return {
+      location: Array.from(session.editor.externalLocation.values()),
+      values: Array.from(glyph.geometryAt(session.editor.externalLocation).values),
+    };
+  }, glyphId);
+}

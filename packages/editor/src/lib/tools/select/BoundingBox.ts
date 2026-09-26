@@ -34,29 +34,23 @@ type RawResizeHitResult = {
 type RawRotateHitResult = { type: "rotate"; corner: CornerHandle } | null;
 
 interface SelectBoundingBoxStyle {
-  readonly stroke: string;
   readonly widthPx: number;
   readonly dashPx?: number[];
   readonly hitRadiusPx: number;
   readonly handle: {
     readonly radiusPx: number;
     readonly offsetPx: number;
-    readonly fill: string;
-    readonly stroke: string;
     readonly widthPx: number;
   };
   readonly rotationZoneOffsetPx: number;
 }
 
 export const SELECT_BOUNDING_BOX_STYLE: SelectBoundingBoxStyle = {
-  stroke: "#1886D7",
   widthPx: 1,
   hitRadiusPx: 8,
   handle: {
     radiusPx: 4,
     offsetPx: 0,
-    fill: "#ffffff",
-    stroke: "#1886D7",
     widthPx: 1.25,
   },
   rotationZoneOffsetPx: 8,
@@ -266,15 +260,18 @@ export class SelectBoundingBox extends CanvasItem<SelectBoundingBoxProps> {
   }
 
   #drawRect(canvas: Canvas, rect: Rect2D): void {
-    const { stroke, widthPx, dashPx } = SELECT_BOUNDING_BOX_STYLE;
+    const { widthPx, dashPx } = SELECT_BOUNDING_BOX_STYLE;
+    const stroke = canvas.theme.segment.selectedColor;
     canvas.strokeRect(rect.x, rect.y, rect.width, rect.height, stroke, widthPx, dashPx);
   }
 
   #drawHandles(canvas: Canvas, handles: HandlePositions): void {
     const style = SELECT_BOUNDING_BOX_STYLE.handle;
+    const fill = canvas.theme.handle.corner.idle.fill;
+    const stroke = canvas.theme.segment.selectedColor;
     const cornerKeys = ["topLeft", "topRight", "bottomLeft", "bottomRight"] as const;
 
-    for (const key of cornerKeys) drawHandle(canvas, handles.corners[key], style);
+    for (const key of cornerKeys) drawHandle(canvas, handles.corners[key], style, fill, stroke);
   }
 }
 
@@ -410,14 +407,16 @@ function drawHandle(
   canvas: Canvas,
   center: Point2D,
   style: SelectBoundingBoxStyle["handle"],
+  fill: string,
+  stroke: string,
 ): void {
   canvas.ctx.save();
 
   const radius = canvas.pxToUpm(style.radiusPx);
   const size = radius * 2;
   canvas.ctx.lineWidth = canvas.pxToUpm(style.widthPx);
-  canvas.ctx.fillStyle = style.fill;
-  canvas.ctx.strokeStyle = style.stroke;
+  canvas.ctx.fillStyle = fill;
+  canvas.ctx.strokeStyle = stroke;
   canvas.ctx.fillRect(center.x - radius, center.y - radius, size, size);
   canvas.ctx.strokeRect(center.x - radius, center.y - radius, size, size);
 

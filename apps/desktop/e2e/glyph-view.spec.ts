@@ -109,25 +109,48 @@ test("does not turn released-modifier zoom momentum into pan", async ({ page, ed
   if (!glyph) throw new Error("Expected a glyph with handles");
 
   await editor.openGlyph(glyph.id);
-  const canvas = editor.canvas;
-  await expect(canvas).toBeVisible();
+  await editor.waitForCanvasRender();
+
+  // Samples are dispatched synchronously in the page so their timestamps, not Playwright
+  // round trips, decide whether the modifier-free sample continues the zoom gesture.
+  const gesture = await editor.canvas.evaluate((canvas) => {
+    const editorState = window.shift?.editor;
+    if (!editorState) throw new Error("Expected editor");
+
+    const bounds = canvas.getBoundingClientRect();
+    const wheel = (init: WheelEventInit) =>
+      canvas.dispatchEvent(
+        new WheelEvent("wheel", {
+          bubbles: true,
+          cancelable: true,
+          clientX: bounds.left + bounds.width / 2,
+          clientY: bounds.top + bounds.height / 2,
+          deltaMode: 0,
+          ...init,
+        }),
+      );
+
+    wheel({ ctrlKey: true, deltaY: -100 });
+    const zoomPan = editorState.pan;
+    const zoomedAt = performance.now();
+    wheel({ deltaX: 30, deltaY: 0 });
+    return { zoomPan, momentumPan: editorState.pan, zoomedAt };
+  });
+  expect(gesture.momentumPan).toEqual(gesture.zoomPan);
+
+  // Elapsed time is the contract: wait on the page clock that stamps wheel events.
+  await page.waitForFunction((zoomedAt) => performance.now() - zoomedAt > 250, gesture.zoomedAt);
   const bounds = await editor.canvasBounds();
-  const event = {
+  await editor.canvas.dispatchEvent("wheel", {
     bubbles: true,
     cancelable: true,
     clientX: Math.round(bounds.x + bounds.width / 2),
     clientY: Math.round(bounds.y + bounds.height / 2),
     deltaMode: 0,
-  };
-
-  await canvas.dispatchEvent("wheel", { ...event, ctrlKey: true, deltaY: -100 });
-  const zoomPan = await page.evaluate(() => window.shift?.editor.pan);
-  await canvas.dispatchEvent("wheel", { ...event, deltaX: 30, deltaY: 0 });
-  expect(await page.evaluate(() => window.shift?.editor.pan)).toEqual(zoomPan);
-
-  await page.waitForTimeout(150);
-  await canvas.dispatchEvent("wheel", { ...event, deltaX: 30, deltaY: 0 });
-  expect((await page.evaluate(() => window.shift?.editor.pan))?.x).toBe((zoomPan?.x ?? 0) - 30);
+    deltaX: 30,
+    deltaY: 0,
+  });
+  expect((await page.evaluate(() => window.shift?.editor.pan))?.x).toBe(gesture.zoomPan.x - 30);
 });
 
 test("keeps a useful UPM frame across empty and extreme glyphs", async ({ page, editor }) => {
@@ -135,7 +158,8 @@ test("keeps a useful UPM frame across empty and extreme glyphs", async ({ page, 
 
   for (const glyph of glyphs) {
     await editor.openGlyph(glyph.id);
-    await expect(editor.canvas).toBeVisible();
+    // Fit-on-open publishes after the scene node; read the projection from a rendered frame.
+    await editor.waitForCanvasRender();
     const frame = await cameraFrame(page);
 
     const context = `${glyph.name}: ${JSON.stringify(frame)}`;

@@ -8,6 +8,7 @@ import {
   glyphCatalogSurface,
   glyphCatalogViewport,
   openVariationControls,
+  waitForEditorReady,
 } from "./fixtures/appLocators";
 
 async function expectRenderedGrid(page: Page): Promise<void> {
@@ -50,7 +51,7 @@ ufoPreviewTest("UFO sources render a complete resident Grid", async ({ page }) =
   await expectRenderedGrid(page);
 });
 
-glyphsPreviewTest("Glyphs sources render a complete resident Grid", async ({ page }) => {
+glyphsPreviewTest("Glyphs sources render a complete resident Grid", async ({ page, editor }) => {
   await expectRenderedGrid(page);
 
   const surface = glyphCatalogSurface(page);
@@ -59,6 +60,11 @@ glyphsPreviewTest("Glyphs sources render a complete resident Grid", async ({ pag
 
   await clickFirstCatalogGlyph(page);
   await page.waitForURL(/#\/editor\//);
+  await waitForEditorReady(
+    page,
+    decodeURIComponent(new URL(page.url()).hash.slice("#/editor/".length)),
+  );
+  await editor.waitForCanvasRender();
 
   const sceneCanvas = page.locator("#scene-canvas");
   const beforeSourceFrame = await sceneCanvas.screenshot();

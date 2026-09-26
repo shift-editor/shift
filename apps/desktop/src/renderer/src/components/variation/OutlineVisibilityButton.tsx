@@ -10,6 +10,7 @@ export const OutlineVisibilityButton = ({
   inherited = false,
   alwaysOpen = false,
   label,
+  subject,
   onClick,
 }: OutlineVisibilityButtonProps) => {
   const [showInheritedIndicator, setShowInheritedIndicator] = useState(inherited);
@@ -45,7 +46,7 @@ export const OutlineVisibilityButton = ({
     <Tooltip>
       <TooltipTrigger>
         <SidebarActionButton
-          label={action}
+          label={subject ? `${action} for ${subject}` : action}
           onClick={() => {
             if (inherited) setShowInheritedIndicator(false);
             if (visible) setShowVisibleIndicator(false);
@@ -63,9 +64,9 @@ export const OutlineVisibilityButton = ({
           {showInheritedIndicator ? (
             <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-primary" />
           ) : visible || showVisibleIndicator || alwaysOpen ? (
-            <EyeOpenIcon aria-hidden className="h-4 w-4" />
+            <EyeOpenIcon aria-hidden className="h-4 w-4 text-icon-subtle" />
           ) : (
-            <EyeClosedIcon aria-hidden className="h-4 w-4" />
+            <EyeClosedIcon aria-hidden className="h-4 w-4 text-icon-subtle" />
           )}
         </SidebarActionButton>
       </TooltipTrigger>

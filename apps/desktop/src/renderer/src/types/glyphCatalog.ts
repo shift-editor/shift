@@ -8,7 +8,8 @@ import type {
   GlyphPreview,
   SourceId,
 } from "@shift/types";
-import type { RenderGlyph } from "@shift/editor/types";
+import type { ListSelectionMode, RenderGlyph } from "@shift/editor/types";
+import type { Dispatch, SetStateAction } from "react";
 import type { ColorTheme } from "@/lib/themes";
 import type { GlyphAtlasSource } from "./glyphAtlas";
 
@@ -23,6 +24,11 @@ export interface GlyphCatalogItem {
 
 export type PendingGlyphNames = ReadonlyMap<GlyphId, GlyphName>;
 
+export interface GlyphCategoryFilter {
+  readonly category: GlyphCategory;
+  readonly subCategoryKey: string | null;
+}
+
 /** Dense external-axis coordinates ordered like `GlyphCatalogSource.axesCell`. */
 export type CatalogLocation = readonly number[];
 
@@ -30,14 +36,20 @@ export interface GlyphCatalogSource {
   availableGlyphs: GlyphCatalogItem[];
   filteredGlyphs: GlyphCatalogItem[];
   categories: GlyphCategorySummary[];
-  selectedCategory: GlyphCategory | null;
-  selectedSubCategoryKey: string | null;
+  categoryFilters: readonly GlyphCategoryFilter[];
+  visibleCategoryFilters: readonly GlyphCategoryFilter[];
+  expandedCategories: ReadonlySet<GlyphCategory>;
+  setExpandedCategories: Dispatch<SetStateAction<ReadonlySet<GlyphCategory>>>;
   query: string;
   setQuery: (nextQuery: string) => void;
   createQuickGlyph: () => GlyphName;
   selectAll: () => void;
-  selectCategory: (category: GlyphCategory) => void;
-  selectSubCategory: (category: GlyphCategory, subCategoryKey: string) => void;
+  selectCategory: (category: GlyphCategory, mode: ListSelectionMode) => void;
+  selectSubCategory: (
+    category: GlyphCategory,
+    subCategoryKey: string,
+    mode: ListSelectionMode,
+  ) => void;
   atlasSource: GlyphAtlasSource;
   observeAtlasInvalidation: (
     listener: (glyphIds: readonly GlyphId[] | null, directory: readonly GlyphId[]) => void,

@@ -3,14 +3,20 @@ import { workspaceTest as test, expect } from "./fixtures/electronApp";
 import {
   clickFirstCatalogGlyph,
   clickFirstCatalogGlyphName,
+  fontNavigation,
   glyphCatalogRenderer,
   glyphCatalogSurface,
   glyphProperties,
 } from "./fixtures/appLocators";
+import { expectPageSnapshot, expectPanelSnapshot } from "./fixtures/snapshots";
 
 test.describe("Home view", () => {
   test("glyph grid matches snapshot", async ({ page }) => {
-    await expect(page).toHaveScreenshot("home-glyph-grid.png");
+    await expect(glyphCatalogRenderer(page)).toHaveAttribute("data-grid-readiness", "Complete", {
+      timeout: 30_000,
+    });
+    await page.mouse.move(0, 0);
+    await expectPageSnapshot(page, "home-glyph-grid.png");
   });
 
   test("navigation highlights Home or Settings without leaving both active", async ({ page }) => {
@@ -60,11 +66,31 @@ test.describe("Home view", () => {
     await page.getByText("Punctuation", { exact: true }).click();
     await expect(page.getByRole("button", { name: "General", exact: true })).toBeVisible();
     await page.mouse.move(0, 0);
-    const screenshot = await page.screenshot({
-      path: test.info().outputPath("home-category-active.png"),
-      animations: "disabled",
-    });
-    await expect(screenshot).toMatchSnapshot("home-category-active.png");
+    await expectPanelSnapshot(fontNavigation(page), "home-category-active.png");
+  });
+
+  test("shift-selects glyph categories as a visible range", async ({ page }) => {
+    const sidebar = page.getByRole("complementary", { name: "Font navigation" });
+    const categoryNames = ["Letter", "Mark", "Punctuation"];
+
+    await sidebar.getByRole("button", { name: "Letter", exact: true }).click();
+    await sidebar
+      .getByRole("button", { name: "Punctuation", exact: true })
+      .click({ modifiers: ["Shift"] });
+
+    for (const name of categoryNames) {
+      await expect(sidebar.getByRole("button", { name, exact: true })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+    }
+    await expect
+      .poll(() => sidebar.locator('button[aria-pressed="true"]').count())
+      .toBeGreaterThan(3);
+    await expect(sidebar.getByRole("button", { name: "Separator", exact: true })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
   });
 
   test("shows an empty Glyph section before a glyph is selected", async ({ page }) => {
@@ -89,10 +115,12 @@ test.describe("Home view", () => {
 
     await leftDivider.focus();
     await page.keyboard.press("ArrowRight");
+    await expect.poll(() => elementWidth(leftSidebar)).toBeGreaterThan(defaultWidth + 1);
     await leftDivider.dispatchEvent("dblclick");
 
     await rightDivider.focus();
     await page.keyboard.press("ArrowLeft");
+    await expect.poll(() => elementWidth(rightSidebar)).toBeGreaterThan(defaultWidth + 1);
     await rightDivider.dispatchEvent("dblclick");
 
     await expect.poll(() => elementWidth(leftSidebar)).toBeCloseTo(defaultWidth, 0);
@@ -161,25 +189,6 @@ test.describe("Home view", () => {
 
     await page.getByRole("button", { name: "Toggle left sidebar" }).click();
     await expect.poll(() => elementWidth(leftPanel)).toBeGreaterThan(0);
-  });
-
-  test("glyph renderer contributes rendered outlines", async ({ page }) => {
-    const catalogSurface = glyphCatalogSurface(page);
-    const renderer = glyphCatalogRenderer(page);
-    await expect(renderer).toBeVisible({ timeout: 30_000 });
-
-    const renderedFrame = await catalogSurface.screenshot();
-    const visibility = await renderer.evaluate((element) => {
-      const previous = element.style.visibility;
-      element.style.visibility = "hidden";
-      return previous;
-    });
-    const frameWithoutGlyphs = await catalogSurface.screenshot();
-    await renderer.evaluate((element, previous) => {
-      element.style.visibility = previous;
-    }, visibility);
-
-    expect(renderedFrame.equals(frameWithoutGlyphs)).toBe(false);
   });
 
   test("finds encoded characters and unencoded glyph names", async ({ page }) => {

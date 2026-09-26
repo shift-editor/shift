@@ -6,7 +6,7 @@ import { CanvasContextProvider } from "@/context/CanvasContextProvider";
 import { CanvasSurface } from "@shift/editor/rendering";
 import { useDebugSafe } from "@/context/DebugContext";
 import { useEditor } from "@/workspace/WorkspaceContext";
-import { zoomMultiplierFromWheel } from "@shift/editor/transform";
+import { WheelGesture, zoomMultiplierFromWheel } from "@shift/editor/transform";
 import type { CanvasProps } from "@shift/editor/types";
 import { objectIsKindOf } from "@shift/editor/types";
 import { InteractiveScene } from "./InteractiveScene";
@@ -14,8 +14,6 @@ import { StaticScene } from "./StaticScene";
 import { DebugPanel } from "../debug/DebugPanel";
 import { TextInput } from "../text/HiddenTextInput";
 import { Vec2 } from "@shift/geo";
-
-const WHEEL_GESTURE_IDLE_MS = 120;
 
 export const Canvas: FC<CanvasProps> = ({ showContextMenu }) => {
   const editor = useEditor();
@@ -33,37 +31,27 @@ export const Canvas: FC<CanvasProps> = ({ showContextMenu }) => {
     const interactiveCanvas = element.querySelector<HTMLCanvasElement>("#interactive-canvas");
     if (!interactiveCanvas) return undefined;
 
-    let wheelGestureMode = "idle";
-    let wheelGestureEndTimer: number | null = null;
-
-    const scheduleWheelGestureEnd = () => {
-      if (wheelGestureEndTimer !== null) window.clearTimeout(wheelGestureEndTimer);
-
-      wheelGestureEndTimer = window.setTimeout(() => {
-        wheelGestureMode = "idle";
-        wheelGestureEndTimer = null;
-      }, WHEEL_GESTURE_IDLE_MS);
-    };
+    const wheelGesture = new WheelGesture();
 
     const handleWheel = (e: WheelEvent) => {
       const screenPos = CanvasSurface.localPoint(interactiveCanvas, { x: e.clientX, y: e.clientY });
       editor.updateMousePosition(e.clientX, e.clientY);
       editor.flushMousePosition();
 
-      if (e.metaKey || e.ctrlKey) {
-        e.preventDefault();
-        wheelGestureMode = "zoom";
-        scheduleWheelGestureEnd();
-
-        const zoomFactor = zoomMultiplierFromWheel(e.deltaY, e.deltaMode);
-        editor.zoomToPoint(screenPos.x, screenPos.y, zoomFactor);
-        return;
-      }
-
-      if (wheelGestureMode === "zoom") {
-        e.preventDefault();
-        scheduleWheelGestureEnd();
-        return;
+      switch (
+        wheelGesture.classify({ timeStamp: e.timeStamp, zoomModifier: e.metaKey || e.ctrlKey })
+      ) {
+        case "zoom": {
+          e.preventDefault();
+          const zoomFactor = zoomMultiplierFromWheel(e.deltaY, e.deltaMode);
+          editor.zoomToPoint(screenPos.x, screenPos.y, zoomFactor);
+          return;
+        }
+        case "ignore":
+          e.preventDefault();
+          return;
+        case "pan":
+          break;
       }
 
       const currentPan = editor.pan;
@@ -104,7 +92,6 @@ export const Canvas: FC<CanvasProps> = ({ showContextMenu }) => {
     element.addEventListener("wheel", handleWheel, { passive: false });
     element.addEventListener("contextmenu", handleContextMenu);
     return () => {
-      if (wheelGestureEndTimer !== null) window.clearTimeout(wheelGestureEndTimer);
       element.removeEventListener("wheel", handleWheel);
       element.removeEventListener("contextmenu", handleContextMenu);
     };
@@ -113,6 +100,7 @@ export const Canvas: FC<CanvasProps> = ({ showContextMenu }) => {
   return (
     <div
       ref={containerRef}
+      data-testid="editor-canvas-stack"
       className={cn("relative z-20 h-full w-full overflow-hidden", !viewportReady && "invisible")}
       onMouseMove={(e) => {
         editor.updateMousePosition(e.clientX, e.clientY);

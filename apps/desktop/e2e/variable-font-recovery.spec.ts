@@ -1,6 +1,7 @@
 import type { Page } from "@playwright/test";
 import type { Axis, AxisId, NamedInstance, NamedInstanceId, Source, SourceId } from "@shift/types";
 import { expect, recoveryTest as test, type RecoveryApp } from "./fixtures/electronApp";
+import type { ExternalAxisLocation } from "@shift/editor/types";
 
 interface ObservedVariableFont {
   axes: Axis[];
@@ -27,6 +28,8 @@ interface AxisFixture {
   instanceId: NamedInstanceId;
 }
 
+// Deletion cascades and undo are unit-tested in Font.test.ts; these tests prove that a
+// topology edit survives forced termination, recovery, explicit Save, and reopening.
 test.setTimeout(90_000);
 
 test("persists source topology", async ({ recoveryApp }) => {
@@ -56,14 +59,7 @@ test("persists source topology", async ({ recoveryApp }) => {
     fixture.defaultSourceId,
     fixture.boldSourceId,
   ]);
-  expect(deleted.axes).toEqual(baseline.axes);
-  expect(deleted.namedInstances).toEqual(baseline.namedInstances);
   expectCanonicalFont(recoveryApp, baseline);
-
-  await undo(recoveryApp.page);
-  await expectVariableFont(recoveryApp.page, { ...baseline, dirty: false });
-  await redo(recoveryApp.page);
-  await expectVariableFont(recoveryApp.page, deleted);
 
   const recovered = await recoveryApp.crashAndRecover();
   await expectVariableFont(recovered, deleted);
@@ -100,32 +96,7 @@ test("persists axis topology", async ({ recoveryApp }) => {
   expect(deleted.axes.map(({ id }) => id)).toEqual([fixture.weightAxisId, fixture.slantAxisId]);
   expect(deleted.defaultSourceId).toBe(fixture.defaultSourceId);
   expect(deleted.dirty).toBe(true);
-  expect(deleted.sources.every(({ location }) => !(fixture.widthAxisId in location.values))).toBe(
-    true,
-  );
-  expect(deleted.sources.find(({ id }) => id === fixture.boldSourceId)?.location.values).toEqual({
-    [fixture.weightAxisId]: 900,
-    [fixture.slantAxisId]: -8,
-  });
-  expect(deleted.namedInstances).toEqual([
-    {
-      id: fixture.instanceId,
-      name: "Display",
-      postscriptName: "MutatorSans-Display",
-      location: {
-        values: {
-          [fixture.weightAxisId]: 700,
-          [fixture.slantAxisId]: -4,
-        },
-      },
-    },
-  ]);
   expectCanonicalFont(recoveryApp, baseline);
-
-  await undo(recoveryApp.page);
-  await expectVariableFont(recoveryApp.page, { ...baseline, dirty: false });
-  await redo(recoveryApp.page);
-  await expectVariableFont(recoveryApp.page, deleted);
 
   const recovered = await recoveryApp.crashAndRecover();
   await expectVariableFont(recovered, deleted);
@@ -159,8 +130,14 @@ async function authorSourceTopology(page: Page): Promise<SourceFixture> {
     });
     await font.editCoordinator.settled();
 
-    const mediumSourceId = font.createSource("Medium", new Map([[axisId, 600]]));
-    const boldSourceId = font.createSource("Bold", new Map([[axisId, 900]]));
+    const mediumSourceId = font.createSource(
+      "Medium",
+      new Map([[axisId, 600]]) as unknown as ExternalAxisLocation,
+    );
+    const boldSourceId = font.createSource(
+      "Bold",
+      new Map([[axisId, 900]]) as unknown as ExternalAxisLocation,
+    );
     const instanceId = font.createNamedInstance({
       name: "Display",
       postscriptName: "MutatorSans-Display",
@@ -237,7 +214,7 @@ async function authorAxisTopology(page: Page): Promise<AxisFixture> {
         [weightAxisId, 900],
         [widthAxisId, 150],
         [slantAxisId, -8],
-      ]),
+      ]) as unknown as ExternalAxisLocation,
     );
     const instanceId = font.createNamedInstance({
       name: "Display",
@@ -287,18 +264,6 @@ function expectCanonicalFont(recoveryApp: RecoveryApp, expected: ObservedVariabl
     axes: expected.axes,
     sources: expected.sources,
     namedInstances: expected.namedInstances,
-  });
-}
-
-async function undo(page: Page): Promise<void> {
-  await page.evaluate(async () => {
-    await window.shift?.font.editCoordinator.undo();
-  });
-}
-
-async function redo(page: Page): Promise<void> {
-  await page.evaluate(async () => {
-    await window.shift?.font.editCoordinator.redo();
   });
 }
 

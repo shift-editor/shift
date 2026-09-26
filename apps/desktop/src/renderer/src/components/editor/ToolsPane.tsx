@@ -63,6 +63,7 @@ export const ToolButton: FC<ToolButtonProps> = ({
                 />
               }
               aria-label={tooltip}
+              aria-pressed={isActive}
               aria-disabled={disabled || undefined}
               isActive={isActive}
               onClick={() => {

@@ -1,11 +1,12 @@
 import { test, expect } from "./fixtures/electronApp";
+import { expectPageSnapshot } from "./fixtures/snapshots";
 
 test.describe("Landing view", () => {
   test("matches default snapshot", async ({ page }) => {
     // Wait for React to mount the landing view.
     await page.waitForSelector("text=Shift", { timeout: 10_000 });
 
-    await expect(page).toHaveScreenshot("landing-default.png");
+    await expectPageSnapshot(page, "landing-default.png");
   });
 
   test("creates an editable font through New font", async ({ electronApp, page }) => {
