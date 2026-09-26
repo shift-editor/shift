@@ -219,6 +219,8 @@ export type SyncCallMap = {
       documentState: WorkspaceDocumentState | null;
     };
   };
+  /** Permanently removes the current redo branch without changing document state. */
+  "workspace.discardRedo": { request: void; response: null };
   /**
    * Saves to the current canonical document, or rejects when the workspace still
    * needs a path. Rides the edit lane so the utility serializes it behind every

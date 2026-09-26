@@ -579,6 +579,11 @@ impl FontWorkspace {
         }
     }
 
+    /// Permanently removes every redo entry without changing live font state or dirty state.
+    pub fn discard_redo(&mut self) {
+        self.ledger.discard_redo();
+    }
+
     fn replay(
         &mut self,
         entry: &LedgerEntry,

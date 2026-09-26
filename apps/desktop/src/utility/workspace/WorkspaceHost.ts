@@ -175,6 +175,11 @@ export class WorkspaceHost {
           const documentState = applied ? this.#emitDocumentChanged() : this.#documentState();
           return { applied, documentState };
         }),
+      "workspace.discardRedo": () =>
+        this.#serialize(() => {
+          this.#bridge.discardRedo();
+          return null;
+        }),
       // Save rides the edit lane: the same #serialize queue orders it behind
       // every committed apply/undo/redo, so it never writes stale state.
       "workspace.save": () => this.#serialize(() => this.#save()),

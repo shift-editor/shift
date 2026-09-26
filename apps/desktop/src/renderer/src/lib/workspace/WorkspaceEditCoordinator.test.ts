@@ -158,6 +158,19 @@ describe("WorkspaceEditCoordinator issues save on the committed-op lane", () => 
     expect(store.workspaceCell.peek()?.glyphs).toHaveLength(0);
   });
 
+  it("discards redo without changing the current renderer state", async () => {
+    const { store, editCoordinator } = stack;
+    editCoordinator.push(createGlyph("A", 65));
+    await editCoordinator.settled();
+    await editCoordinator.undo();
+    const before = store.workspaceCell.peek();
+
+    await editCoordinator.discardRedo();
+
+    await expect(editCoordinator.redo()).resolves.toBeNull();
+    expect(store.workspaceCell.peek()).toBe(before);
+  });
+
   it("groups transaction pushes into one undo entry", async () => {
     const { store, editCoordinator } = stack;
 

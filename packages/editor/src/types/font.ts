@@ -34,6 +34,7 @@ export interface WorkspaceEditCoordinator {
   settled(): Promise<void>;
   undo(): Promise<AppliedChange | null>;
   redo(): Promise<AppliedChange | null>;
+  discardRedo(): Promise<void>;
   state(): Promise<WorkspaceDocumentState | null>;
   readonly settledCell: { readonly value: boolean };
 }
