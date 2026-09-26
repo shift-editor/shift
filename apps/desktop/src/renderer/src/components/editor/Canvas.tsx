@@ -8,7 +8,6 @@ import { useDebugSafe } from "@/context/DebugContext";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { WheelGesture, zoomMultiplierFromWheel } from "@shift/editor/transform";
 import { InteractiveScene } from "./InteractiveScene";
-import { CanvasContextMenu } from "./CanvasContextMenu";
 import { StaticScene } from "./StaticScene";
 import { DebugPanel } from "../debug/DebugPanel";
 import { TextInput } from "../text/HiddenTextInput";
@@ -75,22 +74,20 @@ export const Canvas: FC = () => {
   }, [editor]);
 
   return (
-    <CanvasContextMenu>
-      <div
-        ref={containerRef}
-        data-testid="editor-canvas-stack"
-        className={cn("relative z-20 h-full w-full overflow-hidden", !viewportReady && "invisible")}
-        onMouseMove={(e) => {
-          editor.updateMousePosition(e.clientX, e.clientY);
-        }}
-      >
-        <CanvasContextProvider onViewportReady={onViewportReady}>
-          <StaticScene />
-          <InteractiveScene />
-        </CanvasContextProvider>
-        <TextInput />
-        {debug?.debugPanelOpen && <DebugPanel />}
-      </div>
-    </CanvasContextMenu>
+    <div
+      ref={containerRef}
+      data-testid="editor-canvas-stack"
+      className={cn("relative z-20 h-full w-full overflow-hidden", !viewportReady && "invisible")}
+      onMouseMove={(e) => {
+        editor.updateMousePosition(e.clientX, e.clientY);
+      }}
+    >
+      <CanvasContextProvider onViewportReady={onViewportReady}>
+        <StaticScene />
+        <InteractiveScene />
+      </CanvasContextProvider>
+      <TextInput />
+      {debug?.debugPanelOpen && <DebugPanel />}
+    </div>
   );
 };

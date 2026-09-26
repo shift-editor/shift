@@ -8,6 +8,7 @@ import { useSidebarLayout } from "@/components/chrome/useSidebarLayout";
 import { LeftSidebar } from "@/components/editor/LeftSidebar";
 import { RightSidebar } from "@/components/editor/RightSidebar";
 import { Canvas } from "@/components/editor/Canvas";
+import { CanvasContextMenu } from "@/components/editor/CanvasContextMenu";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
 import { useFocusZone, ZoneContainer } from "@/context/FocusZoneContext";
@@ -142,7 +143,9 @@ export const Editor = () => {
 
   return (
     <EditorLayout cursorStyle={cursorStyle} gesture={gesture.phase}>
-      <Canvas />
+      <CanvasContextMenu>
+        <Canvas />
+      </CanvasContextMenu>
     </EditorLayout>
   );
 };
