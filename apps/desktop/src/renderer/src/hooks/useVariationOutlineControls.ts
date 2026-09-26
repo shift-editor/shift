@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useMemo, useReducer } from "react";
 import type { GlyphOutlineControls, GlyphOutlineTarget } from "@shift/editor/types";
 import type { SourceId } from "@shift/types";
-import { createVariationOutlineState, variationOutlineReducer } from "@/lib/variationOutlineState";
+import {
+  createVariationOutlineState,
+  instanceOutlineTargets,
+  sourceOutlineTargets,
+  variationOutlineReducer,
+} from "@/lib/variationOutlineState";
 
 /**
  * Derives variation-outline controls from one reducer-owned visibility model.
@@ -29,63 +34,11 @@ export function useVariationOutlineControls(
     });
   }, [activeSourceId, editingSourceIds]);
 
-  const sources = useMemo(() => {
-    const explicitTargets = Array.from(state.sources.explicitIds)
-      .filter((sourceId) => sourceId !== activeSourceId)
-      .map((sourceId): GlyphOutlineTarget => ({ kind: "source", sourceId }));
-    const explicitIds = new Set(
-      explicitTargets.flatMap((target) => (target.kind === "source" ? [target.sourceId] : [])),
-    );
-    const selectedTargets = Array.from(editingSourceIds)
-      .filter(
-        (sourceId) =>
-          sourceId !== activeSourceId &&
-          !state.hiddenSelectedSourceIds.has(sourceId) &&
-          !explicitIds.has(sourceId),
-      )
-      .map((sourceId): GlyphOutlineTarget => ({ kind: "source", sourceId }));
-    const visibleIds = new Set([
-      ...explicitIds,
-      ...selectedTargets.flatMap((target) => (target.kind === "source" ? [target.sourceId] : [])),
-    ]);
-    const groupTargets = Array.from(state.sources.groupIds)
-      .filter((sourceId) => sourceId !== activeSourceId && !visibleIds.has(sourceId))
-      .map((sourceId): GlyphOutlineTarget => ({ kind: "source", sourceId }));
-
-    for (const target of groupTargets) {
-      if (target.kind === "source") visibleIds.add(target.sourceId);
-    }
-
-    return {
-      targets: [...explicitTargets, ...selectedTargets, ...groupTargets],
-      inheritedTargets: Array.from(state.sources.groupIds).map(
-        (sourceId): GlyphOutlineTarget => ({ kind: "source", sourceId }),
-      ),
-      visibleIds,
-    };
-  }, [activeSourceId, editingSourceIds, state.hiddenSelectedSourceIds, state.sources]);
-
-  const instances = useMemo(() => {
-    const explicitTargets = Array.from(state.instances.explicitIds).map(
-      (instanceId): GlyphOutlineTarget => ({ kind: "instance", instanceId }),
-    );
-    const visibleIds = new Set(state.instances.explicitIds);
-    const groupTargets = Array.from(state.instances.groupIds)
-      .filter((instanceId) => !visibleIds.has(instanceId))
-      .map((instanceId): GlyphOutlineTarget => ({ kind: "instance", instanceId }));
-
-    for (const target of groupTargets) {
-      if (target.kind === "instance") visibleIds.add(target.instanceId);
-    }
-
-    return {
-      targets: [...explicitTargets, ...groupTargets],
-      inheritedTargets: Array.from(state.instances.groupIds).map(
-        (instanceId): GlyphOutlineTarget => ({ kind: "instance", instanceId }),
-      ),
-      visibleIds,
-    };
-  }, [state.instances]);
+  const sources = useMemo(
+    () => sourceOutlineTargets(state, activeSourceId, editingSourceIds),
+    [activeSourceId, editingSourceIds, state],
+  );
+  const instances = useMemo(() => instanceOutlineTargets(state), [state]);
 
   const toggleSource = useCallback(
     (target: GlyphOutlineTarget) => {
