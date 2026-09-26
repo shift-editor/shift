@@ -1,3 +1,4 @@
+import type { CommandId } from "@shared/commands";
 import type { ToolName } from "@shift/editor/tools";
 import type { DeleteMode } from "@shift/editor/types";
 import type { ToolShortcutEntry } from "@shift/editor/types";
@@ -31,6 +32,9 @@ export interface KeyboardToolManagerActions {
   handleKeyDown(e: KeyboardEvent): boolean;
   handleKeyUp(e: KeyboardEvent): boolean;
 }
+
+/** Dispatches an application command matched by the renderer keyboard router. */
+export type KeyboardCommandHandler = (id: CommandId) => void | Promise<void>;
 
 export interface KeyContext {
   canvasActive: boolean;

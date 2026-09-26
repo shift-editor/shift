@@ -8,6 +8,7 @@ import { useSidebarLayout } from "@/components/chrome/useSidebarLayout";
 import { LeftSidebar } from "@/components/editor/LeftSidebar";
 import { RightSidebar } from "@/components/editor/RightSidebar";
 import { Canvas } from "@/components/editor/Canvas";
+import { CanvasContextMenu } from "@/components/editor/CanvasContextMenu";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
 import { useFocusZone, ZoneContainer } from "@/context/FocusZoneContext";
@@ -16,9 +17,6 @@ import { getShiftHost } from "@/host/shiftHost";
 import { useSignalState } from "@shift/editor/signals";
 import { asGlyphId, mintNodeId } from "@shift/types";
 import { Bounds } from "@shift/geo";
-
-const showCanvasContextMenu = (makeFirstPoint: boolean): Promise<void> =>
-  getShiftHost().menu.showCanvasContextMenu(makeFirstPoint);
 
 export const Editor = () => {
   const { glyphId: glyphIdParam } = useParams();
@@ -106,12 +104,15 @@ export const Editor = () => {
     if (!glyph) return undefined;
 
     const toolManager = editor.toolManager;
-    const keyboardRouter = new KeyboardRouter(() => ({
-      canvasActive: activeZone === "canvas" || editor.isDragging,
-      activeTool: editor.tool?.id ?? null,
-      editor,
-      toolManager,
-    }));
+    const keyboardRouter = new KeyboardRouter(
+      () => ({
+        canvasActive: activeZone === "canvas" || editor.isDragging,
+        activeTool: editor.tool?.id ?? null,
+        editor,
+        toolManager,
+      }),
+      async (commandId) => getShiftHost().commands.run(commandId),
+    );
 
     const keyDownHandler = async (event: KeyboardEvent) => {
       try {
@@ -142,7 +143,9 @@ export const Editor = () => {
 
   return (
     <EditorLayout cursorStyle={cursorStyle} gesture={gesture.phase}>
-      <Canvas showContextMenu={showCanvasContextMenu} />
+      <CanvasContextMenu>
+        <Canvas />
+      </CanvasContextMenu>
     </EditorLayout>
   );
 };

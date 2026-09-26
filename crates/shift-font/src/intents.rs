@@ -90,6 +90,7 @@ pub enum FontIntent {
         layer_id: LayerId,
         anchor_ids: Vec<AnchorId>,
     },
+    /// Adds one direct reference after rejecting direct or transitive component cycles.
     AddComponent {
         layer_id: LayerId,
         component_id: ComponentId,
@@ -366,6 +367,33 @@ pub struct AppliedIntents {
 impl Font {
     fn default_layer_width(&self) -> f64 {
         self.metrics().units_per_em * 0.5
+    }
+
+    fn component_reference_would_cycle(&self, glyph_id: &GlyphId, base_glyph_id: &GlyphId) -> bool {
+        let mut pending = vec![base_glyph_id.clone()];
+        let mut visited = HashSet::new();
+
+        while let Some(candidate_id) = pending.pop() {
+            if candidate_id == *glyph_id {
+                return true;
+            }
+            if !visited.insert(candidate_id.clone()) {
+                continue;
+            }
+
+            let Some(candidate) = self.glyph(candidate_id) else {
+                continue;
+            };
+            pending.extend(
+                candidate
+                    .layers()
+                    .values()
+                    .flat_map(|layer| layer.components_iter())
+                    .map(Component::base_glyph_id),
+            );
+        }
+
+        false
     }
 
     /// Validates and applies an intent set, producing the canonical change
@@ -1123,11 +1151,20 @@ impl Font {
                 if self.has_component_id(component_id) {
                     return Err(CoreError::DuplicateComponentId(component_id.clone()));
                 }
+                let glyph_id = self
+                    .glyph_id_by_layer(layer_id.clone())
+                    .ok_or_else(|| CoreError::LayerNotFound(layer_id.clone()))?;
                 let base_glyph_name = self
                     .glyph(base_glyph_id.clone())
                     .ok_or_else(|| CoreError::GlyphNotFound(base_glyph_id.clone()))?
                     .glyph_name()
                     .clone();
+                if self.component_reference_would_cycle(&glyph_id, base_glyph_id) {
+                    return Err(CoreError::CyclicComponentReference {
+                        glyph_id,
+                        base_glyph_id: base_glyph_id.clone(),
+                    });
+                }
 
                 let change = {
                     let layer = self.layer_mut_or_err(layer_id)?;
@@ -1503,6 +1540,68 @@ mod tests {
         .unwrap();
 
         assert!(font.layer(root_layer_id).unwrap().components().is_empty());
+    }
+
+    #[test]
+    fn adding_a_component_rejects_a_direct_cycle() {
+        let mut font = Font::new();
+        let source_id = font.default_source_id().unwrap();
+        let glyph_id = GlyphId::new();
+        let layer_id = LayerId::new();
+        let mut glyph = Glyph::with_id(glyph_id.clone(), "self-referencing");
+        glyph.set_layer(GlyphLayer::new(layer_id.clone(), source_id));
+        font.insert_glyph(glyph).unwrap();
+
+        let result = font.apply_intents(FontIntentSet {
+            intents: vec![FontIntent::AddComponent {
+                layer_id,
+                component_id: ComponentId::new(),
+                base_glyph_id: glyph_id.clone(),
+            }],
+        });
+
+        assert!(matches!(
+            result,
+            Err(CoreError::CyclicComponentReference {
+                glyph_id: rejected_glyph_id,
+                base_glyph_id,
+            }) if rejected_glyph_id == glyph_id && base_glyph_id == glyph_id
+        ));
+    }
+
+    #[test]
+    fn adding_a_component_rejects_an_indirect_cycle() {
+        let mut font = Font::new();
+        let source_id = font.default_source_id().unwrap();
+        let parent_id = GlyphId::new();
+        let child_id = GlyphId::new();
+
+        let mut parent_layer = GlyphLayer::new(LayerId::new(), source_id.clone());
+        parent_layer.add_component(Component::new(child_id.clone(), "child"));
+        let mut parent = Glyph::with_id(parent_id.clone(), "parent");
+        parent.set_layer(parent_layer);
+        font.insert_glyph(parent).unwrap();
+
+        let child_layer_id = LayerId::new();
+        let mut child = Glyph::with_id(child_id.clone(), "child");
+        child.set_layer(GlyphLayer::new(child_layer_id.clone(), source_id));
+        font.insert_glyph(child).unwrap();
+
+        let result = font.apply_intents(FontIntentSet {
+            intents: vec![FontIntent::AddComponent {
+                layer_id: child_layer_id,
+                component_id: ComponentId::new(),
+                base_glyph_id: parent_id.clone(),
+            }],
+        });
+
+        assert!(matches!(
+            result,
+            Err(CoreError::CyclicComponentReference {
+                glyph_id: rejected_glyph_id,
+                base_glyph_id,
+            }) if rejected_glyph_id == child_id && base_glyph_id == parent_id
+        ));
     }
 
     #[test]

@@ -1,5 +1,5 @@
 import { Button, cn, type ButtonProps } from "@shift/ui";
-import { forwardRef, type MouseEvent, type ReactNode } from "react";
+import { forwardRef, type KeyboardEventHandler, type MouseEvent, type ReactNode } from "react";
 import { SidebarRowButton } from "./SidebarRowButton";
 
 interface SidebarActionRowProps {
@@ -11,6 +11,7 @@ interface SidebarActionRowProps {
   joinsPrevious?: boolean;
   joinsNext?: boolean;
   onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
+  onKeyDown?: KeyboardEventHandler<HTMLButtonElement>;
   className?: string;
   contentClassName?: string;
   "data-testid"?: string;
@@ -25,6 +26,7 @@ export const SidebarActionRow = ({
   joinsPrevious,
   joinsNext,
   onClick,
+  onKeyDown,
   className,
   contentClassName,
   "data-testid": testId,
@@ -55,6 +57,7 @@ export const SidebarActionRow = ({
           delete event.currentTarget.dataset.pointerFocus;
         }}
         onClick={onClick}
+        onKeyDown={onKeyDown}
         className={cn("w-auto flex-1 data-[pointer-focus]:focus-visible:ring-0", contentClassName)}
       >
         {children}
