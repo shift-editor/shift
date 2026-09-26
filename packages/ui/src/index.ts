@@ -86,6 +86,21 @@ export {
 } from "./components/radio";
 export { Progress, type ProgressProps } from "./components/progress";
 export {
+  ContextMenu,
+  ContextMenuTrigger,
+  ContextMenuPortal,
+  ContextMenuPositioner,
+  ContextMenuPopup,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  type ContextMenuProps,
+  type ContextMenuTriggerProps,
+  type ContextMenuPositionerProps,
+  type ContextMenuPopupProps,
+  type ContextMenuItemProps,
+  type ContextMenuSeparatorProps,
+} from "./components/context-menu";
+export {
   Menu,
   MenuTrigger,
   MenuPortal,

@@ -132,8 +132,10 @@ export type CommandContext = {
  * Declarative app command owned by the main process.
  *
  * @remarks
- * Command metadata can be reused by menus, command palettes, shortcuts, and
- * renderer chrome while the `run` callback remains the single behavior source.
+ * Command metadata can be reused by menus, command palettes, and renderer chrome
+ * while the `run` callback remains the single behavior source. Keyboard chords
+ * live in the shared `commandShortcuts` registry so main and renderer consume the
+ * same definition.
  */
 export type Command = {
   /** Stable command identity shared across process boundaries. */
@@ -142,8 +144,6 @@ export type Command = {
   label: string;
   /** Optional longer explanation for command palettes or accessibility hints. */
   description?: string;
-  /** Optional Electron accelerator string for native menu bindings. */
-  accelerator?: string;
   /** Returns whether the command can run in the current app context. */
   enabled?: (ctx: CommandContext) => boolean;
   /** Performs the command's main-process side effects. */

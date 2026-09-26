@@ -2,10 +2,6 @@ import type { ToolMenuItem, ToolName } from "../lib/tools/core";
 
 export type ToolStateScope = "app" | "document";
 
-export interface CanvasProps {
-  readonly showContextMenu?: (makeFirstPoint: boolean) => Promise<void>;
-}
-
 export type CursorType =
   | { type: "default" }
   | { type: "pointer" }

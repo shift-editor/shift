@@ -507,6 +507,55 @@ export class Editor {
   }
 
   /**
+   * Creates an empty glyph and references it from every selected editing source.
+   *
+   * @remarks
+   * Glyph creation and component insertion share one workspace transaction and
+   * undo entry. Once committed, the active-source component becomes the current
+   * selection.
+   *
+   * @param name - Canonical missing glyph name to create in the current font.
+   * @returns The selected active-source component, or `null` when the current
+   * glyph cannot be edited across the complete selected source set.
+   * @throws {Error} when the workspace rejects glyph creation or the component reference.
+   */
+  public async createGlyphAndAddComponent(name: GlyphName): Promise<ComponentId | null> {
+    const activeSourceId = this.activeSourceId;
+    if (this.sessionMode !== "workspace" || !activeSourceId) return null;
+
+    const glyphNodes = this.scene.nodesOfKind("glyph");
+    const [node] = glyphNodes;
+    if (!node || glyphNodes.length !== 1) return null;
+
+    const glyph = this.#fontStore.glyphForId(node.glyphId);
+    if (!glyph) return null;
+
+    const editingSourceIds = this.#editingSourceIdsCell.peek();
+    const layers = this.font.sources
+      .filter(({ id }) => editingSourceIds.has(id))
+      .map(({ id }) => glyph.layerForSource(id));
+    if (layers.length !== editingSourceIds.size || layers.some((layer) => layer === null)) {
+      return null;
+    }
+
+    const componentIds = this.transaction("Create Component Glyph", () => {
+      const record = this.createGlyph(name);
+
+      return layers.map((layer) => {
+        if (!layer) throw new Error("validated component layer is unavailable");
+        return [layer.sourceId, layer.addComponent(record.id)] as const;
+      });
+    });
+    const activeComponentId = componentIds.find(([sourceId]) => sourceId === activeSourceId)?.[1];
+    if (!activeComponentId) return null;
+
+    await this.font.editCoordinator.settled();
+    this.selection.select([activeComponentId]);
+    this.setActiveTool("select");
+    return activeComponentId;
+  }
+
+  /**
    * Adds one component occurrence to every selected editing source.
    *
    * @remarks

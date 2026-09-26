@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { GlyphId, GlyphName, GlyphRecord } from "@shift/types";
 import type { GlyphCatalogItem } from "@/types/glyphCatalog";
 import { getGlyphInfo } from "@/workspace/glyphInfo";
-import { componentPickerGlyphs } from "./componentPicker";
+import { componentPickerCandidates } from "./componentPicker";
 
 const rootId = "glyph-root" as GlyphId;
 const baseId = "glyph-base" as GlyphId;
@@ -27,13 +27,17 @@ const records: GlyphRecord[] = [
 describe("component picker candidates", () => {
   it("excludes the current glyph and direct or indirect dependents", () => {
     expect(
-      componentPickerGlyphs(glyphs, records, rootId, "", glyphInfo).map(({ id }) => id),
+      componentPickerCandidates(glyphs, records, rootId, "", glyphInfo).flatMap((candidate) =>
+        candidate.glyphId ? [candidate.glyphId] : [],
+      ),
     ).toEqual([baseId]);
   });
 
   it.each(["base", "B", "U+0042", "uni0042"])("finds a glyph from %s", (query) => {
     expect(
-      componentPickerGlyphs(glyphs, records, rootId, query, glyphInfo).map(({ id }) => id),
+      componentPickerCandidates(glyphs, records, rootId, query, glyphInfo).flatMap((candidate) =>
+        candidate.glyphId ? [candidate.glyphId] : [],
+      ),
     ).toEqual([baseId]);
   });
 
@@ -59,19 +63,72 @@ describe("component picker candidates", () => {
     ];
 
     expect(
-      componentPickerGlyphs(candidates, candidateRecords, currentId, "", glyphInfo).map(
-        ({ id }) => id,
+      componentPickerCandidates(candidates, candidateRecords, currentId, "", glyphInfo).flatMap(
+        (candidate) => (candidate.glyphId ? [candidate.glyphId] : []),
       ),
     ).toEqual([eId, acuteId, existingId, otherId]);
     expect(
-      componentPickerGlyphs(candidates, candidateRecords, currentId, "e", glyphInfo).map(
-        ({ id }) => id,
+      componentPickerCandidates(candidates, candidateRecords, currentId, "e", glyphInfo).flatMap(
+        (candidate) => (candidate.glyphId ? [candidate.glyphId] : []),
       ),
-    ).toEqual([otherId, existingId, acuteId, eId]);
+    ).toEqual([eId, otherId, existingId, acuteId]);
+  });
+
+  it("offers matching Unicode glyphs that are missing from the font", () => {
+    const candidates = componentPickerCandidates(glyphs, records, rootId, "aacute", glyphInfo);
+
+    expect(candidates[0]).toEqual({
+      availability: "missing",
+      glyphId: null,
+      name: "aacute",
+      displayName: "aacute",
+      unicode: 0x00e1,
+    });
+  });
+
+  it("does not offer unrelated missing Unicode glyphs until the user searches", () => {
+    expect(
+      componentPickerCandidates(glyphs, records, rootId, "", glyphInfo).every(
+        ({ availability }) => availability === "existing",
+      ),
+    ).toBe(true);
+  });
+
+  it("offers missing decomposition glyphs before unrelated existing glyphs", () => {
+    const currentId = "glyph-aacute" as GlyphId;
+    const candidates = componentPickerCandidates(
+      [glyph(baseId, "base", 0x42), glyph(currentId, "aacute", 0x00e1)],
+      [record(baseId), record(currentId)],
+      currentId,
+      "",
+      glyphInfo,
+    );
+
+    expect(
+      candidates.slice(0, 2).map(({ availability, unicode }) => ({ availability, unicode })),
+    ).toEqual([
+      { availability: "missing", unicode: 0x0061 },
+      { availability: "missing", unicode: 0x0301 },
+    ]);
+  });
+
+  it("does not duplicate an existing unencoded glyph as a missing Unicode glyph", () => {
+    const aacuteId = "glyph-aacute" as GlyphId;
+    const candidates = componentPickerCandidates(
+      [...glyphs, glyph(aacuteId, "aacute", null)],
+      [...records, record(aacuteId)],
+      rootId,
+      "aacute",
+      glyphInfo,
+    );
+
+    expect(candidates.filter(({ name }) => name === "aacute")).toEqual([
+      expect.objectContaining({ availability: "existing", glyphId: aacuteId }),
+    ]);
   });
 });
 
-function glyph(id: GlyphId, name: string, unicode: number): GlyphCatalogItem {
+function glyph(id: GlyphId, name: string, unicode: number | null): GlyphCatalogItem {
   return {
     id,
     name: name as GlyphName,

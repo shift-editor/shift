@@ -1,18 +1,167 @@
 import type { GlyphInfo } from "@shift/glyph-info";
-import type { GlyphId, GlyphRecord } from "@shift/types";
+import type { GlyphId, GlyphName, GlyphRecord } from "@shift/types";
+import type { ComponentCandidate } from "@/types/componentPicker";
 import type { GlyphCatalogItem } from "@/types/glyphCatalog";
 
 /**
- * Returns searchable component candidates that cannot create a reference cycle.
+ * Returns existing and creatable component candidates that cannot create a reference cycle.
  *
- * @param glyphs - Catalog order to preserve in the picker results.
+ * @param glyphs - Current-font catalog order to preserve in existing results.
  * @param records - Committed dependency records used for transitive cycle checks.
  * @param currentGlyphId - Glyph that will own the new component occurrence.
  * @param query - Name, character, or Unicode notation to match.
- * @param glyphInfo - Unicode decomposition metadata used to rank empty-query suggestions.
- * @returns A fresh filtered array, with related glyphs first for an empty query.
+ * @param glyphInfo - Unicode metadata used for related ranking and missing-glyph search.
+ * @returns Related decomposition candidates first, followed by current-font and searched Unicode matches.
  */
-export function componentPickerGlyphs(
+export function componentPickerCandidates(
+  glyphs: readonly GlyphCatalogItem[],
+  records: readonly GlyphRecord[],
+  currentGlyphId: GlyphId,
+  query: string,
+  glyphInfo: GlyphInfo,
+): ComponentCandidate[] {
+  const existingGlyphs = componentPickerGlyphs(glyphs, records, currentGlyphId, query, glyphInfo);
+  const candidates: ComponentCandidate[] = existingGlyphs.map((glyph) => ({
+    availability: "existing",
+    glyphId: glyph.id,
+    name: glyph.name,
+    displayName: glyph.displayName,
+    unicode: glyph.unicode,
+  }));
+  const currentFontCodepoints = new Set(
+    glyphs.flatMap((glyph) => (glyph.unicode === null ? [] : [glyph.unicode])),
+  );
+  const currentFontNames = new Set(glyphs.map(({ name }) => name.toLowerCase()));
+
+  if (query.trim() === "") {
+    const currentGlyph = glyphs.find(({ id }) => id === currentGlyphId);
+    if (!currentGlyph) return candidates;
+
+    const canonicalName = glyphInfo.resolveGlyphName(currentGlyph.name, currentGlyph.unicode);
+    const baseName = canonicalName.split(".")[0] ?? canonicalName;
+    const unicode = currentGlyph.unicode ?? glyphInfo.getGlyphByName(baseName)?.codepoint ?? null;
+    const decomposition = unicode === null ? [] : glyphInfo.getDecomposition(unicode);
+    const existingByUnicode = new Map(
+      candidates.flatMap((candidate) =>
+        candidate.unicode === null ? [] : [[candidate.unicode, candidate]],
+      ),
+    );
+    const existingByName = new Map(
+      candidates.map((candidate) => [candidate.name.toLowerCase(), candidate]),
+    );
+    const relatedCandidates: ComponentCandidate[] = [];
+    const relatedGlyphIds = new Set<GlyphId>();
+
+    for (const codepoint of decomposition) {
+      const glyph = glyphInfo.getGlyph(codepoint);
+      const existingCandidate =
+        existingByUnicode.get(codepoint) ??
+        (glyph ? existingByName.get(glyph.name.toLowerCase()) : undefined);
+      if (existingCandidate?.glyphId && !relatedGlyphIds.has(existingCandidate.glyphId)) {
+        relatedCandidates.push(existingCandidate);
+        relatedGlyphIds.add(existingCandidate.glyphId);
+        continue;
+      }
+      if (
+        !glyph ||
+        currentFontCodepoints.has(codepoint) ||
+        currentFontNames.has(glyph.name.toLowerCase())
+      ) {
+        continue;
+      }
+
+      relatedCandidates.push({
+        availability: "missing",
+        glyphId: null,
+        name: glyph.name as GlyphName,
+        displayName: glyph.name,
+        unicode: codepoint,
+      });
+    }
+
+    return [
+      ...relatedCandidates,
+      ...candidates.filter(
+        (candidate) => candidate.glyphId === null || !relatedGlyphIds.has(candidate.glyphId),
+      ),
+    ];
+  }
+
+  const eligibleGlyphs = componentPickerGlyphs(glyphs, records, currentGlyphId, "", glyphInfo);
+  const eligibleByUnicode = new Map(
+    eligibleGlyphs.flatMap((glyph) => (glyph.unicode === null ? [] : [[glyph.unicode, glyph]])),
+  );
+  const rankedCandidates: ComponentCandidate[] = [];
+  const includedGlyphIds = new Set<GlyphId>();
+  const includedCodepoints = new Set<number>();
+  const normalizedQuery = query.trim().toLowerCase();
+  const directUnicode = unicodeFromQuery(query);
+  const directName = glyphInfo.resolveGlyphName(query.trim());
+  const directNameGlyph = glyphInfo.getGlyphByName(directName);
+  const matchingCodepoints = [
+    ...(directUnicode === null ? [] : [directUnicode]),
+    ...(directNameGlyph ? [directNameGlyph.codepoint] : []),
+    ...glyphInfo.search(query).map(({ codepoint }) => codepoint),
+  ];
+
+  for (const candidate of candidates) {
+    if (candidate.glyphId === null) continue;
+    if (
+      candidate.name.toLowerCase() !== normalizedQuery &&
+      candidate.displayName.toLowerCase() !== normalizedQuery
+    ) {
+      continue;
+    }
+
+    rankedCandidates.push(candidate);
+    includedGlyphIds.add(candidate.glyphId);
+    if (candidate.unicode !== null) includedCodepoints.add(candidate.unicode);
+  }
+
+  for (const codepoint of matchingCodepoints) {
+    if (includedCodepoints.has(codepoint)) continue;
+
+    const existingGlyph = eligibleByUnicode.get(codepoint);
+    if (existingGlyph) {
+      if (includedGlyphIds.has(existingGlyph.id)) continue;
+
+      rankedCandidates.push({
+        availability: "existing",
+        glyphId: existingGlyph.id,
+        name: existingGlyph.name,
+        displayName: existingGlyph.displayName,
+        unicode: existingGlyph.unicode,
+      });
+      includedGlyphIds.add(existingGlyph.id);
+      includedCodepoints.add(codepoint);
+      continue;
+    }
+    if (currentFontCodepoints.has(codepoint)) continue;
+
+    const glyph = glyphInfo.getGlyph(codepoint);
+    if (!glyph || currentFontNames.has(glyph.name.toLowerCase())) continue;
+
+    rankedCandidates.push({
+      availability: "missing",
+      glyphId: null,
+      name: glyph.name as GlyphName,
+      displayName: glyph.name,
+      unicode: codepoint,
+    });
+    includedCodepoints.add(codepoint);
+  }
+
+  for (const candidate of candidates) {
+    if (candidate.glyphId === null || includedGlyphIds.has(candidate.glyphId)) continue;
+
+    rankedCandidates.push(candidate);
+    includedGlyphIds.add(candidate.glyphId);
+  }
+
+  return rankedCandidates;
+}
+
+function componentPickerGlyphs(
   glyphs: readonly GlyphCatalogItem[],
   records: readonly GlyphRecord[],
   currentGlyphId: GlyphId,

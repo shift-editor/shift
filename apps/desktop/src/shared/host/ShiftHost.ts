@@ -31,11 +31,6 @@ export interface ShiftHost {
      */
     onRunRendererCommand: (callback: (id: RendererCommandId) => void) => () => void;
   };
-  /** Opens native menus owned by the app shell. */
-  menu: {
-    /** Opens the canvas menu with renderer-derived Make First Point eligibility; execution revalidates selection. */
-    showCanvasContextMenu: (makeFirstPoint: boolean) => Promise<void>;
-  };
   /** Connects the renderer to main-owned document requests. */
   document: {
     /**
