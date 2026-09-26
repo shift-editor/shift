@@ -78,6 +78,19 @@ describe("editor actions share one undo timeline", () => {
     expect(editor.history.capturing).toBe(false);
   });
 
+  it("drops journaled net-zero writes without clearing redo", async () => {
+    await editor.clickGlyphLocal(100, 100);
+    await editor.undo();
+
+    editor.history.capture("Net-zero selection", () => {
+      editor.selection.select([secondId]);
+      editor.selection.clear();
+    });
+    await editor.redo();
+
+    expect(editor.selection.ids).toEqual([firstId]);
+  });
+
   it("undoes Shift-click selection independently", async () => {
     await editor.clickGlyphLocal(100, 100);
     await editor.clickGlyphLocal(200, 200, { shiftKey: true });

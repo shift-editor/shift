@@ -25,6 +25,7 @@ export type { ListSelectionMode } from "./types/listSelection";
 export type { PositionGuide, PositionSelection } from "./types/positionEdit";
 export type { ShiftEditorRecord } from "./types/records";
 export type { SourceSelectionMode } from "./types/sourceSelection";
+export type { StoreChange } from "./types/store";
 export type { ToolShortcutEntry } from "./types/tools";
 export type { AnchorPosition } from "./types/transform";
 export type { DebugOverlays } from "./types/uiState";

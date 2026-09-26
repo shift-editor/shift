@@ -1,23 +1,9 @@
 import type { RecordChange } from "../../../types/history";
-import type { ShiftEditorRecord, ShiftRecordId } from "../../../types/records";
+import type { ShiftEditorRecord } from "../../../types/records";
 
-/** Returns the semantic whole-record changes between two immutable store maps. */
-export function recordChanges(
-  before: ReadonlyMap<ShiftRecordId, ShiftEditorRecord>,
-  after: ReadonlyMap<ShiftRecordId, ShiftEditorRecord>,
-): RecordChange[] {
-  const ids = new Set<ShiftRecordId>([...before.keys(), ...after.keys()]);
-  const changes: RecordChange[] = [];
-
-  for (const id of ids) {
-    const previous = before.get(id) ?? null;
-    const next = after.get(id) ?? null;
-    if (editorRecordsEqual(previous, next)) continue;
-
-    changes.push({ id, before: previous, after: next });
-  }
-
-  return changes;
+/** Returns journaled whole-record changes that differ semantically. */
+export function recordChanges(changes: Iterable<RecordChange>): RecordChange[] {
+  return [...changes].filter((change) => !editorRecordsEqual(change.before, change.after));
 }
 
 /** Compares editor records by value rather than transient object identity. */

@@ -41,7 +41,7 @@ export type WorkspaceEditListener = (event: WorkspaceEditEvent) => void;
 export interface HistoryCaptureContext {
   readonly capture: HistoryCapture;
   readonly label: string;
-  readonly before: ReadonlyMap<ShiftRecordId, ShiftEditorRecord>;
+  readonly changes: Map<ShiftRecordId, RecordChange>;
   readonly editIds: PendingEditId[];
 }
 

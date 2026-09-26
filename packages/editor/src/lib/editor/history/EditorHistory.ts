@@ -15,6 +15,7 @@ import type {
   WorkspaceEffect,
 } from "../../../types/history";
 import type { ShiftEditorRecord } from "../../../types/records";
+import type { StoreChange } from "../../../types/store";
 import { HistoryCapture } from "./HistoryCapture";
 import { editorRecordsEqual, recordChanges } from "./recordChanges";
 
@@ -22,7 +23,7 @@ import { editorRecordsEqual, recordChanges } from "./recordChanges";
  * Interleaves TypeScript editor records with ordered workspace undo entries.
  *
  * @remarks
- * Captures retain immutable store maps and publish only completed user actions.
+ * Captures journal touched editor records and publish only completed user actions.
  * Workspace replay remains owned by Rust; this class stores ordering markers,
  * never document snapshots or stable ledger identities.
  */
@@ -30,7 +31,8 @@ export class EditorHistory {
   readonly #editor: Editor;
   readonly #store: ShiftStore<ShiftEditorRecord>;
   readonly #workspace: WorkspaceEditCoordinator | null;
-  readonly #unsubscribe: (() => void) | null;
+  readonly #unsubscribeStore: () => void;
+  readonly #unsubscribeWorkspace: (() => void) | null;
   readonly #undoEntries: HistoryEntry[] = [];
   readonly #redoEntries: HistoryEntry[] = [];
   readonly #pending = new Map<PendingEditId, PendingHistoryEffect>();
@@ -55,7 +57,9 @@ export class EditorHistory {
     this.#editor = editor;
     this.#store = store;
     this.#workspace = workspace;
-    this.#unsubscribe = workspace?.onEdit((event) => this.#workspaceChanged(event)) ?? null;
+    this.#unsubscribeStore = store.onChange((change) => this.#storeChanged(change));
+    this.#unsubscribeWorkspace =
+      workspace?.onEdit((event) => this.#workspaceChanged(event)) ?? null;
   }
 
   get capturing(): boolean {
@@ -63,7 +67,7 @@ export class EditorHistory {
   }
 
   /**
-   * Begins one explicit user action from the current editor-record map.
+   * Begins one explicit user action and journals its touched editor records.
    *
    * @param label - Human-readable action name retained with the history entry.
    * @returns a synchronous terminal handle for the action.
@@ -79,7 +83,7 @@ export class EditorHistory {
     this.#capture = {
       capture,
       label,
-      before: this.#store.cell.peek(),
+      changes: new Map(),
       editIds: [],
     };
     return capture;
@@ -206,7 +210,8 @@ export class EditorHistory {
 
     if (this.#capture) this.#capture.capture.cancel();
     this.#disposed = true;
-    if (this.#unsubscribe) this.#unsubscribe();
+    this.#unsubscribeStore();
+    if (this.#unsubscribeWorkspace) this.#unsubscribeWorkspace();
     this.#capture = null;
     this.#pending.clear();
     this.#undoEntries.length = 0;
@@ -217,7 +222,7 @@ export class EditorHistory {
     const context = this.#capture;
     if (context?.capture !== capture) return;
 
-    const changes = recordChanges(context.before, this.#store.cell.peek());
+    const changes = recordChanges(context.changes.values());
     this.#capture = null;
 
     const editIds = context.editIds.filter((id) => this.#pending.get(id)?.outcome !== "failed");
@@ -254,7 +259,7 @@ export class EditorHistory {
     const context = this.#capture;
     if (context?.capture !== capture) return;
 
-    const changes = recordChanges(context.before, this.#store.cell.peek());
+    const changes = recordChanges(context.changes.values());
     this.#capture = null;
     this.#applyRecordChanges(changes, true);
 
@@ -283,6 +288,18 @@ export class EditorHistory {
         pending.discardWorkspaceRedo = discardedWorkspaceRedo;
       }
     }
+  }
+
+  #storeChanged(change: StoreChange<ShiftEditorRecord>): void {
+    const context = this.#capture;
+    if (!context || this.#recordingDepth > 0 || this.#disposed) return;
+
+    const previous = context.changes.get(change.id);
+    context.changes.set(change.id, {
+      id: change.id,
+      before: previous ? previous.before : change.before,
+      after: change.after,
+    });
   }
 
   #workspaceChanged(event: WorkspaceEditEvent): void {
