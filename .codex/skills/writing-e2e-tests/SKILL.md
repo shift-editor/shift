@@ -77,12 +77,13 @@ Before every golden:
 Rules:
 
 - One golden per distinct visual contract. Do not add near-duplicate images; if two captures are byte-identical, one of them is redundant.
-- Canvas goldens compare exactly. Never raise tolerance to make a mismatch pass.
+- Canvas goldens use `maxDiffPixels: 0` with `threshold: 0.02` on every host: enough for antialiasing differences between hosts (≤ 0.009), far below a real colour-token change (~0.07). Never raise either to make a mismatch pass; the default threshold of 0.2 silently accepts token changes.
+- Interface goldens (`expectPanelSnapshot`, `expectPageSnapshot`) are exact but compared on CI only, with baselines generated on the runner via the `ci: update visual snapshots` label. Never commit a locally generated interface baseline. Prefer semantic assertions and keep interface goldens few.
 - Goldens never pass on retry. The helpers throw on a retry attempt, so explain the first failure.
 - Use canvas-local positions (`dragCanvas()`, `canvasPagePoint()`) so layout changes cannot redraw geometry.
 - Theme goldens select the theme through the product and assert `data-color-theme` first. HiDPI goldens use `test.use({ deviceScaleFactor: 2 })` and assert `devicePixelRatio` first. Add one golden per palette branch or rendering path, not one per theme.
 
-Updating baselines: only for an intentional appearance change. Run the focused spec with `--update-snapshots -g "<title>"`, open every changed PNG and describe what changed, then rerun without update mode and with `--retries=0 --repeat-each=3`. Use the `ci: update visual snapshots` label only when the difference is host rendering you have inspected.
+Updating baselines: only for an intentional appearance change. Run the focused spec with `--update-snapshots -g "<title>"`, open every changed PNG and describe what changed, then rerun without update mode and with `--retries=0 --repeat-each=3`. Canvas baselines may be generated locally. Interface baselines are generated only by the `ci: update visual snapshots` label; inspect the runner-generated images before merging.
 
 ## Fixtures and isolation
 

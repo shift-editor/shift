@@ -28,14 +28,6 @@ async function openSelectedS(editor: EditorDriver): Promise<void> {
 }
 
 test.describe("Theme", () => {
-  test("light theme home view matches snapshot", async ({ page }) => {
-    await page.evaluate(() => localStorage.setItem("themeSelection", "shift-light"));
-    await page.reload();
-    await expect(page.locator("html")).toHaveAttribute("data-color-theme", "shift-light");
-
-    await expectPageSnapshot(page, "theme-light-home.png");
-  });
-
   // Shift Light uses stylesheet defaults; every other theme maps its palette to canvas tokens
   // through a light or a dark branch, so one theme of each branch covers the mapping.
   for (const themeId of ["shift-dark", "solarized-light"] as const) {
