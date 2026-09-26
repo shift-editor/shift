@@ -93,6 +93,7 @@ export const Sources = ({ canAuthor, outlineControls }: SourcesProps) => {
                     visible={visible}
                     inherited={inherited}
                     label="outline"
+                    subject={`${source.name} source`}
                     onClick={() => outlineControls.onToggle(target)}
                   />
                 )}

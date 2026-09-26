@@ -59,6 +59,7 @@ export const Instances = ({ canAuthor, outlineControls }: InstancesProps) => {
                     visible={visible}
                     inherited={inherited}
                     label="outline"
+                    subject={`${instance.name} instance`}
                     onClick={() => outlineControls.onToggle(target)}
                   />
                 )}
