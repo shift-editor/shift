@@ -44,6 +44,7 @@ export default defineConfig(async () => {
     ],
     resolve: {
       alias: {
+        "@shift/editor": path.resolve(packagesDir, "editor/src"),
         "@shift/ui": path.resolve(packagesDir, "ui/src/index.ts"),
         "@shift/geo": path.resolve(packagesDir, "geo/src/index.ts"),
         "@shift/types": path.resolve(packagesDir, "types/src/index.ts"),
