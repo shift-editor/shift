@@ -27,6 +27,8 @@ interface AxisFixture {
   instanceId: NamedInstanceId;
 }
 
+// Deletion cascades and undo are unit-tested in Font.test.ts; these tests prove that a
+// topology edit survives forced termination, recovery, explicit Save, and reopening.
 test.setTimeout(90_000);
 
 test("persists source topology", async ({ recoveryApp }) => {
@@ -56,14 +58,7 @@ test("persists source topology", async ({ recoveryApp }) => {
     fixture.defaultSourceId,
     fixture.boldSourceId,
   ]);
-  expect(deleted.axes).toEqual(baseline.axes);
-  expect(deleted.namedInstances).toEqual(baseline.namedInstances);
   expectCanonicalFont(recoveryApp, baseline);
-
-  await undo(recoveryApp.page);
-  await expectVariableFont(recoveryApp.page, { ...baseline, dirty: false });
-  await redo(recoveryApp.page);
-  await expectVariableFont(recoveryApp.page, deleted);
 
   const recovered = await recoveryApp.crashAndRecover();
   await expectVariableFont(recovered, deleted);
@@ -100,32 +95,7 @@ test("persists axis topology", async ({ recoveryApp }) => {
   expect(deleted.axes.map(({ id }) => id)).toEqual([fixture.weightAxisId, fixture.slantAxisId]);
   expect(deleted.defaultSourceId).toBe(fixture.defaultSourceId);
   expect(deleted.dirty).toBe(true);
-  expect(deleted.sources.every(({ location }) => !(fixture.widthAxisId in location.values))).toBe(
-    true,
-  );
-  expect(deleted.sources.find(({ id }) => id === fixture.boldSourceId)?.location.values).toEqual({
-    [fixture.weightAxisId]: 900,
-    [fixture.slantAxisId]: -8,
-  });
-  expect(deleted.namedInstances).toEqual([
-    {
-      id: fixture.instanceId,
-      name: "Display",
-      postscriptName: "MutatorSans-Display",
-      location: {
-        values: {
-          [fixture.weightAxisId]: 700,
-          [fixture.slantAxisId]: -4,
-        },
-      },
-    },
-  ]);
   expectCanonicalFont(recoveryApp, baseline);
-
-  await undo(recoveryApp.page);
-  await expectVariableFont(recoveryApp.page, { ...baseline, dirty: false });
-  await redo(recoveryApp.page);
-  await expectVariableFont(recoveryApp.page, deleted);
 
   const recovered = await recoveryApp.crashAndRecover();
   await expectVariableFont(recovered, deleted);
@@ -287,18 +257,6 @@ function expectCanonicalFont(recoveryApp: RecoveryApp, expected: ObservedVariabl
     axes: expected.axes,
     sources: expected.sources,
     namedInstances: expected.namedInstances,
-  });
-}
-
-async function undo(page: Page): Promise<void> {
-  await page.evaluate(async () => {
-    await window.shift?.font.editCoordinator.undo();
-  });
-}
-
-async function redo(page: Page): Promise<void> {
-  await page.evaluate(async () => {
-    await window.shift?.font.editCoordinator.redo();
   });
 }
 
