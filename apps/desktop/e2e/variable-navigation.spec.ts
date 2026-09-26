@@ -1,10 +1,10 @@
 import type { Page } from "@playwright/test";
 import type { AxisId, GlyphId, GlyphName, NamedInstanceId, SourceId } from "@shift/types";
-import { expect, test } from "./fixtures/perfApp";
+import { DESIGNSPACE_FONT_PATH, expect, workspaceTest } from "./fixtures/electronApp";
 import {
   editorShell,
   fontNavigation,
-  glyphCatalogCanvas,
+  glyphCatalogRenderer,
   glyphProperties,
   openCatalogGlyph,
   openVariationControls,
@@ -137,17 +137,20 @@ async function expectPreview(
     .toEqual(expected);
 }
 
+// Navigation coherence is renderer-independent, so this runs on the software-rendered
+// visual project with the authored MutatorSans designspace.
+const test = workspaceTest.extend({ startupFontPath: DESIGNSPACE_FONT_PATH });
+
 test("keeps variable preview and exact-source editability coherent across Grid navigation", async ({
   page,
 }) => {
   test.slow();
 
-  await expect.poll(() => page.evaluate(() => Boolean(navigator.gpu))).toBe(true);
   await expect.poll(() => page.evaluate(() => Boolean(window.shift?.font.loaded))).toBe(true);
   const fixture = await createVariableNavigationFixture(page);
 
   await expect(page).toHaveURL(/#\/home$/);
-  await expect(glyphCatalogCanvas(page)).toHaveAttribute("data-grid-readiness", "Complete", {
+  await expect(glyphCatalogRenderer(page)).toHaveAttribute("data-grid-readiness", "Complete", {
     timeout: 30_000,
   });
   await fontNavigation(page).getByRole("button", { name: "Axes", exact: true }).click();
