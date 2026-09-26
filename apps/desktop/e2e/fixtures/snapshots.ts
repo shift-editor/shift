@@ -9,25 +9,65 @@ import type { EditorDriver } from "./EditorDriver";
  */
 export const SCREENSHOT_STYLE_PATH = path.join(__dirname, "..", "editor.screenshot.css");
 
-/** Options for page and panel goldens whose layout includes the editor sidebars. */
-const PAGE_SNAPSHOT_OPTIONS = {
+/**
+ * Interface goldens compare exactly, but only on CI.
+ *
+ * @remarks
+ * Text antialiasing differs between development Macs and the hosted runner, so interface
+ * baselines come from the runner (the `ci: update visual snapshots` label) and are compared
+ * only there. A per-pixel `threshold` above zero would hide real token changes: Playwright
+ * ignores any pixel whose colour moved less than the threshold, even with `maxDiffPixels: 0`.
+ */
+const INTERFACE_SNAPSHOT_OPTIONS = {
   stylePath: SCREENSHOT_STYLE_PATH,
   animations: "disabled",
   caret: "hide",
+  maxDiffPixels: 0,
+  threshold: 0,
 } as const;
 
 /**
- * Canvas goldens compare exactly: thin strokes and handles occupy few pixels, so a ratio
- * tolerance could accept a displaced curve or a missing marker. They keep device pixels, so a
- * HiDPI golden records the backing-store detail instead of a CSS-pixel downsample; at 1× the
- * two scales are identical.
+ * Canvas goldens compare exactly on every host: software canvas rendering is pixel-identical
+ * locally and on CI, and thin or translucent strokes (handles, comparison outlines) change too
+ * few pixels, too slightly, for any tolerance to be safe. `threshold: 0` matters as much as
+ * `maxDiffPixels: 0`; the default per-pixel threshold accepts colour changes such as a
+ * different outline token. Captures keep device pixels, so a HiDPI golden records
+ * backing-store detail instead of a CSS-pixel downsample; at 1× the two scales are identical.
  */
 const CANVAS_SNAPSHOT_OPTIONS = {
   animations: "disabled",
   caret: "hide",
   maxDiffPixels: 0,
+  threshold: 0,
   scale: "device",
 } as const;
+
+/**
+ * Reports whether interface goldens are compared in this run.
+ *
+ * @remarks
+ * Locally the capture is attached for inspection instead, so nothing is compared against,
+ * or written over, runner-generated baselines.
+ *
+ * @param name - golden about to be compared.
+ * @param target - element or window that would be captured.
+ * @returns true on CI.
+ */
+async function comparesInterfaceGoldens(name: string, target: Locator | Page): Promise<boolean> {
+  if (process.env.CI) return true;
+
+  test.info().annotations.push({
+    type: "interface-golden",
+    description: `${name} is compared on CI only; its baseline comes from the hosted runner.`,
+  });
+  await attachLocalCapture(name, target);
+  return false;
+}
+
+async function attachLocalCapture(name: string, target: Locator | Page): Promise<void> {
+  const body = await target.screenshot({ animations: "disabled", caret: "hide" });
+  await test.info().attach(`local-${name}`, { body, contentType: "image/png" });
+}
 
 /**
  * Refuses to compare a golden on a retry attempt.
@@ -67,14 +107,17 @@ export async function expectCanvasSnapshot(editor: EditorDriver, name: string): 
 }
 
 /**
- * Asserts a panel or page region against a golden with host decoration normalized.
+ * Asserts a panel or page region against a runner-generated golden with host decoration
+ * normalized. Compared on CI only; see {@link INTERFACE_SNAPSHOT_OPTIONS}.
  *
  * @param target - smallest locator that owns the visual contract.
  * @param name - golden file name under the spec's snapshot directory.
  */
 export async function expectPanelSnapshot(target: Locator, name: string): Promise<void> {
   refuseRetriedGolden(name);
-  await expect(target).toHaveScreenshot(name, PAGE_SNAPSHOT_OPTIONS);
+  if (!(await comparesInterfaceGoldens(name, target))) return;
+
+  await expect(target).toHaveScreenshot(name, INTERFACE_SNAPSHOT_OPTIONS);
 }
 
 /**
@@ -89,5 +132,7 @@ export async function expectPanelSnapshot(target: Locator, name: string): Promis
  */
 export async function expectPageSnapshot(page: Page, name: string): Promise<void> {
   refuseRetriedGolden(name);
-  await expect(page).toHaveScreenshot(name, PAGE_SNAPSHOT_OPTIONS);
+  if (!(await comparesInterfaceGoldens(name, page))) return;
+
+  await expect(page).toHaveScreenshot(name, INTERFACE_SNAPSHOT_OPTIONS);
 }
