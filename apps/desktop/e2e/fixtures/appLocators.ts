@@ -65,13 +65,29 @@ export async function firstAxisSlider(page: Page) {
   return page.getByRole("slider", { name: axisName, exact: true });
 }
 
+/**
+ * Waits until the catalog has laid out and painted its first cell.
+ *
+ * @remarks
+ * Catalog cells have no DOM identity, so coordinate clicks before the Grid is complete can
+ * land on an empty surface and never navigate.
+ */
+async function waitForCatalogCells(page: Page): Promise<void> {
+  await expect(glyphCatalogSurface(page)).toHaveAttribute("data-first-glyph-id", /.+/);
+  await expect(glyphCatalogRenderer(page)).toHaveAttribute("data-grid-readiness", "Complete", {
+    timeout: 30_000,
+  });
+}
+
 /** Keeps the catalog preview coordinate contract in one place. */
 export async function clickFirstCatalogGlyph(page: Page): Promise<void> {
+  await waitForCatalogCells(page);
   await glyphCatalogViewport(page).click({ position: FIRST_GLYPH_PREVIEW_POINT });
 }
 
 /** Keeps the catalog name-cell coordinate contract in one place. */
 export async function clickFirstCatalogGlyphName(page: Page): Promise<void> {
+  await waitForCatalogCells(page);
   await glyphCatalogViewport(page).click({ position: FIRST_GLYPH_NAME_POINT });
 }
 
