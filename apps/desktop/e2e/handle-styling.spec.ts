@@ -9,6 +9,7 @@ import {
 } from "./fixtures/electronApp";
 import { clickFirstCatalogGlyph, openVariationControls } from "./fixtures/appLocators";
 import type { ExternalAxisLocation } from "@shift/editor/types";
+import { expectCanvasSnapshot } from "./fixtures/snapshots";
 
 const authoredTest = workspaceTest.extend({ startupFontPath: DESIGNSPACE_FONT_PATH });
 const previewTest = documentTest.extend({ openFontPath: FONT_PATH });
@@ -87,28 +88,32 @@ authoredTest(
   },
 );
 
-authoredTest("named instances between sources draw interpolated handles", async ({ page }) => {
-  await navigateToEditor(page, "53");
-  const instance = await page.evaluate(() => {
-    const font = window.shiftSession!.font;
-    return font.namedInstances.find(
-      (instance) =>
-        !font.sourceAt(
-          new Map(
-            font
-              .getAxes()
-              .map((axis) => [axis.id, instance.location.values[axis.id] ?? axis.default]),
-          ) as unknown as ExternalAxisLocation,
-        ),
-    );
-  });
-  if (!instance) throw new Error("Expected an instance between sources");
-  const controls = await openVariationControls(page);
+authoredTest(
+  "named instances between sources draw interpolated handles",
+  async ({ page, editor }) => {
+    await navigateToEditor(page, "53");
+    const instance = await page.evaluate(() => {
+      const font = window.shiftSession!.font;
+      return font.namedInstances.find(
+        (instance) =>
+          !font.sourceAt(
+            new Map(
+              font
+                .getAxes()
+                .map((axis) => [axis.id, instance.location.values[axis.id] ?? axis.default]),
+            ) as unknown as ExternalAxisLocation,
+          ),
+      );
+    });
+    if (!instance) throw new Error("Expected an instance between sources");
+    const controls = await openVariationControls(page);
 
-  await controls.getByTestId(`instance-${instance.id}`).click();
+    await controls.getByTestId(`instance-${instance.id}`).click();
 
-  await expectEveryHandleDrawnAs(page, ["interpolated"]);
-});
+    await expectEveryHandleDrawnAs(page, ["interpolated"]);
+    await expectCanvasSnapshot(editor, "handles-interpolated-instance.png");
+  },
+);
 
 previewTest(
   "TTF source handles keep source styling without becoming hoverable",

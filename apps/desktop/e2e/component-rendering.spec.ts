@@ -2,6 +2,7 @@ import path from "node:path";
 import type { MatModel } from "@shift/geo";
 import { workspaceTest as test, expect, navigateToEditor } from "./fixtures/electronApp";
 import { editorSidebar, glyphProperties, openVariationControls } from "./fixtures/appLocators";
+import type { ExternalAxisLocation } from "@shift/editor/types";
 import { expectCanvasSnapshot } from "./fixtures/snapshots";
 
 const VARIABLE_FONT_PATH = path.resolve(
@@ -64,6 +65,40 @@ test("exact sources keep ordered component transforms when authored IDs differ",
   expect(sample.renderedTransforms).toEqual(sample.exactTransforms);
 
   await expectCanvasSnapshot(editor, "canvas-Aacute-bold-wide-components.png");
+});
+
+test("components render at an interpolated instance", async ({ page, editor }) => {
+  await navigateToEditor(page, "C1");
+  const controls = await openVariationControls(page);
+  const instanceId = await page.evaluate(() => {
+    const font = window.shift!.font;
+    return font.namedInstances.find(
+      (instance) =>
+        !font.sourceAt(
+          new Map(
+            font
+              .getAxes()
+              .map((axis) => [axis.id, instance.location.values[axis.id] ?? axis.default]),
+          ) as unknown as ExternalAxisLocation,
+        ),
+    )?.id;
+  });
+  if (!instanceId) throw new Error("Expected an instance between sources");
+
+  await controls.getByTestId(`instance-${instanceId}`).click();
+  await expect.poll(() => page.evaluate(() => window.shift!.editor.activeSourceId)).toBeNull();
+  const componentCount = await page.evaluate(() => {
+    const { editor } = window.shift!;
+    const node = editor.scene.nodesOfKind("glyph")[0];
+    const glyph = node ? editor.glyphForId(node.glyphId) : null;
+    if (!glyph) throw new Error("Expected loaded Aacute glyph");
+
+    return glyph.renderModelAt(editor.externalLocationCell, editor.activeSourceIdCell).components
+      .length;
+  });
+  expect(componentCount).toBeGreaterThan(0);
+
+  await expectCanvasSnapshot(editor, "canvas-Aacute-interpolated-components.png");
 });
 
 test("selected components expose editable transforms in the properties sidebar", async ({

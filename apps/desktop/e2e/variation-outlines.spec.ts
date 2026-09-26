@@ -7,6 +7,7 @@ import {
 } from "./fixtures/electronApp";
 import { editorSidebar, openVariationControls, variationControls } from "./fixtures/appLocators";
 import type { ExternalAxisLocation } from "@shift/editor/types";
+import { expectCanvasSnapshot } from "./fixtures/snapshots";
 
 const test = workspaceTest.extend({ startupFontPath: DESIGNSPACE_FONT_PATH });
 
@@ -308,4 +309,44 @@ test("show-all and hide-all keep explicitly shown source and instance outlines",
   await expect.poll(() => drawnOutlines(page)).toEqual([instanceKey]);
   await outlineToggle(page, "Hide", "instance", fixture.instance.name).click();
   await expect.poll(() => drawnOutlines(page)).toEqual([]);
+});
+
+/** Returns a named instance whose location is not a source, so its outline has its own shape. */
+async function interpolatedInstance(page: Page): Promise<{ id: string; name: string }> {
+  const instance = await page.evaluate(() => {
+    const font = window.shiftSession!.font;
+    const match = font.namedInstances.find(
+      (candidate) =>
+        !font.sourceAt(
+          new Map(
+            font
+              .getAxes()
+              .map((axis) => [axis.id, candidate.location.values[axis.id] ?? axis.default]),
+          ) as unknown as ExternalAxisLocation,
+        ),
+    );
+    return match ? { id: match.id, name: match.name } : null;
+  });
+  if (!instance) throw new Error("Expected an instance between sources");
+
+  return instance;
+}
+
+test("a comparison source outline matches snapshot", async ({ page, editor }) => {
+  const fixture = await openOutlineFixture(page);
+
+  await outlineToggle(page, "Show", "source", fixture.source.name).click();
+  await expect.poll(() => drawnOutlines(page)).toEqual([`source:${fixture.source.id}`]);
+
+  await expectCanvasSnapshot(editor, "outline-source.png");
+});
+
+test("an interpolated instance outline matches snapshot", async ({ page, editor }) => {
+  await openOutlineFixture(page);
+  const instance = await interpolatedInstance(page);
+
+  await outlineToggle(page, "Show", "instance", instance.name).click();
+  await expect.poll(() => drawnOutlines(page)).toEqual([`instance:${instance.id}`]);
+
+  await expectCanvasSnapshot(editor, "outline-interpolated-instance.png");
 });

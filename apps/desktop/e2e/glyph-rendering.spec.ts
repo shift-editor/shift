@@ -66,6 +66,43 @@ test.describe("Glyph rendering — S (quadratic curves)", () => {
   });
 });
 
+test.describe("Glyph rendering — zoom", () => {
+  test("handles and control lines stay crisp at high zoom", async ({ page, editor }) => {
+    await editor.openGlyphByUnicode(GLYPH_S);
+    const offCurve = (await editor.outline())[0]?.points.find(
+      (point) => point.pointType === "offCurve",
+    );
+    if (!offCurve) throw new Error("Expected an off-curve point on S");
+    const [target] = await editor.pointTargets([offCurve.id]);
+    if (!target) throw new Error("Expected off-curve point target");
+
+    // Wheel steps are clamped to ×1.1, so a fixed step count from the fit zoom is
+    // deterministic; anchoring on the handle keeps it at the same canvas position.
+    const zoom = () => page.evaluate(() => window.shift!.editor.zoom);
+    const fitZoom = await zoom();
+    const steps = Math.ceil(Math.log(12 / fitZoom) / Math.log(1.1));
+    for (let step = 0; step < steps; step++) {
+      await editor.canvas.dispatchEvent("wheel", {
+        bubbles: true,
+        cancelable: true,
+        clientX: target.pagePosition.x,
+        clientY: target.pagePosition.y,
+        ctrlKey: true,
+        deltaMode: 0,
+        deltaY: -100,
+      });
+    }
+    await expect.poll(zoom).toBeCloseTo(fitZoom * 1.1 ** steps, 6);
+    expect(await zoom()).toBeGreaterThanOrEqual(8);
+    expect(await zoom()).toBeLessThanOrEqual(16);
+
+    await page.mouse.move(1, 1);
+    await expect.poll(() => editor.hoverId()).toBeNull();
+
+    await expectCanvasSnapshot(editor, "canvas-S-high-zoom.png");
+  });
+});
+
 test.describe("Pen tool drawing — segment snapshots", () => {
   test.beforeEach(async ({ editor }) => {
     await editor.openGlyphByUnicode(GLYPH_I);

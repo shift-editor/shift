@@ -1,11 +1,31 @@
 import { colorThemes } from "../src/renderer/src/lib/themes";
-import { workspaceTest as test, expect } from "./fixtures/electronApp";
+import type { Page } from "@playwright/test";
+import type { ThemeId } from "../src/renderer/src/lib/themes";
+import { workspaceTest as test, expect, waitForWorkspaceReady } from "./fixtures/electronApp";
+import type { EditorDriver } from "./fixtures/EditorDriver";
 import {
   clickFirstCatalogGlyph,
   glyphCatalogSurface,
   waitForEditorReady,
 } from "./fixtures/appLocators";
-import { expectPageSnapshot } from "./fixtures/snapshots";
+import { expectCanvasSnapshot, expectPageSnapshot } from "./fixtures/snapshots";
+
+/** Persists a theme selection, reloads the workspace, and proves the theme is applied. */
+async function useTheme(page: Page, themeId: ThemeId): Promise<void> {
+  await page.evaluate((id) => localStorage.setItem("themeSelection", id), themeId);
+  await page.reload();
+  await waitForWorkspaceReady(page);
+  await expect(page.locator("html")).toHaveAttribute("data-color-theme", themeId);
+}
+
+/** Opens S with every point selected so glyph, handles, and selection chrome are all drawn. */
+async function openSelectedS(editor: EditorDriver): Promise<void> {
+  await editor.openGlyphByUnicode("53");
+  await editor.selectAll();
+  expect(await editor.selectionIds()).toHaveLength(await editor.pointCount());
+  // Park the pointer outside the canvas so no hover highlight is part of the golden.
+  await editor.page.mouse.move(1, 1);
+}
 
 test.describe("Theme", () => {
   test("light theme home view matches snapshot", async ({ page }) => {
@@ -14,6 +34,28 @@ test.describe("Theme", () => {
     await expect(page.locator("html")).toHaveAttribute("data-color-theme", "shift-light");
 
     await expectPageSnapshot(page, "theme-light-home.png");
+  });
+
+  // Shift Light uses stylesheet defaults; every other theme maps its palette to canvas tokens
+  // through a light or a dark branch, so one theme of each branch covers the mapping.
+  for (const themeId of ["shift-dark", "solarized-light"] as const) {
+    test(`${themeId} paints glyph, handles, and selection from theme tokens`, async ({
+      page,
+      editor,
+    }) => {
+      await useTheme(page, themeId);
+      await openSelectedS(editor);
+
+      await expectCanvasSnapshot(editor, `canvas-S-all-selected-${themeId}.png`);
+    });
+  }
+
+  test("dark editor chrome matches snapshot", async ({ page, editor }) => {
+    await useTheme(page, "shift-dark");
+    await editor.openGlyphByUnicode("53");
+    await page.mouse.move(1, 1);
+
+    await expectPageSnapshot(page, "editor-shift-dark.png");
   });
 
   test("selects and persists a classic color theme", async ({ page }) => {

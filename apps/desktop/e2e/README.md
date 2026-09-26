@@ -140,6 +140,26 @@ Golden captures are the final assertion of a behavioral test, taken with the hel
 - Express canvas gestures with `editor.canvasPagePoint()` fractions of the interactive canvas, and choose positions away from existing geometry so a click cannot hit an unintended target.
 - Park the pointer off the target before capturing toolbars and menus so hover styling and tooltips are not part of the golden.
 - Do not count or sample palette colours. Assert the render state the editor publishes, or capture a golden of the state.
+- Canvas goldens keep device pixels (`scale: "device"`). A HiDPI spec sets Playwright's `deviceScaleFactor` option (`test.use({ deviceScaleFactor: 2 })`), which the Electron fixtures pass to `--force-device-scale-factor`; window sizing stays in CSS pixels, so a 2× canvas golden is twice the 1× dimensions. Assert `window.devicePixelRatio` before capturing.
+- Theme goldens persist the selection (`localStorage.themeSelection`), reload, and assert `data-color-theme` before capturing. Shift Light uses stylesheet defaults; every other theme maps its palette through a light or dark branch of `colorThemeVariables()`, so add a theme golden when a new theme changes that mapping rather than for each palette.
+
+### Visual contracts
+
+Each golden protects one contract; prefer extending the owning spec over adding a new capture of the same state.
+
+| Contract                        | Goldens                                                                                                                      |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Glyph outlines, handles, guides | `glyph-rendering`: `canvas-{S,B,I,Q}-composited`; `editor`: `editor-canvas-A`                                                |
+| Selection chrome                | `glyph-rendering`: `canvas-S-all-selected`, `segment-selected`, `segment-translating`; `editor`: `segment-upgrade-preview`   |
+| Pen previews                    | `glyph-rendering`: `pen-*`                                                                                                   |
+| Shape drafts                    | `tools`: `{Rectangle,Ellipse}-{draft,committed}`                                                                             |
+| High zoom                       | `glyph-rendering`: `canvas-S-high-zoom`                                                                                      |
+| 2× device scale                 | `hidpi-rendering`: `canvas-S-all-selected-2x`                                                                                |
+| Theme palette mapping           | `theme`: `canvas-S-all-selected-{shift-dark,solarized-light}`, `editor-shift-dark`, `theme-light-home`                       |
+| Variation outlines              | `variation-outlines`: `outline-source`, `outline-interpolated-instance`                                                      |
+| Interpolated handles            | `handle-styling`: `handles-interpolated-instance`                                                                            |
+| Components                      | `component-rendering`: `canvas-Aacute-bold-wide-components`, `canvas-Aacute-interpolated-components`                         |
+| Panels and chrome               | `editor` sidebar and transform panels, `editor-glyph-A`; `tools` toolbar and shape menu; `home`; `landing`; `preview-notice` |
 
 ### Capture determinism
 
