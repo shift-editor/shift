@@ -408,7 +408,7 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Check WebAssembly font core
-        run: RUSTFLAGS='-D warnings --cfg getrandom_backend="wasm_js"' cargo check --target wasm32-unknown-unknown -p shift-font -p shift-slug -p shift-wire
+        run: RUSTFLAGS='-D warnings --cfg getrandom_backend="wasm_js"' cargo check --target wasm32-unknown-unknown -p shift-backends -p shift-font -p shift-slug -p shift-wire
 
       - name: Run tests
         run: cargo test --workspace --exclude shift-bridge
