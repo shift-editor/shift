@@ -100,9 +100,7 @@ test("selected components expose editable transforms in the properties sidebar",
   await expect.poll(() => editor.selectionBounds()).toEqual(initialBounds);
 
   const targetX = Math.round(initialBounds.x) + 25;
-  await xInput.click();
-  await xInput.fill(String(targetX));
-  await xInput.press("Enter");
+  await editor.commitInputValue(xInput, targetX);
   await expect.poll(() => editor.selectionBounds()).toMatchObject({ x: targetX });
 
   await editor.undo();

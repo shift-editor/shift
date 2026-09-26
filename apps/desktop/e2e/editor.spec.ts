@@ -138,9 +138,7 @@ test("switches Alt during proportional resizing and preserves release geometry",
   try {
     await page.mouse.move(canvasBounds.x + normal.x, canvasBounds.y + normal.y, { steps: 3 });
     await editor.flushPointerMoves();
-    await expect
-      .poll(() => page.evaluate(() => window.shift!.editor.toolIf("select")?.state.type))
-      .toBe("resizing");
+    await expect.poll(() => editor.toolState()).toBe("resizing");
 
     await page.keyboard.down("Alt");
     await page.mouse.move(canvasBounds.x + centered.x, canvasBounds.y + centered.y, { steps: 3 });
@@ -188,12 +186,6 @@ test("switches Alt during proportional resizing and preserves release geometry",
 async function selectionCenter(editor: EditorDriver) {
   const bounds = await editor.selectionBounds();
   return { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
-}
-
-async function setInputValue(input: Locator, value: number): Promise<void> {
-  await input.click();
-  await input.fill(String(value));
-  await input.press("Enter");
 }
 
 async function elementWidth(element: Locator): Promise<number> {
@@ -277,8 +269,14 @@ test.describe("Editor view", () => {
     const targetX = Math.round(initialPosition.x) + 25;
     const targetY = Math.round(initialPosition.y) + 30;
 
-    await setInputValue(properties.getByLabel("Anchor X position", { exact: true }), targetX);
-    await setInputValue(properties.getByLabel("Anchor Y position", { exact: true }), targetY);
+    await editor.commitInputValue(
+      properties.getByLabel("Anchor X position", { exact: true }),
+      targetX,
+    );
+    await editor.commitInputValue(
+      properties.getByLabel("Anchor Y position", { exact: true }),
+      targetY,
+    );
 
     await expect.poll(anchorPosition).toEqual({ x: targetX, y: targetY });
     await editor.undo();
@@ -389,9 +387,7 @@ test.describe("Editor view", () => {
         await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2, {
           steps: 3,
         });
-        await expect
-          .poll(() => page.evaluate(() => window.shift!.editor.toolIf("select")?.state.type))
-          .toBe("bending");
+        await expect.poll(() => editor.toolState()).toBe("bending");
         await expect(canvas).toHaveCSS("cursor", /cursor@32-bend\.svg/);
         await expect(sidebar).not.toHaveCSS("cursor", /cursors\//);
       }
@@ -547,16 +543,17 @@ test.describe("Editor view", () => {
     await expect(page.getByRole("tooltip")).toHaveText("Anchor top left");
   });
 
-  test("keeps advance width text current after a sidebar metrics edit", async ({ page }) => {
+  test("keeps advance width text current after a sidebar metrics edit", async ({
+    page,
+    editor,
+  }) => {
     const properties = glyphProperties(page);
     const advanceInput = properties.getByLabel("Advance width", { exact: true });
     const rightSidebearingInput = properties.getByLabel("Right sidebearing", { exact: true });
     const initialAdvance = Number(await advanceInput.inputValue());
     const initialRightSidebearing = Number(await rightSidebearingInput.inputValue());
 
-    await rightSidebearingInput.click();
-    await rightSidebearingInput.fill(String(initialRightSidebearing + 25));
-    await rightSidebearingInput.press("Enter");
+    await editor.commitInputValue(rightSidebearingInput, initialRightSidebearing + 25);
 
     await expect(advanceInput).toHaveValue(String(initialAdvance + 25));
   });
@@ -592,8 +589,8 @@ test.describe("Editor view", () => {
     const targetY = Math.round(initialBounds.y) + 30;
 
     await properties.getByLabel("Anchor top left", { exact: true }).click();
-    await setInputValue(xInput, targetX);
-    await setInputValue(yInput, targetY);
+    await editor.commitInputValue(xInput, targetX);
+    await editor.commitInputValue(yInput, targetY);
 
     await expect.poll(() => editor.selectionBounds()).toMatchObject({ x: targetX, y: targetY });
   });
@@ -627,9 +624,7 @@ test.describe("Editor view", () => {
       try {
         await page.mouse.move(canvasBounds.x + end.x, canvasBounds.y + end.y, { steps: 3 });
         await editor.flushPointerMoves();
-        await expect
-          .poll(() => page.evaluate(() => window.shift!.editor.toolIf("select")?.state.type))
-          .toBe("resizing");
+        await expect.poll(() => editor.toolState()).toBe("resizing");
         const preview = await editor.selectionBounds();
         expect(preview.width).toBeGreaterThan(initialBounds.width);
         expect(preview.width / initialBounds.width).toBeCloseTo(
@@ -659,7 +654,7 @@ test.describe("Editor view", () => {
         const properties = glyphProperties(page);
         const initialBounds = await editor.selectionBounds();
         await properties.getByLabel(anchor, { exact: true }).click();
-        await setInputValue(
+        await editor.commitInputValue(
           properties.getByLabel(`Dimension ${dimension}`, { exact: true }),
           initialBounds[dimension] * 2,
         );
@@ -695,7 +690,7 @@ test.describe("Editor view", () => {
       const properties = glyphProperties(page);
       const initialBounds = await editor.selectionBounds();
       await properties.getByLabel("Anchor top left", { exact: true }).click();
-      await setInputValue(
+      await editor.commitInputValue(
         properties.getByLabel(dimension === "width" ? "Width" : "Height", { exact: true }),
         initialBounds[dimension] * 2,
       );
@@ -731,7 +726,7 @@ test.describe("Editor view", () => {
 
     await properties.getByLabel("Anchor top left", { exact: true }).click();
     const scaleInput = properties.getByLabel("Scale factor", { exact: true });
-    await setInputValue(scaleInput, 2);
+    await editor.commitInputValue(scaleInput, 2);
 
     await expect
       .poll(() => editor.selectionBounds())

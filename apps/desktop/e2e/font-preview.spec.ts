@@ -12,7 +12,7 @@ import {
   settingsDetails,
   waitForEditorReady,
 } from "./fixtures/appLocators";
-import { EditorDriver } from "./fixtures/EditorDriver";
+import type { EditorDriver } from "./fixtures/EditorDriver";
 
 test.describe("retained font source Grid preview", () => {
   test("opens through home with complete source residency and no authored workspace", async ({
@@ -43,9 +43,10 @@ test.describe("retained font source Grid preview", () => {
 
   test("renders a preview glyph with read-only properties and no authored state", async ({
     page,
+    editor,
   }) => {
     await expectResidentPreviewGrid(page);
-    const glyphId = await openFirstPreviewGlyph(page);
+    const glyphId = await openFirstPreviewGlyph(editor);
 
     const readOnlyGlyphInputs = glyphProperties(page).locator("input:disabled");
     await expect(readOnlyGlyphInputs).toHaveCount(3);
@@ -83,11 +84,12 @@ test.describe("retained font source Grid preview", () => {
 
   test("returns to the resident Grid without reading the source or rebuilding the atlas", async ({
     page,
+    editor,
     sourcePath,
   }) => {
     const glyphCanvas = await expectResidentPreviewGrid(page);
     const builds = await glyphCanvas.getAttribute("data-atlas-build-count");
-    const glyphId = await openFirstPreviewGlyph(page);
+    const glyphId = await openFirstPreviewGlyph(editor);
 
     // A removed source exposes any later filesystem read of the retained projection.
     fs.rmSync(sourcePath);
@@ -97,7 +99,7 @@ test.describe("retained font source Grid preview", () => {
     await expect(glyphCanvas).toHaveAttribute("data-fully-resident", "true");
     await expect(glyphCanvas).toHaveAttribute("data-atlas-build-count", builds ?? "");
 
-    expect(await openFirstPreviewGlyph(page)).toBe(glyphId);
+    expect(await openFirstPreviewGlyph(editor)).toBe(glyphId);
     await expect(glyphCanvas).toHaveAttribute("data-atlas-build-count", builds ?? "");
   });
 
@@ -184,11 +186,12 @@ async function expectPaintedGrid(page: Page, glyphCanvas: Locator): Promise<void
   expect(painted.equals(withoutGlyphs)).toBe(false);
 }
 
-async function openFirstPreviewGlyph(page: Page): Promise<GlyphId> {
+async function openFirstPreviewGlyph(editor: EditorDriver): Promise<GlyphId> {
+  const page = editor.page;
   await clickFirstCatalogGlyph(page);
   await page.waitForURL(/#\/editor\//);
   const glyphId = decodeURIComponent(new URL(page.url()).hash.slice("#/editor/".length)) as GlyphId;
   await waitForEditorReady(page, glyphId);
-  await new EditorDriver(page).waitForCanvasRender();
+  await editor.waitForCanvasRender();
   return glyphId;
 }

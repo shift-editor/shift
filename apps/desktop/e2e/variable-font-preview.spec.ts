@@ -8,7 +8,6 @@ import {
   openVariationControls,
   waitForEditorReady,
 } from "./fixtures/appLocators";
-import { EditorDriver } from "./fixtures/EditorDriver";
 
 test.describe("variable font preview projection", () => {
   test("offers source and instance navigation without authoring actions", async ({ page }) => {
@@ -46,6 +45,7 @@ test.describe("variable font preview projection", () => {
 
   test("scrubs retained glyph geometry without source reads or projection acquisition", async ({
     page,
+    editor,
     sourcePath,
   }) => {
     const glyphId = await openPreviewGlyph(page, "A");
@@ -56,7 +56,7 @@ test.describe("variable font preview projection", () => {
 
     const before = await glyphSample(page, glyphId);
     const sceneCanvas = page.locator("#scene-canvas");
-    await new EditorDriver(page).waitForCanvasRender();
+    await editor.waitForCanvasRender();
     const beforeFrame = await sceneCanvas.screenshot();
 
     // A removed source exposes filesystem reads; rejecting acquisition exposes any
@@ -80,7 +80,7 @@ test.describe("variable font preview projection", () => {
       .not.toEqual(before.location);
     expect((await glyphSample(page, glyphId)).values).not.toEqual(before.values);
 
-    await new EditorDriver(page).waitForCanvasRender();
+    await editor.waitForCanvasRender();
     expect((await sceneCanvas.screenshot()).equals(beforeFrame)).toBe(false);
   });
 });

@@ -1,5 +1,4 @@
 import type { Page } from "@playwright/test";
-import { EditorDriver } from "./fixtures/EditorDriver";
 import { expect, glyphsPreviewTest, ufoPreviewTest } from "./fixtures/perfApp";
 import {
   clickFirstCatalogGlyph,
@@ -52,7 +51,7 @@ ufoPreviewTest("UFO sources render a complete resident Grid", async ({ page }) =
   await expectRenderedGrid(page);
 });
 
-glyphsPreviewTest("Glyphs sources render a complete resident Grid", async ({ page }) => {
+glyphsPreviewTest("Glyphs sources render a complete resident Grid", async ({ page, editor }) => {
   await expectRenderedGrid(page);
 
   const surface = glyphCatalogSurface(page);
@@ -65,7 +64,7 @@ glyphsPreviewTest("Glyphs sources render a complete resident Grid", async ({ pag
     page,
     decodeURIComponent(new URL(page.url()).hash.slice("#/editor/".length)),
   );
-  await new EditorDriver(page).waitForCanvasRender();
+  await editor.waitForCanvasRender();
 
   const sceneCanvas = page.locator("#scene-canvas");
   const beforeSourceFrame = await sceneCanvas.screenshot();

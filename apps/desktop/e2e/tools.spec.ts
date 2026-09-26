@@ -80,13 +80,7 @@ async function liveShapeDraft(editor: EditorDriver) {
   });
 }
 
-/** Maps tool id to the aria-label on its toolbar button (set via tooltip). */
-const TOOL_LABELS: Record<string, string> = {
-  select: "Select Tool (V)",
-  pen: "Pen Tool (P)",
-  hand: "Hand Tool (H)",
-  shape: "Rectangle Tool (R)",
-};
+const TOOLBAR_TOOLS = ["select", "pen", "hand", "rectangle"] as const;
 
 test.describe("Canvas pointer lifecycle", () => {
   test.beforeEach(async ({ editor }) => {
@@ -148,12 +142,13 @@ test.describe("Toolbar tools", () => {
     await editor.openGlyphByUnicode("41");
   });
 
-  for (const [tool, label] of Object.entries(TOOL_LABELS)) {
-    test(`${tool} tool active state matches snapshot`, async ({ page }) => {
-      await page.getByRole("button", { name: label, exact: true }).click();
-      await expect
-        .poll(() => page.evaluate(() => window.shift?.editor.toolCell.peek()?.id))
-        .toBe(tool);
+  for (const tool of TOOLBAR_TOOLS) {
+    test(`${tool} tool active state matches snapshot`, async ({ page, editor }) => {
+      await editor.selectTool(tool);
+      await expect(editor.toolButton(tool)).toHaveAttribute("aria-pressed", "true");
+      for (const other of TOOLBAR_TOOLS.filter((candidate) => candidate !== tool)) {
+        await expect(editor.toolButton(other)).toHaveAttribute("aria-pressed", "false");
+      }
       // Park the pointer so hover styling and the button tooltip are not captured.
       await page.mouse.move(0, 0);
 
@@ -221,19 +216,14 @@ test.describe("Toolbar tools", () => {
   });
 
   for (const label of ["Ellipse Tool (O)", "Select Tool (V)", "Pen Tool (P)", "Hand Tool (H)"]) {
-    test(`preserves the selected shape after clicking ${label}`, async ({ page }) => {
+    test(`preserves the selected shape after clicking ${label}`, async ({ page, editor }) => {
       await page.getByRole("button", { name: "Rectangle Tool (R) options" }).click();
       await page.getByRole("menuitemcheckbox", { name: "Ellipse O" }).click();
 
       await page.getByRole("button", { name: label, exact: true }).click();
       await page.getByRole("button", { name: "Ellipse Tool (O)", exact: true }).click();
 
-      await expect
-        .poll(() => page.evaluate(() => window.shift?.editor.toolCell.peek()?.id))
-        .toBe("shape");
-      await expect(
-        page.getByRole("button", { name: "Ellipse Tool (O)", exact: true }),
-      ).toBeVisible();
+      await expect(editor.toolButton("ellipse")).toHaveAttribute("aria-pressed", "true");
       await page.getByRole("button", { name: "Ellipse Tool (O) options" }).click();
       await expect(page.getByRole("menuitemcheckbox", { name: "Ellipse O" })).toHaveAttribute(
         "aria-checked",
@@ -268,9 +258,7 @@ test.describe("Toolbar tools", () => {
       await expect(properties.getByLabel("Width", { exact: true })).toBeEnabled();
 
       await editor.pointerUp();
-      await expect
-        .poll(() => page.evaluate(() => window.shift!.editor.toolCell.peek()?.id))
-        .toBe("select");
+      await expect(editor.toolButton("select")).toHaveAttribute("aria-pressed", "true");
       await expect.poll(() => editor.selectionIds()).toEqual([draft.id]);
       await expect(properties.getByLabel("Width", { exact: true })).toBeEnabled();
       await expect(properties.getByLabel("Width", { exact: true })).toHaveValue(
