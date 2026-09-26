@@ -5,7 +5,7 @@ export type {
 } from "./types/componentTransform";
 export type { Coordinates } from "./types/coordinates";
 export type { PendingEditId } from "./types/editing";
-export type { CanvasProps, CursorType } from "./types/editor";
+export type { CursorType } from "./types/editor";
 export type { DeleteMode, GlyphReader } from "./types/glyph";
 export type { GlyphOutlineControls, GlyphOutlineTarget } from "./types/glyphOutline";
 export type { RenderGlyph } from "./types/glyphRender";

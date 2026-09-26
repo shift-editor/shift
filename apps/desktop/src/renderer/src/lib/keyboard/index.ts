@@ -2,6 +2,7 @@ export { KeyboardRouter } from "./KeyboardRouter";
 export type {
   KeyBinding,
   KeyContext,
+  KeyboardCommandHandler,
   KeyChord,
   KeyboardEditorActions,
   KeyboardToolManagerActions,

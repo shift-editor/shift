@@ -41,7 +41,11 @@ export interface DialogTitleProps extends React.ComponentProps<typeof BaseDialog
 
 export const DialogTitle = React.forwardRef<HTMLHeadingElement, DialogTitleProps>(
   ({ className, ...props }, ref) => (
-    <BaseDialog.Title ref={ref} className={cn(className)} {...props} />
+    <BaseDialog.Title
+      ref={ref}
+      className={cn("text-sm font-medium text-primary", className)}
+      {...props}
+    />
   ),
 );
 DialogTitle.displayName = "DialogTitle";

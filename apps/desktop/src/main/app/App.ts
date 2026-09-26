@@ -398,12 +398,6 @@ export class App {
         this.#applicationMenu.updateCommandStates();
       }
     });
-    ipc.handle(ipcMain, "menu.showCanvasContextMenu", (event, makeFirstPoint) => {
-      const window = this.#requireWindowForWebContents(event.sender);
-      if (!this.#commandContext(window).document.hasWorkspace()) return;
-
-      this.#applicationMenu.showCanvasContextMenu(window.window, makeFirstPoint);
-    });
     ipc.handle(ipcMain, "clipboard.readText", () => {
       return clipboard.readText();
     });

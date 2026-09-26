@@ -1,12 +1,13 @@
+import { commandShortcuts } from "@shared/commands";
 import { matchChord, normalizeKeyboardEvent } from "./normalize";
-import type { KeyBinding, KeyContext } from "./types";
+import type { KeyboardCommandHandler, KeyBinding, KeyContext } from "./types";
 
 export interface KeymapHandlers {
   activateTemporaryHand: (ctx: KeyContext) => boolean;
   releaseTemporaryHand: (ctx: KeyContext) => boolean;
 }
 
-export function createGlobalKeyDownBindings(): KeyBinding[] {
+export function createGlobalKeyDownBindings(runCommand: KeyboardCommandHandler): KeyBinding[] {
   return [
     {
       id: "global.toggleAllSourcesForEditing",
@@ -27,24 +28,51 @@ export function createGlobalKeyDownBindings(): KeyBinding[] {
       run: (ctx) => ctx.editor.collapseEditingSources(),
     },
     {
+      id: "global.addComponent",
+      preventDefault: true,
+      match: (event) => matchChord(event, commandShortcuts["glyph.addComponent"]),
+      run: async () => {
+        await runCommand("glyph.addComponent");
+        return true;
+      },
+    },
+    {
       id: "global.copy",
       preventDefault: true,
       when: (ctx) => ctx.activeTool !== "text",
-      match: (event) => matchChord(event, { key: "c", primaryModifier: true }),
+      match: (event) =>
+        matchChord(event, {
+          key: "c",
+          primaryModifier: true,
+          shiftKey: false,
+          altKey: false,
+        }),
       run: (ctx) => ctx.editor.copy(),
     },
     {
       id: "global.cut",
       preventDefault: true,
       when: (ctx) => ctx.activeTool !== "text",
-      match: (event) => matchChord(event, { key: "x", primaryModifier: true }),
+      match: (event) =>
+        matchChord(event, {
+          key: "x",
+          primaryModifier: true,
+          shiftKey: false,
+          altKey: false,
+        }),
       run: (ctx) => ctx.editor.cut(),
     },
     {
       id: "global.paste",
       preventDefault: true,
       when: (ctx) => ctx.activeTool !== "text",
-      match: (event) => matchChord(event, { key: "v", primaryModifier: true }),
+      match: (event) =>
+        matchChord(event, {
+          key: "v",
+          primaryModifier: true,
+          shiftKey: false,
+          altKey: false,
+        }),
       run: (ctx) => ctx.editor.paste(),
     },
     {

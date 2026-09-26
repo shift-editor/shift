@@ -17,9 +17,6 @@ import { useSignalState } from "@shift/editor/signals";
 import { asGlyphId, mintNodeId } from "@shift/types";
 import { Bounds } from "@shift/geo";
 
-const showCanvasContextMenu = (makeFirstPoint: boolean): Promise<void> =>
-  getShiftHost().menu.showCanvasContextMenu(makeFirstPoint);
-
 export const Editor = () => {
   const { glyphId: glyphIdParam } = useParams();
   const editor = useEditor();
@@ -106,12 +103,15 @@ export const Editor = () => {
     if (!glyph) return undefined;
 
     const toolManager = editor.toolManager;
-    const keyboardRouter = new KeyboardRouter(() => ({
-      canvasActive: activeZone === "canvas" || editor.isDragging,
-      activeTool: editor.tool?.id ?? null,
-      editor,
-      toolManager,
-    }));
+    const keyboardRouter = new KeyboardRouter(
+      () => ({
+        canvasActive: activeZone === "canvas" || editor.isDragging,
+        activeTool: editor.tool?.id ?? null,
+        editor,
+        toolManager,
+      }),
+      async (commandId) => getShiftHost().commands.run(commandId),
+    );
 
     const keyDownHandler = async (event: KeyboardEvent) => {
       try {
@@ -142,7 +142,7 @@ export const Editor = () => {
 
   return (
     <EditorLayout cursorStyle={cursorStyle} gesture={gesture.phase}>
-      <Canvas showContextMenu={showCanvasContextMenu} />
+      <Canvas />
     </EditorLayout>
   );
 };

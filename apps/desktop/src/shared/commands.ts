@@ -42,6 +42,54 @@ export type CommandId =
   | "ui.decreaseSize"
   | "ui.resetSize";
 
+/** Platform-neutral keyboard chord assigned to an application command. */
+export interface CommandShortcut {
+  readonly key: string;
+  readonly primaryModifier: boolean;
+  readonly shiftKey: boolean;
+  readonly altKey: boolean;
+}
+
+/** Canonical keyboard shortcuts shared by native menus and renderer routing. */
+export const commandShortcuts = {
+  "app.showSettings": shortcut(","),
+  "window.close": shortcut("w"),
+  "window.minimise": shortcut("m"),
+  "view.zoomIn": shortcut("+"),
+  "view.zoomOut": shortcut("-"),
+  "ui.increaseSize": shortcut("+", false, true),
+  "ui.decreaseSize": shortcut("-", false, true),
+  "ui.resetSize": shortcut("0", false, true),
+  "file.new": shortcut("n"),
+  "file.open": shortcut("o"),
+  "file.save": shortcut("s"),
+  "file.saveAs": shortcut("s", true),
+  "edit.undo": shortcut("z"),
+  "edit.redo": shortcut("z", true),
+  "edit.cut": shortcut("x"),
+  "edit.copy": shortcut("c"),
+  "edit.paste": shortcut("v"),
+  "edit.selectAll": shortcut("a"),
+  "glyph.addComponent": shortcut("c", true),
+} satisfies Partial<Record<CommandId, CommandShortcut>>;
+
+/** Converts a shared command shortcut to Electron's native accelerator syntax. */
+export function toElectronAccelerator(shortcut: CommandShortcut): string {
+  const parts: string[] = [];
+  if (shortcut.primaryModifier) parts.push("CmdOrCtrl");
+  if (shortcut.altKey) parts.push("Alt");
+  if (shortcut.shiftKey) parts.push("Shift");
+
+  const key = shortcut.key === "+" ? "Plus" : shortcut.key.toUpperCase();
+  parts.push(key);
+
+  return parts.join("+");
+}
+
+function shortcut(key: string, shiftKey = false, altKey = false): CommandShortcut {
+  return { key, primaryModifier: true, shiftKey, altKey };
+}
+
 /**
  * Identifies a command implemented by the active font renderer.
  *

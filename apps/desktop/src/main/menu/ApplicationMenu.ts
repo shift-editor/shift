@@ -63,29 +63,6 @@ export class ApplicationMenu {
     return Menu.buildFromTemplate(this.template());
   }
 
-  /** Opens the native editing menu for the glyph canvas under the current pointer. */
-  showCanvasContextMenu(window: BrowserWindow, makeFirstPoint: boolean): void {
-    const menu = Menu.buildFromTemplate([
-      this.#commandItem("edit.cut", window),
-      this.#commandItem("edit.copy", window),
-      this.#commandItem("edit.paste", window),
-      { type: "separator" },
-      this.#commandItem("edit.duplicate", window),
-      this.#commandItem("edit.deleteSelection", window),
-      { type: "separator" },
-      this.#commandItem("edit.selectAll", window),
-      this.#commandItem("edit.deselect", window),
-      { type: "separator" },
-      this.#commandItem("glyph.reverseSelectedContour", window),
-      {
-        ...this.#commandItem("glyph.makeFirstPoint", window),
-        enabled: makeFirstPoint && this.#isCommandEnabled("glyph.makeFirstPoint", window),
-      },
-    ]);
-
-    menu.popup({ window });
-  }
-
   /** Builds the platform-appropriate top-level menu template. */
   template(): MenuItemConstructorOptions[] {
     return isMac ? this.buildMacMenu() : this.buildWindowsMenu();

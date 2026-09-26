@@ -49,6 +49,25 @@ describe("component references become removable or editable local contours", () 
     expect(editor.sceneGlyphRenderModel?.contours).toHaveLength(1);
   });
 
+  it("creates a missing glyph and component as one undoable edit", async () => {
+    const editor = new TestEditor();
+    await editor.startSession("root", null);
+
+    const componentId = await editor.createGlyphAndAddComponent("aacute" as GlyphName);
+    const created = editor.font.recordForName("aacute" as GlyphName);
+    expect(componentId).not.toBeNull();
+    expect(created?.unicodes).toEqual([0x00e1]);
+    expect(editor.requireGlyphLayer().components[0]?.baseGlyphId).toBe(created?.id);
+
+    await editor.undo();
+    expect(editor.font.recordForName("aacute" as GlyphName)).toBeNull();
+    expect(editor.requireGlyphLayer().components).toEqual([]);
+
+    await editor.redo();
+    expect(editor.font.recordForName("aacute" as GlyphName)?.id).toBe(created?.id);
+    expect(editor.requireGlyphLayer().components[0]?.baseGlyphId).toBe(created?.id);
+  });
+
   it("deletes a selected component without requiring visible bounds", async () => {
     const editor = new TestEditor();
     await editor.startSession("root", null);

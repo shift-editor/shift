@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import type { CommandId } from "@shared/commands";
 import { KeyboardRouter } from "./KeyboardRouter";
 import { TestEditor } from "@/testing";
 import type { Rect2D } from "@shift/geo";
@@ -37,19 +38,26 @@ function createKeyboardEvent(options: KeyboardEventOptions = {}): KeyboardEvent 
 describe("KeyboardRouter", () => {
   let editor: TestEditor;
   let canvasActive: boolean;
+  let command: CommandId | null;
   let router: KeyboardRouter;
 
   beforeEach(async () => {
     editor = new TestEditor();
     await editor.startSession();
     canvasActive = true;
+    command = null;
 
-    router = new KeyboardRouter(() => ({
-      canvasActive,
-      activeTool: editor.tool?.id ?? null,
-      editor,
-      toolManager: editor.toolManager,
-    }));
+    router = new KeyboardRouter(
+      () => ({
+        canvasActive,
+        activeTool: editor.tool?.id ?? null,
+        editor,
+        toolManager: editor.toolManager,
+      }),
+      (id) => {
+        command = id;
+      },
+    );
   });
 
   describe("zoom shortcuts", () => {
@@ -229,6 +237,17 @@ describe("KeyboardRouter", () => {
 
       await router.handleKeyDown(e);
 
+      expect(editor.clipboardBuffer).toBe(bufferBefore);
+    });
+
+    it("runs Add Component instead of copying", async () => {
+      const bufferBefore = editor.clipboardBuffer;
+      const handled = await router.handleKeyDown(
+        createKeyboardEvent({ key: "c", metaKey: true, shiftKey: true }),
+      );
+
+      expect(handled).toBe(true);
+      expect(command).toBe("glyph.addComponent");
       expect(editor.clipboardBuffer).toBe(bufferBefore);
     });
   });
