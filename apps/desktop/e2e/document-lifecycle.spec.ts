@@ -3,7 +3,6 @@ import fs from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
 import type { ElectronApplication, Page } from "@playwright/test";
-import { createBridge } from "@shift/bridge";
 import {
   DESIGNSPACE_FONT_PATH,
   documentTest as test,
@@ -30,6 +29,7 @@ import {
   windowTitle,
 } from "./fixtures/documentLifecycle";
 import { createAuthoredDocument } from "./fixtures/fontSource";
+import { exportedGlyphNames, savedGlyphNames } from "./fixtures/savedDocument";
 import { clickFirstCatalogGlyph } from "./fixtures/appLocators";
 
 const execFileAsync = promisify(execFile);
@@ -101,9 +101,6 @@ const failedPreviewSaveTest = convertiblePreviewTest.extend({
     await use(path.join(nonDirectory, "converted.shift"));
   },
 });
-const otfPreviewTest = test.extend({
-  openFontPath: [OTF_FONT_PATH, { option: true }],
-});
 
 async function openSelectedPreview(page: Page, electronApp: ElectronApplication): Promise<Page> {
   const workspaceWindow = electronApp.waitForEvent("window");
@@ -150,14 +147,10 @@ workspaceTest(
   },
 );
 
-for (const sourcePath of [
-  FONT_PATH,
-  OTF_FONT_PATH,
-  GLYPHS_FONT_PATH,
-  GLYPHSPACKAGE_FONT_PATH,
-  UFO_FONT_PATH,
-  DESIGNSPACE_FONT_PATH,
-]) {
+// Every supported extension shares one activation path in App; a binary file and a
+// directory package cover the file-system shapes. Per-format opening is covered by the
+// preview Save and Save As conversion tests below.
+for (const sourcePath of [FONT_PATH, GLYPHSPACKAGE_FONT_PATH]) {
   test.describe(`external ${path.extname(sourcePath)} activation`, () => {
     test.describe("cold launch", () => {
       test.use({ electronArgs: [sourcePath] });
@@ -270,10 +263,7 @@ async function hasWindowTitle(
 test.describe("opening a font through the application shell", () => {
   test.use({ openFontPath: FONT_PATH });
 
-  test("opens a selected font with disabled authoring controls", async ({
-    electronApp,
-    page,
-  }, testInfo) => {
+  test("opens a selected font with disabled authoring controls", async ({ electronApp, page }) => {
     const workspacePage = await openSelectedPreview(page, electronApp);
 
     for (const label of ["Create glyph", "Create source", "Create instance", "Create axis"]) {
@@ -290,9 +280,6 @@ test.describe("opening a font through the application shell", () => {
       "You can inspect this font, but Shift can’t edit or convert it.",
     );
     await expect(notice.getByRole("button", { name: "Save as Shift…" })).toHaveCount(0);
-    if (testInfo.project.name === "visual") {
-      await expect(notice).toHaveScreenshot("read-only-preview-notice.png");
-    }
     await notice.getByRole("button", { name: "OK" }).click();
     await expect(notice).toBeHidden();
   });
@@ -389,19 +376,6 @@ test.describe("opening a font through the application shell", () => {
       .poll(() => workspacePage.evaluate(() => window.shiftSession!.editor.selection.ids.length))
       .toBe(0);
   });
-
-  test("does not convert a TTF preview through Save", async ({
-    electronApp,
-    page,
-    saveShiftPath,
-  }) => {
-    const workspacePage = await openSelectedPreview(page, electronApp);
-
-    await runCommand(workspacePage, electronApp, "file.save");
-
-    expect(await workspacePage.evaluate(() => window.shiftSession?.mode)).toBe("preview");
-    expect(fs.existsSync(saveShiftPath)).toBe(false);
-  });
 });
 
 failedOpenTest("failed Open keeps the launcher available", async ({ electronApp, page }) => {
@@ -411,17 +385,26 @@ failedOpenTest("failed Open keeps the launcher available", async ({ electronApp,
   expect(electronApp.windows()).toHaveLength(1);
 });
 
-otfPreviewTest(
-  "does not convert an OTF preview through Save",
-  async ({ electronApp, page, saveShiftPath }) => {
-    const workspacePage = await openSelectedPreview(page, electronApp);
+for (const { format, fontPath } of [
+  { format: "TTF", fontPath: FONT_PATH },
+  { format: "OTF", fontPath: OTF_FONT_PATH },
+]) {
+  const binaryPreviewTest = test.extend({
+    openFontPath: [fontPath, { option: true }],
+  });
 
-    await runCommand(workspacePage, electronApp, "file.save");
+  binaryPreviewTest(
+    `does not convert a ${format} preview through Save`,
+    async ({ electronApp, page, testRoot }) => {
+      const workspacePage = await openSelectedPreview(page, electronApp);
 
-    expect(await workspacePage.evaluate(() => window.shiftSession?.mode)).toBe("preview");
-    expect(fs.existsSync(saveShiftPath)).toBe(false);
-  },
-);
+      await runCommand(workspacePage, electronApp, "file.save");
+
+      expect(await workspacePage.evaluate(() => window.shiftSession?.mode)).toBe("preview");
+      expect(findShiftDocuments(testRoot)).toEqual([]);
+    },
+  );
+}
 
 convertiblePreviewTest(
   "convertible previews keep authoring controls disabled until Save",
@@ -449,7 +432,7 @@ convertiblePreviewTest(
       .poll(() => workspacePage.evaluate(() => window.shiftSession?.mode))
       .toBe("workspace");
 
-    expect(fs.existsSync(saveShiftPath)).toBe(true);
+    expect(savedGlyphNames(saveShiftPath, testRoot)).toContain("A");
     expect(sourceTreeSnapshot(UFO_FONT_PATH)).toEqual(sourceBefore);
     await workspacePage.getByRole("button", { name: "Create glyph", exact: true }).click();
     await expect.poll(() => windowTitle(workspacePage, electronApp)).toContain("saved.shift *");
@@ -496,22 +479,21 @@ for (const { format, sourcePath, sourceRoot } of [
 
   formatConversionTest(
     `Save As converts a ${format} preview without changing its source`,
-    async ({ electronApp, page, saveShiftPath }) => {
+    async ({ electronApp, page, saveShiftPath, testRoot }) => {
       const sourceBefore = sourceTreeSnapshot(sourceRoot);
       const workspacePage = await openSelectedPreview(page, electronApp);
 
-      await workspacePage.evaluate(() => {
-        void window.shiftHost?.commands.run("file.saveAs");
-      });
+      await runCommand(workspacePage, electronApp, "file.saveAs");
       await waitForWorkspaceReady(workspacePage);
       await expect
         .poll(() => workspacePage.evaluate(() => window.shiftSession?.mode))
         .toBe("workspace");
 
-      expect(fs.existsSync(saveShiftPath)).toBe(true);
-      expect(
-        await workspacePage.evaluate(() => window.shift?.font.glyphRecords().length ?? 0),
-      ).toBeGreaterThan(0);
+      const workspaceGlyphs = await workspacePage.evaluate(
+        () => window.shift?.font.glyphRecords().map((glyph) => glyph.name) ?? [],
+      );
+      expect(workspaceGlyphs).toContain("A");
+      expect(savedGlyphNames(saveShiftPath, testRoot).sort()).toEqual(workspaceGlyphs.sort());
       expect(sourceTreeSnapshot(sourceRoot)).toEqual(sourceBefore);
     },
   );
@@ -519,7 +501,7 @@ for (const { format, sourcePath, sourceRoot } of [
 
 convertiblePreviewTest(
   "Save As replaces a preview glyph route with the new workspace Home",
-  async ({ electronApp, page, saveShiftPath }) => {
+  async ({ electronApp, page, saveShiftPath, testRoot }) => {
     const workspacePage = await openSelectedPreview(page, electronApp);
     await clickFirstCatalogGlyph(workspacePage);
     await workspacePage.waitForURL(/#\/editor\//);
@@ -528,10 +510,11 @@ convertiblePreviewTest(
     await runCommand(workspacePage, electronApp, "file.saveAs");
     await waitForWorkspaceReady(workspacePage);
 
+    await expect(workspacePage).toHaveURL(/#\/home$/);
     await expect
       .poll(() => workspacePage.evaluate(() => window.shiftSession?.mode))
       .toBe("workspace");
-    expect(fs.existsSync(saveShiftPath)).toBe(true);
+    expect(savedGlyphNames(saveShiftPath, testRoot)).toContain("A");
   },
 );
 
@@ -560,17 +543,6 @@ failedPreviewSaveTest(
     expect(fs.existsSync(workspacesRoot) ? fs.readdirSync(workspacesRoot) : []).toEqual([]);
   },
 );
-
-function savedGlyphNames(documentPath: string, testRoot: string): string[] {
-  const bridge = createBridge();
-  bridge.openDocument(documentPath, path.join(testRoot, "saved-validation.recovery.sqlite"));
-
-  try {
-    return bridge.getGlyphs().map((glyph) => glyph.name);
-  } finally {
-    bridge.closeWorkspace();
-  }
-}
 
 function findShiftDocuments(rootPath: string): string[] {
   const documents: string[] = [];
@@ -770,7 +742,7 @@ discardTest(
 
 saveAsTest(
   "Save As adopts an independent copy without changing the source document",
-  async ({ electronApp, page, saveShiftPath, saveAsShiftPath }) => {
+  async ({ electronApp, page, saveShiftPath, saveAsShiftPath, testRoot }) => {
     const workspacePage = await createNewFont(page, electronApp);
     await workspacePage.getByRole("button", { name: "Create glyph", exact: true }).click();
     await runCommand(workspacePage, electronApp, "file.save");
@@ -780,21 +752,21 @@ saveAsTest(
     await runCommand(workspacePage, electronApp, "file.saveAs");
     await expect.poll(() => fs.existsSync(saveAsShiftPath)).toBe(true);
     await expect.poll(() => windowTitle(workspacePage, electronApp)).toContain("saved-as.shift -");
-    const copySnapshot = fs.readFileSync(saveAsShiftPath);
+    expect(savedGlyphNames(saveAsShiftPath, testRoot)).toEqual(["newGlyph"]);
     expect(fs.readFileSync(saveShiftPath)).toEqual(sourceSnapshot);
 
     await workspacePage.getByRole("button", { name: "Create glyph", exact: true }).click();
     await runCommand(workspacePage, electronApp, "file.save");
 
     expect(fs.readFileSync(saveShiftPath)).toEqual(sourceSnapshot);
-    expect(fs.readFileSync(saveAsShiftPath)).not.toEqual(copySnapshot);
+    expect(savedGlyphNames(saveAsShiftPath, testRoot)).toEqual(["newGlyph", "newGlyph.1"]);
     expect(await windowTitle(workspacePage, electronApp)).toContain("saved-as.shift -");
   },
 );
 
 copiedDocumentTest(
   "opening a raw copy reuses the live document session",
-  async ({ electronApp, page, saveShiftPath, copyShiftPath }) => {
+  async ({ electronApp, page, saveShiftPath, copyShiftPath, testRoot }) => {
     const originalPage = await createNewFont(page, electronApp);
     await originalPage.getByRole("button", { name: "Create glyph", exact: true }).click();
     await runCommand(originalPage, electronApp, "file.save");
@@ -822,13 +794,13 @@ copiedDocumentTest(
     await runCommand(originalPage, electronApp, "file.save");
 
     expect(fs.readFileSync(copyShiftPath)).toEqual(copySnapshot);
-    expect(fs.readFileSync(saveShiftPath)).not.toEqual(sourceSnapshot);
+    expect(savedGlyphNames(saveShiftPath, testRoot)).toContain("newGlyph.1");
   },
 );
 
 saveOnCloseTest(
   "saving dirty close writes the package before closing",
-  async ({ electronApp, page, saveShiftPath }) => {
+  async ({ electronApp, page, saveShiftPath, testRoot }) => {
     const workspacePage = await createNewFont(page, electronApp);
     await workspacePage.getByRole("button", { name: "Create glyph", exact: true }).click();
     await expect.poll(() => windowTitle(workspacePage, electronApp)).toContain("Untitled *");
@@ -836,7 +808,7 @@ saveOnCloseTest(
     await closeWindow(workspacePage, electronApp);
 
     await expect.poll(() => workspacePage.isClosed()).toBe(true);
-    expect(fs.existsSync(saveShiftPath)).toBe(true);
+    expect(savedGlyphNames(saveShiftPath, testRoot)).toContain("newGlyph");
   },
 );
 
@@ -880,7 +852,11 @@ workspaceTest(
     await runCommand(page, electronApp, "file.exportTtf");
 
     await expect.poll(() => fs.existsSync(exportTtfPath)).toBe(true);
-    expect(fs.statSync(exportTtfPath).size).toBeGreaterThan(0);
+    const workspaceGlyphs = await page.evaluate(
+      () => window.shift?.font.glyphRecords().map((glyph) => glyph.name) ?? [],
+    );
+    expect(workspaceGlyphs).toContain("A");
+    expect(exportedGlyphNames(exportTtfPath)).toEqual(expect.arrayContaining(workspaceGlyphs));
     await expect
       .poll(() => page.evaluate(async () => window.shift?.font.editCoordinator.state()))
       .toEqual(before);

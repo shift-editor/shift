@@ -23,6 +23,46 @@ export async function createNewFont(page: Page, electronApp: ElectronApplication
   return workspacePage;
 }
 
+/** Opens a new untitled font window and dirties it with one created glyph. */
+export async function dirtyNewFont(page: Page, electronApp: ElectronApplication): Promise<Page> {
+  const workspacePage = await createNewFont(page, electronApp);
+  await workspacePage.getByRole("button", { name: "Create glyph", exact: true }).click();
+  await expect.poll(() => windowTitle(workspacePage, electronApp)).toContain("Untitled *");
+  return workspacePage;
+}
+
+/** Opens another untitled font through File > New and dirties it with one created glyph. */
+export async function createAnotherDirtyFont(
+  page: Page,
+  electronApp: ElectronApplication,
+): Promise<Page> {
+  const nextWindow = electronApp.waitForEvent("window");
+  await runCommand(page, electronApp, "file.new");
+  const nextPage = await nextWindow;
+  await waitForWorkspaceReady(nextPage);
+  await nextPage.getByRole("button", { name: "Create glyph", exact: true }).click();
+  await expect.poll(() => windowTitle(nextPage, electronApp)).toContain("Untitled *");
+  return nextPage;
+}
+
+/** Waits for a named glyph in the page's authored workspace and returns its identity. */
+export async function glyphIdForName(page: Page, name: string): Promise<string> {
+  await expect
+    .poll(() =>
+      page.evaluate(
+        (glyphName) => window.shift?.font.glyphRecords().some(({ name }) => name === glyphName),
+        name,
+      ),
+    )
+    .toBe(true);
+  const glyphId = await page.evaluate(
+    (glyphName) => window.shift?.font.glyphRecords().find(({ name }) => name === glyphName)?.id,
+    name,
+  );
+  if (!glyphId) throw new Error(`Expected ${name} glyph`);
+  return glyphId;
+}
+
 export async function runCommand(
   page: Page,
   electronApp: ElectronApplication,
