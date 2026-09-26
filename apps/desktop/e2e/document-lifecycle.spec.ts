@@ -14,12 +14,14 @@ import {
   GLYPHSPACKAGE_FONT_PATH,
   MAIN_JS,
   OTF_FONT_PATH,
+  shiftTestEnvironment,
   UFO_FONT_PATH,
   waitForWorkspaceReady,
 } from "./fixtures/electronApp";
 import {
   closeWindow,
   createNewFont,
+  dirtyDocumentDecisions,
   killApp,
   quitApp,
   relaunchApp,
@@ -241,12 +243,18 @@ async function launchSecondInstance(
   documentPath: string,
 ): Promise<void> {
   const executablePath = await electronApp.evaluate(() => process.execPath);
-  await execFileAsync(executablePath, [
-    ...(process.platform === "linux" ? ["--no-sandbox"] : []),
-    MAIN_JS,
-    `--user-data-dir=${path.join(testRoot, "user-data")}`,
-    documentPath,
-  ]);
+  // A second instance that wins the single-instance lock never exits; bound the wait
+  // so the test fails with the launch instead of the overall timeout.
+  await execFileAsync(
+    executablePath,
+    [
+      ...(process.platform === "linux" ? ["--no-sandbox"] : []),
+      MAIN_JS,
+      `--user-data-dir=${path.join(testRoot, "user-data")}`,
+      documentPath,
+    ],
+    { env: shiftTestEnvironment(), timeout: 15_000 },
+  );
 }
 
 async function hasWindowTitle(
@@ -635,6 +643,7 @@ test.describe("document lifecycle through the application shell", () => {
     await expect.poll(() => windowTitle(workspacePage, electronApp)).toContain("Untitled *");
 
     await closeWindow(workspacePage, electronApp);
+    await expect.poll(() => dirtyDocumentDecisions(electronApp)).toEqual(["cancel"]);
 
     await expect(workspacePage.getByLabel("Glyph catalog", { exact: true })).toBeVisible();
     await expect.poll(() => windowTitle(workspacePage, electronApp)).toContain("Untitled *");

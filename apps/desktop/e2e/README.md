@@ -103,6 +103,8 @@ SHIFT_E2E_PREVIEW_FONT_PATH=/path/to/font.ttf pnpm test:e2e:gpu e2e/font-preview
 SHIFT_E2E_VARIABLE_PREVIEW_FONT_PATH=/path/to/variable.ttf pnpm test:e2e:gpu e2e/variable-font-preview.spec.ts
 ```
 
+Every Electron launch, relaunch, and second instance builds its environment with `shiftTestEnvironment()`, which drops inherited `SHIFT_E2E_*` variables before applying the fixture's own. A shell-exported `SHIFT_E2E_FONT_PATH` for GPU runs therefore cannot open extra documents in visual or platform tests.
+
 Authored fixtures import their source into a canonical native document under a temporary test root. Tests must not depend on a developer's existing Shift workspace or user-data directory. Document-lifecycle tests inject deterministic Open, ordered Save As destinations, Export, and dirty-document choices through `NativeDialogs`; ordered choices exercise preview-to-`.shift` conversion, first-Save replacement of a selected existing destination, Save As adoption, multi-document quit, and re-entrant quit without automating OS pickers. Preview conversion E2E proves successful authored-session handoff and reopen, all four convertible source formats, cancellation and failure cleanup, original-source preservation, and TTF/OTF exclusion. Application-menu tests invoke native Electron menu items rather than bypassing them through the host API, covering command capability and focused text/canvas routing. The recovery fixture restarts Electron with the same isolated user-data directory and document, allowing forced-termination recovery to be tested without touching developer state.
 
 ## Visual snapshots
@@ -137,7 +139,8 @@ A snapshot match alone does not prove GPU content exists. Rendering tests that c
 - GPU fixtures must await workspace-window visibility, then apply the final owning `BrowserWindow` size and await the tested page's matching renderer content size; do not let a hidden-to-visible OS adjustment invalidate a baseline.
 - Wait for a route, visible surface, animation frame, or domain state instead of assuming startup completed after a fixed delay.
 - Use `waitForWorkspaceReady()` for authored workspace startup and `waitForEditorReady()`/`openCatalogGlyph()` for glyph routes. A matching URL alone does not mean React has published the requested scene node.
-- Keep negative asynchronous waits limited to behavior where elapsed time is the contract, such as proving a re-entrant quit does not open another confirmation while the first remains pending.
+- Do not use `waitForTimeout()`. After a quit or close request, wait for the scripted answer with `dirtyDocumentDecisions()` and count confirmations with `dirtyDocumentRequests()`; each read is a main-process round trip, so the close guard has already reacted to the recorded decision.
+- When elapsed time is itself the contract, as for wheel-gesture momentum, dispatch the samples inside the page and wait on the page clock that stamps the events rather than sleeping in Playwright.
 - Do not force software rendering or a fixed DPR in GPU and performance tests.
 
 ## Failures and artifacts

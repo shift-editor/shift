@@ -4,11 +4,13 @@ import {
   type ElectronApplication,
   type Page,
 } from "@playwright/test";
+import type { DirtyDocumentChoice } from "../../src/main/document/types";
+import type {} from "../../src/main/dialogs/NativeDialogs";
 import type { CommandId } from "../../src/shared/commands";
 import type { ChildProcess } from "node:child_process";
 import { once } from "node:events";
 import path from "node:path";
-import { MAIN_JS, waitForWorkspaceReady } from "./electronApp";
+import { MAIN_JS, shiftTestEnvironment, waitForWorkspaceReady } from "./electronApp";
 
 export { killApp } from "./electronApp";
 
@@ -105,6 +107,24 @@ export async function requestAppQuit(electronApp: ElectronApplication): Promise<
 }
 
 /**
+ * Returns the dirty-document decisions scripted dialogs have answered so far.
+ *
+ * @remarks
+ * Each read is a main-process round trip, so close and quit guards have finished reacting
+ * to an answered decision before the next read returns.
+ */
+export async function dirtyDocumentDecisions(
+  electronApp: ElectronApplication,
+): Promise<readonly DirtyDocumentChoice[]> {
+  return electronApp.evaluate(() => globalThis.shiftScriptedDialogs?.dirtyDocumentDecisions ?? []);
+}
+
+/** Returns how many dirty-document confirmations scripted dialogs have started. */
+export async function dirtyDocumentRequests(electronApp: ElectronApplication): Promise<number> {
+  return electronApp.evaluate(() => globalThis.shiftScriptedDialogs?.dirtyDocumentRequests ?? 0);
+}
+
+/**
  * Ensures the Electron process exits after a quit request or last-window shutdown.
  *
  * @param electronApp - application to quit if its process is still running.
@@ -137,13 +157,10 @@ export async function relaunchApp(
       `--user-data-dir=${path.join(testRoot, "user-data")}`,
       "--force-device-scale-factor=1",
     ],
-    env: {
-      ...process.env,
-      NODE_ENV: "test",
-      LIBGL_ALWAYS_SOFTWARE: "1",
+    env: shiftTestEnvironment({
       SHIFT_E2E_NATIVE_DIALOGS: "1",
       SHIFT_E2E_OPEN_FONT_PATH: saveShiftPath,
       SHIFT_E2E_SAVE_SHIFT_PATH: saveShiftPath,
-    },
+    }),
   });
 }

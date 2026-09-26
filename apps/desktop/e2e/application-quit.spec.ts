@@ -7,6 +7,8 @@ import { EditorDriver } from "./fixtures/EditorDriver";
 import { addSquare } from "./fixtures/editorInteractions";
 import {
   createNewFont,
+  dirtyDocumentDecisions,
+  dirtyDocumentRequests,
   killApp,
   quitApp,
   relaunchApp,
@@ -80,7 +82,7 @@ test("canceling dirty app quit keeps the document open and dirty", async ({
   const workspacePage = await dirtyNewFont(page, electronApp);
 
   await requestAppQuit(electronApp);
-  await workspacePage.waitForTimeout(100);
+  await expect.poll(() => dirtyDocumentDecisions(electronApp)).toEqual(["cancel"]);
 
   await expect(workspacePage.getByLabel("Glyph catalog", { exact: true })).toBeVisible();
   await expect.poll(() => windowTitle(workspacePage, electronApp)).toContain("Untitled *");
@@ -272,7 +274,10 @@ reentrantQuitTest(
     const workspacePage = await dirtyNewFont(page, electronApp);
 
     await Promise.all([requestAppQuit(electronApp), requestAppQuit(electronApp)]);
-    await workspacePage.waitForTimeout(250);
+    // Both requests arrive while the first delayed confirmation is pending; a second
+    // confirmation would start before the first one answers.
+    await expect.poll(() => dirtyDocumentDecisions(electronApp)).toEqual(["cancel"]);
+    expect(await dirtyDocumentRequests(electronApp)).toBe(1);
 
     await expect(workspacePage.getByLabel("Glyph catalog", { exact: true })).toBeVisible();
     expect(fs.existsSync(saveShiftPath)).toBe(false);

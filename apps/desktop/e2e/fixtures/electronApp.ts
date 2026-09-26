@@ -47,6 +47,34 @@ export const GLYPHSPACKAGE_FONT_PATH = path.resolve(
 
 const execFileAsync = promisify(execFile);
 
+/**
+ * Builds a software-rendered test environment that inherits no Shift E2E settings.
+ *
+ * @remarks
+ * Developers export variables such as `SHIFT_E2E_FONT_PATH` for GPU runs. Every launch,
+ * relaunch, and second instance starts from this environment so a shell setting cannot
+ * open extra documents or change scripted dialog choices.
+ *
+ * @param overrides - Shift E2E variables owned by the launching fixture.
+ * @returns environment for an Electron process under test.
+ */
+export function shiftTestEnvironment(
+  overrides: Record<string, string> = {},
+): Record<string, string> {
+  const environment: Record<string, string> = {};
+  for (const [name, value] of Object.entries(process.env)) {
+    if (value !== undefined && !name.startsWith("SHIFT_E2E_")) environment[name] = value;
+  }
+
+  return {
+    ...environment,
+    NODE_ENV: "test",
+    // Force software rendering for deterministic GPU-free snapshots.
+    LIBGL_ALWAYS_SOFTWARE: "1",
+    ...overrides,
+  };
+}
+
 /** Base fixture for launcher tests; workspace tests override `startupFontPath`. */
 export const test = base.extend<ShiftFixtures & ShiftOptions>({
   startupFontPath: [undefined, { option: true }],
@@ -129,13 +157,7 @@ export const test = base.extend<ShiftFixtures & ShiftOptions>({
       workspacePath = createAuthoredDocument(startupFontPath, path.join(testRoot, "workspace"));
     }
 
-    const environment = {
-      ...process.env,
-      NODE_ENV: "test",
-      // Force software rendering for deterministic GPU-free snapshots.
-      LIBGL_ALWAYS_SOFTWARE: "1",
-    };
-    delete environment.SHIFT_E2E_FONT_PATH;
+    const environment = shiftTestEnvironment();
 
     if (scriptedDialogs) {
       environment.SHIFT_E2E_NATIVE_DIALOGS = "1";
@@ -328,12 +350,9 @@ async function launchShiftApp(
   windowSizing: ShiftOptions["windowSizing"],
   workspacePath?: string,
 ): Promise<ElectronApplication> {
-  const environment = {
-    ...process.env,
-    NODE_ENV: "test",
-    LIBGL_ALWAYS_SOFTWARE: "1",
-  };
-  if (workspacePath) environment.SHIFT_E2E_FONT_PATH = workspacePath;
+  const environment = shiftTestEnvironment(
+    workspacePath ? { SHIFT_E2E_FONT_PATH: workspacePath } : {},
+  );
 
   const app = await electron.launch({
     args: [MAIN_JS, `--user-data-dir=${userDataDir}`, "--force-device-scale-factor=1"],
