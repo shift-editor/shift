@@ -20,7 +20,7 @@ import type {
 } from "@shared/workspace/protocol";
 import { batch, signal, type Signal, type WritableSignal } from "@shift/editor/signals";
 import type { FontStore } from "@shift/editor/model";
-import type { PendingEditId } from "@shift/editor/types";
+import type { PendingEditId, WorkspaceEditEvent, WorkspaceEditListener } from "@shift/editor/types";
 import type { WorkspaceApplyStatus, WorkspaceEdit } from "@/types/workspace";
 import type { FontSessionClient } from "./FontSessionClient";
 
@@ -47,6 +47,7 @@ export class WorkspaceEditCoordinator {
   readonly #store: FontStore;
   readonly #settledCell: WritableSignal<boolean>;
   readonly #applyStatus: WritableSignal<WorkspaceApplyStatus>;
+  readonly #editListeners = new Set<WorkspaceEditListener>();
 
   #chain: Promise<unknown> = Promise.resolve();
   #busy = 0;
@@ -146,6 +147,17 @@ export class WorkspaceEditCoordinator {
     return result;
   }
 
+  /**
+   * Subscribes to accepted, committed, and failed renderer-authored edits.
+   *
+   * @param listener - Synchronous observer called in workspace queue order.
+   * @returns an idempotent function that removes the observer.
+   */
+  onEdit(listener: WorkspaceEditListener): () => void {
+    this.#editListeners.add(listener);
+    return () => this.#editListeners.delete(listener);
+  }
+
   /** Resolves when every queued and in-flight operation has settled. */
   async settled(): Promise<void> {
     this.#assertNoTransaction("settle workspace edits");
@@ -167,14 +179,7 @@ export class WorkspaceEditCoordinator {
     this.#assertNoTransaction("apply workspace edits");
     const edit = this.#acceptEdit(intents, label);
 
-    return this.#serialize(async () => {
-      try {
-        return await this.#sendEdit(edit);
-      } catch (error) {
-        await this.#resync();
-        throw error;
-      }
-    });
+    return this.#serialize(() => this.#commitEdit(edit));
   }
 
   /** Replays the latest undo entry after pending pushes flush. */
@@ -322,14 +327,7 @@ export class WorkspaceEditCoordinator {
     if (intents.length === 0) return id;
 
     const edit = this.#acceptEdit(intents, label, id);
-    void this.#serialize(async () => {
-      try {
-        await this.#sendEdit(edit);
-      } catch (error) {
-        console.error("workspace apply failed; resyncing from truth", error);
-        await this.#resync();
-      }
-    });
+    void this.#serialize(() => this.#commitQueuedEdit(edit));
     return edit.id;
   }
 
@@ -350,6 +348,7 @@ export class WorkspaceEditCoordinator {
         this.#applyStatus.set("queued");
       }
     });
+    this.#notifyEdit({ kind: "accepted", id });
     return edit;
   }
 
@@ -359,11 +358,46 @@ export class WorkspaceEditCoordinator {
     return id;
   }
 
+  async #commitQueuedEdit(edit: WorkspaceEdit): Promise<void> {
+    try {
+      await this.#commitEdit(edit);
+    } catch (error) {
+      console.error("workspace apply failed; resynced from truth", error);
+    }
+  }
+
+  async #commitEdit(edit: WorkspaceEdit): Promise<AppliedChange> {
+    let applied: AppliedChange;
+    try {
+      applied = await this.#sendEdit(edit);
+    } catch (error) {
+      try {
+        await this.#resync();
+      } finally {
+        this.#notifyEdit({ kind: "failed", id: edit.id, error });
+      }
+      throw error;
+    }
+
+    this.#notifyEdit({ kind: "committed", id: edit.id });
+    return applied;
+  }
+
   async #sendEdit(edit: WorkspaceEdit): Promise<AppliedChange> {
     this.#applyStatus.set("applying");
     const applied = await this.#session.apply(edit.intents, edit.label);
     await this.#applyChange(applied, edit.id);
     return applied;
+  }
+
+  #notifyEdit(event: WorkspaceEditEvent): void {
+    for (const listener of this.#editListeners) {
+      try {
+        listener(event);
+      } catch (error) {
+        console.error("workspace edit listener failed", error);
+      }
+    }
   }
 
   #serialize<T>(job: () => Promise<T>): Promise<T> {

@@ -188,6 +188,24 @@ describe("KeyboardRouter", () => {
     });
   });
 
+  describe("selection shortcuts", () => {
+    it("records Select All as one undoable editor action", async () => {
+      await editor.drawOpenContour([
+        { x: 100, y: 100 },
+        { x: 200, y: 100 },
+      ]);
+      editor.selectTool("select");
+      editor.selection.clear();
+
+      const handled = await router.handleKeyDown(createKeyboardEvent({ key: "a", metaKey: true }));
+      expect(handled).toBe(true);
+      expect(editor.selection.ids).toHaveLength(2);
+
+      await editor.undo();
+      expect(editor.selection.ids).toEqual([]);
+    });
+  });
+
   describe("clipboard shortcuts", () => {
     beforeEach(async () => {
       editor.selectTool("pen");
