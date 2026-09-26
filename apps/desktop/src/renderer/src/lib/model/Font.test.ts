@@ -502,6 +502,31 @@ describe("font-level intents make the font variable", () => {
     expect(glyph.allPoints).toEqual([]);
   });
 
+  it("adds distinct missing glyphs and their layers as one undoable change", async () => {
+    const stack = createWorkspaceStack();
+    await stack.createWorkspace();
+
+    await stack.font.createGlyphs([
+      "A" as GlyphName,
+      "A" as GlyphName,
+      ".notdef" as GlyphName,
+      "B" as GlyphName,
+    ]);
+
+    expect(stack.font.recordForName("A" as GlyphName)?.unicodes).toEqual([65]);
+    expect(stack.font.recordForName("B" as GlyphName)?.unicodes).toEqual([66]);
+    expect(stack.font.recordForName(".notdef" as GlyphName)?.unicodes).toEqual([]);
+    expect(stack.font.glyphEntriesCell.value).toHaveLength(3);
+    expect(stack.font.recordForName("A" as GlyphName)?.layers).toHaveLength(1);
+
+    await stack.font.createGlyphs(["A" as GlyphName, "C" as GlyphName]);
+    expect(stack.font.glyphEntriesCell.value).toHaveLength(4);
+    await stack.editCoordinator.undo();
+    expect(stack.font.glyphEntriesCell.value).toHaveLength(3);
+    await stack.editCoordinator.undo();
+    expect(stack.font.glyphEntriesCell.value).toHaveLength(0);
+  });
+
   it("preserves glyph object identity while record names change", async () => {
     const stack = createWorkspaceStack();
     await stack.createWorkspace();

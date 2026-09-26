@@ -1,5 +1,6 @@
 import type {
   FontMetrics,
+  FontIntent,
   MetricDefinition,
   MetricKind,
   FontMetadata,
@@ -742,6 +743,44 @@ export class Font {
       componentBaseGlyphIds: [],
       layers: [{ id: layerId, sourceId }],
     };
+  }
+
+  /**
+   * Creates missing named glyphs and their default layers in one confirmed undoable edit.
+   *
+   * @remarks
+   * Existing names and repeated requests are skipped without renaming. The result
+   * is confirmed by the workspace before this promise resolves; no glyphs are
+   * committed if the workspace rejects the batch.
+   *
+   * @param names - Preferred glyph names, including unencoded names; blank names are ignored.
+   * @throws {Error} when the workspace rejects the edit.
+   */
+  async createGlyphs(names: readonly GlyphName[]): Promise<void> {
+    await this.editCoordinator.settled();
+
+    const seen = new Set<GlyphName>();
+    const intents: FontIntent[] = [];
+    for (const rawName of names) {
+      const name = rawName.trim() as GlyphName;
+      if (!name || seen.has(name) || this.entryForName(name)) continue;
+      seen.add(name);
+
+      const glyphId = mintGlyphId();
+      const layerId = mintLayerId();
+      const unicode = this.glyphHandleForName(name).unicode;
+      intents.push({
+        kind: "createGlyph",
+        createGlyph: { glyphId, name, unicodes: unicode === undefined ? [] : [unicode] },
+      });
+      intents.push({
+        kind: "createGlyphLayer",
+        createGlyphLayer: { layerId, glyphId, sourceId: this.defaultSource.id },
+      });
+    }
+
+    if (intents.length === 0) return;
+    await this.editCoordinator.apply(intents, "Add glyphs");
   }
 
   /**

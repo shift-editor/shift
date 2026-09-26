@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Button,
   cn,
@@ -19,6 +20,7 @@ import { SidebarRowButton } from "@/components/sidebar";
 import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
 import { Category } from "./Category";
 import { SubCategory } from "./SubCategory";
+import { AddGlyphsDialog } from "./AddGlyphsDialog";
 
 export const GlyphCatalogView = () => {
   const {
@@ -29,13 +31,13 @@ export const GlyphCatalogView = () => {
     selectedCategory,
     selectedSubCategoryKey,
     setQuery,
-    createQuickGlyph,
     canAuthor,
     selectAll,
     selectCategory,
     selectSubCategory,
   } = useGlyphCatalog();
 
+  const [addGlyphsOpen, setAddGlyphsOpen] = useState(false);
   const allGlyphCount = allGlyphs.length;
   const filteredGlyphCount = filteredGlyphs.length;
   const allGlyphsSelected = selectedCategory === null && selectedSubCategoryKey === null;
@@ -61,14 +63,14 @@ export const GlyphCatalogView = () => {
               <Button
                 variant="ghost"
                 size="sm"
-                aria-label="Create glyph"
+                aria-label="Add glyphs"
                 aria-disabled={!canAuthor || undefined}
-                onClick={canAuthor ? createQuickGlyph : undefined}
+                onClick={canAuthor ? () => setAddGlyphsOpen(true) : undefined}
               >
                 <PlusIcon className="w-3 h-3 text-muted" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Create glyph</TooltipContent>
+            <TooltipContent>Add glyphs</TooltipContent>
           </Tooltip>
         </div>
 
@@ -115,6 +117,7 @@ export const GlyphCatalogView = () => {
           })}
         </div>
       </div>
+      {addGlyphsOpen && <AddGlyphsDialog onOpenChange={setAddGlyphsOpen} />}
     </div>
   );
 };
