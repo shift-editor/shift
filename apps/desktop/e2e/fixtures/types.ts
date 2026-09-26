@@ -9,6 +9,7 @@ import type {
   NodeId,
   PointId,
   PointSeed,
+  PointType,
   Source,
   SourceId,
 } from "@shift/types";
@@ -102,3 +103,17 @@ export type RecoveryApp = {
   canonicalGlyphNames: () => string[];
   canonicalVariableFont: () => CanonicalVariableFont;
 };
+
+/** Point inserted by a scratch-glyph fixture; the editor mints its identity. */
+export interface ScratchPoint {
+  readonly x: number;
+  readonly y: number;
+  readonly pointType: PointType;
+  readonly smooth: boolean;
+}
+
+/** Contour inserted into a scratch glyph. */
+export interface ScratchContour {
+  readonly closed: boolean;
+  readonly points: readonly ScratchPoint[];
+}
