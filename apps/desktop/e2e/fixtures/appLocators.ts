@@ -83,7 +83,7 @@ export async function waitForEditorReady(page: Page, glyphId: string): Promise<v
     .poll(() =>
       page.evaluate(
         (expectedGlyphId) =>
-          window.shift?.editor.scene.nodesOfKind("glyph")[0]?.glyphId === expectedGlyphId,
+          window.shiftSession?.editor.scene.nodesOfKind("glyph")[0]?.glyphId === expectedGlyphId,
         glyphId,
       ),
     )

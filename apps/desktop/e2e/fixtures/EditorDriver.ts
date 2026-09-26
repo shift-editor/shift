@@ -100,7 +100,7 @@ export class EditorDriver {
 
     await waitForEditorReady(this.page, glyphId);
     await waitForActiveGlyph(this.page, glyphId);
-    await this.page.waitForTimeout(1000);
+    await this.waitForCanvasRender();
   }
 
   /**

@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+import { EditorDriver } from "./fixtures/EditorDriver";
 import { expect, glyphsPreviewTest, ufoPreviewTest } from "./fixtures/perfApp";
 import {
   clickFirstCatalogGlyph,
@@ -8,6 +9,7 @@ import {
   glyphCatalogSurface,
   glyphCatalogViewport,
   openVariationControls,
+  waitForEditorReady,
 } from "./fixtures/appLocators";
 
 async function expectRenderedGrid(page: Page): Promise<void> {
@@ -59,6 +61,11 @@ glyphsPreviewTest("Glyphs sources render a complete resident Grid", async ({ pag
 
   await clickFirstCatalogGlyph(page);
   await page.waitForURL(/#\/editor\//);
+  await waitForEditorReady(
+    page,
+    decodeURIComponent(new URL(page.url()).hash.slice("#/editor/".length)),
+  );
+  await new EditorDriver(page).waitForCanvasRender();
 
   const sceneCanvas = page.locator("#scene-canvas");
   const beforeSourceFrame = await sceneCanvas.screenshot();

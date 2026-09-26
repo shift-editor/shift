@@ -5,7 +5,8 @@ import {
   glyphsPreviewTest,
   variablePreviewTest,
 } from "./fixtures/perfApp";
-import { firstAxisSlider, openVariationControls } from "./fixtures/appLocators";
+import { firstAxisSlider, openVariationControls, waitForEditorReady } from "./fixtures/appLocators";
+import { EditorDriver } from "./fixtures/EditorDriver";
 
 interface VariationSample {
   readonly activeSourceId: string | null;
@@ -27,7 +28,7 @@ async function openVariableGlyph(page: Page): Promise<string> {
     window.location.hash = `#/editor/${encodeURIComponent(entry.id)}`;
     return entry.id;
   });
-  await page.waitForURL(new RegExp(`#/editor/${encodeURIComponent(glyphId)}$`));
+  await waitForEditorReady(page, glyphId);
   await openVariationControls(page);
   await expect(await firstAxisSlider(page)).toBeVisible();
 
@@ -59,6 +60,12 @@ async function moveSliderToMiddle(page: Page): Promise<void> {
   await page.mouse.click(track.left + track.width / 2, track.top + track.height / 2);
 }
 
+/** Captures the scene layer after the latest location has been rendered. */
+async function renderedSceneFrame(page: Page): Promise<Buffer> {
+  await new EditorDriver(page).waitForCanvasRender();
+  return page.locator("#scene-canvas").screenshot();
+}
+
 async function expectContinuousVariablePreview(page: Page): Promise<void> {
   const glyphId = await openVariableGlyph(page);
   const slider = await firstAxisSlider(page);
@@ -71,11 +78,11 @@ async function expectContinuousVariablePreview(page: Page): Promise<void> {
 
   await moveSliderToMiddle(page);
   const middle = await variationSample(page, glyphId);
-  const middleFrame = await page.locator("#scene-canvas").screenshot();
+  const middleFrame = await renderedSceneFrame(page);
 
   await slider.press("End");
   const maximum = await variationSample(page, glyphId);
-  const maximumFrame = await page.locator("#scene-canvas").screenshot();
+  const maximumFrame = await renderedSceneFrame(page);
 
   expect(minimum.activeSourceId).not.toBeNull();
   expect(nearMinimum.activeSourceId).toBeNull();

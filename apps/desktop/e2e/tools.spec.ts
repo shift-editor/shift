@@ -116,9 +116,9 @@ test.describe("Toolbar tools", () => {
   });
 
   for (const [tool, label] of Object.entries(TOOL_LABELS)) {
-    test(`${tool} tool active state matches snapshot`, async ({ page }) => {
+    test(`${tool} tool active state matches snapshot`, async ({ page, editor }) => {
       await page.getByRole("button", { name: label, exact: true }).click();
-      await page.waitForTimeout(300);
+      await editor.waitForCanvasRender();
 
       await expect(page).toHaveScreenshot(`tool-${tool}.png`);
     });

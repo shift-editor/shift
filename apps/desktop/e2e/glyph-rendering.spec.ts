@@ -70,7 +70,7 @@ test.describe("Glyph rendering — selection states", () => {
 
   test("select-all highlights every handle", async ({ page, editor }) => {
     await editor.selectAll();
-    await page.waitForTimeout(300);
+    await editor.waitForCanvasRender();
 
     const canvas = new CanvasUtil(page);
     const screenshot = await canvas.screenshotCanvasLayer("marker-canvas");
@@ -79,7 +79,7 @@ test.describe("Glyph rendering — selection states", () => {
 
   test("select-all shows bounding box overlay", async ({ page, editor }) => {
     await editor.selectAll();
-    await page.waitForTimeout(300);
+    await editor.waitForCanvasRender();
 
     const canvas = new CanvasUtil(page);
     const screenshot = await canvas.screenshotCanvasContainer();
@@ -94,11 +94,10 @@ test.describe("Pen tool drawing — segment snapshots", () => {
 
   test("single on-curve point (click)", async ({ page, editor }) => {
     await editor.selectTool("pen");
-    await page.waitForTimeout(200);
 
     const canvas = editor.canvas;
     await canvas.click({ position: { x: 600, y: 400 } });
-    await page.waitForTimeout(300);
+    await editor.waitForCanvasRender();
 
     const canvasUtil = new CanvasUtil(page);
     const screenshot = await canvasUtil.screenshotCanvasContainer();
@@ -107,12 +106,11 @@ test.describe("Pen tool drawing — segment snapshots", () => {
 
   test("straight line segment (two clicks)", async ({ page, editor }) => {
     await editor.selectTool("pen");
-    await page.waitForTimeout(200);
 
     const canvas = editor.canvas;
     await canvas.click({ position: { x: 500, y: 300 } });
     await canvas.click({ position: { x: 700, y: 500 } });
-    await page.waitForTimeout(300);
+    await editor.waitForCanvasRender();
 
     const canvasUtil = new CanvasUtil(page);
     const screenshot = await canvasUtil.screenshotCanvasContainer();
@@ -142,7 +140,7 @@ test.describe("Pen tool drawing — segment snapshots", () => {
     await canvas.click({ position: { x: 500, y: 300 } });
     await canvas.click({ position: { x: 700, y: 500 } });
     await page.keyboard.down("Space");
-    await page.waitForTimeout(300);
+    await editor.waitForCanvasRender();
 
     const canvasUtil = new CanvasUtil(page);
     const screenshot = await canvasUtil.screenshotCanvasContainer();
@@ -163,7 +161,8 @@ test.describe("Pen tool drawing — segment snapshots", () => {
     await editor.undo();
 
     await page.mouse.move(bounds.x + bounds.width * 0.8, bounds.y + bounds.height * 0.35);
-    await page.waitForTimeout(100);
+    await editor.flushPointerMoves();
+    await editor.waitForCanvasRender();
 
     const canvasUtil = new CanvasUtil(page);
     const screenshot = await canvasUtil.screenshotCanvasContainer();
@@ -172,13 +171,12 @@ test.describe("Pen tool drawing — segment snapshots", () => {
 
   test("cubic curve with handles (click-drag)", async ({ page, editor }) => {
     await editor.selectTool("pen");
-    await page.waitForTimeout(200);
 
     await editor.canvas.click({ position: { x: 400, y: 400 } });
     await editor.pointerDown({ x: 600, y: 300 });
     await editor.pointerMove({ x: 700, y: 250 }, 5);
     await editor.pointerUp();
-    await page.waitForTimeout(300);
+    await editor.waitForCanvasRender();
 
     const canvasUtil = new CanvasUtil(page);
     const screenshot = await canvasUtil.screenshotCanvasContainer();
@@ -187,12 +185,11 @@ test.describe("Pen tool drawing — segment snapshots", () => {
 
   test("cubic curve preview before pointer release", async ({ page, editor }) => {
     await editor.selectTool("pen");
-    await page.waitForTimeout(200);
 
     await editor.canvas.click({ position: { x: 400, y: 400 } });
     await editor.pointerDown({ x: 600, y: 300 });
     await editor.pointerMove({ x: 700, y: 250 }, 5);
-    await page.waitForTimeout(100);
+    await editor.waitForCanvasRender();
 
     const canvasUtil = new CanvasUtil(page);
     const screenshot = await canvasUtil.screenshotCanvasContainer();
@@ -203,7 +200,6 @@ test.describe("Pen tool drawing — segment snapshots", () => {
 
   test("smooth junction preview before consecutive curve release", async ({ page, editor }) => {
     await editor.selectTool("pen");
-    await page.waitForTimeout(200);
 
     await editor.canvas.click({ position: { x: 400, y: 400 } });
     await editor.pointerDown({ x: 600, y: 300 });
@@ -211,7 +207,7 @@ test.describe("Pen tool drawing — segment snapshots", () => {
     await editor.pointerUp();
     await editor.pointerDown({ x: 800, y: 300 });
     await editor.pointerMove({ x: 900, y: 250 }, 5);
-    await page.waitForTimeout(100);
+    await editor.waitForCanvasRender();
 
     const canvasUtil = new CanvasUtil(page);
     const screenshot = await canvasUtil.screenshotCanvasContainer();
@@ -241,12 +237,7 @@ test.describe("Pen tool drawing — segment snapshots", () => {
       position: { x: Math.round(canvasBounds.width * 0.9), y: 500 },
     });
     await expect.poll(() => editor.pointCount()).toBeGreaterThanOrEqual(6);
-    await page.evaluate(
-      () =>
-        new Promise<void>((resolve) => {
-          requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-        }),
-    );
+    await editor.waitForCanvasRender();
 
     const canvasUtil = new CanvasUtil(page);
     const screenshot = await canvasUtil.screenshotCanvasContainer();
@@ -255,7 +246,6 @@ test.describe("Pen tool drawing — segment snapshots", () => {
 
   test("cubic S-curve with symmetric handles", async ({ page, editor }) => {
     await editor.selectTool("pen");
-    await page.waitForTimeout(200);
 
     await editor.pointerDown({ x: 400, y: 500 });
     await editor.pointerMove({ x: 500, y: 500 }, 5);
@@ -264,7 +254,7 @@ test.describe("Pen tool drawing — segment snapshots", () => {
     await editor.pointerDown({ x: 700, y: 300 });
     await editor.pointerMove({ x: 600, y: 300 }, 5);
     await editor.pointerUp();
-    await page.waitForTimeout(300);
+    await editor.waitForCanvasRender();
 
     const canvasUtil = new CanvasUtil(page);
     const screenshot = await canvasUtil.screenshotCanvasContainer();
