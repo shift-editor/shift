@@ -5,6 +5,7 @@ import {
   glyphCatalogSurface,
   waitForEditorReady,
 } from "./fixtures/appLocators";
+import { expectPageSnapshot } from "./fixtures/snapshots";
 
 test.describe("Theme", () => {
   test("light theme home view matches snapshot", async ({ page }) => {
@@ -12,7 +13,7 @@ test.describe("Theme", () => {
     await page.reload();
     await expect(page.locator("html")).toHaveAttribute("data-color-theme", "shift-light");
 
-    await expect(page).toHaveScreenshot("theme-light-home.png");
+    await expectPageSnapshot(page, "theme-light-home.png");
   });
 
   test("selects and persists a classic color theme", async ({ page }) => {

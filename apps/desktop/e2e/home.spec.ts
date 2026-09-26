@@ -8,7 +8,7 @@ import {
   glyphCatalogSurface,
   glyphProperties,
 } from "./fixtures/appLocators";
-import { expectPanelSnapshot, PAGE_SNAPSHOT_OPTIONS } from "./fixtures/snapshots";
+import { expectPageSnapshot, expectPanelSnapshot } from "./fixtures/snapshots";
 
 test.describe("Home view", () => {
   test("glyph grid matches snapshot", async ({ page }) => {
@@ -16,7 +16,7 @@ test.describe("Home view", () => {
       timeout: 30_000,
     });
     await page.mouse.move(0, 0);
-    await expect(page).toHaveScreenshot("home-glyph-grid.png", PAGE_SNAPSHOT_OPTIONS);
+    await expectPageSnapshot(page, "home-glyph-grid.png");
   });
 
   test("navigation highlights Home or Settings without leaving both active", async ({ page }) => {

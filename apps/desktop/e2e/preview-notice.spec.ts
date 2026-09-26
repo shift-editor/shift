@@ -1,4 +1,5 @@
 import { documentTest, expect, FONT_PATH } from "./fixtures/electronApp";
+import { expectPanelSnapshot } from "./fixtures/snapshots";
 
 const test = documentTest.extend({
   openFontPath: FONT_PATH,
@@ -14,7 +15,5 @@ test("read-only preview notice matches snapshot", async ({ electronApp, page }) 
   await workspacePage.getByRole("button", { name: "Read-only preview", exact: true }).click();
   const notice = workspacePage.getByRole("dialog", { name: "This font is view-only" });
 
-  await expect(notice).toHaveScreenshot("read-only-preview-notice.png", {
-    animations: "disabled",
-  });
+  await expectPanelSnapshot(notice, "read-only-preview-notice.png");
 });

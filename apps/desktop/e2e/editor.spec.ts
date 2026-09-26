@@ -5,7 +5,7 @@ import { editorSidebar, glyphProperties } from "./fixtures/appLocators";
 import {
   expectCanvasSnapshot,
   expectPanelSnapshot,
-  PAGE_SNAPSHOT_OPTIONS,
+  expectPageSnapshot,
 } from "./fixtures/snapshots";
 
 /** Opens A and returns three distinct fixture points for alignment scenarios. */
@@ -287,7 +287,7 @@ test.describe("Editor view", () => {
   test("full editor matches snapshot", async ({ page, editor }) => {
     await editor.waitForCanvasRender();
     await page.mouse.move(0, 0);
-    await expect(page).toHaveScreenshot("editor-glyph-A.png", PAGE_SNAPSHOT_OPTIONS);
+    await expectPageSnapshot(page, "editor-glyph-A.png");
   });
 
   test("resets sidebars to their default width on divider double-click", async ({ page }) => {
