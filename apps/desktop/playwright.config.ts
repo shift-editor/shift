@@ -34,6 +34,7 @@ export const VISUAL_SPECS = [
   "handle-properties.spec.ts",
   "handle-snapping.spec.ts",
   "handle-styling.spec.ts",
+  "hidpi-rendering.spec.ts",
   "home.spec.ts",
   "landing.spec.ts",
   "pen-snapping.spec.ts",

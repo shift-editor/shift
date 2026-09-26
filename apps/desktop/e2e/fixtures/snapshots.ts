@@ -18,12 +18,15 @@ const PAGE_SNAPSHOT_OPTIONS = {
 
 /**
  * Canvas goldens compare exactly: thin strokes and handles occupy few pixels, so a ratio
- * tolerance could accept a displaced curve or a missing marker.
+ * tolerance could accept a displaced curve or a missing marker. They keep device pixels, so a
+ * HiDPI golden records the backing-store detail instead of a CSS-pixel downsample; at 1× the
+ * two scales are identical.
  */
 const CANVAS_SNAPSHOT_OPTIONS = {
   animations: "disabled",
   caret: "hide",
   maxDiffPixels: 0,
+  scale: "device",
 } as const;
 
 /**

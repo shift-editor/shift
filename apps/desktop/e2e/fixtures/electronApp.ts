@@ -137,6 +137,7 @@ export const test = base.extend<ShiftFixtures & ShiftOptions>({
       electronProcesses,
       startupFontPath,
       windowSizing,
+      deviceScaleFactor,
       electronArgs,
       scriptedDialogs,
       openFontPath,
@@ -180,11 +181,15 @@ export const test = base.extend<ShiftFixtures & ShiftOptions>({
       args: [...electronArgs, ...(workspacePath ? [workspacePath] : [])],
       env: environment,
       windowSizing,
+      deviceScaleFactor,
     });
     await use(app);
   },
 
-  relaunch: async ({ electronProcesses, testRoot, saveShiftPath, windowSizing }, use) => {
+  relaunch: async (
+    { electronProcesses, testRoot, saveShiftPath, windowSizing, deviceScaleFactor },
+    use,
+  ) => {
     let launches = 0;
     await use(async (options = {}) => {
       launches += 1;
@@ -199,6 +204,7 @@ export const test = base.extend<ShiftFixtures & ShiftOptions>({
           ...options.env,
         }),
         windowSizing,
+        deviceScaleFactor,
       });
     });
   },
@@ -237,7 +243,7 @@ export const documentTest = test.extend<ShiftOptions>({
 
 /** Real Electron lifecycle fixture for sparse native recovery tests. */
 export const recoveryTest = test.extend<{ recoveryApp: RecoveryApp }>({
-  recoveryApp: async ({ electronProcesses, testRoot, windowSizing }, use) => {
+  recoveryApp: async ({ electronProcesses, testRoot, windowSizing, deviceScaleFactor }, use) => {
     const userDataDir = path.join(testRoot, "user-data");
     const documentPath = createAuthoredDocument(FONT_PATH, path.join(testRoot, "workspace"));
     let launches = 0;
@@ -248,6 +254,7 @@ export const recoveryTest = test.extend<{ recoveryApp: RecoveryApp }>({
         userDataDir,
         env: shiftTestEnvironment(openDocument ? { SHIFT_E2E_FONT_PATH: documentPath } : {}),
         windowSizing,
+        deviceScaleFactor,
       });
     };
 

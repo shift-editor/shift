@@ -46,7 +46,7 @@ export class ElectronProcesses {
       args: [
         MAIN_JS,
         `--user-data-dir=${launch.userDataDir}`,
-        "--force-device-scale-factor=1",
+        `--force-device-scale-factor=${launch.deviceScaleFactor ?? 1}`,
         ...(launch.args ?? []),
       ],
       env: launch.env,

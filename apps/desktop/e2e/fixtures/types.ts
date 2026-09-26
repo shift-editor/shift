@@ -135,6 +135,12 @@ export interface ElectronLaunch {
   readonly env: Record<string, string>;
   /** Window geometry policy applied to the first window. */
   readonly windowSizing: "native" | "visual";
+  /**
+   * Device pixels per CSS pixel forced for the process; defaults to 1. Fixtures pass
+   * Playwright's `deviceScaleFactor` option, so `test.use({ deviceScaleFactor: 2 })` renders
+   * at 2× while visual window sizing stays in CSS pixels.
+   */
+  readonly deviceScaleFactor?: number;
 }
 
 /** Launches the application again with the test's user-data directory and dialog script. */
