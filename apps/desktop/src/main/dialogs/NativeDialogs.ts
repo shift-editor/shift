@@ -2,6 +2,24 @@ import type { WorkspaceDocumentState } from "../../shared/workspace/protocol";
 import type { CloseReason, DirtyDocumentChoice, DocumentCrashChoice } from "../document/types";
 import type { Window } from "../windows/Window";
 
+/**
+ * Dirty-document confirmations answered by scripted E2E dialogs.
+ *
+ * @remarks
+ * Published on `globalThis.shiftScriptedDialogs` only when scripted dialogs answer a
+ * confirmation, so Playwright can wait for a decision instead of sleeping.
+ */
+export interface ScriptedDialogLog {
+  /** Confirmations requested, including ones still awaiting their scripted decision. */
+  dirtyDocumentRequests: number;
+  /** Decisions returned, in the order the application received them. */
+  readonly dirtyDocumentDecisions: DirtyDocumentChoice[];
+}
+
+declare global {
+  var shiftScriptedDialogs: ScriptedDialogLog | undefined;
+}
+
 /** Owns native user choices at the outer Electron dialog boundary. */
 export interface NativeDialogs {
   /**

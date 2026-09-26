@@ -1,6 +1,8 @@
 import type { NamedInstanceId, SourceId } from "@shift/types";
+import type { GlyphOutlineTarget } from "@shift/editor/types";
 import type {
   OutlineGroup,
+  OutlineTargetSet,
   VariationOutlineAction,
   VariationOutlineState,
 } from "@/types/variationOutline";
@@ -117,4 +119,71 @@ export function variationOutlineReducer(
       return { ...state, hiddenSelectedSourceIds };
     }
   }
+}
+
+/**
+ * Derives the visible source outlines for the current editing selection.
+ *
+ * @param state - Reducer-owned outline visibility intent.
+ * @param activeSourceId - Editable foreground source, which is never outlined.
+ * @param editingSourceIds - Sources whose outlines are visible unless individually hidden.
+ * @returns Source targets without duplicates, explicit targets first.
+ */
+export function sourceOutlineTargets(
+  state: VariationOutlineState,
+  activeSourceId: SourceId | null,
+  editingSourceIds: ReadonlySet<SourceId>,
+): OutlineTargetSet<SourceId> {
+  const visibleIds = new Set<SourceId>();
+  const include = (sourceIds: Iterable<SourceId>, skip: (sourceId: SourceId) => boolean) =>
+    Array.from(sourceIds).flatMap((sourceId): GlyphOutlineTarget[] => {
+      if (sourceId === activeSourceId || visibleIds.has(sourceId) || skip(sourceId)) return [];
+
+      visibleIds.add(sourceId);
+      return [{ kind: "source", sourceId }];
+    });
+
+  const targets = [
+    ...include(state.sources.explicitIds, () => false),
+    ...include(editingSourceIds, (sourceId) => state.hiddenSelectedSourceIds.has(sourceId)),
+    ...include(state.sources.groupIds, () => false),
+  ];
+
+  return {
+    targets,
+    inheritedTargets: Array.from(
+      state.sources.groupIds,
+      (sourceId): GlyphOutlineTarget => ({ kind: "source", sourceId }),
+    ),
+    visibleIds,
+  };
+}
+
+/**
+ * Derives the visible named-instance outlines.
+ *
+ * @param state - Reducer-owned outline visibility intent.
+ * @returns Instance targets without duplicates, explicit targets first.
+ */
+export function instanceOutlineTargets(
+  state: VariationOutlineState,
+): OutlineTargetSet<NamedInstanceId> {
+  const visibleIds = new Set<NamedInstanceId>();
+  const targets = [...state.instances.explicitIds, ...state.instances.groupIds].flatMap(
+    (instanceId): GlyphOutlineTarget[] => {
+      if (visibleIds.has(instanceId)) return [];
+
+      visibleIds.add(instanceId);
+      return [{ kind: "instance", instanceId }];
+    },
+  );
+
+  return {
+    targets,
+    inheritedTargets: Array.from(
+      state.instances.groupIds,
+      (instanceId): GlyphOutlineTarget => ({ kind: "instance", instanceId }),
+    ),
+    visibleIds,
+  };
 }

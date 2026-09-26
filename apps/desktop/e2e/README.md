@@ -34,7 +34,7 @@ pnpm test:e2e:gpu e2e/glyph-grid.spec.ts --grep "source switching"
 Use repeat mode to reproduce a suspected flake without running the rest of the project:
 
 ```sh
-pnpm test:e2e:gpu e2e/variable-navigation-glyph-grid.spec.ts \
+pnpm test:e2e:visual e2e/variable-navigation.spec.ts \
   --grep "keeps variable preview" --repeat-each=10
 ```
 
@@ -60,6 +60,8 @@ Do not update snapshots merely to make a failure pass. Inspect the diff and conf
 | `platform` | `fixtures/electronApp.ts` | Software rendering, DPR 1, native window geometry | Required on Windows/Linux in the merge queue |
 | `gpu`      | `fixtures/perfApp.ts`     | Hardware GPU, host scale, stable content size     | Required on macOS in the merge queue         |
 | `perf`     | `fixtures/perfApp.ts`     | Hardware GPU, host scale, stable content size     | Nightly and manual only                      |
+
+Project membership is an explicit list of spec files in `apps/desktop/playwright.config.ts` (`VISUAL_SPECS`, `PLATFORM_SPECS`, `GPU_SPECS`, `PERF_SPECS`). Add a new spec to the list for the environment it needs: `visual` for renderer, interaction, and golden behavior; `platform` for native desktop boundaries; `gpu` only for hardware rendering and residency. Platform specs also run in `visual`, because macOS has no separate platform job. `node scripts/check-e2e-projects.mjs` runs in the Linux E2E build job and fails when a spec belongs to no project or a golden bypasses `fixtures/snapshots.ts`.
 
 The shared fixture option `windowSizing` defaults to `"visual"` in the visual project and `"native"` elsewhere. `prepareWindow` waits for visibility and DOM readiness in both modes, but only visual mode unmaximizes and normalizes the renderer viewport. Platform workflows wait for their relevant controls or workspace readiness without depending on exact snapshot dimensions. Recovery launches use the same policy on every restart. GPU and performance fixture sizing is unchanged.
 
@@ -103,6 +105,16 @@ SHIFT_E2E_PREVIEW_FONT_PATH=/path/to/font.ttf pnpm test:e2e:gpu e2e/font-preview
 SHIFT_E2E_VARIABLE_PREVIEW_FONT_PATH=/path/to/variable.ttf pnpm test:e2e:gpu e2e/variable-font-preview.spec.ts
 ```
 
+### Process and dialog ownership
+
+Every Electron process a test starts belongs to the `electronProcesses` fixture. The initial launch, `relaunch()`, and the recovery fixture's restarts verify the isolated user-data directory, prepare the first window with the project's sizing, and record main-process output and renderer failures. Teardown attaches `electron-diagnostics-<launch>` for failed tests and terminates every process tree, including launches left running by a timed-out test. Specs never kill applications they obtained from a fixture; use `killApp()` only to simulate a crash before a relaunch.
+
+Renderer `alert`, `confirm`, `prompt`, and `beforeunload` dialogs are dismissed and recorded. A test that opens one fails at teardown unless it sets `allowRendererDialogs: true`. Native dialogs are scripted through `NativeDialogs` instead.
+
+GPU and preview fixtures in `fixtures/perfApp.ts` also expose `editor: EditorDriver` for the primary page. Construct a driver directly only for additional windows.
+
+Every Electron launch, relaunch, and second instance builds its environment with `shiftTestEnvironment()`, which drops inherited `SHIFT_E2E_*` variables before applying the fixture's own. A shell-exported `SHIFT_E2E_FONT_PATH` for GPU runs therefore cannot open extra documents in visual or platform tests.
+
 Authored fixtures import their source into a canonical native document under a temporary test root. Tests must not depend on a developer's existing Shift workspace or user-data directory. Document-lifecycle tests inject deterministic Open, ordered Save As destinations, Export, and dirty-document choices through `NativeDialogs`; ordered choices exercise preview-to-`.shift` conversion, first-Save replacement of a selected existing destination, Save As adoption, multi-document quit, and re-entrant quit without automating OS pickers. Preview conversion E2E proves successful authored-session handoff and reopen, all four convertible source formats, cancellation and failure cleanup, original-source preservation, and TTF/OTF exclusion. Application-menu tests invoke native Electron menu items rather than bypassing them through the host API, covering command capability and focused text/canvas routing. The recovery fixture restarts Electron with the same isolated user-data directory and document, allowing forced-termination recovery to be tested without touching developer state.
 
 ## Visual snapshots
@@ -111,15 +123,49 @@ The visual fixture forces a fixed device scale and sizes the `BrowserWindow` tha
 
 After an intentional visual change:
 
-1. Run `pnpm test:e2e:visual:update`.
+1. Run `pnpm test:e2e:visual:update`, optionally with a file and `--grep` filter.
 2. Review every changed image under `e2e/__screenshots__/`.
-3. Run `pnpm test:e2e:visual` without update mode.
+3. Run the same visual scope without update mode.
+
+### Writing golden assertions
+
+Golden captures are the final assertion of a behavioral test, taken with the helpers in `fixtures/snapshots.ts`:
+
+- `expectCanvasSnapshot(editor, name)` waits for pending edits and two rendered frames, then compares the composited canvas stack (`editorCanvasStack()`) exactly. Thin strokes and handles occupy few pixels, so canvas goldens never use a ratio tolerance. Individual canvas layers are not captured separately: an element screenshot of one stacked layer includes the layers above it.
+- `expectPanelSnapshot(locator, name)` captures the smallest panel, menu, or toolbar that owns the visual contract with scrollbar gutters normalized, animations disabled, and the caret hidden. `expectPageSnapshot(page, name)` applies the same options to a whole window; reserve it for overall composition.
+- Never call `toHaveScreenshot()` directly in a spec. The helpers are the only golden path, and `scripts/check-e2e-projects.mjs` enforces it.
+- Goldens do not pass on retry. CI retries a failed test once to collect a second trace, but every snapshot helper throws on a retry attempt, so a test with a golden that failed once stays failed. Explain the first failure instead of rerunning it.
+- The helpers use `toHaveScreenshot()`. It waits for two identical consecutive captures; `toMatchSnapshot()` on a screenshot buffer does not stabilize and ignores the configured screenshot tolerance.
+- Prove the state that owns the pixels before capturing it: the authored point count after each Pen gesture, the tool state during a drag, or the published render state of a preview.
+- Express canvas gestures with `editor.canvasPagePoint()` fractions of the interactive canvas, and choose positions away from existing geometry so a click cannot hit an unintended target.
+- Park the pointer off the target before capturing toolbars and menus so hover styling and tooltips are not part of the golden.
+- Do not count or sample palette colours. Assert the render state the editor publishes, or capture a golden of the state.
+- Canvas goldens keep device pixels (`scale: "device"`). A HiDPI spec sets Playwright's `deviceScaleFactor` option (`test.use({ deviceScaleFactor: 2 })`), which the Electron fixtures pass to `--force-device-scale-factor`; window sizing stays in CSS pixels, so a 2× canvas golden is twice the 1× dimensions. Assert `window.devicePixelRatio` before capturing.
+- Theme goldens persist the selection (`localStorage.themeSelection`), reload, and assert `data-color-theme` before capturing. Shift Light uses stylesheet defaults; every other theme maps its palette through a light or dark branch of `colorThemeVariables()`, so add a theme golden when a new theme changes that mapping rather than for each palette.
+
+### Visual contracts
+
+Each golden protects one contract; prefer extending the owning spec over adding a new capture of the same state.
+
+| Contract                        | Goldens                                                                                                                      |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Glyph outlines, handles, guides | `glyph-rendering`: `canvas-{S,B,I,Q}-composited`; `editor`: `editor-canvas-A`                                                |
+| Selection chrome                | `glyph-rendering`: `canvas-S-all-selected`, `segment-selected`, `segment-translating`; `editor`: `segment-upgrade-preview`   |
+| Pen previews                    | `glyph-rendering`: `pen-*`                                                                                                   |
+| Shape drafts                    | `tools`: `{Rectangle,Ellipse}-{draft,committed}`                                                                             |
+| High zoom                       | `glyph-rendering`: `canvas-S-high-zoom`                                                                                      |
+| 2× device scale                 | `hidpi-rendering`: `canvas-S-all-selected-2x`                                                                                |
+| Theme palette mapping           | `theme`: `canvas-S-all-selected-{shift-dark,solarized-light}`, `editor-shift-dark`, `theme-light-home`                       |
+| Variation outlines              | `variation-outlines`: `outline-source`, `outline-interpolated-instance`                                                      |
+| Interpolated handles            | `handle-styling`: `handles-interpolated-instance`                                                                            |
+| Components                      | `component-rendering`: `canvas-Aacute-bold-wide-components`, `canvas-Aacute-interpolated-components`                         |
+| Panels and chrome               | `editor` sidebar and transform panels, `editor-glyph-A`; `tools` toolbar and shape menu; `home`; `landing`; `preview-notice` |
 
 ### Capture determinism
 
 A fixed viewport and DPR do not fix native scrollbar preferences. Overlay and reserved-gutter scrollbars can give the same sidebar different usable widths. Normalize host-dependent decoration only during golden captures when it is not the behavior under test; keep interaction and visibility assertions on the unmodified layout.
 
-Playwright's capture APIs have different contracts: `toHaveScreenshot()` accepts **`stylePath`**, while `screenshot()` accepts **`style`** containing CSS text. Use the same stylesheet for assertions and attached captures, reading its contents for `screenshot()`. Check the installed API types rather than assuming options transfer between APIs; the application typecheck does not include E2E specs.
+Playwright's capture APIs have different contracts: `toHaveScreenshot()` accepts **`stylePath`**, while `screenshot()` accepts **`style`** containing CSS text. Use the same stylesheet for assertions and attached captures, reading its contents for `screenshot()`. Check the installed API types rather than assuming options transfer between APIs. `pnpm typecheck` includes the E2E project through `pnpm --filter @shift/desktop typecheck:e2e`, so specs are checked against the renderer's `window.shift` and `window.shiftSession` declarations.
 
 After inspecting changed baselines, verify without snapshot updates and with `--retries=0`, then repeat the affected test. Reproduce the environmental difference that caused the failure: repeated passes with overlay scrollbars alone do not prove reserved-gutter layouts work. For gutter-related failures, also exercise a measured reserved gutter and verify that controls remain visible and usable. An update-mode pass is baseline generation, not verification; a skipped PR E2E job is not validation.
 
@@ -137,7 +183,8 @@ A snapshot match alone does not prove GPU content exists. Rendering tests that c
 - GPU fixtures must await workspace-window visibility, then apply the final owning `BrowserWindow` size and await the tested page's matching renderer content size; do not let a hidden-to-visible OS adjustment invalidate a baseline.
 - Wait for a route, visible surface, animation frame, or domain state instead of assuming startup completed after a fixed delay.
 - Use `waitForWorkspaceReady()` for authored workspace startup and `waitForEditorReady()`/`openCatalogGlyph()` for glyph routes. A matching URL alone does not mean React has published the requested scene node.
-- Keep negative asynchronous waits limited to behavior where elapsed time is the contract, such as proving a re-entrant quit does not open another confirmation while the first remains pending.
+- Do not use `waitForTimeout()`. After a quit or close request, wait for the scripted answer with `dirtyDocumentDecisions()` and count confirmations with `dirtyDocumentRequests()`; each read is a main-process round trip, so the close guard has already reacted to the recorded decision.
+- When elapsed time is itself the contract, as for wheel-gesture momentum, dispatch the samples inside the page and wait on the page clock that stamps the events rather than sleeping in Playwright.
 - Do not force software rendering or a fixed DPR in GPU and performance tests.
 
 ## Failures and artifacts
@@ -147,5 +194,15 @@ Local failures are written to `apps/desktop/e2e/test-results/`. CI uploads the s
 ```sh
 pnpm --filter @shift/desktop exec playwright show-trace apps/desktop/e2e/test-results/<test>/trace.zip
 ```
+
+### Retries, flaky tests, and reports
+
+CI runs with `retries: 1` so a failure collects a second trace; traces are kept for every failed attempt (`retain-on-failure`) because the first failure of a flaky test is the evidence. A test that passes only on retry is flaky, not green:
+
+- Each shard writes a blob report, uploaded as `blob-report-<target>-<shard>`.
+- The informational `E2E Report` job merges every shard into one HTML report (artifact `playwright-report-<run>`) and runs `scripts/summarize-e2e-report.mjs`. The job summary lists failed, flaky, and slow tests per project, and each flaky test gets a `::warning` annotation on its spec line.
+- `reportSlowTests` lists spec files slower than 20 seconds in each shard log.
+
+Summarize a local JSON report with `node scripts/summarize-e2e-report.mjs <report.json>`.
 
 The project definitions and retry policy live in `apps/desktop/playwright.config.ts`.

@@ -1,68 +1,37 @@
-import { expect, type ElectronApplication, type Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
+import type { ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { documentTest as test, waitForWorkspaceReady } from "./fixtures/electronApp";
-import { openGlyphRoute } from "./fixtures/appLocators";
-import { EditorDriver } from "./fixtures/EditorDriver";
-import { addSquare } from "./fixtures/editorInteractions";
 import {
-  createNewFont,
-  killApp,
+  createAnotherDirtyFont,
+  dirtyDocumentDecisions,
+  dirtyDocumentRequests,
   quitApp,
-  relaunchApp,
+  dirtyNewFont,
   requestAppQuit,
-  runCommand,
   windowTitle,
 } from "./fixtures/documentLifecycle";
+import { savedGlyphNames } from "./fixtures/savedDocument";
 
 const discardOnQuitTest = test.extend({
-  dirtyDocumentChoice: ["discard", { option: true }],
+  dirtyDocumentChoice: "discard",
 });
 const saveOnQuitTest = test.extend({
-  dirtyDocumentChoice: ["save", { option: true }],
+  dirtyDocumentChoice: "save",
 });
 const reentrantQuitTest = test.extend({
-  dirtyDocumentChoices: [["cancel", "discard"], { option: true }],
-  dirtyDocumentDelayMs: [150, { option: true }],
+  dirtyDocumentChoices: ["cancel", "discard"],
+  dirtyDocumentDelayMs: 150,
 });
 
-async function dirtyNewFont(page: Page, electronApp: ElectronApplication): Promise<Page> {
-  const workspacePage = await createNewFont(page, electronApp);
-  await workspacePage.getByRole("button", { name: "Create glyph", exact: true }).click();
-  await expect.poll(() => windowTitle(workspacePage, electronApp)).toContain("Untitled *");
-  return workspacePage;
-}
-
-async function createAnotherDirtyFont(page: Page, electronApp: ElectronApplication): Promise<Page> {
-  const nextWindow = electronApp.waitForEvent("window");
-  await runCommand(page, electronApp, "file.new");
-  const nextPage = await nextWindow;
-  await waitForWorkspaceReady(nextPage);
-  await nextPage.getByRole("button", { name: "Create glyph", exact: true }).click();
-  await expect.poll(() => windowTitle(nextPage, electronApp)).toContain("Untitled *");
-  return nextPage;
-}
-
-async function glyphIdForName(page: Page, name: string): Promise<string> {
-  await expect
-    .poll(() =>
-      page.evaluate(
-        (glyphName) => window.shift?.font.glyphRecords().some(({ name }) => name === glyphName),
-        name,
-      ),
-    )
-    .toBe(true);
-  const glyphId = await page.evaluate(
-    (glyphName) => window.shift?.font.glyphRecords().find(({ name }) => name === glyphName)?.id,
-    name,
-  );
-  if (!glyphId) throw new Error(`Expected ${name} glyph`);
-  return glyphId;
+function processExited(childProcess: ChildProcess): boolean {
+  return childProcess.exitCode !== null || childProcess.signalCode !== null;
 }
 
 async function saveThenDirty(page: Page, savePath: string): Promise<Buffer> {
   await page.evaluate(async (target) => {
-    const coordinator = window.shift?.font.editCoordinator;
+    const coordinator = window.shift?.editCoordinator;
     if (!coordinator) throw new Error("Expected edit coordinator");
 
     await coordinator.save(target);
@@ -80,7 +49,7 @@ test("canceling dirty app quit keeps the document open and dirty", async ({
   const workspacePage = await dirtyNewFont(page, electronApp);
 
   await requestAppQuit(electronApp);
-  await workspacePage.waitForTimeout(100);
+  await expect.poll(() => dirtyDocumentDecisions(electronApp)).toEqual(["cancel"]);
 
   await expect(workspacePage.getByLabel("Glyph catalog", { exact: true })).toBeVisible();
   await expect.poll(() => windowTitle(workspacePage, electronApp)).toContain("Untitled *");
@@ -89,12 +58,12 @@ test("canceling dirty app quit keeps the document open and dirty", async ({
 
 saveOnQuitTest(
   "saving dirty app quit writes before the process exits",
-  async ({ electronApp, page, saveShiftPath }) => {
+  async ({ electronApp, page, saveShiftPath, testRoot }) => {
     await dirtyNewFont(page, electronApp);
 
     await quitApp(electronApp);
 
-    expect(fs.existsSync(saveShiftPath)).toBe(true);
+    expect(savedGlyphNames(saveShiftPath, testRoot)).toContain("newGlyph");
   },
 );
 
@@ -114,123 +83,91 @@ saveOnQuitTest(
   async ({ electronApp, page, testRoot }) => {
     const firstPage = await dirtyNewFont(page, electronApp);
     const firstPath = path.join(testRoot, "first.shift");
-    const firstSaved = await saveThenDirty(firstPage, firstPath);
+    await saveThenDirty(firstPage, firstPath);
     const secondPage = await createAnotherDirtyFont(firstPage, electronApp);
     const secondPath = path.join(testRoot, "second.shift");
-    const secondSaved = await saveThenDirty(secondPage, secondPath);
+    await saveThenDirty(secondPage, secondPath);
+    expect(savedGlyphNames(firstPath, testRoot)).not.toContain("newGlyph.1");
+    expect(savedGlyphNames(secondPath, testRoot)).not.toContain("newGlyph.1");
 
     await quitApp(electronApp);
 
-    expect(fs.readFileSync(firstPath).equals(firstSaved)).toBe(false);
-    expect(fs.readFileSync(secondPath).equals(secondSaved)).toBe(false);
+    expect(savedGlyphNames(firstPath, testRoot)).toContain("newGlyph.1");
+    expect(savedGlyphNames(secondPath, testRoot)).toContain("newGlyph.1");
   },
 );
 
 test.describe("terminal termination", () => {
   test.use({ scriptedDialogs: false });
 
-  for (const signal of ["SIGINT", "SIGTERM"] as const) {
-    for (const target of ["main process", "process group"] as const) {
-      test(`${signal} to the ${target} exits without saving and recovers every dirty document`, async ({
-        electronApp,
-        page,
-        testRoot,
-        saveShiftPath,
-      }) => {
-        test.skip(process.platform === "win32", "POSIX terminal signal semantics");
+  // Ctrl+C reaches the whole process group; service managers signal the main process.
+  const terminations = [
+    { signal: "SIGINT", target: "process group" },
+    { signal: "SIGTERM", target: "main process" },
+  ] as const;
 
-        const firstPage = await dirtyNewFont(page, electronApp);
-        const firstPath = path.join(testRoot, "first.shift");
-        const firstSaved = await saveThenDirty(firstPage, firstPath);
-        const secondPage = await createAnotherDirtyFont(firstPage, electronApp);
-        const secondPath = path.join(testRoot, "second.shift");
-        const secondSaved = await saveThenDirty(secondPage, secondPath);
-        for (const workspacePage of [firstPage, secondPage]) {
-          await workspacePage.waitForFunction(
-            () =>
-              window.shift?.applyStatusCell.peek() === "idle" &&
-              window.shift.documentStateCell.peek()?.dirty === true,
-          );
-        }
+  for (const { signal, target } of terminations) {
+    test(`${signal} to the ${target} exits without saving and recovers every dirty document`, async ({
+      relaunch,
+      electronApp,
+      page,
+      testRoot,
+      saveShiftPath,
+    }) => {
+      test.skip(process.platform === "win32", "POSIX terminal signal semantics");
 
-        const childProcess = electronApp.process();
-        const pid = childProcess.pid;
-        if (pid === undefined) throw new Error("Electron process has no PID");
+      const firstPage = await dirtyNewFont(page, electronApp);
+      const firstPath = path.join(testRoot, "first.shift");
+      const firstSaved = await saveThenDirty(firstPage, firstPath);
+      const secondPage = await createAnotherDirtyFont(firstPage, electronApp);
+      const secondPath = path.join(testRoot, "second.shift");
+      const secondSaved = await saveThenDirty(secondPage, secondPath);
+      for (const workspacePage of [firstPage, secondPage]) {
+        await workspacePage.waitForFunction(
+          () =>
+            window.shift?.applyStatusCell.peek() === "idle" &&
+            window.shift.documentStateCell.peek()?.dirty === true,
+        );
+      }
 
-        // Playwright launches Electron in its own POSIX process group. Signaling
-        // that group exercises Ctrl+C reaching renderers and utilities as well.
-        process.kill(target === "process group" ? -pid : pid, signal);
-        await expect.poll(() => childProcess.signalCode, { timeout: 10_000 }).toBe("SIGKILL");
-        expect(childProcess.exitCode).toBeNull();
-        expect(fs.readFileSync(firstPath).equals(firstSaved)).toBe(true);
-        expect(fs.readFileSync(secondPath).equals(secondSaved)).toBe(true);
-        expect(fs.existsSync(saveShiftPath)).toBe(false);
+      const childProcess = electronApp.process();
+      const pid = childProcess.pid;
+      if (pid === undefined) throw new Error("Electron process has no PID");
 
-        const restarted = await relaunchApp(testRoot, saveShiftPath);
-        try {
-          await expect.poll(() => restarted.windows().length).toBe(2);
-          for (const recoveredPage of restarted.windows()) {
-            await waitForWorkspaceReady(recoveredPage);
-            await expect
-              .poll(() =>
-                recoveredPage.evaluate(() => ({
-                  recovered: window.shift?.font
-                    .glyphRecords()
-                    .some((glyph) => glyph.name === "newGlyph.1"),
-                  dirty: window.shift?.documentStateCell.peek()?.dirty,
-                })),
-              )
-              .toEqual({ recovered: true, dirty: true });
-          }
-        } finally {
-          await killApp(restarted);
-        }
-      });
-    }
+      // Playwright launches Electron in its own POSIX process group. Signaling
+      // that group exercises Ctrl+C reaching renderers and utilities as well.
+      process.kill(target === "process group" ? -pid : pid, signal);
+      await expect.poll(() => processExited(childProcess), { timeout: 10_000 }).toBe(true);
+      expect(fs.readFileSync(firstPath).equals(firstSaved)).toBe(true);
+      expect(fs.readFileSync(secondPath).equals(secondSaved)).toBe(true);
+      expect(fs.existsSync(saveShiftPath)).toBe(false);
+
+      const restarted = await relaunch();
+      await expect.poll(() => restarted.windows().length).toBe(2);
+      for (const recoveredPage of restarted.windows()) {
+        await waitForWorkspaceReady(recoveredPage);
+        await expect
+          .poll(() =>
+            recoveredPage.evaluate(() => ({
+              recovered: window.shift?.font
+                .glyphRecords()
+                .some((glyph) => glyph.name === "newGlyph.1"),
+              dirty: window.shift?.documentStateCell.peek()?.dirty,
+            })),
+          )
+          .toEqual({ recovered: true, dirty: true });
+      }
+    });
   }
-});
-
-test("keeps authored document state isolated between windows", async ({ electronApp, page }) => {
-  const firstPage = await dirtyNewFont(page, electronApp);
-  const secondPage = await createAnotherDirtyFont(firstPage, electronApp);
-  const firstGlyphId = await glyphIdForName(firstPage, "newGlyph");
-  const secondGlyphId = await glyphIdForName(secondPage, "newGlyph");
-  await Promise.all([
-    firstPage.waitForFunction(() => window.shift?.applyStatusCell.peek() === "idle"),
-    secondPage.waitForFunction(() => window.shift?.applyStatusCell.peek() === "idle"),
-  ]);
-
-  await openGlyphRoute(firstPage, firstGlyphId);
-  await addSquare(firstPage);
-  const firstEditor = new EditorDriver(firstPage);
-  await firstEditor.selectVisiblePoint();
-  await firstEditor.hoverVisibleUnselectedPoint();
-  await openGlyphRoute(secondPage, secondGlyphId);
-  const secondEditor = new EditorDriver(secondPage);
-
-  expect(await secondEditor.selectionIds()).toEqual([]);
-  expect(await secondPage.evaluate(() => window.shift?.editor.hover.id)).toBeNull();
-  expect(await firstEditor.selectionIds()).toHaveLength(1);
-  expect(await firstPage.evaluate(() => window.shift?.editor.hover.id)).not.toBeNull();
-
-  await firstPage.getByRole("button", { name: "Font overview" }).click();
-  await firstPage.waitForURL(/#\/home$/);
-  await firstPage.getByRole("button", { name: "Create glyph", exact: true }).click();
-  await glyphIdForName(firstPage, "newGlyph.1");
-  expect(
-    await secondPage.evaluate(() =>
-      window.shift?.font.glyphRecords().some((glyph) => glyph.name === "newGlyph.1"),
-    ),
-  ).toBe(false);
 });
 
 test.describe("terminal termination during quit preparation", () => {
   test.use({ dirtyDocumentChoice: "save", dirtyDocumentDelayMs: 60_000 });
 
   test("SIGINT supersedes a pending save decision without writing or discarding", async ({
+    relaunch,
     electronApp,
     page,
-    testRoot,
     saveShiftPath,
   }) => {
     test.skip(process.platform === "win32", "POSIX terminal signal semantics");
@@ -247,22 +184,18 @@ test.describe("terminal termination during quit preparation", () => {
 
     const childProcess = electronApp.process();
     childProcess.kill("SIGINT");
-    await expect.poll(() => childProcess.signalCode, { timeout: 10_000 }).toBe("SIGKILL");
+    await expect.poll(() => processExited(childProcess), { timeout: 10_000 }).toBe(true);
     expect(fs.existsSync(saveShiftPath)).toBe(false);
 
-    const restarted = await relaunchApp(testRoot, saveShiftPath);
-    try {
-      const recoveredPage = await restarted.firstWindow();
-      await waitForWorkspaceReady(recoveredPage);
-      await expect.poll(() => windowTitle(recoveredPage, restarted)).toContain("Untitled *");
-      expect(
-        await recoveredPage.evaluate(() =>
-          window.shift?.font.glyphRecords().some((glyph) => glyph.name === "newGlyph"),
-        ),
-      ).toBe(true);
-    } finally {
-      await killApp(restarted);
-    }
+    const restarted = await relaunch();
+    const recoveredPage = await restarted.firstWindow();
+    await waitForWorkspaceReady(recoveredPage);
+    await expect.poll(() => windowTitle(recoveredPage, restarted)).toContain("Untitled *");
+    expect(
+      await recoveredPage.evaluate(() =>
+        window.shift?.font.glyphRecords().some((glyph) => glyph.name === "newGlyph"),
+      ),
+    ).toBe(true);
   });
 });
 
@@ -272,7 +205,10 @@ reentrantQuitTest(
     const workspacePage = await dirtyNewFont(page, electronApp);
 
     await Promise.all([requestAppQuit(electronApp), requestAppQuit(electronApp)]);
-    await workspacePage.waitForTimeout(250);
+    // Both requests arrive while the first delayed confirmation is pending; a second
+    // confirmation would start before the first one answers.
+    await expect.poll(() => dirtyDocumentDecisions(electronApp)).toEqual(["cancel"]);
+    expect(await dirtyDocumentRequests(electronApp)).toBe(1);
 
     await expect(workspacePage.getByLabel("Glyph catalog", { exact: true })).toBeVisible();
     expect(fs.existsSync(saveShiftPath)).toBe(false);

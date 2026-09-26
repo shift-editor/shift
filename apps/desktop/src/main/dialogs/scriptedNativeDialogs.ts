@@ -1,5 +1,5 @@
 import type { DirtyDocumentChoice, DocumentCrashChoice } from "../document/types";
-import type { NativeDialogs } from "./NativeDialogs";
+import type { NativeDialogs, ScriptedDialogLog } from "./NativeDialogs";
 
 const dirtyDocumentChoices = parseDirtyDocumentChoices(
   process.env.SHIFT_E2E_DIRTY_DOCUMENT_CHOICES,
@@ -33,15 +33,13 @@ export const scriptedNativeDialogs: NativeDialogs = {
   },
 
   async confirmDirtyDocument() {
+    const log = scriptedDialogLog();
+    log.dirtyDocumentRequests++;
     await dirtyDocumentDelay();
 
-    const choice = dirtyDocumentChoices[dirtyDocumentChoiceIndex];
-    if (choice) {
-      dirtyDocumentChoiceIndex++;
-      return choice;
-    }
-
-    return dirtyDocumentChoice(process.env.SHIFT_E2E_DIRTY_DOCUMENT_CHOICE);
+    const choice = nextDirtyDocumentChoice();
+    log.dirtyDocumentDecisions.push(choice);
+    return choice;
   },
 
   async confirmDocumentReopen() {
@@ -52,6 +50,19 @@ export const scriptedNativeDialogs: NativeDialogs = {
 
   async showExportFailure() {},
 };
+
+function nextDirtyDocumentChoice(): DirtyDocumentChoice {
+  const choice = dirtyDocumentChoices[dirtyDocumentChoiceIndex];
+  if (!choice) return dirtyDocumentChoice(process.env.SHIFT_E2E_DIRTY_DOCUMENT_CHOICE);
+
+  dirtyDocumentChoiceIndex++;
+  return choice;
+}
+
+function scriptedDialogLog(): ScriptedDialogLog {
+  globalThis.shiftScriptedDialogs ??= { dirtyDocumentRequests: 0, dirtyDocumentDecisions: [] };
+  return globalThis.shiftScriptedDialogs;
+}
 
 function documentCrashChoice(value: string | undefined): DocumentCrashChoice {
   switch (value) {

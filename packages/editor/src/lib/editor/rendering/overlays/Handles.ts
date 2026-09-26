@@ -2,6 +2,7 @@ import type { PointId, ContourId } from "@shift/types";
 import type { GlyphContour } from "../../../model/ComponentGlyph";
 import type { Hover } from "../../Hover";
 import type { Selection } from "../../Selection";
+import type { HandleState } from "../../../../types/graphics";
 import type { GlyphNode } from "../../../../types/node";
 import type { RenderContext } from "../../../../types/rendering";
 import { HandleItems } from "./handles/HandleItems";
@@ -42,5 +43,25 @@ export class Handles {
       return;
 
     this.#canvas.draw(ctx.canvas, list.items);
+  }
+
+  /**
+   * Returns the state of every handle {@link draw} would render for the same inputs.
+   *
+   * @returns Handle state keyed by point, in drawing order.
+   */
+  states(
+    contours: readonly GlyphContour[],
+    selection: Selection,
+    hover: Hover,
+    interpolated: boolean,
+    isVisible?: (pointId: PointId, contourId: ContourId) => boolean,
+  ): ReadonlyMap<PointId, HandleState> {
+    const list = new HandleItems().fromContours(
+      contours.map((contour) => contour.contour),
+      { selection, hover, interpolated },
+      isVisible,
+    );
+    return new Map(list.items.map((item) => [item.point.id, item.state]));
   }
 }

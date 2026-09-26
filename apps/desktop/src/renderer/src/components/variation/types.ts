@@ -15,5 +15,7 @@ export interface OutlineVisibilityButtonProps {
   readonly inherited?: boolean;
   readonly alwaysOpen?: boolean;
   readonly label: string;
+  /** Record whose outline the button controls; names the button apart from sibling rows. */
+  readonly subject?: string;
   readonly onClick: () => void;
 }

@@ -17,6 +17,8 @@ import * as path from "path";
 import { once } from "events";
 import type { Unicode } from "@shift/types";
 import { copyImportedSource, createAuthoredDocument } from "./fontSource";
+import { EditorDriver } from "./EditorDriver";
+import type { RecordedDialog } from "./types";
 
 const APP_ROOT = path.resolve(__dirname, "../..");
 const MAIN_JS = path.join(APP_ROOT, ".vite/build/main.js");
@@ -44,6 +46,7 @@ const CONTENT_HEIGHT = 650;
 export type PerfFixtures = {
   electronApp: ElectronApplication;
   page: Page;
+  editor: EditorDriver;
   sourcePath: string;
 };
 
@@ -129,10 +132,21 @@ function createAppTest(fontPath: string, prepareSource: typeof createAuthoredDoc
       await page.waitForLoadState("domcontentloaded");
       await page.waitForURL(/#\/home/, { timeout: 20_000 });
 
-      // Auto-dismiss native save dialogs that interrupt tests.
-      page.on("dialog", (dialog) => dialog.dismiss());
+      const dialogs: RecordedDialog[] = [];
+      page.on("dialog", async (dialog) => {
+        dialogs.push({ type: dialog.type(), message: dialog.message() });
+        await dialog.dismiss();
+      });
 
       await use(page);
+
+      if (dialogs.length > 0) {
+        throw new Error(`Unexpected renderer dialogs: ${JSON.stringify(dialogs)}`);
+      }
+    },
+
+    editor: async ({ page }, use) => {
+      await use(new EditorDriver(page));
     },
   });
 }

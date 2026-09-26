@@ -10,6 +10,7 @@ export const OutlineVisibilityButton = ({
   inherited = false,
   alwaysOpen = false,
   label,
+  subject,
   onClick,
 }: OutlineVisibilityButtonProps) => {
   const [showInheritedIndicator, setShowInheritedIndicator] = useState(inherited);
@@ -45,7 +46,7 @@ export const OutlineVisibilityButton = ({
     <Tooltip>
       <TooltipTrigger>
         <SidebarActionButton
-          label={action}
+          label={subject ? `${action} for ${subject}` : action}
           onClick={() => {
             if (inherited) setShowInheritedIndicator(false);
             if (visible) setShowVisibleIndicator(false);

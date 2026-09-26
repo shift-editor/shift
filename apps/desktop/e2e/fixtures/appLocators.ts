@@ -1,4 +1,5 @@
 import { expect, type Page } from "@playwright/test";
+import type { GlyphId } from "@shift/types";
 
 const FIRST_GLYPH_PREVIEW_POINT = { x: 50, y: 50 };
 const FIRST_GLYPH_NAME_POINT = { x: 50, y: 117 };
@@ -25,6 +26,11 @@ export function glyphCatalogRenderer(page: Page) {
 
 export function editorShell(page: Page) {
   return page.getByTestId("editor-shell");
+}
+
+/** Element compositing the background, scene, marker, and interactive editor canvases. */
+export function editorCanvasStack(page: Page) {
+  return page.getByTestId("editor-canvas-stack");
 }
 
 export function fontNavigation(page: Page) {
@@ -60,13 +66,32 @@ export async function firstAxisSlider(page: Page) {
   return page.getByRole("slider", { name: axisName, exact: true });
 }
 
+/**
+ * Waits until the catalog has laid out its first cell and its preview frame has settled.
+ *
+ * @remarks
+ * Catalog cells have no DOM identity, so coordinate clicks before the Grid settles can land on
+ * an empty surface and never navigate. `Unavailable` is settled too: cells remain laid out and
+ * clickable when a host cannot paint previews, as on software-rendered platform runners.
+ */
+async function waitForCatalogCells(page: Page): Promise<void> {
+  await expect(glyphCatalogSurface(page)).toHaveAttribute("data-first-glyph-id", /.+/);
+  await expect(glyphCatalogRenderer(page)).toHaveAttribute(
+    "data-grid-readiness",
+    /^(Complete|Unavailable)$/,
+    { timeout: 30_000 },
+  );
+}
+
 /** Keeps the catalog preview coordinate contract in one place. */
 export async function clickFirstCatalogGlyph(page: Page): Promise<void> {
+  await waitForCatalogCells(page);
   await glyphCatalogViewport(page).click({ position: FIRST_GLYPH_PREVIEW_POINT });
 }
 
 /** Keeps the catalog name-cell coordinate contract in one place. */
 export async function clickFirstCatalogGlyphName(page: Page): Promise<void> {
+  await waitForCatalogCells(page);
   await glyphCatalogViewport(page).click({ position: FIRST_GLYPH_NAME_POINT });
 }
 
@@ -83,7 +108,7 @@ export async function waitForEditorReady(page: Page, glyphId: string): Promise<v
     .poll(() =>
       page.evaluate(
         (expectedGlyphId) =>
-          window.shift?.editor.scene.nodesOfKind("glyph")[0]?.glyphId === expectedGlyphId,
+          window.shiftSession?.editor.scene.nodesOfKind("glyph")[0]?.glyphId === expectedGlyphId,
         glyphId,
       ),
     )
@@ -97,7 +122,7 @@ export async function waitForEditorReady(page: Page, glyphId: string): Promise<v
  * @param glyphId - catalog identity to acquire before publishing the route.
  * @throws {Error} when the workspace is unavailable or glyph acquisition fails.
  */
-export async function openGlyphRoute(page: Page, glyphId: string): Promise<void> {
+export async function openGlyphRoute(page: Page, glyphId: GlyphId): Promise<void> {
   await page.evaluate(async (id) => {
     const font = window.shift?.font;
     if (!font) throw new Error("Expected font workspace");

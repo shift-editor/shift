@@ -52,6 +52,8 @@ export class SlugGlyphCatalogRenderer implements GlyphCatalogRenderer {
   #hoveredCatalogIndex: number | null = null;
   #firstFrameStarted = false;
   #weightRevision = 0;
+  /** Completed page-set installations, published so E2E can distinguish redraw from rebuild. */
+  #atlasBuildCount = 0;
   #needsRedraw = true;
   #disposed = false;
 
@@ -166,6 +168,7 @@ export class SlugGlyphCatalogRenderer implements GlyphCatalogRenderer {
   update(frame: GlyphCatalogControllerFrame, inputContainer: HTMLDivElement | null): void {
     const previousTarget = this.#targetFrame;
     this.#targetFrame = frame;
+    this.#glyphCanvas.dataset.targetLocation = JSON.stringify(frame.location);
 
     if (
       !previousTarget ||
@@ -335,6 +338,7 @@ export class SlugGlyphCatalogRenderer implements GlyphCatalogRenderer {
         this.#replacementPageIndices.delete(request.pageIndex);
         for (const glyphId of request.glyphIds) this.#invalidGlyphIds.delete(glyphId);
       }
+      this.#atlasBuildCount += 1;
       await this.#synchronizeResolvedWeights(layer);
       if (this.#disposed || this.#atlasBuild !== atlasBuild || atlasBuild.signal.aborted) return;
       this.#activeFrame = this.#targetFrame;
@@ -574,6 +578,8 @@ export class SlugGlyphCatalogRenderer implements GlyphCatalogRenderer {
     this.#glyphCanvas.dataset.targetGlyphCount = String(this.#fontGlyphIds.length);
     const activeLayout = this.#activeFrame ? this.#layout(this.#activeFrame) : null;
     this.#glyphCanvas.dataset.previewHeight = String(activeLayout?.previewHeight ?? 0);
+    this.#glyphCanvas.dataset.atlasBuildCount = String(this.#atlasBuildCount);
+    this.#glyphCanvas.dataset.activeLocation = JSON.stringify(this.#activeFrame?.location ?? null);
 
     let readiness: GridReadiness = "Initial";
     if (this.#activeFrame) readiness = complete ? "Complete" : "Stale";
