@@ -27,18 +27,21 @@ const INTERFACE_SNAPSHOT_OPTIONS = {
 } as const;
 
 /**
- * Canvas goldens compare exactly on every host: software canvas rendering is pixel-identical
- * locally and on CI, and thin or translucent strokes (handles, comparison outlines) change too
- * few pixels, too slightly, for any tolerance to be safe. `threshold: 0` matters as much as
- * `maxDiffPixels: 0`; the default per-pixel threshold accepts colour changes such as a
- * different outline token. Captures keep device pixels, so a HiDPI golden records
- * backing-store detail instead of a CSS-pixel downsample; at 1× the two scales are identical.
+ * Canvas goldens compare on every host with no pixel budget and a small per-pixel threshold.
+ *
+ * @remarks
+ * Development Macs and the hosted runner differ only in antialiased edge pixels, by a YIQ
+ * delta of at most 0.009. A real token change is far larger: moving the translucent
+ * comparison-outline colour changed 3,075 pixels by a median of 0.068. Playwright's default
+ * threshold of 0.2 accepts that change even with `maxDiffPixels: 0`, so the threshold must
+ * stay between the two. Captures keep device pixels, so a HiDPI golden records backing-store
+ * detail instead of a CSS-pixel downsample; at 1× the two scales are identical.
  */
 const CANVAS_SNAPSHOT_OPTIONS = {
   animations: "disabled",
   caret: "hide",
   maxDiffPixels: 0,
-  threshold: 0,
+  threshold: 0.02,
   scale: "device",
 } as const;
 
