@@ -58,6 +58,8 @@ test.describe("Resident Glyph Grid", () => {
     }));
     expect(initialSize.width).toBeGreaterThan(1);
     expect(initialSize.height).toBeGreaterThan(1);
+    const initialBuilds = await atlasBuildCount(glyphCanvas);
+    expect(initialBuilds).toBeGreaterThan(0);
 
     for (let index = 0; index < 12; index += 1) {
       await page.mouse.move(
@@ -111,6 +113,7 @@ test.describe("Resident Glyph Grid", () => {
       )
       .toEqual(initialSize);
     await expectCompleteResidency(glyphCanvas);
+    expect(await atlasBuildCount(glyphCanvas)).toBe(initialBuilds);
     expect(errors).toEqual([]);
   });
 
@@ -133,9 +136,7 @@ test.describe("Resident Glyph Grid", () => {
     await expect(glyphCanvas).toBeVisible({ timeout: 30_000 });
     await expect(glyphCanvas).toHaveAttribute("data-fully-resident", "true");
 
-    await electronApp.evaluate(async ({ BrowserWindow }) => {
-      BrowserWindow.getAllWindows()[0]?.setSize(760, 500);
-    });
+    await resizeWorkspaceWindow(electronApp, page);
     await afterNextPaint(page);
     await expect
       .poll(() => scrollViewport.evaluate((element) => element.scrollHeight > element.clientHeight))
@@ -192,7 +193,7 @@ test.describe("Resident Glyph Grid", () => {
     expect(errors).toEqual([]);
   });
 
-  test("restores the current viewport after a topology edit", async ({ page }) => {
+  test("replaces topology-edited glyphs atomically when returning Home", async ({ page }) => {
     await expect.poll(() => page.evaluate(() => Boolean(navigator.gpu))).toBe(true);
 
     const scrollViewport = glyphCatalogViewport(page);
@@ -242,9 +243,7 @@ test.describe("Resident Glyph Grid", () => {
     await scrollViewport.waitFor({ state: "visible" });
     const glyphCanvas = glyphCatalogCanvas(page);
     await expect(glyphCanvas).toBeVisible({ timeout: 30_000 });
-    await electronApp.evaluate(async ({ BrowserWindow }) => {
-      BrowserWindow.getAllWindows()[0]?.setSize(760, 500);
-    });
+    await resizeWorkspaceWindow(electronApp, page);
     await afterNextPaint(page);
     await expect
       .poll(() => scrollViewport.evaluate((element) => element.scrollHeight > element.clientHeight))
@@ -305,9 +304,9 @@ test.describe("Resident Glyph Grid", () => {
   test("replaces a selected-source deletion atomically", async ({ electronApp, page }) => {
     const glyphCanvas = await prepareCompleteGrid(electronApp, page);
     const variable = await createVariableDesignspace(page);
-    await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
-      timeout: 30_000,
-    });
+    // Arm the observer only after the setup edits have reached a settled frame, so every
+    // recorded transition belongs to the mutation under test.
+    await waitForSettledGrid(page, glyphCanvas);
     await trackGridTransitions(page);
 
     await page.evaluate(async ({ axisId, sourceId }) => {
@@ -333,9 +332,9 @@ test.describe("Resident Glyph Grid", () => {
   }) => {
     const glyphCanvas = await prepareCompleteGrid(electronApp, page);
     const variable = await createVariableDesignspace(page);
-    await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
-      timeout: 30_000,
-    });
+    // Arm the observer only after the setup edits have reached a settled frame, so every
+    // recorded transition belongs to the mutation under test.
+    await waitForSettledGrid(page, glyphCanvas);
     await trackGridTransitions(page);
 
     const deletedAxis = await page.evaluate(async ({ axisId }) => {
@@ -363,7 +362,7 @@ test.describe("Resident Glyph Grid", () => {
     expect(state.hiddenTransitions).toBe(0);
   });
 
-  test("fits oversized outlines without resizing cells while scrubbing an axis", async ({
+  test("keeps cell geometry stable while scrubbing an axis with oversized outlines", async ({
     page,
   }) => {
     const scrollViewport = glyphCatalogViewport(page);
@@ -400,9 +399,7 @@ test.describe("Resident Glyph Grid", () => {
     });
 
     const variable = await createVariableDesignspace(page);
-    await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
-      timeout: 30_000,
-    });
+    await waitForSettledGrid(page, glyphCanvas);
     const initialGeometry = {
       previewHeight: Number(await glyphCanvas.getAttribute("data-preview-height")),
       scrollHeight: await scrollViewport.evaluate((element) => element.scrollHeight),
@@ -415,10 +412,25 @@ test.describe("Resident Glyph Grid", () => {
       );
       if (!workspace || !viewport || !canvas) throw new Error("Expected Grid runtime");
 
+      const nextFrame = () =>
+        new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       const samples: Array<{ previewHeight: number; scrollHeight: number }> = [];
-      for (const value of [400, 500, 650, 800, 900, 650, 400]) {
+      for (const value of [500, 650, 800, 900, 650, 400]) {
+        const previousLocation = canvas.dataset.activeLocation;
         workspace.editor.setExternalLocation(new Map([[axisId, value]]));
-        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        // Sample only once the Grid has rendered this location, never a stale frame.
+        for (let frame = 0; frame < 600; frame += 1) {
+          await nextFrame();
+          if (
+            canvas.dataset.activeLocation !== previousLocation &&
+            canvas.dataset.activeLocation === canvas.dataset.targetLocation
+          ) {
+            break;
+          }
+        }
+        if (canvas.dataset.activeLocation === previousLocation) {
+          throw new Error(`Grid did not render axis value ${value}`);
+        }
         samples.push({
           previewHeight: Number(canvas.dataset.previewHeight),
           scrollHeight: viewport.scrollHeight,
@@ -484,16 +496,48 @@ async function createVariableDesignspace(
 
 async function prepareCompleteGrid(electronApp: ElectronApplication, page: Page): Promise<Locator> {
   await expect.poll(() => page.evaluate(() => Boolean(navigator.gpu))).toBe(true);
-  await electronApp.evaluate(async ({ BrowserWindow }) => {
-    BrowserWindow.getAllWindows()[0]?.setSize(760, 500);
-  });
+  await resizeWorkspaceWindow(electronApp, page);
 
-  const scrollViewport = glyphCatalogViewport(page);
   const glyphCanvas = glyphCatalogCanvas(page);
+  await waitForSettledGrid(page, glyphCanvas);
+  return glyphCanvas;
+}
+
+/**
+ * Shortens the window that owns `page` so the catalog scrolls, and waits for the new viewport.
+ *
+ * @remarks
+ * Workspace windows enforce a minimum width, so only the height can shrink.
+ */
+async function resizeWorkspaceWindow(electronApp: ElectronApplication, page: Page): Promise<void> {
+  const browserWindow = await electronApp.browserWindow(page);
+  await browserWindow.evaluate((window) =>
+    window.setContentSize(window.getContentSize()[0] ?? 0, 450),
+  );
+  await browserWindow.dispose();
+  await expect.poll(() => page.evaluate(() => window.innerHeight)).toBe(450);
+}
+
+/** Waits until the Grid has rendered its current target location with complete residency. */
+async function waitForSettledGrid(page: Page, glyphCanvas: Locator): Promise<void> {
+  await page.evaluate(async () => {
+    await window.shift?.font.editCoordinator.settled();
+  });
+  await afterNextPaint(page);
   await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
     timeout: 30_000,
   });
-  return glyphCanvas;
+  await expect
+    .poll(() =>
+      glyphCanvas.evaluate(
+        (canvas) => canvas.dataset.activeLocation === canvas.dataset.targetLocation,
+      ),
+    )
+    .toBe(true);
+}
+
+async function atlasBuildCount(glyphCanvas: Locator): Promise<number> {
+  return Number(await glyphCanvas.getAttribute("data-atlas-build-count"));
 }
 
 async function trackGridTransitions(page: Page): Promise<void> {
