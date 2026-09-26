@@ -326,8 +326,14 @@ describe("font-level intents make the font variable", () => {
     await stack.createWorkspace();
     const axisId = stack.font.createAxis(weightAxis());
     await stack.editCoordinator.settled();
-    const mediumSourceId = stack.font.createSource("Medium", new Map([[axisId, 600]]));
-    const boldSourceId = stack.font.createSource("Bold", new Map([[axisId, 900]]));
+    const mediumSourceId = stack.font.createSource(
+      "Medium",
+      externalAxisLocationFromRecord({ [axisId]: 600 }),
+    );
+    const boldSourceId = stack.font.createSource(
+      "Bold",
+      externalAxisLocationFromRecord({ [axisId]: 900 }),
+    );
     stack.font.createNamedInstance({
       name: "Display",
       postscriptName: "UntitledFont-Display",
@@ -369,10 +375,7 @@ describe("font-level intents make the font variable", () => {
     await stack.editCoordinator.settled();
     const boldSourceId = stack.font.createSource(
       "Bold Wide",
-      new Map([
-        [weightAxisId, 900],
-        [widthAxisId, 150],
-      ]),
+      externalAxisLocationFromRecord({ [weightAxisId]: 900, [widthAxisId]: 150 }),
     );
     const instanceId = stack.font.createNamedInstance({
       name: "Display",

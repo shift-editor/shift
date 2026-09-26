@@ -80,10 +80,9 @@ describe("application command menu items", () => {
   it("separates canvas zoom from interface size in View", () => {
     const items = viewMenuItems(run, enabled);
     const interfaceSize = items.find(({ label }) => label === "Interface Size");
+    const sizeItems = (interfaceSize?.submenu ?? []) as MenuItemConstructorOptions[];
 
     expect(ids(items)).toEqual(["view.zoomIn", "view.zoomOut"]);
-    expect(
-      (interfaceSize?.submenu as MenuItemConstructorOptions[]).map(({ label }) => label),
-    ).toEqual(["Increase", "Decrease", "Reset"]);
+    expect(sizeItems.map(({ label }) => label)).toEqual(["Increase", "Decrease", "Reset"]);
   });
 });
