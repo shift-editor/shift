@@ -7,6 +7,7 @@ import {
   glyphCatalogViewport,
   openCatalogGlyph,
 } from "./fixtures/appLocators";
+import type { ExternalAxisLocation } from "@shift/editor/types";
 
 const RESIDENT_GPU_ERROR = /resident glyph (device lost|frame failed|initialization failed)/i;
 
@@ -40,7 +41,7 @@ test.describe("Resident Glyph Grid", () => {
     await afterNextPaint(page);
     await expect
       .poll(() =>
-        glyphCanvas.evaluate((canvas) => {
+        glyphCanvas.evaluate((canvas: HTMLCanvasElement) => {
           const bounds = canvas.getBoundingClientRect();
           const scale = window.devicePixelRatio;
           return (
@@ -51,7 +52,7 @@ test.describe("Resident Glyph Grid", () => {
       )
       .toBe(true);
 
-    const initialSize = await glyphCanvas.evaluate((canvas) => ({
+    const initialSize = await glyphCanvas.evaluate((canvas: HTMLCanvasElement) => ({
       width: canvas.width,
       height: canvas.height,
     }));
@@ -71,7 +72,10 @@ test.describe("Resident Glyph Grid", () => {
     await expectCompleteResidency(glyphCanvas);
     await expect
       .poll(() =>
-        glyphCanvas.evaluate((canvas) => ({ width: canvas.width, height: canvas.height })),
+        glyphCanvas.evaluate((canvas: HTMLCanvasElement) => ({
+          width: canvas.width,
+          height: canvas.height,
+        })),
       )
       .toEqual(initialSize);
 
@@ -83,7 +87,10 @@ test.describe("Resident Glyph Grid", () => {
 
     await expect
       .poll(() =>
-        glyphCanvas.evaluate((canvas) => ({ width: canvas.width, height: canvas.height })),
+        glyphCanvas.evaluate((canvas: HTMLCanvasElement) => ({
+          width: canvas.width,
+          height: canvas.height,
+        })),
       )
       .toEqual(initialSize);
 
@@ -96,7 +103,7 @@ test.describe("Resident Glyph Grid", () => {
 
     const catalogSurface = glyphCatalogSurface(page);
     const returnedFrame = await catalogSurface.screenshot();
-    const previousVisibility = await glyphCanvas.evaluate((canvas) => {
+    const previousVisibility = await glyphCanvas.evaluate((canvas: HTMLCanvasElement) => {
       const visibility = canvas.style.visibility;
       canvas.style.visibility = "hidden";
       return visibility;
@@ -108,7 +115,10 @@ test.describe("Resident Glyph Grid", () => {
     expect(returnedFrame.equals(frameWithoutGlyphs)).toBe(false);
     await expect
       .poll(() =>
-        glyphCanvas.evaluate((canvas) => ({ width: canvas.width, height: canvas.height })),
+        glyphCanvas.evaluate((canvas: HTMLCanvasElement) => ({
+          width: canvas.width,
+          height: canvas.height,
+        })),
       )
       .toEqual(initialSize);
     await expectCompleteResidency(glyphCanvas);
@@ -170,7 +180,7 @@ test.describe("Resident Glyph Grid", () => {
       await expectCompleteResidency(glyphCanvas);
 
       const paintedFrame = await catalogSurface.screenshot();
-      const visibility = await glyphCanvas.evaluate((canvas) => {
+      const visibility = await glyphCanvas.evaluate((canvas: HTMLCanvasElement) => {
         document.documentElement.dataset.slugIgnoreHiddenTransitions = "true";
         const previous = canvas.style.visibility;
         canvas.style.visibility = "hidden";
@@ -288,7 +298,7 @@ test.describe("Resident Glyph Grid", () => {
 
     const catalogSurface = glyphCatalogSurface(page);
     const paintedFrame = await catalogSurface.screenshot();
-    const visibility = await glyphCanvas.evaluate((canvas) => {
+    const visibility = await glyphCanvas.evaluate((canvas: HTMLCanvasElement) => {
       const previous = canvas.style.visibility;
       canvas.style.visibility = "hidden";
       return previous;
@@ -312,7 +322,9 @@ test.describe("Resident Glyph Grid", () => {
       const workspace = window.shift;
       if (!workspace) throw new Error("Expected workspace");
 
-      workspace.editor.setExternalLocation(new Map([[axisId, 900]]));
+      workspace.editor.setExternalLocation(
+        new Map([[axisId, 900]]) as unknown as ExternalAxisLocation,
+      );
       workspace.font.deleteSource(sourceId);
       await workspace.font.editCoordinator.settled();
     }, variable);
@@ -340,7 +352,9 @@ test.describe("Resident Glyph Grid", () => {
       const workspace = window.shift;
       if (!workspace) throw new Error("Expected workspace");
 
-      workspace.editor.setExternalLocation(new Map([[axisId, 750]]));
+      workspace.editor.setExternalLocation(
+        new Map([[axisId, 750]]) as unknown as ExternalAxisLocation,
+      );
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       workspace.font.deleteAxis(axisId);
       await workspace.font.editCoordinator.settled();
@@ -416,7 +430,9 @@ test.describe("Resident Glyph Grid", () => {
       const samples: Array<{ previewHeight: number; scrollHeight: number }> = [];
       for (const value of [500, 650, 800, 900, 650, 400]) {
         const previousLocation = canvas.dataset.activeLocation;
-        workspace.editor.setExternalLocation(new Map([[axisId, value]]));
+        workspace.editor.setExternalLocation(
+          new Map([[axisId, value]]) as unknown as ExternalAxisLocation,
+        );
         // Sample only once the Grid has rendered this location, never a stale frame.
         for (let frame = 0; frame < 600; frame += 1) {
           await nextFrame();
@@ -443,7 +459,7 @@ test.describe("Resident Glyph Grid", () => {
     );
     await expect(glyphCanvas).toBeVisible();
     const renderedFrame = await catalogSurface.screenshot();
-    const visibility = await glyphCanvas.evaluate((canvas) => {
+    const visibility = await glyphCanvas.evaluate((canvas: HTMLCanvasElement) => {
       const previous = canvas.style.visibility;
       canvas.style.visibility = "hidden";
       return previous;
@@ -475,7 +491,10 @@ async function createVariableDesignspace(
       hidden: false,
     });
     await font.editCoordinator.settled();
-    const sourceId = font.createSource("Bold", new Map([[axisId, 900]]));
+    const sourceId = font.createSource(
+      "Bold",
+      new Map([[axisId, 900]]) as unknown as ExternalAxisLocation,
+    );
     await font.editCoordinator.settled();
     const source = font.sources.find((candidate) => candidate.id === sourceId);
     if (!source || source.metricValues.length === 0) {
@@ -596,7 +615,7 @@ async function expectCompleteResidency(glyphCanvas: Locator): Promise<void> {
     timeout: 30_000,
   });
   await expect(glyphCanvas).toHaveAttribute("data-fully-resident", "true");
-  const residency = await glyphCanvas.evaluate((canvas) => ({
+  const residency = await glyphCanvas.evaluate((canvas: HTMLCanvasElement) => ({
     resident: Number(canvas.dataset.residentGlyphCount),
     target: Number(canvas.dataset.targetGlyphCount),
   }));

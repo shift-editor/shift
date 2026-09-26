@@ -12,10 +12,10 @@ import { applicationMenuItemEnabled, clickApplicationMenuItem } from "./fixtures
 import type { EditorDriver } from "./fixtures/EditorDriver";
 
 const binaryPreviewTest = launcherTest.extend({
-  openFontPath: [FONT_PATH, { option: true }],
+  openFontPath: FONT_PATH,
 });
 const convertiblePreviewTest = launcherTest.extend({
-  openFontPath: [UFO_FONT_PATH, { option: true }],
+  openFontPath: UFO_FONT_PATH,
 });
 
 async function openSelectedPreview(page: Page, electronApp: ElectronApplication): Promise<Page> {
@@ -155,7 +155,7 @@ launcherTest("Feedback opens a modeless composer", async ({ electronApp, page })
 
   await feedback.press(process.platform === "darwin" ? "Meta+A" : "Control+A");
   expect(
-    await feedback.evaluate((textarea) => ({
+    await feedback.evaluate((textarea: HTMLTextAreaElement) => ({
       start: textarea.selectionStart,
       end: textarea.selectionEnd,
       length: textarea.value.length,
@@ -456,7 +456,7 @@ authoredTest(
 
     const search = page.getByPlaceholder("Search glyphs...");
     await search.fill("Alpha");
-    await search.evaluate((input) => input.select());
+    await search.evaluate((input: HTMLInputElement) => input.select());
     await clickApplicationMenuItem(page, electronApp, "edit.copy");
     await expect
       .poll(() => electronApp.evaluate(({ clipboard }) => clipboard.readText()))

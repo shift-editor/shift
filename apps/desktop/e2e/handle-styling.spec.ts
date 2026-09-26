@@ -8,9 +8,10 @@ import {
   navigateToEditor,
 } from "./fixtures/electronApp";
 import { clickFirstCatalogGlyph, openVariationControls } from "./fixtures/appLocators";
+import type { ExternalAxisLocation } from "@shift/editor/types";
 
 const authoredTest = workspaceTest.extend({ startupFontPath: DESIGNSPACE_FONT_PATH });
-const previewTest = documentTest.extend({ openFontPath: [FONT_PATH, { option: true }] });
+const previewTest = documentTest.extend({ openFontPath: FONT_PATH });
 
 interface DrawnHandles {
   /** Distinct handle states drawn, sorted. */
@@ -97,7 +98,7 @@ authoredTest("named instances between sources draw interpolated handles", async 
             font
               .getAxes()
               .map((axis) => [axis.id, instance.location.values[axis.id] ?? axis.default]),
-          ),
+          ) as unknown as ExternalAxisLocation,
         ),
     );
   });

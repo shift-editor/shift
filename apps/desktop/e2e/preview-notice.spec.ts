@@ -1,7 +1,7 @@
 import { documentTest, expect, FONT_PATH } from "./fixtures/electronApp";
 
 const test = documentTest.extend({
-  openFontPath: [FONT_PATH, { option: true }],
+  openFontPath: FONT_PATH,
 });
 
 test("read-only preview notice matches snapshot", async ({ electronApp, page }) => {

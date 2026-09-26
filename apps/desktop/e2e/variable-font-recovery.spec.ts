@@ -1,6 +1,7 @@
 import type { Page } from "@playwright/test";
 import type { Axis, AxisId, NamedInstance, NamedInstanceId, Source, SourceId } from "@shift/types";
 import { expect, recoveryTest as test, type RecoveryApp } from "./fixtures/electronApp";
+import type { ExternalAxisLocation } from "@shift/editor/types";
 
 interface ObservedVariableFont {
   axes: Axis[];
@@ -129,8 +130,14 @@ async function authorSourceTopology(page: Page): Promise<SourceFixture> {
     });
     await font.editCoordinator.settled();
 
-    const mediumSourceId = font.createSource("Medium", new Map([[axisId, 600]]));
-    const boldSourceId = font.createSource("Bold", new Map([[axisId, 900]]));
+    const mediumSourceId = font.createSource(
+      "Medium",
+      new Map([[axisId, 600]]) as unknown as ExternalAxisLocation,
+    );
+    const boldSourceId = font.createSource(
+      "Bold",
+      new Map([[axisId, 900]]) as unknown as ExternalAxisLocation,
+    );
     const instanceId = font.createNamedInstance({
       name: "Display",
       postscriptName: "MutatorSans-Display",
@@ -207,7 +214,7 @@ async function authorAxisTopology(page: Page): Promise<AxisFixture> {
         [weightAxisId, 900],
         [widthAxisId, 150],
         [slantAxisId, -8],
-      ]),
+      ]) as unknown as ExternalAxisLocation,
     );
     const instanceId = font.createNamedInstance({
       name: "Display",

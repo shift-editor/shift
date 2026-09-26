@@ -6,6 +6,7 @@ import {
   navigateToEditor,
 } from "./fixtures/electronApp";
 import { editorSidebar, openVariationControls, variationControls } from "./fixtures/appLocators";
+import type { ExternalAxisLocation } from "@shift/editor/types";
 
 const test = workspaceTest.extend({ startupFontPath: DESIGNSPACE_FONT_PATH });
 
@@ -164,7 +165,7 @@ test("selects displayed objects at an interpolated instance", async ({ page, edi
             font
               .getAxes()
               .map((axis) => [axis.id, instance.location.values[axis.id] ?? axis.default]),
-          ),
+          ) as unknown as ExternalAxisLocation,
         ),
     )?.id;
   });

@@ -9,6 +9,7 @@ import {
   openCatalogGlyph,
   openVariationControls,
 } from "./fixtures/appLocators";
+import type { ExternalAxisLocation } from "@shift/editor/types";
 
 interface VariableNavigationFixture {
   axisId: AxisId;
@@ -63,7 +64,7 @@ async function createVariableNavigationFixture(page: Page): Promise<VariableNavi
       hidden: false,
     });
     await font.editCoordinator.settled();
-    const boldLocation = new Map([[axisId, 900]]);
+    const boldLocation = new Map([[axisId, 900]]) as unknown as ExternalAxisLocation;
     const boldSourceId = font.createSource("Navigation Bold", boldLocation);
     await font.editCoordinator.settled();
     font.materializeGlyphLayer(
@@ -121,7 +122,7 @@ async function expectPreview(
         ({ axisId, glyphId }) => {
           const workspace = window.shift;
           const glyph = workspace?.editor.glyphForId(glyphId);
-          const geometry = glyph?.geometryAt(workspace.editor.externalLocation);
+          const geometry = workspace && glyph?.geometryAt(workspace.editor.externalLocation);
           const point = geometry?.allPoints[0];
           return {
             location: workspace?.editor.externalLocation.get(axisId),

@@ -1,6 +1,7 @@
 import type { Locator, Page } from "@playwright/test";
 import type { AxisId, NamedInstanceId, SourceId } from "@shift/types";
 import { expect, workspaceTest as test } from "./fixtures/electronApp";
+import type { ExternalAxisLocation } from "@shift/editor/types";
 
 interface VariableFixture {
   axisId: AxisId;
@@ -37,7 +38,10 @@ async function createVariableFixture(page: Page): Promise<VariableFixture> {
       hidden: false,
     });
     await font.editCoordinator.settled();
-    const sourceId = font.createSource("Bold", new Map([[axisId, 900]]));
+    const sourceId = font.createSource(
+      "Bold",
+      new Map([[axisId, 900]]) as unknown as ExternalAxisLocation,
+    );
     const instanceId = font.createNamedInstance({
       name: "Black",
       location: { values: { [axisId]: 800 } },
