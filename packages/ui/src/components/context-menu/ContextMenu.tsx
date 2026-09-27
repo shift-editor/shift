@@ -1,6 +1,7 @@
 import * as React from "react";
 import { ContextMenu as BaseContextMenu } from "@base-ui-components/react/context-menu";
 import { cn } from "../../lib/utils";
+import { usePortalContainer } from "../portal";
 import { menuItemStyles, menuPopupStyles } from "../menu/styles";
 
 export interface ContextMenuProps extends React.ComponentProps<typeof BaseContextMenu.Root> {}
@@ -19,7 +20,10 @@ export const ContextMenuTrigger = React.forwardRef<
 ));
 ContextMenuTrigger.displayName = "ContextMenuTrigger";
 
-export const ContextMenuPortal = BaseContextMenu.Portal;
+export function ContextMenuPortal(props: React.ComponentProps<typeof BaseContextMenu.Portal>) {
+  const container = usePortalContainer();
+  return <BaseContextMenu.Portal container={container} {...props} />;
+}
 
 export interface ContextMenuPositionerProps extends React.ComponentPropsWithoutRef<
   typeof BaseContextMenu.Positioner

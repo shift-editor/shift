@@ -1823,6 +1823,8 @@ class SourceGeometryCache implements GlyphRenderGeometry {
  * Font assembles every authored layer and component dependency before making
  * this object available. Collection replacements preserve Glyph identity while
  * layer geometry continues to update through each GlyphLayerState signal graph.
+ *
+ * @beta Embedders may use this type; its members can change between SDK minor versions.
  */
 export class Glyph {
   readonly #entryCell: WritableSignal<GlyphEntry>;

@@ -12,6 +12,12 @@ export function cloneExternalAxisLocation(location: ExternalAxisLocation): Exter
   return new Map(location) as unknown as ExternalAxisLocation;
 }
 
+/**
+ * Builds a user-space axis location from plain `{ axisId: value }` pairs.
+ *
+ * @param values - Axis values keyed by axis id; axes left out take their default.
+ * @returns A new location the caller owns; the input record is not retained.
+ */
 export function externalAxisLocationFromRecord(
   values: Readonly<Record<string, number>>,
 ): ExternalAxisLocation {

@@ -92,6 +92,7 @@ typings/
 # Vite
 .vite/
 packages/sdk/dist/
+packages/sdk/.api-temp/
 
 # Playwright
 apps/desktop/e2e/test-results/
