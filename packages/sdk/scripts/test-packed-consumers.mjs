@@ -27,6 +27,10 @@ try {
     "package/dist/ui.js",
     "package/dist/ui.d.ts",
     "package/dist/style.css",
+    "package/LICENSE-MIT",
+    "package/LICENSE-APACHE",
+    "package/THIRD_PARTY_NOTICES.md",
+    "package/THIRD_PARTY_LICENSES.txt",
   ]) {
     assert(entries.includes(required), `packed SDK is missing ${required}`);
   }

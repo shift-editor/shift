@@ -26,10 +26,12 @@
     "dist",
     "LICENSE-APACHE",
     "LICENSE-MIT",
+    "THIRD_PARTY_LICENSES.txt",
     "THIRD_PARTY_NOTICES.md"
   ],
   "scripts": {
     "build": "node scripts/build.mjs",
+    "prepack": "node ../../scripts/generate-third-party-licenses.mjs sdk THIRD_PARTY_LICENSES.txt",
     "typecheck": "tsgo --noEmit",
     "generate:inter-a-fixture": "node scripts/generate-inter-a-fixture.mjs",
     "test:packed": "pnpm build && node scripts/test-packed-consumers.mjs",
