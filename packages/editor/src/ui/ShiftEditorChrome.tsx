@@ -10,6 +10,13 @@ export interface ShiftEditorChromeProps {
   session: EditorUISession;
 }
 
+/**
+ * Renders the complete editor: toolbar, variation sidebar, canvas, and glyph sidebar.
+ *
+ * @remarks
+ * Fills its container and owns sidebar visibility. Compose the individual
+ * components inside {@link ShiftEditorRoot} for a different layout.
+ */
 export function ShiftEditorChrome({ session }: ShiftEditorChromeProps) {
   const [leftSidebarOpen, setLeftSidebarOpen] = useState(true);
   const [rightSidebarOpen, setRightSidebarOpen] = useState(true);

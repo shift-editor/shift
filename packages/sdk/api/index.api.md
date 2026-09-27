@@ -319,7 +319,7 @@ export function effect(fn: () => void | (() => void), options?: EffectOptions): 
 // @public
 export type ExternalAxisLocation = AxisLocation<"external">;
 
-// @public (undocumented)
+// @public
 export function externalAxisLocationFromRecord(values: Readonly<Record<string, number>>): ExternalAxisLocation;
 
 // @beta

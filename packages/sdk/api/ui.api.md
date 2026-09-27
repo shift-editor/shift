@@ -7,38 +7,29 @@
 import { JSX } from 'react';
 import { ReactNode } from 'react';
 
-// @public (undocumented)
+// @public
 export function EditorToolbar(input: EditorToolbarProps): JSX.Element;
 
-// @public (undocumented)
+// @public
 export interface EditorToolbarHost {
-    // (undocumented)
     documentEdited: boolean;
-    // (undocumented)
     documentTitle: string;
-    // (undocumented)
     navigation?: ReactNode;
-    // (undocumented)
     windowControls?: ReactNode;
 }
 
 // @public (undocumented)
 export interface EditorToolbarProps {
-    // (undocumented)
     host?: EditorToolbarHost;
-    // (undocumented)
     leftSidebarOpen?: boolean;
-    // (undocumented)
     onToggleLeftSidebar?: () => void;
-    // (undocumented)
     onToggleRightSidebar?: () => void;
-    // (undocumented)
     rightSidebarOpen?: boolean;
     // (undocumented)
     session: EditorUISession;
 }
 
-// @public (undocumented)
+// @public
 export interface EditorUISession {
     // Warning: (ae-forgotten-export) The symbol "Editor" needs to be exported by the entry point ui.d.ts
     //
@@ -52,15 +43,13 @@ export interface EditorUISession {
     readonly mode: "preview" | "memory" | "workspace";
 }
 
-// @public (undocumented)
+// @public
 export function GlyphSidebar(input: GlyphSidebarProps): JSX.Element;
 
-// @public (undocumented)
+// @public
 export interface GlyphSidebarHost {
     glyphLabel?: string;
-    // (undocumented)
     header?: ReactNode;
-    // (undocumented)
     selection?: ReactNode;
 }
 
@@ -72,10 +61,10 @@ export interface GlyphSidebarProps {
     session: EditorUISession;
 }
 
-// @public (undocumented)
+// @public
 export function ShiftEditor(input: ShiftEditorProps): JSX.Element;
 
-// @public (undocumented)
+// @public
 export function ShiftEditorChrome(input: ShiftEditorChromeProps): JSX.Element;
 
 // @public (undocumented)
@@ -101,10 +90,10 @@ export interface ShiftEditorRootProps {
     className?: string;
 }
 
-// @public (undocumented)
+// @public
 export function VariationSidebar(input: VariationSidebarProps): JSX.Element;
 
-// @public (undocumented)
+// @public
 export interface VariationSidebarHost {
     // (undocumented)
     axes?: VariationSidebarSectionHost;
@@ -122,13 +111,10 @@ export interface VariationSidebarProps {
     session: EditorUISession;
 }
 
-// @public (undocumented)
+// @public
 export interface VariationSidebarSectionHost {
-    // (undocumented)
     actions?: ReactNode;
-    // (undocumented)
     active?: boolean;
-    // (undocumented)
     content: ReactNode;
 }
 

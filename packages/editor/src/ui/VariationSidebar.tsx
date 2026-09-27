@@ -8,12 +8,17 @@ import { AxesPanel } from "./AxesPanel";
 import { CollapsibleSection } from "./CollapsibleSection";
 import { SidebarActionRow } from "./SidebarActionRow";
 
+/** Application content for one variation sidebar section. */
 export interface VariationSidebarSectionHost {
+  /** Replaces the section's default list. */
   content: ReactNode;
+  /** Buttons shown in the section header. */
   actions?: ReactNode;
+  /** Keeps the section open and highlighted, for example while one of its menus is open. */
   active?: boolean;
 }
 
+/** Per-section overrides; sections left out keep their default read-only content. */
 export interface VariationSidebarHost {
   sources?: VariationSidebarSectionHost;
   instances?: VariationSidebarSectionHost;
@@ -25,6 +30,14 @@ export interface VariationSidebarProps {
   host?: VariationSidebarHost;
 }
 
+/**
+ * Renders the Sources, Instances, and Axes sections for the session's font.
+ *
+ * @remarks
+ * By default, choosing a source makes it active and moves every placed glyph
+ * to it, choosing an instance moves the editor to its location, and the axes
+ * section edits the editor's location.
+ */
 export function VariationSidebar({ session, host }: VariationSidebarProps) {
   const { editor, font } = session;
   const sources = useSignalState(font.sourcesCell);
