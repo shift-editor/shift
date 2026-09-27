@@ -51,6 +51,7 @@ export type {
   MemoryFontSession,
   MemoryFontSessionOptions,
   MemoryFontSource,
+  MemoryToolName,
 } from "./types/fontSession";
 export type {
   DeleteMode,
