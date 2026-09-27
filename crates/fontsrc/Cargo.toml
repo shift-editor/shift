@@ -1,0 +1,11 @@
+[package]
+name = "fontsrc"
+version = "0.0.0"
+edition = "2021"
+description = "Read and write authored font sources in Rust and TypeScript"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/shift-editor/fontsrc"
+
+[dependencies]
+norad = { git = "https://github.com/linebender/norad", rev = "c2034d9e4dbdb7bc936a86ad180a9e27b6884c3e" }
