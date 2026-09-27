@@ -655,11 +655,11 @@ mod tests {
 
     #[test]
     fn direct_page_matches_variable_simple_and_composite_outlines() {
-        let source =
-            OpenTypeFont::open(&repository_root().join(
-                "packages/editor/src/ui/assets/fonts/HostGrotesk-VariableFont_wght.ttf",
-            ))
-            .unwrap();
+        let source = OpenTypeFont::open(
+            &repository_root()
+                .join("packages/editor/src/ui/assets/fonts/HostGrotesk-VariableFont_wght.ttf"),
+        )
+        .unwrap();
         let roots = ["A", "Aacute", "space"].map(|name| {
             source
                 .directory()
@@ -757,11 +757,11 @@ mod tests {
 
     #[test]
     fn binary_projection_retains_avar_mappings_and_empty_glyphs() {
-        let source =
-            OpenTypeFont::open(&repository_root().join(
-                "packages/editor/src/ui/assets/fonts/HostGrotesk-VariableFont_wght.ttf",
-            ))
-            .unwrap();
+        let source = OpenTypeFont::open(
+            &repository_root()
+                .join("packages/editor/src/ui/assets/fonts/HostGrotesk-VariableFont_wght.ttf"),
+        )
+        .unwrap();
         assert_eq!(
             source.directory().mappings.len(),
             source.directory().axes.len()
@@ -786,11 +786,11 @@ mod tests {
 
     #[test]
     fn direct_pages_cover_every_host_grotesk_glyph() {
-        let source =
-            OpenTypeFont::open(&repository_root().join(
-                "packages/editor/src/ui/assets/fonts/HostGrotesk-VariableFont_wght.ttf",
-            ))
-            .unwrap();
+        let source = OpenTypeFont::open(
+            &repository_root()
+                .join("packages/editor/src/ui/assets/fonts/HostGrotesk-VariableFont_wght.ttf"),
+        )
+        .unwrap();
         let location = source.directory().default_location();
 
         for roots in source
@@ -819,11 +819,11 @@ mod tests {
 
     #[test]
     fn direct_page_matches_a_uniform_host_grotesk_sample() {
-        let source =
-            OpenTypeFont::open(&repository_root().join(
-                "packages/editor/src/ui/assets/fonts/HostGrotesk-VariableFont_wght.ttf",
-            ))
-            .unwrap();
+        let source = OpenTypeFont::open(
+            &repository_root()
+                .join("packages/editor/src/ui/assets/fonts/HostGrotesk-VariableFont_wght.ttf"),
+        )
+        .unwrap();
         let roots = source
             .directory()
             .glyphs
