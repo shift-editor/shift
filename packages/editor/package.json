@@ -28,6 +28,7 @@
       "import": "./src/ui.ts"
     },
     "./style.css": "./src/ui/style.css",
+    "./fonts.css": "./src/ui/fonts.css",
     "./signals": {
       "types": "./src/signals.ts",
       "import": "./src/signals.ts"

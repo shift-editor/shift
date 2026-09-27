@@ -1,16 +1,2 @@
 /* Opt-in faces for hosts that do not already load Inter and JetBrains Mono. */
-@font-face {
-  font-family: "Inter";
-  src: url("../../editor/src/ui/assets/fonts/Inter-VariableFont.ttf") format("truetype");
-  font-weight: 100 900;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "JetBrains Mono";
-  src: url("../../editor/src/ui/assets/fonts/JetBrainsMono[wght].ttf") format("truetype");
-  font-weight: 100 800;
-  font-style: normal;
-  font-display: swap;
-}
+@import "@shift/editor/fonts.css";

@@ -638,6 +638,13 @@ mod tests {
         }
     }
 
+    const HOST_GROTESK_VARIABLE: &str =
+        "apps/desktop/src/renderer/src/assets/fonts/HostGrotesk-VariableFont_wght.ttf";
+
+    fn host_grotesk() -> OpenTypeFont {
+        OpenTypeFont::open(&repository_root().join(HOST_GROTESK_VARIABLE)).unwrap()
+    }
+
     fn repository_root() -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .parent()
@@ -655,11 +662,7 @@ mod tests {
 
     #[test]
     fn direct_page_matches_variable_simple_and_composite_outlines() {
-        let source = OpenTypeFont::open(
-            &repository_root()
-                .join("packages/editor/src/ui/assets/fonts/HostGrotesk-VariableFont_wght.ttf"),
-        )
-        .unwrap();
+        let source = host_grotesk();
         let roots = ["A", "Aacute", "space"].map(|name| {
             source
                 .directory()
@@ -757,11 +760,7 @@ mod tests {
 
     #[test]
     fn binary_projection_retains_avar_mappings_and_empty_glyphs() {
-        let source = OpenTypeFont::open(
-            &repository_root()
-                .join("packages/editor/src/ui/assets/fonts/HostGrotesk-VariableFont_wght.ttf"),
-        )
-        .unwrap();
+        let source = host_grotesk();
         assert_eq!(
             source.directory().mappings.len(),
             source.directory().axes.len()
@@ -786,11 +785,7 @@ mod tests {
 
     #[test]
     fn direct_pages_cover_every_host_grotesk_glyph() {
-        let source = OpenTypeFont::open(
-            &repository_root()
-                .join("packages/editor/src/ui/assets/fonts/HostGrotesk-VariableFont_wght.ttf"),
-        )
-        .unwrap();
+        let source = host_grotesk();
         let location = source.directory().default_location();
 
         for roots in source
@@ -819,11 +814,7 @@ mod tests {
 
     #[test]
     fn direct_page_matches_a_uniform_host_grotesk_sample() {
-        let source = OpenTypeFont::open(
-            &repository_root()
-                .join("packages/editor/src/ui/assets/fonts/HostGrotesk-VariableFont_wght.ttf"),
-        )
-        .unwrap();
+        let source = host_grotesk();
         let roots = source
             .directory()
             .glyphs

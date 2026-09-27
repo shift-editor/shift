@@ -1,3 +1,6 @@
+/* Registers the shared chrome as a Tailwind source; import from the app's Tailwind entry. */
+@source "./";
+
 .shift-editor-chrome,
 .shift-editor-chrome * {
   box-sizing: border-box;

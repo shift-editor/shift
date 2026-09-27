@@ -1,3 +1,4 @@
+import type { SourceId } from "@shift/types";
 import { Separator } from "@shift/ui";
 import { useState, type ReactNode } from "react";
 import { useSignalState } from "../lib/signals";
@@ -33,7 +34,7 @@ export function VariationSidebar({ session, host }: VariationSidebarProps) {
   const [instancesOpen, setInstancesOpen] = useState(true);
   const [axesOpen, setAxesOpen] = useState(true);
 
-  const selectSource = (sourceId: (typeof sources)[number]["id"]) => {
+  const selectSource = (sourceId: SourceId) => {
     editor.selectSource(sourceId);
     for (const node of editor.scene.nodesOfKind("glyph")) {
       editor.scene.updateNode({ id: node.id, sourceId });

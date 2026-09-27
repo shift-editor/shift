@@ -43,16 +43,27 @@ export default defineConfig(async () => {
       tsconfigPaths(),
     ],
     resolve: {
-      alias: {
-        "@shift/editor": path.resolve(packagesDir, "editor/src"),
-        "@shift/ui": path.resolve(packagesDir, "ui/src/index.ts"),
-        "@shift/geo": path.resolve(packagesDir, "geo/src/index.ts"),
-        "@shift/types": path.resolve(packagesDir, "types/src/index.ts"),
-        "@shift/glyph-state": path.resolve(packagesDir, "glyph-state/src/index.ts"),
-        "@shift/glyph-info": path.resolve(packagesDir, "glyph-info/src/index.ts"),
-        "@shift/rules": path.resolve(packagesDir, "rules/src/index.ts"),
-        "@shift/validation": path.resolve(packagesDir, "validation/src/index.ts"),
-      },
+      // Exact matches only: subpaths such as `@shift/editor/signals` and
+      // `@shift/editor/style.css` resolve through each package's `exports` map.
+      alias: [
+        { find: /^@shift\/editor$/, replacement: path.resolve(packagesDir, "editor/src/index.ts") },
+        { find: /^@shift\/ui$/, replacement: path.resolve(packagesDir, "ui/src/index.ts") },
+        { find: /^@shift\/geo$/, replacement: path.resolve(packagesDir, "geo/src/index.ts") },
+        { find: /^@shift\/types$/, replacement: path.resolve(packagesDir, "types/src/index.ts") },
+        {
+          find: /^@shift\/glyph-state$/,
+          replacement: path.resolve(packagesDir, "glyph-state/src/index.ts"),
+        },
+        {
+          find: /^@shift\/glyph-info$/,
+          replacement: path.resolve(packagesDir, "glyph-info/src/index.ts"),
+        },
+        { find: /^@shift\/rules$/, replacement: path.resolve(packagesDir, "rules/src/index.ts") },
+        {
+          find: /^@shift\/validation$/,
+          replacement: path.resolve(packagesDir, "validation/src/index.ts"),
+        },
+      ],
     },
     optimizeDeps: {
       // Serve editor workspace source directly so API changes participate in HMR instead of

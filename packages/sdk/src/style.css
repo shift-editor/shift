@@ -1,10 +1,8 @@
 @import "tailwindcss/theme.css" layer(theme) theme(reference inline);
 @config "../tailwind.config.mjs";
 @import "tailwindcss/utilities.css" layer(utilities);
-@import "../../editor/src/ui/style.css";
-
-@source "../../editor/src/ui/**/*.{ts,tsx}";
-@source "../../ui/src/**/*.tsx";
+@import "@shift/ui/style.css";
+@import "@shift/editor/style.css";
 
 /*
  * Editor tokens compile to `var(--shift-*, default)`, so hosts theme the editor
