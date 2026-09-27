@@ -55,7 +55,13 @@ function desktopNpmPackages() {
     execFileSync(
       "pnpm",
       ["list", "--filter", "@shift/desktop", "--prod", "--depth", "Infinity", "--json"],
-      { cwd: repositoryRoot, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 },
+      {
+        cwd: repositoryRoot,
+        encoding: "utf8",
+        maxBuffer: 256 * 1024 * 1024,
+        // pnpm is a .cmd shim on Windows, which only starts through a shell.
+        shell: process.platform === "win32",
+      },
     ),
   );
   const wanted = new Set();
