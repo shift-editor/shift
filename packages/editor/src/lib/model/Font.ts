@@ -312,6 +312,8 @@ const DEFAULT_FONT_METRICS: FontMetrics = {
  * A glyph handle is only an identity. It may name a glyph that is not committed
  * in the font yet. Use {@link glyph} for existing glyph data, and use the
  * editor layer API when the caller intends to create or edit authored glyph data.
+ *
+ * @beta Embedders may use this type; its members can change between SDK minor versions.
  */
 export class Font {
   readonly #loadedCell: Signal<boolean>;

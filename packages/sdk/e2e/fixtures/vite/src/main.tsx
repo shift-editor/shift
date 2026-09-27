@@ -1,13 +1,9 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
-import {
-  createMemoryFontSession,
-  signal as rootSignal,
-  type MemoryFontSession,
-} from "@shift-editor/sdk";
-import { signal as subpathSignal } from "@shift-editor/sdk/signals";
+import { createMemoryFontSession, type MemoryFontSession } from "@shift-editor/sdk";
 import { ShiftEditorChrome } from "@shift-editor/sdk/ui";
 import "@shift-editor/sdk/style.css";
+import "@shift-editor/sdk/fonts.css";
 import { interASource } from "../shared/interSource";
 import "./host.css";
 
@@ -60,7 +56,6 @@ function regularLayer() {
 let glyphPlaced = false;
 
 window.shiftSdkHarness = {
-  runtimeIdentity: rootSignal === subpathSignal,
   glyphPlaced: () => glyphPlaced,
   onCurvePointId() {
     const contour = regularLayer()?.contours[0];
@@ -105,7 +100,6 @@ window.addEventListener("beforeunload", () => {
 declare global {
   interface Window {
     shiftSdkHarness: {
-      runtimeIdentity: boolean;
       glyphPlaced(): boolean;
       onCurvePointId(): string | null;
       pointPosition(pointId: string): Point | null;

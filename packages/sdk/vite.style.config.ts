@@ -6,15 +6,15 @@ export default defineConfig({
   plugins: [tailwindcss()],
   build: {
     emptyOutDir: false,
-    cssCodeSplit: false,
+    cssCodeSplit: true,
     assetsInlineLimit: 0,
     rollupOptions: {
-      input: "src/style-loader.ts",
+      input: { style: "src/style-loader.ts", fonts: "src/fonts-loader.ts" },
       output: {
-        entryFileNames: "style-loader.js",
+        entryFileNames: "[name]-loader.js",
         assetFileNames: ({ names }) =>
           names.some((name) => name.endsWith(".css"))
-            ? "style.css"
+            ? "[name][extname]"
             : "assets/[name]-[hash][extname]",
       },
     },

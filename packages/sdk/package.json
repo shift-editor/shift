@@ -4,6 +4,9 @@
   "private": true,
   "description": "Browser SDK for the Shift font editor",
   "type": "module",
+  "sideEffects": [
+    "*.css"
+  ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -11,47 +14,12 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./clipboard": {
-      "types": "./dist/clipboard.d.ts",
-      "import": "./dist/clipboard.js"
-    },
-    "./model": {
-      "types": "./dist/model.d.ts",
-      "import": "./dist/model.js"
-    },
-    "./rendering": {
-      "types": "./dist/rendering.d.ts",
-      "import": "./dist/rendering.js"
-    },
     "./ui": {
       "types": "./dist/ui.d.ts",
       "import": "./dist/ui.js"
     },
     "./style.css": "./dist/style.css",
-    "./signals": {
-      "types": "./dist/signals.d.ts",
-      "import": "./dist/signals.js"
-    },
-    "./text": {
-      "types": "./dist/text.d.ts",
-      "import": "./dist/text.js"
-    },
-    "./tools": {
-      "types": "./dist/tools.d.ts",
-      "import": "./dist/tools.js"
-    },
-    "./transform": {
-      "types": "./dist/transform.d.ts",
-      "import": "./dist/transform.js"
-    },
-    "./types": {
-      "types": "./dist/types.d.ts",
-      "import": "./dist/types.js"
-    },
-    "./variation": {
-      "types": "./dist/variation.d.ts",
-      "import": "./dist/variation.js"
-    }
+    "./fonts.css": "./dist/fonts.css"
   },
   "files": [
     "dist"
@@ -60,18 +28,25 @@
     "build": "node scripts/build.mjs",
     "typecheck": "tsgo --noEmit",
     "generate:inter-a-fixture": "node scripts/generate-inter-a-fixture.mjs",
-    "test:packed": "pnpm build && node scripts/test-packed-consumers.mjs"
+    "test:packed": "pnpm build && node scripts/test-packed-consumers.mjs",
+    "api:update": "node scripts/build.mjs --update-api"
   },
   "peerDependencies": {
+    "@base-ui-components/react": "1.0.0-rc.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
+    "@microsoft/api-extractor": "^7.59.2",
+    "@playwright/test": "^1.59.1",
     "@shift/editor": "workspace:*",
     "@shift/types": "workspace:*",
     "@shift/ui": "workspace:*",
-    "@playwright/test": "^1.59.1",
     "@tailwindcss/vite": "^4.1.11",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
     "tailwindcss": "^4.1.11",
     "tsdown": "0.23.0",
     "typescript": "^5.5.4",

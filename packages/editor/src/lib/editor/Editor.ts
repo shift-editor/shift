@@ -129,6 +129,8 @@ interface EditorOptions {
  * expose a separate glyph loading API.
  *
  * @knipclassignore
+ *
+ * @beta Embedders may use this type; its members can change between SDK minor versions.
  */
 export class Editor {
   /**
