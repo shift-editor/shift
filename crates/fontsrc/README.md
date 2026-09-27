@@ -13,3 +13,7 @@ fn load(source: &dyn FontSource) -> Result<Font, fontsrc::ufo::FontLoadError> {
 ```
 
 The format modules expose UFO, Designspace, and Glyphs-native values. Browser/Node adapters and TypeScript bindings remain independent layers.
+
+## License
+
+Licensed under either of [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE) at your option.
