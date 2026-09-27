@@ -3,6 +3,7 @@ export {
   GlyphSidebar,
   ShiftEditor,
   ShiftEditorChrome,
+  ShiftEditorRoot,
   VariationSidebar,
 } from "@shift/editor/ui";
 export type {
@@ -13,6 +14,7 @@ export type {
   GlyphSidebarProps,
   ShiftEditorProps,
   ShiftEditorChromeProps,
+  ShiftEditorRootProps,
   VariationSidebarHost,
   VariationSidebarProps,
   VariationSidebarSectionHost,

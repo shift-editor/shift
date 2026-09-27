@@ -246,6 +246,9 @@ jobs:
       - name: Check browser editor bundle
         run: pnpm check:browser
 
+      - name: Check SDK build and public API report
+        run: pnpm --filter @shift-editor/sdk build
+
   unit-test:
     name: Unit Tests
     needs: detect-changes

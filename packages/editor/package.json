@@ -79,9 +79,10 @@
     "react": "^19.1.0"
   },
   "devDependencies": {
-    "@types/react": "^19.1.8",
+    "@types/react": "^19.2.17",
     "oxlint": "^1.85.0",
     "oxlint-plugin-eslint": "^1.85.0",
+    "react": "^19.2.8",
     "typescript": "^5.5.4",
     "vitest": "^4.1.10"
   }

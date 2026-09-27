@@ -5,3 +5,10 @@ body,
   height: 100%;
   margin: 0;
 }
+
+/* A host Tailwind theme; none of these may leak into the editor. */
+:root {
+  --color-chrome: rgb(255, 0, 0);
+  --color-primary: rgb(255, 0, 0);
+  --spacing: 1rem;
+}

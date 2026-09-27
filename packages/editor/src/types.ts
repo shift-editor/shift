@@ -9,6 +9,7 @@ export type {
   MemoryFontSession,
   MemoryFontSessionOptions,
   MemoryFontSource,
+  MemoryToolName,
 } from "./types/fontSession";
 export type { CursorType } from "./types/editor";
 export type { DeleteMode, GlyphReader } from "./types/glyph";

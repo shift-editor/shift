@@ -1,6 +1,7 @@
 import * as React from "react";
 import { Toast as BaseToast } from "@base-ui-components/react/toast";
 import { cn } from "../../lib/utils";
+import { usePortalContainer } from "../portal";
 
 interface ToastProviderProps {
   children: React.ReactNode;
@@ -18,8 +19,9 @@ interface ToastViewportProps {
 }
 
 function ToastViewport({ children, className, style }: ToastViewportProps) {
+  const container = usePortalContainer();
   return (
-    <BaseToast.Portal>
+    <BaseToast.Portal container={container}>
       <BaseToast.Viewport
         className={cn("fixed top-4 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2", className)}
         style={style}

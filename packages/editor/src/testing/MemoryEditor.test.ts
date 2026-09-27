@@ -115,6 +115,32 @@ describe("memory font editing", () => {
     second.dispose();
   });
 
+  it("offers only the requested tools and activates the first", () => {
+    const source = memorySource(fixture());
+    const defaults = createMemoryFontSession({ source, clipboard: new MemoryClipboard() });
+    const handOnly = createMemoryFontSession({
+      source,
+      clipboard: new MemoryClipboard(),
+      tools: ["hand"],
+    });
+    const viewOnly = createMemoryFontSession({
+      source,
+      clipboard: new MemoryClipboard(),
+      tools: [],
+    });
+
+    expect([...defaults.editor.toolRegistryCell.peek().keys()]).toEqual(["select", "hand"]);
+    expect(defaults.editor.toolCell.peek()?.id).toBe("select");
+    expect([...handOnly.editor.toolRegistryCell.peek().keys()]).toEqual(["hand"]);
+    expect(handOnly.editor.toolCell.peek()?.id).toBe("hand");
+    expect(viewOnly.editor.toolRegistryCell.peek().size).toBe(0);
+    expect(viewOnly.editor.toolCell.peek()).toBeNull();
+
+    defaults.dispose();
+    handOnly.dispose();
+    viewOnly.dispose();
+  });
+
   it("disposes a session idempotently", () => {
     const session = createMemoryFontSession({
       source: memorySource(fixture()),

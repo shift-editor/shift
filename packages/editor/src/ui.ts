@@ -9,6 +9,7 @@ export { EditorToolbar, type EditorToolbarHost, type EditorToolbarProps } from "
 export { GlyphSidebar, type GlyphSidebarHost, type GlyphSidebarProps } from "./ui/GlyphSidebar";
 export { ShiftEditor, type ShiftEditorProps } from "./ui/ShiftEditor";
 export { ShiftEditorChrome, type ShiftEditorChromeProps } from "./ui/ShiftEditorChrome";
+export { ShiftEditorRoot, type ShiftEditorRootProps } from "./ui/ShiftEditorRoot";
 export {
   SidebarActionButton,
   SidebarActionRow,

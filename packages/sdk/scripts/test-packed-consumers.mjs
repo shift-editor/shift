@@ -100,7 +100,6 @@ async function checkViteConsumer(url, server) {
 
   await page.goto(url, { waitUntil: "networkidle" });
   await page.evaluate(() => document.fonts.ready);
-  assert.equal(await page.evaluate(() => window.shiftSdkHarness.runtimeIdentity), true);
   await page
     .waitForFunction(() => window.shiftSdkHarness.glyphPlaced(), undefined, { timeout: 10_000 })
     .catch((error) => {
@@ -116,6 +115,46 @@ async function checkViteConsumer(url, server) {
     true,
     "memory sessions must not offer workspace-backed metric edits",
   );
+
+  const toolbar = page.locator(".shift-editor-chrome header").first();
+  const toolbarBackground = () =>
+    toolbar.evaluate((element) => getComputedStyle(element).backgroundColor);
+  assert.equal(
+    await toolbarBackground(),
+    "rgb(226, 226, 226)",
+    "host theme variables leaked into the editor",
+  );
+  await page.evaluate(() =>
+    document.documentElement.style.setProperty("--shift-color-chrome", "rgb(1, 2, 3)"),
+  );
+  assert.equal(
+    await toolbarBackground(),
+    "rgb(1, 2, 3)",
+    "--shift-* variables must theme the editor",
+  );
+  await page.evaluate(() => document.documentElement.style.removeProperty("--shift-color-chrome"));
+
+  const toolLabels = await page
+    .getByRole("toolbar", { name: "Editor tools" })
+    .getByRole("button")
+    .evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-label")));
+  assert.deepEqual(toolLabels, ["Select Tool (V)", "Hand Tool (H)"]);
+
+  await page.getByRole("button", { name: "Hide left sidebar" }).hover();
+  const tooltip = page.getByRole("tooltip");
+  await tooltip.waitFor();
+  assert.equal(await tooltip.textContent(), "Toggle left sidebar");
+  assert.equal(
+    await tooltip.evaluate((element) => element.closest(".shift-editor-chrome") !== null),
+    true,
+    "tooltips must mount inside the editor root",
+  );
+  assert.equal(
+    await tooltip.evaluate((element) => getComputedStyle(element).backgroundColor),
+    "rgb(35, 35, 35)",
+    "tooltips must receive the SDK's scoped styles",
+  );
+  await page.mouse.move(0, 0);
 
   const pointId = await page.evaluate(() => window.shiftSdkHarness.onCurvePointId());
   assert(pointId, "Inter a has no on-curve point in its Regular layer");

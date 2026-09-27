@@ -5,13 +5,14 @@ Browser-safe Shift editor runtime and React UI. The SDK contains the real Shift 
 ## Install
 
 ```sh
-pnpm add @shift-editor/sdk react
+pnpm add @shift-editor/sdk react react-dom @base-ui-components/react
 ```
 
-Import the stylesheet explicitly when using the supplied UI:
+Import the stylesheet explicitly when using the supplied UI. Add `fonts.css` only when the page does not already load Inter and JetBrains Mono:
 
 ```ts
 import "@shift-editor/sdk/style.css";
+import "@shift-editor/sdk/fonts.css";
 ```
 
 ## Create a memory session
@@ -26,8 +27,8 @@ import {
   createMemoryFontSession,
   type MemoryFontSession,
   type MemoryFontSource,
+  type SystemClipboard,
 } from "@shift-editor/sdk";
-import type { SystemClipboard } from "@shift-editor/sdk/clipboard";
 import { ShiftEditorChrome } from "@shift-editor/sdk/ui";
 import "@shift-editor/sdk/style.css";
 
@@ -74,18 +75,49 @@ The source owns its loaded font data. If it has a `dispose` operation—for exam
 Use individual primitives when the standard desktop-like shell is not appropriate:
 
 ```tsx
-import { EditorToolbar, GlyphSidebar, ShiftEditor, VariationSidebar } from "@shift-editor/sdk/ui";
+import {
+  EditorToolbar,
+  GlyphSidebar,
+  ShiftEditor,
+  ShiftEditorRoot,
+  VariationSidebar,
+} from "@shift-editor/sdk/ui";
 
 export function CustomEditor({ session }: { session: MemoryFontSession }) {
   return (
-    <div className="shift-editor-chrome">
+    <ShiftEditorRoot>
       <EditorToolbar session={session} />
       <VariationSidebar session={session} />
       <ShiftEditor session={session} />
       <GlyphSidebar session={session} />
-    </div>
+    </ShiftEditorRoot>
   );
 }
+```
+
+`ShiftEditorRoot` is the style scope: the SDK stylesheet only applies inside it, and menus and tooltips mount inside it rather than in the page body.
+
+## Theming
+
+Editor colors and fonts read `--shift-*` custom properties, falling back to Shift's light palette. Set them on the root, or on any ancestor:
+
+```css
+.my-editor {
+  --shift-color-chrome: #1f1f1f;
+  --shift-color-surface: #262626;
+  --shift-color-primary: #f5f5f5;
+  --shift-font-ui: "IBM Plex Sans", sans-serif;
+}
+```
+
+Color tokens use the names Shift's own UI uses (`--shift-color-background`, `--shift-color-surface`, `--shift-color-chrome`, `--shift-color-primary`, `--shift-color-accent`, …). The page's own Tailwind or CSS variables do not affect the editor.
+
+## Tools
+
+Memory sessions offer Select and Hand. Choose which appear, in order; the first becomes active and an empty list makes the session view-only:
+
+```ts
+createMemoryFontSession({ source, clipboard, tools: ["hand"] });
 ```
 
 Sidebar toggle buttons are omitted when their callbacks are not supplied.
@@ -93,15 +125,19 @@ Sidebar toggle buttons are omitted when their callbacks are not supplied.
 ## Session capabilities
 
 - `preview`: rendering and inspection only.
-- `memory`: browser-owned state and local coordinate edits. Select and Hand are enabled; Pen and Shape remain visible but disabled because structural edits require workspace authority.
+- `memory`: browser-owned state and local coordinate edits with Select and Hand. Authoring tools and metric edits need workspace authority and are not offered.
 - `workspace`: host-coordinated structural mutation, history, persistence, and export.
 
 `createMemoryFontSession` always creates a `memory` session. It does not create a fake workspace identity or provide persistence, upload, filesystem, undo/redo, or export behavior.
 
 ## SSR and client loading
 
-Types and browser-safe model exports may be imported by shared code. Create sessions and mount React editor components only in a browser client boundary (`"use client"` in Next.js, or an equivalent client-only component). Do not create a session during server rendering.
+Types and the root entry may be imported by shared code. Create sessions and mount React editor components only in a browser client boundary (`"use client"` in Next.js, or an equivalent client-only component). Do not create a session during server rendering.
 
 ## Lifecycle
 
 A page may create multiple independent sessions. Each owns its editor and font model. Call `session.dispose()` when unmounting; disposal is idempotent. Do not reuse a disposed session.
+
+## API stability
+
+The public surface is the root entry, `/ui`, `style.css`, and `fonts.css`, recorded in `api/*.api.md`. `Editor`, `Font`, and `Glyph` are exported as `@beta` types: their members may change between minor versions while the SDK is pre-1.0.

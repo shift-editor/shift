@@ -3,6 +3,7 @@
   "compilerOptions": {
     "composite": false,
     "declaration": true,
+    "stripInternal": true,
     "declarationMap": false,
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "noEmit": false,
@@ -16,16 +17,14 @@
     "../glyph-state/src/**/*.ts",
     "../rules/src/**/*.ts",
     "../types/src/**/*.ts",
-    "../validation/src/**/*.ts"
+    "../validation/src/**/*.ts",
+    "../ui/src/**/*"
   ],
   "exclude": [
     "node_modules",
     "dist",
-    "src/ui.ts",
     "**/*.test.ts",
     "**/*.typecheck.ts",
-    "../editor/src/testing/**",
-    "../editor/src/ui.ts",
-    "../editor/src/ui/**"
+    "../editor/src/testing/**"
   ]
 }

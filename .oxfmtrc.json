@@ -24,6 +24,7 @@
     "crates/shift-bridge/index.d.ts",
     "**/vendor",
     "packages/glyph-info/resources",
-    "apps/desktop/e2e/test-results"
+    "apps/desktop/e2e/test-results",
+    "packages/sdk/api"
   ]
 }

@@ -17,6 +17,15 @@ export interface ShiftEditorProps {
   session: EditorUISession;
 }
 
+/**
+ * Renders the interactive canvas for a session's editor.
+ *
+ * @remarks
+ * Attaches render surfaces on mount, follows its container's size, fits the
+ * scene to view once on first layout, and routes pointer and wheel input to
+ * the active tool. Surfaces detach on unmount; the session stays alive, and
+ * the host still disposes it.
+ */
 export function ShiftEditor({ session }: ShiftEditorProps) {
   const { editor } = session;
   const containerRef = useRef<HTMLDivElement>(null);

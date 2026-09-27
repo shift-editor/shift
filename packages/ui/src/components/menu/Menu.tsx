@@ -1,6 +1,7 @@
 import * as React from "react";
 import { Menu as BaseMenu } from "@base-ui-components/react/menu";
 import { cn } from "../../lib/utils";
+import { usePortalContainer } from "../portal";
 import { menuItemStyles, menuPopupStyles } from "./styles";
 
 export interface MenuProps extends React.ComponentProps<typeof BaseMenu.Root> {}
@@ -17,7 +18,10 @@ export const MenuTrigger = React.forwardRef<
 ));
 MenuTrigger.displayName = "MenuTrigger";
 
-export const MenuPortal = BaseMenu.Portal;
+export function MenuPortal(props: React.ComponentProps<typeof BaseMenu.Portal>) {
+  const container = usePortalContainer();
+  return <BaseMenu.Portal container={container} {...props} />;
+}
 
 export interface MenuPositionerProps extends React.ComponentPropsWithoutRef<
   typeof BaseMenu.Positioner

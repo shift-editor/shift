@@ -1,6 +1,7 @@
 import * as React from "react";
 import { Popover as BasePopover } from "@base-ui-components/react/popover";
 import { cn } from "../../lib/utils";
+import { usePortalContainer } from "../portal";
 
 export interface PopoverProps extends React.ComponentProps<typeof BasePopover.Root> {}
 
@@ -18,7 +19,10 @@ export const PopoverTrigger = React.forwardRef<
 ));
 PopoverTrigger.displayName = "PopoverTrigger";
 
-export const PopoverPortal = BasePopover.Portal;
+export function PopoverPortal(props: React.ComponentProps<typeof BasePopover.Portal>) {
+  const container = usePortalContainer();
+  return <BasePopover.Portal container={container} {...props} />;
+}
 
 export interface PopoverPositionerProps extends React.ComponentPropsWithoutRef<
   typeof BasePopover.Positioner

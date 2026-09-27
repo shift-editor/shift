@@ -5,22 +5,38 @@ import { ShiftIcon } from "./ShiftIcon";
 import { ToolsPane } from "./ToolsPane";
 import type { EditorUISession } from "./types";
 
+/** Document chrome an application supplies in place of the toolbar's embedded defaults. */
 export interface EditorToolbarHost {
+  /** Title shown above the family name. */
   documentTitle: string;
+  /** Whether to mark the title as edited. */
   documentEdited: boolean;
+  /** Controls rendered beside the title, such as back or forward buttons. */
   navigation?: ReactNode;
+  /** Replaces the decorative window buttons; pass the platform's own controls or nothing. */
   windowControls?: ReactNode;
 }
 
 export interface EditorToolbarProps {
   session: EditorUISession;
+  /** Application chrome; without it the toolbar titles itself from the active source. */
   host?: EditorToolbarHost;
+  /** Current left sidebar state, used for the toggle's pressed state and label. */
   leftSidebarOpen?: boolean;
+  /** Current right sidebar state, used for the toggle's pressed state and label. */
   rightSidebarOpen?: boolean;
+  /** Shows the left sidebar toggle; omit to hide the button. */
   onToggleLeftSidebar?: () => void;
+  /** Shows the right sidebar toggle; omit to hide the button. */
   onToggleRightSidebar?: () => void;
 }
 
+/**
+ * Renders the title bar: document title, the session's tools, and sidebar toggles.
+ *
+ * @remarks
+ * Tools come from the session's registered tools, in registration order.
+ */
 export function EditorToolbar({
   session,
   host,

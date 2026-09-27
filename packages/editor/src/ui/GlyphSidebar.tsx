@@ -7,10 +7,13 @@ import { ShiftIcon } from "./ShiftIcon";
 import type { EditorUISession } from "./types";
 import { useGlyphMetrics } from "./useGlyphMetrics";
 
+/** Application content merged into the glyph sidebar. */
 export interface GlyphSidebarHost {
+  /** Replaces the default header of family name and zoom control. */
   header?: ReactNode;
   /** Label shown under the metrics; defaults to the glyph name. */
   glyphLabel?: string;
+  /** Rendered below the glyph metrics, for panels about the current selection. */
   selection?: ReactNode;
 }
 
@@ -19,6 +22,14 @@ export interface GlyphSidebarProps {
   host?: GlyphSidebarHost;
 }
 
+/**
+ * Renders the glyph inspector: codepoint, sidebearings, advance, and name.
+ *
+ * @remarks
+ * Metrics are live for the single glyph placed in the scene and empty when
+ * there are none or several. They are editable only when the session can edit
+ * layers and the glyph has a layer at the active source or location.
+ */
 export function GlyphSidebar({ session, host = {} }: GlyphSidebarProps) {
   const { editor, font } = session;
   const metadata = useSignalState(font.metadataCell);
