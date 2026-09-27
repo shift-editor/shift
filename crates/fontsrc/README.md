@@ -13,3 +13,7 @@ fn load(source: &dyn FontSource) -> Result<Font, fontsrc::ufo::FontLoadError> {
 ```
 
 The first format module exposes UFO-native values and Norad's source/sink boundaries. Designspace, Glyphs, browser/Node adapters, and TypeScript bindings will follow as independent layers.
+
+## License
+
+Licensed under either of [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE) at your option.
