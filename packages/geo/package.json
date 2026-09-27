@@ -1,6 +1,7 @@
 {
   "name": "@shift/geo",
   "version": "0.0.1",
+  "license": "MIT OR Apache-2.0",
   "private": true,
   "description": "Lightweight 2D geometry library for vector math and bezier curves",
   "type": "module",

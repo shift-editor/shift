@@ -159,7 +159,9 @@ const config: Configuration = {
   ],
   extraResources: [
     { from: `../../icons/${iconName}.png`, to: `${iconName}.png` },
-    { from: "../../LICENSE", to: "LICENSE" },
+    { from: "../../LICENSE-MIT", to: "LICENSE-MIT" },
+    { from: "../../LICENSE-APACHE", to: "LICENSE-APACHE" },
+    { from: "../../THIRD_PARTY_NOTICES.md", to: "THIRD_PARTY_NOTICES.md" },
     { from: "THIRD_PARTY_THEMES.md", to: "THIRD_PARTY_THEMES.md" },
   ],
   asar: true,

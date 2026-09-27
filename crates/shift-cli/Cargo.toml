@@ -1,6 +1,7 @@
 [package]
 name = "shift-cli"
 version = "0.1.0"
+license.workspace = true
 edition = "2024"
 description = "Command-line tools for authoring, inspecting, and compiling Shift documents"
 readme = "README.md"

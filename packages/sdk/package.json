@@ -1,6 +1,7 @@
 {
   "name": "@shift-editor/sdk",
   "version": "0.0.0-development",
+  "license": "MIT OR Apache-2.0",
   "private": true,
   "description": "Browser SDK for the Shift font editor",
   "type": "module",
@@ -22,7 +23,10 @@
     "./fonts.css": "./dist/fonts.css"
   },
   "files": [
-    "dist"
+    "dist",
+    "LICENSE-APACHE",
+    "LICENSE-MIT",
+    "THIRD_PARTY_NOTICES.md"
   ],
   "scripts": {
     "build": "node scripts/build.mjs",
