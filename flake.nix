@@ -26,6 +26,7 @@
           rustToolchainToml = (builtins.fromTOML (builtins.readFile ./rust-toolchain.toml)).toolchain;
           rustToolchain = pkgs.rust-bin.stable.${rustToolchainToml.channel}.default.override {
             extensions = rustToolchainToml.components ++ [ "rust-analyzer" ];
+            targets = rustToolchainToml.targets or [ ];
           };
 
           pnpm = pkgs.writeShellScriptBin "pnpm" ''
