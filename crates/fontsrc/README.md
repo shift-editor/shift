@@ -12,4 +12,4 @@ fn load(source: &dyn FontSource) -> Result<Font, fontsrc::ufo::FontLoadError> {
 }
 ```
 
-The format modules expose UFO, Designspace, and Glyphs-native values. Browser/Node adapters and TypeScript bindings remain independent layers.
+The format modules expose UFO, Designspace, and Glyphs-native values. Multi-file hosts implement `fontsrc::FileSource` over a native directory, immutable byte map, archive, browser selection, or remote project tree. Browser/Node adapters and TypeScript bindings remain independent layers.

@@ -1,6 +1,10 @@
+mod support;
+
+use std::io;
 use std::path::{Path, PathBuf};
 
-use fontsrc::glyphs::Font;
+use fontsrc::glyphs::{load_from_source, Font};
+use support::MemorySource;
 
 fn fixture(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -25,11 +29,14 @@ fn in_memory_files_match_native_loading() {
 
 fn assert_in_memory_file_matches_native(path: &Path) {
     let expected = Font::load(path).unwrap();
-    let source = std::fs::read_to_string(path).unwrap();
+    let content = std::fs::read_to_string(path).unwrap();
+    let source = MemorySource::read(path.parent().unwrap()).unwrap();
 
-    let actual = Font::load_from_string(&source).unwrap();
+    let from_string = Font::load_from_string(&content).unwrap();
+    let from_source = load_from_source(Path::new(path.file_name().unwrap()), &source).unwrap();
 
-    assert_eq!(actual, expected);
+    assert_eq!(from_string, expected);
+    assert_eq!(from_source, expected);
 }
 
 #[test]
@@ -49,9 +56,28 @@ fn native_package_matches_equivalent_in_memory_file() {
     std::fs::write(glyphs.join("A_.glyph"), GLYPH).unwrap();
 
     let expected = Font::load_from_string(COMPLETE_FILE).unwrap();
-    let actual = Font::load(&package).unwrap();
+    let root = temporary.path();
+    let actual = load_from_source(Path::new("Test.glyphspackage"), &root).unwrap();
 
     assert_eq!(actual, expected);
+}
+
+#[test]
+fn in_memory_package_returns_unsupported_until_upstream_supports_it() {
+    let temporary = tempfile::tempdir().unwrap();
+    let package = temporary.path().join("Test.glyphspackage");
+    std::fs::create_dir_all(package.join("glyphs")).unwrap();
+    std::fs::write(package.join("fontinfo.plist"), FONT_INFO).unwrap();
+    std::fs::write(package.join("glyphs/A_.glyph"), GLYPH).unwrap();
+    let source = MemorySource::read(temporary.path()).unwrap();
+
+    let error = load_from_source(Path::new("Test.glyphspackage"), &source).unwrap_err();
+
+    assert!(matches!(
+        error,
+        fontsrc::glyphs::error::Error::IoError(error)
+            if error.kind() == io::ErrorKind::Unsupported
+    ));
 }
 
 const FONT_INFO: &str = r#"{
