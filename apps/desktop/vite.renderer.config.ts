@@ -2,7 +2,6 @@ import { defineConfig } from "vite";
 import svgr from "vite-plugin-svgr";
 import path from "path";
 
-const packagesDir = path.resolve(__dirname, "../../packages");
 const distribution = process.env.SHIFT_DISTRIBUTION ?? "release";
 const shiftBuildCommit = process.env.SHIFT_BUILD_COMMIT ?? process.env.GITHUB_SHA ?? "unknown";
 if (distribution !== "release" && distribution !== "nightly") {
@@ -43,27 +42,10 @@ export default defineConfig(async () => {
       tsconfigPaths(),
     ],
     resolve: {
-      // Exact matches only: subpaths such as `@shift/editor/signals` and
-      // `@shift/editor/style.css` resolve through each package's `exports` map.
-      alias: [
-        { find: /^@shift\/editor$/, replacement: path.resolve(packagesDir, "editor/src/index.ts") },
-        { find: /^@shift\/ui$/, replacement: path.resolve(packagesDir, "ui/src/index.ts") },
-        { find: /^@shift\/geo$/, replacement: path.resolve(packagesDir, "geo/src/index.ts") },
-        { find: /^@shift\/types$/, replacement: path.resolve(packagesDir, "types/src/index.ts") },
-        {
-          find: /^@shift\/glyph-state$/,
-          replacement: path.resolve(packagesDir, "glyph-state/src/index.ts"),
-        },
-        {
-          find: /^@shift\/glyph-info$/,
-          replacement: path.resolve(packagesDir, "glyph-info/src/index.ts"),
-        },
-        { find: /^@shift\/rules$/, replacement: path.resolve(packagesDir, "rules/src/index.ts") },
-        {
-          find: /^@shift\/validation$/,
-          replacement: path.resolve(packagesDir, "validation/src/index.ts"),
-        },
-      ],
+      // Forge's renderer defaults preserve symlinks. Under pnpm that gives each workspace package
+      // one module URL per symlink it is reached through, so shared state such as the signals
+      // runtime loads twice. Resolving to real paths keeps one instance per source file.
+      preserveSymlinks: false,
     },
     optimizeDeps: {
       // Serve editor workspace source directly so API changes participate in HMR instead of
