@@ -1,6 +1,7 @@
 import * as React from "react";
 import { Tooltip as BaseTooltip } from "@base-ui-components/react/tooltip";
 import { cn } from "../../lib/utils";
+import { usePortalContainer } from "../portal";
 
 interface TooltipProviderProps {
   children: React.ReactNode;
@@ -48,12 +49,12 @@ function TooltipContent({
   side = "top",
   sideOffset = 5,
 }: TooltipContentProps) {
+  const container = usePortalContainer();
   return (
-    <BaseTooltip.Portal>
+    <BaseTooltip.Portal container={container}>
       <BaseTooltip.Positioner side={side} sideOffset={sideOffset}>
         <BaseTooltip.Popup
           role="tooltip"
-          data-shift-ui-tooltip=""
           className={cn(
             "relative z-50 rounded-md bg-surface-inverse px-3 py-1.5 text-ui text-on-surface-inverse shadow-lg",
             className,
