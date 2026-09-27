@@ -10,7 +10,8 @@
     ".": {
       "types": "./src/index.ts",
       "import": "./src/index.ts"
-    }
+    },
+    "./style.css": "./src/style.css"
   },
   "scripts": {
     "typecheck": "tsgo --noEmit",

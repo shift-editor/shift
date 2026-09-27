@@ -1,26 +1,9 @@
 @reference "tailwindcss";
 @config "../tailwind.config.mjs";
 @import "tailwindcss/utilities.css" layer(utilities);
-@import "../../editor/src/ui/style.css";
-
-@source "../../editor/src/ui/**/*.{ts,tsx}";
-@source "../../ui/src/**/*.tsx";
-
-@font-face {
-  font-family: "Inter";
-  src: url("../../editor/src/ui/assets/fonts/Inter-VariableFont.ttf") format("truetype");
-  font-weight: 100 900;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "JetBrains Mono";
-  src: url("../../editor/src/ui/assets/fonts/JetBrainsMono[wght].ttf") format("truetype");
-  font-weight: 100 800;
-  font-style: normal;
-  font-display: swap;
-}
+@import "@shift/ui/style.css";
+@import "@shift/editor/style.css";
+@import "@shift/editor/fonts.css";
 
 @theme reference {
   --color-background: #ffffff;
