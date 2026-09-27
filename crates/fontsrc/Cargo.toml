@@ -3,7 +3,7 @@ name = "fontsrc"
 version = "0.0.0"
 edition = "2021"
 description = "Read and write authored font sources in Rust and TypeScript"
-license = "MIT"
+license = "MIT OR Apache-2.0"
 readme = "README.md"
 repository = "https://github.com/shift-editor/fontsrc"
 
