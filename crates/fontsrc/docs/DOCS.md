@@ -22,6 +22,7 @@ crates/fontsrc/
     lib.rs                  -- format modules and public format-native exports
   tests/
     designspace_source.rs   -- in-memory Designspace read and write equivalence
+    glyphs_source.rs        -- in-memory Glyphs file and native package equivalence
     ufo_source.rs           -- in-memory UFO read and write equivalence
 ```
 
@@ -30,6 +31,7 @@ The [README](../README.md) provides the minimal Rust usage and incubation scope.
 ## Key Types
 
 - `designspace::DesignSpaceDocument` — Norad's format-native Designspace document model, loadable from any buffered byte reader.
+- `glyphs::Font` — glyphs-reader's normalized, format-native Glyphs 2 and 3 model.
 - `ufo::FontSource` — reads UFO-relative files from any synchronous backing source.
 - `ufo::FontSink` — writes UFO-relative files without assuming a destination filesystem.
 - `ufo::Font` — Norad's format-native UFO model.
@@ -37,7 +39,7 @@ The [README](../README.md) provides the minimal Rust usage and incubation scope.
 
 ## How it works
 
-A host provides Designspace XML through a buffered byte reader and UFO project files through a `FontSource` whose paths are relative to each UFO root. Norad parses those bytes into its native `DesignSpaceDocument` and `Font` models. Native callers may use paths and directories; browser and remote adapters can first gather files asynchronously and then expose immutable bytes synchronously to the parser or worker.
+A host provides Designspace XML through a buffered byte reader, a Glyphs file through an owned string, and UFO project files through a `FontSource` whose paths are relative to each UFO root. The format libraries parse those inputs into native `DesignSpaceDocument` and `Font` models. Native callers may use paths and directories; browser and remote adapters can first gather files asynchronously and then expose immutable content synchronously to the parser or worker.
 
 Writing follows the inverse boundary: `DesignSpaceDocument::save_to_writer` serializes XML to a host-owned writer, while `Font::save_to_sink` serializes UFO-relative files through a host-owned `FontSink`. Destination replacement, stale-file cleanup, upload, and persistence remain host responsibilities.
 
@@ -54,6 +56,7 @@ Writing follows the inverse boundary: `DesignSpaceDocument::save_to_writer` seri
 ## Gotchas
 
 - `FontSource` is synchronous. Browser adapters should perform asynchronous file acquisition outside the parser, preferably in a worker, and expose an immutable in-memory source while parsing.
+- `glyphs::Font::load_from_string` supports browser-owned `.glyphs` files. The upstream `.glyphspackage` loader still requires a native directory; a source-backed package boundary must land before browser package support is complete.
 - UFO data and image directories require `FontSource::list_dir`; sources that omit enumeration intentionally produce empty stores.
 - `FontSink` does not remove stale destination files. Hosts must clear or replace destinations when complete replacement semantics are required.
 
