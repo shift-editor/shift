@@ -1,26 +1,12 @@
 @import "tailwindcss";
-@source "../../../../packages/ui/src/**/*.tsx";
-
-@font-face {
-  font-family: "Inter";
-  src: url("./src/assets/fonts/Inter-VariableFont.ttf") format("truetype");
-  font-weight: 100 900;
-  font-style: normal;
-  font-display: swap;
-}
+@import "@shift/ui/style.css";
+@import "@shift/editor/style.css";
+@import "@shift/editor/fonts.css";
 
 @font-face {
   font-family: "Host Grotesk";
   src: url("./src/assets/fonts/HostGrotesk-VariableFont_wght.ttf") format("truetype");
   font-weight: 100 900;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "JetBrains Mono";
-  src: url("./src/assets/fonts/JetBrainsMono[wght].ttf") format("truetype");
-  font-weight: 100 800;
   font-style: normal;
   font-display: swap;
 }

@@ -12,7 +12,7 @@ import {
 } from "@shift/ui";
 import MinusIcon from "@/assets/general/minus.svg";
 import PlusIcon from "@/assets/general/plus.svg";
-import { SidebarActionButton, SidebarActionRow } from "@/components/sidebar/SidebarActionRow";
+import { SidebarActionButton, SidebarActionRow } from "@/components/sidebar";
 import { CreateAxisMenu } from "@/components/variation/CreateAxisMenu";
 import { useAxes } from "@/hooks/useAxes";
 import type { AxisSettingsSection } from "@/types/settings";

@@ -69,9 +69,8 @@ apps/desktop/src/renderer/src/lib/catalog/
   GlyphCatalog.ts            -- common Font/Editor projection consumed by the resident Grid
 apps/desktop/src/renderer/src/components/home/
   SvgGlyphCatalogGrid.tsx    -- shared virtualized catalog consumer
-apps/desktop/src/renderer/src/hooks/
-  useGlyphSidebearings.ts    -- live selected-glyph sidebearing values and layer availability
-  useGlyphXAdvance.ts        -- live selected-glyph advance and layer availability
+ui/
+  useGlyphMetrics.ts         -- live single-glyph sidebearings, advance, and layer availability
 ```
 
 ## Key Types

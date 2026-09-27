@@ -1,0 +1,21 @@
+{
+  "name": "shift-sdk-vite-consumer",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@shift-editor/sdk": "file:../shift-editor-sdk.tgz",
+    "react": "19.2.3",
+    "react-dom": "19.2.3"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "typescript": "^5.5.4",
+    "vite": "^6.4.3"
+  }
+}
