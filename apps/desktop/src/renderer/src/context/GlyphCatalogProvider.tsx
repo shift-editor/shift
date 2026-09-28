@@ -112,47 +112,27 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
   );
 
   const filteredGlyphs = useMemo(() => {
-    const searchLimit = Math.max(availableUnicodes.length, 200);
-    let filteredUnicodes: Set<number>;
-
-    if (selectedLanguageId !== null) {
-      const languageUnicodes = new Set(languageCatalog.filter(selectedLanguageId));
-      filteredUnicodes =
-        query.trim() === ""
-          ? languageUnicodes
-          : new Set(
-              categoryCatalog
-                .filter({ query, searchLimit })
-                .filter((codepoint) => languageUnicodes.has(codepoint)),
-            );
-    } else {
-      filteredUnicodes = new Set(
-        categoryFilters.length === 0
-          ? categoryCatalog.filter({ query, searchLimit })
-          : categoryFilters.flatMap((filter) =>
-              categoryCatalog.filter({
-                query,
-                category: filter.category,
-                subCategoryKey: filter.subCategoryKey,
-                searchLimit,
-              }),
-            ),
-      );
-    }
-
     const normalizedQuery = query.trim().toLowerCase();
+    const hasQuery = normalizedQuery !== "";
     const filteringByGroup = categoryFilters.length > 0 || selectedLanguageId !== null;
+    const matchedUnicodes = matchingUnicodes({
+      query,
+      searchLimit: Math.max(availableUnicodes.length, 200),
+      selectedLanguageId,
+      categoryFilters,
+      categoryCatalog,
+      languageCatalog,
+    });
 
     return availableGlyphs.filter((glyph) => {
-      const unicodeMatched = glyph.unicode !== null && filteredUnicodes.has(glyph.unicode);
-      const nameMatched =
-        normalizedQuery !== "" &&
-        (glyph.name.toLowerCase().includes(normalizedQuery) ||
-          glyph.displayName.toLowerCase().includes(normalizedQuery));
-
+      const unicodeMatched = glyph.unicode !== null && matchedUnicodes.has(glyph.unicode);
       if (filteringByGroup) return unicodeMatched;
-      if (normalizedQuery !== "") return unicodeMatched || nameMatched;
-      return true;
+      if (!hasQuery) return true;
+
+      const nameMatched =
+        glyph.name.toLowerCase().includes(normalizedQuery) ||
+        glyph.displayName.toLowerCase().includes(normalizedQuery);
+      return unicodeMatched || nameMatched;
     });
   }, [
     availableGlyphs,
@@ -329,6 +309,44 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
     },
   };
 };
+
+interface UnicodeMatchInput {
+  query: string;
+  searchLimit: number;
+  selectedLanguageId: string | null;
+  categoryFilters: readonly GlyphCategoryFilter[];
+  categoryCatalog: GlyphCategoryCatalog;
+  languageCatalog: LanguageCatalog;
+}
+
+/** Codepoints matching the search query within the selected language or categories. */
+function matchingUnicodes({
+  query,
+  searchLimit,
+  selectedLanguageId,
+  categoryFilters,
+  categoryCatalog,
+  languageCatalog,
+}: UnicodeMatchInput): Set<number> {
+  const hasQuery = query.trim() !== "";
+
+  if (selectedLanguageId !== null) {
+    const languageUnicodes = new Set(languageCatalog.filter(selectedLanguageId));
+    if (!hasQuery) return languageUnicodes;
+
+    const queryMatches = categoryCatalog.filter({ query, searchLimit });
+    return new Set(queryMatches.filter((codepoint) => languageUnicodes.has(codepoint)));
+  }
+
+  if (categoryFilters.length === 0) {
+    return new Set(categoryCatalog.filter({ query, searchLimit }));
+  }
+
+  const categoryMatches = categoryFilters.flatMap(({ category, subCategoryKey }) =>
+    categoryCatalog.filter({ query, category, subCategoryKey, searchLimit }),
+  );
+  return new Set(categoryMatches);
+}
 
 function fallbackGlyphName(codepoint: number): string {
   const hex = codepoint.toString(16).toUpperCase();

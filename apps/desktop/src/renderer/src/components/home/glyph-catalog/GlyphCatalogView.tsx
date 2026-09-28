@@ -18,6 +18,7 @@ import PlusIcon from "@/assets/general/plus.svg";
 
 import { SidebarRowButton } from "@/components/sidebar";
 import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
+import { listSelectionMode } from "@/hooks/useListSelection";
 import { CatalogSection } from "./CatalogSection";
 import { Category } from "./Category";
 import { LanguagePicker } from "./LanguagePicker";
@@ -144,14 +145,7 @@ export const GlyphCatalogView = () => {
                         <SidebarRowButton
                           aria-pressed={active}
                           onClick={(event) =>
-                            selectCategory(
-                              categoryNode.category,
-                              event.shiftKey
-                                ? "range"
-                                : event.metaKey || event.ctrlKey
-                                  ? "toggle"
-                                  : "single",
-                            )
+                            selectCategory(categoryNode.category, listSelectionMode(event))
                           }
                         />
                       }
