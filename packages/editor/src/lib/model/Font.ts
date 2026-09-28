@@ -1040,8 +1040,8 @@ export class Font {
       glyph.replaceComponentGlyphs(componentGlyphs.glyphs);
     }
 
+    // font.glyphs reads residency through glyphForId, so this store write reruns it.
     this.#store.setGlyphs([...glyphs.values()]);
-    this.#updateGlyphsFromStore();
   }
 
   #updateGlyphsFromStore(): void {
