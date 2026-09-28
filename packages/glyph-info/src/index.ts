@@ -21,7 +21,7 @@ export { GlyphInfo } from "./GlyphInfo.js";
 /** Load the default pre-built resource bundle. */
 export { defaultResources } from "./resources.js";
 
-export { GLYPH_CATEGORIES } from "./types.js";
+export { DEFAULT_LANGUAGE_IDS, GLYPH_CATEGORIES } from "./types.js";
 export type {
   /** Full metadata record for a single Unicode codepoint. */
   CharsetDefinition,

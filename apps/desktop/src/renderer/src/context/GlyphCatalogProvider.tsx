@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router";
-import type { GlyphCategory, GlyphCategoryCatalog, LanguageCatalog } from "@shift/glyph-info";
+import {
+  DEFAULT_LANGUAGE_IDS,
+  type GlyphCategory,
+  type GlyphCategoryCatalog,
+  type LanguageCatalog,
+} from "@shift/glyph-info";
 import { asGlyphId, type GlyphId, type GlyphName } from "@shift/types";
-import { effect, useSignalState } from "@shift/editor/signals";
+import { effect, signal, useSignalState } from "@shift/editor/signals";
 import { useFontSession } from "@/workspace/WorkspaceContext";
 import { getGlyphInfo } from "@/workspace/glyphInfo";
 import { useListSelection } from "@/hooks/useListSelection";
@@ -13,6 +18,10 @@ import type {
   GlyphCatalogSource,
   GlyphCategoryFilter,
 } from "@/types/glyphCatalog";
+
+const NO_LANGUAGE_IDS = signal<readonly string[] | null>(null, {
+  name: "glyphCatalog.previewLanguageIds",
+});
 
 export const GlyphCatalogProvider = ({ children }: { children: ReactNode }) => {
   const value = useGlyphCatalogSource();
@@ -31,6 +40,10 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
   const workspace = session.workspace;
 
   const availableGlyphs = useSignalState(catalog.glyphsCell);
+  const storedLanguageIds = useSignalState(
+    workspace ? workspace.editor.font.languageIdsCell : NO_LANGUAGE_IDS,
+  );
+  const trackedLanguageIds = storedLanguageIds ?? DEFAULT_LANGUAGE_IDS;
   const location = useSignalState(catalog.locationCell);
   const axes = useSignalState(catalog.axesCell);
   const metrics = useSignalState(catalog.metricsCell);
@@ -73,6 +86,10 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
   const languageCatalog = useMemo<LanguageCatalog>(
     () => glyphInfo.createLanguageCatalog(availableUnicodes),
     [availableUnicodes, glyphInfo],
+  );
+  const languageScripts = useMemo(
+    () => languageCatalog.scriptsFor(trackedLanguageIds),
+    [languageCatalog, trackedLanguageIds],
   );
   const visibleCategoryFilters = useMemo<readonly GlyphCategoryFilter[]>(
     () =>
@@ -233,11 +250,49 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
     return record.name;
   }, [workspace]);
 
+  const setTrackedLanguageIds = useCallback<GlyphCatalogSource["setTrackedLanguageIds"]>(
+    (languageIds) => {
+      if (!workspace) throw new Error("preview catalog cannot change tracked languages");
+
+      workspace.editor.setLanguageIds(languageIds);
+      if (selectedLanguageId !== null && !languageIds.includes(selectedLanguageId)) {
+        setSelectedLanguageId(null);
+      }
+    },
+    [selectedLanguageId, workspace],
+  );
+
+  const languageGlyphs = useCallback<GlyphCatalogSource["languageGlyphs"]>(
+    (languageId) => {
+      const available = new Set(availableUnicodes);
+      return languageCatalog.required(languageId).map((codepoint) => ({
+        codepoint,
+        name: glyphInfo.getGlyphName(codepoint) ?? fallbackGlyphName(codepoint),
+        present: available.has(codepoint),
+      }));
+    },
+    [availableUnicodes, glyphInfo, languageCatalog],
+  );
+
+  const generateGlyphs = useCallback<GlyphCatalogSource["generateGlyphs"]>(
+    (codepoints) => {
+      if (!workspace) throw new Error("preview catalog cannot create glyphs");
+
+      workspace.editor.createGlyphsForUnicodes(codepoints);
+    },
+    [workspace],
+  );
+
   return {
     availableGlyphs: [...availableGlyphs],
     filteredGlyphs,
     categories: categoryCatalog.categories,
-    languageScripts: languageCatalog.scripts,
+    languageScripts,
+    allLanguageScripts: languageCatalog.scripts,
+    trackedLanguageIds,
+    setTrackedLanguageIds,
+    languageGlyphs,
+    generateGlyphs,
     categoryFilters,
     selectedLanguageId,
     visibleCategoryFilters,
@@ -274,6 +329,11 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
     },
   };
 };
+
+function fallbackGlyphName(codepoint: number): string {
+  const hex = codepoint.toString(16).toUpperCase();
+  return codepoint > 0xffff ? `u${hex}` : `uni${hex.padStart(4, "0")}`;
+}
 
 function glyphId(glyph: GlyphCatalogItem) {
   return glyph.id;

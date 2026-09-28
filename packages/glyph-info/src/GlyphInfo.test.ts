@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { GlyphInfo } from "./GlyphInfo.js";
-import type { GlyphCategory } from "./types.js";
+import { DEFAULT_LANGUAGE_IDS, type GlyphCategory } from "./types.js";
 import { defaultResources } from "./resources.js";
 
 let db: GlyphInfo;
@@ -403,6 +403,35 @@ describe("language coverage catalogs", () => {
 
     expect(catalog.filter("eng-latin")).toEqual([0x42, 0x41, 0x61]);
     expect(catalog.filter("unknown-language")).toEqual([]);
+  });
+
+  it("lists every required base character in codepoint order", () => {
+    const catalog = db.createLanguageCatalog([0x61, 0x62]);
+    const required = catalog.required("eng-latin");
+
+    expect(required).toHaveLength(56);
+    expect(required).toContain(0x61);
+    expect(required).toEqual([...required].sort((left, right) => left - right));
+    expect(catalog.required("unknown-language")).toEqual([]);
+  });
+
+  it("groups tracked languages by script and skips unknown ids", () => {
+    const catalog = db.createLanguageCatalog([]);
+    const scripts = catalog.scriptsFor(["rus-cyrillic", "eng-latin", "fra-latin", "nope"]);
+
+    expect(scripts.map(({ script }) => script)).toEqual(["Cyrillic", "Latin"]);
+    expect(scripts[1]?.languages.map(({ language }) => language.id)).toEqual([
+      "eng-latin",
+      "fra-latin",
+    ]);
+  });
+
+  it("resolves every default language id", () => {
+    const catalog = db.createLanguageCatalog([]);
+
+    for (const languageId of DEFAULT_LANGUAGE_IDS) {
+      expect(catalog.coverage(languageId)?.language.id).toBe(languageId);
+    }
   });
 
   it("sorts scripts and languages alphabetically", () => {

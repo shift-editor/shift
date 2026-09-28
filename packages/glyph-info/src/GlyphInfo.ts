@@ -369,6 +369,12 @@ export class GlyphInfo {
       );
     }
 
+    const coverageById = new Map(
+      sortedScripts.flatMap((script) =>
+        script.languages.map((coverage) => [coverage.language.id, coverage] as const),
+      ),
+    );
+
     return {
       scripts: sortedScripts,
       filter: (languageId) => {
@@ -376,6 +382,17 @@ export class GlyphInfo {
         if (!required) return [];
 
         return codepoints.filter((codepoint) => required.has(codepoint));
+      },
+      coverage: (languageId) => coverageById.get(languageId) ?? null,
+      required: (languageId) =>
+        [...(languagesById.get(languageId) ?? [])].sort((left, right) => left - right),
+      scriptsFor: (languageIds) => {
+        const tracked = new Set(languageIds);
+
+        return sortedScripts.flatMap((script) => {
+          const languages = script.languages.filter(({ language }) => tracked.has(language.id));
+          return languages.length === 0 ? [] : [{ script: script.script, languages }];
+        });
       },
     };
   }
