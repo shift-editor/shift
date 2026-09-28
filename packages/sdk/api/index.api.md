@@ -54,6 +54,8 @@ export class Editor {
     createGlyph(name: GlyphName): GlyphRecord;
     // Warning: (ae-forgotten-export) The symbol "ComponentId" needs to be exported by the entry point index.d.ts
     createGlyphAndAddComponent(name: GlyphName): Promise<ComponentId | null>;
+    // Warning: (ae-forgotten-export) The symbol "Unicode" needs to be exported by the entry point index.d.ts
+    createGlyphsForUnicodes(unicodes: readonly Unicode[]): GlyphRecord[];
     createSource(name: string, externalLocation: ExternalAxisLocation): SourceId;
     // Warning: (ae-forgotten-export) The symbol "Modifiers" needs to be exported by the entry point index.d.ts
     //
@@ -244,6 +246,7 @@ export class Editor {
     // (undocumented)
     setDebugOverlays(overlays: DebugOverlays): void;
     setExternalLocation(location: ExternalAxisLocation): void;
+    setLanguageIds(ids: readonly string[]): void;
     setLeftSidebearing(value: number): void;
     // (undocumented)
     setPan(pan: Point2D): void;
@@ -339,6 +342,7 @@ export class Font {
     // Warning: (ae-forgotten-export) The symbol "AxisId" needs to be exported by the entry point index.d.ts
     createAxis(axis: AxisDefinition): AxisId;
     createGlyph(name: GlyphName): GlyphRecord;
+    createGlyphForUnicode(unicode: Unicode): GlyphRecord;
     createGlyphLayer(glyphId: GlyphId, sourceId: SourceId): LayerId;
     // Warning: (ae-forgotten-export) The symbol "NamedInstanceDefinition" needs to be exported by the entry point index.d.ts
     // Warning: (ae-forgotten-export) The symbol "NamedInstanceId" needs to be exported by the entry point index.d.ts
@@ -381,6 +385,7 @@ export class Font {
     hasGlyph(glyphId: GlyphId): boolean;
     get invalidGlyphIdsCell(): Signal<readonly GlyphId[] | null>;
     isVariable(): boolean;
+    get languageIdsCell(): Signal<readonly string[] | null>;
     // Warning: (ae-forgotten-export) The symbol "AnchorId" needs to be exported by the entry point index.d.ts
     layerIdForAnchor(anchorId: AnchorId): LayerId | null;
     layerIdForContour(contourId: ContourId): LayerId | null;
@@ -426,6 +431,7 @@ export class Font {
     // (undocumented)
     recordForName(name: GlyphName): GlyphRecord | null;
     setAxisMappings(mappings: readonly AxisMapping[]): Promise<void>;
+    setLanguageIds(languageIds: readonly string[]): void;
     setMetricDefinitions(definitions: readonly MetricDefinition[]): Promise<void>;
     source(sourceId: SourceId): Source | null;
     sourceAt(location: ExternalAxisLocation): Source | null;
@@ -435,8 +441,6 @@ export class Font {
     get sourceMetricsInterpolationCell(): Signal<SourceMetricsInterpolation | null>;
     get sources(): Source[];
     get sourcesCell(): Signal<Source[]>;
-    // Warning: (ae-forgotten-export) The symbol "Unicode" needs to be exported by the entry point index.d.ts
-    //
     // (undocumented)
     get unicodes(): readonly Unicode[];
     get unicodesCell(): Signal<Unicode[]>;
@@ -458,6 +462,7 @@ export interface FontSnapshot {
     axisMappings: Array<AxisMapping>;
     // (undocumented)
     glyphs: Array<GlyphEntry>;
+    languageIds?: Array<string>;
     // (undocumented)
     metadata: FontMetadata;
     // (undocumented)
@@ -660,7 +665,7 @@ export function useSignalState<T>(signal: Signal<T>, options?: UseSignalOptions)
 
 // Warnings were encountered during analysis:
 //
-// dist/Editor-Ba0KvxXC.d.ts:3586:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
+// dist/Editor-D930LPpT.d.ts:3613:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 
