@@ -2,9 +2,9 @@ use std::{fs, path::PathBuf};
 
 use shift_font::{
     AnchorId, AnchorSeed, Axis, AxisId, BooleanOp, ContourId, DesignLocation, ExternalLocation,
-    Font, FontChange, FontIntent, FontIntentSet, Glyph, GlyphId, GlyphLayer, GlyphName, LayerId,
-    NamedInstance, NamedInstanceId, PointId, PointSeed, PointType, Source, SourceId,
-    error::CoreError,
+    Font, FontChange, FontIntent, FontIntentSet, Glyph, GlyphId, GlyphLayer, GlyphName,
+    LANGUAGES_LIB_KEY, LayerId, NamedInstance, NamedInstanceId, PointId, PointSeed, PointType,
+    Source, SourceId, error::CoreError,
 };
 use shift_store::ShiftStore;
 use shift_workspace::{AcquireScope, FontWorkspace, NewWorkspace, WorkspaceError, WorkspaceSource};
@@ -431,7 +431,7 @@ fn imports_external_fonts_without_a_save_target() {
 #[test]
 fn large_ttf_reopens_directory_first_and_acquires_only_requested_layers() {
     let temp = tempfile::tempdir().unwrap();
-    let source_path = fixture("apps/desktop/src/renderer/src/assets/fonts/Inter-VariableFont.ttf");
+    let source_path = fixture("packages/editor/src/ui/assets/fonts/Inter-VariableFont.ttf");
     let store_path = temp.path().join("inter.sqlite");
 
     let mut workspace = FontWorkspace::open(&source_path, &store_path).unwrap();
@@ -2119,6 +2119,132 @@ fn metadata_replacement_is_persisted_and_undoable_without_changing_metrics() {
         .expect("metadata update should redo");
     assert_eq!(workspace.font().metadata(), &updated);
     assert_eq!(workspace.font().metrics(), &original_metrics);
+}
+
+fn set_languages(workspace: &mut FontWorkspace, language_ids: &[&str]) {
+    workspace
+        .apply(
+            FontIntentSet {
+                intents: vec![FontIntent::SetLanguages {
+                    language_ids: language_ids.iter().map(|id| id.to_string()).collect(),
+                }],
+            },
+            Some("Set Languages".to_string()),
+        )
+        .unwrap();
+}
+
+fn language_ids(ids: &[&str]) -> Option<Vec<String>> {
+    Some(ids.iter().map(|id| id.to_string()).collect())
+}
+
+#[test]
+fn tracked_languages_persist_across_resume_and_undo_restores_absence() {
+    let temp = tempfile::tempdir().unwrap();
+    let store_path = temp.path().join("working.sqlite");
+    let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
+    assert_eq!(workspace.font().language_ids(), None);
+
+    set_languages(
+        &mut workspace,
+        &["eng-latin", "cmn-chinese", " ", "eng-latin"],
+    );
+    assert_eq!(
+        workspace.font().language_ids(),
+        language_ids(&["eng-latin", "cmn-chinese"])
+    );
+    drop(workspace);
+
+    let mut workspace = FontWorkspace::resume(&store_path).unwrap();
+    assert_eq!(
+        workspace.font().language_ids(),
+        language_ids(&["eng-latin", "cmn-chinese"])
+    );
+
+    set_languages(&mut workspace, &[]);
+    assert_eq!(workspace.font().language_ids(), language_ids(&[]));
+
+    let undone = workspace.undo().unwrap().expect("setLanguages should undo");
+    assert!(undone.changes.changes.iter().any(|change| matches!(
+        change,
+        FontChange::FontLibValueUpdated(change) if change.key == LANGUAGES_LIB_KEY
+    )));
+    assert_eq!(
+        workspace.font().language_ids(),
+        language_ids(&["eng-latin", "cmn-chinese"])
+    );
+
+    workspace.redo().unwrap().expect("setLanguages should redo");
+    assert_eq!(workspace.font().language_ids(), language_ids(&[]));
+    drop(workspace);
+
+    let workspace = FontWorkspace::resume(&store_path).unwrap();
+    assert_eq!(workspace.font().language_ids(), language_ids(&[]));
+}
+
+#[test]
+fn undoing_the_first_language_edit_removes_the_persisted_key() {
+    let temp = tempfile::tempdir().unwrap();
+    let store_path = temp.path().join("working.sqlite");
+    let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
+
+    set_languages(&mut workspace, &["eng-latin"]);
+    workspace.undo().unwrap().expect("setLanguages should undo");
+    assert_eq!(workspace.font().language_ids(), None);
+    drop(workspace);
+
+    let workspace = FontWorkspace::resume(&store_path).unwrap();
+    assert_eq!(workspace.font().language_ids(), None);
+}
+
+#[test]
+fn tracked_languages_survive_document_recovery_and_save() {
+    let temp = tempfile::tempdir().unwrap();
+    let document_path = temp.path().join("Languages.shift");
+    let recovery_path = temp.path().join("recovery.sqlite");
+    drop(ShiftStore::create_document(&document_path, &shift_font::Font::new()).unwrap());
+
+    let mut workspace = FontWorkspace::open_document(&document_path, &recovery_path).unwrap();
+    set_languages(&mut workspace, &["eng-latin", "fra-latin"]);
+    drop(workspace);
+
+    let mut recovered = FontWorkspace::open_document(&document_path, &recovery_path).unwrap();
+    assert!(recovered.is_dirty().unwrap());
+    assert_eq!(
+        recovered.font().language_ids(),
+        language_ids(&["eng-latin", "fra-latin"])
+    );
+
+    recovered.save().unwrap();
+    drop(recovered);
+
+    let saved = ShiftStore::open_document(&document_path)
+        .unwrap()
+        .load_font_state()
+        .unwrap();
+    assert_eq!(
+        saved.language_ids(),
+        language_ids(&["eng-latin", "fra-latin"])
+    );
+}
+
+#[test]
+fn undoing_a_saved_language_list_removes_it_from_document_recovery() {
+    let temp = tempfile::tempdir().unwrap();
+    let document_path = temp.path().join("Languages.shift");
+    let recovery_path = temp.path().join("recovery.sqlite");
+    drop(ShiftStore::create_document(&document_path, &shift_font::Font::new()).unwrap());
+
+    let mut workspace = FontWorkspace::open_document(&document_path, &recovery_path).unwrap();
+    set_languages(&mut workspace, &["eng-latin"]);
+    workspace.save().unwrap();
+    workspace.undo().unwrap().expect("setLanguages should undo");
+    assert_eq!(workspace.font().language_ids(), None);
+    drop(workspace);
+
+    let recovered = FontWorkspace::open_document(&document_path, &recovery_path).unwrap();
+    assert!(recovered.is_dirty().unwrap());
+    assert_eq!(recovered.font().language_ids(), None);
 }
 
 #[test]

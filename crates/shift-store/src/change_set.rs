@@ -352,6 +352,9 @@ pub(crate) fn write_glyph_directory_in_tx(
 fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), StoreError> {
     match change {
         font::FontChange::FontMetadataUpdated(change) => update_font_metadata(tx, &change.metadata),
+        font::FontChange::FontLibValueUpdated(change) => {
+            replace_font_lib_value(tx, &change.key, change.value.as_ref())
+        }
         font::FontChange::AxisCreated(change) => {
             let order_index = tx.query_row("SELECT COUNT(*) FROM axes", [], |row| row.get(0))?;
             insert_axis(tx, &change.axis, order_index, false)
@@ -1271,7 +1274,23 @@ fn kerning_side_parts(side: &font::KerningSide) -> (&'static str, &str) {
     }
 }
 
-fn replace_lib_data(
+/// Upserts or removes one `font_lib` row without touching other keys.
+fn replace_font_lib_value(
+    tx: &Transaction<'_>,
+    key: &str,
+    value: Option<&font::LibValue>,
+) -> Result<(), StoreError> {
+    tx.execute("DELETE FROM font_lib WHERE key = ?1", [key])?;
+    if let Some(value) = value {
+        tx.execute(
+            "INSERT INTO font_lib (key, value_json) VALUES (?1, ?2)",
+            params![key, lib_value_json(value)?],
+        )?;
+    }
+    Ok(())
+}
+
+pub(crate) fn replace_lib_data(
     tx: &Transaction<'_>,
     table: &'static str,
     owner_column: &'static str,

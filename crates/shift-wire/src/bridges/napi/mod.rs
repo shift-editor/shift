@@ -798,6 +798,8 @@ pub struct NapiFontSnapshot {
     pub axis_mappings: Vec<NapiAxisMapping>,
     pub axis_mapping_bases: Vec<NapiAxisMappingBasis>,
     pub named_instances: Vec<NapiNamedInstance>,
+    /// Tracked Hyperglot language ids; absent when the font stores no list.
+    pub language_ids: Option<Vec<String>>,
 }
 
 impl From<FontSnapshot> for NapiFontSnapshot {
@@ -825,6 +827,7 @@ impl From<FontSnapshot> for NapiFontSnapshot {
                 .into_iter()
                 .map(Into::into)
                 .collect(),
+            language_ids: snapshot.language_ids,
         }
     }
 }
@@ -1416,6 +1419,15 @@ impl From<SourceMetricsInterpolationSnapshot> for NapiSourceMetricsInterpolation
 pub struct NapiSourceMetricsInterpolationReplacement {
     pub snapshot: Option<NapiSourceMetricsInterpolationSnapshot>,
 }
+/// Replacement wrapper whose presence distinguishes "unchanged" from a
+/// change that removed the tracked language list.
+#[napi(object)]
+pub struct NapiLanguagesReplacement {
+    /// Tracked Hyperglot language ids in authored order; absent when the font
+    /// stores no list and callers should apply their own default.
+    pub language_ids: Option<Vec<String>>,
+}
+
 /// CS0 walking-skeleton intent. A stringly union covering exactly the two
 /// skeleton kinds; CS1 replaces this with per-variant intent structs.
 #[napi(object)]
@@ -1427,9 +1439,10 @@ pub struct NapiFontIntent {
     /// "removeComponents" | "decomposeComponents" |
     /// "reverseContour" | "setContourStart" | "translatePoints" |
     /// "setXAdvance" | "applyBooleanOp".
-    /// Font-level kinds additionally include metadata replacement, axis
-    /// create/update/delete, mapping replacement, named-instance
-    /// create/update/delete, source create/delete, and glyph or layer creation.
+    /// Font-level kinds additionally include metadata replacement, tracked
+    /// language replacement, axis create/update/delete, mapping replacement,
+    /// named-instance create/update/delete, source create/delete, and glyph
+    /// or layer creation.
     /// Every kind shares the same apply path; one set is one undo step.
     pub kind: String,
     pub add_points: Option<NapiAddPointsIntent>,
@@ -1453,6 +1466,7 @@ pub struct NapiFontIntent {
     pub create_glyph: Option<NapiCreateGlyphIntent>,
     pub update_glyph: Option<NapiUpdateGlyphIntent>,
     pub update_font_metadata: Option<NapiUpdateFontMetadataIntent>,
+    pub set_languages: Option<NapiSetLanguagesIntent>,
     pub create_axis: Option<NapiCreateAxisIntent>,
     pub update_axis: Option<NapiUpdateAxisIntent>,
     pub delete_axis: Option<NapiDeleteAxisIntent>,
@@ -1474,6 +1488,14 @@ pub struct NapiFontIntent {
 pub struct NapiUpdateFontMetadataIntent {
     /// Complete replacement snapshot; omitted optional fields are cleared.
     pub metadata: NapiFontMetadata,
+}
+
+/// Replaces the font's tracked language list as one undoable edit.
+#[napi(object)]
+pub struct NapiSetLanguagesIntent {
+    /// Hyperglot language ids in display order. Blank ids are dropped and
+    /// duplicates keep their first position; an empty list is stored as-is.
+    pub language_ids: Vec<String>,
 }
 
 /// Font-level glyph creation. The glyph id is client-minted (decision 6:
@@ -1654,6 +1676,8 @@ pub struct NapiFontReplacement {
     pub source_metrics_interpolation: Option<NapiSourceMetricsInterpolationReplacement>,
     /// Full authored product-preset list when named instances changed.
     pub named_instances: Option<Vec<NapiNamedInstance>>,
+    /// Tracked language list when it changed; absent otherwise.
+    pub languages: Option<NapiLanguagesReplacement>,
     /// Full sources list when font-level source structure changed (createAxis
     /// reshapes locations, createSource adds one); absent otherwise.
     pub sources: Option<Vec<NapiSource>>,

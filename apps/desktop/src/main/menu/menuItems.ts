@@ -1,5 +1,5 @@
 import type { MenuItemConstructorOptions } from "electron";
-import type { CommandId } from "../../shared/commands";
+import { commandShortcuts, toElectronAccelerator, type CommandId } from "../../shared/commands";
 import { commands } from "../commands/Commands";
 
 export function commandMenuItem(
@@ -10,10 +10,12 @@ export function commandMenuItem(
   const command = commands.find((candidate) => candidate.id === id);
   if (!command) throw new Error(`Unknown menu command: ${id}`);
 
+  const shortcut = commandShortcuts[id];
+
   return {
     id,
     label: command.label,
-    accelerator: command.accelerator,
+    accelerator: shortcut ? toElectronAccelerator(shortcut) : undefined,
     enabled: isCommandEnabled(id),
     click: () => runCommand(id),
   };

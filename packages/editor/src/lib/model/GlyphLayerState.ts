@@ -46,6 +46,7 @@ export class GlyphLayerState {
   readonly #geometry: ComputedSignal<GlyphGeometry>;
 
   #confirmedState: GlyphState | null = null;
+  // non-reactive: rollback snapshots per pending edit; only read by the imperative edit, fold, and rollback paths
   readonly #pendingStates = new Map<PendingEditId, GlyphState>();
 
   #editBaseState: GlyphState | null = null;

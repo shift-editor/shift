@@ -143,6 +143,13 @@ export interface BridgeApi {
   getAxisMappings(): Array<AxisMapping>
   getAxisMappingBases(): Array<AxisMappingBasis>
   getMetricDefinitions(): Array<MetricDefinition>
+  /**
+   * Returns the font's tracked Hyperglot language ids in authored order.
+   *
+   * `null` when the font lib has no tracked-language key, so the renderer
+   * applies its own default; an empty array is an explicit empty list.
+   */
+  getLanguageIds(): Array<string> | null
   getNamedInstances(): Array<NamedInstance>
   /** Returns the precomputed source-metric interpolation model for this font. */
   getSourceMetricsInterpolation(): SourceMetricsInterpolationSnapshot | null
@@ -463,9 +470,10 @@ export interface FontIntent {
    * "removeComponents" | "decomposeComponents" |
    * "reverseContour" | "setContourStart" | "translatePoints" |
    * "setXAdvance" | "applyBooleanOp".
-   * Font-level kinds additionally include metadata replacement, axis
-   * create/update/delete, mapping replacement, named-instance
-   * create/update/delete, source create/delete, and glyph or layer creation.
+   * Font-level kinds additionally include metadata replacement, tracked
+   * language replacement, axis create/update/delete, mapping replacement,
+   * named-instance create/update/delete, source create/delete, and glyph
+   * or layer creation.
    * Every kind shares the same apply path; one set is one undo step.
    */
   kind: string
@@ -490,6 +498,7 @@ export interface FontIntent {
   createGlyph?: CreateGlyphIntent
   updateGlyph?: UpdateGlyphIntent
   updateFontMetadata?: UpdateFontMetadataIntent
+  setLanguages?: SetLanguagesIntent
   createAxis?: CreateAxisIntent
   updateAxis?: UpdateAxisIntent
   deleteAxis?: DeleteAxisIntent
@@ -550,6 +559,8 @@ export interface FontReplacement {
   sourceMetricsInterpolation?: SourceMetricsInterpolationReplacement
   /** Full authored product-preset list when named instances changed. */
   namedInstances?: Array<NamedInstance>
+  /** Tracked language list when it changed; absent otherwise. */
+  languages?: LanguagesReplacement
   /**
    * Full sources list when font-level source structure changed (createAxis
    * reshapes locations, createSource adds one); absent otherwise.
@@ -568,6 +579,8 @@ export interface FontSnapshot {
   axisMappings: Array<AxisMapping>
   axisMappingBases: Array<AxisMappingBasis>
   namedInstances: Array<NamedInstance>
+  /** Tracked Hyperglot language ids; absent when the font stores no list. */
+  languageIds?: Array<string>
 }
 
 export interface GlyphChangedEntities {
@@ -692,6 +705,18 @@ export interface InterpolationSupport {
   lower: number
   peak: number
   upper: number
+}
+
+/**
+ * Replacement wrapper whose presence distinguishes "unchanged" from a
+ * change that removed the tracked language list.
+ */
+export interface LanguagesReplacement {
+  /**
+   * Tracked Hyperglot language ids in authored order; absent when the font
+   * stores no list and callers should apply their own default.
+   */
+  languageIds?: Array<string>
 }
 
 export interface LayerDifference {
@@ -845,6 +870,15 @@ export interface SetContourStartIntent {
   layerId: LayerId
   contourId: ContourId
   pointId: PointId
+}
+
+/** Replaces the font's tracked language list as one undoable edit. */
+export interface SetLanguagesIntent {
+  /**
+   * Hyperglot language ids in display order. Blank ids are dropped and
+   * duplicates keep their first position; an empty list is stored as-is.
+   */
+  languageIds: Array<string>
 }
 
 export interface SetMetricDefinitionsIntent {

@@ -1,4 +1,4 @@
-import type { GlyphId } from "@shift/types";
+import type { GlyphId, SourceId } from "@shift/types";
 import type { GlyphAtlasPage, GlyphAtlasPageRequest, GlyphAtlasSource } from "@/types/glyphAtlas";
 import type { GlyphPreviewFrame } from "@/types/glyphPreview";
 import { SlugAtlas } from "@/lib/slug/SlugAtlas";
@@ -181,6 +181,10 @@ export class ResidentGlyphLayer {
 
   hasGlyphs(glyphIds: readonly GlyphId[]): boolean {
     return this.#renderer.hasGlyphs(glyphIds);
+  }
+
+  hasDrawableOutline(glyphId: GlyphId, sourceId: SourceId | null): boolean {
+    return this.#renderer.hasDrawableOutline(glyphId, sourceId);
   }
 
   async updateResolvedWeights(coordinates: readonly number[]): Promise<void> {

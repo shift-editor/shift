@@ -755,6 +755,8 @@ pub struct FontSnapshot {
     pub axis_mappings: Vec<AxisMapping>,
     pub axis_mapping_bases: Vec<AxisMappingBasis>,
     pub named_instances: Vec<NamedInstance>,
+    /// Tracked Hyperglot language ids; `None` when the font stores no list.
+    pub language_ids: Option<Vec<String>>,
 }
 
 /// Numeric encoding used for component transforms in one projection shape.

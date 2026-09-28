@@ -2,6 +2,7 @@ import type {
   AppliedChange,
   FontIntent,
   FontSnapshot,
+  GlyphEntry,
   GlyphId,
   GlyphPreview,
   GlyphRecord,
@@ -15,7 +16,25 @@ import type {
 } from "@shift/types";
 import type { FontStore } from "../lib/model/FontStore";
 import type { PendingEditId } from "./editing";
+import type { WorkspaceEditListener } from "./history";
 import type { GlyphReader } from "./glyph";
+
+/** `FontStore` lookup key for the layer a glyph authors in one source. */
+export type GlyphSourceKey = string & { readonly __glyphSourceKey: unique symbol };
+
+/**
+ * Committed glyph lookups `FontStore` derives from one workspace or font snapshot.
+ *
+ * @remarks
+ * Immutable: a new snapshot replaces the whole index so readers can track it
+ * as a single signal value.
+ */
+export interface FontRecordIndex {
+  readonly layerByGlyphSource: ReadonlyMap<GlyphSourceKey, LayerId>;
+  readonly glyphByLayer: ReadonlyMap<LayerId, GlyphId>;
+  readonly glyphById: ReadonlyMap<GlyphId, GlyphEntry>;
+  readonly recordsById: ReadonlyMap<GlyphId, GlyphRecord>;
+}
 
 export interface FontStoreOptions {
   readonly font?: FontSnapshot | null;
@@ -35,6 +54,7 @@ export interface WorkspaceEditCoordinator {
   undo(): Promise<AppliedChange | null>;
   redo(): Promise<AppliedChange | null>;
   discardRedo(): Promise<void>;
+  onEdit(listener: WorkspaceEditListener): () => void;
   state(): Promise<WorkspaceDocumentState | null>;
   readonly settledCell: { readonly value: boolean };
 }

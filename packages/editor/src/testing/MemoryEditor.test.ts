@@ -12,14 +12,11 @@ import {
   type GlyphRecord,
   type GlyphSnapshot,
 } from "@shift/types";
+import { createMemoryFontSession } from "../createMemoryFontSession";
 import type { SystemClipboard } from "../lib/clipboard";
-import { Editor } from "../lib/editor/Editor";
-import { Font } from "../lib/model/Font";
-import { FontStore } from "../lib/model/FontStore";
-import { Select } from "../lib/tools/select/Select";
 import { externalAxisLocationFromRecord } from "../lib/variation/location";
 import type { ScenePoint } from "../types/coordinates";
-import type { GlyphReader } from "../types/glyph";
+import type { MemoryFontSource } from "../types/fontSession";
 
 const glyphId = asGlyphId("glyph_s");
 const regularSourceId = asSourceId("source_regular");
@@ -48,31 +45,13 @@ class MemoryClipboard implements SystemClipboard {
 describe("memory font editing", () => {
   it("loads snapshots and retains a Select-tool point drag in memory", async () => {
     const { font: fontSnapshot, glyph, records } = fixture();
-    const reader: GlyphReader = {
-      read(glyphIds) {
-        return Promise.resolve(glyphIds.includes(glyph.glyphId) ? [glyph] : []);
-      },
-      glyphPreviews() {
-        return Promise.resolve([]);
-      },
-    };
-    const store = new FontStore({ font: fontSnapshot, records });
-    const font = new Font({ store, reader });
-    const editor = new Editor({
-      font,
-      fontStore: store,
-      clipboard: new MemoryClipboard(),
-      sessionMode: "memory",
-    });
-    editor.registerTool({
-      id: "select",
-      create: (toolEditor) => new Select(toolEditor),
-      icon: () => null,
-      tooltip: "Select",
-    });
-    editor.setActiveTool("select");
-    editor.selectSource(regularSourceId);
+    const source = memorySource({ font: fontSnapshot, glyph, records });
+    const session = createMemoryFontSession({ source, clipboard: new MemoryClipboard() });
+    const { editor, font } = session;
 
+    expect(editor.scene.nodes()).toEqual([]);
+
+    editor.selectSource(regularSourceId);
     const loadedGlyph = await font.loadGlyph(glyphId);
     editor.scene.setNodes([
       {
@@ -117,10 +96,79 @@ describe("memory font editing", () => {
       y: 112.5,
     });
 
-    editor.destroy();
-    font.dispose();
+    session.dispose();
+  });
+
+  it("keeps axis state isolated between independent editor sessions", () => {
+    const source = memorySource(fixture());
+    const first = createMemoryFontSession({ source, clipboard: new MemoryClipboard() });
+    const second = createMemoryFontSession({ source, clipboard: new MemoryClipboard() });
+    const secondLocation = second.editor.externalLocation;
+
+    first.editor.setExternalLocation(externalAxisLocationFromRecord({ [axisId]: 625 }));
+
+    expect(first.editor.externalLocation.get(axisId)).toBe(625);
+    expect(second.editor.externalLocation).toBe(secondLocation);
+    expect(second.editor.externalLocation.has(axisId)).toBe(false);
+
+    first.dispose();
+    second.dispose();
+  });
+
+  it("offers only the requested tools and activates the first", () => {
+    const source = memorySource(fixture());
+    const defaults = createMemoryFontSession({ source, clipboard: new MemoryClipboard() });
+    const handOnly = createMemoryFontSession({
+      source,
+      clipboard: new MemoryClipboard(),
+      tools: ["hand"],
+    });
+    const viewOnly = createMemoryFontSession({
+      source,
+      clipboard: new MemoryClipboard(),
+      tools: [],
+    });
+
+    expect([...defaults.editor.toolRegistryCell.peek().keys()]).toEqual(["select", "hand"]);
+    expect(defaults.editor.toolCell.peek()?.id).toBe("select");
+    expect([...handOnly.editor.toolRegistryCell.peek().keys()]).toEqual(["hand"]);
+    expect(handOnly.editor.toolCell.peek()?.id).toBe("hand");
+    expect(viewOnly.editor.toolRegistryCell.peek().size).toBe(0);
+    expect(viewOnly.editor.toolCell.peek()).toBeNull();
+
+    defaults.dispose();
+    handOnly.dispose();
+    viewOnly.dispose();
+  });
+
+  it("disposes a session idempotently", () => {
+    const session = createMemoryFontSession({
+      source: memorySource(fixture()),
+      clipboard: new MemoryClipboard(),
+    });
+    expect(session.editor.toolCell.peek()?.id).toBe("select");
+    expect(session.editor.toolRegistryCell.peek().size).toBeGreaterThan(0);
+
+    session.dispose();
+
+    expect(session.editor.toolCell.peek()).toBeNull();
+    expect(session.editor.toolRegistryCell.peek().size).toBe(0);
+    expect(() => session.dispose()).not.toThrow();
   });
 });
+
+function memorySource({ font, glyph, records }: ReturnType<typeof fixture>): MemoryFontSource {
+  return {
+    font,
+    records,
+    read(glyphIds) {
+      return Promise.resolve(glyphIds.includes(glyph.glyphId) ? [glyph] : []);
+    },
+    glyphPreviews() {
+      return Promise.resolve([]);
+    },
+  };
+}
 
 function fixture(): {
   font: FontSnapshot;

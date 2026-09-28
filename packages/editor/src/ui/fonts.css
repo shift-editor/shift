@@ -1,0 +1,16 @@
+/* Font faces used by the shared editor chrome, resolved relative to this package. */
+@font-face {
+  font-family: "Inter";
+  src: url("./assets/fonts/Inter-VariableFont.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("./assets/fonts/JetBrainsMono[wght].ttf") format("truetype");
+  font-weight: 100 800;
+  font-style: normal;
+  font-display: swap;
+}

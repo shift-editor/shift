@@ -251,12 +251,8 @@ export function resolveThemeSelection(
   themeSelection: ThemeSelection,
   systemAppearance: ThemeAppearance,
 ): ColorTheme {
-  const themeId =
-    themeSelection === "system"
-      ? systemAppearance === "dark"
-        ? "shift-dark"
-        : "shift-light"
-      : themeSelection;
+  const systemThemeId = systemAppearance === "dark" ? "shift-dark" : "shift-light";
+  const themeId = themeSelection === "system" ? systemThemeId : themeSelection;
   return colorThemes.find((theme) => theme.id === themeId) ?? colorThemes[0];
 }
 

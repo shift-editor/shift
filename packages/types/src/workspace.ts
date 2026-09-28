@@ -26,6 +26,8 @@ export interface WorkspaceSnapshot {
   axisMappings: AxisMapping[];
   axisMappingBases: AxisMappingBasis[];
   namedInstances: NamedInstance[];
+  /** Tracked Hyperglot language ids; `null` when the font stores no list. */
+  languageIds: string[] | null;
 }
 
 export interface WorkspaceGlyphLayerSnapshot {
