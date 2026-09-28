@@ -75,16 +75,17 @@ export class Select extends BaseTool<SelectState, Select> {
     const coords = this.editor.input.pointerCell.value;
     const modifiers = this.editor.input.modifiersCell.value;
     const hover = this.editor.hover.entryCell.value;
-    if (
+    const selectedIds = this.editor.selection.stateCell.value.ids;
+    // Shift-click only adds when there is a selection to add to.
+    const addsToSelection =
       state.type === "ready" &&
       coords &&
       modifiers.shiftKey &&
       hover &&
+      selectedIds.length > 0 &&
       objectIsKindOf(this.editor.object(hover), "point") &&
-      !this.editor.selection.stateCell.value.ids.includes(hover)
-    ) {
-      return { type: "add" };
-    }
+      !selectedIds.includes(hover);
+    if (addsToSelection) return { type: "add" };
 
     if (state.type === "ready" && coords && modifiers.metaKey && hover) {
       const object = this.editor.object(hover);
