@@ -63,13 +63,7 @@ export function EditorToolbar({
             <TooltipTrigger>
               <Button
                 icon={<ShiftIcon name="sidebar-left" className="h-5 w-5" />}
-                aria-label={
-                  leftSidebarOpen === undefined
-                    ? "Toggle left sidebar"
-                    : leftSidebarOpen
-                      ? "Hide left sidebar"
-                      : "Show left sidebar"
-                }
+                aria-label={sidebarToggleLabel("left", leftSidebarOpen)}
                 aria-pressed={leftSidebarOpen}
                 variant="toolbar"
                 size="icon"
@@ -107,13 +101,7 @@ export function EditorToolbar({
             <TooltipTrigger>
               <Button
                 icon={<ShiftIcon name="sidebar-right" className="h-5 w-5" />}
-                aria-label={
-                  rightSidebarOpen === undefined
-                    ? "Toggle right sidebar"
-                    : rightSidebarOpen
-                      ? "Hide right sidebar"
-                      : "Show right sidebar"
-                }
+                aria-label={sidebarToggleLabel("right", rightSidebarOpen)}
                 aria-pressed={rightSidebarOpen}
                 variant="toolbar"
                 size="icon"
@@ -185,4 +173,9 @@ function TrafficLight({
       ) : null}
     </span>
   );
+}
+
+function sidebarToggleLabel(side: "left" | "right", open: boolean | undefined): string {
+  if (open === undefined) return `Toggle ${side} sidebar`;
+  return `${open ? "Hide" : "Show"} ${side} sidebar`;
 }

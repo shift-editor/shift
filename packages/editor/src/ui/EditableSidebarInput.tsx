@@ -8,7 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { NUDGES_VALUES, type NudgeMagnitude } from "../types/nudge";
+import { NUDGES_VALUES, nudgeMagnitude } from "../types/nudge";
 import { useSidebarInputFocus } from "./SidebarInputFocus";
 
 export interface EditableSidebarInputHandle {
@@ -102,11 +102,7 @@ export const EditableSidebarInput = forwardRef<
         if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
 
         event.preventDefault();
-        const magnitude: NudgeMagnitude = event.metaKey
-          ? "large"
-          : event.shiftKey
-            ? "medium"
-            : "small";
+        const magnitude = nudgeMagnitude({ accel: event.metaKey, shift: event.shiftKey });
         const currentValue = isEditing ? parseNumericValue(editValue) : displayValue;
         if (currentValue === null) return;
 
@@ -118,6 +114,8 @@ export const EditableSidebarInput = forwardRef<
       [displayValue, editValue, isEditing, onValueChange],
     );
 
+    const displayText = displayValue === null ? "" : `${displayValue}${suffix}`;
+
     return (
       <Tooltip>
         <TooltipTrigger>
@@ -126,7 +124,7 @@ export const EditableSidebarInput = forwardRef<
             aria-label={ariaLabel}
             label={label}
             labelPosition={labelPosition}
-            value={isEditing ? editValue : displayValue === null ? "" : `${displayValue}${suffix}`}
+            value={isEditing ? editValue : displayText}
             icon={icon}
             iconPosition={iconPosition}
             readOnly={!isEditing}

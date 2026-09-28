@@ -48,6 +48,7 @@
     "shift/no-snapshot-in-domain": "error",
     "shift/no-raw-point-type-check": "error",
     "shift/no-nested-ternary-map": "error",
+    "eslint/no-nested-ternary": "error",
     "shift/no-inline-coordinate-math": "off",
     "shift/no-repeated-optional-chain": "warn",
     "shift/no-section-divider-comments": "error",
