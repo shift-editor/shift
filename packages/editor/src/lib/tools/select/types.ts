@@ -65,6 +65,10 @@ export interface BendDrag {
   startPos: Point2D;
   controlOneId: PointId;
   controlTwoId: PointId;
+  /** On-curve start of the segment; the anchor of control one. */
+  anchorStart: Point2D;
+  /** On-curve end of the segment; the anchor of control two. */
+  anchorEnd: Point2D;
   initialControlOne: Point2D;
   initialControlTwo: Point2D;
   segmentId: SegmentId;

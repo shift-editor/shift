@@ -1,7 +1,7 @@
-import { Vec2 } from "@shift/geo";
+import { Vec2, type Point2D } from "@shift/geo";
 import type { ToolContext } from "../../core/Behavior";
-import type { DragEvent, DragStartEvent } from "../../core/GestureDetector";
-import type { SelectBehavior, SelectState } from "../types";
+import type { DragEvent, DragStartEvent, ModifierKeys } from "../../core/GestureDetector";
+import type { BendDrag, SelectBehavior, SelectState } from "../types";
 import type { GlyphLayerEdit } from "../../../model/GlyphLayerEdit";
 import { objectIsKindOf } from "../../../../types/object";
 
@@ -24,7 +24,7 @@ export class BendCurve implements SelectBehavior {
     const cubic = segment?.asCubic();
     if (!cubic) return false;
 
-    const { controlStart, controlEnd } = cubic;
+    const { start, controlStart, controlEnd, end } = cubic;
 
     const edit = layer.beginEdit();
     this.#edit = edit;
@@ -39,6 +39,8 @@ export class BendCurve implements SelectBehavior {
         segmentId: object.segmentId,
         controlOneId: controlStart.id,
         controlTwoId: controlEnd.id,
+        anchorStart: { x: start.x, y: start.y },
+        anchorEnd: { x: end.x, y: end.y },
         initialControlOne: controlStart,
         initialControlTwo: controlEnd,
       },
@@ -53,32 +55,23 @@ export class BendCurve implements SelectBehavior {
     const object = ctx.editor.object(state.bend.segmentId);
     if (!objectIsKindOf(object, "segment")) return false;
 
-    const point = ctx.editor.getPointInNodeSpace(event.coords.scene, object.node.position);
-    const delta = Vec2.sub(point, state.bend.startPos);
-    const t = state.bend.t;
-    const w1 = 3 * (1 - t) ** 2 * t;
-    const w2 = 3 * (1 - t) * t ** 2;
-    const denom = w1 * w1 + w2 * w2;
-    if (Math.abs(denom) < 1e-12) return true;
+    const pointer = ctx.editor.getPointInNodeSpace(event.coords.scene, object.node.position);
+    const controls = bentControls(state.bend, pointer, event);
+    if (!controls) return true;
 
-    const delta1 = Vec2.scale(delta, w1 / denom);
-    const delta2 = Vec2.scale(delta, w2 / denom);
-    const { initialControlOne, initialControlTwo } = state.bend;
-    const newCp1 = Vec2.add(initialControlOne, delta1);
-    const newCp2 = Vec2.add(initialControlTwo, delta2);
-
+    const [controlOne, controlTwo] = controls;
     this.#edit.setPositions([
       {
         kind: "point",
         id: state.bend.controlOneId,
-        x: newCp1.x,
-        y: newCp1.y,
+        x: controlOne.x,
+        y: controlOne.y,
       },
       {
         kind: "point",
         id: state.bend.controlTwoId,
-        x: newCp2.x,
-        y: newCp2.y,
+        x: controlTwo.x,
+        y: controlTwo.y,
       },
     ]);
     this.#hasChanges = true;
@@ -110,4 +103,117 @@ export class BendCurve implements SelectBehavior {
     this.#done = null;
     this.#hasChanges = false;
   }
+}
+
+type BentControls = readonly [Point2D, Point2D];
+
+/**
+ * Solves the two control positions that pull the curve point at `bend.t` onto `pointer`.
+ *
+ * Shift snaps each handle to the multiple of 45° nearest its free-bend direction,
+ * as RoboFont does; Alt keeps each handle's initial direction. Either way only handle lengths change, so the solve is a
+ * least-squares fit of two scalars. Returns null when `t` sits on an endpoint and
+ * the controls have no influence.
+ */
+function bentControls(
+  bend: BendDrag,
+  pointer: Point2D,
+  modifiers: Pick<ModifierKeys, "shiftKey" | "altKey">,
+): BentControls | null {
+  const weights = bendWeights(bend.t);
+  if (weights.denom < 1e-12) return null;
+
+  const free = freeBend(bend, pointer);
+
+  if (modifiers.shiftKey) {
+    const directionOne = nearestFortyFive(Vec2.sub(free[0], bend.anchorStart));
+    const directionTwo = nearestFortyFive(Vec2.sub(free[1], bend.anchorEnd));
+    if (directionOne && directionTwo) {
+      return bendAlongDirections(bend, pointer, directionOne, directionTwo);
+    }
+  }
+
+  if (modifiers.altKey) {
+    const directionOne = Vec2.unit(Vec2.sub(bend.initialControlOne, bend.anchorStart));
+    const directionTwo = Vec2.unit(Vec2.sub(bend.initialControlTwo, bend.anchorEnd));
+    const hasDirections = !Vec2.isZero(directionOne) && !Vec2.isZero(directionTwo);
+    if (hasDirections) return bendAlongDirections(bend, pointer, directionOne, directionTwo);
+  }
+
+  return free;
+}
+
+/** Moves both controls with the pointer, weighted by their influence at `bend.t`. */
+function freeBend(bend: BendDrag, pointer: Point2D): BentControls {
+  const weights = bendWeights(bend.t);
+  const delta = Vec2.sub(pointer, bend.startPos);
+  return [
+    Vec2.add(bend.initialControlOne, Vec2.scale(delta, weights.one / weights.denom)),
+    Vec2.add(bend.initialControlTwo, Vec2.scale(delta, weights.two / weights.denom)),
+  ];
+}
+
+const FORTY_FIVE_DEGREES = Math.PI / 4;
+
+/** The unit direction at the multiple of 45° closest to `handle`, or null for a zero-length handle. */
+function nearestFortyFive(handle: Point2D): Point2D | null {
+  if (Vec2.isZero(handle)) return null;
+
+  const angle =
+    Math.round(Math.atan2(handle.y, handle.x) / FORTY_FIVE_DEGREES) * FORTY_FIVE_DEGREES;
+  return { x: Math.cos(angle), y: Math.sin(angle) };
+}
+
+function bendWeights(t: number): { one: number; two: number; denom: number } {
+  const one = 3 * (1 - t) ** 2 * t;
+  const two = 3 * (1 - t) * t ** 2;
+  return { one, two, denom: one * one + two * two };
+}
+
+/**
+ * Places each control on a fixed unit direction from its anchor, choosing the two
+ * lengths that bring the curve point at `bend.t` closest to `pointer`. Parallel
+ * directions leave one degree of freedom, which is split by curve weight.
+ */
+function bendAlongDirections(
+  bend: BendDrag,
+  pointer: Point2D,
+  directionOne: Point2D,
+  directionTwo: Point2D,
+): BentControls {
+  const { t, anchorStart, anchorEnd } = bend;
+  const weights = bendWeights(t);
+  const startWeight = (1 - t) ** 3 + weights.one;
+  const endWeight = weights.two + t ** 3;
+  const handlesAtAnchors = Vec2.add(
+    Vec2.scale(anchorStart, startWeight),
+    Vec2.scale(anchorEnd, endWeight),
+  );
+  const residual = Vec2.sub(pointer, handlesAtAnchors);
+
+  const u = Vec2.scale(directionOne, weights.one);
+  const v = Vec2.scale(directionTwo, weights.two);
+  const uu = Vec2.dot(u, u);
+  const uv = Vec2.dot(u, v);
+  const vv = Vec2.dot(v, v);
+  const det = uu * vv - uv * uv;
+
+  let lengthOne: number;
+  let lengthTwo: number;
+  if (Math.abs(det) > 1e-9 * uu * vv) {
+    const ur = Vec2.dot(u, residual);
+    const vr = Vec2.dot(v, residual);
+    lengthOne = (vv * ur - uv * vr) / det;
+    lengthTwo = (uu * vr - uv * ur) / det;
+  } else {
+    const along = Vec2.dot(residual, directionOne);
+    const orientation = Math.sign(Vec2.dot(directionOne, directionTwo)) || 1;
+    lengthOne = (along * weights.one) / weights.denom;
+    lengthTwo = (orientation * along * weights.two) / weights.denom;
+  }
+
+  return [
+    Vec2.add(anchorStart, Vec2.scale(directionOne, lengthOne)),
+    Vec2.add(anchorEnd, Vec2.scale(directionTwo, lengthTwo)),
+  ];
 }
