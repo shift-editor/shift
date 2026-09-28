@@ -106,6 +106,35 @@ export function SvgGlyphCatalogGrid({
             ? new GlyphPreviewLayout(metrics, preview.xAdvance, cell.previewRect.height)
             : null;
           const top = cell.cellRect.top + targetFrame.scrollTop;
+          let nameCell = (
+            <div className="flex h-7 w-full items-center justify-center truncate bg-input px-2 text-xs text-muted">
+              {cell.glyph.displayName}
+            </div>
+          );
+          if (canAuthor) {
+            nameCell = (
+              <Button
+                aria-label={`Rename ${cell.glyph.displayName}`}
+                variant="ghost"
+                className="h-7 w-full truncate bg-input px-2 text-center font-ui text-xs font-normal text-muted hover:bg-hover"
+                onClick={() => setEditingGlyphId(cell.glyph.id)}
+              >
+                {cell.glyph.displayName}
+              </Button>
+            );
+          }
+          if (editingGlyphId === cell.glyph.id) {
+            nameCell = (
+              <GlyphNameInput
+                ref={editingInputRef}
+                glyph={cell.glyph}
+                onFinished={(nextName) => {
+                  if (nextName) onPendingGlyphName(cell.glyph.id, nextName);
+                  setEditingGlyphId(null);
+                }}
+              />
+            );
+          }
 
           return (
             <div
@@ -141,29 +170,7 @@ export function SvgGlyphCatalogGrid({
                 ) : null}
               </Button>
               <div style={{ height: targetFrame.layout.nameGap }} />
-              {editingGlyphId === cell.glyph.id ? (
-                <GlyphNameInput
-                  ref={editingInputRef}
-                  glyph={cell.glyph}
-                  onFinished={(nextName) => {
-                    if (nextName) onPendingGlyphName(cell.glyph.id, nextName);
-                    setEditingGlyphId(null);
-                  }}
-                />
-              ) : canAuthor ? (
-                <Button
-                  aria-label={`Rename ${cell.glyph.displayName}`}
-                  variant="ghost"
-                  className="h-7 w-full truncate bg-input px-2 text-center font-ui text-xs font-normal text-muted hover:bg-hover"
-                  onClick={() => setEditingGlyphId(cell.glyph.id)}
-                >
-                  {cell.glyph.displayName}
-                </Button>
-              ) : (
-                <div className="flex h-7 w-full items-center justify-center truncate bg-input px-2 text-xs text-muted">
-                  {cell.glyph.displayName}
-                </div>
-              )}
+              {nameCell}
             </div>
           );
         })}

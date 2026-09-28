@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from "react";
 import { cn, Input, Tooltip, TooltipContent, TooltipTrigger } from "@shift/ui";
-import { NUDGES_VALUES, type NudgeMagnitude } from "@shift/editor/types";
+import { NUDGES_VALUES, nudgeMagnitude } from "@shift/editor/types";
 import { useFocusZone } from "@/context/FocusZoneContext";
 
 export interface EditableSidebarInputHandle {
@@ -109,8 +109,7 @@ export const EditableSidebarInput = forwardRef<
         if (e.key === "ArrowUp" || e.key === "ArrowDown") {
           e.preventDefault();
 
-          const modifier: NudgeMagnitude = e.metaKey ? "large" : e.shiftKey ? "medium" : "small";
-          const step = NUDGES_VALUES[modifier];
+          const step = NUDGES_VALUES[nudgeMagnitude({ accel: e.metaKey, shift: e.shiftKey })];
           const direction = e.key === "ArrowUp" ? 1 : -1;
 
           const currentValue = isEditing ? parseNumericValue(editValue) : displayValue;
@@ -131,6 +130,8 @@ export const EditableSidebarInput = forwardRef<
       setEditValue(e.target.value);
     }, []);
 
+    const displayText = displayValue === null ? "" : `${displayValue}${suffix}`;
+
     return (
       <Tooltip>
         <TooltipTrigger>
@@ -139,7 +140,7 @@ export const EditableSidebarInput = forwardRef<
             aria-label={ariaLabel}
             label={label}
             labelPosition={labelPosition}
-            value={isEditing ? editValue : displayValue === null ? "" : `${displayValue}${suffix}`}
+            value={isEditing ? editValue : displayText}
             icon={icon}
             iconPosition={iconPosition}
             readOnly={!isEditing}

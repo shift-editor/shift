@@ -42,6 +42,16 @@ export const OutlineVisibilityButton = ({
     return () => clearTimeout(timeout);
   }, [showVisibleIndicator, visible]);
 
+  const eyeOpen = visible || showVisibleIndicator || alwaysOpen;
+  let indicator = eyeOpen ? (
+    <EyeOpenIcon aria-hidden className="h-4 w-4 text-icon-subtle" />
+  ) : (
+    <EyeClosedIcon aria-hidden className="h-4 w-4 text-icon-subtle" />
+  );
+  if (showInheritedIndicator) {
+    indicator = <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-primary" />;
+  }
+
   return (
     <Tooltip>
       <TooltipTrigger>
@@ -61,13 +71,7 @@ export const OutlineVisibilityButton = ({
           }}
           className={visible ? "!opacity-100" : undefined}
         >
-          {showInheritedIndicator ? (
-            <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-primary" />
-          ) : visible || showVisibleIndicator || alwaysOpen ? (
-            <EyeOpenIcon aria-hidden className="h-4 w-4 text-icon-subtle" />
-          ) : (
-            <EyeClosedIcon aria-hidden className="h-4 w-4 text-icon-subtle" />
-          )}
+          {indicator}
         </SidebarActionButton>
       </TooltipTrigger>
       <TooltipContent>{action}</TooltipContent>
