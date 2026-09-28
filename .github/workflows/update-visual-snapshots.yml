@@ -76,6 +76,9 @@ jobs:
         env:
           PATCH_PATH: ${{ runner.temp }}/visual-snapshots.patch
         run: |
+          # New goldens are untracked; mark them intent-to-add so git diff includes them.
+          git add --intent-to-add -- apps/desktop/e2e/__screenshots__
+
           unexpected="$(git diff --name-only | grep -v '^apps/desktop/e2e/__screenshots__/' || true)"
           if [[ -n "$unexpected" ]]; then
             echo "Snapshot update modified unexpected files:"
