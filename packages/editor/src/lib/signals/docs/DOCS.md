@@ -4,6 +4,8 @@
 
 Fine-grained reactivity system providing automatic dependency tracking and efficient updates for the Shift editor.
 
+For rules on writing and reviewing reactive code, and triage when something doesn't update, load the `signals` skill. This file documents how the library works.
+
 ## Architecture Invariants
 
 - **Architecture Invariant:** Signals use `Object.is` equality by default. Mutating an object in place and re-setting the same reference will **not** notify subscribers. Always create a new reference (e.g., `new Set(...)`) to trigger updates.
