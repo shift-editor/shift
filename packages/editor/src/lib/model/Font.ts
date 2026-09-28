@@ -1040,19 +1040,21 @@ export class Font {
       glyph.replaceComponentGlyphs(componentGlyphs.glyphs);
     }
 
-    // font.glyphs reads residency through glyphForId, so this store write reruns it.
     this.#store.setGlyphs([...glyphs.values()]);
+    this.#updateGlyphsFromStore();
   }
 
   #updateGlyphsFromStore(): void {
     const missingGlyphIds = new Set<GlyphId>();
 
-    batch(() => {
-      for (const entry of this.#directoryCell.peek().entries) {
-        const glyph = this.#store.glyphForId(entry.id);
-        if (!glyph) continue;
+    const directory = this.#directoryCell.peek();
 
-        const record = this.#directoryCell.peek().recordForId(entry.id);
+    batch(() => {
+      for (const glyph of this.#store.loadedGlyphs()) {
+        const entry = directory.entryForId(glyph.id);
+        if (!entry) continue;
+
+        const record = directory.recordForId(entry.id);
         const layers = record ? this.#buildGlyphLayers(record) : [];
         const componentGlyphs = this.#componentGlyphsFor(entry.id);
         for (const glyphId of componentGlyphs.missingGlyphIds) missingGlyphIds.add(glyphId);

@@ -68,10 +68,12 @@ export class FontStore {
   readonly #indexCell = signal<FontRecordIndex>(EMPTY_RECORD_INDEX, {
     name: "fontStore.recordIndex",
   });
-  /** Loaded glyph models; replaced whole so lookups that missed rerun once a glyph loads. */
-  readonly #glyphsCell = signal<ReadonlyMap<GlyphId, Glyph>>(new Map(), {
-    name: "fontStore.glyphs",
-  });
+  /**
+   * One cell per glyph id that has been looked up or loaded. A lookup that
+   * misses subscribes only to its own glyph, so loading one glyph reruns only
+   * that glyph's readers and costs O(1).
+   */
+  readonly #glyphCells = new Map<GlyphId, WritableSignal<Glyph | null>>();
 
   readonly #projectionCells = new Map<GlyphId, WritableSignal<GlyphProjection | null>>();
   // non-reactive: interning table that dedupes projection bases; only read while interning
@@ -152,7 +154,7 @@ export class FontStore {
       this.#clearLayerStates();
       this.#clearProjections();
       this.#interpolationBases.clear();
-      this.#glyphsCell.set(new Map());
+      this.#clearGlyphs();
     });
     this.#invalidGlyphIds.set(null);
     this.#committedFont.set(this);
@@ -166,7 +168,7 @@ export class FontStore {
       this.#clearLayerStates();
       this.#clearProjections();
       this.#interpolationBases.clear();
-      this.#glyphsCell.set(new Map());
+      this.#clearGlyphs();
     });
     this.#invalidGlyphIds.set(null);
     this.#committedFont.set(this);
@@ -296,9 +298,12 @@ export class FontStore {
 
       const index = this.#indexCell.peek();
       if (nextWorkspace !== current) {
-        const glyphs = this.#glyphsCell.peek();
-        const residentGlyphs = [...glyphs].filter(([glyphId]) => index.glyphById.has(glyphId));
-        if (residentGlyphs.length !== glyphs.size) this.#glyphsCell.set(new Map(residentGlyphs));
+        for (const [glyphId, cell] of this.#glyphCells) {
+          if (index.glyphById.has(glyphId)) continue;
+
+          cell.set(null);
+          this.#glyphCells.delete(glyphId);
+        }
         if (next?.axes || next?.sources) this.#interpolationBases.clear();
 
         for (const [layerId, cell] of this.#layerStateCells) {
@@ -398,19 +403,31 @@ export class FontStore {
    * @returns The loaded model, or `null` while the glyph is not loaded.
    */
   glyphForId(glyphId: GlyphId): Glyph | null {
-    track(this.#glyphsCell);
-    return this.#glyphsCell.peek().get(glyphId) ?? null;
+    const cell = this.#glyphCell(glyphId);
+    track(cell);
+    return cell.peek();
+  }
+
+  /** Snapshot of the loaded glyph models, without subscribing to future loads. */
+  loadedGlyphs(): Glyph[] {
+    const glyphs: Glyph[] = [];
+    for (const cell of this.#glyphCells.values()) {
+      const glyph = cell.peek();
+      if (glyph) glyphs.push(glyph);
+    }
+    return glyphs;
   }
 
   setGlyphs(glyphs: readonly Glyph[]): void {
     const { glyphById } = this.#indexCell.peek();
-    const current = this.#glyphsCell.peek();
-    const added = glyphs.filter((glyph) => glyphById.has(glyph.id) && !current.has(glyph.id));
-    if (added.length === 0) return;
+    batch(() => {
+      for (const glyph of glyphs) {
+        if (!glyphById.has(glyph.id)) continue;
 
-    const next = new Map(current);
-    for (const glyph of added) next.set(glyph.id, glyph);
-    this.#glyphsCell.set(next);
+        const cell = this.#glyphCell(glyph.id);
+        if (!cell.peek()) cell.set(glyph);
+      }
+    });
   }
 
   componentBaseGlyphIdsInLayerState(glyphId: GlyphId): readonly GlyphId[] {
@@ -482,6 +499,20 @@ export class FontStore {
       this.#projectionCells.set(glyphId, cell);
     }
     return cell;
+  }
+
+  #glyphCell(glyphId: GlyphId): WritableSignal<Glyph | null> {
+    let cell = this.#glyphCells.get(glyphId);
+    if (!cell) {
+      cell = signal(null, { name: `fontStore.glyph.${glyphId}` });
+      this.#glyphCells.set(glyphId, cell);
+    }
+    return cell;
+  }
+
+  #clearGlyphs(): void {
+    for (const cell of this.#glyphCells.values()) cell.set(null);
+    this.#glyphCells.clear();
   }
 
   #clearProjections(): void {
