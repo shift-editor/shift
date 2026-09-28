@@ -91,6 +91,7 @@
   --editor-segment-selected-color: #1886d7;
   --editor-preview-color: #1886d7;
   --editor-variation-outline-color: rgba(12, 146, 244, 0.45);
+  --editor-edit-ghost-color: rgba(0, 0, 0, 0.12);
   --editor-read-only-lock-color: #171717;
   --editor-pen-ready-fill: #ffffff;
   --editor-pen-ready-stroke: #3b82f6;

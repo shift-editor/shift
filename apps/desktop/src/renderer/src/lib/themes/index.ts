@@ -338,6 +338,7 @@ function colorThemeVariables(theme: ColorTheme): Record<string, string> {
     "--editor-segment-selected-color": palette.base0D,
     "--editor-preview-color": palette.base0D,
     "--editor-variation-outline-color": withAlpha(palette.base0D, 0.45),
+    "--editor-edit-ghost-color": withAlpha(glyphForeground, 0.12),
     "--editor-read-only-lock-color": palette.base05,
     "--editor-pen-ready-fill": palette.base00,
     "--editor-pen-ready-stroke": palette.base0D,

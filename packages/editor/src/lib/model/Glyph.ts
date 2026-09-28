@@ -43,6 +43,7 @@ import {
 import { interpolateSourceValues, interpolationWeights } from "../interpolation/InterpolationBasis";
 import { evaluateVariationBasis } from "../interpolation/VariationBasis";
 import { Transform } from "../transform/Transform";
+import { ContourPath } from "../graphics/ContourPath";
 import { Alignment } from "../transform/Alignment";
 import type { FontOptions } from "../../types/font";
 import type { AlignmentType, DistributeType, ReflectAxis } from "../../types/transform";
@@ -424,6 +425,8 @@ export class GlyphLayer {
   readonly positions: PositionEdits;
   readonly #sourceCell: WritableSignal<Source>;
   readonly #writer: GlyphLayerWriter;
+  readonly #editBaseGeometry: ComputedSignal<GlyphGeometry | null>;
+  readonly #editBaseOutline: ComputedSignal<Path2D | null>;
 
   constructor(
     source: Source,
@@ -436,6 +439,20 @@ export class GlyphLayer {
       geometry: state.geometryCell,
     });
     this.positions = new PositionEdits(this);
+    this.#editBaseGeometry = computed(
+      () => {
+        const base = state.editBaseCell.value;
+        return base ? GlyphGeometry.fromState(base) : null;
+      },
+      { name: "glyphLayer.editBaseGeometry" },
+    );
+    this.#editBaseOutline = computed(
+      () => {
+        const geometry = this.#editBaseGeometry.value;
+        return geometry ? rootContoursPath(geometry) : null;
+      },
+      { name: "glyphLayer.editBaseOutline" },
+    );
   }
 
   get source(): Source {
@@ -491,6 +508,26 @@ export class GlyphLayer {
 
   get state(): GlyphState {
     return this.#writer.layerState.state;
+  }
+
+  /**
+   * Geometry of the layer as it was when the active local edit began.
+   *
+   * @remarks
+   * `null` outside a local edit (drag, transform, bend, pen curve). If a
+   * workspace echo lands mid-edit, this moves to the newly accepted state.
+   */
+  get editBaseGeometryCell(): Signal<GlyphGeometry | null> {
+    return this.#editBaseGeometry;
+  }
+
+  /**
+   * Root-contour outline of {@link editBaseGeometryCell}, for drawing the
+   * pre-gesture shape as a ghost under the live outline. Components are not
+   * included.
+   */
+  get editBaseOutlineCell(): Signal<Path2D | null> {
+    return this.#editBaseOutline;
   }
 
   get xAdvanceCell(): Signal<number> {
@@ -2230,4 +2267,13 @@ function sameComponentGlyphs(
     if (current.get(glyphId) !== glyph) return false;
   }
   return true;
+}
+
+function rootContoursPath(geometry: GlyphGeometry): Path2D {
+  const path = new Path2D();
+  const identity = Mat.Identity();
+  for (const contour of geometry.contours) {
+    path.addPath(ContourPath.fromContour(contour, identity).path);
+  }
+  return path;
 }
