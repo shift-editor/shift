@@ -92,6 +92,15 @@ repos:
         types_or: [ts, tsx]
         pass_filenames: false
 
+      # Regenerates packages/sdk/api/*.api.md; a changed report fails the commit so it is
+      # reviewed and staged like any other public API change.
+      - id: sdk-api-report
+        name: sdk api report
+        entry: pnpm --filter @shift-editor/sdk api:update
+        language: system
+        files: ^packages/(editor|geo|glyph-state|rules|sdk|types|ui|validation)/
+        pass_filenames: false
+
       - id: deadcode
         name: deadcode (strict)
         entry: pnpm deadcode:strict
