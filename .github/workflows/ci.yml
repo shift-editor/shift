@@ -412,7 +412,14 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Check WebAssembly font core
-        run: RUSTFLAGS='-D warnings --cfg getrandom_backend="wasm_js"' cargo check --target wasm32-unknown-unknown -p shift-backends -p shift-font -p shift-slug -p shift-wire
+        run: RUSTFLAGS='-D warnings --cfg getrandom_backend="wasm_js"' cargo check --target wasm32-unknown-unknown -p fontsrc -p shift-backends -p shift-font -p shift-slug -p shift-wire
+
+      - name: Check fontsrc dependency boundary
+        run: |
+          if cargo tree -p fontsrc --edges normal --prefix none | grep -q '^shift-'; then
+            echo "fontsrc must not depend on shift-* crates"
+            exit 1
+          fi
 
       - name: Run tests
         run: cargo test --workspace --exclude shift-bridge
