@@ -202,6 +202,7 @@ export class Translate implements SelectBehavior {
         }
         break;
       case "node":
+      case "text":
       case "canvas":
         if (!select.boundingBox.containsTranslationPoint(event.origin)) return null;
         break;
@@ -231,6 +232,7 @@ export class Translate implements SelectBehavior {
         return this.#fromSegmentTarget(editor, event);
       case "component":
       case "node":
+      case "text":
       case "canvas":
         return this.#fromInsideSelectionBounds(editor, select, event);
     }

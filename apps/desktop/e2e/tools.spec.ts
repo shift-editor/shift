@@ -80,7 +80,7 @@ async function liveShapeDraft(editor: EditorDriver) {
   });
 }
 
-const TOOLBAR_TOOLS = ["select", "pen", "hand", "rectangle"] as const;
+const TOOLBAR_TOOLS = ["select", "pen", "hand", "rectangle", "text"] as const;
 
 test.describe("Canvas pointer lifecycle", () => {
   test.beforeEach(async ({ editor }) => {
@@ -314,7 +314,94 @@ test.describe("Toolbar tools", () => {
     expect(await page.evaluate((id) => window.shift!.editor.object(id), draft.ids[0])).toBeNull();
   });
 
-  test("hides unavailable tools", async ({ page }) => {
-    await expect(page.getByRole("button", { name: "Text Tool (T)" })).toHaveCount(0);
+  test("renders a scaled text run and caret on the canvas", async ({ page, editor }) => {
+    await editor.selectTool("text");
+    await editor.waitForCanvasRender();
+    await editor.pointerDown(await editor.canvasPagePoint({ x: 0.65, y: 0.4 }));
+    await editor.pointerUp();
+    await page.keyboard.type("AB");
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const editor = window.shift!.editor;
+          const node = editor.scene.nodesOfKind("textRun")[0];
+          if (!node) return null;
+          const run = editor.text.run(node.runId);
+          const layout = editor.text.layoutCell(node.runId).peek();
+          return run && layout
+            ? {
+                codepoints: run.items.map((item) => (item.kind === "glyph" ? item.codepoint : 10)),
+                glyphsLoaded: layout.lines.every((line) =>
+                  line.runs.every((part) =>
+                    part.glyphs.every((glyph) => glyph.glyphId && editor.glyphForId(glyph.glyphId)),
+                  ),
+                ),
+              }
+            : null;
+        }),
+      )
+      .toEqual({ codepoints: [65, 66], glyphsLoaded: true });
+    await page.evaluate(() => {
+      const editor = window.shift!.editor;
+      const node = editor.scene.nodesOfKind("textRun")[0]!;
+      editor.scene.updateNode({
+        id: node.id,
+        size: editor.font.metricsCell.peek().unitsPerEm * 0.6,
+      });
+    });
+    await page.mouse.move(0, 0);
+    await expectCanvasSnapshot(editor, "canvas-text-AB-scaled-caret.png");
+  });
+
+  test("native text input edits the placed run with arrows and undo", async ({ page, editor }) => {
+    await editor.selectTool("text");
+    await editor.waitForCanvasRender();
+    await editor.pointerDown(await editor.canvasPagePoint({ x: 0.85, y: 0.4 }));
+    await editor.pointerUp();
+    await expect(page.getByRole("textbox", { name: "Text input" })).toBeFocused();
+    await page.keyboard.type("Hi");
+    await editor.press("ArrowLeft");
+    await page.keyboard.type("X");
+    const codepoints = () =>
+      page.evaluate(() => {
+        const editor = window.shift!.editor;
+        const node = editor.scene.nodesOfKind("textRun")[0]!;
+        return editor.text
+          .run(node.runId)!
+          .items.map((item) => (item.kind === "glyph" ? item.codepoint : 10));
+      });
+    await expect.poll(codepoints).toEqual([72, 88, 105]);
+    await editor.undo();
+    await expect.poll(codepoints).toEqual([72, 105]);
+    await editor.redo();
+    await expect.poll(codepoints).toEqual([72, 88, 105]);
+  });
+
+  test("Text shortcut opens an editable run through native text input", async ({
+    page,
+    editor,
+  }) => {
+    await editor.press("t");
+    await expect(editor.toolButton("text")).toHaveAttribute("aria-pressed", "true");
+    await editor.waitForCanvasRender();
+    await editor.pointerDown(await editor.canvasPagePoint({ x: 0.85, y: 0.4 }));
+    await editor.pointerUp();
+    await expect(page.getByRole("textbox", { name: "Text input" })).toBeFocused();
+    await page.keyboard.type("Hi");
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const editor = window.shift!.editor;
+          const node = editor.scene.nodesOfKind("textRun")[0];
+          return node
+            ? editor.text
+                .run(node.runId)
+                ?.items.map((item) => (item.kind === "glyph" ? item.codepoint : 10))
+            : null;
+        }),
+      )
+      .toEqual([72, 105]);
+    await editor.press("Escape");
+    await expect(editor.toolButton("select")).toHaveAttribute("aria-pressed", "true");
   });
 });

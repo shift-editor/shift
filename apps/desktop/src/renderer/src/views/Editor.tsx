@@ -44,18 +44,14 @@ export const Editor = () => {
 
     const nodeId = mintNodeId();
     const sourceId = editor.activeSourceId ?? editor.font.defaultSource.id;
-    editor.scene.setNodes([
-      {
-        id: nodeId,
-        type: "node",
-        kind: "glyph",
-        parentId: null,
-        index: "a0",
-        glyphId: glyph.id,
-        sourceId,
-        position: { x: 0, y: 0 },
-      },
-    ]);
+    for (const old of editor.scene.nodesOfKind("glyph")) editor.scene.deleteNode(old.id);
+    editor.scene.createNode({
+      id: nodeId,
+      kind: "glyph",
+      glyphId: glyph.id,
+      sourceId,
+      position: { x: 0, y: 0 },
+    });
 
     const metrics = editor.font.metricsAtLocation(editor.externalLocation);
     const view = glyph.renderModelAt(editor.externalLocationCell, editor.activeSourceIdCell);

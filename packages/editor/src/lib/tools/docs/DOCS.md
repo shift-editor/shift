@@ -1,6 +1,6 @@
 # Tools
 
-<!-- reviewed: 2026-09-26 -->
+<!-- reviewed: 2026-09-28 -->
 
 State machine-based tool system for the Shift font editor: translates pointer/keyboard input into tool-specific state transitions and rendering.
 
@@ -323,5 +323,5 @@ onDragCancel(state, ctx) {
 - `PositionEdits` — creates standalone or scoped fluent move, rotate, and scale interactions over normalized position targets.
 - `GlyphLayerEdit` — active preview/finish/cancel owner used by fluent edits and arbitrary BendCurve patches.
 - `Coordinates` — `{ screen, scene }` coordinate bundle on pointer events.
-- `TextTool` — text input tool backed by the editor's active text run.
+- `TextTool` — ready/editing text tool that creates scene text nodes and edits their document runs through `editor.textEditing`; the hidden textarea handles native typing.
 - `KeyboardRouter` — binds tool shortcuts registered via `getToolShortcuts`.

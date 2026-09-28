@@ -1,7 +1,7 @@
 import type { GlyphAnchorHit, GlyphHit, GlyphPointHit, GlyphSegmentHit } from "@shift/glyph-state";
-import type { AnchorId, ComponentId, GlyphId, NodeId, PointId } from "@shift/types";
+import type { AnchorId, ComponentId, GlyphId, NodeId, PointId, TextItemId } from "@shift/types";
 import type { NodePoint, ScenePoint } from "./coordinates";
-import type { ShiftNode } from "./node";
+import type { ShiftNode, TextRunNode } from "./node";
 
 type GlyphHitTarget<Hit extends GlyphHit> = Hit & {
   readonly nodeId: NodeId;
@@ -44,9 +44,17 @@ export interface NodeTarget {
   readonly point: NodePoint;
 }
 
+export interface TextPointerTarget {
+  readonly kind: "text";
+  readonly node: TextRunNode;
+  readonly point: NodePoint;
+  readonly cluster: number;
+  readonly itemId: TextItemId | null;
+}
+
 export interface CanvasTarget {
   readonly kind: "canvas";
   readonly point: ScenePoint;
 }
 
-export type PointerTarget = CanvasTarget | NodeTarget | GlyphEditTarget;
+export type PointerTarget = CanvasTarget | NodeTarget | TextPointerTarget | GlyphEditTarget;

@@ -87,8 +87,6 @@ function builtInToolManifests(): readonly ToolManifest[] {
       icon: TextIcon,
       tooltip: "Text Tool (T)",
       shortcut: "t",
-      hidden: true,
-      disabled: true,
     },
   ];
 }
@@ -97,7 +95,8 @@ export function registerBuiltInTools(editor: Editor): void {
   for (const manifest of builtInToolManifests()) {
     manifest.disabled =
       manifest.disabled ||
-      (editor.sessionMode === "preview" && (manifest.id === "pen" || manifest.id === "shape"));
+      (editor.sessionMode === "preview" &&
+        (manifest.id === "pen" || manifest.id === "shape" || manifest.id === "text"));
 
     editor.registerTool(manifest);
   }

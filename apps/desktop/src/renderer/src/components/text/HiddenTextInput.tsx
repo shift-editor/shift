@@ -1,154 +1,119 @@
-/**
- * Hidden textarea that captures text input when the text tool is active.
- *
- * Handles IME composition, clipboard paste, and special characters natively.
- * The textarea is positioned off-screen but remains focused. Input events
- * feed into `editor.textRun`; rendering updates reactively via signals.
- */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef } from "react";
 import { useEditor } from "@/workspace/WorkspaceContext";
-import { effect } from "@shift/editor/signals";
-import { lineBreakTextItem } from "@shift/editor/text";
+import { useSignalState } from "@shift/editor/signals";
+import { glyphTextItem, lineBreakTextItem } from "@shift/editor/text";
 
+/** Receives native text, clipboard, and IME events while a text node is active. */
 export function TextInput() {
   const editor = useEditor();
   const ref = useRef<HTMLTextAreaElement>(null);
-  const [isTextTool, setIsTextTool] = useState(false);
+  const composing = useRef(false);
+  const tool = useSignalState(editor.toolCell);
+  const editing = useSignalState(editor.textEditing.stateCell);
 
-  useEffect(() => {
-    const fx = effect(() => {
-      setIsTextTool(editor.toolCell.value?.id === "text");
+  const textareaRef = useCallback((node: HTMLTextAreaElement | null) => {
+    ref.current = node;
+    node?.focus();
+  }, []);
+
+  if (tool?.id !== "text" || tool.state.type !== "editing" || !editing) return null;
+
+  const insertLiteral = (text: string) => {
+    const items = [...text.replaceAll("\r\n", "\n")].map((char) => {
+      if (char === "\n") return lineBreakTextItem();
+      const codepoint = char.codePointAt(0)!;
+      const handle = editor.font.glyphHandleForUnicode(codepoint);
+      return glyphTextItem(handle.name, codepoint);
     });
-    return () => fx.dispose();
-  }, [editor]);
+    editor.textEditing.insert(items);
+  };
 
-  const textareaRef = useCallback(
-    (node: HTMLTextAreaElement | null) => {
-      ref.current = node;
-      if (!node) return;
-
-      node.focus();
-
-      const handleFocusLost = () => {
-        if (editor.toolIf("text")) {
-          setTimeout(() => node.focus(), 0);
-        }
-      };
-
-      node.addEventListener("blur", handleFocusLost);
-    },
-    [editor],
-  );
-
-  if (!isTextTool) return null;
-
-  const handleInput = () => {
+  const flushInput = () => {
     const textarea = ref.current;
-    if (!textarea) return;
-
-    const text = textarea.value;
-    if (!text) return;
-
-    for (const char of text) {
-      const codepoint = char.codePointAt(0);
-      if (codepoint !== undefined) {
-        editor.insertTextCodepoint(codepoint);
-      }
-    }
-
+    if (!textarea || composing.current || !textarea.value) return;
+    insertLiteral(textarea.value);
     textarea.value = "";
   };
 
   const handleKeyDown = async (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    const extend = e.shiftKey;
-    const run = editor.textRun;
+    if (e.nativeEvent.isComposing || composing.current) return;
 
+    if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === "z") {
+      e.preventDefault();
+      try {
+        if (e.shiftKey) await editor.redo();
+        else await editor.undo();
+      } catch (error) {
+        console.error("text history failed", error);
+      }
+      return;
+    }
+
+    const extend = e.shiftKey;
+    const textEditing = editor.textEditing;
     switch (e.key) {
       case "Escape":
         editor.setActiveTool("select");
         e.preventDefault();
         return;
-
       case "Enter":
-        run.insert(lineBreakTextItem());
+        textEditing.insert([lineBreakTextItem()]);
         e.preventDefault();
         return;
-
       case "Backspace":
-        run.delete();
+        textEditing.deleteBackward();
         e.preventDefault();
         return;
-
       case "Delete":
-        run.deleteForward();
+        textEditing.deleteForward();
         e.preventDefault();
         return;
-
       case "ArrowLeft":
-        if (e.altKey) {
-          run.moveCursorByWord(-1, extend);
-        } else if (e.metaKey) {
-          run.moveCursorToLineStart(extend);
-        } else {
-          run.moveCursorLeft(extend);
-        }
-        e.preventDefault();
-        return;
-
       case "ArrowRight":
-        if (e.altKey) {
-          run.moveCursorByWord(1, extend);
-        } else if (e.metaKey) {
-          run.moveCursorToLineEnd(extend);
-        } else {
-          run.moveCursorRight(extend);
-        }
+        textEditing.move(
+          e.key === "ArrowLeft" ? -1 : 1,
+          e.altKey ? "word" : e.metaKey ? "line" : "character",
+          extend,
+        );
         e.preventDefault();
         return;
-
       case "ArrowUp":
-        run.moveCursorUp(extend);
-        e.preventDefault();
-        return;
-
       case "ArrowDown":
-        run.moveCursorDown(extend);
+        textEditing.moveVertical(e.key === "ArrowUp" ? -1 : 1, extend);
         e.preventDefault();
         return;
-
       case "a":
         if (e.metaKey || e.ctrlKey) {
-          run.buffer.selectAll();
+          textEditing.selectAll();
           e.preventDefault();
           return;
         }
         break;
-
       case "c":
         if (e.metaKey || e.ctrlKey) {
-          const codepoints = run.buffer.selectedItems
-            .map((item) => (item.kind === "glyph" ? item.codepoint : 10))
-            .filter((cp): cp is number => cp !== null);
-          if (codepoints.length > 0) {
-            const text = String.fromCodePoint(...codepoints);
-            navigator.clipboard?.writeText(text);
+          const text = textEditing.selectedItems
+            .map((item) =>
+              item.kind === "linebreak"
+                ? "\n"
+                : item.codepoint === null
+                  ? `/${item.glyphName}`
+                  : String.fromCodePoint(item.codepoint),
+            )
+            .join("");
+          try {
+            if (text) await navigator.clipboard?.writeText(text);
+          } catch (error) {
+            console.error("writing text clipboard failed", error);
           }
           e.preventDefault();
           return;
         }
         break;
-
       case "v":
         if (e.metaKey || e.ctrlKey) {
           e.preventDefault();
           try {
-            const text = (await navigator.clipboard?.readText()) ?? "";
-            for (const char of text) {
-              const codepoint = char.codePointAt(0);
-              if (codepoint !== undefined) {
-                editor.insertTextCodepoint(codepoint);
-              }
-            }
+            textEditing.insertText((await navigator.clipboard?.readText()) ?? "");
           } catch (error) {
             console.error("reading text clipboard failed", error);
           }
@@ -161,8 +126,20 @@ export function TextInput() {
   return (
     <textarea
       ref={textareaRef}
-      onInput={handleInput}
+      onInput={flushInput}
+      onCompositionStart={() => {
+        composing.current = true;
+      }}
+      onCompositionEnd={() => {
+        composing.current = false;
+        flushInput();
+      }}
       onKeyDown={handleKeyDown}
+      onBlur={() => {
+        setTimeout(() => {
+          if (editor.toolIf("text")?.state.type === "editing") ref.current?.focus();
+        }, 0);
+      }}
       aria-label="Text input"
       autoComplete="off"
       style={{

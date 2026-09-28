@@ -68,9 +68,7 @@ import type { Glyph, GlyphLayer } from "../model/Glyph";
 import type { DeleteMode, GlyphGeometrySelection } from "../../types/glyph";
 import type { Modifiers } from "../tools/core/GestureDetector";
 import { Text } from "../text/Text";
-import { TextRuns } from "../text/TextRuns";
-import { TextRun } from "../text/TextRun";
-import { glyphTextItem, Positioner } from "../text/layout";
+import { TextEditing } from "../text/TextEditing";
 
 import type { ToolManifest, ToolShortcutEntry } from "../../types/tools";
 import type { ToolStateScope } from "../../types/editor";
@@ -158,6 +156,7 @@ export class Editor {
   readonly sessionMode: FontSessionMode;
   readonly scene: Scene;
   readonly text: Text;
+  readonly textEditing: TextEditing;
   readonly #nodeDefinitions: NodeDefinitionByKind;
   readonly #store: ShiftStore<ShiftEditorRecord>;
   readonly #fontStore: FontStore;
@@ -202,8 +201,6 @@ export class Editor {
 
   #events: EventEmitter;
 
-  #textRuns: TextRuns;
-
   readonly gesture: EditorGesture;
   readonly input: EditorInput;
   #toolState: {
@@ -247,6 +244,7 @@ export class Editor {
       this.#editingSourceIdsCell,
     );
     this.text = new Text(this.#store, this);
+    this.textEditing = new TextEditing(this.#store, this);
 
     const GlyphDefinition = options.nodeDefinitions?.glyph ?? GlyphNodeDefinition;
     const TextRunDefinition = options.nodeDefinitions?.textRun ?? TextRunNodeDefinition;
@@ -334,8 +332,6 @@ export class Editor {
     );
 
     this.#clipboard = new Clipboard(options.clipboard);
-
-    this.#textRuns = new TextRuns(this, new Positioner());
 
     this.#renderer = new Renderer(this);
 
@@ -1295,28 +1291,6 @@ export class Editor {
     this.setExternalLocation(this.font.defaultLocation());
   }
 
-  public get textRuns(): TextRuns {
-    return this.#textRuns;
-  }
-
-  /** The currently-active text run. Convenience for `editor.textRuns.active`. */
-  public get textRun(): TextRun {
-    return this.#textRuns.active;
-  }
-
-  /** Resolve a unicode codepoint to a glyph item and insert into the active text run. */
-  public insertTextCodepoint(codepoint: number): void {
-    const handle = this.font.glyphHandleForUnicode(codepoint);
-    if (!handle) return;
-    const record = this.font.recordForName(handle.name);
-    if (record) {
-      this.font.loadGlyph(record.id).catch((error) => {
-        console.error("failed to load inserted text glyph", error);
-      });
-    }
-    this.textRun.insert(glyphTextItem(handle.name, codepoint));
-  }
-
   public getToolState(scope: ToolStateScope, toolId: string, key: string): unknown {
     return this.#getToolScopeMap(scope).get(this.#toolStateKey(toolId, key));
   }
@@ -1892,6 +1866,7 @@ export class Editor {
     this.#multiSourceEditing.dispose();
     this.#renderer.destroy();
     this.#toolManager.dispose();
+    this.text.dispose();
     this.history.dispose();
     this.#handlesCell.set(new Map());
     this.#events.dispose();

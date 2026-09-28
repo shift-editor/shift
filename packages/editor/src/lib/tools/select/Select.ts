@@ -15,7 +15,6 @@ import {
   SelectHover,
   SegmentDoubleClick,
 } from "./behaviors";
-import { TextRunHover } from "./behaviors/TextRunHover";
 import type { CursorType } from "../../../types/editor";
 import { objectIsKindOf } from "../../../types/object";
 import type { Canvas } from "../../editor/rendering/Canvas";
@@ -36,7 +35,6 @@ export class Select extends BaseTool<SelectState, Select> {
   readonly behaviors: SelectBehavior[] = [
     new ToggleSmooth(),
     new SegmentDoubleClick(),
-    new TextRunHover(),
     new UpgradeSegment(),
     new Selection(),
     new Nudge(),

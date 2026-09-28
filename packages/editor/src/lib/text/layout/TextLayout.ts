@@ -162,8 +162,7 @@ export class TextLayout {
   }
 
   /**
-   * Resolve stable text-item identity to the current scene-space glyph edit
-   * origin.
+   * Resolve stable text-item identity to the current layout-local glyph origin.
    *
    *   itemId
    *      │
@@ -171,7 +170,7 @@ export class TextLayout {
    *   PositionedGlyph { origin, xOffset/yOffset }
    *      │
    *      ▼
-   *   scene edit origin
+   *   layout-local glyph origin
    */
   editOriginForItem(itemId: TextItemId): Point2D | null {
     for (const line of this.lines) {

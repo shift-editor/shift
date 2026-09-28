@@ -652,7 +652,7 @@ These are allowed to jump around when energy is high, but they should not silent
 **Spacing View**
 
 - [x] Text layout view (multiple glyphs on same canvas)
-- [x] Double-click glyph in text view to edit
+- [ ] Double-click glyph in text view to edit (child glyph node; after text-mode slice 1)
 - [ ] Spacing string presets (HOHOHOnnnooo, etc.)
 - [ ] Custom spacing strings
 - [ ] Adjust spacing while viewing in context
