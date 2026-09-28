@@ -32,6 +32,34 @@ describe("Select dropping an open end onto another open end", () => {
     ]);
   });
 
+  it("keeps an on-curve start when a curve's first point is dropped on its end", async () => {
+    editor.selectTool("pen");
+    await editor.clickGlyphLocal(100, 100);
+    await editor.dragScene({
+      down: { x: 300, y: 100 },
+      start: { x: 340, y: 120 },
+      end: { x: 380, y: 180 },
+    });
+    await editor.dragScene({
+      down: { x: 300, y: 300 },
+      start: { x: 280, y: 340 },
+      end: { x: 250, y: 380 },
+    });
+    const firstId = editor.glyphContours[0]!.firstPoint!.id;
+    editor.selectTool("select");
+
+    await editor.dragScene({
+      down: editor.pointPosition(firstId),
+      start: { x: 130, y: 130 },
+      end: { x: 299, y: 299 },
+    });
+
+    const contour = editor.glyphContours[0];
+    expect(contour?.closed).toBe(true);
+    expect(contour?.firstPoint?.isOnCurve).toBe(true);
+    expect(contour?.firstPoint?.position).toEqual({ x: 300, y: 300 });
+  });
+
   it("joins two contours when an end lands on another contour's end", async () => {
     await editor.drawOpenContour([
       { x: 100, y: 100 },

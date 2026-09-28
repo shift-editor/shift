@@ -45,12 +45,18 @@ export class JoinContours {
     if (this.#from.side === this.#to.side) return false;
 
     const contour = this.#layer.contour(this.#from.contourId);
-    const dropped = this.#from.side === "start" ? contour?.firstPoint : contour?.lastPoint;
-    if (!contour || !dropped || contour.points.filter(Point.isOnCurve).length < 2) return false;
+    const droppingStart = this.#from.side === "start";
+    const dropped = droppingStart ? contour?.firstPoint : contour?.lastPoint;
+    const survivor = droppingStart ? contour?.lastPoint : contour?.firstPoint;
+    if (!contour || !dropped || !survivor) return false;
+    if (contour.points.filter(Point.isOnCurve).length < 2) return false;
 
     return this.#layer.transaction("Close contour", () => {
       if (this.#merge) this.#layer.removePoints([dropped.id]);
       this.#layer.closeContour(contour.id);
+
+      // Dropping the start leaves its outgoing handle first; a contour must start on-curve.
+      if (this.#merge && droppingStart) this.#layer.setContourStart(contour.id, survivor.id);
       return true;
     });
   }
