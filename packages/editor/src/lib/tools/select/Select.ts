@@ -23,6 +23,7 @@ import { SnapLines } from "../../editor/rendering/overlays/SnapLines";
 import { SelectBoundingBox } from "./BoundingBox";
 import { SelectMarquee } from "./Marquee";
 import { SelectUpgradePreview } from "./SelectUpgradePreview";
+import { EndpointDrop } from "./EndpointDrop";
 
 export type { BoundingRectEdge, SelectState };
 
@@ -49,12 +50,20 @@ export class Select extends BaseTool<SelectState, Select> {
     new SelectHover(),
   ];
 
+  /** Whether releasing the current drag would close or join contours at an open end. */
+  #dropsOnOpenEnd(): boolean {
+    const drop = EndpointDrop.fromSelection(this.editor);
+    if (!drop) return false;
+
+    return drop.targetWithin(this.editor.hitRadius) !== null;
+  }
+
   override getCursor(state: SelectState): CursorType {
     if (this.editor.sessionMode === "preview") return { type: "default" };
 
     switch (state.type) {
       case "translating":
-        return { type: "move" };
+        return this.#dropsOnOpenEnd() ? { type: "end" } : { type: "move" };
       case "resizing":
         return edgeToCursor(state.resize.edge, state.resize.flipX, state.resize.flipY);
       case "rotating":

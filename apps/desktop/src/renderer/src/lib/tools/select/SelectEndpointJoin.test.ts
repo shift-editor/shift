@@ -86,6 +86,26 @@ describe("Select dropping an open end onto another open end", () => {
     ]);
   });
 
+  it("shows the end cursor while a dragged end is over another open end", async () => {
+    const [, , lastId] = await editor.drawOpenContour([
+      { x: 100, y: 100 },
+      { x: 300, y: 100 },
+      { x: 300, y: 300 },
+    ]);
+    editor.selectTool("select");
+    const down = editor.projectSceneToScreen(editor.pointPosition(lastId!));
+    const away = editor.projectSceneToScreen({ x: 280, y: 280 });
+    const over = editor.projectSceneToScreen({ x: 101, y: 101 });
+    const cursor = () => editor.toolManager.activeTool?.cursorCell.value;
+
+    editor.pointerDown(down.x, down.y).pointerMove(away.x, away.y);
+    expect(cursor()).toEqual({ type: "move" });
+
+    editor.pointerMove(over.x, over.y);
+    expect(cursor()).toEqual({ type: "end" });
+    editor.escape();
+  });
+
   it("only moves an end dropped away from other ends", async () => {
     const [, , lastId] = await editor.drawOpenContour([
       { x: 100, y: 100 },
