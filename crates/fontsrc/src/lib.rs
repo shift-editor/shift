@@ -4,6 +4,12 @@
 //! source and sink abstractions that work with native files, in-memory maps, and
 //! browser-provided bytes without depending on Shift crates.
 
+/// Designspace document reading, writing, and format-native values.
+pub mod designspace {
+    pub use norad::designspace::*;
+    pub use norad::error::{DesignSpaceLoadError, DesignSpaceSaveError};
+}
+
 /// Unified Font Object reading, writing, and format-native values.
 pub mod ufo {
     pub use norad::error::{FontLoadError, FontWriteError};

@@ -19,15 +19,17 @@ Format-native reading and writing for authored font sources across native, in-me
 ```text
 crates/fontsrc/
   src/
-    lib.rs               -- format modules and public format-native exports
+    lib.rs                  -- format modules and public format-native exports
   tests/
-    ufo_source.rs        -- in-memory UFO read and write equivalence
+    designspace_source.rs   -- in-memory Designspace read and write equivalence
+    ufo_source.rs           -- in-memory UFO read and write equivalence
 ```
 
 The [README](../README.md) provides the minimal Rust usage and incubation scope.
 
 ## Key Types
 
+- `designspace::DesignSpaceDocument` — Norad's format-native Designspace document model, loadable from any buffered byte reader.
 - `ufo::FontSource` — reads UFO-relative files from any synchronous backing source.
 - `ufo::FontSink` — writes UFO-relative files without assuming a destination filesystem.
 - `ufo::Font` — Norad's format-native UFO model.
@@ -35,9 +37,9 @@ The [README](../README.md) provides the minimal Rust usage and incubation scope.
 
 ## How it works
 
-A host provides a `FontSource` whose paths are relative to a UFO root. Norad parses those bytes into its native `Font` model. Native callers may use a directory implementation; browser and remote adapters can first gather files asynchronously and then expose the resulting immutable byte map synchronously to the parser or worker.
+A host provides Designspace XML through a buffered byte reader and UFO project files through a `FontSource` whose paths are relative to each UFO root. Norad parses those bytes into its native `DesignSpaceDocument` and `Font` models. Native callers may use paths and directories; browser and remote adapters can first gather files asynchronously and then expose immutable bytes synchronously to the parser or worker.
 
-Writing follows the inverse boundary: `Font::save_to_sink` serializes relative files through a host-owned `FontSink`. Destination replacement, stale-file cleanup, upload, and persistence remain host responsibilities.
+Writing follows the inverse boundary: `DesignSpaceDocument::save_to_writer` serializes XML to a host-owned writer, while `Font::save_to_sink` serializes UFO-relative files through a host-owned `FontSink`. Destination replacement, stale-file cleanup, upload, and persistence remain host responsibilities.
 
 ## Workflow recipes
 
