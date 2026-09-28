@@ -298,6 +298,11 @@ class GlyphDirectory {
   }
 }
 
+interface ComponentGlyphs {
+  readonly glyphs: ReadonlyMap<GlyphId, Glyph>;
+  readonly missingGlyphIds: readonly GlyphId[];
+}
+
 const DEFAULT_FONT_METRICS: FontMetrics = {
   unitsPerEm: 1000,
 };
@@ -965,11 +970,15 @@ export class Font {
     return layers;
   }
 
-  #componentGlyphsFor(
-    glyphId: GlyphId,
-    glyphs?: ReadonlyMap<GlyphId, Glyph>,
-  ): ReadonlyMap<GlyphId, Glyph> | null {
+  /**
+   * Collects the loaded glyphs a glyph's components reference, transitively.
+   *
+   * @returns The resident component glyphs, plus the referenced glyphs that
+   * are not loaded yet; their own dependencies are found once they load.
+   */
+  #componentGlyphsFor(glyphId: GlyphId, glyphs?: ReadonlyMap<GlyphId, Glyph>): ComponentGlyphs {
     const componentGlyphs = new Map<GlyphId, Glyph>();
+    const missingGlyphIds: GlyphId[] = [];
     const directory = this.#directoryCell.peek();
     const record = directory.recordForId(glyphId);
     const pendingGlyphIds = [
@@ -986,7 +995,10 @@ export class Font {
       seenGlyphIds.add(componentGlyphId);
       const componentGlyph =
         glyphs?.get(componentGlyphId) ?? this.#store.glyphForId(componentGlyphId);
-      if (!componentGlyph) return null;
+      if (!componentGlyph) {
+        missingGlyphIds.push(componentGlyphId);
+        continue;
+      }
 
       componentGlyphs.set(componentGlyphId, componentGlyph);
       const componentRecord = directory.recordForId(componentGlyphId);
@@ -997,7 +1009,7 @@ export class Font {
       );
     }
 
-    return componentGlyphs;
+    return { glyphs: componentGlyphs, missingGlyphIds };
   }
 
   async #readGlyphsIntoStore(glyphIds: readonly GlyphId[]): Promise<void> {
@@ -1022,10 +1034,10 @@ export class Font {
 
     for (const glyph of glyphs.values()) {
       const componentGlyphs = this.#componentGlyphsFor(glyph.id, glyphs);
-      if (!componentGlyphs) {
+      if (componentGlyphs.missingGlyphIds.length > 0) {
         throw new Error(`component glyphs for ${glyph.id} could not be read`);
       }
-      glyph.replaceComponentGlyphs(componentGlyphs);
+      glyph.replaceComponentGlyphs(componentGlyphs.glyphs);
     }
 
     this.#store.setGlyphs([...glyphs.values()]);
@@ -1033,6 +1045,8 @@ export class Font {
   }
 
   #updateGlyphsFromStore(): void {
+    const missingGlyphIds = new Set<GlyphId>();
+
     batch(() => {
       for (const entry of this.#directoryCell.peek().entries) {
         const glyph = this.#store.glyphForId(entry.id);
@@ -1041,13 +1055,33 @@ export class Font {
         const record = this.#directoryCell.peek().recordForId(entry.id);
         const layers = record ? this.#buildGlyphLayers(record) : [];
         const componentGlyphs = this.#componentGlyphsFor(entry.id);
-        if (!layers || !componentGlyphs) continue;
+        for (const glyphId of componentGlyphs.missingGlyphIds) missingGlyphIds.add(glyphId);
+        if (!layers || componentGlyphs.missingGlyphIds.length > 0) continue;
 
         glyph.replaceEntry(entry);
         glyph.replaceLayers(layers);
-        glyph.replaceComponentGlyphs(componentGlyphs);
+        glyph.replaceComponentGlyphs(componentGlyphs.glyphs);
       }
     });
+
+    if (missingGlyphIds.size > 0) void this.#loadComponentGlyphs([...missingGlyphIds]);
+  }
+
+  /**
+   * Loads glyphs newly referenced as components by resident glyphs.
+   *
+   * @remarks
+   * A component can reference a glyph that was never opened, for example one
+   * added from the component picker. Loading it stores the glyph and re-runs
+   * {@link Font.#updateGlyphsFromStore}, which then resolves the component outline.
+   * Runs from the directory effect, so failures are logged rather than thrown.
+   */
+  async #loadComponentGlyphs(glyphIds: readonly GlyphId[]): Promise<void> {
+    try {
+      await this.#glyphRequests(glyphIds);
+    } catch (error) {
+      console.error("failed to load component glyphs", error);
+    }
   }
 
   /**
