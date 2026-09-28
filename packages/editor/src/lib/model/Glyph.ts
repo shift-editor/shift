@@ -24,7 +24,6 @@ import type {
 } from "@shift/types";
 import { mintAnchorId, mintComponentId, mintContourId, mintPointId } from "@shift/types";
 import {
-  batch,
   computed,
   keyedCache,
   signal,
@@ -1834,11 +1833,18 @@ export class Glyph {
   readonly #sourcesCell: Signal<Source[]>;
   readonly #projectionCell: Signal<GlyphProjection | null>;
   readonly #defaultSourceId: SourceId;
-  readonly #layersBySourceId = new Map<SourceId, GlyphLayer>();
-  readonly #layersById = new Map<LayerId, GlyphLayer>();
+  readonly #layersBySourceIdCell = computed(
+    () => new Map(this.#layersCell.value.map((layer) => [layer.sourceId, layer] as const)),
+    { name: "glyph.layersBySourceId" },
+  );
+  readonly #layersByIdCell = computed(
+    () => new Map(this.#layersCell.value.map((layer) => [layer.id, layer] as const)),
+    { name: "glyph.layersById" },
+  );
   readonly #componentGlyphsCell = signal<ReadonlyMap<GlyphId, Glyph>>(new Map(), {
     name: "glyph.componentGlyphs",
   });
+  // non-reactive: memo of render models keyed by their input cells; each model is itself a signal graph
   readonly #renderModels = new WeakMap<
     Signal<ExternalAxisLocation>,
     WeakMap<Signal<SourceId | null>, GlyphRenderModel>
@@ -1852,7 +1858,6 @@ export class Glyph {
     this.#sourcesCell = options.sourcesCell;
     this.#projectionCell = options.projectionCell;
     this.#defaultSourceId = options.defaultSourceId;
-    this.replaceLayers(options.layers);
     this.replaceComponentGlyphs(options.componentGlyphs);
   }
 
@@ -1883,13 +1888,13 @@ export class Glyph {
   }
 
   layerForSource(sourceId: SourceId): GlyphLayer | null {
-    track(this.#layersCell);
+    track(this.#layersBySourceIdCell);
 
-    return this.#layersBySourceId.get(sourceId) ?? null;
+    return this.#layersBySourceIdCell.peek().get(sourceId) ?? null;
   }
 
   layerForId(layerId: LayerId): GlyphLayer | null {
-    return this.#layersById.get(layerId) ?? null;
+    return this.#layersByIdCell.peek().get(layerId) ?? null;
   }
 
   layerAt(location: ExternalAxisLocation): GlyphLayer | null {
@@ -1997,7 +2002,7 @@ export class Glyph {
     if (interpolation) {
       const weights = interpolationWeights(interpolation.basis, designLocation, axes);
       const values = interpolateSourceValues(interpolation.basis, weights, (sourceId) => {
-        const sourceLayer = this.#layersBySourceId.get(sourceId);
+        const sourceLayer = this.#layersBySourceIdCell.peek().get(sourceId);
         if (sourceLayer) {
           track(sourceLayer.geometryCell);
           return sourceLayer.state.values;
@@ -2110,17 +2115,7 @@ export class Glyph {
   }
 
   replaceLayers(layers: readonly GlyphLayer[]): void {
-    batch(() => {
-      this.#layersBySourceId.clear();
-      this.#layersById.clear();
-
-      for (const layer of layers) {
-        this.#layersBySourceId.set(layer.sourceId, layer);
-        this.#layersById.set(layer.id, layer);
-      }
-
-      this.#layersCell.set(layers);
-    });
+    this.#layersCell.set(layers);
   }
 
   /**
@@ -2170,7 +2165,7 @@ export class Glyph {
   /** @internal Primary source geometry backing fallback and interpolation. */
   get primaryGeometryForFont(): GlyphGeometry | null {
     return (
-      this.#layersBySourceId.get(this.#defaultSourceId)?.geometry ??
+      this.#layersBySourceIdCell.peek().get(this.#defaultSourceId)?.geometry ??
       this.#layersCell.peek()[0]?.geometry ??
       null
     );

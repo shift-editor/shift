@@ -11,6 +11,7 @@
 - Name intermediate values. Pull non-trivial expressions (sets, filtered lists, compound conditions) into named `const`s or a named function with early returns instead of nesting them inside ternaries, arguments, or JSX. Nested ternaries are a lint error.
 - Extract repeated logic. When the same condition or mapping appears at several call sites, extract one helper next to the code it belongs to (for example `listSelectionMode` in `hooks/useListSelection.ts`, `nudgeMagnitude` in `types/nudge.ts`) and use it everywhere.
 - Avoid async IIFEs assigned into state, for example `state = (async () => { ... })().catch(...)`. Extract a named helper so the shared-state/memoization code and the async work are readable separately.
+- Derive lookups over reactive state with `computed` (or hold an immutable collection in a signal and replace it). Never hand-maintain a Map/Set that mirrors a signal: a plain collection cannot notify, so readers in `computed`/effects go stale. `shift/no-mutable-collection-field` enforces this; annotate a genuinely non-reactive field with `// non-reactive: <reason>`.
 - Do not prefix commit messages or pull request titles with `[codex]`.
 
 ## Agent Skills

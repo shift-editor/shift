@@ -47,6 +47,7 @@ export class WorkspaceEditCoordinator {
   readonly #store: FontStore;
   readonly #settledCell: WritableSignal<boolean>;
   readonly #applyStatus: WritableSignal<WorkspaceApplyStatus>;
+  // non-reactive: subscriber registry; listeners are invoked imperatively, never read in computeds
   readonly #editListeners = new Set<WorkspaceEditListener>();
 
   #chain: Promise<unknown> = Promise.resolve();
