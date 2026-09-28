@@ -1,5 +1,6 @@
 import { Bounds, Mat, Vec2, type Point2D } from "@shift/geo";
 import { Point, type Segment } from "@shift/glyph-state";
+import type { PointId } from "@shift/types";
 
 import type { ToolContext } from "../../core/Behavior";
 import type { Editor } from "../../../editor/Editor";
@@ -12,6 +13,7 @@ import type { PositionCondition } from "../../../../types/positionEdit";
 import type { SelectBehavior, SelectState } from "../types";
 import type { Select } from "../Select";
 import { TranslateInteraction } from "../TranslateInteraction";
+import { pointSlide } from "../PointSlide";
 import { EndpointDrop } from "../EndpointDrop";
 
 type TranslatingState = Extract<SelectState, { type: "translating" }>;
@@ -254,7 +256,17 @@ export class Translate implements SelectBehavior {
 
   #fromPointTarget(editor: Editor, event: DragStartEvent): TranslateInteraction | null {
     if (event.target.kind !== "point") return null;
-    if (event.altKey) return this.#fromDuplicatedSelection(editor, event.origin.scene);
+
+    const pointId = event.target.id;
+    const selectedWithOthers =
+      editor.selection.isSelected(pointId) && editor.selection.ids.length > 1;
+    if (event.altKey && selectedWithOthers) {
+      return this.#fromDuplicatedSelection(editor, event.origin.scene);
+    }
+    if (event.altKey) {
+      const slide = this.#fromSlidingPoint(editor, pointId, event.origin.scene);
+      if (slide) return slide;
+    }
 
     const reference = { kind: "point" as const, id: event.target.id };
     if (editor.selection.isSelected(event.target.id)) {
@@ -266,6 +278,19 @@ export class Translate implements SelectBehavior {
 
     editor.selection.select([event.target.id]);
     return new TranslateInteraction(selection, reference, event.origin.scene);
+  }
+
+  #fromSlidingPoint(
+    editor: Editor,
+    pointId: PointId,
+    pointerStart: Point2D,
+  ): TranslateInteraction | null {
+    const selection = editor.positionSelection([pointId]);
+    const slide = selection ? pointSlide(selection.layer, pointId) : null;
+    if (!selection || !slide) return null;
+
+    editor.selection.select([pointId]);
+    return new TranslateInteraction(selection, { kind: "point", id: pointId }, pointerStart, slide);
   }
 
   #fromAnchorTarget(editor: Editor, event: DragStartEvent): TranslateInteraction | null {

@@ -2,6 +2,7 @@ export { AngleSnap } from "./AngleSnap";
 export { DirectionSnap } from "./DirectionSnap";
 export { MetricSnap } from "./MetricSnap";
 export { MoveEdit } from "./MoveEdit";
+export { MovementAxis } from "./MovementAxis";
 export { PointRuleConstraint } from "./PointRuleConstraint";
 export { PositionEdits } from "./PositionEdits";
 export { PositionList } from "./PositionList";
