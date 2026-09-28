@@ -1,6 +1,13 @@
 import { commandShortcuts } from "@shared/commands";
+import { alignSelection, applyBooleanSelection, flipSelection } from "@/lib/editor/sidebarActions";
 import { matchChord, normalizeKeyboardEvent } from "./normalize";
-import type { KeyboardCommandHandler, KeyBinding, KeyContext } from "./types";
+import { sidebarShortcuts } from "./sidebarShortcuts";
+import type {
+  KeyboardCommandHandler,
+  KeyBinding,
+  KeyContext,
+  NormalizedKeyboardEvent,
+} from "./types";
 
 export interface KeymapHandlers {
   activateTemporaryHand: (ctx: KeyContext) => boolean;
@@ -36,6 +43,30 @@ export function createGlobalKeyDownBindings(runCommand: KeyboardCommandHandler):
         return true;
       },
     },
+    ...(["left", "center-h", "right", "top", "center-v", "bottom"] as const).map((alignment) => ({
+      id: `global.align.${alignment}`,
+      preventDefault: true,
+      when: (ctx: KeyContext) => ctx.activeTool !== "text",
+      match: (event: NormalizedKeyboardEvent) =>
+        matchChord(event, sidebarShortcuts[`align.${alignment}`]),
+      run: (ctx: KeyContext) => alignSelection(ctx.editor, alignment),
+    })),
+    ...(["union", "intersect", "subtract"] as const).map((operation) => ({
+      id: `global.boolean.${operation}`,
+      preventDefault: true,
+      when: (ctx: KeyContext) => ctx.activeTool !== "text",
+      match: (event: NormalizedKeyboardEvent) =>
+        matchChord(event, sidebarShortcuts[`boolean.${operation}`]),
+      run: (ctx: KeyContext) => applyBooleanSelection(ctx.editor, operation),
+    })),
+    ...(["horizontal", "vertical"] as const).map((axis) => ({
+      id: `global.flip.${axis}`,
+      preventDefault: true,
+      when: (ctx: KeyContext) => ctx.activeTool !== "text",
+      match: (event: NormalizedKeyboardEvent) =>
+        matchChord(event, sidebarShortcuts[`flip.${axis}`]),
+      run: (ctx: KeyContext) => flipSelection(ctx.editor, axis),
+    })),
     {
       id: "global.copy",
       preventDefault: true,
