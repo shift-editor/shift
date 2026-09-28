@@ -597,6 +597,9 @@ export class Editor {
       return null;
     }
 
+    // Load the base first so the component draws its outline as soon as it is added.
+    await this.font.loadGlyph(baseGlyphId);
+
     const glyphNodes = this.scene.nodesOfKind("glyph");
     const [node] = glyphNodes;
     if (!node || glyphNodes.length !== 1 || node.glyphId === baseGlyphId) return null;

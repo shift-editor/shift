@@ -529,7 +529,6 @@ export class Glyph {
     point(pointId: PointId): Point | null;
     // (undocumented)
     points(pointIds: readonly PointId[]): Point[];
-    // (undocumented)
     replaceComponentGlyphs(componentGlyphs: ReadonlyMap<GlyphId, Glyph>): void;
     // (undocumented)
     replaceEntry(entry: GlyphEntry): void;
@@ -665,7 +664,7 @@ export function useSignalState<T>(signal: Signal<T>, options?: UseSignalOptions)
 
 // Warnings were encountered during analysis:
 //
-// dist/Editor-D930LPpT.d.ts:3613:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
+// dist/Editor-CwfVdDLy.d.ts:3621:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

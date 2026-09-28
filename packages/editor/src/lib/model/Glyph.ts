@@ -1836,7 +1836,9 @@ export class Glyph {
   readonly #defaultSourceId: SourceId;
   readonly #layersBySourceId = new Map<SourceId, GlyphLayer>();
   readonly #layersById = new Map<LayerId, GlyphLayer>();
-  readonly #componentGlyphsById = new Map<GlyphId, Glyph>();
+  readonly #componentGlyphsCell = signal<ReadonlyMap<GlyphId, Glyph>>(new Map(), {
+    name: "glyph.componentGlyphs",
+  });
   readonly #renderModels = new WeakMap<
     Signal<ExternalAxisLocation>,
     WeakMap<Signal<SourceId | null>, GlyphRenderModel>
@@ -2084,13 +2086,15 @@ export class Glyph {
         return source?.id ?? null;
       },
       (glyphId, location, sourceId) => {
-        const glyph = glyphId === this.id ? this : this.#componentGlyphsById.get(glyphId);
+        track(this.#componentGlyphsCell);
+        const glyph = glyphId === this.id ? this : this.#componentGlyphsCell.peek().get(glyphId);
         return sourceId
           ? (glyph?.layerForSource(sourceId) ?? null)
           : (glyph?.layerAt(location) ?? null);
       },
       (glyphId, location, sourceId) => {
-        const glyph = glyphId === this.id ? this : this.#componentGlyphsById.get(glyphId);
+        track(this.#componentGlyphsCell);
+        const glyph = glyphId === this.id ? this : this.#componentGlyphsCell.peek().get(glyphId);
         return (
           (sourceId ? glyph?.geometryForSource(sourceId) : glyph?.geometryAt(location)) ??
           new GlyphGeometry({ contours: [], anchors: [], components: [] }, new Float64Array([0]))
@@ -2119,11 +2123,18 @@ export class Glyph {
     });
   }
 
+  /**
+   * Replaces the loaded glyphs this glyph's components reference.
+   *
+   * @remarks
+   * Render models read component outlines through this set, so a change here
+   * redraws them. Unchanged sets are ignored to avoid invalidating every render
+   * model on each directory update.
+   */
   replaceComponentGlyphs(componentGlyphs: ReadonlyMap<GlyphId, Glyph>): void {
-    this.#componentGlyphsById.clear();
-    for (const [glyphId, glyph] of componentGlyphs) {
-      this.#componentGlyphsById.set(glyphId, glyph);
-    }
+    if (sameComponentGlyphs(this.#componentGlyphsCell.peek(), componentGlyphs)) return;
+
+    this.#componentGlyphsCell.set(new Map(componentGlyphs));
   }
 
   get xAdvance(): number {
@@ -2195,4 +2206,16 @@ export class Glyph {
 
 function projectionGeometry(shape: GlyphLayerShape): GlyphGeometry {
   return new GlyphGeometry(shape.structure, shape.values, shape.componentTransformKind);
+}
+
+function sameComponentGlyphs(
+  current: ReadonlyMap<GlyphId, Glyph>,
+  next: ReadonlyMap<GlyphId, Glyph>,
+): boolean {
+  if (current.size !== next.size) return false;
+
+  for (const [glyphId, glyph] of next) {
+    if (current.get(glyphId) !== glyph) return false;
+  }
+  return true;
 }
