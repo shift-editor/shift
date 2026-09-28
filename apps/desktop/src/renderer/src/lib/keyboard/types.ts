@@ -1,32 +1,8 @@
 import type { CommandId } from "@shared/commands";
+import type { Editor } from "@shift/editor";
 import type { ToolName } from "@shift/editor/tools";
-import type { DeleteMode } from "@shift/editor/types";
-import type { ToolShortcutEntry } from "@shift/editor/types";
 
-// TODO: probably remove this and just pass editor.
-export interface KeyboardEditorActions {
-  zoomIn(): void;
-  zoomOut(): void;
-  zoomToFit(): void;
-  zoomToSelection(): void;
-  setZoom(zoom: number): void;
-  copy(): Promise<boolean>;
-  cut(): Promise<boolean>;
-  paste(): Promise<boolean>;
-  deleteSelection(mode?: DeleteMode): Promise<boolean>;
-  undo(): Promise<void>;
-  redo(): Promise<void>;
-  selectAll(): void;
-  toggleAllSourcesForEditing(): boolean;
-  collapseEditingSources(): boolean;
-  setActiveTool(toolName: ToolName): void;
-  getToolShortcuts(): ToolShortcutEntry[];
-  requestTemporaryTool(
-    toolId: ToolName,
-    options?: { onActivate?: () => void; onReturn?: () => void },
-  ): void;
-  returnFromTemporaryTool(): void;
-}
+export type KeyboardEditorActions = Editor;
 
 export interface KeyboardToolManagerActions {
   handleKeyDown(e: KeyboardEvent): boolean;

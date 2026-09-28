@@ -6,6 +6,9 @@ import { useEditor } from "@/workspace/WorkspaceContext";
 import { useSignalState } from "@shift/editor/signals";
 import { Bounds, Mat, Vec2, type PointAxis } from "@shift/geo";
 import { useSelectionBounds } from "@/hooks/useSelectionBounds";
+import { getShiftHost } from "@/host/shiftHost";
+import { alignSelection, flipSelection } from "@/lib/editor/sidebarActions";
+import { formatSidebarShortcut, sidebarShortcuts } from "@/lib/keyboard/sidebarShortcuts";
 
 import RotateIcon from "@/assets/sidebar-right/rotate.svg";
 import RotateCwIcon from "@/assets/sidebar-right/rotate-cw.svg";
@@ -25,27 +28,32 @@ import { AlignmentType, DistributeType } from "@shift/editor/transform";
 const AlignButtonsRow = React.memo(function AlignButtonsRow({
   onAlign,
   canAlign,
+  isMac,
 }: {
   onAlign: (a: AlignmentType) => void;
   canAlign: boolean;
+  isMac: boolean;
 }) {
   return (
     <div className="flex flex-wrap gap-x-4 gap-y-2">
       <div className="flex gap-1">
         <IconButton
           ariaLabel="Align left"
+          shortcut={formatSidebarShortcut(sidebarShortcuts["align.left"], isMac)}
           icon={AlignLeftIcon}
           onClick={() => onAlign("left")}
           disabled={!canAlign}
         />
         <IconButton
           ariaLabel="Align horizontal centers"
+          shortcut={formatSidebarShortcut(sidebarShortcuts["align.center-h"], isMac)}
           icon={AlignCenterHIcon}
           onClick={() => onAlign("center-h")}
           disabled={!canAlign}
         />
         <IconButton
           ariaLabel="Align right"
+          shortcut={formatSidebarShortcut(sidebarShortcuts["align.right"], isMac)}
           icon={AlignRightIcon}
           onClick={() => onAlign("right")}
           disabled={!canAlign}
@@ -54,18 +62,21 @@ const AlignButtonsRow = React.memo(function AlignButtonsRow({
       <div className="flex gap-1">
         <IconButton
           ariaLabel="Align top"
+          shortcut={formatSidebarShortcut(sidebarShortcuts["align.top"], isMac)}
           icon={AlignTopIcon}
           onClick={() => onAlign("top")}
           disabled={!canAlign}
         />
         <IconButton
           ariaLabel="Align vertical centers"
+          shortcut={formatSidebarShortcut(sidebarShortcuts["align.center-v"], isMac)}
           icon={AlignCenterVIcon}
           onClick={() => onAlign("center-v")}
           disabled={!canAlign}
         />
         <IconButton
           ariaLabel="Align bottom"
+          shortcut={formatSidebarShortcut(sidebarShortcuts["align.bottom"], isMac)}
           icon={AlignBottomIcon}
           onClick={() => onAlign("bottom")}
           disabled={!canAlign}
@@ -102,6 +113,7 @@ const DistributeButtonsRow = React.memo(function DistributeButtonsRow({
 
 export const TransformSection = () => {
   const editor = useEditor();
+  const isMac = getShiftHost().platform === "darwin";
   const selection = useSignalState(editor.selection.stateCell);
   const positionSelection = useMemo(
     () => editor.positionSelection(selection.ids),
@@ -183,15 +195,13 @@ export const TransformSection = () => {
   );
 
   const canDistribute = editable && selectedPointIds.length >= 3;
-  const canAlign = editable && selectedPointIds.length >= 2;
+  const canAlign = layer !== null && selectedPointIds.length >= 2;
 
   const handleAlign = useCallback(
     (alignment: AlignmentType) => {
-      if (!layer) return;
-
-      layer.align(selectedPointIds, alignment);
+      alignSelection(editor, alignment);
     },
-    [layer, selectedPointIds],
+    [editor],
   );
 
   const handleDistribute = useCallback(
@@ -254,51 +264,8 @@ export const TransformSection = () => {
     setRotation(wrapped);
   };
 
-  const handleFlipH = () => {
-    if (!editable || !origin) return;
-
-    if (componentSelection && !isEditing) {
-      componentSelection.layer.transformComponents(
-        componentSelection,
-        "Flip components horizontally",
-        ({ bounds }) => {
-          const center = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
-          return Mat.Compose(
-            Mat.Translate(center.x, center.y),
-            Mat.Compose(Mat.ReflectVertical(), Mat.Translate(-center.x, -center.y)),
-          );
-        },
-      );
-      return;
-    }
-
-    if (!layer) return;
-
-    layer.reflect(selectedPointIds, "vertical", origin);
-  };
-
-  const handleFlipV = () => {
-    if (!editable || !origin) return;
-
-    if (componentSelection && !isEditing) {
-      componentSelection.layer.transformComponents(
-        componentSelection,
-        "Flip components vertically",
-        ({ bounds }) => {
-          const center = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
-          return Mat.Compose(
-            Mat.Translate(center.x, center.y),
-            Mat.Compose(Mat.ReflectHorizontal(), Mat.Translate(-center.x, -center.y)),
-          );
-        },
-      );
-      return;
-    }
-
-    if (!layer) return;
-
-    layer.reflect(selectedPointIds, "horizontal", origin);
-  };
+  const handleFlipH = () => flipSelection(editor, "horizontal");
+  const handleFlipV = () => flipSelection(editor, "vertical");
 
   const handlePositionChange = useCallback(
     (axis: PointAxis, value: number) => {
@@ -325,7 +292,7 @@ export const TransformSection = () => {
     <SidebarSection title="Transform">
       <div className="flex flex-col gap-2">
         <div className="text-ui text-secondary">Align</div>
-        <AlignButtonsRow canAlign={canAlign} onAlign={handleAlign} />
+        <AlignButtonsRow canAlign={canAlign} onAlign={handleAlign} isMac={isMac} />
       </div>
 
       <div className="flex flex-col gap-2">
@@ -400,6 +367,7 @@ export const TransformSection = () => {
             <IconButton
               className="p-0.75"
               ariaLabel="Flip horizontally"
+              shortcut={formatSidebarShortcut(sidebarShortcuts["flip.horizontal"], isMac)}
               icon={FlipHIcon}
               disabled={!editable}
               onClick={handleFlipH}
@@ -407,6 +375,7 @@ export const TransformSection = () => {
             <IconButton
               className="p-0.75"
               ariaLabel="Flip vertically"
+              shortcut={formatSidebarShortcut(sidebarShortcuts["flip.vertical"], isMac)}
               icon={FlipVIcon}
               disabled={!editable}
               onClick={handleFlipV}
