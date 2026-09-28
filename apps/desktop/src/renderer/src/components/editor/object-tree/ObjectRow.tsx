@@ -1,5 +1,6 @@
 import { Collapsible, CollapsibleChevron, CollapsibleTrigger } from "@shift/ui";
 import { SidebarActionRow } from "@/components/sidebar";
+import { listSelectionMode } from "@/hooks/useListSelection";
 import type { ObjectRowProps, ObjectTreeIcon } from "@/types/objectTree";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import AnchorIcon from "@/assets/sidebar-left/anchor.svg";
@@ -64,12 +65,7 @@ export const ObjectRow = ({
           isSelected={isSelected}
           joinsPrevious={joinsPrevious}
           joinsNext={joinsNext}
-          onClick={(event) =>
-            selectObject(
-              item.id,
-              event.shiftKey ? "range" : event.metaKey || event.ctrlKey ? "toggle" : "single",
-            )
-          }
+          onClick={(event) => selectObject(item.id, listSelectionMode(event))}
           onKeyDown={async (event) => {
             if (event.key !== "Backspace" && event.key !== "Delete") return;
 

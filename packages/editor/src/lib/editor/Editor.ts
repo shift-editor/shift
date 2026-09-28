@@ -15,6 +15,7 @@ import {
   type GlyphId,
   type GlyphName,
   type GlyphRecord,
+  type Unicode,
   type LayerId,
   type LayerMatch,
 } from "@shift/types";
@@ -513,6 +514,20 @@ export class Editor {
    */
   public createGlyph(name: GlyphName): GlyphRecord {
     return this.font.createGlyph(name);
+  }
+
+  /**
+   * Creates one empty, encoded glyph per Unicode scalar as one undoable step.
+   *
+   * @param unicodes - Scalar values to create glyphs for; each glyph is named
+   * from bundled glyph metadata.
+   * @returns The records for the glyphs that were created, in input order.
+   * @see {@link Font.createGlyphForUnicode}
+   */
+  public createGlyphsForUnicodes(unicodes: readonly Unicode[]): GlyphRecord[] {
+    return this.transaction("Generate Glyphs", () =>
+      unicodes.map((unicode) => this.font.createGlyphForUnicode(unicode)),
+    );
   }
 
   /**
@@ -1288,6 +1303,22 @@ export class Editor {
     }
 
     this.scene.updateNode({ id: node.id, sourceId });
+  }
+
+  /**
+   * Replaces the font's tracked language list as one undoable history step.
+   *
+   * @remarks
+   * The edit is queued on the workspace lane; `font.languageIdsCell` reflects
+   * the committed list once the workspace echo arrives.
+   *
+   * @param ids - Hyperglot language ids in display order; an empty list is
+   * stored as an explicit empty list rather than removing it.
+   */
+  public setLanguageIds(ids: readonly string[]): void {
+    this.font.editCoordinator.transaction("Set languages", () => {
+      this.font.setLanguageIds(ids);
+    });
   }
 
   /** Return the shared external location to the font default. */

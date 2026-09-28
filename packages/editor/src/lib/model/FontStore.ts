@@ -280,6 +280,9 @@ export class FontStore {
               ? (next.sourceMetricsInterpolation.snapshot ?? null)
               : current.sourceMetricsInterpolation,
             namedInstances: next.namedInstances ?? current.namedInstances,
+            languageIds: next.languages
+              ? (next.languages.languageIds ?? null)
+              : current.languageIds,
             sources: next.sources ?? current.sources,
           }
         : current;
@@ -712,5 +715,6 @@ function fontSnapshotFromWorkspace(workspace: WorkspaceSnapshot): FontSnapshot {
     axisMappings: workspace.axisMappings,
     axisMappingBases: workspace.axisMappingBases,
     namedInstances: workspace.namedInstances,
+    ...(workspace.languageIds ? { languageIds: workspace.languageIds } : {}),
   };
 }

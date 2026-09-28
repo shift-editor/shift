@@ -62,6 +62,8 @@
   --text-sm: 0.75rem /* 12px */;
   --text-ui: 0.6875rem /* 11px */;
   --text-xs: 0.625rem /* 10px */;
+  /* Line box from the font's own ascent and descent, for previewing any script. */
+  --leading-normal: normal;
 }
 
 /* Shift Light fallback palette consumed by the 2D and WebGL editor renderers. */
@@ -163,6 +165,12 @@
 .titlebar-drag input,
 .titlebar-drag section,
 .titlebar-drag .titlebar {
+  -webkit-app-region: no-drag;
+}
+
+/* Popups drawn over the titlebar must stay clickable instead of dragging the window. */
+[data-base-ui-portal],
+[data-base-ui-portal] * {
   -webkit-app-region: no-drag;
 }
 

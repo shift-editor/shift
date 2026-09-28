@@ -25,7 +25,7 @@
     "test:perf": "turbo run test:perf --filter=@shift/desktop",
     "test:e2e": "node scripts/run-e2e.mjs",
     "test:e2e:visual": "node scripts/run-e2e.mjs visual",
-    "test:e2e:visual:update": "node scripts/run-e2e.mjs visual --update-snapshots",
+    "test:e2e:visual:update": "node scripts/run-e2e.mjs visual --update-snapshots=all",
     "test:e2e:gpu": "node scripts/run-e2e.mjs gpu",
     "test:e2e:platform": "node scripts/run-e2e.mjs platform",
     "test:e2e:perf": "node scripts/run-e2e.mjs perf",

@@ -2,6 +2,18 @@ import { useCallback, useEffect, useRef } from "react";
 import { applyListSelection } from "@shift/editor";
 import type { ListSelectionMode } from "@shift/editor/types";
 
+/**
+ * Maps a click's modifiers to a list selection mode: Shift extends a range,
+ * Cmd/Ctrl toggles one item, and a plain click selects only that item.
+ */
+export function listSelectionMode(
+  event: Pick<MouseEvent, "shiftKey" | "metaKey" | "ctrlKey">,
+): ListSelectionMode {
+  if (event.shiftKey) return "range";
+  if (event.metaKey || event.ctrlKey) return "toggle";
+  return "single";
+}
+
 export function useListSelection<T>(
   orderedItems: readonly T[],
   selectedItems: readonly T[],

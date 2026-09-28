@@ -1,4 +1,4 @@
-import type { GlyphCategory, GlyphCategorySummary } from "@shift/glyph-info";
+import type { GlyphCategory, GlyphCategorySummary, LanguageScript } from "@shift/glyph-info";
 import type { Rect2D } from "@shift/geo";
 import type {
   CatalogAxis,
@@ -22,6 +22,12 @@ export interface GlyphCatalogItem {
   readonly unicode: number | null;
 }
 
+export interface LanguageGlyph {
+  readonly codepoint: number;
+  readonly name: string;
+  readonly present: boolean;
+}
+
 export type PendingGlyphNames = ReadonlyMap<GlyphId, GlyphName>;
 
 export interface GlyphCategoryFilter {
@@ -36,7 +42,19 @@ export interface GlyphCatalogSource {
   availableGlyphs: GlyphCatalogItem[];
   filteredGlyphs: GlyphCatalogItem[];
   categories: GlyphCategorySummary[];
+  /** Tracked languages grouped by script, as shown in the sidebar. */
+  languageScripts: LanguageScript[];
+  /** Every known language grouped by script, for choosing what to track. */
+  allLanguageScripts: LanguageScript[];
+  trackedLanguageIds: readonly string[];
+  /** Replaces the font's tracked languages as one undoable edit. */
+  setTrackedLanguageIds: (languageIds: readonly string[]) => void;
+  /** Lists every character a language requires and whether the font has it. */
+  languageGlyphs: (languageId: string) => LanguageGlyph[];
+  /** Creates one empty glyph per codepoint as one undoable edit. */
+  generateGlyphs: (codepoints: readonly number[]) => void;
   categoryFilters: readonly GlyphCategoryFilter[];
+  selectedLanguageId: string | null;
   visibleCategoryFilters: readonly GlyphCategoryFilter[];
   expandedCategories: ReadonlySet<GlyphCategory>;
   setExpandedCategories: Dispatch<SetStateAction<ReadonlySet<GlyphCategory>>>;
@@ -50,6 +68,7 @@ export interface GlyphCatalogSource {
     subCategoryKey: string,
     mode: ListSelectionMode,
   ) => void;
+  selectLanguage: (languageId: string) => void;
   atlasSource: GlyphAtlasSource;
   observeAtlasInvalidation: (
     listener: (glyphIds: readonly GlyphId[] | null, directory: readonly GlyphId[]) => void,

@@ -11,8 +11,8 @@ use shift_backends::{
 };
 use shift_font::{
     AppliedIntents, Axis, AxisId, FontChange, FontChangeSet, FontIntent, FontIntentSet,
-    FontMetadata, Glyph, GlyphId, GlyphLayer, LayerId, MetricDefinition, NamedInstance, Source,
-    SourceId, TouchedLayer, error::CoreError,
+    FontMetadata, Glyph, GlyphId, GlyphLayer, LANGUAGES_LIB_KEY, LayerId, LibValue,
+    MetricDefinition, NamedInstance, Source, SourceId, TouchedLayer, error::CoreError,
 };
 use shift_store::{
     DocumentMetadata, RecoveryState, ShiftStore, WorkspaceSourceKind, WorkspaceState,
@@ -401,7 +401,9 @@ impl FontWorkspace {
                         post: change.definitions.clone(),
                     });
                 }
-                FontChange::FontMetadataUpdated(_) | FontChange::NamedInstancesUpdated(_) => {}
+                FontChange::FontMetadataUpdated(_)
+                | FontChange::FontLibValueUpdated(_)
+                | FontChange::NamedInstancesUpdated(_) => {}
                 FontChange::GlyphIdentityChanged(change) => {
                     steps.push(LedgerStep::GlyphIdentity {
                         glyph_id: change.glyph_id.clone(),
@@ -522,6 +524,17 @@ impl FontWorkspace {
                 pre: instances.to_vec(),
                 post: self.font.named_instances().to_vec(),
             });
+        }
+
+        for (key, pre_value) in &pre.font_lib_values {
+            let post_value = self.font.lib().get(key).cloned();
+            if *pre_value != post_value {
+                steps.push(LedgerStep::FontLibValue {
+                    key: key.clone(),
+                    pre: pre_value.clone(),
+                    post: post_value,
+                });
+            }
         }
 
         if let Some(metadata) = pre.metadata.as_ref()
@@ -653,6 +666,10 @@ impl FontWorkspace {
                     LedgerStep::FontMetadata { pre, post } => {
                         let (_from, to) = side.orient(pre, post);
                         replay_font_metadata(font, to, &mut changes);
+                    }
+                    LedgerStep::FontLibValue { key, pre, post } => {
+                        let (_from, to) = side.orient(pre, post);
+                        replay_font_lib_value(font, key, to, &mut changes);
                     }
                     LedgerStep::Axis {
                         pre,
@@ -1081,6 +1098,9 @@ struct PreLayer {
 struct FontLevelPreState {
     layers: Vec<PreLayer>,
     metadata: Option<FontMetadata>,
+    /// Font lib values keyed by lib key, captured before the first intent
+    /// that writes each key.
+    font_lib_values: Vec<(String, Option<LibValue>)>,
     sources: Vec<Source>,
     source_order: Option<Vec<SourceId>>,
     default_source_id: Option<SourceId>,
@@ -1099,6 +1119,18 @@ fn capture_font_level_pre_state(
 ) {
     if matches!(intent, FontIntent::UpdateFontMetadata { .. }) && pre.metadata.is_none() {
         pre.metadata = Some(font.metadata().clone());
+    }
+
+    if matches!(intent, FontIntent::SetLanguages { .. })
+        && !pre
+            .font_lib_values
+            .iter()
+            .any(|(key, _)| key == LANGUAGES_LIB_KEY)
+    {
+        pre.font_lib_values.push((
+            LANGUAGES_LIB_KEY.to_string(),
+            font.lib().get(LANGUAGES_LIB_KEY).cloned(),
+        ));
     }
 
     if matches!(
@@ -1311,6 +1343,21 @@ fn replay_font_metadata(
 ) {
     font.replace_metadata(metadata.clone());
     changes.push(FontChange::font_metadata_updated(&metadata));
+}
+
+fn replay_font_lib_value(
+    font: &mut shift_font::Font,
+    key: String,
+    value: Option<LibValue>,
+    changes: &mut FontChangeSet,
+) {
+    changes.push(FontChange::font_lib_value_updated(&key, value.as_ref()));
+    match value {
+        Some(value) => font.lib_mut().set(key, value),
+        None => {
+            font.lib_mut().remove(&key);
+        }
+    }
 }
 
 fn replay_axis(

@@ -12,8 +12,8 @@ use crate::interpolation::GlyphInterpolationValues;
 use crate::ir::{
     Anchor, AnchorId, Axis, AxisId, AxisMapping, BooleanOp, Component, ComponentId, Contour,
     ContourId, DecomposedTransform, DesignLocation, Font, FontMetadata, Glyph, GlyphId, GlyphLayer,
-    GlyphName, LayerId, MetricDefinition, MetricId, MetricValue, NamedInstance, NamedInstanceId,
-    PointId, PointType, Source, SourceId,
+    GlyphName, LayerId, LibValue, MetricDefinition, MetricId, MetricValue, NamedInstance,
+    NamedInstanceId, PointId, PointType, Source, SourceId, LANGUAGES_LIB_KEY,
 };
 use crate::layer_edit::BulkNodePositionUpdates;
 use crate::source::source_locations_equal;
@@ -159,6 +159,15 @@ pub enum FontIntent {
     UpdateFontMetadata {
         metadata: FontMetadata,
     },
+    /// Replaces the tracked language list stored under
+    /// [`LANGUAGES_LIB_KEY`](crate::LANGUAGES_LIB_KEY).
+    ///
+    /// Ids are Hyperglot language ids. Blank ids are dropped and duplicates
+    /// keep their first position; an empty list is stored as an empty array,
+    /// which is distinct from the key being absent.
+    SetLanguages {
+        language_ids: Vec<String>,
+    },
     CreateAxis {
         axis: Axis,
     },
@@ -258,6 +267,7 @@ impl FontIntent {
             Self::CreateGlyph { .. }
             | Self::UpdateGlyph { .. }
             | Self::UpdateFontMetadata { .. }
+            | Self::SetLanguages { .. }
             | Self::CreateAxis { .. }
             | Self::UpdateAxis { .. }
             | Self::DeleteAxis { .. }
@@ -316,6 +326,7 @@ impl FontIntent {
             Self::CreateGlyph { .. }
             | Self::UpdateGlyph { .. }
             | Self::UpdateFontMetadata { .. }
+            | Self::SetLanguages { .. }
             | Self::CreateAxis { .. }
             | Self::UpdateAxis { .. }
             | Self::DeleteAxis { .. }
@@ -475,6 +486,10 @@ impl Font {
                 changes.push(FontChange::font_metadata_updated(metadata));
                 Ok(Vec::new())
             }
+            FontIntent::SetLanguages { language_ids } => {
+                self.apply_set_languages(language_ids, changes);
+                Ok(Vec::new())
+            }
             FontIntent::CreateAxis { axis } => {
                 self.apply_create_axis(axis, changes)?;
                 Ok(Vec::new())
@@ -608,6 +623,22 @@ impl Font {
 
         self.insert_glyph(glyph)?;
         Ok(Vec::new())
+    }
+
+    fn apply_set_languages(&mut self, language_ids: &[String], changes: &mut FontChangeSet) {
+        let mut seen = HashSet::new();
+        let values = language_ids
+            .iter()
+            .map(|id| id.trim())
+            .filter(|id| !id.is_empty() && seen.insert(*id))
+            .map(|id| LibValue::String(id.to_string()))
+            .collect();
+        let value = LibValue::Array(values);
+        changes.push(FontChange::font_lib_value_updated(
+            LANGUAGES_LIB_KEY,
+            Some(&value),
+        ));
+        self.lib_mut().set(LANGUAGES_LIB_KEY.to_string(), value);
     }
 
     fn apply_create_axis(&mut self, axis: &Axis, changes: &mut FontChangeSet) -> CoreResult<()> {
@@ -1377,6 +1408,7 @@ impl Font {
             FontIntent::CreateGlyph { .. }
             | FontIntent::UpdateGlyph { .. }
             | FontIntent::UpdateFontMetadata { .. }
+            | FontIntent::SetLanguages { .. }
             | FontIntent::CreateAxis { .. }
             | FontIntent::UpdateAxis { .. }
             | FontIntent::DeleteAxis { .. }
