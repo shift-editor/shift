@@ -19,7 +19,7 @@ repos:
     hooks:
       - id: no-empty-files
         name: no empty files
-        entry: "bash -c 'for f in \"$@\"; do if [ -f \"$f\" ] && [ ! -s \"$f\" ]; then echo \"Empty file: $f\"; exit 1; fi; done'"
+        entry: 'bash -c ''for f in "$@"; do if [ -f "$f" ] && [ ! -s "$f" ]; then echo "Empty file: $f"; exit 1; fi; done'''
         language: system
         types_or: [javascript, jsx, ts, tsx, rust, css, json]
 
