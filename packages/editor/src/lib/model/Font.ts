@@ -332,6 +332,7 @@ export class Font {
   readonly #axisMappingBasesCell: Signal<AxisMappingBasis[]>;
 
   readonly #namedInstancesCell: Signal<NamedInstance[]>;
+  readonly #languageIdsCell: Signal<readonly string[] | null>;
 
   readonly #unicodesCell: Signal<Unicode[]>;
   readonly #glyphEntriesCell: Signal<readonly GlyphEntry[]>;
@@ -406,6 +407,7 @@ export class Font {
       return this.#metricsForSource(source);
     });
     this.#namedInstancesCell = computed(() => fontCell.value?.namedInstances ?? []);
+    this.#languageIdsCell = computed(() => fontCell.value?.languageIds ?? null);
     this.#directoryCell = computed(() =>
       GlyphDirectory.fromEntries(
         fontCell.value?.glyphs ?? [],
@@ -498,6 +500,18 @@ export class Font {
   /** Reactive authored product presets in external axis coordinates. */
   get namedInstancesCell(): Signal<NamedInstance[]> {
     return this.#namedInstancesCell;
+  }
+
+  /**
+   * Reactive tracked Hyperglot language ids (for example `eng-latin`) in authored order.
+   *
+   * @remarks
+   * `null` means the font stores no tracked-language list, so callers apply
+   * their own default. An array, including an empty one, is the authored list.
+   * Updates after load, committed edits, undo, and redo.
+   */
+  get languageIdsCell(): Signal<readonly string[] | null> {
+    return this.#languageIdsCell;
   }
 
   /** Reactive committed variation sources for sidebar controls. */
@@ -723,7 +737,27 @@ export class Font {
   createGlyph(name: GlyphName): GlyphRecord {
     const finalName = this.nextAvailableGlyphName(name);
     const handle = this.glyphHandleForName(finalName);
-    const unicodes = handle.unicode === undefined ? [] : [handle.unicode];
+    return this.#createGlyphRecord(finalName, handle.unicode === undefined ? [] : [handle.unicode]);
+  }
+
+  /**
+   * Creates a glyph encoded at one Unicode scalar, with its default authored layer.
+   *
+   * @remarks
+   * The name comes from bundled glyph metadata, falling back to `uniXXXX` /
+   * `uXXXXX`, and is auto-incremented if taken. Unlike {@link createGlyph}, the
+   * Unicode value is assigned explicitly, so fallback names stay encoded.
+   *
+   * @param unicode - Scalar value the new glyph encodes.
+   * @returns The created glyph record with its optimistic default layer.
+   */
+  createGlyphForUnicode(unicode: Unicode): GlyphRecord {
+    return this.#createGlyphRecord(this.nextAvailableGlyphName(this.nameForUnicode(unicode)), [
+      unicode,
+    ]);
+  }
+
+  #createGlyphRecord(finalName: GlyphName, unicodes: Unicode[]): GlyphRecord {
     const glyphId = mintGlyphId();
     const layerId = mintLayerId();
     const sourceId = this.defaultSource.id;
@@ -1339,6 +1373,24 @@ export class Font {
     }
 
     return sourceId;
+  }
+
+  /**
+   * Queues replacement of the tracked language list on the workspace edit lane.
+   *
+   * @remarks
+   * {@link languageIdsCell} changes only after the workspace echo is folded.
+   * Rust drops blank ids and keeps the first occurrence of duplicates. Call
+   * inside an edit-coordinator transaction to control the undo step label.
+   *
+   * @param languageIds - Hyperglot language ids in display order; an empty
+   * list is stored as an explicit empty list.
+   */
+  setLanguageIds(languageIds: readonly string[]): void {
+    this.editCoordinator.push({
+      kind: "setLanguages",
+      setLanguages: { languageIds: [...languageIds] },
+    });
   }
 
   /**

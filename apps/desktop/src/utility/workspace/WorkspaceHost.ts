@@ -656,6 +656,7 @@ export class WorkspaceHost {
       axisMappings: this.#bridge.getAxisMappings(),
       axisMappingBases: this.#bridge.getAxisMappingBases(),
       namedInstances: this.#bridge.getNamedInstances(),
+      languageIds: this.#bridge.getLanguageIds(),
     };
   }
 

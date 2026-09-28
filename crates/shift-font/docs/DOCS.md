@@ -40,6 +40,7 @@ crates/shift-font/src/
 - `Font` owns glyphs, sources, axes, axis mappings, named instances, metadata, and font-level data.
 - `EntityList` owns stable-ID lookup and authoring order for glyphs, contours, components, and future ordered entity collections.
 - `FontMetadata` is the complete authored naming and attribution snapshot replaced by `UpdateFontMetadata`.
+- `SetLanguages` writes the tracked Hyperglot language ids to the font lib under `LANGUAGES_LIB_KEY` (`com.shift.languages`) and records a single-key `FontLibValueUpdated` change; `Font::language_ids` returns `None` when the key is absent.
 - `Axis` has stable identity, an external/internal role, a continuous or discrete kind, and optional external/user-space value labels.
 - `AxisLabel` has font-wide stable identity so UI rows and later instance recipes survive renames and reordering.
 - `AxisMapping` owns an ordered set of mapping points. Independent mappings transform one external axis; the optional cross-axis group maps one design-space location to another.
