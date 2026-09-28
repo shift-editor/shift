@@ -7,8 +7,10 @@ on:
 
 permissions: {}
 
+# Every label event starts this workflow, so key the group on the label too: adding an
+# unrelated label must not cancel an in-progress snapshot run for the same pull request.
 concurrency:
-  group: update-visual-snapshots-${{ github.event.pull_request.number }}
+  group: update-visual-snapshots-${{ github.event.pull_request.number }}-${{ github.event.label.name }}
   cancel-in-progress: true
 
 jobs:
