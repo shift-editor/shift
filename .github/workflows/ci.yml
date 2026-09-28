@@ -247,7 +247,11 @@ jobs:
         run: pnpm check:browser
 
       - name: Check SDK build and public API report
-        run: pnpm --filter @shift-editor/sdk build
+        run: |
+          if ! pnpm --filter @shift-editor/sdk build; then
+            echo "::error title=SDK build or API report::If API Extractor reported a changed API signature, run \`pnpm --filter @shift-editor/sdk api:update\` and commit packages/sdk/api/."
+            exit 1
+          fi
 
   unit-test:
     name: Unit Tests
