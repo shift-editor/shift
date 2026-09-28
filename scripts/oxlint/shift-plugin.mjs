@@ -166,9 +166,225 @@ function isIteratorValueRead(node) {
   return callee.property?.type === "Identifier" && callee.property.name === "next";
 }
 
+const SIGNAL_PRIMITIVES = new Set(["signal", "computed", "effect", "track"]);
+const MUTABLE_COLLECTIONS = new Set(["Map", "Set", "WeakMap", "WeakSet"]);
+const COLLECTION_MUTATORS = new Set(["set", "delete", "clear", "add"]);
+const SIGNAL_TYPES = new Set(["Signal", "WritableSignal", "ComputedSignal", "ReadonlySignal"]);
+const NON_REACTIVE_ANNOTATION = /^\s*non-reactive:\s*\S/;
+
+/** Whether an import source is the Shift signals module (relative, `@/`, or package export). */
+function isSignalsModule(source) {
+  if (source === "@shift/editor" || source === "@shift/editor/signals") return true;
+  return /(^|\/)signals(\/(index|signal))?$/.test(source);
+}
+
+function importsSignalPrimitive(program) {
+  return program.body.some((statement) => {
+    if (statement.type !== "ImportDeclaration") return false;
+    if (statement.importKind === "type") return false;
+    if (!isSignalsModule(statement.source.value)) return false;
+
+    return statement.specifiers.some(
+      (specifier) =>
+        specifier.type === "ImportSpecifier" &&
+        specifier.importKind !== "type" &&
+        SIGNAL_PRIMITIVES.has(specifier.imported?.name ?? specifier.imported?.value),
+    );
+  });
+}
+
+function typeReferenceName(typeNode) {
+  if (typeNode?.type !== "TSTypeReference") return null;
+  const name = typeNode.typeName;
+  if (name?.type === "Identifier") return name.name;
+  return null;
+}
+
+function typeArgumentsOf(node) {
+  return (node?.typeArguments ?? node?.typeParameters)?.params ?? [];
+}
+
+/**
+ * Describe a mutable collection type or constructor: its kind and whether the
+ * stored values are signals (entries that notify on their own).
+ */
+function collectionShape(kind, typeArgs) {
+  if (!MUTABLE_COLLECTIONS.has(kind)) return null;
+
+  const valueIndex = kind === "Map" || kind === "WeakMap" ? 1 : 0;
+  const valueType = typeArgs[valueIndex];
+  const holdsSignals = SIGNAL_TYPES.has(typeReferenceName(valueType));
+  return { kind, holdsSignals };
+}
+
+function fieldCollectionShape(field) {
+  const annotation = field.typeAnnotation?.typeAnnotation;
+  const annotated = typeReferenceName(annotation);
+  if (annotated) {
+    const shape = collectionShape(annotated, typeArgumentsOf(annotation));
+    if (shape) return shape;
+  }
+
+  const value = field.value;
+  if (value?.type === "NewExpression" && value.callee?.type === "Identifier") {
+    return collectionShape(value.callee.name, typeArgumentsOf(value));
+  }
+
+  return null;
+}
+
+function hasNonReactiveAnnotation(field, sourceCode) {
+  const text = sourceCode.text ?? sourceCode.getText();
+  const comments = sourceCode.getAllComments ? sourceCode.getAllComments() : [];
+  let cursor = field.range[0];
+
+  const leading = comments
+    .filter((comment) => comment.range[1] <= cursor)
+    .sort((a, b) => b.range[1] - a.range[1]);
+
+  for (const comment of leading) {
+    const gap = text.slice(comment.range[1], cursor);
+    if (gap.trim() !== "") return false;
+    if (comment.type === "Line" && NON_REACTIVE_ANNOTATION.test(comment.value)) return true;
+    cursor = comment.range[0];
+  }
+
+  return false;
+}
+
+function thisFieldKey(member) {
+  if (member?.type !== "MemberExpression" || member.computed) return null;
+  if (member.object?.type !== "ThisExpression") return null;
+  const property = member.property;
+  if (property?.type === "PrivateIdentifier") return `#${property.name}`;
+  if (property?.type === "Identifier") return property.name;
+  return null;
+}
+
+function fieldKey(field) {
+  if (field.computed) return null;
+  const key = field.key;
+  if (key?.type === "PrivateIdentifier") return `#${key.name}`;
+  if (key?.type === "Identifier") return key.name;
+  return null;
+}
+
+/** Whether a node runs synchronously in its class constructor (not in a nested callback). */
+function isDirectlyInConstructor(node) {
+  let current = node.parent;
+
+  while (current) {
+    if (
+      current.type === "ArrowFunctionExpression" ||
+      current.type === "FunctionExpression" ||
+      current.type === "FunctionDeclaration"
+    ) {
+      const method = current.parent;
+      return method?.type === "MethodDefinition" && method.kind === "constructor";
+    }
+    current = current.parent;
+  }
+
+  return false;
+}
+
+function enclosingClassBody(node) {
+  let current = node.parent;
+
+  while (current) {
+    if (current.type === "ClassBody") return current;
+    current = current.parent;
+  }
+
+  return null;
+}
+
 export default {
   meta: { name: "shift" },
   rules: {
+    /**
+     * Ban in-place mutation of Map/Set class fields in reactive modules.
+     *
+     * A plain collection cannot notify. When a class mutates one in place and
+     * a `computed` or render effect reads it, the reader never reruns (the bug
+     * behind PR #453). Derive the index with `computed` over its source signal,
+     * or hold an immutable collection in a signal and replace it.
+     *
+     * Applies to classes in files that import `signal`/`computed`/`effect`/
+     * `track` from the signals module. Flags `this.#field.set/delete/clear/add`
+     * (and `this.field.*`) outside the constructor body. Fields whose values
+     * are signals (`Map<K, WritableSignal<V>>`) are allowed because each entry
+     * notifies. A field that is never read reactively may opt out with a
+     * leading `// non-reactive: <reason>` comment.
+     */
+    "no-mutable-collection-field": {
+      meta: {
+        type: "problem",
+        messages: {
+          mutableCollection:
+            "`{{field}}` is a {{kind}} mutated in place; readers in computed/effect never rerun. Derive it with `computed` over its source signal or hold an immutable collection in a signal. If it is never read reactively, annotate the field with `// non-reactive: <why>`.",
+        },
+        schema: [],
+      },
+      create(context) {
+        const filename = context.getFilename();
+
+        if (filename.includes(".test.") || filename.includes("testing/")) return {};
+
+        const sourceCode = context.getSourceCode();
+        let active = false;
+        const classFields = new WeakMap();
+
+        function collectionFields(classBody) {
+          const cached = classFields.get(classBody);
+          if (cached) return cached;
+
+          const fields = new Map();
+          for (const member of classBody.body) {
+            if (member.type !== "PropertyDefinition" || member.static) continue;
+            const key = fieldKey(member);
+            if (!key) continue;
+            const shape = fieldCollectionShape(member);
+            if (!shape || shape.holdsSignals) continue;
+            if (hasNonReactiveAnnotation(member, sourceCode)) continue;
+            fields.set(key, shape);
+          }
+
+          classFields.set(classBody, fields);
+          return fields;
+        }
+
+        return {
+          Program(node) {
+            active = importsSignalPrimitive(node);
+          },
+          CallExpression(node) {
+            if (!active) return;
+
+            const callee = node.callee;
+            if (callee?.type !== "MemberExpression" || callee.computed) return;
+            if (!COLLECTION_MUTATORS.has(callee.property?.name)) return;
+
+            const field = thisFieldKey(callee.object);
+            if (!field) return;
+
+            const classBody = enclosingClassBody(node);
+            if (!classBody) return;
+
+            const shape = collectionFields(classBody).get(field);
+            if (!shape) return;
+            if (isDirectlyInConstructor(node)) return;
+
+            context.report({
+              node,
+              messageId: "mutableCollection",
+              data: { field, kind: shape.kind },
+            });
+          },
+        };
+      },
+    },
+
     /**
      * Ban `getFoo()` / `isFoo()` methods that just return `this.#signal.value`
      * (or `.peek()`). Use a value getter + optional `$foo` signal getter

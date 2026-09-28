@@ -1,6 +1,7 @@
 {
   "name": "@shift/editor",
   "version": "0.0.1",
+  "license": "MIT OR Apache-2.0",
   "private": true,
   "description": "Browser-safe Shift editor runtime",
   "type": "module",
@@ -23,6 +24,12 @@
       "types": "./src/rendering.ts",
       "import": "./src/rendering.ts"
     },
+    "./ui": {
+      "types": "./src/ui.ts",
+      "import": "./src/ui.ts"
+    },
+    "./style.css": "./src/ui/style.css",
+    "./fonts.css": "./src/ui/fonts.css",
     "./signals": {
       "types": "./src/signals.ts",
       "import": "./src/signals.ts"
@@ -64,6 +71,7 @@
     "@shift/glyph-state": "workspace:*",
     "@shift/rules": "workspace:*",
     "@shift/types": "workspace:*",
+    "@shift/ui": "workspace:*",
     "@shift/validation": "workspace:*",
     "regl": "^2.1.1"
   },
@@ -71,9 +79,10 @@
     "react": "^19.1.0"
   },
   "devDependencies": {
-    "@types/react": "^19.1.8",
+    "@types/react": "^19.2.17",
     "oxlint": "^1.85.0",
     "oxlint-plugin-eslint": "^1.85.0",
+    "react": "^19.2.8",
     "typescript": "^5.5.4",
     "vitest": "^4.1.10"
   }

@@ -174,6 +174,31 @@ mod tests {
     }
 
     #[test]
+    fn tracked_languages_round_trip_through_font_lib_plist() {
+        let mut font = create_test_font();
+        font.apply_intents(shift_font::FontIntentSet {
+            intents: vec![shift_font::FontIntent::SetLanguages {
+                language_ids: vec!["eng-latin".to_string(), "cmn-chinese".to_string()],
+            }],
+        })
+        .unwrap();
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let ufo_path = temp_dir.path().join("languages.ufo");
+        let ufo_path_str = ufo_path.to_str().unwrap();
+        UfoWriter::new().save(&font, ufo_path_str).unwrap();
+
+        let lib_plist = fs::read_to_string(ufo_path.join("lib.plist")).unwrap();
+        assert!(lib_plist.contains("<key>com.shift.languages</key>"));
+
+        let reloaded = UfoReader::new().load(ufo_path_str).unwrap();
+        assert_eq!(
+            reloaded.language_ids(),
+            Some(vec!["eng-latin".to_string(), "cmn-chinese".to_string()])
+        );
+    }
+
+    #[test]
     fn failed_save_preserves_existing_ufo() {
         let font = create_test_font();
         let temp_dir = tempfile::tempdir().unwrap();

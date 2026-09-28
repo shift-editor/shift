@@ -34,7 +34,7 @@ pub use entity::{
     GlyphId, GuidelineId, LayerId, MetricId, NamedInstanceId, PointId, SourceId,
 };
 pub use features::FeatureData;
-pub use font::{Font, FontMetadata};
+pub use font::{Font, FontMetadata, LANGUAGES_LIB_KEY};
 pub use glyph::{Glyph, GlyphLayer};
 pub use glyph_name::{GlyphName, GlyphNameError};
 pub use guideline::{Guideline, GuidelineOrientation};

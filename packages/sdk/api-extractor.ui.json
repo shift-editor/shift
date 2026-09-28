@@ -1,0 +1,10 @@
+{
+  "extends": "./api-extractor.json",
+  "mainEntryPointFilePath": "<projectFolder>/dist/ui.d.ts",
+  "apiReport": {
+    "enabled": true,
+    "reportFileName": "ui",
+    "reportFolder": "<projectFolder>/api/",
+    "reportTempFolder": "<projectFolder>/.api-temp/"
+  }
+}

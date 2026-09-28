@@ -3,6 +3,9 @@ resolver = "2"
 members = ["crates/*"]
 
 
+[workspace.package]
+license = "MIT OR Apache-2.0"
+
 [workspace.dependencies]
 shift-wire = { path = "crates/shift-wire" }
 shift-backends = { path = "crates/shift-backends" }

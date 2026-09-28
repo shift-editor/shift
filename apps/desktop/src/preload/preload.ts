@@ -12,9 +12,6 @@ const shiftHost: ShiftHost = {
     run: invoke(ipcRenderer, "commands.run"),
     onRunRendererCommand: listen(ipcRenderer, "commands.runRenderer"),
   },
-  menu: {
-    showCanvasContextMenu: invoke(ipcRenderer, "menu.showCanvasContextMenu"),
-  },
   document: {
     connect: invoke(ipcRenderer, "document.connect"),
   },

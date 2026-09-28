@@ -245,13 +245,15 @@ export class LayerBuffers {
     if (pointIds.size !== points.length) return false;
     if ([...pointIds].some((pointId) => this.#contourForPoint(pointId))) return false;
 
-    const contour = contourId
-      ? this.contour(contourId)
-      : before
-        ? this.#contourForPoint(before)
-        : null;
+    const contour = this.#insertionContour(contourId, before);
     if (!contour) return false;
     return contour.insertPoints(points, before);
+  }
+
+  #insertionContour(contourId?: ContourId, before?: PointId) {
+    if (contourId) return this.contour(contourId);
+    if (before) return this.#contourForPoint(before);
+    return null;
   }
 
   setContourClosed(contourId: ContourId, closed: boolean): boolean {

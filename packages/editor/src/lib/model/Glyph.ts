@@ -24,7 +24,6 @@ import type {
 } from "@shift/types";
 import { mintAnchorId, mintComponentId, mintContourId, mintPointId } from "@shift/types";
 import {
-  batch,
   computed,
   keyedCache,
   signal,
@@ -1823,6 +1822,8 @@ class SourceGeometryCache implements GlyphRenderGeometry {
  * Font assembles every authored layer and component dependency before making
  * this object available. Collection replacements preserve Glyph identity while
  * layer geometry continues to update through each GlyphLayerState signal graph.
+ *
+ * @beta Embedders may use this type; its members can change between SDK minor versions.
  */
 export class Glyph {
   readonly #entryCell: WritableSignal<GlyphEntry>;
@@ -1832,9 +1833,18 @@ export class Glyph {
   readonly #sourcesCell: Signal<Source[]>;
   readonly #projectionCell: Signal<GlyphProjection | null>;
   readonly #defaultSourceId: SourceId;
-  readonly #layersBySourceId = new Map<SourceId, GlyphLayer>();
-  readonly #layersById = new Map<LayerId, GlyphLayer>();
-  readonly #componentGlyphsById = new Map<GlyphId, Glyph>();
+  readonly #layersBySourceIdCell = computed(
+    () => new Map(this.#layersCell.value.map((layer) => [layer.sourceId, layer] as const)),
+    { name: "glyph.layersBySourceId" },
+  );
+  readonly #layersByIdCell = computed(
+    () => new Map(this.#layersCell.value.map((layer) => [layer.id, layer] as const)),
+    { name: "glyph.layersById" },
+  );
+  readonly #componentGlyphsCell = signal<ReadonlyMap<GlyphId, Glyph>>(new Map(), {
+    name: "glyph.componentGlyphs",
+  });
+  // non-reactive: memo of render models keyed by their input cells; each model is itself a signal graph
   readonly #renderModels = new WeakMap<
     Signal<ExternalAxisLocation>,
     WeakMap<Signal<SourceId | null>, GlyphRenderModel>
@@ -1848,7 +1858,6 @@ export class Glyph {
     this.#sourcesCell = options.sourcesCell;
     this.#projectionCell = options.projectionCell;
     this.#defaultSourceId = options.defaultSourceId;
-    this.replaceLayers(options.layers);
     this.replaceComponentGlyphs(options.componentGlyphs);
   }
 
@@ -1879,13 +1888,13 @@ export class Glyph {
   }
 
   layerForSource(sourceId: SourceId): GlyphLayer | null {
-    track(this.#layersCell);
+    track(this.#layersBySourceIdCell);
 
-    return this.#layersBySourceId.get(sourceId) ?? null;
+    return this.#layersBySourceIdCell.peek().get(sourceId) ?? null;
   }
 
   layerForId(layerId: LayerId): GlyphLayer | null {
-    return this.#layersById.get(layerId) ?? null;
+    return this.#layersByIdCell.peek().get(layerId) ?? null;
   }
 
   layerAt(location: ExternalAxisLocation): GlyphLayer | null {
@@ -1993,7 +2002,7 @@ export class Glyph {
     if (interpolation) {
       const weights = interpolationWeights(interpolation.basis, designLocation, axes);
       const values = interpolateSourceValues(interpolation.basis, weights, (sourceId) => {
-        const sourceLayer = this.#layersBySourceId.get(sourceId);
+        const sourceLayer = this.#layersBySourceIdCell.peek().get(sourceId);
         if (sourceLayer) {
           track(sourceLayer.geometryCell);
           return sourceLayer.state.values;
@@ -2082,13 +2091,15 @@ export class Glyph {
         return source?.id ?? null;
       },
       (glyphId, location, sourceId) => {
-        const glyph = glyphId === this.id ? this : this.#componentGlyphsById.get(glyphId);
+        track(this.#componentGlyphsCell);
+        const glyph = glyphId === this.id ? this : this.#componentGlyphsCell.peek().get(glyphId);
         return sourceId
           ? (glyph?.layerForSource(sourceId) ?? null)
           : (glyph?.layerAt(location) ?? null);
       },
       (glyphId, location, sourceId) => {
-        const glyph = glyphId === this.id ? this : this.#componentGlyphsById.get(glyphId);
+        track(this.#componentGlyphsCell);
+        const glyph = glyphId === this.id ? this : this.#componentGlyphsCell.peek().get(glyphId);
         return (
           (sourceId ? glyph?.geometryForSource(sourceId) : glyph?.geometryAt(location)) ??
           new GlyphGeometry({ contours: [], anchors: [], components: [] }, new Float64Array([0]))
@@ -2104,24 +2115,21 @@ export class Glyph {
   }
 
   replaceLayers(layers: readonly GlyphLayer[]): void {
-    batch(() => {
-      this.#layersBySourceId.clear();
-      this.#layersById.clear();
-
-      for (const layer of layers) {
-        this.#layersBySourceId.set(layer.sourceId, layer);
-        this.#layersById.set(layer.id, layer);
-      }
-
-      this.#layersCell.set(layers);
-    });
+    this.#layersCell.set(layers);
   }
 
+  /**
+   * Replaces the loaded glyphs this glyph's components reference.
+   *
+   * @remarks
+   * Render models read component outlines through this set, so a change here
+   * redraws them. Unchanged sets are ignored to avoid invalidating every render
+   * model on each directory update.
+   */
   replaceComponentGlyphs(componentGlyphs: ReadonlyMap<GlyphId, Glyph>): void {
-    this.#componentGlyphsById.clear();
-    for (const [glyphId, glyph] of componentGlyphs) {
-      this.#componentGlyphsById.set(glyphId, glyph);
-    }
+    if (sameComponentGlyphs(this.#componentGlyphsCell.peek(), componentGlyphs)) return;
+
+    this.#componentGlyphsCell.set(new Map(componentGlyphs));
   }
 
   get xAdvance(): number {
@@ -2157,7 +2165,7 @@ export class Glyph {
   /** @internal Primary source geometry backing fallback and interpolation. */
   get primaryGeometryForFont(): GlyphGeometry | null {
     return (
-      this.#layersBySourceId.get(this.#defaultSourceId)?.geometry ??
+      this.#layersBySourceIdCell.peek().get(this.#defaultSourceId)?.geometry ??
       this.#layersCell.peek()[0]?.geometry ??
       null
     );
@@ -2193,4 +2201,16 @@ export class Glyph {
 
 function projectionGeometry(shape: GlyphLayerShape): GlyphGeometry {
   return new GlyphGeometry(shape.structure, shape.values, shape.componentTransformKind);
+}
+
+function sameComponentGlyphs(
+  current: ReadonlyMap<GlyphId, Glyph>,
+  next: ReadonlyMap<GlyphId, Glyph>,
+): boolean {
+  if (current.size !== next.size) return false;
+
+  for (const [glyphId, glyph] of next) {
+    if (current.get(glyphId) !== glyph) return false;
+  }
+  return true;
 }

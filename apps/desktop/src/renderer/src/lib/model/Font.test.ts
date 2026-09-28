@@ -50,6 +50,7 @@ const SNAPSHOT: WorkspaceSnapshot = {
   axisMappings: [],
   axisMappingBases: [],
   namedInstances: [],
+  languageIds: null,
 };
 
 describe("Font projects the workspace snapshot", () => {

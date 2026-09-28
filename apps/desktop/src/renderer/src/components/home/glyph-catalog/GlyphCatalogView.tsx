@@ -18,7 +18,11 @@ import PlusIcon from "@/assets/general/plus.svg";
 
 import { SidebarRowButton } from "@/components/sidebar";
 import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
+import { listSelectionMode } from "@/hooks/useListSelection";
+import { CatalogSection } from "./CatalogSection";
 import { Category } from "./Category";
+import { LanguagePicker } from "./LanguagePicker";
+import { LanguageScript } from "./LanguageScript";
 import { SubCategory } from "./SubCategory";
 
 export const GlyphCatalogView = () => {
@@ -26,7 +30,14 @@ export const GlyphCatalogView = () => {
     availableGlyphs: allGlyphs,
     filteredGlyphs,
     categories,
+    languageScripts,
+    allLanguageScripts,
+    trackedLanguageIds,
+    setTrackedLanguageIds,
+    languageGlyphs,
+    generateGlyphs,
     categoryFilters,
+    selectedLanguageId,
     visibleCategoryFilters,
     expandedCategories,
     setExpandedCategories,
@@ -37,6 +48,7 @@ export const GlyphCatalogView = () => {
     selectAll,
     selectCategory,
     selectSubCategory,
+    selectLanguage,
   } = useGlyphCatalog();
 
   const selectedFilterIndexes = useMemo(
@@ -56,7 +68,7 @@ export const GlyphCatalogView = () => {
   );
   const allGlyphCount = allGlyphs.length;
   const filteredGlyphCount = filteredGlyphs.length;
-  const allGlyphsSelected = categoryFilters.length === 0;
+  const allGlyphsSelected = categoryFilters.length === 0 && selectedLanguageId === null;
 
   return (
     <div className="flex flex-col gap-2">
@@ -96,91 +108,111 @@ export const GlyphCatalogView = () => {
             <span className="text-xs">{`${filteredGlyphCount}/${allGlyphCount}`}</span>
           </SidebarRowButton>
 
-          {categories.map((categoryNode) => {
-            const filterIndex = visibleCategoryFilters.findIndex(
-              (filter) =>
-                filter.category === categoryNode.category && filter.subCategoryKey === null,
-            );
-            const active = selectedFilterIndexes.has(filterIndex);
+          <CatalogSection title="Categories">
+            {categories.map((categoryNode) => {
+              const filterIndex = visibleCategoryFilters.findIndex(
+                (filter) =>
+                  filter.category === categoryNode.category && filter.subCategoryKey === null,
+              );
+              const active = selectedFilterIndexes.has(filterIndex);
 
-            return (
-              <div
-                key={categoryNode.category}
-                className={cn(
-                  active &&
-                    "relative isolate rounded bg-transparent before:pointer-events-none before:absolute before:inset-0 before:-z-10 before:rounded before:bg-hover/50 before:content-['']",
-                  active &&
-                    selectedFilterIndexes.has(filterIndex - 1) &&
-                    "before:-top-1 before:rounded-t-none",
-                  active && selectedFilterIndexes.has(filterIndex + 1) && "before:rounded-b-none",
-                )}
-              >
-                <Collapsible
-                  open={expandedCategories.has(categoryNode.category)}
-                  onOpenChange={(open) => {
-                    setExpandedCategories((previous) => {
-                      const next = new Set(previous);
-                      if (open) next.add(categoryNode.category);
-                      else next.delete(categoryNode.category);
-                      return next;
-                    });
-                  }}
-                  className="flex flex-col"
+              return (
+                <div
+                  key={categoryNode.category}
+                  className={cn(
+                    active &&
+                      "relative isolate rounded bg-transparent before:pointer-events-none before:absolute before:inset-0 before:-z-10 before:rounded before:bg-hover/50 before:content-['']",
+                    active &&
+                      selectedFilterIndexes.has(filterIndex - 1) &&
+                      "before:-top-1 before:rounded-t-none",
+                    active && selectedFilterIndexes.has(filterIndex + 1) && "before:rounded-b-none",
+                  )}
                 >
-                  <CollapsibleTrigger
-                    render={
-                      <SidebarRowButton
-                        aria-pressed={active}
-                        onClick={(event) =>
-                          selectCategory(
-                            categoryNode.category,
-                            event.shiftKey
-                              ? "range"
-                              : event.metaKey || event.ctrlKey
-                                ? "toggle"
-                                : "single",
-                          )
-                        }
-                      />
-                    }
+                  <Collapsible
+                    open={expandedCategories.has(categoryNode.category)}
+                    onOpenChange={(open) => {
+                      setExpandedCategories((previous) => {
+                        const next = new Set(previous);
+                        if (open) next.add(categoryNode.category);
+                        else next.delete(categoryNode.category);
+                        return next;
+                      });
+                    }}
+                    className="flex flex-col"
                   >
-                    <Category category={categoryNode.category} />
-                  </CollapsibleTrigger>
-                  <CollapsiblePanel>
-                    <div className="flex flex-col gap-1 pt-1">
-                      {categoryNode.subCategories.map((subCategory) => {
-                        const subCategoryFilterIndex = visibleCategoryFilters.findIndex(
-                          (filter) =>
-                            filter.category === categoryNode.category &&
-                            filter.subCategoryKey === subCategory.key,
-                        );
-                        const subCategoryActive = selectedFilterIndexes.has(subCategoryFilterIndex);
+                    <CollapsibleTrigger
+                      render={
+                        <SidebarRowButton
+                          aria-pressed={active}
+                          onClick={(event) =>
+                            selectCategory(categoryNode.category, listSelectionMode(event))
+                          }
+                        />
+                      }
+                    >
+                      <Category category={categoryNode.category} />
+                    </CollapsibleTrigger>
+                    <CollapsiblePanel>
+                      <div className="flex flex-col gap-1 pt-1">
+                        {categoryNode.subCategories.map((subCategory) => {
+                          const subCategoryFilterIndex = visibleCategoryFilters.findIndex(
+                            (filter) =>
+                              filter.category === categoryNode.category &&
+                              filter.subCategoryKey === subCategory.key,
+                          );
+                          const subCategoryActive =
+                            selectedFilterIndexes.has(subCategoryFilterIndex);
 
-                        return (
-                          <SubCategory
-                            key={subCategory.key}
-                            label={subCategory.label}
-                            active={subCategoryActive}
-                            joinsPrevious={
-                              subCategoryActive &&
-                              selectedFilterIndexes.has(subCategoryFilterIndex - 1)
-                            }
-                            joinsNext={
-                              subCategoryActive &&
-                              selectedFilterIndexes.has(subCategoryFilterIndex + 1)
-                            }
-                            onSelect={(mode) =>
-                              selectSubCategory(categoryNode.category, subCategory.key, mode)
-                            }
-                          />
-                        );
-                      })}
-                    </div>
-                  </CollapsiblePanel>
-                </Collapsible>
-              </div>
-            );
-          })}
+                          return (
+                            <SubCategory
+                              key={subCategory.key}
+                              label={subCategory.label}
+                              active={subCategoryActive}
+                              joinsPrevious={
+                                subCategoryActive &&
+                                selectedFilterIndexes.has(subCategoryFilterIndex - 1)
+                              }
+                              joinsNext={
+                                subCategoryActive &&
+                                selectedFilterIndexes.has(subCategoryFilterIndex + 1)
+                              }
+                              onSelect={(mode) =>
+                                selectSubCategory(categoryNode.category, subCategory.key, mode)
+                              }
+                            />
+                          );
+                        })}
+                      </div>
+                    </CollapsiblePanel>
+                  </Collapsible>
+                </div>
+              );
+            })}
+          </CatalogSection>
+
+          <CatalogSection
+            title="Languages"
+            actions={
+              <LanguagePicker
+                scripts={allLanguageScripts}
+                trackedLanguageIds={trackedLanguageIds}
+                disabled={!canAuthor}
+                onApply={setTrackedLanguageIds}
+              />
+            }
+          >
+            {languageScripts.map((group) => (
+              <LanguageScript
+                key={group.script}
+                group={group}
+                selectedLanguageId={selectedLanguageId}
+                canGenerate={canAuthor}
+                onSelectLanguage={selectLanguage}
+                languageGlyphs={languageGlyphs}
+                onGenerate={generateGlyphs}
+              />
+            ))}
+          </CatalogSection>
         </div>
       </div>
     </div>

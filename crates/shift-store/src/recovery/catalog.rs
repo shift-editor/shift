@@ -122,7 +122,8 @@ pub(super) const KERNING_GROUPS: RecoveryTable = RecoveryTable::canonical_only("
 pub(super) const KERNING_GROUP_MEMBERS: RecoveryTable =
     RecoveryTable::canonical_only("kerning_group_members");
 pub(super) const KERNING_PAIRS: RecoveryTable = RecoveryTable::canonical_only("kerning_pairs");
-pub(super) const FONT_LIB: RecoveryTable = RecoveryTable::canonical_only("font_lib");
+pub(super) const FONT_LIB: RecoveryTable =
+    RecoveryTable::replace_collection("font_lib", None, false);
 pub(super) const FONTINFO_REMAINDER: RecoveryTable =
     RecoveryTable::canonical_only("fontinfo_remainder");
 pub(super) const SOURCE_LIB: RecoveryTable =

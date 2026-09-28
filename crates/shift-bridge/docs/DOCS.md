@@ -49,6 +49,7 @@ crates/shift-bridge/
 - `NapiAppliedChange` -- replace-grade mutation response returned by apply/undo/redo.
 - `NapiFontReplacement` -- selective complete font projections; metadata is present only when an edit replaced it.
 - `NapiUpdateFontMetadataIntent` -- complete authored metadata replacement payload that leaves metrics unchanged.
+- `NapiSetLanguagesIntent` / `NapiLanguagesReplacement` -- tracked Hyperglot language list replacement stored in the font lib under `com.shift.languages`; the replacement wrapper's `languageIds` is absent when the key is absent, so `getLanguageIds()` and the echo distinguish "no list" from an empty list.
 - `NapiAddComponentIntent` / `NapiSetComponentTransformsIntent` / `NapiRemoveComponentsIntent` / `NapiDecomposeComponentsIntent` -- component-authoring payloads carrying stable layer, component, base-glyph, and decomposed-transform values through the shared atomic apply path.
 - `NapiLayerReplaced` -- NAPI adapter for one replaced glyph layer in an applied change.
 - `NapiAxis` / `NapiAxisMapping` -- authoring DTOs used by axis create/update, mapping replacement, and mapped-location queries.

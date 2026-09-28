@@ -1,0 +1,61 @@
+{
+  "name": "@shift-editor/sdk",
+  "version": "0.0.0-development",
+  "license": "MIT OR Apache-2.0",
+  "private": true,
+  "description": "Browser SDK for the Shift font editor",
+  "type": "module",
+  "sideEffects": [
+    "*.css"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./ui": {
+      "types": "./dist/ui.d.ts",
+      "import": "./dist/ui.js"
+    },
+    "./style.css": "./dist/style.css",
+    "./fonts.css": "./dist/fonts.css"
+  },
+  "files": [
+    "dist",
+    "LICENSE-APACHE",
+    "LICENSE-MIT",
+    "THIRD_PARTY_LICENSES.txt",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "prepack": "node ../../scripts/generate-third-party-licenses.mjs sdk THIRD_PARTY_LICENSES.txt",
+    "typecheck": "tsgo --noEmit",
+    "generate:inter-a-fixture": "node scripts/generate-inter-a-fixture.mjs",
+    "test:packed": "pnpm build && node scripts/test-packed-consumers.mjs",
+    "api:update": "node scripts/build.mjs --update-api"
+  },
+  "peerDependencies": {
+    "@base-ui-components/react": "1.0.0-rc.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@microsoft/api-extractor": "^7.59.2",
+    "@playwright/test": "^1.59.1",
+    "@shift/editor": "workspace:*",
+    "@shift/types": "workspace:*",
+    "@shift/ui": "workspace:*",
+    "@tailwindcss/vite": "^4.1.11",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "tailwindcss": "^4.1.11",
+    "tsdown": "0.23.0",
+    "typescript": "^5.5.4",
+    "vite": "^6.4.3"
+  }
+}

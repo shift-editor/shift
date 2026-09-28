@@ -2,6 +2,7 @@ import * as React from "react";
 import { Select as BaseSelect, type SelectRootProps } from "@base-ui-components/react/select";
 import { Check, ChevronDown } from "lucide-react";
 import { cn } from "../../lib/utils";
+import { usePortalContainer } from "../portal";
 
 export type SelectProps<Value, Multiple extends boolean | undefined = false> = SelectRootProps<
   Value,
@@ -57,7 +58,10 @@ export const SelectIcon = React.forwardRef<
 ));
 SelectIcon.displayName = "SelectIcon";
 
-export const SelectPortal = BaseSelect.Portal;
+export function SelectPortal(props: React.ComponentProps<typeof BaseSelect.Portal>) {
+  const container = usePortalContainer();
+  return <BaseSelect.Portal container={container} {...props} />;
+}
 
 export interface SelectPositionerProps extends React.ComponentPropsWithoutRef<
   typeof BaseSelect.Positioner
