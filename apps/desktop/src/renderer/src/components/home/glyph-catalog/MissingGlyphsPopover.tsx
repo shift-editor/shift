@@ -16,6 +16,10 @@ import {
 import { useCheckboxRange } from "@/hooks/useCheckboxRange";
 import type { LanguageGlyph } from "@/types/glyphCatalog";
 
+const ROW_HEIGHT = 40;
+const VIEWPORT_HEIGHT = 320;
+const OVERSCAN_ROWS = 4;
+
 export interface MissingGlyphsPopoverProps {
   anchor: RefObject<HTMLElement | null>;
   languageName: string;
@@ -38,7 +42,14 @@ export const MissingGlyphsPopover = ({
   onGenerate,
 }: MissingGlyphsPopoverProps) => {
   const [selectedCodepoints, setSelectedCodepoints] = useState<readonly number[]>([]);
+  const [scrollTop, setScrollTop] = useState(0);
   const codepoints = useMemo(() => glyphs?.map(({ codepoint }) => codepoint) ?? [], [glyphs]);
+  const firstRow = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN_ROWS);
+  const lastRow = Math.min(
+    glyphs?.length ?? 0,
+    Math.ceil((scrollTop + VIEWPORT_HEIGHT) / ROW_HEIGHT) + OVERSCAN_ROWS,
+  );
+  const visibleGlyphs = glyphs?.slice(firstRow, lastRow) ?? [];
   const selected = useMemo(() => new Set(selectedCodepoints), [selectedCodepoints]);
   const { onMouseDown, itemsToChange, resetRange } = useCheckboxRange(codepoints);
   const missingCodepoints = useMemo(
@@ -50,6 +61,7 @@ export const MissingGlyphsPopover = ({
   const handleOpenChange = (open: boolean) => {
     if (open) return;
     setSelectedCodepoints([]);
+    setScrollTop(0);
     resetRange();
     onClose();
   };
@@ -57,11 +69,14 @@ export const MissingGlyphsPopover = ({
   const setChecked = (target: number, checked: boolean) => {
     const missing = new Set(missingCodepoints);
     const affected = new Set(itemsToChange(target).filter((codepoint) => missing.has(codepoint)));
-    setSelectedCodepoints((previous) =>
-      checked
-        ? [...previous, ...[...affected].filter((codepoint) => !previous.includes(codepoint))]
-        : previous.filter((codepoint) => !affected.has(codepoint)),
-    );
+    setSelectedCodepoints((previous) => {
+      const next = new Set(previous);
+      for (const codepoint of affected) {
+        if (checked) next.add(codepoint);
+        else next.delete(codepoint);
+      }
+      return [...next];
+    });
   };
 
   const generate = () => {
@@ -92,27 +107,31 @@ export const MissingGlyphsPopover = ({
               role="group"
               aria-label={`Missing glyphs for ${languageName}`}
               className="scrollbar-themed max-h-80 overflow-y-auto p-1"
+              onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
             >
-              {glyphs?.map(({ codepoint, name, present }) => (
-                <label
-                  key={codepoint}
-                  className="flex cursor-pointer select-none items-center gap-2 rounded px-1 py-2 text-ui text-primary hover:bg-hover"
-                  onMouseDown={onMouseDown}
-                >
-                  <Checkbox
-                    checked={present || selected.has(codepoint)}
-                    onCheckedChange={(checked) => setChecked(codepoint, checked)}
-                    disabled={present || !canGenerate}
-                  />
-                  <span className="min-w-0 flex-1 truncate">{name}</span>
-                  <span
-                    aria-hidden
-                    className="w-10 shrink-0 text-center text-3xl leading-none text-muted"
+              <div className="relative" style={{ height: (glyphs?.length ?? 0) * ROW_HEIGHT }}>
+                {visibleGlyphs.map(({ codepoint, name, present }, index) => (
+                  <label
+                    key={codepoint}
+                    className="absolute flex h-10 w-full cursor-pointer select-none items-center gap-2 rounded px-1 text-ui text-primary hover:bg-hover"
+                    style={{ top: (firstRow + index) * ROW_HEIGHT }}
+                    onMouseDown={onMouseDown}
                   >
-                    {String.fromCodePoint(codepoint)}
-                  </span>
-                </label>
-              ))}
+                    <Checkbox
+                      checked={present || selected.has(codepoint)}
+                      onCheckedChange={(checked) => setChecked(codepoint, checked)}
+                      disabled={present || !canGenerate}
+                    />
+                    <span className="min-w-0 flex-1 truncate">{name}</span>
+                    <span
+                      aria-hidden
+                      className="w-10 shrink-0 text-center text-3xl leading-none text-muted"
+                    >
+                      {String.fromCodePoint(codepoint)}
+                    </span>
+                  </label>
+                ))}
+              </div>
             </div>
 
             {glyphs && glyphs.length > 0 && (

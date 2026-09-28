@@ -1,4 +1,4 @@
-import type { GlyphId } from "@shift/types";
+import type { GlyphId, SourceId } from "@shift/types";
 import type { GlyphAtlasPageWeights } from "@/types/glyphAtlas";
 import type { GlyphPreviewFrame, GlyphPreviewInstance } from "@/types/glyphPreview";
 import { SlugAtlas } from "./SlugAtlas";
@@ -83,6 +83,13 @@ export class SlugRenderer {
 
   hasGlyphs(glyphIds: readonly GlyphId[]): boolean {
     return glyphIds.every((glyphId) => this.#pageByGlyph.has(glyphId));
+  }
+
+  hasDrawableOutline(glyphId: GlyphId, sourceId: SourceId | null): boolean {
+    const page = this.#pageByGlyph.get(glyphId);
+    if (!page) throw new Error(`resident Slug glyph ${glyphId} is not loaded`);
+
+    return page.atlas.hasDrawableOutline(glyphId, sourceId);
   }
 
   setResolvedWeights(updates: readonly GlyphAtlasPageWeights[]): void {

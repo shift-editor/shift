@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Button } from "@shift/ui";
 import { GlyphCatalogLayout } from "./glyphCatalogLayout";
 import { GlyphNameInput } from "./GlyphNameInput";
@@ -106,6 +106,34 @@ export function SvgGlyphCatalogGrid({
             ? new GlyphPreviewLayout(metrics, preview.xAdvance, cell.previewRect.height)
             : null;
           const top = cell.cellRect.top + targetFrame.scrollTop;
+          let previewContent: ReactNode = null;
+          if (preview?.svgPath && previewLayout) {
+            previewContent = (
+              <svg
+                aria-hidden="true"
+                width={cell.previewContentRect.width}
+                height={cell.previewContentRect.height}
+                viewBox={previewLayout.viewBox}
+                preserveAspectRatio="xMidYMid meet"
+                className="overflow-hidden"
+              >
+                <g transform="scale(1, -1)">
+                  <path d={preview.svgPath} fill="currentColor" fillRule="nonzero" />
+                </g>
+              </svg>
+            );
+          } else if (
+            readiness === "Complete" &&
+            previews.has(cell.glyph.id) &&
+            cell.glyph.unicode !== null
+          ) {
+            previewContent = (
+              <span aria-hidden="true" className="font-sans text-3xl text-muted">
+                {String.fromCodePoint(cell.glyph.unicode)}
+              </span>
+            );
+          }
+
           let nameCell = (
             <div className="flex h-7 w-full items-center justify-center truncate bg-input px-2 text-xs text-muted">
               {cell.glyph.displayName}
@@ -154,20 +182,7 @@ export function SvgGlyphCatalogGrid({
                 style={{ height: cell.previewRect.height }}
                 onClick={async () => handleOpenGlyph(cell.glyph.id)}
               >
-                {preview?.svgPath && previewLayout ? (
-                  <svg
-                    aria-hidden="true"
-                    width={cell.previewContentRect.width}
-                    height={cell.previewContentRect.height}
-                    viewBox={previewLayout.viewBox}
-                    preserveAspectRatio="xMidYMid meet"
-                    className="overflow-hidden"
-                  >
-                    <g transform="scale(1, -1)">
-                      <path d={preview.svgPath} fill="currentColor" fillRule="nonzero" />
-                    </g>
-                  </svg>
-                ) : null}
+                {previewContent}
               </Button>
               <div style={{ height: targetFrame.layout.nameGap }} />
               {nameCell}

@@ -468,17 +468,29 @@ export class SlugGlyphCatalogRenderer implements GlyphCatalogRenderer {
 
     const layout = this.#layout(input);
     const frame = this.#currentFrame(layout, input);
+    const layer = this.#layer;
+    const visibleGlyphIds = frame.cells.map((cell) => cell.glyph.id);
+    const emptyGlyphIds = new Set<GlyphId>();
+    if (layer?.hasGlyphs(visibleGlyphIds)) {
+      for (const cell of frame.cells) {
+        if (
+          cell.glyph.unicode !== null &&
+          !layer.hasDrawableOutline(cell.glyph.id, input.sourceId)
+        ) {
+          emptyGlyphIds.add(cell.glyph.id);
+        }
+      }
+    }
+
     const hoveredCell = this.#pointer ? layout.hit(frame, this.#pointer) : null;
     this.#updateHoveredCatalogIndex(hoveredCell?.catalogIndex ?? null);
-    this.#overlay.draw(this.#container, frame, hoveredCell?.catalogIndex ?? null);
+    this.#overlay.draw(this.#container, frame, hoveredCell?.catalogIndex ?? null, emptyGlyphIds);
 
     if (input.editingGlyphId && !this.#overlay.positionInput(frame, input.editingGlyphId)) {
       this.#onEditingUnavailable();
     }
 
-    const layer = this.#layer;
     if (!layer) return;
-    const visibleGlyphIds = frame.cells.map((cell) => cell.glyph.id);
     if (!layer.hasGlyphs(visibleGlyphIds)) {
       void this.#refreshAtlas();
       return;

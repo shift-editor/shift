@@ -177,6 +177,18 @@ describe("resident atlas frame planning", () => {
     expect(Array.from(atlas.weights([650]))).toEqual([1, 0.5]);
   });
 
+  it("uses the selected variant's curves to distinguish empty glyphs from component outlines", () => {
+    const { descriptor, bytes } = residentFixture();
+    const atlas = new SlugAtlas(descriptor, buffer(), buffer(), descriptor.layout.totalLength);
+    const queue = { writeBuffer() {} } as unknown as GPUQueue;
+    new DataView(bytes.buffer).setUint32(descriptor.layout.glyphs.offset + 20, 0, true);
+    atlas.write(queue, 0, bytes);
+
+    expect(atlas.hasDrawableOutline("glyph-a" as GlyphId, null)).toBe(false);
+    expect(atlas.hasDrawableOutline("glyph-a" as GlyphId, "source-heavy" as SourceId)).toBe(true);
+    expect(atlas.hasDrawableOutline("glyph-a" as GlyphId, "source-other" as SourceId)).toBe(false);
+  });
+
   it("captures split descriptors and plans an exact component variant", () => {
     const { descriptor, bytes } = residentFixture();
     const atlas = new SlugAtlas(descriptor, buffer(), buffer(), descriptor.layout.totalLength);
