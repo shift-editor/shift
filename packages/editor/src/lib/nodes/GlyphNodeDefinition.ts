@@ -347,8 +347,14 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     this.#drawDebugOverlays(node, ctx, view);
   }
 
-  /** Draws the pre-gesture outline of the displayed source layer while a local edit is live. */
+  /**
+   * Draws the pre-gesture outline of the displayed source layer while a Select edit is live.
+   * Creation tools skip it: their base outline is the shape being extended, not a reference.
+   */
   #drawEditGhost(node: GlyphNode, ctx: RenderContext): void {
+    track(this.editor.toolCell);
+    if (this.editor.toolCell.peek()?.id !== "select") return;
+
     track(this.editor.activeSourceIdCell);
     const sourceId = this.editor.activeSourceIdCell.peek();
     if (!sourceId) return;
