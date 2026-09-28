@@ -1,5 +1,5 @@
 import { Bounds, Mat, Vec2, type Point2D } from "@shift/geo";
-import { Point, type Segment } from "@shift/glyph-state";
+import { Point, type Contour, type Segment } from "@shift/glyph-state";
 import type { PointId } from "@shift/types";
 
 import type { ToolContext } from "../../core/Behavior";
@@ -175,6 +175,9 @@ export class Translate implements SelectBehavior {
 
       return self;
     }
+
+    // A smooth junction's line fixes this handle's direction; there is no angle to snap.
+    if (handleFollowsLine(contour, point)) return null;
 
     const anchor = contour.cubicHandleAnchor(point.id);
     return anchor ? PositionReference.point(anchor.id) : null;
@@ -386,4 +389,19 @@ function translatingState(startPos: Point2D, shiftKey: boolean): TranslatingStat
       guides: [],
     },
   };
+}
+
+/** Whether `handle` sits on a smooth anchor whose other side is a line, locking its direction. */
+function handleFollowsLine(contour: Contour, handle: Point): boolean {
+  const anchor = contour.cubicHandleAnchor(handle.id);
+  if (!anchor?.smooth) return false;
+
+  const points = contour.points;
+  const anchorIndex = points.findIndex((point) => point.id === anchor.id);
+  const handleIndex = points.findIndex((point) => point.id === handle.id);
+  const step = handleIndex - anchorIndex;
+  // A closed contour's first and last points are neighbours across the wrap.
+  const towardHandle = Math.abs(step) === 1 ? step : -Math.sign(step);
+  const opposite = contour.pointAt(anchorIndex - towardHandle);
+  return opposite?.isOnCurve ?? false;
 }
