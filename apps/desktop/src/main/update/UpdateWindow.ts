@@ -145,14 +145,19 @@ export class UpdateWindow {
     this.#load(window);
   }
 
+  #stateQuery(): string {
+    if (this.#availableVersion) {
+      return `?state=available&version=${encodeURIComponent(this.#availableVersion)}`;
+    }
+    if (this.#readyVersion) {
+      return `?state=ready&version=${encodeURIComponent(this.#readyVersion)}`;
+    }
+    return "";
+  }
+
   #load(window: BrowserWindow): void {
     const source = getRendererSource();
-    const stateQuery = this.#availableVersion
-      ? `?state=available&version=${encodeURIComponent(this.#availableVersion)}`
-      : this.#readyVersion
-        ? `?state=ready&version=${encodeURIComponent(this.#readyVersion)}`
-        : "";
-    const hash = `/update${stateQuery}`;
+    const hash = `/update${this.#stateQuery()}`;
 
     if (source.type === "url") {
       const url = new URL(source.source);

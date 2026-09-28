@@ -8,6 +8,8 @@ Font format backends that convert between on-disk font files and the `Font` IR u
 
 **Architecture Invariant:** Backends never expose format-specific types (`norad`, `glyphs-reader`) to callers. Authored conversion returns `shift-font` values; retained source reading returns a source-neutral `FontDirectory` plus location-independent `ProjectedGlyph` values without constructing authored objects. WHY: editing needs one authored model, while read-only inspection must not eagerly convert a complete source.
 
+**Architecture Invariant:** WebAssembly builds exclude the native `.shift` document adaptor and its `shift-store` dependency. The retained format core must compile for `wasm32-unknown-unknown` without pulling SQLite or Zstd into the browser graph. Path-based source opening remains a desktop host capability; a browser-owned byte boundary belongs to the separately packaged WASM adapter. WHY: browser font loading should reuse the format implementation without importing persistence or pretending browser bytes are native paths.
+
 **Architecture Invariant:** `FontDirectory::from_font` is the sole projection from a format's canonical `shift-font::Font` header into retained metadata. Format adapters supply only ordered glyph names/Unicode values and retained geometry handles. Directory source order must match the source IDs used by retained layers, and sparse mapping coordinates are completed with the same axis-default/base semantics as the authored mapping model. WHY: separate format-specific directory builders silently lose metadata or misaddress source geometry.
 
 **Architecture Invariant:** `FontReader` and `FontWriter` require `Send + Sync`. WHY: Backends are stored in `FontLoader` which lives inside the editor's shared state; they must be safe to use from multiple threads.
@@ -176,6 +178,9 @@ The same-session comparison is authoritative; older absolute measurements used d
 ## Verification
 
 ```bash
+# Keep the retained format core free of native document storage.
+cargo check --target wasm32-unknown-unknown -p shift-backends
+
 # Run all backend tests (UFO round-trip, atomic writes, Glyphs loading, TTF export)
 cargo test -p shift-backends
 

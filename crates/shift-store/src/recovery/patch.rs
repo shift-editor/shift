@@ -6,17 +6,17 @@ use shift_font as font;
 use super::{
     RecoveryOverlay, RecoveryState,
     catalog::{
-        AXES, AXIS_MAPPINGS, GLYPH_COMPONENTS, GLYPH_LAYERS, GLYPH_LIB, GLYPH_UNICODES, GLYPHS,
-        METRIC_DEFINITIONS, NAMED_INSTANCES, RecoveryTable, SOURCE_LIB, SOURCE_LOCATIONS,
+        AXES, AXIS_MAPPINGS, FONT_LIB, GLYPH_COMPONENTS, GLYPH_LAYERS, GLYPH_LIB, GLYPH_UNICODES,
+        GLYPHS, METRIC_DEFINITIONS, NAMED_INSTANCES, RecoveryTable, SOURCE_LIB, SOURCE_LOCATIONS,
         SOURCE_METRIC_VALUES, SOURCES,
     },
 };
 use crate::{
     FontInfo, StoreError,
     change_set::{
-        replace_axis_mappings, replace_metric_definitions, replace_named_instances,
-        upsert_axis_with_order, upsert_font_info, write_glyph_directory_in_tx,
-        write_source_snapshot_in_tx,
+        replace_axis_mappings, replace_lib_data, replace_metric_definitions,
+        replace_named_instances, upsert_axis_with_order, upsert_font_info,
+        write_glyph_directory_in_tx, write_source_snapshot_in_tx,
     },
     layer::write_layer_in_tx,
     write_mode::WriteMode,
@@ -44,6 +44,7 @@ impl RecoveryOverlay {
         }
 
         let mut metadata_changed = false;
+        let mut font_lib_changed = false;
         let mut mappings_changed = false;
         let mut definitions_changed = false;
         let mut instances_changed = false;
@@ -55,6 +56,7 @@ impl RecoveryOverlay {
         for change in &change_set.changes {
             match change {
                 font::FontChange::FontMetadataUpdated(_) => metadata_changed = true,
+                font::FontChange::FontLibValueUpdated(_) => font_lib_changed = true,
                 font::FontChange::AxisCreated(_) => {
                     axis_ids.extend(post_font.axes().iter().map(font::Axis::id));
                     source_ids.extend(post_font.sources().iter().map(font::Source::id));
@@ -109,6 +111,10 @@ impl RecoveryOverlay {
                     ],
                 )?;
             }
+        }
+        if font_lib_changed {
+            replace_lib_data(&tx, "font_lib", "key", None, post_font.lib())?;
+            mark_replaced(&tx, FONT_LIB, GLOBAL_OWNER)?;
         }
         if mappings_changed {
             replace_axis_mappings(&tx, post_font.axis_mappings())?;

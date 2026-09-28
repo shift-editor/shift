@@ -27,6 +27,12 @@ type Coordinate = { readonly x: number; readonly y: number };
 /**
  * Pure transformation functions for geometry manipulation.
  */
+function reflectionMatrix(axis: ReflectAxis): Mat {
+  if (axis === "horizontal") return Mat.ReflectHorizontal();
+  if (axis === "vertical") return Mat.ReflectVertical();
+  return Mat.ReflectAxis(axis.angle);
+}
+
 export const Transform = {
   /**
    * Rotate points around an origin.
@@ -71,13 +77,7 @@ export const Transform = {
     axis: ReflectAxis,
     origin: Point2D,
   ): T[] {
-    const matrix =
-      axis === "horizontal"
-        ? Mat.ReflectHorizontal()
-        : axis === "vertical"
-          ? Mat.ReflectVertical()
-          : Mat.ReflectAxis(axis.angle);
-    return Transform.applyMatrix(points, matrix, origin);
+    return Transform.applyMatrix(points, reflectionMatrix(axis), origin);
   },
 
   /**

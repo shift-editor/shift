@@ -95,6 +95,11 @@ Join our [Discord server](https://discord.gg/582FxBdNH7) to ask questions, repor
 
 ## License
 
-[GNU General Public License v3.0 only (`GPL-3.0-only`)](https://www.gnu.org/licenses/gpl-3.0.en.html)
+Shift is dual-licensed under either of
 
-Copyright © 2026 Kostya Farber.
+- [MIT license](LICENSE-MIT)
+- [Apache License, Version 2.0](LICENSE-APACHE)
+
+at your option. Unless you explicitly state otherwise, any contribution you submit for inclusion in Shift is licensed as above, without any additional terms or conditions.
+
+Third-party fonts, data, and code bundled with Shift keep their own licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

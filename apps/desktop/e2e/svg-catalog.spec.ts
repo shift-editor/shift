@@ -26,6 +26,45 @@ test.describe("SVG glyph catalog fallback", () => {
     await waitForEditorReady(page, glyphId);
   });
 
+  test("shows the system character for an empty encoded glyph", async ({ page }) => {
+    const name = await page.evaluate(async () => {
+      const workspace = window.shift;
+      if (!workspace) throw new Error("Expected workspace");
+
+      const [glyph] = workspace.editor.createGlyphsForUnicodes([0x3042]);
+      if (!glyph) throw new Error("Expected an empty Hiragana glyph");
+      await workspace.font.editCoordinator.settled();
+      return glyph.name;
+    });
+
+    await page.getByPlaceholder("Search glyphs...").fill(name);
+    const svg = glyphCatalogSvg(page);
+    await expect(svg).toHaveAttribute("data-grid-readiness", "Complete");
+    const tile = svg.getByRole("button", { name: /^Open / }).filter({ hasText: "あ" });
+    await expect(tile).toHaveCount(1);
+    await expect(tile.locator("path")).toHaveCount(0);
+  });
+
+  test("selects and deselects Chinese missing glyphs across the list", async ({ page }) => {
+    await page.getByRole("button", { name: "Chinese", exact: true }).click();
+    const language = page.getByRole("button", { name: /Mandarin Chinese/ });
+    await language.click({ button: "right" });
+    const list = page.getByRole("group", { name: "Missing glyphs for Mandarin Chinese" });
+    await expect(list).toBeVisible();
+    const checkboxes = list.getByRole("checkbox");
+
+    await page.getByRole("button", { name: "Select All" }).click();
+    await expect(page.getByRole("button", { name: "Deselect All" })).toBeVisible();
+    await expect(checkboxes.first()).toBeChecked();
+    const firstName = await list.locator("label").first().textContent();
+    await list.evaluate((element) => (element.scrollTop = element.scrollHeight));
+    await expect.poll(() => list.locator("label").first().textContent()).not.toBe(firstName);
+    await expect(checkboxes.first()).toBeChecked();
+
+    await page.getByRole("button", { name: "Deselect All" }).click();
+    await expect(checkboxes.first()).not.toBeChecked();
+  });
+
   test("remains interactive after scrolling away and back", async ({ page }) => {
     const svg = glyphCatalogSvg(page);
     await expect(svg).toHaveAttribute("data-grid-readiness", "Complete", { timeout: 30_000 });

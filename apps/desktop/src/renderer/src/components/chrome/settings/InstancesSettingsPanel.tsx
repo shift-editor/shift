@@ -4,7 +4,7 @@ import { Input, Tooltip, TooltipContent, TooltipTrigger } from "@shift/ui";
 import { message } from "@shared/messages";
 import MinusIcon from "@/assets/general/minus.svg";
 import PlusIcon from "@/assets/general/plus.svg";
-import { SidebarActionButton, SidebarActionRow } from "@/components/sidebar/SidebarActionRow";
+import { SidebarActionButton, SidebarActionRow } from "@/components/sidebar";
 import { CreateInstanceMenu } from "@/components/variation/CreateInstanceMenu";
 import { useAxes } from "@/hooks/useAxes";
 import { useNamedInstances } from "@/hooks/useNamedInstances";

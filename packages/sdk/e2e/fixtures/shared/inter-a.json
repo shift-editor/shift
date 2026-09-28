@@ -1,0 +1,2959 @@
+{
+  "font": {
+    "axes": [
+      {
+        "axisType": "continuous",
+        "default": 14,
+        "hidden": false,
+        "id": "axis_fixture_001",
+        "labels": [],
+        "maximum": 32,
+        "minimum": 14,
+        "name": "Optical size",
+        "role": "external",
+        "tag": "opsz"
+      },
+      {
+        "axisType": "continuous",
+        "default": 400,
+        "hidden": false,
+        "id": "axis_fixture_002",
+        "labels": [],
+        "maximum": 900,
+        "minimum": 100,
+        "name": "Weight",
+        "role": "external",
+        "tag": "wght"
+      }
+    ],
+    "axisMappingBases": [
+      {
+        "basis": {
+          "deltas": [
+            {
+              "region": [
+                {
+                  "axisId": "axis_fixture_001",
+                  "lower": 0,
+                  "peak": 0,
+                  "upper": 0
+                }
+              ],
+              "values": {
+                "$float64": [0]
+              }
+            },
+            {
+              "region": [
+                {
+                  "axisId": "axis_fixture_001",
+                  "lower": 0,
+                  "peak": 1,
+                  "upper": 1
+                }
+              ],
+              "values": {
+                "$float64": [0]
+              }
+            }
+          ]
+        },
+        "inputAxisIds": ["axis_fixture_001"],
+        "mappingId": "axisMapping_fixture_001",
+        "outputAxisIds": ["axis_fixture_001"]
+      },
+      {
+        "basis": {
+          "deltas": [
+            {
+              "region": [
+                {
+                  "axisId": "axis_fixture_002",
+                  "lower": 0,
+                  "peak": 0,
+                  "upper": 0
+                }
+              ],
+              "values": {
+                "$float64": [0]
+              }
+            },
+            {
+              "region": [
+                {
+                  "axisId": "axis_fixture_002",
+                  "lower": -1,
+                  "peak": -1,
+                  "upper": 0
+                }
+              ],
+              "values": {
+                "$float64": [0]
+              }
+            },
+            {
+              "region": [
+                {
+                  "axisId": "axis_fixture_002",
+                  "lower": 0,
+                  "peak": 0.2,
+                  "upper": 1
+                }
+              ],
+              "values": {
+                "$float64": [-0.020000000000000018]
+              }
+            },
+            {
+              "region": [
+                {
+                  "axisId": "axis_fixture_002",
+                  "lower": 0.2,
+                  "peak": 0.4,
+                  "upper": 1
+                }
+              ],
+              "values": {
+                "$float64": [-0.025000000000000022]
+              }
+            },
+            {
+              "region": [
+                {
+                  "axisId": "axis_fixture_002",
+                  "lower": 0.4,
+                  "peak": 0.6,
+                  "upper": 1
+                }
+              ],
+              "values": {
+                "$float64": [-0.03333333333333325]
+              }
+            },
+            {
+              "region": [
+                {
+                  "axisId": "axis_fixture_002",
+                  "lower": 0.6,
+                  "peak": 0.8,
+                  "upper": 1
+                }
+              ],
+              "values": {
+                "$float64": [-0.010000000000000071]
+              }
+            },
+            {
+              "region": [
+                {
+                  "axisId": "axis_fixture_002",
+                  "lower": 0.8,
+                  "peak": 1,
+                  "upper": 1
+                }
+              ],
+              "values": {
+                "$float64": [0]
+              }
+            }
+          ]
+        },
+        "inputAxisIds": ["axis_fixture_002"],
+        "mappingId": "axisMapping_fixture_002",
+        "outputAxisIds": ["axis_fixture_002"]
+      }
+    ],
+    "axisMappings": [
+      {
+        "id": "axisMapping_fixture_001",
+        "inputs": ["axis_fixture_001"],
+        "name": "Optical size mapping",
+        "outputs": ["axis_fixture_001"],
+        "points": [
+          {
+            "input": {
+              "values": {
+                "axis_fixture_001": 14
+              }
+            },
+            "output": {
+              "values": {
+                "axis_fixture_001": 14
+              }
+            }
+          },
+          {
+            "input": {
+              "values": {
+                "axis_fixture_001": 32
+              }
+            },
+            "output": {
+              "values": {
+                "axis_fixture_001": 32
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": "axisMapping_fixture_002",
+        "inputs": ["axis_fixture_002"],
+        "name": "Weight mapping",
+        "outputs": ["axis_fixture_002"],
+        "points": [
+          {
+            "input": {
+              "values": {
+                "axis_fixture_002": 100
+              }
+            },
+            "output": {
+              "values": {
+                "axis_fixture_002": 100
+              }
+            }
+          },
+          {
+            "input": {
+              "values": {
+                "axis_fixture_002": 400
+              }
+            },
+            "output": {
+              "values": {
+                "axis_fixture_002": 400
+              }
+            }
+          },
+          {
+            "input": {
+              "values": {
+                "axis_fixture_002": 500
+              }
+            },
+            "output": {
+              "values": {
+                "axis_fixture_002": 490
+              }
+            }
+          },
+          {
+            "input": {
+              "values": {
+                "axis_fixture_002": 600
+              }
+            },
+            "output": {
+              "values": {
+                "axis_fixture_002": 580
+              }
+            }
+          },
+          {
+            "input": {
+              "values": {
+                "axis_fixture_002": 700
+              }
+            },
+            "output": {
+              "values": {
+                "axis_fixture_002": 670
+              }
+            }
+          },
+          {
+            "input": {
+              "values": {
+                "axis_fixture_002": 800
+              }
+            },
+            "output": {
+              "values": {
+                "axis_fixture_002": 780
+              }
+            }
+          },
+          {
+            "input": {
+              "values": {
+                "axis_fixture_002": 900
+              }
+            },
+            "output": {
+              "values": {
+                "axis_fixture_002": 900
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "glyphs": [
+      {
+        "componentBaseGlyphIds": [],
+        "id": "glyph_fixture_001",
+        "layers": [
+          {
+            "id": "layer_fixture_001",
+            "sourceId": "source_fixture_001"
+          },
+          {
+            "id": "layer_fixture_002",
+            "sourceId": "source_fixture_002"
+          },
+          {
+            "id": "layer_fixture_003",
+            "sourceId": "source_fixture_003"
+          },
+          {
+            "id": "layer_fixture_004",
+            "sourceId": "source_fixture_004"
+          },
+          {
+            "id": "layer_fixture_005",
+            "sourceId": "source_fixture_005"
+          },
+          {
+            "id": "layer_fixture_006",
+            "sourceId": "source_fixture_006"
+          }
+        ],
+        "name": "a",
+        "unicodes": [97]
+      }
+    ],
+    "metadata": {
+      "familyName": "Inter",
+      "styleName": "Regular",
+      "versionMajor": 3,
+      "versionMinor": 0
+    },
+    "metricDefinitions": [
+      {
+        "id": "metric_fixture_001",
+        "kind": "ascender",
+        "name": "Ascender"
+      },
+      {
+        "id": "metric_fixture_002",
+        "kind": "capHeight",
+        "name": "Cap Height"
+      },
+      {
+        "id": "metric_fixture_003",
+        "kind": "xHeight",
+        "name": "x-Height"
+      },
+      {
+        "id": "metric_fixture_004",
+        "kind": "baseline",
+        "name": "Baseline"
+      },
+      {
+        "id": "metric_fixture_005",
+        "kind": "descender",
+        "name": "Descender"
+      }
+    ],
+    "metrics": {
+      "unitsPerEm": 2048
+    },
+    "namedInstances": [
+      {
+        "id": "namedInstance_fixture_001",
+        "location": {
+          "values": {
+            "axis_fixture_001": 14,
+            "axis_fixture_002": 100
+          }
+        },
+        "name": "Thin"
+      },
+      {
+        "id": "namedInstance_fixture_002",
+        "location": {
+          "values": {
+            "axis_fixture_001": 14,
+            "axis_fixture_002": 200
+          }
+        },
+        "name": "ExtraLight"
+      },
+      {
+        "id": "namedInstance_fixture_003",
+        "location": {
+          "values": {
+            "axis_fixture_001": 14,
+            "axis_fixture_002": 300
+          }
+        },
+        "name": "Light"
+      },
+      {
+        "id": "namedInstance_fixture_004",
+        "location": {
+          "values": {
+            "axis_fixture_001": 14,
+            "axis_fixture_002": 400
+          }
+        },
+        "name": "Regular"
+      },
+      {
+        "id": "namedInstance_fixture_005",
+        "location": {
+          "values": {
+            "axis_fixture_001": 14,
+            "axis_fixture_002": 500
+          }
+        },
+        "name": "Medium"
+      },
+      {
+        "id": "namedInstance_fixture_006",
+        "location": {
+          "values": {
+            "axis_fixture_001": 14,
+            "axis_fixture_002": 600
+          }
+        },
+        "name": "SemiBold"
+      },
+      {
+        "id": "namedInstance_fixture_007",
+        "location": {
+          "values": {
+            "axis_fixture_001": 14,
+            "axis_fixture_002": 700
+          }
+        },
+        "name": "Bold"
+      },
+      {
+        "id": "namedInstance_fixture_008",
+        "location": {
+          "values": {
+            "axis_fixture_001": 14,
+            "axis_fixture_002": 800
+          }
+        },
+        "name": "ExtraBold"
+      },
+      {
+        "id": "namedInstance_fixture_009",
+        "location": {
+          "values": {
+            "axis_fixture_001": 14,
+            "axis_fixture_002": 900
+          }
+        },
+        "name": "Black"
+      }
+    ],
+    "sourceMetricsInterpolation": {
+      "basis": {
+        "basis": {
+          "deltas": [
+            {
+              "region": [
+                {
+                  "axisId": "axis_fixture_001",
+                  "lower": 0,
+                  "peak": 0,
+                  "upper": 0
+                },
+                {
+                  "axisId": "axis_fixture_002",
+                  "lower": 0,
+                  "peak": 0,
+                  "upper": 0
+                }
+              ],
+              "values": {
+                "$float64": [0, 0, 1, 0, 0, 0]
+              }
+            },
+            {
+              "region": [
+                {
+                  "axisId": "axis_fixture_001",
+                  "lower": 0,
+                  "peak": 1,
+                  "upper": 1
+                },
+                {
+                  "axisId": "axis_fixture_002",
+                  "lower": 0,
+                  "peak": 0,
+                  "upper": 0
+                }
+              ],
+              "values": {
+                "$float64": [0, 0, -1, 1, 0, 0]
+              }
+            },
+            {
+              "region": [
+                {
+                  "axisId": "axis_fixture_001",
+                  "lower": 0,
+                  "peak": 0,
+                  "upper": 0
+                },
+                {
+                  "axisId": "axis_fixture_002",
+                  "lower": -1,
+                  "peak": -1,
+                  "upper": 0
+                }
+              ],
+              "values": {
+                "$float64": [1, 0, -1, 0, 0, 0]
+              }
+            },
+            {
+              "region": [
+                {
+                  "axisId": "axis_fixture_001",
+                  "lower": 0,
+                  "peak": 0,
+                  "upper": 0
+                },
+                {
+                  "axisId": "axis_fixture_002",
+                  "lower": 0,
+                  "peak": 1,
+                  "upper": 1
+                }
+              ],
+              "values": {
+                "$float64": [0, 0, -1, 0, 1, 0]
+              }
+            },
+            {
+              "region": [
+                {
+                  "axisId": "axis_fixture_001",
+                  "lower": 0,
+                  "peak": 1,
+                  "upper": 1
+                },
+                {
+                  "axisId": "axis_fixture_002",
+                  "lower": -1,
+                  "peak": -1,
+                  "upper": 0
+                }
+              ],
+              "values": {
+                "$float64": [-1, 1, 1, -1, 0, 0]
+              }
+            },
+            {
+              "region": [
+                {
+                  "axisId": "axis_fixture_001",
+                  "lower": 0,
+                  "peak": 1,
+                  "upper": 1
+                },
+                {
+                  "axisId": "axis_fixture_002",
+                  "lower": 0,
+                  "peak": 1,
+                  "upper": 1
+                }
+              ],
+              "values": {
+                "$float64": [0, 0, 1, -1, -1, 1]
+              }
+            }
+          ]
+        },
+        "sourceIds": [
+          "source_fixture_001",
+          "source_fixture_002",
+          "source_fixture_003",
+          "source_fixture_004",
+          "source_fixture_005",
+          "source_fixture_006"
+        ]
+      },
+      "metricIds": [
+        "metric_fixture_001",
+        "metric_fixture_002",
+        "metric_fixture_003",
+        "metric_fixture_004",
+        "metric_fixture_005"
+      ],
+      "sources": [
+        {
+          "sourceId": "source_fixture_001",
+          "values": {
+            "$float64": [1984, 33, 1490, 33, 1118, 33, 0, -33, -494, -33, 0]
+          }
+        },
+        {
+          "sourceId": "source_fixture_002",
+          "values": {
+            "$float64": [1984, 33, 1490, 33, 1056, 33, 0, -33, -494, -33, 0]
+          }
+        },
+        {
+          "sourceId": "source_fixture_003",
+          "values": {
+            "$float64": [1984, 33, 1490, 33, 1118, 33, 0, -33, -494, -33, 0]
+          }
+        },
+        {
+          "sourceId": "source_fixture_004",
+          "values": {
+            "$float64": [1984, 33, 1490, 33, 1056, 33, 0, -33, -494, -33, 0]
+          }
+        },
+        {
+          "sourceId": "source_fixture_005",
+          "values": {
+            "$float64": [1984, 33, 1490, 33, 1118, 33, 0, -33, -494, -33, 0]
+          }
+        },
+        {
+          "sourceId": "source_fixture_006",
+          "values": {
+            "$float64": [1984, 33, 1490, 33, 1056, 33, 0, -33, -494, -33, 0]
+          }
+        }
+      ],
+      "technicalFields": ["italicAngle"]
+    },
+    "sources": [
+      {
+        "id": "source_fixture_001",
+        "italicAngle": 0,
+        "location": {
+          "values": {
+            "axis_fixture_001": 14,
+            "axis_fixture_002": 100
+          }
+        },
+        "metricValues": [
+          {
+            "metricId": "metric_fixture_001",
+            "overshoot": 33,
+            "position": 1984
+          },
+          {
+            "metricId": "metric_fixture_002",
+            "overshoot": 33,
+            "position": 1490
+          },
+          {
+            "metricId": "metric_fixture_003",
+            "overshoot": 33,
+            "position": 1118
+          },
+          {
+            "metricId": "metric_fixture_004",
+            "overshoot": -33,
+            "position": 0
+          },
+          {
+            "metricId": "metric_fixture_005",
+            "overshoot": -33,
+            "position": -494
+          }
+        ],
+        "name": "Thin"
+      },
+      {
+        "id": "source_fixture_002",
+        "italicAngle": 0,
+        "location": {
+          "values": {
+            "axis_fixture_001": 32,
+            "axis_fixture_002": 100
+          }
+        },
+        "metricValues": [
+          {
+            "metricId": "metric_fixture_001",
+            "overshoot": 33,
+            "position": 1984
+          },
+          {
+            "metricId": "metric_fixture_002",
+            "overshoot": 33,
+            "position": 1490
+          },
+          {
+            "metricId": "metric_fixture_003",
+            "overshoot": 33,
+            "position": 1056
+          },
+          {
+            "metricId": "metric_fixture_004",
+            "overshoot": -33,
+            "position": 0
+          },
+          {
+            "metricId": "metric_fixture_005",
+            "overshoot": -33,
+            "position": -494
+          }
+        ],
+        "name": "Display Thin"
+      },
+      {
+        "id": "source_fixture_003",
+        "italicAngle": 0,
+        "location": {
+          "values": {
+            "axis_fixture_001": 14,
+            "axis_fixture_002": 400
+          }
+        },
+        "metricValues": [
+          {
+            "metricId": "metric_fixture_001",
+            "overshoot": 33,
+            "position": 1984
+          },
+          {
+            "metricId": "metric_fixture_002",
+            "overshoot": 33,
+            "position": 1490
+          },
+          {
+            "metricId": "metric_fixture_003",
+            "overshoot": 33,
+            "position": 1118
+          },
+          {
+            "metricId": "metric_fixture_004",
+            "overshoot": -33,
+            "position": 0
+          },
+          {
+            "metricId": "metric_fixture_005",
+            "overshoot": -33,
+            "position": -494
+          }
+        ],
+        "name": "Regular"
+      },
+      {
+        "id": "source_fixture_004",
+        "italicAngle": 0,
+        "location": {
+          "values": {
+            "axis_fixture_001": 32,
+            "axis_fixture_002": 400
+          }
+        },
+        "metricValues": [
+          {
+            "metricId": "metric_fixture_001",
+            "overshoot": 33,
+            "position": 1984
+          },
+          {
+            "metricId": "metric_fixture_002",
+            "overshoot": 33,
+            "position": 1490
+          },
+          {
+            "metricId": "metric_fixture_003",
+            "overshoot": 33,
+            "position": 1056
+          },
+          {
+            "metricId": "metric_fixture_004",
+            "overshoot": -33,
+            "position": 0
+          },
+          {
+            "metricId": "metric_fixture_005",
+            "overshoot": -33,
+            "position": -494
+          }
+        ],
+        "name": "Display"
+      },
+      {
+        "id": "source_fixture_005",
+        "italicAngle": 0,
+        "location": {
+          "values": {
+            "axis_fixture_001": 14,
+            "axis_fixture_002": 900
+          }
+        },
+        "metricValues": [
+          {
+            "metricId": "metric_fixture_001",
+            "overshoot": 33,
+            "position": 1984
+          },
+          {
+            "metricId": "metric_fixture_002",
+            "overshoot": 33,
+            "position": 1490
+          },
+          {
+            "metricId": "metric_fixture_003",
+            "overshoot": 33,
+            "position": 1118
+          },
+          {
+            "metricId": "metric_fixture_004",
+            "overshoot": -33,
+            "position": 0
+          },
+          {
+            "metricId": "metric_fixture_005",
+            "overshoot": -33,
+            "position": -494
+          }
+        ],
+        "name": "Black"
+      },
+      {
+        "id": "source_fixture_006",
+        "italicAngle": 0,
+        "location": {
+          "values": {
+            "axis_fixture_001": 32,
+            "axis_fixture_002": 900
+          }
+        },
+        "metricValues": [
+          {
+            "metricId": "metric_fixture_001",
+            "overshoot": 33,
+            "position": 1984
+          },
+          {
+            "metricId": "metric_fixture_002",
+            "overshoot": 33,
+            "position": 1490
+          },
+          {
+            "metricId": "metric_fixture_003",
+            "overshoot": 33,
+            "position": 1056
+          },
+          {
+            "metricId": "metric_fixture_004",
+            "overshoot": -33,
+            "position": 0
+          },
+          {
+            "metricId": "metric_fixture_005",
+            "overshoot": -33,
+            "position": -494
+          }
+        ],
+        "name": "Display Black"
+      }
+    ]
+  },
+  "glyphs": [
+    {
+      "glyphId": "glyph_fixture_001",
+      "layers": [
+        {
+          "glyphId": "glyph_fixture_001",
+          "sourceId": "source_fixture_001",
+          "state": {
+            "layerId": "layer_fixture_001",
+            "structure": {
+              "anchors": [
+                {
+                  "id": "anchor_fixture_001",
+                  "name": "bottom"
+                },
+                {
+                  "id": "anchor_fixture_002",
+                  "name": "ogonek"
+                },
+                {
+                  "id": "anchor_fixture_003",
+                  "name": "top"
+                }
+              ],
+              "components": [],
+              "contours": [
+                {
+                  "closed": true,
+                  "id": "contour_fixture_001",
+                  "points": [
+                    {
+                      "id": "point_fixture_001",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_002",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_003",
+                      "pointType": "onCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_004",
+                      "pointType": "onCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_005",
+                      "pointType": "onCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_006",
+                      "pointType": "onCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_007",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_008",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_009",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_010",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_011",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_012",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_013",
+                      "pointType": "onCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_014",
+                      "pointType": "onCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_015",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_016",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_017",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_018",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_019",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_020",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_021",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_022",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_023",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_024",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_025",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_026",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_027",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_028",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_029",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_030",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    }
+                  ]
+                },
+                {
+                  "closed": true,
+                  "id": "contour_fixture_002",
+                  "points": [
+                    {
+                      "id": "point_fixture_031",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_032",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_033",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_034",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_035",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_036",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_037",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_038",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_039",
+                      "pointType": "onCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_040",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_041",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_042",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_043",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    }
+                  ]
+                }
+              ]
+            },
+            "values": {
+              "$float64": [
+                1076, 620, -24, 792, 85, 826, 274, 832, 274, 832, 0, 878, 0, 878, 802, 878, 992,
+                742, 1134, 516, 1134, 341, 1134, 195, 1047, 142, 908, 186, 890, 233, 1015, 358,
+                1088, 516, 1088, 707, 1088, 832, 975, 832, 802, 832, 736, 832, 649, 687, 631, 532,
+                614, 189, 573, 110, 454, 110, 302, 110, 93, 268, -24, 452, -24, 285, 22, 156, 134,
+                156, 302, 156, 445, 250, 535, 550, 570, 678, 585, 777, 605, 832, 646, 832, 478, 832,
+                207, 663, 22, 452, 22, 530, 0, 878, 0, 526, 1118
+              ]
+            }
+          }
+        },
+        {
+          "glyphId": "glyph_fixture_001",
+          "sourceId": "source_fixture_002",
+          "state": {
+            "layerId": "layer_fixture_002",
+            "structure": {
+              "anchors": [
+                {
+                  "id": "anchor_fixture_004",
+                  "name": "bottom"
+                },
+                {
+                  "id": "anchor_fixture_005",
+                  "name": "ogonek"
+                },
+                {
+                  "id": "anchor_fixture_006",
+                  "name": "top"
+                }
+              ],
+              "components": [],
+              "contours": [
+                {
+                  "closed": true,
+                  "id": "contour_fixture_003",
+                  "points": [
+                    {
+                      "id": "point_fixture_044",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_045",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_046",
+                      "pointType": "onCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_047",
+                      "pointType": "onCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_048",
+                      "pointType": "onCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_049",
+                      "pointType": "onCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_050",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_051",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_052",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_053",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_054",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_055",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_056",
+                      "pointType": "onCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_057",
+                      "pointType": "onCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_058",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_059",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_060",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_061",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_062",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_063",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_064",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_065",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_066",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_067",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_068",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_069",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_070",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_071",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_072",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_073",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    }
+                  ]
+                },
+                {
+                  "closed": true,
+                  "id": "contour_fixture_004",
+                  "points": [
+                    {
+                      "id": "point_fixture_074",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_075",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_076",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_077",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_078",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_079",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_080",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_081",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_082",
+                      "pointType": "onCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_083",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_084",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_085",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_086",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    }
+                  ]
+                }
+              ]
+            },
+            "values": {
+              "$float64": [
+                1004, 612, -16, 762, 76, 822, 218, 824, 218, 824, 0, 870, 0, 870, 740, 870, 930,
+                701, 1072, 486, 1072, 269, 1072, 98, 928, 98, 740, 144, 740, 144, 902, 295, 1026,
+                486, 1026, 675, 1026, 824, 903, 824, 740, 824, 712, 824, 624, 697, 599, 508, 574,
+                189, 532, 70, 450, 70, 278, 70, 77, 244, -16, 428, -16, 258, 30, 116, 115, 116, 278,
+                116, 422, 221, 488, 508, 528, 681, 552, 765, 567, 824, 618, 824, 438, 824, 167, 643,
+                30, 428, 30, 490, 0, 870, 0, 486, 1056
+              ]
+            }
+          }
+        },
+        {
+          "glyphId": "glyph_fixture_001",
+          "sourceId": "source_fixture_003",
+          "state": {
+            "layerId": "layer_fixture_003",
+            "structure": {
+              "anchors": [
+                {
+                  "id": "anchor_fixture_007",
+                  "name": "bottom"
+                },
+                {
+                  "id": "anchor_fixture_008",
+                  "name": "ogonek"
+                },
+                {
+                  "id": "anchor_fixture_009",
+                  "name": "top"
+                }
+              ],
+              "components": [],
+              "contours": [
+                {
+                  "closed": true,
+                  "id": "contour_fixture_005",
+                  "points": [
+                    {
+                      "id": "point_fixture_087",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_088",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_089",
+                      "pointType": "onCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_090",
+                      "pointType": "onCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_091",
+                      "pointType": "onCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_092",
+                      "pointType": "onCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_093",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_094",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_095",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_096",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_097",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_098",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_099",
+                      "pointType": "onCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_100",
+                      "pointType": "onCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_101",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_102",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_103",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_104",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_105",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_106",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_107",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_108",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_109",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_110",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_111",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_112",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_113",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_114",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_115",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_116",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    }
+                  ]
+                },
+                {
+                  "closed": true,
+                  "id": "contour_fixture_006",
+                  "points": [
+                    {
+                      "id": "point_fixture_117",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_118",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_119",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_120",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_121",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_122",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_123",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_124",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_125",
+                      "pointType": "onCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_126",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_127",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_128",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_129",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    }
+                  ]
+                }
+              ]
+            },
+            "values": {
+              "$float64": [
+                1150, 660, -26, 765, 73, 819, 248, 823, 248, 823, 0, 992, 0, 992, 737, 992, 1086,
+                723, 1132, 573, 1132, 400, 1132, 208, 1070, 122, 867, 295, 810, 330, 888, 417, 974,
+                578, 974, 733, 974, 812, 894, 812, 755, 812, 749, 812, 666, 724, 672, 525, 647, 318,
+                621, 90, 574, 90, 318, 90, 98, 259, -26, 471, -26, 368, 133, 271, 193, 271, 309,
+                271, 436, 386, 478, 517, 495, 586, 504, 782, 524, 812, 559, 812, 404, 812, 267, 701,
+                133, 502, 133, 557, 0, 992, 0, 558, 1118
+              ]
+            }
+          }
+        },
+        {
+          "glyphId": "glyph_fixture_001",
+          "sourceId": "source_fixture_004",
+          "state": {
+            "layerId": "layer_fixture_004",
+            "structure": {
+              "anchors": [
+                {
+                  "id": "anchor_fixture_010",
+                  "name": "bottom"
+                },
+                {
+                  "id": "anchor_fixture_011",
+                  "name": "ogonek"
+                },
+                {
+                  "id": "anchor_fixture_012",
+                  "name": "top"
+                }
+              ],
+              "components": [],
+              "contours": [
+                {
+                  "closed": true,
+                  "id": "contour_fixture_007",
+                  "points": [
+                    {
+                      "id": "point_fixture_130",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_131",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_132",
+                      "pointType": "onCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_133",
+                      "pointType": "onCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_134",
+                      "pointType": "onCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_135",
+                      "pointType": "onCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_136",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_137",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_138",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_139",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_140",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_141",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_142",
+                      "pointType": "onCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_143",
+                      "pointType": "onCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_144",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_145",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_146",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_147",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_148",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_149",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_150",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_151",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_152",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_153",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_154",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_155",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_156",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_157",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_158",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_159",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    }
+                  ]
+                },
+                {
+                  "closed": true,
+                  "id": "contour_fixture_008",
+                  "points": [
+                    {
+                      "id": "point_fixture_160",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_161",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_162",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_163",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_164",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_165",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_166",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_167",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_168",
+                      "pointType": "onCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_169",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_170",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_171",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_172",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    }
+                  ]
+                }
+              ]
+            },
+            "values": {
+              "$float64": [
+                1060, 640, -16, 723, 74, 762, 150, 766, 150, 766, 0, 934, 0, 934, 728, 934, 937,
+                778, 1076, 532, 1076, 282, 1076, 111, 933, 102, 740, 275, 740, 283, 845, 385, 926,
+                532, 926, 680, 926, 766, 843, 766, 728, 766, 718, 766, 637, 701, 645, 500, 618, 288,
+                590, 80, 546, 80, 304, 80, 93, 238, -16, 448, -16, 337, 136, 254, 195, 254, 294,
+                254, 413, 370, 455, 492, 472, 613, 489, 740, 508, 766, 532, 766, 400, 766, 262, 680,
+                136, 472, 136, 524, 0, 934, 0, 524, 1056
+              ]
+            }
+          }
+        },
+        {
+          "glyphId": "glyph_fixture_001",
+          "sourceId": "source_fixture_005",
+          "state": {
+            "layerId": "layer_fixture_005",
+            "structure": {
+              "anchors": [
+                {
+                  "id": "anchor_fixture_013",
+                  "name": "bottom"
+                },
+                {
+                  "id": "anchor_fixture_014",
+                  "name": "ogonek"
+                },
+                {
+                  "id": "anchor_fixture_015",
+                  "name": "top"
+                }
+              ],
+              "components": [],
+              "contours": [
+                {
+                  "closed": true,
+                  "id": "contour_fixture_009",
+                  "points": [
+                    {
+                      "id": "point_fixture_173",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_174",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_175",
+                      "pointType": "onCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_176",
+                      "pointType": "onCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_177",
+                      "pointType": "onCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_178",
+                      "pointType": "onCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_179",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_180",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_181",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_182",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_183",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_184",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_185",
+                      "pointType": "onCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_186",
+                      "pointType": "onCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_187",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_188",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_189",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_190",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_191",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_192",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_193",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_194",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_195",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_196",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_197",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_198",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_199",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_200",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_201",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_202",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    }
+                  ]
+                },
+                {
+                  "closed": true,
+                  "id": "contour_fixture_010",
+                  "points": [
+                    {
+                      "id": "point_fixture_203",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_204",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_205",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_206",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_207",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_208",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_209",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_210",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_211",
+                      "pointType": "onCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_212",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_213",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_214",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_215",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    }
+                  ]
+                }
+              ]
+            },
+            "values": {
+              "$float64": [
+                1222, 559, -18, 693, 30, 752, 254, 760, 254, 760, 0, 1120, 0, 1120, 766, 1120, 972,
+                916, 1132, 598, 1132, 284, 1132, 113, 979, 82, 792, 444, 756, 457, 824, 516, 856,
+                592, 856, 669, 856, 718, 823, 718, 766, 718, 762, 718, 697, 647, 677, 460, 664, 229,
+                647, 50, 553, 50, 308, 50, 86, 199, -18, 414, -18, 476, 236, 428, 269, 428, 332,
+                428, 389, 468, 433, 562, 448, 625, 458, 679, 471, 722, 488, 722, 396, 722, 294, 635,
+                236, 544, 236, 602, 0, 1120, 0, 616, 1118
+              ]
+            }
+          }
+        },
+        {
+          "glyphId": "glyph_fixture_001",
+          "sourceId": "source_fixture_006",
+          "state": {
+            "layerId": "layer_fixture_006",
+            "structure": {
+              "anchors": [
+                {
+                  "id": "anchor_fixture_016",
+                  "name": "bottom"
+                },
+                {
+                  "id": "anchor_fixture_017",
+                  "name": "ogonek"
+                },
+                {
+                  "id": "anchor_fixture_018",
+                  "name": "top"
+                }
+              ],
+              "components": [],
+              "contours": [
+                {
+                  "closed": true,
+                  "id": "contour_fixture_011",
+                  "points": [
+                    {
+                      "id": "point_fixture_216",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_217",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_218",
+                      "pointType": "onCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_219",
+                      "pointType": "onCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_220",
+                      "pointType": "onCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_221",
+                      "pointType": "onCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_222",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_223",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_224",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_225",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_226",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_227",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_228",
+                      "pointType": "onCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_229",
+                      "pointType": "onCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_230",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_231",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_232",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_233",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_234",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_235",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_236",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_237",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_238",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_239",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_240",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_241",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_242",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_243",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_244",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_245",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    }
+                  ]
+                },
+                {
+                  "closed": true,
+                  "id": "contour_fixture_012",
+                  "points": [
+                    {
+                      "id": "point_fixture_246",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_247",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_248",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_249",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_250",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_251",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_252",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_253",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_254",
+                      "pointType": "onCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_255",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    },
+                    {
+                      "id": "point_fixture_256",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_257",
+                      "pointType": "offCurve",
+                      "smooth": false
+                    },
+                    {
+                      "id": "point_fixture_258",
+                      "pointType": "onCurve",
+                      "smooth": true
+                    }
+                  ]
+                }
+              ]
+            },
+            "values": {
+              "$float64": [
+                1194, 545, -19, 644, 22, 714, 148, 718, 148, 718, 0, 1108, 0, 1108, 706, 1108, 946,
+                934, 1080, 608, 1080, 284, 1080, 111, 946, 94, 706, 460, 706, 467, 768, 513, 802,
+                592, 802, 665, 802, 712, 772, 712, 726, 712, 722, 712, 664, 642, 642, 456, 630, 228,
+                615, 50, 528, 50, 292, 50, 82, 198, -19, 410, -19, 472, 230, 424, 262, 424, 316,
+                424, 370, 474, 406, 556, 420, 630, 433, 676, 444, 716, 458, 716, 374, 716, 280, 626,
+                230, 540, 230, 590, 0, 1108, 0, 592, 1056
+              ]
+            }
+          }
+        }
+      ],
+      "projection": {
+        "componentGlyphIds": [],
+        "components": {
+          "components": [],
+          "rootGlyphId": "glyph_fixture_001"
+        },
+        "exactSourceComponents": [],
+        "exactSourceShapes": [],
+        "fallback": {
+          "componentTransformKind": "decomposed",
+          "structure": {
+            "anchors": [
+              {
+                "id": "anchor_fixture_007",
+                "name": "bottom"
+              },
+              {
+                "id": "anchor_fixture_008",
+                "name": "ogonek"
+              },
+              {
+                "id": "anchor_fixture_009",
+                "name": "top"
+              }
+            ],
+            "components": [],
+            "contours": [
+              {
+                "closed": true,
+                "id": "contour_fixture_005",
+                "points": [
+                  {
+                    "id": "point_fixture_087",
+                    "pointType": "offCurve",
+                    "smooth": false
+                  },
+                  {
+                    "id": "point_fixture_088",
+                    "pointType": "offCurve",
+                    "smooth": false
+                  },
+                  {
+                    "id": "point_fixture_089",
+                    "pointType": "onCurve",
+                    "smooth": false
+                  },
+                  {
+                    "id": "point_fixture_090",
+                    "pointType": "onCurve",
+                    "smooth": false
+                  },
+                  {
+                    "id": "point_fixture_091",
+                    "pointType": "onCurve",
+                    "smooth": false
+                  },
+                  {
+                    "id": "point_fixture_092",
+                    "pointType": "onCurve",
+                    "smooth": false
+                  },
+                  {
+                    "id": "point_fixture_093",
+                    "pointType": "onCurve",
+                    "smooth": true
+                  },
+                  {
+                    "id": "point_fixture_094",
+                    "pointType": "offCurve",
+                    "smooth": false
+                  },
+                  {
+                    "id": "point_fixture_095",
+                    "pointType": "offCurve",
+                    "smooth": false
+                  },
+                  {
+                    "id": "point_fixture_096",
+                    "pointType": "onCurve",
+                    "smooth": true
+                  },
+                  {
+                    "id": "point_fixture_097",
+                    "pointType": "offCurve",
+                    "smooth": false
+                  },
+                  {
+                    "id": "point_fixture_098",
+                    "pointType": "offCurve",
+                    "smooth": false
+                  },
+                  {
+                    "id": "point_fixture_099",
+                    "pointType": "onCurve",
+                    "smooth": false
+                  },
+                  {
+                    "id": "point_fixture_100",
+                    "pointType": "onCurve",
+                    "smooth": false
+                  },
+                  {
+                    "id": "point_fixture_101",
+                    "pointType": "offCurve",
+                    "smooth": false
+                  },
+                  {
+                    "id": "point_fixture_102",
+                    "pointType": "offCurve",
+                    "smooth": false
+                  },
+                  {
+                    "id": "point_fixture_103",
+                    "pointType": "onCurve",
+                    "smooth": true
+                  },
+                  {
+                    "id": "point_fixture_104",
+                    "pointType": "offCurve",
+                    "smooth": false
+                  },
+                  {
+                    "id": "point_fixture_105",
+                    "pointType": "offCurve",
+                    "smooth": false
+                  },
+                  {
+                    "id": "point_fixture_106",
+                    "pointType": "onCurve",
+                    "smooth": true
+                  },
+                  {
+                    "id": "point_fixture_107",
+                    "pointType": "onCurve",
+                    "smooth": true
+                  },
+                  {
+                    "id": "point_fixture_108",
+                    "pointType": "offCurve",
+                    "smooth": false
+                  },
+                  {
+                    "id": "point_fixture_109",
+                    "pointType": "offCurve",
+                    "smooth": false
+                  },
+                  {
+                    "id": "point_fixture_110",
+                    "pointType": "onCurve",
+                    "smooth": true
+                  },
+                  {
+                    "id": "point_fixture_111",
+                    "pointType": "offCurve",
+                    "smooth": false
+                  },
+                  {
+                    "id": "point_fixture_112",
+                    "pointType": "offCurve",
+                    "smooth": false
+                  },
+                  {
+                    "id": "point_fixture_113",
+                    "pointType": "onCurve",
+                    "smooth": true
+                  },
+                  {
+                    "id": "point_fixture_114",
+                    "pointType": "offCurve",
+                    "smooth": false
+                  },
+                  {
+                    "id": "point_fixture_115",
+                    "pointType": "offCurve",
+                    "smooth": false
+                  },
+                  {
+                    "id": "point_fixture_116",
+                    "pointType": "onCurve",
+                    "smooth": true
+                  }
+                ]
+              },
+              {
+                "closed": true,
+                "id": "contour_fixture_006",
+                "points": [
+                  {
+                    "id": "point_fixture_117",
+                    "pointType": "offCurve",
+                    "smooth": false
+                  },
+                  {
+                    "id": "point_fixture_118",
+                    "pointType": "offCurve",
+                    "smooth": false
+                  },
+                  {
+                    "id": "point_fixture_119",
+                    "pointType": "onCurve",
+                    "smooth": true
+                  },
+                  {
+                    "id": "point_fixture_120",
+                    "pointType": "offCurve",
+                    "smooth": false
+                  },
+                  {
+                    "id": "point_fixture_121",
+                    "pointType": "offCurve",
+                    "smooth": false
+                  },
+                  {
+                    "id": "point_fixture_122",
+                    "pointType": "onCurve",
+                    "smooth": true
+                  },
+                  {
+                    "id": "point_fixture_123",
+                    "pointType": "offCurve",
+                    "smooth": false
+                  },
+                  {
+                    "id": "point_fixture_124",
+                    "pointType": "offCurve",
+                    "smooth": false
+                  },
+                  {
+                    "id": "point_fixture_125",
+                    "pointType": "onCurve",
+                    "smooth": false
+                  },
+                  {
+                    "id": "point_fixture_126",
+                    "pointType": "onCurve",
+                    "smooth": true
+                  },
+                  {
+                    "id": "point_fixture_127",
+                    "pointType": "offCurve",
+                    "smooth": false
+                  },
+                  {
+                    "id": "point_fixture_128",
+                    "pointType": "offCurve",
+                    "smooth": false
+                  },
+                  {
+                    "id": "point_fixture_129",
+                    "pointType": "onCurve",
+                    "smooth": true
+                  }
+                ]
+              }
+            ]
+          },
+          "values": {
+            "$float64": [
+              1150, 660, -26, 765, 73, 819, 248, 823, 248, 823, 0, 992, 0, 992, 737, 992, 1086, 723,
+              1132, 573, 1132, 400, 1132, 208, 1070, 122, 867, 295, 810, 330, 888, 417, 974, 578,
+              974, 733, 974, 812, 894, 812, 755, 812, 749, 812, 666, 724, 672, 525, 647, 318, 621,
+              90, 574, 90, 318, 90, 98, 259, -26, 471, -26, 368, 133, 271, 193, 271, 309, 271, 436,
+              386, 478, 517, 495, 586, 504, 782, 524, 812, 559, 812, 404, 812, 267, 701, 133, 502,
+              133, 557, 0, 992, 0, 558, 1118
+            ]
+          }
+        },
+        "glyphId": "glyph_fixture_001",
+        "interpolation": {
+          "basis": {
+            "basis": {
+              "deltas": [
+                {
+                  "region": [
+                    {
+                      "axisId": "axis_fixture_001",
+                      "lower": 0,
+                      "peak": 0,
+                      "upper": 0
+                    },
+                    {
+                      "axisId": "axis_fixture_002",
+                      "lower": 0,
+                      "peak": 0,
+                      "upper": 0
+                    }
+                  ],
+                  "values": {
+                    "$float64": [0, 0, 1, 0, 0, 0]
+                  }
+                },
+                {
+                  "region": [
+                    {
+                      "axisId": "axis_fixture_001",
+                      "lower": 0,
+                      "peak": 1,
+                      "upper": 1
+                    },
+                    {
+                      "axisId": "axis_fixture_002",
+                      "lower": 0,
+                      "peak": 0,
+                      "upper": 0
+                    }
+                  ],
+                  "values": {
+                    "$float64": [0, 0, -1, 1, 0, 0]
+                  }
+                },
+                {
+                  "region": [
+                    {
+                      "axisId": "axis_fixture_001",
+                      "lower": 0,
+                      "peak": 0,
+                      "upper": 0
+                    },
+                    {
+                      "axisId": "axis_fixture_002",
+                      "lower": -1,
+                      "peak": -1,
+                      "upper": 0
+                    }
+                  ],
+                  "values": {
+                    "$float64": [1, 0, -1, 0, 0, 0]
+                  }
+                },
+                {
+                  "region": [
+                    {
+                      "axisId": "axis_fixture_001",
+                      "lower": 0,
+                      "peak": 0,
+                      "upper": 0
+                    },
+                    {
+                      "axisId": "axis_fixture_002",
+                      "lower": 0,
+                      "peak": 1,
+                      "upper": 1
+                    }
+                  ],
+                  "values": {
+                    "$float64": [0, 0, -1, 0, 1, 0]
+                  }
+                },
+                {
+                  "region": [
+                    {
+                      "axisId": "axis_fixture_001",
+                      "lower": 0,
+                      "peak": 1,
+                      "upper": 1
+                    },
+                    {
+                      "axisId": "axis_fixture_002",
+                      "lower": -1,
+                      "peak": -1,
+                      "upper": 0
+                    }
+                  ],
+                  "values": {
+                    "$float64": [-1, 1, 1, -1, 0, 0]
+                  }
+                },
+                {
+                  "region": [
+                    {
+                      "axisId": "axis_fixture_001",
+                      "lower": 0,
+                      "peak": 1,
+                      "upper": 1
+                    },
+                    {
+                      "axisId": "axis_fixture_002",
+                      "lower": 0,
+                      "peak": 1,
+                      "upper": 1
+                    }
+                  ],
+                  "values": {
+                    "$float64": [0, 0, 1, -1, -1, 1]
+                  }
+                }
+              ]
+            },
+            "sourceIds": [
+              "source_fixture_001",
+              "source_fixture_002",
+              "source_fixture_003",
+              "source_fixture_004",
+              "source_fixture_005",
+              "source_fixture_006"
+            ]
+          },
+          "sources": [
+            {
+              "sourceId": "source_fixture_001",
+              "values": {
+                "$float64": [
+                  1076, 620, -24, 792, 85, 826, 274, 832, 274, 832, 0, 878, 0, 878, 802, 878, 992,
+                  742, 1134, 516, 1134, 341, 1134, 195, 1047, 142, 908, 186, 890, 233, 1015, 358,
+                  1088, 516, 1088, 707, 1088, 832, 975, 832, 802, 832, 736, 832, 649, 687, 631, 532,
+                  614, 189, 573, 110, 454, 110, 302, 110, 93, 268, -24, 452, -24, 285, 22, 156, 134,
+                  156, 302, 156, 445, 250, 535, 550, 570, 678, 585, 777, 605, 832, 646, 832, 478,
+                  832, 207, 663, 22, 452, 22, 530, 0, 878, 0, 526, 1118
+                ]
+              }
+            },
+            {
+              "sourceId": "source_fixture_002",
+              "values": {
+                "$float64": [
+                  1004, 612, -16, 762, 76, 822, 218, 824, 218, 824, 0, 870, 0, 870, 740, 870, 930,
+                  701, 1072, 486, 1072, 269, 1072, 98, 928, 98, 740, 144, 740, 144, 902, 295, 1026,
+                  486, 1026, 675, 1026, 824, 903, 824, 740, 824, 712, 824, 624, 697, 599, 508, 574,
+                  189, 532, 70, 450, 70, 278, 70, 77, 244, -16, 428, -16, 258, 30, 116, 115, 116,
+                  278, 116, 422, 221, 488, 508, 528, 681, 552, 765, 567, 824, 618, 824, 438, 824,
+                  167, 643, 30, 428, 30, 490, 0, 870, 0, 486, 1056
+                ]
+              }
+            },
+            {
+              "sourceId": "source_fixture_003",
+              "values": {
+                "$float64": [
+                  1150, 660, -26, 765, 73, 819, 248, 823, 248, 823, 0, 992, 0, 992, 737, 992, 1086,
+                  723, 1132, 573, 1132, 400, 1132, 208, 1070, 122, 867, 295, 810, 330, 888, 417,
+                  974, 578, 974, 733, 974, 812, 894, 812, 755, 812, 749, 812, 666, 724, 672, 525,
+                  647, 318, 621, 90, 574, 90, 318, 90, 98, 259, -26, 471, -26, 368, 133, 271, 193,
+                  271, 309, 271, 436, 386, 478, 517, 495, 586, 504, 782, 524, 812, 559, 812, 404,
+                  812, 267, 701, 133, 502, 133, 557, 0, 992, 0, 558, 1118
+                ]
+              }
+            },
+            {
+              "sourceId": "source_fixture_004",
+              "values": {
+                "$float64": [
+                  1060, 640, -16, 723, 74, 762, 150, 766, 150, 766, 0, 934, 0, 934, 728, 934, 937,
+                  778, 1076, 532, 1076, 282, 1076, 111, 933, 102, 740, 275, 740, 283, 845, 385, 926,
+                  532, 926, 680, 926, 766, 843, 766, 728, 766, 718, 766, 637, 701, 645, 500, 618,
+                  288, 590, 80, 546, 80, 304, 80, 93, 238, -16, 448, -16, 337, 136, 254, 195, 254,
+                  294, 254, 413, 370, 455, 492, 472, 613, 489, 740, 508, 766, 532, 766, 400, 766,
+                  262, 680, 136, 472, 136, 524, 0, 934, 0, 524, 1056
+                ]
+              }
+            },
+            {
+              "sourceId": "source_fixture_005",
+              "values": {
+                "$float64": [
+                  1222, 559, -18, 693, 30, 752, 254, 760, 254, 760, 0, 1120, 0, 1120, 766, 1120,
+                  972, 916, 1132, 598, 1132, 284, 1132, 113, 979, 82, 792, 444, 756, 457, 824, 516,
+                  856, 592, 856, 669, 856, 718, 823, 718, 766, 718, 762, 718, 697, 647, 677, 460,
+                  664, 229, 647, 50, 553, 50, 308, 50, 86, 199, -18, 414, -18, 476, 236, 428, 269,
+                  428, 332, 428, 389, 468, 433, 562, 448, 625, 458, 679, 471, 722, 488, 722, 396,
+                  722, 294, 635, 236, 544, 236, 602, 0, 1120, 0, 616, 1118
+                ]
+              }
+            },
+            {
+              "sourceId": "source_fixture_006",
+              "values": {
+                "$float64": [
+                  1194, 545, -19, 644, 22, 714, 148, 718, 148, 718, 0, 1108, 0, 1108, 706, 1108,
+                  946, 934, 1080, 608, 1080, 284, 1080, 111, 946, 94, 706, 460, 706, 467, 768, 513,
+                  802, 592, 802, 665, 802, 712, 772, 712, 726, 712, 722, 712, 664, 642, 642, 456,
+                  630, 228, 615, 50, 528, 50, 292, 50, 82, 198, -19, 410, -19, 472, 230, 424, 262,
+                  424, 316, 424, 370, 474, 406, 556, 420, 630, 433, 676, 444, 716, 458, 716, 374,
+                  716, 280, 626, 230, 540, 230, 590, 0, 1108, 0, 592, 1056
+                ]
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "records": [
+    {
+      "componentBaseGlyphIds": [],
+      "id": "glyph_fixture_001",
+      "layers": [
+        {
+          "id": "layer_fixture_001",
+          "sourceId": "source_fixture_001"
+        },
+        {
+          "id": "layer_fixture_002",
+          "sourceId": "source_fixture_002"
+        },
+        {
+          "id": "layer_fixture_003",
+          "sourceId": "source_fixture_003"
+        },
+        {
+          "id": "layer_fixture_004",
+          "sourceId": "source_fixture_004"
+        },
+        {
+          "id": "layer_fixture_005",
+          "sourceId": "source_fixture_005"
+        },
+        {
+          "id": "layer_fixture_006",
+          "sourceId": "source_fixture_006"
+        }
+      ],
+      "name": "a",
+      "unicodes": [97]
+    }
+  ]
+}

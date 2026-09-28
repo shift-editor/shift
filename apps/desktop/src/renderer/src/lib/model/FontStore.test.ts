@@ -263,6 +263,7 @@ function snapshot(workspaceId: string, layerId: LayerId): WorkspaceSnapshot {
     axisMappings: [],
     axisMappingBases: [],
     namedInstances: [],
+    languageIds: null,
   };
 }
 

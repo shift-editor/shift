@@ -1,7 +1,7 @@
 import type { ToolContext } from "../../core/Behavior";
 import type { KeyDownEvent } from "../../core/GestureDetector";
 import type { SelectBehavior, SelectState } from "../types";
-import { NUDGES_VALUES, type NudgeMagnitude } from "../../../../types/nudge";
+import { NUDGES_VALUES, nudgeMagnitude } from "../../../../types/nudge";
 import { PointRuleConstraint, PositionEdits } from "../../../model/positions/index";
 
 export class Nudge implements SelectBehavior {
@@ -15,8 +15,8 @@ export class Nudge implements SelectBehavior {
     const anchorIds = selection.targets.anchors ?? [];
     if (pointIds.length === 0 && anchorIds.length === 0) return false;
 
-    const modifier: NudgeMagnitude = event.accelKey ? "large" : event.shiftKey ? "medium" : "small";
-    const nudgeValue = NUDGES_VALUES[modifier];
+    const nudgeValue =
+      NUDGES_VALUES[nudgeMagnitude({ accel: event.accelKey, shift: event.shiftKey })];
 
     let dx = 0;
     let dy = 0;

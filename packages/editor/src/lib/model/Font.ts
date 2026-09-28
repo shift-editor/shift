@@ -298,6 +298,11 @@ class GlyphDirectory {
   }
 }
 
+interface ComponentGlyphs {
+  readonly glyphs: ReadonlyMap<GlyphId, Glyph>;
+  readonly missingGlyphIds: readonly GlyphId[];
+}
+
 const DEFAULT_FONT_METRICS: FontMetrics = {
   unitsPerEm: 1000,
 };
@@ -312,6 +317,8 @@ const DEFAULT_FONT_METRICS: FontMetrics = {
  * A glyph handle is only an identity. It may name a glyph that is not committed
  * in the font yet. Use {@link glyph} for existing glyph data, and use the
  * editor layer API when the caller intends to create or edit authored glyph data.
+ *
+ * @beta Embedders may use this type; its members can change between SDK minor versions.
  */
 export class Font {
   readonly #loadedCell: Signal<boolean>;
@@ -330,6 +337,7 @@ export class Font {
   readonly #axisMappingBasesCell: Signal<AxisMappingBasis[]>;
 
   readonly #namedInstancesCell: Signal<NamedInstance[]>;
+  readonly #languageIdsCell: Signal<readonly string[] | null>;
 
   readonly #unicodesCell: Signal<Unicode[]>;
   readonly #glyphEntriesCell: Signal<readonly GlyphEntry[]>;
@@ -404,6 +412,7 @@ export class Font {
       return this.#metricsForSource(source);
     });
     this.#namedInstancesCell = computed(() => fontCell.value?.namedInstances ?? []);
+    this.#languageIdsCell = computed(() => fontCell.value?.languageIds ?? null);
     this.#directoryCell = computed(() =>
       GlyphDirectory.fromEntries(
         fontCell.value?.glyphs ?? [],
@@ -496,6 +505,18 @@ export class Font {
   /** Reactive authored product presets in external axis coordinates. */
   get namedInstancesCell(): Signal<NamedInstance[]> {
     return this.#namedInstancesCell;
+  }
+
+  /**
+   * Reactive tracked Hyperglot language ids (for example `eng-latin`) in authored order.
+   *
+   * @remarks
+   * `null` means the font stores no tracked-language list, so callers apply
+   * their own default. An array, including an empty one, is the authored list.
+   * Updates after load, committed edits, undo, and redo.
+   */
+  get languageIdsCell(): Signal<readonly string[] | null> {
+    return this.#languageIdsCell;
   }
 
   /** Reactive committed variation sources for sidebar controls. */
@@ -721,7 +742,27 @@ export class Font {
   createGlyph(name: GlyphName): GlyphRecord {
     const finalName = this.nextAvailableGlyphName(name);
     const handle = this.glyphHandleForName(finalName);
-    const unicodes = handle.unicode === undefined ? [] : [handle.unicode];
+    return this.#createGlyphRecord(finalName, handle.unicode === undefined ? [] : [handle.unicode]);
+  }
+
+  /**
+   * Creates a glyph encoded at one Unicode scalar, with its default authored layer.
+   *
+   * @remarks
+   * The name comes from bundled glyph metadata, falling back to `uniXXXX` /
+   * `uXXXXX`, and is auto-incremented if taken. Unlike {@link createGlyph}, the
+   * Unicode value is assigned explicitly, so fallback names stay encoded.
+   *
+   * @param unicode - Scalar value the new glyph encodes.
+   * @returns The created glyph record with its optimistic default layer.
+   */
+  createGlyphForUnicode(unicode: Unicode): GlyphRecord {
+    return this.#createGlyphRecord(this.nextAvailableGlyphName(this.nameForUnicode(unicode)), [
+      unicode,
+    ]);
+  }
+
+  #createGlyphRecord(finalName: GlyphName, unicodes: Unicode[]): GlyphRecord {
     const glyphId = mintGlyphId();
     const layerId = mintLayerId();
     const sourceId = this.defaultSource.id;
@@ -929,11 +970,15 @@ export class Font {
     return layers;
   }
 
-  #componentGlyphsFor(
-    glyphId: GlyphId,
-    glyphs?: ReadonlyMap<GlyphId, Glyph>,
-  ): ReadonlyMap<GlyphId, Glyph> | null {
+  /**
+   * Collects the loaded glyphs a glyph's components reference, transitively.
+   *
+   * @returns The resident component glyphs, plus the referenced glyphs that
+   * are not loaded yet; their own dependencies are found once they load.
+   */
+  #componentGlyphsFor(glyphId: GlyphId, glyphs?: ReadonlyMap<GlyphId, Glyph>): ComponentGlyphs {
     const componentGlyphs = new Map<GlyphId, Glyph>();
+    const missingGlyphIds: GlyphId[] = [];
     const directory = this.#directoryCell.peek();
     const record = directory.recordForId(glyphId);
     const pendingGlyphIds = [
@@ -950,7 +995,10 @@ export class Font {
       seenGlyphIds.add(componentGlyphId);
       const componentGlyph =
         glyphs?.get(componentGlyphId) ?? this.#store.glyphForId(componentGlyphId);
-      if (!componentGlyph) return null;
+      if (!componentGlyph) {
+        missingGlyphIds.push(componentGlyphId);
+        continue;
+      }
 
       componentGlyphs.set(componentGlyphId, componentGlyph);
       const componentRecord = directory.recordForId(componentGlyphId);
@@ -961,7 +1009,7 @@ export class Font {
       );
     }
 
-    return componentGlyphs;
+    return { glyphs: componentGlyphs, missingGlyphIds };
   }
 
   async #readGlyphsIntoStore(glyphIds: readonly GlyphId[]): Promise<void> {
@@ -986,10 +1034,10 @@ export class Font {
 
     for (const glyph of glyphs.values()) {
       const componentGlyphs = this.#componentGlyphsFor(glyph.id, glyphs);
-      if (!componentGlyphs) {
+      if (componentGlyphs.missingGlyphIds.length > 0) {
         throw new Error(`component glyphs for ${glyph.id} could not be read`);
       }
-      glyph.replaceComponentGlyphs(componentGlyphs);
+      glyph.replaceComponentGlyphs(componentGlyphs.glyphs);
     }
 
     this.#store.setGlyphs([...glyphs.values()]);
@@ -997,21 +1045,45 @@ export class Font {
   }
 
   #updateGlyphsFromStore(): void {
-    batch(() => {
-      for (const entry of this.#directoryCell.peek().entries) {
-        const glyph = this.#store.glyphForId(entry.id);
-        if (!glyph) continue;
+    const missingGlyphIds = new Set<GlyphId>();
 
-        const record = this.#directoryCell.peek().recordForId(entry.id);
+    const directory = this.#directoryCell.peek();
+
+    batch(() => {
+      for (const glyph of this.#store.loadedGlyphs()) {
+        const entry = directory.entryForId(glyph.id);
+        if (!entry) continue;
+
+        const record = directory.recordForId(entry.id);
         const layers = record ? this.#buildGlyphLayers(record) : [];
         const componentGlyphs = this.#componentGlyphsFor(entry.id);
-        if (!layers || !componentGlyphs) continue;
+        for (const glyphId of componentGlyphs.missingGlyphIds) missingGlyphIds.add(glyphId);
+        if (!layers || componentGlyphs.missingGlyphIds.length > 0) continue;
 
         glyph.replaceEntry(entry);
         glyph.replaceLayers(layers);
-        glyph.replaceComponentGlyphs(componentGlyphs);
+        glyph.replaceComponentGlyphs(componentGlyphs.glyphs);
       }
     });
+
+    if (missingGlyphIds.size > 0) void this.#loadComponentGlyphs([...missingGlyphIds]);
+  }
+
+  /**
+   * Loads glyphs newly referenced as components by resident glyphs.
+   *
+   * @remarks
+   * A component can reference a glyph that was never opened, for example one
+   * added from the component picker. Loading it stores the glyph and re-runs
+   * {@link Font.#updateGlyphsFromStore}, which then resolves the component outline.
+   * Runs from the directory effect, so failures are logged rather than thrown.
+   */
+  async #loadComponentGlyphs(glyphIds: readonly GlyphId[]): Promise<void> {
+    try {
+      await this.#glyphRequests(glyphIds);
+    } catch (error) {
+      console.error("failed to load component glyphs", error);
+    }
   }
 
   /**
@@ -1337,6 +1409,24 @@ export class Font {
     }
 
     return sourceId;
+  }
+
+  /**
+   * Queues replacement of the tracked language list on the workspace edit lane.
+   *
+   * @remarks
+   * {@link languageIdsCell} changes only after the workspace echo is folded.
+   * Rust drops blank ids and keeps the first occurrence of duplicates. Call
+   * inside an edit-coordinator transaction to control the undo step label.
+   *
+   * @param languageIds - Hyperglot language ids in display order; an empty
+   * list is stored as an explicit empty list.
+   */
+  setLanguageIds(languageIds: readonly string[]): void {
+    this.editCoordinator.push({
+      kind: "setLanguages",
+      setLanguages: { languageIds: [...languageIds] },
+    });
   }
 
   /**

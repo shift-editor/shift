@@ -91,6 +91,8 @@ typings/
 
 # Vite
 .vite/
+packages/sdk/dist/
+packages/sdk/.api-temp/
 
 # Playwright
 apps/desktop/e2e/test-results/
@@ -120,3 +122,7 @@ packages/glyph-info/resources/*.db
 
 
 .claude/schedule*
+
+# Generated at packaging time
+apps/desktop/.generated/
+packages/sdk/THIRD_PARTY_LICENSES.txt

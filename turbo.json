@@ -77,7 +77,12 @@
         "^generate:bridge-types",
         "generate:bridge-types"
       ],
-      "outputs": []
+      "outputs": [],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/packages/*/src/**",
+        "$TURBO_ROOT$/packages/*/package.json"
+      ]
     },
     "@shift/desktop#build": {
       "dependsOn": [
@@ -94,7 +99,9 @@
         "vite*.config.ts",
         "electron-builder.config.ts",
         "resources/**",
-        "$TURBO_ROOT$/icons/**"
+        "$TURBO_ROOT$/icons/**",
+        "$TURBO_ROOT$/packages/*/src/**",
+        "$TURBO_ROOT$/packages/*/package.json"
       ]
     },
     "@shift/desktop#build:e2e": {
@@ -112,7 +119,9 @@
         "vite*.config.ts",
         "electron-builder.config.ts",
         "resources/**",
-        "$TURBO_ROOT$/icons/**"
+        "$TURBO_ROOT$/icons/**",
+        "$TURBO_ROOT$/packages/*/src/**",
+        "$TURBO_ROOT$/packages/*/package.json"
       ]
     },
     "@shift/desktop#package": {
@@ -191,7 +200,12 @@
         "@shift/glyph-info#generate"
       ],
       "outputs": [],
-      "inputs": ["src/**", "*.config.ts"]
+      "inputs": [
+        "src/**",
+        "*.config.ts",
+        "$TURBO_ROOT$/packages/*/src/**",
+        "$TURBO_ROOT$/packages/*/package.json"
+      ]
     },
     "shift-bridge#test": {
       "dependsOn": ["build"],

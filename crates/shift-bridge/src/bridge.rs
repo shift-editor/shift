@@ -18,6 +18,7 @@ use shift_font::{
   FontMetadata as FontMetadataModel, Glyph, GlyphId, LayerId, Location as FontLocation,
   MetricDefinition as FontMetricDefinition, MetricId, MetricKind, MetricValue,
   NamedInstance as FontNamedInstance, NamedInstanceId, PointId, PointSeed, SourceId,
+  LANGUAGES_LIB_KEY,
 };
 use shift_slug::{
   build_authored_atlas_page_profiled, build_authored_atlas_profiled,
@@ -30,10 +31,10 @@ use shift_wire::{
     NapiAxisRole, NapiAxisType, NapiCatalogAtlasGlyph, NapiCatalogAtlasPage,
     NapiCatalogAtlasWeights, NapiFontIntent, NapiFontMetadata, NapiFontMetrics,
     NapiFontReplacement, NapiFontSnapshot, NapiGlyphPreview, NapiGlyphProjection, NapiGlyphRecord,
-    NapiGlyphSnapshot, NapiGlyphSnapshotRequest, NapiInterpolationBasis, NapiLayerMatch,
-    NapiLayerReplaced, NapiLocation, NapiMetricDefinition, NapiMetricKind, NapiNamedInstance,
-    NapiPointSeed, NapiSlugAtlas, NapiSlugExactSource, NapiSlugGlyph, NapiSlugLayout,
-    NapiSlugPreviewExtents, NapiSlugSection, NapiSlugWeightSet, NapiSource,
+    NapiGlyphSnapshot, NapiGlyphSnapshotRequest, NapiInterpolationBasis, NapiLanguagesReplacement,
+    NapiLayerMatch, NapiLayerReplaced, NapiLocation, NapiMetricDefinition, NapiMetricKind,
+    NapiNamedInstance, NapiPointSeed, NapiSlugAtlas, NapiSlugExactSource, NapiSlugGlyph,
+    NapiSlugLayout, NapiSlugPreviewExtents, NapiSlugSection, NapiSlugWeightSet, NapiSource,
     NapiSourceMetricsInterpolationReplacement, NapiSourceMetricsInterpolationSnapshot,
   },
   AnchorData, Axis, AxisMapping, AxisMappingBasis, ComponentData, ComponentGlyph,
@@ -338,6 +339,8 @@ fn wire_font_snapshot(
     axis_mappings,
     axis_mapping_bases,
     named_instances,
+    // Preview sources expose only the directory, which carries no font lib.
+    language_ids: None,
   })
 }
 
@@ -1280,15 +1283,35 @@ impl Bridge {
   #[napi]
   pub fn get_glyphs(&self) -> errors::Result<Vec<NapiGlyphRecord>> {
     let workspace = self.workspace()?;
+    let font = workspace.font();
+    let source_order = font
+      .sources()
+      .iter()
+      .enumerate()
+      .map(|(index, source)| (source.id().to_string(), index))
+      .collect::<HashMap<_, _>>();
     let mut component_references = workspace.glyph_component_references()?;
-    let mut records = workspace
-      .font()
+    let mut records = font
       .glyphs()
       .map(|glyph| {
         let mut record = GlyphRecord::from(glyph);
         record.component_base_glyph_ids =
           component_references.remove(&glyph.id()).unwrap_or_default();
-        NapiGlyphRecord::from(record)
+        let mut record = NapiGlyphRecord::from(record);
+        record.layers.sort_by(|left, right| {
+          source_order
+            .get(&left.source_id)
+            .copied()
+            .unwrap_or(usize::MAX)
+            .cmp(
+              &source_order
+                .get(&right.source_id)
+                .copied()
+                .unwrap_or(usize::MAX),
+            )
+            .then_with(|| left.id.cmp(&right.id))
+        });
+        record
       })
       .collect::<Vec<_>>();
     records.sort_by(|a, b| a.name.cmp(&b.name));
@@ -1330,6 +1353,7 @@ impl Bridge {
   /// change set touched that structure.
   fn applied_echo(&self, outcome: shift_font::AppliedIntents) -> errors::Result<NapiAppliedChange> {
     let mut metadata_changed = false;
+    let mut languages_changed = false;
     let mut glyphs_changed = false;
     let mut axes_changed = false;
     let mut axis_mappings_changed = false;
@@ -1339,6 +1363,9 @@ impl Bridge {
     for change in &outcome.changes.changes {
       match change {
         FontChange::FontMetadataUpdated(_) => metadata_changed = true,
+        FontChange::FontLibValueUpdated(change) if change.key == LANGUAGES_LIB_KEY => {
+          languages_changed = true;
+        }
         FontChange::GlyphAppended(_)
         | FontChange::GlyphPopped(_)
         | FontChange::GlyphIdentityChanged(_)
@@ -1386,6 +1413,7 @@ impl Bridge {
       .collect();
 
     let font_changed = metadata_changed
+      || languages_changed
       || glyphs_changed
       || axes_changed
       || axis_mappings_changed
@@ -1420,6 +1448,13 @@ impl Bridge {
             .transpose()?,
           named_instances: named_instances_changed
             .then(|| self.get_named_instances())
+            .transpose()?,
+          languages: languages_changed
+            .then(|| -> errors::Result<NapiLanguagesReplacement> {
+              Ok(NapiLanguagesReplacement {
+                language_ids: self.get_language_ids()?,
+              })
+            })
             .transpose()?,
           sources: sources_changed.then(|| self.get_sources()).transpose()?,
         })
@@ -1479,6 +1514,12 @@ impl Bridge {
       .map(|request| request.glyph_id.clone())
       .collect::<Vec<_>>();
     let font = self.acquire_and_font(&glyph_ids, AcquireScope::Glyphs)?;
+    let source_order = font
+      .sources()
+      .iter()
+      .enumerate()
+      .map(|(index, source)| (source.id(), index))
+      .collect::<HashMap<_, _>>();
     let mut snapshots = Vec::new();
     for request in requests {
       let glyph_id = request.glyph_id;
@@ -1488,10 +1529,26 @@ impl Bridge {
 
       let projection = font.glyph_projection(&glyph_id)?.as_ref().map(Into::into);
 
-      let layers = glyph
+      let mut layers = glyph
         .layers()
         .values()
         .map(|layer| layer.as_ref())
+        .collect::<Vec<_>>();
+      layers.sort_by(|left, right| {
+        source_order
+          .get(&left.source_id())
+          .copied()
+          .unwrap_or(usize::MAX)
+          .cmp(
+            &source_order
+              .get(&right.source_id())
+              .copied()
+              .unwrap_or(usize::MAX),
+          )
+          .then_with(|| left.id().as_str().cmp(right.id().as_str()))
+      });
+      let layers = layers
+        .into_iter()
         .map(|layer| GlyphLayerSnapshot {
           glyph_id: glyph_id.clone(),
           source_id: layer.source_id(),
@@ -1972,6 +2029,15 @@ impl Bridge {
     )
   }
 
+  /// Returns the font's tracked Hyperglot language ids in authored order.
+  ///
+  /// `null` when the font lib has no tracked-language key, so the renderer
+  /// applies its own default; an empty array is an explicit empty list.
+  #[napi]
+  pub fn get_language_ids(&self) -> errors::Result<Option<Vec<String>>> {
+    Ok(self.font()?.language_ids())
+  }
+
   #[napi]
   pub fn get_named_instances(&self) -> errors::Result<Vec<NapiNamedInstance>> {
     Ok(
@@ -2008,16 +2074,36 @@ impl Bridge {
 
   #[napi]
   pub fn get_sources(&self) -> errors::Result<Vec<NapiSource>> {
-    Ok(
-      self
-        .font()?
-        .sources()
-        .iter()
-        .filter(|source| source.is_master())
-        .map(Source::from)
-        .map(Into::into)
-        .collect(),
-    )
+    let font = self.font()?;
+    let metric_order = font
+      .metric_definitions()
+      .iter()
+      .enumerate()
+      .map(|(index, definition)| (definition.id().to_string(), index))
+      .collect::<HashMap<_, _>>();
+    let mut sources = font
+      .sources()
+      .iter()
+      .filter(|source| source.is_master())
+      .map(Source::from)
+      .map(NapiSource::from)
+      .collect::<Vec<_>>();
+    for source in &mut sources {
+      source.metric_values.sort_by(|left, right| {
+        metric_order
+          .get(&left.metric_id)
+          .copied()
+          .unwrap_or(usize::MAX)
+          .cmp(
+            &metric_order
+              .get(&right.metric_id)
+              .copied()
+              .unwrap_or(usize::MAX),
+          )
+          .then_with(|| left.metric_id.cmp(&right.metric_id))
+      });
+    }
+    Ok(sources)
   }
 
   fn save_snapshot(&mut self) -> BridgeResult<FontSaveSnapshot> {
@@ -2336,6 +2422,14 @@ fn map_intent(intent: NapiFontIntent) -> errors::Result<FontIntent> {
         .ok_or_else(|| missing("updateFontMetadata"))?;
       Ok(FontIntent::UpdateFontMetadata {
         metadata: map_font_metadata(payload.metadata),
+      })
+    }
+    "setLanguages" => {
+      let payload = intent
+        .set_languages
+        .ok_or_else(|| missing("setLanguages"))?;
+      Ok(FontIntent::SetLanguages {
+        language_ids: payload.language_ids,
       })
     }
     "createAxis" => {
@@ -2672,8 +2766,8 @@ mod tests {
     NapiGlyphSnapshotRequest, NapiGlyphState, NapiLocation, NapiMoveAnchorsIntent,
     NapiMovePointsIntent, NapiNamedInstance, NapiPointSeed, NapiPointType, NapiRemoveAnchorsIntent,
     NapiRemovePointsIntent, NapiReverseContourIntent, NapiSetContourClosedIntent,
-    NapiSetPointSmoothIntent, NapiSetXAdvanceIntent, NapiTranslatePointsIntent,
-    NapiUpdateNamedInstanceIntent,
+    NapiSetLanguagesIntent, NapiSetPointSmoothIntent, NapiSetXAdvanceIntent,
+    NapiTranslatePointsIntent, NapiUpdateNamedInstanceIntent,
   };
   use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -2703,6 +2797,7 @@ mod tests {
       create_glyph: None,
       update_glyph: None,
       update_font_metadata: None,
+      set_languages: None,
       create_axis: None,
       update_axis: None,
       delete_axis: None,
@@ -3907,6 +4002,43 @@ mod tests {
     assert!(applied.layers.is_empty());
     assert!(next.glyphs.is_none());
     assert_eq!(bridge.get_glyphs().unwrap()[0].layers.len(), 1);
+  }
+
+  #[test]
+  fn set_languages_echoes_the_list_and_undo_echoes_its_absence() {
+    let mut bridge = bridge_with_workspace();
+    assert_eq!(bridge.get_language_ids().unwrap(), None);
+
+    let applied = bridge
+      .apply(
+        vec![NapiFontIntent {
+          set_languages: Some(NapiSetLanguagesIntent {
+            language_ids: vec!["eng-latin".to_string(), "cmn-chinese".to_string()],
+          }),
+          ..skeleton_intent("setLanguages")
+        }],
+        None,
+      )
+      .unwrap();
+
+    let next = applied
+      .next
+      .expect("setLanguages must echo font replacements");
+    let languages = next.languages.expect("setLanguages must echo languages");
+    assert_eq!(
+      languages.language_ids,
+      Some(vec!["eng-latin".to_string(), "cmn-chinese".to_string()])
+    );
+    assert!(next.metadata.is_none());
+    assert!(next.sources.is_none());
+
+    let undone = bridge.undo().unwrap().expect("setLanguages should undo");
+    let languages = undone
+      .next
+      .and_then(|next| next.languages)
+      .expect("undo must echo languages");
+    assert_eq!(languages.language_ids, None);
+    assert_eq!(bridge.get_language_ids().unwrap(), None);
   }
 
   #[test]

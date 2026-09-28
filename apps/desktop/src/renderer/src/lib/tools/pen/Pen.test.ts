@@ -276,12 +276,15 @@ describe("Pen tool", () => {
     it("a click-placed point survives as one undoable ledger entry", async () => {
       await editor.click(100, 200);
       expect(editor.pointCount).toBe(1);
+      const selection = editor.selection.ids;
 
       await editor.undo();
       expect(editor.pointCount).toBe(0);
+      expect(editor.selection.ids).toEqual([]);
 
       await editor.redo();
       expect(editor.pointCount).toBe(1);
+      expect(editor.selection.ids).toEqual(selection);
     });
 
     it("a curve drag appends complete topology in one undo step", async () => {

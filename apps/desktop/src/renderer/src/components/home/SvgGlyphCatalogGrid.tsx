@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Button } from "@shift/ui";
 import { GlyphCatalogLayout } from "./glyphCatalogLayout";
 import { GlyphNameInput } from "./GlyphNameInput";
@@ -20,6 +20,7 @@ export function SvgGlyphCatalogGrid({
   onPendingGlyphName,
   onFirstFrame,
   onUnavailable,
+  glyphActionLabel,
 }: SvgGlyphCatalogGridProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const editingInputRef = useRef<HTMLInputElement>(null);
@@ -105,6 +106,63 @@ export function SvgGlyphCatalogGrid({
             ? new GlyphPreviewLayout(metrics, preview.xAdvance, cell.previewRect.height)
             : null;
           const top = cell.cellRect.top + targetFrame.scrollTop;
+          let previewContent: ReactNode = null;
+          if (preview?.svgPath && previewLayout) {
+            previewContent = (
+              <svg
+                aria-hidden="true"
+                width={cell.previewContentRect.width}
+                height={cell.previewContentRect.height}
+                viewBox={previewLayout.viewBox}
+                preserveAspectRatio="xMidYMid meet"
+                className="overflow-hidden"
+              >
+                <g transform="scale(1, -1)">
+                  <path d={preview.svgPath} fill="currentColor" fillRule="nonzero" />
+                </g>
+              </svg>
+            );
+          } else if (
+            readiness === "Complete" &&
+            previews.has(cell.glyph.id) &&
+            cell.glyph.unicode !== null
+          ) {
+            previewContent = (
+              <span aria-hidden="true" className="font-sans text-3xl text-muted">
+                {String.fromCodePoint(cell.glyph.unicode)}
+              </span>
+            );
+          }
+
+          let nameCell = (
+            <div className="flex h-7 w-full items-center justify-center truncate bg-input px-2 text-xs text-muted">
+              {cell.glyph.displayName}
+            </div>
+          );
+          if (canAuthor) {
+            nameCell = (
+              <Button
+                aria-label={`Rename ${cell.glyph.displayName}`}
+                variant="ghost"
+                className="h-7 w-full truncate bg-input px-2 text-center font-ui text-xs font-normal text-muted hover:bg-hover"
+                onClick={() => setEditingGlyphId(cell.glyph.id)}
+              >
+                {cell.glyph.displayName}
+              </Button>
+            );
+          }
+          if (editingGlyphId === cell.glyph.id) {
+            nameCell = (
+              <GlyphNameInput
+                ref={editingInputRef}
+                glyph={cell.glyph}
+                onFinished={(nextName) => {
+                  if (nextName) onPendingGlyphName(cell.glyph.id, nextName);
+                  setEditingGlyphId(null);
+                }}
+              />
+            );
+          }
 
           return (
             <div
@@ -118,51 +176,16 @@ export function SvgGlyphCatalogGrid({
               }}
             >
               <Button
-                aria-label={`Open ${cell.glyph.displayName}`}
+                aria-label={glyphActionLabel?.(cell.glyph) ?? `Open ${cell.glyph.displayName}`}
                 variant="ghost"
                 className="flex w-full items-center justify-center overflow-hidden p-0 hover:bg-hover"
                 style={{ height: cell.previewRect.height }}
                 onClick={async () => handleOpenGlyph(cell.glyph.id)}
               >
-                {preview?.svgPath && previewLayout ? (
-                  <svg
-                    aria-hidden="true"
-                    width={cell.previewContentRect.width}
-                    height={cell.previewContentRect.height}
-                    viewBox={previewLayout.viewBox}
-                    preserveAspectRatio="xMidYMid meet"
-                    className="overflow-hidden"
-                  >
-                    <g transform="scale(1, -1)">
-                      <path d={preview.svgPath} fill="currentColor" fillRule="nonzero" />
-                    </g>
-                  </svg>
-                ) : null}
+                {previewContent}
               </Button>
               <div style={{ height: targetFrame.layout.nameGap }} />
-              {editingGlyphId === cell.glyph.id ? (
-                <GlyphNameInput
-                  ref={editingInputRef}
-                  glyph={cell.glyph}
-                  onFinished={(nextName) => {
-                    if (nextName) onPendingGlyphName(cell.glyph.id, nextName);
-                    setEditingGlyphId(null);
-                  }}
-                />
-              ) : canAuthor ? (
-                <Button
-                  aria-label={`Rename ${cell.glyph.displayName}`}
-                  variant="ghost"
-                  className="h-7 w-full truncate bg-input px-2 text-center font-ui text-xs font-normal text-muted hover:bg-hover"
-                  onClick={() => setEditingGlyphId(cell.glyph.id)}
-                >
-                  {cell.glyph.displayName}
-                </Button>
-              ) : (
-                <div className="flex h-7 w-full items-center justify-center truncate bg-input px-2 text-xs text-muted">
-                  {cell.glyph.displayName}
-                </div>
-              )}
+              {nameCell}
             </div>
           );
         })}
