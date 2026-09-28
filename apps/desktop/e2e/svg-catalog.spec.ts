@@ -26,6 +26,25 @@ test.describe("SVG glyph catalog fallback", () => {
     await waitForEditorReady(page, glyphId);
   });
 
+  test("shows the system character for an empty encoded glyph", async ({ page }) => {
+    const name = await page.evaluate(async () => {
+      const workspace = window.shift;
+      if (!workspace) throw new Error("Expected workspace");
+
+      const [glyph] = workspace.editor.createGlyphsForUnicodes([0x3042]);
+      if (!glyph) throw new Error("Expected an empty Hiragana glyph");
+      await workspace.font.editCoordinator.settled();
+      return glyph.name;
+    });
+
+    await page.getByPlaceholder("Search glyphs...").fill(name);
+    const svg = glyphCatalogSvg(page);
+    await expect(svg).toHaveAttribute("data-grid-readiness", "Complete");
+    const tile = svg.getByRole("button", { name: /^Open / }).filter({ hasText: "あ" });
+    await expect(tile).toHaveCount(1);
+    await expect(tile.locator("path")).toHaveCount(0);
+  });
+
   test("remains interactive after scrolling away and back", async ({ page }) => {
     const svg = glyphCatalogSvg(page);
     await expect(svg).toHaveAttribute("data-grid-readiness", "Complete", { timeout: 30_000 });
