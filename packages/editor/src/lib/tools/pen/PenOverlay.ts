@@ -50,6 +50,11 @@ export class PenOverlay extends CanvasItem<PenOverlayProps> {
 
         this.#snapLines.draw(canvas, props.state.guides, props.nodePosition);
         return;
+      case "closing":
+        if (!props.nodePosition) return;
+
+        this.#snapLines.draw(canvas, props.state.guides, props.nodePosition);
+        return;
       case "idle":
       case "anchored":
         return;

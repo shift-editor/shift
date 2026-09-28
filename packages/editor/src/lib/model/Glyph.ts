@@ -91,6 +91,7 @@ import { GlyphLayerPositionPatch } from "./GlyphLayerPositionPatch";
 import { GlyphLayerEdit } from "./GlyphLayerEdit";
 import { ComponentTransformEdit } from "./ComponentTransformEdit";
 import { DeletePoints } from "./DeletePoints";
+import { JoinContours, type ContourEnd } from "./JoinContours";
 import { GlyphLayerState } from "./GlyphLayerState";
 import type { ContourBuffer } from "./ContourBuffer";
 import type { LayerBuffers } from "./LayerBuffers";
@@ -982,6 +983,22 @@ export class GlyphLayer {
    */
   deletePoints(pointIds: readonly PointId[], mode: DeleteMode = "fit"): boolean {
     return new DeletePoints(this, pointIds, mode).apply();
+  }
+
+  /**
+   * Connects two open contour ends as one undoable edit.
+   *
+   * @remarks
+   * Two ends of one contour close it. Ends of different contours join into the
+   * `from` contour; the `to` contour's points get new identities.
+   *
+   * @param from - End whose contour survives a join; dropped when merging.
+   * @param to - End connected to `from`.
+   * @param merge - Replace `from`'s end point with `to`'s instead of adding a line between them.
+   * @returns Whether both ends were open and were connected.
+   */
+  joinContours(from: ContourEnd, to: ContourEnd, merge: boolean): boolean {
+    return new JoinContours(this, from, to, merge).apply();
   }
 
   /**
