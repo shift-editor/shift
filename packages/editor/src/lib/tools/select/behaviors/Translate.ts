@@ -12,6 +12,7 @@ import type { PositionCondition } from "../../../../types/positionEdit";
 import type { SelectBehavior, SelectState } from "../types";
 import type { Select } from "../Select";
 import { TranslateInteraction } from "../TranslateInteraction";
+import { EndpointDrop } from "../EndpointDrop";
 
 type TranslatingState = Extract<SelectState, { type: "translating" }>;
 
@@ -56,7 +57,7 @@ export class Translate implements SelectBehavior {
   onDragEnd(state: SelectState, ctx: ToolContext<SelectState>): boolean {
     if (state.type !== "translating") return false;
 
-    this.#drag?.commit();
+    this.#commitDrag(ctx.editor);
     this.#componentEdit?.commit("Move components");
     if (this.#done) this.#done();
 
@@ -182,6 +183,21 @@ export class Translate implements SelectBehavior {
     if (!bounds) return null;
 
     return PositionReference.position(Bounds.center(bounds));
+  }
+
+  /** Commits the move; an open end dropped on another open end also closes or joins its contour. */
+  #commitDrag(editor: Editor): void {
+    const drag = this.#drag;
+    if (!drag) return;
+
+    const drop = EndpointDrop.fromSelection(editor);
+    const target = drop?.targetWithin(editor.hitRadius) ?? null;
+    if (!drop || !target) {
+      drag.commit();
+      return;
+    }
+
+    if (drop.commitAndJoin(() => drag.commit(), target)) editor.selection.clear();
   }
 
   #cleanup(): void {
