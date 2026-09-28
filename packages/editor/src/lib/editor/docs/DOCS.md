@@ -1,6 +1,6 @@
 # Editor
 
-<!-- reviewed: 2026-09-26 -->
+<!-- reviewed: 2026-09-28 -->
 
 Central orchestrator for the canvas-based glyph editing surface, wiring viewport transforms, selection, rendering, hit testing, and tool management into a single facade.
 
@@ -26,7 +26,7 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 
 **Architecture Invariant:** `EditorInput` owns raw pointer position, modifiers, and primary-button state. `pointerDownCell` becomes true on accepted pointer-down and resets on release, cancellation, or an editor interaction reset. Gesture interpretation remains separate: a click is emitted on release only when the press never crossed the drag threshold.
 
-**Architecture Invariant:** `drawOffset` is derived render state. Text tools focus glyphs by `GlyphAnchor { runId, itemId }`; `Editor` resolves that anchor through `TextRuns` and `TextLayout.editOriginForItem()`. Tools must not set text-run edit placement coordinates directly.
+**Architecture Invariant:** Text is placed by scene nodes, not by an editor-global draw offset. `TextRunNodeDefinition` renders and hit-tests layout in node space at `node.size / unitsPerEm`; `TextEditing` stores the active node and item-identity carets. In-context glyph editing will place a child GlyphNode from layout in a later slice.
 
 **Architecture Invariant: CRITICAL:** `Camera` owns the affine matrices as lazily computed cells. Anything that reads viewport-derived values inside a `computed` or `effect` will auto-track. Calling `setRect()`, changing zoom/pan, or changing UPM invalidates both matrices and triggers downstream redraws automatically. Never cache matrix results outside a signal.
 

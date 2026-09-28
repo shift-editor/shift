@@ -194,7 +194,7 @@ describe("KeyboardRouter", () => {
       const handled = await router.handleKeyDown(e);
 
       expect(handled).toBe(false);
-      expect(editor.toolIf("text")?.state).toEqual({ type: "typing" });
+      expect(editor.toolIf("text")?.state).toEqual({ type: "ready" });
     });
   });
 
@@ -578,7 +578,7 @@ describe("KeyboardRouter", () => {
 
       await router.handleKeyDown(e);
 
-      expect(editor.toolIf("text")?.state).toEqual({ type: "typing" });
+      expect(editor.toolIf("text")?.state).toEqual({ type: "ready" });
     });
   });
 

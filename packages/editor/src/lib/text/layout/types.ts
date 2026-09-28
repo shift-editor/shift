@@ -1,20 +1,12 @@
 import type { Bounds, Point2D } from "@shift/geo";
-import type { GlyphId, SourceMetrics } from "@shift/types";
+import { mintTextItemId, type GlyphId, type SourceMetrics, type TextItemId } from "@shift/types";
 
-export type TextItemId = string;
 export type TextRunId = string;
+export type { TextItemId };
 
 export interface GlyphAnchor {
   runId: TextRunId;
   itemId: TextItemId;
-}
-
-let nextItemId = 1;
-
-export function createTextItemId(): TextItemId {
-  const id = `item_${nextItemId}`;
-  nextItemId += 1;
-  return id;
 }
 
 /**
@@ -41,13 +33,13 @@ export interface LineBreakTextItem {
 export function glyphTextItem(
   glyphName: string,
   codepoint: number | null = null,
-  id: TextItemId = createTextItemId(),
+  id: TextItemId = mintTextItemId(),
 ): GlyphTextItem {
   return { id, kind: "glyph", glyphName, codepoint };
 }
 
 /** Build a line break text item — structural paragraph separator. */
-export function lineBreakTextItem(id: TextItemId = createTextItemId()): LineBreakTextItem {
+export function lineBreakTextItem(id: TextItemId = mintTextItemId()): LineBreakTextItem {
   return { id, kind: "linebreak" };
 }
 

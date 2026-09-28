@@ -19,6 +19,7 @@ const TOOL_LABELS = {
   hand: "Hand Tool (H)",
   rectangle: "Rectangle Tool (R)",
   ellipse: "Ellipse Tool (O)",
+  text: "Text Tool (T)",
 } as const;
 
 /** Toolbar tool actions the driver can locate and activate. */

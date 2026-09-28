@@ -26,7 +26,8 @@ export class SelectHover implements SelectBehavior {
         return false;
       }
 
-      case "node": {
+      case "node":
+      case "text": {
         ctx.editor.hover.clear();
         return false;
       }

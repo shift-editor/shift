@@ -480,13 +480,23 @@ export class EditorHistory {
     batch(() => {
       for (const change of changes) {
         const record = reverse ? change.before : change.after;
-        if (record?.type === "selection" || record?.type === "editing") continue;
+        if (
+          record?.type === "selection" ||
+          record?.type === "editing" ||
+          record?.type === "textEditing"
+        )
+          continue;
         this.#applyRecord(change.id, record);
       }
 
       for (const change of changes) {
         const record = reverse ? change.before : change.after;
-        if (record?.type !== "selection" && record?.type !== "editing") continue;
+        if (
+          record?.type !== "selection" &&
+          record?.type !== "editing" &&
+          record?.type !== "textEditing"
+        )
+          continue;
         this.#applyRecord(change.id, record);
       }
     });
@@ -510,6 +520,11 @@ export class EditorHistory {
       case "editing": {
         const nodeIds = record.nodeIds.filter((id) => this.#editor.scene.node(id) !== null);
         return nodeIds.length > 0 ? { ...record, nodeIds } : null;
+      }
+      case "textEditing": {
+        if (this.#editor.tool?.id !== "text") return null;
+        const node = this.#editor.scene.nodeOfKind(record.nodeId, "textRun");
+        return node && this.#editor.text.run(node.runId) ? record : null;
       }
       default:
         return record;

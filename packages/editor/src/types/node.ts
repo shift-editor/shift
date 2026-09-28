@@ -1,5 +1,5 @@
 import type { Point2D } from "@shift/geo";
-import type { GlyphId, Location, NodeId, RunId, SourceId } from "@shift/types";
+import type { GlyphId, NodeId, RunId, SourceId } from "@shift/types";
 
 /**
  * Describes a placed object in the editor scene.
@@ -55,8 +55,7 @@ export interface GlyphNode extends Node {
  *
  * @remarks
  * A text run node is the movable proofing container for text-domain layout. It
- * points at document-scoped run content and carries placement styling such as
- * size and external location.
+ * points at document-scoped run content and carries placement and size.
  */
 export interface TextRunNode extends Node {
   readonly kind: "textRun";
@@ -66,9 +65,6 @@ export interface TextRunNode extends Node {
 
   /** Proof rendering size for this placement. */
   readonly size: number;
-
-  /** Pinned variation location used when shaping and drawing this placement. */
-  readonly externalLocation: Location;
 }
 
 /** Represents every scene node kind known to this build. */
