@@ -4,6 +4,7 @@ import type { StoreChange } from "../../types/store";
 
 export class ShiftStore<R extends ShiftRecord = ShiftRecord> {
   readonly #cell: WritableSignal<ReadonlyMap<R["id"], R>>;
+  // non-reactive: subscriber registry; listeners are invoked imperatively, never read in computeds
   readonly #changeListeners = new Set<(change: StoreChange<R>) => void>();
 
   constructor(records: readonly R[] = []) {

@@ -9,8 +9,10 @@
  * the now-active run for ergonomic chaining.
  */
 import {
+  batch,
   signal,
   computed,
+  track,
   type Signal,
   type WritableSignal,
   type ComputedSignal,
@@ -30,7 +32,7 @@ export interface PersistedTextRun {
 }
 
 export class TextRuns {
-  readonly #runs: Map<string, TextRun>;
+  readonly #runsCell: WritableSignal<ReadonlyMap<string, TextRun>>;
   readonly #activeKey: WritableSignal<string>;
   readonly #active: ComputedSignal<TextRun>;
   readonly #editor: Editor;
@@ -38,15 +40,19 @@ export class TextRuns {
   readonly #editorRun: TextRun;
 
   constructor(editor: Editor, positioner: Positioner) {
-    this.#runs = new Map();
-    this.#activeKey = signal(DEFAULT_RUN_KEY);
     this.#editor = editor;
     this.#positioner = positioner;
+    this.#runsCell = signal<ReadonlyMap<string, TextRun>>(
+      new Map([[DEFAULT_RUN_KEY, this.#createRun(DEFAULT_RUN_KEY)]]),
+      { name: "textRuns.runs" },
+    );
+    this.#activeKey = signal(DEFAULT_RUN_KEY);
     this.#editorRun = new TextRun(EDITOR_RUN_ID, this.#editor, this.#positioner);
-    this.#active = computed(() => this.#getOrCreate(this.#activeKey.value));
+    // Every writer of the active key ensures its run exists first.
+    this.#active = computed(() => this.#runsCell.value.get(this.#activeKey.value)!);
   }
 
-  /** The currently-active run. Lazily creates one for the active key if needed. */
+  /** The currently-active run. */
   get active(): TextRun {
     return this.#active.peek();
   }
@@ -83,6 +89,7 @@ export class TextRuns {
    */
   switchTo(glyphName: string | null): TextRun {
     const key = glyphName ?? DEFAULT_RUN_KEY;
+    this.#ensureRun(key);
     this.#activeKey.set(key);
     return this.active;
   }
@@ -94,16 +101,18 @@ export class TextRuns {
     run.interaction.clear();
   }
 
-  /** Drop every run. */
+  /** Drop every run; the active key restarts with an empty run. */
   clearAll(): void {
-    this.#runs.clear();
+    this.#runsCell.set(new Map());
+    this.#ensureRun(this.#activeKey.peek());
     this.#editorRun.buffer.clear();
     this.#editorRun.interaction.clear();
   }
 
   get(runId: string): TextRun | null {
     if (runId === EDITOR_RUN_ID) return this.#editorRun;
-    return this.#runs.get(runId) ?? null;
+    track(this.#runsCell);
+    return this.#runsCell.peek().get(runId) ?? null;
   }
 
   resolveAnchor(anchor: GlyphAnchor): FocusedGlyph | null {
@@ -116,7 +125,7 @@ export class TextRuns {
 
   serialize(): Record<string, PersistedTextRun> {
     const out: Record<string, PersistedTextRun> = {};
-    for (const [key, run] of this.#runs) {
+    for (const [key, run] of this.#runsCell.peek()) {
       if (key === DEFAULT_RUN_KEY) continue;
       const buffer = run.buffer.snapshot();
       if (buffer.items && buffer.items.length > 0) {
@@ -127,31 +136,31 @@ export class TextRuns {
   }
 
   deserialize(persisted: Record<string, PersistedTextRun>): void {
-    this.#runs.clear();
+    const runs = new Map<string, TextRun>();
     for (const [key, entry] of Object.entries(persisted)) {
-      const run = new TextRun(key, this.#editor, this.#positioner);
+      const run = this.#createRun(key);
       run.buffer.restore(entry.buffer);
-      this.#runs.set(key, run);
+      runs.set(key, run);
     }
 
-    // Force `activeCell` to re-resolve from the now-populated Map. Without this,
-    // any consumer that already read `activeCell.value` before deserialize ran
-    // (e.g., the Editor's auto-save effect during construction) holds a
-    // stale reference to a pre-load empty TextRun — and any subsequent fire
-    // of the effect serializes that empty state back over the loaded data.
-    // The Map itself isn't a signal, so we toggle `activeKey` through a
-    // sentinel to bypass the computed's equality skip.
     const key = this.#activeKey.peek();
-    const targetKey = this.#runs.has(key) ? key : DEFAULT_RUN_KEY;
-    this.#activeKey.set("__force_recompute__");
-    this.#activeKey.set(targetKey);
+    const targetKey = runs.has(key) ? key : DEFAULT_RUN_KEY;
+    if (!runs.has(targetKey)) runs.set(targetKey, this.#createRun(targetKey));
+
+    batch(() => {
+      this.#runsCell.set(runs);
+      this.#activeKey.set(targetKey);
+    });
   }
 
-  #getOrCreate(key: string): TextRun {
-    let run = this.#runs.get(key);
-    if (run) return run;
-    run = new TextRun(key, this.#editor, this.#positioner);
-    this.#runs.set(key, run);
-    return run;
+  #ensureRun(key: string): void {
+    const runs = this.#runsCell.peek();
+    if (runs.has(key)) return;
+
+    this.#runsCell.set(new Map(runs).set(key, this.#createRun(key)));
+  }
+
+  #createRun(key: string): TextRun {
+    return new TextRun(key, this.#editor, this.#positioner);
   }
 }

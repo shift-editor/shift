@@ -28,7 +28,7 @@ const DEFAULT_MODIFIERS: Modifiers = {
 };
 
 export class ToolManager implements ToolSwitchHandler {
-  private registry = new Map<ToolName, ToolManifest>();
+  // non-reactive: registration ownership tokens, only checked by imperative replace/dispose
   private owners = new Map<ToolName, symbol>();
   private primaryTool: ToolInstance | null = null;
   private overrideTool: ToolInstance | null = null;
@@ -36,6 +36,7 @@ export class ToolManager implements ToolSwitchHandler {
   readonly #manifests: WritableSignal<ReadonlyMap<ToolName, ToolManifest>>;
   private gesture = new GestureDetector();
   private editor: Editor;
+  // non-reactive: replacements deferred until the active drag ends, drained imperatively
   private pendingReplacements = new Set<ToolName>();
   #pointerCapture: HistoryCapture | null = null;
 
@@ -91,14 +92,13 @@ export class ToolManager implements ToolSwitchHandler {
    */
   register(manifest: ToolManifest): ToolRegistration {
     this.#validateManifest(manifest);
-    if (this.registry.has(manifest.id)) {
+    if (this.#manifests.peek().has(manifest.id)) {
       throw new Error(`[ToolManager] Tool already registered: ${manifest.id}`);
     }
 
     const owner = Symbol(manifest.id);
-    this.registry.set(manifest.id, manifest);
     this.owners.set(manifest.id, owner);
-    this.#publishManifests();
+    this.#putManifest(manifest);
 
     return new ToolRegistration(
       manifest.id,
@@ -303,11 +303,10 @@ export class ToolManager implements ToolSwitchHandler {
 
     this.#disposeOverride();
     this.#disposePrimary();
-    this.registry.clear();
     this.owners.clear();
     this.pendingReplacements.clear();
     this.#publishActiveTool();
-    this.#publishManifests();
+    this.#manifests.set(new Map());
   }
 
   /** Resets gesture and active-tool state at an editor context boundary. */
@@ -406,7 +405,7 @@ export class ToolManager implements ToolSwitchHandler {
   }
 
   private createToolInstance(id: ToolName): ToolInstance | null {
-    const manifest = this.registry.get(id);
+    const manifest = this.#manifests.peek().get(id);
     if (!manifest) return null;
     return manifest.create(this.editor);
   }
@@ -414,8 +413,7 @@ export class ToolManager implements ToolSwitchHandler {
   #replaceRegistration(owner: symbol, manifest: ToolManifest): void {
     this.#assertOwner(owner, manifest.id);
     this.#validateManifest(manifest);
-    this.registry.set(manifest.id, manifest);
-    this.#publishManifests();
+    this.#putManifest(manifest);
 
     if (this.activeTool?.id === manifest.id && this.editor.isDragging) {
       this.pendingReplacements.add(manifest.id);
@@ -435,9 +433,10 @@ export class ToolManager implements ToolSwitchHandler {
 
     if (removingActive && this.editor.isDragging) this.cancelPointerGesture();
 
-    this.registry.delete(id);
     this.owners.delete(id);
-    this.#publishManifests();
+    const manifests = new Map(this.#manifests.peek());
+    manifests.delete(id);
+    this.#manifests.set(manifests);
 
     if (removingOverride) this.#clearOverride();
     if (removingPrimary) this.#disposePrimary();
@@ -485,7 +484,7 @@ export class ToolManager implements ToolSwitchHandler {
     const ids = [...this.pendingReplacements];
     this.pendingReplacements.clear();
     for (const id of ids) {
-      if (this.registry.has(id)) this.#replaceResident(id);
+      if (this.#manifests.peek().has(id)) this.#replaceResident(id);
     }
   }
 
@@ -511,9 +510,10 @@ export class ToolManager implements ToolSwitchHandler {
   }
 
   #fallbackId(): ToolName | null {
-    if (this.registry.has("select")) return "select";
+    const manifests = this.#manifests.peek();
+    if (manifests.has("select")) return "select";
 
-    return this.registry.keys().next().value ?? null;
+    return manifests.keys().next().value ?? null;
   }
 
   #assertOwner(owner: symbol, id: ToolName): void {
@@ -532,7 +532,7 @@ export class ToolManager implements ToolSwitchHandler {
     this.#activeTool.set(this.overrideTool ?? this.primaryTool);
   }
 
-  #publishManifests(): void {
-    this.#manifests.set(new Map(this.registry));
+  #putManifest(manifest: ToolManifest): void {
+    this.#manifests.set(new Map(this.#manifests.peek()).set(manifest.id, manifest));
   }
 }
