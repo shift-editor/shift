@@ -3,7 +3,7 @@ mod support;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
 
-use fontsrc::designspace::DesignSpaceDocument;
+use fontsrc::designspace::{load_from_source, DesignSpaceDocument};
 use fontsrc::ufo::{DataRequest, Font};
 use support::MemorySource;
 
@@ -43,6 +43,27 @@ fn every_referenced_ufo_loads_from_memory() {
 
         assert_eq!(actual, expected, "source mismatch for {}", path.display());
     }
+}
+
+#[test]
+fn project_source_matches_native_file() {
+    let path = fixture();
+    let root = path.parent().unwrap();
+    let expected = DesignSpaceDocument::load(&path).unwrap();
+    let source = MemorySource::read(root).unwrap();
+
+    let actual = load_from_source(Path::new("MutatorSans.designspace"), &source).unwrap();
+
+    assert_eq!(actual, expected);
+}
+
+#[test]
+fn project_source_rejects_non_normalized_paths() {
+    let source = MemorySource::read(fixture().parent().unwrap()).unwrap();
+
+    let result = load_from_source(Path::new("../MutatorSans.designspace"), &source);
+
+    assert!(result.is_err());
 }
 
 #[test]

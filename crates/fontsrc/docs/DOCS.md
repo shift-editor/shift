@@ -10,7 +10,7 @@ Format-native reading and writing for authored font sources across native, in-me
 
 **Architecture Invariant:** Format modules expose format-native values before any optional unified model. The `ufo` module uses Norad's `Font`, `FontSource`, and `FontSink` contracts without converting them into Shift's authored model. WHY: format-specific data and unknown `lib` content must survive without being narrowed to one editor's domain.
 
-**Architecture Invariant:** Core format operations receive source-owned bytes through source and sink traits rather than assuming native paths. Filesystem implementations are adapters, not the parsing boundary. WHY: the same parser must operate over directories, archives, in-memory files, browser selections, and remote project trees.
+**Architecture Invariant:** Core format operations receive source-owned bytes through `FileSource` and format-native sink traits rather than assuming native paths. Source paths are normalized and relative to one host-owned project root. Filesystem implementations are adapters, not the parsing boundary. WHY: the same parser must operate over directories, archives, in-memory files, browser selections, and remote project trees without permitting reads outside the selected project.
 
 **Architecture Invariant:** Unreleased upstream source/sink APIs are pinned to an exact Git revision. WHY: browser-safe I/O is currently ahead of Norad's published crate API and must not drift underneath reproducible builds.
 
@@ -32,7 +32,8 @@ The [README](../README.md) provides the minimal Rust usage and incubation scope.
 
 ## Key Types
 
-- `designspace::DesignSpaceDocument` — Norad's format-native Designspace document model, loadable from any buffered byte reader.
+- `FileSource` — reads normalized project-relative paths from a native directory, immutable byte map, archive, browser selection, or remote tree.
+- `designspace::DesignSpaceDocument` — Norad's format-native Designspace document model, loadable from any buffered byte reader or `FileSource`.
 - `glyphs::Font` — glyphs-reader's normalized, format-native Glyphs 2 and 3 model.
 - `ufo::FontSource` — reads UFO-relative files from any synchronous backing source.
 - `ufo::FontSink` — writes UFO-relative files without assuming a destination filesystem.
@@ -41,7 +42,7 @@ The [README](../README.md) provides the minimal Rust usage and incubation scope.
 
 ## How it works
 
-A host provides Designspace XML through a buffered byte reader, a Glyphs file through an owned string, and UFO project files through a `FontSource` whose paths are relative to each UFO root. The format libraries parse those inputs into native `DesignSpaceDocument` and `Font` models. Native callers may use paths and directories; browser and remote adapters can first gather files asynchronously and then expose immutable content synchronously to the parser or worker.
+A host provides a project tree through `FileSource`. Designspace and Glyphs loaders resolve normalized relative paths within that tree; UFO loaders use the same underlying trait relative to an individual UFO root. The format libraries parse those inputs into native `DesignSpaceDocument` and `Font` models. Native callers may use paths and directories; browser and remote adapters can first gather files asynchronously and then expose immutable content synchronously to the parser or worker.
 
 Writing follows the inverse boundary: `DesignSpaceDocument::save_to_writer` serializes XML to a host-owned writer, while `Font::save_to_sink` serializes UFO-relative files through a host-owned `FontSink`. Destination replacement, stale-file cleanup, upload, and persistence remain host responsibilities.
 
@@ -59,7 +60,8 @@ Writing follows the inverse boundary: `DesignSpaceDocument::save_to_writer` seri
 ## Gotchas
 
 - `FontSource` is synchronous. Browser adapters should perform asynchronous file acquisition outside the parser, preferably in a worker, and expose an immutable in-memory source while parsing.
-- `glyphs::Font::load_from_string` supports browser-owned `.glyphs` files. The upstream `.glyphspackage` loader still requires a native directory; a source-backed package boundary must land before browser package support is complete.
+- `glyphs::load_from_source` supports browser-owned `.glyphs` files. It loads `.glyphspackage` from filesystem-backed sources, but returns `Unsupported` for in-memory packages until glyphs-reader exposes its package parser through a source abstraction.
+- `FileSource` is re-exported from Norad's source trait. UFO code may continue using the format-local `ufo::FontSource` name for the same contract.
 - UFO data and image directories require `FontSource::list_dir`; sources that omit enumeration intentionally produce empty stores.
 - `FontSink` does not remove stale destination files. Hosts must clear or replace destinations when complete replacement semantics are required.
 
