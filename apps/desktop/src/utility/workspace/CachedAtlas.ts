@@ -339,11 +339,7 @@ export async function publishCachedAtlas(
   for (let pageIndex = 0; pageIndex < publication.pageCount; pageIndex += 1) {
     const staged = publication.stagedPages.get(pageIndex);
     const carried = previous?.cached.pages.find((page) => page.pageIndex === pageIndex);
-    const page = staged
-      ? stagedPage(staged, compressedOffset)
-      : carried
-        ? { ...carried, compressedOffset }
-        : null;
+    const page = publishedPage(staged, carried, compressedOffset);
     if (!page) return null;
 
     pages.push(page);
@@ -628,6 +624,17 @@ async function readCarrySource(
   } catch {
     return null;
   }
+}
+
+/** A freshly staged page wins over one carried from the previous cache file. */
+function publishedPage(
+  staged: StagedCachedAtlasPage | undefined,
+  carried: CachedAtlasPage | undefined,
+  compressedOffset: number,
+): CachedAtlasPage | null {
+  if (staged) return stagedPage(staged, compressedOffset);
+  if (carried) return { ...carried, compressedOffset };
+  return null;
 }
 
 function stagedPage(page: StagedCachedAtlasPage, compressedOffset: number): CachedAtlasPage {

@@ -8,13 +8,16 @@
 - Avoid `.then(...)` / `.catch(...)` chains in application code when the same flow can be written clearly with `await`.
 - Avoid `void promise.catch(...)` in React event handlers and normal command handlers. Use an `async` function with `try`/`catch` instead.
 - Use `void promise.catch(...)` only for genuinely fire-and-forget boundaries that cannot be awaited by the caller, such as Electron menu callbacks. Keep those cases local and log or surface the failure.
+- Name intermediate values. Pull non-trivial expressions (sets, filtered lists, compound conditions) into named `const`s or a named function with early returns instead of nesting them inside ternaries, arguments, or JSX. Nested ternaries are a lint error.
+- Extract repeated logic. When the same condition or mapping appears at several call sites, extract one helper next to the code it belongs to (for example `listSelectionMode` in `hooks/useListSelection.ts`, `nudgeMagnitude` in `types/nudge.ts`) and use it everywhere.
 - Avoid async IIFEs assigned into state, for example `state = (async () => { ... })().catch(...)`. Extract a named helper so the shared-state/memoization code and the async work are readable separately.
+- Derive lookups over reactive state with `computed` (or hold an immutable collection in a signal and replace it). Never hand-maintain a Map/Set that mirrors a signal: a plain collection cannot notify, so readers in `computed`/effects go stale. `shift/no-mutable-collection-field` enforces this; annotate a genuinely non-reactive field with `// non-reactive: <reason>`.
 - Do not prefix commit messages or pull request titles with `[codex]`.
 
 ## Agent Skills
 
 - `.agents/skills/` is the canonical source for repository skills. Pi discovers this standard location automatically.
-- Load the matching skill before acting: `commit` for commits, `pr` for pull requests, `issue` for issues, `writing-tests` for test changes or reviews, `writing-e2e-tests` for desktop Playwright specs, fixtures, and visual goldens, `ui` for interface and styling work, `jsdoc` for JSDoc, and `rustdoc` for Rust documentation.
+- Load the matching skill before acting: `commit` for commits, `pr` for pull requests, `issue` for issues, `writing-tests` for test changes or reviews, `writing-e2e-tests` for desktop Playwright specs, fixtures, and visual goldens, `ui` for interface and styling work, `signals` for reactive code (`signal`, `computed`, `effect`, model and render state), `jsdoc` for JSDoc, and `rustdoc` for Rust documentation.
 - `.claude/skills/` and `.codex/skills/` are generated client adapters. Never edit shared skills there directly.
 - After changing a canonical skill, run `pnpm agent-skills:sync`. CI runs `pnpm agent-skills:check` to prevent adapter drift.
 

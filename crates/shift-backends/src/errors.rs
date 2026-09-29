@@ -69,6 +69,7 @@ pub enum FormatBackendError {
     #[error(transparent)]
     Font(#[from] shift_font::CoreError),
 
+    #[cfg(not(target_arch = "wasm32"))]
     #[error(transparent)]
     Store(#[from] shift_store::StoreError),
 

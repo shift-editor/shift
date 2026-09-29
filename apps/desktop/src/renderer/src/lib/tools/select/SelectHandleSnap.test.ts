@@ -198,3 +198,34 @@ describe("Select snaps only a single cubic handle around its owning endpoint", (
     expect(editor.pointPosition(incoming.end.id)).toEqual({ x: 400, y: 100 });
   });
 });
+
+describe("Select does not angle-snap a handle locked to a line", () => {
+  it("publishes no guide for a smooth line-to-curve junction's handle", async () => {
+    const editor = new TestEditor();
+    await editor.startSession();
+    editor.selectTool("pen");
+    await editor.clickGlyphLocal(100, 100);
+    await editor.clickGlyphLocal(400, 100);
+    await editor.dragScene({
+      down: { x: 700, y: 300 },
+      start: { x: 710, y: 300 },
+      end: { x: 800, y: 300 },
+    });
+    const layer = editor.requireGlyphLayer();
+    const cubic = layer.contours[0]!.segments()[1]!.asCubic()!;
+    layer.setPointSmooth(cubic.start.id, true);
+    await editor.settle();
+    editor.selectTool("select");
+
+    const down = editor.projectSceneToScreen(cubic.controlStart);
+    const end = editor.projectSceneToScreen({ x: 560, y: 160 });
+    editor.pointerDown(down.x, down.y).pointerMove(end.x, end.y, { shiftKey: true });
+
+    expect(editor.toolIf("select")?.state).toMatchObject({
+      type: "translating",
+      translate: { guides: [] },
+    });
+    expect(editor.pointPosition(cubic.controlStart.id).y).toBeCloseTo(100);
+    editor.escape();
+  });
+});

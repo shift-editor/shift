@@ -4,6 +4,7 @@ import type { HandleState } from "../../../../../types/graphics";
 import type { Hover } from "../../../Hover";
 import type { Selection } from "../../../Selection";
 import type { GlyphRenderContour } from "../../../../../types/glyphRender";
+import { nextPoint, previousPoint } from "../contourNeighbors";
 import { PointHandleItem } from "./PointHandleItem";
 
 export interface HandleStateSource {
@@ -52,8 +53,8 @@ export class HandleItems {
         const point = points[index]!;
         if (isVisible && !isVisible(point.id, contour.id)) continue;
 
-        const prev = index > 0 ? points[index - 1]! : contour.closed ? points[count - 1]! : null;
-        const next = index + 1 < count ? points[index + 1]! : contour.closed ? points[0]! : null;
+        const prev = previousPoint(points, index, contour.closed);
+        const next = nextPoint(points, index, contour.closed);
         const state = stateForPoint(contourIndex, index);
         const item = this.#pool[itemCount];
 

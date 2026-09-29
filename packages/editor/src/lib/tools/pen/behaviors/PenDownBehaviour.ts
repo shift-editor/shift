@@ -24,7 +24,7 @@ export class PenDownBehaviour implements PenBehavior {
     switch (target.type) {
       case "terminal":
         if (isActive) {
-          stroke.closeActiveContour();
+          stroke.connectTo(target);
         } else {
           stroke.continueContour(target.contourId, target.side, target.pointId);
         }
@@ -61,7 +61,37 @@ export class PenDownBehaviour implements PenBehavior {
     const target = targets.at(nodePoint, editor.hitRadius);
     if (target.type === "segment") return false;
 
-    if (!stroke.activeEndpoint) return false;
+    const start = stroke.activeEndpoint;
+    if (!start) return false;
+
+    const firstPoint = stroke.activeContour?.firstPoint;
+    const pressesFirstPoint =
+      target.type === "terminal" &&
+      target.side === "start" &&
+      target.pointId === firstPoint?.id &&
+      start.pointId !== firstPoint.id;
+    const pressesOtherEnd =
+      target.type === "terminal" && !pressesFirstPoint && target.pointId !== start.pointId;
+    if (pressesOtherEnd) {
+      stroke.connectTo(target);
+      ctx.setState({ type: "ready" });
+      return true;
+    }
+
+    if (pressesFirstPoint) {
+      ctx.setState({
+        type: "closing",
+        close: {
+          start,
+          firstPointId: firstPoint.id,
+          firstPosition: firstPoint.position,
+          handlePosition: null,
+        },
+        shiftKey: event.shiftKey,
+        guides: [],
+      });
+      return true;
+    }
 
     const anchorPosition =
       target.type === "empty"

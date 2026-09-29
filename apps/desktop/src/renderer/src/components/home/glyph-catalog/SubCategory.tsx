@@ -1,5 +1,6 @@
 import type { ListSelectionMode } from "@shift/editor/types";
 import { SidebarActionRow } from "@/components/sidebar";
+import { listSelectionMode } from "@/hooks/useListSelection";
 
 export interface SubCategoryProps {
   label: string;
@@ -20,9 +21,7 @@ export const SubCategory = ({
     isSelected={active}
     joinsPrevious={joinsPrevious}
     joinsNext={joinsNext}
-    onClick={(event) =>
-      onSelect(event.shiftKey ? "range" : event.metaKey || event.ctrlKey ? "toggle" : "single")
-    }
+    onClick={(event) => onSelect(listSelectionMode(event))}
     contentClassName="pl-7"
   >
     <span className="truncate">{label}</span>

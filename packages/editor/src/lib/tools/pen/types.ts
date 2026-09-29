@@ -25,6 +25,15 @@ export interface PenCurve {
   readonly handlePosition: Point2D;
 }
 
+/** Press on the active contour's first point; dragging shapes the closing curve. */
+export interface PenClose {
+  readonly start: PenEndpoint;
+  readonly firstPointId: PointId;
+  readonly firstPosition: Point2D;
+  /** Pointer position after the drag threshold; null while the gesture is still a click. */
+  readonly handlePosition: Point2D | null;
+}
+
 export interface PenOutgoingHandle {
   readonly pointId: PointId;
   readonly position: Point2D;
@@ -34,6 +43,13 @@ export type PenState =
   | { type: "idle" }
   | { type: "ready" }
   | { type: "anchored"; anchorPosition: Point2D }
+  | {
+      type: "closing";
+      close: PenClose;
+      shiftKey: boolean;
+      /** Glyph-local snap feedback from the latest closing-handle preview. */
+      guides: readonly PositionGuide[];
+    }
   | {
       type: "dragging";
       curve: PenCurve;

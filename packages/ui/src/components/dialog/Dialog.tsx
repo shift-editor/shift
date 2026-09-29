@@ -1,6 +1,7 @@
 import * as React from "react";
 import { Dialog as BaseDialog } from "@base-ui-components/react/dialog";
 import { cn } from "../../lib/utils";
+import { usePortalContainer } from "../portal";
 
 export interface DialogProps extends React.ComponentProps<typeof BaseDialog.Root> {}
 
@@ -19,7 +20,10 @@ export const DialogBackdrop = React.forwardRef<HTMLDivElement, DialogBackdropPro
 );
 DialogBackdrop.displayName = "DialogBackdrop";
 
-export const DialogPortal = BaseDialog.Portal;
+export function DialogPortal(props: React.ComponentProps<typeof BaseDialog.Portal>) {
+  const container = usePortalContainer();
+  return <BaseDialog.Portal container={container} {...props} />;
+}
 
 export interface DialogPopupProps extends React.ComponentProps<typeof BaseDialog.Popup> {}
 
@@ -41,7 +45,11 @@ export interface DialogTitleProps extends React.ComponentProps<typeof BaseDialog
 
 export const DialogTitle = React.forwardRef<HTMLHeadingElement, DialogTitleProps>(
   ({ className, ...props }, ref) => (
-    <BaseDialog.Title ref={ref} className={cn(className)} {...props} />
+    <BaseDialog.Title
+      ref={ref}
+      className={cn("text-sm font-medium text-primary", className)}
+      {...props}
+    />
   ),
 );
 DialogTitle.displayName = "DialogTitle";

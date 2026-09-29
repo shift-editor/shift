@@ -3,6 +3,7 @@ import type { Point } from "@shift/glyph-state";
 import type { Canvas } from "../Canvas";
 import type { GlyphRenderContour } from "../../../../types/glyphRender";
 import { Validate } from "@shift/validation";
+import { nextPoint, previousPoint } from "./contourNeighbors";
 
 /**
  * Draws tether lines connecting off-curve control points to their on-curve anchors.
@@ -33,8 +34,8 @@ export class ControlLines {
         const current = points[i]!;
         if (!Validate.isOffCurve(current)) continue;
 
-        const next = i + 1 < len ? points[i + 1] : contour.closed ? points[0] : undefined;
-        const prev = i > 0 ? points[i - 1] : contour.closed ? points[len - 1] : undefined;
+        const next = nextPoint(points, i, contour.closed);
+        const prev = previousPoint(points, i, contour.closed);
 
         const anchor = next && Validate.isOffCurve(next) ? prev : next;
         if (!anchor || Validate.isOffCurve(anchor)) continue;

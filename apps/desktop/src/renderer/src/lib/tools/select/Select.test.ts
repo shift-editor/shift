@@ -158,6 +158,13 @@ describe("Select tool", () => {
         expect(editor.toolManager.activeTool?.cursorCell.value).not.toEqual({ type: "add" });
       });
 
+      it("does not offer adding while nothing is selected", () => {
+        editor.selection.clear();
+        const point = editor.projectSceneToScreen({ x: 200, y: 200 });
+        editor.pointerMove(point.x, point.y, { shiftKey: true });
+        expect(editor.toolManager.activeTool?.cursorCell.value).not.toEqual({ type: "add" });
+      });
+
       it("stops offering add when Shift-click selects the hovered point", async () => {
         await editor.clickGlyphLocal(100, 100);
         const point = editor.projectSceneToScreen({ x: 200, y: 200 });

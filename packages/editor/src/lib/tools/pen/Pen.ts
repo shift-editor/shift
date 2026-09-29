@@ -1,6 +1,6 @@
 import { BaseTool, type ToolName } from "../core";
 import type { PenContext, PenCurve, PenEndpoint, PenState } from "./types";
-import { PenDownBehaviour, HandleBehavior, EscapeBehavior } from "./behaviors";
+import { PenDownBehaviour, HandleBehavior, EscapeBehavior, CloseBehavior } from "./behaviors";
 import type { CursorType } from "../../../types/editor";
 import type { Canvas } from "../../editor/rendering/Canvas";
 import type { Editor } from "../../editor/Editor";
@@ -27,7 +27,12 @@ export class Pen extends BaseTool<PenState, Pen> {
   readonly activeEndpointCell: ComputedSignal<PenEndpoint | null>;
   #penOverlay = new PenOverlay(this);
 
-  readonly behaviors = [new EscapeBehavior(), new PenDownBehaviour(), new HandleBehavior()];
+  readonly behaviors = [
+    new EscapeBehavior(),
+    new PenDownBehaviour(),
+    new CloseBehavior(),
+    new HandleBehavior(),
+  ];
 
   constructor(editor: Editor) {
     super(editor);
@@ -140,28 +145,22 @@ export class Pen extends BaseTool<PenState, Pen> {
     const nodePoint = this.editor.getPointInNodeSpace(pos.scene, stroke.node.position);
     const targets = PenTargets.forGeometry(stroke.layer.geometry);
     const target = targets.at(nodePoint, this.editor.hitRadius);
-    const activeContour = stroke.activeContour;
+    const activeEndpoint = stroke.activeEndpoint;
 
     switch (target.type) {
-      case "terminal": {
-        if (activeContour && target.side == "start" && activeContour.points.length > 1) {
-          return { type: "pen-end" };
-        }
-
-        if (!activeContour) {
-          return { type: "pen-end" };
-        }
-      }
-      case "segment": {
-        if (!activeContour) return { type: "pen-add" };
-      }
+      case "terminal":
+        if (target.pointId === activeEndpoint?.pointId) return { type: "pen" };
+        return { type: "pen-end" };
+      case "segment":
+        if (!activeEndpoint) return { type: "pen-add" };
+        return { type: "pen" };
+      case "empty":
+        return { type: "pen" };
     }
-
-    return { type: "pen" };
   }
 
   protected override isEditing(state: PenState): boolean {
-    return state.type === "dragging";
+    return state.type === "dragging" || state.type === "closing";
   }
 
   initialState(): PenState {

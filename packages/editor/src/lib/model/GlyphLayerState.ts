@@ -46,9 +46,12 @@ export class GlyphLayerState {
   readonly #geometry: ComputedSignal<GlyphGeometry>;
 
   #confirmedState: GlyphState | null = null;
+  // non-reactive: rollback snapshots per pending edit; only read by the imperative edit, fold, and rollback paths
   readonly #pendingStates = new Map<PendingEditId, GlyphState>();
 
-  #editBaseState: GlyphState | null = null;
+  readonly #editBaseState: WritableSignal<GlyphState | null> = signal<GlyphState | null>(null, {
+    name: "glyphLayer.editBase",
+  });
   #reapplyEdit: (() => void) | null = null;
 
   constructor(state: GlyphState) {
@@ -136,6 +139,17 @@ export class GlyphLayerState {
 
   get geometryCell(): Signal<GlyphGeometry> {
     return this.#geometry;
+  }
+
+  /**
+   * The accepted layer state the active local edit started from.
+   *
+   * @remarks
+   * `null` outside a local edit. When a workspace echo lands mid-edit the base
+   * moves to the newly accepted state before the edit is replayed on top.
+   */
+  get editBaseCell(): Signal<GlyphState | null> {
+    return this.#editBaseState;
   }
 
   get state(): GlyphState {
@@ -244,7 +258,7 @@ export class GlyphLayerState {
   replaceValues(values: Float64Array): void {
     this.replace({
       layerId: this.#layerId,
-      structure: this.#editBaseState?.structure ?? this.#structure.peek(),
+      structure: this.#editBaseState.peek()?.structure ?? this.#structure.peek(),
       values,
     });
   }
@@ -259,7 +273,7 @@ export class GlyphLayerState {
   }
 
   foldWorkspaceState(editId: PendingEditId | null, replacement: LayerReplaced): void {
-    const confirmed = this.#confirmedState ?? this.#editBaseState ?? this.state;
+    const confirmed = this.#confirmedState ?? this.#editBaseState.peek() ?? this.state;
     const state = {
       layerId: this.#layerId,
       structure: replacement.structure ?? confirmed.structure,
@@ -280,21 +294,21 @@ export class GlyphLayerState {
 
   /** Begins one reversible local edit against the current reactive layer. */
   beginEdit(reapply: () => void): void {
-    if (this.#editBaseState) throw new Error("glyph layer already has an active edit");
+    if (this.#editBaseState.peek()) throw new Error("glyph layer already has an active edit");
 
-    this.#editBaseState = this.state;
+    this.#editBaseState.set(this.state);
     this.#reapplyEdit = reapply;
   }
 
   /** Restores the latest accepted base, then applies the edit as pending workspace operations. */
   finishEdit(apply: () => void): void {
-    const baseState = this.#editBaseState;
+    const baseState = this.#editBaseState.peek();
     if (!baseState) throw new Error("glyph layer has no active edit to finish");
 
-    this.#editBaseState = null;
     this.#reapplyEdit = null;
 
     batch(() => {
+      this.#editBaseState.set(null);
       this.#publish(baseState);
       apply();
     });
@@ -302,12 +316,14 @@ export class GlyphLayerState {
 
   /** Cancels the active edit and restores the latest accepted layer state. */
   cancelEdit(): void {
-    const baseState = this.#editBaseState;
+    const baseState = this.#editBaseState.peek();
     if (!baseState) return;
 
-    this.#editBaseState = null;
     this.#reapplyEdit = null;
-    this.#publish(baseState);
+    batch(() => {
+      this.#editBaseState.set(null);
+      this.#publish(baseState);
+    });
   }
 
   /**
@@ -349,7 +365,7 @@ export class GlyphLayerState {
 
       if (!this.#reapplyEdit) return;
 
-      this.#editBaseState = this.state;
+      this.#editBaseState.set(this.state);
       this.#reapplyEdit();
     });
   }

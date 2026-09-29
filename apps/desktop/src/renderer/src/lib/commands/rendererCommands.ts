@@ -14,6 +14,24 @@ const TEXT_EDIT_COMMANDS = new Set<EditorCommandId>([
   "edit.selectAll",
 ]);
 
+/** Returns whether the selected point can become its closed contour's new start point. */
+export function canMakeFirstPoint(editor: Editor): boolean {
+  if (editor.sessionMode === "preview" || editor.selection.ids.length !== 1) return false;
+
+  const object = editor.object(editor.selection.ids[0]);
+  if (!objectIsKindOf(object, "point")) return false;
+  if (!object.layer || object.layer.sourceId !== editor.activeSourceId) return false;
+
+  const point = object.geometry.point(object.pointId);
+  const contour = object.geometry.contour(object.contourId);
+
+  return (
+    point?.isOnCurve === true &&
+    contour?.closed === true &&
+    contour.points[0]?.id !== object.pointId
+  );
+}
+
 /**
  * Executes a renderer-owned app command against one editor.
  *
@@ -54,22 +72,27 @@ export async function runRendererCommand(editor: Editor, id: EditorCommandId): P
       return editor.deleteSelection();
 
     case "edit.duplicate": {
-      const inserted = editor.duplicateSelection();
+      const inserted = editor.history.capture("Duplicate", () => {
+        const ids = editor.duplicateSelection();
+        if (ids.length > 0) editor.selection.select(ids);
+        return ids;
+      });
       if (inserted.length === 0) return false;
 
-      editor.selection.select(inserted);
       await editor.font.editCoordinator.settled();
       return true;
     }
 
-    case "edit.selectAll":
+    case "edit.selectAll": {
       editor.selectAll();
       return editor.selection.ids.length > 0;
+    }
 
     case "edit.deselect": {
-      const hadSelection = editor.selection.hasSelection();
-      editor.selection.clear();
-      return hadSelection;
+      if (!editor.selection.hasSelection()) return false;
+
+      editor.history.capture("Deselect", () => editor.selection.clear());
+      return true;
     }
 
     case "view.zoomIn":
@@ -81,15 +104,12 @@ export async function runRendererCommand(editor: Editor, id: EditorCommandId): P
       return true;
 
     case "glyph.makeFirstPoint": {
-      if (editor.sessionMode === "preview" || editor.selection.ids.length !== 1) return false;
+      if (!canMakeFirstPoint(editor)) return false;
 
       const object = editor.object(editor.selection.ids[0]);
-      if (!objectIsKindOf(object, "point")) return false;
+      if (!objectIsKindOf(object, "point") || !object.layer) return false;
 
-      const layer = object.layer;
-      if (!layer || layer.sourceId !== editor.activeSourceId) return false;
-
-      const changed = layer.setContourStart(object.contourId, object.pointId);
+      const changed = object.layer.setContourStart(object.contourId, object.pointId);
       if (changed) await editor.font.editCoordinator.settled();
 
       return changed;

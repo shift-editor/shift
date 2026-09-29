@@ -37,6 +37,56 @@ export interface CharsetSummary {
   count: number;
 }
 
+/** Represents a primary Hyperglot orthography and its required base-character repertoire. */
+export interface Language {
+  id: string;
+  name: string;
+  autonym: string | null;
+  script: string;
+  baseCodepoints: number[];
+}
+
+export interface LanguageCoverage {
+  language: Language;
+  presentCount: number;
+  requiredCount: number;
+}
+
+export interface LanguageScript {
+  script: string;
+  languages: LanguageCoverage[];
+}
+
+/**
+ * Languages tracked by a font that has not chosen its own list: the ten most
+ * spoken languages by total speakers (Ethnologue), as Hyperglot orthography ids.
+ */
+export const DEFAULT_LANGUAGE_IDS = [
+  "eng-latin",
+  "cmn-chinese",
+  "hin-devanagari",
+  "spa-latin",
+  "fra-latin",
+  "arb-arabic",
+  "ben-bengali",
+  "por-latin",
+  "rus-cyrillic",
+  "urd-arabic",
+] as const;
+
+export interface LanguageCatalog {
+  /** Every known language, grouped by script. */
+  scripts: LanguageScript[];
+  /** Returns the font's codepoints that the language requires, in input order. */
+  filter(languageId: string): number[];
+  /** Returns coverage for one language, or `null` for an unknown id. */
+  coverage(languageId: string): LanguageCoverage | null;
+  /** Returns every codepoint the language requires, ascending. */
+  required(languageId: string): number[];
+  /** Groups the given languages by script, skipping unknown ids. */
+  scriptsFor(languageIds: readonly string[]): LanguageScript[];
+}
+
 export interface SearchResult {
   codepoint: number;
   glyphName: string | null;
@@ -93,5 +143,6 @@ export interface GlyphInfoResources {
   glyphData: Glyph[];
   decomposition: Decomposition;
   charsets: CharsetDefinition[];
+  languages: Language[];
   searchData: Record<string, unknown>[];
 }

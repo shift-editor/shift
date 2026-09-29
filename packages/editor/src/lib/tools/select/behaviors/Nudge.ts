@@ -1,8 +1,9 @@
 import type { ToolContext } from "../../core/Behavior";
 import type { KeyDownEvent } from "../../core/GestureDetector";
 import type { SelectBehavior, SelectState } from "../types";
-import { NUDGES_VALUES, type NudgeMagnitude } from "../../../../types/nudge";
+import { NUDGES_VALUES, nudgeMagnitude } from "../../../../types/nudge";
 import { PointRuleConstraint, PositionEdits } from "../../../model/positions/index";
+import { pointSlide } from "../PointSlide";
 
 export class Nudge implements SelectBehavior {
   onKeyDown(state: SelectState, ctx: ToolContext<SelectState>, event: KeyDownEvent): boolean {
@@ -15,8 +16,8 @@ export class Nudge implements SelectBehavior {
     const anchorIds = selection.targets.anchors ?? [];
     if (pointIds.length === 0 && anchorIds.length === 0) return false;
 
-    const modifier: NudgeMagnitude = event.accelKey ? "large" : event.shiftKey ? "medium" : "small";
-    const nudgeValue = NUDGES_VALUES[modifier];
+    const nudgeValue =
+      NUDGES_VALUES[nudgeMagnitude({ accel: event.accelKey, shift: event.shiftKey })];
 
     let dx = 0;
     let dy = 0;
@@ -38,8 +39,15 @@ export class Nudge implements SelectBehavior {
         return false;
     }
 
+    const [onlyPointId] = pointIds;
+    const slidesAlone = event.altKey && pointIds.length === 1 && anchorIds.length === 0;
+    const slide = slidesAlone && onlyPointId ? pointSlide(selection.layer, onlyPointId) : null;
+
     const edit = PositionEdits.fromSelection(selection).move(selection.targets);
-    if (pointIds.length > 0) {
+    if (slide) edit.along(slide.axis);
+
+    const handlesFollow = slide?.handlesFollow ?? true;
+    if (pointIds.length > 0 && handlesFollow) {
       edit.constrainedBy(PointRuleConstraint.forSelection(selection.layer.geometry, pointIds));
     }
     edit.preview({ x: dx, y: dy });

@@ -23,6 +23,7 @@ import { SnapLines } from "../../editor/rendering/overlays/SnapLines";
 import { SelectBoundingBox } from "./BoundingBox";
 import { SelectMarquee } from "./Marquee";
 import { SelectUpgradePreview } from "./SelectUpgradePreview";
+import { EndpointDrop } from "./EndpointDrop";
 
 export type { BoundingRectEdge, SelectState };
 
@@ -49,12 +50,20 @@ export class Select extends BaseTool<SelectState, Select> {
     new SelectHover(),
   ];
 
+  /** Whether releasing the current drag would close or join contours at an open end. */
+  #dropsOnOpenEnd(): boolean {
+    const drop = EndpointDrop.fromSelection(this.editor);
+    if (!drop) return false;
+
+    return drop.targetWithin(this.editor.hitRadius) !== null;
+  }
+
   override getCursor(state: SelectState): CursorType {
     if (this.editor.sessionMode === "preview") return { type: "default" };
 
     switch (state.type) {
       case "translating":
-        return { type: "move" };
+        return this.#dropsOnOpenEnd() ? { type: "end" } : { type: "move" };
       case "resizing":
         return edgeToCursor(state.resize.edge, state.resize.flipX, state.resize.flipY);
       case "rotating":
@@ -66,16 +75,17 @@ export class Select extends BaseTool<SelectState, Select> {
     const coords = this.editor.input.pointerCell.value;
     const modifiers = this.editor.input.modifiersCell.value;
     const hover = this.editor.hover.entryCell.value;
-    if (
+    const selectedIds = this.editor.selection.stateCell.value.ids;
+    // Shift-click only adds when there is a selection to add to.
+    const addsToSelection =
       state.type === "ready" &&
       coords &&
       modifiers.shiftKey &&
       hover &&
+      selectedIds.length > 0 &&
       objectIsKindOf(this.editor.object(hover), "point") &&
-      !this.editor.selection.stateCell.value.ids.includes(hover)
-    ) {
-      return { type: "add" };
-    }
+      !selectedIds.includes(hover);
+    if (addsToSelection) return { type: "add" };
 
     if (state.type === "ready" && coords && modifiers.metaKey && hover) {
       const object = this.editor.object(hover);
@@ -130,7 +140,11 @@ export class Select extends BaseTool<SelectState, Select> {
         return {
           state: {
             type: "brushing",
-            selection: { startPos: event.origin.scene, currentPos: event.coords.scene },
+            selection: {
+              startPos: event.origin.scene,
+              currentPos: event.coords.scene,
+              initialSelection: [],
+            },
           },
         };
 

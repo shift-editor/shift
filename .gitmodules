@@ -1,3 +1,6 @@
 [submodule "packages/glyph-info/vendor/GlyphsInfo"]
 	path = packages/glyph-info/vendor/GlyphsInfo
 	url = https://github.com/schriftgestalt/GlyphsInfo.git
+[submodule "packages/glyph-info/vendor/Hyperglot"]
+	path = packages/glyph-info/vendor/Hyperglot
+	url = https://github.com/rosettatype/hyperglot.git

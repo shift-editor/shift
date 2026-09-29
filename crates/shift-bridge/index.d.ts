@@ -128,6 +128,13 @@ export declare class Bridge {
   getAxisMappings(): Array<NapiAxisMapping>
   getAxisMappingBases(): Array<NapiAxisMappingBasis>
   getMetricDefinitions(): Array<NapiMetricDefinition>
+  /**
+   * Returns the font's tracked Hyperglot language ids in authored order.
+   *
+   * `null` when the font lib has no tracked-language key, so the renderer
+   * applies its own default; an empty array is an explicit empty list.
+   */
+  getLanguageIds(): Array<string> | null
   getNamedInstances(): Array<NapiNamedInstance>
   /** Returns the precomputed source-metric interpolation model for this font. */
   getSourceMetricsInterpolation(): NapiSourceMetricsInterpolationSnapshot | null
@@ -457,9 +464,10 @@ export interface NapiFontIntent {
    * "removeComponents" | "decomposeComponents" |
    * "reverseContour" | "setContourStart" | "translatePoints" |
    * "setXAdvance" | "applyBooleanOp".
-   * Font-level kinds additionally include metadata replacement, axis
-   * create/update/delete, mapping replacement, named-instance
-   * create/update/delete, source create/delete, and glyph or layer creation.
+   * Font-level kinds additionally include metadata replacement, tracked
+   * language replacement, axis create/update/delete, mapping replacement,
+   * named-instance create/update/delete, source create/delete, and glyph
+   * or layer creation.
    * Every kind shares the same apply path; one set is one undo step.
    */
   kind: string
@@ -484,6 +492,7 @@ export interface NapiFontIntent {
   createGlyph?: NapiCreateGlyphIntent
   updateGlyph?: NapiUpdateGlyphIntent
   updateFontMetadata?: NapiUpdateFontMetadataIntent
+  setLanguages?: NapiSetLanguagesIntent
   createAxis?: NapiCreateAxisIntent
   updateAxis?: NapiUpdateAxisIntent
   deleteAxis?: NapiDeleteAxisIntent
@@ -544,6 +553,8 @@ export interface NapiFontReplacement {
   sourceMetricsInterpolation?: NapiSourceMetricsInterpolationReplacement
   /** Full authored product-preset list when named instances changed. */
   namedInstances?: Array<NapiNamedInstance>
+  /** Tracked language list when it changed; absent otherwise. */
+  languages?: NapiLanguagesReplacement
   /**
    * Full sources list when font-level source structure changed (createAxis
    * reshapes locations, createSource adds one); absent otherwise.
@@ -562,6 +573,8 @@ export interface NapiFontSnapshot {
   axisMappings: Array<NapiAxisMapping>
   axisMappingBases: Array<NapiAxisMappingBasis>
   namedInstances: Array<NapiNamedInstance>
+  /** Tracked Hyperglot language ids; absent when the font stores no list. */
+  languageIds?: Array<string>
 }
 
 export interface NapiGlyphChangedEntities {
@@ -686,6 +699,18 @@ export interface NapiInterpolationSupport {
   lower: number
   peak: number
   upper: number
+}
+
+/**
+ * Replacement wrapper whose presence distinguishes "unchanged" from a
+ * change that removed the tracked language list.
+ */
+export interface NapiLanguagesReplacement {
+  /**
+   * Tracked Hyperglot language ids in authored order; absent when the font
+   * stores no list and callers should apply their own default.
+   */
+  languageIds?: Array<string>
 }
 
 export interface NapiLayerDifference {
@@ -858,6 +883,15 @@ export interface NapiSetContourStartIntent {
   layerId: LayerId
   contourId: ContourId
   pointId: PointId
+}
+
+/** Replaces the font's tracked language list as one undoable edit. */
+export interface NapiSetLanguagesIntent {
+  /**
+   * Hyperglot language ids in display order. Blank ids are dropped and
+   * duplicates keep their first position; an empty list is stored as-is.
+   */
+  languageIds: Array<string>
 }
 
 export interface NapiSetMetricDefinitionsIntent {

@@ -1,6 +1,7 @@
 [package]
 name = "shift-workspace"
 version = "0.1.0"
+license.workspace = true
 edition = "2024"
 
 [dependencies]

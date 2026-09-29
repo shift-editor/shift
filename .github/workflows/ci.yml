@@ -246,6 +246,13 @@ jobs:
       - name: Check browser editor bundle
         run: pnpm check:browser
 
+      - name: Check SDK build and public API report
+        run: |
+          if ! pnpm --filter @shift-editor/sdk build; then
+            echo "::error title=SDK build or API report::If API Extractor reported a changed API signature, run \`pnpm --filter @shift-editor/sdk api:update\` and commit packages/sdk/api/."
+            exit 1
+          fi
+
   unit-test:
     name: Unit Tests
     needs: detect-changes
@@ -405,7 +412,7 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Check WebAssembly font core
-        run: RUSTFLAGS='-D warnings --cfg getrandom_backend="wasm_js"' cargo check --target wasm32-unknown-unknown -p fontsrc -p shift-font -p shift-slug -p shift-wire
+        run: RUSTFLAGS='-D warnings --cfg getrandom_backend="wasm_js"' cargo check --target wasm32-unknown-unknown -p fontsrc -p shift-backends -p shift-font -p shift-slug -p shift-wire
 
       - name: Check fontsrc dependency boundary
         run: |

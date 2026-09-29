@@ -313,6 +313,8 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
       ctx.canvas.fillPath(component.closedContoursPath, ctx.canvas.theme.component.fill);
     }
 
+    this.#drawEditGhost(node, ctx);
+
     this.#outline.draw(ctx.canvas, view, {
       stroke: {
         color: ctx.canvas.theme.glyph.stroke,
@@ -343,6 +345,29 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     }
 
     this.#drawDebugOverlays(node, ctx, view);
+  }
+
+  /**
+   * Draws the pre-gesture outline of the displayed source layer while a Select edit is live.
+   * Creation tools skip it: their base outline is the shape being extended, not a reference.
+   */
+  #drawEditGhost(node: GlyphNode, ctx: RenderContext): void {
+    track(this.editor.toolCell);
+    if (this.editor.toolCell.peek()?.id !== "select") return;
+
+    track(this.editor.activeSourceIdCell);
+    const sourceId = this.editor.activeSourceIdCell.peek();
+    if (!sourceId) return;
+
+    const layer = this.editor.glyphForId(node.glyphId)?.layerForSource(sourceId);
+    if (!layer) return;
+
+    track(layer.editBaseOutlineCell);
+    const ghost = layer.editBaseOutlineCell.peek();
+    if (!ghost) return;
+
+    const { color, widthPx } = ctx.canvas.theme.editGhost;
+    ctx.canvas.strokePath(ghost, color, widthPx);
   }
 
   #drawDisplayContent(ctx: RenderContext, view: GlyphRenderModel): void {

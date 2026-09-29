@@ -17,6 +17,7 @@ import { useActiveSourceId } from "@/hooks/useActiveSourceId";
 import { useEditingSourceIds } from "@/hooks/useEditingSourceIds";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { SidebarActionButton, SidebarActionRow } from "@/components/sidebar";
+import { listSelectionMode } from "@/hooks/useListSelection";
 import { useSettingsNavigation } from "@/context/SettingsNavigationContext";
 import { OutlineVisibilityButton } from "./OutlineVisibilityButton";
 import type { SourcesProps } from "./types";
@@ -78,14 +79,7 @@ export const Sources = ({ canAuthor, outlineControls }: SourcesProps) => {
             isSelected={selected}
             joinsPrevious={joinsPrevious}
             joinsNext={joinsNext}
-            onClick={(event) => {
-              const mode: SourceSelectionMode = event.shiftKey
-                ? "range"
-                : event.metaKey || event.ctrlKey
-                  ? "toggle"
-                  : "single";
-              selectSource(source.id, mode);
-            }}
+            onClick={(event) => selectSource(source.id, listSelectionMode(event))}
             actions={
               <>
                 {outlineControls && source.id !== activeSourceId && (

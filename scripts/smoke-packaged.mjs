@@ -1,4 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { createServer } from "node:net";
 import os from "node:os";
@@ -136,7 +137,26 @@ function verifyMacosDocumentIcon() {
   }
 }
 
+/** Fails when a packaged app omits the license texts it must redistribute. */
+function verifyLicenseResources() {
+  const resourcesPath =
+    process.platform === "darwin"
+      ? path.join(packagePath, `${packageName}.app`, "Contents", "Resources")
+      : path.join(packagePath, "resources");
+  for (const name of [
+    "LICENSE-MIT",
+    "LICENSE-APACHE",
+    "THIRD_PARTY_NOTICES.md",
+    "THIRD_PARTY_LICENSES.txt",
+  ]) {
+    if (!existsSync(path.join(resourcesPath, name))) {
+      throw new Error(`Packaged app is missing ${name}`);
+    }
+  }
+}
+
 verifyMacosDocumentIcon();
+verifyLicenseResources();
 
 async function reservePort() {
   const server = createServer();

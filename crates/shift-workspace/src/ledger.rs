@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use shift_font::{
     Axis, AxisId, AxisMapping, FontMetadata, Glyph, GlyphId, GlyphLayer, GlyphName, LayerId,
-    MetricDefinition, NamedInstance, Source, SourceId,
+    LibValue, MetricDefinition, NamedInstance, Source, SourceId,
 };
 
 /// Maximum entries retained independently by each stack. The oldest entry on
@@ -32,6 +32,12 @@ pub enum LedgerStep {
     FontMetadata {
         pre: FontMetadata,
         post: FontMetadata,
+    },
+    /// One font lib key on each side; `None` means the key is absent.
+    FontLibValue {
+        key: String,
+        pre: Option<LibValue>,
+        post: Option<LibValue>,
     },
     Axis {
         pre: Option<Axis>,
@@ -130,6 +136,7 @@ impl LedgerEntry {
                     .map(|layer| layer.id())
                     .collect(),
                 LedgerStep::FontMetadata { .. }
+                | LedgerStep::FontLibValue { .. }
                 | LedgerStep::Axis { .. }
                 | LedgerStep::AxisOrder { .. }
                 | LedgerStep::AxisMappings { .. }
