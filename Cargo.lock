@@ -907,7 +907,9 @@ dependencies = [
 name = "fontsrc"
 version = "0.0.0"
 dependencies = [
+ "glyphs-reader",
  "norad 0.18.4 (git+https://github.com/linebender/norad?rev=c2034d9e4dbdb7bc936a86ad180a9e27b6884c3e)",
+ "tempfile",
 ]
 
 [[package]]

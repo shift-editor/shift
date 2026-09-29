@@ -10,6 +10,11 @@ pub mod designspace {
     pub use norad::error::{DesignSpaceLoadError, DesignSpaceSaveError};
 }
 
+/// Glyphs source reading and format-native values.
+pub mod glyphs {
+    pub use glyphs_reader::*;
+}
+
 /// Unified Font Object reading, writing, and format-native values.
 pub mod ufo {
     pub use norad::error::{FontLoadError, FontWriteError};
