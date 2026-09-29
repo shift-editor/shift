@@ -40,6 +40,41 @@ describe("Select movement preserves selected geometry", () => {
     expect(editor.pointPosition(lastId)).toEqual({ x: 200 + drag.delta.x, y: 200 + drag.delta.y });
   });
 
+  it("moves the whole selection when dragging an unselected segment inside its bounding box", async () => {
+    editor.selection.select([firstId, middleId, lastId]);
+    const segmentId = layer.contours[0]?.segments()[0]?.id;
+    if (!segmentId) throw new Error("Expected segment");
+
+    const drag = await editor.dragScene({
+      down: { x: 125, y: 125 },
+      start: { x: 129, y: 125 },
+      end: { x: 160, y: 150 },
+    });
+
+    expect(editor.selection.has(segmentId)).toBe(false);
+    expect(editor.pointPosition(firstId)).toEqual({ x: 100 + drag.delta.x, y: 100 + drag.delta.y });
+    expect(editor.pointPosition(middleId)).toEqual({
+      x: 150 + drag.delta.x,
+      y: 150 + drag.delta.y,
+    });
+    expect(editor.pointPosition(lastId)).toEqual({ x: 200 + drag.delta.x, y: 200 + drag.delta.y });
+  });
+
+  it("moves the selection, not an unselected point dragged inside its bounding box", async () => {
+    editor.selection.select([firstId, lastId]);
+
+    const drag = await editor.dragScene({
+      down: editor.pointPosition(middleId),
+      start: { x: 154, y: 150 },
+      end: { x: 190, y: 180 },
+    });
+
+    expect(editor.selection.has(middleId)).toBe(false);
+    expect(editor.pointPosition(firstId)).toEqual({ x: 100 + drag.delta.x, y: 100 + drag.delta.y });
+    expect(editor.pointPosition(middleId)).toEqual({ x: 150, y: 150 });
+    expect(editor.pointPosition(lastId)).toEqual({ x: 200 + drag.delta.x, y: 200 + drag.delta.y });
+  });
+
   it("selects and moves an anchor dragged directly", async () => {
     const anchorId = layer.addAnchor("top", { x: 300, y: 300 });
     await editor.settle();

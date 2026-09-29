@@ -218,7 +218,7 @@ export class Translate implements SelectBehavior {
   ): ComponentTransformEdit | null {
     switch (event.target.kind) {
       case "component":
-        if (!editor.selection.isSelected(event.target.id)) {
+        if (!boundingBoxOwnsDrag(editor, select, event)) {
           editor.selection.select([event.target.id]);
         }
         break;
@@ -243,6 +243,10 @@ export class Translate implements SelectBehavior {
     select: Select,
     event: DragStartEvent,
   ): TranslateInteraction | null {
+    if (!event.altKey && boundingBoxOwnsDrag(editor, select, event)) {
+      return this.#fromSelection(editor, event.origin.scene);
+    }
+
     switch (event.target.kind) {
       case "point":
         return this.#fromPointTarget(editor, event);
@@ -389,6 +393,15 @@ function translatingState(startPos: Point2D, shiftKey: boolean): TranslatingStat
       guides: [],
     },
   };
+}
+
+/** Whether an unselected target sits inside the selection's bounding box, which then moves instead. */
+function boundingBoxOwnsDrag(editor: Editor, select: Select, event: DragStartEvent): boolean {
+  const { target } = event;
+  const targetSelected =
+    target.kind !== "canvas" && target.kind !== "node" && editor.selection.isSelected(target.id);
+
+  return !targetSelected && select.boundingBox.containsTranslationPoint(event.origin);
 }
 
 /** Whether `handle` sits on a smooth anchor whose other side is a line, locking its direction. */
