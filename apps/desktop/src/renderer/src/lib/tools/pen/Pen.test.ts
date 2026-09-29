@@ -517,6 +517,26 @@ describe("Pen tool", () => {
       expect(closing?.controlEnd).toMatchObject({ x: 100, y: 40 });
     });
 
+    it("Escape during a closing drag leaves the contour open and the stroke active", async () => {
+      await editor.drawOpenContour([
+        { x: 100, y: 100 },
+        { x: 300, y: 100 },
+        { x: 300, y: 300 },
+      ]);
+      const down = editor.projectSceneToScreen({ x: 100, y: 100 });
+      const move = editor.projectSceneToScreen({ x: 160, y: 130 });
+
+      editor.pointerDown(down.x, down.y).pointerMove(move.x, move.y);
+      editor.escape();
+      editor.pointerUp(move.x, move.y);
+      await editor.settle();
+
+      expect(editor.glyphContours).toHaveLength(1);
+      expect(editor.glyphContours[0]?.closed).toBe(false);
+      expect(editor.glyphContours[0]?.points).toHaveLength(3);
+      expect(editor.openContour).not.toBeNull();
+    });
+
     it("a closing drag is one undo step", async () => {
       await editor.drawOpenContour([
         { x: 100, y: 100 },

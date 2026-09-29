@@ -57,7 +57,7 @@ export class CloseBehavior implements PenBehavior {
   onDragCancel(state: PenState, ctx: ToolContext<PenState, Pen>): boolean {
     if (state.type !== "closing") return false;
 
-    this.#curve = null;
+    this.#curve?.cancel();
     this.#finish(ctx);
     return true;
   }
