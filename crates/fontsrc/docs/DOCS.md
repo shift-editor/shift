@@ -1,6 +1,6 @@
 # fontsrc
 
-<!-- reviewed: 2026-09-26 review-every: 90d -->
+<!-- reviewed: 2026-09-27 review-every: 90d -->
 
 Format-native reading and writing for authored font sources across native, in-memory, and browser-owned storage.
 
@@ -21,9 +21,11 @@ crates/fontsrc/
   src/
     lib.rs                  -- format modules and public format-native exports
   tests/
-    designspace_source.rs   -- in-memory Designspace read and write equivalence
-    glyphs_source.rs        -- in-memory Glyphs file and native package equivalence
-    ufo_source.rs           -- in-memory UFO read and write equivalence
+    support/
+      mod.rs                -- reusable in-memory project tree
+    designspace_source.rs   -- Designspace document and referenced-UFO corpus
+    glyphs_source.rs        -- Glyphs file and native package corpus
+    ufo_source.rs           -- UFO source, sink, and binary-store corpus
 ```
 
 The [README](../README.md) provides the minimal Rust usage and incubation scope.
@@ -50,8 +52,9 @@ Writing follows the inverse boundary: `DesignSpaceDocument::save_to_writer` seri
 1. Keep the public values format-native.
 2. Accept bytes, readers, or source/sink traits rather than requiring native paths.
 3. Add fixture-backed equivalence tests against the upstream native-path behavior.
-4. Verify the crate has no `shift-*` dependency.
-5. Check native and `wasm32-unknown-unknown` builds.
+4. Cover malformed input and format-specific stores or references that generic model equality can miss.
+5. Verify the crate has no `shift-*` dependency.
+6. Check native and `wasm32-unknown-unknown` builds.
 
 ## Gotchas
 

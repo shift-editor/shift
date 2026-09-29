@@ -15,6 +15,7 @@ fn fixture(name: &str) -> PathBuf {
 #[test]
 fn in_memory_files_match_native_loading() {
     for path in [
+        fixture("GlyphsImportLosses.glyphs"),
         fixture("Homenaje.glyphs"),
         fixture("MutatorSansVariable.glyphs"),
     ] {
@@ -29,6 +30,13 @@ fn assert_in_memory_file_matches_native(path: &Path) {
     let actual = Font::load_from_string(&source).unwrap();
 
     assert_eq!(actual, expected);
+}
+
+#[test]
+fn malformed_in_memory_file_returns_an_error() {
+    let result = Font::load_from_string("{ glyphs = (");
+
+    assert!(result.is_err());
 }
 
 #[test]
