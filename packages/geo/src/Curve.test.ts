@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { Curve } from "./Curve";
+import { Rect } from "./Rect";
 import { Vec2 } from "./Vec2";
 
 describe("Curve", () => {
@@ -268,6 +269,33 @@ describe("Curve", () => {
 
       expect(Curve.startPoint(cubic)).toEqual({ x: 0, y: 0 });
       expect(Curve.endPoint(cubic)).toEqual({ x: 10, y: 0 });
+    });
+  });
+
+  describe("intersectsRect", () => {
+    const arch = Curve.cubic(
+      { x: 0, y: 0 },
+      { x: 0, y: 100 },
+      { x: 100, y: 100 },
+      { x: 100, y: 0 },
+    );
+
+    it("detects a line crossing the rect with both endpoints outside", () => {
+      const line = Curve.line({ x: -10, y: 5 }, { x: 20, y: 5 });
+      expect(Curve.intersectsRect(line, Rect.fromXYWH(0, 0, 10, 10))).toBe(true);
+    });
+
+    it("detects a curve whose middle passes through the rect", () => {
+      expect(Curve.intersectsRect(arch, Rect.fromXYWH(45, 70, 10, 10))).toBe(true);
+    });
+
+    it("rejects a rect under the arch that the curve never touches", () => {
+      expect(Curve.intersectsRect(arch, Rect.fromXYWH(40, 10, 20, 20))).toBe(false);
+    });
+
+    it("rejects a rect beside a diagonal line inside its bounds", () => {
+      const line = Curve.line({ x: 0, y: 0 }, { x: 100, y: 100 });
+      expect(Curve.intersectsRect(line, Rect.fromXYWH(60, 10, 20, 20))).toBe(false);
     });
   });
 });

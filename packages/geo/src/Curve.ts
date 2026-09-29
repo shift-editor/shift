@@ -24,7 +24,8 @@
  * ```
  */
 
-import type { Point2D } from "./types";
+import type { Point2D, Rect2D } from "./types";
+import { Rect } from "./Rect";
 import type { Bounds } from "./Bounds";
 import { Vec2 } from "./Vec2";
 import { fitCubic } from "./fitCubic";
@@ -88,6 +89,8 @@ export interface ClosestPoint {
 const CURVE_SUBDIVISIONS = 32;
 const NEWTON_TOLERANCE = 1e-6;
 const NEWTON_MAX_ITERATIONS = 8;
+const RECT_INTERSECTION_TOLERANCE = 1e-3;
+const RECT_INTERSECTION_MAX_DEPTH = 32;
 
 // ============================================
 // Curve Namespace
@@ -253,6 +256,18 @@ export const Curve = {
     return points;
   },
 
+  /**
+   * Test whether any part of the curve lies inside or on the edge of a rectangle.
+   *
+   * @remarks
+   * Catches curves that pass through the rectangle with both endpoints outside it.
+   * Pieces are subdivided until one touches the rectangle or its bounds shrink below
+   * a small tolerance.
+   */
+  intersectsRect(curve: CurveType, rect: Rect2D): boolean {
+    return curvePieceIntersectsRect(curve, rect, 0);
+  },
+
   isLine(curve: CurveType): curve is LineCurve {
     return curve.type === "line";
   },
@@ -265,6 +280,31 @@ export const Curve = {
     return curve.type === "cubic";
   },
 } as const;
+
+function curvePieceIntersectsRect(curve: CurveType, rect: Rect2D, depth: number): boolean {
+  const bounds = Curve.bounds(curve);
+  const clear =
+    bounds.max.x < rect.left ||
+    bounds.min.x > rect.right ||
+    bounds.max.y < rect.top ||
+    bounds.min.y > rect.bottom;
+  if (clear) return false;
+
+  if (Rect.containsPoint(rect, Curve.startPoint(curve))) return true;
+  if (Rect.containsPoint(rect, Curve.endPoint(curve))) return true;
+
+  const settled =
+    depth >= RECT_INTERSECTION_MAX_DEPTH ||
+    (bounds.max.x - bounds.min.x <= RECT_INTERSECTION_TOLERANCE &&
+      bounds.max.y - bounds.min.y <= RECT_INTERSECTION_TOLERANCE);
+  if (settled) return true;
+
+  const [head, tail] = Curve.splitAt(curve, 0.5);
+  return (
+    curvePieceIntersectsRect(head, rect, depth + 1) ||
+    curvePieceIntersectsRect(tail, rect, depth + 1)
+  );
+}
 
 function quadraticPointAt(curve: QuadraticCurve, t: number): Point2D {
   const mt = 1 - t;
