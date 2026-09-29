@@ -1,5 +1,4 @@
-import { Rect, Vec2, type Rect2D } from "@shift/geo";
-import type { PointId } from "@shift/types";
+import { Curve, Rect, Vec2, type Rect2D } from "@shift/geo";
 import type { SelectableId } from "../../../../types/object";
 import type { ToolContext } from "../../core/Behavior";
 import type { DragEndEvent, DragEvent, DragStartEvent } from "../../core/GestureDetector";
@@ -30,7 +29,7 @@ export class Marquee implements SelectBehavior {
     if (state.type !== "brushing") return false;
 
     const rect = Rect.fromPoints(state.selection.startPos, event.coords.scene);
-    this.selectPointsInRect(rect, ctx, event.shiftKey ? state.selection.initialSelection : []);
+    this.selectIdsInRect(rect, ctx, event.shiftKey ? state.selection.initialSelection : []);
 
     ctx.setState({
       type: "brushing",
@@ -43,7 +42,7 @@ export class Marquee implements SelectBehavior {
     if (state.type !== "brushing") return false;
 
     const rect = Rect.fromPoints(state.selection.startPos, event.coords.scene);
-    this.selectPointsInRect(rect, ctx, event.shiftKey ? state.selection.initialSelection : []);
+    this.selectIdsInRect(rect, ctx, event.shiftKey ? state.selection.initialSelection : []);
 
     ctx.setState({ type: "ready" });
     return true;
@@ -57,25 +56,34 @@ export class Marquee implements SelectBehavior {
     return true;
   }
 
-  private getPointsInRect(rect: Rect2D, ctx: ToolContext<SelectState>): Set<PointId> {
-    const pointIds = new Set<PointId>();
+  /** Points inside the rect, plus segments it touches without catching just one end point. */
+  private getIdsInRect(rect: Rect2D, ctx: ToolContext<SelectState>): Set<SelectableId> {
+    const ids = new Set<SelectableId>();
 
     for (const node of ctx.editor.scene.nodesOfKind("glyph")) {
       const glyph = ctx.editor.glyphForId(node.glyphId);
       if (!glyph) continue;
 
-      for (const point of glyph.geometryAt(ctx.editor.externalLocation).allPoints) {
-        const scenePoint = Vec2.add(point, node.position);
-        if (!Rect.containsPoint(rect, scenePoint)) continue;
+      const geometry = glyph.geometryAt(ctx.editor.externalLocation);
+      const origin = Vec2.sub({ x: rect.x, y: rect.y }, node.position);
+      const localRect = Rect.fromXYWH(origin.x, origin.y, rect.width, rect.height);
 
-        pointIds.add(point.id);
+      for (const point of geometry.allPoints) {
+        if (Rect.containsPoint(localRect, point)) ids.add(point.id);
+      }
+      for (const segment of geometry.segments) {
+        const startInside = Rect.containsPoint(localRect, segment.start);
+        const endInside = Rect.containsPoint(localRect, segment.end);
+        // Brushing one end point selects that point alone, not the segments leaving it.
+        if (startInside !== endInside) continue;
+        if (Curve.intersectsRect(segment.toCurve(), localRect)) ids.add(segment.id);
       }
     }
 
-    return pointIds;
+    return ids;
   }
 
-  private selectPointsInRect(
+  private selectIdsInRect(
     rect: Rect2D,
     ctx: ToolContext<SelectState>,
     initialSelection: readonly SelectableId[],
@@ -85,7 +93,7 @@ export class Marquee implements SelectBehavior {
       return;
     }
 
-    const pointIds = this.getPointsInRect(rect, ctx);
-    ctx.editor.selection.select([...initialSelection, ...pointIds]);
+    const ids = this.getIdsInRect(rect, ctx);
+    ctx.editor.selection.select([...initialSelection, ...ids]);
   }
 }

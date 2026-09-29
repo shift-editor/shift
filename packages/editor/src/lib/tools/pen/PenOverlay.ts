@@ -3,7 +3,7 @@ import type { Canvas } from "../../editor/rendering/Canvas";
 import { CanvasItem } from "../../editor/rendering/CanvasItem";
 import { SnapLines } from "../../editor/rendering/overlays/SnapLines";
 import type { Editor } from "../../editor/Editor";
-import type { Pen, PenState } from "./Pen";
+import type { Pen } from "./Pen";
 import { PenStroke } from "./PenStroke";
 import { PenTargets } from "./PenTargets";
 import type { PenOverlayProps } from "./types";
@@ -27,12 +27,17 @@ export class PenOverlay extends CanvasItem<PenOverlayProps> {
     track(this.#editor.input.modifiersCell);
     const state = this.#pen.stateCell.value;
     const activeEndpoint = state.type === "ready" ? this.#pen.activeEndpointCell.value : null;
+    const pendingHandle =
+      activeEndpoint && activeEndpoint.kind !== "corner"
+        ? activeEndpoint.outgoingHandlePosition
+        : null;
 
     return {
       state,
       pointer: this.#editor.input.pointerCell.value,
       nodePosition: context?.glyphNode.position ?? null,
       lastOnCurvePoint: activeEndpoint?.position ?? null,
+      pendingHandle,
     };
   }
 
@@ -44,12 +49,35 @@ export class PenOverlay extends CanvasItem<PenOverlayProps> {
       case "ready":
         this.#drawReady(canvas, props);
         return;
-      case "dragging":
-        this.#drawOutgoingHandle(canvas, props.state, props.nodePosition);
+      case "dragging": {
+        const { start } = props.state.curve;
+        if (start.kind !== "corner") {
+          this.#drawHandle(
+            canvas,
+            start.position,
+            start.outgoingHandlePosition,
+            props.nodePosition,
+          );
+        }
+        this.#drawHandle(
+          canvas,
+          props.state.curve.anchorPosition,
+          props.state.curve.handlePosition,
+          props.nodePosition,
+        );
         if (!props.nodePosition) return;
 
         this.#snapLines.draw(canvas, props.state.guides, props.nodePosition);
         return;
+      }
+      case "pulling": {
+        const { pull } = props.state;
+        if (!pull.handlePosition || !props.nodePosition) return;
+
+        this.#drawHandle(canvas, pull.position, pull.handlePosition, props.nodePosition);
+        this.#snapLines.draw(canvas, props.state.guides, props.nodePosition);
+        return;
+      }
       case "closing":
         if (!props.nodePosition) return;
 
@@ -62,6 +90,10 @@ export class PenOverlay extends CanvasItem<PenOverlayProps> {
   }
 
   #drawReady(canvas: Canvas, props: PenOverlayProps): void {
+    if (props.lastOnCurvePoint && props.pendingHandle) {
+      this.#drawHandle(canvas, props.lastOnCurvePoint, props.pendingHandle, props.nodePosition);
+    }
+
     const pointer = props.pointer;
     if (!pointer) return;
 
@@ -101,15 +133,16 @@ export class PenOverlay extends CanvasItem<PenOverlayProps> {
     canvas.filledStrokeCircle(pointerPosition, size, fill, stroke, widthPx);
   }
 
-  #drawOutgoingHandle(
+  #drawHandle(
     canvas: Canvas,
-    state: PenState & { type: "dragging" },
+    anchor: Point2D,
+    handle: Point2D,
     nodePosition: Point2D | null,
   ): void {
     if (!nodePosition) return;
 
-    const anchorPos = Vec2.add(nodePosition, state.curve.anchorPosition);
-    const handlePos = Vec2.add(nodePosition, state.curve.handlePosition);
+    const anchorPos = Vec2.add(nodePosition, anchor);
+    const handlePos = Vec2.add(nodePosition, handle);
     const { stroke, widthPx } = canvas.theme.glyph;
     canvas.line(anchorPos, handlePos, stroke, widthPx);
 

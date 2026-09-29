@@ -176,11 +176,17 @@ describe("Select tool", () => {
         expect(editor.toolManager.activeTool?.cursorCell.value).not.toEqual({ type: "add" });
       });
 
-      it("does not offer adding on selected points, segments, or empty canvas", () => {
+      it("offers adding on an unselected segment", () => {
+        editor.selection.select([firstId]);
+        const segment = editor.projectSceneToScreen({ x: 150, y: 150 });
+        editor.pointerMove(segment.x, segment.y, { shiftKey: true });
+        expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "add" });
+      });
+
+      it("does not offer adding on selected points or empty canvas", () => {
         editor.selection.select([firstId, secondId]);
         for (const position of [
           { x: 100, y: 100 },
-          { x: 150, y: 150 },
           { x: 500, y: 500 },
         ]) {
           const point = editor.projectSceneToScreen(position);
@@ -806,6 +812,48 @@ describe("Select tool", () => {
 
       expect(editor.selection.has(inside.id)).toBe(true);
       expect(editor.selection.has(outside.id)).toBe(false);
+    });
+
+    it("marquee-selects a segment crossed anywhere along its length", async () => {
+      editor.selectTool("pen");
+      await editor.clickGlyphLocal(100, 200);
+      await editor.clickGlyphLocal(180, 200);
+
+      const contour = editor.requireGlyphLayer().contours[0];
+      const segmentId = contour?.segments()[0]?.id;
+      const [start, end] = contour?.points ?? [];
+      if (!segmentId || !start || !end) throw new Error("Expected line segment");
+
+      editor.selectTool("select");
+      await editor.dragScene({
+        down: { x: 130, y: 180 },
+        start: { x: 134, y: 180 },
+        end: { x: 150, y: 220 },
+      });
+
+      expect(editor.selection.has(segmentId)).toBe(true);
+      expect(editor.selection.has(start.id)).toBe(false);
+      expect(editor.selection.has(end.id)).toBe(false);
+    });
+
+    it("marquee-selects a segment with both of its end points", async () => {
+      editor.selectTool("pen");
+      await editor.clickGlyphLocal(100, 200);
+      await editor.clickGlyphLocal(180, 200);
+
+      const contour = editor.requireGlyphLayer().contours[0];
+      const segmentId = contour?.segments()[0]?.id;
+      const [start, end] = contour?.points ?? [];
+      if (!segmentId || !start || !end) throw new Error("Expected line segment");
+
+      editor.selectTool("select");
+      await editor.dragScene({
+        down: { x: 80, y: 180 },
+        start: { x: 84, y: 180 },
+        end: { x: 200, y: 220 },
+      });
+
+      expect(new Set(editor.selection.ids)).toEqual(new Set([start.id, end.id, segmentId]));
     });
   });
 

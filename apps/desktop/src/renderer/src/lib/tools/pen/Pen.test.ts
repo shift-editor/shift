@@ -223,18 +223,24 @@ describe("Pen tool", () => {
       expect(endpoint?.smooth).toBe(false);
     });
 
-    it("adding a point and then dragging should create a cubic curve", async () => {
-      await editor.click(200, -800);
-      editor.pointerDown(200, -800);
-      editor.pointerMove(400, 120);
-      editor.pointerMove(400, 140);
-      editor.pointerMove(400, 160);
-      editor.pointerUp(200, -200);
-      await editor.settle();
+    it("adding a point and then dragging off it pulls a handle for the next curve", async () => {
+      await editor.clickGlyphLocal(100, 100);
+      await editor.dragScene({
+        down: { x: 100, y: 100 },
+        start: { x: 120, y: 120 },
+        end: { x: 160, y: 180 },
+      });
+      expect(editor.openContour?.points).toHaveLength(1);
 
-      const contour = editor.openContour;
-      expect(contour?.segments().length).toBe(1);
-      expect(contour?.segments()[0]?.type).toBe("cubic");
+      await editor.dragScene({
+        down: { x: 300, y: 100 },
+        start: { x: 320, y: 120 },
+        end: { x: 340, y: 140 },
+      });
+
+      const cubic = editor.openContour?.segments()[0]?.asCubic();
+      expect(cubic?.controlStart.x).toBeCloseTo(160);
+      expect(cubic?.controlStart.y).toBeCloseTo(180);
     });
 
     it("keeps the curve visible when its drag preview ends", async () => {
@@ -313,6 +319,151 @@ describe("Pen tool", () => {
     });
   });
 
+  describe("pulling a handle from an open end", () => {
+    it("pulls a free handle from a line's end into the next dragged curve", async () => {
+      await editor.clickGlyphLocal(100, 100);
+      await editor.clickGlyphLocal(300, 100);
+
+      await editor.dragScene({
+        down: { x: 300, y: 100 },
+        start: { x: 320, y: 120 },
+        end: { x: 380, y: 180 },
+      });
+      await editor.dragScene({
+        down: { x: 500, y: 100 },
+        start: { x: 520, y: 120 },
+        end: { x: 540, y: 140 },
+      });
+
+      const contour = editor.openContour;
+      const next = contour?.segments()[1]?.asCubic();
+      expect(contour?.segments()[0]?.type).toBe("line");
+      expect(next?.controlStart.x).toBeCloseTo(380);
+      expect(next?.controlStart.y).toBeCloseTo(180);
+      expect(next?.start.smooth).toBe(false);
+    });
+
+    it("keeps a handle pulled with Option on the line's direction", async () => {
+      await editor.clickGlyphLocal(100, 100);
+      await editor.clickGlyphLocal(300, 100);
+
+      await editor.dragScene({
+        down: { x: 300, y: 100 },
+        start: { x: 320, y: 120 },
+        end: { x: 380, y: 160 },
+        options: { altKey: true },
+      });
+      await editor.dragScene({
+        down: { x: 500, y: 100 },
+        start: { x: 520, y: 120 },
+        end: { x: 540, y: 140 },
+      });
+
+      const next = editor.openContour?.segments()[1]?.asCubic();
+      expect(next?.controlStart.x).toBeCloseTo(380);
+      expect(next?.controlStart.y).toBeCloseTo(100);
+      expect(next?.start.smooth).toBe(true);
+    });
+
+    it("mirrors a curve's incoming handle while pulling from its end", async () => {
+      await editor.clickGlyphLocal(100, 100);
+      await editor.dragScene({
+        down: { x: 300, y: 100 },
+        start: { x: 340, y: 120 },
+        end: { x: 380, y: 180 },
+      });
+
+      await editor.dragScene({
+        down: { x: 300, y: 100 },
+        start: { x: 320, y: 90 },
+        end: { x: 360, y: 60 },
+      });
+      await editor.dragScene({
+        down: { x: 500, y: 100 },
+        start: { x: 520, y: 120 },
+        end: { x: 540, y: 140 },
+      });
+
+      const [first, second] = editor.openContour?.segments() ?? [];
+      const incoming = first?.asCubic()?.controlEnd;
+      const outgoing = second?.asCubic()?.controlStart;
+      expect(incoming?.x).toBeCloseTo(240);
+      expect(incoming?.y).toBeCloseTo(140);
+      expect(outgoing?.x).toBeCloseTo(360);
+      expect(outgoing?.y).toBeCloseTo(60);
+      expect(second?.asCubic()?.start.smooth).toBe(true);
+    });
+
+    it("draws a line when clicking after pulling a handle", async () => {
+      await editor.clickGlyphLocal(100, 100);
+      await editor.clickGlyphLocal(300, 100);
+      await editor.dragScene({
+        down: { x: 300, y: 100 },
+        start: { x: 320, y: 120 },
+        end: { x: 380, y: 180 },
+      });
+      await editor.clickGlyphLocal(500, 100);
+
+      expect(editor.openContour?.segments()[1]?.type).toBe("line");
+    });
+
+    it("draws a line when clicking after an ordinary curve drag", async () => {
+      await editor.clickGlyphLocal(100, 100);
+      await editor.dragScene({
+        down: { x: 300, y: 100 },
+        start: { x: 340, y: 120 },
+        end: { x: 380, y: 180 },
+      });
+      await editor.clickGlyphLocal(500, 100);
+
+      expect(editor.openContour?.segments()[1]?.type).toBe("line");
+    });
+
+    it("restores a curve's incoming handle when Escape cancels the pull", async () => {
+      await editor.clickGlyphLocal(100, 100);
+      await editor.dragScene({
+        down: { x: 300, y: 100 },
+        start: { x: 340, y: 120 },
+        end: { x: 380, y: 180 },
+      });
+
+      const down = editor.projectSceneToScreen({ x: 300, y: 100 });
+      const start = editor.projectSceneToScreen({ x: 320, y: 90 });
+      const end = editor.projectSceneToScreen({ x: 360, y: 60 });
+      editor.pointerDown(down.x, down.y).pointerMove(start.x, start.y).pointerMove(end.x, end.y);
+      editor.escape();
+      await editor.settle();
+
+      const incoming = editor.openContour?.segments()[0]?.asCubic()?.controlEnd;
+      expect(incoming?.x).toBeCloseTo(220);
+      expect(incoming?.y).toBeCloseTo(20);
+    });
+
+    it("continues another open contour from the end a handle is pulled out of", async () => {
+      await editor.clickGlyphLocal(100, 100);
+      await editor.clickGlyphLocal(300, 100);
+      editor.escape();
+
+      await editor.dragScene({
+        down: { x: 100, y: 100 },
+        start: { x: 90, y: 120 },
+        end: { x: 60, y: 160 },
+      });
+      await editor.dragScene({
+        down: { x: 0, y: 300 },
+        start: { x: 20, y: 320 },
+        end: { x: 40, y: 340 },
+      });
+
+      const contour = editor.openContour;
+      const next = contour?.segments()[1]?.asCubic();
+      expect(editor.glyphContours).toHaveLength(1);
+      expect(next?.start.x).toBeCloseTo(100);
+      expect(next?.controlStart.x).toBeCloseTo(60);
+      expect(next?.controlStart.y).toBeCloseTo(160);
+    });
+  });
+
   describe("closing and joining", () => {
     it("dragging off the first point closes a line-started contour along the line's tangent", async () => {
       await editor.drawOpenContour([
@@ -364,6 +515,26 @@ describe("Pen tool", () => {
       const closing = contour?.segments().at(-1)?.asCubic();
       expect(first?.controlStart).toMatchObject({ x: 100, y: 160 });
       expect(closing?.controlEnd).toMatchObject({ x: 100, y: 40 });
+    });
+
+    it("Escape during a closing drag leaves the contour open and the stroke active", async () => {
+      await editor.drawOpenContour([
+        { x: 100, y: 100 },
+        { x: 300, y: 100 },
+        { x: 300, y: 300 },
+      ]);
+      const down = editor.projectSceneToScreen({ x: 100, y: 100 });
+      const move = editor.projectSceneToScreen({ x: 160, y: 130 });
+
+      editor.pointerDown(down.x, down.y).pointerMove(move.x, move.y);
+      editor.escape();
+      editor.pointerUp(move.x, move.y);
+      await editor.settle();
+
+      expect(editor.glyphContours).toHaveLength(1);
+      expect(editor.glyphContours[0]?.closed).toBe(false);
+      expect(editor.glyphContours[0]?.points).toHaveLength(3);
+      expect(editor.openContour).not.toBeNull();
     });
 
     it("a closing drag is one undo step", async () => {

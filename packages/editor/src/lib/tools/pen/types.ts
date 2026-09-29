@@ -13,7 +13,15 @@ export type PenEndpoint =
       readonly position: Point2D;
     }
   | {
+      /** Tangent-continuous: the next curve starts smooth along the outgoing handle. */
       readonly kind: "smooth";
+      readonly pointId: PointId;
+      readonly position: Point2D;
+      readonly outgoingHandlePosition: Point2D;
+    }
+  | {
+      /** A corner with a handle pulled out of it for the next curve. */
+      readonly kind: "cusp";
       readonly pointId: PointId;
       readonly position: Point2D;
       readonly outgoingHandlePosition: Point2D;
@@ -34,9 +42,18 @@ export interface PenClose {
   readonly handlePosition: Point2D | null;
 }
 
+/** Press on an open end; dragging pulls the next segment's first handle out of it. */
+export interface PenPull {
+  readonly pointId: PointId;
+  readonly position: Point2D;
+  /** Pointer position after the drag threshold; null while the gesture is still a press. */
+  readonly handlePosition: Point2D | null;
+}
+
 export interface PenOutgoingHandle {
   readonly pointId: PointId;
   readonly position: Point2D;
+  readonly smooth: boolean;
 }
 
 export type PenState =
@@ -48,6 +65,12 @@ export type PenState =
       close: PenClose;
       shiftKey: boolean;
       /** Glyph-local snap feedback from the latest closing-handle preview. */
+      guides: readonly PositionGuide[];
+    }
+  | {
+      type: "pulling";
+      pull: PenPull;
+      /** Glyph-local snap feedback from the latest pulled-handle preview. */
       guides: readonly PositionGuide[];
     }
   | {
@@ -65,6 +88,8 @@ export interface PenOverlayProps {
   readonly pointer: Coordinates | null;
   readonly nodePosition: Point2D | null;
   readonly lastOnCurvePoint: Point2D | null;
+  /** The active endpoint's handle waiting for the next segment; cleared when the stroke ends. */
+  readonly pendingHandle: Point2D | null;
 }
 
 export type PenContext =

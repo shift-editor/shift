@@ -17,7 +17,7 @@ import {
 } from "./behaviors";
 import { TextRunHover } from "./behaviors/TextRunHover";
 import type { CursorType } from "../../../types/editor";
-import { objectIsKindOf } from "../../../types/object";
+import { objectIsKindOf, type ShiftObject } from "../../../types/object";
 import type { Canvas } from "../../editor/rendering/Canvas";
 import { SnapLines } from "../../editor/rendering/overlays/SnapLines";
 import { SelectBoundingBox } from "./BoundingBox";
@@ -83,7 +83,7 @@ export class Select extends BaseTool<SelectState, Select> {
       modifiers.shiftKey &&
       hover &&
       selectedIds.length > 0 &&
-      objectIsKindOf(this.editor.object(hover), "point") &&
+      shiftClickAddable(this.editor.object(hover)) &&
       !selectedIds.includes(hover);
     if (addsToSelection) return { type: "add" };
 
@@ -203,5 +203,18 @@ export class Select extends BaseTool<SelectState, Select> {
     if (!object) return;
 
     this.#snapLines.draw(canvas, state.translate.guides, object.node.position);
+  }
+}
+
+/** Whether Shift-click adds this hovered object to the selection, matching the Selection behavior. */
+function shiftClickAddable(object: ShiftObject | null): boolean {
+  switch (object?.kind) {
+    case "point":
+    case "anchor":
+    case "segment":
+    case "component":
+      return true;
+    default:
+      return false;
   }
 }
