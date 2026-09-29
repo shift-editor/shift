@@ -105,18 +105,6 @@ describe("placed proof text editing", () => {
     expect(clusterForCaret(items, target)).toBe(3);
   });
 
-  it("hover follows the glyph item under the pointer and clears off text", async () => {
-    await editor.clickGlyphLocal(800, 0);
-    editor.textEditing.insert([glyphTextItem("A", 65)]);
-    const node = editor.scene.nodesOfKind("textRun")[0]!;
-    const item = editor.text.run(node.runId)!.items[0]!;
-    const over = editor.projectSceneToScreen({ x: 810, y: 0 });
-    editor.pointerMove(over.x, over.y);
-    expect(editor.textEditing.hoveredItem).toBe(item.id);
-    editor.pointerMove(0, 0);
-    expect(editor.textEditing.hoveredItem).toBeNull();
-  });
-
   it("Escape deletes an empty node; undo restores it without reopening editing", async () => {
     await editor.clickGlyphLocal(800, 0);
     const node = editor.scene.nodesOfKind("textRun")[0]!;

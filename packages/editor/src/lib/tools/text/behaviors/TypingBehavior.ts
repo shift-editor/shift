@@ -4,7 +4,6 @@ import type {
   DragEvent,
   DragStartEvent,
   KeyDownEvent,
-  PointerMoveEvent,
 } from "../../core/GestureDetector";
 import type { ToolContext } from "../../core/Behavior";
 import type { TextBehavior, TextState } from "../types";
@@ -42,13 +41,6 @@ export class TypingBehavior implements TextBehavior {
     }
     ctx.setState({ type: "editing" });
     return true;
-  }
-
-  onPointerMove(state: TextState, ctx: ToolContext<TextState>, event: PointerMoveEvent): boolean {
-    if (state.type === "idle") return false;
-    const target = event.target;
-    ctx.editor.textEditing.setHoveredItem(target.kind === "text" ? target.itemId : null);
-    return target.kind === "text";
   }
 
   onDragStart(state: TextState, ctx: ToolContext<TextState>, event: DragStartEvent): boolean {

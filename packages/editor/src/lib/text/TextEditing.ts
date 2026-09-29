@@ -1,5 +1,5 @@
-import { computed, signal, type Signal } from "../signals";
-import type { NodeId, TextItemId } from "@shift/types";
+import { computed, type Signal } from "../signals";
+import type { NodeId } from "@shift/types";
 import type { ShiftStore } from "../store/ShiftStore";
 import type { ShiftEditorRecord } from "../../types/records";
 import {
@@ -25,7 +25,6 @@ export class TextEditing {
   readonly #store: ShiftStore<ShiftEditorRecord>;
   readonly #editor: Editor;
   readonly stateCell: Signal<TextEditingRecord | null>;
-  readonly #hoveredItem = signal<TextItemId | null>(null);
   #goalX: number | null = null;
 
   constructor(store: ShiftStore<ShiftEditorRecord>, editor: Editor) {
@@ -42,15 +41,6 @@ export class TextEditing {
 
   get state(): TextEditingRecord | null {
     return this.stateCell.peek();
-  }
-  get hoveredItemCell(): Signal<TextItemId | null> {
-    return this.#hoveredItem;
-  }
-  get hoveredItem(): TextItemId | null {
-    return this.#hoveredItem.peek();
-  }
-  setHoveredItem(id: TextItemId | null): void {
-    this.#hoveredItem.set(id);
   }
 
   /** Begins editing within the caller's pointer capture. */
@@ -70,7 +60,6 @@ export class TextEditing {
   /** Ends transient text focus; callers decide whether the change is history-bearing. */
   end(): void {
     this.#store.delete(currentTextEditingId);
-    this.#hoveredItem.set(null);
     this.#goalX = null;
   }
 

@@ -119,7 +119,6 @@ export class SceneLayer extends CanvasItem<SceneLayerProps> {
     this.#editor.selection.stateCell.value;
     this.#editor.hover.entryCell.value;
     track(this.#editor.textEditing.stateCell);
-    track(this.#editor.textEditing.hoveredItemCell);
     this.#editor.scene.cell.value;
     for (const node of this.#editor.scene.nodesOfKind("textRun")) {
       track(this.#editor.text.layoutCell(node.runId));

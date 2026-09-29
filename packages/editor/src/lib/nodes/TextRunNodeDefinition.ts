@@ -96,7 +96,7 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
         break;
       }
       case "content":
-        this.#drawGlyphs(node, ctx, layout);
+        this.#drawGlyphs(ctx, layout);
         break;
       case "controls": {
         const editing = this.editor.textEditing.stateCell.peek();
@@ -116,9 +116,7 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     }
   }
 
-  #drawGlyphs(node: TextRunNode, ctx: RenderContext, layout: TextLayout): void {
-    const hovered = this.editor.textEditing.hoveredItemCell.peek();
-    const active = this.editor.textEditing.stateCell.peek()?.nodeId === node.id;
+  #drawGlyphs(ctx: RenderContext, layout: TextLayout): void {
     for (const line of layout.lines) {
       let runBase = layout.origin.x;
       for (const run of line.runs) {
@@ -134,17 +132,7 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
             runBase + glyph.origin.x + glyph.xOffset,
             line.y + glyph.origin.y + glyph.yOffset,
           );
-          this.#outline.draw(ctx.canvas, renderModel, {
-            fill: ctx.canvas.theme.glyph.fill,
-            ...(active && hovered && glyph.sourceItemIds.includes(hovered)
-              ? {
-                  stroke: {
-                    color: ctx.canvas.theme.textRun.hoverOutline,
-                    widthPx: ctx.canvas.theme.textRun.hoverOutlineWidthPx,
-                  },
-                }
-              : {}),
-          });
+          this.#outline.draw(ctx.canvas, renderModel, { fill: ctx.canvas.theme.glyph.fill });
           ctx.canvas.restore();
         }
         runBase += run.advance;

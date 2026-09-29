@@ -172,6 +172,7 @@ export class Select extends BaseTool<SelectState, Select> {
   }
 
   override deactivate(): void {
+    this.editor.hover.clear();
     this.setState({ type: "idle" });
   }
 

@@ -40,6 +40,13 @@ function builtInToolManifests(): readonly ToolManifest[] {
       shortcut: "p",
     },
     {
+      id: "text",
+      create: (api) => new TextTool(api),
+      icon: TextIcon,
+      tooltip: "Text Tool (T)",
+      shortcut: "t",
+    },
+    {
       id: "hand",
       create: (api) => new Hand(api),
       icon: HandIcon,
@@ -80,13 +87,6 @@ function builtInToolManifests(): readonly ToolManifest[] {
           onSelect: selectEllipse,
         },
       ],
-    },
-    {
-      id: "text",
-      create: (api) => new TextTool(api),
-      icon: TextIcon,
-      tooltip: "Text Tool (T)",
-      shortcut: "t",
     },
   ];
 }

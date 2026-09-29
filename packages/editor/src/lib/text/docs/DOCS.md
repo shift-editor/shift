@@ -9,8 +9,8 @@ Placed proof text is document-scoped item content projected through scene nodes 
 - `TextRunRecord.items` stores stable, client-minted `TextItemId` identities for glyphs and linebreaks. Indices/clusters are derived, never identity. `/name` parsing belongs to paste/import, not the stored representation.
 - `Scene` owns placement and ordering; `TextRunNode.runId` links it to a run. `size / unitsPerEm` scales node-local layout equally for bounds, hits, and all drawing passes. Location follows the editor, not the node.
 - `Text.layoutCell(runId)` is the shared reactive layout, derived from items, source, axis location, and completed glyph acquisition. A missing glyph is loaded asynchronously; no layout or draw path starts I/O. Even an empty run has a caret at its origin.
-- `TextEditingRecord` owns the current node, anchor, and focus for one session. A `TextCaret` is the ID of the preceding item or null for the run start. Its cluster is `indexOf(itemId) + 1`; linebreaks count. Hover and vertical goal-x are transient.
-- `TextRunNodeDefinition` draws selection in background, fills/hover in content, and caret in controls. Hits return a text target with node-local point, item identity, and insertion cluster. The renderer enters node space once; the definition applies size scale.
+- `TextEditingRecord` owns the current node, anchor, and focus for one session. A `TextCaret` is the ID of the preceding item or null for the run start. Its cluster is `indexOf(itemId) + 1`; linebreaks count. Vertical goal-x is transient.
+- `TextRunNodeDefinition` draws selection in background, fills in content, and caret in controls. Hits return a text target with node-local point, item identity, and insertion cluster. The renderer enters node space once; the definition applies size scale.
 - `EditorHistory` captures complete text-run, node, and session-record replacements, never a second text undo stack. Replays place the session record last and reject dangling text node/run identities. Ending text focus when switching tools is transient; Escape's empty-run deletion is one separate undoable action. Undo of that deletion restores the node without reopening editing.
 - No draw offset or implicit editor run exists. In-context glyph editing will use a child GlyphNode in a later slice.
 
@@ -25,7 +25,7 @@ Placed proof text is document-scoped item content projected through scene nodes 
 ## Codemap
 
 - `Text.ts`: run records, imported text parser, reactive layout, glyph acquisition.
-- `TextEditing.ts`: session caret, navigation, selected items, history boundaries, hover.
+- `TextEditing.ts`: session caret, navigation, selected items, history boundaries.
 - `edit.ts`: pure splice, deletion, selection, word, and selection-rectangle operations.
 - `layout/`: existing TextLayout, Positioner (literal LTR advances), and Caret.
 - `lib/nodes/TextRunNodeDefinition.ts`: scaled presentation and hit testing.
@@ -65,7 +65,7 @@ Every row names a removed or rewritten test from the legacy suites or toolbar E2
 | TextInteraction: suspend moves editing                     | Suspend in-place glyph target across tool exit | Intentionally removed in slice 1; in-context glyph editing is deferred                                                           |
 | TextInteraction: resume restores suspended target          | Resume in-place glyph target                   | Intentionally removed in slice 1; in-context glyph editing is deferred                                                           |
 | TextInteraction: resume with nothing                       | No suspended glyph target                      | Intentionally removed along with suspension                                                                                      |
-| TextInteraction: clear resets context                      | End focus and clear hover                      | `TextEditing.test.ts`: Escape deletes an empty node; hover follows item and clears                                               |
+| TextInteraction: clear resets context                      | End focus and clear hover                      | `TextEditing.test.ts`: Escape deletes an empty node; text-run hover intentionally removed                                        |
 | TextInteraction: adjust nulls deleted indices              | Deleted glyph target no longer resolves        | `edit.test.ts`: an item identity follows insertion/deletion (absent ID resolves to no cluster); in-context target owner deferred |
 | TextInteraction: adjust shifts after deletion              | Surviving identity follows reordered items     | `edit.test.ts`: an item identity follows insertions and deletions before it                                                      |
 | TextInteraction: adjust shifts after insertion             | Surviving identity follows reordered items     | `TextEditing.test.ts`: a caret stays on its item when another is inserted before it                                              |
