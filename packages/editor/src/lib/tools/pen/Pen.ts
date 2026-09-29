@@ -1,6 +1,12 @@
 import { BaseTool, type ToolName } from "../core";
 import type { PenContext, PenCurve, PenEndpoint, PenState } from "./types";
-import { PenDownBehaviour, HandleBehavior, EscapeBehavior, CloseBehavior } from "./behaviors";
+import {
+  PenDownBehaviour,
+  HandleBehavior,
+  EscapeBehavior,
+  CloseBehavior,
+  PullHandleBehavior,
+} from "./behaviors";
 import type { CursorType } from "../../../types/editor";
 import type { Canvas } from "../../editor/rendering/Canvas";
 import type { Editor } from "../../editor/Editor";
@@ -29,6 +35,7 @@ export class Pen extends BaseTool<PenState, Pen> {
 
   readonly behaviors = [
     new EscapeBehavior(),
+    new PullHandleBehavior(),
     new PenDownBehaviour(),
     new CloseBehavior(),
     new HandleBehavior(),
@@ -55,7 +62,7 @@ export class Pen extends BaseTool<PenState, Pen> {
       const outgoingHandle = context.outgoingHandle;
       if (outgoingHandle?.pointId === anchor.id) {
         return {
-          kind: "smooth",
+          kind: outgoingHandle.smooth ? "smooth" : "cusp",
           pointId: anchor.id,
           position: anchor.position,
           outgoingHandlePosition: outgoingHandle.position,
@@ -101,9 +108,13 @@ export class Pen extends BaseTool<PenState, Pen> {
     if (!context?.activeContourId) return;
 
     const outgoingHandle =
-      endpoint.kind === "smooth"
-        ? { pointId: endpoint.pointId, position: endpoint.outgoingHandlePosition }
-        : null;
+      endpoint.kind === "corner"
+        ? null
+        : {
+            pointId: endpoint.pointId,
+            position: endpoint.outgoingHandlePosition,
+            smooth: endpoint.kind === "smooth",
+          };
     this.#ctx.set({ ...context, outgoingHandle });
   }
 
@@ -160,7 +171,7 @@ export class Pen extends BaseTool<PenState, Pen> {
   }
 
   protected override isEditing(state: PenState): boolean {
-    return state.type === "dragging" || state.type === "closing";
+    return state.type === "dragging" || state.type === "closing" || state.type === "pulling";
   }
 
   initialState(): PenState {

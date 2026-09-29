@@ -51,6 +51,10 @@ export class PenStroke {
     return this.#pen.activeEndpointCell.peek();
   }
 
+  setActiveEndpoint(endpoint: PenEndpoint): void {
+    this.#pen.setActiveEndpoint(endpoint);
+  }
+
   startContour(position: Point2D): PointId {
     const [contourId, pointId] = this.#pen.editor.transaction("Start contour", () => {
       const contourId = this.#layer.addContour();
