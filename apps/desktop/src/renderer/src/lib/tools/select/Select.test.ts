@@ -176,11 +176,17 @@ describe("Select tool", () => {
         expect(editor.toolManager.activeTool?.cursorCell.value).not.toEqual({ type: "add" });
       });
 
-      it("does not offer adding on selected points, segments, or empty canvas", () => {
+      it("offers adding on an unselected segment", () => {
+        editor.selection.select([firstId]);
+        const segment = editor.projectSceneToScreen({ x: 150, y: 150 });
+        editor.pointerMove(segment.x, segment.y, { shiftKey: true });
+        expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "add" });
+      });
+
+      it("does not offer adding on selected points or empty canvas", () => {
         editor.selection.select([firstId, secondId]);
         for (const position of [
           { x: 100, y: 100 },
-          { x: 150, y: 150 },
           { x: 500, y: 500 },
         ]) {
           const point = editor.projectSceneToScreen(position);
