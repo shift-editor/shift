@@ -7,6 +7,7 @@ import {
   type MoveEdit,
 } from "../../model/positions/index";
 import type { PositionFeedback, PositionSelection } from "../../../types/positionEdit";
+import type { PointSlide } from "./PointSlide";
 
 export class TranslateInteraction {
   readonly move: MoveEdit;
@@ -16,6 +17,7 @@ export class TranslateInteraction {
     selection: PositionSelection,
     reference: GlyphLayerPositionTarget | null,
     pointerStart: Point2D,
+    slide: PointSlide | null = null,
   ) {
     this.move = PositionEdits.fromSelection(selection).move(selection.targets);
 
@@ -30,8 +32,11 @@ export class TranslateInteraction {
       }
     }
 
+    if (slide) this.move.along(slide.axis);
+
     const pointIds = selection.targets.points ?? [];
-    if (pointIds.length > 0) {
+    const handlesFollow = slide?.handlesFollow ?? true;
+    if (pointIds.length > 0 && handlesFollow) {
       this.move.constrainedBy(PointRuleConstraint.forSelection(selection.layer.geometry, pointIds));
     }
 

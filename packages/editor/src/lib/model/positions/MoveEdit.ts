@@ -12,6 +12,7 @@ import type {
   PositionTargets,
 } from "../../../types/positionEdit";
 import { DirectionSnap } from "./DirectionSnap";
+import type { MovementAxis } from "./MovementAxis";
 import { PointRuleConstraint } from "./PointRuleConstraint";
 import { PositionEditGroup } from "./PositionEditGroup";
 import { PositionReference } from "./PositionReference";
@@ -28,6 +29,7 @@ export class MoveEdit implements PositionEdit {
   #directionSnap: DirectionSnap | null = null;
   #directionPivot: Point2D | null = null;
   #directionGuides = true;
+  #axisDirection: Point2D | null = null;
   #snapProvider: PositionSnapProvider | null = null;
   #pointRules: PointRuleConstraint | null = null;
 
@@ -76,6 +78,19 @@ export class MoveEdit implements PositionEdit {
     this.#directionPivot = snap.resolvePivot(this.#layers.reference.layer);
     this.#directionGuides = snap.showsGuides;
     this.#directionSnap = snap;
+    return this;
+  }
+
+  /**
+   * Restricts every preview delta to one axis, after snapping.
+   *
+   * @param axis - Axis whose direction freezes on attachment; coincident ends leave movement free.
+   * @returns This edit for fluent configuration before its first preview.
+   * @throws {Error} When preview has begun or an axis end does not exist in the layer.
+   */
+  along(axis: MovementAxis): this {
+    this.#assertConfiguring();
+    this.#axisDirection = axis.resolveDirection(this.#layers.reference.layer);
     return this;
   }
 
@@ -139,6 +154,10 @@ export class MoveEdit implements PositionEdit {
         delta = Vec2.sub(snap.point, this.#reference);
         guides.push(...snap.guides);
       }
+    }
+
+    if (this.#axisDirection) {
+      delta = Vec2.project(delta, this.#axisDirection);
     }
 
     const reference = this.#layers.reference;

@@ -677,6 +677,68 @@ describe("Select curve bending preserves edit lifecycle", () => {
     expect(editor.pointPosition(controlTwoId)).toEqual(twoBefore);
   });
 
+  it("snaps each handle to the nearest 45° while Shift bends a flat curve", async () => {
+    await editor.dragScene({
+      down: bendPoint,
+      start: { x: bendPoint.x + 4, y: bendPoint.y },
+      end: { x: bendPoint.x, y: bendPoint.y + 40 },
+      options: { metaKey: true, shiftKey: true },
+    });
+
+    const handleOne = Vec2.sub(editor.pointPosition(controlOneId), { x: 100, y: 200 });
+    const handleTwo = Vec2.sub(editor.pointPosition(controlTwoId), { x: 200, y: 200 });
+    expect(handleOne.x).toBeGreaterThan(0);
+    expect(handleOne.y).toBeCloseTo(handleOne.x);
+    expect(handleTwo.x).toBeLessThan(0);
+    expect(handleTwo.y).toBeCloseTo(-handleTwo.x);
+    expect(layer.contours[0]?.segments()[0]?.pointAt(0.5).y).toBeCloseTo(bendPoint.y + 40);
+  });
+
+  it("reads Shift per drag sample so releasing it mid-drag frees the handles", () => {
+    const down = editor.projectSceneToScreen(bendPoint);
+    const start = editor.projectSceneToScreen({ x: bendPoint.x + 4, y: bendPoint.y });
+    const end = editor.projectSceneToScreen({ x: bendPoint.x, y: bendPoint.y + 40 });
+    const handleOne = () => Vec2.sub(editor.pointPosition(controlOneId), { x: 100, y: 200 });
+
+    editor.pointerDown(down.x, down.y, { metaKey: true });
+    editor.pointerMove(start.x, start.y, { metaKey: true });
+    editor.pointerMove(end.x, end.y, { metaKey: true, shiftKey: true });
+    expect(handleOne().y).toBeCloseTo(handleOne().x);
+
+    editor.pointerMove(end.x, end.y + 1, { metaKey: true });
+    expect(handleOne().y).not.toBeCloseTo(handleOne().x);
+  });
+
+  it("keeps each handle's direction and changes only its length while Alt is held", async () => {
+    await editor.dragScene({
+      down: bendPoint,
+      start: { x: bendPoint.x + 4, y: bendPoint.y },
+      end: { x: bendPoint.x + 20, y: bendPoint.y + 40 },
+      options: { metaKey: true },
+    });
+    const anchorStart = { x: 100, y: 200 };
+    const anchorEnd = { x: 200, y: 200 };
+    const handleOneBefore = Vec2.sub(editor.pointPosition(controlOneId), anchorStart);
+    const handleTwoBefore = Vec2.sub(editor.pointPosition(controlTwoId), anchorEnd);
+    const bentPoint = layer.contours[0]?.segments()[0]?.pointAt(0.5);
+    if (!bentPoint) throw new Error("Expected bent segment");
+
+    await editor.dragScene({
+      down: bentPoint,
+      start: { x: bentPoint.x, y: bentPoint.y + 4 },
+      end: { x: bentPoint.x - 10, y: bentPoint.y + 30 },
+      options: { metaKey: true, altKey: true },
+    });
+
+    const handleOne = Vec2.sub(editor.pointPosition(controlOneId), anchorStart);
+    const handleTwo = Vec2.sub(editor.pointPosition(controlTwoId), anchorEnd);
+    expect(Vec2.cross(Vec2.unit(handleOne), Vec2.unit(handleOneBefore))).toBeCloseTo(0);
+    expect(Vec2.cross(Vec2.unit(handleTwo), Vec2.unit(handleTwoBefore))).toBeCloseTo(0);
+    expect(Vec2.dot(handleOne, handleOneBefore)).toBeGreaterThan(0);
+    expect(Vec2.dot(handleTwo, handleTwoBefore)).toBeGreaterThan(0);
+    expect(Vec2.len(handleOne)).not.toBeCloseTo(Vec2.len(handleOneBefore), 0);
+  });
+
   it("commits bending as one undoable and redoable edit", async () => {
     const oneBefore = editor.pointPosition(controlOneId);
     const twoBefore = editor.pointPosition(controlTwoId);
@@ -696,5 +758,33 @@ describe("Select curve bending preserves edit lifecycle", () => {
 
     await editor.redo();
     expect([editor.pointPosition(controlOneId), editor.pointPosition(controlTwoId)]).toEqual(bent);
+  });
+});
+
+describe("Select Shift-bending snaps handles to 45° steps", () => {
+  it("snaps a diagonal curve's handles to one horizontal and one vertical", async () => {
+    const editor = new TestEditor();
+    await editor.startSession();
+    await editor.drawOpenContour([
+      { x: 100, y: 100 },
+      { x: 300, y: 300 },
+    ]);
+    const layer = editor.requireGlyphLayer();
+    const segment = layer.contours[0]?.segments()[0];
+    if (!segment || !layer.upgradeLineToCubic(segment.id)) throw new Error("Expected cubic");
+    await editor.settle();
+    const cubic = layer.contours[0]?.segments()[0]?.asCubic();
+    if (!cubic) throw new Error("Expected cubic");
+    editor.selectTool("select");
+
+    await editor.dragScene({
+      down: { x: 200, y: 200 },
+      start: { x: 204, y: 196 },
+      end: { x: 260, y: 140 },
+      options: { metaKey: true, shiftKey: true },
+    });
+
+    expect(editor.pointPosition(cubic.controlStart.id)).toMatchObject({ x: 260, y: 100 });
+    expect(editor.pointPosition(cubic.controlEnd.id)).toMatchObject({ x: 300, y: 140 });
   });
 });

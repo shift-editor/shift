@@ -30,6 +30,7 @@ export class GlyphLayerEdit {
   readonly #anchors = new Map<AnchorId, AnchorSeed>();
   readonly #smoothPoints = new Map<PointId, boolean>();
   readonly #positions = new Map<string, GlyphLayerPosition>();
+  readonly #closedContours = new Set<ContourId>();
   #closed = false;
 
   constructor(glyphLayer: GlyphLayer, state: GlyphLayerState) {
@@ -90,6 +91,15 @@ export class GlyphLayerEdit {
     this.#smoothPoints.set(pointId, smooth);
   }
 
+  closeContour(contourId: ContourId): void {
+    this.#assertOpen();
+    if (!this.#state.buffers.setContourClosed(contourId, true)) {
+      throw new Error(`cannot close contour ${contourId}: it is not in the layer`);
+    }
+
+    this.#closedContours.add(contourId);
+  }
+
   setPositions(positions: GlyphLayerPositions): void {
     this.#assertOpen();
     if (positions.length === 0) return;
@@ -122,6 +132,10 @@ export class GlyphLayerEdit {
 
         for (const [pointId, smooth] of this.#smoothPoints) {
           this.#glyphLayer.setPointSmooth(pointId, smooth);
+        }
+
+        for (const contourId of this.#closedContours) {
+          this.#glyphLayer.closeContour(contourId);
         }
 
         const positions = [...this.#positions.values()];
@@ -158,6 +172,12 @@ export class GlyphLayerEdit {
       for (const [pointId, smooth] of this.#smoothPoints) {
         if (!this.#state.buffers.setPointSmooth(pointId, smooth)) {
           throw new Error(`cannot reapply smoothness for point ${pointId}`);
+        }
+      }
+
+      for (const contourId of this.#closedContours) {
+        if (!this.#state.buffers.setContourClosed(contourId, true)) {
+          throw new Error(`cannot reapply closure for contour ${contourId}`);
         }
       }
 

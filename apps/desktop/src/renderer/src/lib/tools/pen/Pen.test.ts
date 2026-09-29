@@ -312,4 +312,131 @@ describe("Pen tool", () => {
       expect(editor.glyphContours.length).toBe(0);
     });
   });
+
+  describe("closing and joining", () => {
+    it("dragging off the first point closes a line-started contour along the line's tangent", async () => {
+      await editor.drawOpenContour([
+        { x: 100, y: 100 },
+        { x: 300, y: 100 },
+        { x: 300, y: 300 },
+      ]);
+
+      await editor.dragScene({
+        down: { x: 100, y: 100 },
+        start: { x: 130, y: 110 },
+        end: { x: 160, y: 130 },
+      });
+
+      const contour = editor.glyphContours[0];
+      expect(editor.glyphContours).toHaveLength(1);
+      expect(contour?.closed).toBe(true);
+      expect(contour?.points.filter((point) => point.isOnCurve)).toHaveLength(3);
+      expect(contour?.firstPoint?.smooth).toBe(true);
+      expect(contour?.segments()[0]?.type).toBe("line");
+
+      const closing = contour?.segments().at(-1)?.asCubic();
+      expect(closing?.controlEnd.x).toBeCloseTo(40);
+      expect(closing?.controlEnd.y).toBeCloseTo(100);
+      expect(editor.openContour).toBeNull();
+    });
+
+    it("dragging off the first point mirrors a curve-started contour's first handle", async () => {
+      await editor.clickGlyphLocal(100, 100);
+      await editor.dragScene({
+        down: { x: 300, y: 100 },
+        start: { x: 340, y: 120 },
+        end: { x: 380, y: 180 },
+      });
+      await editor.clickGlyphLocal(300, 300);
+
+      await editor.dragScene({
+        down: { x: 100, y: 100 },
+        start: { x: 100, y: 130 },
+        end: { x: 100, y: 160 },
+      });
+
+      const contour = editor.glyphContours[0];
+      expect(contour?.closed).toBe(true);
+      expect(contour?.points.filter((point) => point.isOnCurve)).toHaveLength(3);
+      expect(contour?.firstPoint?.smooth).toBe(true);
+
+      const first = contour?.segments()[0]?.asCubic();
+      const closing = contour?.segments().at(-1)?.asCubic();
+      expect(first?.controlStart).toMatchObject({ x: 100, y: 160 });
+      expect(closing?.controlEnd).toMatchObject({ x: 100, y: 40 });
+    });
+
+    it("a closing drag is one undo step", async () => {
+      await editor.drawOpenContour([
+        { x: 100, y: 100 },
+        { x: 300, y: 100 },
+        { x: 300, y: 300 },
+      ]);
+      await editor.dragScene({
+        down: { x: 100, y: 100 },
+        start: { x: 130, y: 110 },
+        end: { x: 160, y: 130 },
+      });
+
+      await editor.undo();
+
+      const contour = editor.glyphContours[0];
+      expect(contour?.closed).toBe(false);
+      expect(contour?.points).toHaveLength(3);
+    });
+
+    it("clicking another contour's end joins the two contours and ends the stroke", async () => {
+      await editor.drawOpenContour([
+        { x: 100, y: 100 },
+        { x: 300, y: 100 },
+      ]);
+      editor.escape();
+      await editor.clickGlyphLocal(100, 300);
+      await editor.clickGlyphLocal(300, 300);
+
+      await editor.clickGlyphLocal(300, 100);
+
+      const contours = editor.glyphContours;
+      expect(contours).toHaveLength(1);
+      expect(contours[0]?.closed).toBe(false);
+      expect(contours[0]?.points.map((point) => point.position)).toEqual([
+        { x: 100, y: 300 },
+        { x: 300, y: 300 },
+        { x: 300, y: 100 },
+        { x: 100, y: 100 },
+      ]);
+
+      await editor.clickGlyphLocal(500, 500);
+      expect(editor.glyphContours).toHaveLength(2);
+    });
+
+    it("shows the end cursor over another contour's start while drawing", async () => {
+      await editor.drawOpenContour([
+        { x: 100, y: 100 },
+        { x: 300, y: 100 },
+      ]);
+      editor.escape();
+      await editor.clickGlyphLocal(100, 300);
+      await editor.clickGlyphLocal(300, 300);
+
+      const otherStart = editor.projectSceneToScreen({ x: 100, y: 100 });
+      editor.pointerMove(otherStart.x, otherStart.y);
+
+      expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "pen-end" });
+    });
+
+    it("clicking another contour's end leaves the active contour open", async () => {
+      await editor.drawOpenContour([
+        { x: 100, y: 100 },
+        { x: 300, y: 100 },
+      ]);
+      editor.escape();
+      await editor.clickGlyphLocal(100, 300);
+      await editor.clickGlyphLocal(300, 300);
+
+      await editor.clickGlyphLocal(100, 100);
+
+      expect(editor.glyphContours.every((contour) => !contour.closed)).toBe(true);
+    });
+  });
 });

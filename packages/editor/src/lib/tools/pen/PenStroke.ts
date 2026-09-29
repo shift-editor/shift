@@ -7,6 +7,7 @@ import type { MoveEdit } from "../../model/positions/index";
 import type { GlyphNode } from "../../../types/node";
 import type { Pen } from "./Pen";
 import type { PenCurve, PenEndpoint } from "./types";
+import type { PenTarget } from "./PenTargets";
 
 export class PenStroke {
   readonly #pen: Pen;
@@ -121,6 +122,28 @@ export class PenStroke {
     this.#layer.closeContour(contourId);
     this.#pen.clearActiveContour();
     return true;
+  }
+
+  /**
+   * Connects the active contour's end to an open end: its own first point closes
+   * it, another contour's end joins that contour. Either way the stroke ends.
+   *
+   * @returns Whether the contours changed.
+   */
+  connectTo(target: PenTarget & { readonly type: "terminal" }): boolean {
+    const contourId = this.#pen.context?.activeContourId;
+    if (!contourId) return false;
+    if (target.pointId === this.activeEndpoint?.pointId) return false;
+
+    if (target.contourId === contourId) return this.closeActiveContour();
+
+    const joined = this.#layer.joinContours(
+      { contourId, side: "end" },
+      { contourId: target.contourId, side: target.side },
+      false,
+    );
+    this.#pen.clearActiveContour();
+    return joined;
   }
 
   canClose(position: Point2D, hitRadius: number): boolean {

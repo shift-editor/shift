@@ -59,6 +59,25 @@ describe("Pen applies Shift direction snapping", () => {
     editor.escape();
   });
 
+  it("publishes a direction guide while Shift snaps a closing drag", async () => {
+    await editor.dragScene({
+      down: { x: 300, y: 100 },
+      start: { x: 340, y: 120 },
+      end: { x: 380, y: 180 },
+    });
+    await editor.clickGlyphLocal(300, 300);
+    const down = editor.projectSceneToScreen({ x: 100, y: 100 });
+    const end = editor.projectSceneToScreen({ x: 100, y: 162 });
+
+    editor.pointerDown(down.x, down.y).pointerMove(end.x, end.y, { shiftKey: true });
+
+    const state = editor.toolIf("pen")?.state;
+    if (state?.type !== "closing") throw new Error("Expected Pen closing drag");
+    expect(state.guides).toHaveLength(1);
+    expect(state.guides[0]).toMatchObject({ kind: "direction", from: { x: 100, y: 100 } });
+    editor.escape();
+  });
+
   it("keeps visual feedback for horizontal Pen handle snapping", () => {
     const down = editor.projectSceneToScreen({ x: 300, y: 100 });
     const end = editor.projectSceneToScreen({ x: 380, y: 100 });
