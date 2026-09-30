@@ -134,7 +134,7 @@ const MissingActions = ({
 );
 
 const CARD_CLASS =
-  "group relative flex min-w-0 flex-col overflow-hidden border border-line/60 bg-background card-shadow transition-shadow hover:shadow-md";
+  "group relative flex min-w-0 flex-col overflow-hidden border border-line/20 bg-background card-shadow transition-shadow hover:shadow-md";
 const CARD_BUTTON_CLASS =
   "absolute inset-0 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset";
 const HOVER_REVEAL_CLASS =
@@ -222,7 +222,7 @@ export const RecentFileRow = ({ document, folder, now, actions }: RecentFileItem
       >
         <span
           aria-hidden="true"
-          className="relative size-9 shrink-0 rounded-md border border-line/60 bg-surface-muted"
+          className="relative size-9 shrink-0 rounded-md border border-line/20 bg-surface-muted"
         >
           <RecentSpecimen document={document} className="absolute inset-0 m-auto size-6" />
         </span>
