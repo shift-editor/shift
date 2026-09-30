@@ -127,6 +127,11 @@
     0 1px 3px -1px var(--color-shadow-key);
 }
 
+/* Unstyled text follows the theme instead of the browser's color-scheme default. */
+body {
+  color: var(--color-primary);
+}
+
 /* Hide scrollbar while preserving scroll behavior */
 @utility scrollbar-hidden {
   scrollbar-width: none;
