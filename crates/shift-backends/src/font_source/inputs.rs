@@ -42,6 +42,10 @@ enum ProjectionEvaluation<'a> {
 }
 
 /// Builds source-neutral retained compiler inputs from projected glyphs.
+///
+/// A root the source cannot project (for example a Glyphs smart-component
+/// glyph) compiles as an empty outline so it cannot fail the rest of the page;
+/// reading that glyph directly still reports the projection error.
 pub fn variable_glyph_inputs<S: FontSource + ?Sized>(
     source: &S,
     roots: &[GlyphIndex],
@@ -49,12 +53,16 @@ pub fn variable_glyph_inputs<S: FontSource + ?Sized>(
     validate_roots(source.directory(), roots)?;
     let projected = roots
         .par_iter()
-        .map(|root| source.glyph(*root))
-        .collect::<Result<Vec<_>, _>>()?;
+        .map(|root| source.glyph(*root).ok())
+        .collect::<Vec<_>>();
 
     let mut projections = BTreeMap::new();
     let mut closures = Vec::with_capacity(projected.len());
     for projected_glyph in projected {
+        let Some(projected_glyph) = projected_glyph else {
+            closures.push(None);
+            continue;
+        };
         let mut closure = Vec::with_capacity(projected_glyph.components.len() + 1);
         for projection in
             std::iter::once(projected_glyph.root).chain(projected_glyph.components.into_vec())
@@ -74,7 +82,7 @@ pub fn variable_glyph_inputs<S: FontSource + ?Sized>(
         }
         closure.sort_unstable();
         closure.dedup();
-        closures.push(closure);
+        closures.push(Some(closure));
     }
 
     let axes = atlas_axes(source.directory())?;
@@ -93,6 +101,10 @@ pub fn variable_glyph_inputs<S: FontSource + ?Sized>(
 
     let mut glyphs = Vec::with_capacity(roots.len());
     for (root, closure) in roots.iter().zip(&closures) {
+        let Some(closure) = closure else {
+            glyphs.push((root.to_u32(), empty_glyph_input()));
+            continue;
+        };
         let source_weights = closure
             .iter()
             .flat_map(|glyph| {
@@ -192,6 +204,19 @@ pub fn variable_glyph_inputs<S: FontSource + ?Sized>(
         axes,
         regions: registry.into_regions(),
     })
+}
+
+fn empty_glyph_input() -> GlyphInput {
+    let (shape, base_values) = outline_input(&ProjectedOutline {
+        advance: 0.0,
+        segments: Vec::new(),
+    });
+    GlyphInput {
+        shape,
+        base_values,
+        samples: Vec::new(),
+        exact_variants: Vec::new(),
+    }
 }
 
 fn outline_input(outline: &ProjectedOutline) -> (RetainedGlyphShape, Box<[f64]>) {
@@ -587,6 +612,79 @@ mod tests {
             .resolve_glyph_with_weights(atlas_glyph, &weights)
             .unwrap()
             .is_empty());
+    }
+
+    const SMART_NEIGHBOUR_GLYPHS: &str = r#"{
+.appVersion = "3343";
+.formatVersion = 3;
+familyName = "Smart Neighbour";
+fontMaster = (
+{ id = master01; name = Regular; }
+);
+glyphs = (
+{
+glyphname = bar;
+layers = (
+{
+layerId = master01;
+shapes = (
+{
+closed = 1;
+nodes = (
+(100,0,l),
+(200,0,l),
+(200,700,l),
+(100,700,l)
+);
+}
+);
+width = 300;
+}
+);
+},
+{
+glyphname = _smart.dash;
+layers = (
+{
+layerId = master01;
+partSelection = { Width = 1; };
+width = 300;
+}
+);
+}
+);
+unitsPerEm = 1000;
+}"#;
+
+    #[test]
+    fn unprojectable_glyph_compiles_empty_without_failing_its_page() {
+        let temporary = tempfile::tempdir().unwrap();
+        let path = temporary.path().join("SmartNeighbour.glyphs");
+        std::fs::write(&path, SMART_NEIGHBOUR_GLYPHS).unwrap();
+        let font = GlyphsFont::open(&path).unwrap();
+        let glyph = |name: &str| {
+            font.directory()
+                .glyphs
+                .iter()
+                .find(|glyph| glyph.name == name)
+                .unwrap()
+                .index
+        };
+        let (bar, smart) = (glyph("bar"), glyph("_smart.dash"));
+        assert!(font.glyph(smart).is_err());
+
+        let page = compile_page(&font, &[bar, smart]).unwrap();
+        let weights = page
+            .weights(font.directory().default_location().coordinates())
+            .unwrap();
+        let resolve = |index: usize| {
+            page.atlas()
+                .resolve_glyph_with_weights(page.glyphs()[index].1, &weights)
+                .unwrap()
+        };
+
+        assert!(!resolve(0).is_empty());
+        assert!(resolve(1).is_empty());
     }
 
     #[test]
