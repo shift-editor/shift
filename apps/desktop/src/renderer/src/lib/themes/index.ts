@@ -306,7 +306,7 @@ function colorThemeVariables(theme: ColorTheme): Record<string, string> {
     "--color-sidebar-icon": secondary,
     "--color-accent": palette.base0D,
     "--color-on-accent": readableOn(palette.base0D, [
-      "#ffffff",
+      lightest(palette.base00, palette.base07),
       darkest(palette.base00, palette.base07),
     ]),
     "--color-error": palette.base08,
@@ -363,14 +363,29 @@ function colorThemeVariables(theme: ColorTheme): Record<string, string> {
   };
 }
 
-/** Returns the candidate text colour with the highest WCAG contrast against `background`. */
-function readableOn(background: string, candidates: readonly string[]): string {
+/** How close a preferred candidate's contrast must come to the best one to still win. */
+const PREFERRED_CONTRAST_MARGIN = 0.8;
+
+/**
+ * Picks the candidate with the highest WCAG contrast on `background`, except that the
+ * first candidate wins whenever it comes within 20% of the best. WCAG contrast
+ * over-favours dark text on saturated mid-tone accents, where light text reads better.
+ */
+function readableOn(background: string, [preferred, ...others]: readonly string[]): string {
   const backgroundLuminance = relativeLuminance(background);
   const contrast = (color: string) => {
     const [lighter, darker] = [relativeLuminance(color), backgroundLuminance].sort((a, b) => b - a);
     return (lighter + 0.05) / (darker + 0.05);
   };
-  return candidates.reduce((best, color) => (contrast(color) > contrast(best) ? color : best));
+  const best = others.reduce(
+    (best, color) => (contrast(color) > contrast(best) ? color : best),
+    preferred,
+  );
+  return contrast(preferred) >= contrast(best) * PREFERRED_CONTRAST_MARGIN ? preferred : best;
+}
+
+function lightest(first: string, second: string): string {
+  return relativeLuminance(first) >= relativeLuminance(second) ? first : second;
 }
 
 function darkest(first: string, second: string): string {
