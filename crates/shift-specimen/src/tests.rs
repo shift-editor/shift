@@ -114,3 +114,47 @@ fn resolves_a_design_language_by_script_subtag_or_language() {
     assert_eq!(script("sr-Latn"), None);
     assert_eq!(script("en"), None);
 }
+
+#[test]
+fn plans_only_the_latin_candidates_for_a_latin_font() {
+    let characters: Vec<char> = ('A'..='Z').chain('a'..='z').collect();
+
+    assert_eq!(
+        subset_plan(&characters),
+        SubsetPlan {
+            characters: vec!['A', 'G', 'a', 'g'],
+            needs_features: false,
+        }
+    );
+}
+
+#[test]
+fn plans_the_script_pair_and_fallback_letters_for_a_non_latin_font() {
+    let hebrew: Vec<char> = ('\u{05D0}'..='\u{05EA}').collect();
+    let plan = subset_plan(&hebrew);
+
+    assert!(plan.characters.contains(&'א') && plan.characters.contains(&'ב'));
+    assert!(plan.characters.len() <= 2 + SCRIPT_FALLBACK_LETTERS);
+    assert!(!plan.needs_features);
+}
+
+#[test]
+fn needs_the_whole_font_only_for_arabic_without_latin() {
+    let arabic: Vec<char> = ('\u{0621}'..='\u{064A}').collect();
+    let with_latin: Vec<char> = arabic.iter().copied().chain(['A', 'g']).collect();
+
+    assert!(subset_plan(&arabic).needs_features);
+    assert!(!subset_plan(&with_latin).needs_features);
+}
+
+#[test]
+fn a_subset_with_the_full_character_map_draws_the_same_specimen() {
+    let data = repo_font("fixtures/fonts/mutatorsans/MutatorSans.ttf");
+    let font = SpecimenFont::new(&data).unwrap();
+    let characters: Vec<char> = font.characters().collect();
+
+    assert_eq!(
+        specimen_with_characters(&data, &characters).map(|specimen| specimen.text),
+        Some("AG".to_string())
+    );
+}

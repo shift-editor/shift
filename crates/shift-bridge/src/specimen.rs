@@ -3,7 +3,8 @@ use std::path::PathBuf;
 use napi::bindgen_prelude::*;
 use napi::{Error, Status};
 use napi_derive::napi;
-use shift_backends::{font_loader::FontLoader, FontExporter};
+use shift_backends::{font_loader::FontLoader, FontExporter, FontView, GlyphSubsetView};
+use shift_font::Glyph;
 
 use crate::bridge::FontSaveSnapshot;
 
@@ -41,30 +42,87 @@ pub(crate) enum SpecimenInput {
   Path(PathBuf),
 }
 
-/// Compiles when needed, then chooses and outlines the thumbnail specimen.
+/// Compiles what the specimen needs, then chooses and outlines it.
 pub struct SpecimenTask {
   pub(crate) input: SpecimenInput,
 }
 
 impl SpecimenTask {
-  fn font_binary(&self) -> std::result::Result<Vec<u8>, String> {
+  fn build(&self) -> std::result::Result<Option<shift_specimen::Specimen>, String> {
     match &self.input {
-      SpecimenInput::Snapshot(snapshot) => FontExporter::new()
-        .compile_ttf(snapshot)
-        .map_err(|error| error.to_string()),
+      SpecimenInput::Snapshot(snapshot) => source_specimen(snapshot),
       SpecimenInput::Path(path) if is_font_binary(path) => {
-        std::fs::read(path).map_err(|error| error.to_string())
+        let binary = std::fs::read(path).map_err(|error| error.to_string())?;
+        Ok(shift_specimen::specimen(&binary))
       }
       SpecimenInput::Path(path) => {
         let font = FontLoader::new()
           .read_font(&path.to_string_lossy())
           .map_err(|error| error.to_string())?;
-        FontExporter::new()
-          .compile_ttf(&font)
-          .map_err(|error| error.to_string())
+        source_specimen(&font)
       }
     }
   }
+}
+
+/// Glyphs with outlines kept from the start of glyph order, for the
+/// specimen's "first drawn glyphs" fallback.
+const LEADING_DRAWN_GLYPHS: usize = 2;
+
+/// Builds a source font's specimen by compiling only the glyphs it can use.
+///
+/// The specimen rules decide from the whole font's character map; only the
+/// candidate glyphs, `.notdef`, and the first drawn glyphs are compiled. A
+/// font whose specimen needs contextual forms is compiled whole instead.
+fn source_specimen(
+  font: &impl FontView,
+) -> std::result::Result<Option<shift_specimen::Specimen>, String> {
+  let glyphs = font.glyphs();
+  let characters: Vec<char> = glyphs
+    .iter()
+    .flat_map(|glyph| {
+      glyph
+        .unicodes()
+        .iter()
+        .filter_map(|&code| char::from_u32(code))
+    })
+    .collect();
+  let plan = shift_specimen::subset_plan(&characters);
+
+  let exporter = FontExporter::new();
+  let binary = if plan.needs_features {
+    exporter.compile_ttf(font)
+  } else {
+    let planned = glyphs.iter().filter(|glyph| {
+      glyph
+        .unicodes()
+        .iter()
+        .filter_map(|&code| char::from_u32(code))
+        .any(|character| plan.characters.contains(&character))
+    });
+    let leading = glyphs
+      .iter()
+      .filter(|glyph| glyph.name() != ".notdef" && has_outline(glyph))
+      .take(LEADING_DRAWN_GLYPHS);
+    let names = planned
+      .chain(leading)
+      .map(|glyph| glyph.name())
+      .chain([".notdef"]);
+    exporter.compile_ttf(&GlyphSubsetView::new(font, names))
+  }
+  .map_err(|error| error.to_string())?;
+
+  Ok(shift_specimen::specimen_with_characters(
+    &binary,
+    &characters,
+  ))
+}
+
+fn has_outline(glyph: &Glyph) -> bool {
+  glyph
+    .layers()
+    .values()
+    .any(|layer| !layer.contours().is_empty() || !layer.components().is_empty())
 }
 
 impl Task for SpecimenTask {
@@ -72,10 +130,9 @@ impl Task for SpecimenTask {
   type JsValue = Option<NapiSpecimen>;
 
   fn compute(&mut self) -> Result<Self::Output> {
-    let binary = self
-      .font_binary()
-      .map_err(|message| Error::new(Status::GenericFailure, message))?;
-    Ok(shift_specimen::specimen(&binary))
+    self
+      .build()
+      .map_err(|message| Error::new(Status::GenericFailure, message))
   }
 
   fn resolve(&mut self, _env: Env, output: Self::Output) -> Result<Self::JsValue> {

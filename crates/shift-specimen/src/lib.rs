@@ -66,13 +66,74 @@ pub struct ViewBox {
 /// finds glyphs with ink; callers show an empty thumbnail in that case.
 pub fn specimen(font_data: &[u8]) -> Option<Specimen> {
     let font = SpecimenFont::new(font_data)?;
-    let coverage = Coverage::of(&font);
+    let coverage = Coverage::from_characters(font.characters());
+    specimen_from(&font, &coverage)
+}
 
+/// Builds the specimen from a compiled subset of a font, deciding with the
+/// full font's character map.
+///
+/// `font_data` must include the glyphs for every character in
+/// [`subset_plan`]'s result, plus the first glyphs with outlines in glyph
+/// order; `characters` is every character the whole font maps.
+pub fn specimen_with_characters(font_data: &[u8], characters: &[char]) -> Option<Specimen> {
+    let font = SpecimenFont::new(font_data)?;
+    let coverage = Coverage::from_characters(characters.iter().copied());
+    specimen_from(&font, &coverage)
+}
+
+/// What a font source must compile so [`specimen_with_characters`] can draw
+/// its specimen without compiling every glyph.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SubsetPlan {
+    /// Characters any specimen rule might shape; compile their glyphs.
+    pub characters: Vec<char>,
+    /// Whether the chosen script needs contextual shaping features, so the
+    /// whole font must be compiled with its feature code.
+    pub needs_features: bool,
+}
+
+/// Plans the smallest compile that still draws the right specimen.
+///
+/// Only the glyph-independent rules are applied here: the specimen text is
+/// still chosen after shaping the compiled subset.
+pub fn subset_plan(characters: &[char]) -> SubsetPlan {
+    let coverage = Coverage::from_characters(characters.iter().copied());
+    if coverage.is_symbol_font() {
+        return SubsetPlan {
+            characters: Vec::new(),
+            needs_features: false,
+        };
+    }
+
+    let covered = |character: &char| characters.contains(character);
+    let mut planned: Vec<char> = ['A', 'g', 'G', 'a'].into_iter().filter(covered).collect();
+    let draws_ag = covered(&'A') && covered(&'g');
+    let script = coverage.main_script();
+    if let Some(script) = script {
+        planned.extend(script.pair().chars().filter(covered));
+        planned.extend(
+            coverage
+                .letters(script)
+                .into_iter()
+                .take(SCRIPT_FALLBACK_LETTERS),
+        );
+    }
+    planned.sort_unstable();
+    planned.dedup();
+
+    SubsetPlan {
+        characters: planned,
+        needs_features: !draws_ag && script.is_some_and(SpecimenScript::needs_contextual_forms),
+    }
+}
+
+fn specimen_from(font: &SpecimenFont, coverage: &Coverage) -> Option<Specimen> {
     if coverage.is_symbol_font() {
         return font.glyph_order_specimen();
     }
     if let Some(script) = font.declared_script() {
-        if let Some(specimen) = font.script_specimen(script, &coverage) {
+        if let Some(specimen) = font.script_specimen(script, coverage) {
             return Some(specimen);
         }
     }
@@ -80,7 +141,7 @@ pub fn specimen(font_data: &[u8]) -> Option<Specimen> {
         return Some(specimen);
     }
     if let Some(script) = coverage.main_script() {
-        if let Some(specimen) = font.script_specimen(script, &coverage) {
+        if let Some(specimen) = font.script_specimen(script, coverage) {
             return Some(specimen);
         }
     }
@@ -90,6 +151,10 @@ pub fn specimen(font_data: &[u8]) -> Option<Specimen> {
         .find_map(|text| font.shaped_specimen(text))
         .or_else(|| font.glyph_order_specimen())
 }
+
+/// Letters of the main script kept in a subset for the "first two drawn
+/// letters" fallback when the script's pair is not drawn.
+const SCRIPT_FALLBACK_LETTERS: usize = 8;
 
 /// A script whose fonts get a script-specific specimen pair.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -184,6 +249,11 @@ impl SpecimenScript {
         }
     }
 
+    /// Whether the pair only renders correctly with GSUB contextual forms.
+    fn needs_contextual_forms(self) -> bool {
+        self == Self::Arabic
+    }
+
     fn includes(self, script: Script) -> bool {
         match self {
             Self::Arabic => script == Script::Arabic,
@@ -215,14 +285,14 @@ struct Coverage {
 }
 
 impl Coverage {
-    fn of(font: &SpecimenFont) -> Self {
+    fn from_characters(characters: impl IntoIterator<Item = char>) -> Self {
         let mut coverage = Coverage {
             characters: 0,
             symbols: 0,
             letters_by_script: HashMap::new(),
         };
 
-        for character in font.characters() {
+        for character in characters {
             if character.is_whitespace() || character.is_control() {
                 continue;
             }
@@ -312,8 +382,11 @@ impl<'a> SpecimenFont<'a> {
             .data_maps()
             .iter()
             .find(|record| record.tag() == Tag::new(b"dlng"))?;
-        // read-fonts' ScriptLangTag splitting mis-measures tags after the
-        // first, so the comma-separated list is split here.
+        // read-fonts parses `dlng` into `Metadata::ScriptLangTags`, but its
+        // `ScriptLangTag::read_len_at` finds the next comma from the start of
+        // the whole list rather than the current tag, so every tag after the
+        // first is mis-sized (still true in read-fonts 0.43). Split the raw
+        // bytes here instead.
         let start = record.data_offset().to_u32() as usize;
         let end = start + record.data_length() as usize;
         let bytes = meta.offset_data().as_bytes().get(start..end)?;
