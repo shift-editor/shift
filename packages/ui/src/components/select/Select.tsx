@@ -103,8 +103,8 @@ export const SelectItem = React.forwardRef<
   <BaseSelect.Item
     ref={ref}
     className={cn(
-      "grid h-7 cursor-pointer select-none grid-cols-[1rem_minmax(0,1fr)] items-center rounded px-1",
-      "text-sm text-primary outline-none data-[highlighted]:bg-hover/50",
+      "grid h-7 cursor-pointer select-none grid-cols-[1rem_minmax(0,1fr)] items-center gap-2 rounded px-2",
+      "text-sm whitespace-nowrap text-primary outline-none data-[highlighted]:bg-hover/50",
       "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
       className,
     )}
@@ -126,9 +126,23 @@ export const SelectItemIndicator = React.forwardRef<
     className={cn("flex items-center justify-center", className)}
     {...props}
   >
-    {children ?? <Check className="h-3.5 w-3.5" />}
+    {children ?? <Check className="h-3.5 w-3.5" strokeWidth={1.75} />}
   </BaseSelect.ItemIndicator>
 ));
 SelectItemIndicator.displayName = "SelectItemIndicator";
 
-export const SelectItemText = BaseSelect.ItemText;
+export interface SelectItemTextProps extends React.ComponentPropsWithoutRef<
+  typeof BaseSelect.ItemText
+> {}
+
+/**
+ * Option label, pinned to the item's second column so unselected options,
+ * which render no indicator, stay aligned with the selected one.
+ */
+export const SelectItemText = React.forwardRef<
+  React.ElementRef<typeof BaseSelect.ItemText>,
+  SelectItemTextProps
+>(({ className, ...props }, ref) => (
+  <BaseSelect.ItemText ref={ref} className={cn("col-start-2", className)} {...props} />
+));
+SelectItemText.displayName = "SelectItemText";
