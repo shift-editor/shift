@@ -114,6 +114,12 @@
   --editor-text-component-overlay-hover-b: rgba(255, 151, 186, 0.4);
 }
 
+/* Only Shift Light shows the coloured lockup; other themes fill it with a tint of their text colour. */
+:root[data-color-theme]:not([data-color-theme="shift-light"]) {
+  --color-logo-lid: color-mix(in srgb, currentColor 22%, transparent);
+  --color-logo-body: color-mix(in srgb, currentColor 22%, transparent);
+}
+
 /* Lifts a bordered card off the page with theme-aware shadow colours. */
 @utility card-shadow {
   box-shadow:
