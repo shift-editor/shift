@@ -88,6 +88,7 @@ describe("Select translates segment selections in 90-degree directions", () => {
     await editor.settle();
     const cubic = layer.contours[0]!.segments()[0]!.asCubic()!;
     const before = cubic.controlStart.y;
+    await editor.clickGlyphLocal(200, 100);
     await editor.dragScene({
       down: { x: 200, y: 100 },
       start: { x: 260, y: 180 },

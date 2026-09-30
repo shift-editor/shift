@@ -423,8 +423,6 @@ test.describe("Editor view", () => {
     } finally {
       await page.keyboard.up("Alt");
     }
-    await canvas.click({ position: down, modifiers: ["Meta"] });
-    await editor.waitForIdle();
     await page.keyboard.down("Meta");
     try {
       await expect(canvas).toHaveCSS("cursor", /cursor@32-bend\.svg/);
@@ -432,7 +430,15 @@ test.describe("Editor view", () => {
         await sidebar.hover({ position: { x: 10, y: 10 } });
         await expect(sidebar).not.toHaveCSS("cursor", /cursors\//);
       }
+    } finally {
+      await page.keyboard.up("Meta");
+    }
+    await canvas.click({ position: down, modifiers: ["Meta"] });
+    await editor.waitForIdle();
+    await canvas.click({ position: { x: 10, y: 10 } });
+    await editor.waitForIdle();
 
+    try {
       await canvas.hover({ position: down });
       await page.mouse.down();
       for (const sidebar of [editorSidebar(page), glyphProperties(page)]) {
@@ -449,7 +455,6 @@ test.describe("Editor view", () => {
     } finally {
       await page.keyboard.press("Escape");
       await page.mouse.up();
-      await page.keyboard.up("Meta");
     }
     await expect(canvas).toHaveCSS("cursor", /cursor@32\.svg/);
   });
@@ -521,7 +526,7 @@ test.describe("Editor view", () => {
         expect(point.y).toBeCloseTo(preview.controls[index].y, 6);
       });
       await expect.poll(previewHandles).toBeNull();
-      await expect(canvas).toHaveCSS("cursor", /cursor@32-bend\.svg/);
+      await expect(canvas).toHaveCSS("cursor", /cursor@32\.svg/);
     } finally {
       await page.keyboard.up("Meta");
     }

@@ -11,8 +11,10 @@ export class BendCurve implements SelectBehavior {
   #hasChanges = false;
 
   onDragStart(state: SelectState, ctx: ToolContext<SelectState>, event: DragStartEvent): boolean {
-    if (state.type !== "ready" || !event.metaKey) return false;
+    if (state.type !== "ready") return false;
     if (event.target.kind !== "segment") return false;
+    // Dragging a selected segment translates it instead.
+    if (ctx.editor.selection.isSelected(event.target.id)) return false;
 
     const object = ctx.editor.object(event.target.id);
     if (!objectIsKindOf(object, "segment")) return false;

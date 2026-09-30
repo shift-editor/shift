@@ -95,7 +95,7 @@ export class Select extends BaseTool<SelectState, Select> {
         if (
           layer &&
           layer.sourceId === this.editor.activeSourceIdCell.value &&
-          (segment?.type === "line" || segment?.type === "cubic")
+          segment?.type === "line"
         ) {
           return { type: "bend" };
         }
