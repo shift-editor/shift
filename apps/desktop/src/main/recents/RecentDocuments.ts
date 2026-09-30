@@ -10,7 +10,7 @@ export const RECENT_DOCUMENTS_LIMIT = 20;
  * Revision of the specimen choice rules. Bump it when they change so cached
  * thumbnails built under older rules are rebuilt on next open.
  */
-const SPECIMEN_REVISION = 3;
+const SPECIMEN_REVISION = 1;
 
 /** A built specimen and the file modification time it was built from. */
 type Thumbnail = {

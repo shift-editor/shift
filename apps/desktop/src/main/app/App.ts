@@ -64,8 +64,7 @@ export class App {
   #workspaces: WorkspaceManager;
   #documentsRoot: string | null = null;
   #recents: RecentDocuments | null = null;
-  #fontOpensInFlight = 0;
-  #recentsPublishDeferred = false;
+  /** Launchers a font open is replacing; they stop receiving recents so no half-ready card flashes. */
   #replacedLaunchers = new WeakSet<Window>();
   #pendingOpenPaths: string[] = [];
   #previewConversions = new Map<string, Promise<void>>();
@@ -689,7 +688,7 @@ export class App {
       const sourcePath = this.#pendingOpenPaths[0];
 
       try {
-        const session = await this.#openFontPath(sourcePath);
+        const session = await this.#workspaces.openPath(sourcePath);
         const opener =
           this.#windows.activeWindow() ??
           this.#windows
@@ -743,17 +742,28 @@ export class App {
    * @returns whether a workspace window now shows the file.
    */
   async #openPathFromWindow(opener: Window, sourcePath: string): Promise<boolean> {
+    const openerIsLauncher = this.#workspaces.getForBrowserWindow(opener.window) === null;
+    if (openerIsLauncher) this.#replacedLaunchers.add(opener);
+
     try {
-      const session = await this.#openFontPath(sourcePath);
+      const session = await this.#workspaces.openPath(sourcePath);
       if (this.#focusExistingWorkspaceWindow(opener, session)) return true;
 
       this.#openWorkspaceWindow(opener, session);
       return true;
     } catch (error) {
       this.#log.warn("open document failed", error);
+      if (openerIsLauncher) this.#restoreLauncherRecents(opener);
       await this.#nativeDialogs.showOpenFailure(opener, this.applicationName);
       return false;
     }
+  }
+
+  #restoreLauncherRecents(launcher: Window): void {
+    this.#replacedLaunchers.delete(launcher);
+    if (launcher.window.isDestroyed()) return;
+
+    ipc.send(launcher.window.webContents, "recents.changed", this.#recents?.list() ?? []);
   }
 
   #openRecentFromMenu(sourcePath: string): void {
@@ -783,34 +793,8 @@ export class App {
     }
   }
 
-  /**
-   * Opens a font while holding back recents updates from renderer windows.
-   *
-   * @remarks
-   * Opening records the file before its window exists, so the launcher would
-   * briefly show a new card with no preview. Updates wait until every open has
-   * settled; by then a successful open has already replaced the launcher.
-   */
-  async #openFontPath(sourcePath: string): Promise<FontSessionHost> {
-    this.#fontOpensInFlight += 1;
-    try {
-      return await this.#workspaces.openPath(sourcePath);
-    } finally {
-      this.#fontOpensInFlight -= 1;
-      if (this.#fontOpensInFlight === 0 && this.#recentsPublishDeferred) {
-        this.#recentsPublishDeferred = false;
-        // After the caller has shown the font and closed the launcher it replaced.
-        setTimeout(() => this.#publishRecents(), 0);
-      }
-    }
-  }
-
   #publishRecents(): void {
     this.#applicationMenu.refresh();
-    if (this.#fontOpensInFlight > 0) {
-      this.#recentsPublishDeferred = true;
-      return;
-    }
 
     const documents = this.#recents?.list() ?? [];
     for (const window of this.#windows.allWindows()) {
