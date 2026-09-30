@@ -355,6 +355,28 @@ instances = (
 unitsPerEm = 1000;
 }"#;
 
+    const VARIABLE_INSTANCE_GLYPHS: &str = r#"{
+.appVersion = "3516";
+.formatVersion = 3;
+axes = (
+{ name = Weight; tag = wght; }
+);
+familyName = Variable;
+fontMaster = (
+{ axesValues = (100); id = thin; name = Thin; },
+{ axesValues = (400); id = regular; name = Regular; },
+{ axesValues = (900); id = black; name = Black; }
+);
+glyphs = ();
+instances = (
+{ name = Regular; type = variable; },
+{ axesValues = (100); name = Thin; },
+{ axesValues = (400); name = Regular; },
+{ axesValues = (900); name = Black; }
+);
+unitsPerEm = 1000;
+}"#;
+
     #[test]
     fn directory_sources_keep_retained_master_order() {
         let font = GlyphsFont::open(&fixture("MutatorSansVariable.glyphs")).unwrap();
@@ -402,6 +424,23 @@ unitsPerEm = 1000;
         assert_eq!((*minimum, *default, *maximum), (100.0, 100.0, 700.0));
         assert_eq!(font.directory.sources[1].location.as_ref(), [62.0]);
         assert_eq!(font.directory.instances[0].location.as_ref(), [500.0]);
+    }
+
+    #[test]
+    fn variable_instances_are_not_named_instances() {
+        let temporary = tempfile::tempdir().unwrap();
+        let path = temporary.path().join("Variable.glyphs");
+        fs::write(&path, VARIABLE_INSTANCE_GLYPHS).unwrap();
+
+        let font = GlyphsFont::open(&path).unwrap();
+        let names = font
+            .directory
+            .instances
+            .iter()
+            .map(|instance| instance.name.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(names, ["Thin", "Regular", "Black"]);
     }
 
     #[test]

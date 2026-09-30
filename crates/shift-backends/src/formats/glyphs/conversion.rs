@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use glyphs_reader::{
     Anchor as GlyphsAnchor, Component as GlyphsComponent, FeatureSnippet, Font as GlyphsFont,
-    FontMaster, Glyph as GlyphsGlyph, NodeType, Shape,
+    FontMaster, Glyph as GlyphsGlyph, InstanceType, NodeType, Shape,
 };
 use shift_font::{
     Anchor, Axis, AxisMapping, AxisMappingPoint, Component, Contour, DesignLocation,
@@ -19,6 +19,15 @@ const GLYPHS_SIDE1_PREFIX: &str = "@MMK_L_";
 const GLYPHS_SIDE2_PREFIX: &str = "@MMK_R_";
 const UFO_SIDE1_PREFIX: &str = "public.kern1.";
 const UFO_SIDE2_PREFIX: &str = "public.kern2.";
+
+/// Whether a Glyphs instance names a design-space location.
+///
+/// `type = variable` instances carry variable-font export settings and have no
+/// `axesValues`, so they would otherwise fall back to the default location and
+/// collide with a static instance there.
+fn is_named_instance(active: bool, instance_type: &InstanceType) -> bool {
+    active && *instance_type == InstanceType::Single
+}
 
 pub(crate) fn master_design_values(font: &GlyphsFont, axis_index: usize) -> Vec<f64> {
     font.masters
@@ -148,7 +157,7 @@ pub(crate) fn font_header(
         let instance_values = glyphs_font
             .instances
             .iter()
-            .filter(|instance| instance.active)
+            .filter(|instance| is_named_instance(instance.active, &instance.type_))
             .filter_map(|instance| instance.axes_values.get(index))
             .map(|value| mapping.unmap(value.into_inner()));
         let external_values = mapping
@@ -246,7 +255,7 @@ pub(crate) fn font_header(
         glyphs_font
             .instances
             .iter()
-            .filter(|instance| instance.active)
+            .filter(|instance| is_named_instance(instance.active, &instance.type_))
             .map(|instance| {
                 NamedInstance::new(
                     instance.name.clone(),
