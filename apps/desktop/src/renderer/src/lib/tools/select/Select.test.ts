@@ -721,38 +721,69 @@ describe("Select tool", () => {
       });
     });
 
-    it("bends a cubic segment with meta-drag", async () => {
-      editor.selectTool("pen");
-      await editor.clickGlyphLocal(100, 200);
-      await editor.clickGlyphLocal(190, 230);
+    describe("dragging a cubic segment", () => {
+      let layer: GlyphLayer;
+      let bendPoint: Point2D;
+      let controlStartId: PointId;
+      let controlEndId: PointId;
 
-      const layer = editor.requireGlyphLayer();
-      const segment = layer.contours[0]?.segments()[0];
-      if (!segment) throw new Error("Expected line segment");
-      expect(layer.upgradeLineToCubic(segment.id)).toBe(true);
-      await editor.settle();
+      beforeEach(async () => {
+        editor.selectTool("pen");
+        await editor.clickGlyphLocal(100, 200);
+        await editor.clickGlyphLocal(190, 230);
 
-      const cubic = layer.contours[0]?.segments()[0]?.asCubic();
-      if (!cubic) throw new Error("Expected cubic segment");
+        layer = editor.requireGlyphLayer();
+        const segment = layer.contours[0]?.segments()[0];
+        if (!segment) throw new Error("Expected line segment");
+        expect(layer.upgradeLineToCubic(segment.id)).toBe(true);
+        await editor.settle();
 
-      const beforeControlStart = editor.pointPosition(cubic.controlStart.id);
-      const beforeControlEnd = editor.pointPosition(cubic.controlEnd.id);
-      const bendPoint = layer.contours[0]?.segments()[0]?.pointAt(0.5);
-      if (!bendPoint) throw new Error("Expected cubic bend point");
+        const cubic = layer.contours[0]?.segments()[0]?.asCubic();
+        const point = layer.contours[0]?.segments()[0]?.pointAt(0.5);
+        if (!cubic || !point) throw new Error("Expected cubic segment");
+        controlStartId = cubic.controlStart.id;
+        controlEndId = cubic.controlEnd.id;
+        bendPoint = point;
 
-      editor.selectTool("select");
-      await editor.dragScene({
-        down: bendPoint,
-        start: { x: bendPoint.x + 4, y: bendPoint.y },
-        end: { x: bendPoint.x + 4, y: bendPoint.y + 40 },
-        options: { metaKey: true },
+        editor.selectTool("select");
+        editor.selection.clear();
       });
 
-      const afterControlStart = editor.pointPosition(cubic.controlStart.id);
-      const afterControlEnd = editor.pointPosition(cubic.controlEnd.id);
+      function dragDown() {
+        return editor.dragScene({
+          down: bendPoint,
+          start: { x: bendPoint.x + 4, y: bendPoint.y },
+          end: { x: bendPoint.x + 4, y: bendPoint.y + 40 },
+        });
+      }
 
-      expect(afterControlStart.y).toBeGreaterThan(beforeControlStart.y);
-      expect(afterControlEnd.y).toBeGreaterThan(beforeControlEnd.y);
+      it("bends an unselected segment without moving its anchors", async () => {
+        const [start, , , end] = layer.contours[0]?.points ?? [];
+        if (!start || !end) throw new Error("Expected segment anchors");
+        const beforeControlStart = editor.pointPosition(controlStartId);
+        const beforeControlEnd = editor.pointPosition(controlEndId);
+
+        await dragDown();
+
+        expect(editor.pointPosition(controlStartId).y).toBeGreaterThan(beforeControlStart.y);
+        expect(editor.pointPosition(controlEndId).y).toBeGreaterThan(beforeControlEnd.y);
+        expect(editor.pointPosition(start.id)).toEqual({ x: start.x, y: start.y });
+        expect(editor.pointPosition(end.id)).toEqual({ x: end.x, y: end.y });
+      });
+
+      it("translates a segment selected by clicking it first", async () => {
+        const before = layer.contours[0]?.points ?? [];
+        await editor.clickGlyphLocal(bendPoint.x, bendPoint.y);
+
+        const drag = await dragDown();
+
+        for (const point of before) {
+          expect(editor.pointPosition(point.id)).toEqual({
+            x: point.x + drag.delta.x,
+            y: point.y + drag.delta.y,
+          });
+        }
+      });
     });
 
     it("toggles a point smooth with double-click", async () => {
