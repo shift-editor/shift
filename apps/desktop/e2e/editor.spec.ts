@@ -526,7 +526,7 @@ test.describe("Editor view", () => {
         expect(point.y).toBeCloseTo(preview.controls[index].y, 6);
       });
       await expect.poll(previewHandles).toBeNull();
-      await expect(canvas).toHaveCSS("cursor", /cursor@32-bend\.svg/);
+      await expect(canvas).toHaveCSS("cursor", /cursor@32\.svg/);
     } finally {
       await page.keyboard.up("Meta");
     }
