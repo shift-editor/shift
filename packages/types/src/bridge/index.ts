@@ -104,6 +104,7 @@ export type {
   SetMetricDefinitionsIntent,
   Source,
   SourceMetricValue,
+  Specimen,
   Unicode,
   UpdateAxisIntent,
   UpdateFontMetadataIntent,

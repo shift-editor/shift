@@ -36,6 +36,7 @@
   --color-sidebar-icon: #585858;
 
   --color-accent: #0c92f4;
+  --color-on-accent: #ffffff;
 
   /* Status and action colors */
   --color-error: #dc2626;
@@ -64,6 +65,10 @@
   --text-xs: 0.625rem /* 10px */;
   /* Line box from the font's own ascent and descent, for previewing any script. */
   --leading-normal: normal;
+
+  /* Shadow colours for card-shadow; themes darken them on dark palettes. */
+  --color-shadow-ambient: rgba(50, 50, 93, 0.25);
+  --color-shadow-key: rgba(0, 0, 0, 0.3);
 }
 
 /* Shift Light fallback palette consumed by the 2D and WebGL editor renderers. */
@@ -107,6 +112,13 @@
   --editor-text-component-overlay-b: rgba(255, 182, 207, 0.26);
   --editor-text-component-overlay-hover-a: rgba(124, 220, 150, 0.4);
   --editor-text-component-overlay-hover-b: rgba(255, 151, 186, 0.4);
+}
+
+/* Lifts a bordered card off the page with theme-aware shadow colours. */
+@utility card-shadow {
+  box-shadow:
+    0 2px 5px -1px var(--color-shadow-ambient),
+    0 1px 3px -1px var(--color-shadow-key);
 }
 
 /* Hide scrollbar while preserving scroll behavior */

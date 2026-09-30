@@ -22,6 +22,7 @@ const shiftHost: ShiftHost = {
   },
   window: {
     reopenDocument: invoke(ipcRenderer, "window.reopenDocument"),
+    ready: invoke(ipcRenderer, "window.ready"),
   },
   errors: {
     reportRenderer: invoke(ipcRenderer, "errors.reportRenderer"),
@@ -37,6 +38,15 @@ const shiftHost: ShiftHost = {
   },
   ui: {
     onZoomChanged: listen(ipcRenderer, "ui.zoomChanged"),
+  },
+  recents: {
+    list: invoke(ipcRenderer, "recents.list"),
+    open: invoke(ipcRenderer, "recents.open"),
+    remove: invoke(ipcRenderer, "recents.remove"),
+    restore: invoke(ipcRenderer, "recents.restore"),
+    reveal: invoke(ipcRenderer, "recents.reveal"),
+    locate: invoke(ipcRenderer, "recents.locate"),
+    onChanged: listen(ipcRenderer, "recents.changed"),
   },
   clipboard: {
     writeText: invoke(ipcRenderer, "clipboard.writeText"),

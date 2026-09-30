@@ -13,7 +13,7 @@ export type ButtonProps = BaseButtonProps & {
 };
 
 const variantStyles = {
-  primary: "rounded-md bg-accent text-white hover:bg-accent/90",
+  primary: "rounded-md bg-accent text-on-accent hover:bg-accent/90",
   default: "border border-line-subtle bg-background hover:bg-surface-hover",
   ghost: "hover:bg-hover/50 data-[active]:bg-hover/50",
   toolbar:

@@ -136,6 +136,12 @@ export {
 } from "./components/popover";
 export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "./components/tooltip";
 export {
+  Toggle,
+  ToggleGroup,
+  type ToggleProps,
+  type ToggleGroupProps,
+} from "./components/toggle-group";
+export {
   ToastProvider,
   ToastViewport,
   ToastRoot,
@@ -181,4 +187,4 @@ export {
   type PortalContainerProviderProps,
 } from "./components/portal";
 export { cn } from "./lib/utils";
-export { Check, ChevronDown, Search, X } from "lucide-react";
+export { ArrowRight, Check, ChevronDown, LayoutGrid, List, Search, X } from "lucide-react";

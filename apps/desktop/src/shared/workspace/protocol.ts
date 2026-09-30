@@ -12,12 +12,14 @@ import type {
   LayerMatch,
   Location,
   SlugAtlas,
+  Specimen,
   WorkspaceDocumentState,
   WorkspaceSnapshot,
 } from "@shift/types";
 
 export type {
   FontSessionMode,
+  Specimen,
   WorkspaceDocumentSourceKind,
   WorkspaceDocumentState,
   WorkspaceGlyphLayerSnapshot,
@@ -156,6 +158,11 @@ export type ShellCallMap = {
   "source.close": { request: void; response: null };
   "workspace.connect": { request: void; response: void };
   "document.state": { request: void; response: WorkspaceDocumentState | null };
+  /**
+   * Builds the recent-files thumbnail specimen: from the open document's
+   * current state, otherwise from the font file at `path`.
+   */
+  "workspace.specimen": { request: { path: string }; response: Specimen | null };
 };
 
 export type ShellEventMap = {
