@@ -92,6 +92,14 @@ export interface ShiftHost {
   window: {
     /** Reconstructs this document renderer without clearing recovery state. */
     reopenDocument: () => Promise<void>;
+    /**
+     * Tells main this window has rendered its content and can be shown.
+     *
+     * @remarks
+     * Windows that main creates hidden, such as the launcher, appear on this
+     * signal instead of on first paint; repeated calls are ignored.
+     */
+    ready: () => Promise<void>;
   };
   /** Privacy-safe renderer diagnostics reported to the main log. */
   errors: {

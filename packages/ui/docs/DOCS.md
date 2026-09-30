@@ -40,6 +40,7 @@ packages/ui/
       slider/              -- Slider with thumb-level accessible name
       tabs/                -- Tabs root, list, tab, indicator, and panel
       textarea/            -- Multiline Field control
+      toggle-group/        -- ToggleGroup and icon-sized Toggle
       toolbar/             -- Toolbar root, group, button, and separator
       toast/               -- ToastProvider, ToastViewport, ToastRoot, ToastTitle, ToastDescription, ToastClose, useToastManager
       tooltip/             -- Tooltip, TooltipTrigger, TooltipContent, TooltipProvider
@@ -53,7 +54,7 @@ packages/ui/
 - **Form control props** -- `FieldLabelProps` adds a semantic `tone` (`"primary" | "secondary"`), while `FieldControlProps`, `TextareaProps`, `SelectTriggerProps`, and `NumberFieldGroupProps` add matching `variant` (`"filled" | "plain"`) contracts. Other form controls preserve their Base UI or native contracts while adding Shift styling.
 - **`TabsProps`** and tab-part props -- expose the Base UI Tabs composition; `TabsTabProps` adds `size` (`"sm" | "md"`) for shared tab typography and padding.
 - **`ToolbarProps`** and toolbar-part props -- expose Base UI's toolbar composition and roving keyboard focus for application tool strips.
-- **`SeparatorProps`** -- adds `orientation` (`"horizontal" | "vertical"`) to the Base UI separator.
+- **`SeparatorProps`** -- adds `orientation` (`"horizontal" | "vertical"`) and `variant` (`"subtle"` for panel regions, `"strong"` for dividers between small controls) to the Base UI separator.
 - **`ProgressProps`** -- extends Base UI Progress root props with track and indicator class overrides.
 - **Dialog and popover props** -- thin wrappers over Base UI sub-component props; `DialogClose` and `PopoverClose` add an `icon` variant for compact close actions.
 - **`CollapsibleProps`** / **`CollapsibleTriggerProps`** / **`CollapsiblePanelProps`** -- thin wrappers over Base UI Collapsible sub-component props.
@@ -75,6 +76,8 @@ Each component follows the same pattern: import the Base UI primitive, wrap it i
 **Toolbar** exposes Base UI's root, group, button, and separator. Consumers can render the shared `Button` through `ToolbarButton` to retain Shift styling while participating in toolbar focus navigation, or render another Base UI trigger through it for menu composition.
 
 **Toast** is the most complex component family. `ToastProvider` wraps Base UI's provider with a default 2-second timeout. `ToastViewport` renders through a portal, centered at the top of the viewport. Individual toasts use enter/exit opacity transitions. Consumers call `useToastManager` (re-exported directly from Base UI) to imperatively add toasts.
+
+**ToggleGroup** wraps Base UI's toggle group: pressing one `Toggle` releases the others unless `multiple` is set, and the group owns `aria-pressed` and arrow-key focus. `Toggle` is icon-sized and muted until hovered; a pressed toggle (`data-pressed`) sits on a filled background.
 
 **Tooltip** supports an optional per-instance `delayDuration` override. When provided, it wraps the tooltip root in its own `TooltipProvider`; otherwise it inherits from the nearest ancestor `TooltipProvider`.
 

@@ -1,5 +1,5 @@
 import { Fragment, useLayoutEffect, useRef, useState } from "react";
-import { Button, cn, Plus, Tooltip, TooltipContent, TooltipTrigger } from "@shift/ui";
+import { Button, cn, Tooltip, TooltipContent, TooltipTrigger } from "@shift/ui";
 import { pathBasename, recentOpenedLabel, type RecentDocument } from "@shared/recents";
 import { RecentFileMenu } from "./RecentFileMenu";
 import type { RecentFileActions } from "./useRecentFileActions";
@@ -141,27 +141,6 @@ const HOVER_REVEAL_CLASS =
   "relative shrink-0 self-center opacity-0 group-hover:opacity-100 group-has-focus-visible:opacity-100 data-[popup-open]:opacity-100";
 
 /**
- * First grid card: creates a new font. A plain panel with a plus that the
- * grid stretches to the height of the recent-file cards beside it.
- */
-export const NewFontCard = ({ onCreate }: { onCreate: () => void }) => (
-  <li className={cn(CARD_CLASS, "items-center justify-center bg-surface-muted text-secondary")}>
-    <Tooltip>
-      <TooltipTrigger>
-        <button
-          type="button"
-          aria-label="New font"
-          onClick={onCreate}
-          className={CARD_BUTTON_CLASS}
-        />
-      </TooltipTrigger>
-      <TooltipContent>New font ⌘N</TooltipContent>
-    </Tooltip>
-    <Plus aria-hidden="true" className="pointer-events-none size-10" strokeWidth={2} />
-  </li>
-);
-
-/**
  * Grid card for one recent file: specimen, filename, and when it was opened.
  *
  * @remarks
@@ -192,16 +171,16 @@ export const RecentFileCard = ({ document, folder, now, actions }: RecentFileIte
       </Tooltip>
       <div
         className={cn(
-          "pointer-events-none relative aspect-square w-full bg-surface-muted",
+          "pointer-events-none relative aspect-4/3 w-full bg-surface-muted",
           document.missing && "opacity-50",
         )}
       >
         <RecentSpecimen document={document} className="absolute inset-0 m-auto h-1/2 w-3/4" />
       </div>
-      <div className="flex flex-1 gap-0.5 py-2 pr-1 pl-2.5">
+      <div className="flex items-center gap-0.5 py-2 pr-1 pl-2.5">
         <div
           className={cn(
-            "pointer-events-none flex min-w-0 flex-1 flex-col justify-between gap-0.5",
+            "pointer-events-none flex min-w-0 flex-1 flex-col gap-0.5",
             document.missing && "opacity-50",
           )}
         >
@@ -217,6 +196,49 @@ export const RecentFileCard = ({ document, folder, now, actions }: RecentFileIte
           <MissingActions document={document} actions={actions} />
         </div>
       )}
+    </li>
+  );
+};
+
+/** List row for one recent file: specimen chip, name, full path, and when it was opened. */
+export const RecentFileRow = ({ document, folder, now, actions }: RecentFileItemProps) => {
+  const name = pathBasename(document.path);
+  const activate = document.missing ? actions.locate : actions.open;
+
+  return (
+    <li
+      className="group flex items-center gap-2 rounded-md pr-2 hover:bg-hover/50"
+      data-missing={document.missing}
+      data-specimen-text={document.specimen?.text}
+    >
+      <button
+        type="button"
+        onClick={() => activate(document)}
+        className={cn(
+          "flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-md p-1.5 text-left outline-none",
+          "focus-visible:ring-2 focus-visible:ring-accent",
+          document.missing && "opacity-50",
+        )}
+      >
+        <span
+          aria-hidden="true"
+          className="relative size-9 shrink-0 rounded-md border border-line/60 bg-surface-muted"
+        >
+          <RecentSpecimen document={document} className="absolute inset-0 m-auto size-6" />
+        </span>
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className="truncate text-sm font-medium text-primary">
+            {name}
+            {folder && <span className="font-normal text-secondary"> · {folder}</span>}
+          </span>
+          <span className="truncate text-ui text-secondary">{document.path}</span>
+        </span>
+        <span className="shrink-0 text-right text-ui text-secondary">
+          {openedLine(document, undefined, now)}
+        </span>
+      </button>
+      {document.missing && <MissingActions document={document} actions={actions} />}
+      <RecentFileMenu document={document} actions={actions} className={HOVER_REVEAL_CLASS} />
     </li>
   );
 };

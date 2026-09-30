@@ -5,7 +5,7 @@ import { runCommand } from "./fixtures/documentLifecycle";
 test.use({ windowSizing: "native" });
 
 test("opens the launcher at its compact native size", async ({ electronApp, page }) => {
-  await expect(page.getByRole("button", { name: "New font", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "New Font", exact: true })).toBeVisible();
   const browserWindow = await electronApp.browserWindow(page);
 
   try {

@@ -58,6 +58,8 @@ export type RendererToMain = {
   "session.connect": () => void;
   "session.ready": () => void;
   "window.reopenDocument": () => void;
+  /** Reports that the sender's first meaningful content is rendered, so main can show it. */
+  "window.ready": () => void;
   "errors.reportRenderer": (report: RendererErrorReport) => void;
   "update.startDownload": () => void;
   "update.cancelDownload": () => void;

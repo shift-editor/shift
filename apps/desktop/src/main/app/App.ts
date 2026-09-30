@@ -36,9 +36,12 @@ import type { RecentDocumentVisit } from "../../shared/recents";
 const SLUG_ATLAS_PROFILING_ENABLED =
   process.env.SHIFT_PROFILE_SLUG_ATLAS !== undefined &&
   process.env.SHIFT_PROFILE_SLUG_ATLAS !== "0";
-const LAUNCHER_MIN_WIDTH = 940;
-const LAUNCHER_WIDTH = 1040;
+const LAUNCHER_MIN_WIDTH = 880;
+const LAUNCHER_WIDTH = 960;
 const LAUNCHER_HEIGHT = 720;
+/** Largest share of the screen the launcher takes on displays smaller than its size. */
+const LAUNCHER_MAX_SCREEN_SHARE = 0.9;
+const LAUNCHER_SHOW_FALLBACK_MS = 2000;
 
 /**
  * Owns Electron app startup and the first main-process service graph.
@@ -61,6 +64,9 @@ export class App {
   #workspaces: WorkspaceManager;
   #documentsRoot: string | null = null;
   #recents: RecentDocuments | null = null;
+  #fontOpensInFlight = 0;
+  #recentsPublishDeferred = false;
+  #replacedLaunchers = new WeakSet<Window>();
   #pendingOpenPaths: string[] = [];
   #previewConversions = new Map<string, Promise<void>>();
   #documentCrashDecisions = new Map<string, Promise<void>>();
@@ -296,10 +302,25 @@ export class App {
     return window;
   }
 
+  /**
+   * Creates the launcher hidden and shows it once its recent files have rendered.
+   *
+   * @remarks
+   * The renderer signals `window.ready`; the timer shows the window anyway if
+   * that signal never arrives, so a renderer failure cannot leave it invisible.
+   */
   #openLauncher(): Window {
-    const window = this.#createWindow(true, launcherBounds(), false, LAUNCHER_MIN_WIDTH);
+    const window = this.#createWindow(false, launcherBounds(), false, LAUNCHER_MIN_WIDTH);
     this.#loadLauncher(window);
+    setTimeout(() => this.#presentIfHidden(window), LAUNCHER_SHOW_FALLBACK_MS);
     return window;
+  }
+
+  #presentIfHidden(window: Window): void {
+    const browserWindow = window.window;
+    if (browserWindow.isDestroyed() || browserWindow.isVisible()) return;
+
+    window.present();
   }
 
   #loadLauncher(window: Window): void {
@@ -491,6 +512,9 @@ export class App {
       event.sender.postMessage("session.port", null, [port2]);
       this.#log.info("font session port sent to renderer");
     });
+    ipc.handle(ipcMain, "window.ready", (event) => {
+      this.#presentIfHidden(this.#requireWindowForWebContents(event.sender));
+    });
     ipc.handle(ipcMain, "window.reopenDocument", async (event) => {
       const window = this.#requireWindowForWebContents(event.sender);
       await this.#reopenDocumentWindow(window);
@@ -665,7 +689,7 @@ export class App {
       const sourcePath = this.#pendingOpenPaths[0];
 
       try {
-        const session = await this.#workspaces.openPath(sourcePath);
+        const session = await this.#openFontPath(sourcePath);
         const opener =
           this.#windows.activeWindow() ??
           this.#windows
@@ -720,7 +744,7 @@ export class App {
    */
   async #openPathFromWindow(opener: Window, sourcePath: string): Promise<boolean> {
     try {
-      const session = await this.#workspaces.openPath(sourcePath);
+      const session = await this.#openFontPath(sourcePath);
       if (this.#focusExistingWorkspaceWindow(opener, session)) return true;
 
       this.#openWorkspaceWindow(opener, session);
@@ -759,12 +783,38 @@ export class App {
     }
   }
 
+  /**
+   * Opens a font while holding back recents updates from renderer windows.
+   *
+   * @remarks
+   * Opening records the file before its window exists, so the launcher would
+   * briefly show a new card with no preview. Updates wait until every open has
+   * settled; by then a successful open has already replaced the launcher.
+   */
+  async #openFontPath(sourcePath: string): Promise<FontSessionHost> {
+    this.#fontOpensInFlight += 1;
+    try {
+      return await this.#workspaces.openPath(sourcePath);
+    } finally {
+      this.#fontOpensInFlight -= 1;
+      if (this.#fontOpensInFlight === 0 && this.#recentsPublishDeferred) {
+        this.#recentsPublishDeferred = false;
+        // After the caller has shown the font and closed the launcher it replaced.
+        setTimeout(() => this.#publishRecents(), 0);
+      }
+    }
+  }
+
   #publishRecents(): void {
     this.#applicationMenu.refresh();
+    if (this.#fontOpensInFlight > 0) {
+      this.#recentsPublishDeferred = true;
+      return;
+    }
 
     const documents = this.#recents?.list() ?? [];
     for (const window of this.#windows.allWindows()) {
-      if (window.window.isDestroyed()) continue;
+      if (window.window.isDestroyed() || this.#replacedLaunchers.has(window)) continue;
       ipc.send(window.window.webContents, "recents.changed", documents);
     }
   }
@@ -774,7 +824,9 @@ export class App {
     if (!existingWindow) return false;
 
     existingWindow.focus();
-    if (this.#workspaces.getForBrowserWindow(opener.window) === null) opener.close();
+    if (this.#workspaces.getForBrowserWindow(opener.window) === null) {
+      this.#closeReplacedLauncher(opener);
+    }
     return true;
   }
 
@@ -787,7 +839,12 @@ export class App {
     this.#workspaces.attachWindow(session.workspaceId, workspaceWindow);
     this.#loadWorkspace(workspaceWindow);
 
-    if (closeOpener) opener.close();
+    if (closeOpener) this.#closeReplacedLauncher(opener);
+  }
+
+  #closeReplacedLauncher(launcher: Window): void {
+    this.#replacedLaunchers.add(launcher);
+    launcher.close();
   }
 
   #fontSessionForSender(sender: WebContents, operation: string): FontSessionHost {
@@ -816,11 +873,11 @@ export class App {
   }
 }
 
-/** Centres the launcher on the primary display, shrinking it to fit smaller screens. */
+/** Centres the 4:3 launcher on the primary display, capped to 90% of smaller screens. */
 function launcherBounds(): Rectangle {
   const workArea = screen.getPrimaryDisplay().workArea;
-  const width = Math.min(LAUNCHER_WIDTH, workArea.width);
-  const height = Math.min(LAUNCHER_HEIGHT, workArea.height);
+  const width = Math.min(LAUNCHER_WIDTH, Math.round(workArea.width * LAUNCHER_MAX_SCREEN_SHARE));
+  const height = Math.min(LAUNCHER_HEIGHT, Math.round(workArea.height * LAUNCHER_MAX_SCREEN_SHARE));
   return {
     x: workArea.x + Math.round((workArea.width - width) / 2),
     y: workArea.y + Math.round((workArea.height - height) / 2),

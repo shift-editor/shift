@@ -12,7 +12,7 @@ test.describe("Landing view", () => {
   test("creates an editable font through New font", async ({ electronApp, page }) => {
     const workspaceWindow = electronApp.waitForEvent("window");
 
-    await page.getByRole("button", { name: "New font", exact: true }).click();
+    await page.getByRole("button", { name: "New Font", exact: true }).click();
 
     const workspacePage = await workspaceWindow;
     await workspacePage.waitForURL(/#\/home$/);

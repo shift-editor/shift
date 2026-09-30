@@ -22,6 +22,7 @@ const shiftHost: ShiftHost = {
   },
   window: {
     reopenDocument: invoke(ipcRenderer, "window.reopenDocument"),
+    ready: invoke(ipcRenderer, "window.ready"),
   },
   errors: {
     reportRenderer: invoke(ipcRenderer, "errors.reportRenderer"),
