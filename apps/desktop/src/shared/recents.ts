@@ -8,6 +8,8 @@ export type RecentDocument = {
   documentId: string | null;
   /** Epoch milliseconds of the most recent open. */
   openedAt: number;
+  /** Containing folder for display, with the home directory shortened to `~`. */
+  location: string;
   /** True when nothing exists at `path` any more. */
   missing: boolean;
   /**

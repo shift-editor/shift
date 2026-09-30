@@ -63,7 +63,7 @@ describe("RecentDocuments", () => {
     new RecentDocuments(storePath).record({ path: a, documentId: null }, 5);
 
     expect(new RecentDocuments(storePath).list()).toEqual([
-      { path: a, documentId: null, openedAt: 5, missing: false, specimen: null },
+      { path: a, documentId: null, openedAt: 5, location: root, missing: false, specimen: null },
     ]);
   });
 
@@ -130,8 +130,16 @@ describe("RecentDocuments", () => {
     recents.record({ path: moved, documentId: "doc-1" }, 2);
 
     expect(recents.list()).toEqual([
-      { path: moved, documentId: "doc-1", openedAt: 2, missing: false, specimen },
+      { path: moved, documentId: "doc-1", openedAt: 2, location: root, missing: false, specimen },
     ]);
+  });
+
+  it("shows a file's folder with the home directory shortened to ~", () => {
+    const home = path.dirname(root);
+    const recents = new RecentDocuments(storePath, home);
+    recents.record({ path: font("A.otf"), documentId: null }, 1);
+
+    expect(recents.list()[0].location).toBe(`~/${path.basename(root)}`);
   });
 
   it("clears every file", () => {

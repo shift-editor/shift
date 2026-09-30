@@ -16,7 +16,7 @@ const ids = (items: MenuItemConstructorOptions[]) => items.flatMap(({ id }) => (
 const noRecents = { documents: [], open: () => {}, clear: () => {} };
 
 function recent(path: string, missing = false): RecentDocument {
-  return { path, documentId: null, openedAt: 0, missing };
+  return { path, documentId: null, openedAt: 0, location: "~", missing, specimen: null };
 }
 
 function submenu(item: MenuItemConstructorOptions): MenuItemConstructorOptions[] {

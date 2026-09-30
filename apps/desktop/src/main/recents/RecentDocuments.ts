@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import type { RecentDocument, RecentDocumentVisit } from "../../shared/recents";
 import type { Specimen } from "../../shared/workspace/protocol";
@@ -41,6 +42,7 @@ type RecentEntry = {
  */
 export class RecentDocuments {
   readonly #filePath: string;
+  readonly #homeDirectory: string;
   readonly #listeners = new Set<() => void>();
   #entries: RecentEntry[];
 
@@ -49,8 +51,9 @@ export class RecentDocuments {
    *
    * @param filePath - JSON file that stores the list across launches.
    */
-  constructor(filePath: string) {
+  constructor(filePath: string, homeDirectory: string = os.homedir()) {
     this.#filePath = filePath;
+    this.#homeDirectory = homeDirectory;
     this.#entries = readEntries(filePath);
   }
 
@@ -66,6 +69,7 @@ export class RecentDocuments {
         path: entry.path,
         documentId: entry.documentId,
         openedAt: entry.openedAt,
+        location: displayLocation(entry.path, this.#homeDirectory),
         missing: modifiedAt === null,
         specimen: currentThumbnail(entry, modifiedAt)?.specimen ?? null,
       };
@@ -190,6 +194,16 @@ export class RecentDocuments {
 function sameDocument(entry: RecentEntry, visit: RecentDocumentVisit): boolean {
   if (entry.path === visit.path) return true;
   return visit.documentId !== null && entry.documentId === visit.documentId;
+}
+
+/** Returns the file's folder with a leading home directory shortened to `~`. */
+function displayLocation(filePath: string, homeDirectory: string): string {
+  const folder = path.dirname(filePath);
+  if (folder === homeDirectory) return "~";
+  if (folder.startsWith(homeDirectory + path.sep)) {
+    return `~${folder.slice(homeDirectory.length)}`;
+  }
+  return folder;
 }
 
 function modificationTime(filePath: string): number | null {

@@ -21,7 +21,7 @@ export const Landing = () => {
   }, [recentsLoaded]);
 
   return (
-    <main className="relative flex h-screen flex-col bg-background">
+    <main className="relative flex h-screen flex-col bg-background text-primary">
       {/* Overlaid so the launcher centres against the whole window, not the space below the bar. */}
       <div className="absolute inset-x-0 top-0 z-10">
         <Titlebar />

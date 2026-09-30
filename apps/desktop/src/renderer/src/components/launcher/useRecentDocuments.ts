@@ -53,3 +53,26 @@ export function useMinuteClock(): number {
 
   return now;
 }
+
+/**
+ * Tracks whether Alt (Option) is held, resetting when the window loses focus
+ * so a key released elsewhere cannot leave it stuck on.
+ */
+export function useAltKeyHeld(): boolean {
+  const [held, setHeld] = useState(false);
+
+  useEffect(() => {
+    const update = (event: KeyboardEvent) => setHeld(event.altKey);
+    const release = () => setHeld(false);
+    window.addEventListener("keydown", update);
+    window.addEventListener("keyup", update);
+    window.addEventListener("blur", release);
+    return () => {
+      window.removeEventListener("keydown", update);
+      window.removeEventListener("keyup", update);
+      window.removeEventListener("blur", release);
+    };
+  }, []);
+
+  return held;
+}

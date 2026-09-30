@@ -2,6 +2,7 @@ import { Fragment, useLayoutEffect, useRef, useState } from "react";
 import { Button, cn, Tooltip, TooltipContent, TooltipTrigger } from "@shift/ui";
 import { pathBasename, recentOpenedLabel, type RecentDocument } from "@shared/recents";
 import { RecentFileMenu } from "./RecentFileMenu";
+import { useAltKeyHeld } from "./useRecentDocuments";
 import type { RecentFileActions } from "./useRecentFileActions";
 import { filenameWrapChunks, middleTruncatedName, middleTruncationLimit } from "./recentFileName";
 
@@ -200,9 +201,23 @@ export const RecentFileCard = ({ document, folder, now, actions }: RecentFileIte
   );
 };
 
-/** List row for one recent file: specimen chip, name, full path, and when it was opened. */
-export const RecentFileRow = ({ document, folder, now, actions }: RecentFileItemProps) => {
-  const name = pathBasename(document.path);
+/** A row's filename; holding Alt prefixes its folder in a lighter shade, forming the path. */
+const RecentFileRowName = ({ document }: { document: RecentDocument }) => {
+  const showLocation = useAltKeyHeld();
+
+  return (
+    <span className="min-w-0 flex-1 truncate text-sm font-medium text-primary">
+      {showLocation && <span className="font-normal text-muted">{document.location}/</span>}
+      {pathBasename(document.path)}
+    </span>
+  );
+};
+
+/**
+ * List row for one recent file: specimen chip, name, and when it was opened.
+ * Holding Alt prefixes each name with its folder, forming the path.
+ */
+export const RecentFileRow = ({ document, now, actions }: RecentFileItemProps) => {
   const activate = document.missing ? actions.locate : actions.open;
 
   return (
@@ -226,13 +241,7 @@ export const RecentFileRow = ({ document, folder, now, actions }: RecentFileItem
         >
           <RecentSpecimen document={document} className="absolute inset-0 m-auto size-6" />
         </span>
-        <span className="flex min-w-0 flex-1 flex-col">
-          <span className="truncate text-sm font-medium text-primary">
-            {name}
-            {folder && <span className="font-normal text-secondary"> · {folder}</span>}
-          </span>
-          <span className="truncate text-ui text-secondary">{document.path}</span>
-        </span>
+        <RecentFileRowName document={document} />
         <span className="shrink-0 text-right text-ui text-secondary">
           {openedLine(document, undefined, now)}
         </span>
