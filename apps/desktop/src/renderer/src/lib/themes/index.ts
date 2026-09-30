@@ -298,6 +298,8 @@ function colorThemeVariables(theme: ColorTheme): Record<string, string> {
     "--color-icon-button-hover": dark ? withAlpha(palette.base05, 0.2) : palette.base02,
     "--color-line": dark ? palette.base03 : palette.base06,
     "--color-line-subtle": dark ? withAlpha(palette.base05, 0.2) : palette.base01,
+    "--color-shadow-ambient": dark ? "rgba(0, 0, 0, 0.55)" : "rgba(50, 50, 93, 0.25)",
+    "--color-shadow-key": dark ? "rgba(0, 0, 0, 0.7)" : "rgba(0, 0, 0, 0.3)",
     "--color-primary": palette.base05,
     "--color-secondary": secondary,
     "--color-muted": muted,

@@ -6,6 +6,7 @@ import type {
   ShellCallMap,
   ShellEventMap,
   WorkspaceDocumentIdentity,
+  Specimen,
   WorkspaceDocumentState,
   WorkspaceRecovery,
 } from "../../shared/workspace/protocol";
@@ -215,6 +216,17 @@ export class WorkspaceProcess {
    */
   documentState(): Promise<WorkspaceDocumentState | null> {
     return this.#requireChannel().call("document.state", undefined);
+  }
+
+  /**
+   * Builds the recent-files thumbnail specimen on the utility's worker thread.
+   *
+   * @param path - Font file to read when the process holds a preview rather than a document.
+   * @returns null when the font draws nothing usable.
+   * @throws {Error} when the process is not running, or the font cannot be read or compiled.
+   */
+  specimen(path: string): Promise<Specimen | null> {
+    return this.#requireChannel().call("workspace.specimen", { path });
   }
 
   #trackReady(proc: UtilityProcess, channel: Channel<ShellCallMap, ShellEventMap>): Promise<void> {

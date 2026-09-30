@@ -5,12 +5,23 @@ import {
   editMenuItems,
   fileMenuItems,
   helpMenuItems,
+  openRecentMenuItem,
   viewMenuItems,
 } from "./menuItems";
+import type { RecentDocument } from "../../shared/recents";
 
 const run = () => {};
 const enabled = () => true;
 const ids = (items: MenuItemConstructorOptions[]) => items.flatMap(({ id }) => (id ? [id] : []));
+const noRecents = { documents: [], open: () => {}, clear: () => {} };
+
+function recent(path: string, missing = false): RecentDocument {
+  return { path, documentId: null, openedAt: 0, missing };
+}
+
+function submenu(item: MenuItemConstructorOptions): MenuItemConstructorOptions[] {
+  return item.submenu as MenuItemConstructorOptions[];
+}
 
 describe("application command menu items", () => {
   it("publishes command identity, accelerator, and current capability", () => {
@@ -42,6 +53,7 @@ describe("application command menu items", () => {
         checked.push(id);
         return id === "file.open";
       },
+      noRecents,
     );
 
     expect(checked).toEqual([
@@ -50,6 +62,53 @@ describe("application command menu items", () => {
       "file.save",
       "file.saveAs",
       "file.exportTtf",
+    ]);
+  });
+
+  it("opens recent files by path and disables the ones that went missing", () => {
+    const opened: string[] = [];
+    let cleared = false;
+    const items = submenu(
+      openRecentMenuItem({
+        documents: [recent("/fonts/Fraunces.shift"), recent("/gone/London.otf", true)],
+        open: (path) => opened.push(path),
+        clear: () => {
+          cleared = true;
+        },
+      }),
+    );
+
+    expect(items.map(({ label, enabled }) => ({ label, enabled }))).toEqual([
+      { label: "Fraunces.shift", enabled: true },
+      { label: "London.otf", enabled: false },
+      { label: undefined, enabled: undefined },
+      { label: "Clear Menu", enabled: true },
+    ]);
+
+    (items[0].click as () => void)();
+    (items[3].click as () => void)();
+    expect(opened).toEqual(["/fonts/Fraunces.shift"]);
+    expect(cleared).toBe(true);
+  });
+
+  it("names the parent folder when recent files share a filename", () => {
+    const items = submenu(
+      openRecentMenuItem({
+        documents: [recent("/fonts/Roman/Font.ufo"), recent("/fonts/Italic/Font.ufo")],
+        open: () => {},
+        clear: () => {},
+      }),
+    );
+
+    expect(items.slice(0, 2).map(({ label }) => label)).toEqual([
+      "Font.ufo — Roman",
+      "Font.ufo — Italic",
+    ]);
+  });
+
+  it("leaves only a disabled Clear Menu when there are no recent files", () => {
+    expect(submenu(openRecentMenuItem(noRecents))).toEqual([
+      expect.objectContaining({ label: "Clear Menu", enabled: false }),
     ]);
   });
 

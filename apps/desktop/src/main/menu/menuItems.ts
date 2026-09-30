@@ -1,6 +1,14 @@
 import type { MenuItemConstructorOptions } from "electron";
 import { commandShortcuts, toElectronAccelerator, type CommandId } from "../../shared/commands";
 import { commands } from "../commands/Commands";
+import { pathBasename, recentFolderLabels, type RecentDocument } from "../../shared/recents";
+
+/** Recent files and actions shown in File → Open Recent. */
+export type RecentMenu = {
+  documents: readonly RecentDocument[];
+  open: (path: string) => void;
+  clear: () => void;
+};
 
 export function commandMenuItem(
   id: CommandId,
@@ -24,10 +32,12 @@ export function commandMenuItem(
 export function fileMenuItems(
   runCommand: (id: CommandId) => void,
   isCommandEnabled: (id: CommandId) => boolean,
+  recent: RecentMenu,
 ): MenuItemConstructorOptions[] {
   return [
     commandMenuItem("file.new", runCommand, isCommandEnabled),
     commandMenuItem("file.open", runCommand, isCommandEnabled),
+    openRecentMenuItem(recent),
     { type: "separator" },
     commandMenuItem("file.save", runCommand, isCommandEnabled),
     commandMenuItem("file.saveAs", runCommand, isCommandEnabled),
@@ -37,6 +47,35 @@ export function fileMenuItems(
       submenu: [commandMenuItem("file.exportTtf", runCommand, isCommandEnabled)],
     },
   ];
+}
+
+/**
+ * Builds File → Open Recent: one item per recent file, then Clear Menu.
+ *
+ * @remarks
+ * Files that share a name are suffixed with the parent folder that tells them
+ * apart. Missing files stay listed but disabled until they are located or cleared.
+ */
+export function openRecentMenuItem(recent: RecentMenu): MenuItemConstructorOptions {
+  const folders = recentFolderLabels(recent.documents.map((document) => document.path));
+  const documentItems = recent.documents.map((document): MenuItemConstructorOptions => {
+    const name = pathBasename(document.path);
+    const folder = folders.get(document.path);
+    return {
+      label: folder ? `${name} — ${folder}` : name,
+      enabled: !document.missing,
+      click: () => recent.open(document.path),
+    };
+  });
+
+  return {
+    label: "Open Recent",
+    submenu: [
+      ...documentItems,
+      ...(documentItems.length > 0 ? [{ type: "separator" as const }] : []),
+      { label: "Clear Menu", enabled: documentItems.length > 0, click: () => recent.clear() },
+    ],
+  };
 }
 
 /**

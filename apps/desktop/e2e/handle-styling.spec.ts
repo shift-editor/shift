@@ -119,7 +119,7 @@ previewTest(
   "TTF source handles keep source styling without becoming hoverable",
   async ({ page, electronApp }) => {
     const workspaceWindow = electronApp.waitForEvent("window");
-    await page.getByRole("button", { name: /Load font/ }).click();
+    await page.getByRole("button", { name: "Open Font…", exact: true }).click();
     const workspacePage = await workspaceWindow;
     await workspacePage.waitForURL(/#\/home$/);
     await clickFirstCatalogGlyph(workspacePage);

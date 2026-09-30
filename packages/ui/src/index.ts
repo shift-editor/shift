@@ -181,4 +181,4 @@ export {
   type PortalContainerProviderProps,
 } from "./components/portal";
 export { cn } from "./lib/utils";
-export { Check, ChevronDown, Search, X } from "lucide-react";
+export { ArrowRight, Check, ChevronDown, Plus, Search, X } from "lucide-react";

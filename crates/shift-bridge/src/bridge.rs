@@ -1173,6 +1173,33 @@ impl Bridge {
     }))
   }
 
+  /// Builds the thumbnail specimen for a font file, independent of any
+  /// document or preview this bridge holds.
+  ///
+  /// Resolves to `null` when the font draws nothing usable; rejects when the
+  /// file cannot be read or compiled.
+  #[napi(ts_return_type = "Promise<NapiSpecimen | null>")]
+  pub fn font_file_specimen(&self, path: String) -> AsyncTask<crate::specimen::SpecimenTask> {
+    AsyncTask::new(crate::specimen::SpecimenTask {
+      input: crate::specimen::SpecimenInput::Path(std::path::PathBuf::from(path)),
+    })
+  }
+
+  /// Builds the thumbnail specimen from the open document's current state.
+  ///
+  /// Resolves to `null` when the font draws nothing usable; rejects when no
+  /// workspace is open or compilation fails.
+  #[napi(ts_return_type = "Promise<NapiSpecimen | null>")]
+  pub fn document_specimen(&mut self) -> Result<AsyncTask<crate::specimen::SpecimenTask>> {
+    Ok(AsyncTask::new(crate::specimen::SpecimenTask {
+      input: crate::specimen::SpecimenInput::Snapshot(
+        self
+          .save_snapshot()
+          .map_err(|e| Error::new(Status::GenericFailure, e.to_string()))?,
+      ),
+    }))
+  }
+
   #[napi]
   pub fn document_state(&self) -> errors::Result<NapiDocumentState> {
     self.document_state_snapshot()

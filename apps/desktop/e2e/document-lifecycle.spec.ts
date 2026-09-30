@@ -103,7 +103,7 @@ const failedPreviewSaveTest = convertiblePreviewTest.extend({
 
 async function openSelectedPreview(page: Page, electronApp: ElectronApplication): Promise<Page> {
   const workspaceWindow = electronApp.waitForEvent("window");
-  await page.getByRole("button", { name: /Load font/ }).click();
+  await page.getByRole("button", { name: "Open Font…", exact: true }).click();
 
   const workspacePage = await workspaceWindow;
   await workspacePage.waitForURL(/#\/home$/);
@@ -216,7 +216,7 @@ test.describe("unsupported file activation", () => {
   test.use({ electronArgs: [path.join(path.dirname(FONT_PATH), "ignored.txt")] });
 
   test("keeps the launcher for unsupported extensions", async ({ electronApp, page }) => {
-    await expect(page.getByRole("button", { name: /Load font/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Open Font…", exact: true })).toBeVisible();
     await expect(page).toHaveURL(/#\/launcher$/);
     expect(electronApp.windows()).toHaveLength(1);
   });
@@ -436,7 +436,7 @@ convertiblePreviewTest(
     const launcherPage = await relaunchedApp.firstWindow();
     await launcherPage.waitForURL(/#\/launcher$/);
     const reopenedWindow = relaunchedApp.waitForEvent("window");
-    await launcherPage.getByRole("button", { name: /Load font/ }).click();
+    await launcherPage.getByRole("button", { name: "Open Font…", exact: true }).click();
     const reopenedPage = await reopenedWindow;
     await waitForWorkspaceReady(reopenedPage);
 
@@ -576,7 +576,7 @@ test.describe("document lifecycle through the application shell", () => {
     await launcherPage.waitForURL(/#\/launcher$/);
 
     const reopenedWindow = relaunchedApp.waitForEvent("window");
-    await launcherPage.getByRole("button", { name: /Load font/ }).click();
+    await launcherPage.getByRole("button", { name: "Open Font…", exact: true }).click();
     const reopenedPage = await reopenedWindow;
     await reopenedPage.waitForURL(/#\/home$/);
     await expect(reopenedPage.getByLabel("Glyph catalog", { exact: true })).toBeVisible();
@@ -702,7 +702,7 @@ discardTest(
     const launcherPage = await relaunchedApp.firstWindow();
     await launcherPage.waitForURL(/#\/launcher$/);
     const reopenedWindow = relaunchedApp.waitForEvent("window");
-    await launcherPage.getByRole("button", { name: /Load font/ }).click();
+    await launcherPage.getByRole("button", { name: "Open Font…", exact: true }).click();
     const reopenedPage = await reopenedWindow;
     await waitForWorkspaceReady(reopenedPage);
 

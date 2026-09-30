@@ -1,0 +1,14 @@
+[package]
+name = "shift-specimen"
+version = "0.1.0"
+edition = "2021"
+description = "Chooses, shapes, and outlines the specimen text shown on Shift's recent-file thumbnails"
+license.workspace = true
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+harfrust = "0.13.3"
+skrifa = "0.32.0"
+unicode-script = "0.5"

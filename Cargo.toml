@@ -12,6 +12,7 @@ shift-backends = { path = "crates/shift-backends" }
 shift-bridge = { path = "crates/shift-bridge" }
 shift-font = { path = "crates/shift-font" }
 shift-slug = { path = "crates/shift-slug" }
+shift-specimen = { path = "crates/shift-specimen" }
 shift-store = { path = "crates/shift-store" }
 shift-workspace = { path = "crates/shift-workspace" }
 
