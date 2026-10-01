@@ -2,7 +2,7 @@
   <p align="center">
     <img width="250" alt="image" src="https://github.com/user-attachments/assets/5ed51bda-3e29-40f2-b87d-9309f2366bf1" />
     <h1 align="center"><b>Shift</b></h1>
-    <p>A font editor built for variable fonts.</p>
+    <p>A modern, fast font editor.</p>
     <p>
       <a href="https://shift.graphics">Download</a>
       ·
@@ -14,9 +14,7 @@
   </p>
 </div>
 
-**Shift is a free, open-source font editor for macOS, Windows, and Linux, available now in alpha.**
-
-Shift opens `.shift` documents, UFO, Designspace, and Glyphs sources (use **Save as Shift** to edit them), and TTF/OTF fonts for viewing. It exports TrueType, including variable fonts.
+Shift is free and open source, and runs on macOS, Windows, and Linux. It stays responsive with large glyph sets and many sources, and it's designed to be easy to pick up.
 
 > [!WARNING]
 > Work on copies of your fonts and keep backups. Workflows and file details will change between alpha releases.
@@ -32,8 +30,9 @@ Download Shift for macOS, Windows, and Linux from [shift.graphics](https://shift
 | Drawing and editing outlines             |   ✅    |
 | Variable fonts: axes, sources, instances |   ✅    |
 | Components                               |   ✅    |
-| Opening UFO, Designspace, and Glyphs     |   ✅    |
-| Exporting TrueType                       |   ✅    |
+| Import: UFO, Designspace, Glyphs         |   ✅    |
+| View: TTF, OTF                           |   ✅    |
+| Export: TrueType, including variable     |   ✅    |
 | Kerning                                  | Planned |
 | Text proofing                            | Planned |
 
