@@ -105,6 +105,12 @@ Updating baselines: only for an intentional appearance change. Run the focused s
 
 Membership is explicit in `apps/desktop/playwright.config.ts`. Add a new spec to the right list — `visual`, `platform`, `gpu`, or `perf` — and run `node scripts/check-e2e-projects.mjs`. A spec that needs native lifecycle behavior on Windows and Linux belongs in `platform`. A spec whose only GPU dependency is incidental belongs in `visual`.
 
+## Large-data performance regressions
+
+- The `perf` project runs nightly or manually, not in the normal correctness suite. Protect a large-list UI change with a small `visual` interaction test that reaches an offscreen row, preserves selection and keyboard focus, and bounds the number of mounted rows.
+- In a real-app performance test, time the whole user-visible operation through confirmed edit settlement and canvas readiness with the relevant panels mounted. Timing only a local mutation, Rust apply, or IPC handler misses renderer main-thread stalls. Keep hardware-sensitive time ceilings in `perf`, not `visual`; verify the test fails for the original regression rather than only when it times out.
+- Use `EditorDriver` for navigation and edit settling. Keep the performance fixture responsible for the hardware launch and generated data, not editor behavior.
+
 ## Proving a test is not flaky
 
 Before committing a new or changed E2E test:

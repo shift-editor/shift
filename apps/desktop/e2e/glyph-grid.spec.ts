@@ -1,6 +1,6 @@
 import type { ElectronApplication, Locator, Page } from "@playwright/test";
 import type { AxisId, SourceId } from "@shift/types";
-import { test, expect, navigateToEditor } from "./fixtures/perfApp";
+import { test, expect } from "./fixtures/perfApp";
 import {
   glyphCatalogCanvas,
   glyphCatalogSurface,
@@ -202,7 +202,10 @@ test.describe("Resident Glyph Grid", () => {
     expect(errors).toEqual([]);
   });
 
-  test("replaces topology-edited glyphs atomically when returning Home", async ({ page }) => {
+  test("replaces topology-edited glyphs atomically when returning Home", async ({
+    page,
+    editor,
+  }) => {
     await expect.poll(() => page.evaluate(() => Boolean(navigator.gpu))).toBe(true);
 
     const scrollViewport = glyphCatalogViewport(page);
@@ -210,7 +213,7 @@ test.describe("Resident Glyph Grid", () => {
     const glyphCanvas = glyphCatalogCanvas(page);
     await expect(glyphCanvas).toBeVisible({ timeout: 30_000 });
 
-    await navigateToEditor(page, "53");
+    await editor.openGlyphByUnicode("53");
     await trackGridTransitions(page);
 
     await page.evaluate(async () => {
@@ -245,7 +248,11 @@ test.describe("Resident Glyph Grid", () => {
     expect(state.hiddenTransitions).toBe(0);
   });
 
-  test("keeps distant glyphs resident after a topology patch", async ({ electronApp, page }) => {
+  test("keeps distant glyphs resident after a topology patch", async ({
+    electronApp,
+    page,
+    editor,
+  }) => {
     await expect.poll(() => page.evaluate(() => Boolean(navigator.gpu))).toBe(true);
 
     const scrollViewport = glyphCatalogViewport(page);
@@ -258,7 +265,7 @@ test.describe("Resident Glyph Grid", () => {
       .poll(() => scrollViewport.evaluate((element) => element.scrollHeight > element.clientHeight))
       .toBe(true);
 
-    await navigateToEditor(page, "53");
+    await editor.openGlyphByUnicode("53");
     await page.evaluate(async () => {
       const editor = window.shift?.editor;
       if (!editor) throw new Error("Expected editor runtime");
@@ -377,6 +384,7 @@ test.describe("Resident Glyph Grid", () => {
 
   test("keeps cell geometry stable while scrubbing an axis with oversized outlines", async ({
     page,
+    editor,
   }) => {
     const scrollViewport = glyphCatalogViewport(page);
     const catalogSurface = glyphCatalogSurface(page);
@@ -385,7 +393,7 @@ test.describe("Resident Glyph Grid", () => {
       timeout: 30_000,
     });
 
-    await navigateToEditor(page, "53");
+    await editor.openGlyphByUnicode("53");
     await page.evaluate(async () => {
       const editor = window.shift?.editor;
       if (!editor) throw new Error("Expected editor runtime");

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import type { ElectronApplication, Page } from "@playwright/test";
 import type { GlyphId } from "@shift/types";
+import type { GlyphCatalogItem } from "@/types/glyphCatalog";
 import {
   documentTest as launcherTest,
   documentWorkspaceTest as authoredTest,
@@ -210,7 +211,7 @@ authoredTest(
 
         return false;
       };
-      let item = null;
+      let item: GlyphCatalogItem | null = null;
       for (const candidate of session.catalog.glyphsCell.peek()) {
         if (candidate.id === currentGlyphId || referencesCurrentGlyph(candidate.id)) continue;
 

@@ -23,10 +23,10 @@ describe("visible object rows", () => {
   it("uses preorder and records each visible nesting depth", () => {
     const rows = flattenVisibleObjectRows(items, new Set());
 
-    expect(rows.map((row) => [row.item.id, row.depth])).toEqual([
-      [contourId, 0],
-      [firstPointId, 1],
-      [secondPointId, 1],
+    expect(rows.map((row) => [row.item.id, row.depth, row.position, row.setSize])).toEqual([
+      [contourId, 0, 1, 1],
+      [firstPointId, 1, 1, 2],
+      [secondPointId, 1, 2, 2],
     ]);
   });
 

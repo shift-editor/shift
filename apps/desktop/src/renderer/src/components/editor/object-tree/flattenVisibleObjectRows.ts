@@ -8,8 +8,8 @@ export function flattenVisibleObjectRows(
   const rows: VisibleObjectRow[] = [];
 
   function appendRows(children: readonly ObjectTreeItem[], depth: number): void {
-    for (const item of children) {
-      rows.push({ depth, item });
+    for (const [index, item] of children.entries()) {
+      rows.push({ depth, item, position: index + 1, setSize: children.length });
       if (collapsedObjectIds.has(item.id)) continue;
 
       appendRows(item.children, depth + 1);

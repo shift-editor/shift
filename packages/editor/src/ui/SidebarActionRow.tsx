@@ -14,6 +14,7 @@ export interface SidebarActionRowProps {
   onKeyDown?: KeyboardEventHandler<HTMLButtonElement>;
   className?: string;
   contentClassName?: string;
+  tabIndex?: number;
   "data-testid"?: string;
 }
 
@@ -29,6 +30,7 @@ export const SidebarActionRow = ({
   onKeyDown,
   className,
   contentClassName,
+  tabIndex,
   "data-testid": testId,
 }: SidebarActionRowProps) => (
   <div
@@ -49,6 +51,7 @@ export const SidebarActionRow = ({
       <SidebarRowButton
         variant="transparent"
         data-testid={testId}
+        tabIndex={tabIndex}
         aria-pressed={isSelected}
         onPointerDown={(event) => {
           event.currentTarget.dataset.pointerFocus = "true";

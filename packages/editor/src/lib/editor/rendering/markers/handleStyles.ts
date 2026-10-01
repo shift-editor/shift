@@ -130,3 +130,18 @@ export function buildMarkerStyles(theme: EditorRenderTheme) {
     last: buildStyleByState(theme, "last"),
   } as const;
 }
+
+/**
+ * Returns the maximum screen-space radius of any rotated handle in a theme.
+ *
+ * @param theme - Current render palette and handle dimensions.
+ * @returns Conservative CSS-pixel padding for viewport culling.
+ */
+export function handleCullPaddingPx(theme: EditorRenderTheme): number {
+  const styles = buildMarkerStyles(theme);
+  return Math.max(
+    ...Object.values(styles).flatMap((states) =>
+      Object.values(states).map((style) => Math.hypot(style.extentX, style.extentY)),
+    ),
+  );
+}

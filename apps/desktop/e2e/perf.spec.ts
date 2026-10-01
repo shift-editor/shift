@@ -18,10 +18,10 @@
 import * as fs from "fs";
 import * as path from "path";
 import type { PointId } from "@shift/types";
+import type { ExternalAxisLocation } from "@shift/editor/types";
 import {
   test,
   expect,
-  navigateToEditor,
   generateContourData,
   computeStats,
   formatPerfTable,
@@ -46,7 +46,7 @@ const THRESHOLDS: Record<string, number> = {
   "nudge (all pts)": 60, // Immediate local interaction path; persistence settles asynchronously.
   "undo (all pts)": 1_000, // Full renderer↔utility ledger replay for a 50K-point patch.
   "redo (all pts)": 1_000,
-  "pen-tool (100 clicks)": 500, // Spiky due to GC — tighten after optimization
+  "pen input-to-render (100 clicks)": 500, // Includes browser input, persistence, and two frames.
   "pan (all selected)": 5,
   "zoom (all selected)": 5,
 };
@@ -108,8 +108,8 @@ test.describe("Performance — 50K points", () => {
     }
   });
 
-  test.beforeEach(async ({ page }) => {
-    await navigateToEditor(page, "53");
+  test.beforeEach(async ({ editor }) => {
+    await editor.openGlyphByUnicode("53");
   });
 
   /**
@@ -146,27 +146,138 @@ test.describe("Performance — 50K points", () => {
     ).toBeLessThanOrEqual(allowed);
   }
 
-  test("setup: paste 50K points into the glyph", async ({ page }) => {
+  test("setup: paste 50K points into the glyph", async ({ page, editor }) => {
     const contours = generateContourData(TARGET_POINTS);
-
-    const pointCount = await page.evaluate(async (data) => {
+    const insertion = await page.evaluate((data) => {
       const workspace = window.shift;
       if (!workspace) throw new Error("shift runtime API not exposed");
 
-      const editor = workspace.editor;
-      const inserted = editor.insertContent({ contours: data });
+      const start = performance.now();
+      const inserted = workspace.editor.insertContent({ contours: data });
       if (!inserted) throw new Error("contour insertion failed");
-
-      await editor.font.editCoordinator.settled();
-
-      const layer = editor.layerForGeometry({ points: inserted as readonly PointId[] });
-      if (!layer) throw new Error("inserted contours have no editable layer");
-
-      return layer.allPoints.length;
+      return { count: inserted.length, lastId: inserted.at(-1), ms: performance.now() - start };
     }, contours);
+    const settleStart = performance.now();
+    await editor.waitForIdle();
+    const settleMs = performance.now() - settleStart;
+    await editor.waitForCanvasRender();
+    const readyMs = performance.now() - settleStart;
 
-    expect(pointCount).toBeGreaterThanOrEqual(TARGET_POINTS);
-    console.log(`Created glyph with ${pointCount} points`);
+    expect(insertion.count).toBeGreaterThanOrEqual(TARGET_POINTS);
+    expect(settleMs, "50K-point edit must not block the renderer during confirmation").toBeLessThan(
+      1_500,
+    );
+    expect(readyMs, "the canvas must be ready after the confirmed edit").toBeLessThan(2_000);
+
+    const objects = page.getByRole("navigation", { name: "Glyph objects" });
+    const rows = objects.locator('[data-testid^="object-"]');
+    expect(await rows.count(), "the sidebar must mount only a viewport of rows").toBeLessThan(100);
+    await objects.evaluate((nav) => {
+      if (!nav.parentElement) throw new Error("Objects scroll container is missing");
+      nav.parentElement.scrollTop = nav.parentElement.scrollHeight;
+    });
+    if (!insertion.lastId) throw new Error("Expected an inserted point");
+    await expect(objects.getByTestId(`object-${insertion.lastId}`)).toBeVisible();
+    expect(await rows.count()).toBeLessThan(100);
+    console.log(
+      `50K setup: insertion=${insertion.ms.toFixed(1)}ms settlement=${settleMs.toFixed(1)}ms ready=${readyMs.toFixed(1)}ms`,
+    );
+  });
+
+  test("confirms five-point nudges on one and two sources at the same scale", async ({
+    page,
+    editor,
+  }) => {
+    const pointIds = await page.evaluate((contours) => {
+      const runtime = window.shift!.editor;
+      const inserted = runtime.insertContent({ contours });
+      if (!inserted) throw new Error("contour insertion failed");
+      return inserted.slice(0, 5) as PointId[];
+    }, generateContourData(TARGET_POINTS));
+    expect(pointIds).toHaveLength(5);
+    await editor.waitForIdle();
+    await editor.waitForCanvasRender();
+
+    const before = await editor.pointPosition(pointIds[0]!);
+    await page.evaluate((ids) => window.shift!.editor.selection.select(ids), pointIds);
+    const singleStart = performance.now();
+    await editor.press("ArrowRight");
+    await editor.waitForCanvasRender();
+    const singleMs = performance.now() - singleStart;
+    expect(await editor.pointPosition(pointIds[0]!)).toMatchObject({ x: before.x + 1 });
+    await editor.undo();
+    expect(await editor.pointPosition(pointIds[0]!)).toEqual(before);
+
+    const axisId = await page.evaluate(() =>
+      window.shift!.editor.font.createAxis({
+        tag: "bch1",
+        name: "Benchmark Weight",
+        role: "external",
+        axisType: "continuous",
+        minimum: 100,
+        default: 400,
+        maximum: 900,
+        labels: [],
+        hidden: false,
+      }),
+    );
+    await editor.waitForIdle();
+    const sourceIds = await page.evaluate((axisId) => {
+      const runtime = window.shift!.editor;
+      const referenceId = runtime.font.defaultSource.id;
+      const location = new Map([[axisId, 900]]) as unknown as ExternalAxisLocation;
+      const targetId = runtime.font.createSource("Benchmark Bold", location);
+      return { referenceId, targetId };
+    }, axisId);
+    await editor.waitForIdle();
+    await expect
+      .poll(() =>
+        page.evaluate((id) => Boolean(window.shift!.editor.font.source(id)), sourceIds.targetId),
+      )
+      .toBe(true);
+    await page.evaluate(({ referenceId, targetId }) => {
+      const runtime = window.shift!.editor;
+      runtime.selectSourceForEditing(targetId);
+      runtime.selectSourceForEditing(referenceId);
+      runtime.selectSourceForEditing(targetId, "toggle");
+    }, sourceIds);
+    await editor.waitForIdle();
+    await expect
+      .poll(() =>
+        page.evaluate(
+          (ids) => window.shift!.editor.positionSelection(ids)?.additionalLayers.length,
+          pointIds,
+        ),
+      )
+      .toBe(1);
+
+    const targetPosition = async () =>
+      page.evaluate((ids) => {
+        const selection = window.shift!.editor.positionSelection(ids);
+        const target = selection?.additionalLayers[0];
+        const targetId = target?.targets.points?.[0];
+        if (!target || !targetId) throw new Error("Expected a complete matched source");
+        const point = target.layer.point(targetId);
+        if (!point) throw new Error("Expected a matched point");
+        return { x: point.x, y: point.y };
+      }, pointIds);
+    const targetBefore = await targetPosition();
+    await page.evaluate((ids) => window.shift!.editor.selection.select(ids), pointIds);
+    const multiStart = performance.now();
+    await editor.press("ArrowRight");
+    await editor.waitForCanvasRender();
+    const multiMs = performance.now() - multiStart;
+
+    expect(await editor.pointPosition(pointIds[0]!)).toMatchObject({ x: before.x + 1 });
+    expect(await targetPosition()).toMatchObject({ x: targetBefore.x + 1 });
+    await editor.undo();
+    expect(await editor.pointPosition(pointIds[0]!)).toEqual(before);
+    expect(await targetPosition()).toEqual(targetBefore);
+    expect(singleMs).toBeLessThan(1_500);
+    expect(multiMs).toBeLessThan(1_500);
+    console.log(
+      `50K five-point nudge: single=${singleMs.toFixed(1)}ms two-source=${multiMs.toFixed(1)}ms`,
+    );
   });
 
   test("translate drag — few points selected (5)", async ({ page }) => {
@@ -205,7 +316,7 @@ test.describe("Performance — 50K points", () => {
           times.push(performance.now() - start);
         }
 
-        layer.commitPositionPatch(updates);
+        layer.applyPositionPatch(updates);
         await editor.font.editCoordinator.settled();
         return times;
       },
@@ -253,7 +364,7 @@ test.describe("Performance — 50K points", () => {
           times.push(performance.now() - start);
         }
 
-        layer.commitPositionPatch(updates);
+        layer.applyPositionPatch(updates);
         await editor.font.editCoordinator.settled();
         return times;
       },
@@ -301,7 +412,7 @@ test.describe("Performance — 50K points", () => {
           times.push(performance.now() - start);
         }
 
-        layer.commitPositionPatch(updates);
+        layer.applyPositionPatch(updates);
         await editor.font.editCoordinator.settled();
         return times;
       },
@@ -370,7 +481,7 @@ test.describe("Performance — 50K points", () => {
           y: index + 10,
         }));
         layer.previewPositionPatch(updates);
-        layer.commitPositionPatch(updates);
+        layer.applyPositionPatch(updates);
         await editor.font.editCoordinator.settled();
 
         const undoTimes: number[] = [];
@@ -398,40 +509,37 @@ test.describe("Performance — 50K points", () => {
     assertPerf(redoStats);
   });
 
-  test("pen tool — rapid point placement on complex glyph", async ({ page }) => {
-    const contours = generateContourData(TARGET_POINTS);
+  test("pen tool — real clicks reach rendered geometry", async ({ page, editor }) => {
+    await page.evaluate(async (contours) => {
+      const editor = window.shift!.editor;
+      const inserted = editor.insertContent({ contours });
+      if (!inserted) throw new Error("contour insertion failed");
 
-    const samples = await page.evaluate(
-      async ({ contours, clickCount }) => {
-        const editor = window.shift!.editor;
-        const inserted = editor.insertContent({ contours });
-        if (!inserted) throw new Error("contour insertion failed");
+      await editor.font.editCoordinator.settled();
+    }, generateContourData(TARGET_POINTS));
+    await editor.selectTool("pen");
+    await editor.waitForCanvasRender();
 
-        await editor.font.editCoordinator.settled();
-        editor.setActiveTool("pen");
+    const initialCount = await editor.pointCount();
+    const before = await page.locator("#marker-canvas").screenshot();
+    const bounds = await editor.canvasBounds();
+    const samples: number[] = [];
 
-        const times: number[] = [];
+    for (let index = 0; index < 100; index++) {
+      const x =
+        bounds.x + 25 + (Math.floor(index / 8) % 2 === 0 ? index % 8 : 7 - (index % 8)) * 20;
+      const y = bounds.y + 80 + Math.floor(index / 8) * 20;
+      const start = performance.now();
 
-        for (let index = 0; index < clickCount; index++) {
-          const x = 100 + (index % 50) * 10;
-          const y = 100 + Math.floor(index / 50) * 10;
+      await page.mouse.click(x, y);
+      await editor.waitForCanvasRender();
+      samples.push(performance.now() - start);
+    }
 
-          const start = performance.now();
-          editor.toolManager.handlePointerDown(
-            { x, y },
-            { shiftKey: false, altKey: false, metaKey: false },
-          );
-          editor.toolManager.handlePointerUp({ x, y });
-          times.push(performance.now() - start);
-        }
+    expect(await editor.pointCount()).toBe(initialCount + 100);
+    expect((await page.locator("#marker-canvas").screenshot()).equals(before)).toBe(false);
 
-        await editor.font.editCoordinator.settled();
-        return times;
-      },
-      { contours, clickCount: 100 },
-    );
-
-    const stats = computeStats("pen-tool (100 clicks)", samples);
+    const stats = computeStats("pen input-to-render (100 clicks)", samples);
     results.push(stats);
     assertPerf(stats);
   });

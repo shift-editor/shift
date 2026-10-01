@@ -24,9 +24,30 @@ export type ObjectTree = readonly ObjectTreeSection[];
 export interface VisibleObjectRow {
   readonly depth: number;
   readonly item: ObjectTreeItem;
+  readonly position: number;
+  readonly setSize: number;
 }
 
 export type ObjectTreeSelectionHandler = (id: SelectableId, mode: ListSelectionMode) => void;
+
+export interface VirtualObjectRowsProps {
+  readonly rows: readonly VisibleObjectRow[];
+  readonly visibleIds: readonly SelectableId[];
+  readonly selectedIds: ReadonlySet<SelectableId>;
+  readonly collapsedObjectIds: ReadonlySet<SelectableId>;
+  readonly setObjectOpen: (id: SelectableId, open: boolean) => void;
+  readonly selectObject: ObjectTreeSelectionHandler;
+  readonly sectionLabel: string;
+  readonly sectionTop: number;
+  readonly scrollTop: number;
+  readonly viewportHeight: number;
+  readonly focusedObjectId: SelectableId | null;
+  readonly pendingFocusId: SelectableId | null;
+  readonly onFocusObject: (id: SelectableId) => void;
+  readonly onNavigate: (id: SelectableId) => void;
+  readonly onPendingFocusResolved: () => void;
+  readonly onDeleteSelection: () => Promise<boolean>;
+}
 
 export interface ObjectRowProps {
   readonly isCollapsed: boolean;

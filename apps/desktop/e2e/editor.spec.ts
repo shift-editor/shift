@@ -289,6 +289,87 @@ test.describe("Editor view", () => {
     await expect.poll(() => editor.selectionIds()).toEqual([contour.id]);
   });
 
+  test("keeps the object tree usable without mounting offscreen points", async ({
+    page,
+    editor,
+  }) => {
+    const [firstId, lastId] = await page.evaluate(() => {
+      const contours = Array.from({ length: 120 }, (_, index) => ({
+        closed: false,
+        points: [
+          { x: index * 20, y: 0, pointType: "onCurve" as const, smooth: false },
+          { x: index * 20 + 10, y: 10, pointType: "onCurve" as const, smooth: false },
+        ],
+      }));
+      const inserted = window.shift!.editor.insertContent({ contours });
+      if (!inserted?.[0] || !inserted.at(-1)) throw new Error("Expected inserted points");
+      return [inserted[0], inserted.at(-1)!] as const;
+    });
+    await editor.waitForIdle();
+    await editor.waitForCanvasRender();
+
+    const objects = page.getByRole("navigation", { name: "Glyph objects" });
+    const rows = objects.locator('[data-testid^="object-"]');
+    await expect(objects.getByTestId(`object-${firstId}`)).toBeVisible();
+    expect(await rows.count()).toBeLessThan(100);
+    await objects.getByTestId(`object-${firstId}`).click();
+    await objects.evaluate((nav) => {
+      if (!nav.parentElement) throw new Error("Objects scroll container is missing");
+      nav.parentElement.scrollTop = nav.parentElement.scrollHeight;
+    });
+    await expect(objects.getByTestId(`object-${lastId}`)).toBeVisible();
+    await expect(objects.getByTestId(`object-${firstId}`)).toHaveCount(0);
+    await objects.getByTestId(`object-${lastId}`).click({ modifiers: ["Shift"] });
+
+    const outline = await editor.outline();
+    const start = outline.findIndex((contour) => contour.points[0]?.id === firstId);
+    expect(start).toBeGreaterThanOrEqual(0);
+    const expected = outline
+      .slice(start)
+      .flatMap((contour, index) => [
+        ...(index === 0 ? [] : [contour.id]),
+        ...contour.points.map((point) => point.id),
+      ]);
+    await expect.poll(() => editor.selectionIds()).toEqual(expected);
+    expect(await rows.count()).toBeLessThan(100);
+
+    await objects.evaluate((nav) => {
+      if (!nav.parentElement) throw new Error("Objects scroll container is missing");
+      nav.parentElement.scrollTop = 0;
+    });
+    const destination = outline[start + 25]?.points[1]?.id;
+    if (!destination) throw new Error("Expected a point past the first visible rows");
+    await objects.getByTestId(`object-${firstId}`).click();
+    const tree = objects.getByRole("tree", { name: "Contours" });
+    await expect(tree).toBeFocused();
+    for (let index = 0; index < 76; index++) await page.keyboard.press("ArrowDown");
+    await expect(tree).toHaveAttribute("aria-activedescendant", `object-tree-${destination}`);
+    await expect(objects.getByTestId(`object-${destination}`)).toBeVisible();
+    const focusedContour = outline[start + 25];
+    if (!focusedContour) throw new Error("Expected a contour containing the focused point");
+    await page.keyboard.press("ArrowLeft");
+    await expect(tree).toHaveAttribute("aria-activedescendant", `object-tree-${focusedContour.id}`);
+    await page.keyboard.press("ArrowLeft");
+    await expect(
+      objects
+        .getByRole("treeitem")
+        .filter({ has: page.getByTestId(`object-${focusedContour.id}`) }),
+    ).toHaveAttribute("aria-expanded", "false");
+    await page.keyboard.press("ArrowRight");
+    await expect(objects.getByTestId(`object-${focusedContour.id}`)).toBeVisible();
+    await page.keyboard.press("ArrowRight");
+    const firstChildId = focusedContour.points[0]?.id;
+    if (!firstChildId) throw new Error("Expected a contour point");
+    await expect(tree).toHaveAttribute("aria-activedescendant", `object-tree-${firstChildId}`);
+    await page.keyboard.press(" ");
+    await expect.poll(() => editor.selectionIds()).toEqual([firstId, firstChildId]);
+    await page.keyboard.press("Delete");
+    await editor.waitForIdle();
+    await expect(tree).toHaveAttribute("aria-activedescendant", `object-tree-${focusedContour.id}`);
+    await page.keyboard.press("Tab");
+    await expect(tree).not.toBeFocused();
+  });
+
   test("edits anchor X and Y positions without restoring stale coordinates", async ({
     page,
     editor,

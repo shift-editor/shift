@@ -1,4 +1,5 @@
 import type { PointId, ContourId } from "@shift/types";
+import { handleCullPaddingPx } from "../markers/handleStyles";
 import type { GlyphContour } from "../../../model/ComponentGlyph";
 import type { Hover } from "../../Hover";
 import type { Selection } from "../../Selection";
@@ -37,6 +38,7 @@ export class Handles {
         interpolated,
       },
       isVisible,
+      ctx.canvas.visibleBounds(handleCullPaddingPx(ctx.canvas.theme)),
     );
 
     if (this.#markers.draw(ctx.markers, list, ctx.canvas.camera, node.position, ctx.canvas.theme))

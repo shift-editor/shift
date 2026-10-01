@@ -40,7 +40,8 @@ export class LayerBuffers {
   readonly anchors: AnchorBuffer;
   readonly components: readonly ComponentBuffer[];
 
-  readonly #pointContoursCell: ComputedSignal<ReadonlyMap<PointId, ContourBuffer>>;
+  // non-reactive: routes imperative point edits; render readers track contour/structure cells.
+  readonly #pointContours = new Map<PointId, ContourBuffer>();
 
   readonly structureCell: ComputedSignal<GlyphStructure>;
   readonly snapshotCell: ComputedSignal<Float64Array>;
@@ -64,16 +65,10 @@ export class LayerBuffers {
     this.anchors = anchors;
     this.components = components;
 
-    this.#pointContoursCell = computed(
-      () => {
-        const pointContours = new Map<PointId, ContourBuffer>();
-        for (const contour of this.contoursCell.value) {
-          for (const point of contour.dataCell.value.points) pointContours.set(point.id, contour);
-        }
-        return pointContours;
-      },
-      { name: "glyphLayer.buffers.pointContours" },
-    );
+    for (const contour of contours) {
+      for (const point of contour.data.points) this.#pointContours.set(point.id, contour);
+    }
+
     let initialStructure: GlyphStructure | null = structure;
     this.structureCell = computed(
       () => {
@@ -247,7 +242,14 @@ export class LayerBuffers {
 
     const contour = this.#insertionContour(contourId, before);
     if (!contour) return false;
-    return contour.insertPoints(points, before);
+
+    return batch(() => {
+      if (!contour.insertPoints(points, before)) return false;
+
+      for (const point of points) this.#pointContours.set(point.id, contour);
+
+      return true;
+    });
   }
 
   #insertionContour(contourId?: ContourId, before?: PointId) {
@@ -299,6 +301,7 @@ export class LayerBuffers {
 
     batch(() => {
       for (const [contour, ids] of contours) contour.removePoints(ids);
+      for (const pointId of removed) this.#pointContours.delete(pointId);
 
       const emptyContours = new Set(
         [...contours.keys()].filter((contour) => contour.pointCount === 0),
@@ -427,7 +430,7 @@ export class LayerBuffers {
   }
 
   #contourForPoint(pointId: PointId): ContourBuffer | null {
-    return this.#pointContoursCell.peek().get(pointId) ?? null;
+    return this.#pointContours.get(pointId) ?? null;
   }
 
   static #snapshot(
