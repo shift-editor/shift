@@ -481,7 +481,7 @@ export class GlyphLayer {
     return this.#writer.geometry;
   }
 
-  /** @internal Reactive geometry used for component transform and attachment reads. */
+  /** @internal Reactive geometry used for component transform reads. */
   get geometryCell(): Signal<GlyphGeometry> {
     return this.#writer.geometryCell;
   }
@@ -1110,8 +1110,8 @@ export class GlyphLayer {
    *
    * @remarks
    * Each selected occurrence is recursively flattened at this source's design
-   * location. Component transforms and anchor attachment are applied before the
-   * replacement contours are committed.
+   * location. Component transforms are applied before the replacement contours
+   * are committed.
    *
    * @param componentIds - Direct component occurrences owned by this layer.
    */

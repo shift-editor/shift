@@ -3,10 +3,7 @@ use std::path::Path;
 
 use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
 use shift_backends::font_loader::FontLoader;
-use shift_font::composite::{
-    ComponentAnchorReference as FontAnchorReference, GlyphComponents,
-    ResolvedContour as FontResolvedContour,
-};
+use shift_font::composite::{GlyphComponents, ResolvedContour as FontResolvedContour};
 use shift_font::variation::map_location;
 use shift_font::{
     Axis, Component as FontComponent, DesignLocation, ExternalLocation, Font, GlyphId, GlyphLayer,
@@ -14,11 +11,11 @@ use shift_font::{
 };
 
 use super::types::{
-    AffineTransform, AnchorInspection, AnchorReference, Bounds, ComponentAttachment,
-    ComponentInspection, ContourInspection, DecomposedTransform, GlyphIdentity, GlyphInspection,
-    GlyphLocation, GlyphStructure, GlyphSummary, LayerInspection, LocationValue, PointInspection,
-    ResolvedContour, ResolvedGlyph, SourceInspection, SourceReference, SourceWeight,
-    VariationInspection, VariationRegion, VariationSupport,
+    AffineTransform, AnchorInspection, Bounds, ComponentInspection, ContourInspection,
+    DecomposedTransform, GlyphIdentity, GlyphInspection, GlyphLocation, GlyphStructure,
+    GlyphSummary, LayerInspection, LocationValue, PointInspection, ResolvedContour, ResolvedGlyph,
+    SourceInspection, SourceReference, SourceWeight, VariationInspection, VariationRegion,
+    VariationSupport,
 };
 
 impl GlyphInspection {
@@ -282,12 +279,6 @@ fn inspect_components(
                     .collect(),
                 decomposed_transform: inspect_decomposed_transform(component),
                 transform: inspect_transform(component),
-                attachment: occurrence
-                    .attachment()
-                    .map(|attachment| ComponentAttachment {
-                        source: inspect_anchor_reference(attachment.source()),
-                        target: inspect_anchor_reference(attachment.target()),
-                    }),
             })
         })
         .collect()
@@ -317,19 +308,6 @@ fn inspect_transform(component: &FontComponent) -> AffineTransform {
         yy: matrix.yy,
         dx: matrix.dx,
         dy: matrix.dy,
-    }
-}
-
-fn inspect_anchor_reference(reference: &FontAnchorReference) -> AnchorReference {
-    AnchorReference {
-        component_path: reference
-            .component_path()
-            .as_slice()
-            .iter()
-            .map(ToString::to_string)
-            .collect(),
-        glyph_id: reference.glyph_id().to_string(),
-        anchor_id: reference.anchor_id().to_string(),
     }
 }
 

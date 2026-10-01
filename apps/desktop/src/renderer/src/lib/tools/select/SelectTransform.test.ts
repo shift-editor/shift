@@ -615,15 +615,12 @@ describe("Select curve bending preserves edit lifecycle", () => {
     editor.selectTool("select");
   });
 
-  it("shows the bend cursor when Meta is pressed over a cubic, and clears it on release", () => {
+  it("keeps the normal cursor on Cmd-hover over a cubic", () => {
     const down = editor.projectSceneToScreen(bendPoint);
     editor.pointerMove(down.x, down.y);
     expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "default" });
 
-    editor.keyDown("Meta", { metaKey: true });
-    expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "bend" });
-
-    editor.pointerMove(down.x, down.y);
+    editor.keyDown("Meta");
     expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "default" });
   });
 
@@ -638,17 +635,17 @@ describe("Select curve bending preserves edit lifecycle", () => {
 
   it("does not offer bending on a point or empty canvas", () => {
     const down = editor.projectSceneToScreen({ x: 100, y: 200 });
-    editor.pointerMove(down.x, down.y, { metaKey: true });
+    editor.pointerMove(down.x, down.y);
     expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "default" });
 
-    editor.pointerMove(down.x + 300, down.y + 300, { metaKey: true });
+    editor.pointerMove(down.x + 300, down.y + 300);
     expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "default" });
   });
 
-  it("keeps the bend cursor during a drag even after Meta is released", async () => {
+  it("shows the bend cursor for the whole bend drag", async () => {
     const down = editor.projectSceneToScreen(bendPoint);
-    editor.pointerDown(down.x, down.y, { metaKey: true });
-    editor.pointerMove(down.x + 4, down.y, { metaKey: true });
+    editor.pointerDown(down.x, down.y);
+    editor.pointerMove(down.x + 4, down.y);
     expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "bend" });
 
     editor.pointerMove(down.x + 4, down.y + 40);
@@ -665,9 +662,9 @@ describe("Select curve bending preserves edit lifecycle", () => {
     const start = editor.projectSceneToScreen({ x: bendPoint.x + 4, y: bendPoint.y });
     const end = editor.projectSceneToScreen({ x: bendPoint.x + 4, y: bendPoint.y + 40 });
 
-    editor.pointerDown(down.x, down.y, { metaKey: true });
-    editor.pointerMove(start.x, start.y, { metaKey: true });
-    editor.pointerMove(end.x, end.y, { metaKey: true });
+    editor.pointerDown(down.x, down.y);
+    editor.pointerMove(start.x, start.y);
+    editor.pointerMove(end.x, end.y);
     expect(editor.pointPosition(controlOneId)).not.toEqual(oneBefore);
     expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "bend" });
     editor.escape();
@@ -682,7 +679,7 @@ describe("Select curve bending preserves edit lifecycle", () => {
       down: bendPoint,
       start: { x: bendPoint.x + 4, y: bendPoint.y },
       end: { x: bendPoint.x, y: bendPoint.y + 40 },
-      options: { metaKey: true, shiftKey: true },
+      options: { shiftKey: true },
     });
 
     const handleOne = Vec2.sub(editor.pointPosition(controlOneId), { x: 100, y: 200 });
@@ -700,12 +697,12 @@ describe("Select curve bending preserves edit lifecycle", () => {
     const end = editor.projectSceneToScreen({ x: bendPoint.x, y: bendPoint.y + 40 });
     const handleOne = () => Vec2.sub(editor.pointPosition(controlOneId), { x: 100, y: 200 });
 
-    editor.pointerDown(down.x, down.y, { metaKey: true });
-    editor.pointerMove(start.x, start.y, { metaKey: true });
-    editor.pointerMove(end.x, end.y, { metaKey: true, shiftKey: true });
+    editor.pointerDown(down.x, down.y);
+    editor.pointerMove(start.x, start.y);
+    editor.pointerMove(end.x, end.y, { shiftKey: true });
     expect(handleOne().y).toBeCloseTo(handleOne().x);
 
-    editor.pointerMove(end.x, end.y + 1, { metaKey: true });
+    editor.pointerMove(end.x, end.y + 1);
     expect(handleOne().y).not.toBeCloseTo(handleOne().x);
   });
 
@@ -714,7 +711,6 @@ describe("Select curve bending preserves edit lifecycle", () => {
       down: bendPoint,
       start: { x: bendPoint.x + 4, y: bendPoint.y },
       end: { x: bendPoint.x + 20, y: bendPoint.y + 40 },
-      options: { metaKey: true },
     });
     const anchorStart = { x: 100, y: 200 };
     const anchorEnd = { x: 200, y: 200 };
@@ -727,7 +723,7 @@ describe("Select curve bending preserves edit lifecycle", () => {
       down: bentPoint,
       start: { x: bentPoint.x, y: bentPoint.y + 4 },
       end: { x: bentPoint.x - 10, y: bentPoint.y + 30 },
-      options: { metaKey: true, altKey: true },
+      options: { altKey: true },
     });
 
     const handleOne = Vec2.sub(editor.pointPosition(controlOneId), anchorStart);
@@ -746,7 +742,6 @@ describe("Select curve bending preserves edit lifecycle", () => {
       down: bendPoint,
       start: { x: bendPoint.x + 4, y: bendPoint.y },
       end: { x: bendPoint.x + 4, y: bendPoint.y + 40 },
-      options: { metaKey: true },
     });
     const bent = [editor.pointPosition(controlOneId), editor.pointPosition(controlTwoId)];
 
@@ -781,7 +776,7 @@ describe("Select Shift-bending snaps handles to 45° steps", () => {
       down: { x: 200, y: 200 },
       start: { x: 204, y: 196 },
       end: { x: 260, y: 140 },
-      options: { metaKey: true, shiftKey: true },
+      options: { shiftKey: true },
     });
 
     expect(editor.pointPosition(cubic.controlStart.id)).toMatchObject({ x: 260, y: 100 });

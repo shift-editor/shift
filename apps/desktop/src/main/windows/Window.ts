@@ -91,12 +91,14 @@ export class Window {
   }
 
   present(): void {
-    this.#window.show();
-
+    // Maximising a hidden window shows it already at full size, so it never
+    // flashes at its normal bounds first.
     if (this.#maximiseOnPresent) {
       this.#maximiseOnPresent = false;
       this.#window.maximize();
     }
+
+    this.#window.show();
 
     this.#window.focus();
   }

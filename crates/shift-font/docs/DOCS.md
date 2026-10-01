@@ -32,7 +32,7 @@ crates/shift-font/src/
   layer_edit.rs    -- glyph-layer geometry mutations
   interpolation.rs -- source compatibility, reusable bases, source values
   projection.rs    -- location-independent glyph payloads and resolved views
-  composite.rs     -- component occurrences, attachment semantics, and flattening
+  composite.rs     -- component occurrences, anchor-aligned placement, and flattening
 ```
 
 ## Key Types
@@ -60,7 +60,7 @@ crates/shift-font/src/
 - `LayerMatch` derives cross-layer contour, point, anchor, and component identity mappings for structurally compatible layers. `LayerDifference` retains ordered structural evidence for incompatible layers.
 - `GlyphProjection` is a compact location-independent glyph payload: shared fallback layers, optional compatible interpolation, exact-source topology exceptions, `GlyphComponents`, and transitive component identities.
 - `GlyphProjectionSet` is an immutable, read-scoped projection table for requested roots and their transitive components. It prepares each glyph once and reuses interpolation bases keyed by ordered compatible source identities; callers discard it after the current read or compilation.
-- `GlyphComponents` is the ordered, cycle-pruned component occurrence list for one root glyph. Every `ComponentGlyph` carries its full `ComponentId` ancestry, its zero-based slot within the immediate parent layer, and its Rust-selected anchor attachment. The ancestry identifies the authored occurrence; the parent-local slot correlates numeric transforms across compatible source layers whose corresponding components have different authored IDs.
+- `GlyphComponents` is the ordered, cycle-pruned component occurrence list for one root glyph. Every `ComponentGlyph` carries its full `ComponentId` ancestry, and its zero-based slot within the immediate parent layer. The ancestry identifies the authored occurrence; the parent-local slot correlates numeric transforms across compatible source layers whose corresponding components have different authored IDs.
 - `FontProjection` is a read-only, location-bound view that reuses resolved component layers across one or many glyph requests.
 - `ResolvedGlyph` is derived, flattened geometry plus x advance. An existing blank glyph resolves to an empty contour list; a missing glyph resolves to `None`.
 - `Contour` and `Point` describe outline geometry inside a glyph layer. Quadratic path conversion preserves one off-curve control and a `PointType::QCurve` endpoint rather than reducing the endpoint to `OnCurve`.
@@ -145,7 +145,9 @@ Transport and workspace layers should pass stable identity to find the model obj
 3. Bulk position paths take `BulkNodePositionUpdates` flat ID/coordinate slices; validate coordinate length against the ID count before mutating anything so a malformed batch never half-applies.
 4. Verify: `cargo test -p shift-font`.
 
-Component authoring uses `AddComponent`, `SetComponentTransforms`, `RemoveComponents`, and `DecomposeComponents`. Add creates an identity-transformed direct reference with caller-minted identity. Transform replacement validates all direct component identities before mutating and records one values-only layer replacement. Anchor attachment establishes automatic placement first, then the authored transform composes on top as a user-controlled offset. Decomposition replaces selected direct references with fresh local contours, recursively flattening each selected subtree at the target layer's source location after component transforms and anchor attachment are resolved. Unselected siblings still participate in attachment resolution.
+Component authoring uses `AddComponent`, `SetComponentTransforms`, `RemoveComponents`, and `DecomposeComponents`. Add creates a direct reference with caller-minted identity, translated so its first `_name` anchor meets the most recently placed matching `name` anchor among earlier siblings at the same source (`composite::anchor_aligned_offset`); without a match the transform is identity. Transform replacement validates all direct component identities before mutating and records one values-only layer replacement. Decomposition replaces selected direct references with fresh local contours, recursively flattening each selected subtree at the target layer's source location after component transforms are resolved.
+
+**Architecture Invariant:** A component transform is its absolute placement within the parent layer, as in UFO, Glyphs, and compiled fonts. Resolution, rendering, and export never re-derive placement from anchors. WHY: imported sources already store anchor-aligned positions, so composing anchor alignment at render time double-offsets every imported mark and makes canvas geometry disagree with exported fonts. Moving a base anchor does not yet move dependent marks.
 
 ## Gotchas
 

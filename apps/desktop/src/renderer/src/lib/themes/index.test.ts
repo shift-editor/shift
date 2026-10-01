@@ -56,6 +56,16 @@ describe("color themes", () => {
     expect(properties.get("--color-line-subtle")).not.toBe(properties.get("--color-surface"));
     expect(properties.get("--editor-variation-outline-color")).toBe("rgba(139, 233, 253, 0.45)");
     expect(properties.get("--editor-read-only-lock-color")).toBe("#f8f8f2");
+    // Dracula's accent is a pale cyan, so text on it must be dark, not white.
+    expect(properties.get("--color-on-accent")).toBe(properties.get("--color-background"));
+
+    // Solarized's mid-tone blue scores slightly higher with dark text, but its light base reads better.
+    applyResolvedTheme(resolveThemeSelection("solarized-dark", "light"), root);
+    expect(properties.get("--color-on-accent")).toBe("#fdf6e3");
+
+    // Text on Gruvbox Light's teal uses the palette's cream rather than pure white.
+    applyResolvedTheme(resolveThemeSelection("gruvbox-light", "dark"), root);
+    expect(properties.get("--color-on-accent")).toBe("#fbf1c7");
 
     applyResolvedTheme(resolveThemeSelection("shift-light", "dark"), root);
     expect(root.dataset.theme).toBe("light");

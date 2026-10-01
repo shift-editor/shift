@@ -6,16 +6,15 @@ use shift_font::{GlyphId, PointType as IrPointType};
 
 use crate::{
     AnchorData, AnchorMatch, Axis, AxisLabel, AxisMapping, AxisMappingBasis, AxisMappingPoint,
-    ComponentAnchorAttachment, ComponentAnchorReference, ComponentData, ComponentGlyph,
-    ComponentMatch, ComponentTransformKind, ContourData, ContourMatch, FontMetadata, FontMetrics,
-    FontSnapshot, GlyphChangedEntities, GlyphComponents, GlyphEntry, GlyphInterpolation,
-    GlyphLayerRecord, GlyphLayerShape, GlyphLayerSnapshot, GlyphProjection, GlyphRecord,
-    GlyphSnapshot, GlyphSnapshotRequest, GlyphSourceComponents, GlyphSourceShape,
-    GlyphSourceValues, GlyphState, GlyphStructure, GlyphVariation, InterpolationBasis,
-    InterpolationSupport, LayerDifference, LayerDifferenceKind, LayerMatch, Location,
-    MetricDefinition, MetricKind, NamedInstance, PointData, PointMatch, PointType, Source,
-    SourceMetricField, SourceMetricValue, SourceMetricValues, SourceMetricsInterpolationSnapshot,
-    VariationBasis, VariationDelta,
+    ComponentData, ComponentGlyph, ComponentMatch, ComponentTransformKind, ContourData,
+    ContourMatch, FontMetadata, FontMetrics, FontSnapshot, GlyphChangedEntities, GlyphComponents,
+    GlyphEntry, GlyphInterpolation, GlyphLayerRecord, GlyphLayerShape, GlyphLayerSnapshot,
+    GlyphProjection, GlyphRecord, GlyphSnapshot, GlyphSnapshotRequest, GlyphSourceComponents,
+    GlyphSourceShape, GlyphSourceValues, GlyphState, GlyphStructure, GlyphVariation,
+    InterpolationBasis, InterpolationSupport, LayerDifference, LayerDifferenceKind, LayerMatch,
+    Location, MetricDefinition, MetricKind, NamedInstance, PointData, PointMatch, PointType,
+    Source, SourceMetricField, SourceMetricValue, SourceMetricValues,
+    SourceMetricsInterpolationSnapshot, VariationBasis, VariationDelta,
 };
 
 #[napi(object)]
@@ -36,7 +35,6 @@ pub struct NapiSlugLayout {
     pub component_parts: NapiSlugSection,
     pub components: NapiSlugSection,
     pub component_sources: NapiSlugSection,
-    pub anchor_sources: NapiSlugSection,
     pub line_bits: NapiSlugSection,
     pub total_length: u32,
 }
@@ -978,45 +976,6 @@ pub struct NapiGlyphSourceShape {
 }
 
 #[napi(object)]
-pub struct NapiComponentAnchorReference {
-    #[napi(ts_type = "Array<ComponentId>")]
-    pub component_path: Vec<String>,
-    #[napi(ts_type = "GlyphId")]
-    pub glyph_id: String,
-    #[napi(ts_type = "AnchorId")]
-    pub anchor_id: String,
-}
-
-impl From<ComponentAnchorReference> for NapiComponentAnchorReference {
-    fn from(anchor: ComponentAnchorReference) -> Self {
-        Self {
-            component_path: anchor
-                .component_path
-                .into_iter()
-                .map(|component_id| component_id.to_string())
-                .collect(),
-            glyph_id: anchor.glyph_id.to_string(),
-            anchor_id: anchor.anchor_id.to_string(),
-        }
-    }
-}
-
-#[napi(object)]
-pub struct NapiComponentAnchorAttachment {
-    pub source: NapiComponentAnchorReference,
-    pub target: NapiComponentAnchorReference,
-}
-
-impl From<ComponentAnchorAttachment> for NapiComponentAnchorAttachment {
-    fn from(attachment: ComponentAnchorAttachment) -> Self {
-        Self {
-            source: attachment.source.into(),
-            target: attachment.target.into(),
-        }
-    }
-}
-
-#[napi(object)]
 pub struct NapiComponentGlyph {
     #[napi(ts_type = "GlyphId")]
     pub parent_glyph_id: String,
@@ -1029,7 +988,6 @@ pub struct NapiComponentGlyph {
     pub parent_path: Vec<String>,
     #[napi(ts_type = "Array<ComponentId>")]
     pub component_path: Vec<String>,
-    pub attachment: Option<NapiComponentAnchorAttachment>,
 }
 
 impl From<ComponentGlyph> for NapiComponentGlyph {
@@ -1050,7 +1008,6 @@ impl From<ComponentGlyph> for NapiComponentGlyph {
                 .into_iter()
                 .map(|component_id| component_id.to_string())
                 .collect(),
-            attachment: component.attachment.map(Into::into),
         }
     }
 }

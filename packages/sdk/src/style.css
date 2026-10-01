@@ -27,6 +27,7 @@
   --color-muted: var(--shift-color-muted, #5f5f5f);
   --color-sidebar-icon: var(--shift-color-sidebar-icon, #585858);
   --color-accent: var(--shift-color-accent, #0c92f4);
+  --color-on-accent: var(--shift-color-on-accent, #ffffff);
   --color-error: var(--shift-color-error, #dc2626);
   --color-error-ring: var(--shift-color-error-ring, #ef4444);
   --color-destructive: var(--shift-color-destructive, #dc2626);

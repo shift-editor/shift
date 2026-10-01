@@ -2,6 +2,7 @@ import type { CommandId, RendererCommandId } from "../commands";
 import type { UpdateProgress } from "../update/types";
 import type { RendererErrorReport } from "../ipc/contract";
 import type { FontSessionMode } from "../workspace/protocol";
+import type { RecentDocument } from "../recents";
 
 /**
  * Renderer-facing API for Electron app-shell behavior.
@@ -91,6 +92,14 @@ export interface ShiftHost {
   window: {
     /** Reconstructs this document renderer without clearing recovery state. */
     reopenDocument: () => Promise<void>;
+    /**
+     * Tells main this window has rendered its content and can be shown.
+     *
+     * @remarks
+     * Windows that main creates hidden, such as the launcher, appear on this
+     * signal instead of on first paint; repeated calls are ignored.
+     */
+    ready: () => Promise<void>;
   };
   /** Privacy-safe renderer diagnostics reported to the main log. */
   errors: {
@@ -104,6 +113,36 @@ export interface ShiftHost {
      * @returns an unsubscribe function.
      */
     onZoomChanged: (callback: (percent: number) => void) => () => void;
+  };
+  /** Main-owned list of files Shift has opened. */
+  recents: {
+    /** Returns recent files, newest first, with a fresh missing-file check. */
+    list: () => Promise<RecentDocument[]>;
+    /**
+     * Opens a recent file from this window.
+     *
+     * @remarks
+     * Main shows a native failure message when the file cannot be opened.
+     */
+    open: (path: string) => Promise<void>;
+    /**
+     * Removes one file from recents.
+     *
+     * @returns the removed entry for {@link restore}, or null when it was already gone.
+     */
+    remove: (path: string) => Promise<RecentDocument | null>;
+    /** Puts a removed entry back in its original time order. */
+    restore: (document: RecentDocument) => Promise<void>;
+    /** Shows the file in Finder or the platform file manager. */
+    reveal: (path: string) => Promise<void>;
+    /** Asks for the new location of a missing file and opens it. */
+    locate: (path: string) => Promise<void>;
+    /**
+     * Subscribes to recent-file changes.
+     *
+     * @returns an unsubscribe function.
+     */
+    onChanged: (callback: (documents: RecentDocument[]) => void) => () => void;
   };
   /** System clipboard access owned by the app shell. */
   clipboard: {

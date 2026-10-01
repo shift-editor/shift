@@ -22,7 +22,7 @@ const convertiblePreviewTest = launcherTest.extend({
 
 async function openSelectedPreview(page: Page, electronApp: ElectronApplication): Promise<Page> {
   const workspaceWindow = electronApp.waitForEvent("window");
-  await page.getByRole("button", { name: /Load font/ }).click();
+  await page.getByRole("button", { name: "Open Font…", exact: true }).click();
 
   const workspacePage = await workspaceWindow;
   await workspacePage.waitForURL(/#\/home$/);

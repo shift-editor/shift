@@ -34,6 +34,21 @@ export type Unicode = number;
 export interface BridgeApi {
   createUntitledWorkspace(storePath: string, options?: NewWorkspace | undefined | null): void
   exportWorkspace(request: FontExportRequest): Promise<FontExportResult>
+  /**
+   * Builds the thumbnail specimen for a font file, independent of any
+   * document or preview this bridge holds.
+   *
+   * Resolves to `null` when the font draws nothing usable; rejects when the
+   * file cannot be read or compiled.
+   */
+  fontFileSpecimen(path: string): Promise<Specimen | null>
+  /**
+   * Builds the thumbnail specimen from the open document's current state.
+   *
+   * Resolves to `null` when the font draws nothing usable; rejects when no
+   * workspace is open or compilation fails.
+   */
+  documentSpecimen(): Promise<Specimen | null>
   documentState(): DocumentState
   inspectDocument(path: string): DocumentIdentity
   closeWorkspace(): void
@@ -183,6 +198,20 @@ export interface FontExportResult {
 export interface NewWorkspace {
   familyName?: string
   unitsPerEm?: number
+}
+
+/**
+ * Specimen outline drawn on a recent file's thumbnail, in font units with y
+ * pointing down.
+ */
+export interface Specimen {
+  /** Characters shown; empty when glyphs were chosen by glyph order. */
+  text: string
+  /** SVG path data. */
+  outline: string
+  /** SVG `viewBox` as `[x, y, width, height]`, fitted to the ink. */
+  viewBox: Array<number>
+  rightToLeft: boolean
 }
 export interface AddAnchorsIntent {
   layerId: LayerId
@@ -350,17 +379,6 @@ export interface CloneGlyphLayerIntent {
   fromLayerId: LayerId
 }
 
-export interface ComponentAnchorAttachment {
-  source: ComponentAnchorReference
-  target: ComponentAnchorReference
-}
-
-export interface ComponentAnchorReference {
-  componentPath: Array<ComponentId>
-  glyphId: GlyphId
-  anchorId: AnchorId
-}
-
 export interface ComponentData {
   id: ComponentId
   baseGlyphId: GlyphId
@@ -374,7 +392,6 @@ export interface ComponentGlyph {
   baseGlyphId: GlyphId
   parentPath: Array<ComponentId>
   componentPath: Array<ComponentId>
-  attachment?: ComponentAnchorAttachment
 }
 
 export interface ComponentMatch {
@@ -931,7 +948,6 @@ export interface SlugLayout {
   componentParts: SlugSection
   components: SlugSection
   componentSources: SlugSection
-  anchorSources: SlugSection
   lineBits: SlugSection
   totalLength: number
 }

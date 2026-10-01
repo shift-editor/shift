@@ -22,7 +22,7 @@ struct VariableParams {
     component_parts_offset: u32,
     components_offset: u32,
     component_sources_offset: u32,
-    anchor_sources_offset: u32,
+    _reserved: u32,
     line_bits_offset: u32,
 };
 
@@ -78,11 +78,6 @@ struct VariableComponent {
     parent_component: u32,
     source_start: u32,
     source_count: u32,
-    source_anchor_start: u32,
-    source_anchor_count: u32,
-    target_anchor_start: u32,
-    target_anchor_count: u32,
-    target_component: u32,
 };
 
 struct VariableComponentSource {
@@ -96,12 +91,6 @@ struct VariableComponentSource {
     skew_y: f32,
     center_x: f32,
     center_y: f32,
-};
-
-struct VariableAnchorSource {
-    weight_index: u32,
-    x: f32,
-    y: f32,
 };
 
 struct Affine {
@@ -204,16 +193,11 @@ fn read_component_part(index: u32) -> VariableComponentPart {
 }
 
 fn read_component(index: u32) -> VariableComponent {
-    let offset = variable.components_offset + index * 32u;
+    let offset = variable.components_offset + index * 12u;
     return VariableComponent(
         atlas_u32(offset),
         atlas_u32(offset + 4u),
         atlas_u32(offset + 8u),
-        atlas_u32(offset + 12u),
-        atlas_u32(offset + 16u),
-        atlas_u32(offset + 20u),
-        atlas_u32(offset + 24u),
-        atlas_u32(offset + 28u),
     );
 }
 
@@ -230,15 +214,6 @@ fn read_component_source(index: u32) -> VariableComponentSource {
         atlas_f32(offset + 28u),
         atlas_f32(offset + 32u),
         atlas_f32(offset + 36u),
-    );
-}
-
-fn read_anchor_source(index: u32) -> VariableAnchorSource {
-    let offset = variable.anchor_sources_offset + index * 12u;
-    return VariableAnchorSource(
-        atlas_u32(offset),
-        atlas_f32(offset + 4u),
-        atlas_f32(offset + 8u),
     );
 }
 
@@ -412,22 +387,13 @@ fn component_affine(component: VariableComponent) -> Affine {
     return Affine(vec4<f32>(xx, xy, yx, yy), vec2<f32>(dx, dy), vec2<f32>(0.0));
 }
 
-fn anchor_point(source_start: u32, source_count: u32) -> vec2<f32> {
-    var result = vec2<f32>(0.0);
-    for (var source_offset = 0u; source_offset < source_count; source_offset += 1u) {
-        let source = read_anchor_source(source_start + source_offset);
-        result += vec2<f32>(source.x, source.y) * source_weights[source.weight_index];
-    }
-    return result;
-}
-
 fn transform_scratch_start(instance_index: u32) -> u32 {
     var result = 0u;
     for (var prior_instance = 0u; prior_instance < instance_index; prior_instance += 1u) {
         let glyph = read_variable_glyph(instances[prior_instance].glyph.x);
         if (glyph.source_start & 0x80000000u) != 0u {
             let descriptor = read_component_glyph(glyph.source_start & 0x7fffffffu);
-            result += descriptor.component_count * 2u;
+            result += descriptor.component_count;
         }
     }
     return result;
@@ -461,34 +427,16 @@ fn resolve_visible_curves(
         workgroupBarrier();
 
         if local_id.x == 0u {
-            let local_start = workgroup_transform_start;
-            let resolved_start = local_start + descriptor.component_count;
+            let resolved_start = workgroup_transform_start;
             for (var component_index = 0u; component_index < descriptor.component_count; component_index += 1u) {
                 let component = read_component(descriptor.component_start + component_index);
-                var local_transform = component_affine(component);
-                if component.target_component != 0xffffffffu {
-                    let source_anchor = anchor_point(
-                        component.source_anchor_start,
-                        component.source_anchor_count,
-                    );
-                    let target_anchor = anchor_point(
-                        component.target_anchor_start,
-                        component.target_anchor_count,
-                    );
-                    let source = transform_point(local_transform, source_anchor);
-                    let target_transform = resolved_component_transforms[
-                        local_start + component.target_component
-                    ];
-                    let target_point = transform_point(target_transform, target_anchor);
-                    local_transform.translation += target_point - source;
-                }
+                let local_transform = component_affine(component);
                 var parent_transform = identity_affine();
                 if component.parent_component != 0xffffffffu {
                     parent_transform = resolved_component_transforms[
                         resolved_start + component.parent_component
                     ];
                 }
-                resolved_component_transforms[local_start + component_index] = local_transform;
                 resolved_component_transforms[resolved_start + component_index] = compose_affine(
                     parent_transform,
                     local_transform,
@@ -498,7 +446,7 @@ fn resolve_visible_curves(
         storageBarrier();
         workgroupBarrier();
 
-        let resolved_start = workgroup_transform_start + descriptor.component_count;
+        let resolved_start = workgroup_transform_start;
         for (var part_offset = 0u; part_offset < descriptor.part_count; part_offset += 1u) {
             let part = read_component_part(descriptor.part_start + part_offset);
             let direct_glyph = read_variable_glyph(part.glyph_index);

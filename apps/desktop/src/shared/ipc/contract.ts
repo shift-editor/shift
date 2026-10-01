@@ -5,6 +5,7 @@ import type {
   WorkspaceExportResult,
 } from "../workspace/protocol";
 import type { UpdateProgress } from "../update/types";
+import type { RecentDocument } from "../recents";
 
 export type DocumentCallMap = {
   "document.state": { request: void; response: WorkspaceDocumentState | null };
@@ -57,11 +58,22 @@ export type RendererToMain = {
   "session.connect": () => void;
   "session.ready": () => void;
   "window.reopenDocument": () => void;
+  /** Reports that the sender's first meaningful content is rendered, so main can show it. */
+  "window.ready": () => void;
   "errors.reportRenderer": (report: RendererErrorReport) => void;
   "update.startDownload": () => void;
   "update.cancelDownload": () => void;
   "update.restartToUpdate": () => void;
   "update.later": () => void;
+  "recents.list": () => RecentDocument[];
+  /** Opens a recent file from the sender window, replacing it when it is the launcher. */
+  "recents.open": (path: string) => void;
+  /** Returns the removed entry so the renderer can offer undo. */
+  "recents.remove": (path: string) => RecentDocument | null;
+  "recents.restore": (document: RecentDocument) => void;
+  "recents.reveal": (path: string) => void;
+  /** Asks for the new location of a missing file, opens it, and drops the stale entry. */
+  "recents.locate": (path: string) => void;
 };
 
 /**
@@ -82,4 +94,6 @@ export type MainToRenderer = {
   "update.progress": (progress: UpdateProgress) => void;
   /** Reports that the downloaded application version can be installed. */
   "update.ready": (version: string) => void;
+  /** Recent files changed after an open, Save As, removal, or Clear Menu. */
+  "recents.changed": (documents: RecentDocument[]) => void;
 };

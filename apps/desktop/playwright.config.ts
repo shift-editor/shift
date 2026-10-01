@@ -18,6 +18,7 @@ export const PLATFORM_SPECS = [
   "document-lifecycle.spec.ts",
   "document-recovery.spec.ts",
   "platform-integration.spec.ts",
+  "recent-files.spec.ts",
   "variable-font-recovery.spec.ts",
   "window-behavior.spec.ts",
   "window-isolation.spec.ts",

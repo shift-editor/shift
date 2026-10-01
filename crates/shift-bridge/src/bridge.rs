@@ -167,7 +167,6 @@ fn napi_slug_layout(layout: VariableLayout) -> BridgeResult<NapiSlugLayout> {
     component_parts: napi_slug_section(layout.component_parts)?,
     components: napi_slug_section(layout.components)?,
     component_sources: napi_slug_section(layout.component_sources)?,
-    anchor_sources: napi_slug_section(layout.anchor_sources)?,
     line_bits: napi_slug_section(layout.line_bits)?,
     total_length: u32::try_from(layout.total_length)
       .map_err(|_| shift_slug::SlugError::LengthOverflow)?,
@@ -742,7 +741,6 @@ fn wire_source_components(
         base_glyph_id: identity.glyph_id(component.glyph)?,
         parent_path: parent_path.clone(),
         component_path: component_path.clone(),
-        attachment: None,
       });
       visit(
         component.glyph,
@@ -1170,6 +1168,33 @@ impl Bridge {
         .save_snapshot()
         .map_err(|e| Error::new(Status::GenericFailure, e.to_string()))?,
       request: request.try_into()?,
+    }))
+  }
+
+  /// Builds the thumbnail specimen for a font file, independent of any
+  /// document or preview this bridge holds.
+  ///
+  /// Resolves to `null` when the font draws nothing usable; rejects when the
+  /// file cannot be read or compiled.
+  #[napi(ts_return_type = "Promise<NapiSpecimen | null>")]
+  pub fn font_file_specimen(&self, path: String) -> AsyncTask<crate::specimen::SpecimenTask> {
+    AsyncTask::new(crate::specimen::SpecimenTask {
+      input: crate::specimen::SpecimenInput::Path(std::path::PathBuf::from(path)),
+    })
+  }
+
+  /// Builds the thumbnail specimen from the open document's current state.
+  ///
+  /// Resolves to `null` when the font draws nothing usable; rejects when no
+  /// workspace is open or compilation fails.
+  #[napi(ts_return_type = "Promise<NapiSpecimen | null>")]
+  pub fn document_specimen(&mut self) -> Result<AsyncTask<crate::specimen::SpecimenTask>> {
+    Ok(AsyncTask::new(crate::specimen::SpecimenTask {
+      input: crate::specimen::SpecimenInput::Snapshot(
+        self
+          .save_snapshot()
+          .map_err(|e| Error::new(Status::GenericFailure, e.to_string()))?,
+      ),
     }))
   }
 

@@ -1,4 +1,4 @@
-import { createBridge, type ShiftBridge } from "@shift/bridge";
+import { createBridge, type ShiftBridge, type Specimen } from "@shift/bridge";
 import type { GlyphSnapshot } from "@shift/types";
 import fs from "node:fs";
 import path from "node:path";
@@ -121,6 +121,7 @@ export class WorkspaceHost {
         this.#connectSyncLane(context.ports);
       },
       "document.state": () => this.#serialize(() => this.#documentState()),
+      "workspace.specimen": ({ path }) => this.#specimen(path),
     });
 
     this.#shell.emit("ready", undefined);
@@ -762,6 +763,18 @@ export class WorkspaceHost {
     }));
     const result = await completion;
     return { path: result.path, format: "ttf" };
+  }
+
+  async #specimen(path: string): Promise<Specimen | null> {
+    const { completion } = await this.#serialize(() => ({
+      // Both calls capture their input synchronously and compile on a worker
+      // thread, so the workspace queue is released while fontc runs.
+      completion:
+        this.#state.kind === "document"
+          ? this.#bridge.documentSpecimen()
+          : this.#bridge.fontFileSpecimen(path),
+    }));
+    return completion;
   }
 
   async #close(discard: boolean): Promise<null> {

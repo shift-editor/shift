@@ -7,7 +7,7 @@ const test = documentTest.extend({
 
 test("read-only preview notice matches snapshot", async ({ electronApp, page }) => {
   const workspaceWindow = electronApp.waitForEvent("window");
-  await page.getByRole("button", { name: /Load font/ }).click();
+  await page.getByRole("button", { name: "Open Font…", exact: true }).click();
   const workspacePage = await workspaceWindow;
   await expect(workspacePage.getByLabel("Glyph catalog", { exact: true })).toBeVisible();
   await expect.poll(() => workspacePage.evaluate(() => window.shiftSession?.mode)).toBe("preview");

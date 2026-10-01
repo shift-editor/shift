@@ -298,11 +298,17 @@ function colorThemeVariables(theme: ColorTheme): Record<string, string> {
     "--color-icon-button-hover": dark ? withAlpha(palette.base05, 0.2) : palette.base02,
     "--color-line": dark ? palette.base03 : palette.base06,
     "--color-line-subtle": dark ? withAlpha(palette.base05, 0.2) : palette.base01,
+    "--color-shadow-ambient": dark ? "rgba(0, 0, 0, 0.55)" : "rgba(50, 50, 93, 0.25)",
+    "--color-shadow-key": dark ? "rgba(0, 0, 0, 0.7)" : "rgba(0, 0, 0, 0.3)",
     "--color-primary": palette.base05,
     "--color-secondary": secondary,
     "--color-muted": muted,
     "--color-sidebar-icon": secondary,
     "--color-accent": palette.base0D,
+    "--color-on-accent": readableOn(palette.base0D, [
+      lightest(palette.base00, palette.base07),
+      darkest(palette.base00, palette.base07),
+    ]),
     "--color-error": palette.base08,
     "--color-error-ring": palette.base08,
     "--color-destructive": palette.base08,
@@ -355,6 +361,43 @@ function colorThemeVariables(theme: ColorTheme): Record<string, string> {
     "--editor-text-component-overlay-hover-a": withAlpha(palette.base0B, 0.4),
     "--editor-text-component-overlay-hover-b": withAlpha(palette.base0F, 0.4),
   };
+}
+
+/** How close a preferred candidate's contrast must come to the best one to still win. */
+const PREFERRED_CONTRAST_MARGIN = 0.8;
+
+/**
+ * Picks the candidate with the highest WCAG contrast on `background`, except that the
+ * first candidate wins whenever it comes within 20% of the best. WCAG contrast
+ * over-favours dark text on saturated mid-tone accents, where light text reads better.
+ */
+function readableOn(background: string, [preferred, ...others]: readonly string[]): string {
+  const backgroundLuminance = relativeLuminance(background);
+  const contrast = (color: string) => {
+    const [lighter, darker] = [relativeLuminance(color), backgroundLuminance].sort((a, b) => b - a);
+    return (lighter + 0.05) / (darker + 0.05);
+  };
+  const best = others.reduce(
+    (best, color) => (contrast(color) > contrast(best) ? color : best),
+    preferred,
+  );
+  return contrast(preferred) >= contrast(best) * PREFERRED_CONTRAST_MARGIN ? preferred : best;
+}
+
+function lightest(first: string, second: string): string {
+  return relativeLuminance(first) >= relativeLuminance(second) ? first : second;
+}
+
+function darkest(first: string, second: string): string {
+  return relativeLuminance(first) <= relativeLuminance(second) ? first : second;
+}
+
+function relativeLuminance(color: string): number {
+  const channel = (offset: number) => {
+    const value = Number.parseInt(color.slice(offset, offset + 2), 16) / 255;
+    return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * channel(1) + 0.7152 * channel(3) + 0.0722 * channel(5);
 }
 
 function withAlpha(color: string, alpha: number): string {

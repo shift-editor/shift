@@ -12,6 +12,7 @@ import { WorkspaceProcess } from "./WorkspaceProcess";
 import { FontSessionHost, type FontSessionId } from "./FontSessionHost";
 import { DocumentSessionIndex } from "./DocumentSessionIndex";
 import { isConvertiblePreviewPath } from "../../shared/workspace/previewConversion";
+import type { RecentDocumentVisit } from "../../shared/recents";
 
 /** Provides app-owned values required when a workspace session is created. */
 export interface WorkspaceManagerOptions {
@@ -19,6 +20,10 @@ export interface WorkspaceManagerOptions {
   readonly applicationName: () => string;
   readonly nativeDialogs: NativeDialogs;
   readonly onSessionCrashed?: (session: FontSessionHost) => void;
+  /** Called when a file is opened, or when a document gains a new path through Save As. */
+  readonly onDocumentVisited?: (visit: RecentDocumentVisit, session: FontSessionHost) => void;
+  /** Called after an authored document is saved in place. */
+  readonly onDocumentSaved?: (visit: RecentDocumentVisit, session: FontSessionHost) => void;
 }
 
 /**
@@ -35,6 +40,8 @@ export class WorkspaceManager {
   readonly #applicationName: () => string;
   readonly #nativeDialogs: NativeDialogs;
   readonly #onSessionCrashed: (session: FontSessionHost) => void;
+  readonly #onDocumentVisited: (visit: RecentDocumentVisit, session: FontSessionHost) => void;
+  readonly #onDocumentSaved: (visit: RecentDocumentVisit, session: FontSessionHost) => void;
   readonly #sessionsById = new Map<FontSessionId, FontSessionHost>();
   readonly #sessionIdByWindowId = new Map<number, FontSessionId>();
   readonly #documentSessions = new DocumentSessionIndex();
@@ -50,6 +57,8 @@ export class WorkspaceManager {
     this.#applicationName = options.applicationName;
     this.#nativeDialogs = options.nativeDialogs;
     this.#onSessionCrashed = options.onSessionCrashed ?? (() => {});
+    this.#onDocumentVisited = options.onDocumentVisited ?? (() => {});
+    this.#onDocumentSaved = options.onDocumentSaved ?? (() => {});
   }
 
   /**
@@ -132,6 +141,10 @@ export class WorkspaceManager {
       const existingBeforeOpen = this.#sessionForDocument(identity);
       if (existingBeforeOpen) {
         workspaceProcess.stop();
+        this.#onDocumentVisited(
+          { path: identity.canonicalPath, documentId: identity.documentId },
+          existingBeforeOpen,
+        );
         return existingBeforeOpen;
       }
 
@@ -315,7 +328,33 @@ export class WorkspaceManager {
       throw error;
     }
 
+    this.#recordDocumentPaths(session, state);
     return session;
+  }
+
+  /**
+   * Reports the document's path whenever it gains one, and each save in place,
+   * as later state changes arrive.
+   */
+  #recordDocumentPaths(session: FontSessionHost, state: WorkspaceDocumentState): void {
+    let recordedPath: string | null = null;
+    let dirty = state.dirty;
+    const observe = (next: WorkspaceDocumentState | null) => {
+      if (!next?.canonicalPath) return;
+
+      const visit = { path: next.canonicalPath, documentId: next.documentId };
+      const saved = dirty && !next.dirty;
+      dirty = next.dirty;
+      if (next.canonicalPath !== recordedPath) {
+        recordedPath = next.canonicalPath;
+        this.#onDocumentVisited(visit, session);
+        return;
+      }
+      if (saved) this.#onDocumentSaved(visit, session);
+    };
+
+    observe(state);
+    session.workspaceProcess.onDocumentChanged(observe);
   }
 
   async #restoreRecovery(recovery: WorkspaceRecovery): Promise<FontSessionHost> {
@@ -381,9 +420,11 @@ export class WorkspaceManager {
     try {
       await workspaceProcess.whenReady();
       const state = await workspaceProcess.openFontSource(sourcePath);
+      const visit = { path: state.canonicalPath, documentId: null };
       const existing = this.get(state.sessionId);
       if (existing) {
         workspaceProcess.stop();
+        this.#onDocumentVisited(visit, existing);
         return existing;
       }
 
@@ -394,6 +435,7 @@ export class WorkspaceManager {
         workspaceProcess,
       });
       this.register(session);
+      this.#onDocumentVisited(visit, session);
       return session;
     } catch (error) {
       workspaceProcess.stop();

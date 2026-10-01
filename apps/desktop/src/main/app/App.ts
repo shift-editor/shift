@@ -5,6 +5,7 @@ import {
   ipcMain,
   MessageChannelMain,
   screen,
+  shell,
   type Rectangle,
   type WebContents,
 } from "electron";
@@ -29,11 +30,18 @@ import { shiftProductName } from "../release";
 import { AppUpdater } from "../update/AppUpdater";
 import { isConvertiblePreviewPath } from "../../shared/workspace/previewConversion";
 import { OPEN_FONT_EXTENSIONS } from "../../shared/openFontExtensions";
+import { RecentDocuments } from "../recents/RecentDocuments";
+import type { RecentDocumentVisit } from "../../shared/recents";
 
 const SLUG_ATLAS_PROFILING_ENABLED =
   process.env.SHIFT_PROFILE_SLUG_ATLAS !== undefined &&
   process.env.SHIFT_PROFILE_SLUG_ATLAS !== "0";
-const LAUNCHER_MIN_WIDTH = 800;
+const LAUNCHER_MIN_WIDTH = 880;
+const LAUNCHER_WIDTH = 960;
+const LAUNCHER_HEIGHT = 720;
+/** Largest share of the screen the launcher takes on displays smaller than its size. */
+const LAUNCHER_MAX_SCREEN_SHARE = 0.9;
+const LAUNCHER_SHOW_FALLBACK_MS = 2000;
 
 /**
  * Owns Electron app startup and the first main-process service graph.
@@ -55,6 +63,9 @@ export class App {
   #windows = new WindowManager();
   #workspaces: WorkspaceManager;
   #documentsRoot: string | null = null;
+  #recents: RecentDocuments | null = null;
+  /** Launchers a font open is replacing; they stop receiving recents so no half-ready card flashes. */
+  #replacedLaunchers = new WeakSet<Window>();
   #pendingOpenPaths: string[] = [];
   #previewConversions = new Map<string, Promise<void>>();
   #documentCrashDecisions = new Map<string, Promise<void>>();
@@ -86,6 +97,11 @@ export class App {
 
       return this.#commands.isEnabled(id, this.#commandContext(window));
     },
+    () => ({
+      documents: this.#recents?.list() ?? [],
+      open: (sourcePath) => this.#openRecentFromMenu(sourcePath),
+      clear: () => this.#recents?.clear(),
+    }),
   );
 
   /**
@@ -113,6 +129,11 @@ export class App {
       applicationName: () => this.applicationName,
       nativeDialogs: this.#nativeDialogs,
       onSessionCrashed: (session) => this.#handleDocumentCrash(session, null),
+      onDocumentVisited: (visit, session) => {
+        this.#recents?.record(visit);
+        if (this.#recents?.needsSpecimen(visit)) void this.#buildSpecimen(visit, session);
+      },
+      onDocumentSaved: (visit, session) => void this.#buildSpecimen(visit, session),
     });
     this.#lifecycle = new AppLifecycle({
       documentForWindow: (window) => {
@@ -188,6 +209,10 @@ export class App {
       this.#log.info("running when ready callback");
 
       this.#documentsRoot = path.join(app.getPath("userData"), "working-documents");
+      this.#recents = new RecentDocuments(
+        path.join(app.getPath("userData"), "recent-documents.json"),
+      );
+      this.#recents.onChanged(() => this.#publishRecents());
 
       const restoredSessions = await this.#workspaces.restoreRecoveries();
       for (const session of restoredSessions) {
@@ -276,10 +301,25 @@ export class App {
     return window;
   }
 
+  /**
+   * Creates the launcher hidden and shows it once its recent files have rendered.
+   *
+   * @remarks
+   * The renderer signals `window.ready`; the timer shows the window anyway if
+   * that signal never arrives, so a renderer failure cannot leave it invisible.
+   */
   #openLauncher(): Window {
-    const window = this.#createWindow(true, undefined, false, LAUNCHER_MIN_WIDTH);
+    const window = this.#createWindow(false, launcherBounds(), false, LAUNCHER_MIN_WIDTH);
     this.#loadLauncher(window);
+    setTimeout(() => this.#presentIfHidden(window), LAUNCHER_SHOW_FALLBACK_MS);
     return window;
+  }
+
+  #presentIfHidden(window: Window): void {
+    const browserWindow = window.window;
+    if (browserWindow.isDestroyed() || browserWindow.isVisible()) return;
+
+    window.present();
   }
 
   #loadLauncher(window: Window): void {
@@ -416,6 +456,30 @@ export class App {
     ipc.handle(ipcMain, "update.later", () => {
       this.#updater.later();
     });
+    ipc.handle(ipcMain, "recents.list", () => {
+      return this.#recents?.list() ?? [];
+    });
+    ipc.handle(ipcMain, "recents.open", async (event, sourcePath) => {
+      const window = this.#requireWindowForWebContents(event.sender);
+      await this.#openPathFromWindow(window, sourcePath);
+    });
+    ipc.handle(ipcMain, "recents.remove", (_event, sourcePath) => {
+      return this.#recents?.remove(sourcePath) ?? null;
+    });
+    ipc.handle(ipcMain, "recents.restore", (_event, document) => {
+      this.#recents?.restore(document);
+    });
+    ipc.handle(ipcMain, "recents.reveal", (_event, sourcePath) => {
+      shell.showItemInFolder(sourcePath);
+    });
+    ipc.handle(ipcMain, "recents.locate", async (event, missingPath) => {
+      const window = this.#requireWindowForWebContents(event.sender);
+      const locatedPath = await this.#nativeDialogs.openFont(window);
+      if (!locatedPath) return;
+
+      const opened = await this.#openPathFromWindow(window, locatedPath);
+      if (opened && path.resolve(locatedPath) !== missingPath) this.#recents?.remove(missingPath);
+    });
     ipc.handle(ipcMain, "document.connect", (event) => {
       this.#log.info("document connect requested");
       const session = this.#fontSessionForSender(event.sender, "document.connect");
@@ -446,6 +510,9 @@ export class App {
 
       event.sender.postMessage("session.port", null, [port2]);
       this.#log.info("font session port sent to renderer");
+    });
+    ipc.handle(ipcMain, "window.ready", (event) => {
+      this.#presentIfHidden(this.#requireWindowForWebContents(event.sender));
     });
     ipc.handle(ipcMain, "window.reopenDocument", async (event) => {
       const window = this.#requireWindowForWebContents(event.sender);
@@ -656,17 +723,83 @@ export class App {
   }
 
   async #openWorkspaceFromWindow(opener: Window): Promise<void> {
+    let openPath: string | null;
     try {
-      const openPath = await this.#nativeDialogs.openFont(opener);
-      if (!openPath) return;
+      openPath = await this.#nativeDialogs.openFont(opener);
+    } catch (error) {
+      this.#log.warn("open dialog failed", error);
+      await this.#nativeDialogs.showOpenFailure(opener, this.applicationName);
+      return;
+    }
+    if (!openPath) return;
 
-      const session = await this.#workspaces.openPath(openPath);
-      if (this.#focusExistingWorkspaceWindow(opener, session)) return;
+    await this.#openPathFromWindow(opener, openPath);
+  }
+
+  /**
+   * Opens a font path on behalf of a window, showing a native failure when it cannot open.
+   *
+   * @returns whether a workspace window now shows the file.
+   */
+  async #openPathFromWindow(opener: Window, sourcePath: string): Promise<boolean> {
+    const openerIsLauncher = this.#workspaces.getForBrowserWindow(opener.window) === null;
+    if (openerIsLauncher) this.#replacedLaunchers.add(opener);
+
+    try {
+      const session = await this.#workspaces.openPath(sourcePath);
+      if (this.#focusExistingWorkspaceWindow(opener, session)) return true;
 
       this.#openWorkspaceWindow(opener, session);
+      return true;
     } catch (error) {
       this.#log.warn("open document failed", error);
+      if (openerIsLauncher) this.#restoreLauncherRecents(opener);
       await this.#nativeDialogs.showOpenFailure(opener, this.applicationName);
+      return false;
+    }
+  }
+
+  #restoreLauncherRecents(launcher: Window): void {
+    this.#replacedLaunchers.delete(launcher);
+    if (launcher.window.isDestroyed()) return;
+
+    ipc.send(launcher.window.webContents, "recents.changed", this.#recents?.list() ?? []);
+  }
+
+  #openRecentFromMenu(sourcePath: string): void {
+    const opener = this.#windows.activeWindow();
+    if (!opener) {
+      this.#handleOpenPath(sourcePath);
+      return;
+    }
+
+    // Menu clicks cannot await; #openPathFromWindow reports its own failures.
+    void this.#openPathFromWindow(opener, sourcePath);
+  }
+
+  /**
+   * Builds a recent file's thumbnail specimen in its session's utility process.
+   *
+   * @remarks
+   * Runs detached from the open or save that triggered it; failures such as
+   * the session closing mid-build leave the previous thumbnail in place.
+   */
+  async #buildSpecimen(visit: RecentDocumentVisit, session: FontSessionHost): Promise<void> {
+    try {
+      const specimen = await session.workspaceProcess.specimen(visit.path);
+      this.#recents?.setSpecimen(visit, specimen);
+    } catch (error) {
+      this.#log.warn("building recent file specimen failed", visit.path, error);
+    }
+  }
+
+  #publishRecents(): void {
+    this.#applicationMenu.refresh();
+
+    const documents = this.#recents?.list() ?? [];
+    for (const window of this.#windows.allWindows()) {
+      if (window.window.isDestroyed() || this.#replacedLaunchers.has(window)) continue;
+      ipc.send(window.window.webContents, "recents.changed", documents);
     }
   }
 
@@ -675,7 +808,9 @@ export class App {
     if (!existingWindow) return false;
 
     existingWindow.focus();
-    if (this.#workspaces.getForBrowserWindow(opener.window) === null) opener.close();
+    if (this.#workspaces.getForBrowserWindow(opener.window) === null) {
+      this.#closeReplacedLauncher(opener);
+    }
     return true;
   }
 
@@ -688,7 +823,12 @@ export class App {
     this.#workspaces.attachWindow(session.workspaceId, workspaceWindow);
     this.#loadWorkspace(workspaceWindow);
 
-    if (closeOpener) opener.close();
+    if (closeOpener) this.#closeReplacedLauncher(opener);
+  }
+
+  #closeReplacedLauncher(launcher: Window): void {
+    this.#replacedLaunchers.add(launcher);
+    launcher.close();
   }
 
   #fontSessionForSender(sender: WebContents, operation: string): FontSessionHost {
@@ -715,4 +855,17 @@ export class App {
 
     return window;
   }
+}
+
+/** Centres the 4:3 launcher on the primary display, capped to 90% of smaller screens. */
+function launcherBounds(): Rectangle {
+  const workArea = screen.getPrimaryDisplay().workArea;
+  const width = Math.min(LAUNCHER_WIDTH, Math.round(workArea.width * LAUNCHER_MAX_SCREEN_SHARE));
+  const height = Math.min(LAUNCHER_HEIGHT, Math.round(workArea.height * LAUNCHER_MAX_SCREEN_SHARE));
+  return {
+    x: workArea.x + Math.round((workArea.width - width) / 2),
+    y: workArea.y + Math.round((workArea.height - height) / 2),
+    width,
+    height,
+  };
 }

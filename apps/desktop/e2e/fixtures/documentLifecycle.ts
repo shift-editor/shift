@@ -9,7 +9,7 @@ import { waitForWorkspaceReady } from "./electronApp";
 
 export async function createNewFont(page: Page, electronApp: ElectronApplication): Promise<Page> {
   const workspaceWindow = electronApp.waitForEvent("window");
-  await page.getByRole("button", { name: "New font", exact: true }).click();
+  await page.getByRole("button", { name: "New Font", exact: true }).click();
 
   const workspacePage = await workspaceWindow;
   await waitForWorkspaceReady(workspacePage);

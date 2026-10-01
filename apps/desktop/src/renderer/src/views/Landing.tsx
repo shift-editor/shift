@@ -1,64 +1,48 @@
-import { Button, Separator } from "@shift/ui";
-import { LauncherLogo } from "@/app/branding";
+import { useEffect } from "react";
+import { LauncherLockup } from "@/app/branding";
 import { shiftProductName } from "@/app/release";
-import { RecentFiles } from "./RecentFiles";
+import { RecentFiles } from "@/components/launcher/RecentFiles";
+import { useRecentDocuments } from "@/components/launcher/useRecentDocuments";
 import { Titlebar } from "@/components/chrome/Titlebar";
 import { getShiftHost } from "@/host/shiftHost";
 
 export const Landing = () => {
-  const host = getShiftHost();
+  const recentDocuments = useRecentDocuments();
+  const recentsLoaded = recentDocuments !== null;
 
-  const handleNewFont = async () => {
-    try {
-      await host.commands.run("file.new");
-    } catch (error) {
-      console.error("new font failed", error);
-    }
-  };
+  useEffect(() => {
+    if (!recentsLoaded) return undefined;
 
-  const handleOpenFont = async () => {
-    try {
-      await host.commands.run("file.open");
-    } catch (error) {
-      console.error("opening a font failed", error);
-    }
-  };
+    // Wait for the frame with the recent files to paint before main shows the window.
+    const frame = requestAnimationFrame(() => {
+      void signalReady();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [recentsLoaded]);
 
   return (
-    <main className="flex h-screen flex-col bg-background">
-      <Titlebar />
-      <section className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4">
-        <div className="flex flex-col items-center gap-2">
-          <LauncherLogo aria-hidden="true" className="h-auto w-60 text-primary" />
-          <h1 className="sr-only">{shiftProductName}</h1>
+    <main className="relative flex h-screen flex-col bg-background text-primary">
+      {/* Overlaid so the launcher centres against the whole window, not the space below the bar. */}
+      <div className="absolute inset-x-0 top-0 z-10">
+        <Titlebar />
+      </div>
+      <div className="scrollbar-hidden flex min-h-0 flex-1 flex-col overflow-y-auto">
+        <div className="mx-auto flex w-200 max-w-full flex-col gap-20 px-6 pt-20 pb-20">
+          <header className="flex justify-center">
+            <LauncherLockup aria-hidden="true" className="h-auto w-44 text-primary" />
+            <h1 className="sr-only">{shiftProductName}</h1>
+          </header>
+          {recentDocuments && <RecentFiles documents={recentDocuments} />}
         </div>
-        <div className="flex flex-col items-start w-50">
-          <Button
-            className="w-full flex justify-between items-center font-medium"
-            onClick={handleNewFont}
-            variant="ghost"
-          >
-            New font
-            <span aria-hidden="true" className="text-sm font-medium text-muted">
-              ⌘ + n
-            </span>
-          </Button>
-          <Button
-            className="w-full flex justify-between items-center font-medium"
-            onClick={handleOpenFont}
-            variant="ghost"
-          >
-            Load font
-            <span aria-hidden="true" className="text-sm font-medium text-muted">
-              ⌘ + o
-            </span>
-          </Button>
-        </div>
-        <div className="flex flex-col gap-4 mt-4">
-          <Separator className="bg-secondary/30" />
-          <RecentFiles onOpenFile={() => {}} />
-        </div>
-      </section>
+      </div>
     </main>
   );
 };
+
+async function signalReady(): Promise<void> {
+  try {
+    await getShiftHost().window.ready();
+  } catch (error) {
+    console.error("signalling launcher readiness failed", error);
+  }
+}

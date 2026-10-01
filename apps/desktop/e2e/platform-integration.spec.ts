@@ -94,7 +94,7 @@ async function reopenAndVerify(
   const launcherPage = await relaunchedApp.firstWindow();
   await launcherPage.waitForURL(/#\/launcher$/);
   const workspaceWindow = relaunchedApp.waitForEvent("window");
-  await launcherPage.getByRole("button", { name: /Load font/ }).click();
+  await launcherPage.getByRole("button", { name: "Open Font…", exact: true }).click();
   const workspacePage = await workspaceWindow;
   await waitForWorkspaceReady(workspacePage);
   const editor = new EditorDriver(workspacePage);

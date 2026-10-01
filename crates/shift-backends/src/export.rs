@@ -120,9 +120,15 @@ impl FontExporter {
         })
     }
 
-    fn export_ttf(&self, font: &impl FontView, output_path: &Path) -> Result<(), ExportError> {
-        ensure_ttf_output_path(output_path)?;
-
+    /// Compiles a TrueType binary from the supplied font without writing it
+    /// anywhere; build intermediates live in a temporary directory that is
+    /// removed before returning.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ExportError`] when the source cannot be represented in the
+    /// supported compiler model or compilation fails.
+    pub fn compile_ttf(&self, font: &impl FontView) -> Result<Vec<u8>, ExportError> {
         let temp_dir = tempfile::Builder::new()
             .prefix("shift-export-")
             .tempdir()
@@ -130,7 +136,13 @@ impl FontExporter {
 
         let build_dir = temp_dir.path().join("build");
         let source = ShiftIrSource::from_font_view(font).map_err(map_source_error)?;
-        let bytes = compile_ttf(source, &build_dir)?;
+        compile_ttf(source, &build_dir)
+    }
+
+    fn export_ttf(&self, font: &impl FontView, output_path: &Path) -> Result<(), ExportError> {
+        ensure_ttf_output_path(output_path)?;
+
+        let bytes = self.compile_ttf(font)?;
         write_file_atomic(output_path, &bytes).map_err(|source| ExportError::WriteOutput {
             path: output_path.to_path_buf(),
             source,

@@ -7,8 +7,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 use shift_font::composite::{
-    ComponentAnchorReference as IrComponentAnchorReference, ComponentGlyph as IrComponentGlyph,
-    GlyphComponents as IrGlyphComponents,
+    ComponentGlyph as IrComponentGlyph, GlyphComponents as IrGlyphComponents,
 };
 use shift_font::{
     Anchor as IrAnchor, AnchorId, Axis as IrAxis, AxisId, AxisKind as IrAxisKind, AxisLabelId,
@@ -900,33 +899,6 @@ pub struct GlyphSourceShape {
     pub shape: GlyphLayerShape,
 }
 
-/// One anchor occurrence selected by Rust component semantics.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ComponentAnchorReference {
-    pub component_path: Vec<ComponentId>,
-    pub glyph_id: GlyphId,
-    pub anchor_id: AnchorId,
-}
-
-impl From<&IrComponentAnchorReference> for ComponentAnchorReference {
-    fn from(anchor: &IrComponentAnchorReference) -> Self {
-        Self {
-            component_path: anchor.component_path().as_slice().to_vec(),
-            glyph_id: anchor.glyph_id(),
-            anchor_id: anchor.anchor_id(),
-        }
-    }
-}
-
-/// Rust-selected source and target anchors for one component attachment.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ComponentAnchorAttachment {
-    pub source: ComponentAnchorReference,
-    pub target: ComponentAnchorReference,
-}
-
 /// One ordered, cycle-pruned component occurrence.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -937,7 +909,6 @@ pub struct ComponentGlyph {
     pub base_glyph_id: GlyphId,
     pub parent_path: Vec<ComponentId>,
     pub component_path: Vec<ComponentId>,
-    pub attachment: Option<ComponentAnchorAttachment>,
 }
 
 impl From<&IrComponentGlyph> for ComponentGlyph {
@@ -949,12 +920,6 @@ impl From<&IrComponentGlyph> for ComponentGlyph {
             base_glyph_id: component.base_glyph_id(),
             parent_path: component.parent_path().as_slice().to_vec(),
             component_path: component.component_path().as_slice().to_vec(),
-            attachment: component
-                .attachment()
-                .map(|attachment| ComponentAnchorAttachment {
-                    source: attachment.source().into(),
-                    target: attachment.target().into(),
-                }),
         }
     }
 }

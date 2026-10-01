@@ -739,7 +739,7 @@ fn build_instances(
                 .get((glyph.source_start & !(1 << 31)) as usize)
                 .ok_or("component glyph descriptor is out of range")?;
             component_transform_count = component_transform_count
-                .checked_add(descriptor.component_count as usize * 2)
+                .checked_add(descriptor.component_count as usize)
                 .ok_or("scratch component transform count overflow")?;
         }
     }

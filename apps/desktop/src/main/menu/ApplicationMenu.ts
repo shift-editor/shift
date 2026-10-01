@@ -6,6 +6,7 @@ import {
   fileMenuItems,
   helpMenuItems,
   viewMenuItems,
+  type RecentMenu,
 } from "./menuItems";
 import { commands } from "../commands/Commands";
 
@@ -22,6 +23,7 @@ const isMac = process.platform === "darwin";
 export class ApplicationMenu {
   readonly #runCommand: (id: CommandId, window?: BrowserWindow) => void;
   readonly #isCommandEnabled: (id: CommandId, window?: BrowserWindow) => boolean;
+  readonly #recent: () => RecentMenu;
   #menu: Menu | null = null;
 
   /**
@@ -29,19 +31,29 @@ export class ApplicationMenu {
    *
    * @param runCommand - executes Shift-owned menu actions against the current window.
    * @param isCommandEnabled - resolves each command's current native enabled state.
+   * @param recent - resolves File → Open Recent's current files and actions.
    */
   constructor(
     runCommand: (id: CommandId, window?: BrowserWindow) => void,
     isCommandEnabled: (id: CommandId, window?: BrowserWindow) => boolean,
+    recent: () => RecentMenu,
   ) {
     this.#runCommand = runCommand;
     this.#isCommandEnabled = isCommandEnabled;
+    this.#recent = recent;
   }
 
   /** Installs the current menu template as Electron's application menu. */
   install(): void {
     this.#menu = this.build();
     Menu.setApplicationMenu(this.#menu);
+  }
+
+  /** Rebuilds the installed menu so dynamic submenus such as Open Recent stay current. */
+  refresh(): void {
+    if (!this.#menu) return;
+
+    this.install();
   }
 
   /** Re-evaluates command capabilities against the active window and session. */
@@ -170,7 +182,7 @@ export class ApplicationMenu {
 
   #fileItems(includeQuit: boolean): MenuItemConstructorOptions[] {
     const items: MenuItemConstructorOptions[] = [
-      ...fileMenuItems(this.#runCommand, this.#isCommandEnabled),
+      ...fileMenuItems(this.#runCommand, this.#isCommandEnabled, this.#recent()),
       { type: "separator" },
       this.#commandItem("window.close"),
     ];

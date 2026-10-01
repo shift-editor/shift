@@ -16,6 +16,7 @@ use fontir::source::Source;
 use kurbo::BezPath;
 use ordered_float::OrderedFloat;
 use shift_font::test_support::sample_variable_font;
+use shift_font::{KerningPair, KerningSide};
 
 use super::source::ShiftIrSource;
 
@@ -47,6 +48,25 @@ fn shift_source_produces_expected_fontir() {
     let actual = compile_ir(ShiftIrSource::from_font_view(&sample_variable_font()).unwrap());
 
     assert_eq!(actual, expected_ir());
+}
+
+#[test]
+fn kerning_pairs_with_missing_sides_are_skipped() {
+    let mut font = sample_variable_font();
+    font.kerning_mut().add_pair(KerningPair::new(
+        KerningSide::Group("public.kern1.A".to_string()),
+        KerningSide::Group("public.kern2.J".to_string()),
+        -30.0,
+    ));
+    font.kerning_mut().add_pair(KerningPair::new(
+        KerningSide::Glyph("missing".to_string().into()),
+        KerningSide::Group("public.kern2.A".to_string()),
+        -20.0,
+    ));
+
+    let actual = compile_ir(ShiftIrSource::from_font_view(&font).unwrap());
+
+    assert_eq!(actual.kerning, expected_ir().kerning);
 }
 
 fn compile_ir(source: ShiftIrSource) -> Compilation {

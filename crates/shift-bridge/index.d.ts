@@ -19,6 +19,21 @@ export declare class Bridge {
   constructor()
   createUntitledWorkspace(storePath: string, options?: NapiNewWorkspace | undefined | null): void
   exportWorkspace(request: NapiFontExportRequest): Promise<NapiFontExportResult>
+  /**
+   * Builds the thumbnail specimen for a font file, independent of any
+   * document or preview this bridge holds.
+   *
+   * Resolves to `null` when the font draws nothing usable; rejects when the
+   * file cannot be read or compiled.
+   */
+  fontFileSpecimen(path: string): Promise<NapiSpecimen | null>
+  /**
+   * Builds the thumbnail specimen from the open document's current state.
+   *
+   * Resolves to `null` when the font draws nothing usable; rejects when no
+   * workspace is open or compilation fails.
+   */
+  documentSpecimen(): Promise<NapiSpecimen | null>
   documentState(): NapiDocumentState
   inspectDocument(path: string): NapiDocumentIdentity
   closeWorkspace(): void
@@ -168,6 +183,20 @@ export interface NapiFontExportResult {
 export interface NapiNewWorkspace {
   familyName?: string
   unitsPerEm?: number
+}
+
+/**
+ * Specimen outline drawn on a recent file's thumbnail, in font units with y
+ * pointing down.
+ */
+export interface NapiSpecimen {
+  /** Characters shown; empty when glyphs were chosen by glyph order. */
+  text: string
+  /** SVG path data. */
+  outline: string
+  /** SVG `viewBox` as `[x, y, width, height]`, fitted to the ink. */
+  viewBox: Array<number>
+  rightToLeft: boolean
 }
 export interface NapiAddAnchorsIntent {
   layerId: LayerId
@@ -341,17 +370,6 @@ export interface NapiCloneGlyphLayerIntent {
   fromLayerId: LayerId
 }
 
-export interface NapiComponentAnchorAttachment {
-  source: NapiComponentAnchorReference
-  target: NapiComponentAnchorReference
-}
-
-export interface NapiComponentAnchorReference {
-  componentPath: Array<ComponentId>
-  glyphId: GlyphId
-  anchorId: AnchorId
-}
-
 export interface NapiComponentData {
   id: ComponentId
   baseGlyphId: GlyphId
@@ -365,7 +383,6 @@ export interface NapiComponentGlyph {
   baseGlyphId: GlyphId
   parentPath: Array<ComponentId>
   componentPath: Array<ComponentId>
-  attachment?: NapiComponentAnchorAttachment
 }
 
 export interface NapiComponentMatch {
@@ -944,7 +961,6 @@ export interface NapiSlugLayout {
   componentParts: NapiSlugSection
   components: NapiSlugSection
   componentSources: NapiSlugSection
-  anchorSources: NapiSlugSection
   lineBits: NapiSlugSection
   totalLength: number
 }

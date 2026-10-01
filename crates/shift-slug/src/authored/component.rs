@@ -2,14 +2,14 @@ use std::collections::{hash_map::Entry, HashMap};
 use std::time::Instant;
 
 use shift_font::{
-    composite::ComponentAnchorReference, ComponentId, Font, GlyphId, GlyphLayer, GlyphProjection,
-    GlyphProjectionSet, InterpolationBasis, ResolvedGlyph, SourceId,
+    ComponentId, Font, GlyphId, GlyphLayer, GlyphProjection, GlyphProjectionSet,
+    InterpolationBasis, ResolvedGlyph, SourceId,
 };
 
 use crate::variable::ROOT_COMPONENT;
 use crate::{
-    AuthoredAtlasProfile, Bounds, VariableAnchorSource, VariableAtlasBuilder, VariableComponent,
-    VariableComponentPart, VariableComponentSource,
+    AuthoredAtlasProfile, Bounds, VariableAtlasBuilder, VariableComponent, VariableComponentPart,
+    VariableComponentSource,
 };
 
 use super::{
@@ -197,7 +197,6 @@ pub(super) fn add_default_component_projection_glyph(
     }
 
     let mut component_sources = Vec::new();
-    let mut anchor_sources = Vec::new();
     let mut components = Vec::with_capacity(projection.components().components().len());
     for (component_index, occurrence) in projection.components().components().iter().enumerate() {
         let parent_projection =
@@ -223,44 +222,11 @@ pub(super) fn add_default_component_projection_glyph(
 
         let parent_component =
             component_index_for_path(&component_indexes, occurrence.parent_path().as_slice())?;
-        let mut component = VariableComponent {
+        components.push(VariableComponent {
             parent_component,
             source_start,
             source_count,
-            source_anchor_start: 0,
-            source_anchor_count: 0,
-            target_anchor_start: 0,
-            target_anchor_count: 0,
-            target_component: ROOT_COMPONENT,
-        };
-        if let Some(attachment) = occurrence.attachment() {
-            let source_range = append_anchor_sources(
-                &mut anchor_sources,
-                projection_for(compilation.projection_set, &attachment.source().glyph_id())?,
-                attachment.source(),
-                &source_context,
-                "source anchor",
-            )?;
-            let target_range = append_anchor_sources(
-                &mut anchor_sources,
-                projection_for(compilation.projection_set, &attachment.target().glyph_id())?,
-                attachment.target(),
-                &source_context,
-                "target anchor",
-            )?;
-            component.source_anchor_start = source_range.0;
-            component.source_anchor_count = source_range.1;
-            component.target_anchor_start = target_range.0;
-            component.target_anchor_count = target_range.1;
-            component.target_component = component_index_for_path(
-                &component_indexes,
-                attachment.target().component_path().as_slice(),
-            )?;
-            if component.target_component == ROOT_COMPONENT {
-                return Err(crate::SlugError::LengthOverflow.into());
-            }
-        }
-        components.push(component);
+        });
     }
 
     let root_glyph_index = direct_glyphs[&projection.glyph_id()];
@@ -299,7 +265,6 @@ pub(super) fn add_default_component_projection_glyph(
             parts,
             components,
             component_sources,
-            anchor_sources,
         )
         .map_err(Into::into)
 }
@@ -408,39 +373,6 @@ fn append_component_sources(
         });
     }
     Ok(())
-}
-
-fn append_anchor_sources(
-    output: &mut Vec<VariableAnchorSource>,
-    projection: &GlyphProjection,
-    reference: &ComponentAnchorReference,
-    context: &AuthoredComponentSourceContext<'_>,
-    kind: &'static str,
-) -> Result<(u32, u32), AuthoredSlugError> {
-    let start = u32::try_from(output.len()).map_err(|_| crate::SlugError::LengthOverflow)?;
-    for (source_index, (weight_index, layer)) in
-        context.weighted_layers(projection)?.into_iter().enumerate()
-    {
-        let anchor = layer
-            .anchors_iter()
-            .find(|anchor| anchor.id() == reference.anchor_id())
-            .ok_or_else(|| shift_font::CoreError::AnchorNotFound(reference.anchor_id()))?;
-        let x = anchor.x() as f32;
-        let y = anchor.y() as f32;
-        if !anchor.x().is_finite() || !anchor.y().is_finite() || !x.is_finite() || !y.is_finite() {
-            return Err(AuthoredSlugError::NonFiniteComponentValue {
-                component_index: context.component_index,
-                source_index,
-                kind,
-            });
-        }
-        output.push(VariableAnchorSource { weight_index, x, y });
-    }
-    let count = u32::try_from(output.len())
-        .map_err(|_| crate::SlugError::LengthOverflow)?
-        .checked_sub(start)
-        .ok_or(crate::SlugError::LengthOverflow)?;
-    Ok((start, count))
 }
 
 fn component_index_for_path(
