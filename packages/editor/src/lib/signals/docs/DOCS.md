@@ -16,6 +16,7 @@ For rules on writing and reviewing reactive code, and triage when something does
 - **Architecture Invariant: CRITICAL:** Re-entrant notification is guarded by the `isNotifying` flag. Signals written during notification are queued in `pendingNotifications` and flushed after the current notification pass. Without this, subscribers could see inconsistent state.
 - **Architecture Invariant:** Signal-bearing fields and accessors use the `*Cell` suffix. The plain noun is the unwrapped snapshot value: `zoomCell` is `Signal<number>`, `zoom` is `number`.
 - **Architecture Invariant: Convention:** `fooCell` accessors are for raw state or cheap computeds that are safe to subscribe to via `useSignalState`. Expensive derived values (bounds, paths, sidebearings) are exposed as plain getters and pulled on demand. For React live display of a derived value, write a purpose-specific hook (e.g. `useSelectionBounds`) that subscribes to the raw inputs and pulls the getter at render time.
+- **Architecture Invariant:** Signal diagnostics retain only weak references to nodes. Registry-wide inspection sees live nodes, including externally owned disposed nodes, but does not keep an otherwise unowned graph alive; garbage collection determines when nodes disappear.
 - **Architecture Invariant:** `ComputedSignal.dispose()` clears both its `dependencies` and its `#subscribers`. Anything that was reaching the source signal _through_ this computed loses that path. If the consumer needs to keep firing across the lifetime of the source, it must hold a **direct** subscription to the source — not rely on a chain that passes through a disposable intermediate (e.g. an LRU-cached object's computed).
 
 ## Codemap
@@ -27,6 +28,7 @@ signals/
   index.ts           — public re-exports
 apps/desktop/src/renderer/src/lib/signals/
   signal.test.ts     — unit tests (vitest)
+  signalCollection.test.ts — real-GC graph ownership and disposal tests
 ```
 
 A second React bridge, `useSignalEffect` (lifecycle-scoped effect), lives in `@/hooks/useSignalEffect`. Purpose-specific hooks for derived values live under `hooks/`:

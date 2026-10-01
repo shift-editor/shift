@@ -28,7 +28,12 @@ export class Canvas {
     return px / this.camera.zoom;
   }
 
-  /** Returns the padded viewport in the current node-local drawing coordinates. */
+  /**
+   * Returns the padded viewport in the current node-local drawing coordinates.
+   *
+   * @param paddingPx - Outward margin in CSS pixels, covering markers at the edge.
+   * @returns Bounds after the active camera and node transforms are inverted.
+   */
   visibleBounds(paddingPx: number): BoundsType {
     const inverse = this.ctx.getTransform().inverse();
     const { width, height } = this.ctx.canvas;

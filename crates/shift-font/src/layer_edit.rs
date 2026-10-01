@@ -215,10 +215,25 @@ impl GlyphLayer {
         &self,
         updates: &HashMap<PointId, NodePosition>,
     ) -> CoreResult<()> {
-        for point_id in updates.keys() {
-            self.point_contour_or_err(point_id.clone())?;
+        let mut remaining: HashSet<PointId> = updates.keys().cloned().collect();
+        if remaining.is_empty() {
+            return Ok(());
         }
-        Ok(())
+
+        for contour in self.contours_iter() {
+            for point in contour.points() {
+                remaining.remove(&point.id());
+                if remaining.is_empty() {
+                    return Ok(());
+                }
+            }
+        }
+
+        let point_id = remaining
+            .into_iter()
+            .next()
+            .expect("unmatched point remains");
+        Err(CoreError::PointInContourNotFound(point_id))
     }
 
     fn anchor_positions_exist_or_err(
@@ -816,6 +831,60 @@ mod tests {
         assert_eq!(
             point_position(&session, contour_id.clone(), point_id.clone()),
             (0.0, 0.0)
+        );
+    }
+
+    #[test]
+    fn apply_bulk_node_positions_validates_all_contours_before_moving() {
+        let mut session = create_session();
+        let first_contour = session.add_empty_contour().id();
+        let first_point = add_point(&mut session, first_contour.clone(), 10.0, 20.0);
+        let second_contour = session.add_empty_contour().id();
+        let second_point = add_point(&mut session, second_contour.clone(), 30.0, 40.0);
+        let missing_point = PointId::new();
+        let invalid_ids = [
+            first_point.clone(),
+            second_point.clone(),
+            missing_point.clone(),
+        ];
+        let invalid_coords = [100.0, 200.0, 300.0, 400.0, 500.0, 600.0];
+
+        let result = session.apply_bulk_node_positions(BulkNodePositionUpdates {
+            point_ids: Some(&invalid_ids),
+            point_coords: Some(&invalid_coords),
+            anchor_ids: None,
+            anchor_coords: None,
+        });
+        assert!(matches!(
+            result,
+            Err(CoreError::PointInContourNotFound(id)) if id == missing_point
+        ));
+        assert_eq!(
+            point_position(&session, first_contour.clone(), first_point.clone()),
+            (10.0, 20.0)
+        );
+        assert_eq!(
+            point_position(&session, second_contour.clone(), second_point.clone()),
+            (30.0, 40.0)
+        );
+
+        let valid_ids = [first_point.clone(), second_point.clone()];
+        let valid_coords = [100.0, 200.0, 300.0, 400.0];
+        session
+            .apply_bulk_node_positions(BulkNodePositionUpdates {
+                point_ids: Some(&valid_ids),
+                point_coords: Some(&valid_coords),
+                anchor_ids: None,
+                anchor_coords: None,
+            })
+            .unwrap();
+        assert_eq!(
+            point_position(&session, first_contour, first_point),
+            (100.0, 200.0)
+        );
+        assert_eq!(
+            point_position(&session, second_contour, second_point),
+            (300.0, 400.0)
         );
     }
 

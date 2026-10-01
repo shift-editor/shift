@@ -58,6 +58,52 @@ test.describe("Glyph rendering — S (quadratic curves)", () => {
     await expectCanvasSnapshot(editor, "canvas-S-composited.png");
   });
 
+  test("retains edge-overlapping markers across zoom, node placement and pan", async ({
+    page,
+    editor,
+  }) => {
+    const initialCount = await editor.pointCount();
+    await page.evaluate(() => {
+      const editor = window.shift!.editor;
+      const node = editor.scene.nodesOfKind("glyph")[0]!;
+      const position = { x: 200, y: 300 };
+      editor.scene.updateNode({ id: node.id, position });
+      editor.zoomIn();
+      const camera = editor.getCameraTransform();
+      const width = camera.centre.x * 2;
+      const inserted = editor.insertContent({
+        contours: [
+          {
+            closed: false,
+            points: [-100, -2, width / 2, width + 100].map((x) => {
+              const scene = editor.projectScreenToScene({ x, y: camera.logicalHeight / 2 });
+              return {
+                x: scene.x - position.x,
+                y: scene.y - position.y,
+                pointType: "onCurve" as const,
+                smooth: false,
+              };
+            }),
+          },
+        ],
+      });
+      if (!inserted) throw new Error("Expected inserted points");
+    });
+    await editor.waitForCanvasRender();
+    expect(await editor.pointCount()).toBe(initialCount + 4);
+    await page.mouse.move(1, 1);
+    await editor.flushPointerMoves();
+    await expectCanvasSnapshot(editor, "handles-S-culled-before-pan.png");
+
+    await page.evaluate(() => {
+      const editor = window.shift!.editor;
+      editor.setPan({ x: editor.pan.x + 200, y: editor.pan.y });
+    });
+    await editor.waitForCanvasRender();
+    await expectCanvasSnapshot(editor, "handles-S-culled-after-pan.png");
+    expect(await editor.pointCount()).toBe(initialCount + 4);
+  });
+
   test("select-all highlights every handle and shows the bounding box", async ({ editor }) => {
     await editor.selectAll();
     expect(await editor.selectionIds()).toHaveLength(await editor.pointCount());
