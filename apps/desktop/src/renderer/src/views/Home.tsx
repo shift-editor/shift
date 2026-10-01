@@ -1,25 +1,26 @@
-import { useRef } from "react";
-import {
-  ResizableHandle,
-  ResizablePanel,
-  ResizablePanelGroup,
-  type ResizablePanelHandle,
-} from "@shift/ui";
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@shift/ui";
 import { GlyphGrid } from "@/components/home/GlyphGrid";
 import { LeftSidebar } from "@/components/home/LeftSidebar";
 import { RightSidebar } from "@/components/editor/RightSidebar";
 import { Toolbar } from "@/components/chrome/Toolbar";
+import { useSidebarLayout } from "@/components/chrome/useSidebarLayout";
 
 const LEFT_SIDEBAR_DEFAULT_SIZE = 15;
 const RIGHT_SIDEBAR_DEFAULT_SIZE = 15;
 
 export const Home = () => {
-  const leftSidebarPanelRef = useRef<ResizablePanelHandle>(null);
-  const rightSidebarPanelRef = useRef<ResizablePanelHandle>(null);
+  const {
+    leftSidebarPanelRef,
+    rightSidebarPanelRef,
+    leftSidebarContentRef,
+    rightSidebarContentRef,
+    toggleLeftSidebar,
+    toggleRightSidebar,
+  } = useSidebarLayout();
 
   return (
     <main className="grid h-screen w-full grid-rows-[auto_minmax(0,1fr)]">
-      <Toolbar />
+      <Toolbar toggleLeftSidebar={toggleLeftSidebar} toggleRightSidebar={toggleRightSidebar} />
       <ResizablePanelGroup
         data-testid="home-layout-panels"
         direction="horizontal"
@@ -28,6 +29,7 @@ export const Home = () => {
       >
         <ResizablePanel
           ref={leftSidebarPanelRef}
+          className="sidebar-panel"
           data-testid="left-sidebar-panel"
           id="left-sidebar"
           order={1}
@@ -37,7 +39,9 @@ export const Home = () => {
           collapsible
           collapsedSize={0}
         >
-          <LeftSidebar />
+          <div ref={leftSidebarContentRef} className="h-full">
+            <LeftSidebar />
+          </div>
         </ResizablePanel>
         <ResizableHandle
           aria-label="Resize left sidebar"
@@ -54,6 +58,7 @@ export const Home = () => {
         />
         <ResizablePanel
           ref={rightSidebarPanelRef}
+          className="sidebar-panel"
           data-testid="right-sidebar-panel"
           id="right-sidebar"
           order={3}
@@ -63,7 +68,9 @@ export const Home = () => {
           collapsible
           collapsedSize={0}
         >
-          <RightSidebar />
+          <div ref={rightSidebarContentRef} className="h-full">
+            <RightSidebar />
+          </div>
         </ResizablePanel>
       </ResizablePanelGroup>
     </main>

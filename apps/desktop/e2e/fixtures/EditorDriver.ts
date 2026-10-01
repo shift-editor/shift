@@ -20,7 +20,10 @@ const TOOL_LABELS = {
   ellipse: "Ellipse Tool (O)",
 } as const;
 
-async function waitForActiveGlyph(page: Page, glyphId: GlyphId): Promise<void> {
+/** Toolbar tool actions the driver can locate and activate. */
+export type EditorTool = keyof typeof TOOL_LABELS;
+
+async function waitForActiveGlyph(page: Page, glyphId: string): Promise<void> {
   await page.waitForFunction((expectedGlyphId) => {
     const editor = window.shift?.editor;
     const node = editor?.scene.nodesOfKind("glyph")[0];
@@ -100,7 +103,7 @@ export class EditorDriver {
 
     await waitForEditorReady(this.page, glyphId);
     await waitForActiveGlyph(this.page, glyphId);
-    await this.page.waitForTimeout(1000);
+    await this.waitForCanvasRender();
   }
 
   /**
@@ -137,8 +140,16 @@ export class EditorDriver {
    * Selects a toolbar tool by stable identity.
    * @param tool - Primary tool action to activate.
    */
-  async selectTool(tool: keyof typeof TOOL_LABELS): Promise<void> {
-    await this.page.getByRole("button", { name: TOOL_LABELS[tool], exact: true }).click();
+  async selectTool(tool: EditorTool): Promise<void> {
+    await this.toolButton(tool).click();
+  }
+
+  /**
+   * Returns the toolbar button for a tool; its `aria-pressed` state reports activation.
+   * @param tool - Primary tool action whose button is located.
+   */
+  toolButton(tool: EditorTool): Locator {
+    return this.page.getByRole("button", { name: TOOL_LABELS[tool], exact: true });
   }
 
   /** Waits for pending edits and two browser frames to reach the canvas. */
@@ -218,6 +229,17 @@ export class EditorDriver {
   async press(key: string): Promise<void> {
     await this.page.keyboard.press(key);
     await this.#waitForEdits();
+  }
+
+  /**
+   * Replaces a numeric or text field's value, commits it with Enter, and waits for edits.
+   * @param input - Editable field in the workspace window.
+   * @param value - Replacement typed into the field.
+   */
+  async commitInputValue(input: Locator, value: number | string): Promise<void> {
+    await input.click();
+    await input.fill(String(value));
+    await this.press("Enter");
   }
 
   /**
@@ -545,6 +567,27 @@ export class EditorDriver {
       target.id,
     );
     return target.id;
+  }
+
+  /**
+   * Converts a position normalized to the interactive canvas into page coordinates.
+   *
+   * @remarks
+   * Keeps gesture geometry independent of sidebar widths and toolbar height.
+   * @param fraction - Fractions from zero to one along the canvas width and height.
+   * @returns Rounded page coordinates for pointer input.
+   * @throws {Error} when a fraction lies outside the canvas.
+   */
+  async canvasPagePoint(fraction: Point2D): Promise<Point2D> {
+    if (fraction.x < 0 || fraction.x > 1 || fraction.y < 0 || fraction.y > 1) {
+      throw new Error("Canvas positions must be normalized between zero and one");
+    }
+
+    const bounds = await this.canvasBounds();
+    return {
+      x: Math.round(bounds.x + bounds.width * fraction.x),
+      y: Math.round(bounds.y + bounds.height * fraction.y),
+    };
   }
 
   async #waitForEdits(): Promise<void> {

@@ -148,6 +148,17 @@ describe("Select translates segment selections in 90-degree directions", () => {
     expect(editor.pointPosition(lastId)).toEqual({ x: 300, y: 300 });
   });
 
+  it("resizes from a selection corner even when a selected segment endpoint occupies it", async () => {
+    await editor.clickGlyphLocal(150, 100);
+    await editor.clickGlyphLocal(300, 150, { shiftKey: true });
+    const down = editor.projectSceneToScreen({ x: 100, y: 100 });
+    const end = editor.projectSceneToScreen({ x: 130, y: 140 });
+    editor.pointerDown(down.x, down.y).pointerMove(end.x, end.y, { shiftKey: true });
+    expect(editor.toolIf("select")?.state.type).toBe("resizing");
+    editor.escape();
+    expect(editor.pointPosition(firstId)).toEqual({ x: 100, y: 100 });
+  });
+
   it("leaves segment movement unchanged without Shift", async () => {
     await editor.dragScene({
       down: { x: 150, y: 100 },

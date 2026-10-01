@@ -1,3 +1,5 @@
+import { AxesPanel as SharedAxesPanel } from "@shift/editor/ui";
+import { withExternalAxisValue } from "@shift/editor/variation";
 import type { Axis } from "@shift/types";
 import {
   Button,
@@ -8,106 +10,38 @@ import {
   MenuPositioner,
   MenuSeparator,
   MenuTrigger,
-  Slider,
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@shift/ui";
-import { EditableSidebarInput } from "@/components/editor/sidebar-right/EditableSidebarInput";
-import { useSettingsNavigation } from "@/context/SettingsNavigationContext";
-import { useAxes } from "@/hooks/useAxes";
-import { useExternalLocation } from "@/hooks/useExternalLocation";
-import { axisVaries } from "@/lib/variation/axis";
-import { axisValue, withExternalAxisValue } from "@/lib/variation/location";
-import { useFont, useFontSession } from "@/workspace/WorkspaceContext";
-
 import VerticalElipsis from "@/assets/general/vertical-ellipsis.svg";
+import { useSettingsNavigation } from "@/context/SettingsNavigationContext";
+import { useExternalLocation } from "@/hooks/useExternalLocation";
+import { useFontSession } from "@/workspace/WorkspaceContext";
 
 export const AxesPanel = () => {
-  const font = useFont();
-  const canAuthor = useFontSession().mode === "authored";
-  const axes = useAxes().filter(axisVaries);
+  const session = useFontSession();
   const [location, setExternalLocation] = useExternalLocation();
   const settings = useSettingsNavigation();
 
-  if (axes.length === 0) return <p className="text-ui text-muted pl-2">No varying axes</p>;
-
-  const onAxisChange = (axis: Axis, value: number) => {
-    const nextLocation = withExternalAxisValue(location, axis, value);
-    setExternalLocation(nextLocation);
-  };
-
-  const resetAxis = (axis: Axis) => {
-    onAxisChange(axis, axis.default);
-  };
-
-  const deleteAxis = (axis: Axis) => {
-    font.deleteAxis(axis.id);
-  };
-
   return (
-    <div className="flex flex-col gap-1">
-      {axes.map((axis) => (
-        <div key={axis.id} className="flex flex-col gap-1">
-          <div className="flex items-center justify-between px-2">
-            <span className="text-ui text-secondary">{axis.name}</span>
-          </div>
-
-          <div className="grid grid-cols-[3.5rem_minmax(0,1fr)_1.5rem] items-center gap-4 pl-2">
-            <EditableSidebarInput
-              ariaLabel={`${axis.name} value`}
-              value={axisValue(location, axis)}
-              className="w-14"
-              onValueChange={(value) => onAxisChange(axis, value)}
-            />
-            <AxisSlider
-              axis={axis}
-              value={axisValue(location, axis)}
-              onChange={(value) => onAxisChange(axis, value)}
-              onReset={() => resetAxis(axis)}
-            />
-            {canAuthor ? (
-              <AxisActionsMenu
-                axis={axis}
-                onEdit={() => settings.open({ category: "axes", axisId: axis.id })}
-                onReset={() => resetAxis(axis)}
-                onDelete={() => deleteAxis(axis)}
-              />
-            ) : (
-              <span />
-            )}
-          </div>
-        </div>
-      ))}
-    </div>
+    <SharedAxesPanel
+      session={session}
+      actions={(axis) =>
+        session.mode === "workspace" ? (
+          <AxisActionsMenu
+            axis={axis}
+            onEdit={() => settings.open({ category: "axes", axisId: axis.id })}
+            onReset={() => setExternalLocation(withExternalAxisValue(location, axis, axis.default))}
+            onDelete={() => session.font.deleteAxis(axis.id)}
+          />
+        ) : (
+          <span />
+        )
+      }
+    />
   );
 };
-
-interface AxisSliderProps {
-  axis: Axis;
-  value: number;
-  onChange: (value: number) => void;
-  onReset: () => void;
-}
-
-const AxisSlider = ({ axis, value, onChange, onReset }: AxisSliderProps) => (
-  <div
-    className="min-w-0 flex-1"
-    onDoubleClick={(event) => {
-      event.preventDefault();
-      onReset();
-    }}
-  >
-    <Slider
-      aria-label={axis.name}
-      min={axis.minimum}
-      max={axis.maximum}
-      step={0.01}
-      value={value}
-      onValueChange={onChange}
-    />
-  </div>
-);
 
 interface AxisActionsMenuProps {
   axis: Axis;
@@ -121,16 +55,9 @@ const AxisActionsMenu = ({ axis, onEdit, onReset, onDelete }: AxisActionsMenuPro
     <Tooltip>
       <TooltipTrigger>
         <MenuTrigger
-          render={
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              className="h-6 w-6 p-0.5"
-              aria-label={`Actions for ${axis.name}`}
-            />
-          }
+          render={<Button variant="ghost" size="icon-sm" aria-label={`Actions for ${axis.name}`} />}
         >
-          <VerticalElipsis className="h-5 w-5" />
+          <VerticalElipsis className="h-5 w-5 text-icon-subtle" />
         </MenuTrigger>
       </TooltipTrigger>
       <TooltipContent>{`Actions for ${axis.name}`}</TooltipContent>

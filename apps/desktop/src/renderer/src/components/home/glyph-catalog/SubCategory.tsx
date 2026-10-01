@@ -1,32 +1,29 @@
-import { GlyphCategory } from "@shift/glyph-info";
-import { Button } from "@shift/ui";
+import type { ListSelectionMode } from "@shift/editor/types";
+import { SidebarActionRow } from "@/components/sidebar";
+import { listSelectionMode } from "@/hooks/useListSelection";
 
 export interface SubCategoryProps {
-  category: GlyphCategory;
-  subCategory: string;
-  selectedCategory: GlyphCategory | null;
-  selectedSubCategoryKey: string | null;
-  onSelectSubCategory: (category: GlyphCategory, subCategoryKey: string) => void;
+  label: string;
+  active: boolean;
+  joinsPrevious: boolean;
+  joinsNext: boolean;
+  onSelect: (mode: ListSelectionMode) => void;
 }
-export const SubCategory = ({
-  category,
-  subCategory,
-  selectedCategory,
-  selectedSubCategoryKey,
-  onSelectSubCategory,
-}: SubCategoryProps) => {
-  const isActive = selectedCategory === category && selectedSubCategoryKey === subCategory;
 
-  return (
-    <Button
-      key={`${category}:${subCategory}`}
-      className="w-full justify-between pl-4"
-      variant="ghost"
-      size="sm"
-      onClick={() => onSelectSubCategory(category, subCategory)}
-      isActive={isActive}
-    >
-      <span className="text-sm">{subCategory}</span>
-    </Button>
-  );
-};
+export const SubCategory = ({
+  label,
+  active,
+  joinsPrevious,
+  joinsNext,
+  onSelect,
+}: SubCategoryProps) => (
+  <SidebarActionRow
+    isSelected={active}
+    joinsPrevious={joinsPrevious}
+    joinsNext={joinsNext}
+    onClick={(event) => onSelect(listSelectionMode(event))}
+    contentClassName="pl-7"
+  >
+    <span className="truncate">{label}</span>
+  </SidebarActionRow>
+);

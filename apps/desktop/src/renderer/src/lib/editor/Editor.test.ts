@@ -1,9 +1,12 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { mintNodeId } from "@shift/types";
 import { TestEditor } from "@/testing/TestEditor";
-import { effect } from "@/lib/signals";
+import { effect } from "@shift/editor/signals";
 import { runRendererCommand } from "@/lib/commands/rendererCommands";
-import { externalAxisLocationFromRecord } from "@/lib/variation/location";
+import { externalAxisLocationFromRecord } from "@shift/editor/variation";
 
 describe("Editor scene bootstrap", () => {
   let editor: TestEditor;
@@ -159,6 +162,69 @@ describe("Editor scene bootstrap", () => {
     );
   });
 
+  it("keeps source selection and external axis location synchronized", async () => {
+    const axisId = editor.font.createAxis(weightAxis());
+    await editor.settle();
+    const sourceId = editor.createSource("Bold", externalAxisLocationFromRecord({ [axisId]: 700 }));
+    await editor.settle();
+
+    editor.selectSource(editor.font.defaultSource.id);
+    expect(editor.externalLocation.get(axisId)).toBe(400);
+    editor.selectSource(sourceId);
+    expect(editor.externalLocation.get(axisId)).toBe(700);
+    expect([...editor.editingSourceIds]).toEqual([sourceId]);
+
+    editor.setExternalLocation(externalAxisLocationFromRecord({ [axisId]: 550 }));
+    expect(editor.activeSourceId).toBeNull();
+    expect(editor.editingSourceIds.size).toBe(0);
+
+    editor.setExternalLocation(externalAxisLocationFromRecord({ [axisId]: 700 }));
+    expect(editor.activeSourceId).toBe(sourceId);
+    expect([...editor.editingSourceIds]).toEqual([sourceId]);
+  });
+
+  it("selects contiguous and noncontiguous editing sources around the reference", async () => {
+    const axisId = editor.font.createAxis(weightAxis());
+    await editor.settle();
+    const thinId = editor.createSource("Thin", externalAxisLocationFromRecord({ [axisId]: 100 }));
+    await editor.settle();
+    const boldId = editor.createSource("Bold", externalAxisLocationFromRecord({ [axisId]: 700 }));
+    await editor.settle();
+    const blackId = editor.createSource("Black", externalAxisLocationFromRecord({ [axisId]: 900 }));
+    await editor.settle();
+
+    const referenceId = editor.font.defaultSource.id;
+    editor.selectSource(referenceId);
+    editor.selectSourceForEditing(blackId, "range");
+    expect(editor.activeSourceId).toBe(referenceId);
+    expect([...editor.editingSourceIds]).toEqual(editor.font.sources.map(({ id }) => id));
+
+    editor.selectSource(referenceId);
+    editor.selectSourceForEditing(boldId, "toggle");
+    editor.selectSourceForEditing(thinId, "toggle");
+    expect(editor.editingSourceIds).toEqual(new Set([referenceId, boldId, thinId]));
+
+    editor.selectSourceForEditing(referenceId, "toggle");
+    expect(editor.editingSourceIds).toEqual(new Set([referenceId, boldId, thinId]));
+  });
+
+  it("toggles editing between every source and the reference", async () => {
+    const axisId = editor.font.createAxis(weightAxis());
+    await editor.settle();
+    editor.createSource("Bold", externalAxisLocationFromRecord({ [axisId]: 700 }));
+    await editor.settle();
+    const referenceId = editor.font.defaultSource.id;
+    editor.selectSource(referenceId);
+
+    expect(editor.toggleAllSourcesForEditing()).toBe(true);
+    expect([...editor.editingSourceIds]).toEqual(editor.font.sources.map(({ id }) => id));
+    expect(editor.activeSourceId).toBe(referenceId);
+
+    expect(editor.toggleAllSourcesForEditing()).toBe(true);
+    expect([...editor.editingSourceIds]).toEqual([referenceId]);
+    expect(editor.collapseEditingSources()).toBe(false);
+  });
+
   it("materializes the opened glyph when selecting a sparse source", async () => {
     editor.selectTool("pen");
     await editor.clickGlyphLocal(0, 0);
@@ -233,5 +299,91 @@ describe("Editor renderer commands", () => {
 
     expect(handled).toBe(true);
     expect(editor.requireGlyphLayer().contours[0]!.points.map(({ x }) => x)).toEqual([200, 100, 0]);
+  });
+});
+
+describe("Editor glyph generation", () => {
+  let editor: TestEditor;
+
+  beforeEach(async () => {
+    editor = new TestEditor();
+    await editor.startSession();
+  });
+
+  it("creates encoded glyphs as one undoable step", async () => {
+    const created = editor.createGlyphsForUnicodes([0x00e9, 0x0416]);
+    await editor.settle();
+
+    expect(created.map(({ name, unicodes }) => [name, unicodes])).toEqual([
+      ["eacute", [0x00e9]],
+      ["Zhe-cy", [0x0416]],
+    ]);
+    expect(editor.font.nameForUnicode(0x00e9)).toBe("eacute");
+
+    await editor.undo();
+
+    expect(editor.font.hasGlyph(created[0]!.id)).toBe(false);
+    expect(editor.font.hasGlyph(created[1]!.id)).toBe(false);
+  });
+
+  it("keeps a glyph encoded when its name falls back to uniXXXX", async () => {
+    const [created] = editor.createGlyphsForUnicodes([0xe000]);
+    await editor.settle();
+
+    expect(created?.name).toBe("uniE000");
+    expect(created?.unicodes).toEqual([0xe000]);
+  });
+});
+
+describe("Editor tracked languages", () => {
+  let editor: TestEditor;
+
+  beforeEach(async () => {
+    editor = new TestEditor();
+    await editor.startSession();
+  });
+
+  it("reports no tracked languages for a new font", () => {
+    expect(editor.font.languageIdsCell.peek()).toBeNull();
+  });
+
+  it("commits the list as one undoable step that undo and redo restore", async () => {
+    editor.setLanguageIds(["eng-latin", "cmn-chinese"]);
+    await editor.settle();
+
+    expect(editor.font.languageIdsCell.peek()).toEqual(["eng-latin", "cmn-chinese"]);
+
+    editor.setLanguageIds([]);
+    await editor.settle();
+
+    expect(editor.font.languageIdsCell.peek()).toEqual([]);
+
+    await editor.undo();
+
+    expect(editor.font.languageIdsCell.peek()).toEqual(["eng-latin", "cmn-chinese"]);
+
+    await editor.undo();
+
+    expect(editor.font.languageIdsCell.peek()).toBeNull();
+
+    await editor.redo();
+
+    expect(editor.font.languageIdsCell.peek()).toEqual(["eng-latin", "cmn-chinese"]);
+  });
+
+  it("loads the saved list when the document is reopened", async () => {
+    const outputRoot = mkdtempSync(join(tmpdir(), "shift-languages-reopen-"));
+    const savePath = join(outputRoot, "Languages.shift");
+    editor.setLanguageIds(["eng-latin", "fra-latin"]);
+    await editor.saveAs(savePath);
+    await editor.closeSession();
+
+    const reopened = new TestEditor();
+    await reopened.openSession(savePath, "A");
+
+    expect(reopened.font.languageIdsCell.peek()).toEqual(["eng-latin", "fra-latin"]);
+
+    await reopened.closeSession();
+    rmSync(outputRoot, { recursive: true, force: true });
   });
 });

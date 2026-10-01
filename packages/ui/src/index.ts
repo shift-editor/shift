@@ -78,7 +78,28 @@ export {
   type SelectItemIndicatorProps,
 } from "./components/select";
 export { Slider, type SliderProps } from "./components/slider";
+export {
+  RadioGroup,
+  RadioCard,
+  type RadioGroupProps,
+  type RadioCardProps,
+} from "./components/radio";
 export { Progress, type ProgressProps } from "./components/progress";
+export {
+  ContextMenu,
+  ContextMenuTrigger,
+  ContextMenuPortal,
+  ContextMenuPositioner,
+  ContextMenuPopup,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  type ContextMenuProps,
+  type ContextMenuTriggerProps,
+  type ContextMenuPositionerProps,
+  type ContextMenuPopupProps,
+  type ContextMenuItemProps,
+  type ContextMenuSeparatorProps,
+} from "./components/context-menu";
 export {
   Menu,
   MenuTrigger,
@@ -154,5 +175,10 @@ export {
   type ResizableHandleProps,
   type ResizablePanelHandle,
 } from "./components/resizable";
+export {
+  PortalContainerProvider,
+  usePortalContainer,
+  type PortalContainerProviderProps,
+} from "./components/portal";
 export { cn } from "./lib/utils";
 export { Check, ChevronDown, Search, X } from "lucide-react";

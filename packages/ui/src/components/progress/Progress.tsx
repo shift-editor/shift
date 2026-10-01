@@ -11,7 +11,10 @@ export const Progress = React.forwardRef<HTMLDivElement, ProgressProps>(
   ({ className, trackClassName, indicatorClassName, ...props }, ref) => (
     <BaseProgress.Root ref={ref} className={cn("w-full", className)} {...props}>
       <BaseProgress.Track
-        className={cn("relative h-2 w-full overflow-hidden rounded-full bg-canvas", trackClassName)}
+        className={cn(
+          "relative h-2 w-full overflow-hidden rounded-full bg-surface-muted",
+          trackClassName,
+        )}
       >
         <BaseProgress.Indicator
           className={cn("h-full rounded-full bg-accent transition-[width]", indicatorClassName)}

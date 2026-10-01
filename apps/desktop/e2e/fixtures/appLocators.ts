@@ -28,12 +28,27 @@ export function editorShell(page: Page) {
   return page.getByTestId("editor-shell");
 }
 
+/** Element compositing the background, scene, marker, and interactive editor canvases. */
+export function editorCanvasStack(page: Page) {
+  return page.getByTestId("editor-canvas-stack");
+}
+
 export function fontNavigation(page: Page) {
   return page.getByRole("complementary", { name: "Font navigation" });
 }
 
+export function editorSidebar(page: Page) {
+  return page.getByRole("complementary", { name: "Glyph objects and variations" });
+}
+
 export function variationControls(page: Page) {
-  return page.getByRole("complementary", { name: "Variation controls" });
+  return editorSidebar(page).getByRole("tabpanel", { name: "Variations" });
+}
+
+export async function openVariationControls(page: Page) {
+  const sidebar = editorSidebar(page);
+  await sidebar.getByRole("tab", { name: "Variations", exact: true }).click();
+  return variationControls(page);
 }
 
 export function glyphProperties(page: Page) {
@@ -51,13 +66,32 @@ export async function firstAxisSlider(page: Page) {
   return page.getByRole("slider", { name: axisName, exact: true });
 }
 
+/**
+ * Waits until the catalog has laid out its first cell and its preview frame has settled.
+ *
+ * @remarks
+ * Catalog cells have no DOM identity, so coordinate clicks before the Grid settles can land on
+ * an empty surface and never navigate. `Unavailable` is settled too: cells remain laid out and
+ * clickable when a host cannot paint previews, as on software-rendered platform runners.
+ */
+async function waitForCatalogCells(page: Page): Promise<void> {
+  await expect(glyphCatalogSurface(page)).toHaveAttribute("data-first-glyph-id", /.+/);
+  await expect(glyphCatalogRenderer(page)).toHaveAttribute(
+    "data-grid-readiness",
+    /^(Complete|Unavailable)$/,
+    { timeout: 30_000 },
+  );
+}
+
 /** Keeps the catalog preview coordinate contract in one place. */
 export async function clickFirstCatalogGlyph(page: Page): Promise<void> {
+  await waitForCatalogCells(page);
   await glyphCatalogViewport(page).click({ position: FIRST_GLYPH_PREVIEW_POINT });
 }
 
 /** Keeps the catalog name-cell coordinate contract in one place. */
 export async function clickFirstCatalogGlyphName(page: Page): Promise<void> {
+  await waitForCatalogCells(page);
   await glyphCatalogViewport(page).click({ position: FIRST_GLYPH_NAME_POINT });
 }
 
@@ -74,7 +108,7 @@ export async function waitForEditorReady(page: Page, glyphId: string): Promise<v
     .poll(() =>
       page.evaluate(
         (expectedGlyphId) =>
-          window.shift?.editor.scene.nodesOfKind("glyph")[0]?.glyphId === expectedGlyphId,
+          window.shiftSession?.editor.scene.nodesOfKind("glyph")[0]?.glyphId === expectedGlyphId,
         glyphId,
       ),
     )

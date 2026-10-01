@@ -33,11 +33,11 @@ export function ErrorDialog({
   const details = error === undefined ? null : errorDetails(error, componentStack);
 
   return (
-    <main className="h-screen bg-canvas text-primary">
+    <main className="h-screen bg-surface-muted text-primary">
       <Dialog open>
         <DialogPortal>
-          <DialogBackdrop className="bg-canvas" />
-          <DialogPopup className="top-1/2 max-h-[calc(100vh-4rem)] w-[min(40rem,calc(100vw-4rem))] max-w-none -translate-y-1/2 overflow-y-auto rounded-lg bg-panel p-6 shadow-lg">
+          <DialogBackdrop className="bg-surface-muted" />
+          <DialogPopup className="top-1/2 max-h-[calc(100vh-4rem)] w-[min(40rem,calc(100vw-4rem))] max-w-none -translate-y-1/2 overflow-y-auto p-6">
             <DialogTitle className="text-lg font-semibold">{title}</DialogTitle>
             <p className="mt-2 text-sm text-secondary">{description}</p>
             {details && (
@@ -56,7 +56,7 @@ export function ErrorDialog({
                 <CollapsiblePanel>
                   <pre
                     aria-label={message("error.details.label")}
-                    className="mt-2 max-h-64 overflow-auto rounded-md bg-canvas p-3 whitespace-pre-wrap break-words font-mono text-sm text-secondary"
+                    className="mt-2 max-h-64 overflow-auto rounded-md bg-surface-muted p-3 whitespace-pre-wrap break-words font-mono text-sm text-secondary"
                   >
                     {details}
                   </pre>

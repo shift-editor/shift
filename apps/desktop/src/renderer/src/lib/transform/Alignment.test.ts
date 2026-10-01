@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { Alignment } from "./Alignment";
+import { Alignment } from "@shift/editor/transform";
 import { Bounds } from "@shift/geo";
 import type { PointId } from "@shift/types";
 

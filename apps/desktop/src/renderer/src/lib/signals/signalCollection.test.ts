@@ -1,7 +1,7 @@
 import { Session } from "node:inspector/promises";
 import { setImmediate } from "node:timers/promises";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { computed, effect, signal, signalDebug, type Signal } from "./signal";
+import { computed, effect, signal, signalDebug, type Signal } from "@shift/editor/signals";
 
 const session = new Session();
 

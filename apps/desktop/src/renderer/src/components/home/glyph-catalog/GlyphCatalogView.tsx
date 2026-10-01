@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import {
   Button,
   cn,
@@ -6,6 +7,7 @@ import {
   CollapsibleTrigger,
   Input,
   Search,
+  Separator,
   Tooltip,
   TooltipContent,
   TooltipTrigger,
@@ -14,8 +16,13 @@ import {
 import AllIcon from "@/assets/sidebar-left/all.svg";
 import PlusIcon from "@/assets/general/plus.svg";
 
+import { SidebarRowButton } from "@/components/sidebar";
 import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
+import { listSelectionMode } from "@/hooks/useListSelection";
+import { CatalogSection } from "./CatalogSection";
 import { Category } from "./Category";
+import { LanguagePicker } from "./LanguagePicker";
+import { LanguageScript } from "./LanguageScript";
 import { SubCategory } from "./SubCategory";
 
 export const GlyphCatalogView = () => {
@@ -23,33 +30,59 @@ export const GlyphCatalogView = () => {
     availableGlyphs: allGlyphs,
     filteredGlyphs,
     categories,
+    languageScripts,
+    allLanguageScripts,
+    trackedLanguageIds,
+    setTrackedLanguageIds,
+    languageGlyphs,
+    generateGlyphs,
+    categoryFilters,
+    selectedLanguageId,
+    visibleCategoryFilters,
+    expandedCategories,
+    setExpandedCategories,
     query,
-    selectedCategory,
-    selectedSubCategoryKey,
     setQuery,
     createQuickGlyph,
     canAuthor,
     selectAll,
     selectCategory,
     selectSubCategory,
+    selectLanguage,
   } = useGlyphCatalog();
 
+  const selectedFilterIndexes = useMemo(
+    () =>
+      new Set(
+        visibleCategoryFilters.flatMap((filter, index) =>
+          categoryFilters.some(
+            (selected) =>
+              selected.category === filter.category &&
+              selected.subCategoryKey === filter.subCategoryKey,
+          )
+            ? [index]
+            : [],
+        ),
+      ),
+    [categoryFilters, visibleCategoryFilters],
+  );
   const allGlyphCount = allGlyphs.length;
   const filteredGlyphCount = filteredGlyphs.length;
-  const allGlyphsSelected = selectedCategory === null && selectedSubCategoryKey === null;
-  const isTopLevelCategorySelected = selectedCategory !== null && selectedSubCategoryKey === null;
+  const allGlyphsSelected = categoryFilters.length === 0 && selectedLanguageId === null;
 
   return (
-    <div className="flex min-h-0 flex-col gap-2">
+    <div className="flex flex-col gap-2">
       <Input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Search glyphs..."
-        className="h-8 text-sm bg-input"
+        size="md"
         icon={<Search className="w-3 h-3 text-muted" />}
         iconPosition="left"
       />
-      <div className="flex-1 overflow-y-auto scrollbar-hidden">
+      <Separator className="-mx-3 w-auto" />
+
+      <div>
         <div className="flex items-center justify-between font-sans mb-2">
           <span className="text-ui font-medium text-primary">Glyphs</span>
           <Tooltip>
@@ -68,58 +101,119 @@ export const GlyphCatalogView = () => {
           </Tooltip>
         </div>
 
-        <div className="w-full">
-          <Button
-            className="w-full justify-between"
-            variant="ghost"
-            size="sm"
-            onClick={selectAll}
-            isActive={allGlyphsSelected}
-          >
-            <div className="flex gap-2 items-center justify-center">
-              <AllIcon className="w-4 h-4" />
-              <span className="text-sm">All</span>
-            </div>
+        <div className="flex flex-col gap-1">
+          <SidebarRowButton onClick={selectAll} isActive={allGlyphsSelected}>
+            <AllIcon className="h-4 w-4 shrink-0 text-primary" />
+            <span className="min-w-0 flex-1 truncate text-left">All</span>
             <span className="text-xs">{`${filteredGlyphCount}/${allGlyphCount}`}</span>
-          </Button>
-        </div>
+          </SidebarRowButton>
 
-        {categories.map((categoryNode) => (
-          <div
-            key={categoryNode.category}
-            className={cn(
-              "mt-1",
-              isTopLevelCategorySelected && selectedCategory === categoryNode.category
-                ? "bg-hover/50 rounded-sm"
-                : null,
-            )}
-          >
-            <Collapsible>
-              <CollapsibleTrigger render={<div className="w-full" />}>
-                <Category
-                  category={categoryNode.category}
-                  selectedCategory={selectedCategory}
-                  isTopLevelCategorySelected={isTopLevelCategorySelected}
-                  onSelectCategory={selectCategory}
-                />
-              </CollapsibleTrigger>
-              <CollapsiblePanel>
-                <div>
-                  {categoryNode.subCategories.map((subCategory) => (
-                    <SubCategory
-                      key={subCategory.key}
-                      category={categoryNode.category}
-                      subCategory={subCategory.label}
-                      selectedCategory={selectedCategory}
-                      selectedSubCategoryKey={selectedSubCategoryKey}
-                      onSelectSubCategory={selectSubCategory}
-                    />
-                  ))}
+          <CatalogSection title="Categories">
+            {categories.map((categoryNode) => {
+              const filterIndex = visibleCategoryFilters.findIndex(
+                (filter) =>
+                  filter.category === categoryNode.category && filter.subCategoryKey === null,
+              );
+              const active = selectedFilterIndexes.has(filterIndex);
+
+              return (
+                <div
+                  key={categoryNode.category}
+                  className={cn(
+                    active &&
+                      "relative isolate rounded bg-transparent before:pointer-events-none before:absolute before:inset-0 before:-z-10 before:rounded before:bg-hover/50 before:content-['']",
+                    active &&
+                      selectedFilterIndexes.has(filterIndex - 1) &&
+                      "before:-top-1 before:rounded-t-none",
+                    active && selectedFilterIndexes.has(filterIndex + 1) && "before:rounded-b-none",
+                  )}
+                >
+                  <Collapsible
+                    open={expandedCategories.has(categoryNode.category)}
+                    onOpenChange={(open) => {
+                      setExpandedCategories((previous) => {
+                        const next = new Set(previous);
+                        if (open) next.add(categoryNode.category);
+                        else next.delete(categoryNode.category);
+                        return next;
+                      });
+                    }}
+                    className="flex flex-col"
+                  >
+                    <CollapsibleTrigger
+                      render={
+                        <SidebarRowButton
+                          aria-pressed={active}
+                          onClick={(event) =>
+                            selectCategory(categoryNode.category, listSelectionMode(event))
+                          }
+                        />
+                      }
+                    >
+                      <Category category={categoryNode.category} />
+                    </CollapsibleTrigger>
+                    <CollapsiblePanel>
+                      <div className="flex flex-col gap-1 pt-1">
+                        {categoryNode.subCategories.map((subCategory) => {
+                          const subCategoryFilterIndex = visibleCategoryFilters.findIndex(
+                            (filter) =>
+                              filter.category === categoryNode.category &&
+                              filter.subCategoryKey === subCategory.key,
+                          );
+                          const subCategoryActive =
+                            selectedFilterIndexes.has(subCategoryFilterIndex);
+
+                          return (
+                            <SubCategory
+                              key={subCategory.key}
+                              label={subCategory.label}
+                              active={subCategoryActive}
+                              joinsPrevious={
+                                subCategoryActive &&
+                                selectedFilterIndexes.has(subCategoryFilterIndex - 1)
+                              }
+                              joinsNext={
+                                subCategoryActive &&
+                                selectedFilterIndexes.has(subCategoryFilterIndex + 1)
+                              }
+                              onSelect={(mode) =>
+                                selectSubCategory(categoryNode.category, subCategory.key, mode)
+                              }
+                            />
+                          );
+                        })}
+                      </div>
+                    </CollapsiblePanel>
+                  </Collapsible>
                 </div>
-              </CollapsiblePanel>
-            </Collapsible>
-          </div>
-        ))}
+              );
+            })}
+          </CatalogSection>
+
+          <CatalogSection
+            title="Languages"
+            actions={
+              <LanguagePicker
+                scripts={allLanguageScripts}
+                trackedLanguageIds={trackedLanguageIds}
+                disabled={!canAuthor}
+                onApply={setTrackedLanguageIds}
+              />
+            }
+          >
+            {languageScripts.map((group) => (
+              <LanguageScript
+                key={group.script}
+                group={group}
+                selectedLanguageId={selectedLanguageId}
+                canGenerate={canAuthor}
+                onSelectLanguage={selectLanguage}
+                languageGlyphs={languageGlyphs}
+                onGenerate={generateGlyphs}
+              />
+            ))}
+          </CatalogSection>
+        </div>
       </div>
     </div>
   );

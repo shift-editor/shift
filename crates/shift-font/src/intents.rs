@@ -10,9 +10,10 @@ use crate::changes::{AnchorPosition, FontChange, FontChangeSet, PointPosition};
 use crate::error::{CoreError, CoreResult};
 use crate::interpolation::GlyphInterpolationValues;
 use crate::ir::{
-    Anchor, AnchorId, Axis, AxisId, AxisMapping, BooleanOp, Contour, ContourId, DesignLocation,
-    Font, FontMetadata, Glyph, GlyphId, GlyphLayer, GlyphName, LayerId, MetricDefinition, MetricId,
-    MetricValue, NamedInstance, NamedInstanceId, PointId, PointType, Source, SourceId,
+    Anchor, AnchorId, Axis, AxisId, AxisMapping, BooleanOp, Component, ComponentId, Contour,
+    ContourId, DecomposedTransform, DesignLocation, Font, FontMetadata, Glyph, GlyphId, GlyphLayer,
+    GlyphName, LayerId, LibValue, MetricDefinition, MetricId, MetricValue, NamedInstance,
+    NamedInstanceId, PointId, PointType, Source, SourceId, LANGUAGES_LIB_KEY,
 };
 use crate::layer_edit::BulkNodePositionUpdates;
 use crate::source::source_locations_equal;
@@ -89,6 +90,27 @@ pub enum FontIntent {
         layer_id: LayerId,
         anchor_ids: Vec<AnchorId>,
     },
+    /// Adds one direct reference after rejecting direct or transitive component cycles.
+    AddComponent {
+        layer_id: LayerId,
+        component_id: ComponentId,
+        base_glyph_id: GlyphId,
+    },
+    /// Replaces direct component transforms without changing component identity or order.
+    SetComponentTransforms {
+        layer_id: LayerId,
+        component_ids: Vec<ComponentId>,
+        /// Nine decomposed values per component in interpolation order.
+        transforms: Vec<f64>,
+    },
+    RemoveComponents {
+        layer_id: LayerId,
+        component_ids: Vec<ComponentId>,
+    },
+    DecomposeComponents {
+        layer_id: LayerId,
+        component_ids: Vec<ComponentId>,
+    },
     ReverseContour {
         layer_id: LayerId,
         contour_id: ContourId,
@@ -136,6 +158,15 @@ pub enum FontIntent {
     /// Replaces authored font metadata without changing font metrics.
     UpdateFontMetadata {
         metadata: FontMetadata,
+    },
+    /// Replaces the tracked language list stored under
+    /// [`LANGUAGES_LIB_KEY`](crate::LANGUAGES_LIB_KEY).
+    ///
+    /// Ids are Hyperglot language ids. Blank ids are dropped and duplicates
+    /// keep their first position; an empty list is stored as an empty array,
+    /// which is distinct from the key being absent.
+    SetLanguages {
+        language_ids: Vec<String>,
     },
     CreateAxis {
         axis: Axis,
@@ -223,6 +254,10 @@ impl FontIntent {
             | Self::AddAnchors { layer_id, .. }
             | Self::MoveAnchors { layer_id, .. }
             | Self::RemoveAnchors { layer_id, .. }
+            | Self::AddComponent { layer_id, .. }
+            | Self::SetComponentTransforms { layer_id, .. }
+            | Self::RemoveComponents { layer_id, .. }
+            | Self::DecomposeComponents { layer_id, .. }
             | Self::ReverseContour { layer_id, .. }
             | Self::SetContourStart { layer_id, .. }
             | Self::TranslatePoints { layer_id, .. }
@@ -232,6 +267,7 @@ impl FontIntent {
             Self::CreateGlyph { .. }
             | Self::UpdateGlyph { .. }
             | Self::UpdateFontMetadata { .. }
+            | Self::SetLanguages { .. }
             | Self::CreateAxis { .. }
             | Self::UpdateAxis { .. }
             | Self::DeleteAxis { .. }
@@ -266,6 +302,10 @@ impl FontIntent {
             | Self::AddAnchors { layer_id, .. }
             | Self::MoveAnchors { layer_id, .. }
             | Self::RemoveAnchors { layer_id, .. }
+            | Self::AddComponent { layer_id, .. }
+            | Self::SetComponentTransforms { layer_id, .. }
+            | Self::RemoveComponents { layer_id, .. }
+            | Self::DecomposeComponents { layer_id, .. }
             | Self::ReverseContour { layer_id, .. }
             | Self::SetContourStart { layer_id, .. }
             | Self::TranslatePoints { layer_id, .. }
@@ -286,6 +326,7 @@ impl FontIntent {
             Self::CreateGlyph { .. }
             | Self::UpdateGlyph { .. }
             | Self::UpdateFontMetadata { .. }
+            | Self::SetLanguages { .. }
             | Self::CreateAxis { .. }
             | Self::UpdateAxis { .. }
             | Self::DeleteAxis { .. }
@@ -307,6 +348,7 @@ impl FontIntent {
             self,
             Self::MovePoints { .. }
                 | Self::MoveAnchors { .. }
+                | Self::SetComponentTransforms { .. }
                 | Self::TranslatePoints { .. }
                 | Self::SetXAdvance { .. }
         )
@@ -336,6 +378,33 @@ pub struct AppliedIntents {
 impl Font {
     fn default_layer_width(&self) -> f64 {
         self.metrics().units_per_em * 0.5
+    }
+
+    fn component_reference_would_cycle(&self, glyph_id: &GlyphId, base_glyph_id: &GlyphId) -> bool {
+        let mut pending = vec![base_glyph_id.clone()];
+        let mut visited = HashSet::new();
+
+        while let Some(candidate_id) = pending.pop() {
+            if candidate_id == *glyph_id {
+                return true;
+            }
+            if !visited.insert(candidate_id.clone()) {
+                continue;
+            }
+
+            let Some(candidate) = self.glyph(candidate_id) else {
+                continue;
+            };
+            pending.extend(
+                candidate
+                    .layers()
+                    .values()
+                    .flat_map(|layer| layer.components_iter())
+                    .map(Component::base_glyph_id),
+            );
+        }
+
+        false
     }
 
     /// Validates and applies an intent set, producing the canonical change
@@ -415,6 +484,10 @@ impl Font {
             FontIntent::UpdateFontMetadata { metadata } => {
                 self.replace_metadata(metadata.clone());
                 changes.push(FontChange::font_metadata_updated(metadata));
+                Ok(Vec::new())
+            }
+            FontIntent::SetLanguages { language_ids } => {
+                self.apply_set_languages(language_ids, changes);
                 Ok(Vec::new())
             }
             FontIntent::CreateAxis { axis } => {
@@ -550,6 +623,22 @@ impl Font {
 
         self.insert_glyph(glyph)?;
         Ok(Vec::new())
+    }
+
+    fn apply_set_languages(&mut self, language_ids: &[String], changes: &mut FontChangeSet) {
+        let mut seen = HashSet::new();
+        let values = language_ids
+            .iter()
+            .map(|id| id.trim())
+            .filter(|id| !id.is_empty() && seen.insert(*id))
+            .map(|id| LibValue::String(id.to_string()))
+            .collect();
+        let value = LibValue::Array(values);
+        changes.push(FontChange::font_lib_value_updated(
+            LANGUAGES_LIB_KEY,
+            Some(&value),
+        ));
+        self.lib_mut().set(LANGUAGES_LIB_KEY.to_string(), value);
     }
 
     fn apply_create_axis(&mut self, axis: &Axis, changes: &mut FontChangeSet) -> CoreResult<()> {
@@ -1085,6 +1174,163 @@ impl Font {
                 self.forget_anchor_ids(anchor_ids);
                 Ok(change)
             }
+            FontIntent::AddComponent {
+                layer_id,
+                component_id,
+                base_glyph_id,
+            } => {
+                if self.has_component_id(component_id) {
+                    return Err(CoreError::DuplicateComponentId(component_id.clone()));
+                }
+                let glyph_id = self
+                    .glyph_id_by_layer(layer_id.clone())
+                    .ok_or_else(|| CoreError::LayerNotFound(layer_id.clone()))?;
+                let base_glyph_name = self
+                    .glyph(base_glyph_id.clone())
+                    .ok_or_else(|| CoreError::GlyphNotFound(base_glyph_id.clone()))?
+                    .glyph_name()
+                    .clone();
+                if self.component_reference_would_cycle(&glyph_id, base_glyph_id) {
+                    return Err(CoreError::CyclicComponentReference {
+                        glyph_id,
+                        base_glyph_id: base_glyph_id.clone(),
+                    });
+                }
+
+                let change = {
+                    let layer = self.layer_mut_or_err(layer_id)?;
+                    layer.add_component(Component::with_id(
+                        component_id.clone(),
+                        base_glyph_id.clone(),
+                        base_glyph_name,
+                        Default::default(),
+                    ));
+                    FontChange::layer_components_replaced(layer)
+                };
+
+                self.rebuild_structure_index()?;
+                Ok(change)
+            }
+            FontIntent::SetComponentTransforms {
+                layer_id,
+                component_ids,
+                transforms,
+            } => {
+                if transforms.len() != component_ids.len() * 9 {
+                    return Err(CoreError::InvalidPositionUpdateInput {
+                        kind: "component transforms",
+                        message: format!(
+                            "expected {} values for {} components, got {}",
+                            component_ids.len() * 9,
+                            component_ids.len(),
+                            transforms.len()
+                        ),
+                    });
+                }
+                if transforms.iter().any(|value| !value.is_finite()) {
+                    return Err(CoreError::InvalidPositionUpdateInput {
+                        kind: "component transforms",
+                        message: "values must be finite".to_string(),
+                    });
+                }
+
+                let layer = self.layer_mut_or_err(layer_id)?;
+                for component_id in component_ids {
+                    if layer.component(component_id.clone()).is_none() {
+                        return Err(CoreError::InvalidComponentId(component_id.to_string()));
+                    }
+                }
+                for (component_id, values) in component_ids.iter().zip(transforms.chunks_exact(9)) {
+                    layer.set_component_transform(
+                        component_id,
+                        DecomposedTransform {
+                            translate_x: values[0],
+                            translate_y: values[1],
+                            rotation: values[2],
+                            scale_x: values[3],
+                            scale_y: values[4],
+                            skew_x: values[5],
+                            skew_y: values[6],
+                            t_center_x: values[7],
+                            t_center_y: values[8],
+                        },
+                    )?;
+                }
+
+                Ok(FontChange::layer_geometry_replaced(layer))
+            }
+            FontIntent::RemoveComponents {
+                layer_id,
+                component_ids,
+            } => {
+                let component_ids = component_ids.iter().cloned().collect::<HashSet<_>>();
+                let change = {
+                    let layer = self.layer_mut_or_err(layer_id)?;
+                    for component_id in &component_ids {
+                        if layer.component(component_id.clone()).is_none() {
+                            return Err(CoreError::InvalidComponentId(component_id.to_string()));
+                        }
+                    }
+                    for component_id in &component_ids {
+                        layer.remove_component(component_id.clone());
+                    }
+                    FontChange::layer_components_replaced(layer)
+                };
+
+                self.rebuild_structure_index()?;
+                Ok(change)
+            }
+            FontIntent::DecomposeComponents {
+                layer_id,
+                component_ids,
+            } => {
+                let component_ids = component_ids.iter().cloned().collect::<HashSet<_>>();
+                let (glyph_id, location) = {
+                    let glyph_id = self
+                        .glyph_id_by_layer(layer_id.clone())
+                        .ok_or_else(|| CoreError::LayerNotFound(layer_id.clone()))?;
+                    let layer = self.layer_mut_or_err(layer_id)?;
+                    for component_id in &component_ids {
+                        if layer.component(component_id.clone()).is_none() {
+                            return Err(CoreError::InvalidComponentId(component_id.to_string()));
+                        }
+                    }
+                    let source_id = layer.source_id();
+                    let location = self
+                        .sources()
+                        .iter()
+                        .find(|source| source.id() == source_id)
+                        .ok_or(CoreError::SourceNotFound(source_id))?
+                        .location()
+                        .clone();
+                    (glyph_id, location)
+                };
+                let resolved_contours = {
+                    let mut projection = self.projection(&location);
+                    projection.component_contours(&glyph_id, &component_ids)?
+                };
+
+                let change = {
+                    let layer = self.layer_mut_or_err(layer_id)?;
+                    for component_id in &component_ids {
+                        layer.remove_component(component_id.clone());
+                    }
+                    for resolved in resolved_contours {
+                        let mut contour = Contour::new();
+                        for point in resolved.points {
+                            contour.push_point(point);
+                        }
+                        if resolved.closed {
+                            contour.close();
+                        }
+                        layer.add_contour(contour);
+                    }
+                    FontChange::layer_components_replaced(layer)
+                };
+
+                self.rebuild_structure_index()?;
+                Ok(change)
+            }
             FontIntent::ReverseContour {
                 layer_id,
                 contour_id,
@@ -1162,6 +1408,7 @@ impl Font {
             FontIntent::CreateGlyph { .. }
             | FontIntent::UpdateGlyph { .. }
             | FontIntent::UpdateFontMetadata { .. }
+            | FontIntent::SetLanguages { .. }
             | FontIntent::CreateAxis { .. }
             | FontIntent::UpdateAxis { .. }
             | FontIntent::DeleteAxis { .. }
@@ -1281,6 +1528,213 @@ mod tests {
             Err(CoreError::DuplicateContourId(id)) if id == contour_id
         ));
         assert_eq!(font.glyphs().next().unwrap().layers().len(), 1);
+    }
+
+    #[test]
+    fn component_intents_add_and_remove_one_reference() {
+        let mut font = Font::new();
+        let source_id = font.default_source_id().unwrap();
+        let base_id = GlyphId::new();
+        let mut base = Glyph::with_id(base_id.clone(), "base");
+        base.set_layer(GlyphLayer::new(LayerId::new(), source_id.clone()));
+        font.insert_glyph(base).unwrap();
+
+        let root_id = GlyphId::new();
+        let root_layer_id = LayerId::new();
+        let mut root = Glyph::with_id(root_id, "root");
+        root.set_layer(GlyphLayer::new(root_layer_id.clone(), source_id));
+        font.insert_glyph(root).unwrap();
+        let component_id = ComponentId::new();
+
+        font.apply_intents(FontIntentSet {
+            intents: vec![FontIntent::AddComponent {
+                layer_id: root_layer_id.clone(),
+                component_id: component_id.clone(),
+                base_glyph_id: base_id.clone(),
+            }],
+        })
+        .unwrap();
+
+        let component = font
+            .layer(root_layer_id.clone())
+            .unwrap()
+            .component(component_id.clone())
+            .unwrap();
+        assert_eq!(component.base_glyph_id(), base_id);
+        assert_eq!(component.base_glyph_name().as_str(), "base");
+
+        font.apply_intents(FontIntentSet {
+            intents: vec![FontIntent::RemoveComponents {
+                layer_id: root_layer_id.clone(),
+                component_ids: vec![component_id],
+            }],
+        })
+        .unwrap();
+
+        assert!(font.layer(root_layer_id).unwrap().components().is_empty());
+    }
+
+    #[test]
+    fn adding_a_component_rejects_a_direct_cycle() {
+        let mut font = Font::new();
+        let source_id = font.default_source_id().unwrap();
+        let glyph_id = GlyphId::new();
+        let layer_id = LayerId::new();
+        let mut glyph = Glyph::with_id(glyph_id.clone(), "self-referencing");
+        glyph.set_layer(GlyphLayer::new(layer_id.clone(), source_id));
+        font.insert_glyph(glyph).unwrap();
+
+        let result = font.apply_intents(FontIntentSet {
+            intents: vec![FontIntent::AddComponent {
+                layer_id,
+                component_id: ComponentId::new(),
+                base_glyph_id: glyph_id.clone(),
+            }],
+        });
+
+        assert!(matches!(
+            result,
+            Err(CoreError::CyclicComponentReference {
+                glyph_id: rejected_glyph_id,
+                base_glyph_id,
+            }) if rejected_glyph_id == glyph_id && base_glyph_id == glyph_id
+        ));
+    }
+
+    #[test]
+    fn adding_a_component_rejects_an_indirect_cycle() {
+        let mut font = Font::new();
+        let source_id = font.default_source_id().unwrap();
+        let parent_id = GlyphId::new();
+        let child_id = GlyphId::new();
+
+        let mut parent_layer = GlyphLayer::new(LayerId::new(), source_id.clone());
+        parent_layer.add_component(Component::new(child_id.clone(), "child"));
+        let mut parent = Glyph::with_id(parent_id.clone(), "parent");
+        parent.set_layer(parent_layer);
+        font.insert_glyph(parent).unwrap();
+
+        let child_layer_id = LayerId::new();
+        let mut child = Glyph::with_id(child_id.clone(), "child");
+        child.set_layer(GlyphLayer::new(child_layer_id.clone(), source_id));
+        font.insert_glyph(child).unwrap();
+
+        let result = font.apply_intents(FontIntentSet {
+            intents: vec![FontIntent::AddComponent {
+                layer_id: child_layer_id,
+                component_id: ComponentId::new(),
+                base_glyph_id: parent_id.clone(),
+            }],
+        });
+
+        assert!(matches!(
+            result,
+            Err(CoreError::CyclicComponentReference {
+                glyph_id: rejected_glyph_id,
+                base_glyph_id,
+            }) if rejected_glyph_id == child_id && base_glyph_id == parent_id
+        ));
+    }
+
+    #[test]
+    fn component_transform_intent_replaces_authored_values() {
+        let mut font = Font::new();
+        let source_id = font.default_source_id().unwrap();
+        let layer_id = LayerId::new();
+        let component_id = ComponentId::new();
+        let mut layer = GlyphLayer::new(layer_id.clone(), source_id);
+        layer.add_component(Component::with_id(
+            component_id.clone(),
+            GlyphId::new(),
+            "base",
+            DecomposedTransform::default(),
+        ));
+        let mut glyph = Glyph::new("root");
+        glyph.set_layer(layer);
+        font.insert_glyph(glyph).unwrap();
+
+        font.apply_intents(FontIntentSet {
+            intents: vec![FontIntent::SetComponentTransforms {
+                layer_id: layer_id.clone(),
+                component_ids: vec![component_id.clone()],
+                transforms: vec![12.0, -7.0, 30.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0],
+            }],
+        })
+        .unwrap();
+
+        let transform = font
+            .layer(layer_id)
+            .unwrap()
+            .component(component_id)
+            .unwrap()
+            .transform();
+        assert_eq!(transform.translate_x, 12.0);
+        assert_eq!(transform.translate_y, -7.0);
+        assert_eq!(transform.rotation, 30.0);
+        assert_eq!(transform.scale_x, 2.0);
+        assert_eq!(transform.scale_y, 3.0);
+        assert_eq!(transform.skew_x, 4.0);
+        assert_eq!(transform.skew_y, 5.0);
+        assert_eq!(transform.t_center_x, 6.0);
+        assert_eq!(transform.t_center_y, 7.0);
+    }
+
+    #[test]
+    fn decomposing_a_component_recursively_flattens_its_transformed_subtree() {
+        let mut font = Font::new();
+        let source_id = font.default_source_id().unwrap();
+
+        let leaf_id = GlyphId::new();
+        let mut leaf_layer = GlyphLayer::new(LayerId::new(), source_id.clone());
+        let mut leaf_contour = Contour::new();
+        leaf_contour.add_point(10.0, 20.0, PointType::OnCurve, false);
+        leaf_layer.add_contour(leaf_contour);
+        let mut leaf = Glyph::with_id(leaf_id.clone(), "leaf");
+        leaf.set_layer(leaf_layer);
+        font.insert_glyph(leaf).unwrap();
+
+        let middle_id = GlyphId::new();
+        let mut middle_layer = GlyphLayer::new(LayerId::new(), source_id.clone());
+        middle_layer.add_component(Component::with_transform(
+            leaf_id,
+            "leaf",
+            crate::DecomposedTransform {
+                translate_y: 5.0,
+                ..Default::default()
+            },
+        ));
+        let mut middle = Glyph::with_id(middle_id.clone(), "middle");
+        middle.set_layer(middle_layer);
+        font.insert_glyph(middle).unwrap();
+
+        let root_layer_id = LayerId::new();
+        let root_component_id = ComponentId::new();
+        let mut root_layer = GlyphLayer::new(root_layer_id.clone(), source_id);
+        root_layer.add_component(Component::with_id(
+            root_component_id.clone(),
+            middle_id,
+            "middle",
+            crate::DecomposedTransform {
+                translate_x: 30.0,
+                ..Default::default()
+            },
+        ));
+        let mut root = Glyph::new("root");
+        root.set_layer(root_layer);
+        font.insert_glyph(root).unwrap();
+
+        font.apply_intents(FontIntentSet {
+            intents: vec![FontIntent::DecomposeComponents {
+                layer_id: root_layer_id.clone(),
+                component_ids: vec![root_component_id],
+            }],
+        })
+        .unwrap();
+
+        let layer = font.layer(root_layer_id).unwrap();
+        let point = &layer.contours_iter().next().unwrap().points()[0];
+        assert!(layer.components().is_empty());
+        assert_eq!((point.x(), point.y()), (40.0, 25.0));
     }
 
     #[test]

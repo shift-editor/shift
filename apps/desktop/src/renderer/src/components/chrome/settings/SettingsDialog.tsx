@@ -15,6 +15,7 @@ import {
 import { message } from "@shared/messages";
 import type { SettingsCategory, SettingsTarget } from "@/types/settings";
 import { useFont } from "@/workspace/WorkspaceContext";
+import { AppearanceSettingsPanel } from "./AppearanceSettingsPanel";
 import { AxesSettingsPanel } from "./AxesSettingsPanel";
 import { FontSettingsPanel } from "./FontSettingsPanel";
 import { InstancesSettingsPanel } from "./InstancesSettingsPanel";
@@ -45,10 +46,10 @@ export const SettingsDialog = ({
         <DialogBackdrop />
         <DialogPopup
           className={cn(
-            "fixed left-1/2 top-1/2 h-[500px]",
-            "w-[800px] max-w-none -translate-x-1/2 -translate-y-1/2",
-            "grid grid-cols-[9.5rem_minmax(0,1fr)] overflow-hidden rounded-lg",
-            "border border-line-subtle bg-canvas shadow-lg",
+            "fixed left-1/2 top-1/2 h-125",
+            "w-200 max-w-none -translate-x-1/2 -translate-y-1/2",
+            "grid grid-cols-[9.5rem_minmax(0,1fr)] overflow-hidden",
+            "border border-line-subtle bg-surface-muted",
           )}
         >
           <DialogTitle className="sr-only">{message("settings.dialog.title")}</DialogTitle>
@@ -61,16 +62,13 @@ export const SettingsDialog = ({
 
           <main
             aria-label="Settings details"
-            className="relative min-h-0 min-w-0 overflow-hidden bg-canvas"
+            className="relative min-h-0 min-w-0 overflow-hidden bg-surface-muted"
           >
             <Tooltip>
               <TooltipTrigger>
                 <DialogClose
-                  className={cn(
-                    "absolute right-2 top-2 z-10 inline-flex h-7 w-7 cursor-pointer",
-                    "items-center justify-center rounded text-primary/70 transition-colors",
-                    "hover:bg-hover hover:text-primary",
-                  )}
+                  variant="icon"
+                  className="absolute right-2 top-2 z-10 h-7 w-7"
                   aria-label={message("settings.dialog.close")}
                 >
                   <X className="h-4 w-4" />
@@ -94,6 +92,12 @@ interface SettingsCategoryPanelProps {
 
 const SettingsCategoryPanel = ({ target, canAuthor }: SettingsCategoryPanelProps) => {
   switch (target.category) {
+    case "appearance":
+      return (
+        <ScrollablePanel>
+          <AppearanceSettingsPanel />
+        </ScrollablePanel>
+      );
     case "font":
       return (
         <ScrollablePanel>
@@ -129,6 +133,8 @@ const SettingsCategoryPanel = ({ target, canAuthor }: SettingsCategoryPanelProps
 
 function targetForCategory(category: SettingsCategory): SettingsTarget {
   switch (category) {
+    case "appearance":
+      return { category: "appearance" };
     case "font":
       return { category: "font" };
     case "sources":

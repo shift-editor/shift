@@ -10,7 +10,7 @@ export const SidebarSection = ({ title, children, className }: SidebarSectionPro
   return (
     <section className={cn("flex flex-col gap-2", className)}>
       <div className="flex items-center gap-2">
-        <h3 className="text-ui font-medium  text-[#232323]">{title}</h3>
+        <h3 className="text-ui font-medium text-primary">{title}</h3>
       </div>
       <div className="flex flex-col gap-2">{children}</div>
     </section>

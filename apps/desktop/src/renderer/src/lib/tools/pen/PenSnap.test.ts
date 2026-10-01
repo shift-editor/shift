@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { TestEditor } from "@/testing/TestEditor";
 
-describe("Pen snaps mirrored creation handles around the new endpoint", () => {
+describe("Pen applies Shift direction snapping", () => {
   let editor: TestEditor;
 
   beforeEach(async () => {
@@ -56,6 +56,25 @@ describe("Pen snaps mirrored creation handles around the new endpoint", () => {
       x: 220,
       y: 40,
     });
+    editor.escape();
+  });
+
+  it("publishes a direction guide while Shift snaps a closing drag", async () => {
+    await editor.dragScene({
+      down: { x: 300, y: 100 },
+      start: { x: 340, y: 120 },
+      end: { x: 380, y: 180 },
+    });
+    await editor.clickGlyphLocal(300, 300);
+    const down = editor.projectSceneToScreen({ x: 100, y: 100 });
+    const end = editor.projectSceneToScreen({ x: 100, y: 162 });
+
+    editor.pointerDown(down.x, down.y).pointerMove(end.x, end.y, { shiftKey: true });
+
+    const state = editor.toolIf("pen")?.state;
+    if (state?.type !== "closing") throw new Error("Expected Pen closing drag");
+    expect(state.guides).toHaveLength(1);
+    expect(state.guides[0]).toMatchObject({ kind: "direction", from: { x: 100, y: 100 } });
     editor.escape();
   });
 
@@ -194,10 +213,27 @@ describe("Pen snaps mirrored creation handles around the new endpoint", () => {
     editor.escape();
   });
 
-  it("keeps Shift-click placement as a straight segment", async () => {
-    await editor.clickGlyphLocal(300, 100, { shiftKey: true });
-    expect(editor.pointCount).toBe(2);
+  it("snaps Shift-click placement around the previous point", async () => {
+    await editor.clickGlyphLocal(300, 160, { shiftKey: true });
+    const endpoint = editor.openContour!.lastPoint!;
+    const length = Math.hypot(200, 60);
+
     expect(editor.openContour!.segments()[0]!.type).toBe("line");
-    expect(editor.openContour!.lastPoint!.position).toEqual({ x: 300, y: 100 });
+    expect(endpoint.x).toBeCloseTo(100 + length * Math.cos(Math.PI / 12));
+    expect(endpoint.y).toBeCloseTo(100 + length * Math.sin(Math.PI / 12));
+  });
+
+  it("uses the snapped preview anchor when dragging a new cubic", async () => {
+    await editor.dragScene({
+      down: { x: 300, y: 160 },
+      start: { x: 340, y: 200 },
+      end: { x: 380, y: 240 },
+      options: { shiftKey: true },
+    });
+    const endpoint = editor.openContour!.segments()[0]!.asCubic()!.end;
+    const length = Math.hypot(200, 60);
+
+    expect(endpoint.x).toBeCloseTo(100 + length * Math.cos(Math.PI / 12));
+    expect(endpoint.y).toBeCloseTo(100 + length * Math.sin(Math.PI / 12));
   });
 });

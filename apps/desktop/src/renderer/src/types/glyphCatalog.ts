@@ -1,4 +1,4 @@
-import type { GlyphCategory, GlyphCategorySummary } from "@shift/glyph-info";
+import type { GlyphCategory, GlyphCategorySummary, LanguageScript } from "@shift/glyph-info";
 import type { Rect2D } from "@shift/geo";
 import type {
   CatalogAxis,
@@ -8,8 +8,9 @@ import type {
   GlyphPreview,
   SourceId,
 } from "@shift/types";
-import type { RenderGlyph } from "./glyphRender";
-import type { ThemeName } from "./uiState";
+import type { ListSelectionMode, RenderGlyph } from "@shift/editor/types";
+import type { Dispatch, SetStateAction } from "react";
+import type { ColorTheme } from "@/lib/themes";
 import type { GlyphAtlasSource } from "./glyphAtlas";
 
 export type GlyphCatalogCellArea = "preview" | "name";
@@ -21,12 +22,18 @@ export interface GlyphCatalogItem {
   readonly unicode: number | null;
 }
 
+export interface LanguageGlyph {
+  readonly codepoint: number;
+  readonly name: string;
+  readonly present: boolean;
+}
+
 export type PendingGlyphNames = ReadonlyMap<GlyphId, GlyphName>;
 
-/** Publication decision for an asynchronously opened glyph. */
-export type GlyphOpenResult<T> =
-  | { readonly status: "current"; readonly glyph: T }
-  | { readonly status: "stale" };
+export interface GlyphCategoryFilter {
+  readonly category: GlyphCategory;
+  readonly subCategoryKey: string | null;
+}
 
 /** Dense external-axis coordinates ordered like `GlyphCatalogSource.axesCell`. */
 export type CatalogLocation = readonly number[];
@@ -35,14 +42,33 @@ export interface GlyphCatalogSource {
   availableGlyphs: GlyphCatalogItem[];
   filteredGlyphs: GlyphCatalogItem[];
   categories: GlyphCategorySummary[];
-  selectedCategory: GlyphCategory | null;
-  selectedSubCategoryKey: string | null;
+  /** Tracked languages grouped by script, as shown in the sidebar. */
+  languageScripts: LanguageScript[];
+  /** Every known language grouped by script, for choosing what to track. */
+  allLanguageScripts: LanguageScript[];
+  trackedLanguageIds: readonly string[];
+  /** Replaces the font's tracked languages as one undoable edit. */
+  setTrackedLanguageIds: (languageIds: readonly string[]) => void;
+  /** Lists every character a language requires and whether the font has it. */
+  languageGlyphs: (languageId: string) => LanguageGlyph[];
+  /** Creates one empty glyph per codepoint as one undoable edit. */
+  generateGlyphs: (codepoints: readonly number[]) => void;
+  categoryFilters: readonly GlyphCategoryFilter[];
+  selectedLanguageId: string | null;
+  visibleCategoryFilters: readonly GlyphCategoryFilter[];
+  expandedCategories: ReadonlySet<GlyphCategory>;
+  setExpandedCategories: Dispatch<SetStateAction<ReadonlySet<GlyphCategory>>>;
   query: string;
   setQuery: (nextQuery: string) => void;
   createQuickGlyph: () => GlyphName;
   selectAll: () => void;
-  selectCategory: (category: GlyphCategory) => void;
-  selectSubCategory: (category: GlyphCategory, subCategoryKey: string) => void;
+  selectCategory: (category: GlyphCategory, mode: ListSelectionMode) => void;
+  selectSubCategory: (
+    category: GlyphCategory,
+    subCategoryKey: string,
+    mode: ListSelectionMode,
+  ) => void;
+  selectLanguage: (languageId: string) => void;
   atlasSource: GlyphAtlasSource;
   observeAtlasInvalidation: (
     listener: (glyphIds: readonly GlyphId[] | null, directory: readonly GlyphId[]) => void,
@@ -103,7 +129,7 @@ export interface GlyphCatalogControllerFrame {
   readonly location: CatalogLocation;
   readonly metrics: CatalogMetrics;
   readonly sourceId: SourceId | null;
-  readonly themeName: ThemeName;
+  readonly resolvedTheme: ColorTheme;
   readonly active: boolean;
   readonly editingGlyphId: GlyphId | null;
 }
@@ -150,4 +176,5 @@ export interface SlugGlyphCatalogSurfaceProps extends GlyphCatalogViewProps {
 
 export interface SvgGlyphCatalogGridProps extends GlyphCatalogViewProps {
   readonly glyphPreviews: GlyphCatalogSource["glyphPreviews"];
+  readonly glyphActionLabel?: (glyph: GlyphCatalogItem) => string;
 }

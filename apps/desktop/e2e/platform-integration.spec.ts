@@ -2,16 +2,11 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import type { ElectronApplication, Page, TestInfo } from "@playwright/test";
-import type { GlyphId } from "@shift/types";
 import { documentTest as test, expect, waitForWorkspaceReady } from "./fixtures/electronApp";
-import {
-  createNewFont,
-  killApp,
-  quitApp,
-  relaunchApp,
-  runCommand,
-} from "./fixtures/documentLifecycle";
+import { createNewFont, glyphIdForName, quitApp, runCommand } from "./fixtures/documentLifecycle";
 import { EditorDriver } from "./fixtures/EditorDriver";
+import type { RelaunchApp } from "./fixtures/types";
+import type { GlyphId } from "@shift/types";
 import { addSquare } from "./fixtures/editorInteractions";
 
 const platformTest = test.extend({
@@ -38,11 +33,11 @@ platformTest("uses platform-appropriate window controls", async ({ electronApp, 
 
 platformTest(
   "saves, exports, and reopens through Unicode paths with inspectable evidence",
-  async ({ electronApp, page, saveShiftPath, exportTtfPath, testRoot }, testInfo) => {
+  async ({ electronApp, page, saveShiftPath, exportTtfPath, relaunch }, testInfo) => {
     await attachScreenshot(testInfo, "launcher", page);
     const { workspacePage, glyphId } = await createEvidenceDocument(electronApp, page, testInfo);
     await persistEvidence(electronApp, workspacePage, saveShiftPath, exportTtfPath, testInfo);
-    await reopenAndVerify(electronApp, testRoot, saveShiftPath, glyphId, testInfo);
+    await reopenAndVerify(electronApp, relaunch, glyphId, testInfo);
   },
 );
 
@@ -89,45 +84,23 @@ async function persistEvidence(
 
 async function reopenAndVerify(
   electronApp: ElectronApplication,
-  testRoot: string,
-  saveShiftPath: string,
+  relaunch: RelaunchApp,
   glyphId: GlyphId,
   testInfo: TestInfo,
 ): Promise<void> {
   await quitApp(electronApp);
-  const relaunchedApp = await relaunchApp(testRoot, saveShiftPath);
+  const relaunchedApp = await relaunch();
 
-  try {
-    const launcherPage = await relaunchedApp.firstWindow();
-    await launcherPage.waitForURL(/#\/launcher$/);
-    const workspaceWindow = relaunchedApp.waitForEvent("window");
-    await launcherPage.getByRole("button", { name: /Load font/ }).click();
-    const workspacePage = await workspaceWindow;
-    await waitForWorkspaceReady(workspacePage);
-    const editor = new EditorDriver(workspacePage);
-    await editor.openGlyph(glyphId);
-    expect(await editor.pointCount()).toBe(4);
-    await attachScreenshot(testInfo, "reopened-editor", workspacePage);
-  } finally {
-    await killApp(relaunchedApp);
-  }
-}
-
-async function glyphIdForName(page: Page, glyphName: string): Promise<GlyphId> {
-  await expect
-    .poll(() =>
-      page.evaluate(
-        (name) => window.shift?.font.glyphRecords().find((glyph) => glyph.name === name)?.id,
-        glyphName,
-      ),
-    )
-    .not.toBeUndefined();
-  const glyphId = await page.evaluate(
-    (name) => window.shift?.font.glyphRecords().find((glyph) => glyph.name === name)?.id,
-    glyphName,
-  );
-  if (!glyphId) throw new Error(`Expected ${glyphName} glyph`);
-  return glyphId;
+  const launcherPage = await relaunchedApp.firstWindow();
+  await launcherPage.waitForURL(/#\/launcher$/);
+  const workspaceWindow = relaunchedApp.waitForEvent("window");
+  await launcherPage.getByRole("button", { name: /Load font/ }).click();
+  const workspacePage = await workspaceWindow;
+  await waitForWorkspaceReady(workspacePage);
+  const editor = new EditorDriver(workspacePage);
+  await editor.openGlyph(glyphId);
+  expect(await editor.pointCount()).toBe(4);
+  await attachScreenshot(testInfo, "reopened-editor", workspacePage);
 }
 
 async function attachScreenshot(testInfo: TestInfo, name: string, page: Page): Promise<void> {

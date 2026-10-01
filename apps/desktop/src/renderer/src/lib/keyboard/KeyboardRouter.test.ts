@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import type { CommandId } from "@shared/commands";
 import { KeyboardRouter } from "./KeyboardRouter";
 import { TestEditor } from "@/testing";
-import type { Rect2D } from "@shift/geo";
+import { Mat, Polygon, type Rect2D } from "@shift/geo";
+import { Point } from "@shift/glyph-state";
+import type { GlyphName } from "@shift/types";
 
 type KeyboardEventOptions = Partial<
   Pick<KeyboardEvent, "key" | "code" | "metaKey" | "ctrlKey" | "shiftKey" | "altKey" | "target">
@@ -37,19 +40,26 @@ function createKeyboardEvent(options: KeyboardEventOptions = {}): KeyboardEvent 
 describe("KeyboardRouter", () => {
   let editor: TestEditor;
   let canvasActive: boolean;
+  let command: CommandId | null;
   let router: KeyboardRouter;
 
   beforeEach(async () => {
     editor = new TestEditor();
     await editor.startSession();
     canvasActive = true;
+    command = null;
 
-    router = new KeyboardRouter(() => ({
-      canvasActive,
-      activeTool: editor.tool?.id ?? null,
-      editor,
-      toolManager: editor.toolManager,
-    }));
+    router = new KeyboardRouter(
+      () => ({
+        canvasActive,
+        activeTool: editor.tool?.id ?? null,
+        editor,
+        toolManager: editor.toolManager,
+      }),
+      (id) => {
+        command = id;
+      },
+    );
   });
 
   describe("zoom shortcuts", () => {
@@ -188,6 +198,256 @@ describe("KeyboardRouter", () => {
     });
   });
 
+  describe("right sidebar shortcuts", () => {
+    it.each([
+      {
+        key: "a",
+        code: "KeyA",
+        alignment: "left",
+        expected: [
+          [100, 100],
+          [100, 150],
+        ],
+      },
+      {
+        key: "h",
+        code: "KeyH",
+        alignment: "center-h",
+        expected: [
+          [150, 100],
+          [150, 150],
+        ],
+      },
+      {
+        key: "d",
+        code: "KeyD",
+        alignment: "right",
+        expected: [
+          [200, 100],
+          [200, 150],
+        ],
+      },
+      {
+        key: "w",
+        code: "KeyW",
+        alignment: "top",
+        expected: [
+          [100, 150],
+          [200, 150],
+        ],
+      },
+      {
+        key: "v",
+        code: "KeyV",
+        alignment: "center-v",
+        expected: [
+          [100, 125],
+          [200, 125],
+        ],
+      },
+      {
+        key: "s",
+        code: "KeyS",
+        alignment: "bottom",
+        expected: [
+          [100, 100],
+          [200, 100],
+        ],
+      },
+    ])("Alt+$key aligns $alignment", async ({ key, code, expected }) => {
+      const ids = await editor.drawOpenContour([
+        { x: 100, y: 100 },
+        { x: 200, y: 150 },
+      ]);
+      editor.selectTool("select");
+      editor.selection.select(ids);
+
+      const handled = await router.handleKeyDown(createKeyboardEvent({ key, code, altKey: true }));
+      await editor.settle();
+
+      expect(handled).toBe(true);
+      expect(
+        ids.map((id) => {
+          const point = editor.requireGlyphLayer().point(id);
+          return [point?.x, point?.y];
+        }),
+      ).toEqual(expected);
+    });
+
+    it.each([
+      {
+        key: "h",
+        code: "KeyH",
+        expected: [
+          [200, 100],
+          [100, 150],
+        ],
+      },
+      {
+        key: "v",
+        code: "KeyV",
+        expected: [
+          [100, 150],
+          [200, 100],
+        ],
+      },
+    ])("Shift+$key flips the selected points", async ({ key, code, expected }) => {
+      const ids = await editor.drawOpenContour([
+        { x: 100, y: 100 },
+        { x: 200, y: 150 },
+      ]);
+      editor.selectTool("select");
+      editor.selection.select(ids);
+
+      const handled = await router.handleKeyDown(
+        createKeyboardEvent({ key, code, shiftKey: true }),
+      );
+      await editor.settle();
+
+      expect(handled).toBe(true);
+      expect(
+        ids.map((id) => {
+          const point = editor.requireGlyphLayer().point(id);
+          return [point?.x, point?.y];
+        }),
+      ).toEqual(expected);
+    });
+
+    it("flips a selected component through its transform", async () => {
+      await editor.addGlyph("flip-base", null);
+      const record = editor.font.recordForName("flip-base" as GlyphName);
+      if (!record) throw new Error("Expected component glyph");
+      const glyph = await editor.font.loadGlyph(record.id);
+      const baseLayer = glyph.layerForSource(editor.font.defaultSource.id);
+      if (!baseLayer) throw new Error("Expected component layer");
+      const contourId = baseLayer.addContour();
+      baseLayer.addPoint(contourId, Point.onCurve({ x: 0, y: 0 }));
+      baseLayer.addPoint(contourId, Point.onCurve({ x: 100, y: 100 }));
+      const componentId = editor.requireGlyphLayer().addComponent(record.id);
+      await editor.settle();
+      editor.selection.select([componentId]);
+
+      const handled = await router.handleKeyDown(
+        createKeyboardEvent({ key: "h", code: "KeyH", shiftKey: true }),
+      );
+      await editor.settle();
+
+      expect(handled).toBe(true);
+      const component = editor.requireGlyphLayer().components.find(({ id }) => id === componentId);
+      if (!component) throw new Error("Expected selected component");
+      const transform = Mat.fromDecomposed(component.transform);
+      expect(transform.a).toBeCloseTo(-1);
+      expect(transform.d).toBeCloseTo(1);
+    });
+
+    it.each([
+      { key: "u", code: "KeyU", area: 14_600 },
+      { key: "i", code: "KeyI", area: 1_600 },
+      { key: "s", code: "KeyS", area: 6_500 },
+    ])("Alt+Shift+$key applies a Boolean edit", async ({ key, code, area }) => {
+      editor.selectTool("shape");
+      await editor.dragScene({
+        down: { x: 10, y: 10 },
+        start: { x: 20, y: 20 },
+        end: { x: 100, y: 100 },
+      });
+      editor.selectTool("shape");
+      await editor.dragScene({
+        down: { x: 60, y: 60 },
+        start: { x: 70, y: 70 },
+        end: { x: 150, y: 150 },
+      });
+      editor.selection.select(editor.requireGlyphLayer().contours.map(({ id }) => id));
+
+      const handled = await router.handleKeyDown(
+        createKeyboardEvent({ key, code, altKey: true, shiftKey: true }),
+      );
+      await editor.settle();
+
+      expect(handled).toBe(true);
+      const contours = editor.requireGlyphLayer().contours;
+      expect(contours).toHaveLength(1);
+      expect(Polygon.area(contours[0]!.points)).toBeCloseTo(area);
+    });
+
+    it("leaves alignment keys available when fewer than two points are selected", async () => {
+      const ids = await editor.drawOpenContour([
+        { x: 100, y: 100 },
+        { x: 200, y: 150 },
+      ]);
+      editor.selectTool("select");
+      editor.selection.select([ids[0]!]);
+
+      const handled = await router.handleKeyDown(
+        createKeyboardEvent({ key: "a", code: "KeyA", altKey: true }),
+      );
+
+      expect(handled).toBe(false);
+      expect(editor.requireGlyphLayer().point(ids[0]!)?.x).toBe(100);
+    });
+
+    it("uses the physical key for Option-generated characters", async () => {
+      const ids = await editor.drawOpenContour([
+        { x: 100, y: 100 },
+        { x: 200, y: 150 },
+      ]);
+      editor.selectTool("select");
+      editor.selection.select(ids);
+
+      const handled = await router.handleKeyDown(
+        createKeyboardEvent({ key: "å", code: "KeyA", altKey: true }),
+      );
+
+      expect(handled).toBe(true);
+      expect(editor.requireGlyphLayer().point(ids[1]!)?.x).toBe(100);
+    });
+
+    it("leaves shortcuts inside inputs alone", async () => {
+      const ids = await editor.drawOpenContour([
+        { x: 100, y: 100 },
+        { x: 200, y: 150 },
+      ]);
+      editor.selectTool("select");
+      editor.selection.select(ids);
+      const input = { tagName: "INPUT" } as EventTarget & { tagName: string };
+
+      const handled = await router.handleKeyDown(
+        createKeyboardEvent({ key: "å", code: "KeyA", altKey: true, target: input }),
+      );
+
+      expect(handled).toBe(false);
+      expect(editor.requireGlyphLayer().point(ids[1]!)?.x).toBe(200);
+    });
+
+    it("does not flip while typing with the text tool", async () => {
+      editor.selectTool("text");
+
+      const handled = await router.handleKeyDown(
+        createKeyboardEvent({ key: "h", code: "KeyH", shiftKey: true }),
+      );
+
+      expect(handled).toBe(false);
+    });
+  });
+
+  describe("selection shortcuts", () => {
+    it("records Select All as one undoable editor action", async () => {
+      await editor.drawOpenContour([
+        { x: 100, y: 100 },
+        { x: 200, y: 100 },
+      ]);
+      editor.selectTool("select");
+      editor.selection.clear();
+
+      const handled = await router.handleKeyDown(createKeyboardEvent({ key: "a", metaKey: true }));
+      expect(handled).toBe(true);
+      expect(editor.selection.ids).toHaveLength(2);
+
+      await editor.undo();
+      expect(editor.selection.ids).toEqual([]);
+    });
+  });
+
   describe("clipboard shortcuts", () => {
     beforeEach(async () => {
       editor.selectTool("pen");
@@ -231,6 +491,17 @@ describe("KeyboardRouter", () => {
 
       expect(editor.clipboardBuffer).toBe(bufferBefore);
     });
+
+    it("runs Add Component instead of copying", async () => {
+      const bufferBefore = editor.clipboardBuffer;
+      const handled = await router.handleKeyDown(
+        createKeyboardEvent({ key: "c", metaKey: true, shiftKey: true }),
+      );
+
+      expect(handled).toBe(true);
+      expect(command).toBe("glyph.addComponent");
+      expect(editor.clipboardBuffer).toBe(bufferBefore);
+    });
   });
 
   describe("delete key", () => {
@@ -249,6 +520,44 @@ describe("KeyboardRouter", () => {
       expect(editor.pointCount).toBe(0);
       expect(editor.selection.hasSelection()).toBe(false);
     });
+
+    it.each(["Delete", "Backspace"])(
+      "%s joins the neighbours of a deleted point into one contour",
+      async (key) => {
+        const [, middle] = await editor.drawOpenContour([
+          { x: 100, y: 100 },
+          { x: 200, y: 150 },
+          { x: 300, y: 100 },
+        ]);
+        editor.selectTool("select");
+        editor.selection.select([middle!]);
+
+        await router.handleKeyDown(createKeyboardEvent({ key, code: key }));
+        await editor.settle();
+
+        expect(editor.requireGlyphLayer().contours).toHaveLength(1);
+        expect(editor.pointCount).toBe(2);
+      },
+    );
+
+    it.each(["Delete", "Backspace"])(
+      "Shift+%s leaves a gap instead of joining the neighbours",
+      async (key) => {
+        const [, middle] = await editor.drawOpenContour([
+          { x: 100, y: 100 },
+          { x: 200, y: 150 },
+          { x: 300, y: 100 },
+        ]);
+        editor.selectTool("select");
+        editor.selection.select([middle!]);
+
+        await router.handleKeyDown(createKeyboardEvent({ key, code: key, shiftKey: true }));
+        await editor.settle();
+
+        expect(editor.requireGlyphLayer().contours).toHaveLength(2);
+        expect(editor.pointCount).toBe(2);
+      },
+    );
   });
 
   describe("temporary hand tool (space)", () => {

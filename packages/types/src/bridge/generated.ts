@@ -66,8 +66,19 @@ export interface BridgeApi {
    * redo stack is empty.
    */
   redo(): AppliedChange | null
+  /** Permanently removes every redo entry without changing font or dirty state. */
+  discardRedo(): void
   /** Glyph-addressed snapshots for renderer-local synchronous font state. */
   getGlyphSnapshots(requests: Array<GlyphSnapshotRequest>): Array<GlyphSnapshot>
+  /**
+   * Derives entity mappings and structural diagnostics between two layers.
+   *
+   * Both layers must belong to the same glyph. The read acquires that glyph's
+   * authored layers before matching, so sparse workspace residency cannot
+   * produce an incomplete result. Missing layers and cross-glyph requests are
+   * rejected rather than represented as compatibility differences.
+   */
+  getLayerMatch(referenceLayerId: LayerId, targetLayerId: LayerId): LayerMatch
   /**
    * Returns compact glyph projections without resolving a location.
    *
@@ -132,6 +143,13 @@ export interface BridgeApi {
   getAxisMappings(): Array<AxisMapping>
   getAxisMappingBases(): Array<AxisMappingBasis>
   getMetricDefinitions(): Array<MetricDefinition>
+  /**
+   * Returns the font's tracked Hyperglot language ids in authored order.
+   *
+   * `null` when the font lib has no tracked-language key, so the renderer
+   * applies its own default; an empty array is an explicit empty list.
+   */
+  getLanguageIds(): Array<string> | null
   getNamedInstances(): Array<NamedInstance>
   /** Returns the precomputed source-metric interpolation model for this font. */
   getSourceMetricsInterpolation(): SourceMetricsInterpolationSnapshot | null
@@ -171,6 +189,12 @@ export interface AddAnchorsIntent {
   anchors: Array<AnchorSeed>
 }
 
+export interface AddComponentIntent {
+  layerId: LayerId
+  componentId: ComponentId
+  baseGlyphId: GlyphId
+}
+
 export interface AddContourIntent {
   layerId: LayerId
   contourId: ContourId
@@ -189,6 +213,11 @@ export interface AddPointsIntent {
 export interface AnchorData {
   id: AnchorId
   name?: string
+}
+
+export interface AnchorMatch {
+  referenceId: AnchorId
+  targetId: AnchorId
 }
 
 /**
@@ -348,12 +377,22 @@ export interface ComponentGlyph {
   attachment?: ComponentAnchorAttachment
 }
 
+export interface ComponentMatch {
+  referenceId: ComponentId
+  targetId: ComponentId
+}
+
 export type ComponentTransformKind = "decomposed" | "affine";
 
 export interface ContourData {
   id: ContourId
   points: Array<PointData>
   closed: boolean
+}
+
+export interface ContourMatch {
+  referenceId: ContourId
+  targetId: ContourId
 }
 
 /**
@@ -398,6 +437,11 @@ export interface CreateSourceIntent {
   location: Location
 }
 
+export interface DecomposeComponentsIntent {
+  layerId: LayerId
+  componentIds: Array<ComponentId>
+}
+
 /** Font-level axis deletion. Removing an axis also reshapes source locations. */
 export interface DeleteAxisIntent {
   axisId: AxisId
@@ -422,11 +466,14 @@ export interface FontIntent {
    * Discriminator naming the populated payload field. Editing kinds:
    * "addPoints" | "addContour" | "setContourClosed" | "movePoints" |
    * "setPointSmooth" | "removePoints" | "addAnchors" | "moveAnchors" |
-   * "removeAnchors" | "reverseContour" | "setContourStart" | "translatePoints" |
+   * "removeAnchors" | "addComponent" | "setComponentTransforms" |
+   * "removeComponents" | "decomposeComponents" |
+   * "reverseContour" | "setContourStart" | "translatePoints" |
    * "setXAdvance" | "applyBooleanOp".
-   * Font-level kinds additionally include metadata replacement, axis
-   * create/update/delete, mapping replacement, named-instance
-   * create/update/delete, source create/delete, and glyph or layer creation.
+   * Font-level kinds additionally include metadata replacement, tracked
+   * language replacement, axis create/update/delete, mapping replacement,
+   * named-instance create/update/delete, source create/delete, and glyph
+   * or layer creation.
    * Every kind shares the same apply path; one set is one undo step.
    */
   kind: string
@@ -439,6 +486,10 @@ export interface FontIntent {
   addAnchors?: AddAnchorsIntent
   moveAnchors?: MoveAnchorsIntent
   removeAnchors?: RemoveAnchorsIntent
+  addComponent?: AddComponentIntent
+  setComponentTransforms?: SetComponentTransformsIntent
+  removeComponents?: RemoveComponentsIntent
+  decomposeComponents?: DecomposeComponentsIntent
   reverseContour?: ReverseContourIntent
   setContourStart?: SetContourStartIntent
   translatePoints?: TranslatePointsIntent
@@ -447,6 +498,7 @@ export interface FontIntent {
   createGlyph?: CreateGlyphIntent
   updateGlyph?: UpdateGlyphIntent
   updateFontMetadata?: UpdateFontMetadataIntent
+  setLanguages?: SetLanguagesIntent
   createAxis?: CreateAxisIntent
   updateAxis?: UpdateAxisIntent
   deleteAxis?: DeleteAxisIntent
@@ -507,6 +559,8 @@ export interface FontReplacement {
   sourceMetricsInterpolation?: SourceMetricsInterpolationReplacement
   /** Full authored product-preset list when named instances changed. */
   namedInstances?: Array<NamedInstance>
+  /** Tracked language list when it changed; absent otherwise. */
+  languages?: LanguagesReplacement
   /**
    * Full sources list when font-level source structure changed (createAxis
    * reshapes locations, createSource adds one); absent otherwise.
@@ -525,6 +579,8 @@ export interface FontSnapshot {
   axisMappings: Array<AxisMapping>
   axisMappingBases: Array<AxisMappingBasis>
   namedInstances: Array<NamedInstance>
+  /** Tracked Hyperglot language ids; absent when the font stores no list. */
+  languageIds?: Array<string>
 }
 
 export interface GlyphChangedEntities {
@@ -652,6 +708,47 @@ export interface InterpolationSupport {
 }
 
 /**
+ * Replacement wrapper whose presence distinguishes "unchanged" from a
+ * change that removed the tracked language list.
+ */
+export interface LanguagesReplacement {
+  /**
+   * Tracked Hyperglot language ids in authored order; absent when the font
+   * stores no list and callers should apply their own default.
+   */
+  languageIds?: Array<string>
+}
+
+export interface LayerDifference {
+  kind: LayerDifferenceKind
+  contour?: number
+  point?: number
+  referenceCount?: number
+  targetCount?: number
+  referenceClosed?: boolean
+  targetClosed?: boolean
+  referencePointType?: PointType
+  targetPointType?: PointType
+  referenceAnchorNames?: Array<string | undefined | null>
+  targetAnchorNames?: Array<string | undefined | null>
+  referenceComponentIds?: Array<GlyphId> | undefined
+  targetComponentIds?: Array<GlyphId> | undefined
+}
+
+export type LayerDifferenceKind = "contourCount" | "contourClosed" | "pointCount" | "pointType" | "anchorCount" | "anchorSequence" | "componentSequence";
+
+export interface LayerMatch {
+  referenceLayerId: LayerId
+  targetLayerId: LayerId
+  complete: boolean
+  contours: Array<ContourMatch>
+  points: Array<PointMatch>
+  anchors: Array<AnchorMatch>
+  components: Array<ComponentMatch>
+  differences: Array<LayerDifference>
+}
+
+/**
  * Replace-grade state for one touched layer; the renderer folds by
  * substitution, never by interpreting changes.
  */
@@ -713,6 +810,11 @@ export interface PointData {
   smooth: boolean
 }
 
+export interface PointMatch {
+  referenceId: PointId
+  targetId: PointId
+}
+
 /**
  * A point to create, carrying its caller-minted id (decision 6: ids are
  * client-minted so verbs return identity synchronously).
@@ -732,6 +834,11 @@ export interface RemoveAnchorsIntent {
   anchorIds: Array<AnchorId>
 }
 
+export interface RemoveComponentsIntent {
+  layerId: LayerId
+  componentIds: Array<ComponentId>
+}
+
 export interface RemovePointsIntent {
   layerId: LayerId
   pointIds: Array<PointId>
@@ -746,6 +853,12 @@ export interface SetAxisMappingsIntent {
   mappings: Array<AxisMapping>
 }
 
+export interface SetComponentTransformsIntent {
+  layerId: LayerId
+  componentIds: Array<ComponentId>
+  transforms: Array<number>
+}
+
 export interface SetContourClosedIntent {
   layerId: LayerId
   contourId: ContourId
@@ -757,6 +870,15 @@ export interface SetContourStartIntent {
   layerId: LayerId
   contourId: ContourId
   pointId: PointId
+}
+
+/** Replaces the font's tracked language list as one undoable edit. */
+export interface SetLanguagesIntent {
+  /**
+   * Hyperglot language ids in display order. Blank ids are dropped and
+   * duplicates keep their first position; an empty list is stored as-is.
+   */
+  languageIds: Array<string>
 }
 
 export interface SetMetricDefinitionsIntent {

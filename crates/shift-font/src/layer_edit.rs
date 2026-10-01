@@ -1,7 +1,8 @@
 use crate::{
     boolean,
     error::{CoreError, CoreResult},
-    Anchor, AnchorId, BooleanOp, Contour, ContourId, GlyphLayer, Point, PointId, PointType,
+    Anchor, AnchorId, BooleanOp, ComponentId, Contour, ContourId, DecomposedTransform, GlyphLayer,
+    Point, PointId, PointType,
 };
 use std::collections::{HashMap, HashSet};
 
@@ -320,6 +321,25 @@ impl GlyphLayer {
 impl GlyphLayer {
     pub fn set_x_advance(&mut self, width: f64) {
         self.set_width(width);
+    }
+
+    /// Replaces one direct component's authored decomposed transform.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::InvalidComponentId`] when `component_id` does not
+    /// belong to this layer.
+    pub fn set_component_transform(
+        &mut self,
+        component_id: &ComponentId,
+        transform: DecomposedTransform,
+    ) -> CoreResult<()> {
+        let component = self
+            .components_iter_mut()
+            .find(|component| component.id() == *component_id)
+            .ok_or_else(|| CoreError::InvalidComponentId(component_id.to_string()))?;
+        component.set_transform(transform);
+        Ok(())
     }
 
     /// Translate all editable glyph geometry in the active layer.

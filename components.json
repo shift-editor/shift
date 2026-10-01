@@ -1,0 +1,8 @@
+{
+  "tailwind": {
+    "css": "apps/desktop/src/renderer/index.css"
+  },
+  "aliases": {
+    "ui": "./packages/ui/src/components"
+  }
+}

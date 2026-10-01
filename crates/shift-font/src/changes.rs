@@ -1,7 +1,7 @@
 use crate::{
-    Anchor, AnchorId, Axis, AxisId, AxisMapping, Contour, ContourId, FontMetadata, Glyph, GlyphId,
-    GlyphLayer, GlyphName, LayerId, MetricDefinition, NamedInstance, Point, PointId, PointType,
-    Source, SourceId,
+    Anchor, AnchorId, Axis, AxisId, AxisMapping, Component, Contour, ContourId, FontMetadata,
+    Glyph, GlyphId, GlyphLayer, GlyphName, LayerId, LibValue, MetricDefinition, NamedInstance,
+    Point, PointId, PointType, Source, SourceId,
 };
 
 #[derive(Clone, Debug, Default)]
@@ -33,6 +33,8 @@ impl From<FontChange> for FontChangeSet {
 pub enum FontChange {
     /// Authored font metadata was replaced without changing metrics.
     FontMetadataUpdated(FontMetadataUpdated),
+    /// One font lib key was set or removed; other keys are untouched.
+    FontLibValueUpdated(FontLibValueUpdated),
     AxisCreated(AxisCreated),
     AxisUpdated(AxisUpdated),
     AxisDeleted(AxisDeleted),
@@ -58,6 +60,8 @@ pub enum FontChange {
     PointPositionsChanged(PointPositionsChanged),
     AnchorPositionsChanged(AnchorPositionsChanged),
     LayerGeometryReplaced(LayerGeometryReplaced),
+    /// A component edit replaced the complete layer and its directory dependency edges.
+    LayerComponentsReplaced(LayerGeometryReplaced),
 }
 
 impl FontChange {
@@ -65,6 +69,14 @@ impl FontChange {
     pub fn font_metadata_updated(metadata: &FontMetadata) -> Self {
         Self::FontMetadataUpdated(FontMetadataUpdated {
             metadata: metadata.clone(),
+        })
+    }
+
+    /// Builds a single-key font lib change; `None` records the key's removal.
+    pub fn font_lib_value_updated(key: &str, value: Option<&LibValue>) -> Self {
+        Self::FontLibValueUpdated(FontLibValueUpdated {
+            key: key.to_string(),
+            value: value.cloned(),
         })
     }
 
@@ -202,6 +214,14 @@ impl FontChange {
         })
     }
 
+    /// Builds a complete layer replacement whose component dependency edges changed.
+    pub fn layer_components_replaced(layer: &GlyphLayer) -> Self {
+        Self::LayerComponentsReplaced(LayerGeometryReplaced {
+            layer_id: layer.id(),
+            layer: GlyphLayerValue::from(layer),
+        })
+    }
+
     /// Layer identity touched by a payload-affecting change.
     ///
     /// Workspace persistence uses this exhaustive match as a safety boundary:
@@ -219,8 +239,11 @@ impl FontChange {
             Self::PointSmoothChanged(change) => Some(&change.layer_id),
             Self::PointPositionsChanged(change) => Some(&change.layer_id),
             Self::AnchorPositionsChanged(change) => Some(&change.layer_id),
-            Self::LayerGeometryReplaced(change) => Some(&change.layer_id),
+            Self::LayerGeometryReplaced(change) | Self::LayerComponentsReplaced(change) => {
+                Some(&change.layer_id)
+            }
             Self::FontMetadataUpdated(_)
+            | Self::FontLibValueUpdated(_)
             | Self::AxisCreated(_)
             | Self::AxisUpdated(_)
             | Self::AxisDeleted(_)
@@ -242,6 +265,14 @@ impl FontChange {
 pub struct FontMetadataUpdated {
     /// Complete authored metadata after the edit.
     pub metadata: FontMetadata,
+}
+
+/// Post-edit state of one font lib key.
+#[derive(Clone, Debug)]
+pub struct FontLibValueUpdated {
+    pub key: String,
+    /// Complete value after the edit; `None` when the key was removed.
+    pub value: Option<LibValue>,
 }
 
 #[derive(Clone, Debug)]
@@ -455,6 +486,7 @@ pub struct GlyphLayerValue {
     pub height: Option<f64>,
     pub contours: Vec<ContourValue>,
     pub anchors: Vec<AnchorValue>,
+    pub components: Vec<Component>,
 }
 
 impl From<&GlyphLayer> for GlyphLayerValue {
@@ -468,6 +500,7 @@ impl From<&GlyphLayer> for GlyphLayerValue {
                 .enumerate()
                 .map(|(order_index, anchor)| AnchorValue::from_anchor(order_index, anchor))
                 .collect(),
+            components: layer.components_iter().cloned().collect(),
         }
     }
 }

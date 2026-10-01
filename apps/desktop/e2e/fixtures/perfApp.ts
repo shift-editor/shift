@@ -15,9 +15,10 @@ import fs from "node:fs";
 import os from "node:os";
 import * as path from "path";
 import { once } from "events";
-import type { ContourContent } from "@/lib/clipboard/types";
+import type { ContourContent } from "@shift/editor/clipboard";
 import { EditorDriver } from "./EditorDriver";
 import { copyImportedSource, createAuthoredDocument } from "./fontSource";
+import type { RecordedDialog } from "./types";
 
 const APP_ROOT = path.resolve(__dirname, "../..");
 const MAIN_JS = path.join(APP_ROOT, ".vite/build/main.js");
@@ -45,8 +46,8 @@ const CONTENT_HEIGHT = 650;
 export type PerfFixtures = {
   electronApp: ElectronApplication;
   page: Page;
-  sourcePath: string;
   editor: EditorDriver;
+  sourcePath: string;
 };
 
 /**
@@ -131,10 +132,17 @@ function createAppTest(fontPath: string, prepareSource: typeof createAuthoredDoc
       await page.waitForLoadState("domcontentloaded");
       await page.waitForURL(/#\/home/, { timeout: 20_000 });
 
-      // Auto-dismiss native save dialogs that interrupt tests.
-      page.on("dialog", (dialog) => dialog.dismiss());
+      const dialogs: RecordedDialog[] = [];
+      page.on("dialog", async (dialog) => {
+        dialogs.push({ type: dialog.type(), message: dialog.message() });
+        await dialog.dismiss();
+      });
 
       await use(page);
+
+      if (dialogs.length > 0) {
+        throw new Error(`Unexpected renderer dialogs: ${JSON.stringify(dialogs)}`);
+      }
     },
 
     editor: async ({ page }, use) => {

@@ -1,6 +1,6 @@
 # Shared UI (`@shift/ui`)
 
-<!-- reviewed: 2026-09-05 review-every: 90d -->
+<!-- reviewed: 2026-09-26 review-every: 90d -->
 
 Shared UI component library for Shift, wrapping Base UI primitives with Tailwind styling and Shift design tokens.
 
@@ -10,6 +10,7 @@ Shared UI component library for Shift, wrapping Base UI primitives with Tailwind
 - **Architecture Invariant:** All application state and business logic live in the consuming app, not in this package. Components add Tailwind classes via `cn`; small self-contained interaction behavior that belongs to the widget itself is allowed (e.g. `Input`'s Cmd/Ctrl+A select-all).
 - **Architecture Invariant:** Each component lives in its own directory with a barrel `index.ts`. The package root `index.ts` re-exports everything -- consumers import from `@shift/ui`, never from deep paths.
 - **Architecture Invariant:** The `cn` utility (clsx + tailwind-merge) must be used for all className composition. This ensures Tailwind class conflicts are resolved correctly when consumers pass overrides.
+- **Architecture Invariant:** Components consume semantic utilities rather than named palettes. The desktop theme registry maps terminal-style palettes into the shared `--color-*` variables at runtime.
 - **Architecture Invariant:** The package is source-only (`main` and `exports` both point to `./src/index.ts`). There is no build step -- consuming apps bundle it directly via their own bundler.
 
 ## Codemap
@@ -24,6 +25,7 @@ packages/ui/
       button/Button.tsx    -- Button with variant/size/isActive/icon props
       checkbox/            -- Checkbox and indicator
       collapsible/         -- Collapsible, CollapsibleTrigger, CollapsiblePanel, CollapsibleChevron
+      context-menu/        -- Right-click trigger, portal, positioner, popup, item, and separator
       dialog/              -- Dialog, DialogBackdrop, DialogPortal, DialogPopup, DialogTitle, DialogClose
       field/               -- Field root, label, control, description, and error
       input/Input.tsx      -- Input with label/icon positioning and select-all shortcut
@@ -31,6 +33,7 @@ packages/ui/
       number-field/        -- Numeric root, input, step controls, and scrub area
       popover/             -- Popover trigger, portal, positioner, popup, title, and close
       progress/            -- Progress root with styled track and indicator
+      radio/               -- RadioGroup and selectable RadioCard preset control
       resizable/           -- ResizablePanelGroup, ResizablePanel, ResizableHandle over react-resizable-panels
       select/              -- Select trigger, popup, list, item, and indicator primitives
       separator/           -- Separator (horizontal/vertical)
@@ -45,14 +48,14 @@ packages/ui/
 
 ## Key Types
 
-- **`ButtonProps`** -- extends Base UI `ButtonProps` with `variant` (`"default" | "ghost" | "primary"`), `size` (`"sm" | "md" | "lg" | "icon" | "icon-sm"`), `isActive`, and `icon`.
-- **`InputProps`** -- extends Base UI `Input` props with `label`, `labelPosition`, `icon`, and `iconPosition`.
-- **Form control props** -- `CheckboxProps`, `FieldProps`, `NumberFieldProps`, `SelectProps`, and `TextareaProps` preserve their Base UI or native control contracts while adding Shift styling.
-- **`TabsProps`** and tab-part props -- expose the Base UI Tabs composition so consumers can choose their own panel layout while retaining shared interaction and focus behavior.
+- **`ButtonProps`** -- extends Base UI `ButtonProps` with `variant` (`"default" | "ghost" | "primary" | "toolbar" | "row" | "muted" | "transparent"`), `size` (`"sm" | "md" | "lg" | "icon" | "icon-sm"`), `isActive`, and `icon`.
+- **`InputProps`** -- extends Base UI `Input` props while replacing the native numeric `size` attribute with the visual `size` (`"compact" | "sm" | "md"`) and `variant` (`"filled" | "plain"`) contracts; it also adds `label`, `labelPosition`, `icon`, and `iconPosition`.
+- **Form control props** -- `FieldLabelProps` adds a semantic `tone` (`"primary" | "secondary"`), while `FieldControlProps`, `TextareaProps`, `SelectTriggerProps`, and `NumberFieldGroupProps` add matching `variant` (`"filled" | "plain"`) contracts. Other form controls preserve their Base UI or native contracts while adding Shift styling.
+- **`TabsProps`** and tab-part props -- expose the Base UI Tabs composition; `TabsTabProps` adds `size` (`"sm" | "md"`) for shared tab typography and padding.
 - **`ToolbarProps`** and toolbar-part props -- expose Base UI's toolbar composition and roving keyboard focus for application tool strips.
 - **`SeparatorProps`** -- adds `orientation` (`"horizontal" | "vertical"`) to the Base UI separator.
 - **`ProgressProps`** -- extends Base UI Progress root props with track and indicator class overrides.
-- **`DialogProps`** / **`DialogBackdropProps`** / **`DialogPopupProps`** / **`DialogTitleProps`** -- thin wrappers over Base UI Dialog sub-component props.
+- **Dialog and popover props** -- thin wrappers over Base UI sub-component props; `DialogClose` and `PopoverClose` add an `icon` variant for compact close actions.
 - **`CollapsibleProps`** / **`CollapsibleTriggerProps`** / **`CollapsiblePanelProps`** -- thin wrappers over Base UI Collapsible sub-component props.
 - **`ToastProviderProps`** -- `children` and `timeout` (default 2000ms).
 - **`ToastRootProps`** -- requires a `toast` object (from `useToastManager`) plus `children` and optional `className`.
@@ -61,11 +64,13 @@ packages/ui/
 
 Each component follows the same pattern: import the Base UI primitive, wrap it in a `React.forwardRef` (or plain function for root/provider components), apply Shift design tokens via Tailwind classes using `cn`, and forward all remaining props. Consumers never interact with Base UI directly.
 
-**Button** is the most opinionated component, defining three visual variants (`default`, `ghost`, `primary`) and five size presets. It also supports an `isActive` data attribute for toggled toolbar buttons and an `icon` slot.
+**Button** is the most opinionated component, defining seven visual variants (`default`, `ghost`, `primary`, `toolbar`, `row`, `muted`, `transparent`) and five size presets. `toolbar` owns application-toolbar icon treatment, `row` owns selectable full-width rows, `muted` owns low-emphasis actions, and `transparent` suppresses backgrounds in every interaction state. It also supports an `isActive` data attribute for toggled buttons and an `icon` slot.
 
-**Input** adds label and icon positioning logic (left/right for each) on top of the Base UI input, adjusting padding classes dynamically.
+**Input** adds label and icon positioning logic (left/right for each) on top of the Base UI input, adjusting padding classes dynamically. Its visual `size` replaces the native numeric HTML size attribute: `compact` is the dense 24px default, `sm` is 28px, and `md` is 32px. Its variants are `filled` for the standard input background and `plain` for controls that match the containing surface.
 
-**Field**, **Checkbox**, **NumberField**, **Select**, **Tabs**, and **Textarea** are composable primitive families for settings and inspector forms. Validation and application state remain in the consumer; these wrappers only provide accessible structure, behavior, and Shift styling. `Textarea` renders a native textarea through Base UI Field's `Control` slot so it participates in the same label, validation, and disabled-state contract. `Slider` forwards its `aria-label` to Base UI's interactive thumb rather than leaving the accessible name on the non-interactive root. `Progress` composes Base UI's root, track, and indicator while allowing a consumer to override each visual layer.
+**MenuItem** and **ContextMenuItem** provide default, danger, and outlined visual variants. Menu and context-menu popups and items share the same styling source so kebab and right-click menus remain visually identical. Dialog and popover close primitives remain unstyled by default so they can render text buttons, while their `icon` variant owns compact close-button styling.
+
+**Field**, **Checkbox**, **NumberField**, **Select**, **Tabs**, and **Textarea** are composable primitive families for settings and inspector forms. Validation and application state remain in the consumer; these wrappers only provide accessible structure, behavior, and Shift styling. `FieldLabel` uses `tone` for primary or secondary emphasis. `FieldControl`, `Textarea`, `SelectTrigger`, and `NumberFieldGroup` use `filled` for standard control backgrounds and `plain` for controls that match the application background. `Textarea` renders a native textarea through Base UI Field's `Control` slot so it participates in the same label, validation, and disabled-state contract. `Slider` forwards its `aria-label` to Base UI's interactive thumb rather than leaving the accessible name on the non-interactive root. `Progress` composes Base UI's root, track, and indicator while allowing a consumer to override each visual layer.
 
 **Toolbar** exposes Base UI's root, group, button, and separator. Consumers can render the shared `Button` through `ToolbarButton` to retain Shift styling while participating in toolbar focus navigation, or render another Base UI trigger through it for menu composition.
 

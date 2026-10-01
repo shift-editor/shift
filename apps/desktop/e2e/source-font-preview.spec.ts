@@ -7,7 +7,8 @@ import {
   glyphCatalogCanvas,
   glyphCatalogSurface,
   glyphCatalogViewport,
-  variationControls,
+  openVariationControls,
+  waitForEditorReady,
 } from "./fixtures/appLocators";
 
 async function expectRenderedGrid(page: Page): Promise<void> {
@@ -50,7 +51,7 @@ ufoPreviewTest("UFO sources render a complete resident Grid", async ({ page }) =
   await expectRenderedGrid(page);
 });
 
-glyphsPreviewTest("Glyphs sources render a complete resident Grid", async ({ page }) => {
+glyphsPreviewTest("Glyphs sources render a complete resident Grid", async ({ page, editor }) => {
   await expectRenderedGrid(page);
 
   const surface = glyphCatalogSurface(page);
@@ -59,10 +60,16 @@ glyphsPreviewTest("Glyphs sources render a complete resident Grid", async ({ pag
 
   await clickFirstCatalogGlyph(page);
   await page.waitForURL(/#\/editor\//);
+  await waitForEditorReady(
+    page,
+    decodeURIComponent(new URL(page.url()).hash.slice("#/editor/".length)),
+  );
+  await editor.waitForCanvasRender();
 
   const sceneCanvas = page.locator("#scene-canvas");
   const beforeSourceFrame = await sceneCanvas.screenshot();
-  const sourceButtons = variationControls(page).getByRole("button", {
+  const variationControls = await openVariationControls(page);
+  const sourceButtons = variationControls.getByRole("button", {
     name: "Regular",
     exact: true,
   });
@@ -75,12 +82,14 @@ glyphsPreviewTest("Glyphs sources render a complete resident Grid", async ({ pag
     .toBe(targetSourceId);
   await expect
     .poll(() => page.evaluate(() => window.shiftSession?.catalog.locationCell.value))
-    .toEqual(beforeLocation);
+    .not.toEqual(beforeLocation);
   await expect
     .poll(async () => (await sceneCanvas.screenshot()).equals(beforeSourceFrame))
     .toBe(false);
 
-  await (await firstAxisSlider(page)).press("End");
+  const slider = await firstAxisSlider(page);
+  await slider.press("End");
+  await slider.press("ArrowLeft");
   await expect
     .poll(() => page.evaluate(() => window.shiftSession?.editor.activeSourceId))
     .toBeNull();

@@ -1,6 +1,8 @@
 import * as React from "react";
 import { Menu as BaseMenu } from "@base-ui-components/react/menu";
 import { cn } from "../../lib/utils";
+import { usePortalContainer } from "../portal";
+import { menuItemStyles, menuPopupStyles } from "./styles";
 
 export interface MenuProps extends React.ComponentProps<typeof BaseMenu.Root> {}
 
@@ -16,7 +18,10 @@ export const MenuTrigger = React.forwardRef<
 ));
 MenuTrigger.displayName = "MenuTrigger";
 
-export const MenuPortal = BaseMenu.Portal;
+export function MenuPortal(props: React.ComponentProps<typeof BaseMenu.Portal>) {
+  const container = usePortalContainer();
+  return <BaseMenu.Portal container={container} {...props} />;
+}
 
 export interface MenuPositionerProps extends React.ComponentPropsWithoutRef<
   typeof BaseMenu.Positioner
@@ -34,24 +39,13 @@ export interface MenuPopupProps extends React.ComponentPropsWithoutRef<typeof Ba
 
 export const MenuPopup = React.forwardRef<React.ElementRef<typeof BaseMenu.Popup>, MenuPopupProps>(
   ({ className, ...props }, ref) => (
-    <BaseMenu.Popup
-      ref={ref}
-      className={cn(
-        "min-w-32 rounded-md border border-line-subtle bg-surface p-1 shadow-lg",
-        "focus-visible:outline-none",
-        className,
-      )}
-      {...props}
-    />
+    <BaseMenu.Popup ref={ref} className={cn(menuPopupStyles, className)} {...props} />
   ),
 );
 MenuPopup.displayName = "MenuPopup";
 
-const menuItemStyles =
-  "flex h-7 cursor-pointer select-none items-center rounded px-2 text-sm text-primary outline-none data-[highlighted]:bg-hover/50 data-[disabled]:pointer-events-none data-[disabled]:opacity-50";
-
 export interface MenuItemProps extends React.ComponentPropsWithoutRef<typeof BaseMenu.Item> {
-  variant?: "default" | "danger";
+  variant?: "default" | "danger" | "outlined";
 }
 
 export const MenuItem = React.forwardRef<React.ElementRef<typeof BaseMenu.Item>, MenuItemProps>(
@@ -60,7 +54,9 @@ export const MenuItem = React.forwardRef<React.ElementRef<typeof BaseMenu.Item>,
       ref={ref}
       className={cn(
         menuItemStyles,
-        variant === "danger" && "text-red-600 data-[highlighted]:bg-red-50",
+        variant === "danger" && "text-destructive data-[highlighted]:bg-destructive-hover",
+        variant === "outlined" &&
+          "h-8 justify-center gap-2 border border-line-subtle bg-surface-muted hover:bg-hover data-[highlighted]:bg-hover",
         className,
       )}
       {...props}

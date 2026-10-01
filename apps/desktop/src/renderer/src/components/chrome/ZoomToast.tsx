@@ -14,7 +14,7 @@ import MinusIcon from "@/assets/general/minus.svg";
 import PlusIcon from "@/assets/general/plus.svg";
 
 const TOAST_DURATION_MS = 1500;
-const VIEWPORT_CLASS = "top-16 left-auto right-[266px] translate-x-0 origin-top-right";
+const VIEWPORT_CLASS = "top-16 left-auto right-66.5 translate-x-0 origin-top-right";
 
 const hoverState = { isHovering: false };
 

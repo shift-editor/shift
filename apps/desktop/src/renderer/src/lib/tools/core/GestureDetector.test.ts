@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { GestureDetector } from "./GestureDetector";
+import { GestureDetector } from "@shift/editor/tools";
 import { expectAt, makeTestCoordinates } from "@/testing";
 
 function c(x: number, y: number) {

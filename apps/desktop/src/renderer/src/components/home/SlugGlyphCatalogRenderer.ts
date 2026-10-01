@@ -3,9 +3,9 @@ import type { GlyphId } from "@shift/types";
 import { GlyphPreviewLayout } from "./GlyphPreviewLayout";
 import { GlyphCatalogLayout } from "./glyphCatalogLayout";
 import { GlyphCatalogOverlay } from "./GlyphCatalogOverlay";
-import { CanvasSurface } from "@/lib/editor/rendering/CanvasSurface";
-import { FrameHandler } from "@/lib/editor/rendering/FrameHandler";
-import { parseCssColor } from "@/lib/editor/rendering/markers/color";
+import { CanvasSurface } from "@shift/editor/rendering";
+import { FrameHandler } from "@shift/editor/rendering";
+import { parseCssColor } from "@shift/editor/rendering";
 import { ResidentGlyphLayer } from "@/lib/graphics/backends/ResidentGlyphLayer";
 import type {
   GlyphCatalogControllerFrame,
@@ -52,6 +52,8 @@ export class SlugGlyphCatalogRenderer implements GlyphCatalogRenderer {
   #hoveredCatalogIndex: number | null = null;
   #firstFrameStarted = false;
   #weightRevision = 0;
+  /** Completed page-set installations, published so E2E can distinguish redraw from rebuild. */
+  #atlasBuildCount = 0;
   #needsRedraw = true;
   #disposed = false;
 
@@ -166,6 +168,7 @@ export class SlugGlyphCatalogRenderer implements GlyphCatalogRenderer {
   update(frame: GlyphCatalogControllerFrame, inputContainer: HTMLDivElement | null): void {
     const previousTarget = this.#targetFrame;
     this.#targetFrame = frame;
+    this.#glyphCanvas.dataset.targetLocation = JSON.stringify(frame.location);
 
     if (
       !previousTarget ||
@@ -173,7 +176,7 @@ export class SlugGlyphCatalogRenderer implements GlyphCatalogRenderer {
       !sameCoordinates(previousTarget.location, frame.location) ||
       previousTarget.metrics !== frame.metrics ||
       previousTarget.sourceId !== frame.sourceId ||
-      previousTarget.themeName !== frame.themeName
+      previousTarget.resolvedTheme !== frame.resolvedTheme
     ) {
       this.#needsRedraw = true;
     }
@@ -335,6 +338,7 @@ export class SlugGlyphCatalogRenderer implements GlyphCatalogRenderer {
         this.#replacementPageIndices.delete(request.pageIndex);
         for (const glyphId of request.glyphIds) this.#invalidGlyphIds.delete(glyphId);
       }
+      this.#atlasBuildCount += 1;
       await this.#synchronizeResolvedWeights(layer);
       if (this.#disposed || this.#atlasBuild !== atlasBuild || atlasBuild.signal.aborted) return;
       this.#activeFrame = this.#targetFrame;
@@ -464,17 +468,29 @@ export class SlugGlyphCatalogRenderer implements GlyphCatalogRenderer {
 
     const layout = this.#layout(input);
     const frame = this.#currentFrame(layout, input);
+    const layer = this.#layer;
+    const visibleGlyphIds = frame.cells.map((cell) => cell.glyph.id);
+    const emptyGlyphIds = new Set<GlyphId>();
+    if (layer?.hasGlyphs(visibleGlyphIds)) {
+      for (const cell of frame.cells) {
+        if (
+          cell.glyph.unicode !== null &&
+          !layer.hasDrawableOutline(cell.glyph.id, input.sourceId)
+        ) {
+          emptyGlyphIds.add(cell.glyph.id);
+        }
+      }
+    }
+
     const hoveredCell = this.#pointer ? layout.hit(frame, this.#pointer) : null;
     this.#updateHoveredCatalogIndex(hoveredCell?.catalogIndex ?? null);
-    this.#overlay.draw(this.#container, frame, hoveredCell?.catalogIndex ?? null);
+    this.#overlay.draw(this.#container, frame, hoveredCell?.catalogIndex ?? null, emptyGlyphIds);
 
     if (input.editingGlyphId && !this.#overlay.positionInput(frame, input.editingGlyphId)) {
       this.#onEditingUnavailable();
     }
 
-    const layer = this.#layer;
     if (!layer) return;
-    const visibleGlyphIds = frame.cells.map((cell) => cell.glyph.id);
     if (!layer.hasGlyphs(visibleGlyphIds)) {
       void this.#refreshAtlas();
       return;
@@ -574,6 +590,8 @@ export class SlugGlyphCatalogRenderer implements GlyphCatalogRenderer {
     this.#glyphCanvas.dataset.targetGlyphCount = String(this.#fontGlyphIds.length);
     const activeLayout = this.#activeFrame ? this.#layout(this.#activeFrame) : null;
     this.#glyphCanvas.dataset.previewHeight = String(activeLayout?.previewHeight ?? 0);
+    this.#glyphCanvas.dataset.atlasBuildCount = String(this.#atlasBuildCount);
+    this.#glyphCanvas.dataset.activeLocation = JSON.stringify(this.#activeFrame?.location ?? null);
 
     let readiness: GridReadiness = "Initial";
     if (this.#activeFrame) readiness = complete ? "Complete" : "Stale";

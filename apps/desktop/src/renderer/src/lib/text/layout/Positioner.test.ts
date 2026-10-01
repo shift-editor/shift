@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import type { TestEditor } from "@/testing/TestEditor";
-import { Positioner } from "./Positioner";
-import { glyphTextItem as glyph } from "./types";
+import { Positioner } from "@shift/editor/testing";
+import { glyphTextItem as glyph } from "@shift/editor/text";
 import { layoutTestEditor, ltrRun } from "./testUtils";
-import { signal } from "@/lib/signals/signal";
+import { signal } from "@shift/editor/signals";
 
 describe("Positioner", () => {
   let editor: TestEditor;

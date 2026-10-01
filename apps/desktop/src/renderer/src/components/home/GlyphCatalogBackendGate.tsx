@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 
 import { SlugGlyphCatalogSurface } from "./SlugGlyphCatalogSurface";
 import { SvgGlyphCatalogGrid } from "./SvgGlyphCatalogGrid";
 import type { GlyphId, GlyphName } from "@shift/types";
-import { effect, track } from "@/lib/signals";
+import { effect, track } from "@shift/editor/signals";
 import type { GlyphCatalogBackendGateProps, PendingGlyphNames } from "@/types/glyphCatalog";
 import type { GlyphCatalogRendererKind } from "@/types/glyphCatalogRenderer";
 import { useFontSession } from "@/workspace/WorkspaceContext";

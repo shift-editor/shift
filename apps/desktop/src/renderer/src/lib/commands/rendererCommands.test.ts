@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { mintContourId } from "@shift/types";
 import { TestEditor } from "@/testing/TestEditor";
-import { runRendererCommand } from "./rendererCommands";
+import { canMakeFirstPoint, runRendererCommand } from "./rendererCommands";
 
 describe("preview editor commands", () => {
   it("does not create canvas selection through Select All", async () => {
@@ -34,7 +34,9 @@ describe("Make First Point", () => {
     const pointId = before.points[1].id;
     editor.selection.select([pointId]);
 
+    expect(canMakeFirstPoint(editor)).toBe(true);
     expect(await runRendererCommand(editor, "glyph.makeFirstPoint")).toBe(true);
+    expect(canMakeFirstPoint(editor)).toBe(false);
     const after = editor.glyphContours[0];
     expect(after.closed).toBe(true);
     expect(after.points).toEqual([...before.points.slice(1), before.points[0]]);
@@ -58,12 +60,16 @@ describe("Make First Point", () => {
   it("does not promote handles, accept multiple points, or record an unchanged start", async () => {
     const before = editor.glyphContours[0];
     editor.selection.select([before.points[3].id]);
+    expect(canMakeFirstPoint(editor)).toBe(false);
     expect(await runRendererCommand(editor, "glyph.makeFirstPoint")).toBe(false);
     editor.selection.select([before.points[1].id, before.points[2].id]);
+    expect(canMakeFirstPoint(editor)).toBe(false);
     expect(await runRendererCommand(editor, "glyph.makeFirstPoint")).toBe(false);
     editor.selection.select([before.points[0].id]);
+    expect(canMakeFirstPoint(editor)).toBe(false);
     expect(await runRendererCommand(editor, "glyph.makeFirstPoint")).toBe(false);
     editor.selection.clear();
+    expect(canMakeFirstPoint(editor)).toBe(false);
     expect(await runRendererCommand(editor, "glyph.makeFirstPoint")).toBe(false);
     expect(editor.glyphContours[0].points).toEqual(before.points);
 
@@ -78,6 +84,7 @@ describe("Make First Point", () => {
     const before = editor.glyphContours[0].points;
     editor.selection.select([before[1].id]);
 
+    expect(canMakeFirstPoint(editor)).toBe(false);
     expect(await runRendererCommand(editor, "glyph.makeFirstPoint")).toBe(false);
     expect(editor.glyphContours[0].closed).toBe(false);
     expect(editor.glyphContours[0].points).toEqual(before);
@@ -123,10 +130,20 @@ describe("empty and invalid editor operations", () => {
       { x: 100, y: 0 },
     ]);
     editor.selectAll();
+    const originalSelection = editor.selection.ids;
 
     expect(await runRendererCommand(editor, "edit.duplicate")).toBe(true);
     expect(editor.pointCount).toBe(4);
-    expect(editor.selection.ids).toHaveLength(2);
+    const duplicateSelection = editor.selection.ids;
+    expect(duplicateSelection).toHaveLength(2);
+
+    await editor.undo();
+    expect(editor.pointCount).toBe(2);
+    expect(editor.selection.ids).toEqual(originalSelection);
+    await editor.redo();
+    expect(editor.pointCount).toBe(4);
+    expect(editor.selection.ids).toEqual(duplicateSelection);
+
     expect(await runRendererCommand(editor, "edit.deselect")).toBe(true);
     expect(editor.selection.ids).toEqual([]);
   });

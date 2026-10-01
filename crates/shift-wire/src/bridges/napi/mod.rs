@@ -5,16 +5,17 @@ use napi_derive::napi;
 use shift_font::{GlyphId, PointType as IrPointType};
 
 use crate::{
-    AnchorData, Axis, AxisLabel, AxisMapping, AxisMappingBasis, AxisMappingPoint,
+    AnchorData, AnchorMatch, Axis, AxisLabel, AxisMapping, AxisMappingBasis, AxisMappingPoint,
     ComponentAnchorAttachment, ComponentAnchorReference, ComponentData, ComponentGlyph,
-    ComponentTransformKind, ContourData, FontMetadata, FontMetrics, FontSnapshot,
-    GlyphChangedEntities, GlyphComponents, GlyphEntry, GlyphInterpolation, GlyphLayerRecord,
-    GlyphLayerShape, GlyphLayerSnapshot, GlyphProjection, GlyphRecord, GlyphSnapshot,
-    GlyphSnapshotRequest, GlyphSourceComponents, GlyphSourceShape, GlyphSourceValues, GlyphState,
-    GlyphStructure, GlyphVariation, InterpolationBasis, InterpolationSupport, Location,
-    MetricDefinition, MetricKind, NamedInstance, PointData, PointType, Source, SourceMetricField,
-    SourceMetricValue, SourceMetricValues, SourceMetricsInterpolationSnapshot, VariationBasis,
-    VariationDelta,
+    ComponentMatch, ComponentTransformKind, ContourData, ContourMatch, FontMetadata, FontMetrics,
+    FontSnapshot, GlyphChangedEntities, GlyphComponents, GlyphEntry, GlyphInterpolation,
+    GlyphLayerRecord, GlyphLayerShape, GlyphLayerSnapshot, GlyphProjection, GlyphRecord,
+    GlyphSnapshot, GlyphSnapshotRequest, GlyphSourceComponents, GlyphSourceShape,
+    GlyphSourceValues, GlyphState, GlyphStructure, GlyphVariation, InterpolationBasis,
+    InterpolationSupport, LayerDifference, LayerDifferenceKind, LayerMatch, Location,
+    MetricDefinition, MetricKind, NamedInstance, PointData, PointMatch, PointType, Source,
+    SourceMetricField, SourceMetricValue, SourceMetricValues, SourceMetricsInterpolationSnapshot,
+    VariationBasis, VariationDelta,
 };
 
 #[napi(object)]
@@ -529,6 +530,175 @@ impl From<GlyphLayerRecord> for NapiGlyphLayerRecord {
 }
 
 #[napi(object)]
+pub struct NapiContourMatch {
+    #[napi(ts_type = "ContourId")]
+    pub reference_id: String,
+    #[napi(ts_type = "ContourId")]
+    pub target_id: String,
+}
+
+impl From<ContourMatch> for NapiContourMatch {
+    fn from(pair: ContourMatch) -> Self {
+        Self {
+            reference_id: pair.reference_id.to_string(),
+            target_id: pair.target_id.to_string(),
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NapiPointMatch {
+    #[napi(ts_type = "PointId")]
+    pub reference_id: String,
+    #[napi(ts_type = "PointId")]
+    pub target_id: String,
+}
+
+impl From<PointMatch> for NapiPointMatch {
+    fn from(pair: PointMatch) -> Self {
+        Self {
+            reference_id: pair.reference_id.to_string(),
+            target_id: pair.target_id.to_string(),
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NapiAnchorMatch {
+    #[napi(ts_type = "AnchorId")]
+    pub reference_id: String,
+    #[napi(ts_type = "AnchorId")]
+    pub target_id: String,
+}
+
+impl From<AnchorMatch> for NapiAnchorMatch {
+    fn from(pair: AnchorMatch) -> Self {
+        Self {
+            reference_id: pair.reference_id.to_string(),
+            target_id: pair.target_id.to_string(),
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NapiComponentMatch {
+    #[napi(ts_type = "ComponentId")]
+    pub reference_id: String,
+    #[napi(ts_type = "ComponentId")]
+    pub target_id: String,
+}
+
+impl From<ComponentMatch> for NapiComponentMatch {
+    fn from(pair: ComponentMatch) -> Self {
+        Self {
+            reference_id: pair.reference_id.to_string(),
+            target_id: pair.target_id.to_string(),
+        }
+    }
+}
+
+#[napi(string_enum = "camelCase")]
+pub enum NapiLayerDifferenceKind {
+    ContourCount,
+    ContourClosed,
+    PointCount,
+    PointType,
+    AnchorCount,
+    AnchorSequence,
+    ComponentSequence,
+}
+
+impl From<LayerDifferenceKind> for NapiLayerDifferenceKind {
+    fn from(kind: LayerDifferenceKind) -> Self {
+        match kind {
+            LayerDifferenceKind::ContourCount => Self::ContourCount,
+            LayerDifferenceKind::ContourClosed => Self::ContourClosed,
+            LayerDifferenceKind::PointCount => Self::PointCount,
+            LayerDifferenceKind::PointType => Self::PointType,
+            LayerDifferenceKind::AnchorCount => Self::AnchorCount,
+            LayerDifferenceKind::AnchorSequence => Self::AnchorSequence,
+            LayerDifferenceKind::ComponentSequence => Self::ComponentSequence,
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NapiLayerDifference {
+    pub kind: NapiLayerDifferenceKind,
+    pub contour: Option<u32>,
+    pub point: Option<u32>,
+    pub reference_count: Option<u32>,
+    pub target_count: Option<u32>,
+    pub reference_closed: Option<bool>,
+    pub target_closed: Option<bool>,
+    pub reference_point_type: Option<NapiPointType>,
+    pub target_point_type: Option<NapiPointType>,
+    pub reference_anchor_names: Option<Vec<Option<String>>>,
+    pub target_anchor_names: Option<Vec<Option<String>>>,
+    #[napi(ts_type = "Array<GlyphId> | undefined")]
+    pub reference_component_ids: Option<Vec<String>>,
+    #[napi(ts_type = "Array<GlyphId> | undefined")]
+    pub target_component_ids: Option<Vec<String>>,
+}
+
+impl From<LayerDifference> for NapiLayerDifference {
+    fn from(difference: LayerDifference) -> Self {
+        Self {
+            kind: difference.kind.into(),
+            contour: difference.contour,
+            point: difference.point,
+            reference_count: difference.reference_count,
+            target_count: difference.target_count,
+            reference_closed: difference.reference_closed,
+            target_closed: difference.target_closed,
+            reference_point_type: difference.reference_point_type.map(Into::into),
+            target_point_type: difference.target_point_type.map(Into::into),
+            reference_anchor_names: difference.reference_anchor_names,
+            target_anchor_names: difference.target_anchor_names,
+            reference_component_ids: difference
+                .reference_component_ids
+                .map(|ids| ids.into_iter().map(|id| id.to_string()).collect()),
+            target_component_ids: difference
+                .target_component_ids
+                .map(|ids| ids.into_iter().map(|id| id.to_string()).collect()),
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NapiLayerMatch {
+    #[napi(ts_type = "LayerId")]
+    pub reference_layer_id: String,
+    #[napi(ts_type = "LayerId")]
+    pub target_layer_id: String,
+    pub complete: bool,
+    pub contours: Vec<NapiContourMatch>,
+    pub points: Vec<NapiPointMatch>,
+    pub anchors: Vec<NapiAnchorMatch>,
+    pub components: Vec<NapiComponentMatch>,
+    pub differences: Vec<NapiLayerDifference>,
+}
+
+impl From<LayerMatch> for NapiLayerMatch {
+    fn from(layer_match: LayerMatch) -> Self {
+        Self {
+            reference_layer_id: layer_match.reference_layer_id.to_string(),
+            target_layer_id: layer_match.target_layer_id.to_string(),
+            complete: layer_match.complete,
+            contours: layer_match.contours.into_iter().map(Into::into).collect(),
+            points: layer_match.points.into_iter().map(Into::into).collect(),
+            anchors: layer_match.anchors.into_iter().map(Into::into).collect(),
+            components: layer_match.components.into_iter().map(Into::into).collect(),
+            differences: layer_match
+                .differences
+                .into_iter()
+                .map(Into::into)
+                .collect(),
+        }
+    }
+}
+
+#[napi(object)]
 pub struct NapiGlyphState {
     #[napi(ts_type = "LayerId")]
     pub layer_id: String,
@@ -628,6 +798,8 @@ pub struct NapiFontSnapshot {
     pub axis_mappings: Vec<NapiAxisMapping>,
     pub axis_mapping_bases: Vec<NapiAxisMappingBasis>,
     pub named_instances: Vec<NapiNamedInstance>,
+    /// Tracked Hyperglot language ids; absent when the font stores no list.
+    pub language_ids: Option<Vec<String>>,
 }
 
 impl From<FontSnapshot> for NapiFontSnapshot {
@@ -655,6 +827,7 @@ impl From<FontSnapshot> for NapiFontSnapshot {
                 .into_iter()
                 .map(Into::into)
                 .collect(),
+            language_ids: snapshot.language_ids,
         }
     }
 }
@@ -1246,6 +1419,15 @@ impl From<SourceMetricsInterpolationSnapshot> for NapiSourceMetricsInterpolation
 pub struct NapiSourceMetricsInterpolationReplacement {
     pub snapshot: Option<NapiSourceMetricsInterpolationSnapshot>,
 }
+/// Replacement wrapper whose presence distinguishes "unchanged" from a
+/// change that removed the tracked language list.
+#[napi(object)]
+pub struct NapiLanguagesReplacement {
+    /// Tracked Hyperglot language ids in authored order; absent when the font
+    /// stores no list and callers should apply their own default.
+    pub language_ids: Option<Vec<String>>,
+}
+
 /// CS0 walking-skeleton intent. A stringly union covering exactly the two
 /// skeleton kinds; CS1 replaces this with per-variant intent structs.
 #[napi(object)]
@@ -1253,11 +1435,14 @@ pub struct NapiFontIntent {
     /// Discriminator naming the populated payload field. Editing kinds:
     /// "addPoints" | "addContour" | "setContourClosed" | "movePoints" |
     /// "setPointSmooth" | "removePoints" | "addAnchors" | "moveAnchors" |
-    /// "removeAnchors" | "reverseContour" | "setContourStart" | "translatePoints" |
+    /// "removeAnchors" | "addComponent" | "setComponentTransforms" |
+    /// "removeComponents" | "decomposeComponents" |
+    /// "reverseContour" | "setContourStart" | "translatePoints" |
     /// "setXAdvance" | "applyBooleanOp".
-    /// Font-level kinds additionally include metadata replacement, axis
-    /// create/update/delete, mapping replacement, named-instance
-    /// create/update/delete, source create/delete, and glyph or layer creation.
+    /// Font-level kinds additionally include metadata replacement, tracked
+    /// language replacement, axis create/update/delete, mapping replacement,
+    /// named-instance create/update/delete, source create/delete, and glyph
+    /// or layer creation.
     /// Every kind shares the same apply path; one set is one undo step.
     pub kind: String,
     pub add_points: Option<NapiAddPointsIntent>,
@@ -1269,6 +1454,10 @@ pub struct NapiFontIntent {
     pub add_anchors: Option<NapiAddAnchorsIntent>,
     pub move_anchors: Option<NapiMoveAnchorsIntent>,
     pub remove_anchors: Option<NapiRemoveAnchorsIntent>,
+    pub add_component: Option<NapiAddComponentIntent>,
+    pub set_component_transforms: Option<NapiSetComponentTransformsIntent>,
+    pub remove_components: Option<NapiRemoveComponentsIntent>,
+    pub decompose_components: Option<NapiDecomposeComponentsIntent>,
     pub reverse_contour: Option<NapiReverseContourIntent>,
     pub set_contour_start: Option<NapiSetContourStartIntent>,
     pub translate_points: Option<NapiTranslatePointsIntent>,
@@ -1277,6 +1466,7 @@ pub struct NapiFontIntent {
     pub create_glyph: Option<NapiCreateGlyphIntent>,
     pub update_glyph: Option<NapiUpdateGlyphIntent>,
     pub update_font_metadata: Option<NapiUpdateFontMetadataIntent>,
+    pub set_languages: Option<NapiSetLanguagesIntent>,
     pub create_axis: Option<NapiCreateAxisIntent>,
     pub update_axis: Option<NapiUpdateAxisIntent>,
     pub delete_axis: Option<NapiDeleteAxisIntent>,
@@ -1298,6 +1488,14 @@ pub struct NapiFontIntent {
 pub struct NapiUpdateFontMetadataIntent {
     /// Complete replacement snapshot; omitted optional fields are cleared.
     pub metadata: NapiFontMetadata,
+}
+
+/// Replaces the font's tracked language list as one undoable edit.
+#[napi(object)]
+pub struct NapiSetLanguagesIntent {
+    /// Hyperglot language ids in display order. Blank ids are dropped and
+    /// duplicates keep their first position; an empty list is stored as-is.
+    pub language_ids: Vec<String>,
 }
 
 /// Font-level glyph creation. The glyph id is client-minted (decision 6:
@@ -1478,6 +1676,8 @@ pub struct NapiFontReplacement {
     pub source_metrics_interpolation: Option<NapiSourceMetricsInterpolationReplacement>,
     /// Full authored product-preset list when named instances changed.
     pub named_instances: Option<Vec<NapiNamedInstance>>,
+    /// Tracked language list when it changed; absent otherwise.
+    pub languages: Option<NapiLanguagesReplacement>,
     /// Full sources list when font-level source structure changed (createAxis
     /// reshapes locations, createSource adds one); absent otherwise.
     pub sources: Option<Vec<NapiSource>>,
@@ -1598,6 +1798,41 @@ pub struct NapiRemoveAnchorsIntent {
     pub layer_id: String,
     #[napi(ts_type = "Array<AnchorId>")]
     pub anchor_ids: Vec<String>,
+}
+
+#[napi(object)]
+pub struct NapiAddComponentIntent {
+    #[napi(ts_type = "LayerId")]
+    pub layer_id: String,
+    #[napi(ts_type = "ComponentId")]
+    pub component_id: String,
+    #[napi(ts_type = "GlyphId")]
+    pub base_glyph_id: String,
+}
+
+#[napi(object)]
+pub struct NapiSetComponentTransformsIntent {
+    #[napi(ts_type = "LayerId")]
+    pub layer_id: String,
+    #[napi(ts_type = "Array<ComponentId>")]
+    pub component_ids: Vec<String>,
+    pub transforms: Vec<f64>,
+}
+
+#[napi(object)]
+pub struct NapiRemoveComponentsIntent {
+    #[napi(ts_type = "LayerId")]
+    pub layer_id: String,
+    #[napi(ts_type = "Array<ComponentId>")]
+    pub component_ids: Vec<String>,
+}
+
+#[napi(object)]
+pub struct NapiDecomposeComponentsIntent {
+    #[napi(ts_type = "LayerId")]
+    pub layer_id: String,
+    #[napi(ts_type = "Array<ComponentId>")]
+    pub component_ids: Vec<String>,
 }
 
 #[napi(object)]

@@ -1,0 +1,19 @@
+import type { ToolContext } from "../../core/Behavior";
+import type { KeyDownEvent } from "../../core/GestureDetector";
+import type { SelectBehavior, SelectState } from "../types";
+
+export class Escape implements SelectBehavior {
+  onKeyDown(_state: SelectState, ctx: ToolContext<SelectState>, event: KeyDownEvent): boolean {
+    if (event.key !== "Escape") return false;
+
+    if (ctx.editor.selection.hasSelection()) {
+      ctx.editor.history.capture("Deselect", () => {
+        ctx.editor.selection.clear();
+        ctx.setState({ type: "ready" });
+      });
+      return true;
+    }
+
+    return false;
+  }
+}

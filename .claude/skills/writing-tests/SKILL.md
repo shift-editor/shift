@@ -78,13 +78,13 @@ If you catch yourself doing any of the following, stop. You're about to write a 
 | **Command test**     | A `Command`'s execute/undo/redo round-trip                                 | `lib/commands/primitives/PointCommands.test.ts`                                             |
 | **Pure module test** | Stateless class or function with no `Editor` dependency                    | `lib/tools/text/TextRunController.test.ts`, `lib/editor/hit/boundingBox.test.ts`            |
 | **Bridge test**      | `NativeBridge` against the real Rust engine                                | `bridge/NativeBridge.test.ts`                                                               |
-| **Desktop E2E test** | Behavior requiring the real renderer, DOM, Electron, or visual output     | `e2e/editor.spec.ts`, `e2e/tools.spec.ts`, `e2e/application-menu.spec.ts`                  |
+| **Desktop E2E test** | Behavior requiring the real renderer, DOM, Electron, or visual output      | `e2e/editor.spec.ts`, `e2e/tools.spec.ts`, `e2e/application-menu.spec.ts`                   |
 
 If your target doesn't fit one of these, stop and ask — don't invent a new shape.
 
 ### Decision: which one
 
-1. Does it require the real renderer, DOM, Electron, native menus, or visual output? → **Desktop E2E test** via `EditorDriver` and Playwright.
+1. Does it require the real renderer, DOM, Electron, native menus, or visual output? → **Desktop E2E test** via `EditorDriver` and Playwright. Load `/writing-e2e-tests` before writing it.
 2. Can its behavior be observed completely through editor domain state after a click, drag, or key? → **Tool test** via `TestEditor`.
 3. Is it a single command's undo/redo contract? → **Command test**.
 4. Is it a pure function or pure class with no `Editor`? → **Pure module test**.
@@ -238,6 +238,8 @@ The codebase went through a deliberate sweep that deleted thousands of lines of 
 The replacement — real `Editor`, real Rust via NAPI, fake only at the outermost boundary (`SystemClipboard`, `NativeBridge`) — catches regressions mocks silently missed. Don't reintroduce what was deleted.
 
 ## Visual E2E reliability
+
+Load `/writing-e2e-tests` for waits, oracles, goldens, fixtures, projects, and flake verification. The points below are the minimum.
 
 Before adding or changing screenshot assertions, follow [Desktop E2E capture determinism](../../../apps/desktop/e2e/README.md#capture-determinism).
 

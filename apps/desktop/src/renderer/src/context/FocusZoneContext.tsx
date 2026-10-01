@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useCallback, useMemo, type ReactNode } from "react";
+import { SidebarInputFocusProvider } from "@shift/editor/ui";
 import type { FocusZone } from "@/types/focus";
 
 interface FocusZoneContextValue {
@@ -64,7 +65,16 @@ export function FocusZoneProvider({ children, defaultZone = "canvas" }: FocusZon
     [activeZone, focusLock, lockedZone, setZone, claimZone, lockToZone, unlock, isZone],
   );
 
-  return <FocusZoneContext.Provider value={value}>{children}</FocusZoneContext.Provider>;
+  const sidebarInputFocus = useMemo(
+    () => ({ onEditStart: () => lockToZone("sidebar"), onEditEnd: unlock }),
+    [lockToZone, unlock],
+  );
+
+  return (
+    <FocusZoneContext.Provider value={value}>
+      <SidebarInputFocusProvider value={sidebarInputFocus}>{children}</SidebarInputFocusProvider>
+    </FocusZoneContext.Provider>
+  );
 }
 
 export function useFocusZone(): FocusZoneContextValue {

@@ -1,16 +1,11 @@
-import {
-  _electron as electron,
-  expect,
-  type ElectronApplication,
-  type Page,
-} from "@playwright/test";
+import { expect, type ElectronApplication, type Page } from "@playwright/test";
+import type { DirtyDocumentChoice } from "../../src/main/document/types";
+import type {} from "../../src/main/dialogs/NativeDialogs";
 import type { CommandId } from "../../src/shared/commands";
+import type { GlyphId } from "@shift/types";
 import type { ChildProcess } from "node:child_process";
 import { once } from "node:events";
-import path from "node:path";
-import { MAIN_JS, waitForWorkspaceReady } from "./electronApp";
-
-export { killApp } from "./electronApp";
+import { waitForWorkspaceReady } from "./electronApp";
 
 export async function createNewFont(page: Page, electronApp: ElectronApplication): Promise<Page> {
   const workspaceWindow = electronApp.waitForEvent("window");
@@ -19,6 +14,46 @@ export async function createNewFont(page: Page, electronApp: ElectronApplication
   const workspacePage = await workspaceWindow;
   await waitForWorkspaceReady(workspacePage);
   return workspacePage;
+}
+
+/** Opens a new untitled font window and dirties it with one created glyph. */
+export async function dirtyNewFont(page: Page, electronApp: ElectronApplication): Promise<Page> {
+  const workspacePage = await createNewFont(page, electronApp);
+  await workspacePage.getByRole("button", { name: "Create glyph", exact: true }).click();
+  await expect.poll(() => windowTitle(workspacePage, electronApp)).toContain("Untitled *");
+  return workspacePage;
+}
+
+/** Opens another untitled font through File > New and dirties it with one created glyph. */
+export async function createAnotherDirtyFont(
+  page: Page,
+  electronApp: ElectronApplication,
+): Promise<Page> {
+  const nextWindow = electronApp.waitForEvent("window");
+  await runCommand(page, electronApp, "file.new");
+  const nextPage = await nextWindow;
+  await waitForWorkspaceReady(nextPage);
+  await nextPage.getByRole("button", { name: "Create glyph", exact: true }).click();
+  await expect.poll(() => windowTitle(nextPage, electronApp)).toContain("Untitled *");
+  return nextPage;
+}
+
+/** Waits for a named glyph in the page's authored workspace and returns its identity. */
+export async function glyphIdForName(page: Page, name: string): Promise<GlyphId> {
+  await expect
+    .poll(() =>
+      page.evaluate(
+        (glyphName) => window.shift?.font.glyphRecords().some(({ name }) => name === glyphName),
+        name,
+      ),
+    )
+    .toBe(true);
+  const glyphId = await page.evaluate(
+    (glyphName) => window.shift?.font.glyphRecords().find(({ name }) => name === glyphName)?.id,
+    name,
+  );
+  if (!glyphId) throw new Error(`Expected ${name} glyph`);
+  return glyphId;
 }
 
 export async function runCommand(
@@ -105,6 +140,24 @@ export async function requestAppQuit(electronApp: ElectronApplication): Promise<
 }
 
 /**
+ * Returns the dirty-document decisions scripted dialogs have answered so far.
+ *
+ * @remarks
+ * Each read is a main-process round trip, so close and quit guards have finished reacting
+ * to an answered decision before the next read returns.
+ */
+export async function dirtyDocumentDecisions(
+  electronApp: ElectronApplication,
+): Promise<readonly DirtyDocumentChoice[]> {
+  return electronApp.evaluate(() => globalThis.shiftScriptedDialogs?.dirtyDocumentDecisions ?? []);
+}
+
+/** Returns how many dirty-document confirmations scripted dialogs have started. */
+export async function dirtyDocumentRequests(electronApp: ElectronApplication): Promise<number> {
+  return electronApp.evaluate(() => globalThis.shiftScriptedDialogs?.dirtyDocumentRequests ?? 0);
+}
+
+/**
  * Ensures the Electron process exits after a quit request or last-window shutdown.
  *
  * @param electronApp - application to quit if its process is still running.
@@ -125,25 +178,4 @@ export async function quitApp(
     return;
   }
   await exited;
-}
-
-export async function relaunchApp(
-  testRoot: string,
-  saveShiftPath: string,
-): Promise<ElectronApplication> {
-  return electron.launch({
-    args: [
-      MAIN_JS,
-      `--user-data-dir=${path.join(testRoot, "user-data")}`,
-      "--force-device-scale-factor=1",
-    ],
-    env: {
-      ...process.env,
-      NODE_ENV: "test",
-      LIBGL_ALWAYS_SOFTWARE: "1",
-      SHIFT_E2E_NATIVE_DIALOGS: "1",
-      SHIFT_E2E_OPEN_FONT_PATH: saveShiftPath,
-      SHIFT_E2E_SAVE_SHIFT_PATH: saveShiftPath,
-    },
-  });
 }

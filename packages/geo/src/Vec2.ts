@@ -24,7 +24,7 @@
  * ```
  */
 
-import type { Point2D } from "./types";
+import type { Point2D, PointAxis } from "./types";
 
 /**
  * Epsilon for floating point comparisons
@@ -72,6 +72,17 @@ export const Vec2 = {
   },
 
   /**
+   * Creates a vector with one coordinate set and the other coordinate zeroed.
+   *
+   * @param axis - Coordinate receiving the value.
+   * @param value - Signed coordinate value.
+   * @returns A fresh axis-aligned vector.
+   */
+  fromAxis(axis: PointAxis, value: number): Point2D {
+    return axis === "x" ? { x: value, y: 0 } : { x: 0, y: value };
+  },
+
+  /**
    * Clone a vector
    */
   clone(v: Point2D): Point2D {
@@ -81,6 +92,18 @@ export const Vec2 = {
   // ============================================
   // Basic Operations
   // ============================================
+
+  /**
+   * Returns a copy with one coordinate replaced.
+   *
+   * @param point - Source point whose other coordinate is preserved.
+   * @param axis - Coordinate to replace.
+   * @param value - New coordinate value.
+   * @returns A fresh point with the replacement applied.
+   */
+  setAxis(point: Point2D, axis: PointAxis, value: number): Point2D {
+    return axis === "x" ? { x: value, y: point.y } : { x: point.x, y: value };
+  },
 
   /**
    * Add two vectors: a + b

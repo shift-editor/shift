@@ -1,0 +1,30 @@
+{
+  "extends": "../tsconfig/base.json",
+  "compilerOptions": {
+    "composite": false,
+    "declaration": true,
+    "stripInternal": true,
+    "declarationMap": false,
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "noEmit": false,
+    "rootDir": "..",
+    "jsx": "react-jsx"
+  },
+  "include": [
+    "src/**/*",
+    "../editor/src/**/*",
+    "../geo/src/**/*.ts",
+    "../glyph-state/src/**/*.ts",
+    "../rules/src/**/*.ts",
+    "../types/src/**/*.ts",
+    "../validation/src/**/*.ts",
+    "../ui/src/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "**/*.test.ts",
+    "**/*.typecheck.ts",
+    "../editor/src/testing/**"
+  ]
+}

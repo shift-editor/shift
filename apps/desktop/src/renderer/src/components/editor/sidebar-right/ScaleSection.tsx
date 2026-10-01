@@ -4,9 +4,9 @@ import { TransformGrid } from "./TransformGrid";
 import { EditableSidebarInput, type EditableSidebarInputHandle } from "./EditableSidebarInput";
 import { useTransformOrigin } from "@/context/TransformOriginContext";
 import { useEditor } from "@/workspace/WorkspaceContext";
-import { anchorToPoint } from "@/lib/transform/anchor";
-import { useSignalState } from "@/lib/signals";
-import { Bounds } from "@shift/geo";
+import { anchorToPoint } from "@shift/editor/transform";
+import { useSignalState } from "@shift/editor/signals";
+import { Bounds, Mat } from "@shift/geo";
 import ScaleIcon from "@/assets/sidebar-right/scale.svg";
 import { useSelectionBounds } from "@/hooks/useSelectionBounds";
 
@@ -22,10 +22,14 @@ export const ScaleSection = () => {
     () => editor.positionSelection(selection.ids),
     [editor, selection],
   );
+  const componentSelection = useMemo(
+    () => editor.componentTransformSelection(selection.ids),
+    [editor, selection],
+  );
   const selectedPointIds = positionSelection?.targets.points ?? [];
   const isEditing = useSignalState(editor.isEditingCell);
   const layer = isEditing ? null : (positionSelection?.layer ?? null);
-  const editable = positionSelection !== null;
+  const editable = positionSelection !== null || componentSelection !== null;
 
   useEffect(() => {
     if (!widthRef.current || !heightRef.current) return;
@@ -40,39 +44,74 @@ export const ScaleSection = () => {
 
   const handleSizeChange = useCallback(
     (dimension: "width" | "height", value: number) => {
-      if (!layer) return;
-      if (!selectionBounds) return;
+      if (!editable || !selectionBounds) return;
 
       const current =
         dimension === "width" ? Bounds.width(selectionBounds) : Bounds.height(selectionBounds);
       if (current === 0) return;
 
       const factor = value / current;
+      if (componentSelection && !isEditing) {
+        componentSelection.layer.transformComponents(
+          componentSelection,
+          "Scale components",
+          ({ bounds }) => {
+            const localBounds = Bounds.fromXYWH(bounds.x, bounds.y, bounds.width, bounds.height);
+            const anchorPoint = anchorToPoint(anchor, localBounds);
+            return Mat.Compose(
+              Mat.Translate(anchorPoint.x, anchorPoint.y),
+              Mat.Compose(Mat.Scale(factor, factor), Mat.Translate(-anchorPoint.x, -anchorPoint.y)),
+            );
+          },
+        );
+        return;
+      }
+
+      if (!layer) return;
+
       const anchorPoint = anchorToPoint(anchor, selectionBounds);
       layer.scale(selectedPointIds, factor, factor, anchorPoint);
     },
-    [anchor, layer, selectedPointIds, selectionBounds],
+    [anchor, componentSelection, editable, isEditing, layer, selectedPointIds, selectionBounds],
   );
 
   const handleScaleChange = useCallback(
     (scale: number) => {
+      if (!editable || !selectionBounds) return;
+
+      if (componentSelection && !isEditing) {
+        componentSelection.layer.transformComponents(
+          componentSelection,
+          "Scale components",
+          ({ bounds }) => {
+            const localBounds = Bounds.fromXYWH(bounds.x, bounds.y, bounds.width, bounds.height);
+            const anchorPoint = anchorToPoint(anchor, localBounds);
+            return Mat.Compose(
+              Mat.Translate(anchorPoint.x, anchorPoint.y),
+              Mat.Compose(Mat.Scale(scale, scale), Mat.Translate(-anchorPoint.x, -anchorPoint.y)),
+            );
+          },
+        );
+        return;
+      }
+
       if (!layer) return;
-      if (!selectionBounds) return;
+
       const anchorPoint = anchorToPoint(anchor, selectionBounds);
       layer.scale(selectedPointIds, scale, scale, anchorPoint);
     },
-    [anchor, layer, selectedPointIds, selectionBounds],
+    [anchor, componentSelection, editable, isEditing, layer, selectedPointIds, selectionBounds],
   );
 
   return (
     <SidebarSection title="Scale">
       <div className="flex flex-col gap-2">
-        <div className="text-xs text-secondary">Size</div>
+        <div className="text-ui text-secondary">Size</div>
         <div className="flex gap-2">
           <EditableSidebarInput
             ref={widthRef}
             ariaLabel="Width"
-            label={<span className="text-xs text-secondary">W</span>}
+            label={<span className="text-ui text-secondary">W</span>}
             disabled={!editable}
             onValueChange={(v) => handleSizeChange("width", v)}
           />
@@ -88,7 +127,7 @@ export const ScaleSection = () => {
 
       <div className="flex gap-4">
         <div className="flex flex-col gap-2">
-          <div className="text-xs text-secondary">Scale</div>
+          <div className="text-ui text-secondary">Scale</div>
           <EditableSidebarInput
             ariaLabel="Scale factor"
             className="max-w-18 pl-7"
@@ -102,7 +141,7 @@ export const ScaleSection = () => {
         </div>
 
         <div className="flex flex-col gap-2">
-          <div className="text-xs text-secondary">Anchor point</div>
+          <div className="text-ui text-secondary">Anchor point</div>
           <div className="w-full h-full bg-input p-1.5 rounded-sm">
             <TransformGrid activeAnchor={anchor} onChange={editable ? setAnchor : undefined} />
           </div>

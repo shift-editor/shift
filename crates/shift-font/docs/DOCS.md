@@ -1,6 +1,6 @@
 # shift-font
 
-<!-- reviewed: 2026-09-05 review-every: 90d -->
+<!-- reviewed: 2026-09-20 review-every: 90d -->
 
 First-class Rust font object model for Shift.
 
@@ -18,6 +18,7 @@ First-class Rust font object model for Shift.
 - **Architecture Invariant:** Authored metadata and font metrics are independent. Metadata edits replace the complete metadata snapshot without rewriting metrics.
 - **Architecture Invariant:** UPM is font-global. Metric identities and semantic roles are font-owned; positions, overshoots, and optional technical metrics are authored on master sources.
 - **Architecture Invariant:** Point removal never leaves empty contour records. Removing a contour's final point prunes the contour and its stable identity from the font-wide structure index.
+- **Architecture Invariant:** Component add, removal, decomposition, undo, and redo publish component-specific layer replacements so persisted dependency edges and derived projections remain synchronized with authored layer structure.
 
 ## Codemap
 
@@ -39,6 +40,7 @@ crates/shift-font/src/
 - `Font` owns glyphs, sources, axes, axis mappings, named instances, metadata, and font-level data.
 - `EntityList` owns stable-ID lookup and authoring order for glyphs, contours, components, and future ordered entity collections.
 - `FontMetadata` is the complete authored naming and attribution snapshot replaced by `UpdateFontMetadata`.
+- `SetLanguages` writes the tracked Hyperglot language ids to the font lib under `LANGUAGES_LIB_KEY` (`com.shift.languages`) and records a single-key `FontLibValueUpdated` change; `Font::language_ids` returns `None` when the key is absent.
 - `Axis` has stable identity, an external/internal role, a continuous or discrete kind, and optional external/user-space value labels.
 - `AxisLabel` has font-wide stable identity so UI rows and later instance recipes survive renames and reordering.
 - `AxisMapping` owns an ordered set of mapping points. Independent mappings transform one external axis; the optional cross-axis group maps one design-space location to another.
@@ -55,7 +57,7 @@ crates/shift-font/src/
 - `InterpolationBasis` combines real source identities with a `VariationBasis` whose vectors produce source weights; it never contains glyph coordinates or metrics.
 - `AxisMappingBasis` combines mapping input/output identities with a `VariationBasis` whose vectors produce normalized output adjustments.
 - `GlyphInterpolation` combines a reusable basis with one glyph's compatible authored source values. The glyph's default-source layer owns topology when present; otherwise a deterministic master-backed reference layer allows sparse glyph interpolation.
-- `LayerCompatibility` records every hard structural difference between an interpolation reference layer and another source layer. `LayerDifference` retains ordered path, node, anchor, and component evidence for diagnostics.
+- `LayerMatch` derives cross-layer contour, point, anchor, and component identity mappings for structurally compatible layers. `LayerDifference` retains ordered structural evidence for incompatible layers.
 - `GlyphProjection` is a compact location-independent glyph payload: shared fallback layers, optional compatible interpolation, exact-source topology exceptions, `GlyphComponents`, and transitive component identities.
 - `GlyphProjectionSet` is an immutable, read-scoped projection table for requested roots and their transitive components. It prepares each glyph once and reuses interpolation bases keyed by ordered compatible source identities; callers discard it after the current read or compilation.
 - `GlyphComponents` is the ordered, cycle-pruned component occurrence list for one root glyph. Every `ComponentGlyph` carries its full `ComponentId` ancestry, its zero-based slot within the immediate parent layer, and its Rust-selected anchor attachment. The ancestry identifies the authored occurrence; the parent-local slot correlates numeric transforms across compatible source layers whose corresponding components have different authored IDs.
@@ -86,9 +88,9 @@ Stable IDs are identity. Names and Unicode values are editable metadata.
 
 `Font::glyph_interpolation(glyph_id)` builds compatible source values over an `InterpolationBasis`. The glyph's default-source layer defines structural topology when it exists. Sparse glyphs without that layer choose their most structurally complete master as the reference layer. When two compatible masters bracket the normalized default on one axis, the basis derives a virtual default contribution from them; more complex underdetermined layouts use the documented static fallback. The basis depends only on axes and ordered source locations, so the same mechanism can interpolate other numeric domains without copying glyph concepts into them.
 
-`GlyphLayer::interpolation_compatibility_with(source)` is the source of truth for hard structural compatibility. The receiver is the interpolation reference. It compares paths, nodes, anchors, and components in authored order and never sorts them. OpenType requires corresponding outlines to have the same contour and point structure, and `gvar` addresses composite components by their ordered component index. Shift therefore treats the ordered base-glyph sequence as structural. `ComponentId` identifies one authored node inside one layer and remains the basis of occurrence ancestry, but it is not cross-source correspondence: compatible layers may use different IDs for components in the same ordered slot. See the [OpenType Font Variations overview](https://learn.microsoft.com/en-us/typography/opentype/spec/otvaroverview), the [`gvar` composite processing rules](https://learn.microsoft.com/en-us/typography/opentype/spec/gvar#point-numbers-and-processing-for-composite-glyphs), and [fontTools interpolatability diagnostics](https://fonttools.readthedocs.io/en/latest/varLib/interpolatable.html).
+`GlyphLayer::match_with(target)` is the source of truth for cross-layer entity matching and hard structural compatibility. The receiver is the reference layer. It compares contours, points, anchors, and components in authored order and never sorts them. A complete `LayerMatch` maps each reference entity ID to the target ID in the same structural slot; an incomplete match exposes ordered `LayerDifference` diagnostics but no entity mappings, preventing partial structural edits. OpenType requires corresponding outlines to have the same contour and point structure, and `gvar` addresses composite components by their ordered component index. Shift therefore treats the ordered base-glyph sequence as structural. Per-layer entity IDs remain local authored identities rather than cross-source identities. See the [OpenType Font Variations overview](https://learn.microsoft.com/en-us/typography/opentype/spec/otvaroverview), the [`gvar` composite processing rules](https://learn.microsoft.com/en-us/typography/opentype/spec/gvar#point-numbers-and-processing-for-composite-glyphs), and [fontTools interpolatability diagnostics](https://fonttools.readthedocs.io/en/latest/varLib/interpolatable.html).
 
-Coordinates, advance width, smooth flags, anchor positions, and component transforms are interpolated values, not structural compatibility. Matching anchor count, names, and order is currently a Shift-specific restriction because anchor positions share the ordered glyph interpolation vector; OpenType `gvar` and fontTools do not define source-anchor compatibility. Variable component scale or matrix transforms need a separate export diagnostic because `gvar` varies component placement rather than those transforms. Correspondence and quality warnings such as contour order, wrong start point, and kinks are separate from this hard structural result.
+Coordinates, advance width, smooth flags, anchor positions, and component transforms are interpolated values, not structural compatibility. Matching anchor count, names, and order is currently a Shift-specific restriction because anchor positions share the ordered glyph interpolation vector; OpenType `gvar` and fontTools do not define source-anchor compatibility. Variable component scale or matrix transforms need a separate export diagnostic because `gvar` varies component placement rather than those transforms. Quality warnings such as contour order, wrong start point, and kinks are separate from this hard structural result.
 
 `Font::glyph_projection(glyph_id)` preserves the preferred fallback, compatible interpolation, incompatible authored source topology, and Rust-owned component relationships without resolving a location. `Font::glyph_projection_set(glyph_ids)` applies the same semantics to a batch while preparing each requested or transitively referenced glyph once and sharing equal source-location bases. Authored fallback and exact-source layers remain `Arc`-shared; only derived interpolation values are owned by the projections. Each glyph in the component closure resolves independently at the shared root location: exact master, then interpolation, then static master fallback. Layer-only/background sources never supply projection geometry. A renderer can retain this compact payload and combine its basis with current authored source signals. No arbitrary location result is persisted, and projection sets must not survive authored edits.
 
@@ -118,6 +120,8 @@ Mutations should live on the model object being mutated:
 layer.add_empty_contour();
 layer.add_point_to_contour(contour_id, x, y, point_type, smooth)?;
 layer.remove_points(&point_ids)?;
+layer.add_component(component);
+layer.remove_component(component_id);
 layer.apply_bulk_node_positions(updates)?;
 ```
 
@@ -140,6 +144,8 @@ Transport and workspace layers should pass stable identity to find the model obj
 2. Never leave an empty contour record behind: follow `remove_points`, which prunes emptied contours and returns the pruned `ContourId` values so the font-wide structure index stays consistent.
 3. Bulk position paths take `BulkNodePositionUpdates` flat ID/coordinate slices; validate coordinate length against the ID count before mutating anything so a malformed batch never half-applies.
 4. Verify: `cargo test -p shift-font`.
+
+Component authoring uses `AddComponent`, `SetComponentTransforms`, `RemoveComponents`, and `DecomposeComponents`. Add creates an identity-transformed direct reference with caller-minted identity. Transform replacement validates all direct component identities before mutating and records one values-only layer replacement. Anchor attachment establishes automatic placement first, then the authored transform composes on top as a user-controlled offset. Decomposition replaces selected direct references with fresh local contours, recursively flattening each selected subtree at the target layer's source location after component transforms and anchor attachment are resolved. Unselected siblings still participate in attachment resolution.
 
 ## Gotchas
 

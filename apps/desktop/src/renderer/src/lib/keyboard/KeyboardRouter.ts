@@ -1,11 +1,12 @@
 import {
+  createCanvasFallbackKeyDownBindings,
   createCanvasKeyDownBindings,
   createGlobalKeyDownBindings,
   createGlobalKeyUpBindings,
   createTextKeyDownBindings,
 } from "./keymaps";
 import { normalizeKeyboardEvent } from "./normalize";
-import type { KeyBinding, KeyContext } from "./types";
+import type { KeyboardCommandHandler, KeyBinding, KeyContext } from "./types";
 
 function isEditableTarget(target: EventTarget | null): boolean {
   if (!target || typeof target !== "object") return false;
@@ -26,18 +27,20 @@ export class KeyboardRouter {
   #globalKeyDown: KeyBinding[];
   #textKeyDown: KeyBinding[];
   #canvasKeyDown: KeyBinding[];
+  #canvasFallbackKeyDown: KeyBinding[];
   #globalKeyUp: KeyBinding[];
   #temporaryHandActive = false;
 
-  constructor(getContext: () => KeyContext) {
+  constructor(getContext: () => KeyContext, runCommand: KeyboardCommandHandler) {
     this.#getContext = getContext;
     const handlers = {
       activateTemporaryHand: (ctx: KeyContext) => this.#activateTemporaryHand(ctx),
       releaseTemporaryHand: (ctx: KeyContext) => this.#releaseTemporaryHand(ctx),
     };
-    this.#globalKeyDown = createGlobalKeyDownBindings();
+    this.#globalKeyDown = createGlobalKeyDownBindings(runCommand);
     this.#textKeyDown = createTextKeyDownBindings();
     this.#canvasKeyDown = createCanvasKeyDownBindings(handlers);
+    this.#canvasFallbackKeyDown = createCanvasFallbackKeyDownBindings();
     this.#globalKeyUp = createGlobalKeyUpBindings(handlers);
   }
 
@@ -64,7 +67,11 @@ export class KeyboardRouter {
       return true;
     }
 
-    return ctx.toolManager.handleKeyDown(e);
+    if (ctx.toolManager.handleKeyDown(e)) {
+      return true;
+    }
+
+    return this.#runBindings(this.#canvasFallbackKeyDown, ctx, e);
   }
 
   async handleKeyUp(e: KeyboardEvent): Promise<boolean> {

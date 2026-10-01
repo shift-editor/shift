@@ -1,6 +1,6 @@
 import { createContext, useContext } from "react";
-import type { Editor } from "@/lib/editor/Editor";
-import type { Font } from "@/lib/model/Font";
+import type { Editor } from "@shift/editor";
+import type { Font } from "@shift/editor/model";
 import type { FontSession } from "@/types/fontSession";
 import type { Workspace } from "./Workspace";
 

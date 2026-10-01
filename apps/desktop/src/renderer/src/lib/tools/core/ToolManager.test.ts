@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import type { Editor } from "@/lib/editor/Editor";
+import type { Editor } from "@shift/editor";
 import { TestEditor } from "@/testing/TestEditor";
-import { BaseTool } from "./BaseTool";
-import type { Behavior } from "./Behavior";
-import type { ToolManifest } from "./ToolManifest";
-import type { ToolName } from "./createContext";
+import { BaseTool } from "@shift/editor/tools";
+import type { Behavior } from "@shift/editor/tools";
+import type { ToolManifest } from "@shift/editor/tools";
+import type { ToolName } from "@shift/editor/tools";
 
 type RuntimeToolState = { type: "idle" } | { type: "ready" } | { type: "dragging" };
 type RuntimeDragEnd = "complete" | "leave-open" | "throw";

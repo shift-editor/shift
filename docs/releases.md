@@ -84,6 +84,7 @@ The AppImage remains a direct-download alternative. Verify it through the releas
 
 - `release-please.yml` maintains a draft release pull request. Merging it creates a numeric version tag and draft GitHub release, then invokes `release-desktop.yml`.
 - `release-desktop.yml` validates `vMAJOR.MINOR.PATCH`, builds macOS arm64/x64 ZIPs and DMGs, a Windows x64 per-user NSIS installer, and Linux x64 DEB/RPM/AppImage packages, smoke-tests packaged applications, signs the Release RPM and checksum manifest, uploads the GitHub prerelease, publishes signed APT/DNF repositories, then advances the Release feed.
+- `signpath-test-windows.yml` is a manual integration check for SignPath. It builds and smoke-tests the Windows x64 package, submits the NSIS installer to the `test-signing` policy, verifies that SignPath returned an Authenticode signature, and retains the signed installer as a 14-day workflow artifact. It does not publish the installer or modify an update feed.
 - `nightly-after-merge.yml` dispatches `nightly.yml` after a pull request labeled `release: nightly` merges into `main`. Closing an unmerged pull request or merging one without the label does nothing.
 - `nightly.yml` runs from that dispatch, its daily schedule, or a manual dispatch. It resolves one `0.RUN.ATTEMPT` version and builds the same matrix. After every build succeeds, it archives versioned updater assets in the immutable R2 prefix `nightly/<full-commit>/`, replaces the rolling GitHub prerelease's friendly download aliases, and advances the feed to the exact R2 prefix. A commit whose R2 manifest and feed are already active is skipped.
 - `installed-app-screenshots.yml` is a macOS arm64, Windows x64, and Linux x64 review workflow that runs when its harness changes, when `ci: installed app screenshots` is applied to a same-repository pull request, or when manually dispatched. Label-triggered runs check out that pull request's head commit. The workflow reuses exact native bridge binaries keyed by platform, architecture, and native inputs, pre-approves its macOS capture shell to avoid the private-window-picker prompt, then builds and installs Release packages, captures the installed launcher, document, application menu, native dialog, and `.shift` activation, and retains screenshots and registration metadata as 14-day Actions artifacts. For same-repository pull requests, it also publishes only the expected PNGs under `installed-app-screenshots/pr-<number>/run-<id>/` in the dedicated screenshot R2 bucket and renders their direct public URLs in collapsed scenario sections within a sticky review comment. Its non-published capture package alone enables Electron's Node CLI inspector for Playwright; Release and Nightly packages keep that fuse disabled.
@@ -126,8 +127,17 @@ The Release Please workflow mints a short-lived token from the repository-scoped
 | `R2_SCREENSHOT_SECRET_ACCESS_KEY`  | Bucket-scoped screenshot S3 secret access key                  |
 | `LINUX_REPOSITORY_GPG_PRIVATE_KEY` | ASCII-armored private Linux repository signing key             |
 | `LINUX_REPOSITORY_GPG_PASSPHRASE`  | Passphrase protecting the Linux repository signing key         |
+| `SIGNPATH_API_TOKEN`                | API token for a CI user that can submit to `shift/test-signing` |
 
 Never put private keys or signing credentials in repository files, workflow inputs, artifacts, or logs. macOS release and Nightly jobs fail when signing credentials are absent.
+
+For the Windows signing integration check, install the [SignPath GitHub App](https://github.com/apps/signpath) for `shift-editor/shift`, link GitHub.com as the project's trusted build system, and make the API-token user a submitter for the `test-signing` policy. Store the token directly as the `SIGNPATH_API_TOKEN` repository secret:
+
+```sh
+gh secret set SIGNPATH_API_TOKEN
+```
+
+Run **Test Sign Windows** from GitHub Actions. Test-signed installers are workflow artifacts only and must not be published as releases.
 
 ## Setup and required QA
 

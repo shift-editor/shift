@@ -79,10 +79,7 @@ export const CreateAxisMenu = ({ onAxisCreated, onOpenChange }: CreateAxisMenuPr
               </MenuItem>
             ))}
             <MenuSeparator className="-mx-2 my-2" />
-            <MenuItem
-              className="h-8 justify-center gap-2 border border-line-subtle bg-canvas hover:bg-hover data-[highlighted]:bg-hover"
-              onClick={() => createAxis(nextCustomAxisDefinition(axes))}
-            >
+            <MenuItem variant="outlined" onClick={() => createAxis(nextCustomAxisDefinition(axes))}>
               <PlusIcon className="h-3 w-3 text-muted" />
               Add custom axis
             </MenuItem>

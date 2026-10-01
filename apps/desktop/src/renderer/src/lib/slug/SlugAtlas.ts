@@ -1,6 +1,6 @@
 import type { GlyphId, SlugSection, SourceId } from "@shift/types";
-import { interpolationWeights } from "@/lib/interpolation/InterpolationBasis";
-import { externalAxisLocationFromRecord, mapAxisLocation } from "@/lib/variation/location";
+import { interpolationWeights } from "@shift/editor/variation";
+import { externalAxisLocationFromRecord, mapAxisLocation } from "@shift/editor/variation";
 import type { CatalogLocation } from "@/types/glyphCatalog";
 import type { GlyphPreviewInstance, PackedGlyphPreviewFrame } from "@/types/glyphPreview";
 import type { GlyphAtlasGlyph, GlyphAtlasPage } from "@/types/glyphAtlas";
@@ -209,6 +209,25 @@ export class SlugAtlas {
         atlas.layout.lineBits.offset,
       ].map((value) => checkedU32(value, "resident atlas offset")),
     );
+  }
+
+  /** Reports whether the selected resident variant contains drawable curves. */
+  hasDrawableOutline(glyphId: GlyphId, sourceId: SourceId | null): boolean {
+    const glyph = this.#glyphs.get(glyphId);
+    if (!glyph) throw new Error(`resident Slug glyph ${glyphId} is missing`);
+
+    const glyphIndex = selectedGlyphIndex(glyph, sourceId);
+    const glyphOffset = glyphIndex * VARIABLE_GLYPH_BYTES;
+    if (glyphOffset + VARIABLE_GLYPH_BYTES > this.#glyphBytes.byteLength) {
+      throw new Error(`resident Slug glyph index ${glyphIndex} is out of range`);
+    }
+
+    const glyphView = new DataView(
+      this.#glyphBytes.buffer,
+      this.#glyphBytes.byteOffset,
+      this.#glyphBytes.byteLength,
+    );
+    return glyphView.getUint32(glyphOffset + 20, true) > 0;
   }
 
   /** Packs visible glyph identities into shader instances and exact scratch capacities. */

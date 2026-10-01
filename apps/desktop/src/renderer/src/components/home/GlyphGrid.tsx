@@ -66,7 +66,7 @@ export const GlyphGrid = memo(function GlyphGrid() {
         onUnavailable={handleCatalogUnavailable}
       />
       {filteredGlyphs.length === 0 ? (
-        <div className="pointer-events-none absolute inset-0 z-[4] flex items-center justify-center px-4 text-sm text-muted">
+        <div className="pointer-events-none absolute inset-0 z-4 flex items-center justify-center px-4 text-sm text-muted">
           No glyphs match this filter.
         </div>
       ) : null}

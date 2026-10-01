@@ -31,11 +31,6 @@ export interface ShiftHost {
      */
     onRunRendererCommand: (callback: (id: RendererCommandId) => void) => () => void;
   };
-  /** Opens native menus owned by the app shell. */
-  menu: {
-    /** Opens the canvas menu with renderer-derived Make First Point eligibility; execution revalidates selection. */
-    showCanvasContextMenu: (makeFirstPoint: boolean) => Promise<void>;
-  };
   /** Connects the renderer to main-owned document requests. */
   document: {
     /**
@@ -50,7 +45,7 @@ export interface ShiftHost {
   };
   /** Connects the renderer to its selected font-session backend. */
   session: {
-    mode: () => Promise<FontSessionMode>;
+    mode: () => Promise<Exclude<FontSessionMode, "memory">>;
     /**
      * Asks main to transfer a fresh sync-lane port to the session process.
      *

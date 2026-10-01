@@ -8,11 +8,11 @@ import {
 } from "@shift/types";
 import { Point } from "@shift/glyph-state";
 import { Curve } from "@shift/geo";
-import { effect, signal, track } from "@/lib/signals/signal";
-import { emptyExternalAxisLocation } from "@/lib/variation/location";
+import { effect, signal, track } from "@shift/editor/signals";
+import { emptyExternalAxisLocation } from "@shift/editor/variation";
 import { TestEditor } from "@/testing/TestEditor";
-import type { GlyphLayer } from "./Glyph";
-import { RenderGlyph } from "./RenderGlyph";
+import type { GlyphLayer } from "@shift/editor/model";
+import { RenderGlyph } from "@shift/editor/model";
 
 /**
  * Restored from the WS6 behavioral inventory (git show ef037c6e^), rebuilt on

@@ -1,12 +1,15 @@
 //! Location-independent glyph backing and location-bound read-only resolution.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use crate::composite::{resolved_contours_from_layers, GlyphComponents, ResolvedContour};
+use crate::composite::{
+    flatten_selected_component_contours_from_layers, resolved_contours_from_layers,
+    GlyphComponents, ResolvedContour,
+};
 use crate::{
-    Axis, CoreError, CoreResult, DesignLocation, Font, Glyph, GlyphId, GlyphInterpolation,
-    GlyphLayer, InterpolationBasis, Source, SourceId,
+    Axis, ComponentId, CoreError, CoreResult, DesignLocation, Font, Glyph, GlyphId,
+    GlyphInterpolation, GlyphLayer, InterpolationBasis, Source, SourceId,
 };
 
 /// One exact-source shape that cannot be represented by compatible variation.
@@ -587,6 +590,27 @@ impl FontProjection<'_> {
             contours: resolved_contours_from_layers(glyph_id, &self.layers)?,
             x_advance: layer.width(),
         }))
+    }
+
+    /// Resolves selected direct component occurrences into flattened contours.
+    ///
+    /// Descendant components are included recursively at this projection's
+    /// location. Anchor attachment uses the complete root component sequence.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same resolution errors as [`Self::glyph`] when the root or
+    /// any selected component branch cannot be resolved.
+    pub(crate) fn component_contours(
+        &mut self,
+        glyph_id: &GlyphId,
+        component_ids: &HashSet<ComponentId>,
+    ) -> CoreResult<Vec<ResolvedContour>> {
+        if !self.prepare_layer_tree(glyph_id)? {
+            return Err(CoreError::GlyphNotFound(glyph_id.clone()));
+        }
+
+        flatten_selected_component_contours_from_layers(glyph_id, &self.layers, component_ids)
     }
 
     /// Resolves existing glyphs in request order with shared component work.

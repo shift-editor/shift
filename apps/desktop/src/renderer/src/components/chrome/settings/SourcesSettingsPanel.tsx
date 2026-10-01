@@ -1,13 +1,13 @@
 import { useEffect, useState, type ReactNode } from "react";
 import type { Axis, MetricDefinition, Source, SourceId, SourceMetricValue } from "@shift/types";
-import { Input, Tooltip, TooltipContent, TooltipTrigger, cn } from "@shift/ui";
+import { Input, Tooltip, TooltipContent, TooltipTrigger } from "@shift/ui";
 import { message } from "@shared/messages";
 import MinusIcon from "@/assets/general/minus.svg";
 import PlusIcon from "@/assets/general/plus.svg";
-import { SidebarActionButton, SidebarActionRow } from "@/components/sidebar/SidebarActionRow";
+import { SidebarActionButton, SidebarActionRow } from "@/components/sidebar";
 import { CreateSourceMenu } from "@/components/variation/CreateSourceMenu";
 import { useAxes } from "@/hooks/useAxes";
-import { useSignalState } from "@/lib/signals";
+import { useSignalState } from "@shift/editor/signals";
 import { useFont } from "@/workspace/WorkspaceContext";
 import { SettingsNumberField } from "./SettingsNumberField";
 import { useSettingsForm } from "./useSettingsForm";
@@ -45,7 +45,7 @@ export const SourcesSettingsPanel = ({ initialSourceId, canAuthor }: SourcesSett
 
   return (
     <div className="grid h-full min-h-0 grid-cols-[10rem_minmax(0,1fr)]">
-      <aside className="flex min-h-0 flex-col border-r border-r-toolbar bg-canvas">
+      <aside className="flex min-h-0 flex-col border-r border-r-chrome bg-surface-muted">
         <div className="flex h-11 shrink-0 items-center justify-between px-2">
           <h2 className="pl-1 text-sm font-medium text-primary">Sources</h2>
           {canAuthor ? (
@@ -62,25 +62,19 @@ export const SourcesSettingsPanel = ({ initialSourceId, canAuthor }: SourcesSett
           )}
         </div>
 
-        <div className="scrollbar-hidden min-h-0 overflow-y-auto px-2 pb-2">
+        <div className="scrollbar-hidden flex min-h-0 flex-col gap-1 overflow-y-auto px-2 pb-2">
           {sources.map((source) => (
             <SidebarActionRow
               key={source.id}
               data-testid={`settings-source-${source.id}`}
               isActive={source.id === selectedSource?.id}
-              className={cn(
-                "h-8",
-                source.id === selectedSource?.id &&
-                  "bg-hover hover:bg-hover data-[active]:bg-hover",
-              )}
               onClick={() => setSelectedSourceId(source.id)}
-              contentClassName="h-8 text-sm font-normal"
               actions={
                 <Tooltip>
                   <TooltipTrigger>
                     <SidebarActionButton
                       label={`Delete ${source.name}`}
-                      className="h-8 hover:bg-icon-button-hover"
+                      className="hover:bg-icon-button-hover"
                       aria-disabled={
                         !canAuthor || sources.length === 1 || source.id === font.defaultSource.id
                           ? true
@@ -155,7 +149,7 @@ const SourceEditor = ({ source, axes, definitions, canAuthor }: SourceEditorProp
         <h2 className="text-sm font-medium text-primary">{draft.name || "Source"}</h2>
       </div>
 
-      {form.error && <p className="mb-4 text-xs text-red-600">{form.error}</p>}
+      {form.error && <p className="mb-4 text-xs text-error">{form.error}</p>}
 
       <SettingsSection title="Name">
         <Input
@@ -166,7 +160,8 @@ const SourceEditor = ({ source, axes, definitions, canAuthor }: SourceEditorProp
             form.update((current) => ({ ...current, name }));
           }}
           onBlur={commit}
-          className="h-8 bg-white text-sm text-black"
+          size="md"
+          variant="plain"
         />
       </SettingsSection>
 

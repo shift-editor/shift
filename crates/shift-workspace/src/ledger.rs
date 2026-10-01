@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use shift_font::{
     Axis, AxisId, AxisMapping, FontMetadata, Glyph, GlyphId, GlyphLayer, GlyphName, LayerId,
-    MetricDefinition, NamedInstance, Source, SourceId,
+    LibValue, MetricDefinition, NamedInstance, Source, SourceId,
 };
 
 /// Maximum entries retained independently by each stack. The oldest entry on
@@ -32,6 +32,12 @@ pub enum LedgerStep {
     FontMetadata {
         pre: FontMetadata,
         post: FontMetadata,
+    },
+    /// One font lib key on each side; `None` means the key is absent.
+    FontLibValue {
+        key: String,
+        pre: Option<LibValue>,
+        post: Option<LibValue>,
     },
     Axis {
         pre: Option<Axis>,
@@ -130,6 +136,7 @@ impl LedgerEntry {
                     .map(|layer| layer.id())
                     .collect(),
                 LedgerStep::FontMetadata { .. }
+                | LedgerStep::FontLibValue { .. }
                 | LedgerStep::Axis { .. }
                 | LedgerStep::AxisOrder { .. }
                 | LedgerStep::AxisMappings { .. }
@@ -178,6 +185,11 @@ impl Ledger {
         };
         self.next_position += 1;
         push_undo_bounded(&mut self.undo, entry, &mut self.base_position);
+    }
+
+    /// Permanently removes every redo entry without changing the current or saved position.
+    pub fn discard_redo(&mut self) {
+        self.redo.clear();
     }
 
     /// Pops the entry to undo; the caller replays its pre states and must
@@ -283,6 +295,24 @@ mod tests {
 
         assert!(ledger.redo.is_empty());
         assert_eq!(ledger.undo.len(), 1);
+    }
+
+    #[test]
+    fn discarding_redo_preserves_the_current_and_saved_positions() {
+        let mut ledger = Ledger::default();
+        ledger.push(Some("saved".into()), Vec::new());
+        ledger.mark_saved();
+        ledger.push(Some("later".into()), Vec::new());
+
+        let later = ledger.pop_undo().unwrap();
+        ledger.record_undone(later);
+        assert!(!ledger.is_dirty());
+
+        ledger.discard_redo();
+
+        assert!(!ledger.is_dirty());
+        assert!(ledger.pop_redo().is_none());
+        assert_eq!(ledger.pop_undo().unwrap().label.as_deref(), Some("saved"));
     }
 
     #[test]

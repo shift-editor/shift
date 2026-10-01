@@ -1,13 +1,7 @@
 @import "tailwindcss";
-@source "../../../../packages/ui/src/**/*.tsx";
-
-@font-face {
-  font-family: "Inter";
-  src: url("./src/assets/fonts/Inter-VariableFont.ttf") format("truetype");
-  font-weight: 100 900;
-  font-style: normal;
-  font-display: swap;
-}
+@import "@shift/ui/style.css";
+@import "@shift/editor/style.css";
+@import "@shift/editor/fonts.css";
 
 @font-face {
   font-family: "Host Grotesk";
@@ -17,30 +11,19 @@
   font-display: swap;
 }
 
-@font-face {
-  font-family: "JetBrains Mono";
-  src: url("./src/assets/fonts/JetBrainsMono[wght].ttf") format("truetype");
-  font-weight: 100 800;
-  font-style: normal;
-  font-display: swap;
-}
-
 @theme {
-  /* Background colors: bg-app, bg-canvas, bg-toolbar, etc. */
-  --color-app: #ffffff;
-  --color-canvas: #f2f2f2;
-  --color-toolbar: #e2e2e2;
-  --color-hover: #e5e5e5;
+  /* Background layers: background, surfaces, chrome, and controls. */
+  --color-background: #ffffff;
   --color-surface: #ffffff;
+  --color-surface-muted: #f2f2f2;
+  --color-chrome: #e2e2e2;
+  --color-hover: #e5e5e5;
   --color-surface-hover: #f5f5f5;
   --color-surface-inverse: #232323;
   --color-on-surface-inverse: #ffffff;
-  --color-panel: #ffffff;
   --color-input: #ededed;
   --color-icon-button: #f3f3f3;
   --color-icon-button-hover: #d9d9d9;
-
-  --color-input-bg: #f3f3f3;
 
   /* Border colors: border-line, border-line-subtle */
   --color-line: #2c2c2c;
@@ -53,6 +36,16 @@
   --color-sidebar-icon: #585858;
 
   --color-accent: #0c92f4;
+
+  /* Status and action colors */
+  --color-error: #dc2626;
+  --color-error-ring: #ef4444;
+  --color-destructive: #dc2626;
+  --color-destructive-hover: #fef2f2;
+
+  /* Low-emphasis icon and control colors */
+  --color-icon-subtle: #9f9f9f;
+  --color-control-muted: #c2c2c2;
 
   /* Canvas accent colors */
   --color-canvas-purple: #8b5cf6;
@@ -69,6 +62,51 @@
   --text-sm: 0.75rem /* 12px */;
   --text-ui: 0.6875rem /* 11px */;
   --text-xs: 0.625rem /* 10px */;
+  /* Line box from the font's own ascent and descent, for previewing any script. */
+  --leading-normal: normal;
+}
+
+/* Shift Light fallback palette consumed by the 2D and WebGL editor renderers. */
+:root {
+  --editor-cursor-color: #0c92f4;
+  --editor-guides-color: rgba(37, 99, 235, 0.5);
+  --editor-selection-fill: rgba(59, 130, 246, 0.1);
+  --editor-selection-stroke: rgba(59, 130, 246, 0.5);
+  --editor-glyph-fill: #000000;
+  --editor-glyph-editable-fill: rgba(225, 225, 225, 0.2);
+  --editor-glyph-stroke: #000000;
+  --editor-component-fill: rgba(231, 231, 231, 0.75);
+  --editor-control-line-color: rgba(136, 136, 136, 0.65);
+  --editor-handle-fill: #ffffff;
+  --editor-handle-interpolated-stroke: rgba(0, 0, 0, 0.65);
+  --editor-handle-primary-stroke: #0c92f4;
+  --editor-handle-control-stroke: #b0b0b0;
+  --editor-handle-anchor-stroke: #6b15ec;
+  --editor-handle-overlay-subtle: rgba(255, 255, 255, 0.1);
+  --editor-handle-overlay-first: rgba(255, 255, 255, 0.3);
+  --editor-handle-overlay-last: rgba(255, 255, 255, 0.5);
+  --editor-handle-overlay-anchor: rgba(255, 255, 255, 0.75);
+  --editor-snap-color: #ff3b30;
+  --editor-segment-hover-color: #1886d7;
+  --editor-segment-selected-color: #1886d7;
+  --editor-preview-color: #1886d7;
+  --editor-variation-outline-color: rgba(12, 146, 244, 0.45);
+  --editor-edit-ghost-color: rgba(0, 0, 0, 0.12);
+  --editor-read-only-lock-color: #171717;
+  --editor-pen-ready-fill: #ffffff;
+  --editor-pen-ready-stroke: #3b82f6;
+  --editor-debug-tight-bounds: #ff0000;
+  --editor-debug-hit-radii: #2196f3;
+  --editor-debug-segment-bounds: #ff9800;
+  --editor-debug-glyph-bbox: #ff00fb;
+  --editor-text-cursor-color: #0c92f4;
+  --editor-text-selection-fill: rgba(12, 146, 244, 0.2);
+  --editor-text-hover-outline: #0c92f4;
+  --editor-text-composite-arm-fill: rgba(128, 128, 128, 0.22);
+  --editor-text-component-overlay-a: rgba(169, 236, 183, 0.26);
+  --editor-text-component-overlay-b: rgba(255, 182, 207, 0.26);
+  --editor-text-component-overlay-hover-a: rgba(124, 220, 150, 0.4);
+  --editor-text-component-overlay-hover-b: rgba(255, 151, 186, 0.4);
 }
 
 /* Hide scrollbar while preserving scroll behavior */
@@ -77,6 +115,44 @@
   -ms-overflow-style: none;
   &::-webkit-scrollbar {
     display: none;
+  }
+}
+
+/* Keep scrollbars legible without introducing a host-defined track color. */
+@utility scrollbar-themed {
+  scrollbar-color: var(--color-control-muted) var(--color-surface);
+
+  &::-webkit-scrollbar {
+    width: 10px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: var(--color-surface);
+  }
+
+  &::-webkit-scrollbar-thumb {
+    border: 2px solid var(--color-surface);
+    border-radius: 9999px;
+    background: var(--color-control-muted);
+  }
+}
+
+/* Coordinate toolbar-driven layout changes while clipping fixed-width sidebar contents. */
+.sidebar-panel {
+  overflow: hidden;
+}
+
+.sidebar-layout-animating > [data-panel] {
+  transition: flex-grow 150ms ease-out;
+}
+
+.sidebar-layout-animating:has([data-resize-handle-state="drag"]) > [data-panel] {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-layout-animating > [data-panel] {
+    transition: none;
   }
 }
 
@@ -90,6 +166,12 @@
 .titlebar-drag input,
 .titlebar-drag section,
 .titlebar-drag .titlebar {
+  -webkit-app-region: no-drag;
+}
+
+/* Popups drawn over the titlebar must stay clickable instead of dragging the window. */
+[data-base-ui-portal],
+[data-base-ui-portal] * {
   -webkit-app-region: no-drag;
 }
 

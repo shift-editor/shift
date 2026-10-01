@@ -1,115 +1,129 @@
-import type { ElectronApplication, Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import {
   workspaceTest,
   documentTest,
   expect,
   FONT_PATH,
   DESIGNSPACE_FONT_PATH,
+  navigateToEditor,
 } from "./fixtures/electronApp";
-import { clickFirstCatalogGlyph } from "./fixtures/appLocators";
+import { clickFirstCatalogGlyph, openVariationControls } from "./fixtures/appLocators";
+import type { ExternalAxisLocation } from "@shift/editor/types";
+import { expectCanvasSnapshot } from "./fixtures/snapshots";
 
 const authoredTest = workspaceTest.extend({ startupFontPath: DESIGNSPACE_FONT_PATH });
 const previewTest = documentTest.extend({ openFontPath: FONT_PATH });
 
-async function handlePixels(page: Page, electronApp: ElectronApplication) {
-  const screenshot = await page.locator("#marker-canvas").screenshot({
-    style:
-      "#background-canvas, #scene-canvas, #interactive-canvas { visibility: hidden; } #marker-canvas { background: white; }",
+interface DrawnHandles {
+  /** Distinct handle states drawn, sorted. */
+  readonly states: readonly string[];
+  /** Handles drawn for the glyph node. */
+  readonly count: number;
+  /** Points in the glyph geometry at the current location. */
+  readonly pointCount: number;
+}
+
+/** Reads the point handles the glyph node draws at the current location. */
+async function drawnHandles(page: Page): Promise<DrawnHandles> {
+  return page.evaluate(() => {
+    const editor = window.shiftSession!.editor;
+    const node = editor.scene.nodesOfKind("glyph")[0];
+    if (!node) return { states: [], count: 0, pointCount: 0 };
+
+    const states = editor.nodeDefinition("glyph").handleStates(node);
+    const geometry = editor.glyphForId(node.glyphId)?.geometryAt(editor.externalLocation);
+    return {
+      states: [...new Set(states.values())].sort(),
+      count: states.size,
+      pointCount: geometry?.allPoints.length ?? 0,
+    };
   });
-  return electronApp.evaluate(({ nativeImage }, png) => {
-    const pixels = nativeImage.createFromBuffer(Buffer.from(png, "base64")).toBitmap();
-    let blue = 0;
-    let neutral = 0;
-    for (let index = 0; index < pixels.length; index += 4) {
-      const b = pixels[index]!;
-      const g = pixels[index + 1]!;
-      const r = pixels[index + 2]!;
-      if (b > r + 60 && g > r + 40) blue++;
-      if (r < 250 && r === g && g === b) neutral++;
-    }
-    return { blue, neutral };
-  }, screenshot.toString("base64"));
+}
+
+async function expectEveryHandleDrawnAs(page: Page, states: readonly string[]): Promise<void> {
+  await expect
+    .poll(async () => {
+      const handles = await drawnHandles(page);
+      return { states: handles.states, complete: handles.count === handles.pointCount };
+    })
+    .toEqual({ states, complete: true });
 }
 
 authoredTest(
-  "handles remain visible while scrubbing and use source-location styling",
-  async ({ page, electronApp, editor }) => {
-    await editor.openGlyphByUnicode("53");
-    await expect.poll(async () => (await handlePixels(page, electronApp)).blue).toBeGreaterThan(0);
-    const controls = page.getByRole("complementary", { name: "Variation controls" });
+  "handles stay drawn with interpolated styling while scrubbing between sources",
+  async ({ page }) => {
+    await navigateToEditor(page, "53");
+    await expectEveryHandleDrawnAs(page, ["idle"]);
+    const controls = await openVariationControls(page);
+    // Collapse the record lists so the axis controls sit inside the fixed-size window.
     await controls.getByRole("button", { name: "Sources", exact: true }).click();
     await controls.getByRole("button", { name: "Instances", exact: true }).click();
     const slider = controls.getByRole("slider", { name: "width", exact: true });
-    const bounds = await slider.boundingBox();
-    if (!bounds) throw new Error("Expected width slider bounds");
-    await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+    // The slider role belongs to the thumb input, so scrub by offsets from the thumb centre.
+    const thumb = await slider.boundingBox();
+    if (!thumb) throw new Error("Expected width slider thumb bounds");
+
+    const start = { x: thumb.x + thumb.width / 2, y: thumb.y + thumb.height / 2 };
+    const values: (string | null)[] = [];
+    await page.mouse.move(start.x, start.y);
     await page.mouse.down();
     try {
-      for (const fraction of [1.5, 2, 2.5]) {
-        await page.mouse.move(bounds.x + bounds.width * fraction, bounds.y + bounds.height / 2, {
-          steps: 3,
-        });
+      // Offsets stay inside the short sidebar track, between the width sources.
+      for (const offset of [10, 15, 20]) {
+        await page.mouse.move(start.x + offset, start.y, { steps: 3 });
         await expect
           .poll(() => page.evaluate(() => window.shiftSession!.editor.activeSourceId))
           .toBeNull();
-        await expect.poll(async () => (await handlePixels(page, electronApp)).blue).toBe(0);
-        await expect
-          .poll(async () => (await handlePixels(page, electronApp)).neutral)
-          .toBeGreaterThan(0);
+        await expectEveryHandleDrawnAs(page, ["interpolated"]);
+        values.push(await slider.getAttribute("aria-valuenow"));
       }
     } finally {
       await page.mouse.up();
     }
+    expect(new Set(values).size).toBe(3);
+
     await slider.focus();
     await slider.press("Home");
-    await expect.poll(async () => (await handlePixels(page, electronApp)).blue).toBeGreaterThan(0);
+    await expectEveryHandleDrawnAs(page, ["idle"]);
   },
 );
 
 authoredTest(
-  "named instances between sources use interpolated handle outlines",
-  async ({ page, electronApp, editor }) => {
-    await editor.openGlyphByUnicode("53");
-    const instance = await page.evaluate(async () => {
-      const { font, editor, catalog } = window.shiftSession!;
-      const { externalLocation, activeSourceId } = editor;
-
-      try {
-        for (const instance of font.namedInstances) {
-          await catalog.setLocation(
-            font.getAxes().map((axis) => instance.location.values[axis.id] ?? axis.default),
-          );
-          if (!font.sourceAt(editor.externalLocation)) return instance;
-        }
-        return null;
-      } finally {
-        editor.setExternalLocation(externalLocation);
-        if (activeSourceId !== null) editor.selectSource(activeSourceId);
-      }
+  "named instances between sources draw interpolated handles",
+  async ({ page, editor }) => {
+    await navigateToEditor(page, "53");
+    const instance = await page.evaluate(() => {
+      const font = window.shiftSession!.font;
+      return font.namedInstances.find(
+        (instance) =>
+          !font.sourceAt(
+            new Map(
+              font
+                .getAxes()
+                .map((axis) => [axis.id, instance.location.values[axis.id] ?? axis.default]),
+            ) as unknown as ExternalAxisLocation,
+          ),
+      );
     });
     if (!instance) throw new Error("Expected an instance between sources");
-    const controls = page.getByRole("complementary", { name: "Variation controls" });
-    await controls.getByRole("button", { name: "Sources", exact: true }).click();
+    const controls = await openVariationControls(page);
+
     await controls.getByTestId(`instance-${instance.id}`).click();
 
-    await expect.poll(async () => (await handlePixels(page, electronApp)).blue).toBe(0);
-    await expect
-      .poll(async () => (await handlePixels(page, electronApp)).neutral)
-      .toBeGreaterThan(0);
+    await expectEveryHandleDrawnAs(page, ["interpolated"]);
+    await expectCanvasSnapshot(editor, "handles-interpolated-instance.png");
   },
 );
 
 previewTest(
-  "TTF source handles retain their normal color without becoming selectable",
+  "TTF source handles keep source styling without becoming hoverable",
   async ({ page, electronApp }) => {
     const workspaceWindow = electronApp.waitForEvent("window");
     await page.getByRole("button", { name: /Load font/ }).click();
     const workspacePage = await workspaceWindow;
     await workspacePage.waitForURL(/#\/home$/);
     await clickFirstCatalogGlyph(workspacePage);
-    await expect
-      .poll(async () => (await handlePixels(workspacePage, electronApp)).blue)
-      .toBeGreaterThan(0);
+    await expectEveryHandleDrawnAs(workspacePage, ["idle"]);
 
     const point = await workspacePage.evaluate(() => {
       const editor = window.shiftSession!.editor;
@@ -124,9 +138,10 @@ previewTest(
     const bounds = await workspacePage.locator("#interactive-canvas").boundingBox();
     if (!bounds) throw new Error("Expected interactive canvas bounds");
     await workspacePage.mouse.move(bounds.x + point.x, bounds.y + point.y);
+
     await expect
       .poll(() => workspacePage.evaluate(() => window.shiftSession!.editor.hover.id))
       .toBeNull();
-    expect((await handlePixels(workspacePage, electronApp)).blue).toBeGreaterThan(0);
+    await expectEveryHandleDrawnAs(workspacePage, ["idle"]);
   },
 );

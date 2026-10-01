@@ -32,13 +32,13 @@ export const SettingsNumberField = ({
       }}
       disabled={disabled}
     >
-      <NumberFieldGroup className={cn("h-8 bg-white", className)}>
+      <NumberFieldGroup variant="plain" className={cn("h-8", className)}>
         <NumberFieldInput
           aria-label={ariaLabel}
           {...(!isFocused && { value: value === null ? "" : String(Number(value.toFixed(2))) })}
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
-          className={cn("px-2 text-sm text-black", inputClassName)}
+          className={inputClassName}
         />
       </NumberFieldGroup>
     </NumberField>

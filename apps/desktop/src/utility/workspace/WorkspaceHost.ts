@@ -175,6 +175,11 @@ export class WorkspaceHost {
           const documentState = applied ? this.#emitDocumentChanged() : this.#documentState();
           return { applied, documentState };
         }),
+      "workspace.discardRedo": () =>
+        this.#serialize(() => {
+          this.#bridge.discardRedo();
+          return null;
+        }),
       // Save rides the edit lane: the same #serialize queue orders it behind
       // every committed apply/undo/redo, so it never writes stale state.
       "workspace.save": () => this.#serialize(() => this.#save()),
@@ -182,6 +187,8 @@ export class WorkspaceHost {
       "workspace.export": ({ path }) => this.#export(path),
       "workspace.glyphSnapshots": ({ requests }) =>
         this.#serialize(() => this.#bridge.getGlyphSnapshots(requests) as GlyphSnapshot[]),
+      "workspace.layerMatch": ({ referenceLayerId, targetLayerId }) =>
+        this.#serialize(() => this.#bridge.getLayerMatch(referenceLayerId, targetLayerId)),
       "workspace.glyphProjections": ({ glyphIds }) =>
         this.#serialize(() => this.#bridge.getGlyphProjections(glyphIds)),
       "workspace.glyphPreviews": ({ glyphIds, location }) =>
@@ -649,6 +656,7 @@ export class WorkspaceHost {
       axisMappings: this.#bridge.getAxisMappings(),
       axisMappingBases: this.#bridge.getAxisMappingBases(),
       namedInstances: this.#bridge.getNamedInstances(),
+      languageIds: this.#bridge.getLanguageIds(),
     };
   }
 

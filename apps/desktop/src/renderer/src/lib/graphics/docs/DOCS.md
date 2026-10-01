@@ -1,6 +1,6 @@
 # Graphics
 
-<!-- reviewed: 2026-09-05 -->
+<!-- reviewed: 2026-09-28 -->
 
 Renderer vector-path values and the accelerated marker-layer backend for editor handle drawing.
 
@@ -33,15 +33,18 @@ Renderer vector-path values and the accelerated marker-layer backend for editor 
 ## Codemap
 
 ```
-graphics/
-  ContourPath.ts              — transformed contour commands with lazy path outputs
-  canvasText.ts               — width-constrained Canvas2D label fitting
+packages/editor/src/lib/graphics/
+  ContourPath.ts                — transformed contour commands with lazy path outputs
   backends/
-    MarkerLayer.ts            — WebGL context: REGL init, instance buffer management, draw command
+    MarkerLayer.ts              — WebGL context: REGL init, instance buffer management, draw command
+packages/editor/src/lib/model/
+  Glyph.ts                      — common authored/imported location-bound render model
+apps/desktop/src/renderer/src/lib/graphics/
+  canvasText.ts                 — width-constrained Canvas2D label fitting
+  backends/
     AuthoredGlyphAtlasSource.ts — authored workspace page adapter
     ImportedGlyphAtlasSource.ts — imported source page adapter
     ResidentGlyphLayer.ts       — WebGPU catalog device, complete page-set uploads, atomic replacement, draw, and teardown
-  ../model/Glyph.ts             — common authored/imported location-bound render model
 ```
 
 Supporting files live in the editor rendering module:
@@ -99,9 +102,9 @@ editor/rendering/overlays/handles/
 
 ### Catalog renderer lifecycle
 
-`GlyphCatalogBackendGate` initializes Slug once and selects SVG only when that WebGPU initialization fails. `SlugGlyphCatalogRenderer` retains `ResidentGlyphLayer` across routes and observes its session's `GlyphCatalog`. Authored catalogs project `Font.invalidGlyphIdsCell`; immutable preview catalogs invalidate their complete retained directory once at startup. Directory revisions build one glyph-to-page index, so invalidation never linearly searches the directory per root. Initial residency uploads every deterministic 256-root directory page in one `atlasBuild`; `SlugRenderer.loadPages` constructs all GPU page resources before synchronously replacing glyph mappings and exposing the first frame. Disposable atlas artifacts use canonical `DocumentId` for bound documents so a clean reopen with a fresh app-local allocation reuses identical pages; unbound documents remain isolated by `workspaceId`. Durable authored revision, alignment, page count, root identities, and payload validation remain independent cache invalidators. Local edits and global structural changes leave the prior complete mappings active, abort stale candidates, and rebuild every affected fixed page as one atomic replacement. The invalid-root set is the current-revision residency authority: successful page-set installation removes its requested roots, and complete residency means the set is empty. Scrolling only updates fixed layout instances and submits a frame; it never prepares, streams, cancels, or installs atlas pages. The glyph canvas reports `data-fully-resident="true"` only for the complete current revision, while `data-grid-readiness` distinguishes `Initial`, `Stale`, `Complete`, and `Unavailable` for product E2E assertions. Route-dependent navigation is accessed through a stable callback ref so it cannot recreate the renderer or device. `#needsRedraw` keeps overlay-only pointer updates from submitting glyph frames.
+`GlyphCatalogBackendGate` initializes Slug once and selects SVG only when that WebGPU initialization fails. `SlugGlyphCatalogRenderer` retains `ResidentGlyphLayer` across routes and observes its session's `GlyphCatalog`. Authored catalogs project `Font.invalidGlyphIdsCell`; immutable preview catalogs invalidate their complete retained directory once at startup. Directory revisions build one glyph-to-page index, so invalidation never linearly searches the directory per root. Initial residency uploads every deterministic 256-root directory page in one `atlasBuild`; `SlugRenderer.loadPages` constructs all GPU page resources before synchronously replacing glyph mappings and exposing the first frame. Disposable atlas artifacts use canonical `DocumentId` for bound documents so a clean reopen with a fresh app-local allocation reuses identical pages; unbound documents remain isolated by `workspaceId`. Durable authored revision, alignment, page count, root identities, and payload validation remain independent cache invalidators. Local edits and global structural changes leave the prior complete mappings active, abort stale candidates, and rebuild every affected fixed page as one atomic replacement. The invalid-root set is the current-revision residency authority: successful page-set installation removes its requested roots, and complete residency means the set is empty. Scrolling only updates fixed layout instances and submits a frame; it never prepares, streams, cancels, or installs atlas pages. The resident glyph descriptor's selected variant curve count identifies empty encoded glyphs, which receive a system-font character on the catalog overlay without a separate preview read. The glyph canvas reports `data-fully-resident="true"` only for the complete current revision, while `data-grid-readiness` distinguishes `Initial`, `Stale`, `Complete`, and `Unavailable` for product E2E assertions. `data-atlas-build-count` counts completed page-set installations so tests can tell a redraw from a rebuild, and `data-target-location`/`data-active-location` publish the requested and rendered catalog coordinates so tests sample only frames for the current location. Route-dependent navigation is accessed through a stable callback ref so it cannot recreate the renderer or device. `#needsRedraw` keeps overlay-only pointer updates from submitting glyph frames.
 
-`SvgGlyphCatalogGrid` uses virtualized React cells with native buttons, labels, inputs, focus, and event handling. It renders the current scroll window immediately; cached outlines remain visible by glyph identity, while unresolved outlines fill in without hiding or freezing the current controls. `useGlyphPreviewFrame` requests bridge-printed paths in batches of at most 256 and stores drawable or shapeless entries in a 256 MiB location-keyed LRU. A location change clears the cache; authored invalidation removes only affected glyphs, and completed same-location requests remain useful when scrolling advances before publication. Imported and authored sessions use the same `GlyphCatalog.glyphPreviews()` boundary, with external catalog coordinates mapped to design space before native preview resolution.
+`SvgGlyphCatalogGrid` uses virtualized React cells with native buttons, labels, inputs, focus, and event handling. It renders the current scroll window immediately; cached outlines remain visible by glyph identity, while unresolved outlines fill in without hiding or freezing the current controls. `useGlyphPreviewFrame` requests bridge-printed paths in batches of at most 256 and stores drawable or shapeless entries in a 256 MiB location-keyed LRU. A location change clears the cache; authored invalidation removes only affected glyphs, and completed same-location requests remain useful when scrolling advances before publication. Empty encoded SVG paths receive the same system-font character fallback while authored outlines take precedence. Imported and authored sessions use the same `GlyphCatalog.glyphPreviews()` boundary, with external catalog coordinates mapped to design space before native preview resolution.
 
 `GlyphCatalogLayout` owns fixed shared cell dimensions independent of atlas pages and design location. The preview shader reads each visible glyph's exact resolved scratch bounds, unions them with the metrics-and-advance viewport, and caps its fit scale at the metrics-derived `defaultPixelsPerEm`. Oversized glyphs shrink individually instead of clipping or resizing the Grid.
 
@@ -128,15 +131,15 @@ CPU packing and GPU instance buffers only grow, never shrink. On overflow each r
 
 1. Add the shape name to `MarkerShape` union in `types.ts`.
 2. Add its integer ID to `SHAPE_IDS` in `handleStyles.ts`.
-3. Add a theme entry in `Theme` and a style builder function in `handleStyles.ts`.
-4. Add the entry to the `STYLES` object.
+3. Add a theme entry to `EditorRenderTheme` and a style builder function in `handleStyles.ts`.
+4. Add the entry to `buildMarkerStyles`.
 5. Add a new `else if (v_shape < N.5)` branch in `handle.frag.glsl.ts` with the SDF.
 6. Add classification logic on `PointHandleItem`.
 7. If the shape needs new SDF primitives, add them to `sdf.glsl.ts`.
 
 ### Changing handle colors or sizes
 
-Modify the theme values in `Theme`. `handleStyles.ts` reads from `DEFAULT_THEME` at module load, so changes take effect on next app start (or HMR reload). No shader changes needed.
+Modify handle sizes in `Theme.ts`. Built-in colors come from `lib/themes/index.ts`; `index.css` contains the Shift Light fallback shown before React resolves the persisted selection. `readEditorRenderTheme` resolves the active CSS palette, and `buildMarkerStyles` rebuilds GPU-ready colors when the render theme changes. No shader changes are needed.
 
 ### Debugging GPU rendering issues
 
@@ -146,7 +149,7 @@ Set a breakpoint or add logging in `MarkerHandleRenderer.draw` or `MarkerLayer.d
 
 - **Silent CPU fallback**: If WebGL init fails, `Handles` silently falls back to Canvas 2D drawing. There is only a `console.warn` in `MarkerLayer.#initialize`. Check the browser console if GPU markers are not rendering.
 
-- **Styles are module-level constants**: `STYLES` is built once from `DEFAULT_THEME` when `handleStyles.ts` loads. Runtime theme changes will not update GPU marker styles without a module reload.
+- **Theme changes invalidate marker uploads**: `MarkerHandleRenderer` rebuilds marker styles and repacks its cached display list when the `EditorRenderTheme` identity changes. Preserve that invalidation when changing marker caches.
 
 - **Instance buffer never shrinks**: If a glyph temporarily has many points (e.g., during a paste), the GPU buffer stays at peak size until the context is destroyed.
 
@@ -175,4 +178,6 @@ Set a breakpoint or add logging in `MarkerHandleRenderer.draw` or `MarkerLayer.d
 - `SvgGlyphCatalogGrid` -- virtualized React fallback with native DOM interaction
 - `useGlyphPreviewFrame` -- complete-frame SVG publication with bounded preview residency
 - `SlugAtlas` / `SlugRenderer` -- internal packed-atlas and shader implementation behind `ResidentGlyphLayer`
-- `DEFAULT_THEME` -- theme object whose handle styles feed into `STYLES` at load time
+- `EditorRenderTheme` -- typed 2D/WebGL appearance and geometry contract
+- `readEditorRenderTheme` -- resolves the active `--editor-*` CSS palette into that contract
+- `buildMarkerStyles` -- converts handle colors into GPU-ready values for the active theme

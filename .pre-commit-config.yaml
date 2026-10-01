@@ -19,7 +19,7 @@ repos:
     hooks:
       - id: no-empty-files
         name: no empty files
-        entry: "bash -c 'for f in \"$@\"; do if [ -f \"$f\" ] && [ ! -s \"$f\" ]; then echo \"Empty file: $f\"; exit 1; fi; done'"
+        entry: 'bash -c ''for f in "$@"; do if [ -f "$f" ] && [ ! -s "$f" ]; then echo "Empty file: $f"; exit 1; fi; done'''
         language: system
         types_or: [javascript, jsx, ts, tsx, rust, css, json]
 
@@ -90,6 +90,15 @@ repos:
         entry: pnpm typecheck
         language: system
         types_or: [ts, tsx]
+        pass_filenames: false
+
+      # Regenerates packages/sdk/api/*.api.md; a changed report fails the commit so it is
+      # reviewed and staged like any other public API change.
+      - id: sdk-api-report
+        name: sdk api report
+        entry: pnpm --filter @shift-editor/sdk api:update
+        language: system
+        files: ^packages/(editor|geo|glyph-state|rules|sdk|types|ui|validation)/
         pass_filenames: false
 
       - id: deadcode

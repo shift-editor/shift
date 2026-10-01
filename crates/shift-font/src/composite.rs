@@ -6,8 +6,8 @@
 //! Anchor-driven placement rules:
 //! - Primary attachment: a component anchor named `_{name}` attaches to the
 //!   most recently placed anchor named `{name}`.
-//! - Explicit component affine transforms are always applied; anchor offsets are
-//!   composed on top of those transforms.
+//! - Anchor placement is resolved first; authored component transforms are then
+//!   composed on top as user-controlled offsets.
 //!
 //! Traversal and determinism rules:
 //! - Components are processed in authored order.
@@ -108,7 +108,7 @@ impl ComponentAnchorAttachment {
 /// One ordered component occurrence within a glyph.
 ///
 /// The occurrence is already cycle-pruned. Consumers evaluate its authored
-/// transform relative to `parent_path`, then apply the optional Rust-selected
+/// transform relative to `parent_path` on top of the optional Rust-selected
 /// anchor attachment. They do not repeat name matching, ordering, or cycle
 /// decisions.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -423,18 +423,17 @@ fn local_transform_for_component(
         .get(attachment.target().component_path())
         .ok_or_else(|| invalid_component(component_glyph))?;
 
-    let (source_x, source_y) = explicit.transform_point(source_anchor.x(), source_anchor.y());
     let (target_x, target_y) =
         target_transform.transform_point(target_anchor.x(), target_anchor.y());
-    Ok(compose_transform(
-        Transform::translate(target_x - source_x, target_y - source_y),
-        explicit,
-    ))
+    let attachment =
+        Transform::translate(target_x - source_anchor.x(), target_y - source_anchor.y());
+    Ok(compose_transform(explicit, attachment))
 }
 
 fn resolve_component_contours(
     layers: &HashMap<GlyphId, &GlyphLayer>,
     components: &GlyphComponents,
+    selected_root_components: Option<&HashSet<ComponentId>>,
 ) -> CoreResult<Vec<ResolvedContour>> {
     let mut local_transforms = HashMap::<ComponentPath, Transform>::new();
     let mut resolved_transforms = HashMap::<ComponentPath, Transform>::new();
@@ -459,11 +458,20 @@ fn resolve_component_contours(
             &component_glyph.component_id(),
             &component_glyph.base_glyph_id(),
         )?;
-        contours.extend(
-            layer
-                .contours_iter()
-                .map(|contour| transform_contour_points(contour, resolved_transform)),
-        );
+        let selected = selected_root_components.is_none_or(|selected| {
+            component_glyph
+                .component_path()
+                .as_slice()
+                .first()
+                .is_some_and(|component_id| selected.contains(component_id))
+        });
+        if selected {
+            contours.extend(
+                layer
+                    .contours_iter()
+                    .map(|contour| transform_contour_points(contour, resolved_transform)),
+            );
+        }
     }
 
     Ok(contours)
@@ -488,7 +496,26 @@ pub fn flatten_component_contours_from_layers(
 ) -> CoreResult<Vec<ResolvedContour>> {
     let view = layer_view(layers);
     let components = GlyphComponents::from_layers(root_glyph_id, &view)?;
-    resolve_component_contours(&view, &components)
+    resolve_component_contours(&view, &components, None)
+}
+
+/// Flattens selected direct component occurrences into local contours.
+///
+/// Descendant components are included recursively. Unselected siblings still
+/// participate in anchor attachment resolution but contribute no contours.
+///
+/// # Errors
+///
+/// Returns an error when `layers` does not contain the complete component
+/// closure or when its component and anchor identities are inconsistent.
+pub(crate) fn flatten_selected_component_contours_from_layers(
+    root_glyph_id: &GlyphId,
+    layers: &HashMap<GlyphId, GlyphLayer>,
+    component_ids: &HashSet<ComponentId>,
+) -> CoreResult<Vec<ResolvedContour>> {
+    let view = layer_view(layers);
+    let components = GlyphComponents::from_layers(root_glyph_id, &view)?;
+    resolve_component_contours(&view, &components, Some(component_ids))
 }
 
 /// Resolves root and component contours for one derived glyph layer.
@@ -512,7 +539,7 @@ pub fn resolved_contours_from_layers(
         .map(|contour| transform_contour_points(contour, Transform::identity()))
         .collect::<Vec<_>>();
     let components = GlyphComponents::from_layers(root_glyph_id, &view)?;
-    contours.extend(resolve_component_contours(&view, &components)?);
+    contours.extend(resolve_component_contours(&view, &components, None)?);
     Ok(contours)
 }
 
@@ -867,6 +894,49 @@ mod tests {
         assert_eq!(mark_contour.points[0].y(), 200.0);
         assert_eq!(mark_contour.points[1].x(), 105.0);
         assert_eq!(mark_contour.points[1].y(), 200.0);
+    }
+
+    #[test]
+    fn authored_translation_offsets_anchor_attachment() {
+        let mut font = Font::new();
+        let source_id = font.default_source_id().unwrap();
+
+        let mut base = Glyph::new("base".to_string());
+        let base_id = base.id();
+        let mut base_layer = test_layer(source_id.clone(), 500.0);
+        base_layer.add_contour(two_point_contour(0.0, 0.0, 10.0, 0.0));
+        base_layer.add_anchor(Anchor::new(Some("top".to_string()), 100.0, 200.0));
+        base.set_layer(base_layer);
+        font.insert_glyph(base).unwrap();
+
+        let mut mark = Glyph::new("mark".to_string());
+        let mark_id = mark.id();
+        let mut mark_layer = test_layer(source_id.clone(), 500.0);
+        mark_layer.add_contour(two_point_contour(0.0, 0.0, 10.0, 0.0));
+        mark_layer.add_anchor(Anchor::new(Some("_top".to_string()), 5.0, 0.0));
+        mark.set_layer(mark_layer);
+        font.insert_glyph(mark).unwrap();
+
+        let mut comp = Glyph::new("comp".to_string());
+        let comp_id = comp.id();
+        let mut comp_layer = test_layer(source_id.clone(), 500.0);
+        comp_layer.add_component(Component::new(base_id, "base".to_string()));
+        comp_layer.add_component(Component::with_matrix(
+            mark_id,
+            "mark".to_string(),
+            &Transform::translate(30.0, 40.0),
+        ));
+        comp.set_layer(comp_layer);
+        font.insert_glyph(comp).unwrap();
+
+        let resolved =
+            flatten_component_contours_from_layers(&comp_id, &default_layers(&font)).unwrap();
+
+        let mark_contour = &resolved[1];
+        assert_eq!(mark_contour.points[0].x(), 125.0);
+        assert_eq!(mark_contour.points[0].y(), 240.0);
+        assert_eq!(mark_contour.points[1].x(), 135.0);
+        assert_eq!(mark_contour.points[1].y(), 240.0);
     }
 
     #[test]

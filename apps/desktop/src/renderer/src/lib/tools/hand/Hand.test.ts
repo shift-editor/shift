@@ -20,6 +20,17 @@ describe("Hand tool", () => {
     expect(editor.toolIf("select")?.state).toEqual({ type: "ready" });
   });
 
+  it("closes the Hand cursor on pointer down before dragging", () => {
+    expect(editor.cursor).toBe("grab");
+
+    editor.pointerDown(0, 0);
+    expect(editor.cursor).toBe("grabbing");
+
+    editor.pointerUp(0, 0);
+    expect(editor.cursor).toBe("grab");
+    expect(editor.toolIf("hand")?.state).toEqual({ type: "ready" });
+  });
+
   it("drag pans the viewport by the screen delta", () => {
     const startPan = editor.pan;
 
@@ -43,6 +54,7 @@ describe("Hand tool", () => {
 
     expect(editor.isDragging).toBe(false);
     expect(editor.toolIf("hand")?.state.type).toBe("ready");
+    expect(editor.cursor).toBe("grab");
 
     // After cancel, further moves without a new pointerDown must not pan.
     editor.pointerMove(200, 0);

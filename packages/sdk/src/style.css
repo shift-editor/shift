@@ -1,0 +1,57 @@
+@import "tailwindcss/theme.css" layer(theme) theme(reference inline);
+@config "../tailwind.config.mjs";
+@import "tailwindcss/utilities.css" layer(utilities);
+@import "@shift/ui/style.css";
+@import "@shift/editor/style.css";
+
+/*
+ * Editor tokens compile to `var(--shift-*, default)`, so hosts theme the editor
+ * by setting `--shift-*` variables and their own Tailwind theme cannot leak in.
+ */
+@theme inline reference {
+  --color-background: var(--shift-color-background, #ffffff);
+  --color-surface: var(--shift-color-surface, #ffffff);
+  --color-surface-muted: var(--shift-color-surface-muted, #f2f2f2);
+  --color-chrome: var(--shift-color-chrome, #e2e2e2);
+  --color-hover: var(--shift-color-hover, #e5e5e5);
+  --color-surface-hover: var(--shift-color-surface-hover, #f5f5f5);
+  --color-surface-inverse: var(--shift-color-surface-inverse, #232323);
+  --color-on-surface-inverse: var(--shift-color-on-surface-inverse, #ffffff);
+  --color-input: var(--shift-color-input, #ededed);
+  --color-icon-button: var(--shift-color-icon-button, #f3f3f3);
+  --color-icon-button-hover: var(--shift-color-icon-button-hover, #d9d9d9);
+  --color-line: var(--shift-color-line, #2c2c2c);
+  --color-line-subtle: var(--shift-color-line-subtle, #f0f0f0);
+  --color-primary: var(--shift-color-primary, #171717);
+  --color-secondary: var(--shift-color-secondary, #898989);
+  --color-muted: var(--shift-color-muted, #5f5f5f);
+  --color-sidebar-icon: var(--shift-color-sidebar-icon, #585858);
+  --color-accent: var(--shift-color-accent, #0c92f4);
+  --color-error: var(--shift-color-error, #dc2626);
+  --color-error-ring: var(--shift-color-error-ring, #ef4444);
+  --color-destructive: var(--shift-color-destructive, #dc2626);
+  --color-destructive-hover: var(--shift-color-destructive-hover, #fef2f2);
+  --color-icon-subtle: var(--shift-color-icon-subtle, #9f9f9f);
+  --color-control-muted: var(--shift-color-control-muted, #c2c2c2);
+  --color-canvas-purple: var(--shift-color-canvas-purple, #8b5cf6);
+  --color-canvas-orange: var(--shift-color-canvas-orange, #f97316);
+  --color-canvas-green: var(--shift-color-canvas-green, #22c55e);
+  --color-canvas-indigo: var(--shift-color-canvas-indigo, #6366f1);
+  --color-canvas-blue: var(--shift-color-canvas-blue, #3b82f6);
+  --color-canvas-cyan: var(--shift-color-canvas-cyan, #06b6d4);
+  --font-ui: var(--shift-font-ui, "Inter", ui-sans-serif, system-ui, sans-serif);
+  --font-display: var(--shift-font-display, "Host Grotesk", ui-sans-serif, system-ui, sans-serif);
+  --font-mono: var(--shift-font-mono, "JetBrains Mono", ui-monospace, monospace);
+  --text-sm: 0.75rem;
+  --text-ui: 0.6875rem;
+  --text-xs: 0.625rem;
+}
+
+@utility scrollbar-hidden {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}

@@ -2,7 +2,6 @@ import { defineConfig } from "vite";
 import svgr from "vite-plugin-svgr";
 import path from "path";
 
-const packagesDir = path.resolve(__dirname, "../../packages");
 const distribution = process.env.SHIFT_DISTRIBUTION ?? "release";
 const shiftBuildCommit = process.env.SHIFT_BUILD_COMMIT ?? process.env.GITHUB_SHA ?? "unknown";
 if (distribution !== "release" && distribution !== "nightly") {
@@ -45,19 +44,22 @@ export default defineConfig(async () => {
       tsconfigPaths(),
     ],
     resolve: {
-      alias: {
-        "@shift/ui": path.resolve(packagesDir, "ui/src/index.ts"),
-        "@shift/geo": path.resolve(packagesDir, "geo/src/index.ts"),
-        "@shift/types": path.resolve(packagesDir, "types/src/index.ts"),
-        "@shift/glyph-state": path.resolve(packagesDir, "glyph-state/src/index.ts"),
-        "@shift/glyph-info": path.resolve(packagesDir, "glyph-info/src/index.ts"),
-        "@shift/rules": path.resolve(packagesDir, "rules/src/index.ts"),
-        "@shift/validation": path.resolve(packagesDir, "validation/src/index.ts"),
-      },
+      // Forge's renderer defaults preserve symlinks. Under pnpm that gives each workspace package
+      // one module URL per symlink it is reached through, so shared state such as the signals
+      // runtime loads twice. Resolving to real paths keeps one instance per source file.
+      preserveSymlinks: false,
     },
     optimizeDeps: {
-      include: ["use-sync-external-store/shim", "use-sync-external-store/shim/with-selector"],
+      // Serve editor workspace source directly so API changes participate in HMR instead of
+      // remaining trapped in Vite's dependency cache. Its CommonJS regl dependency still needs
+      // prebundling to provide the default export expected by the editor's rendering modules.
+      include: [
+        "regl",
+        "use-sync-external-store/shim",
+        "use-sync-external-store/shim/with-selector",
+      ],
       exclude: [
+        "@shift/editor",
         "@shift/ui",
         "@shift/geo",
         "@shift/types",

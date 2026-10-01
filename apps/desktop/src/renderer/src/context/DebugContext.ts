@@ -1,5 +1,5 @@
 import { createContext, useContext } from "react";
-import type { DebugOverlays } from "@/types/uiState";
+import type { DebugOverlays } from "@shift/editor/types";
 
 export const DEFAULT_DEBUG_OVERLAYS: DebugOverlays = {
   tightBounds: false,

@@ -10,7 +10,7 @@ export const StaticScene = () => {
       <canvas
         id="background-canvas"
         ref={backgroundCanvasRef}
-        className="pointer-events-none absolute inset-0 h-full w-full bg-canvas"
+        className="pointer-events-none absolute inset-0 h-full w-full bg-surface-muted"
       />
       <canvas
         id="scene-canvas"

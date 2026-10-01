@@ -1,9 +1,18 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { isPointId, type PointId } from "@shift/types";
+import { Point } from "@shift/glyph-state";
+import type { Point2D } from "@shift/geo";
+import { isPointId, type ComponentId, type GlyphName, type PointId } from "@shift/types";
+import type { GlyphLayer } from "@shift/editor/model";
 import { TestEditor } from "@/testing/TestEditor";
-import { SELECT_BOUNDING_BOX_STYLE } from "./BoundingBox";
-import { Select } from "./Select";
-import { LOCK_GAP_PX, LOCK_SIZE_PX } from "@/lib/editor/rendering/icons/lock";
+import { SELECT_BOUNDING_BOX_STYLE } from "@shift/editor/testing";
+import { Select } from "@shift/editor/tools";
+import { LOCK_GAP_PX, LOCK_SIZE_PX } from "@shift/editor/rendering";
+
+function addClosedContour(layer: GlyphLayer, points: readonly Point2D[]): void {
+  const contourId = layer.addContour();
+  for (const point of points) layer.addPoint(contourId, Point.onCurve(point));
+  layer.closeContour(contourId);
+}
 
 // Restored from the WS6 behavioral inventory (git show ef037c6e^).
 describe("Select tool", () => {
@@ -149,6 +158,13 @@ describe("Select tool", () => {
         expect(editor.toolManager.activeTool?.cursorCell.value).not.toEqual({ type: "add" });
       });
 
+      it("does not offer adding while nothing is selected", () => {
+        editor.selection.clear();
+        const point = editor.projectSceneToScreen({ x: 200, y: 200 });
+        editor.pointerMove(point.x, point.y, { shiftKey: true });
+        expect(editor.toolManager.activeTool?.cursorCell.value).not.toEqual({ type: "add" });
+      });
+
       it("stops offering add when Shift-click selects the hovered point", async () => {
         await editor.clickGlyphLocal(100, 100);
         const point = editor.projectSceneToScreen({ x: 200, y: 200 });
@@ -160,11 +176,17 @@ describe("Select tool", () => {
         expect(editor.toolManager.activeTool?.cursorCell.value).not.toEqual({ type: "add" });
       });
 
-      it("does not offer adding on selected points, segments, or empty canvas", () => {
+      it("offers adding on an unselected segment", () => {
+        editor.selection.select([firstId]);
+        const segment = editor.projectSceneToScreen({ x: 150, y: 150 });
+        editor.pointerMove(segment.x, segment.y, { shiftKey: true });
+        expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "add" });
+      });
+
+      it("does not offer adding on selected points or empty canvas", () => {
         editor.selection.select([firstId, secondId]);
         for (const position of [
           { x: 100, y: 100 },
-          { x: 150, y: 150 },
           { x: 500, y: 500 },
         ]) {
           const point = editor.projectSceneToScreen(position);
@@ -790,6 +812,262 @@ describe("Select tool", () => {
 
       expect(editor.selection.has(inside.id)).toBe(true);
       expect(editor.selection.has(outside.id)).toBe(false);
+    });
+
+    it("marquee-selects a segment crossed anywhere along its length", async () => {
+      editor.selectTool("pen");
+      await editor.clickGlyphLocal(100, 200);
+      await editor.clickGlyphLocal(180, 200);
+
+      const contour = editor.requireGlyphLayer().contours[0];
+      const segmentId = contour?.segments()[0]?.id;
+      const [start, end] = contour?.points ?? [];
+      if (!segmentId || !start || !end) throw new Error("Expected line segment");
+
+      editor.selectTool("select");
+      await editor.dragScene({
+        down: { x: 130, y: 180 },
+        start: { x: 134, y: 180 },
+        end: { x: 150, y: 220 },
+      });
+
+      expect(editor.selection.has(segmentId)).toBe(true);
+      expect(editor.selection.has(start.id)).toBe(false);
+      expect(editor.selection.has(end.id)).toBe(false);
+    });
+
+    it("marquee-selects a segment with both of its end points", async () => {
+      editor.selectTool("pen");
+      await editor.clickGlyphLocal(100, 200);
+      await editor.clickGlyphLocal(180, 200);
+
+      const contour = editor.requireGlyphLayer().contours[0];
+      const segmentId = contour?.segments()[0]?.id;
+      const [start, end] = contour?.points ?? [];
+      if (!segmentId || !start || !end) throw new Error("Expected line segment");
+
+      editor.selectTool("select");
+      await editor.dragScene({
+        down: { x: 80, y: 180 },
+        start: { x: 84, y: 180 },
+        end: { x: 200, y: 220 },
+      });
+
+      expect(new Set(editor.selection.ids)).toEqual(new Set([start.id, end.id, segmentId]));
+    });
+  });
+
+  describe("component fill selection", () => {
+    it("selects the frontmost overlapping component", async () => {
+      await editor.addGlyph("base", null);
+      const baseRecord = editor.font.recordForName("base" as GlyphName)!;
+      const base = await editor.font.loadGlyph(baseRecord.id);
+      addClosedContour(base.layerForSource(editor.font.defaultSource.id)!, [
+        { x: 0, y: 0 },
+        { x: 100, y: 0 },
+        { x: 100, y: 100 },
+        { x: 0, y: 100 },
+      ]);
+      editor.requireGlyphLayer().addComponent(baseRecord.id);
+      const frontId = editor.requireGlyphLayer().addComponent(baseRecord.id);
+      await editor.settle();
+
+      await editor.clickGlyphLocal(50, 50);
+      expect(editor.selection.ids).toEqual([frontId]);
+    });
+
+    it("selects the directly editable parent of nested geometry", async () => {
+      await editor.addGlyph("leaf", null);
+      await editor.addGlyph("middle", null);
+      const leafRecord = editor.font.recordForName("leaf" as GlyphName)!;
+      const leaf = await editor.font.loadGlyph(leafRecord.id);
+      addClosedContour(leaf.layerForSource(editor.font.defaultSource.id)!, [
+        { x: 0, y: 0 },
+        { x: 100, y: 0 },
+        { x: 100, y: 100 },
+        { x: 0, y: 100 },
+      ]);
+      const middleRecord = editor.font.recordForName("middle" as GlyphName)!;
+      const middle = await editor.font.loadGlyph(middleRecord.id);
+      middle.layerForSource(editor.font.defaultSource.id)!.addComponent(leafRecord.id);
+      await editor.settle();
+      const directId = editor.requireGlyphLayer().addComponent(middleRecord.id);
+      await editor.settle();
+
+      await editor.clickGlyphLocal(50, 50);
+      expect(editor.selection.ids).toEqual([directId]);
+      expect(editor.selectionBounds()).toMatchObject({ x: 0, y: 0, width: 100, height: 100 });
+      expect((editor.toolManager.activeTool as Select).boundingBox.visible).toBe(true);
+    });
+
+    it("does not select component fill through an opposite-winding hole", async () => {
+      await editor.addGlyph("counter", null);
+      const record = editor.font.recordForName("counter" as GlyphName)!;
+      const glyph = await editor.font.loadGlyph(record.id);
+      const layer = glyph.layerForSource(editor.font.defaultSource.id)!;
+      addClosedContour(layer, [
+        { x: 0, y: 0 },
+        { x: 100, y: 0 },
+        { x: 100, y: 100 },
+        { x: 0, y: 100 },
+      ]);
+      addClosedContour(layer, [
+        { x: 25, y: 25 },
+        { x: 25, y: 75 },
+        { x: 75, y: 75 },
+        { x: 75, y: 25 },
+      ]);
+      const componentId = editor.requireGlyphLayer().addComponent(record.id);
+      await editor.settle();
+
+      await editor.clickGlyphLocal(10, 10);
+      expect(editor.selection.ids).toEqual([componentId]);
+      await editor.clickGlyphLocal(50, 50);
+      expect(editor.selection.ids).toEqual([]);
+    });
+
+    it("selects an open component by segment proximity", async () => {
+      await editor.addGlyph("open", null);
+      const record = editor.font.recordForName("open" as GlyphName)!;
+      const glyph = await editor.font.loadGlyph(record.id);
+      const layer = glyph.layerForSource(editor.font.defaultSource.id)!;
+      const contourId = layer.addContour();
+      layer.addPoint(contourId, Point.onCurve({ x: 0, y: 0 }));
+      layer.addPoint(contourId, Point.onCurve({ x: 100, y: 0 }));
+      const componentId = editor.requireGlyphLayer().addComponent(record.id);
+      await editor.settle();
+
+      await editor.clickGlyphLocal(50, 0);
+      expect(editor.selection.ids).toEqual([componentId]);
+    });
+
+    it("uses curved component boundaries", async () => {
+      await editor.addGlyph("curve", null);
+      const record = editor.font.recordForName("curve" as GlyphName)!;
+      const glyph = await editor.font.loadGlyph(record.id);
+      const layer = glyph.layerForSource(editor.font.defaultSource.id)!;
+      const contourId = layer.addContour();
+      layer.addPoint(contourId, Point.onCurve({ x: 0, y: 0 }));
+      layer.addPoint(contourId, Point.offCurve({ x: 50, y: 100 }));
+      layer.addPoint(contourId, Point.onCurve({ x: 100, y: 0 }));
+      layer.addPoint(contourId, Point.onCurve({ x: 100, y: -10 }));
+      layer.addPoint(contourId, Point.onCurve({ x: 0, y: -10 }));
+      layer.closeContour(contourId);
+      const componentId = editor.requireGlyphLayer().addComponent(record.id);
+      await editor.settle();
+
+      await editor.clickGlyphLocal(50, 25);
+      expect(editor.selection.ids).toEqual([componentId]);
+      await editor.clickGlyphLocal(50, 75);
+      expect(editor.selection.ids).toEqual([]);
+    });
+
+    describe("component transforms", () => {
+      let layer: GlyphLayer;
+      let componentId: ComponentId;
+
+      beforeEach(async () => {
+        await editor.addGlyph("transform-base", null);
+        const record = editor.font.recordForName("transform-base" as GlyphName)!;
+        const glyph = await editor.font.loadGlyph(record.id);
+        const baseLayer = glyph.layerForSource(editor.font.defaultSource.id)!;
+        addClosedContour(baseLayer, [
+          { x: 0, y: 0 },
+          { x: 100, y: 0 },
+          { x: 100, y: 100 },
+          { x: 0, y: 100 },
+        ]);
+        addClosedContour(baseLayer, [
+          { x: 25, y: 25 },
+          { x: 25, y: 75 },
+          { x: 75, y: 75 },
+          { x: 75, y: 25 },
+        ]);
+
+        layer = editor.requireGlyphLayer();
+        componentId = layer.addComponent(record.id);
+        await editor.settle();
+        await editor.clickGlyphLocal(10, 10);
+      });
+
+      it("moves from empty space inside the component bounds and preserves undo", async () => {
+        await editor.dragScene({
+          down: { x: 50, y: 50 },
+          start: { x: 55, y: 50 },
+          end: { x: 80, y: 70 },
+        });
+
+        expect(
+          layer.components.find((component) => component.id === componentId)?.transform,
+        ).toMatchObject({
+          translateX: 30,
+          translateY: 20,
+        });
+        expect(editor.selectionBounds()).toMatchObject({ x: 30, y: 20, width: 100, height: 100 });
+
+        await editor.undo();
+        expect(
+          layer.components.find((component) => component.id === componentId)?.transform,
+        ).toMatchObject({
+          translateX: 0,
+          translateY: 0,
+        });
+        await editor.redo();
+        expect(
+          layer.components.find((component) => component.id === componentId)?.transform,
+        ).toMatchObject({
+          translateX: 30,
+          translateY: 20,
+        });
+      });
+
+      it("discards a component move when the drag is canceled", () => {
+        const down = editor.projectSceneToScreen({ x: 50, y: 50 });
+        const move = editor.projectSceneToScreen({ x: 80, y: 70 });
+        editor.pointerDown(down.x, down.y).pointerMove(move.x, move.y);
+        expect(layer.components[0]?.transform).toMatchObject({ translateX: 30, translateY: 20 });
+
+        editor.escape();
+        expect(layer.components[0]?.transform).toMatchObject({ translateX: 0, translateY: 0 });
+      });
+
+      it("scales from a component corner handle", async () => {
+        const bounds = editor.selectionBounds();
+        if (!bounds) throw new Error("Expected component bounds");
+
+        await editor.dragScene({
+          down: { x: bounds.right, y: bounds.bottom },
+          start: { x: bounds.right + 5, y: bounds.bottom + 5 },
+          end: { x: bounds.right + 50, y: bounds.bottom + 50 },
+        });
+
+        expect(layer.components[0]?.transform).toMatchObject({ scaleX: 1.5, scaleY: 1.5 });
+        expect(editor.selectionBounds()).toMatchObject({ x: 0, y: 0, width: 150, height: 150 });
+      });
+
+      it("rotates from the active corner rotation zone", async () => {
+        const tool = editor.toolManager.activeTool as Select;
+        const rect = tool.boundingBox.screenRect;
+        const bounds = editor.selectionBounds();
+        if (!rect || !bounds) throw new Error("Expected component bounding box");
+
+        const downScreen = {
+          x: rect.right + SELECT_BOUNDING_BOX_STYLE.rotationZoneOffsetPx,
+          y: rect.top - SELECT_BOUNDING_BOX_STYLE.rotationZoneOffsetPx,
+        };
+        const down = editor.projectScreenToScene(downScreen);
+        const center = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
+        const offset = { x: down.x - center.x, y: down.y - center.y };
+        const end = { x: center.x - offset.y, y: center.y + offset.x };
+
+        await editor.dragScene({
+          down,
+          start: { x: down.x + (end.x - down.x) * 0.1, y: down.y + (end.y - down.y) * 0.1 },
+          end,
+        });
+
+        expect(Math.abs(layer.components[0]?.transform.rotation ?? 0)).toBeCloseTo(90);
+      });
     });
   });
 });

@@ -1,26 +1,26 @@
 import { isConvertiblePreviewPath } from "@shared/workspace/previewConversion";
-import type { Editor } from "@/lib/editor/Editor";
-import type { Font } from "@/lib/model/Font";
+import type { Editor } from "@shift/editor";
+import type { Font } from "@shift/editor/model";
 import type { GlyphCatalog } from "@/lib/catalog/GlyphCatalog";
 import type { FontSessionClient } from "@/lib/workspace/FontSessionClient";
-import type { AuthoredFontSession, PreviewFontSession } from "@/types/fontSession";
+import type { PreviewFontSession, WorkspaceFontSession } from "@/types/fontSession";
 import type { Workspace } from "./Workspace";
 
 /**
- * Creates an authored renderer composition with durable workspace capabilities.
+ * Creates a renderer composition with durable workspace capabilities.
  *
  * @param catalog - Resident catalog owned for the session lifetime.
  * @param workspace - Connected authored workspace disposed with the session.
  * @param client - Session transport disposed after the renderer composition.
- * @returns an authored session whose disposal releases every owned resource.
+ * @returns a workspace session whose disposal releases every owned resource.
  */
-export function createAuthoredFontSession(
+export function createWorkspaceFontSession(
   catalog: GlyphCatalog,
   workspace: Workspace,
   client: FontSessionClient,
-): AuthoredFontSession {
+): WorkspaceFontSession {
   return {
-    mode: "authored",
+    mode: "workspace",
     catalog,
     workspace,
     font: workspace.font,

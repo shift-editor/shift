@@ -1,5 +1,5 @@
 import type { FontIntent } from "@shift/types";
-import type { PendingEditId } from "./editing";
+import type { PendingEditId } from "@shift/editor/types";
 
 /** One renderer edit matching one workspace apply and one undo entry. */
 export interface WorkspaceEdit {

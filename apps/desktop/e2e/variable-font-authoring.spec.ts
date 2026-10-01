@@ -1,6 +1,7 @@
 import type { Locator, Page } from "@playwright/test";
 import type { AxisId, NamedInstanceId, SourceId } from "@shift/types";
 import { expect, workspaceTest as test } from "./fixtures/electronApp";
+import type { ExternalAxisLocation } from "@shift/editor/types";
 
 interface VariableFixture {
   axisId: AxisId;
@@ -22,10 +23,8 @@ async function selectCategory(dialog: Locator, category: "Axes" | "Sources" | "I
 
 async function createVariableFixture(page: Page): Promise<VariableFixture> {
   return page.evaluate(async () => {
-    const session = window.shiftSession;
-    if (!session || session.mode !== "authored") throw new Error("Expected authored font");
-
-    const { font, editor, catalog } = session;
+    const font = window.shift?.font;
+    if (!font) throw new Error("Expected authored font");
 
     const axisId = font.createAxis({
       tag: "opsz",
@@ -39,23 +38,16 @@ async function createVariableFixture(page: Page): Promise<VariableFixture> {
       hidden: false,
     });
     await font.editCoordinator.settled();
-    const { externalLocation, activeSourceId } = editor;
-
-    try {
-      await catalog.setLocation(
-        font.getAxes().map((axis) => (axis.id === axisId ? 900 : axis.default)),
-      );
-      const sourceId = font.createSource("Bold", editor.externalLocation);
-      const instanceId = font.createNamedInstance({
-        name: "Black",
-        location: { values: { [axisId]: 800 } },
-      });
-      await font.editCoordinator.settled();
-      return { axisId, sourceId, instanceId };
-    } finally {
-      editor.setExternalLocation(externalLocation);
-      if (activeSourceId !== null) editor.selectSource(activeSourceId);
-    }
+    const sourceId = font.createSource(
+      "Bold",
+      new Map([[axisId, 900]]) as unknown as ExternalAxisLocation,
+    );
+    const instanceId = font.createNamedInstance({
+      name: "Black",
+      location: { values: { [axisId]: 800 } },
+    });
+    await font.editCoordinator.settled();
+    return { axisId, sourceId, instanceId };
   });
 }
 

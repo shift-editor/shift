@@ -8,6 +8,7 @@ import {
   mintLayerId,
   mintSourceId,
   type Axis,
+  type AxisDefinition,
   type AxisId,
   type GlyphId,
   type GlyphName,
@@ -15,11 +16,12 @@ import {
   type Unicode,
 } from "@shift/types";
 import type { WorkspaceSnapshot } from "@shared/workspace/protocol";
-import { Font } from "./Font";
-import { FontStore } from "./FontStore";
+import { Font } from "@shift/editor/model";
+import { FontStore } from "@shift/editor/model";
 import { createWorkspaceStack } from "@/testing/workspaceStack";
-import { signal } from "@/lib/signals/signal";
-import { externalAxisLocationFromRecord } from "@/lib/variation/location";
+import { signal } from "@shift/editor/signals";
+import { externalAxisLocationFromRecord } from "@shift/editor/variation";
+import { getGlyphInfo } from "@/workspace/glyphInfo";
 
 const SNAPSHOT: WorkspaceSnapshot = {
   workspaceId: "11111111-2222-3333-4444-555555555555",
@@ -48,6 +50,7 @@ const SNAPSHOT: WorkspaceSnapshot = {
   axisMappings: [],
   axisMappingBases: [],
   namedInstances: [],
+  languageIds: null,
 };
 
 describe("Font projects the workspace snapshot", () => {
@@ -73,6 +76,20 @@ describe("Font projects the workspace snapshot", () => {
     expect(font.hasGlyph(record!.id)).toBe(true);
     expect(font.nameForUnicode(65 as Unicode)).toBe("A");
     expect(font.sources.map((source) => source.name)).toEqual(["Regular"]);
+  });
+
+  it("uses injected glyph metadata only when the host provides it", () => {
+    const unicode = 0x00c0 as Unicode;
+    const lightweight = new Font({ store: new FontStore() });
+    const informed = new Font({ store: new FontStore(), glyphInfo: getGlyphInfo() });
+
+    expect(lightweight.nameForUnicode(unicode)).toBe("uni00C0");
+    expect(lightweight.glyphHandleForName("Agrave" as GlyphName)).toEqual({ name: "Agrave" });
+    expect(informed.nameForUnicode(unicode)).toBe("Agrave");
+    expect(informed.glyphHandleForName("Agrave" as GlyphName)).toEqual({
+      name: "Agrave",
+      unicode,
+    });
   });
 
   it("loadedCell flips reactively when the snapshot changes", () => {
@@ -303,6 +320,91 @@ describe("font-level intents make the font variable", () => {
 
     await stack.editCoordinator.undo();
     expect(stack.font.getAxisMappings()).toEqual([]);
+  });
+
+  it("deletes a source without touching axes or named instances, and undo restores it", async () => {
+    const stack = createWorkspaceStack();
+    await stack.createWorkspace();
+    const axisId = stack.font.createAxis(weightAxis());
+    await stack.editCoordinator.settled();
+    const mediumSourceId = stack.font.createSource(
+      "Medium",
+      externalAxisLocationFromRecord({ [axisId]: 600 }),
+    );
+    const boldSourceId = stack.font.createSource(
+      "Bold",
+      externalAxisLocationFromRecord({ [axisId]: 900 }),
+    );
+    stack.font.createNamedInstance({
+      name: "Display",
+      postscriptName: "UntitledFont-Display",
+      location: { values: { [axisId]: 800 } as Record<AxisId, number> },
+    });
+    await stack.editCoordinator.settled();
+    const axes = stack.font.getAxes();
+    const namedInstances = stack.font.namedInstances;
+    const defaultSourceId = stack.font.defaultSource.id;
+
+    stack.font.deleteSource(mediumSourceId);
+    await stack.editCoordinator.settled();
+
+    expect(stack.font.sources.map(({ id }) => id)).toEqual([defaultSourceId, boldSourceId]);
+    expect(stack.font.getAxes()).toEqual(axes);
+    expect(stack.font.namedInstances).toEqual(namedInstances);
+
+    await stack.editCoordinator.undo();
+    expect(stack.font.sources.map(({ id }) => id)).toEqual([
+      defaultSourceId,
+      mediumSourceId,
+      boldSourceId,
+    ]);
+  });
+
+  it("removes a deleted axis from source and instance locations, and undo restores them", async () => {
+    const stack = createWorkspaceStack();
+    await stack.createWorkspace();
+    const weightAxisId = stack.font.createAxis(weightAxis());
+    await stack.editCoordinator.settled();
+    const widthAxisId = stack.font.createAxis({
+      ...weightAxis(),
+      tag: "wdth",
+      name: "Width",
+      minimum: 50,
+      default: 100,
+      maximum: 200,
+    });
+    await stack.editCoordinator.settled();
+    const boldSourceId = stack.font.createSource(
+      "Bold Wide",
+      externalAxisLocationFromRecord({ [weightAxisId]: 900, [widthAxisId]: 150 }),
+    );
+    const instanceId = stack.font.createNamedInstance({
+      name: "Display",
+      postscriptName: "UntitledFont-Display",
+      location: {
+        values: { [weightAxisId]: 700, [widthAxisId]: 120 } as Record<AxisId, number>,
+      },
+    });
+    await stack.editCoordinator.settled();
+    const sources = stack.font.sources;
+    const namedInstances = stack.font.namedInstances;
+
+    stack.font.deleteAxis(widthAxisId);
+    await stack.editCoordinator.settled();
+
+    expect(stack.font.getAxes().map(({ id }) => id)).toEqual([weightAxisId]);
+    expect(stack.font.sources.every(({ location }) => !(widthAxisId in location.values))).toBe(
+      true,
+    );
+    expect(stack.font.source(boldSourceId)?.location.values).toEqual({ [weightAxisId]: 900 });
+    expect(stack.font.namedInstances).toEqual([
+      expect.objectContaining({ id: instanceId, location: { values: { [weightAxisId]: 700 } } }),
+    ]);
+
+    await stack.editCoordinator.undo();
+    expect(stack.font.getAxes().map(({ id }) => id)).toEqual([weightAxisId, widthAxisId]);
+    expect(stack.font.sources).toEqual(sources);
+    expect(stack.font.namedInstances).toEqual(namedInstances);
   });
 
   it("projects stable axis labels and explicit named instances", async () => {
@@ -721,5 +823,19 @@ function mappingPoint(axisId: AxisId, input: number, output: number) {
   return {
     input: { values: { [axisId]: input } as Record<AxisId, number> },
     output: { values: { [axisId]: output } as Record<AxisId, number> },
+  };
+}
+
+function weightAxis(): AxisDefinition {
+  return {
+    tag: "wght",
+    name: "Weight",
+    role: "external",
+    axisType: "continuous",
+    minimum: 100,
+    default: 400,
+    maximum: 900,
+    labels: [],
+    hidden: false,
   };
 }

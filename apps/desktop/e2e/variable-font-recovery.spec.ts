@@ -1,6 +1,7 @@
 import type { Page } from "@playwright/test";
 import type { Axis, AxisId, NamedInstance, NamedInstanceId, Source, SourceId } from "@shift/types";
 import { expect, recoveryTest as test, type RecoveryApp } from "./fixtures/electronApp";
+import type { ExternalAxisLocation } from "@shift/editor/types";
 
 interface ObservedVariableFont {
   axes: Axis[];
@@ -27,6 +28,8 @@ interface AxisFixture {
   instanceId: NamedInstanceId;
 }
 
+// Deletion cascades and undo are unit-tested in Font.test.ts; these tests prove that a
+// topology edit survives forced termination, recovery, explicit Save, and reopening.
 test.setTimeout(90_000);
 
 test("persists source topology", async ({ recoveryApp }) => {
@@ -56,14 +59,7 @@ test("persists source topology", async ({ recoveryApp }) => {
     fixture.defaultSourceId,
     fixture.boldSourceId,
   ]);
-  expect(deleted.axes).toEqual(baseline.axes);
-  expect(deleted.namedInstances).toEqual(baseline.namedInstances);
   expectCanonicalFont(recoveryApp, baseline);
-
-  await undo(recoveryApp.page);
-  await expectVariableFont(recoveryApp.page, { ...baseline, dirty: false });
-  await redo(recoveryApp.page);
-  await expectVariableFont(recoveryApp.page, deleted);
 
   const recovered = await recoveryApp.crashAndRecover();
   await expectVariableFont(recovered, deleted);
@@ -100,32 +96,7 @@ test("persists axis topology", async ({ recoveryApp }) => {
   expect(deleted.axes.map(({ id }) => id)).toEqual([fixture.weightAxisId, fixture.slantAxisId]);
   expect(deleted.defaultSourceId).toBe(fixture.defaultSourceId);
   expect(deleted.dirty).toBe(true);
-  expect(deleted.sources.every(({ location }) => !(fixture.widthAxisId in location.values))).toBe(
-    true,
-  );
-  expect(deleted.sources.find(({ id }) => id === fixture.boldSourceId)?.location.values).toEqual({
-    [fixture.weightAxisId]: 900,
-    [fixture.slantAxisId]: -8,
-  });
-  expect(deleted.namedInstances).toEqual([
-    {
-      id: fixture.instanceId,
-      name: "Display",
-      postscriptName: "MutatorSans-Display",
-      location: {
-        values: {
-          [fixture.weightAxisId]: 700,
-          [fixture.slantAxisId]: -4,
-        },
-      },
-    },
-  ]);
   expectCanonicalFont(recoveryApp, baseline);
-
-  await undo(recoveryApp.page);
-  await expectVariableFont(recoveryApp.page, { ...baseline, dirty: false });
-  await redo(recoveryApp.page);
-  await expectVariableFont(recoveryApp.page, deleted);
 
   const recovered = await recoveryApp.crashAndRecover();
   await expectVariableFont(recovered, deleted);
@@ -142,10 +113,8 @@ test("persists axis topology", async ({ recoveryApp }) => {
 
 async function authorSourceTopology(page: Page): Promise<SourceFixture> {
   return page.evaluate(async () => {
-    const session = window.shiftSession;
-    if (!session || session.mode !== "authored") throw new Error("Expected authored font");
-
-    const { font, editor, catalog } = session;
+    const font = window.shift?.font;
+    if (!font) throw new Error("Expected authored font");
 
     const defaultSourceId = font.defaultSource.id;
     const axisId = font.createAxis({
@@ -161,54 +130,45 @@ async function authorSourceTopology(page: Page): Promise<SourceFixture> {
     });
     await font.editCoordinator.settled();
 
-    const { externalLocation, activeSourceId } = editor;
+    const mediumSourceId = font.createSource(
+      "Medium",
+      new Map([[axisId, 600]]) as unknown as ExternalAxisLocation,
+    );
+    const boldSourceId = font.createSource(
+      "Bold",
+      new Map([[axisId, 900]]) as unknown as ExternalAxisLocation,
+    );
+    const instanceId = font.createNamedInstance({
+      name: "Display",
+      postscriptName: "MutatorSans-Display",
+      location: { values: { [axisId]: 800 } },
+    });
+    await font.editCoordinator.settled();
 
-    try {
-      await catalog.setLocation(
-        font.getAxes().map((axis) => (axis.id === axisId ? 600 : axis.default)),
-      );
-      const mediumSourceId = font.createSource("Medium", editor.externalLocation);
-      await catalog.setLocation(
-        font.getAxes().map((axis) => (axis.id === axisId ? 900 : axis.default)),
-      );
-      const boldSourceId = font.createSource("Bold", editor.externalLocation);
-      const instanceId = font.createNamedInstance({
-        name: "Display",
-        postscriptName: "MutatorSans-Display",
-        location: { values: { [axisId]: 800 } },
-      });
-      await font.editCoordinator.settled();
+    const medium = font.source(mediumSourceId);
+    if (!medium) throw new Error("Expected Medium source");
 
-      const medium = font.source(mediumSourceId);
-      if (!medium) throw new Error("Expected Medium source");
+    const ascender = font.metricDefinitions.find(({ kind }) => kind === "ascender");
+    if (!ascender) throw new Error("Expected ascender metric");
 
-      const ascender = font.metricDefinitions.find(({ kind }) => kind === "ascender");
-      if (!ascender) throw new Error("Expected ascender metric");
+    await font.updateSource({
+      ...medium,
+      name: "Medium Master",
+      italicAngle: -2,
+      lineGap: 37,
+      metricValues: medium.metricValues.map((value) =>
+        value.metricId === ascender.id ? { ...value, position: value.position + 17 } : value,
+      ),
+    });
 
-      await font.updateSource({
-        ...medium,
-        name: "Medium Master",
-        italicAngle: -2,
-        lineGap: 37,
-        metricValues: medium.metricValues.map((value) =>
-          value.metricId === ascender.id ? { ...value, position: value.position + 17 } : value,
-        ),
-      });
-
-      return { axisId, defaultSourceId, mediumSourceId, boldSourceId, instanceId };
-    } finally {
-      editor.setExternalLocation(externalLocation);
-      if (activeSourceId !== null) editor.selectSource(activeSourceId);
-    }
+    return { axisId, defaultSourceId, mediumSourceId, boldSourceId, instanceId };
   });
 }
 
 async function authorAxisTopology(page: Page): Promise<AxisFixture> {
   return page.evaluate(async () => {
-    const session = window.shiftSession;
-    if (!session || session.mode !== "authored") throw new Error("Expected authored font");
-
-    const { font, editor, catalog } = session;
+    const font = window.shift?.font;
+    if (!font) throw new Error("Expected authored font");
 
     const defaultSourceId = font.defaultSource.id;
     const weightAxisId = font.createAxis({
@@ -248,49 +208,35 @@ async function authorAxisTopology(page: Page): Promise<AxisFixture> {
     });
     await font.editCoordinator.settled();
 
-    const { externalLocation, activeSourceId } = editor;
-
-    try {
-      await catalog.setLocation(
-        font.getAxes().map((axis) => {
-          switch (axis.id) {
-            case weightAxisId:
-              return 900;
-            case widthAxisId:
-              return 150;
-            case slantAxisId:
-              return -8;
-            default:
-              return axis.default;
-          }
-        }),
-      );
-      const boldSourceId = font.createSource("Bold Slanted", editor.externalLocation);
-      const instanceId = font.createNamedInstance({
-        name: "Display",
-        postscriptName: "MutatorSans-Display",
-        location: {
-          values: {
-            [weightAxisId]: 700,
-            [widthAxisId]: 120,
-            [slantAxisId]: -4,
-          },
+    const boldSourceId = font.createSource(
+      "Bold Slanted",
+      new Map([
+        [weightAxisId, 900],
+        [widthAxisId, 150],
+        [slantAxisId, -8],
+      ]) as unknown as ExternalAxisLocation,
+    );
+    const instanceId = font.createNamedInstance({
+      name: "Display",
+      postscriptName: "MutatorSans-Display",
+      location: {
+        values: {
+          [weightAxisId]: 700,
+          [widthAxisId]: 120,
+          [slantAxisId]: -4,
         },
-      });
-      await font.editCoordinator.settled();
+      },
+    });
+    await font.editCoordinator.settled();
 
-      return {
-        weightAxisId,
-        widthAxisId,
-        slantAxisId,
-        defaultSourceId,
-        boldSourceId,
-        instanceId,
-      };
-    } finally {
-      editor.setExternalLocation(externalLocation);
-      if (activeSourceId !== null) editor.selectSource(activeSourceId);
-    }
+    return {
+      weightAxisId,
+      widthAxisId,
+      slantAxisId,
+      defaultSourceId,
+      boldSourceId,
+      instanceId,
+    };
   });
 }
 
@@ -318,18 +264,6 @@ function expectCanonicalFont(recoveryApp: RecoveryApp, expected: ObservedVariabl
     axes: expected.axes,
     sources: expected.sources,
     namedInstances: expected.namedInstances,
-  });
-}
-
-async function undo(page: Page): Promise<void> {
-  await page.evaluate(async () => {
-    await window.shift?.font.editCoordinator.undo();
-  });
-}
-
-async function redo(page: Page): Promise<void> {
-  await page.evaluate(async () => {
-    await window.shift?.font.editCoordinator.redo();
   });
 }
 

@@ -1,2 +1,9 @@
-export { CollapsibleSection, type CollapsibleSectionProps } from "./CollapsibleSection";
-export { SidebarActionButton, SidebarActionRow, SidebarActionSlot } from "./SidebarActionRow";
+export {
+  CollapsibleSection,
+  SidebarActionButton,
+  SidebarActionRow,
+  SidebarActionSlot,
+  SidebarRowButton,
+  type CollapsibleSectionProps,
+  type SidebarRowButtonProps,
+} from "@shift/editor/ui";

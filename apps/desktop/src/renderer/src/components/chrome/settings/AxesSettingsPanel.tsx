@@ -9,11 +9,10 @@ import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-  cn,
 } from "@shift/ui";
 import MinusIcon from "@/assets/general/minus.svg";
 import PlusIcon from "@/assets/general/plus.svg";
-import { SidebarActionButton, SidebarActionRow } from "@/components/sidebar/SidebarActionRow";
+import { SidebarActionButton, SidebarActionRow } from "@/components/sidebar";
 import { CreateAxisMenu } from "@/components/variation/CreateAxisMenu";
 import { useAxes } from "@/hooks/useAxes";
 import type { AxisSettingsSection } from "@/types/settings";
@@ -51,7 +50,7 @@ export const AxesSettingsPanel = ({ initialAxisId, canAuthor }: AxesSettingsPane
 
   return (
     <div className="grid h-full flex-1 grid-cols-[10rem_minmax(0,1fr)]">
-      <aside className="flex min-h-0 flex-col border-r border-r-toolbar bg-canvas">
+      <aside className="flex min-h-0 flex-col border-r border-r-chrome bg-surface-muted">
         <div className="flex h-11 shrink-0 items-center justify-between px-2">
           <h2 className="pl-1 text-sm font-medium text-primary">Axes</h2>
           {canAuthor ? (
@@ -68,24 +67,19 @@ export const AxesSettingsPanel = ({ initialAxisId, canAuthor }: AxesSettingsPane
           )}
         </div>
 
-        <nav className="scrollbar-hidden flex min-h-0 flex-col gap-0.5 overflow-y-auto px-2 pb-2">
+        <nav className="scrollbar-hidden flex min-h-0 flex-col gap-1 overflow-y-auto px-2 pb-2">
           {axes.map((axis) => (
             <SidebarActionRow
               key={axis.id}
               data-testid={`settings-axis-${axis.id}`}
               isActive={axis.id === selectedAxisId}
-              className={cn(
-                "h-8",
-                axis.id === selectedAxisId && "bg-hover hover:bg-hover data-[active]:bg-hover",
-              )}
               onClick={() => setSelectedAxisId(axis.id)}
-              contentClassName="h-8 text-sm font-normal"
               actions={
                 <Tooltip>
                   <TooltipTrigger>
                     <SidebarActionButton
                       label={`Delete ${axis.name}`}
-                      className="h-8 hover:bg-icon-button-hover"
+                      className="hover:bg-icon-button-hover"
                       aria-disabled={!canAuthor || undefined}
                       onClick={(event) => {
                         event.stopPropagation();
@@ -135,14 +129,14 @@ const AxisEditor = ({ axis, canAuthor }: { axis: Axis; canAuthor: boolean }) => 
         <div className="flex h-11 items-center px-5 pr-8">
           <h2 className="truncate text-sm font-medium text-primary">{draft.axis.name}</h2>
         </div>
-        <TabsList className="h-8 w-full gap-2 border-toolbar px-5 pr-8">
-          <TabsTab value="definition" className="h-8 px-2.5 text-sm">
+        <TabsList className="h-8 w-full gap-2 border-chrome px-5 pr-8">
+          <TabsTab value="definition" size="md">
             Definition
           </TabsTab>
-          <TabsTab value="mapping" className="h-8 px-2.5 text-sm">
+          <TabsTab value="mapping" size="md">
             Mapping
           </TabsTab>
-          <TabsTab value="styles" className="h-8 px-2.5 text-sm">
+          <TabsTab value="styles" size="md">
             Styles
           </TabsTab>
           <TabsIndicator />

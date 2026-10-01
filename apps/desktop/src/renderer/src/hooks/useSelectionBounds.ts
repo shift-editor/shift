@@ -1,6 +1,6 @@
 import { Bounds, type Bounds as BoundsType } from "@shift/geo";
 import { useEditor } from "@/workspace/WorkspaceContext";
-import { useSignalState } from "@/lib/signals";
+import { useSignalState } from "@shift/editor/signals";
 
 /**
  * Current selection bounds.

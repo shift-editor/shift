@@ -2,7 +2,8 @@ use crate::axis::{Axis, AxisMapping, DesignLocation};
 use crate::binary_data::BinaryData;
 use crate::collection::EntityList;
 use crate::entity::{
-    AnchorId, AxisId, ContourId, GlyphEntityId, GlyphId, LayerId, MetricId, PointId, SourceId,
+    AnchorId, AxisId, ComponentId, ContourId, GlyphEntityId, GlyphId, LayerId, MetricId, PointId,
+    SourceId,
 };
 use crate::error::{CoreError, CoreResult};
 use crate::features::FeatureData;
@@ -10,7 +11,7 @@ use crate::glyph::{Glyph, GlyphLayer};
 use crate::guideline::Guideline;
 use crate::interpolation::GlyphInterpolationValues;
 use crate::kerning::KerningData;
-use crate::lib_data::LibData;
+use crate::lib_data::{LibData, LibValue};
 use crate::metrics::{FontMetrics, MetricDefinition, MetricKind, MetricValue};
 use crate::named_instance::{validate_named_instances, NamedInstance};
 use crate::source::source_locations_equal;
@@ -19,6 +20,10 @@ use crate::{AxisLabelId, GlyphName, NamedInstanceId};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+
+/// Font lib key holding tracked Hyperglot language ids (for example
+/// `eng-latin`) as a plist array of strings.
+pub const LANGUAGES_LIB_KEY: &str = "com.shift.languages";
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -1042,6 +1047,13 @@ impl Font {
             .contains(&GlyphEntityId::from(anchor_id.clone()))
     }
 
+    /// Returns whether a component identity is already in use anywhere in the font.
+    pub(crate) fn has_component_id(&self, component_id: &ComponentId) -> bool {
+        self.index()
+            .entity_ids
+            .contains(&GlyphEntityId::from(component_id.clone()))
+    }
+
     /// Records a contour minted by an in-place layer edit.
     pub(crate) fn record_contour_id(&mut self, contour_id: ContourId) {
         self.state_mut()
@@ -1355,6 +1367,27 @@ impl Font {
 
     pub fn lib_mut(&mut self) -> &mut LibData {
         &mut self.data_mut().lib
+    }
+
+    /// Returns the tracked language ids stored under [`LANGUAGES_LIB_KEY`].
+    ///
+    /// `None` means the key is absent, so callers apply their own default
+    /// list; `Some` (possibly empty) is the authored list in stored order.
+    /// Non-string array entries are skipped, and a non-array value reads as
+    /// absent.
+    pub fn language_ids(&self) -> Option<Vec<String>> {
+        match self.lib().get(LANGUAGES_LIB_KEY)? {
+            LibValue::Array(values) => Some(
+                values
+                    .iter()
+                    .filter_map(|value| match value {
+                        LibValue::String(id) => Some(id.clone()),
+                        _ => None,
+                    })
+                    .collect(),
+            ),
+            _ => None,
+        }
     }
 
     /// Source-format font-info fields that Shift does not model, preserved

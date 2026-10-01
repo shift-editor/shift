@@ -5,6 +5,7 @@ type IconButtonProps = {
   icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
   onClick: () => void;
   disabled?: boolean;
+  shortcut?: string;
   className?: string;
 };
 
@@ -13,6 +14,7 @@ export const IconButton = ({
   icon: Icon,
   onClick,
   disabled,
+  shortcut,
   className,
 }: IconButtonProps) => (
   <Tooltip>
@@ -34,6 +36,11 @@ export const IconButton = ({
         <Icon className="w-full h-full" />
       </Button>
     </TooltipTrigger>
-    <TooltipContent>{ariaLabel}</TooltipContent>
+    <TooltipContent>
+      {ariaLabel}
+      {shortcut ? (
+        <kbd className="ml-2 font-sans text-on-surface-inverse/70">{shortcut}</kbd>
+      ) : null}
+    </TooltipContent>
   </Tooltip>
 );

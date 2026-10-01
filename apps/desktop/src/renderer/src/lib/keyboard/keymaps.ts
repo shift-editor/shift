@@ -1,32 +1,109 @@
+import { commandShortcuts } from "@shared/commands";
+import { alignSelection, applyBooleanSelection, flipSelection } from "@/lib/editor/sidebarActions";
 import { matchChord, normalizeKeyboardEvent } from "./normalize";
-import type { KeyBinding, KeyContext } from "./types";
+import { sidebarShortcuts } from "./sidebarShortcuts";
+import type {
+  KeyboardCommandHandler,
+  KeyBinding,
+  KeyContext,
+  NormalizedKeyboardEvent,
+} from "./types";
 
 export interface KeymapHandlers {
   activateTemporaryHand: (ctx: KeyContext) => boolean;
   releaseTemporaryHand: (ctx: KeyContext) => boolean;
 }
 
-export function createGlobalKeyDownBindings(): KeyBinding[] {
+export function createGlobalKeyDownBindings(runCommand: KeyboardCommandHandler): KeyBinding[] {
   return [
+    {
+      id: "global.toggleAllSourcesForEditing",
+      preventDefault: true,
+      match: (event) =>
+        matchChord(event, {
+          key: "e",
+          primaryModifier: true,
+          shiftKey: false,
+          altKey: false,
+        }),
+      run: (ctx) => ctx.editor.toggleAllSourcesForEditing(),
+    },
+    {
+      id: "global.collapseEditingSources",
+      when: (ctx) => !ctx.canvasActive,
+      match: (event) => matchChord(event, { key: "Escape" }),
+      run: (ctx) => ctx.editor.collapseEditingSources(),
+    },
+    {
+      id: "global.addComponent",
+      preventDefault: true,
+      match: (event) => matchChord(event, commandShortcuts["glyph.addComponent"]),
+      run: async () => {
+        await runCommand("glyph.addComponent");
+        return true;
+      },
+    },
+    ...(["left", "center-h", "right", "top", "center-v", "bottom"] as const).map((alignment) => ({
+      id: `global.align.${alignment}`,
+      preventDefault: true,
+      when: (ctx: KeyContext) => ctx.activeTool !== "text",
+      match: (event: NormalizedKeyboardEvent) =>
+        matchChord(event, sidebarShortcuts[`align.${alignment}`]),
+      run: (ctx: KeyContext) => alignSelection(ctx.editor, alignment),
+    })),
+    ...(["union", "intersect", "subtract"] as const).map((operation) => ({
+      id: `global.boolean.${operation}`,
+      preventDefault: true,
+      when: (ctx: KeyContext) => ctx.activeTool !== "text",
+      match: (event: NormalizedKeyboardEvent) =>
+        matchChord(event, sidebarShortcuts[`boolean.${operation}`]),
+      run: (ctx: KeyContext) => applyBooleanSelection(ctx.editor, operation),
+    })),
+    ...(["horizontal", "vertical"] as const).map((axis) => ({
+      id: `global.flip.${axis}`,
+      preventDefault: true,
+      when: (ctx: KeyContext) => ctx.activeTool !== "text",
+      match: (event: NormalizedKeyboardEvent) =>
+        matchChord(event, sidebarShortcuts[`flip.${axis}`]),
+      run: (ctx: KeyContext) => flipSelection(ctx.editor, axis),
+    })),
     {
       id: "global.copy",
       preventDefault: true,
       when: (ctx) => ctx.activeTool !== "text",
-      match: (event) => matchChord(event, { key: "c", primaryModifier: true }),
+      match: (event) =>
+        matchChord(event, {
+          key: "c",
+          primaryModifier: true,
+          shiftKey: false,
+          altKey: false,
+        }),
       run: (ctx) => ctx.editor.copy(),
     },
     {
       id: "global.cut",
       preventDefault: true,
       when: (ctx) => ctx.activeTool !== "text",
-      match: (event) => matchChord(event, { key: "x", primaryModifier: true }),
+      match: (event) =>
+        matchChord(event, {
+          key: "x",
+          primaryModifier: true,
+          shiftKey: false,
+          altKey: false,
+        }),
       run: (ctx) => ctx.editor.cut(),
     },
     {
       id: "global.paste",
       preventDefault: true,
       when: (ctx) => ctx.activeTool !== "text",
-      match: (event) => matchChord(event, { key: "v", primaryModifier: true }),
+      match: (event) =>
+        matchChord(event, {
+          key: "v",
+          primaryModifier: true,
+          shiftKey: false,
+          altKey: false,
+        }),
       run: (ctx) => ctx.editor.paste(),
     },
     {
@@ -168,6 +245,16 @@ export function createCanvasKeyDownBindings(handlers: KeymapHandlers): KeyBindin
         ctx.editor.selectAll();
         return true;
       },
+    },
+  ];
+}
+
+export function createCanvasFallbackKeyDownBindings(): KeyBinding[] {
+  return [
+    {
+      id: "canvas.collapseEditingSources",
+      match: (event) => matchChord(event, { key: "Escape" }),
+      run: (ctx) => ctx.editor.collapseEditingSources(),
     },
   ];
 }

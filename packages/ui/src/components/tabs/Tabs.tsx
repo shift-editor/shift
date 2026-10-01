@@ -24,16 +24,24 @@ export const TabsList = React.forwardRef<React.ElementRef<typeof BaseTabs.List>,
 );
 TabsList.displayName = "TabsList";
 
-export interface TabsTabProps extends React.ComponentPropsWithoutRef<typeof BaseTabs.Tab> {}
+export interface TabsTabProps extends React.ComponentPropsWithoutRef<typeof BaseTabs.Tab> {
+  size?: "sm" | "md";
+}
+
+const tabSizeStyles = {
+  sm: "px-2 text-xs",
+  md: "px-2.5 text-sm",
+};
 
 export const TabsTab = React.forwardRef<React.ElementRef<typeof BaseTabs.Tab>, TabsTabProps>(
-  ({ className, ...props }, ref) => (
+  ({ className, size = "sm", ...props }, ref) => (
     <BaseTabs.Tab
       ref={ref}
       className={cn(
-        "relative h-8 cursor-pointer px-2 text-xs text-secondary outline-none",
+        "relative h-8 cursor-pointer text-secondary outline-none",
         "data-[active]:text-primary data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
         "focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent",
+        tabSizeStyles[size],
         className,
       )}
       {...props}
@@ -53,8 +61,8 @@ export const TabsIndicator = React.forwardRef<
   <BaseTabs.Indicator
     ref={ref}
     className={cn(
-      "absolute bottom-0 left-[var(--active-tab-left)] h-0.5",
-      "w-[var(--active-tab-width)] bg-accent transition-[left,width]",
+      "absolute bottom-0 left-(--active-tab-left) h-0.5",
+      "w-(--active-tab-width) bg-accent transition-[left,width]",
       className,
     )}
     {...props}

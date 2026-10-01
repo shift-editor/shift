@@ -1,7 +1,8 @@
 import { Polygon } from "@shift/geo";
 import { isContourId } from "@shift/types";
 import { beforeEach, describe, expect, it } from "vitest";
-import type { GlyphLayer } from "@/lib/model/Glyph";
+import type { GlyphLayer } from "@shift/editor/model";
+import { externalAxisLocationFromRecord } from "@shift/editor/variation";
 import { TestEditor } from "@/testing/TestEditor";
 
 const operationCases = [
@@ -37,6 +38,8 @@ describe("editor boolean operations", () => {
   beforeEach(async () => {
     editor = new TestEditor();
     await editor.startSession();
+    editor.font.createAxis(weightAxis());
+    await editor.settle();
     editor.selectTool("shape");
     await editor.dragScene({
       down: { x: 10, y: 10 },
@@ -60,13 +63,16 @@ describe("editor boolean operations", () => {
       await editor.boolean(contourIdA, contourIdB, operation);
       const layer = editor.requireGlyphLayer();
       expectGeometry(layer, contourCount, area, bounds);
-      expect(editor.selection.ids).toEqual(layer.contours.map((contour) => contour.id));
+      const resultSelection = layer.contours.map((contour) => contour.id);
+      expect(editor.selection.ids).toEqual(resultSelection);
 
       await editor.undo();
       expectGeometry(editor.requireGlyphLayer(), 2, 16_200, [10, 10, 150, 150]);
+      expect(editor.selection.ids).toEqual([contourIdA, contourIdB]);
 
       await editor.redo();
       expectGeometry(editor.requireGlyphLayer(), contourCount, area, bounds);
+      expect(editor.selection.ids).toEqual(resultSelection);
     },
   );
 
@@ -96,7 +102,9 @@ describe("editor boolean operations", () => {
     const layer = editor.requireGlyphLayer();
     const before = geometrySummary(layer);
     const [contourIdA, contourIdB] = selectedContours(editor);
-    editor.setSourceToDefault();
+    const axis = editor.font.getAxes()[0];
+    if (!axis) throw new Error("Expected a weight axis");
+    editor.setExternalLocation(externalAxisLocationFromRecord({ [axis.id]: 550 }));
 
     await editor.boolean(contourIdA, contourIdB, "union");
 
@@ -108,6 +116,20 @@ describe("editor boolean operations", () => {
     expectGeometry(layer, 1, 8_100, [10, 10, 100, 100]);
   });
 });
+
+function weightAxis() {
+  return {
+    tag: "wght",
+    name: "Weight",
+    role: "external" as const,
+    axisType: "continuous" as const,
+    minimum: 100,
+    default: 400,
+    maximum: 900,
+    labels: [],
+    hidden: false,
+  };
+}
 
 function selectedContours(editor: TestEditor) {
   const [contourIdA, contourIdB] = editor.selection.ids.filter(isContourId);

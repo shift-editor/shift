@@ -5,7 +5,7 @@ import { Button, Tooltip, TooltipContent, TooltipTrigger } from "@shift/ui";
 import { message } from "@shared/messages";
 import MinusIcon from "@/assets/general/minus.svg";
 import PlusIcon from "@/assets/general/plus.svg";
-import { useSignalState } from "@/lib/signals";
+import { useSignalState } from "@shift/editor/signals";
 import { useFont } from "@/workspace/WorkspaceContext";
 import { MappingGraph } from "./MappingGraph";
 import { SettingsNumberField } from "./SettingsNumberField";
@@ -83,17 +83,39 @@ export const AxisMappingPanel = ({ axis }: AxisMappingPanelProps) => {
 
   return (
     <section className="grid grid-cols-[minmax(13rem,1fr)_minmax(12rem,0.9fr)] gap-5 p-5 pr-8">
-      <MappingGraph axis={axis} points={draft.points} />
+      <MappingGraph
+        axis={axis}
+        points={draft.points}
+        onPointChange={(index, input, output) => {
+          form.update((current) => ({
+            ...current,
+            points: current.points.map((point, pointIndex) => {
+              if (pointIndex !== index) return point;
+
+              return {
+                ...point,
+                input: {
+                  values: { ...point.input.values, [axis.id]: input },
+                },
+                output: {
+                  values: { ...point.output.values, [axis.id]: output },
+                },
+              };
+            }),
+          }));
+        }}
+        onPointCommit={form.commit}
+      />
 
       <div className="flex min-w-0 flex-col gap-2">
         <h3 className="text-sm text-primary">Source Mapping</h3>
-        {form.error && <p className="text-xs text-red-600">{form.error}</p>}
-        <div className="overflow-hidden rounded border border-line-subtle bg-white">
+        {form.error && <p className="text-xs text-error">{form.error}</p>}
+        <div className="overflow-hidden rounded border border-line-subtle bg-surface">
           <table className="w-full table-fixed border-collapse text-center text-sm">
             <thead className="bg-input text-secondary">
               <tr>
-                <th className="h-7 px-1 font-medium text-black">User</th>
-                <th className="h-7 px-1 font-medium text-black">Source</th>
+                <th className="h-7 px-1 font-medium text-primary">User</th>
+                <th className="h-7 px-1 font-medium text-primary">Source</th>
                 <th className="w-7" />
               </tr>
             </thead>
@@ -141,7 +163,7 @@ export const AxisMappingPanel = ({ axis }: AxisMappingPanelProps) => {
           type="button"
           variant="primary"
           size="sm"
-          className="h-7 self-start px-2 text-sm"
+          className="self-start text-sm"
           disabled={nextPoint === null}
           onClick={async () => {
             await form.updateAndCommit((current) => {

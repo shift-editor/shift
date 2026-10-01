@@ -1,34 +1,16 @@
-import type { ToolName } from "@/lib/tools/core";
-import type { DeleteMode } from "@/types/glyph";
-import type { ToolShortcutEntry } from "@/types/tools";
+import type { CommandId } from "@shared/commands";
+import type { Editor } from "@shift/editor";
+import type { ToolName } from "@shift/editor/tools";
 
-// TODO: probably remove this and just pass editor.
-export interface KeyboardEditorActions {
-  zoomIn(): void;
-  zoomOut(): void;
-  zoomToFit(): void;
-  zoomToSelection(): void;
-  setZoom(zoom: number): void;
-  copy(): Promise<boolean>;
-  cut(): Promise<boolean>;
-  paste(): Promise<boolean>;
-  deleteSelection(mode?: DeleteMode): Promise<boolean>;
-  undo(): Promise<void>;
-  redo(): Promise<void>;
-  selectAll(): void;
-  setActiveTool(toolName: ToolName): void;
-  getToolShortcuts(): ToolShortcutEntry[];
-  requestTemporaryTool(
-    toolId: ToolName,
-    options?: { onActivate?: () => void; onReturn?: () => void },
-  ): void;
-  returnFromTemporaryTool(): void;
-}
+export type KeyboardEditorActions = Editor;
 
 export interface KeyboardToolManagerActions {
   handleKeyDown(e: KeyboardEvent): boolean;
   handleKeyUp(e: KeyboardEvent): boolean;
 }
+
+/** Dispatches an application command matched by the renderer keyboard router. */
+export type KeyboardCommandHandler = (id: CommandId) => void | Promise<void>;
 
 export interface KeyContext {
   canvasActive: boolean;

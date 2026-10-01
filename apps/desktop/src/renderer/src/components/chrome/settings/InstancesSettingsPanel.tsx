@@ -1,10 +1,10 @@
 import { useEffect, useState, type ReactNode } from "react";
 import type { Axis, NamedInstance, NamedInstanceId } from "@shift/types";
-import { Input, Tooltip, TooltipContent, TooltipTrigger, cn } from "@shift/ui";
+import { Input, Tooltip, TooltipContent, TooltipTrigger } from "@shift/ui";
 import { message } from "@shared/messages";
 import MinusIcon from "@/assets/general/minus.svg";
 import PlusIcon from "@/assets/general/plus.svg";
-import { SidebarActionButton, SidebarActionRow } from "@/components/sidebar/SidebarActionRow";
+import { SidebarActionButton, SidebarActionRow } from "@/components/sidebar";
 import { CreateInstanceMenu } from "@/components/variation/CreateInstanceMenu";
 import { useAxes } from "@/hooks/useAxes";
 import { useNamedInstances } from "@/hooks/useNamedInstances";
@@ -48,7 +48,7 @@ export const InstancesSettingsPanel = ({
 
   return (
     <div className="grid h-full min-h-0 grid-cols-[10rem_minmax(0,1fr)]">
-      <aside className="flex min-h-0 flex-col border-r border-r-toolbar bg-canvas">
+      <aside className="flex min-h-0 flex-col border-r border-r-chrome bg-surface-muted">
         <div className="flex h-11 shrink-0 items-center justify-between px-2">
           <h2 className="pl-1 text-sm font-medium text-primary">Instances</h2>
           {canAuthor ? (
@@ -65,25 +65,19 @@ export const InstancesSettingsPanel = ({
           )}
         </div>
 
-        <div className="scrollbar-hidden min-h-0 overflow-y-auto px-2 pb-2">
+        <div className="scrollbar-hidden flex min-h-0 flex-col gap-1 overflow-y-auto px-2 pb-2">
           {instances.map((instance) => (
             <SidebarActionRow
               key={instance.id}
               data-testid={`settings-instance-${instance.id}`}
               isActive={instance.id === selectedInstance?.id}
-              className={cn(
-                "h-8",
-                instance.id === selectedInstance?.id &&
-                  "bg-hover hover:bg-hover data-[active]:bg-hover",
-              )}
               onClick={() => setSelectedInstanceId(instance.id)}
-              contentClassName="h-8 text-sm font-normal"
               actions={
                 <Tooltip>
                   <TooltipTrigger>
                     <SidebarActionButton
                       label={`Delete ${instance.name}`}
-                      className="h-8 hover:bg-icon-button-hover"
+                      className="hover:bg-icon-button-hover"
                       aria-disabled={!canAuthor || undefined}
                       onClick={(event) => {
                         event.stopPropagation();
@@ -146,7 +140,7 @@ const InstanceEditor = ({ instance, axes, canAuthor }: InstanceEditorProps) => {
         <h2 className="truncate text-sm font-medium text-primary">{draft.name || "Instance"}</h2>
       </div>
 
-      {form.error && <p className="mb-4 text-xs text-red-600">{form.error}</p>}
+      {form.error && <p className="mb-4 text-xs text-error">{form.error}</p>}
 
       <SettingsSection title="Name">
         <Input
@@ -157,7 +151,8 @@ const InstanceEditor = ({ instance, axes, canAuthor }: InstanceEditorProps) => {
             form.update((current) => ({ ...current, name }));
           }}
           onBlur={commit}
-          className="h-8 bg-white text-sm text-black"
+          size="md"
+          variant="plain"
         />
       </SettingsSection>
 

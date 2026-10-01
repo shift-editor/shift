@@ -51,8 +51,19 @@ export declare class Bridge {
    * redo stack is empty.
    */
   redo(): NapiAppliedChange | null
+  /** Permanently removes every redo entry without changing font or dirty state. */
+  discardRedo(): void
   /** Glyph-addressed snapshots for renderer-local synchronous font state. */
   getGlyphSnapshots(requests: Array<NapiGlyphSnapshotRequest>): Array<NapiGlyphSnapshot>
+  /**
+   * Derives entity mappings and structural diagnostics between two layers.
+   *
+   * Both layers must belong to the same glyph. The read acquires that glyph's
+   * authored layers before matching, so sparse workspace residency cannot
+   * produce an incomplete result. Missing layers and cross-glyph requests are
+   * rejected rather than represented as compatibility differences.
+   */
+  getLayerMatch(referenceLayerId: LayerId, targetLayerId: LayerId): NapiLayerMatch
   /**
    * Returns compact glyph projections without resolving a location.
    *
@@ -117,6 +128,13 @@ export declare class Bridge {
   getAxisMappings(): Array<NapiAxisMapping>
   getAxisMappingBases(): Array<NapiAxisMappingBasis>
   getMetricDefinitions(): Array<NapiMetricDefinition>
+  /**
+   * Returns the font's tracked Hyperglot language ids in authored order.
+   *
+   * `null` when the font lib has no tracked-language key, so the renderer
+   * applies its own default; an empty array is an explicit empty list.
+   */
+  getLanguageIds(): Array<string> | null
   getNamedInstances(): Array<NapiNamedInstance>
   /** Returns the precomputed source-metric interpolation model for this font. */
   getSourceMetricsInterpolation(): NapiSourceMetricsInterpolationSnapshot | null
@@ -156,6 +174,12 @@ export interface NapiAddAnchorsIntent {
   anchors: Array<NapiAnchorSeed>
 }
 
+export interface NapiAddComponentIntent {
+  layerId: LayerId
+  componentId: ComponentId
+  baseGlyphId: GlyphId
+}
+
 export interface NapiAddContourIntent {
   layerId: LayerId
   contourId: ContourId
@@ -174,6 +198,11 @@ export interface NapiAddPointsIntent {
 export interface NapiAnchorData {
   id: AnchorId
   name?: string
+}
+
+export interface NapiAnchorMatch {
+  referenceId: AnchorId
+  targetId: AnchorId
 }
 
 /**
@@ -339,6 +368,11 @@ export interface NapiComponentGlyph {
   attachment?: NapiComponentAnchorAttachment
 }
 
+export interface NapiComponentMatch {
+  referenceId: ComponentId
+  targetId: ComponentId
+}
+
 export declare const enum NapiComponentTransformKind {
   Decomposed = 'decomposed',
   Affine = 'affine'
@@ -348,6 +382,11 @@ export interface NapiContourData {
   id: ContourId
   points: Array<NapiPointData>
   closed: boolean
+}
+
+export interface NapiContourMatch {
+  referenceId: ContourId
+  targetId: ContourId
 }
 
 /**
@@ -392,6 +431,11 @@ export interface NapiCreateSourceIntent {
   location: NapiLocation
 }
 
+export interface NapiDecomposeComponentsIntent {
+  layerId: LayerId
+  componentIds: Array<ComponentId>
+}
+
 /** Font-level axis deletion. Removing an axis also reshapes source locations. */
 export interface NapiDeleteAxisIntent {
   axisId: AxisId
@@ -416,11 +460,14 @@ export interface NapiFontIntent {
    * Discriminator naming the populated payload field. Editing kinds:
    * "addPoints" | "addContour" | "setContourClosed" | "movePoints" |
    * "setPointSmooth" | "removePoints" | "addAnchors" | "moveAnchors" |
-   * "removeAnchors" | "reverseContour" | "setContourStart" | "translatePoints" |
+   * "removeAnchors" | "addComponent" | "setComponentTransforms" |
+   * "removeComponents" | "decomposeComponents" |
+   * "reverseContour" | "setContourStart" | "translatePoints" |
    * "setXAdvance" | "applyBooleanOp".
-   * Font-level kinds additionally include metadata replacement, axis
-   * create/update/delete, mapping replacement, named-instance
-   * create/update/delete, source create/delete, and glyph or layer creation.
+   * Font-level kinds additionally include metadata replacement, tracked
+   * language replacement, axis create/update/delete, mapping replacement,
+   * named-instance create/update/delete, source create/delete, and glyph
+   * or layer creation.
    * Every kind shares the same apply path; one set is one undo step.
    */
   kind: string
@@ -433,6 +480,10 @@ export interface NapiFontIntent {
   addAnchors?: NapiAddAnchorsIntent
   moveAnchors?: NapiMoveAnchorsIntent
   removeAnchors?: NapiRemoveAnchorsIntent
+  addComponent?: NapiAddComponentIntent
+  setComponentTransforms?: NapiSetComponentTransformsIntent
+  removeComponents?: NapiRemoveComponentsIntent
+  decomposeComponents?: NapiDecomposeComponentsIntent
   reverseContour?: NapiReverseContourIntent
   setContourStart?: NapiSetContourStartIntent
   translatePoints?: NapiTranslatePointsIntent
@@ -441,6 +492,7 @@ export interface NapiFontIntent {
   createGlyph?: NapiCreateGlyphIntent
   updateGlyph?: NapiUpdateGlyphIntent
   updateFontMetadata?: NapiUpdateFontMetadataIntent
+  setLanguages?: NapiSetLanguagesIntent
   createAxis?: NapiCreateAxisIntent
   updateAxis?: NapiUpdateAxisIntent
   deleteAxis?: NapiDeleteAxisIntent
@@ -501,6 +553,8 @@ export interface NapiFontReplacement {
   sourceMetricsInterpolation?: NapiSourceMetricsInterpolationReplacement
   /** Full authored product-preset list when named instances changed. */
   namedInstances?: Array<NapiNamedInstance>
+  /** Tracked language list when it changed; absent otherwise. */
+  languages?: NapiLanguagesReplacement
   /**
    * Full sources list when font-level source structure changed (createAxis
    * reshapes locations, createSource adds one); absent otherwise.
@@ -519,6 +573,8 @@ export interface NapiFontSnapshot {
   axisMappings: Array<NapiAxisMapping>
   axisMappingBases: Array<NapiAxisMappingBasis>
   namedInstances: Array<NapiNamedInstance>
+  /** Tracked Hyperglot language ids; absent when the font stores no list. */
+  languageIds?: Array<string>
 }
 
 export interface NapiGlyphChangedEntities {
@@ -646,6 +702,55 @@ export interface NapiInterpolationSupport {
 }
 
 /**
+ * Replacement wrapper whose presence distinguishes "unchanged" from a
+ * change that removed the tracked language list.
+ */
+export interface NapiLanguagesReplacement {
+  /**
+   * Tracked Hyperglot language ids in authored order; absent when the font
+   * stores no list and callers should apply their own default.
+   */
+  languageIds?: Array<string>
+}
+
+export interface NapiLayerDifference {
+  kind: NapiLayerDifferenceKind
+  contour?: number
+  point?: number
+  referenceCount?: number
+  targetCount?: number
+  referenceClosed?: boolean
+  targetClosed?: boolean
+  referencePointType?: NapiPointType
+  targetPointType?: NapiPointType
+  referenceAnchorNames?: Array<string | undefined | null>
+  targetAnchorNames?: Array<string | undefined | null>
+  referenceComponentIds?: Array<GlyphId> | undefined
+  targetComponentIds?: Array<GlyphId> | undefined
+}
+
+export declare const enum NapiLayerDifferenceKind {
+  ContourCount = 'contourCount',
+  ContourClosed = 'contourClosed',
+  PointCount = 'pointCount',
+  PointType = 'pointType',
+  AnchorCount = 'anchorCount',
+  AnchorSequence = 'anchorSequence',
+  ComponentSequence = 'componentSequence'
+}
+
+export interface NapiLayerMatch {
+  referenceLayerId: LayerId
+  targetLayerId: LayerId
+  complete: boolean
+  contours: Array<NapiContourMatch>
+  points: Array<NapiPointMatch>
+  anchors: Array<NapiAnchorMatch>
+  components: Array<NapiComponentMatch>
+  differences: Array<NapiLayerDifference>
+}
+
+/**
  * Replace-grade state for one touched layer; the renderer folds by
  * substitution, never by interpreting changes.
  */
@@ -714,6 +819,11 @@ export interface NapiPointData {
   smooth: boolean
 }
 
+export interface NapiPointMatch {
+  referenceId: PointId
+  targetId: PointId
+}
+
 /**
  * A point to create, carrying its caller-minted id (decision 6: ids are
  * client-minted so verbs return identity synchronously).
@@ -737,6 +847,11 @@ export interface NapiRemoveAnchorsIntent {
   anchorIds: Array<AnchorId>
 }
 
+export interface NapiRemoveComponentsIntent {
+  layerId: LayerId
+  componentIds: Array<ComponentId>
+}
+
 export interface NapiRemovePointsIntent {
   layerId: LayerId
   pointIds: Array<PointId>
@@ -751,6 +866,12 @@ export interface NapiSetAxisMappingsIntent {
   mappings: Array<NapiAxisMapping>
 }
 
+export interface NapiSetComponentTransformsIntent {
+  layerId: LayerId
+  componentIds: Array<ComponentId>
+  transforms: Array<number>
+}
+
 export interface NapiSetContourClosedIntent {
   layerId: LayerId
   contourId: ContourId
@@ -762,6 +883,15 @@ export interface NapiSetContourStartIntent {
   layerId: LayerId
   contourId: ContourId
   pointId: PointId
+}
+
+/** Replaces the font's tracked language list as one undoable edit. */
+export interface NapiSetLanguagesIntent {
+  /**
+   * Hyperglot language ids in display order. Blank ids are dropped and
+   * duplicates keep their first position; an empty list is stored as-is.
+   */
+  languageIds: Array<string>
 }
 
 export interface NapiSetMetricDefinitionsIntent {

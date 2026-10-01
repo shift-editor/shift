@@ -1,0 +1,103 @@
+import type { ToolContext } from "../../core/Behavior";
+import type { ClickEvent, DragStartEvent } from "../../core/GestureDetector";
+import { PenStroke } from "../PenStroke";
+import { PenTargets } from "../PenTargets";
+import type { PenState, PenBehavior } from "../types";
+import type { Pen } from "../Pen";
+
+export class PenDownBehaviour implements PenBehavior {
+  onClick(state: PenState, ctx: ToolContext<PenState, Pen>, event: ClickEvent): boolean {
+    if (state.type !== "ready") return false;
+
+    const editor = ctx.editor;
+    const stroke = PenStroke.active(ctx.tool);
+    if (!stroke) return false;
+
+    const nodePoint = editor.getPointInNodeSpace(event.coords.scene, stroke.node.position);
+    const targets = PenTargets.forGeometry(stroke.layer.geometry);
+    const target = targets.at(nodePoint, editor.hitRadius);
+
+    editor.selection.clear();
+
+    const isActive = stroke.activeEndpoint !== null;
+
+    switch (target.type) {
+      case "terminal":
+        if (isActive) {
+          stroke.connectTo(target);
+        } else {
+          stroke.continueContour(target.contourId, target.side, target.pointId);
+        }
+
+        ctx.setState({ type: "ready" });
+        return true;
+
+      case "segment":
+        if (!stroke.splitSegment(target.segmentId, target.t)) return false;
+        ctx.setState({ type: "ready" });
+        return true;
+
+      case "empty":
+        if (stroke.activeContour) {
+          stroke.appendOnCurve(ctx.tool.resolveAnchorPosition(nodePoint, event.shiftKey));
+        } else {
+          stroke.startContour(nodePoint);
+        }
+
+        ctx.setState({ type: "ready" });
+        return true;
+    }
+  }
+
+  onDragStart(state: PenState, ctx: ToolContext<PenState, Pen>, event: DragStartEvent): boolean {
+    if (state.type !== "ready") return false;
+
+    const editor = ctx.editor;
+    const stroke = PenStroke.active(ctx.tool);
+    if (!stroke) return false;
+
+    const nodePoint = editor.getPointInNodeSpace(event.coords.scene, stroke.node.position);
+    const targets = PenTargets.forGeometry(stroke.layer.geometry);
+    const target = targets.at(nodePoint, editor.hitRadius);
+    if (target.type === "segment") return false;
+
+    const start = stroke.activeEndpoint;
+    if (!start) return false;
+
+    const firstPoint = stroke.activeContour?.firstPoint;
+    const pressesFirstPoint =
+      target.type === "terminal" &&
+      target.side === "start" &&
+      target.pointId === firstPoint?.id &&
+      start.pointId !== firstPoint.id;
+    const pressesOtherEnd =
+      target.type === "terminal" && !pressesFirstPoint && target.pointId !== start.pointId;
+    if (pressesOtherEnd) {
+      stroke.connectTo(target);
+      ctx.setState({ type: "ready" });
+      return true;
+    }
+
+    if (pressesFirstPoint) {
+      ctx.setState({
+        type: "closing",
+        close: {
+          start,
+          firstPointId: firstPoint.id,
+          firstPosition: firstPoint.position,
+          handlePosition: null,
+        },
+        shiftKey: event.shiftKey,
+        guides: [],
+      });
+      return true;
+    }
+
+    const anchorPosition =
+      target.type === "empty"
+        ? ctx.tool.resolveAnchorPosition(nodePoint, event.shiftKey)
+        : nodePoint;
+    ctx.setState({ type: "anchored", anchorPosition });
+    return true;
+  }
+}

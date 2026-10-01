@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { copyFile, mkdtemp, rm } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -84,6 +84,22 @@ if (signMacos) {
   }
 }
 
+const thirdPartyLicensesPath = path.join(__dirname, ".generated", "THIRD_PARTY_LICENSES.txt");
+
+/** Regenerates the license texts of every npm package and crate this build ships. */
+async function writeThirdPartyLicenses() {
+  await mkdir(path.dirname(thirdPartyLicensesPath), { recursive: true });
+  await execFileAsync(
+    process.execPath,
+    [
+      path.join(__dirname, "../../scripts/generate-third-party-licenses.mjs"),
+      "desktop",
+      thirdPartyLicensesPath,
+    ],
+    { maxBuffer: 64 * 1024 * 1024 },
+  );
+}
+
 async function compileMacosAssetCatalog(context: AfterPackContext) {
   if (context.electronPlatformName !== "darwin") return;
 
@@ -131,6 +147,7 @@ async function compileMacosAssetCatalog(context: AfterPackContext) {
 }
 
 const config: Configuration = {
+  beforePack: writeThirdPartyLicenses,
   afterPack: compileMacosAssetCatalog,
   appId,
   productName,
@@ -159,7 +176,11 @@ const config: Configuration = {
   ],
   extraResources: [
     { from: `../../icons/${iconName}.png`, to: `${iconName}.png` },
-    { from: "../../LICENSE", to: "LICENSE" },
+    { from: "../../LICENSE-MIT", to: "LICENSE-MIT" },
+    { from: "../../LICENSE-APACHE", to: "LICENSE-APACHE" },
+    { from: "../../THIRD_PARTY_NOTICES.md", to: "THIRD_PARTY_NOTICES.md" },
+    { from: ".generated/THIRD_PARTY_LICENSES.txt", to: "THIRD_PARTY_LICENSES.txt" },
+    { from: "THIRD_PARTY_THEMES.md", to: "THIRD_PARTY_THEMES.md" },
   ],
   asar: true,
   asarUnpack: ["**/*.node"],

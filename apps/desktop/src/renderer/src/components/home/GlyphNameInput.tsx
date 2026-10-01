@@ -64,7 +64,8 @@ export const GlyphNameInput = forwardRef<HTMLInputElement, GlyphNameInputProps>(
             event.currentTarget.select();
           }
         }}
-        className="h-7 w-full truncate bg-input text-center font-ui text-xs font-normal text-muted focus:ring-inset"
+        size="sm"
+        className="w-full truncate text-center text-muted"
       />
     );
   },

@@ -1,5 +1,5 @@
 import type { GlyphId } from "@shift/types";
-import { Canvas2DSurface } from "@/lib/editor/rendering/CanvasSurface";
+import { Canvas2DSurface } from "@shift/editor/rendering";
 import { fitCanvasText } from "@/lib/graphics/canvasText";
 import type { GlyphCatalogFrame } from "@/types/glyphCatalog";
 
@@ -34,7 +34,12 @@ export class GlyphCatalogOverlay {
     return true;
   }
 
-  draw(container: HTMLElement, frame: GlyphCatalogFrame, hoveredCatalogIndex: number | null): void {
+  draw(
+    container: HTMLElement,
+    frame: GlyphCatalogFrame,
+    hoveredCatalogIndex: number | null,
+    emptyGlyphIds: ReadonlySet<GlyphId>,
+  ): void {
     const context = Canvas2DSurface.from(this.#canvas).ctx;
     const style = getComputedStyle(container);
     const mutedColor = style.getPropertyValue("--color-muted").trim() || style.color;
@@ -55,6 +60,19 @@ export class GlyphCatalogOverlay {
           HOVER_RADIUS,
         );
         context.fill();
+      }
+
+      if (cell.glyph.unicode !== null && emptyGlyphIds.has(cell.glyph.id)) {
+        context.fillStyle = mutedColor;
+        context.font = "32px system-ui, sans-serif";
+        context.textAlign = "center";
+        context.textBaseline = "middle";
+        context.fillText(
+          String.fromCodePoint(cell.glyph.unicode),
+          cell.previewRect.x + cell.previewRect.width / 2,
+          cell.previewRect.y + cell.previewRect.height / 2,
+          cell.previewContentRect.width,
+        );
       }
 
       context.fillStyle = inputColor;

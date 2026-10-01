@@ -9,14 +9,18 @@ import type {
   NodeId,
   PointId,
   PointSeed,
+  PointType,
   Source,
   SourceId,
 } from "@shift/types";
 import type { DirtyDocumentChoice } from "../../src/main/document/types";
 import type { EditorDriver } from "./EditorDriver";
+import type { ElectronProcesses } from "./electronProcesses";
 
 export type ShiftFixtures = {
+  electronProcesses: ElectronProcesses;
   electronApp: ElectronApplication;
+  relaunch: RelaunchApp;
   page: Page;
   editor: EditorDriver;
   testRoot: string;
@@ -38,6 +42,8 @@ export type ShiftOptions = {
   dirtyDocumentChoices: readonly DirtyDocumentChoice[] | undefined;
   dirtyDocumentDelayMs: number;
   documentCrashChoice: "reopen" | "close";
+  /** Permits renderer alert, confirm, prompt, or beforeunload dialogs during the test. */
+  allowRendererDialogs: boolean;
 };
 
 export interface CanonicalVariableFont {
@@ -102,3 +108,51 @@ export type RecoveryApp = {
   canonicalGlyphNames: () => string[];
   canonicalVariableFont: () => CanonicalVariableFont;
 };
+
+/** Point inserted by a scratch-glyph fixture; the editor mints its identity. */
+export interface ScratchPoint {
+  readonly x: number;
+  readonly y: number;
+  readonly pointType: PointType;
+  readonly smooth: boolean;
+}
+
+/** Contour inserted into a scratch glyph. */
+export interface ScratchContour {
+  readonly closed: boolean;
+  readonly points: readonly ScratchPoint[];
+}
+
+/** One Electron launch owned by {@link ElectronProcesses}. */
+export interface ElectronLaunch {
+  /** Diagnostic label for attachments, such as `initial` or `relaunch-1`. */
+  readonly label: string;
+  /** Isolated user-data directory the application must adopt. */
+  readonly userDataDir: string;
+  /** Arguments after the main script, such as a document path. */
+  readonly args?: readonly string[];
+  /** Environment for the launch; build it with `shiftTestEnvironment()`. */
+  readonly env: Record<string, string>;
+  /** Window geometry policy applied to the first window. */
+  readonly windowSizing: "native" | "visual";
+  /**
+   * Device pixels per CSS pixel forced for the process; defaults to 1. Fixtures pass
+   * Playwright's `deviceScaleFactor` option, so `test.use({ deviceScaleFactor: 2 })` renders
+   * at 2× while visual window sizing stays in CSS pixels.
+   */
+  readonly deviceScaleFactor?: number;
+}
+
+/** Launches the application again with the test's user-data directory and dialog script. */
+export type RelaunchApp = (options?: {
+  /** Additional arguments, such as a document to open on launch. */
+  readonly args?: readonly string[];
+  /** Additional Shift E2E variables for this launch. */
+  readonly env?: Record<string, string>;
+}) => Promise<ElectronApplication>;
+
+/** Records a dialog the renderer opened during a test. */
+export interface RecordedDialog {
+  readonly type: string;
+  readonly message: string;
+}

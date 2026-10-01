@@ -11,8 +11,8 @@ use shift_backends::{
 };
 use shift_font::{
     AppliedIntents, Axis, AxisId, FontChange, FontChangeSet, FontIntent, FontIntentSet,
-    FontMetadata, Glyph, GlyphId, GlyphLayer, LayerId, MetricDefinition, NamedInstance, Source,
-    SourceId, TouchedLayer, error::CoreError,
+    FontMetadata, Glyph, GlyphId, GlyphLayer, LANGUAGES_LIB_KEY, LayerId, LibValue,
+    MetricDefinition, NamedInstance, Source, SourceId, TouchedLayer, error::CoreError,
 };
 use shift_store::{
     DocumentMetadata, RecoveryState, ShiftStore, WorkspaceSourceKind, WorkspaceState,
@@ -259,6 +259,32 @@ impl FontWorkspace {
             .collect::<Vec<_>>();
         self.acquire_layers(required_layers)?;
 
+        let mut component_roots = Vec::new();
+        for intent in &set.intents {
+            match intent {
+                FontIntent::AddComponent { base_glyph_id, .. } => {
+                    component_roots.push(base_glyph_id.clone());
+                }
+                FontIntent::DecomposeComponents {
+                    layer_id,
+                    component_ids,
+                } => {
+                    let Some(layer) = self.font.layer(layer_id.clone()) else {
+                        continue;
+                    };
+                    component_roots.extend(component_ids.iter().filter_map(|component_id| {
+                        layer
+                            .component(component_id.clone())
+                            .map(|component| component.base_glyph_id())
+                    }));
+                }
+                _ => {}
+            }
+        }
+        if !component_roots.is_empty() {
+            self.acquire_glyphs(&component_roots, AcquireScope::ComponentClosure)?;
+        }
+
         let mut pre = FontLevelPreState::default();
         for intent in &set.intents {
             let Some(layer_id) = intent.layer_id() else {
@@ -375,7 +401,9 @@ impl FontWorkspace {
                         post: change.definitions.clone(),
                     });
                 }
-                FontChange::FontMetadataUpdated(_) | FontChange::NamedInstancesUpdated(_) => {}
+                FontChange::FontMetadataUpdated(_)
+                | FontChange::FontLibValueUpdated(_)
+                | FontChange::NamedInstancesUpdated(_) => {}
                 FontChange::GlyphIdentityChanged(change) => {
                     steps.push(LedgerStep::GlyphIdentity {
                         glyph_id: change.glyph_id.clone(),
@@ -456,7 +484,8 @@ impl FontWorkspace {
                 | FontChange::PointSmoothChanged(_)
                 | FontChange::PointPositionsChanged(_)
                 | FontChange::AnchorPositionsChanged(_)
-                | FontChange::LayerGeometryReplaced(_) => {}
+                | FontChange::LayerGeometryReplaced(_)
+                | FontChange::LayerComponentsReplaced(_) => {}
             }
         }
 
@@ -495,6 +524,17 @@ impl FontWorkspace {
                 pre: instances.to_vec(),
                 post: self.font.named_instances().to_vec(),
             });
+        }
+
+        for (key, pre_value) in &pre.font_lib_values {
+            let post_value = self.font.lib().get(key).cloned();
+            if *pre_value != post_value {
+                steps.push(LedgerStep::FontLibValue {
+                    key: key.clone(),
+                    pre: pre_value.clone(),
+                    post: post_value,
+                });
+            }
         }
 
         if let Some(metadata) = pre.metadata.as_ref()
@@ -550,6 +590,11 @@ impl FontWorkspace {
                 Err(error)
             }
         }
+    }
+
+    /// Permanently removes every redo entry without changing live font state or dirty state.
+    pub fn discard_redo(&mut self) {
+        self.ledger.discard_redo();
     }
 
     fn replay(
@@ -621,6 +666,10 @@ impl FontWorkspace {
                     LedgerStep::FontMetadata { pre, post } => {
                         let (_from, to) = side.orient(pre, post);
                         replay_font_metadata(font, to, &mut changes);
+                    }
+                    LedgerStep::FontLibValue { key, pre, post } => {
+                        let (_from, to) = side.orient(pre, post);
+                        replay_font_lib_value(font, key, to, &mut changes);
                     }
                     LedgerStep::Axis {
                         pre,
@@ -1049,6 +1098,9 @@ struct PreLayer {
 struct FontLevelPreState {
     layers: Vec<PreLayer>,
     metadata: Option<FontMetadata>,
+    /// Font lib values keyed by lib key, captured before the first intent
+    /// that writes each key.
+    font_lib_values: Vec<(String, Option<LibValue>)>,
     sources: Vec<Source>,
     source_order: Option<Vec<SourceId>>,
     default_source_id: Option<SourceId>,
@@ -1067,6 +1119,18 @@ fn capture_font_level_pre_state(
 ) {
     if matches!(intent, FontIntent::UpdateFontMetadata { .. }) && pre.metadata.is_none() {
         pre.metadata = Some(font.metadata().clone());
+    }
+
+    if matches!(intent, FontIntent::SetLanguages { .. })
+        && !pre
+            .font_lib_values
+            .iter()
+            .any(|(key, _)| key == LANGUAGES_LIB_KEY)
+    {
+        pre.font_lib_values.push((
+            LANGUAGES_LIB_KEY.to_string(),
+            font.lib().get(LANGUAGES_LIB_KEY).cloned(),
+        ));
     }
 
     if matches!(
@@ -1218,6 +1282,7 @@ fn replay_layer_pairs(
     let mut replayed = Vec::with_capacity(pairs.len());
     let mut structural_replacements = Vec::with_capacity(pairs.len());
     for pair in pairs {
+        let components_changed = pair.pre.components() != pair.post.components();
         let replacement = match side {
             ReplaySide::Pre => pair.pre,
             ReplaySide::Post => pair.post,
@@ -1227,14 +1292,16 @@ fn replay_layer_pairs(
         } else {
             font.replace_glyph_layer_values(replacement.id(), &replacement.interpolation_values())?;
         }
-        replayed.push((replacement, pair.structural));
+        replayed.push((replacement, pair.structural, components_changed));
     }
     font.replace_glyph_layers(structural_replacements)?;
 
-    for (layer, structural) in replayed {
-        // Geometry replace persists contours only; metrics ride their
-        // own change so width/height restores reach SQLite too.
-        changes.push(FontChange::layer_geometry_replaced(layer.as_ref()));
+    for (layer, structural, components_changed) in replayed {
+        if components_changed {
+            changes.push(FontChange::layer_components_replaced(layer.as_ref()));
+        } else {
+            changes.push(FontChange::layer_geometry_replaced(layer.as_ref()));
+        }
         changes.push(FontChange::layer_metrics_changed(layer.as_ref()));
         touched.push(TouchedLayer { layer, structural });
     }
@@ -1276,6 +1343,21 @@ fn replay_font_metadata(
 ) {
     font.replace_metadata(metadata.clone());
     changes.push(FontChange::font_metadata_updated(&metadata));
+}
+
+fn replay_font_lib_value(
+    font: &mut shift_font::Font,
+    key: String,
+    value: Option<LibValue>,
+    changes: &mut FontChangeSet,
+) {
+    changes.push(FontChange::font_lib_value_updated(&key, value.as_ref()));
+    match value {
+        Some(value) => font.lib_mut().set(key, value),
+        None => {
+            font.lib_mut().remove(&key);
+        }
+    }
 }
 
 fn replay_axis(

@@ -1,6 +1,7 @@
 import * as React from "react";
 import { Dialog as BaseDialog } from "@base-ui-components/react/dialog";
 import { cn } from "../../lib/utils";
+import { usePortalContainer } from "../portal";
 
 export interface DialogProps extends React.ComponentProps<typeof BaseDialog.Root> {}
 
@@ -19,7 +20,10 @@ export const DialogBackdrop = React.forwardRef<HTMLDivElement, DialogBackdropPro
 );
 DialogBackdrop.displayName = "DialogBackdrop";
 
-export const DialogPortal = BaseDialog.Portal;
+export function DialogPortal(props: React.ComponentProps<typeof BaseDialog.Portal>) {
+  const container = usePortalContainer();
+  return <BaseDialog.Portal container={container} {...props} />;
+}
 
 export interface DialogPopupProps extends React.ComponentProps<typeof BaseDialog.Popup> {}
 
@@ -28,7 +32,7 @@ export const DialogPopup = React.forwardRef<HTMLDivElement, DialogPopupProps>(
     <BaseDialog.Popup
       ref={ref}
       className={cn(
-        "fixed left-1/2 top-[20%] z-50 w-full max-w-lg -translate-x-1/2 rounded-md bg-surface shadow-sm",
+        "fixed left-1/2 top-1/5 z-50 w-full max-w-lg -translate-x-1/2 rounded-lg bg-surface shadow-lg",
         className,
       )}
       {...props}
@@ -41,9 +45,27 @@ export interface DialogTitleProps extends React.ComponentProps<typeof BaseDialog
 
 export const DialogTitle = React.forwardRef<HTMLHeadingElement, DialogTitleProps>(
   ({ className, ...props }, ref) => (
-    <BaseDialog.Title ref={ref} className={cn(className)} {...props} />
+    <BaseDialog.Title
+      ref={ref}
+      className={cn("text-sm font-medium text-primary", className)}
+      {...props}
+    />
   ),
 );
 DialogTitle.displayName = "DialogTitle";
 
-export const DialogClose = BaseDialog.Close;
+export const DialogClose = React.forwardRef<
+  React.ElementRef<typeof BaseDialog.Close>,
+  React.ComponentPropsWithoutRef<typeof BaseDialog.Close> & { variant?: "icon" }
+>(({ className, variant, ...props }, ref) => (
+  <BaseDialog.Close
+    ref={ref}
+    className={cn(
+      variant === "icon" &&
+        "inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded text-primary/70 transition-colors hover:bg-hover hover:text-primary",
+      className,
+    )}
+    {...props}
+  />
+));
+DialogClose.displayName = "DialogClose";

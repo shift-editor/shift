@@ -1,0 +1,69 @@
+/**
+ * Behavior — a single state-transition rule in the tool state machine.
+ *
+ * Each tool declares an ordered list of behaviors. On every event, BaseTool
+ * iterates the list, finds the first behavior that `canHandle` the
+ * (state, event) pair, and delegates the transition to it. This keeps each
+ * behavior small and testable in isolation.
+ *
+ * @typeParam S - Tool state union (e.g. `PenState`, `SelectState`).
+ * @typeParam E - Event type, defaults to {@link ToolEvent}.
+ * @typeParam A - Action type emitted alongside state transitions. Tools
+ *   without side-effect actions leave this as `never`.
+ *
+ * @module
+ */
+import type { Editor } from "../../editor/Editor";
+import type {
+  ClickEvent,
+  DoubleClickEvent,
+  DragCancelEvent,
+  DragEndEvent,
+  DragEvent,
+  DragStartEvent,
+  KeyDownEvent,
+  KeyUpEvent,
+  PointerMoveEvent,
+  ToolEvent,
+} from "./GestureDetector";
+
+export interface ToolContext<S, TTool = unknown> {
+  readonly editor: Editor;
+  readonly tool: TTool;
+  getState(): S;
+  setState(next: S): void;
+  /** Registers rollback for the active drag; the returned function dismisses it after success. */
+  onCancel(callback: () => void): () => void;
+}
+
+/**
+ * A composable state-transition rule.
+ *
+ * Behaviors are stateless objects — all mutable context lives in the tool
+ * state `S` and the {@link Editor}. Implement `canHandle` as a fast guard
+ * (typically a state-type + event-type check) and `transition` as the pure
+ * state computation. Use `onTransition` for post-transition side effects
+ * that need both the previous and next states.
+ */
+export interface Behavior<S, TTool = unknown> {
+  // New explicit event handlers
+  onPointerMove?(state: S, ctx: ToolContext<S, TTool>, event: PointerMoveEvent): boolean;
+  onClick?(state: S, ctx: ToolContext<S, TTool>, event: ClickEvent): boolean;
+  onDoubleClick?(state: S, ctx: ToolContext<S, TTool>, event: DoubleClickEvent): boolean;
+  onDragStart?(state: S, ctx: ToolContext<S, TTool>, event: DragStartEvent): boolean;
+  onDrag?(state: S, ctx: ToolContext<S, TTool>, event: DragEvent): boolean;
+  onDragEnd?(state: S, ctx: ToolContext<S, TTool>, event: DragEndEvent): boolean;
+  onDragCancel?(state: S, ctx: ToolContext<S, TTool>, event: DragCancelEvent): boolean;
+  onKeyDown?(state: S, ctx: ToolContext<S, TTool>, event: KeyDownEvent): boolean;
+  onKeyUp?(state: S, ctx: ToolContext<S, TTool>, event: KeyUpEvent): boolean;
+  onStateExit?(prev: S, next: S, ctx: ToolContext<S, TTool>, event: ToolEvent): void;
+  onStateEnter?(prev: S, next: S, ctx: ToolContext<S, TTool>, event: ToolEvent): void;
+}
+
+/**
+ * Identity helper for defining a behavior as a plain object literal with
+ * full type inference. Avoids the boilerplate of `satisfies Behavior<...>`.
+ */
+export function createBehavior<S, TTool = unknown>(impl: Behavior<S, TTool>): Behavior<S, TTool> {
+  return impl;
+}
