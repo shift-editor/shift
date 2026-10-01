@@ -124,8 +124,12 @@ impl Work<Context, WorkId, Error> for KerningInstanceWork {
         let groups = context.kerning_groups.get();
         let mut kerns = BTreeMap::new();
         for pair in self.snapshot.kerning.pairs() {
-            let first = resolve_side(&pair.first, true, &glyph_order, &groups)?;
-            let second = resolve_side(&pair.second, false, &glyph_order, &groups)?;
+            let (Some(first), Some(second)) = (
+                resolve_side(&pair.first, true, &glyph_order, &groups),
+                resolve_side(&pair.second, false, &glyph_order, &groups),
+            ) else {
+                continue;
+            };
             kerns.insert((first, second), OrderedFloat(pair.value));
         }
 
@@ -137,33 +141,32 @@ impl Work<Context, WorkId, Error> for KerningInstanceWork {
     }
 }
 
+/// Resolves one kerning side against the compiled glyph order and groups.
+///
+/// Returns `None` for a side naming a glyph outside the compiled order or a
+/// group that was not emitted, so the pair is skipped as fontc does for
+/// Glyphs and UFO sources. Groups disappear when none of their members are
+/// compiled.
 fn resolve_side(
     side: &KerningSide,
     first: bool,
     glyph_order: &fontir::ir::GlyphOrder,
     groups: &KerningGroups,
-) -> Result<KernSide, Error> {
+) -> Option<KernSide> {
     match side {
-        KerningSide::Glyph(name) if glyph_order.contains(name.as_str()) => {
-            Ok(KernSide::Glyph(name.as_str().into()))
-        }
-        KerningSide::Glyph(name) => Err(Error::InvalidEntry(
-            "Shift kerning pair",
-            format!("references missing glyph '{}'", name.as_str()),
-        )),
+        KerningSide::Glyph(name) => glyph_order
+            .contains(name.as_str())
+            .then(|| KernSide::Glyph(name.as_str().into())),
         KerningSide::Group(name) => {
             let group = if first {
                 KernGroup::Side1(bare_group_name(name).into())
             } else {
                 KernGroup::Side2(bare_group_name(name).into())
             };
-            if !groups.groups.contains_key(&group) {
-                return Err(Error::InvalidEntry(
-                    "Shift kerning pair",
-                    format!("references missing group '{name}'"),
-                ));
-            }
-            Ok(KernSide::Group(group))
+            groups
+                .groups
+                .contains_key(&group)
+                .then_some(KernSide::Group(group))
         }
     }
 }

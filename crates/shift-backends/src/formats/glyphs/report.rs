@@ -19,17 +19,24 @@ pub(super) fn import_report(source: &GlyphsFont) -> ImportReport {
         });
     }
 
-    let intermediate_layers = source
+    let master_locations = source
+        .masters
+        .iter()
+        .map(|master| &master.axes_values)
+        .collect::<Vec<_>>();
+    let master_located_intermediate_layers = source
         .glyphs
         .values()
         .flat_map(|glyph| &glyph.layers)
-        .filter(|layer| layer.is_intermediate())
+        .filter(|layer| {
+            layer.is_intermediate() && master_locations.contains(&&layer.attributes.coordinates)
+        })
         .count();
-    if intermediate_layers > 0 {
+    if master_located_intermediate_layers > 0 {
         report.losses.push(ImportLoss {
-            kind: ImportLossKind::Approximated,
+            kind: ImportLossKind::Omitted,
             message: format!(
-                "Shift does not represent Glyphs intermediate-layer locations; {intermediate_layers} layers were retained as ordinary layers without their intermediate locations."
+                "{master_located_intermediate_layers} Glyphs intermediate layers sit exactly on a master location and were omitted."
             ),
         });
     }
@@ -55,7 +62,7 @@ pub(super) fn import_report(source: &GlyphsFont) -> ImportReport {
         report.losses.push(ImportLoss {
             kind: ImportLossKind::Approximated,
             message: format!(
-                "Shift does not represent Glyphs smart-component axes and locations; smart geometry in {smart_component_glyphs} glyphs was retained as ordinary layers and components."
+                "Shift does not represent Glyphs smart-component axes and locations; {smart_component_glyphs} smart glyphs keep only their master layers, and their pole layers were omitted."
             ),
         });
     }
@@ -133,12 +140,14 @@ mod tests {
 
         let report = import_report(&source);
 
-        assert_eq!(report.losses.len(), 3);
+        assert_eq!(report.losses.len(), 2);
         assert_eq!(report.losses[0].kind, ImportLossKind::Omitted);
         assert!(report.losses[0].message.contains("bracket layers"));
         assert_eq!(report.losses[1].kind, ImportLossKind::Approximated);
-        assert!(report.losses[1].message.contains("intermediate-layer"));
-        assert_eq!(report.losses[2].kind, ImportLossKind::Approximated);
-        assert!(report.losses[2].message.contains("smart-component"));
+        assert!(report.losses[1].message.contains("smart-component"));
+        assert!(!report
+            .losses
+            .iter()
+            .any(|loss| loss.message.contains("intermediate")));
     }
 }

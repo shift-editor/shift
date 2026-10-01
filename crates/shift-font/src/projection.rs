@@ -595,7 +595,7 @@ impl FontProjection<'_> {
     /// Resolves selected direct component occurrences into flattened contours.
     ///
     /// Descendant components are included recursively at this projection's
-    /// location. Anchor attachment uses the complete root component sequence.
+    /// location.
     ///
     /// # Errors
     ///
@@ -743,7 +743,7 @@ fn exact_source_id(
 mod tests {
     use crate::test_support::sample_variable_font;
     use crate::{
-        Anchor, Axis, AxisId, Component, Contour, CoreError, DesignLocation, Font, Glyph, GlyphId,
+        Axis, AxisId, Component, Contour, CoreError, DesignLocation, Font, Glyph, GlyphId,
         GlyphLayer, LayerId, PointType, Source, SourceId, Transform,
     };
 
@@ -1171,46 +1171,6 @@ mod tests {
         let mut expected_ids = vec![acutecomb_id, acute_id];
         expected_ids.sort();
         assert_eq!(projection.component_glyph_ids(), expected_ids);
-    }
-
-    #[test]
-    fn glyph_projection_fixes_anchor_attachment_choice() {
-        let (mut font, _axis_id, _light_id, regular_id, _bold_id) = variable_font();
-        let base_id = GlyphId::from_raw("A");
-        let mut base = Glyph::with_id(base_id.clone(), "A");
-        let mut base_layer = line_layer(regular_id.clone(), 0.0);
-        base_layer.add_anchor(Anchor::new(Some("top".to_string()), 100.0, 200.0));
-        base.set_layer(base_layer);
-        font.insert_glyph(base).unwrap();
-
-        let mark_id = GlyphId::from_raw("acutecomb");
-        let mut mark = Glyph::with_id(mark_id.clone(), "acutecomb");
-        let mut mark_layer = line_layer(regular_id.clone(), 0.0);
-        mark_layer.add_anchor(Anchor::new(Some("_top".to_string()), 5.0, 0.0));
-        mark.set_layer(mark_layer);
-        font.insert_glyph(mark).unwrap();
-
-        let root_id = GlyphId::from_raw("Aacute");
-        let mut root = Glyph::with_id(root_id.clone(), "Aacute");
-        let mut root_layer = GlyphLayer::with_width(LayerId::new(), regular_id, 500.0);
-        root_layer.add_component(Component::new(base_id, "A"));
-        root_layer.add_component(Component::new(mark_id, "acutecomb"));
-        root.set_layer(root_layer);
-        font.insert_glyph(root).unwrap();
-
-        let projection = font.glyph_projection(&root_id).unwrap().unwrap();
-
-        let components = projection.components().components();
-        assert_eq!(components.len(), 2);
-        let attachment = components[1].attachment().unwrap();
-        assert_eq!(
-            attachment.source().component_path(),
-            components[1].component_path()
-        );
-        assert_eq!(
-            attachment.target().component_path(),
-            components[0].component_path()
-        );
     }
 
     #[test]

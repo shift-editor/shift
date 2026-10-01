@@ -25,7 +25,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         };
         let requirements = authored_glyph_requirements(&projection);
         report.component_occurrences += requirements.component_occurrences;
-        report.attachments += requirements.attachment_count;
         report.exact_source_shapes += requirements.exact_source_shapes;
         report.exact_component_variants += requirements.exact_component_variants;
         if projection.interpolation().is_some() {
@@ -79,15 +78,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         next_weight_index,
     );
     println!(
-        "component_glyphs_supported={} component_occurrences={} attachments={} exact_source_shapes={} exact_component_variants={}",
+        "component_glyphs_supported={} component_occurrences={} exact_source_shapes={} exact_component_variants={}",
         report.supported_component_glyphs,
         report.component_occurrences,
-        report.attachments,
         report.exact_source_shapes,
         report.exact_component_variants,
     );
     println!(
-        "atlas_glyphs={} curves={} delta_curves={} sparse_indices={} sources={} dense_sources={} sparse_sources={} component_glyphs={} component_parts={} components={} component_sources={} anchor_sources={} packed_bytes={}",
+        "atlas_glyphs={} curves={} delta_curves={} sparse_indices={} sources={} dense_sources={} sparse_sources={} component_glyphs={} component_parts={} components={} component_sources={} packed_bytes={}",
         statistics.glyph_count,
         statistics.curve_count,
         statistics.delta_curve_count,
@@ -99,7 +97,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         statistics.component_part_count,
         statistics.component_count,
         statistics.component_source_count,
-        statistics.anchor_source_count,
         packed.as_bytes().len(),
     );
     println!(
@@ -243,7 +240,6 @@ struct Report {
     static_glyphs: usize,
     supported_component_glyphs: usize,
     component_occurrences: usize,
-    attachments: usize,
     exact_source_shapes: usize,
     exact_component_variants: usize,
 }

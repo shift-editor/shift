@@ -118,8 +118,6 @@ export type {
   CatalogAtlasWeights,
   CatalogAxis,
   CatalogMetrics,
-  ComponentAnchorAttachment,
-  ComponentAnchorReference,
   ComponentData,
   ComponentGlyph,
   ComponentMatch,

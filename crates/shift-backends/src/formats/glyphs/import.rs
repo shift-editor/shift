@@ -2,10 +2,13 @@ use std::{collections::HashMap, path::Path, sync::Arc};
 
 use glyphs_reader::Font as GlyphsFont;
 use rayon::prelude::*;
-use shift_font::{Font, Glyph, GlyphId, SourceId};
+use shift_font::{Font, Glyph, GlyphId};
 
 use super::{
-    conversion::{convert_glyph, font_header, imported_layer_count},
+    conversion::{
+        add_intermediate_sources, convert_glyph, font_header, imported_layer_count,
+        GlyphsLayerSources,
+    },
     report::import_report,
 };
 use crate::{
@@ -18,7 +21,7 @@ pub(crate) struct GlyphsGlyphStream {
     source: Arc<GlyphsFont>,
     glyph_ids: HashMap<String, GlyphId>,
     glyph_names: Vec<String>,
-    source_ids_by_master_id: HashMap<String, SourceId>,
+    sources: GlyphsLayerSources,
     next_glyph: usize,
 }
 
@@ -46,7 +49,7 @@ impl GlyphStream for GlyphsGlyphStream {
         let mut layer_count = 0;
         while end < self.glyph_names.len() && end - self.next_glyph < limit.max_glyphs() {
             let glyph = &self.source.glyphs[self.glyph_names[end].as_str()];
-            let next_layers = imported_layer_count(glyph, &self.source_ids_by_master_id);
+            let next_layers = imported_layer_count(glyph, &self.sources);
             if end > self.next_glyph && layer_count + next_layers > limit.max_layers() {
                 break;
             }
@@ -61,7 +64,7 @@ impl GlyphStream for GlyphsGlyphStream {
                 convert_glyph(
                     &self.source.glyphs[name.as_str()],
                     &self.glyph_ids,
-                    &self.source_ids_by_master_id,
+                    &self.sources,
                 )
             })
             .collect::<FormatBackendResult<Vec<_>>>()?;
@@ -84,7 +87,8 @@ pub(crate) fn stream_retained(
     source: Arc<GlyphsFont>,
 ) -> FormatBackendResult<(Font, GlyphsGlyphStream, ImportReport)> {
     let report = import_report(&source);
-    let (header, source_ids_by_master_id) = font_header(&source)?;
+    let (mut header, source_ids_by_master_id) = font_header(&source)?;
+    let sources = add_intermediate_sources(&mut header, &source, source_ids_by_master_id);
     let glyph_names = source
         .glyphs
         .values()
@@ -101,7 +105,7 @@ pub(crate) fn stream_retained(
             source,
             glyph_ids,
             glyph_names,
-            source_ids_by_master_id,
+            sources,
             next_glyph: 0,
         },
         report,

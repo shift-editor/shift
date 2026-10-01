@@ -1,9 +1,10 @@
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 use glyphs_reader::{
     Anchor as GlyphsAnchor, Component as GlyphsComponent, FeatureSnippet, Font as GlyphsFont,
-    FontMaster, Glyph as GlyphsGlyph, InstanceType, NodeType, Shape,
+    FontMaster, Glyph as GlyphsGlyph, InstanceType, Layer as GlyphsLayer, NodeType, Shape,
 };
+use ordered_float::OrderedFloat;
 use shift_font::{
     Anchor, Axis, AxisMapping, AxisMappingPoint, Component, Contour, DesignLocation,
     ExternalLocation, FeatureData, Font, Glyph, GlyphId, GlyphLayer, KerningData, KerningPair,
@@ -284,21 +285,103 @@ pub(crate) fn font_header(
     Ok((font, source_ids_by_master_id))
 }
 
-pub(super) fn imported_layer_count(
-    glyph: &GlyphsGlyph,
-    source_ids_by_master_id: &HashMap<String, SourceId>,
-) -> usize {
+/// Glyphs intermediate-layer coordinates, one design value per font axis.
+type IntermediateLocation = Vec<OrderedFloat<f64>>;
+
+/// Shift sources that receive imported Glyphs layers.
+///
+/// Master layers map to their master's source. Each distinct intermediate
+/// (brace) layer location maps to one sparse master source. Smart-component
+/// pole and draft layers have no source and are not imported.
+pub(super) struct GlyphsLayerSources {
+    masters: HashMap<String, SourceId>,
+    intermediates: HashMap<IntermediateLocation, SourceId>,
+}
+
+impl GlyphsLayerSources {
+    fn source_id(&self, layer: &GlyphsLayer) -> Option<SourceId> {
+        if layer.is_master() {
+            return self.masters.get(layer.master_id()).cloned();
+        }
+        if layer.is_intermediate() {
+            return self
+                .intermediates
+                .get(&layer.attributes.coordinates)
+                .cloned();
+        }
+        None
+    }
+}
+
+/// Adds one sparse master source per distinct intermediate-layer location.
+///
+/// Locations that coincide with a master stay unmapped; the import report
+/// lists those layers as omitted. Each new source takes the metrics the
+/// masters interpolate to at its location, which leaves font-wide metric
+/// interpolation unchanged.
+pub(super) fn add_intermediate_sources(
+    font: &mut Font,
+    glyphs_font: &GlyphsFont,
+    masters: HashMap<String, SourceId>,
+) -> GlyphsLayerSources {
+    let master_locations = glyphs_font
+        .masters
+        .iter()
+        .map(|master| master.axes_values.clone())
+        .collect::<Vec<_>>();
+    let locations = glyphs_font
+        .glyphs
+        .values()
+        .flat_map(|glyph| &glyph.layers)
+        .filter(|layer| layer.is_intermediate())
+        .map(|layer| layer.attributes.coordinates.clone())
+        .filter(|location| !master_locations.contains(location))
+        .collect::<BTreeSet<_>>();
+
+    let metrics = font.source_metric_interpolation();
+    let mut intermediates = HashMap::new();
+    for coordinates in locations {
+        let mut location = DesignLocation::new();
+        for (axis, value) in font.axes().iter().zip(&coordinates) {
+            location.set(axis.id(), value.into_inner());
+        }
+        let name = coordinates
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(", ");
+        let mut source = Source::new(format!("{{{name}}}"), location.clone());
+        if let Some(resolved) = metrics
+            .as_ref()
+            .and_then(|metrics| metrics.resolve(&location, font.axes()).ok())
+        {
+            source.set_metric_values(resolved.metric_values().clone());
+            source.set_italic_angle(resolved.italic_angle());
+            source.set_line_gap(resolved.line_gap());
+            source.set_underline_position(resolved.underline_position());
+            source.set_underline_thickness(resolved.underline_thickness());
+        }
+        intermediates.insert(coordinates, font.add_source(source));
+    }
+
+    GlyphsLayerSources {
+        masters,
+        intermediates,
+    }
+}
+
+pub(super) fn imported_layer_count(glyph: &GlyphsGlyph, sources: &GlyphsLayerSources) -> usize {
     glyph
         .layers
         .iter()
-        .filter(|layer| source_ids_by_master_id.contains_key(layer.master_id()))
+        .filter(|layer| sources.source_id(layer).is_some())
         .count()
 }
 
 pub(super) fn convert_glyph(
     glyph: &GlyphsGlyph,
     glyph_ids: &HashMap<String, GlyphId>,
-    source_ids_by_master_id: &HashMap<String, SourceId>,
+    sources: &GlyphsLayerSources,
 ) -> FormatBackendResult<Glyph> {
     let glyph_id = glyph_ids
         .get(glyph.name.as_str())
@@ -308,7 +391,7 @@ pub(super) fn convert_glyph(
     result.set_unicodes(glyph.unicode.iter().copied().collect());
 
     for layer in &glyph.layers {
-        let Some(source_id) = source_ids_by_master_id.get(layer.master_id()).cloned() else {
+        let Some(source_id) = sources.source_id(layer) else {
             continue;
         };
 
@@ -324,6 +407,7 @@ pub(super) fn convert_glyph(
                     }
                     if path.closed {
                         contour.close();
+                        contour.start_at_first_on_curve();
                     }
                     result_layer.add_contour(contour);
                 }
@@ -451,4 +535,75 @@ fn convert_kerning(font: &GlyphsFont) -> KerningData {
     }
 
     kerning
+}
+
+#[cfg(test)]
+mod tests {
+    use glyphs_reader::LayerAttributes;
+    use ordered_float::OrderedFloat;
+
+    use super::*;
+
+    fn layer(layer_id: &str, master_id: Option<&str>, coordinates: &[f64]) -> GlyphsLayer {
+        GlyphsLayer {
+            layer_id: layer_id.to_string(),
+            associated_master_id: master_id.map(ToString::to_string),
+            attributes: LayerAttributes {
+                coordinates: coordinates.iter().copied().map(OrderedFloat).collect(),
+                ..LayerAttributes::default()
+            },
+            ..GlyphsLayer::default()
+        }
+    }
+
+    #[test]
+    fn intermediate_layers_import_into_one_source_per_location() {
+        let mut font = Font::new();
+        let axis = Axis::weight();
+        let axis_id = axis.id();
+        font.add_axis(axis).unwrap();
+        let master_source_id = font.default_source_id().unwrap();
+
+        let mut glyphs_font = GlyphsFont::default();
+        for name in ["a", "b"] {
+            glyphs_font.glyphs.insert(
+                name.into(),
+                GlyphsGlyph {
+                    name: name.into(),
+                    layers: vec![
+                        layer("m01", None, &[]),
+                        layer("brace", Some("m01"), &[155.0]),
+                        layer("draft", Some("m01"), &[]),
+                    ],
+                    ..GlyphsGlyph::default()
+                },
+            );
+        }
+        let sources = add_intermediate_sources(
+            &mut font,
+            &glyphs_font,
+            HashMap::from([("m01".to_string(), master_source_id.clone())]),
+        );
+        let glyph_ids = HashMap::from([
+            ("a".to_string(), GlyphId::new()),
+            ("b".to_string(), GlyphId::new()),
+        ]);
+
+        let a = convert_glyph(&glyphs_font.glyphs["a"], &glyph_ids, &sources).unwrap();
+        let b = convert_glyph(&glyphs_font.glyphs["b"], &glyph_ids, &sources).unwrap();
+
+        let brace = font
+            .sources()
+            .iter()
+            .find(|source| source.name() == "{155}")
+            .unwrap();
+        assert!(brace.is_master());
+        assert_eq!(brace.location().get(&axis_id), Some(155.0));
+        assert_eq!(imported_layer_count(&glyphs_font.glyphs["a"], &sources), 2);
+        for glyph in [&a, &b] {
+            assert_eq!(glyph.layers().len(), 2);
+            assert!(glyph.layer_for_source(master_source_id.clone()).is_some());
+            assert!(glyph.layer_for_source(brace.id()).is_some());
+        }
+    }
 }

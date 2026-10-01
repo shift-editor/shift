@@ -7,6 +7,7 @@
 //! milestones add variants alongside the tools that emit them.
 
 use crate::changes::{AnchorPosition, FontChange, FontChangeSet, PointPosition};
+use crate::composite::anchor_aligned_offset;
 use crate::error::{CoreError, CoreResult};
 use crate::interpolation::GlyphInterpolationValues;
 use crate::ir::{
@@ -1197,13 +1198,14 @@ impl Font {
                     });
                 }
 
+                let transform = self.anchor_aligned_component_transform(layer_id, base_glyph_id)?;
                 let change = {
                     let layer = self.layer_mut_or_err(layer_id)?;
                     layer.add_component(Component::with_id(
                         component_id.clone(),
                         base_glyph_id.clone(),
                         base_glyph_name,
-                        Default::default(),
+                        transform,
                     ));
                     FontChange::layer_components_replaced(layer)
                 };
@@ -1428,6 +1430,45 @@ impl Font {
         }
     }
 
+    /// Places a new component so its `_name` anchor meets the matching sibling anchor.
+    ///
+    /// Siblings and the new base glyph are read at `layer_id`'s source. A
+    /// sibling whose base glyph has no layer there contributes no anchors.
+    fn anchor_aligned_component_transform(
+        &self,
+        layer_id: &LayerId,
+        base_glyph_id: &GlyphId,
+    ) -> CoreResult<DecomposedTransform> {
+        let layer = self
+            .layer(layer_id.clone())
+            .ok_or_else(|| CoreError::LayerNotFound(layer_id.clone()))?;
+        let source_id = layer.source_id();
+        let base_layer_at_source = |glyph_id: GlyphId| {
+            self.glyph(glyph_id)
+                .and_then(|glyph| glyph.layer_for_source(source_id.clone()))
+        };
+        let Some(component_layer) = base_layer_at_source(base_glyph_id.clone()) else {
+            return Ok(DecomposedTransform::default());
+        };
+
+        let placed: Vec<_> = layer
+            .components_iter()
+            .filter_map(|component| {
+                base_layer_at_source(component.base_glyph_id())
+                    .map(|base_layer| (component.matrix(), base_layer))
+            })
+            .collect();
+        let Some((dx, dy)) = anchor_aligned_offset(&placed, component_layer) else {
+            return Ok(DecomposedTransform::default());
+        };
+
+        Ok(DecomposedTransform {
+            translate_x: dx,
+            translate_y: dy,
+            ..Default::default()
+        })
+    }
+
     fn layer_mut_or_err(&mut self, layer_id: &LayerId) -> CoreResult<&mut GlyphLayer> {
         self.layer_mut(layer_id.clone())
             .ok_or(CoreError::LayerNotFound(layer_id.clone()))
@@ -1572,6 +1613,51 @@ mod tests {
         .unwrap();
 
         assert!(font.layer(root_layer_id).unwrap().components().is_empty());
+    }
+
+    #[test]
+    fn adding_a_mark_stores_its_anchor_aligned_position() {
+        let mut font = Font::new();
+        let source_id = font.default_source_id().unwrap();
+        let base_id = GlyphId::new();
+        let mut base = Glyph::with_id(base_id.clone(), "o");
+        let mut base_layer = GlyphLayer::new(LayerId::new(), source_id.clone());
+        base_layer.add_anchor(Anchor::new(Some("top".to_string()), 321.0, 485.0));
+        base.set_layer(base_layer);
+        font.insert_glyph(base).unwrap();
+
+        let mark_id = GlyphId::new();
+        let mut mark = Glyph::with_id(mark_id.clone(), "acutecomb");
+        let mut mark_layer = GlyphLayer::new(LayerId::new(), source_id.clone());
+        mark_layer.add_anchor(Anchor::new(Some("_top".to_string()), 0.0, 485.0));
+        mark.set_layer(mark_layer);
+        font.insert_glyph(mark).unwrap();
+
+        let root_layer_id = LayerId::new();
+        let mut root = Glyph::with_id(GlyphId::new(), "oacute");
+        root.set_layer(GlyphLayer::new(root_layer_id.clone(), source_id));
+        font.insert_glyph(root).unwrap();
+        let mark_component_id = ComponentId::new();
+
+        font.apply_intents(FontIntentSet {
+            intents: vec![
+                FontIntent::AddComponent {
+                    layer_id: root_layer_id.clone(),
+                    component_id: ComponentId::new(),
+                    base_glyph_id: base_id,
+                },
+                FontIntent::AddComponent {
+                    layer_id: root_layer_id.clone(),
+                    component_id: mark_component_id.clone(),
+                    base_glyph_id: mark_id,
+                },
+            ],
+        })
+        .unwrap();
+
+        let layer = font.layer(root_layer_id).unwrap();
+        let mark = layer.component(mark_component_id).unwrap();
+        assert_eq!(mark.matrix(), crate::Transform::translate(321.0, 0.0));
     }
 
     #[test]

@@ -20,8 +20,7 @@ pub const VARIABLE_PARAMS_BYTES: usize = 64;
 mod component;
 pub(crate) use component::ROOT_COMPONENT;
 pub use component::{
-    VariableAnchorSource, VariableComponent, VariableComponentGlyph, VariableComponentPart,
-    VariableComponentSource,
+    VariableComponent, VariableComponentGlyph, VariableComponentPart, VariableComponentSource,
 };
 
 /// One glyph in a resident variable atlas.
@@ -70,7 +69,6 @@ pub struct VariableLayout {
     pub component_parts: Section,
     pub components: Section,
     pub component_sources: Section,
-    pub anchor_sources: Section,
     pub line_bits: Section,
     pub total_length: usize,
 }
@@ -103,7 +101,7 @@ pub fn pack_variable_params(
         as_u32(params.layout.component_parts.offset)?,
         as_u32(params.layout.components.offset)?,
         as_u32(params.layout.component_sources.offset)?,
-        as_u32(params.layout.anchor_sources.offset)?,
+        0,
         as_u32(params.layout.line_bits.offset)?,
     ];
     let mut bytes = [0; VARIABLE_PARAMS_BYTES];
@@ -133,7 +131,6 @@ pub struct VariableAtlas {
     component_parts: Vec<VariableComponentPart>,
     components: Vec<VariableComponent>,
     component_sources: Vec<VariableComponentSource>,
-    anchor_sources: Vec<VariableAnchorSource>,
     line_bits: Vec<u32>,
 }
 
@@ -183,10 +180,6 @@ impl VariableAtlas {
         &self.component_sources
     }
 
-    pub fn anchor_sources(&self) -> &[VariableAnchorSource] {
-        &self.anchor_sources
-    }
-
     pub fn line_bits(&self) -> &[u32] {
         &self.line_bits
     }
@@ -232,7 +225,6 @@ impl VariableAtlas {
             component_part_count: self.component_parts.len(),
             component_count: self.components.len(),
             component_source_count: self.component_sources.len(),
-            anchor_source_count: self.anchor_sources.len(),
             bands_per_direction: self.band_count,
             max_curves_per_glyph: self
                 .glyphs
@@ -509,14 +501,8 @@ impl VariableAtlas {
             component::VARIABLE_COMPONENT_SOURCE_BYTES,
             alignment,
         )?;
-        let anchor_sources = next_section(
-            component_sources,
-            self.anchor_sources.len(),
-            component::VARIABLE_ANCHOR_SOURCE_BYTES,
-            alignment,
-        )?;
         let line_bits = next_section(
-            anchor_sources,
+            component_sources,
             self.line_bits.len(),
             std::mem::size_of::<u32>(),
             alignment,
@@ -537,7 +523,6 @@ impl VariableAtlas {
             component_parts,
             components,
             component_sources,
-            anchor_sources,
             line_bits,
             total_length,
         })
@@ -615,8 +600,6 @@ impl VariableAtlas {
         component::write_components(&mut writer, &self.components);
         writer.pad_to(layout.component_sources.offset)?;
         component::write_component_sources(&mut writer, &self.component_sources);
-        writer.pad_to(layout.anchor_sources.offset)?;
-        component::write_anchor_sources(&mut writer, &self.anchor_sources);
         writer.pad_to(layout.line_bits.offset)?;
         for word in &self.line_bits {
             writer.write(&word.to_le_bytes());
@@ -643,7 +626,6 @@ pub struct VariableStatistics {
     pub component_part_count: usize,
     pub component_count: usize,
     pub component_source_count: usize,
-    pub anchor_source_count: usize,
     pub bands_per_direction: u32,
     pub max_curves_per_glyph: u32,
 }
@@ -666,7 +648,6 @@ pub(crate) struct VariableAtlasCheckpoint {
     component_parts: usize,
     components: usize,
     component_sources: usize,
-    anchor_sources: usize,
     line_bits: usize,
     last_line_word: Option<u32>,
 }
@@ -953,7 +934,6 @@ impl VariableAtlasBuilder {
             component_parts: self.atlas.component_parts.len(),
             components: self.atlas.components.len(),
             component_sources: self.atlas.component_sources.len(),
-            anchor_sources: self.atlas.anchor_sources.len(),
             line_bits: self.atlas.line_bits.len(),
             last_line_word: self.atlas.line_bits.last().copied(),
         }
@@ -978,9 +958,6 @@ impl VariableAtlasBuilder {
         self.atlas
             .component_sources
             .truncate(checkpoint.component_sources);
-        self.atlas
-            .anchor_sources
-            .truncate(checkpoint.anchor_sources);
         self.atlas.line_bits.truncate(checkpoint.line_bits);
         if let (Some(last), Some(value)) =
             (self.atlas.line_bits.last_mut(), checkpoint.last_line_word)

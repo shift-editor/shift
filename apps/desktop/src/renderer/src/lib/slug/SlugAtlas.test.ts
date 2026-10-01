@@ -28,7 +28,6 @@ function residentFixture(): {
       componentParts: emptySection(),
       components: emptySection(),
       componentSources: emptySection(),
-      anchorSources: emptySection(),
       lineBits: emptySection(),
       totalLength: 536,
     },
@@ -210,7 +209,7 @@ describe("resident atlas frame planning", () => {
       bandCount: 16,
       indexCount: 48,
       glyphCount: 1,
-      componentTransformCount: 8,
+      componentTransformCount: 4,
     });
     expect(new DataView(frame.instances.buffer).getUint32(32, true)).toBe(1);
   });

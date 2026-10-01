@@ -107,7 +107,6 @@ pub struct ComponentInspection {
     pub component_path: Vec<String>,
     pub decomposed_transform: DecomposedTransform,
     pub transform: AffineTransform,
-    pub attachment: Option<ComponentAttachment>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize)]
@@ -133,21 +132,6 @@ pub struct AffineTransform {
     pub yy: f64,
     pub dx: f64,
     pub dy: f64,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ComponentAttachment {
-    pub source: AnchorReference,
-    pub target: AnchorReference,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AnchorReference {
-    pub component_path: Vec<String>,
-    pub glyph_id: String,
-    pub anchor_id: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]

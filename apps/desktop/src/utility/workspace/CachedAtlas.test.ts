@@ -241,7 +241,6 @@ function descriptor(glyphIds: GlyphId[], totalLength: number): SlugAtlas {
       componentParts: empty,
       components: empty,
       componentSources: empty,
-      anchorSources: empty,
       lineBits: empty,
       totalLength,
     },

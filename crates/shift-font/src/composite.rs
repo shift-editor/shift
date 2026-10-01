@@ -3,11 +3,10 @@
 //! This module builds component relationships and resolves them into concrete
 //! contours without mutating authored glyph layers.
 //!
-//! Anchor-driven placement rules:
-//! - Primary attachment: a component anchor named `_{name}` attaches to the
-//!   most recently placed anchor named `{name}`.
-//! - Anchor placement is resolved first; authored component transforms are then
-//!   composed on top as user-controlled offsets.
+//! Component transforms are absolute placements, matching UFO, Glyphs, and
+//! compiled fonts. Anchor alignment is an authoring operation
+//! ([`anchor_aligned_offset`]) that writes a transform; resolution never
+//! re-derives placement from anchors.
 //!
 //! Traversal and determinism rules:
 //! - Components are processed in authored order.
@@ -16,8 +15,8 @@
 
 use crate::curve::segment_bounds;
 use crate::{
-    Anchor, AnchorId, ComponentId, Contour, CoreError, CoreResult, CurveSegment, CurveSegmentIter,
-    GlyphId, GlyphLayer, Point, PointId, Transform,
+    ComponentId, Contour, CoreError, CoreResult, CurveSegment, CurveSegmentIter, GlyphId,
+    GlyphLayer, Point, PointId, Transform,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -57,59 +56,10 @@ impl ComponentPath {
     }
 }
 
-/// One anchor occurrence within cycle-pruned component relationships.
-///
-/// `component_path` is empty only for a root glyph anchor. Component placement
-/// currently references sibling occurrences, so projected attachment anchors
-/// normally carry the path of the direct component that contributes them.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ComponentAnchorReference {
-    component_path: ComponentPath,
-    glyph_id: GlyphId,
-    anchor_id: AnchorId,
-}
-
-impl ComponentAnchorReference {
-    /// Returns the component occurrence that owns the anchor.
-    pub fn component_path(&self) -> &ComponentPath {
-        &self.component_path
-    }
-
-    /// Returns the glyph whose selected layer contains the anchor.
-    pub fn glyph_id(&self) -> GlyphId {
-        self.glyph_id.clone()
-    }
-
-    /// Returns the stable anchor identity within the selected glyph layer.
-    pub fn anchor_id(&self) -> AnchorId {
-        self.anchor_id.clone()
-    }
-}
-
-/// Rust-selected anchor attachment for one component occurrence.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ComponentAnchorAttachment {
-    source: ComponentAnchorReference,
-    target: ComponentAnchorReference,
-}
-
-impl ComponentAnchorAttachment {
-    /// Returns the `_name` anchor on the component being placed.
-    pub fn source(&self) -> &ComponentAnchorReference {
-        &self.source
-    }
-
-    /// Returns the most recently placed matching `name` anchor.
-    pub fn target(&self) -> &ComponentAnchorReference {
-        &self.target
-    }
-}
-
 /// One ordered component occurrence within a glyph.
 ///
 /// The occurrence is already cycle-pruned. Consumers evaluate its authored
-/// transform relative to `parent_path` on top of the optional Rust-selected
-/// anchor attachment. They do not repeat name matching, ordering, or cycle
+/// transform relative to `parent_path`. They do not repeat ordering or cycle
 /// decisions.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ComponentGlyph {
@@ -119,7 +69,6 @@ pub struct ComponentGlyph {
     base_glyph_id: GlyphId,
     parent_path: ComponentPath,
     component_path: ComponentPath,
-    attachment: Option<ComponentAnchorAttachment>,
 }
 
 impl ComponentGlyph {
@@ -152,11 +101,6 @@ impl ComponentGlyph {
     pub fn component_path(&self) -> &ComponentPath {
         &self.component_path
     }
-
-    /// Returns the Rust-selected anchor attachment, when one applies.
-    pub fn attachment(&self) -> Option<&ComponentAnchorAttachment> {
-        self.attachment.as_ref()
-    }
 }
 
 /// Ordered, cycle-pruned component relationships for one resolved root glyph.
@@ -173,8 +117,8 @@ pub struct GlyphComponents {
 impl GlyphComponents {
     /// Builds component relationships from layers resolved at one location.
     ///
-    /// The result fixes authored order, `_name` attachment choice, occurrence
-    /// paths, and branch-local cycle pruning without snapshotting numeric
+    /// The result fixes authored order, occurrence paths, and branch-local
+    /// cycle pruning without snapshotting numeric
     /// transforms or anchor positions.
     ///
     /// # Errors
@@ -251,31 +195,35 @@ fn invalid_component(component: &ComponentGlyph) -> CoreError {
     CoreError::InvalidComponentId(component.component_id().to_string())
 }
 
-trait NamedPlacedAnchor {
-    fn name(&self) -> &str;
-}
-
-fn attachment_anchor_pair<'a, T: NamedPlacedAnchor>(
-    component_layer: &'a GlyphLayer,
-    placed_anchors: &'a [T],
-) -> Option<(&'a Anchor, &'a T)> {
+/// Returns the translation that aligns a new component with earlier siblings.
+///
+/// A `_name` anchor on `component_layer` aligns with the most recently placed
+/// `name` anchor among `placed`, which lists the parent layer's existing direct
+/// components in authored order with their absolute transforms and base layers.
+/// The first `_name` anchor that finds a match wins. Returns `None` when no
+/// anchor pair matches.
+pub fn anchor_aligned_offset(
+    placed: &[(Transform, &GlyphLayer)],
+    component_layer: &GlyphLayer,
+) -> Option<(f64, f64)> {
     for anchor in component_layer.anchors_iter() {
-        let Some(name) = anchor.name() else {
-            continue;
-        };
-        let Some(target_name) = name.strip_prefix('_') else {
+        let Some(target_name) = anchor.name().and_then(|name| name.strip_prefix('_')) else {
             continue;
         };
         if target_name.is_empty() {
             continue;
         }
 
-        if let Some(target) = placed_anchors
-            .iter()
-            .rev()
-            .find(|placed| placed.name() == target_name)
-        {
-            return Some((anchor, target));
+        let target = placed.iter().rev().find_map(|(transform, layer)| {
+            layer
+                .anchors()
+                .iter()
+                .rev()
+                .find(|placed| placed.name() == Some(target_name))
+                .map(|placed| transform.transform_point(placed.x(), placed.y()))
+        });
+        if let Some((target_x, target_y)) = target {
+            return Some((target_x - anchor.x(), target_y - anchor.y()));
         }
     }
 
@@ -298,18 +246,6 @@ fn transform_contour_points(contour: &Contour, transform: Transform) -> Resolved
     }
 }
 
-#[derive(Clone)]
-struct PlacedComponentAnchor {
-    name: String,
-    anchor: ComponentAnchorReference,
-}
-
-impl NamedPlacedAnchor for PlacedComponentAnchor {
-    fn name(&self) -> &str {
-        &self.name
-    }
-}
-
 fn append_components(
     layers: &HashMap<GlyphId, &GlyphLayer>,
     parent_layer: &GlyphLayer,
@@ -318,8 +254,6 @@ fn append_components(
     visiting: &mut HashSet<GlyphId>,
     out: &mut Vec<ComponentGlyph>,
 ) -> CoreResult<()> {
-    let mut placed_anchors: Vec<PlacedComponentAnchor> = Vec::new();
-
     for (component_index, component) in parent_layer.components_iter().enumerate() {
         let base_glyph_id = component.base_glyph_id();
         if visiting.contains(&base_glyph_id) {
@@ -329,18 +263,6 @@ fn append_components(
         let component_layer = layer_for_component(layers, &component.id(), &base_glyph_id)?;
 
         let component_path = parent_path.child(component.id());
-        let attachment =
-            attachment_anchor_pair(component_layer, &placed_anchors).map(|(source, target)| {
-                ComponentAnchorAttachment {
-                    source: ComponentAnchorReference {
-                        component_path: component_path.clone(),
-                        glyph_id: base_glyph_id.clone(),
-                        anchor_id: source.id(),
-                    },
-                    target: target.anchor.clone(),
-                }
-            });
-
         out.push(ComponentGlyph {
             parent_glyph_id: parent_glyph_id.clone(),
             component_id: component.id(),
@@ -348,23 +270,7 @@ fn append_components(
             base_glyph_id: base_glyph_id.clone(),
             parent_path: parent_path.clone(),
             component_path: component_path.clone(),
-            attachment,
         });
-
-        for anchor in component_layer.anchors_iter() {
-            let Some(name) = anchor.name() else {
-                continue;
-            };
-
-            placed_anchors.push(PlacedComponentAnchor {
-                name: name.to_string(),
-                anchor: ComponentAnchorReference {
-                    component_path: component_path.clone(),
-                    glyph_id: base_glyph_id.clone(),
-                    anchor_id: anchor.id(),
-                },
-            });
-        }
 
         visiting.insert(base_glyph_id.clone());
         append_components(
@@ -397,51 +303,16 @@ fn explicit_transform_for_component(
     Ok(component.matrix())
 }
 
-fn anchor_for_reference<'a>(
-    layers: &'a HashMap<GlyphId, &GlyphLayer>,
-    reference: &ComponentAnchorReference,
-) -> CoreResult<&'a Anchor> {
-    let layer = layer_for_glyph(layers, &reference.glyph_id())?;
-    layer
-        .anchors_iter()
-        .find(|anchor| anchor.id() == reference.anchor_id())
-        .ok_or_else(|| CoreError::AnchorNotFound(reference.anchor_id()))
-}
-
-fn local_transform_for_component(
-    layers: &HashMap<GlyphId, &GlyphLayer>,
-    component_glyph: &ComponentGlyph,
-    local_transforms: &HashMap<ComponentPath, Transform>,
-) -> CoreResult<Transform> {
-    let explicit = explicit_transform_for_component(layers, component_glyph)?;
-    let Some(attachment) = component_glyph.attachment() else {
-        return Ok(explicit);
-    };
-    let source_anchor = anchor_for_reference(layers, attachment.source())?;
-    let target_anchor = anchor_for_reference(layers, attachment.target())?;
-    let target_transform = local_transforms
-        .get(attachment.target().component_path())
-        .ok_or_else(|| invalid_component(component_glyph))?;
-
-    let (target_x, target_y) =
-        target_transform.transform_point(target_anchor.x(), target_anchor.y());
-    let attachment =
-        Transform::translate(target_x - source_anchor.x(), target_y - source_anchor.y());
-    Ok(compose_transform(explicit, attachment))
-}
-
 fn resolve_component_contours(
     layers: &HashMap<GlyphId, &GlyphLayer>,
     components: &GlyphComponents,
     selected_root_components: Option<&HashSet<ComponentId>>,
 ) -> CoreResult<Vec<ResolvedContour>> {
-    let mut local_transforms = HashMap::<ComponentPath, Transform>::new();
     let mut resolved_transforms = HashMap::<ComponentPath, Transform>::new();
     let mut contours = Vec::new();
 
     for component_glyph in components.components() {
-        let local_transform =
-            local_transform_for_component(layers, component_glyph, &local_transforms)?;
+        let local_transform = explicit_transform_for_component(layers, component_glyph)?;
         let parent_transform = if component_glyph.parent_path().is_root() {
             Transform::identity()
         } else {
@@ -450,7 +321,6 @@ fn resolve_component_contours(
                 .ok_or_else(|| invalid_component(component_glyph))?
         };
         let resolved_transform = compose_transform(parent_transform, local_transform);
-        local_transforms.insert(component_glyph.component_path().clone(), local_transform);
         resolved_transforms.insert(component_glyph.component_path().clone(), resolved_transform);
 
         let layer = layer_for_component(
@@ -501,8 +371,8 @@ pub fn flatten_component_contours_from_layers(
 
 /// Flattens selected direct component occurrences into local contours.
 ///
-/// Descendant components are included recursively. Unselected siblings still
-/// participate in anchor attachment resolution but contribute no contours.
+/// Descendant components are included recursively. Unselected siblings
+/// contribute no contours.
 ///
 /// # Errors
 ///
@@ -845,59 +715,30 @@ mod tests {
     }
 
     #[test]
-    fn primary_anchor_attachment_applies_translation() {
-        let mut font = Font::new();
-        let source_id = font.default_source_id().unwrap();
+    fn anchor_aligned_offset_matches_latest_sibling_anchor() {
+        let source_id = SourceId::new();
+        let mut first = test_layer(source_id.clone(), 500.0);
+        first.add_anchor(Anchor::new(Some("top".to_string()), 100.0, 200.0));
+        let mut second = test_layer(source_id.clone(), 500.0);
+        second.add_anchor(Anchor::new(Some("top".to_string()), 50.0, 300.0));
+        let mut mark = test_layer(source_id, 500.0);
+        mark.add_anchor(Anchor::new(Some("_top".to_string()), 5.0, 10.0));
 
-        let mut base = Glyph::new("base".to_string());
-        let base_id = base.id();
-        let mut base_layer = test_layer(source_id.clone(), 500.0);
-        base_layer.add_contour(two_point_contour(0.0, 0.0, 10.0, 0.0));
-        base_layer.add_anchor(Anchor::new(Some("top".to_string()), 100.0, 200.0));
-        base.set_layer(base_layer);
-        font.insert_glyph(base).unwrap();
+        let placed = [
+            (Transform::identity(), &first),
+            (Transform::translate(20.0, 0.0), &second),
+        ];
 
-        let mut mark = Glyph::new("mark".to_string());
-        let mark_id = mark.id();
-        let mut mark_layer = test_layer(source_id.clone(), 500.0);
-        mark_layer.add_contour(two_point_contour(0.0, 0.0, 10.0, 0.0));
-        mark_layer.add_anchor(Anchor::new(Some("_top".to_string()), 5.0, 0.0));
-        mark.set_layer(mark_layer);
-        font.insert_glyph(mark).unwrap();
-
-        let mut comp = Glyph::new("comp".to_string());
-        let comp_id = comp.id();
-        let mut comp_layer = test_layer(source_id.clone(), 500.0);
-        comp_layer.add_component(Component::new(base_id, "base".to_string()));
-        comp_layer.add_component(Component::new(mark_id, "mark".to_string()));
-        comp.set_layer(comp_layer);
-        font.insert_glyph(comp).unwrap();
-
-        let layers = default_layers(&font);
-        let components = GlyphComponents::from_layers(&comp_id, &layer_view(&layers)).unwrap();
-        let attachment = components.components()[1].attachment().unwrap();
-
+        assert_eq!(anchor_aligned_offset(&placed, &mark), Some((65.0, 290.0)));
         assert_eq!(
-            attachment.source().component_path(),
-            components.components()[1].component_path()
+            anchor_aligned_offset(&placed[..1], &mark),
+            Some((95.0, 190.0))
         );
-        assert_eq!(
-            attachment.target().component_path(),
-            components.components()[0].component_path()
-        );
-
-        let resolved = flatten_component_contours_from_layers(&comp_id, &layers).unwrap();
-
-        assert_eq!(resolved.len(), 2);
-        let mark_contour = &resolved[1];
-        assert_eq!(mark_contour.points[0].x(), 95.0);
-        assert_eq!(mark_contour.points[0].y(), 200.0);
-        assert_eq!(mark_contour.points[1].x(), 105.0);
-        assert_eq!(mark_contour.points[1].y(), 200.0);
+        assert_eq!(anchor_aligned_offset(&[], &mark), None);
     }
 
     #[test]
-    fn authored_translation_offsets_anchor_attachment() {
+    fn component_transform_is_absolute_despite_matching_anchors() {
         let mut font = Font::new();
         let source_id = font.default_source_id().unwrap();
 
@@ -924,7 +765,7 @@ mod tests {
         comp_layer.add_component(Component::with_matrix(
             mark_id,
             "mark".to_string(),
-            &Transform::translate(30.0, 40.0),
+            &Transform::translate(95.0, 200.0),
         ));
         comp.set_layer(comp_layer);
         font.insert_glyph(comp).unwrap();
@@ -933,14 +774,14 @@ mod tests {
             flatten_component_contours_from_layers(&comp_id, &default_layers(&font)).unwrap();
 
         let mark_contour = &resolved[1];
-        assert_eq!(mark_contour.points[0].x(), 125.0);
-        assert_eq!(mark_contour.points[0].y(), 240.0);
-        assert_eq!(mark_contour.points[1].x(), 135.0);
-        assert_eq!(mark_contour.points[1].y(), 240.0);
+        assert_eq!(mark_contour.points[0].x(), 95.0);
+        assert_eq!(mark_contour.points[0].y(), 200.0);
+        assert_eq!(mark_contour.points[1].x(), 105.0);
+        assert_eq!(mark_contour.points[1].y(), 200.0);
     }
 
     #[test]
-    fn explicit_transform_applies_without_attachment() {
+    fn explicit_transform_applies_without_anchors() {
         let mut font = Font::new();
         let source_id = font.default_source_id().unwrap();
 
@@ -1012,46 +853,21 @@ mod tests {
     }
 
     #[test]
-    fn multiple_marks_attach_to_latest_matching_anchor() {
-        let mut font = Font::new();
-        let source_id = font.default_source_id().unwrap();
+    fn stacked_marks_align_to_the_previous_mark() {
+        let source_id = SourceId::new();
+        let mut base = test_layer(source_id.clone(), 500.0);
+        base.add_anchor(Anchor::new(Some("top".to_string()), 100.0, 200.0));
+        let mut mark = test_layer(source_id, 500.0);
+        mark.add_anchor(Anchor::new(Some("_top".to_string()), 5.0, 0.0));
+        mark.add_anchor(Anchor::new(Some("top".to_string()), 5.0, 20.0));
 
-        let mut base = Glyph::new("base".to_string());
-        let base_id = base.id();
-        let mut base_layer = test_layer(source_id.clone(), 500.0);
-        base_layer.add_anchor(Anchor::new(Some("top".to_string()), 100.0, 200.0));
-        base_layer.add_contour(two_point_contour(0.0, 0.0, 10.0, 0.0));
-        base.set_layer(base_layer);
-        font.insert_glyph(base).unwrap();
+        let first = anchor_aligned_offset(&[(Transform::identity(), &base)], &mark).unwrap();
+        assert_eq!(first, (95.0, 200.0));
 
-        let mut mark = Glyph::new("mark".to_string());
-        let mark_id = mark.id();
-        let mut mark_layer = test_layer(source_id.clone(), 500.0);
-        mark_layer.add_anchor(Anchor::new(Some("_top".to_string()), 5.0, 0.0));
-        mark_layer.add_anchor(Anchor::new(Some("top".to_string()), 5.0, 20.0));
-        mark_layer.add_contour(two_point_contour(0.0, 0.0, 10.0, 0.0));
-        mark.set_layer(mark_layer);
-        font.insert_glyph(mark).unwrap();
-
-        let mut comp = Glyph::new("comp".to_string());
-        let comp_id = comp.id();
-        let mut comp_layer = test_layer(source_id.clone(), 500.0);
-        comp_layer.add_component(Component::new(base_id, "base".to_string()));
-        comp_layer.add_component(Component::new(mark_id.clone(), "mark".to_string()));
-        comp_layer.add_component(Component::new(mark_id, "mark".to_string()));
-        comp.set_layer(comp_layer);
-        font.insert_glyph(comp).unwrap();
-
-        let resolved =
-            flatten_component_contours_from_layers(&comp_id, &default_layers(&font)).unwrap();
-
-        assert_eq!(resolved.len(), 3);
-        let first_mark = &resolved[1];
-        assert_eq!(first_mark.points[0].y(), 200.0);
-        assert_eq!(first_mark.points[1].y(), 200.0);
-
-        let second_mark = &resolved[2];
-        assert_eq!(second_mark.points[0].y(), 220.0);
-        assert_eq!(second_mark.points[1].y(), 220.0);
+        let placed = [
+            (Transform::identity(), &base),
+            (Transform::translate(first.0, first.1), &mark),
+        ];
+        assert_eq!(anchor_aligned_offset(&placed, &mark), Some((95.0, 220.0)));
     }
 }

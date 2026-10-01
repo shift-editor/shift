@@ -145,14 +145,25 @@ fn add_anchors(
     Ok(())
 }
 
+/// Builds a kurbo path whose start is the first segment's on-curve point.
+///
+/// Glyphs and UFO contours may begin with off-curve points; segment iteration
+/// already starts at the first on-curve point and wraps the leading controls
+/// into the closing segment, so the path must start there too.
 fn to_bez_path(contour: &Contour) -> BezPath {
     let mut path = BezPath::new();
-    let Some(first) = contour.first_point() else {
+    let mut segments = contour.segments().peekable();
+    let Some(
+        CurveSegment::Line(first, _)
+        | CurveSegment::Quad(first, _, _)
+        | CurveSegment::Cubic(first, _, _, _),
+    ) = segments.peek()
+    else {
         return path;
     };
 
     path.move_to((first.x(), first.y()));
-    for segment in contour.segments() {
+    for segment in segments {
         match segment {
             CurveSegment::Line(_, end) => path.line_to((end.x(), end.y())),
             CurveSegment::Quad(_, control, end) => {
@@ -173,4 +184,36 @@ fn to_bez_path(contour: &Contour) -> BezPath {
     }
 
     path
+}
+
+#[cfg(test)]
+mod tests {
+    use kurbo::PathEl;
+    use shift_font::{Contour, PointType};
+
+    use super::to_bez_path;
+
+    #[test]
+    fn contour_starting_off_curve_starts_path_on_curve() {
+        let mut contour = Contour::new();
+        contour.add_point(10.0, 0.0, PointType::OffCurve, false);
+        contour.add_point(20.0, 10.0, PointType::OffCurve, false);
+        contour.add_point(20.0, 20.0, PointType::OnCurve, false);
+        contour.add_point(0.0, 20.0, PointType::OnCurve, false);
+        contour.add_point(0.0, 0.0, PointType::OnCurve, false);
+        contour.close();
+
+        let elements = to_bez_path(&contour).elements().to_vec();
+
+        assert_eq!(
+            elements,
+            vec![
+                PathEl::MoveTo((20.0, 20.0).into()),
+                PathEl::LineTo((0.0, 20.0).into()),
+                PathEl::LineTo((0.0, 0.0).into()),
+                PathEl::CurveTo((10.0, 0.0).into(), (20.0, 10.0).into(), (20.0, 20.0).into()),
+                PathEl::ClosePath,
+            ]
+        );
+    }
 }
