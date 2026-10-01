@@ -25,7 +25,8 @@ jobs:
     name: Resolve release
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      # Draft releases are only visible to tokens that can write to the repository.
+      contents: write
     outputs:
       tag: ${{ steps.release.outputs.tag }}
       version: ${{ steps.release.outputs.version }}
