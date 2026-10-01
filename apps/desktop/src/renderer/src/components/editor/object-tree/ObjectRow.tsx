@@ -50,6 +50,7 @@ export const ObjectRow = ({
               {hasChildren ? (
                 <CollapsibleTrigger
                   aria-label={`Toggle ${item.label}`}
+                  tabIndex={-1}
                   className="flex h-7 w-3 shrink-0 cursor-pointer items-center justify-center text-secondary hover:text-primary"
                 >
                   <CollapsibleChevron aria-hidden />
@@ -66,18 +67,8 @@ export const ObjectRow = ({
           joinsPrevious={joinsPrevious}
           joinsNext={joinsNext}
           onClick={(event) => selectObject(item.id, listSelectionMode(event))}
-          onKeyDown={async (event) => {
-            if (event.key !== "Backspace" && event.key !== "Delete") return;
-
-            event.preventDefault();
-            event.stopPropagation();
-            try {
-              await editor.deleteSelection();
-            } catch (error) {
-              console.error("object row deletion failed", error);
-            }
-          }}
           data-testid={`object-${item.id}`}
+          tabIndex={-1}
           contentClassName="pl-1.5"
         >
           <span className="truncate">{item.label}</span>

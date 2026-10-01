@@ -64,6 +64,13 @@ Map those roles to existing theme tokens first. Compare the finished implementat
 
 If the reference is ambiguous or conflicts with an established interaction pattern, ask which behavior wins before inventing a new one.
 
+## Large lists and trees
+
+- Before rendering a collection that can grow with glyph points, catalog entries, or document content, estimate the mounted DOM count at realistic scale. Window or paginate unbounded rows; do not map the entire logical collection into React elements merely because scrolling hides most of it.
+- Keep the complete logical order for selection and keyboard navigation, but mount only the viewport and a small overscan. Focus, selection, and mounted rows are distinct; an `aria-activedescendant` must always identify a mounted row. Scroll a keyboard target into the rendered window before publishing it as active.
+- Trees are composite widgets: Tab enters/leaves; arrow keys navigate the visible expanded order. Preserve focus and selection through collapse, edits, and manual scrolling. Check the WAI-ARIA tree pattern before inventing per-row keyboard behavior.
+- Test both bounded mounted rows and reaching/selecting an offscreen item. Extract a shared virtualizer only when multiple surfaces actually need the same layout and focus contract.
+
 ## Accessibility and interaction
 
 - Every icon-only action needs an accessible name and a concise visible tooltip.
