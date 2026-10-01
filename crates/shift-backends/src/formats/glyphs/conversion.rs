@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use glyphs_reader::{
     Anchor as GlyphsAnchor, Component as GlyphsComponent, FeatureSnippet, Font as GlyphsFont,
-    FontMaster, Glyph as GlyphsGlyph, InstanceType, NodeType, Shape,
+    FontMaster, Glyph as GlyphsGlyph, InstanceType, Layer as GlyphsLayer, NodeType, Shape,
 };
 use shift_font::{
     Anchor, Axis, AxisMapping, AxisMappingPoint, Component, Contour, DesignLocation,
@@ -284,6 +284,21 @@ pub(crate) fn font_header(
     Ok((font, source_ids_by_master_id))
 }
 
+/// Returns the source for a master layer, or `None` for any other layer.
+///
+/// `GlyphsLayer::master_id` also returns the associated master of
+/// intermediate, smart-component pole, and draft layers. Shift represents one
+/// layer per source, so only master layers are imported.
+fn master_layer_source_id(
+    layer: &GlyphsLayer,
+    source_ids_by_master_id: &HashMap<String, SourceId>,
+) -> Option<SourceId> {
+    if !layer.is_master() {
+        return None;
+    }
+    source_ids_by_master_id.get(layer.master_id()).cloned()
+}
+
 pub(super) fn imported_layer_count(
     glyph: &GlyphsGlyph,
     source_ids_by_master_id: &HashMap<String, SourceId>,
@@ -291,7 +306,7 @@ pub(super) fn imported_layer_count(
     glyph
         .layers
         .iter()
-        .filter(|layer| source_ids_by_master_id.contains_key(layer.master_id()))
+        .filter(|layer| master_layer_source_id(layer, source_ids_by_master_id).is_some())
         .count()
 }
 
@@ -308,7 +323,7 @@ pub(super) fn convert_glyph(
     result.set_unicodes(glyph.unicode.iter().copied().collect());
 
     for layer in &glyph.layers {
-        let Some(source_id) = source_ids_by_master_id.get(layer.master_id()).cloned() else {
+        let Some(source_id) = master_layer_source_id(layer, source_ids_by_master_id) else {
             continue;
         };
 
@@ -452,4 +467,44 @@ fn convert_kerning(font: &GlyphsFont) -> KerningData {
     }
 
     kerning
+}
+
+#[cfg(test)]
+mod tests {
+    use glyphs_reader::LayerAttributes;
+    use ordered_float::OrderedFloat;
+
+    use super::*;
+
+    #[test]
+    fn non_master_layers_do_not_become_extra_source_layers() {
+        let source_id = SourceId::new();
+        let source_ids_by_master_id = HashMap::from([("m01".to_string(), source_id.clone())]);
+        let glyph_ids = HashMap::from([("a".to_string(), GlyphId::new())]);
+        let glyph = GlyphsGlyph {
+            name: "a".into(),
+            layers: vec![
+                GlyphsLayer {
+                    layer_id: "m01".to_string(),
+                    ..GlyphsLayer::default()
+                },
+                GlyphsLayer {
+                    layer_id: "brace".to_string(),
+                    associated_master_id: Some("m01".to_string()),
+                    attributes: LayerAttributes {
+                        coordinates: vec![OrderedFloat(155.0)],
+                        ..LayerAttributes::default()
+                    },
+                    ..GlyphsLayer::default()
+                },
+            ],
+            ..GlyphsGlyph::default()
+        };
+
+        let converted = convert_glyph(&glyph, &glyph_ids, &source_ids_by_master_id).unwrap();
+
+        assert_eq!(imported_layer_count(&glyph, &source_ids_by_master_id), 1);
+        assert_eq!(converted.layers().len(), 1);
+        assert!(converted.layer_for_source(source_id).is_some());
+    }
 }
