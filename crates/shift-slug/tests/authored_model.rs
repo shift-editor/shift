@@ -415,7 +415,7 @@ fn component_model_resolves_varying_decomposed_transform() {
 }
 
 #[test]
-fn component_model_resolves_variable_anchor_attachment() {
+fn component_model_ignores_mark_anchors_when_placing_components() {
     let mut font = sample_variable_font();
     let source_ids = font
         .glyphs_by_unicode(0x41)
@@ -463,7 +463,6 @@ fn component_model_resolves_variable_anchor_attachment() {
     font.insert_glyph(root).unwrap();
 
     let projection = font.glyph_projection(&root_id).unwrap().unwrap();
-    assert_eq!(authored_glyph_requirements(&projection).attachment_count, 1);
     let interpolation = projection.interpolation().unwrap();
     let weight_indices = (1..=interpolation.sources().len() as u32).collect::<Vec<_>>();
     let weight_set =

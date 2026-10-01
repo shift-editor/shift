@@ -463,7 +463,6 @@ fn variable_packing_is_aligned_deterministic_and_little_endian() {
     assert_eq!(layout.component_parts.offset % 256, 0);
     assert_eq!(layout.components.offset % 256, 0);
     assert_eq!(layout.component_sources.offset % 256, 0);
-    assert_eq!(layout.anchor_sources.offset % 256, 0);
     assert_eq!(layout.line_bits.offset % 256, 0);
     assert_eq!(&first.as_bytes()[..4], &1.5_f32.to_le_bytes());
     assert_eq!(
@@ -512,9 +511,8 @@ fn variable_params_pack_every_resident_section_offset() {
         component_parts: section(32),
         components: section(36),
         component_sources: section(40),
-        anchor_sources: section(44),
-        line_bits: section(48),
-        total_length: 52,
+        line_bits: section(44),
+        total_length: 48,
     };
     let bytes = pack_variable_params(VariableParams {
         instance_count: 3,
@@ -531,7 +529,7 @@ fn variable_params_pack_every_resident_section_offset() {
     assert_eq!(bytes.len(), VARIABLE_PARAMS_BYTES);
     assert_eq!(
         words,
-        [3, 8, 28, 0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48]
+        [3, 8, 28, 0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 0, 44]
     );
 }
 
@@ -649,9 +647,8 @@ fn shared_shader_validates_and_has_the_host_side_strides() {
         ("VariableSource", 8),
         ("VariableComponentGlyph", 24),
         ("VariableComponentPart", 16),
-        ("VariableComponent", 32),
+        ("VariableComponent", 12),
         ("VariableComponentSource", 40),
-        ("VariableAnchorSource", 12),
         ("Affine", 32),
         ("Band", 8),
     ] {

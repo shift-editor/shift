@@ -30,7 +30,7 @@ import type {
 export const DEFAULT_ATLAS_CACHE_BYTE_BUDGET = 1024 * 1024 * 1024;
 
 const FORMAT = "shift.slug-atlas-cache.v1" as const;
-const MAGIC = Buffer.from("SHATLAS1");
+const MAGIC = Buffer.from("SHATLAS2");
 const INDEX_CHECKSUM_BYTES = 32;
 const INDEX_CHECKSUM_OFFSET = MAGIC.byteLength + 4;
 const HEADER_BYTES = INDEX_CHECKSUM_OFFSET + INDEX_CHECKSUM_BYTES;
@@ -88,7 +88,6 @@ const slugAtlasSchema = z
         componentParts: sectionSchema,
         components: sectionSchema,
         componentSources: sectionSchema,
-        anchorSources: sectionSchema,
         lineBits: sectionSchema,
         totalLength: nonnegativeInteger,
       })

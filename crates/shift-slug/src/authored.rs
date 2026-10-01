@@ -37,7 +37,6 @@ pub(super) struct AuthoredGlyphCompilation<'a, 'profile> {
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct AuthoredGlyphRequirements {
     pub component_occurrences: usize,
-    pub attachment_count: usize,
     pub exact_source_shapes: usize,
     pub exact_component_variants: usize,
 }
@@ -237,9 +236,8 @@ impl fmt::Display for AuthoredSlugError {
         match self {
             Self::UnsupportedGlyph(requirements) => write!(
                 formatter,
-                "authored Slug adapter does not yet support {} component occurrences, {} attachments, {} exact-source shapes, and {} exact component variants",
+                "authored Slug adapter does not yet support {} component occurrences, {} exact-source shapes, and {} exact component variants",
                 requirements.component_occurrences,
-                requirements.attachment_count,
                 requirements.exact_source_shapes,
                 requirements.exact_component_variants,
             ),
@@ -643,11 +641,6 @@ pub fn authored_glyph_requirements(projection: &GlyphProjection) -> AuthoredGlyp
             .len()
             .max(direct_fallback_components)
             .saturating_add(exact_components.len()),
-        attachment_count: default_components
-            .iter()
-            .chain(exact_components)
-            .filter(|component| component.attachment().is_some())
-            .count(),
         exact_source_shapes: projection.exact_source_shapes().len(),
         exact_component_variants: projection.exact_source_components().len(),
     }

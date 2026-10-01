@@ -16,17 +16,16 @@ import type { RenderContour } from "./GlyphRenderModel";
  * Represents one Rust-projected component occurrence with live numeric transforms.
  *
  * @remarks
- * Rust has already fixed this occurrence's order, ancestry, attachment anchors,
- * and cycle status. `componentPath` is its stable occurrence identity. The
- * cells here only evaluate authored matrices and anchor coordinates at the
- * current external location.
+ * Rust has already fixed this occurrence's order, ancestry, and cycle status.
+ * `componentPath` is its stable occurrence identity. The cells here only
+ * evaluate authored matrices at the current external location; a component's
+ * transform is its absolute placement within the parent.
  */
 export class ComponentGlyph {
   readonly #definitionCell: Signal<ComponentGlyphDefinition>;
   readonly #glyphIdCell: Signal<GlyphId>;
   readonly #locationCell: Signal<ExternalAxisLocation>;
   readonly #renderModel: GlyphRenderModel;
-  readonly #localTransformCell: Signal<MatModel>;
 
   readonly transformCell: Signal<MatModel>;
   readonly resolvedTransformCell: Signal<MatModel>;
@@ -63,36 +62,11 @@ export class ComponentGlyph {
 
       return component.matrix;
     });
-    this.#localTransformCell = computed(() => {
-      const definition = this.#definitionCell.value;
-      const explicit = this.transformCell.value;
-      const attachment = definition.attachment;
-      if (!attachment) return explicit;
-
-      const location = this.#locationCell.value;
-      const sourceGeometry = this.#renderModel.geometryAt(attachment.source.glyphId, location);
-      const source = sourceGeometry.anchor(attachment.source.anchorId);
-      if (!source) return explicit;
-
-      const targetComponent = this.#renderModel.componentAt(attachment.target.componentPath);
-      if (!targetComponent) return explicit;
-
-      const targetGeometry = this.#renderModel.geometryAt(attachment.target.glyphId, location);
-      const target = targetGeometry.anchor(attachment.target.anchorId);
-      if (!target) return explicit;
-
-      const targetPosition = Mat.applyToPoint(targetComponent.#localTransformCell.value, target);
-      const attachmentOffset = Mat.Translate(
-        targetPosition.x - source.x,
-        targetPosition.y - source.y,
-      );
-      return Mat.Compose(explicit, attachmentOffset);
-    });
     this.resolvedTransformCell = computed(() => {
       const parent = this.#parent();
-      if (!parent) return this.#localTransformCell.value;
+      if (!parent) return this.transformCell.value;
 
-      return Mat.Compose(parent.resolvedTransformCell.value, this.#localTransformCell.value);
+      return Mat.Compose(parent.resolvedTransformCell.value, this.transformCell.value);
     });
 
     this.contoursCell = renderModel.contoursAt(this.#glyphIdCell, this.resolvedTransformCell, this);

@@ -205,7 +205,7 @@ export class SlugAtlas {
         atlas.layout.componentParts.offset,
         atlas.layout.components.offset,
         atlas.layout.componentSources.offset,
-        atlas.layout.anchorSources.offset,
+        0,
         atlas.layout.lineBits.offset,
       ].map((value) => checkedU32(value, "resident atlas offset")),
     );
@@ -305,7 +305,7 @@ export class SlugAtlas {
       const componentCount = componentView.getUint32(componentOffset + 12, true);
       componentTransformCount = checkedAdd(
         componentTransformCount,
-        checkedMultiply(componentCount, 2, "component transform scratch"),
+        componentCount,
         "component transform scratch",
       );
     }

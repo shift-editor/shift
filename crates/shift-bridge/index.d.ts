@@ -370,17 +370,6 @@ export interface NapiCloneGlyphLayerIntent {
   fromLayerId: LayerId
 }
 
-export interface NapiComponentAnchorAttachment {
-  source: NapiComponentAnchorReference
-  target: NapiComponentAnchorReference
-}
-
-export interface NapiComponentAnchorReference {
-  componentPath: Array<ComponentId>
-  glyphId: GlyphId
-  anchorId: AnchorId
-}
-
 export interface NapiComponentData {
   id: ComponentId
   baseGlyphId: GlyphId
@@ -394,7 +383,6 @@ export interface NapiComponentGlyph {
   baseGlyphId: GlyphId
   parentPath: Array<ComponentId>
   componentPath: Array<ComponentId>
-  attachment?: NapiComponentAnchorAttachment
 }
 
 export interface NapiComponentMatch {
@@ -973,7 +961,6 @@ export interface NapiSlugLayout {
   componentParts: NapiSlugSection
   components: NapiSlugSection
   componentSources: NapiSlugSection
-  anchorSources: NapiSlugSection
   lineBits: NapiSlugSection
   totalLength: number
 }

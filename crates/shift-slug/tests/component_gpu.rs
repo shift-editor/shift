@@ -20,7 +20,7 @@ use wgpu::{
 };
 
 #[test]
-fn gpu_resolves_varying_component_transforms_and_attachments() {
+fn gpu_resolves_varying_component_transforms() {
     let (font, root_id) = component_font();
     let projection = font.glyph_projection(&root_id).unwrap().unwrap();
     let interpolation = projection.interpolation().unwrap();
@@ -141,7 +141,7 @@ fn gpu_resolves_varying_component_transforms_and_attachments() {
     let transform_buffer = storage_buffer(
         &device,
         "shift-slug component test transforms",
-        descriptor.component_count as usize * 2 * 32,
+        descriptor.component_count as usize * 32,
     );
     let readback = device.create_buffer(&BufferDescriptor {
         label: Some("shift-slug component test readback"),

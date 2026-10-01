@@ -379,17 +379,6 @@ export interface CloneGlyphLayerIntent {
   fromLayerId: LayerId
 }
 
-export interface ComponentAnchorAttachment {
-  source: ComponentAnchorReference
-  target: ComponentAnchorReference
-}
-
-export interface ComponentAnchorReference {
-  componentPath: Array<ComponentId>
-  glyphId: GlyphId
-  anchorId: AnchorId
-}
-
 export interface ComponentData {
   id: ComponentId
   baseGlyphId: GlyphId
@@ -403,7 +392,6 @@ export interface ComponentGlyph {
   baseGlyphId: GlyphId
   parentPath: Array<ComponentId>
   componentPath: Array<ComponentId>
-  attachment?: ComponentAnchorAttachment
 }
 
 export interface ComponentMatch {
@@ -960,7 +948,6 @@ export interface SlugLayout {
   componentParts: SlugSection
   components: SlugSection
   componentSources: SlugSection
-  anchorSources: SlugSection
   lineBits: SlugSection
   totalLength: number
 }
