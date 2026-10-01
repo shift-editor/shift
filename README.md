@@ -2,96 +2,79 @@
   <p align="center">
     <img width="250" alt="image" src="https://github.com/user-attachments/assets/5ed51bda-3e29-40f2-b87d-9309f2366bf1" />
     <h1 align="center"><b>Shift</b></h1>
-    <p>A modern, cross-platform font editor built with TypeScript and Rust, focused on bringing contemporary technologies and design principles to type design.</p>
+    <p>A font editor built for variable fonts.</p>
+    <p>
+      <a href="https://shift.graphics">Download</a>
+      ·
+      <a href="https://shift.graphics/releases">Release notes</a>
+      ·
+      <a href="https://discord.gg/582FxBdNH7">Discord</a>
+    </p>
     <img width="2400" height="1600" alt="image" src="https://github.com/user-attachments/assets/592962c3-f198-4e53-af61-460a592b05f0" />
-
-
   </p>
 </div>
 
-## Why Shift?
+**Shift is a free, open-source font editor for macOS, Windows, and Linux, available now in alpha.**
 
-Shift aims to redefine font editing by combining the power of Rust for performance-critical tasks with the flexibility of web-based UI technologies. Whether you're a type designer or a developer, Shift offers a fresh approach to creating and editing fonts with a focus on speed, precision, and extensibility.
+Shift opens `.shift` documents, UFO, Designspace, and Glyphs sources (use **Save as Shift** to edit them), and TTF/OTF fonts for viewing. It exports TrueType, including variable fonts.
 
 > [!WARNING]
-> Shift is an unstable Developer Preview. Versioned Alpha builds are for early testing, not production font work. Work on copies and retain independent backups. Installable builds are published through [GitHub Releases](https://github.com/shift-editor/shift/releases); the latest complete development snapshot is available as [Shift Nightly](https://github.com/shift-editor/shift/releases/tag/nightly).
+> Work on copies of your fonts and keep backups. Workflows and file details will change between alpha releases.
 
-Linux versioned releases are available through signed [APT and DNF repositories](docs/releases.md#linux-installation), with DEB, RPM, and AppImage direct downloads retained as alternatives.
+## Download
 
-## Architecture
+Download Shift for macOS, Windows, and Linux from [shift.graphics](https://shift.graphics) or [GitHub Releases](https://github.com/shift-editor/shift/releases). On Linux, install from the [APT or DNF repositories](docs/releases.md#linux-installation) to get updates. For the latest development build, use [Shift Nightly](https://github.com/shift-editor/shift/releases/tag/nightly).
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│                         Desktop App                          │
-│  Electron shell  ←→  React UI  ←→  TypeScript Editor         │
-└───────────────────────────────┬──────────────────────────────┘
-                                │ IPC / native bridge
-┌───────────────────────────────┴──────────────────────────────┐
-│                         Rust Crates                          │
-│  shift-bridge      transport adapter                         │
-│  shift-workspace   open working state                        │
-│  shift-font        live font authoring model                 │
-│  shift-store       canonical SQLite documents and recovery   │
-│  shift-cli         document authoring and inspection CLI     │
-└──────────────────────────────────────────────────────────────┘
-```
+## Status
 
-The desktop app owns shell and editor interaction. Rust owns the live font authoring model, canonical SQLite documents, durable recovery state, and native transport boundary.
+| Area                                     | Status  |
+| ---------------------------------------- | :-----: |
+| Drawing and editing outlines             |   ✅    |
+| Variable fonts: axes, sources, instances |   ✅    |
+| Components                               |   ✅    |
+| Opening UFO, Designspace, and Glyphs     |   ✅    |
+| Exporting TrueType                       |   ✅    |
+| Kerning                                  | Planned |
+| Text proofing                            | Planned |
 
-`shift-font` is the core Rust object model:
+Found a bug? Use **Help → Report a Problem** in the app, or ask on [Discord](https://discord.gg/582FxBdNH7).
 
-- `Font` owns glyphs, sources, axes, metadata, and font-level data.
-- `Source` is an editable designspace position with a name and location.
-- `Glyph` is a glyph concept identified by `GlyphId`.
-- `GlyphLayer` is authored editable data for one glyph at one source.
+## Development
 
-Stable IDs are identity. Names and Unicode values are editable metadata.
-
-## Getting Started
-
-### Prerequisites
-
-- [Node.js](https://nodejs.org/) (v24)
-- [pnpm](https://pnpm.io/) (v11)
-- [Rust](https://rustup.rs/) (stable)
-
-### Quick Start
+Shift is an Electron app with a TypeScript editor and a Rust core. You need [Node.js](https://nodejs.org/) 24, [pnpm](https://pnpm.io/) 11, and stable [Rust](https://rustup.rs/).
 
 ```bash
 git clone https://github.com/shift-editor/shift.git
 cd shift
-
 pnpm install
 pnpm dev
 ```
 
-`pnpm dev` builds the Rust addon in debug mode through Turbo before starting Electron. Use `pnpm dev:release` for representative performance, or `pnpm dev:watch` / `pnpm dev:watch:release` to rebuild the addon when Rust changes.
+| Command            | What it does                                                  |
+| ------------------ | ------------------------------------------------------------- |
+| `pnpm dev`         | Build the native addon in debug mode and start the app        |
+| `pnpm dev:release` | Same with a release build, for performance work               |
+| `pnpm test`        | Run the test suites                                           |
+| `pnpm check`       | Lint, typecheck, dead-code checks, and tests; run before a PR |
+| `pnpm package`     | Build an installable app                                      |
 
-### Command-line inspection
+### Repository layout
 
-The `shift` CLI can inspect canonical SQLite `.shift` documents without modifying them:
+- `apps/desktop`: Electron app and React UI
+- `packages/editor`: tools, rendering, and editor state
+- `crates/shift-bridge`: native bridge between TypeScript and Rust
+- `crates/shift-workspace`: open documents and editing sessions
+- `crates/shift-font`: the font model and editing behavior
+- `crates/shift-store`: `.shift` files and recovery
+- `crates/shift-backends`, `crates/fontsrc`: importing and exporting UFO, Designspace, Glyphs, and TrueType
 
-```bash
-cargo run -p shift-cli -- inspect path/to/Family.shift
-cargo run -p shift-cli -- inspect --view axes path/to/Family.shift
-cargo run -p shift-cli -- inspect --json path/to/Family.shift
-```
-
-See [crates/shift-cli/README.md](crates/shift-cli/README.md) for the supported views and development commands.
-
-## Roadmap
-
-See [ROADMAP.md](ROADMAP.md) for current implementation status and planned features. We are planning to ship a production grade font editor.
+See [docs/architecture](docs/architecture/index.md) for how the code is organized.
 
 ## Security and signing
 
 Windows releases are currently unsigned while Shift applies for open-source code signing. See the [code signing policy](CODE_SIGNING_POLICY.md) for the signing scope, release controls, team roles, and network/privacy disclosures.
 
 Security vulnerabilities can be reported privately to [Kostya Farber](mailto:kostya.farber@gmail.com).
-
-## Community
-
-Join our [Discord server](https://discord.gg/582FxBdNH7) to ask questions, report bugs, or contribute!
 
 ## License
 
