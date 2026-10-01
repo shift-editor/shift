@@ -1,0 +1,11 @@
+version: 0.1.1
+files:
+  - url: https://github.com/shift-editor/shift/releases/download/v0.1.1/Shift-0.1.1-macOS-x64.zip
+    sha512: sm1pDuBhag5xy8uh6FjlB6af1aVij4zM7e41tM6usj5h/a3c56ZD4+QY+HRWBN7iVfQO3knqsNzL84tnLtfB3Q==
+    size: 147397903
+  - url: https://github.com/shift-editor/shift/releases/download/v0.1.1/Shift-0.1.1-macOS-x64.dmg
+    sha512: o8AAW+gowNOkr1aNLYzHxso9ilCkHGw04iz86zGxgbILMej67ZS6eAhIHxXewpY8sX69lKmcpCf7+KPWE7x4GA==
+    size: 147734562
+path: https://github.com/shift-editor/shift/releases/download/v0.1.1/Shift-0.1.1-macOS-x64.zip
+sha512: sm1pDuBhag5xy8uh6FjlB6af1aVij4zM7e41tM6usj5h/a3c56ZD4+QY+HRWBN7iVfQO3knqsNzL84tnLtfB3Q==
+releaseDate: '2026-10-01T18:31:00.956Z'
