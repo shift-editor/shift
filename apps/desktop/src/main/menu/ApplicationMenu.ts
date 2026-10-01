@@ -202,6 +202,7 @@ export class ApplicationMenu {
   #glyphItems(): MenuItemConstructorOptions[] {
     return [
       this.#commandItem("glyph.addComponent"),
+      this.#commandItem("glyph.decomposeComponents"),
       { type: "separator" },
       this.#commandItem("glyph.reverseSelectedContour"),
     ];

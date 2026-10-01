@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { Point } from "@shift/glyph-state";
 import type { GlyphName } from "@shift/types";
 import { externalAxisLocationFromRecord } from "@shift/editor/variation";
+import { runRendererCommand } from "@/lib/commands/rendererCommands";
 import { TestEditor } from "@/testing/TestEditor";
 
 describe("component references become removable or editable local contours", () => {
@@ -142,6 +143,42 @@ describe("component references become removable or editable local contours", () 
     await editor.redo();
     expect(referenceLayer.components).toEqual([]);
     expect(targetLayer.components).toEqual([]);
+  });
+});
+
+describe("Decompose Components replaces selected components with outlines", () => {
+  it("decomposes the selection through the command as one undoable edit", async () => {
+    const editor = new TestEditor();
+    await editor.startSession("root", null);
+    await editor.addGlyph("base", null);
+    const base = editor.font.recordForName("base" as GlyphName)!;
+    const baseLayer = (await editor.font.loadGlyph(base.id)).layerForSource(
+      editor.font.defaultSource.id,
+    )!;
+    const contourId = baseLayer.addContour();
+    baseLayer.addPoint(contourId, Point.onCurve({ x: 40, y: 25 }));
+    const componentId = await editor.addComponent(base.id);
+
+    expect(editor.canDecomposeSelection()).toBe(true);
+    expect(await runRendererCommand(editor, "glyph.decomposeComponents")).toBe(true);
+    const layer = editor.requireGlyphLayer();
+    expect(layer.components).toEqual([]);
+    expect(layer.allPoints.map(({ x, y }) => ({ x, y }))).toEqual([{ x: 40, y: 25 }]);
+
+    await editor.undo();
+    expect(layer.components.map(({ id }) => id)).toEqual([componentId]);
+    expect(layer.allPoints).toEqual([]);
+  });
+
+  it("does nothing when the selection is not components", async () => {
+    const editor = new TestEditor();
+    await editor.startSession();
+    const [pointId] = await editor.drawOpenContour([{ x: 0, y: 0 }]);
+    editor.selection.select([pointId]);
+
+    expect(editor.canDecomposeSelection()).toBe(false);
+    expect(await runRendererCommand(editor, "glyph.decomposeComponents")).toBe(false);
+    expect(editor.requireGlyphLayer().allPoints).toHaveLength(1);
   });
 });
 

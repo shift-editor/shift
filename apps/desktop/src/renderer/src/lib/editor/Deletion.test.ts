@@ -231,6 +231,20 @@ describe("deletion refuses absent or unsupported selections without edits", () =
     expect(layer().state).toEqual(before);
   });
 
+  it("deletes selected anchors as one undoable edit", async () => {
+    const top = layer().addAnchor("top", { x: 0, y: 100 });
+    const bottom = layer().addAnchor("bottom", { x: 0, y: 0 });
+    await editor.settle();
+    editor.selection.select([top]);
+
+    expect(await editor.deleteSelection()).toBe(true);
+    expect(layer().anchors.map(({ id }) => id)).toEqual([bottom]);
+    expect(editor.selection.ids).toEqual([]);
+
+    await editor.undo();
+    expect(layer().anchors.map(({ id }) => id)).toEqual([top, bottom]);
+  });
+
   it("retains anchors when they are mixed into a point selection", async () => {
     const [id] = await editor.drawOpenContour([{ x: 0, y: 0 }]);
     const anchor = layer().addAnchor("top", { x: 0, y: 100 });

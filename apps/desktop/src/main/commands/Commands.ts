@@ -229,6 +229,12 @@ const glyphCommands: Command[] = [
     run: (ctx) => ctx.renderer.run("glyph.addComponent"),
   },
   {
+    id: "glyph.decomposeComponents",
+    label: "Decompose Components",
+    enabled: (ctx) => ctx.document.hasWorkspace(),
+    run: (ctx) => ctx.renderer.run("glyph.decomposeComponents"),
+  },
+  {
     id: "glyph.makeFirstPoint",
     label: "Make First Point",
     enabled: (ctx) => ctx.document.hasWorkspace(),

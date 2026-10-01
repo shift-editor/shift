@@ -115,6 +115,9 @@ export async function runRendererCommand(editor: Editor, id: EditorCommandId): P
       return changed;
     }
 
+    case "glyph.decomposeComponents":
+      return editor.decomposeSelection();
+
     case "glyph.reverseSelectedContour": {
       const contourIds = new Set<ContourId>();
 
@@ -186,6 +189,7 @@ async function runFocusedTextEditCommand(id: EditorCommandId): Promise<boolean |
     case "edit.deselect":
     case "view.zoomIn":
     case "view.zoomOut":
+    case "glyph.decomposeComponents":
     case "glyph.reverseSelectedContour":
     case "glyph.makeFirstPoint":
       return null;
