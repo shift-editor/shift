@@ -76,6 +76,7 @@ impl UfoReader {
 
         if is_closed {
             shift_contour.close();
+            shift_contour.start_at_first_on_curve();
         }
 
         shift_contour

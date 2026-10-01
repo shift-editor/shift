@@ -324,6 +324,7 @@ pub(super) fn convert_glyph(
                     }
                     if path.closed {
                         contour.close();
+                        contour.start_at_first_on_curve();
                     }
                     result_layer.add_contour(contour);
                 }

@@ -87,6 +87,22 @@ impl Contour {
         self.points.reverse();
     }
 
+    /// Rotates a closed contour so its first point is its first on-curve point.
+    ///
+    /// Glyphs and UFO sources may list a closed contour's leading off-curve
+    /// controls before its start point. Rotation keeps every segment and
+    /// point identity; corresponding master contours rotate by the same
+    /// amount, so interpolation compatibility is unchanged. Open contours
+    /// and contours without an on-curve point are left as they are.
+    pub fn start_at_first_on_curve(&mut self) {
+        if !self.closed {
+            return;
+        }
+        if let Some(start) = self.points.iter().position(Point::is_on_curve) {
+            self.points.rotate_left(start);
+        }
+    }
+
     pub fn add_point(&mut self, x: f64, y: f64, point_type: PointType, smooth: bool) -> PointId {
         let id = PointId::new();
         let point = Point::new(id.clone(), x, y, point_type, smooth);
@@ -261,6 +277,21 @@ impl From<&Contour> for BezPath {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn closed_contour_starts_at_first_on_curve() {
+        let mut c = Contour::new();
+        c.add_point(10.0, 0.0, PointType::OffCurve, false);
+        c.add_point(20.0, 10.0, PointType::OffCurve, false);
+        c.add_point(20.0, 20.0, PointType::OnCurve, false);
+        c.add_point(0.0, 0.0, PointType::OnCurve, false);
+        c.close();
+
+        c.start_at_first_on_curve();
+
+        let xs: Vec<f64> = c.points().iter().map(Point::x).collect();
+        assert_eq!(xs, vec![20.0, 0.0, 10.0, 20.0]);
+    }
 
     #[test]
     fn contour_creation() {
