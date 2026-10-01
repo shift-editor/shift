@@ -25,7 +25,8 @@ jobs:
     name: Resolve release
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      # Draft releases are only visible to tokens that can write to the repository.
+      contents: write
     outputs:
       tag: ${{ steps.release.outputs.tag }}
       version: ${{ steps.release.outputs.version }}
@@ -44,6 +45,8 @@ jobs:
       - name: Require an unpublished draft release
         env:
           GH_TOKEN: ${{ github.token }}
+          # This job has no checkout, so gh cannot infer the repository.
+          GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
         shell: bash
         run: |
