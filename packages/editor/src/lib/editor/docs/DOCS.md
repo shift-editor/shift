@@ -171,7 +171,9 @@ Paste selects inserted objects and activates Select before awaiting the workspac
 
 ### Deletion
 
-`Editor.deleteSelection(mode)` normalizes point, segment, and contour selection against the active authored layer and delegates to `GlyphLayer.deletePoints`. Delete and Backspace use `"fit"`; Shift selects `"gap"`. Native-menu Delete uses the same default reconnection behavior. Reconnection never raises the original span's highest degree: lines stay lines, quadratic/line mixtures stay quadratic, and spans containing cubics are fitted as cubics. Selecting a segment is equivalent to selecting all of its points. Unsupported, missing, or mixed-anchor selections refuse without mutation. Successful deletion clears selection and hover and awaits the workspace echo; geometry removal and selection clearing are one unified undo step.
+`Editor.deleteSelection(mode)` normalizes point, segment, and contour selection against the active authored layer and delegates to `GlyphLayer.deletePoints`. Delete and Backspace use `"fit"`; Shift selects `"gap"`. Native-menu Delete uses the same default reconnection behavior. Reconnection never raises the original span's highest degree: lines stay lines, quadratic/line mixtures stay quadratic, and spans containing cubics are fitted as cubics. Selecting a segment is equivalent to selecting all of its points. Component-only selections remove the matched components in every selected source; anchor-only selections remove the matched anchors in every selected source. Unsupported, missing, or mixed point-and-anchor selections refuse without mutation.
+
+`Editor.decomposeSelection()` accepts the same component-only selections, replaces the matched components in every selected source with their base outlines as one undo step, and clears selection. Successful deletion clears selection and hover and awaits the workspace echo; geometry removal and selection clearing are one unified undo step.
 
 ### Hit testing
 

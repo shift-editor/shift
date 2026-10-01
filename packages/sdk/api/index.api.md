@@ -43,6 +43,7 @@ export class Editor {
     //
     // (undocumented)
     get camera(): Camera;
+    canDecomposeSelection(): boolean;
     collapseEditingSources(): boolean;
     // Warning: (ae-forgotten-export) The symbol "SelectableId" needs to be exported by the entry point index.d.ts
     // Warning: (ae-forgotten-export) The symbol "ComponentTransformSelection" needs to be exported by the entry point index.d.ts
@@ -75,6 +76,7 @@ export class Editor {
     get debugOverlays(): DebugOverlays;
     // (undocumented)
     get debugOverlaysCell(): Signal<DebugOverlays>;
+    decomposeSelection(): Promise<boolean>;
     // Warning: (ae-forgotten-export) The symbol "DeleteMode" needs to be exported by the entry point index.d.ts
     //
     // (undocumented)
@@ -664,7 +666,7 @@ export function useSignalState<T>(signal: Signal<T>, options?: UseSignalOptions)
 
 // Warnings were encountered during analysis:
 //
-// dist/Editor-C4VGA6MS.d.ts:3725:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
+// dist/Editor-BO84Q4oC.d.ts:3725:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

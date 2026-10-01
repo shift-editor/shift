@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import type { PointId } from "@shift/types";
+import { Point } from "@shift/glyph-state";
+import type { ComponentId, GlyphName, PointId } from "@shift/types";
 import { TestEditor } from "@/testing/TestEditor";
 
 describe("Select arrow keys nudge selected points", () => {
@@ -73,5 +74,39 @@ describe("Select arrow keys nudge selected points", () => {
 
     await editor.redo();
     expect([editor.pointPosition(firstId), editor.pointPosition(secondId)]).toEqual(nudged);
+  });
+});
+
+describe("Select arrow keys nudge selected components", () => {
+  let editor: TestEditor;
+  let componentId: ComponentId;
+
+  const translation = () => {
+    const component = editor.requireGlyphLayer().components.find(({ id }) => id === componentId);
+    return { x: component?.transform.translateX, y: component?.transform.translateY };
+  };
+
+  beforeEach(async () => {
+    editor = new TestEditor();
+    await editor.startSession("root", null);
+    await editor.addGlyph("base", null);
+    const base = editor.font.recordForName("base" as GlyphName)!;
+    const baseLayer = (await editor.font.loadGlyph(base.id)).layerForSource(
+      editor.font.defaultSource.id,
+    )!;
+    const contourId = baseLayer.addContour();
+    baseLayer.addPoint(contourId, Point.onCurve({ x: 0, y: 0 }));
+    baseLayer.addPoint(contourId, Point.onCurve({ x: 100, y: 100 }));
+    componentId = (await editor.addComponent(base.id))!;
+    editor.selectTool("select");
+  });
+
+  it("moves the component by the increment as one undoable edit", async () => {
+    await editor.pressKey("ArrowRight", { shiftKey: true });
+    await editor.pressKey("ArrowUp");
+    expect(translation()).toEqual({ x: 10, y: 1 });
+
+    await editor.undo();
+    expect(translation()).toEqual({ x: 10, y: 0 });
   });
 });

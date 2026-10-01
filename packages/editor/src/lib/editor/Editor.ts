@@ -1808,26 +1808,29 @@ export class Editor {
   }
 
   public async deleteSelection(mode: DeleteMode = "fit"): Promise<boolean> {
-    const componentTargets = this.#componentTargets(this.selection.ids);
-    if (componentTargets) {
-      this.transaction("Delete Components", () => {
-        componentTargets.layer.removeComponents(componentTargets.componentIds);
-        for (const target of componentTargets.additionalLayers) {
-          target.layer.removeComponents(target.componentIds);
+    const componentsRemoved = await this.#editSelectedComponents(
+      "Delete Components",
+      (layer, ids) => layer.removeComponents(ids),
+    );
+    if (componentsRemoved) return true;
+
+    const selection = this.positionSelection(this.selection.ids);
+    if (!selection) return false;
+
+    const pointIds = selection.targets.points ?? [];
+    const anchorIds = selection.targets.anchors ?? [];
+    if (pointIds.length === 0 && anchorIds.length > 0) {
+      this.transaction("Delete Anchors", () => {
+        selection.layer.removeAnchors(anchorIds);
+        for (const target of selection.additionalLayers) {
+          target.layer.removeAnchors(target.targets.anchors ?? []);
         }
       });
-
-      this.selection.clear();
-      this.hover.clear();
-      await this.font.editCoordinator.settled();
+      await this.#clearSelectionAfterEdit();
       return true;
     }
 
-    const selection = this.positionSelection(this.selection.ids);
-    const pointIds = selection?.targets.points ?? [];
-    if (!selection || pointIds.length === 0 || (selection.targets.anchors?.length ?? 0) > 0) {
-      return false;
-    }
+    if (pointIds.length === 0 || anchorIds.length > 0) return false;
 
     const deleted = this.history.capture("Delete", () => {
       if (!selection.layer.deletePoints(pointIds, mode)) return false;
@@ -1840,6 +1843,48 @@ export class Editor {
 
     await this.font.editCoordinator.settled();
     return true;
+  }
+
+  /** Whether the selection is entirely components that {@link decomposeSelection} can decompose. */
+  public canDecomposeSelection(): boolean {
+    return this.#componentTargets(this.selection.ids) !== null;
+  }
+
+  /**
+   * Replaces the selected components with their base glyphs' outlines.
+   *
+   * @remarks
+   * Applies to every source selected for editing that has matching components,
+   * as one undo step, then clears the selection.
+   *
+   * @returns `true` when components were decomposed; `false` when the selection
+   * is not entirely components on the active source.
+   */
+  public async decomposeSelection(): Promise<boolean> {
+    return this.#editSelectedComponents("Decompose Components", (layer, ids) =>
+      layer.decomposeComponents(ids),
+    );
+  }
+
+  async #editSelectedComponents(
+    label: string,
+    edit: (layer: GlyphLayer, componentIds: readonly ComponentId[]) => void,
+  ): Promise<boolean> {
+    const targets = this.#componentTargets(this.selection.ids);
+    if (!targets) return false;
+
+    this.transaction(label, () => {
+      edit(targets.layer, targets.componentIds);
+      for (const target of targets.additionalLayers) edit(target.layer, target.componentIds);
+    });
+    await this.#clearSelectionAfterEdit();
+    return true;
+  }
+
+  async #clearSelectionAfterEdit(): Promise<void> {
+    this.selection.clear();
+    this.hover.clear();
+    await this.font.editCoordinator.settled();
   }
 
   /**

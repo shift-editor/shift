@@ -83,6 +83,11 @@ export const CanvasContextMenu = ({ children }: CanvasContextMenuProps) => {
             <ContextMenuItem onClick={async () => runCommand("glyph.addComponent")}>
               Add component…
             </ContextMenuItem>
+            {editor.canDecomposeSelection() && (
+              <ContextMenuItem onClick={async () => runCommand("glyph.decomposeComponents")}>
+                Decompose Components
+              </ContextMenuItem>
+            )}
             <ContextMenuItem onClick={async () => runCommand("glyph.reverseSelectedContour")}>
               Reverse Contour
             </ContextMenuItem>
