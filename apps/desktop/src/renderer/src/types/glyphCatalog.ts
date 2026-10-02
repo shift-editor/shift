@@ -8,6 +8,7 @@ import type {
   GlyphPreview,
   SourceId,
 } from "@shift/types";
+import type { SessionViewResumeCatalog } from "@shared/viewResume";
 import type { ListSelectionMode, RenderGlyph } from "@shift/editor/types";
 import type { Dispatch, SetStateAction } from "react";
 import type { ColorTheme } from "@/lib/themes";
@@ -84,6 +85,10 @@ export interface GlyphCatalogSource {
   canAuthor: boolean;
   openedGlyph: RenderGlyph | null;
   openGlyph: (glyph: GlyphCatalogItem) => Promise<void>;
+  restoreCatalogView: (catalog: SessionViewResumeCatalog) => void;
+  pendingCatalogScrollTop: number | null;
+  acknowledgeCatalogScrollApplied: () => void;
+  reportCatalogScrollTop: (scrollTop: number) => void;
 }
 
 export interface GlyphCatalogLayoutMetrics {
@@ -140,6 +145,9 @@ export interface GlyphNameInputProps {
 }
 
 export interface GlyphCatalogBackendGateProps {
+  pendingCatalogScrollTop: number | null;
+  onCatalogScrollTop: (scrollTop: number) => void;
+  onCatalogScrollApplied: () => void;
   readonly glyphs: readonly GlyphCatalogItem[];
   readonly location: CatalogLocation;
   readonly metrics: CatalogMetrics;
@@ -177,4 +185,7 @@ export interface SlugGlyphCatalogSurfaceProps extends GlyphCatalogViewProps {
 export interface SvgGlyphCatalogGridProps extends GlyphCatalogViewProps {
   readonly glyphPreviews: GlyphCatalogSource["glyphPreviews"];
   readonly glyphActionLabel?: (glyph: GlyphCatalogItem) => string;
+  readonly pendingCatalogScrollTop: number | null;
+  readonly onCatalogScrollTop: (scrollTop: number) => void;
+  readonly onCatalogScrollApplied: () => void;
 }

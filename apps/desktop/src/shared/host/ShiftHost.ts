@@ -3,6 +3,7 @@ import type { UpdateProgress } from "../update/types";
 import type { RendererErrorReport } from "../ipc/contract";
 import type { FontSessionMode } from "../workspace/protocol";
 import type { RecentDocument } from "../recents";
+import type { SessionViewResume } from "../viewResume";
 
 /**
  * Renderer-facing API for Electron app-shell behavior.
@@ -55,6 +56,8 @@ export interface ShiftHost {
      */
     connect: () => Promise<void>;
     ready: () => Promise<void>;
+    setViewResume: (resume: SessionViewResume) => Promise<void>;
+    takeViewResume: () => Promise<SessionViewResume | null>;
   };
   /** Controls and observes the main-owned application update flow. */
   update: {

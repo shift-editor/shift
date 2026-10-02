@@ -286,6 +286,11 @@ export class DocumentSession {
     this.#updateWindowTitle();
   }
 
+  /** Returns the last accepted document state snapshot owned by main. */
+  cachedDocumentState(): WorkspaceDocumentState | null {
+    return this.#state;
+  }
+
   async #commitWorkspaceClose(discard: boolean, ownerReason: CloseReason | null): Promise<void> {
     await Promise.resolve();
 

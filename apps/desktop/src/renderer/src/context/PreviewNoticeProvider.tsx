@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { PreviewNoticeDialog } from "@/components/chrome/PreviewNoticeDialog";
 import { getShiftHost } from "@/host/shiftHost";
+import { useViewResumeCapture } from "@/context/ViewResumeCaptureContext";
 import { useFontSession } from "@/workspace/WorkspaceContext";
 
 const PreviewNoticeContext = createContext<(() => void) | null>(null);
@@ -16,6 +17,7 @@ export function usePreviewNotice(): () => void {
 
 export const PreviewNoticeProvider = ({ children }: { children: ReactNode }) => {
   const session = useFontSession();
+  const { flush: flushViewResume } = useViewResumeCapture();
   const [previewNoticeOpen, setPreviewNoticeOpen] = useState(false);
 
   const showPreviewNotice = useCallback(() => {
@@ -28,11 +30,12 @@ export const PreviewNoticeProvider = ({ children }: { children: ReactNode }) => 
     setPreviewNoticeOpen(false);
 
     try {
+      await flushViewResume();
       await getShiftHost().commands.run("file.save");
     } catch (error) {
       console.error("preview conversion failed", error);
     }
-  }, []);
+  }, [flushViewResume]);
 
   useEffect(
     () => session.editor.on("previewMutationAttempted", showPreviewNotice),

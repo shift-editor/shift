@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Navigate, Outlet, Route, Routes, useLocation } from "react-router";
 
 import { Landing } from "@/views/Landing";
@@ -11,6 +11,7 @@ import { DebugProvider } from "@/context/DebugProvider";
 import { SettingsNavigationProvider } from "@/context/SettingsNavigationProvider";
 import { GlyphCatalogProvider } from "@/context/GlyphCatalogProvider";
 import { PreviewNoticeProvider } from "@/context/PreviewNoticeProvider";
+import { ViewResumeProvider } from "@/context/ViewResumeProvider";
 import { AboutScreen } from "@/views/AboutScreen";
 import { FeedbackScreen } from "@/views/FeedbackScreen";
 import { UpdateScreen } from "@/views/UpdateScreen";
@@ -56,16 +57,22 @@ export const Screens = () => {
 
 const FontSessionScreens = () => {
   const location = useLocation();
+  const [pendingScrollRestore, setPendingScrollRestore] = useState<number | null>(null);
+  const handleScrollRestoreApplied = useCallback(() => setPendingScrollRestore(null), []);
 
   // Preserve the resident catalog atlas across screen navigation. Route visibility
   // must not own the WebGPU device or trigger another complete atlas upload.
   const catalogActive = location.pathname === "/home";
 
   return (
-    <GlyphCatalogProvider>
-      <PreviewNoticeProvider>
-        <SettingsNavigationProvider>
-          <ShiftSessionSetup />
+    <GlyphCatalogProvider
+      pendingScrollRestore={pendingScrollRestore}
+      onScrollRestoreApplied={handleScrollRestoreApplied}
+    >
+      <ViewResumeProvider onRestoredScrollTop={setPendingScrollRestore}>
+        <PreviewNoticeProvider>
+          <SettingsNavigationProvider>
+            <ShiftSessionSetup />
           <div
             aria-hidden={!catalogActive}
             className={catalogActive ? undefined : "pointer-events-none fixed inset-0 z-0"}
@@ -76,8 +83,9 @@ const FontSessionScreens = () => {
           <div className={catalogActive ? undefined : "relative z-10"}>
             <Outlet />
           </div>
-        </SettingsNavigationProvider>
-      </PreviewNoticeProvider>
+          </SettingsNavigationProvider>
+        </PreviewNoticeProvider>
+      </ViewResumeProvider>
     </GlyphCatalogProvider>
   );
 };

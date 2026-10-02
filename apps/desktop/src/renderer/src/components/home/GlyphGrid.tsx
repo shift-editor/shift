@@ -17,6 +17,10 @@ export const GlyphGrid = memo(function GlyphGrid() {
     glyphPreviews,
     canAuthor,
     openGlyph,
+    pendingCatalogScrollTop,
+    reportCatalogScrollTop,
+    acknowledgeCatalogScrollApplied,
+    query,
   } = useGlyphCatalog();
   const [catalogReady, setCatalogReady] = useState(false);
   const workspaceReadyRef = useRef(false);
@@ -49,6 +53,7 @@ export const GlyphGrid = memo(function GlyphGrid() {
       aria-label="Glyph catalog surface"
       data-filtered-glyph-count={filteredGlyphs.length}
       data-first-glyph-id={filteredGlyphs[0]?.id}
+      data-view-resume-query={query}
       className="relative h-full min-h-0 w-full overflow-hidden font-ui text-primary"
     >
       <GlyphCatalogBackendGate
@@ -64,6 +69,9 @@ export const GlyphGrid = memo(function GlyphGrid() {
         openGlyph={openGlyph}
         onFirstFrame={handleCatalogReady}
         onUnavailable={handleCatalogUnavailable}
+        pendingCatalogScrollTop={pendingCatalogScrollTop}
+        onCatalogScrollTop={reportCatalogScrollTop}
+        onCatalogScrollApplied={acknowledgeCatalogScrollApplied}
       />
       {filteredGlyphs.length === 0 ? (
         <div className="pointer-events-none absolute inset-0 z-4 flex items-center justify-center px-4 text-sm text-muted">

@@ -19,6 +19,8 @@ const shiftHost: ShiftHost = {
     mode: invoke(ipcRenderer, "session.mode"),
     connect: invoke(ipcRenderer, "session.connect"),
     ready: invoke(ipcRenderer, "session.ready"),
+    setViewResume: invoke(ipcRenderer, "session.setViewResume"),
+    takeViewResume: invoke(ipcRenderer, "session.takeViewResume"),
   },
   window: {
     reopenDocument: invoke(ipcRenderer, "window.reopenDocument"),

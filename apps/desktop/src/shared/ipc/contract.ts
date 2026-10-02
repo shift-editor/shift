@@ -6,6 +6,7 @@ import type {
 } from "../workspace/protocol";
 import type { UpdateProgress } from "../update/types";
 import type { RecentDocument } from "../recents";
+import type { SessionViewResume } from "../viewResume";
 
 export type DocumentCallMap = {
   "document.state": { request: void; response: WorkspaceDocumentState | null };
@@ -57,6 +58,10 @@ export type RendererToMain = {
    */
   "session.connect": () => void;
   "session.ready": () => void;
+  /** Persists the sender window's latest catalog/editor view state for session resume. */
+  "session.setViewResume": (resume: SessionViewResume) => void;
+  /** Returns and clears the persisted resume payload for the sender's session. */
+  "session.takeViewResume": () => SessionViewResume | null;
   "window.reopenDocument": () => void;
   /** Reports that the sender's first meaningful content is rendered, so main can show it. */
   "window.ready": () => void;

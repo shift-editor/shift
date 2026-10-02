@@ -21,6 +21,9 @@ export function SvgGlyphCatalogGrid({
   onFirstFrame,
   onUnavailable,
   glyphActionLabel,
+  pendingCatalogScrollTop,
+  onCatalogScrollTop,
+  onCatalogScrollApplied,
 }: SvgGlyphCatalogGridProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const editingInputRef = useRef<HTMLInputElement>(null);
@@ -43,6 +46,14 @@ export function SvgGlyphCatalogGrid({
     onFirstFrame,
     onUnavailable,
   );
+
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!container || pendingCatalogScrollTop === null) return;
+
+    container.scrollTop = pendingCatalogScrollTop;
+    onCatalogScrollApplied();
+  }, [onCatalogScrollApplied, pendingCatalogScrollTop]);
 
   useLayoutEffect(() => {
     const container = containerRef.current;
@@ -97,7 +108,11 @@ export function SvgGlyphCatalogGrid({
       data-preview-cache-bytes={cacheBytes}
       data-first-glyph-name={glyphs[0]?.displayName}
       className="absolute inset-0 overflow-x-hidden overflow-y-auto"
-      onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
+      onScroll={(event) => {
+        const nextScrollTop = event.currentTarget.scrollTop;
+        setScrollTop(nextScrollTop);
+        onCatalogScrollTop(nextScrollTop);
+      }}
     >
       <div className="relative" style={{ height: layout.totalHeight, width: "100%" }}>
         {targetFrame.cells.map((cell) => {

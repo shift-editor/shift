@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MutableRefObject,
+  type ReactNode,
+} from "react";
 import { useLocation, useNavigate } from "react-router";
 import {
   DEFAULT_LANGUAGE_IDS,
@@ -6,13 +14,19 @@ import {
   type GlyphCategoryCatalog,
   type LanguageCatalog,
 } from "@shift/glyph-info";
-import { asGlyphId, type GlyphId, type GlyphName } from "@shift/types";
+import type { GlyphName } from "@shift/types";
 import { effect, signal, useSignalState } from "@shift/editor/signals";
+import type { SessionViewResume, SessionViewResumeCatalog } from "@shared/viewResume";
+import { emptySessionViewResume } from "@shared/viewResume";
+import { getShiftHost } from "@/host/shiftHost";
 import { useFontSession } from "@/workspace/WorkspaceContext";
 import { getGlyphInfo } from "@/workspace/glyphInfo";
 import { useListSelection } from "@/hooks/useListSelection";
 import { LatestRequest } from "@shift/editor";
+import { viewResumeCaptureDecision } from "@/lib/workspace/viewResumeCapture";
 import { GlyphCatalogContext } from "./GlyphCatalogContext";
+import { ViewResumeCaptureContext } from "./ViewResumeCaptureContext";
+import { glyphIdFromPath } from "./glyphCatalogRoute";
 import type {
   GlyphCatalogItem,
   GlyphCatalogSource,
@@ -23,12 +37,50 @@ const NO_LANGUAGE_IDS = signal<readonly string[] | null>(null, {
   name: "glyphCatalog.previewLanguageIds",
 });
 
-export const GlyphCatalogProvider = ({ children }: { children: ReactNode }) => {
-  const value = useGlyphCatalogSource();
-  return <GlyphCatalogContext.Provider value={value}>{children}</GlyphCatalogContext.Provider>;
+type GlyphCatalogProviderProps = {
+  children: ReactNode;
+  pendingScrollRestore: number | null;
+  onScrollRestoreApplied: () => void;
 };
 
-const useGlyphCatalogSource = (): GlyphCatalogSource => {
+export const GlyphCatalogProvider = ({
+  children,
+  pendingScrollRestore,
+  onScrollRestoreApplied,
+}: GlyphCatalogProviderProps) => {
+  const captureRef = useRef<CaptureControls | null>(null);
+  const value = useGlyphCatalogSource({
+    pendingScrollRestore,
+    onScrollRestoreApplied,
+    captureRef,
+  });
+
+  const flush = useCallback(async () => {
+    await captureRef.current?.flush();
+  }, []);
+
+  return (
+    <ViewResumeCaptureContext.Provider value={{ flush }}>
+      <GlyphCatalogContext.Provider value={value}>{children}</GlyphCatalogContext.Provider>
+    </ViewResumeCaptureContext.Provider>
+  );
+};
+
+type CaptureControls = {
+  flush: () => Promise<void>;
+};
+
+type GlyphCatalogSourceOptions = {
+  pendingScrollRestore: number | null;
+  onScrollRestoreApplied: () => void;
+  captureRef: MutableRefObject<CaptureControls | null>;
+};
+
+const useGlyphCatalogSource = ({
+  pendingScrollRestore,
+  onScrollRestoreApplied,
+  captureRef,
+}: GlyphCatalogSourceOptions): GlyphCatalogSource => {
   const session = useFontSession();
   const navigate = useNavigate();
   const navigateRef = useRef(navigate);
@@ -73,6 +125,9 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
   const [expandedCategories, setExpandedCategories] = useState<ReadonlySet<GlyphCategory>>(
     () => new Set(),
   );
+  const [reportedCatalogScrollTop, setReportedCatalogScrollTop] = useState(0);
+  const lastCapturedAtRef = useRef<number | null>(null);
+  const latestResumeRef = useRef<SessionViewResume>(emptySessionViewResume());
 
   const availableUnicodes = useMemo(
     () => availableGlyphs.flatMap((glyph) => (glyph.unicode === null ? [] : [glyph.unicode])),
@@ -263,6 +318,83 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
     [workspace],
   );
 
+  const restoreCatalogView = useCallback((catalogView: SessionViewResumeCatalog) => {
+    setQuery(catalogView.query);
+    setCategoryFilters(catalogView.categoryFilters as GlyphCategoryFilter[]);
+    setSelectedLanguageId(catalogView.selectedLanguageId);
+  }, []);
+
+  const buildResume = useCallback((): SessionViewResume => {
+    const routeGlyphId = glyphIdFromPath(routeLocation.pathname);
+    const routeGlyph = routeGlyphId
+      ? availableGlyphs.find((glyph) => glyph.id === routeGlyphId)
+      : null;
+
+    return {
+      route: routeGlyph
+        ? {
+            glyphName: routeGlyph.name,
+            unicode: routeGlyph.unicode,
+            glyphId: routeGlyphId,
+          }
+        : null,
+      catalog: {
+        query,
+        categoryFilters: categoryFilters.map(({ category, subCategoryKey }) => ({
+          category,
+          subCategoryKey,
+        })),
+        selectedLanguageId,
+        scrollTop: reportedCatalogScrollTop,
+      },
+    };
+  }, [
+    availableGlyphs,
+    categoryFilters,
+    query,
+    reportedCatalogScrollTop,
+    routeLocation.pathname,
+    selectedLanguageId,
+  ]);
+
+  const persistResume = useCallback(
+    async (flush: boolean) => {
+      const decision = viewResumeCaptureDecision(lastCapturedAtRef.current, Date.now(), flush);
+      if (decision.kind === "skip") return;
+
+      lastCapturedAtRef.current = Date.now();
+      const resume = buildResume();
+      latestResumeRef.current = resume;
+      await getShiftHost().session.setViewResume(resume);
+    },
+    [buildResume],
+  );
+
+  useEffect(() => {
+    captureRef.current = {
+      flush: async () => persistResume(true),
+    };
+
+    return () => {
+      captureRef.current = null;
+    };
+  }, [captureRef, persistResume]);
+
+  useEffect(() => {
+    void persistResume(true);
+  }, [persistResume, routeLocation.pathname]);
+
+  useEffect(() => {
+    void persistResume(false);
+  }, [
+    availableGlyphs,
+    categoryFilters,
+    persistResume,
+    query,
+    reportedCatalogScrollTop,
+    selectedLanguageId,
+  ]);
+
   return {
     availableGlyphs: [...availableGlyphs],
     filteredGlyphs,
@@ -307,6 +439,10 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
       setCategoryFilters([]);
       setSelectedLanguageId(languageId);
     },
+    restoreCatalogView,
+    pendingCatalogScrollTop: pendingScrollRestore,
+    acknowledgeCatalogScrollApplied: onScrollRestoreApplied,
+    reportCatalogScrollTop: setReportedCatalogScrollTop,
   };
 };
 
@@ -359,18 +495,4 @@ function glyphId(glyph: GlyphCatalogItem) {
 
 function sameCategoryFilter(left: GlyphCategoryFilter, right: GlyphCategoryFilter) {
   return left.category === right.category && left.subCategoryKey === right.subCategoryKey;
-}
-
-function glyphIdFromPath(pathname: string): GlyphId | null {
-  const prefix = "/editor/";
-  if (!pathname.startsWith(prefix)) return null;
-
-  let value: string;
-  try {
-    value = decodeURIComponent(pathname.slice(prefix.length));
-  } catch {
-    return null;
-  }
-
-  return value.length > 0 ? asGlyphId(value) : null;
 }

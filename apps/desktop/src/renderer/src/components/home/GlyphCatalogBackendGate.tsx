@@ -21,6 +21,9 @@ export function GlyphCatalogBackendGate({
   openGlyph,
   onFirstFrame,
   onUnavailable,
+  pendingCatalogScrollTop,
+  onCatalogScrollTop,
+  onCatalogScrollApplied,
 }: GlyphCatalogBackendGateProps) {
   const session = useFontSession();
   const workspace = session.workspace;
@@ -91,6 +94,9 @@ export function GlyphCatalogBackendGate({
         onPendingGlyphName={handlePendingGlyphName}
         onFirstFrame={onFirstFrame}
         onUnavailable={onUnavailable}
+        pendingCatalogScrollTop={pendingCatalogScrollTop}
+        onCatalogScrollTop={onCatalogScrollTop}
+        onCatalogScrollApplied={onCatalogScrollApplied}
       />
     );
   }

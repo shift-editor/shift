@@ -488,21 +488,41 @@ for (const { format, sourcePath, sourceRoot } of [
 }
 
 convertiblePreviewTest(
-  "Save As replaces a preview glyph route with the new workspace Home",
+  "Save As restores the editor route after preview conversion",
   async ({ electronApp, page, saveShiftPath, testRoot }) => {
     const workspacePage = await openSelectedPreview(page, electronApp);
     await clickFirstCatalogGlyph(workspacePage);
     await workspacePage.waitForURL(/#\/editor\//);
     await expect(workspacePage.locator("#interactive-canvas")).toBeVisible();
 
+    const openedGlyphName = await workspacePage.evaluate(() => {
+      const glyphId = window.location.hash.match(/#\/editor\/([^/?]+)/)?.[1];
+      if (!glyphId) return null;
+      const decoded = decodeURIComponent(glyphId);
+      return window.shift?.font.glyphRecords().find((glyph) => glyph.id === decoded)?.name ?? null;
+    });
+
     await runCommand(workspacePage, electronApp, "file.saveAs");
     await waitForWorkspaceReady(workspacePage);
 
-    await expect(workspacePage).toHaveURL(/#\/home$/);
+    await expect(workspacePage).toHaveURL(/#\/editor\//);
+    await expect(workspacePage.locator("#interactive-canvas")).toBeVisible();
     await expect
       .poll(() => workspacePage.evaluate(() => window.shiftSession?.mode))
       .toBe("workspace");
     expect(savedGlyphNames(saveShiftPath, testRoot)).toContain("A");
+    if (openedGlyphName) {
+      await expect
+        .poll(() =>
+          workspacePage.evaluate(() => {
+            const glyphId = window.location.hash.match(/#\/editor\/([^/?]+)/)?.[1];
+            if (!glyphId) return null;
+            const decoded = decodeURIComponent(glyphId);
+            return window.shift?.font.glyphRecords().find((glyph) => glyph.id === decoded)?.name;
+          }),
+        )
+        .toBe(openedGlyphName);
+    }
   },
 );
 

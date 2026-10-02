@@ -1,6 +1,6 @@
 # Preload
 
-<!-- reviewed: 2026-09-05 review-every: 90d -->
+<!-- reviewed: 2026-10-02 review-every: 90d -->
 
 Electron preload script that exposes the typed Shift host API and relays session ports to the renderer.
 
@@ -27,7 +27,7 @@ preload/
 
 The preload runs once before the renderer loads:
 
-1. Builds `ShiftHost` methods from typed `invoke` and `listen` IPC helpers, including native context-menu requests, update-window progress and actions, privacy-safe renderer error reports, and document-window reconstruction without clearing recovery state.
+1. Builds `ShiftHost` methods from typed `invoke` and `listen` IPC helpers, including native context-menu requests, update-window progress and actions, privacy-safe renderer error reports, document-window reconstruction without clearing recovery state, and `session.setViewResume` / `session.takeViewResume` for persisted catalog and editor routes across session interruptions.
 2. Exposes that object as `window.shiftHost` through `contextBridge`.
 3. Relays session and document `MessagePort`s into the page. Because packaged `file://` pages have opaque origins, receivers authenticate these relays with `event.source === window` plus the expected message type rather than comparing origin strings.
 

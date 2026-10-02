@@ -32,6 +32,11 @@ import { isConvertiblePreviewPath } from "../../shared/workspace/previewConversi
 import { OPEN_FONT_EXTENSIONS } from "../../shared/openFontExtensions";
 import { RecentDocuments } from "../recents/RecentDocuments";
 import type { RecentDocumentVisit } from "../../shared/recents";
+import type { SessionViewResume } from "../../shared/viewResume";
+import {
+  ViewResumePersistence,
+  workspaceLoadHashFromResume,
+} from "../viewResume/persistViewResume";
 
 const SLUG_ATLAS_PROFILING_ENABLED =
   process.env.SHIFT_PROFILE_SLUG_ATLAS !== undefined &&
@@ -64,6 +69,7 @@ export class App {
   #workspaces: WorkspaceManager;
   #documentsRoot: string | null = null;
   #recents: RecentDocuments | null = null;
+  #viewResume: ViewResumePersistence | null = null;
   /** Launchers a font open is replacing; they stop receiving recents so no half-ready card flashes. */
   #replacedLaunchers = new WeakSet<Window>();
   #pendingOpenPaths: string[] = [];
@@ -213,6 +219,11 @@ export class App {
         path.join(app.getPath("userData"), "recent-documents.json"),
       );
       this.#recents.onChanged(() => this.#publishRecents());
+      this.#viewResume = new ViewResumePersistence(
+        path.join(app.getPath("userData"), "view-resume.json"),
+      );
+
+      await this.#reopenSessionsAfterUpdateRestart();
 
       const restoredSessions = await this.#workspaces.restoreRecoveries();
       for (const session of restoredSessions) {
@@ -252,6 +263,9 @@ export class App {
 
       this.#updater.start();
       this.#log.info("finished when ready callback");
+    });
+    app.on("before-quit", () => {
+      this.#recordOpenSessionsForUpdateRestart();
     });
     app.on("will-quit", () => {
       this.#log.info("will quit: disposing app services");
@@ -398,11 +412,49 @@ export class App {
 
   #crashedWindows(session: FontSessionHost | null, failedWindow: Window | null): Window[] {
     if (failedWindow) return [failedWindow];
-    return session?.allWindows() ?? [];
+    return session ? [...session.allWindows()] : [];
   }
 
   #loadWorkspace(window: Window): void {
-    this.#loadRenderer(window, "/home");
+    const session = this.#workspaces.getForBrowserWindow(window.window);
+    const resume = session && this.#viewResume ? this.#viewResume.get(session.workspaceId) : null;
+    const hash = workspaceLoadHashFromResume(resume);
+    this.#loadRenderer(window, hash);
+  }
+
+  #recordOpenSessionsForUpdateRestart(): void {
+    if (!this.#viewResume) return;
+
+    const openSessions = this.#workspaces
+      .list()
+      .filter((session) => session.mode === "workspace" && session.windows.size > 0)
+      .map((session) => ({
+        sessionId: session.workspaceId,
+        documentPath: session.document?.cachedDocumentState()?.saveTarget ?? null,
+      }));
+
+    this.#viewResume.setOpenSessionsAtQuit(openSessions);
+  }
+
+  async #reopenSessionsAfterUpdateRestart(): Promise<void> {
+    if (!this.#viewResume) return;
+
+    const pending = this.#viewResume.takeOpenSessionsAtQuit();
+    for (const entry of pending) {
+      if (!entry.documentPath) continue;
+
+      try {
+        const session = await this.#workspaces.openPath(entry.documentPath);
+        const window = this.#createWindow(false, undefined, true);
+        this.#workspaces.attachWindow(session.workspaceId, window);
+        if (entry.sessionId !== session.workspaceId) {
+          this.#viewResume.transfer(entry.sessionId, session.workspaceId);
+        }
+        this.#loadWorkspace(window);
+      } catch (error) {
+        this.#log.warn("failed to reopen session after update restart", entry, error);
+      }
+    }
   }
 
   #loadRenderer(window: Window, hash: string): void {
@@ -520,6 +572,14 @@ export class App {
     });
     ipc.handle(ipcMain, "errors.reportRenderer", (_event, report) => {
       this.#log.warn("renderer error reported", report);
+    });
+    ipc.handle(ipcMain, "session.setViewResume", (event, resume: SessionViewResume) => {
+      const session = this.#fontSessionForSender(event.sender, "session.setViewResume");
+      this.#viewResume?.set(session.workspaceId, resume);
+    });
+    ipc.handle(ipcMain, "session.takeViewResume", (event) => {
+      const session = this.#fontSessionForSender(event.sender, "session.takeViewResume");
+      return this.#viewResume?.consume(session.workspaceId) ?? null;
     });
     ipc.handle(ipcMain, "session.ready", (event) => {
       if (SLUG_ATLAS_PROFILING_ENABLED) {
@@ -650,6 +710,7 @@ export class App {
         }
 
         if (preview.windows.size === 0) this.#workspaces.unregister(preview.workspaceId);
+        this.#viewResume?.transfer(preview.workspaceId, authored.workspaceId);
         this.#applicationMenu.updateCommandStates();
         window.window.webContents.reload();
       } catch (error) {

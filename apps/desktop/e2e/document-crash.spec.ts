@@ -1,6 +1,11 @@
 import type { ElectronApplication, Page } from "@playwright/test";
 import type { GlyphName } from "@shift/types";
-import { expect, workspaceTest as test, waitForWorkspaceReady } from "./fixtures/electronApp";
+import {
+  expect,
+  navigateToEditor,
+  workspaceTest as test,
+  waitForWorkspaceReady,
+} from "./fixtures/electronApp";
 
 test.setTimeout(90_000);
 test.use({ scriptedDialogs: true });
@@ -19,12 +24,25 @@ test("reopens a crashed document renderer with completed edits", async ({ electr
   await expect.poll(() => electronApp.windows().length).toBe(1);
 });
 
+test("reopens a crashed renderer on the last editor route", async ({ electronApp, page }) => {
+  await navigateToEditor(page, "41");
+  await page.waitForURL(/#\/editor\//);
+  await expect(page.locator("#interactive-canvas")).toBeVisible();
+
+  const reopenedPage = await crashRendererAndWaitForWindow(electronApp, page);
+  await waitForAuthoredWorkspace(reopenedPage);
+  await expect(reopenedPage).toHaveURL(/#\/editor\//);
+  await expect(reopenedPage.locator("#interactive-canvas")).toBeVisible();
+});
+
 test("reopens after a document render failure", async ({ electronApp, page }) => {
   const glyphName = "reactDocumentRecovery" as GlyphName;
   await page.evaluate((name) => {
     window.shift?.editor.createGlyph(name);
   }, glyphName);
   await waitForGlyph(page, glyphName);
+  await navigateToEditor(page, "41");
+  await page.waitForURL(/#\/editor\//);
 
   await page.evaluate(() => {
     window.location.hash = "/e2e-document-render-failure";
@@ -43,9 +61,16 @@ test("reopens after a document render failure", async ({ electronApp, page }) =>
   const nextWindow = electronApp.waitForEvent("window");
   await page.getByRole("button", { name: "Reopen document" }).click();
   const reopenedPage = await nextWindow;
-  await waitForWorkspaceReady(reopenedPage);
+  await waitForAuthoredWorkspace(reopenedPage);
   await waitForGlyph(reopenedPage, glyphName);
+  await expect(reopenedPage).toHaveURL(/#\/editor\//);
 });
+
+async function waitForAuthoredWorkspace(page: Page): Promise<void> {
+  await page.waitForFunction(() => window.shift?.font.loaded === true, undefined, {
+    timeout: 20_000,
+  });
+}
 
 test("contains root route render failures", async ({ page }) => {
   await page.evaluate(() => {
