@@ -1,8 +1,8 @@
-import { Mat } from "@shift/geo";
+import { Mat, Polygon } from "@shift/geo";
 import type { Contour, GlyphGeometry, Point } from "@shift/glyph-state";
 import { ContourPath } from "@shift/editor/rendering";
 import { Validate } from "@shift/validation";
-import type { ObjectTree } from "@/types/objectTree";
+import type { ContourDirection, ObjectTree } from "@/types/objectTree";
 
 const CONTOUR_ICON_SIZE = 14;
 const CONTOUR_ICON_PADDING = 1;
@@ -20,32 +20,21 @@ export function createObjectTree(geometry: GlyphGeometry): ObjectTree {
           kind: "contour",
           icon: "contour",
           iconPath: createContourIconPath(contour),
+          direction: contourDirection(contour),
           label: `Contour ${contourIndex + 1}`,
           children: contour.points.map((point, pointIndex) => {
-            const icon = pointIcon(contour, point);
-            let label = "First";
-
-            if (pointIndex !== 0) {
-              pointCounts[icon] += 1;
-
-              switch (icon) {
-                case "curve":
-                  label = `Curve ${pointCounts.curve}`;
-                  break;
-                case "handle":
-                  label = `Handle ${pointCounts.handle}`;
-                  break;
-                case "line":
-                  label = `Line ${pointCounts.line}`;
-                  break;
-              }
+            if (pointIndex === 0) {
+              return { id: point.id, kind: "point", icon: "first", label: "First", children: [] };
             }
+
+            const icon = pointIcon(contour, point);
+            pointCounts[icon] += 1;
 
             return {
               id: point.id,
               kind: "point",
               icon,
-              label,
+              label: pointLabel(icon, pointCounts[icon]),
               children: [],
             };
           }),
@@ -95,6 +84,22 @@ export function createContourIconPath(contour: Contour): string | undefined {
   const transform = new Mat(scale, 0, 0, -scale, translateX, translateY);
 
   return ContourPath.fromContour(contour, transform).svgPath;
+}
+
+function contourDirection(contour: Contour): ContourDirection | undefined {
+  if (!contour.closed) return undefined;
+  return Polygon.isClockwise(contour.points) ? "clockwise" : "counterclockwise";
+}
+
+function pointLabel(icon: "curve" | "handle" | "line", count: number): string {
+  switch (icon) {
+    case "curve":
+      return `Curve ${count}`;
+    case "handle":
+      return `Handle ${count}`;
+    case "line":
+      return `Line ${count}`;
+  }
 }
 
 function pointIcon(contour: Contour, point: Point) {

@@ -33,6 +33,30 @@ export function canMakeFirstPoint(editor: Editor): boolean {
 }
 
 /**
+ * Reverses the given contours as one undoable step, without touching selection.
+ *
+ * @returns false when none of the ids resolve to contours on the active source's layer.
+ */
+export function reverseContours(editor: Editor, contourIds: Iterable<ContourId>): boolean {
+  const contours = [...contourIds]
+    .map((contourId) => editor.object(contourId))
+    .filter((object) => objectIsKindOf(object, "contour"));
+
+  if (contours.length === 0) return false;
+
+  const layer = editor.layerForGeometry({
+    contours: contours.map((contour) => contour.contourId),
+  });
+  if (!layer || layer.sourceId !== editor.activeSourceId) return false;
+
+  editor.transaction("Reverse Contours", () => {
+    for (const contour of contours) layer.reverseContour(contour.contourId);
+  });
+
+  return true;
+}
+
+/**
  * Executes a renderer-owned app command against one editor.
  *
  * Focused text controls retain conventional Edit-menu behavior. Otherwise the
@@ -136,22 +160,7 @@ export async function runRendererCommand(editor: Editor, id: EditorCommandId): P
         }
       }
 
-      const contours = [...contourIds]
-        .map((contourId) => editor.object(contourId))
-        .filter((object) => objectIsKindOf(object, "contour"));
-
-      if (contours.length === 0) return false;
-
-      const layer = editor.layerForGeometry({
-        contours: contours.map((contour) => contour.contourId),
-      });
-      if (!layer || layer.sourceId !== editor.activeSourceId) return false;
-
-      editor.transaction("Reverse Contours", () => {
-        for (const contour of contours) layer.reverseContour(contour.contourId);
-      });
-
-      return true;
+      return reverseContours(editor, contourIds);
     }
   }
 }

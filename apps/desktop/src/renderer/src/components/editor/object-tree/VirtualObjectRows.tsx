@@ -1,4 +1,5 @@
-import { useLayoutEffect } from "react";
+import { cn } from "@shift/ui";
+import { useLayoutEffect, useState } from "react";
 import type { SelectableId } from "@shift/editor/types";
 import type { VirtualObjectRowsProps } from "@/types/objectTree";
 import { ObjectRow } from "./ObjectRow";
@@ -11,6 +12,7 @@ export function VirtualObjectRows({
   rows,
   visibleIds,
   selectedIds,
+  coveredIds,
   collapsedObjectIds,
   setObjectOpen,
   selectObject,
@@ -43,6 +45,9 @@ export function VirtualObjectRows({
   const after = afterCount > 0 ? afterCount * OBJECT_ROW_STEP - ROW_GAP : 0;
   const focusedIndex = focusedObjectId ? visibleIds.indexOf(focusedObjectId) : -1;
   const mountedFocus = focusedIndex >= visibleRowRange.start && focusedIndex < visibleRowRange.end;
+  // The tree's own focus ring is suppressed; the focused row shows one only while
+  // navigating by keyboard, so modifier keys after a click don't flash a ring.
+  const [isKeyboardNavigating, setKeyboardNavigating] = useState(false);
 
   useLayoutEffect(() => {
     if (!pendingFocusId) return;
@@ -68,7 +73,9 @@ export function VirtualObjectRows({
       aria-multiselectable="true"
       aria-activedescendant={mountedFocus ? `object-tree-${focusedObjectId}` : undefined}
       tabIndex={0}
-      className="flex flex-col gap-1"
+      className="flex flex-col gap-1 outline-none"
+      onPointerDown={() => setKeyboardNavigating(false)}
+      onBlur={() => setKeyboardNavigating(false)}
       onFocus={() => {
         if (mountedFocus) return;
 
@@ -154,6 +161,7 @@ export function VirtualObjectRows({
 
         if (!next) return;
         event.preventDefault();
+        setKeyboardNavigating(true);
         onNavigate(next);
       }}
     >
@@ -163,6 +171,7 @@ export function VirtualObjectRows({
         const previousId = visibleIds[rowIndex - 1];
         const nextId = visibleIds[rowIndex + 1];
         const isSelected = selectedIds.has(row.item.id);
+        const isCovered = coveredIds.has(row.item.id);
 
         return (
           <div
@@ -177,14 +186,17 @@ export function VirtualObjectRows({
             aria-expanded={
               row.item.children.length > 0 ? !collapsedObjectIds.has(row.item.id) : undefined
             }
-            className="h-7"
+            className={cn(
+              "h-7 rounded",
+              isKeyboardNavigating && row.item.id === focusedObjectId && "ring-2 ring-primary/50",
+            )}
           >
             <ObjectRow
               row={row}
               isCollapsed={collapsedObjectIds.has(row.item.id)}
-              isSelected={isSelected}
-              joinsPrevious={isSelected && previousId !== undefined && selectedIds.has(previousId)}
-              joinsNext={isSelected && nextId !== undefined && selectedIds.has(nextId)}
+              isSelected={isCovered}
+              joinsPrevious={isCovered && previousId !== undefined && coveredIds.has(previousId)}
+              joinsNext={isCovered && nextId !== undefined && coveredIds.has(nextId)}
               onOpenChange={setObjectOpen}
               selectObject={selectObject}
             />

@@ -1,11 +1,21 @@
 import type { ListSelectionMode, SelectableId } from "@shift/editor/types";
 
-export type ObjectTreeIcon = "anchor" | "component" | "contour" | "curve" | "handle" | "line";
+export type ObjectTreeIcon =
+  | "anchor"
+  | "component"
+  | "contour"
+  | "curve"
+  | "first"
+  | "handle"
+  | "line";
+export type ContourDirection = "clockwise" | "counterclockwise";
 export type ObjectTreeItemKind = "anchor" | "component" | "contour" | "point";
 export type ObjectTreeSectionId = "anchors" | "components" | "contours";
 
 export interface ObjectTreeItem {
   readonly children: readonly ObjectTreeItem[];
+  /** Winding of a closed contour in font units (y-up); absent for open contours. */
+  readonly direction?: ContourDirection;
   readonly icon: ObjectTreeIcon;
   readonly iconPath?: string;
   readonly id: SelectableId;
@@ -34,6 +44,8 @@ export interface VirtualObjectRowsProps {
   readonly rows: readonly VisibleObjectRow[];
   readonly visibleIds: readonly SelectableId[];
   readonly selectedIds: ReadonlySet<SelectableId>;
+  /** Selected ids plus the children of selected parents. */
+  readonly coveredIds: ReadonlySet<SelectableId>;
   readonly collapsedObjectIds: ReadonlySet<SelectableId>;
   readonly setObjectOpen: (id: SelectableId, open: boolean) => void;
   readonly selectObject: ObjectTreeSelectionHandler;
