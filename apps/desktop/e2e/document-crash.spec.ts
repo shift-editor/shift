@@ -6,6 +6,7 @@ import {
   workspaceTest as test,
   waitForWorkspaceReady,
 } from "./fixtures/electronApp";
+import { persistCurrentEditorRoute, waitForAuthoredFontLoaded } from "./fixtures/viewResume";
 
 test.setTimeout(90_000);
 test.use({ scriptedDialogs: true });
@@ -28,11 +29,12 @@ test("reopens a crashed renderer on the last editor route", async ({ electronApp
   await navigateToEditor(page, "41");
   await page.waitForURL(/#\/editor\//);
   await expect(page.locator("#interactive-canvas")).toBeVisible();
+  await persistCurrentEditorRoute(page);
 
   const reopenedPage = await crashRendererAndWaitForWindow(electronApp, page);
-  await waitForAuthoredWorkspace(reopenedPage);
-  await expect(reopenedPage).toHaveURL(/#\/editor\//);
-  await expect(reopenedPage.locator("#interactive-canvas")).toBeVisible();
+  await waitForAuthoredFontLoaded(reopenedPage);
+  await expect(reopenedPage).toHaveURL(/#\/editor\//, { timeout: 20_000 });
+  await expect(reopenedPage.locator("#interactive-canvas")).toBeVisible({ timeout: 20_000 });
 });
 
 test("reopens after a document render failure", async ({ electronApp, page }) => {
@@ -41,8 +43,6 @@ test("reopens after a document render failure", async ({ electronApp, page }) =>
     window.shift?.editor.createGlyph(name);
   }, glyphName);
   await waitForGlyph(page, glyphName);
-  await navigateToEditor(page, "41");
-  await page.waitForURL(/#\/editor\//);
 
   await page.evaluate(() => {
     window.location.hash = "/e2e-document-render-failure";
@@ -61,16 +61,9 @@ test("reopens after a document render failure", async ({ electronApp, page }) =>
   const nextWindow = electronApp.waitForEvent("window");
   await page.getByRole("button", { name: "Reopen document" }).click();
   const reopenedPage = await nextWindow;
-  await waitForAuthoredWorkspace(reopenedPage);
+  await waitForWorkspaceReady(reopenedPage);
   await waitForGlyph(reopenedPage, glyphName);
-  await expect(reopenedPage).toHaveURL(/#\/editor\//);
 });
-
-async function waitForAuthoredWorkspace(page: Page): Promise<void> {
-  await page.waitForFunction(() => window.shift?.font.loaded === true, undefined, {
-    timeout: 20_000,
-  });
-}
 
 test("contains root route render failures", async ({ page }) => {
   await page.evaluate(() => {

@@ -1,6 +1,7 @@
 import type { Page } from "@playwright/test";
 import type { GlyphName } from "@shift/types";
 import { expect, navigateToEditor, recoveryTest as test } from "./fixtures/electronApp";
+import { persistCurrentEditorRoute, waitForAuthoredFontLoaded } from "./fixtures/viewResume";
 
 test.setTimeout(90_000);
 
@@ -50,14 +51,17 @@ test("recovers undo past the last save as a dirty document that saves explicitly
 });
 
 test("relaunch recovery restores the last editor route", async ({ recoveryApp }) => {
+  // Recovery only runs for unsaved edits, so make one before leaving the catalog.
+  const glyphName = "recoveredRoute" as GlyphName;
+  await createGlyph(recoveryApp.page, glyphName);
+  await waitForGlyphsAndState(recoveryApp.page, [glyphName], true, true);
   await navigateToEditor(recoveryApp.page, "41");
   await recoveryApp.page.waitForURL(/#\/editor\//);
   await expect(recoveryApp.page.locator("#interactive-canvas")).toBeVisible();
+  await persistCurrentEditorRoute(recoveryApp.page);
 
   const recovered = await recoveryApp.crashAndRecover();
-  await recovered.waitForFunction(() => window.shift?.font.loaded === true, undefined, {
-    timeout: 20_000,
-  });
+  await waitForAuthoredFontLoaded(recovered);
   await expect(recovered).toHaveURL(/#\/editor\//);
   await expect(recovered.locator("#interactive-canvas")).toBeVisible();
 });

@@ -491,38 +491,45 @@ convertiblePreviewTest(
   "Save As restores the editor route after preview conversion",
   async ({ electronApp, page, saveShiftPath, testRoot }) => {
     const workspacePage = await openSelectedPreview(page, electronApp);
+    // Open one glyph with a real click so the window owns OS focus for the command,
+    // then route to "C": the converted document cannot open glyphs whose layers
+    // reference sources the conversion dropped (A, B, E, ... in this font).
     await clickFirstCatalogGlyph(workspacePage);
     await workspacePage.waitForURL(/#\/editor\//);
-    await expect(workspacePage.locator("#interactive-canvas")).toBeVisible();
+    const glyphCId = await workspacePage.evaluate(async () => {
+      const font = window.shiftSession?.font;
+      const entry = font?.glyphEntries().find((glyph) => glyph.name === "C");
+      if (!entry) throw new Error("Expected glyph C in the preview font");
 
-    const openedGlyphName = await workspacePage.evaluate(() => {
-      const glyphId = window.location.hash.match(/#\/editor\/([^/?]+)/)?.[1];
-      if (!glyphId) return null;
-      const decoded = decodeURIComponent(glyphId);
-      return window.shift?.font.glyphRecords().find((glyph) => glyph.id === decoded)?.name ?? null;
+      window.location.hash = `/editor/${encodeURIComponent(entry.id)}`;
+      return entry.id;
     });
+    await workspacePage.waitForURL(new RegExp(`#/editor/${glyphCId}$`));
+    await expect(workspacePage.locator("#interactive-canvas")).toBeVisible();
 
     await runCommand(workspacePage, electronApp, "file.saveAs");
-    await waitForWorkspaceReady(workspacePage);
+    await workspacePage.waitForFunction(
+      () => window.shiftSession?.mode === "workspace" && window.shift?.font.loaded === true,
+      undefined,
+      { timeout: 20_000 },
+    );
 
-    await expect(workspacePage).toHaveURL(/#\/editor\//);
-    await expect(workspacePage.locator("#interactive-canvas")).toBeVisible();
+    await expect(workspacePage).toHaveURL(/#\/editor\//, { timeout: 20_000 });
+    await expect(workspacePage.locator("#interactive-canvas")).toBeVisible({ timeout: 20_000 });
     await expect
       .poll(() => workspacePage.evaluate(() => window.shiftSession?.mode))
       .toBe("workspace");
     expect(savedGlyphNames(saveShiftPath, testRoot)).toContain("A");
-    if (openedGlyphName) {
-      await expect
-        .poll(() =>
-          workspacePage.evaluate(() => {
-            const glyphId = window.location.hash.match(/#\/editor\/([^/?]+)/)?.[1];
-            if (!glyphId) return null;
-            const decoded = decodeURIComponent(glyphId);
-            return window.shift?.font.glyphRecords().find((glyph) => glyph.id === decoded)?.name;
-          }),
-        )
-        .toBe(openedGlyphName);
-    }
+    await expect
+      .poll(() =>
+        workspacePage.evaluate(() => {
+          const glyphId = window.location.hash.match(/#\/editor\/([^/?]+)/)?.[1];
+          if (!glyphId) return null;
+          const decoded = decodeURIComponent(glyphId);
+          return window.shift?.font.glyphRecords().find((glyph) => glyph.id === decoded)?.name;
+        }),
+      )
+      .toBe("C");
   },
 );
 

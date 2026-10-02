@@ -266,7 +266,7 @@ export const recoveryTest = test.extend<{ recoveryApp: RecoveryApp }>({
       crashAndRecover: async () => {
         await killApp(app);
         app = await launch(false);
-        page = await readyWorkspacePage(app);
+        page = await readyRecoveredWorkspacePage(app);
         return page;
       },
       crashAndReopenDocument: async () => {
@@ -318,6 +318,16 @@ async function readyWorkspacePage(app: ElectronApplication): Promise<Page> {
   const page = await app.firstWindow();
   await page.waitForLoadState("domcontentloaded");
   await waitForWorkspaceReady(page);
+  return page;
+}
+
+async function readyRecoveredWorkspacePage(app: ElectronApplication): Promise<Page> {
+  const page = await app.firstWindow();
+  await page.waitForLoadState("domcontentloaded");
+  await page.waitForURL(/#\/(home|editor\/)/, { timeout: 20_000 });
+  await page.waitForFunction(() => window.shift?.font.loaded === true, undefined, {
+    timeout: 20_000,
+  });
   return page;
 }
 
