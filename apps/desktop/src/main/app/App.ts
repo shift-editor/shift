@@ -80,7 +80,7 @@ export class App {
   #applicationMenu = new ApplicationMenu(
     (id, browserWindow) => {
       const window = browserWindow
-        ? this.#windows.windowForBrowserWindow(browserWindow)
+        ? (this.#windows.windowForBrowserWindow(browserWindow) ?? undefined)
         : undefined;
       if (browserWindow && !window) return;
 
@@ -97,7 +97,7 @@ export class App {
     },
     (id, browserWindow) => {
       const window = browserWindow
-        ? this.#windows.windowForBrowserWindow(browserWindow)
+        ? (this.#windows.windowForBrowserWindow(browserWindow) ?? undefined)
         : undefined;
       if (browserWindow && !window) return false;
 
@@ -156,6 +156,8 @@ export class App {
       lifecycle: this.#lifecycle,
       activeWindow: () => this.#windows.activeWindow(),
       log: createShiftLogger("app.update"),
+      recordOpenSessionsForUpdateRestart: () => this.#recordOpenSessionsForUpdateRestart(),
+      clearOpenSessionsForUpdateRestart: () => this.#clearOpenSessionsForUpdateRestart(),
     });
   }
 
@@ -263,9 +265,6 @@ export class App {
 
       this.#updater.start();
       this.#log.info("finished when ready callback");
-    });
-    app.on("before-quit", () => {
-      this.#recordOpenSessionsForUpdateRestart();
     });
     app.on("will-quit", () => {
       this.#log.info("will quit: disposing app services");
@@ -399,6 +398,8 @@ export class App {
     const session = this.#workspaces.getForBrowserWindow(owner.window);
     if (!session?.document) throw new Error("document reopen requires an authored workspace");
 
+    await this.#flushViewResumeFromRenderer(owner);
+
     const reopened = await this.#workspaces.reopenSession(session.workspaceId);
     const bounds = owner.window.isDestroyed() ? undefined : owner.window.getBounds();
     const window = this.#createWindow(false, bounds);
@@ -422,6 +423,25 @@ export class App {
     this.#loadRenderer(window, hash);
   }
 
+  async #flushViewResumeFromRenderer(window: Window): Promise<void> {
+    const webContents = window.window.webContents;
+    if (window.window.isDestroyed() || webContents.isDestroyed() || webContents.isCrashed()) {
+      return;
+    }
+
+    try {
+      await webContents.executeJavaScript(
+        `(async () => {
+          const flush = globalThis.__shiftViewResumeFlush;
+          if (typeof flush === "function") await flush();
+        })()`,
+        true,
+      );
+    } catch (error) {
+      this.#log.warn("failed to flush view resume from renderer", error);
+    }
+  }
+
   #recordOpenSessionsForUpdateRestart(): void {
     if (!this.#viewResume) return;
 
@@ -434,6 +454,10 @@ export class App {
       }));
 
     this.#viewResume.setOpenSessionsAtQuit(openSessions);
+  }
+
+  #clearOpenSessionsForUpdateRestart(): void {
+    this.#viewResume?.clearOpenSessionsAtQuit();
   }
 
   async #reopenSessionsAfterUpdateRestart(): Promise<void> {
@@ -577,6 +601,14 @@ export class App {
       const session = this.#fontSessionForSender(event.sender, "session.setViewResume");
       this.#viewResume?.set(session.workspaceId, resume);
     });
+    ipc.handle(ipcMain, "session.peekViewResume", (event) => {
+      const session = this.#fontSessionForSender(event.sender, "session.peekViewResume");
+      return this.#viewResume?.get(session.workspaceId) ?? null;
+    });
+    ipc.handle(ipcMain, "session.consumeViewResume", (event) => {
+      const session = this.#fontSessionForSender(event.sender, "session.consumeViewResume");
+      this.#viewResume?.consume(session.workspaceId);
+    });
     ipc.handle(ipcMain, "session.takeViewResume", (event) => {
       const session = this.#fontSessionForSender(event.sender, "session.takeViewResume");
       return this.#viewResume?.consume(session.workspaceId) ?? null;
@@ -688,6 +720,8 @@ export class App {
       try {
         const sourcePath = preview.sourcePath;
         if (!sourcePath || !isConvertiblePreviewPath(sourcePath)) return;
+
+        await this.#flushViewResumeFromRenderer(window);
 
         const parsedSourcePath = path.parse(sourcePath);
         const suggestedPath = path.join(parsedSourcePath.dir, `${parsedSourcePath.name}.shift`);

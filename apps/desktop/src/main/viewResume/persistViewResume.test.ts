@@ -33,6 +33,17 @@ describe("ViewResumePersistence", () => {
     expect(store.get("workspace")).toEqual(resume);
   });
 
+  it("clears pending update-restart sessions", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "shift-view-resume-"));
+    const filePath = path.join(root, "view-resume.json");
+    const store = new ViewResumePersistence(filePath);
+
+    store.setOpenSessionsAtQuit([{ sessionId: "s-1", documentPath: "/tmp/doc.shift" }]);
+    store.clearOpenSessionsAtQuit();
+
+    expect(store.takeOpenSessionsAtQuit()).toEqual([]);
+  });
+
   it("composes an editor hash when glyph id is known", () => {
     const resume = emptySessionViewResume();
     resume.route = { glyphName: "A", unicode: 65, glyphId: asGlyphId("glyph-id") };

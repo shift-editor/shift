@@ -20,6 +20,8 @@ const shiftHost: ShiftHost = {
     connect: invoke(ipcRenderer, "session.connect"),
     ready: invoke(ipcRenderer, "session.ready"),
     setViewResume: invoke(ipcRenderer, "session.setViewResume"),
+    peekViewResume: invoke(ipcRenderer, "session.peekViewResume"),
+    consumeViewResume: invoke(ipcRenderer, "session.consumeViewResume"),
     takeViewResume: invoke(ipcRenderer, "session.takeViewResume"),
   },
   window: {

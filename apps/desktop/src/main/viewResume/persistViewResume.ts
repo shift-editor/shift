@@ -5,8 +5,6 @@ import type {
   SessionViewResumeOpenSession,
   ViewResumeFile,
 } from "../../shared/viewResume";
-import { emptySessionViewResume } from "../../shared/viewResume";
-
 /**
  * Persists per-session view resume payloads under the app user data directory.
  *
@@ -67,6 +65,13 @@ export class ViewResumePersistence {
     this.#file = { ...this.#file, openSessionsAtQuit: [] };
     writeFile(this.#filePath, this.#file);
     return openSessionsAtQuit;
+  }
+
+  clearOpenSessionsAtQuit(): void {
+    if (this.#file.openSessionsAtQuit.length === 0) return;
+
+    this.#file = { ...this.#file, openSessionsAtQuit: [] };
+    writeFile(this.#filePath, this.#file);
   }
 }
 

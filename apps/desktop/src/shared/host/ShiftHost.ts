@@ -57,6 +57,8 @@ export interface ShiftHost {
     connect: () => Promise<void>;
     ready: () => Promise<void>;
     setViewResume: (resume: SessionViewResume) => Promise<void>;
+    peekViewResume: () => Promise<SessionViewResume | null>;
+    consumeViewResume: () => Promise<void>;
     takeViewResume: () => Promise<SessionViewResume | null>;
   };
   /** Controls and observes the main-owned application update flow. */

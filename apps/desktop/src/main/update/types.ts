@@ -27,4 +27,8 @@ export type AppUpdaterOptions = {
   lifecycle: AppLifecycle;
   activeWindow: () => Window | null;
   log: ShiftLogger;
+  /** Called while workspace windows are still open, before update restart closes documents. */
+  recordOpenSessionsForUpdateRestart: () => void;
+  /** Clears a pending update-restart reopen list when the user vetoes restart. */
+  clearOpenSessionsForUpdateRestart?: () => void;
 };

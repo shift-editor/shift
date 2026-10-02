@@ -60,6 +60,10 @@ export type RendererToMain = {
   "session.ready": () => void;
   /** Persists the sender window's latest catalog/editor view state for session resume. */
   "session.setViewResume": (resume: SessionViewResume) => void;
+  /** Returns the persisted resume payload without clearing it. */
+  "session.peekViewResume": () => SessionViewResume | null;
+  /** Clears the persisted resume payload for the sender's session. */
+  "session.consumeViewResume": () => void;
   /** Returns and clears the persisted resume payload for the sender's session. */
   "session.takeViewResume": () => SessionViewResume | null;
   "window.reopenDocument": () => void;

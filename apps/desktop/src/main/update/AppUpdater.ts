@@ -171,12 +171,20 @@ export class AppUpdater {
   async restartToUpdate(): Promise<void> {
     if (this.#status.type !== "ready") return;
 
+    this.#options.recordOpenSessionsForUpdateRestart();
+
     try {
       if (!(await this.#options.lifecycle.confirmQuit("update"))) {
         this.#options.log.info("update restart blocked by document close");
+        if (this.#options.clearOpenSessionsForUpdateRestart) {
+          this.#options.clearOpenSessionsForUpdateRestart();
+        }
         return;
       }
     } catch (error) {
+      if (this.#options.clearOpenSessionsForUpdateRestart) {
+        this.#options.clearOpenSessionsForUpdateRestart();
+      }
       this.#options.log.warn("update restart blocked by document close failure", error);
       await this.#showMessage({
         type: "error",
