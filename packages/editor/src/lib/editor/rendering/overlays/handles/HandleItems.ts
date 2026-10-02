@@ -32,8 +32,10 @@ export class HandleItems {
   ): HandleDisplayList {
     return this.#fromShapes(
       contours,
-      (contourIndex, pointIndex) =>
-        this.#state(contours[contourIndex]!.points[pointIndex]!.id, source),
+      (contourIndex, pointIndex) => {
+        const contour = contours[contourIndex]!;
+        return this.#state(contour.points[pointIndex]!.id, contour.id, source);
+      },
       isVisible,
       visibleBounds,
     );
@@ -86,10 +88,11 @@ export class HandleItems {
     return new HandleDisplayList(this.#items);
   }
 
-  #state(id: SelectableId, source: HandleStateSource): HandleState {
+  #state(id: SelectableId, contourId: ContourId, source: HandleStateSource): HandleState {
     if (source.interpolated) return "interpolated";
 
-    if (source.selection.has(id)) return "selected";
+    // A selected contour covers its points, so they draw as selected too.
+    if (source.selection.has(id) || source.selection.has(contourId)) return "selected";
 
     if (source.hover.has(id)) return "hovered";
 

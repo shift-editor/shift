@@ -24,6 +24,27 @@ const geometry = new GlyphGeometry(
   new Float64Array([500, 0, 0, 10, 0, 20, 0, 25, 10, 30, 0]),
 );
 
+function squareGeometry(closed: boolean, coordinates: readonly number[]): GlyphGeometry {
+  return new GlyphGeometry(
+    {
+      contours: [
+        {
+          id: asContourId("square"),
+          closed,
+          points: ["a", "b", "c", "d"].map((id) => ({
+            id: asPointId(id),
+            pointType: "onCurve" as const,
+            smooth: false,
+          })),
+        },
+      ],
+      anchors: [],
+      components: [],
+    },
+    new Float64Array([500, ...coordinates]),
+  );
+}
+
 describe("object tree contour descriptions", () => {
   it("labels the first point and describes remaining point geometry", () => {
     const contour = createObjectTree(geometry)[0]?.items[0];
@@ -35,6 +56,34 @@ describe("object tree contour descriptions", () => {
       "Handle 1",
       "Curve 2",
     ]);
+  });
+
+  it("marks the first point with its own icon", () => {
+    const contour = createObjectTree(geometry)[0]?.items[0];
+
+    expect(contour?.children.map((point) => point.icon)).toEqual([
+      "first",
+      "line",
+      "curve",
+      "handle",
+      "curve",
+    ]);
+  });
+
+  it("reports the winding of closed contours in y-up font space", () => {
+    const upFirst = [0, 0, 0, 10, 10, 10, 10, 0];
+    const rightFirst = [0, 0, 10, 0, 10, 10, 0, 10];
+
+    expect(createObjectTree(squareGeometry(true, upFirst))[0]?.items[0]?.direction).toBe(
+      "clockwise",
+    );
+    expect(createObjectTree(squareGeometry(true, rightFirst))[0]?.items[0]?.direction).toBe(
+      "counterclockwise",
+    );
+  });
+
+  it("gives open contours no direction", () => {
+    expect(createObjectTree(geometry)[0]?.items[0]?.direction).toBeUndefined();
   });
 
   it("fits contour path geometry into the icon view box", () => {

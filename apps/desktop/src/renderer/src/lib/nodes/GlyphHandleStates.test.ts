@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { PointId } from "@shift/types";
+import { objectIsKindOf } from "@shift/editor/types";
 import { externalAxisLocationFromRecord } from "@shift/editor/variation";
 import { TestEditor } from "@/testing/TestEditor";
 
@@ -33,6 +34,15 @@ describe("glyph handles keep source styling apart from interpolated locations", 
       [pointIds[1], "selected"],
       [pointIds[2], "idle"],
     ]);
+  });
+
+  it("draws every point of a selected contour as selected", () => {
+    const point = editor.object(pointIds[0]!);
+    if (!objectIsKindOf(point, "point")) throw new Error("Expected point object");
+
+    editor.selection.select([point.contourId]);
+
+    expect([...handleStates().values()]).toEqual(["selected", "selected", "selected"]);
   });
 
   it("keeps drawing every handle with interpolated styling between sources", async () => {

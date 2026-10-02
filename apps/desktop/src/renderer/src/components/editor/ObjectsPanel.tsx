@@ -84,6 +84,14 @@ export const ObjectsPanel = () => {
     return result;
   }, [objectTree]);
 
+  const coveredIds = useMemo(() => {
+    const result = new Set(selectedIds);
+    for (const [childId, parentId] of parentByObjectId) {
+      if (selectedIds.has(parentId)) result.add(childId);
+    }
+    return result;
+  }, [parentByObjectId, selectedIds]);
+
   const { selectItem: selectObject } = useListSelection(visibleObjectIds, selection.ids, (ids) => {
     editor.history.capture("Select object", () => editor.selection.select(ids));
   });
@@ -193,6 +201,7 @@ export const ObjectsPanel = () => {
                   rows={rows}
                   visibleIds={visibleIds}
                   selectedIds={selectedIds}
+                  coveredIds={coveredIds}
                   collapsedObjectIds={collapsedObjectIds}
                   setObjectOpen={setObjectOpen}
                   selectObject={selectObject}

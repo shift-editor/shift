@@ -1,12 +1,24 @@
-import { Collapsible, CollapsibleChevron, CollapsibleTrigger } from "@shift/ui";
-import { SidebarActionRow } from "@/components/sidebar";
+import {
+  Collapsible,
+  CollapsibleChevron,
+  CollapsibleTrigger,
+  RotateCcw,
+  RotateCw,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@shift/ui";
+import { SidebarActionButton, SidebarActionRow } from "@/components/sidebar";
+import { isContourId } from "@shift/types";
 import { listSelectionMode } from "@/hooks/useListSelection";
-import type { ObjectRowProps, ObjectTreeIcon } from "@/types/objectTree";
+import { reverseContours } from "@/lib/commands/rendererCommands";
+import type { ContourDirection, ObjectRowProps, ObjectTreeIcon } from "@/types/objectTree";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import AnchorIcon from "@/assets/sidebar-left/anchor.svg";
 import ComponentIcon from "@/assets/sidebar-left/component.svg";
 import ContourIcon from "@/assets/sidebar-left/contour.svg";
 import CurvePointIcon from "@/assets/sidebar-left/curve-point.svg";
+import FirstPointIcon from "@/assets/sidebar-left/first-point.svg";
 import HandlePointIcon from "@/assets/sidebar-left/handle-point.svg";
 import LinePointIcon from "@/assets/sidebar-left/line-point.svg";
 import { ObjectContextMenu } from "./ObjectContextMenu";
@@ -23,6 +35,7 @@ export const ObjectRow = ({
   const editor = useEditor();
   const { depth, item } = row;
   const hasChildren = item.children.length > 0;
+  const reversibleContourId = item.direction && isContourId(item.id) ? item.id : null;
 
   return (
     <ObjectContextMenu
@@ -63,6 +76,25 @@ export const ObjectRow = ({
               </span>
             </div>
           }
+          actions={
+            item.direction &&
+            reversibleContourId && (
+              <Tooltip>
+                <TooltipTrigger>
+                  <SidebarActionButton
+                    label={`Reverse ${item.label}`}
+                    tabIndex={-1}
+                    className={isSelected ? "!opacity-100" : undefined}
+                    onClick={() => reverseContours(editor, [reversibleContourId])}
+                  >
+                    <DirectionIcon direction={item.direction} />
+                  </SidebarActionButton>
+                </TooltipTrigger>
+                <TooltipContent>Reverse contour</TooltipContent>
+              </Tooltip>
+            )
+          }
+          className="pr-2"
           isSelected={isSelected}
           joinsPrevious={joinsPrevious}
           joinsNext={joinsNext}
@@ -77,6 +109,16 @@ export const ObjectRow = ({
     </ObjectContextMenu>
   );
 };
+
+const DirectionIcon = ({ direction }: { direction: ContourDirection }) => (
+  <span aria-hidden className="flex text-secondary">
+    {direction === "clockwise" ? (
+      <RotateCw className="h-3.5 w-3.5" />
+    ) : (
+      <RotateCcw className="h-3.5 w-3.5" />
+    )}
+  </span>
+);
 
 function itemIcon(icon: ObjectTreeIcon, iconPath?: string) {
   const className = "h-3 w-3 text-icon-subtle [&_path]:stroke-current";
@@ -109,6 +151,8 @@ function itemIcon(icon: ObjectTreeIcon, iconPath?: string) {
       return <ContourIcon aria-hidden className={className} />;
     case "curve":
       return <CurvePointIcon aria-hidden className={className} />;
+    case "first":
+      return <FirstPointIcon aria-hidden className="h-3 w-3 text-icon-subtle" />;
     case "handle":
       return <HandlePointIcon aria-hidden className={className} />;
     case "line":
