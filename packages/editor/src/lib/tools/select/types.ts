@@ -1,12 +1,10 @@
 import type { Point2D, Rect2D } from "@shift/geo";
-import type { AnchorId, PointId } from "@shift/types";
+import type { AnchorId, PointId, SegmentId, SelectableId } from "@shift/types";
 import type { BoundingRectEdge } from "./cursor";
 import type { CornerHandle } from "./BoundingBox";
 import type { Behavior } from "../core/Behavior";
 import type { Select } from "./Select";
-import type { SegmentId } from "../../../types/indicator";
 import type { PositionGuide } from "../../../types/positionEdit";
-import type { SelectableId } from "../../../types/object";
 
 export interface DragTarget {
   pointIds: PointId[];

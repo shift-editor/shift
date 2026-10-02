@@ -18,6 +18,9 @@ export type {
   NamedInstanceId,
   NodeId,
   RunId,
+  SegmentId,
+  SelectableId,
+  ShiftId,
   SourceId,
 } from "./ids";
 export {
@@ -35,6 +38,7 @@ export {
   asNamedInstanceId,
   asNodeId,
   asRunId,
+  asSegmentId,
   asSourceId,
   isPointId,
   isContourId,

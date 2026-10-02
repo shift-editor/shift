@@ -16,6 +16,11 @@ const config: ForgeConfig = {
           target: "preload",
         },
         {
+          entry: "src/utility/sandbox.ts",
+          config: "vite.main.config.ts",
+          target: "main",
+        },
+        {
           entry: "src/utility/workspace.ts",
           config: "vite.main.config.ts",
           target: "main",

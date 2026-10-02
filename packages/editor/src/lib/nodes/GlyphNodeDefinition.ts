@@ -1,6 +1,5 @@
 import { Bounds, type Rect2D } from "@shift/geo";
-import type { SegmentId } from "@shift/glyph-state";
-import type { ComponentId, NodeId, PointId } from "@shift/types";
+import type { ComponentId, NodeId, PointId, SegmentId } from "@shift/types";
 import type { NodePoint } from "../../types/coordinates";
 import { SCREEN_HIT_RADIUS } from "../editor/rendering/constants";
 import { OutlineRenderer } from "../editor/rendering/Outline";

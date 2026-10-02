@@ -919,7 +919,7 @@ interface ShiftScriptContext {
 
 **MCP Server**
 
-- [ ] Expose Shift as MCP server
+- [x] Expose Shift as MCP server
 - [ ] Tools: getGlyph, movePoint, addContour, exportPreview
 - [ ] Claude can read/write font data
 

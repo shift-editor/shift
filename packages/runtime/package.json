@@ -1,0 +1,33 @@
+{
+  "name": "@shift/runtime",
+  "version": "0.0.1",
+  "license": "MIT OR Apache-2.0",
+  "private": true,
+  "description": "Typed capabilities shared by Shift protocol and plugin hosts",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
+    },
+    "./code-api": "./generated/code-api.d.ts"
+  },
+  "scripts": {
+    "code-api:generate": "node scripts/generate-code-api.mjs",
+    "code-api:check": "node scripts/generate-code-api.mjs --check",
+    "typecheck": "pnpm code-api:check && tsgo --noEmit",
+    "lint": "oxlint --fix src/",
+    "lint:check": "oxlint --deny-warnings src/"
+  },
+  "dependencies": {
+    "@shift/types": "workspace:*"
+  },
+  "devDependencies": {
+    "oxfmt": "^0.49.0",
+    "oxlint": "^1.85.0",
+    "tsdown": "0.23.0",
+    "typescript": "^5.5.4"
+  }
+}

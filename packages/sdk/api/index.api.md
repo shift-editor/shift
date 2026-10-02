@@ -4,6 +4,16 @@
 
 ```ts
 
+// @public
+export interface AxisCoordinate {
+    // Warning: (ae-forgotten-export) The symbol "AxisId" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    axisId: AxisId;
+    // (undocumented)
+    value: number;
+}
+
 // Warning: (ae-forgotten-export) The symbol "ComputedOptions" needs to be exported by the entry point index.d.ts
 // Warning: (ae-forgotten-export) The symbol "ComputedSignal" needs to be exported by the entry point index.d.ts
 //
@@ -45,7 +55,6 @@ export class Editor {
     get camera(): Camera;
     canDecomposeSelection(): boolean;
     collapseEditingSources(): boolean;
-    // Warning: (ae-forgotten-export) The symbol "SelectableId" needs to be exported by the entry point index.d.ts
     // Warning: (ae-forgotten-export) The symbol "ComponentTransformSelection" needs to be exported by the entry point index.d.ts
     componentTransformSelection(ids: readonly SelectableId[]): ComponentTransformSelection | null;
     // Warning: (ae-forgotten-export) The symbol "ShiftContent" needs to be exported by the entry point index.d.ts
@@ -186,7 +195,6 @@ export class Editor {
     // (undocumented)
     nodeDefinition(kind: NodeKind): NodeDefinition;
     notifyPreviewMutationAttempt(): void;
-    // Warning: (ae-forgotten-export) The symbol "ShiftId" needs to be exported by the entry point index.d.ts
     // Warning: (ae-forgotten-export) The symbol "ShiftObject" needs to be exported by the entry point index.d.ts
     object(id: ShiftId): ShiftObject | null;
     objects(ids: readonly ShiftId[]): readonly ShiftObject[];
@@ -315,6 +323,62 @@ export class Editor {
     zoomToSelection(): void;
 }
 
+// @public
+export interface EditorGlyph {
+    // (undocumented)
+    glyphId: GlyphId;
+    // (undocumented)
+    name: string;
+    // Warning: (ae-forgotten-export) The symbol "NodeId" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    nodeId: NodeId;
+    // (undocumented)
+    sourceId: SourceId;
+}
+
+// @public
+export interface EditorInspection extends EditorView {
+    // (undocumented)
+    mode: ShiftSessionMode;
+    // (undocumented)
+    sessionId: string;
+    // (undocumented)
+    windowId: number;
+}
+
+// @public
+export interface EditorTool {
+    // (undocumented)
+    id: string;
+    // (undocumented)
+    state: string;
+}
+
+// @public
+export interface EditorView {
+    // (undocumented)
+    activeSourceId: SourceId | null;
+    // (undocumented)
+    applyStatus: "idle" | "queued" | "applying" | null;
+    // (undocumented)
+    dragging: boolean;
+    // (undocumented)
+    editing: boolean;
+    // (undocumented)
+    editingSourceIds: SourceId[];
+    // (undocumented)
+    externalLocation: AxisCoordinate[];
+    // (undocumented)
+    glyph: EditorGlyph | null;
+    // (undocumented)
+    route: string;
+    // (undocumented)
+    selectionIds: SelectableId[];
+    // (undocumented)
+    tool: EditorTool | null;
+}
+
 // Warning: (ae-forgotten-export) The symbol "EffectOptions" needs to be exported by the entry point index.d.ts
 // Warning: (ae-forgotten-export) The symbol "Effect" needs to be exported by the entry point index.d.ts
 //
@@ -341,7 +405,6 @@ export class Font {
     contourIdForPoint(pointId: PointId): ContourId | null;
     contourIdForSegment(segmentId: SegmentId): ContourId | null;
     // Warning: (ae-forgotten-export) The symbol "AxisDefinition" needs to be exported by the entry point index.d.ts
-    // Warning: (ae-forgotten-export) The symbol "AxisId" needs to be exported by the entry point index.d.ts
     createAxis(axis: AxisDefinition): AxisId;
     createGlyph(name: GlyphName): GlyphRecord;
     createGlyphForUnicode(unicode: Unicode): GlyphRecord;
@@ -392,7 +455,6 @@ export class Font {
     layerIdForAnchor(anchorId: AnchorId): LayerId | null;
     layerIdForContour(contourId: ContourId): LayerId | null;
     layerIdForPoint(pointId: PointId): LayerId | null;
-    // Warning: (ae-forgotten-export) The symbol "SegmentId" needs to be exported by the entry point index.d.ts
     layerIdForSegment(segmentId: SegmentId): LayerId | null;
     // Warning: (ae-forgotten-export) The symbol "GlyphLayerState" needs to be exported by the entry point index.d.ts
     layerState(layerId: LayerId): GlyphLayerState | null;
@@ -643,6 +705,48 @@ export interface MemoryFontSource extends GlyphReader {
 export type MemoryToolName = "select" | "hand";
 
 // @public
+export type SegmentId = string & {
+    readonly [SegmentIdBrand]: typeof SegmentIdBrand;
+};
+
+// @public
+export type SelectableId = ShiftId;
+
+// @public
+export interface ShiftCapabilities {
+    // (undocumented)
+    editor: {
+        inspect(input: {
+            windowId: number;
+        }): Promise<EditorInspection>;
+    };
+    // (undocumented)
+    sessions: {
+        list(): Promise<ShiftSession[]>;
+    };
+}
+
+// @public
+export type ShiftId = NodeId | PointId | AnchorId | ContourId | SegmentId | ComponentId;
+
+// @public
+export interface ShiftSession {
+    // (undocumented)
+    editorConnected: boolean;
+    // (undocumented)
+    focused: boolean;
+    // (undocumented)
+    mode: ShiftSessionMode;
+    // (undocumented)
+    sessionId: string;
+    // (undocumented)
+    windowId: number;
+}
+
+// @public (undocumented)
+export type ShiftSessionMode = FontSessionMode;
+
+// @public
 export interface Signal<T> {
     // Warning: (ae-forgotten-export) The symbol "SignalDebugSnapshot" needs to be exported by the entry point index.d.ts
     debug(): SignalDebugSnapshot;
@@ -666,7 +770,7 @@ export function useSignalState<T>(signal: Signal<T>, options?: UseSignalOptions)
 
 // Warnings were encountered during analysis:
 //
-// dist/Editor-BO84Q4oC.d.ts:3725:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
+// dist/Editor-Ch6PpQ3W.d.ts:3726:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

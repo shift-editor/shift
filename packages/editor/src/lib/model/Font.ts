@@ -24,6 +24,7 @@ import type {
   LayerMatch,
   Location,
   PointId,
+  SegmentId,
   NamedInstance,
   NamedInstanceDefinition,
   NamedInstanceId,
@@ -36,7 +37,6 @@ import {
   mintNamedInstanceId,
   mintSourceId,
 } from "@shift/types";
-import type { SegmentId } from "@shift/glyph-state";
 import {
   batch,
   computed,

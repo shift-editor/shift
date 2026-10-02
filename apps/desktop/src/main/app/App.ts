@@ -30,8 +30,11 @@ import { shiftProductName } from "../release";
 import { AppUpdater } from "../update/AppUpdater";
 import { isConvertiblePreviewPath } from "../../shared/workspace/previewConversion";
 import { OPEN_FONT_EXTENSIONS } from "../../shared/openFontExtensions";
-import { RecentDocuments } from "../recents/RecentDocuments";
+import { ShiftMcpServer } from "@shift/mcp";
+import type { EditorInspection, ShiftSession } from "@shift/runtime";
 import type { RecentDocumentVisit } from "../../shared/recents";
+import { RecentDocuments } from "../recents/RecentDocuments";
+import { SandboxRuntimeProcess } from "../sandbox/SandboxRuntimeProcess";
 
 const SLUG_ATLAS_PROFILING_ENABLED =
   process.env.SHIFT_PROFILE_SLUG_ATLAS !== undefined &&
@@ -60,6 +63,8 @@ export class App {
   readonly #updater: AppUpdater;
 
   #commands = new CommandRegistry();
+  #mcp: ShiftMcpServer | null = null;
+  #sandbox: SandboxRuntimeProcess | null = null;
   #windows = new WindowManager();
   #workspaces: WorkspaceManager;
   #documentsRoot: string | null = null;
@@ -213,6 +218,7 @@ export class App {
         path.join(app.getPath("userData"), "recent-documents.json"),
       );
       this.#recents.onChanged(() => this.#publishRecents());
+      await this.#startMcp();
 
       const restoredSessions = await this.#workspaces.restoreRecoveries();
       for (const session of restoredSessions) {
@@ -255,6 +261,7 @@ export class App {
     });
     app.on("will-quit", () => {
       this.#log.info("will quit: disposing app services");
+      void this.#stopMcp();
       for (const session of this.#workspaces.list()) {
         this.#workspaces.unregister(session.workspaceId);
       }
@@ -290,6 +297,7 @@ export class App {
         this.#log.info("working window closed");
         const session = this.#workspaces.getForBrowserWindow(window.window);
         this.#workspaces.detachWindow(window);
+        window.agent.dispose();
         if (session?.windows.size === 0) {
           this.#workspaces.unregister(session.workspaceId);
         }
@@ -430,6 +438,12 @@ export class App {
   }
 
   #registerIpcHandlers(): void {
+    ipc.handle(ipcMain, "agent.connect", (event) => {
+      const window = this.#requireWindowForWebContents(event.sender);
+      const { port1, port2 } = new MessageChannelMain();
+      window.agent.connect(port1);
+      event.sender.postMessage("agent.port", null, [port2]);
+    });
     ipc.handle(ipcMain, "commands.run", async (event, id) => {
       const window = this.#requireWindowForWebContents(event.sender);
       try {
@@ -829,6 +843,90 @@ export class App {
   #closeReplacedLauncher(launcher: Window): void {
     this.#replacedLaunchers.add(launcher);
     launcher.close();
+  }
+
+  async #startMcp(): Promise<void> {
+    const sandbox = new SandboxRuntimeProcess({
+      sessions: {
+        list: () => Promise.resolve(this.#agentSessions()),
+      },
+      editor: {
+        inspect: ({ windowId }) => this.#inspectEditor(windowId),
+      },
+    });
+    const mcp = new ShiftMcpServer({
+      execute: (code) => sandbox.execute(code),
+      descriptorPath: path.join(app.getPath("userData"), "mcp.json"),
+      logger: createShiftLogger("app.mcp"),
+    });
+
+    try {
+      await sandbox.start();
+      await mcp.start();
+      this.#sandbox = sandbox;
+      this.#mcp = mcp;
+    } catch (error) {
+      sandbox.stop();
+      try {
+        await mcp.stop();
+      } catch (stopError) {
+        this.#log.error("failed to clean up MCP server startup", stopError);
+      }
+      this.#log.error("failed to start MCP server", error);
+    }
+  }
+
+  async #stopMcp(): Promise<void> {
+    const mcp = this.#mcp;
+    const sandbox = this.#sandbox;
+    this.#mcp = null;
+    this.#sandbox = null;
+
+    const stoppingMcp = mcp?.stop();
+    sandbox?.stop();
+    if (!stoppingMcp) return;
+
+    try {
+      await stoppingMcp;
+    } catch (error) {
+      this.#log.error("failed to stop MCP server", error);
+    }
+  }
+
+  #agentSessions(): ShiftSession[] {
+    const focusedWindowId = BrowserWindow.getFocusedWindow()?.id ?? null;
+    const sessions: ShiftSession[] = [];
+
+    for (const window of this.#windows.allWindows()) {
+      const session = this.#workspaces.getForBrowserWindow(window.window);
+      if (!session) continue;
+
+      sessions.push({
+        windowId: window.window.id,
+        sessionId: session.sessionId,
+        mode: session.mode,
+        focused: window.window.id === focusedWindowId,
+        editorConnected: window.agent.connected,
+      });
+    }
+
+    return sessions;
+  }
+
+  async #inspectEditor(windowId: number): Promise<EditorInspection> {
+    const window = this.#windows.windowForId(windowId);
+    if (!window) throw new Error(`Shift window ${windowId} is not open`);
+
+    const session = this.#workspaces.getForBrowserWindow(window.window);
+    if (!session) throw new Error(`Shift window ${windowId} has no font session`);
+
+    const view = await window.agent.inspectEditor();
+    return {
+      ...view,
+      windowId,
+      sessionId: session.sessionId,
+      mode: session.mode,
+    };
   }
 
   #fontSessionForSender(sender: WebContents, operation: string): FontSessionHost {

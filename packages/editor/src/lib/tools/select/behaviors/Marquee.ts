@@ -1,5 +1,5 @@
 import { Curve, Rect, Vec2, type Rect2D } from "@shift/geo";
-import type { SelectableId } from "../../../../types/object";
+import type { SelectableId } from "@shift/types";
 import type { ToolContext } from "../../core/Behavior";
 import type { DragEndEvent, DragEvent, DragStartEvent } from "../../core/GestureDetector";
 import type { SelectBehavior, SelectState } from "../types";

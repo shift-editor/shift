@@ -1,6 +1,6 @@
 import type { Point2D } from "@shift/geo";
-import { Point, type SegmentId } from "@shift/glyph-state";
-import type { ContourId, PointId } from "@shift/types";
+import { Point } from "@shift/glyph-state";
+import type { ContourId, PointId, SegmentId } from "@shift/types";
 import type { GlyphGeometry } from "../../model/Glyph";
 
 export type PenTarget =

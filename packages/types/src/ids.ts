@@ -23,6 +23,7 @@ declare const MetricIdBrand: unique symbol;
 declare const NamedInstanceIdBrand: unique symbol;
 declare const NodeIdBrand: unique symbol;
 declare const RunIdBrand: unique symbol;
+declare const SegmentIdBrand: unique symbol;
 declare const SourceIdBrand: unique symbol;
 
 /**
@@ -116,6 +117,11 @@ export type NodeId = string & { readonly [NodeIdBrand]: typeof NodeIdBrand };
  */
 export type RunId = string & { readonly [RunIdBrand]: typeof RunIdBrand };
 
+/** Stable identity of one segment derived from its endpoint identities. */
+export type SegmentId = string & {
+  readonly [SegmentIdBrand]: typeof SegmentIdBrand;
+};
+
 /**
  * A source identifier from Rust.
  * Branded string type - can't be confused with other IDs or plain strings.
@@ -123,6 +129,12 @@ export type RunId = string & { readonly [RunIdBrand]: typeof RunIdBrand };
 export type SourceId = string & {
   readonly [SourceIdBrand]: typeof SourceIdBrand;
 };
+
+/** Identifies an editor-addressable scene node or glyph object. */
+export type ShiftId = NodeId | PointId | AnchorId | ContourId | SegmentId | ComponentId;
+
+/** Identifies objects that can be selected by the editor. */
+export type SelectableId = ShiftId;
 
 /**
  * Convert a string ID from Rust to a typed PointId.
@@ -222,6 +234,16 @@ export function asNodeId(id: string): NodeId {
  */
 export function asRunId(id: string): RunId {
   return id as RunId;
+}
+
+/**
+ * Converts a derived segment identity string to a typed SegmentId.
+ *
+ * @param id - identity produced from one segment's endpoint identities.
+ * @returns the same string with its segment identity brand.
+ */
+export function asSegmentId(id: string): SegmentId {
+  return id as SegmentId;
 }
 
 /**

@@ -70,6 +70,10 @@ export function FontEditor({ source }: { source: MemoryFontSource }) {
 
 The source owns its loaded font data. If it has a `dispose` operation—for example, a future worker-backed WASM source—the host disposes it separately from the editor session.
 
+## Host capabilities
+
+`ShiftCapabilities` and its observation types describe the host-neutral live application API shared by protocol adapters and future plugin hosts. Browser integrations may implement the same contract with `"memory"` sessions; Electron and MCP are not part of the SDK contract.
+
 ## Custom chrome
 
 Use individual primitives when the standard desktop-like shell is not appropriate:

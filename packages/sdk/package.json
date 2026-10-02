@@ -46,6 +46,7 @@
     "@microsoft/api-extractor": "^7.59.2",
     "@playwright/test": "^1.59.1",
     "@shift/editor": "workspace:*",
+    "@shift/runtime": "workspace:*",
     "@shift/types": "workspace:*",
     "@shift/ui": "workspace:*",
     "@tailwindcss/vite": "^4.1.11",

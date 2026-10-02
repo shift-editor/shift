@@ -46,6 +46,7 @@ Import from `@shift/types`.
 - `LayerReplaced` -- one replaced glyph layer in an applied change.
 - `AddComponentIntent` / `SetComponentTransformsIntent` / `RemoveComponentsIntent` / `DecomposeComponentsIntent` -- generated component-authoring DTOs using branded layer, component, and glyph identities plus ordered decomposed-transform values.
 - `PointType` -- bridge point type union: `"onCurve" | "offCurve" | "qCurve"`. Quadratic endpoints remain distinct across transport even though anchor predicates accept both on-curve variants.
+- `SegmentId` / `ShiftId` / `SelectableId` -- canonical identities for derived segments and editor-addressable objects. Geometry packages construct and interpret segment identities, but all identity brands and unions are owned here.
 
 ## How it works
 

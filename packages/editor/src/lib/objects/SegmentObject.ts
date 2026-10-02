@@ -1,6 +1,6 @@
 import { Bounds, Vec2, type Rect2D } from "@shift/geo";
-import type { GlyphGeometry, SegmentId } from "@shift/glyph-state";
-import type { ContourId, PointId } from "@shift/types";
+import type { GlyphGeometry } from "@shift/glyph-state";
+import type { ContourId, PointId, SegmentId } from "@shift/types";
 import { track } from "../signals/index";
 import type { GlyphLayer } from "../model/Glyph";
 import type { ShiftObjectOf } from "../../types/object";

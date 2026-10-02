@@ -1,8 +1,7 @@
-import { isPointId, type PointId } from "@shift/types";
+import { isPointId, type PointId, type SelectableId } from "@shift/types";
 import { Validate } from "@shift/validation";
 import type { Contour, Point } from "@shift/glyph-state";
 import type { ContourContent, PointContent, ShiftContent } from "./types";
-import type { SelectableId } from "../../types/object";
 
 export interface ClipboardContourSource {
   readonly contours: readonly Contour[];
