@@ -29,7 +29,9 @@ describe("matchResumeGlyph", () => {
       { id: asGlyphId("g-1"), name: "A" as GlyphName, unicode: null },
       { id: asGlyphId("g-2"), name: "A" as GlyphName, unicode: null },
     ];
-    expect(matchResumeGlyph(ambiguous, { glyphName: "A", unicode: null, glyphId: null })).toBeNull();
+    expect(
+      matchResumeGlyph(ambiguous, { glyphName: "A", unicode: null, glyphId: null }),
+    ).toBeNull();
   });
 
   it("returns null for an empty catalog", () => {

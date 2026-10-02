@@ -2,6 +2,7 @@ import { createContext, useContext } from "react";
 
 export type ViewResumeCaptureControls = {
   flush: () => Promise<void>;
+  notifyConsumed: () => void;
 };
 
 export const ViewResumeCaptureContext = createContext<ViewResumeCaptureControls | null>(null);

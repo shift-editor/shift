@@ -19,6 +19,7 @@ import { effect, signal, useSignalState } from "@shift/editor/signals";
 import type { SessionViewResume, SessionViewResumeCatalog } from "@shared/viewResume";
 import { emptySessionViewResume } from "@shared/viewResume";
 import { getShiftHost } from "@/host/shiftHost";
+import { viewResumeRestoreActive } from "@/lib/workspace/viewResumeRestoreActive";
 import { useFontSession } from "@/workspace/WorkspaceContext";
 import { getGlyphInfo } from "@/workspace/glyphInfo";
 import { useListSelection } from "@/hooks/useListSelection";
@@ -49,10 +50,15 @@ export const GlyphCatalogProvider = ({
   onScrollRestoreApplied,
 }: GlyphCatalogProviderProps) => {
   const captureRef = useRef<CaptureControls | null>(null);
+  const [viewResumeConsumedEpoch, setViewResumeConsumedEpoch] = useState(0);
+  const notifyViewResumeConsumed = useCallback(() => {
+    setViewResumeConsumedEpoch((epoch) => epoch + 1);
+  }, []);
   const value = useGlyphCatalogSource({
     pendingScrollRestore,
     onScrollRestoreApplied,
     captureRef,
+    viewResumeConsumedEpoch,
   });
 
   const flush = useCallback(async () => {
@@ -60,7 +66,7 @@ export const GlyphCatalogProvider = ({
   }, []);
 
   return (
-    <ViewResumeCaptureContext.Provider value={{ flush }}>
+    <ViewResumeCaptureContext.Provider value={{ flush, notifyConsumed: notifyViewResumeConsumed }}>
       <GlyphCatalogContext.Provider value={value}>{children}</GlyphCatalogContext.Provider>
     </ViewResumeCaptureContext.Provider>
   );
@@ -73,6 +79,7 @@ type CaptureControls = {
 type GlyphCatalogSourceOptions = {
   pendingScrollRestore: number | null;
   onScrollRestoreApplied: () => void;
+  viewResumeConsumedEpoch: number;
   captureRef: MutableRefObject<CaptureControls | null>;
 };
 
@@ -80,6 +87,7 @@ const useGlyphCatalogSource = ({
   pendingScrollRestore,
   onScrollRestoreApplied,
   captureRef,
+  viewResumeConsumedEpoch,
 }: GlyphCatalogSourceOptions): GlyphCatalogSource => {
   const session = useFontSession();
   const navigate = useNavigate();
@@ -212,33 +220,42 @@ const useGlyphCatalogSource = ({
   );
 
   useEffect(() => {
-    const sourceGlyphId = glyphIdFromPath(routeLocation.pathname);
-    if (sourceGlyphId === null) {
-      if (routeLocation.pathname.startsWith("/editor/")) {
+    let active = true;
+
+    async function enforceRoute(): Promise<void> {
+      if (viewResumeRestoreActive() && viewResumeConsumedEpoch === 0) {
+        const pendingResume = await getShiftHost().session.peekViewResume();
+        if (!active) return;
+        if (pendingResume?.route) return;
+      }
+
+      const sourceGlyphId = glyphIdFromPath(routeLocation.pathname);
+      if (sourceGlyphId === null) {
+        if (routeLocation.pathname.startsWith("/editor/")) {
+          openRequestRef.current.invalidate();
+          openedGlyphKeyRef.current = null;
+          setOpenedGlyph(null);
+          navigateRef.current("/home", { replace: true });
+        }
+        return;
+      }
+      if (!availableGlyphs.some((glyph) => glyph.id === sourceGlyphId)) {
         openRequestRef.current.invalidate();
         openedGlyphKeyRef.current = null;
         setOpenedGlyph(null);
         navigateRef.current("/home", { replace: true });
+        return;
       }
-      return;
-    }
-    if (!availableGlyphs.some((glyph) => glyph.id === sourceGlyphId)) {
-      openRequestRef.current.invalidate();
-      openedGlyphKeyRef.current = null;
-      setOpenedGlyph(null);
-      navigateRef.current("/home", { replace: true });
-      return;
-    }
-    const glyphId = sourceGlyphId;
-    if (openedGlyphKeyRef.current === glyphId) return;
+      const glyphId = sourceGlyphId;
+      if (openedGlyphKeyRef.current === glyphId) return;
 
-    openedGlyphKeyRef.current = glyphId;
-    let active = true;
+      openedGlyphKeyRef.current = glyphId;
 
-    async function openRouteGlyph(): Promise<void> {
       try {
         const result = await openRequestRef.current.run(() => catalog.openGlyph(glyphId));
-        if (!active || result.status === "stale") return;
+        // Not gated on `active`: a rerun for the same route returns early on
+        // `openedGlyphKeyRef`, so this request is the only one that can publish the glyph.
+        if (result.status === "stale") return;
 
         setOpenedGlyph(result.result);
       } catch (error) {
@@ -246,11 +263,12 @@ const useGlyphCatalogSource = ({
       }
     }
 
-    void openRouteGlyph();
+    void enforceRoute();
+
     return () => {
       active = false;
     };
-  }, [availableGlyphs, catalog, routeLocation.pathname]);
+  }, [availableGlyphs, catalog, routeLocation.pathname, viewResumeConsumedEpoch]);
 
   useEffect(() => {
     const openedGlyphId = openedGlyphKeyRef.current;
@@ -362,21 +380,40 @@ const useGlyphCatalogSource = ({
       const decision = viewResumeCaptureDecision(lastCapturedAtRef.current, Date.now(), flush);
       if (decision.kind === "skip") return;
 
-      lastCapturedAtRef.current = Date.now();
       const resume = buildResume();
+      if (viewResumeRestoreActive() && viewResumeConsumedEpoch === 0) {
+        const pendingResume = await getShiftHost().session.peekViewResume();
+        if (pendingResume?.route) {
+          if (resume.route === null) return;
+
+          const routeGlyphId = glyphIdFromPath(routeLocation.pathname);
+          const pendingGlyphId = pendingResume.route.glyphId;
+          if (
+            pendingGlyphId !== null &&
+            routeGlyphId !== null &&
+            routeGlyphId !== pendingGlyphId &&
+            resume.route.glyphId !== pendingGlyphId
+          ) {
+            return;
+          }
+        }
+      }
+      lastCapturedAtRef.current = Date.now();
       latestResumeRef.current = resume;
       await getShiftHost().session.setViewResume(resume);
     },
-    [buildResume],
+    [buildResume, routeLocation.pathname, viewResumeConsumedEpoch],
   );
 
   useEffect(() => {
     captureRef.current = {
       flush: async () => persistResume(true),
     };
+    globalThis.__shiftViewResumeFlush = captureRef.current.flush;
 
     return () => {
       captureRef.current = null;
+      delete globalThis.__shiftViewResumeFlush;
     };
   }, [captureRef, persistResume]);
 

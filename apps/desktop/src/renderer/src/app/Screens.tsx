@@ -73,16 +73,16 @@ const FontSessionScreens = () => {
         <PreviewNoticeProvider>
           <SettingsNavigationProvider>
             <ShiftSessionSetup />
-          <div
-            aria-hidden={!catalogActive}
-            className={catalogActive ? undefined : "pointer-events-none fixed inset-0 z-0"}
-            inert={!catalogActive}
-          >
-            <Home />
-          </div>
-          <div className={catalogActive ? undefined : "relative z-10"}>
-            <Outlet />
-          </div>
+            <div
+              aria-hidden={!catalogActive}
+              className={catalogActive ? undefined : "pointer-events-none fixed inset-0 z-0"}
+              inert={!catalogActive}
+            >
+              <Home />
+            </div>
+            <div className={catalogActive ? undefined : "relative z-10"}>
+              <Outlet />
+            </div>
           </SettingsNavigationProvider>
         </PreviewNoticeProvider>
       </ViewResumeProvider>
