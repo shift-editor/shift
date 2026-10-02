@@ -37,10 +37,13 @@ export const GlyphGrid = memo(function GlyphGrid() {
   }, []);
 
   useEffect(() => {
-    if (!catalogReady && filteredGlyphs.length > 0) return;
+    // The catalog only paints while Home is active, so a window that loads on an editor
+    // route (view resume) has no first frame to wait for.
+    const awaitingCatalogFrame = catalogActive && !catalogReady && filteredGlyphs.length > 0;
+    if (awaitingCatalogFrame) return;
 
     void showMeasuredWorkspace();
-  }, [catalogReady, filteredGlyphs.length, showMeasuredWorkspace]);
+  }, [catalogActive, catalogReady, filteredGlyphs.length, showMeasuredWorkspace]);
 
   const handleCatalogReady = useCallback(() => setCatalogReady(true), []);
   const handleCatalogUnavailable = useCallback(() => {
