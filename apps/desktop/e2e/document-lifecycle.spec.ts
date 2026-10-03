@@ -448,23 +448,6 @@ convertiblePreviewTest(
   },
 );
 
-convertiblePreviewTest(
-  "Save keeps the open glyph when a preview becomes a Shift document",
-  async ({ electronApp, page }) => {
-    const workspacePage = await openSelectedPreview(page, electronApp);
-    const editor = new EditorDriver(workspacePage);
-    await editor.openGlyphByName("A");
-    const glyph = await editor.activeGlyph();
-    if (!glyph) throw new Error("Expected the preview to open glyph A");
-
-    await runCommand(workspacePage, electronApp, "file.save");
-    await expect
-      .poll(() => workspacePage.evaluate(() => window.shiftSession?.mode))
-      .toBe("workspace");
-    await waitForEditorReady(workspacePage, glyph.glyphId);
-  },
-);
-
 for (const { format, sourcePath, sourceRoot } of [
   {
     format: "Designspace",
@@ -505,20 +488,20 @@ for (const { format, sourcePath, sourceRoot } of [
 }
 
 convertiblePreviewTest(
-  "Save As replaces a preview glyph route with the new workspace Home",
+  "Save As keeps a preview glyph route in the new workspace",
   async ({ electronApp, page, saveShiftPath, testRoot }) => {
     const workspacePage = await openSelectedPreview(page, electronApp);
     await clickFirstCatalogGlyph(workspacePage);
     await workspacePage.waitForURL(/#\/editor\//);
     await expect(workspacePage.locator("#interactive-canvas")).toBeVisible();
+    const glyphId = decodeURIComponent(new URL(workspacePage.url()).hash.slice("#/editor/".length));
 
     await runCommand(workspacePage, electronApp, "file.saveAs");
-    await waitForWorkspaceReady(workspacePage);
-
-    await expect(workspacePage).toHaveURL(/#\/home$/);
     await expect
       .poll(() => workspacePage.evaluate(() => window.shiftSession?.mode))
       .toBe("workspace");
+
+    await waitForEditorReady(workspacePage, glyphId);
     expect(savedGlyphNames(saveShiftPath, testRoot)).toContain("A");
   },
 );

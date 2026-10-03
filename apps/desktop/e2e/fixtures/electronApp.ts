@@ -270,6 +270,9 @@ export const recoveryTest = test.extend<{ recoveryApp: RecoveryApp }>({
         return page;
       },
       crashAndRecoverWindow: async () => {
+        // Chromium writes renderer storage to disk in batches; persist it as if the user
+        // had lingered, so the kill tests reopen behavior rather than that flush delay.
+        await app.evaluate(({ session }) => session.defaultSession.flushStorageData());
         await killApp(app);
         app = await launch(false);
         page = await app.firstWindow();
