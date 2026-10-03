@@ -69,6 +69,7 @@ test.describe("Glyph rendering — S (quadratic curves)", () => {
       const node = editor.scene.nodesOfKind("glyph")[0]!;
       const position = { x: 200, y: -300 };
       editor.scene.updateNode({ id: node.id, position });
+      const placed = editor.scene.node(node.id)!;
       editor.zoomIn();
       const camera = editor.getCameraTransform();
       const width = camera.logicalWidth;
@@ -81,7 +82,7 @@ test.describe("Glyph rendering — S (quadratic curves)", () => {
                 x,
                 y: camera.logicalHeight / 2,
               } as ScreenPoint);
-              const local = editor.toLocal(node, scene);
+              const local = editor.toLocal(placed, scene);
               return {
                 x: local.x,
                 y: local.y,
