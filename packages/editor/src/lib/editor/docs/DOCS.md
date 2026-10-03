@@ -135,7 +135,7 @@ Tools receive screen and scene coordinates from the pointer pipeline. Scene/node
 | handles    | WebGL (regl) | GPU-rendered point handles                                  | `#sceneEffect` (via scene render) |
 | overlay    | Canvas 2D    | Bounding box outline, tool overlays                         | `#overlayEffect`                  |
 
-Background, scene, and overlays start in scene space (`Canvas.withSceneSpace()` applies the view); each node draws inside `withTransform(sceneTransform(node))`, and the marker layer receives the same node-to-screen matrix as one uniform. Pixel-sized chrome (handles, crosses, icons) projects its anchor points with `Canvas.toScreen()` and draws inside `withScreenSpace()`.
+Background, scene, and overlays start in scene space (`Canvas.withSceneSpace()` applies the view); each node draws inside `withTransform(sceneTransform(node))`, and the marker layer receives the same node-to-screen matrix as one uniform. Pixel-sized chrome (handles, anchors, crosses, icons) draws inside `withScreenSpace((screen, project) => …)`: `project` maps positions and angles from the outer units, and screen-only helpers require the `ScreenCanvas` it hands out, so they cannot be called from node units.
 
 ### Rendering pipeline
 

@@ -1,5 +1,4 @@
-import { Mat } from "@shift/geo";
-import { angleThrough, type Canvas } from "../../Canvas";
+import type { Canvas } from "../../Canvas";
 import { drawHandle, drawHandleDirection, drawHandleFirst, drawHandleLast } from "../handleDrawing";
 import type { PointHandleItem } from "./PointHandleItem";
 
@@ -11,27 +10,23 @@ export class CanvasHandleRenderer {
    * @param canvas - Canvas in the units the handle points are measured in.
    */
   draw(canvas: Canvas, items: readonly PointHandleItem[]): void {
-    // Captured before entering screen space, where the canvas transform becomes identity.
-    const toScreen = Mat.Copy(canvas.transform);
-    const screenAngle = (angle: number) => angleThrough(toScreen, angle);
-
-    canvas.withScreenSpace(() => {
+    canvas.withScreenSpace((screen, project) => {
       for (const item of items) {
-        const point = Mat.applyToPoint(toScreen, item.point);
+        const point = project.point(item.point);
         switch (item.shape) {
           case "direction":
-            drawHandleDirection(canvas, point, screenAngle(item.rotation), item.state);
+            drawHandleDirection(screen, point, project.angle(item.rotation), item.state);
             break;
           case "first":
-            drawHandleFirst(canvas, point, screenAngle(item.rotation), item.state);
+            drawHandleFirst(screen, point, project.angle(item.rotation), item.state);
             break;
           case "last":
             if (item.prev) {
-              drawHandleLast(canvas, point, Mat.applyToPoint(toScreen, item.prev), item.state);
+              drawHandleLast(screen, point, project.point(item.prev), item.state);
             }
             break;
           default:
-            drawHandle(canvas, point, item.shape, item.state);
+            drawHandle(screen, point, item.shape, item.state);
             break;
         }
       }

@@ -40,16 +40,16 @@ export class Guides {
 
   /** Draws the lock icon centred under the descender line, sized in screen pixels. */
   #drawLock(canvas: Canvas, descender: number, advance: number): void {
-    const anchor = canvas.toScreen({ x: advance / 2, y: descender });
     const scale = LOCK_SIZE_PX / LOCK_VIEW_BOX_SIZE;
 
-    canvas.withScreenSpace(() => {
-      canvas.ctx.save();
-      canvas.ctx.translate(anchor.x - LOCK_SIZE_PX / 2, anchor.y + LOCK_GAP_PX);
-      canvas.ctx.scale(scale, scale);
-      canvas.ctx.fillStyle = canvas.theme.readOnlyLock.color;
-      canvas.ctx.fill(getLockPath());
-      canvas.ctx.restore();
+    canvas.withScreenSpace((screen, project) => {
+      const anchor = project.point({ x: advance / 2, y: descender });
+      screen.ctx.save();
+      screen.ctx.translate(anchor.x - LOCK_SIZE_PX / 2, anchor.y + LOCK_GAP_PX);
+      screen.ctx.scale(scale, scale);
+      screen.ctx.fillStyle = screen.theme.readOnlyLock.color;
+      screen.ctx.fill(getLockPath());
+      screen.ctx.restore();
     });
   }
 }

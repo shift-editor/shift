@@ -1,4 +1,3 @@
-import { Mat } from "@shift/geo";
 import type { Canvas } from "../Canvas";
 import type { HandleState } from "../../../../types/graphics";
 import { drawHandle } from "./handleDrawing";
@@ -15,13 +14,9 @@ export class Anchors {
    * @param canvas - Canvas in the units the anchors are measured in.
    */
   draw(canvas: Canvas, anchors: readonly GlyphRenderAnchor[], state: HandleStateSource): void {
-    // Captured before entering screen space, where the canvas transform becomes identity.
-    const toScreen = Mat.Copy(canvas.transform);
-
-    canvas.withScreenSpace(() => {
+    canvas.withScreenSpace((screen, project) => {
       for (const anchor of anchors) {
-        const point = Mat.applyToPoint(toScreen, anchor);
-        drawHandle(canvas, point, "anchor", this.#anchorState(anchor, state));
+        drawHandle(screen, project.point(anchor), "anchor", this.#anchorState(anchor, state));
       }
     });
   }

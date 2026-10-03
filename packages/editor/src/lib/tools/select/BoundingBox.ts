@@ -1,6 +1,6 @@
 import { Bounds, Rect, Vec2, type Point2D, type Rect2D } from "@shift/geo";
 import type { Editor } from "../../editor/Editor";
-import type { Canvas } from "../../editor/rendering/Canvas";
+import type { Canvas, ScreenCanvas } from "../../editor/rendering/Canvas";
 import { CanvasItem } from "../../editor/rendering/CanvasItem";
 import type { Coordinates } from "../../../types/coordinates";
 import { scenePoint } from "../../editor/spaces";
@@ -238,9 +238,9 @@ export class SelectBoundingBox extends CanvasItem<SelectBoundingBoxProps> {
     const props = this.propsCell.value;
     if (!props) return;
 
-    canvas.withScreenSpace(() => {
-      this.#drawRect(canvas, props.screenRect);
-      if (props.showHandles) this.#drawHandles(canvas, props.screenHandles);
+    canvas.withScreenSpace((screen) => {
+      this.#drawRect(screen, props.screenRect);
+      if (props.showHandles) this.#drawHandles(screen, props.screenHandles);
     });
   }
 
@@ -255,13 +255,13 @@ export class SelectBoundingBox extends CanvasItem<SelectBoundingBoxProps> {
     );
   }
 
-  #drawRect(canvas: Canvas, rect: Rect2D): void {
+  #drawRect(canvas: ScreenCanvas, rect: Rect2D): void {
     const { widthPx, dashPx } = SELECT_BOUNDING_BOX_STYLE;
     const stroke = canvas.theme.segment.selectedColor;
     canvas.strokeRect(rect.x, rect.y, rect.width, rect.height, stroke, widthPx, dashPx);
   }
 
-  #drawHandles(canvas: Canvas, handles: HandlePositions): void {
+  #drawHandles(canvas: ScreenCanvas, handles: HandlePositions): void {
     const style = SELECT_BOUNDING_BOX_STYLE.handle;
     const fill = canvas.theme.handle.corner.idle.fill;
     const stroke = canvas.theme.segment.selectedColor;
@@ -383,7 +383,7 @@ function rectFromPoints(points: readonly Point2D[]): Rect2D {
 }
 
 function drawHandle(
-  canvas: Canvas,
+  canvas: ScreenCanvas,
   center: Point2D,
   style: SelectBoundingBoxStyle["handle"],
   fill: string,

@@ -26,12 +26,11 @@ export class SnapLines {
 
     const diagonal: Point2D = { x: crossSizePx, y: crossSizePx };
     const antiDiagonal: Point2D = { x: crossSizePx, y: -crossSizePx };
-    const crosses = [...markers.values()].map((marker) => canvas.toScreen(marker));
-
-    canvas.withScreenSpace(() => {
-      for (const cross of crosses) {
-        canvas.line(Vec2.sub(cross, diagonal), Vec2.add(cross, diagonal), color, widthPx);
-        canvas.line(Vec2.sub(cross, antiDiagonal), Vec2.add(cross, antiDiagonal), color, widthPx);
+    canvas.withScreenSpace((screen, project) => {
+      for (const marker of markers.values()) {
+        const cross = project.point(marker);
+        screen.line(Vec2.sub(cross, diagonal), Vec2.add(cross, diagonal), color, widthPx);
+        screen.line(Vec2.sub(cross, antiDiagonal), Vec2.add(cross, antiDiagonal), color, widthPx);
       }
     });
   }

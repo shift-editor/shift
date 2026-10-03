@@ -1,6 +1,27 @@
 import { Bounds, Mat, type MatModel, type Point2D } from "@shift/geo";
 import { readEditorRenderTheme, type EditorRenderTheme } from "./Theme";
 import type { CameraTransform } from "../managers/Camera";
+import type { ScreenPoint } from "../../../types/coordinates";
+import { screenPoint } from "../spaces";
+
+declare const screenSpace: unique symbol;
+
+/**
+ * A {@link Canvas} whose drawing units are logical screen pixels.
+ *
+ * @remarks
+ * Only {@link Canvas.withScreenSpace} hands one out, so drawing that sizes
+ * shapes in pixels can require it and cannot be called from node units.
+ */
+export type ScreenCanvas = Canvas & { readonly [screenSpace]: true };
+
+/** Maps positions and directions from the units outside a screen-space block to screen pixels. */
+export interface ScreenProjection {
+  /** Returns a point from the outer drawing units as a screen point. */
+  point(point: Point2D): ScreenPoint;
+  /** Returns the on-screen angle of a direction given in the outer drawing units. */
+  angle(angle: number): number;
+}
 
 /**
  * Single 2D rendering API wrapping CanvasRenderingContext2D.
@@ -51,11 +72,6 @@ export class Canvas {
    */
   get transform(): MatModel {
     return this.#transform;
-  }
-
-  /** Returns a point in the current drawing units as logical screen pixels. */
-  toScreen(point: Point2D): Point2D {
-    return Mat.applyToPoint(this.#transform, point);
   }
 
   /**
@@ -191,10 +207,28 @@ export class Canvas {
   /**
    * Runs a drawing callback in logical screen pixels.
    *
-   * @param draw - Drawing operation to run with one unit equal to one screen pixel.
+   * @param draw - Drawing operation to run with one unit equal to one screen
+   * pixel. `project` maps positions and directions from the units in effect
+   * before the call, so callers never capture the transform themselves.
+   *
+   * @example
+   * ```ts
+   * canvas.withScreenSpace((screen, project) => {
+   *   for (const anchor of anchors) drawHandle(screen, project.point(anchor), "anchor", state);
+   * });
+   * ```
    */
-  withScreenSpace(draw: (canvas: Canvas) => void): void {
-    this.withTransform(this.#inverted(), draw);
+  withScreenSpace(draw: (screen: ScreenCanvas, project: ScreenProjection) => void): void {
+    const outer = Mat.Copy(this.#transform);
+    const project: ScreenProjection = {
+      point: (point) => {
+        const { x, y } = Mat.applyToPoint(outer, point);
+        return screenPoint(x, y);
+      },
+      angle: (angle) => angleThrough(outer, angle),
+    };
+
+    this.withTransform(this.#inverted(), (canvas) => draw(asScreen(canvas), project));
   }
 
   /** @knipclassignore */
@@ -286,7 +320,7 @@ export class Canvas {
 
   /** Opens a save, enters screen space, and traces a circle path; the caller paints and restores. */
   #screenCircle(center: Point2D, radiusPx: number): void {
-    const screen = this.toScreen(center);
+    const screen = Mat.applyToPoint(this.#transform, center);
     this.ctx.save();
     this.#applyToContext(this.#inverted());
     this.ctx.beginPath();
@@ -300,8 +334,13 @@ export class Canvas {
   }
 }
 
+/** Brands a canvas that the caller has just put into screen space. */
+function asScreen(canvas: Canvas): ScreenCanvas {
+  return canvas as ScreenCanvas;
+}
+
 /** Returns the angle a direction makes after the linear part of `transform` is applied. */
-export function angleThrough(transform: MatModel, angle: number): number {
+function angleThrough(transform: MatModel, angle: number): number {
   const { a, b, c, d } = transform;
   const x = Math.cos(angle);
   const y = Math.sin(angle);

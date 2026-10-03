@@ -1,5 +1,5 @@
-import type { Point2D } from "@shift/geo";
-import type { Canvas } from "../Canvas";
+import type { ScreenCanvas } from "../Canvas";
+import type { ScreenPoint } from "../../../../types/coordinates";
 import type { HandleState, HandleType } from "../../../../types/graphics";
 import type { HandleStyle } from "../Theme";
 import { Vec2 } from "@shift/geo";
@@ -7,8 +7,8 @@ import { Vec2 } from "@shift/geo";
 const START_TRIANGLE_GAP = 3;
 
 export function drawHandle(
-  canvas: Canvas,
-  point: Point2D,
+  canvas: ScreenCanvas,
+  point: ScreenPoint,
   type: Exclude<HandleType, "first" | "last" | "direction">,
   state: HandleState,
 ): void {
@@ -29,8 +29,8 @@ export function drawHandle(
 }
 
 export function drawHandleFirst(
-  canvas: Canvas,
-  point: Point2D,
+  canvas: ScreenCanvas,
+  point: ScreenPoint,
   angle: number,
   state: HandleState,
 ): void {
@@ -64,8 +64,8 @@ export function drawHandleFirst(
 }
 
 export function drawHandleDirection(
-  canvas: Canvas,
-  point: Point2D,
+  canvas: ScreenCanvas,
+  point: ScreenPoint,
   angle: number,
   state: HandleState,
 ): void {
@@ -88,9 +88,9 @@ export function drawHandleDirection(
 }
 
 export function drawHandleLast(
-  canvas: Canvas,
-  anchor: Point2D,
-  prev: Point2D,
+  canvas: ScreenCanvas,
+  anchor: ScreenPoint,
+  prev: ScreenPoint,
   state: HandleState,
 ): void {
   const style = canvas.theme.handle.last[state];
@@ -114,7 +114,7 @@ export function drawHandleLast(
   canvas.ctx.restore();
 }
 
-function drawCorner(canvas: Canvas, point: Point2D, style: HandleStyle): void {
+function drawCorner(canvas: ScreenCanvas, point: ScreenPoint, style: HandleStyle): void {
   const size = style.size;
   const half = size / 2;
 
@@ -135,7 +135,7 @@ function drawCorner(canvas: Canvas, point: Point2D, style: HandleStyle): void {
   canvas.ctx.restore();
 }
 
-function drawCircleHandle(canvas: Canvas, point: Point2D, style: HandleStyle): void {
+function drawCircleHandle(canvas: ScreenCanvas, point: ScreenPoint, style: HandleStyle): void {
   const radius = style.size;
 
   canvas.ctx.save();
@@ -160,7 +160,7 @@ function drawCircleHandle(canvas: Canvas, point: Point2D, style: HandleStyle): v
   canvas.ctx.restore();
 }
 
-function drawDiamond(canvas: Canvas, point: Point2D, style: HandleStyle): void {
+function drawDiamond(canvas: ScreenCanvas, point: ScreenPoint, style: HandleStyle): void {
   const size = style.size;
   const half = size / 2;
 
