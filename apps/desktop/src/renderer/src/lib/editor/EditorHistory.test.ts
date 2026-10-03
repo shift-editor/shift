@@ -23,7 +23,7 @@ describe("editor actions share one undo timeline", () => {
   it("changes no document state when undoing and redoing a selection", async () => {
     const before = await editor.font.editCoordinator.state();
 
-    await editor.clickGlyphLocal(100, 100);
+    await editor.clickLocal(100, 100);
     await editor.undo();
     await editor.redo();
 
@@ -79,7 +79,7 @@ describe("editor actions share one undo timeline", () => {
   });
 
   it("drops journaled net-zero writes without clearing redo", async () => {
-    await editor.clickGlyphLocal(100, 100);
+    await editor.clickLocal(100, 100);
     await editor.undo();
 
     editor.history.capture("Net-zero selection", () => {
@@ -92,8 +92,8 @@ describe("editor actions share one undo timeline", () => {
   });
 
   it("undoes Shift-click selection independently", async () => {
-    await editor.clickGlyphLocal(100, 100);
-    await editor.clickGlyphLocal(200, 200, { shiftKey: true });
+    await editor.clickLocal(100, 100);
+    await editor.clickLocal(200, 200, { shiftKey: true });
     expect(editor.selection.ids).toEqual([firstId, secondId]);
 
     await editor.undo();
@@ -104,7 +104,7 @@ describe("editor actions share one undo timeline", () => {
   });
 
   it("coalesces a marquee gesture into one selection action", async () => {
-    await editor.dragScene({
+    await editor.dragLocal({
       down: { x: 80, y: 80 },
       start: { x: 84, y: 80 },
       end: { x: 130, y: 130 },
@@ -121,7 +121,7 @@ describe("editor actions share one undo timeline", () => {
   it("preserves the starting selection for a Shift-marquee", async () => {
     editor.selection.select([secondId]);
 
-    await editor.dragScene({
+    await editor.dragLocal({
       down: { x: 60, y: 60 },
       start: { x: 70, y: 60 },
       end: { x: 130, y: 130 },
@@ -136,7 +136,7 @@ describe("editor actions share one undo timeline", () => {
   it("preserves selection when a Shift-marquee contains no points", async () => {
     editor.selection.select([secondId]);
 
-    await editor.dragScene({
+    await editor.dragLocal({
       down: { x: 60, y: 60 },
       start: { x: 70, y: 60 },
       end: { x: 80, y: 80 },
@@ -148,9 +148,9 @@ describe("editor actions share one undo timeline", () => {
 
   it("drops only newly brushed points when a Shift-marquee shrinks", () => {
     editor.selection.select([secondId]);
-    const down = editor.projectSceneToScreen({ x: 60, y: 60 });
-    const expanded = editor.projectSceneToScreen({ x: 130, y: 130 });
-    const shrunk = editor.projectSceneToScreen({ x: 80, y: 80 });
+    const down = editor.localToScreen({ x: 60, y: 60 });
+    const expanded = editor.localToScreen({ x: 130, y: 130 });
+    const shrunk = editor.localToScreen({ x: 80, y: 80 });
 
     editor.pointerDown(down.x, down.y, { shiftKey: true });
     editor.pointerMove(expanded.x, expanded.y, { shiftKey: true });
@@ -163,8 +163,8 @@ describe("editor actions share one undo timeline", () => {
 
   it("restores the starting selection when a marquee is cancelled", () => {
     editor.selection.select([secondId]);
-    const down = editor.projectSceneToScreen({ x: 60, y: 60 });
-    const end = editor.projectSceneToScreen({ x: 130, y: 130 });
+    const down = editor.localToScreen({ x: 60, y: 60 });
+    const end = editor.localToScreen({ x: 130, y: 130 });
 
     editor.pointerDown(down.x, down.y, { shiftKey: true });
     editor.pointerMove(end.x, end.y, { shiftKey: true });
@@ -186,7 +186,7 @@ describe("editor actions share one undo timeline", () => {
 
   it("waits for a pending document action before undoing it", async () => {
     editor.selectTool("pen");
-    const point = editor.projectSceneToScreen({ x: 300, y: 300 });
+    const point = editor.localToScreen({ x: 300, y: 300 });
     editor.pointerDown(point.x, point.y);
     editor.pointerUp(point.x, point.y);
 
@@ -196,7 +196,7 @@ describe("editor actions share one undo timeline", () => {
   });
 
   it("ignores stale selection identities after scene navigation", async () => {
-    await editor.clickGlyphLocal(100, 100);
+    await editor.clickLocal(100, 100);
     editor.scene.clear();
     editor.selection.clear();
 
@@ -208,7 +208,7 @@ describe("editor actions share one undo timeline", () => {
 
   it("compounds selecting and moving an unselected point", async () => {
     const before = editor.pointPosition(firstId);
-    await editor.dragScene({
+    await editor.dragLocal({
       down: before,
       start: { x: before.x + 4, y: before.y },
       end: { x: before.x + 40, y: before.y + 30 },
@@ -263,8 +263,8 @@ describe("editor actions share one undo timeline", () => {
   });
 
   it("discards editor redo after a new selection action", async () => {
-    await editor.clickGlyphLocal(100, 100);
-    await editor.clickGlyphLocal(200, 200, { shiftKey: true });
+    await editor.clickLocal(100, 100);
+    await editor.clickLocal(200, 200, { shiftKey: true });
     await editor.undo();
 
     await editor.click(9999, 9999);
@@ -289,7 +289,7 @@ describe("editor actions share one undo timeline", () => {
     const rejected = expect(applying).rejects.toThrow();
     capture.finish();
 
-    await editor.clickGlyphLocal(200, 200);
+    await editor.clickLocal(200, 200);
     await rejected;
     expect(editor.selection.ids).toEqual([secondId]);
 
@@ -299,12 +299,12 @@ describe("editor actions share one undo timeline", () => {
 
   it("discards document redo after a new selection action", async () => {
     editor.selectTool("pen");
-    await editor.clickGlyphLocal(300, 300);
+    await editor.clickLocal(300, 300);
     await editor.undo();
     expect(editor.pointCount).toBe(2);
 
     editor.selectTool("select");
-    await editor.clickGlyphLocal(100, 100);
+    await editor.clickLocal(100, 100);
     await editor.redo();
 
     expect(editor.pointCount).toBe(2);

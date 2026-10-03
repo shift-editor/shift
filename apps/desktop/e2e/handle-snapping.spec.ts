@@ -1,3 +1,4 @@
+import type { LocalPoint } from "@shift/editor/spaces";
 import { workspaceTest as test, expect } from "./fixtures/electronApp";
 import { openScratchGlyph } from "./fixtures/scratchGlyph";
 import { activeSnapGuides } from "./fixtures/snapGuides";
@@ -30,20 +31,16 @@ test("keeps a 15-degree handle snap when Shift is released before mouseup", asyn
     const node = editor.scene.nodesOfKind("glyph")[0]!;
     const layer = editor.glyphForId(node.glyphId)!.layerForSource(node.sourceId)!;
     const cubic = layer.contours[0]!.segments()[0]!.asCubic()!;
-    const down = editor.projectSceneToScreen({
-      x: cubic.controlStart.x + node.position.x,
-      y: cubic.controlStart.y + node.position.y,
-    });
-    const end = editor.projectSceneToScreen({
-      x: 180 + node.position.x,
-      y: 160 + node.position.y,
-    });
+    const down = editor.sceneToScreen(
+      editor.toScene(node, { x: cubic.controlStart.x, y: cubic.controlStart.y } as LocalPoint),
+    );
+    const end = editor.sceneToScreen(editor.toScene(node, { x: 180, y: 160 } as LocalPoint));
     down.x = Math.round(down.x);
     down.y = Math.round(down.y);
     end.x = Math.round(end.x);
     end.y = Math.round(end.y);
-    const startPos = editor.projectScreenToScene(down);
-    const endPos = editor.projectScreenToScene(end);
+    const startPos = editor.screenToScene(down);
+    const endPos = editor.screenToScene(end);
     const length = Math.hypot(
       cubic.controlStart.x + endPos.x - startPos.x - cubic.start.x,
       cubic.controlStart.y + endPos.y - startPos.y - cubic.start.y,

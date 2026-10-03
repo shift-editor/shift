@@ -39,7 +39,7 @@ describe("TestEditor", () => {
   describe("settled user actions", () => {
     it("waits for glyph-local clicks before returning", async () => {
       editor.selectTool("pen");
-      await editor.clickGlyphLocal(100, 200);
+      await editor.clickLocal(100, 200);
       const point = editor.openContour?.points[0];
       if (!point) throw new Error("Expected point");
 
@@ -48,7 +48,7 @@ describe("TestEditor", () => {
 
     it("rejects confirmed geometry reads while a raw action is pending", async () => {
       editor.selectTool("pen");
-      const screen = editor.projectSceneToScreen({ x: 100, y: 200 });
+      const screen = editor.localToScreen({ x: 100, y: 200 });
       editor.pointerDown(screen.x, screen.y).pointerUp(screen.x, screen.y);
       const point = editor.openContour?.points[0];
       if (!point) throw new Error("Expected point");
@@ -60,7 +60,7 @@ describe("TestEditor", () => {
 
     it("waits for editing key presses before returning", async () => {
       editor.selectTool("pen");
-      await editor.clickGlyphLocal(100, 200);
+      await editor.clickLocal(100, 200);
       const point = editor.openContour?.points[0];
       if (!point) throw new Error("Expected point");
       editor.selection.select([point.id]);
@@ -108,7 +108,7 @@ describe("TestEditor", () => {
 
     it("resolves placed glyph points", async () => {
       editor.selectTool("pen");
-      await editor.clickGlyphLocal(100, 200);
+      await editor.clickLocal(100, 200);
 
       const layer = editor.glyphLayer;
       const node = editor.glyphNode;
@@ -125,27 +125,21 @@ describe("TestEditor", () => {
       expect(editor.layerForGeometry({ points: [point.id] })?.id).toBe(layer.id);
       expect(object.node).toEqual(node);
       expect(object.bounds()).toEqual({
-        x: 100,
-        y: 200,
-        width: 0,
-        height: 0,
-        left: 100,
-        top: 200,
-        right: 100,
-        bottom: 200,
+        min: { x: 100, y: 200 },
+        max: { x: 100, y: 200 },
       });
     });
 
     it("resolves points added after ownership has already been queried", async () => {
       editor.selectTool("pen");
-      await editor.clickGlyphLocal(100, 100);
+      await editor.clickLocal(100, 100);
 
       const layer = editor.requireGlyphLayer();
       const firstPoint = layer.allPoints[0];
       if (!firstPoint) throw new Error("Expected initial point");
       expect(editor.layerForGeometry({ points: [firstPoint.id] })?.id).toBe(layer.id);
 
-      await editor.dragScene({
+      await editor.dragLocal({
         down: { x: 300, y: 100 },
         start: { x: 320, y: 120 },
         end: { x: 380, y: 180 },
@@ -158,8 +152,8 @@ describe("TestEditor", () => {
 
     it("resolves placed glyph segments and contours", async () => {
       editor.selectTool("pen");
-      await editor.clickGlyphLocal(100, 200);
-      await editor.clickGlyphLocal(180, 200);
+      await editor.clickLocal(100, 200);
+      await editor.clickLocal(180, 200);
 
       const layer = editor.glyphLayer;
       const node = editor.glyphNode;

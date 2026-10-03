@@ -36,7 +36,7 @@ describe("saved editor outcomes survive a fresh workspace stack", () => {
     await editor.saveAs(join(outputRoot, "SavedRevision.shift"));
 
     editor.selectTool("pen");
-    await editor.clickGlyphLocal(100, 100);
+    await editor.clickLocal(100, 100);
     await expect(editor.font.editCoordinator.state()).resolves.toMatchObject({ dirty: true });
 
     await editor.undo();
@@ -95,14 +95,14 @@ describe("saved editor outcomes survive a fresh workspace stack", () => {
     const original = new TestEditor();
     await original.startSession();
     original.selectTool("pen");
-    await original.clickGlyphLocal(100, 100);
-    await original.clickGlyphLocal(300, 100);
-    await original.dragScene({
+    await original.clickLocal(100, 100);
+    await original.clickLocal(300, 100);
+    await original.dragLocal({
       down: { x: 500, y: 100 },
       start: { x: 504, y: 104 },
       end: { x: 580, y: 180 },
     });
-    await original.dragScene({
+    await original.dragLocal({
       down: { x: 700, y: 100 },
       start: { x: 704, y: 104 },
       end: { x: 780, y: 180 },
@@ -120,7 +120,7 @@ describe("saved editor outcomes survive a fresh workspace stack", () => {
     const firstPoint = original.requireGlyphLayer().allPoints[0];
     if (!firstPoint) throw new Error("Expected authored point");
     original.selectTool("select");
-    await original.dragScene({
+    await original.dragLocal({
       down: firstPoint,
       start: { x: firstPoint.x + 4, y: firstPoint.y },
       end: { x: firstPoint.x + 40, y: firstPoint.y + 30 },
@@ -154,7 +154,7 @@ describe("saved editor outcomes survive a fresh workspace stack", () => {
     if (!reopenedPoint) throw new Error("Expected reopened point");
     const savedPosition = reopened.pointPosition(reopenedPoint.id);
     reopened.selectTool("select");
-    const drag = await reopened.dragScene({
+    const drag = await reopened.dragLocal({
       down: savedPosition,
       start: { x: savedPosition.x + 4, y: savedPosition.y },
       end: { x: savedPosition.x + 30, y: savedPosition.y + 20 },

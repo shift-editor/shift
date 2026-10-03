@@ -14,6 +14,7 @@
  *    Fails if any operation regresses >30% vs baseline. Run with
  *    `PERF_UPDATE_BASELINE=1` to accept new numbers after intentional changes.
  */
+import type { ScreenPoint } from "@shift/editor/spaces";
 
 import * as fs from "fs";
 import * as path from "path";
@@ -565,7 +566,7 @@ test.describe("Performance — 50K points", () => {
           panTimes.push(performance.now() - panStart);
 
           const zoomStart = performance.now();
-          editor.zoomToPoint(640, 400, 0.01);
+          editor.zoomToPoint({ x: 640, y: 400 } as ScreenPoint, 0.01);
           zoomTimes.push(performance.now() - zoomStart);
         }
 

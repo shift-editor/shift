@@ -1,4 +1,4 @@
-import { Bounds, type Bounds as BoundsType, type Point2D } from "@shift/geo";
+import type { MatModel, Point2D } from "@shift/geo";
 import { readEditorRenderTheme, type EditorRenderTheme } from "./Theme";
 import type { CameraTransform } from "../managers/Camera";
 
@@ -26,24 +26,6 @@ export class Canvas {
   /** Convert screen pixels to UPM units at the current zoom level. */
   pxToUpm(px: number): number {
     return px / this.camera.zoom;
-  }
-
-  /**
-   * Returns the padded viewport in the current node-local drawing coordinates.
-   *
-   * @param paddingPx - Outward margin in CSS pixels, covering markers at the edge.
-   * @returns Bounds after the active camera and node transforms are inverted.
-   */
-  visibleBounds(paddingPx: number): BoundsType {
-    const inverse = this.ctx.getTransform().inverse();
-    const { width, height } = this.ctx.canvas;
-    const padding = paddingPx * (width / (this.camera.centre.x * 2));
-    return Bounds.fromPoints([
-      inverse.transformPoint({ x: -padding, y: -padding }),
-      inverse.transformPoint({ x: width + padding, y: -padding }),
-      inverse.transformPoint({ x: width + padding, y: height + padding }),
-      inverse.transformPoint({ x: -padding, y: height + padding }),
-    ])!;
   }
 
   line(from: Point2D, to: Point2D, stroke: string, widthPx: number): void {
@@ -112,38 +94,31 @@ export class Canvas {
   }
 
   /**
-   * Runs a drawing callback in root scene coordinates.
+   * Runs a drawing callback in scene coordinates.
    *
-   * @param drawOffset - Scene-space offset applied after the camera transform.
-   * @param draw - Drawing operation to run while the context is in scene space.
+   * @param draw - Drawing operation to run while the context maps scene units to the screen.
    */
-  withSceneSpace(drawOffset: Point2D, draw: (canvas: Canvas) => void): void {
-    const camera = this.camera;
-
-    this.ctx.save();
-    this.ctx.transform(
-      camera.zoom,
-      0,
-      0,
-      camera.zoom,
-      camera.panX + camera.centre.x * (1 - camera.zoom),
-      camera.panY + camera.centre.y * (1 - camera.zoom),
-    );
-
-    const baselineY = camera.layoutHeight - camera.padding - camera.descender;
-    this.ctx.transform(1, 0, 0, -1, camera.padding, baselineY);
-    this.ctx.translate(drawOffset.x, drawOffset.y);
-
-    try {
-      draw(this);
-    } finally {
-      this.ctx.restore();
-    }
+  withSceneSpace(draw: (canvas: Canvas) => void): void {
+    this.withTransform(this.camera.view, draw);
   }
 
-  withTranslation(offset: Point2D, draw: (canvas: Canvas) => void): void {
+  /**
+   * Runs a drawing callback with a transform appended to the current one.
+   *
+   * @param transform - Maps the callback's coordinates into the current drawing space.
+   * @param draw - Drawing operation to run in the transformed space.
+   */
+  withTransform(transform: MatModel, draw: (canvas: Canvas) => void): void {
     this.ctx.save();
-    this.ctx.translate(offset.x, offset.y);
+    this.ctx.transform(
+      transform.a,
+      transform.b,
+      transform.c,
+      transform.d,
+      transform.e,
+      transform.f,
+    );
+
     try {
       draw(this);
     } finally {

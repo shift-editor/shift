@@ -17,8 +17,8 @@ afterEach(() => editor.destroy());
 
 describe("deleting on-curve points fits their original span", () => {
   beforeEach(async () => {
-    await editor.clickGlyphLocal(0, 0);
-    await editor.dragScene({
+    await editor.clickLocal(0, 0);
+    await editor.dragLocal({
       down: { x: 200, y: 0 },
       start: { x: 200, y: -40 },
       end: { x: 200, y: -100 },
@@ -158,8 +158,8 @@ function weightAxis() {
 
 describe("deleting cubic handles converts the segment to a line", () => {
   beforeEach(async () => {
-    await editor.clickGlyphLocal(0, 0);
-    await editor.dragScene({
+    await editor.clickLocal(0, 0);
+    await editor.dragLocal({
       down: { x: 200, y: 0 },
       start: { x: 200, y: -40 },
       end: { x: 200, y: -100 },
@@ -195,7 +195,7 @@ describe("deleting cubic handles converts the segment to a line", () => {
 
   it("does not modify adjoining unselected geometry", async () => {
     const selected = layer().contours[0].segments()[0].asCubic()!.controlStart.id;
-    await editor.dragScene({
+    await editor.dragLocal({
       down: { x: 400, y: 0 },
       start: { x: 400, y: 40 },
       end: { x: 400, y: 100 },

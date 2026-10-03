@@ -1,3 +1,4 @@
+import type { ScreenPoint } from "@shift/editor/spaces";
 /**
  * Visual snapshot tests for glyph rendering — covers handles, curves, filled
  * outlines, and distinct visual styles for on-curve vs off-curve points.
@@ -70,16 +71,20 @@ test.describe("Glyph rendering — S (quadratic curves)", () => {
       editor.scene.updateNode({ id: node.id, position });
       editor.zoomIn();
       const camera = editor.getCameraTransform();
-      const width = camera.centre.x * 2;
+      const width = camera.logicalWidth;
       const inserted = editor.insertContent({
         contours: [
           {
             closed: false,
             points: [-100, -2, width / 2, width + 100].map((x) => {
-              const scene = editor.projectScreenToScene({ x, y: camera.logicalHeight / 2 });
+              const scene = editor.screenToScene({
+                x,
+                y: camera.logicalHeight / 2,
+              } as ScreenPoint);
+              const local = editor.toLocal(node, scene);
               return {
-                x: scene.x - position.x,
-                y: scene.y - position.y,
+                x: local.x,
+                y: local.y,
                 pointType: "onCurve" as const,
                 smooth: false,
               };

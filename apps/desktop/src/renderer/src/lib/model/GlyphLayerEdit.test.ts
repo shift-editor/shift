@@ -53,8 +53,8 @@ describe("glyph layer edits preserve committed preview bases", () => {
     editor = new TestEditor();
     await editor.startSession();
     editor.selectTool("pen");
-    await editor.clickGlyphLocal(100, 100);
-    await editor.clickGlyphLocal(300, 200);
+    await editor.clickLocal(100, 100);
+    await editor.clickLocal(300, 200);
   });
 
   it("adds contours, points, and anchors locally and cancels them together", () => {

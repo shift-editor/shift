@@ -153,7 +153,7 @@ export class Pen extends BaseTool<PenState, Pen> {
     const pos = this.editor.input.pointerCell.value;
     if (!pos) return { type: "pen" };
 
-    const nodePoint = this.editor.getPointInNodeSpace(pos.scene, stroke.node.position);
+    const nodePoint = this.editor.toLocal(stroke.node, pos.scene);
     const targets = PenTargets.forGeometry(stroke.layer.geometry);
     const target = targets.at(nodePoint, this.editor.hitRadius);
     const activeEndpoint = stroke.activeEndpoint;

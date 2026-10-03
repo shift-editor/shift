@@ -1,6 +1,6 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
-import { createMemoryFontSession, type MemoryFontSession } from "@shift-editor/sdk";
+import { createMemoryFontSession, scenePoint, type MemoryFontSession } from "@shift-editor/sdk";
 import { ShiftEditorChrome } from "@shift-editor/sdk/ui";
 import "@shift-editor/sdk/style.css";
 import "@shift-editor/sdk/fonts.css";
@@ -67,7 +67,7 @@ window.shiftSdkHarness = {
   },
   pointScreenPosition(pointId: string) {
     const point = regularLayer()?.point(pointId as never);
-    return point ? first.editor.projectSceneToScreen(point) : null;
+    return point ? first.editor.sceneToScreen(scenePoint(point.x, point.y)) : null;
   },
   zoom: () => first.editor.zoom,
   pan: () => ({ ...first.editor.pan }),

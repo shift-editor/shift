@@ -1,4 +1,5 @@
-import { Vec2, type Point2D } from "@shift/geo";
+import type { Point2D } from "@shift/geo";
+import { localPoint } from "../../editor/spaces";
 import { CanvasItem } from "../../editor/rendering/CanvasItem";
 import type { Canvas } from "../../editor/rendering/Canvas";
 import { objectIsKindOf } from "../../../types/object";
@@ -33,7 +34,10 @@ export class SelectUpgradePreview extends CanvasItem<readonly Point2D[]> {
     const segment = layer.geometryCell.value.segment(object.segmentId);
     if (!segment || segment.type !== "line") return null;
 
-    return [1 / 3, 2 / 3].map((t) => Vec2.add(object.node.position, segment.pointAt(t)));
+    return [1 / 3, 2 / 3].map((t) => {
+      const point = segment.pointAt(t);
+      return editor.toScene(object.node, localPoint(point.x, point.y));
+    });
   }
 
   draw(canvas: Canvas): void {

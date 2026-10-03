@@ -13,7 +13,7 @@ describe("handle visibility is independent of geometry and selection", () => {
       .get("shape")!
       .menuItems!.find((item) => item.id === "ellipse")!
       .onSelect();
-    await editor.dragScene({
+    await editor.dragLocal({
       down: { x: 0, y: 0 },
       start: { x: 40, y: 30 },
       end: { x: 200, y: 100 },

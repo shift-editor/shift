@@ -1,4 +1,4 @@
-import type { Point2D } from "@shift/geo";
+import type { MatModel } from "@shift/geo";
 import type { CameraTransform } from "../../../managers/Camera";
 import type { MarkerLayer } from "../../../../graphics/backends/MarkerLayer";
 import { MARKER_INSTANCE_FLOATS } from "../../markers/types";
@@ -27,7 +27,7 @@ export class MarkerHandleRenderer {
     layer: MarkerLayer | null,
     list: HandleDisplayList,
     camera: CameraTransform,
-    drawOffset: Point2D,
+    toScreen: MatModel,
     theme: EditorRenderTheme,
   ): boolean {
     if (!layer) return false;
@@ -59,9 +59,8 @@ export class MarkerHandleRenderer {
 
     return layer.drawUploaded(
       this.#uploadedInstanceCount,
-      camera,
-      drawOffset,
-      camera.centre.x * 2,
+      toScreen,
+      camera.logicalWidth,
       camera.logicalHeight,
     );
   }

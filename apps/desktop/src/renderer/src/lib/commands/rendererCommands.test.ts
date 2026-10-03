@@ -19,10 +19,10 @@ describe("Make First Point", () => {
     editor = new TestEditor();
     await editor.startSession();
     editor.selectTool("pen");
-    await editor.clickGlyphLocal(100, 100);
-    await editor.clickGlyphLocal(400, 100);
-    await editor.clickGlyphLocal(400, 400);
-    await editor.clickGlyphLocal(100, 100);
+    await editor.clickLocal(100, 100);
+    await editor.clickLocal(400, 100);
+    await editor.clickLocal(400, 400);
+    await editor.clickLocal(100, 100);
     const layer = editor.requireGlyphLayer();
     expect(layer.upgradeLineToCubic(layer.contours[0].segments()[2].id)).toBe(true);
     await editor.settle();

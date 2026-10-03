@@ -1,4 +1,5 @@
-import { Bounds, Vec2, type Rect2D } from "@shift/geo";
+import { localBounds } from "../editor/spaces";
+import type { LocalBounds } from "../../types/coordinates";
 import type { ComponentId } from "@shift/types";
 import type { ComponentGlyph } from "../model/ComponentGlyph";
 import type { GlyphLayer } from "../model/Glyph";
@@ -23,14 +24,11 @@ export class ComponentObject implements ShiftObjectOf<"component"> {
     this.componentPath = component.componentPath;
   }
 
-  bounds(): Rect2D | null {
+  bounds(): LocalBounds | null {
     track(this.component.boundsCell);
     const bounds = this.component.boundsCell.peek();
     if (!bounds) return null;
 
-    return Bounds.toRect({
-      min: Vec2.add(this.node.position, bounds.min),
-      max: Vec2.add(this.node.position, bounds.max),
-    });
+    return localBounds(bounds);
   }
 }

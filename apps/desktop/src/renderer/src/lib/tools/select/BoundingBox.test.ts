@@ -21,7 +21,6 @@ const HANDLES = getHandlePositions(
   RECT,
   SELECT_BOUNDING_BOX_STYLE.handle.offsetPx,
   SELECT_BOUNDING_BOX_STYLE.rotationZoneOffsetPx,
-  "down",
 );
 const HIT_RADIUS = SELECT_BOUNDING_BOX_STYLE.hitRadiusPx;
 

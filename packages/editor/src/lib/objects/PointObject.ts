@@ -1,4 +1,6 @@
-import { Bounds, Vec2, type Rect2D } from "@shift/geo";
+import { Bounds } from "@shift/geo";
+import { localBounds } from "../editor/spaces";
+import type { LocalBounds } from "../../types/coordinates";
 import type { GlyphGeometry } from "@shift/glyph-state";
 import type { ContourId, PointId } from "@shift/types";
 import { track } from "../signals/index";
@@ -37,10 +39,10 @@ export class PointObject implements ShiftObjectOf<"point"> {
     return this.layer.geometry;
   }
 
-  bounds(): Rect2D | null {
+  bounds(): LocalBounds | null {
     const point = this.geometry.point(this.pointId);
     if (!point) return null;
 
-    return Bounds.toRect(Bounds.fromPoint(Vec2.add(this.node.position, point)));
+    return localBounds(Bounds.fromPoint(point));
   }
 }

@@ -18,11 +18,33 @@ import {
   type Unicode,
   type LayerId,
   type LayerMatch,
+  type NodeId,
 } from "@shift/types";
 import { isSegmentId, type SegmentId } from "@shift/glyph-state";
 import type { ExternalAxisLocation } from "../../types/variation";
 import type { SourceSelectionMode } from "../../types/sourceSelection";
-import type { Coordinates, NodePoint, ScenePoint } from "../../types/coordinates";
+import type {
+  Coordinates,
+  LocalBounds,
+  LocalPoint,
+  LocalVector,
+  SceneBounds,
+  ScenePoint,
+  SceneVector,
+  ScreenPoint,
+  ScreenVector,
+  SpaceTransform,
+} from "../../types/coordinates";
+import {
+  applyLinear,
+  applyTransform,
+  composeTransforms,
+  invertTransform,
+  localBounds,
+  sceneBounds,
+  spaceTransform,
+  transformBounds,
+} from "./spaces";
 import {
   axisValue,
   cloneExternalAxisLocation,
@@ -30,7 +52,7 @@ import {
 } from "../variation/location";
 import type { ActiveTool, ToolName, ToolRegistration } from "../tools/core";
 import { ToolManager } from "../tools/core/ToolManager";
-import { Bounds, Vec2, type Bounds as BoundsType, type Point2D, type Rect2D } from "@shift/geo";
+import { Bounds, Mat, type Bounds as BoundsType, type Point2D, type Rect2D } from "@shift/geo";
 
 import { applyListSelection } from "./listSelection";
 import { Camera } from "./managers";
@@ -85,7 +107,7 @@ import type { ComponentTargets } from "../../types/componentTargets";
 import type { PositionSelection } from "../../types/positionEdit";
 import type { SelectableId, ShiftId, ShiftObject } from "../../types/object";
 import type { ShiftEditorRecord } from "../../types/records";
-import type { GlyphNode, NodeKind } from "../../types/node";
+import type { GlyphNode, NodeKind, ShiftNode } from "../../types/node";
 import {
   AnchorObject,
   ComponentObject,
@@ -177,7 +199,8 @@ export class Editor {
   #tool: Signal<ActiveTool | null>;
   #dragging: Signal<boolean>;
   #isEditing: Signal<boolean>;
-  #selectionBounds: Signal<Rect2D | null>;
+  #selectionBounds: Signal<LocalBounds | null>;
+  #selectionSceneBounds: Signal<SceneBounds | null>;
   readonly #handlesCell = signal<ReadonlyMap<symbol, PointId | ContourId>>(new Map(), {
     name: "editor.handles",
   });
@@ -197,7 +220,6 @@ export class Editor {
   #multiSourceEditing: MultiSourceEditing;
 
   #cursorEffect: Effect;
-  #cameraMetricsEffect: Effect;
 
   #clipboard: Clipboard;
 
@@ -282,6 +304,16 @@ export class Editor {
         name: "editor.selection.bounds",
       },
     );
+    this.#selectionSceneBounds = computed(
+      () => {
+        track(this.selection.stateCell);
+        track(this.scene.cell);
+        return this.selectionSceneBounds();
+      },
+      {
+        name: "editor.selection.sceneBounds",
+      },
+    );
 
     // TODO: why not make editor extend EventEmitter?
     this.#events = new EventEmitter();
@@ -339,17 +371,6 @@ export class Editor {
     this.#textRuns = new TextRuns(this, new Positioner());
 
     this.#renderer = new Renderer(this);
-
-    this.#cameraMetricsEffect = effect(
-      () => {
-        track(this.font.metricsCell);
-        track(this.font.metricDefinitionsCell);
-        track(this.font.sourcesCell);
-        track(this.font.sourceMetricsInterpolationCell);
-        this.updateMetricsFromFont(this.#externalLocation.value);
-      },
-      { name: "editor.cameraMetrics" },
-    );
 
     this.#cursorEffect = effect(
       () => {
@@ -1036,17 +1057,18 @@ export class Editor {
   }
 
   /**
-   * Returns the current selection bounds in scene coordinates.
+   * Returns the box enclosing the given objects, in their node's own units.
    *
    * @remarks
-   * Selection stores IDs only. This method resolves those IDs against the
-   * current scene and font, asks each object for its live bounds, and returns a
-   * fresh axis-aligned rectangle enclosing the resolved objects.
+   * The space editing works in: a glyph selection is measured in font units,
+   * as the transform panel and edit pivots expect. For the camera and
+   * on-canvas chrome use {@link selectionSceneBounds}.
    *
    * @param ids - Identities to bound, defaulting to the current selection; does not change selection.
-   * @returns null when no supplied object has bounds.
+   * @returns null when no supplied object has bounds, or when the objects belong to different nodes.
    */
-  public selectionBounds(ids: readonly SelectableId[] = this.selection.ids): Rect2D | null {
+  public selectionBounds(ids: readonly SelectableId[] = this.selection.ids): LocalBounds | null {
+    let nodeId: NodeId | null = null;
     let bounds: BoundsType | null = null;
 
     for (const id of ids) {
@@ -1056,16 +1078,58 @@ export class Editor {
       const objectBounds = object.bounds();
       if (!objectBounds) continue;
 
-      const next = Bounds.fromXYWH(
-        objectBounds.x,
-        objectBounds.y,
-        objectBounds.width,
-        objectBounds.height,
-      );
+      if (nodeId && object.node.id !== nodeId) return null;
+      nodeId = object.node.id;
+      bounds = bounds ? Bounds.union(bounds, objectBounds) : objectBounds;
+    }
+
+    return bounds ? localBounds(bounds) : null;
+  }
+
+  /**
+   * Returns the scene node every given object belongs to.
+   *
+   * @param ids - Identities to resolve, defaulting to the current selection.
+   * @returns null when nothing resolves or the objects belong to different nodes.
+   */
+  public selectionNode(ids: readonly SelectableId[] = this.selection.ids): ShiftNode | null {
+    let node: ShiftNode | null = null;
+    for (const id of ids) {
+      const object = this.object(id);
+      if (!object) continue;
+      if (node && object.node.id !== node.id) return null;
+      node = object.node;
+    }
+    return node;
+  }
+
+  /**
+   * Returns the scene-space box enclosing the given objects, which may span several nodes.
+   *
+   * @remarks
+   * For the camera and on-canvas selection chrome. Editing operations that work
+   * in a glyph's units use {@link selectionBounds}.
+   *
+   * @param ids - Identities to bound, defaulting to the current selection; does not change selection.
+   * @returns null when no supplied object has bounds.
+   */
+  public selectionSceneBounds(
+    ids: readonly SelectableId[] = this.selection.ids,
+  ): SceneBounds | null {
+    let bounds: BoundsType | null = null;
+
+    for (const id of ids) {
+      const object = this.object(id);
+      if (!object) continue;
+
+      const objectBounds = object.bounds();
+      if (!objectBounds) continue;
+
+      const next = this.toSceneBounds(object.node, objectBounds);
       bounds = bounds ? Bounds.union(bounds, next) : next;
     }
 
-    return bounds ? Bounds.toRect(bounds) : null;
+    return bounds ? sceneBounds(bounds) : null;
   }
 
   /**
@@ -1114,9 +1178,14 @@ export class Editor {
     return true;
   }
 
-  /** Reactive scene-space bounds for the current selection. */
-  public get selectionBoundsCell(): Signal<Rect2D | null> {
+  /** Reactive bounds of the current selection in its node's units; see {@link selectionBounds}. */
+  public get selectionBoundsCell(): Signal<LocalBounds | null> {
     return this.#selectionBounds;
+  }
+
+  /** Reactive scene-space bounds of the current selection; see {@link selectionSceneBounds}. */
+  public get selectionSceneBoundsCell(): Signal<SceneBounds | null> {
+    return this.#selectionSceneBounds;
   }
 
   /**
@@ -1368,8 +1437,129 @@ export class Editor {
     if (!scopedState.delete(stateKey)) return;
   }
 
-  getPointInNodeSpace(point: ScenePoint, nodePosition: Point2D): NodePoint {
-    return Vec2.sub(point, nodePosition);
+  /**
+   * Returns the transform from a node's own units to scene space, read without tracking.
+   *
+   * @remarks
+   * Places the node's frame through its ancestors' frames, then applies the
+   * node's own units. Callers that need to redraw on placement changes track
+   * `scene.cell`.
+   *
+   * @param node - a node in the scene; its ancestors are resolved by `parentId`.
+   */
+  sceneTransform(node: ShiftNode): SpaceTransform<"local", "scene"> {
+    const units = this.nodeDefinition(node.kind).unitsTransform(node);
+    return spaceTransform(Mat.Compose(this.#frameToScene(node), units));
+  }
+
+  /**
+   * Returns the transform from a node's own units to screen pixels, read without tracking.
+   *
+   * @param node - a node in the scene; its ancestors are resolved by `parentId`.
+   */
+  screenTransform(node: ShiftNode): SpaceTransform<"local", "screen"> {
+    return composeTransforms(this.#camera.viewCell.peek(), this.sceneTransform(node));
+  }
+
+  /**
+   * Returns a point in a node's own units as a scene point.
+   *
+   * @param node - the node whose units `point` is measured in.
+   * @param point - a point in `node`'s own units.
+   */
+  toScene(node: ShiftNode, point: LocalPoint): ScenePoint {
+    return applyTransform(this.sceneTransform(node), point);
+  }
+
+  /**
+   * Returns a scene point in a node's own units.
+   *
+   * @param node - the node whose units the result is measured in.
+   * @param point - a scene point.
+   */
+  toLocal(node: ShiftNode, point: ScenePoint): LocalPoint {
+    return applyTransform(invertTransform(this.sceneTransform(node)), point);
+  }
+
+  /**
+   * Returns bounds in a node's own units as scene-space bounds.
+   *
+   * @param node - the node whose units `bounds` is measured in.
+   * @param bounds - bounds in `node`'s own units.
+   */
+  toSceneBounds(node: ShiftNode, bounds: LocalBounds): SceneBounds {
+    return transformBounds(this.sceneTransform(node), bounds);
+  }
+
+  /**
+   * Returns scene-space bounds in a node's own units.
+   *
+   * @param node - the node whose units the result is measured in.
+   * @param bounds - scene-space bounds.
+   */
+  toLocalBounds(node: ShiftNode, bounds: SceneBounds): LocalBounds {
+    return transformBounds(invertTransform(this.sceneTransform(node)), bounds);
+  }
+
+  /**
+   * Returns a scene-space displacement in a node's own units.
+   *
+   * @param node - the node whose units the result is measured in.
+   * @param vector - a scene-space displacement.
+   */
+  toLocalVector(node: ShiftNode, vector: SceneVector): LocalVector {
+    return applyLinear(invertTransform(this.sceneTransform(node)), vector);
+  }
+
+  /**
+   * Returns a canvas displacement in scene units, read without tracking.
+   *
+   * @param vector - a displacement in logical pixels.
+   */
+  toSceneVector(vector: ScreenVector): SceneVector {
+    return this.#camera.screenToSceneVector(vector);
+  }
+
+  /**
+   * Returns a node's scene-space bounds.
+   *
+   * @returns null when the node's kind reports no bounds.
+   */
+  nodeBounds(node: ShiftNode): SceneBounds | null {
+    const bounds = this.nodeDefinition(node.kind).bounds(node);
+    return bounds ? this.toSceneBounds(node, bounds) : null;
+  }
+
+  /**
+   * Returns the part of the scene visible in the canvas, in a node's own units.
+   *
+   * @param node - the node whose units the result is measured in.
+   * @param marginPx - extra logical pixels on every side, so content just off-screen is included.
+   * @returns fresh bounds; read without tracking.
+   */
+  visibleLocalBounds(node: ShiftNode, marginPx: number): LocalBounds {
+    const visible = this.#camera.visibleSceneBounds(marginPx);
+    const bounds = sceneBounds({
+      min: { x: visible.minX, y: visible.minY },
+      max: { x: visible.maxX, y: visible.maxY },
+    });
+    return this.toLocalBounds(node, bounds);
+  }
+
+  /**
+   * The transform from a node's frame to the scene: Y-down, origin at the node's
+   * position, nested in its parent's frame.
+   *
+   * @remarks
+   * Frames carry placement only. Each node's units apply to its own content and
+   * never to its children's frames.
+   */
+  #frameToScene(node: ShiftNode): Mat {
+    const position = Mat.Translate(node.position.x, node.position.y);
+    const parent = this.scene.node(node.parentId);
+    if (!parent) return position;
+
+    return Mat.Compose(this.#frameToScene(parent), position);
   }
 
   getPointerTarget(point: ScenePoint): PointerTarget {
@@ -1381,8 +1571,7 @@ export class Editor {
       const definition = this.nodeDefinition(node.kind);
       if (!definition) continue;
 
-      const nodePoint = this.getPointInNodeSpace(point, node.position);
-      const target = definition.hit(node, nodePoint);
+      const target = definition.hit(node, this.toLocal(node, point));
       if (target) return target;
     }
 
@@ -1424,10 +1613,6 @@ export class Editor {
 
   public setCameraRect(rect: Rect2D) {
     this.#camera.setRect(rect);
-  }
-
-  public setCameraUpm(upm: number) {
-    this.#camera.upm = upm;
   }
 
   public get xAdvance(): number {
@@ -1497,21 +1682,15 @@ export class Editor {
     this.#fontStore.glyphForId(node.glyphId)?.layerForSource(sourceId)?.setRightSidebearing(value);
   }
 
-  public updateMetricsFromFont(location: ExternalAxisLocation = this.externalLocation): void {
-    const metrics = this.font.metricsAtLocation(location);
-    this.#camera.upm = metrics.unitsPerEm;
-    this.#camera.descender = metrics.descender;
-  }
-
-  public get screenMousePositionCell(): Signal<Point2D> {
+  public get screenMousePositionCell(): Signal<ScreenPoint> {
     return this.#camera.screenMousePositionCell;
   }
 
-  public getMousePosition(): Point2D {
+  public getMousePosition(): ScenePoint {
     return this.#camera.mousePosition;
   }
 
-  public getScreenMousePosition(): Point2D {
+  public getScreenMousePosition(): ScreenPoint {
     return this.#camera.screenMousePosition;
   }
 
@@ -1527,8 +1706,8 @@ export class Editor {
     return this.input.pointerCell;
   }
 
-  public projectScreenToScene(screen: Point2D): Point2D {
-    return this.#camera.projectScreenToScene(screen.x, screen.y);
+  public screenToScene(screen: ScreenPoint): ScenePoint {
+    return this.#camera.screenToScene(screen);
   }
 
   public get hitRadius(): number {
@@ -1536,31 +1715,27 @@ export class Editor {
   }
 
   /** @knipclassignore Indirectly consumed through Renderer. */
-  public screenToUpmDistance(pixels: number): number {
-    return this.#camera.screenToUpmDistance(pixels);
+  public screenToSceneDistance(pixels: number): number {
+    return this.#camera.screenToSceneDistance(pixels);
   }
 
   /** @knipclassignore Indirectly consumed through Renderer. */
   public getCameraTransform(): CameraTransform {
     return {
+      view: this.#camera.viewCell.peek(),
       zoom: this.#camera.zoomLevel,
-      panX: this.#camera.panX,
-      panY: this.#camera.panY,
-      centre: this.#camera.centre,
+      logicalWidth: this.#camera.logicalWidth,
       logicalHeight: this.#camera.logicalHeight,
-      layoutHeight: this.#camera.layoutHeight,
-      padding: this.#camera.padding,
-      descender: this.#camera.descender,
     };
   }
 
   /** @knipclassignore Indirectly consumed through Renderer. */
-  public projectSceneToScreen(scene: Point2D): Point2D {
-    return this.#camera.projectSceneToScreen(scene.x, scene.y);
+  public sceneToScreen(scene: ScenePoint): ScreenPoint {
+    return this.#camera.sceneToScreen(scene);
   }
 
-  public fromScreen(screen: Point2D): Coordinates {
-    const scene = this.projectScreenToScene(screen);
+  public fromScreen(screen: ScreenPoint): Coordinates {
+    const scene = this.screenToScene(screen);
     return { screen, scene };
   }
 
@@ -1569,7 +1744,7 @@ export class Editor {
   }
 
   public setPan(pan: Point2D): void {
-    this.#camera.setPan(pan.x, pan.y);
+    this.#camera.setPan(pan);
   }
 
   public zoomIn(): void {
@@ -1585,7 +1760,7 @@ export class Editor {
    *
    * @param bounds - Scene-space bounds used for initial framing.
    */
-  public fitInitialBounds(bounds: Rect2D): void {
+  public fitInitialBounds(bounds: SceneBounds): void {
     this.#camera.fitInitialBounds(bounds);
   }
 
@@ -1594,7 +1769,7 @@ export class Editor {
    *
    * @param bounds - Scene-space rectangle to centre and fit.
    */
-  public fitBounds(bounds: Rect2D): void {
+  public fitBounds(bounds: SceneBounds): void {
     this.#camera.fitToBounds(bounds);
   }
 
@@ -1603,21 +1778,20 @@ export class Editor {
     let bounds: BoundsType | null = null;
 
     for (const node of this.scene.nodes()) {
-      const nodeBounds = this.nodeDefinition(node.kind)?.bounds(node);
+      const nodeBounds = this.nodeBounds(node);
       if (!nodeBounds) continue;
 
-      const next = Bounds.fromXYWH(nodeBounds.x, nodeBounds.y, nodeBounds.width, nodeBounds.height);
-      bounds = bounds ? Bounds.union(bounds, next) : next;
+      bounds = bounds ? Bounds.union(bounds, nodeBounds) : nodeBounds;
     }
 
     if (!bounds) return;
 
-    this.fitBounds(Bounds.toRect(bounds));
+    this.fitBounds(sceneBounds(bounds));
   }
 
   /** Fits the current selection into the viewport. */
   public zoomToSelection(): void {
-    const bounds = this.selectionBounds();
+    const bounds = this.selectionSceneBounds();
     if (!bounds) return;
 
     this.fitBounds(bounds);
@@ -1628,8 +1802,8 @@ export class Editor {
     this.#camera.setZoom(zoom);
   }
 
-  public zoomToPoint(screenX: number, screenY: number, zoomDelta: number): void {
-    this.#camera.zoomToPoint(screenX, screenY, zoomDelta);
+  public zoomToPoint(anchor: ScreenPoint, zoomDelta: number): void {
+    this.#camera.zoomToPoint(anchor, zoomDelta);
   }
 
   public setCursor(cursor: CursorType): void {
@@ -1968,7 +2142,6 @@ export class Editor {
   public destroy() {
     this.#events.emit("destroying");
     this.#cursorEffect.dispose();
-    this.#cameraMetricsEffect.dispose();
     this.#multiSourceEditing.dispose();
     this.#renderer.destroy();
     this.#toolManager.dispose();

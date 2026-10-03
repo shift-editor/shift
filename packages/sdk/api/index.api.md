@@ -104,8 +104,8 @@ export class Editor {
     get externalLocation(): ExternalAxisLocation;
     // (undocumented)
     get externalLocationCell(): Signal<ExternalAxisLocation>;
-    fitBounds(bounds: Rect2D): void;
-    fitInitialBounds(bounds: Rect2D): void;
+    fitBounds(bounds: SceneBounds): void;
+    fitInitialBounds(bounds: SceneBounds): void;
     // (undocumented)
     flushMousePosition(): void;
     // (undocumented)
@@ -113,7 +113,7 @@ export class Editor {
     // (undocumented)
     get fps(): Signal<number>;
     // (undocumented)
-    fromScreen(screen: Point2D): Coordinates;
+    fromScreen(screen: ScreenPoint): Coordinates;
     // Warning: (ae-forgotten-export) The symbol "EditorGesture" needs to be exported by the entry point index.d.ts
     //
     // (undocumented)
@@ -121,19 +121,13 @@ export class Editor {
     // Warning: (ae-forgotten-export) The symbol "CameraTransform" needs to be exported by the entry point index.d.ts
     getCameraTransform(): CameraTransform;
     // (undocumented)
-    getMousePosition(): Point2D;
+    getMousePosition(): ScenePoint;
     // Warning: (ae-forgotten-export) The symbol "PointerTarget" needs to be exported by the entry point index.d.ts
     //
     // (undocumented)
     getPointerTarget(point: ScenePoint): PointerTarget;
-    // Warning: (ae-forgotten-export) The symbol "ScenePoint" needs to be exported by the entry point index.d.ts
-    // Warning: (ae-forgotten-export) The symbol "Point2D" needs to be exported by the entry point index.d.ts
-    // Warning: (ae-forgotten-export) The symbol "NodePoint" needs to be exported by the entry point index.d.ts
-    //
     // (undocumented)
-    getPointInNodeSpace(point: ScenePoint, nodePosition: Point2D): NodePoint;
-    // (undocumented)
-    getScreenMousePosition(): Point2D;
+    getScreenMousePosition(): ScreenPoint;
     // Warning: (ae-forgotten-export) The symbol "ToolShortcutEntry" needs to be exported by the entry point index.d.ts
     //
     // (undocumented)
@@ -172,6 +166,7 @@ export class Editor {
     // Warning: (ae-forgotten-export) The symbol "GlyphGeometrySelection" needs to be exported by the entry point index.d.ts
     // Warning: (ae-forgotten-export) The symbol "GlyphLayer" needs to be exported by the entry point index.d.ts
     layerForGeometry(ids: GlyphGeometrySelection): GlyphLayer | null;
+    nodeBounds(node: ShiftNode): SceneBounds | null;
     // Warning: (ae-forgotten-export) The symbol "GlyphNodeDefinition" needs to be exported by the entry point index.d.ts
     //
     // (undocumented)
@@ -192,6 +187,8 @@ export class Editor {
     objects(ids: readonly ShiftId[]): readonly ShiftObject[];
     // Warning: (ae-forgotten-export) The symbol "EventEmitter" needs to be exported by the entry point index.d.ts
     on: EventEmitter["on"];
+    // Warning: (ae-forgotten-export) The symbol "Point2D" needs to be exported by the entry point index.d.ts
+    //
     // (undocumented)
     get pan(): Point2D;
     paste(): Promise<boolean>;
@@ -201,9 +198,6 @@ export class Editor {
     get pointerCoords(): Signal<Coordinates | null>;
     // Warning: (ae-forgotten-export) The symbol "PositionSelection" needs to be exported by the entry point index.d.ts
     positionSelection(ids: readonly SelectableId[]): PositionSelection | null;
-    projectSceneToScreen(scene: Point2D): Point2D;
-    // (undocumented)
-    projectScreenToScene(screen: Point2D): Point2D;
     // (undocumented)
     redo(): Promise<void>;
     // Warning: (ae-forgotten-export) The symbol "ToolManifest" needs to be exported by the entry point index.d.ts
@@ -219,15 +213,26 @@ export class Editor {
     //
     // (undocumented)
     readonly scene: Scene;
+    sceneToScreen(scene: ScenePoint): ScreenPoint;
+    // Warning: (ae-forgotten-export) The symbol "SpaceTransform" needs to be exported by the entry point index.d.ts
+    sceneTransform(node: ShiftNode): SpaceTransform<"local", "scene">;
     // (undocumented)
-    get screenMousePositionCell(): Signal<Point2D>;
-    screenToUpmDistance(pixels: number): number;
+    get screenMousePositionCell(): Signal<ScreenPoint>;
+    // (undocumented)
+    screenToScene(screen: ScreenPoint): ScenePoint;
+    screenToSceneDistance(pixels: number): number;
+    screenTransform(node: ShiftNode): SpaceTransform<"local", "screen">;
     selectAll(): void;
     // Warning: (ae-forgotten-export) The symbol "Selection_2" needs to be exported by the entry point index.d.ts
     readonly selection: Selection_2;
-    // Warning: (ae-forgotten-export) The symbol "Rect2D" needs to be exported by the entry point index.d.ts
-    selectionBounds(ids?: readonly SelectableId[]): Rect2D | null;
-    get selectionBoundsCell(): Signal<Rect2D | null>;
+    // Warning: (ae-forgotten-export) The symbol "LocalBounds" needs to be exported by the entry point index.d.ts
+    selectionBounds(ids?: readonly SelectableId[]): LocalBounds | null;
+    get selectionBoundsCell(): Signal<LocalBounds | null>;
+    // Warning: (ae-forgotten-export) The symbol "ShiftNode" needs to be exported by the entry point index.d.ts
+    selectionNode(ids?: readonly SelectableId[]): ShiftNode | null;
+    // Warning: (ae-forgotten-export) The symbol "SceneBounds" needs to be exported by the entry point index.d.ts
+    selectionSceneBounds(ids?: readonly SelectableId[]): SceneBounds | null;
+    get selectionSceneBoundsCell(): Signal<SceneBounds | null>;
     selectSource(sourceId: SourceId): void;
     // Warning: (ae-forgotten-export) The symbol "SourceSelectionMode" needs to be exported by the entry point index.d.ts
     selectSourceForEditing(sourceId: SourceId, mode?: SourceSelectionMode): void;
@@ -235,10 +240,10 @@ export class Editor {
     readonly sessionMode: FontSessionMode;
     // (undocumented)
     setActiveTool(toolName: ToolName): void;
+    // Warning: (ae-forgotten-export) The symbol "Rect2D" needs to be exported by the entry point index.d.ts
+    //
     // (undocumented)
     setCameraRect(rect: Rect2D): void;
-    // (undocumented)
-    setCameraUpm(upm: number): void;
     // (undocumented)
     setCurrentModifiers(modifiers: Modifiers): void;
     // Warning: (ae-forgotten-export) The symbol "CursorType" needs to be exported by the entry point index.d.ts
@@ -277,6 +282,11 @@ export class Editor {
     // (undocumented)
     get textRuns(): TextRuns;
     toggleAllSourcesForEditing(): boolean;
+    toLocal(node: ShiftNode, point: ScenePoint): LocalPoint;
+    toLocalBounds(node: ShiftNode, bounds: SceneBounds): LocalBounds;
+    // Warning: (ae-forgotten-export) The symbol "SceneVector" needs to be exported by the entry point index.d.ts
+    // Warning: (ae-forgotten-export) The symbol "LocalVector" needs to be exported by the entry point index.d.ts
+    toLocalVector(node: ShiftNode, vector: SceneVector): LocalVector;
     // Warning: (ae-forgotten-export) The symbol "ActiveTool" needs to be exported by the entry point index.d.ts
     get tool(): ActiveTool | null;
     get toolCell(): Signal<ActiveTool | null>;
@@ -292,13 +302,16 @@ export class Editor {
     get toolRegistry(): ReadonlyMap<ToolName, ToolRegistryItem>;
     // (undocumented)
     get toolRegistryCell(): Signal<ReadonlyMap<ToolName, ToolRegistryItem>>;
+    toScene(node: ShiftNode, point: LocalPoint): ScenePoint;
+    toSceneBounds(node: ShiftNode, bounds: LocalBounds): SceneBounds;
+    // Warning: (ae-forgotten-export) The symbol "ScreenVector" needs to be exported by the entry point index.d.ts
+    toSceneVector(vector: ScreenVector): SceneVector;
     transaction<TResult>(label: string, body: () => TResult): TResult;
     // (undocumented)
     undo(): Promise<void>;
     // (undocumented)
-    updateMetricsFromFont(location?: ExternalAxisLocation): void;
-    // (undocumented)
     updateMousePosition(clientX: number, clientY: number): void;
+    visibleLocalBounds(node: ShiftNode, marginPx: number): LocalBounds;
     // (undocumented)
     get xAdvance(): number;
     // (undocumented)
@@ -311,7 +324,7 @@ export class Editor {
     zoomOut(): void;
     zoomToFit(): void;
     // (undocumented)
-    zoomToPoint(screenX: number, screenY: number, zoomDelta: number): void;
+    zoomToPoint(anchor: ScreenPoint, zoomDelta: number): void;
     zoomToSelection(): void;
 }
 
@@ -606,6 +619,14 @@ export interface GlyphSnapshot {
     projection?: GlyphProjection;
 }
 
+// Warning: (ae-forgotten-export) The symbol "PointIn" needs to be exported by the entry point index.d.ts
+//
+// @public
+export type LocalPoint = PointIn<"local">;
+
+// @public
+export function localPoint(x: number, y: number): LocalPoint;
+
 // @public
 export interface MemoryFontSession {
     // (undocumented)
@@ -643,6 +664,18 @@ export interface MemoryFontSource extends GlyphReader {
 export type MemoryToolName = "select" | "hand";
 
 // @public
+export type ScenePoint = PointIn<"scene">;
+
+// @public
+export function scenePoint(x: number, y: number): ScenePoint;
+
+// @public
+export type ScreenPoint = PointIn<"screen">;
+
+// @public
+export function screenPoint(x: number, y: number): ScreenPoint;
+
+// @public
 export interface Signal<T> {
     // Warning: (ae-forgotten-export) The symbol "SignalDebugSnapshot" needs to be exported by the entry point index.d.ts
     debug(): SignalDebugSnapshot;
@@ -666,7 +699,7 @@ export function useSignalState<T>(signal: Signal<T>, options?: UseSignalOptions)
 
 // Warnings were encountered during analysis:
 //
-// dist/Editor-BO84Q4oC.d.ts:3725:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
+// dist/Editor-oT8CmWIR.d.ts:3995:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

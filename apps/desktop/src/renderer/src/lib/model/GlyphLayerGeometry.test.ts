@@ -10,8 +10,8 @@ describe("GlyphLayer point movement", () => {
     editor = new TestEditor();
     await editor.startSession();
     editor.selectTool("pen");
-    await editor.clickGlyphLocal(10, 20);
-    await editor.clickGlyphLocal(30, 40);
+    await editor.clickLocal(10, 20);
+    await editor.clickLocal(30, 40);
   });
 
   const layer = () => editor.glyphLayer!;
@@ -128,8 +128,8 @@ describe("GlyphLayer.splitSegment", () => {
 
   describe("line segment", () => {
     beforeEach(async () => {
-      await editor.clickGlyphLocal(0, 0);
-      await editor.clickGlyphLocal(100, 0);
+      await editor.clickLocal(0, 0);
+      await editor.clickLocal(100, 0);
     });
 
     it("inserts a single on-curve point at t=0.5", async () => {
@@ -156,8 +156,8 @@ describe("GlyphLayer.splitSegment", () => {
   });
 
   it("inserts the point at the parametric position for t=0.25", async () => {
-    await editor.clickGlyphLocal(0, 0);
-    await editor.clickGlyphLocal(100, 100);
+    await editor.clickLocal(0, 0);
+    await editor.clickLocal(100, 100);
 
     const segment = layer().contours[0]!.segments()[0]!;
     const splitId = layer().splitSegment(segment.id, 0.25);
@@ -254,8 +254,8 @@ describe("GlyphLayer.upgradeLineToCubic", () => {
     editor = new TestEditor();
     await editor.startSession();
     editor.selectTool("pen");
-    await editor.clickGlyphLocal(0, 0);
-    await editor.clickGlyphLocal(90, 30);
+    await editor.clickLocal(0, 0);
+    await editor.clickLocal(90, 30);
   });
 
   const layer = () => editor.glyphLayer!;
@@ -296,8 +296,8 @@ describe("GlyphLayer metrics", () => {
     editor = new TestEditor();
     await editor.startSession();
     editor.selectTool("pen");
-    await editor.clickGlyphLocal(100, 200);
-    await editor.clickGlyphLocal(150, 200);
+    await editor.clickLocal(100, 200);
+    await editor.clickLocal(150, 200);
     initialAdvance = editor.glyphLayer!.xAdvance;
   });
 

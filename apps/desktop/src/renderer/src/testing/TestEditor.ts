@@ -11,11 +11,12 @@
  * change sets; until then the editor surface under test is tool/input state.
  */
 
+import { localPoint, scenePoint, screenPoint, type ScreenPoint } from "@shift/editor/spaces";
 import { Editor } from "@shift/editor";
 import type { Glyph, GlyphRenderModel, GlyphLayer } from "@shift/editor/model";
 import type { ToolName } from "@shift/editor/tools";
 import { registerBuiltInTools } from "@/lib/tools/tools";
-import type { Point2D } from "@shift/geo";
+import { Bounds, type Point2D, type Rect2D } from "@shift/geo";
 import {
   mintGlyphId,
   mintLayerId,
@@ -34,6 +35,20 @@ import type { GlyphNode } from "@shift/editor/types";
 import type { FontSessionMode, WorkspaceDocumentState } from "@shared/workspace/protocol";
 
 const DEFAULT_MODIFIERS = { shiftKey: false, altKey: false, metaKey: false };
+
+interface DragInput {
+  down: Point2D;
+  start: Point2D;
+  end: Point2D;
+  options?: Partial<typeof DEFAULT_MODIFIERS>;
+}
+
+interface DragResult {
+  down: Point2D;
+  start: Point2D;
+  end: Point2D;
+  delta: Point2D;
+}
 
 /**
  * In-memory {@link SystemClipboard} for tests. The buffer is directly
@@ -214,7 +229,7 @@ export class TestEditor extends Editor {
   async drawOpenContour(points: readonly Point2D[]): Promise<readonly PointId[]> {
     this.selectTool("pen");
     for (const point of points) {
-      await this.clickGlyphLocal(point.x, point.y);
+      await this.clickLocal(point.x, point.y);
     }
 
     const contour = this.openContour;
@@ -256,23 +271,40 @@ export class TestEditor extends Editor {
 
   async click(x: number, y: number, options?: Partial<typeof DEFAULT_MODIFIERS>): Promise<this> {
     const mods = { ...DEFAULT_MODIFIERS, ...options };
-    this.toolManager.handlePointerDown({ x, y }, mods);
-    this.toolManager.handlePointerUp({ x, y }, mods);
+    this.toolManager.handlePointerDown(screenPoint(x, y), mods);
+    this.toolManager.handlePointerUp(screenPoint(x, y), mods);
 
     return this.settle();
   }
 
   /**
-   * Click at glyph-local (UPM) coordinates, projecting through the camera.
-   * Use when a test asserts exact point positions; plain {@link click} takes
-   * screen coordinates, which the viewport y-flips.
+   * Projects a glyph-local (UPM) point to canvas pixels through the glyph node's
+   * transform and the camera.
+   *
+   * @param point - a position in the placed glyph's own units, such as a point,
+   * handle, or bounds value read from its layer.
+   * @throws {Error} when no glyph node is open.
    */
-  async clickGlyphLocal(
+  localToScreen(point: Point2D): ScreenPoint {
+    const node = this.glyphNode;
+    if (!node) throw new Error("localToScreen needs an open glyph node");
+
+    return this.sceneToScreen(this.toScene(node, localPoint(point.x, point.y)));
+  }
+
+  /**
+   * Clicks at glyph-local (UPM) coordinates, projecting through the glyph node and camera.
+   *
+   * @remarks
+   * Use when a test asserts exact point positions; plain {@link click} takes
+   * screen coordinates.
+   */
+  async clickLocal(
     x: number,
     y: number,
     options?: Partial<typeof DEFAULT_MODIFIERS>,
   ): Promise<this> {
-    const screen = this.projectSceneToScreen({ x, y });
+    const screen = this.localToScreen({ x, y });
     return this.click(screen.x, screen.y, options);
   }
 
@@ -284,15 +316,43 @@ export class TestEditor extends Editor {
    * @returns The scene-space drag points observed through the camera and the
    * canonical delta from `down` to `end`.
    */
-  async dragScene(input: {
-    down: Point2D;
-    start: Point2D;
-    end: Point2D;
-    options?: Partial<typeof DEFAULT_MODIFIERS>;
-  }): Promise<{ down: Point2D; start: Point2D; end: Point2D; delta: Point2D }> {
-    const downScreen = this.projectSceneToScreen(input.down);
-    const startScreen = this.projectSceneToScreen(input.start);
-    const endScreen = this.projectSceneToScreen(input.end);
+  dragScene(input: DragInput): Promise<DragResult> {
+    return this.#drag(
+      input,
+      (point) => this.sceneToScreen(scenePoint(point.x, point.y)),
+      (screen) => this.screenToScene(screen),
+    );
+  }
+
+  /**
+   * Drags through the glyph node's own (UPM) coordinates with a distinct
+   * threshold-crossing sample.
+   *
+   * @param input - Glyph-local pointer-down origin, threshold-crossing first
+   * move, and final pointer position.
+   * @returns The glyph-local drag points observed through the node and camera,
+   * and the canonical delta from `down` to `end`.
+   * @throws {Error} when no glyph node is open.
+   */
+  dragLocal(input: DragInput): Promise<DragResult> {
+    const node = this.glyphNode;
+    if (!node) throw new Error("dragLocal needs an open glyph node");
+
+    return this.#drag(
+      input,
+      (point) => this.localToScreen(point),
+      (screen) => this.toLocal(node, this.screenToScene(screen)),
+    );
+  }
+
+  async #drag(
+    input: DragInput,
+    toScreen: (point: Point2D) => ScreenPoint,
+    fromScreen: (screen: ScreenPoint) => Point2D,
+  ): Promise<DragResult> {
+    const downScreen = toScreen(input.down);
+    const startScreen = toScreen(input.start);
+    const endScreen = toScreen(input.end);
 
     this.pointerDown(downScreen.x, downScreen.y, input.options);
     this.pointerMove(startScreen.x, startScreen.y, input.options);
@@ -301,9 +361,9 @@ export class TestEditor extends Editor {
 
     await this.settle();
 
-    const down = this.projectScreenToScene(downScreen);
-    const start = this.projectScreenToScene(startScreen);
-    const end = this.projectScreenToScene(endScreen);
+    const down = fromScreen(downScreen);
+    const start = fromScreen(startScreen);
+    const end = fromScreen(endScreen);
 
     return {
       down,
@@ -316,14 +376,24 @@ export class TestEditor extends Editor {
     };
   }
 
+  /**
+   * Returns the selection's bounds in the glyph's own units as a rectangle.
+   *
+   * @returns null when nothing is selected or the selection spans nodes.
+   */
+  selectionLocalRect(): Rect2D | null {
+    const bounds = this.selectionBounds();
+    return bounds ? Bounds.toRect(bounds) : null;
+  }
+
   pointerDown(x: number, y: number, options?: Partial<typeof DEFAULT_MODIFIERS>): this {
-    this.toolManager.handlePointerDown({ x, y }, { ...DEFAULT_MODIFIERS, ...options });
+    this.toolManager.handlePointerDown(screenPoint(x, y), { ...DEFAULT_MODIFIERS, ...options });
     return this;
   }
 
   pointerMove(x: number, y: number, options?: Partial<typeof DEFAULT_MODIFIERS>): this {
     this.toolManager.handlePointerMove(
-      { x, y },
+      screenPoint(x, y),
       { ...DEFAULT_MODIFIERS, ...options },
       { force: true },
     );
@@ -332,7 +402,7 @@ export class TestEditor extends Editor {
   }
 
   pointerUp(x: number, y: number, options?: Partial<typeof DEFAULT_MODIFIERS>): this {
-    this.toolManager.handlePointerUp({ x, y }, { ...DEFAULT_MODIFIERS, ...options });
+    this.toolManager.handlePointerUp(screenPoint(x, y), { ...DEFAULT_MODIFIERS, ...options });
     return this;
   }
 

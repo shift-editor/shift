@@ -61,10 +61,10 @@ describe("Pen tool", () => {
     });
 
     it("publishes complete local curve topology while the drag is active", async () => {
-      await editor.clickGlyphLocal(100, 100);
-      const down = editor.projectSceneToScreen({ x: 300, y: 100 });
-      const threshold = editor.projectSceneToScreen({ x: 340, y: 120 });
-      const end = editor.projectSceneToScreen({ x: 380, y: 180 });
+      await editor.clickLocal(100, 100);
+      const down = editor.localToScreen({ x: 300, y: 100 });
+      const threshold = editor.localToScreen({ x: 340, y: 120 });
+      const end = editor.localToScreen({ x: 380, y: 180 });
 
       editor.pointerDown(down.x, down.y);
       editor.pointerMove(threshold.x, threshold.y);
@@ -80,9 +80,9 @@ describe("Pen tool", () => {
     });
 
     it("restores the authored topology when an active curve is canceled", async () => {
-      await editor.clickGlyphLocal(100, 100);
-      const down = editor.projectSceneToScreen({ x: 300, y: 100 });
-      const threshold = editor.projectSceneToScreen({ x: 340, y: 120 });
+      await editor.clickLocal(100, 100);
+      const down = editor.localToScreen({ x: 300, y: 100 });
+      const threshold = editor.localToScreen({ x: 340, y: 120 });
 
       editor.pointerDown(down.x, down.y);
       editor.pointerMove(threshold.x, threshold.y);
@@ -95,9 +95,9 @@ describe("Pen tool", () => {
     });
 
     it("places an untouched corner control one third toward the new anchor", async () => {
-      await editor.clickGlyphLocal(100, 100);
+      await editor.clickLocal(100, 100);
 
-      await editor.dragScene({
+      await editor.dragLocal({
         down: { x: 300, y: 100 },
         start: { x: 340, y: 120 },
         end: { x: 380, y: 180 },
@@ -111,9 +111,9 @@ describe("Pen tool", () => {
     });
 
     it("persists the release-position incoming handle", async () => {
-      await editor.clickGlyphLocal(100, 100);
+      await editor.clickLocal(100, 100);
 
-      await editor.dragScene({
+      await editor.dragLocal({
         down: { x: 300, y: 100 },
         start: { x: 340, y: 120 },
         end: { x: 380, y: 180 },
@@ -125,13 +125,13 @@ describe("Pen tool", () => {
     });
 
     it("preserves a dragged junction's outgoing handle in the next cubic", async () => {
-      await editor.clickGlyphLocal(100, 100);
-      await editor.dragScene({
+      await editor.clickLocal(100, 100);
+      await editor.dragLocal({
         down: { x: 300, y: 100 },
         start: { x: 340, y: 120 },
         end: { x: 380, y: 180 },
       });
-      await editor.dragScene({
+      await editor.dragLocal({
         down: { x: 500, y: 100 },
         start: { x: 540, y: 120 },
         end: { x: 580, y: 180 },
@@ -143,13 +143,13 @@ describe("Pen tool", () => {
     });
 
     it("preserves consecutive handles before previous workspace echoes settle", async () => {
-      const point = editor.clickGlyphLocal(100, 100);
-      const firstCurve = editor.dragScene({
+      const point = editor.clickLocal(100, 100);
+      const firstCurve = editor.dragLocal({
         down: { x: 300, y: 100 },
         start: { x: 340, y: 120 },
         end: { x: 380, y: 180 },
       });
-      const secondCurve = editor.dragScene({
+      const secondCurve = editor.dragLocal({
         down: { x: 500, y: 100 },
         start: { x: 540, y: 120 },
         end: { x: 580, y: 180 },
@@ -162,17 +162,17 @@ describe("Pen tool", () => {
     });
 
     it("keeps an active consecutive curve visible across the previous workspace echo", async () => {
-      await editor.clickGlyphLocal(100, 100);
+      await editor.clickLocal(100, 100);
 
-      const previousCurve = editor.dragScene({
+      const previousCurve = editor.dragLocal({
         down: { x: 300, y: 100 },
         start: { x: 340, y: 120 },
         end: { x: 380, y: 180 },
       });
 
-      const down = editor.projectSceneToScreen({ x: 500, y: 100 });
-      const threshold = editor.projectSceneToScreen({ x: 540, y: 120 });
-      const end = editor.projectSceneToScreen({ x: 580, y: 180 });
+      const down = editor.localToScreen({ x: 500, y: 100 });
+      const threshold = editor.localToScreen({ x: 540, y: 120 });
+      const end = editor.localToScreen({ x: 580, y: 180 });
       editor.pointerDown(down.x, down.y);
       editor.pointerMove(threshold.x, threshold.y);
       editor.pointerMove(end.x, end.y);
@@ -224,15 +224,15 @@ describe("Pen tool", () => {
     });
 
     it("adding a point and then dragging off it pulls a handle for the next curve", async () => {
-      await editor.clickGlyphLocal(100, 100);
-      await editor.dragScene({
+      await editor.clickLocal(100, 100);
+      await editor.dragLocal({
         down: { x: 100, y: 100 },
         start: { x: 120, y: 120 },
         end: { x: 160, y: 180 },
       });
       expect(editor.openContour?.points).toHaveLength(1);
 
-      await editor.dragScene({
+      await editor.dragLocal({
         down: { x: 300, y: 100 },
         start: { x: 320, y: 120 },
         end: { x: 340, y: 140 },
@@ -294,8 +294,8 @@ describe("Pen tool", () => {
     });
 
     it("a curve drag appends complete topology in one undo step", async () => {
-      await editor.clickGlyphLocal(100, 100);
-      await editor.dragScene({
+      await editor.clickLocal(100, 100);
+      await editor.dragLocal({
         down: { x: 300, y: 100 },
         start: { x: 340, y: 120 },
         end: { x: 380, y: 180 },
@@ -321,15 +321,15 @@ describe("Pen tool", () => {
 
   describe("pulling a handle from an open end", () => {
     it("pulls a free handle from a line's end into the next dragged curve", async () => {
-      await editor.clickGlyphLocal(100, 100);
-      await editor.clickGlyphLocal(300, 100);
+      await editor.clickLocal(100, 100);
+      await editor.clickLocal(300, 100);
 
-      await editor.dragScene({
+      await editor.dragLocal({
         down: { x: 300, y: 100 },
         start: { x: 320, y: 120 },
         end: { x: 380, y: 180 },
       });
-      await editor.dragScene({
+      await editor.dragLocal({
         down: { x: 500, y: 100 },
         start: { x: 520, y: 120 },
         end: { x: 540, y: 140 },
@@ -344,16 +344,16 @@ describe("Pen tool", () => {
     });
 
     it("keeps a handle pulled with Option on the line's direction", async () => {
-      await editor.clickGlyphLocal(100, 100);
-      await editor.clickGlyphLocal(300, 100);
+      await editor.clickLocal(100, 100);
+      await editor.clickLocal(300, 100);
 
-      await editor.dragScene({
+      await editor.dragLocal({
         down: { x: 300, y: 100 },
         start: { x: 320, y: 120 },
         end: { x: 380, y: 160 },
         options: { altKey: true },
       });
-      await editor.dragScene({
+      await editor.dragLocal({
         down: { x: 500, y: 100 },
         start: { x: 520, y: 120 },
         end: { x: 540, y: 140 },
@@ -366,19 +366,19 @@ describe("Pen tool", () => {
     });
 
     it("mirrors a curve's incoming handle while pulling from its end", async () => {
-      await editor.clickGlyphLocal(100, 100);
-      await editor.dragScene({
+      await editor.clickLocal(100, 100);
+      await editor.dragLocal({
         down: { x: 300, y: 100 },
         start: { x: 340, y: 120 },
         end: { x: 380, y: 180 },
       });
 
-      await editor.dragScene({
+      await editor.dragLocal({
         down: { x: 300, y: 100 },
         start: { x: 320, y: 90 },
         end: { x: 360, y: 60 },
       });
-      await editor.dragScene({
+      await editor.dragLocal({
         down: { x: 500, y: 100 },
         start: { x: 520, y: 120 },
         end: { x: 540, y: 140 },
@@ -395,41 +395,41 @@ describe("Pen tool", () => {
     });
 
     it("draws a line when clicking after pulling a handle", async () => {
-      await editor.clickGlyphLocal(100, 100);
-      await editor.clickGlyphLocal(300, 100);
-      await editor.dragScene({
+      await editor.clickLocal(100, 100);
+      await editor.clickLocal(300, 100);
+      await editor.dragLocal({
         down: { x: 300, y: 100 },
         start: { x: 320, y: 120 },
         end: { x: 380, y: 180 },
       });
-      await editor.clickGlyphLocal(500, 100);
+      await editor.clickLocal(500, 100);
 
       expect(editor.openContour?.segments()[1]?.type).toBe("line");
     });
 
     it("draws a line when clicking after an ordinary curve drag", async () => {
-      await editor.clickGlyphLocal(100, 100);
-      await editor.dragScene({
+      await editor.clickLocal(100, 100);
+      await editor.dragLocal({
         down: { x: 300, y: 100 },
         start: { x: 340, y: 120 },
         end: { x: 380, y: 180 },
       });
-      await editor.clickGlyphLocal(500, 100);
+      await editor.clickLocal(500, 100);
 
       expect(editor.openContour?.segments()[1]?.type).toBe("line");
     });
 
     it("restores a curve's incoming handle when Escape cancels the pull", async () => {
-      await editor.clickGlyphLocal(100, 100);
-      await editor.dragScene({
+      await editor.clickLocal(100, 100);
+      await editor.dragLocal({
         down: { x: 300, y: 100 },
         start: { x: 340, y: 120 },
         end: { x: 380, y: 180 },
       });
 
-      const down = editor.projectSceneToScreen({ x: 300, y: 100 });
-      const start = editor.projectSceneToScreen({ x: 320, y: 90 });
-      const end = editor.projectSceneToScreen({ x: 360, y: 60 });
+      const down = editor.localToScreen({ x: 300, y: 100 });
+      const start = editor.localToScreen({ x: 320, y: 90 });
+      const end = editor.localToScreen({ x: 360, y: 60 });
       editor.pointerDown(down.x, down.y).pointerMove(start.x, start.y).pointerMove(end.x, end.y);
       editor.escape();
       await editor.settle();
@@ -440,16 +440,16 @@ describe("Pen tool", () => {
     });
 
     it("continues another open contour from the end a handle is pulled out of", async () => {
-      await editor.clickGlyphLocal(100, 100);
-      await editor.clickGlyphLocal(300, 100);
+      await editor.clickLocal(100, 100);
+      await editor.clickLocal(300, 100);
       editor.escape();
 
-      await editor.dragScene({
+      await editor.dragLocal({
         down: { x: 100, y: 100 },
         start: { x: 90, y: 120 },
         end: { x: 60, y: 160 },
       });
-      await editor.dragScene({
+      await editor.dragLocal({
         down: { x: 0, y: 300 },
         start: { x: 20, y: 320 },
         end: { x: 40, y: 340 },
@@ -472,7 +472,7 @@ describe("Pen tool", () => {
         { x: 300, y: 300 },
       ]);
 
-      await editor.dragScene({
+      await editor.dragLocal({
         down: { x: 100, y: 100 },
         start: { x: 130, y: 110 },
         end: { x: 160, y: 130 },
@@ -492,15 +492,15 @@ describe("Pen tool", () => {
     });
 
     it("dragging off the first point mirrors a curve-started contour's first handle", async () => {
-      await editor.clickGlyphLocal(100, 100);
-      await editor.dragScene({
+      await editor.clickLocal(100, 100);
+      await editor.dragLocal({
         down: { x: 300, y: 100 },
         start: { x: 340, y: 120 },
         end: { x: 380, y: 180 },
       });
-      await editor.clickGlyphLocal(300, 300);
+      await editor.clickLocal(300, 300);
 
-      await editor.dragScene({
+      await editor.dragLocal({
         down: { x: 100, y: 100 },
         start: { x: 100, y: 130 },
         end: { x: 100, y: 160 },
@@ -523,8 +523,8 @@ describe("Pen tool", () => {
         { x: 300, y: 100 },
         { x: 300, y: 300 },
       ]);
-      const down = editor.projectSceneToScreen({ x: 100, y: 100 });
-      const move = editor.projectSceneToScreen({ x: 160, y: 130 });
+      const down = editor.localToScreen({ x: 100, y: 100 });
+      const move = editor.localToScreen({ x: 160, y: 130 });
 
       editor.pointerDown(down.x, down.y).pointerMove(move.x, move.y);
       editor.escape();
@@ -543,7 +543,7 @@ describe("Pen tool", () => {
         { x: 300, y: 100 },
         { x: 300, y: 300 },
       ]);
-      await editor.dragScene({
+      await editor.dragLocal({
         down: { x: 100, y: 100 },
         start: { x: 130, y: 110 },
         end: { x: 160, y: 130 },
@@ -562,10 +562,10 @@ describe("Pen tool", () => {
         { x: 300, y: 100 },
       ]);
       editor.escape();
-      await editor.clickGlyphLocal(100, 300);
-      await editor.clickGlyphLocal(300, 300);
+      await editor.clickLocal(100, 300);
+      await editor.clickLocal(300, 300);
 
-      await editor.clickGlyphLocal(300, 100);
+      await editor.clickLocal(300, 100);
 
       const contours = editor.glyphContours;
       expect(contours).toHaveLength(1);
@@ -577,7 +577,7 @@ describe("Pen tool", () => {
         { x: 100, y: 100 },
       ]);
 
-      await editor.clickGlyphLocal(500, 500);
+      await editor.clickLocal(500, 500);
       expect(editor.glyphContours).toHaveLength(2);
     });
 
@@ -587,10 +587,10 @@ describe("Pen tool", () => {
         { x: 300, y: 100 },
       ]);
       editor.escape();
-      await editor.clickGlyphLocal(100, 300);
-      await editor.clickGlyphLocal(300, 300);
+      await editor.clickLocal(100, 300);
+      await editor.clickLocal(300, 300);
 
-      const otherStart = editor.projectSceneToScreen({ x: 100, y: 100 });
+      const otherStart = editor.localToScreen({ x: 100, y: 100 });
       editor.pointerMove(otherStart.x, otherStart.y);
 
       expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "pen-end" });
@@ -602,10 +602,10 @@ describe("Pen tool", () => {
         { x: 300, y: 100 },
       ]);
       editor.escape();
-      await editor.clickGlyphLocal(100, 300);
-      await editor.clickGlyphLocal(300, 300);
+      await editor.clickLocal(100, 300);
+      await editor.clickLocal(300, 300);
 
-      await editor.clickGlyphLocal(100, 100);
+      await editor.clickLocal(100, 100);
 
       expect(editor.glyphContours.every((contour) => !contour.closed)).toBe(true);
     });

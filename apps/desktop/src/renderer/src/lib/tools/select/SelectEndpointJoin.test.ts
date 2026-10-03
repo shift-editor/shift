@@ -17,7 +17,7 @@ describe("Select dropping an open end onto another open end", () => {
     ]);
     editor.selectTool("select");
 
-    await editor.dragScene({
+    await editor.dragLocal({
       down: editor.pointPosition(lastId!),
       start: { x: 280, y: 280 },
       end: { x: 101, y: 101 },
@@ -34,13 +34,13 @@ describe("Select dropping an open end onto another open end", () => {
 
   it("keeps an on-curve start when a curve's first point is dropped on its end", async () => {
     editor.selectTool("pen");
-    await editor.clickGlyphLocal(100, 100);
-    await editor.dragScene({
+    await editor.clickLocal(100, 100);
+    await editor.dragLocal({
       down: { x: 300, y: 100 },
       start: { x: 340, y: 120 },
       end: { x: 380, y: 180 },
     });
-    await editor.dragScene({
+    await editor.dragLocal({
       down: { x: 300, y: 300 },
       start: { x: 280, y: 340 },
       end: { x: 250, y: 380 },
@@ -48,7 +48,7 @@ describe("Select dropping an open end onto another open end", () => {
     const firstId = editor.glyphContours[0]!.firstPoint!.id;
     editor.selectTool("select");
 
-    await editor.dragScene({
+    await editor.dragLocal({
       down: editor.pointPosition(firstId),
       start: { x: 130, y: 130 },
       end: { x: 299, y: 299 },
@@ -74,7 +74,7 @@ describe("Select dropping an open end onto another open end", () => {
     if (!lastId) throw new Error("Expected a second contour");
     editor.selectTool("select");
 
-    await editor.dragScene({
+    await editor.dragLocal({
       down: editor.pointPosition(lastId),
       start: { x: 300, y: 280 },
       end: { x: 299, y: 101 },
@@ -97,7 +97,7 @@ describe("Select dropping an open end onto another open end", () => {
       { x: 300, y: 300 },
     ]);
     editor.selectTool("select");
-    await editor.dragScene({
+    await editor.dragLocal({
       down: editor.pointPosition(lastId!),
       start: { x: 280, y: 280 },
       end: { x: 101, y: 101 },
@@ -121,9 +121,9 @@ describe("Select dropping an open end onto another open end", () => {
       { x: 300, y: 300 },
     ]);
     editor.selectTool("select");
-    const down = editor.projectSceneToScreen(editor.pointPosition(lastId!));
-    const away = editor.projectSceneToScreen({ x: 280, y: 280 });
-    const over = editor.projectSceneToScreen({ x: 101, y: 101 });
+    const down = editor.localToScreen(editor.pointPosition(lastId!));
+    const away = editor.localToScreen({ x: 280, y: 280 });
+    const over = editor.localToScreen({ x: 101, y: 101 });
     const cursor = () => editor.toolManager.activeTool?.cursorCell.value;
 
     editor.pointerDown(down.x, down.y).pointerMove(away.x, away.y);
@@ -142,7 +142,7 @@ describe("Select dropping an open end onto another open end", () => {
     ]);
     editor.selectTool("select");
 
-    await editor.dragScene({
+    await editor.dragLocal({
       down: editor.pointPosition(lastId!),
       start: { x: 300, y: 280 },
       end: { x: 300, y: 250 },

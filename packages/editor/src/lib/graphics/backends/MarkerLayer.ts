@@ -2,8 +2,7 @@ import REGL from "regl";
 import { MARKER_INSTANCE_FLOATS } from "../../editor/rendering/markers/types";
 import vert from "../../editor/rendering/markers/shaders/handle.vert.glsl";
 import frag from "../../editor/rendering/markers/shaders/handle.frag.glsl";
-import type { CameraTransform } from "../../editor/managers/Camera";
-import type { Point2D } from "@shift/geo";
+import type { MatModel } from "@shift/geo";
 
 const UNIT_QUAD = new Float32Array([-1, -1, 1, -1, -1, 1, 1, -1, 1, 1, -1, 1]);
 const CLEAR_OPTIONS = {
@@ -15,14 +14,8 @@ interface MarkerDrawProps {
   instanceCount: number;
   logicalWidth: number;
   logicalHeight: number;
-  layoutHeight: number;
-  zoom: number;
-  panX: number;
-  panY: number;
-  centre: [number, number];
-  padding: number;
-  descender: number;
-  drawOffset: [number, number];
+  /** Marker position units → screen pixels, column-major. */
+  toScreen: Float32Array;
 }
 
 export class MarkerLayer {
@@ -32,20 +25,11 @@ export class MarkerLayer {
   #available = false;
   #instanceCapacity = 0;
   #frameDrew = false;
-  #centre: [number, number] = [0, 0];
-  #drawOffset: [number, number] = [0, 0];
   #drawProps: MarkerDrawProps = {
     instanceCount: 0,
     logicalWidth: 0,
     logicalHeight: 0,
-    layoutHeight: 0,
-    zoom: 1,
-    panX: 0,
-    panY: 0,
-    centre: this.#centre,
-    padding: 0,
-    descender: 0,
-    drawOffset: this.#drawOffset,
+    toScreen: new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]),
   };
 
   resizeCanvas(canvas: HTMLCanvasElement): void {
@@ -88,8 +72,7 @@ export class MarkerLayer {
   draw(
     packedInstances: Float32Array,
     instanceCount: number,
-    camera: CameraTransform,
-    drawOffset: Point2D,
+    toScreen: MatModel,
     logicalWidth: number,
     logicalHeight: number,
   ): boolean {
@@ -98,7 +81,7 @@ export class MarkerLayer {
 
     if (!this.uploadInstances(packedInstances, instanceCount)) return false;
 
-    return this.drawUploaded(instanceCount, camera, drawOffset, logicalWidth, logicalHeight);
+    return this.drawUploaded(instanceCount, toScreen, logicalWidth, logicalHeight);
   }
 
   uploadInstances(packedInstances: Float32Array, instanceCount: number): boolean {
@@ -127,10 +110,16 @@ export class MarkerLayer {
     return true;
   }
 
+  /**
+   * Draws the uploaded markers, clearing the surface first.
+   *
+   * @param toScreen - Maps marker positions to screen pixels; marker sizes stay in pixels.
+   * @param logicalWidth - Canvas width in logical pixels.
+   * @param logicalHeight - Canvas height in logical pixels.
+   */
   drawUploaded(
     instanceCount: number,
-    camera: CameraTransform,
-    drawOffset: Point2D,
+    toScreen: MatModel,
     logicalWidth: number,
     logicalHeight: number,
   ): boolean {
@@ -145,19 +134,20 @@ export class MarkerLayer {
     }
 
     this.clear();
-    this.#centre[0] = camera.centre.x;
-    this.#centre[1] = camera.centre.y;
-    this.#drawOffset[0] = drawOffset.x;
-    this.#drawOffset[1] = drawOffset.y;
     this.#drawProps.instanceCount = instanceCount;
     this.#drawProps.logicalWidth = logicalWidth;
     this.#drawProps.logicalHeight = logicalHeight;
-    this.#drawProps.layoutHeight = camera.layoutHeight;
-    this.#drawProps.zoom = camera.zoom;
-    this.#drawProps.panX = camera.panX;
-    this.#drawProps.panY = camera.panY;
-    this.#drawProps.padding = camera.padding;
-    this.#drawProps.descender = camera.descender;
+    this.#drawProps.toScreen.set([
+      toScreen.a,
+      toScreen.b,
+      0,
+      toScreen.c,
+      toScreen.d,
+      0,
+      toScreen.e,
+      toScreen.f,
+      1,
+    ]);
     this.#drawCommand(this.#drawProps);
     return true;
   }
@@ -219,16 +209,9 @@ export class MarkerLayer {
           a_bar_stroke_color: instanceAttr(21),
         },
         uniforms: {
-          u_zoom: prop("zoom"),
-          u_pan_x: prop("panX"),
-          u_pan_y: prop("panY"),
-          u_centre: prop("centre"),
+          u_to_screen: prop("toScreen"),
           u_logical_width: prop("logicalWidth"),
           u_logical_height: prop("logicalHeight"),
-          u_layout_height: prop("layoutHeight"),
-          u_padding: prop("padding"),
-          u_descender: prop("descender"),
-          u_draw_offset: prop("drawOffset"),
         },
         blend: {
           enable: true,

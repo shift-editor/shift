@@ -14,16 +14,9 @@ attribute vec4 a_overlay_color;
 attribute float a_bar_size;
 attribute vec4 a_bar_stroke_color;
 
-uniform float u_zoom;
-uniform float u_pan_x;
-uniform float u_pan_y;
-uniform vec2 u_centre;
+uniform mat3 u_to_screen;
 uniform float u_logical_width;
 uniform float u_logical_height;
-uniform float u_layout_height;
-uniform float u_padding;
-uniform float u_descender;
-uniform vec2 u_draw_offset;
 
 varying vec2 v_local;
 varying vec2 v_extent;
@@ -49,17 +42,7 @@ vec2 screenToClip(vec2 screen) {
 }
 
 void main() {
-  float baseline_y = u_layout_height - u_padding - u_descender;
-  vec2 scene = a_position + u_draw_offset;
-  vec2 base_screen = vec2(
-    scene.x + u_padding,
-    baseline_y - scene.y
-  );
-  vec2 view_translate = vec2(
-    u_pan_x + u_centre.x * (1.0 - u_zoom),
-    u_pan_y + u_centre.y * (1.0 - u_zoom)
-  );
-  vec2 screen = base_screen * u_zoom + view_translate;
+  vec2 screen = (u_to_screen * vec3(a_position, 1.0)).xy;
 
   vec2 local = a_unit * a_extent;
   vec2 rotated = rotatePoint(local, -a_rotation);

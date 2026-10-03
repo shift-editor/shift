@@ -6,10 +6,16 @@ import type { Select } from "../Select";
 import type { BoundingRectEdge as NullableBoundingRectEdge } from "../cursor";
 import { PositionEdits, PositionList, type ScaleEdit } from "../../../model/positions";
 import type { ComponentTransformEdit } from "../../../model/ComponentTransformEdit";
+import type { Editor } from "../../../editor/Editor";
+import { localBounds, scenePoint } from "../../../editor/spaces";
+import type { LocalBounds } from "../../../../types/coordinates";
+import type { ShiftNode } from "../../../../types/node";
 
 type BoundingRectEdge = Exclude<NullableBoundingRectEdge, null>;
 
 export class Resize implements SelectBehavior {
+  #editor: Editor | null = null;
+  #node: ShiftNode | null = null;
   #edit: ScaleEdit | null = null;
   #componentEdit: ComponentTransformEdit | null = null;
   #done: (() => void) | null = null;
@@ -28,9 +34,12 @@ export class Resize implements SelectBehavior {
     const positionSelection = ctx.editor.positionSelection(ctx.editor.selection.ids);
     if (!componentSelection && !positionSelection) return false;
 
-    let localBounds: Rect2D;
+    const node = ctx.editor.selectionNode();
+    if (!node) return false;
+
+    let targetBounds: LocalBounds;
     if (componentSelection) {
-      localBounds = componentSelection.bounds;
+      targetBounds = localBoundsOfRect(componentSelection.bounds);
     } else if (positionSelection) {
       const positions = PositionList.fromTargetGroups(
         positionSelection.layer,
@@ -39,16 +48,19 @@ export class Resize implements SelectBehavior {
       const bounds = Bounds.fromPoints(positions);
       if (!bounds) return false;
 
-      localBounds = Bounds.toRect(bounds);
+      targetBounds = localBounds(bounds);
     } else {
       return false;
     }
+
+    this.#editor = ctx.editor;
+    this.#node = node;
 
     const edge = hit.edge;
     const startPos = event.origin.scene;
 
     const anchorPoint = this.getAnchorPointForEdge(edge, hit.rect, event.altKey);
-    const localAnchorPoint = this.getAnchorPointForEdge(edge, localBounds, event.altKey);
+    const localAnchorPoint = this.#localAnchor(edge, targetBounds, event.altKey);
 
     if (componentSelection) {
       this.#componentEdit =
@@ -73,7 +85,7 @@ export class Resize implements SelectBehavior {
         startPos,
         lastPos: startPos,
         initialBounds: hit.rect,
-        localBounds,
+        localBounds: targetBounds,
         anchorPoint,
         uniformScale: false,
         flipX: false,
@@ -121,7 +133,27 @@ export class Resize implements SelectBehavior {
     }
   }
 
+  /**
+   * Returns the pivot for `edge` in the node's units.
+   *
+   * @remarks
+   * Edges are named as the user sees them on screen. The node's units may be
+   * flipped relative to the scene, so the anchor is chosen on the bounds in
+   * scene space and converted back, rather than read from the local corners.
+   */
+  #localAnchor(edge: BoundingRectEdge, bounds: LocalBounds, useCentre: boolean): Point2D {
+    const editor = this.#editor;
+    const node = this.#node;
+    if (!editor || !node) return Bounds.center(bounds);
+
+    const sceneRect = Bounds.toRect(editor.toSceneBounds(node, bounds));
+    const anchor = this.getAnchorPointForEdge(edge, sceneRect, useCentre);
+    return editor.toLocal(node, scenePoint(anchor.x, anchor.y));
+  }
+
   #cleanup(): void {
+    this.#editor = null;
+    this.#node = null;
     this.#edit = null;
     this.#componentEdit = null;
     this.#done = null;
@@ -138,7 +170,7 @@ export class Resize implements SelectBehavior {
       state.resize.initialBounds,
       event.altKey,
     );
-    const localAnchorPoint = this.getAnchorPointForEdge(
+    const localAnchorPoint = this.#localAnchor(
       state.resize.edge,
       state.resize.localBounds,
       event.altKey,
@@ -154,7 +186,11 @@ export class Resize implements SelectBehavior {
 
     if (this.#componentEdit) {
       this.#componentEdit.preview((layer) => {
-        const origin = this.getAnchorPointForEdge(state.resize.edge, layer.bounds, event.altKey);
+        const origin = this.#localAnchor(
+          state.resize.edge,
+          localBoundsOfRect(layer.bounds),
+          event.altKey,
+        );
         const scale = Mat.Scale(sx, sy);
         const fromOrigin = Mat.Translate(-origin.x, -origin.y);
         const toOrigin = Mat.Translate(origin.x, origin.y);
@@ -183,21 +219,21 @@ export class Resize implements SelectBehavior {
 
     switch (edge) {
       case "top-left":
-        return { x: rect.right, y: rect.top };
-      case "top-right":
-        return { x: rect.left, y: rect.top };
-      case "bottom-left":
         return { x: rect.right, y: rect.bottom };
-      case "bottom-right":
+      case "top-right":
         return { x: rect.left, y: rect.bottom };
+      case "bottom-left":
+        return { x: rect.right, y: rect.top };
+      case "bottom-right":
+        return { x: rect.left, y: rect.top };
       case "left":
         return { x: rect.right, y: center.y };
       case "right":
         return { x: rect.left, y: center.y };
       case "top":
-        return { x: center.x, y: rect.top };
-      case "bottom":
         return { x: center.x, y: rect.bottom };
+      case "bottom":
+        return { x: center.x, y: rect.top };
     }
   }
 
@@ -226,7 +262,7 @@ export class Resize implements SelectBehavior {
       (edge.includes("left") ? initialBounds.left : initialBounds.right) - anchorPoint.x,
     );
     const initialHeight = Math.abs(
-      (edge.includes("top") ? initialBounds.bottom : initialBounds.top) - anchorPoint.y,
+      (edge.includes("top") ? initialBounds.top : initialBounds.bottom) - anchorPoint.y,
     );
 
     if ((affectsX && initialWidth === 0) || (affectsY && initialHeight === 0)) {
@@ -251,14 +287,10 @@ export class Resize implements SelectBehavior {
       flipX = currentPos.x < anchorPoint.x;
     }
 
-    if (edge === "top-left" || edge === "top-right") {
-      flipY = currentPos.y < anchorPoint.y;
-    } else if (edge === "bottom-left" || edge === "bottom-right") {
+    if (edge === "top" || edge === "top-left" || edge === "top-right") {
       flipY = currentPos.y > anchorPoint.y;
-    } else if (edge === "top") {
+    } else if (edge === "bottom" || edge === "bottom-left" || edge === "bottom-right") {
       flipY = currentPos.y < anchorPoint.y;
-    } else if (edge === "bottom") {
-      flipY = currentPos.y > anchorPoint.y;
     }
 
     if (flipX) sx = -sx;
@@ -266,4 +298,8 @@ export class Resize implements SelectBehavior {
 
     return { sx, sy };
   }
+}
+
+function localBoundsOfRect(rect: Rect2D): LocalBounds {
+  return localBounds(Bounds.fromXYWH(rect.x, rect.y, rect.width, rect.height));
 }

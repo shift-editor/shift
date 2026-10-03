@@ -1,3 +1,4 @@
+import type { LocalPoint, ScenePoint, ScreenPoint } from "@shift/editor/spaces";
 import type { Locator, Page } from "@playwright/test";
 import type { Point2D, Rect2D } from "@shift/geo";
 import type { Point } from "@shift/glyph-state";
@@ -178,7 +179,7 @@ export class EditorDriver {
       const editor = window.shiftSession?.editor;
       if (!editor) throw new Error("Expected editor");
 
-      return editor.projectSceneToScreen(scenePosition);
+      return editor.sceneToScreen(scenePosition as ScenePoint);
     }, position);
   }
 
@@ -203,7 +204,7 @@ export class EditorDriver {
       const editor = window.shiftSession?.editor;
       if (!editor) throw new Error("Expected editor");
 
-      return editor.projectScreenToScene(canvasPosition);
+      return editor.screenToScene(canvasPosition as ScreenPoint);
     }, position);
   }
 
@@ -362,12 +363,21 @@ export class EditorDriver {
     );
   }
 
-  /** Returns fresh live selection bounds; throws without a bounded selection. */
+  /** Returns fresh live selection bounds in glyph units; throws without a bounded selection. */
   async selectionBounds(): Promise<Rect2D> {
-    const bounds = await this.page.evaluate(() => window.shift?.editor.selectionBounds());
-    if (!bounds) throw new Error("Expected selection bounds");
+    const b = await this.page.evaluate(() => window.shift?.editor.selectionBounds());
+    if (!b) throw new Error("Expected selection bounds");
 
-    return bounds;
+    return {
+      x: b.min.x,
+      y: b.min.y,
+      width: b.max.x - b.min.x,
+      height: b.max.y - b.min.y,
+      left: b.min.x,
+      top: b.min.y,
+      right: b.max.x,
+      bottom: b.max.y,
+    };
   }
 
   /** Returns a fresh confirmed outline; throws without an authored layer. */
@@ -417,10 +427,9 @@ export class EditorDriver {
         const point = layer.point(id);
         if (!point) throw new Error(`Expected editable point ${id}`);
 
-        const canvasPosition = editor.projectSceneToScreen({
-          x: point.x + node.position.x,
-          y: point.y + node.position.y,
-        });
+        const canvasPosition = editor.sceneToScreen(
+          editor.toScene(node, { x: point.x, y: point.y } as LocalPoint),
+        );
         return {
           id,
           glyphPosition: { x: point.x, y: point.y },
@@ -481,10 +490,9 @@ export class EditorDriver {
         .filter((candidate) => candidate.isOnCurve)
         .map((candidate) => ({
           point: candidate,
-          screen: workspace.editor.projectSceneToScreen({
-            x: candidate.x + node.position.x,
-            y: candidate.y + node.position.y,
-          }),
+          screen: workspace.editor.sceneToScreen(
+            workspace.editor.toScene(node, { x: candidate.x, y: candidate.y } as LocalPoint),
+          ),
         }))
         .filter(
           ({ screen }) =>
@@ -502,7 +510,7 @@ export class EditorDriver {
       if (!candidate) throw new Error("Expected visible on-curve point");
 
       const endScreen = { x: candidate.screen.x + 40, y: candidate.screen.y + 30 };
-      const endScene = workspace.editor.projectScreenToScene(endScreen);
+      const endScene = workspace.editor.screenToScene(endScreen as ScreenPoint);
       return {
         id: candidate.point.id,
         startPagePosition: {
@@ -510,10 +518,7 @@ export class EditorDriver {
           y: bounds.top + candidate.screen.y,
         },
         endPagePosition: { x: bounds.left + endScreen.x, y: bounds.top + endScreen.y },
-        expectedGlyphPosition: {
-          x: endScene.x - node.position.x,
-          y: endScene.y - node.position.y,
-        },
+        expectedGlyphPosition: workspace.editor.toLocal(node, endScene),
       };
     });
 
@@ -553,10 +558,9 @@ export class EditorDriver {
       );
       if (!point) throw new Error("Expected unselected point");
 
-      const screen = workspace.editor.projectSceneToScreen({
-        x: point.x + node.position.x,
-        y: point.y + node.position.y,
-      });
+      const screen = workspace.editor.sceneToScreen(
+        workspace.editor.toScene(node, { x: point.x, y: point.y } as LocalPoint),
+      );
       const bounds = canvas.getBoundingClientRect();
       return { id: point.id, x: bounds.left + screen.x, y: bounds.top + screen.y };
     });

@@ -20,7 +20,7 @@ describe("Select chooses on-curve snapping pivots from adjacent segments", () =>
   });
 
   it("snaps the first line endpoint around its next point", async () => {
-    await editor.dragScene({
+    await editor.dragLocal({
       down: { x: 100, y: 100 },
       start: { x: 220, y: 160 },
       end: { x: 220, y: 160 },
@@ -32,7 +32,7 @@ describe("Select chooses on-curve snapping pivots from adjacent segments", () =>
   });
 
   it("snaps an open contour's final line endpoint around its previous point", async () => {
-    await editor.dragScene({
+    await editor.dragLocal({
       down: { x: 300, y: 300 },
       start: { x: 360, y: 180 },
       end: { x: 360, y: 180 },
@@ -44,7 +44,7 @@ describe("Select chooses on-curve snapping pivots from adjacent segments", () =>
   });
 
   it("snaps a two-line junction around itself", async () => {
-    await editor.dragScene({
+    await editor.dragLocal({
       down: { x: 300, y: 100 },
       start: { x: 330, y: 140 },
       end: { x: 330, y: 140 },
@@ -60,7 +60,7 @@ describe("Select chooses on-curve snapping pivots from adjacent segments", () =>
     const layer = editor.requireGlyphLayer();
     layer.closeContour(layer.contours[0]!.id);
     await editor.settle();
-    await editor.dragScene({
+    await editor.dragLocal({
       down: { x: 100, y: 100 },
       start: { x: 130, y: 140 },
       end: { x: 130, y: 140 },
@@ -74,7 +74,7 @@ describe("Select chooses on-curve snapping pivots from adjacent segments", () =>
     const layer = editor.requireGlyphLayer();
     layer.upgradeLineToCubic(layer.contours[0]!.segments()[0]!.id);
     await editor.settle();
-    await editor.dragScene({
+    await editor.dragLocal({
       down: { x: 300, y: 100 },
       start: { x: 240, y: 220 },
       end: { x: 240, y: 220 },
@@ -89,7 +89,7 @@ describe("Select chooses on-curve snapping pivots from adjacent segments", () =>
     const layer = editor.requireGlyphLayer();
     layer.upgradeLineToCubic(layer.contours[0]!.segments()[1]!.id);
     await editor.settle();
-    await editor.dragScene({
+    await editor.dragLocal({
       down: { x: 300, y: 100 },
       start: { x: 330, y: 140 },
       end: { x: 330, y: 140 },
@@ -103,7 +103,7 @@ describe("Select chooses on-curve snapping pivots from adjacent segments", () =>
     const layer = editor.requireGlyphLayer();
     layer.upgradeLineToCubic(layer.contours[0]!.segments()[1]!.id);
     await editor.settle();
-    await editor.dragScene({
+    await editor.dragLocal({
       down: { x: 300, y: 300 },
       start: { x: 330, y: 340 },
       end: { x: 330, y: 340 },
@@ -114,7 +114,7 @@ describe("Select chooses on-curve snapping pivots from adjacent segments", () =>
   });
 
   it("leaves movement unconstrained without Shift", async () => {
-    await editor.dragScene({
+    await editor.dragLocal({
       down: { x: 100, y: 100 },
       start: { x: 220, y: 160 },
       end: { x: 220, y: 160 },
@@ -124,7 +124,7 @@ describe("Select chooses on-curve snapping pivots from adjacent segments", () =>
 
   it("does not apply single-point rules to a multi-point selection", async () => {
     editor.selection.select([firstId, lastId]);
-    await editor.dragScene({
+    await editor.dragLocal({
       down: { x: 200, y: 200 },
       start: { x: 230, y: 240 },
       end: { x: 230, y: 240 },
@@ -163,8 +163,8 @@ describe("Select chooses on-curve snapping pivots from adjacent segments", () =>
     "resizes at selection corner $down instead of snapping a point",
     async ({ down, end, first, last }) => {
       editor.selection.select([firstId, lastId]);
-      const start = editor.projectSceneToScreen(down);
-      const finish = editor.projectSceneToScreen(end);
+      const start = editor.localToScreen({ x: down.x, y: down.y });
+      const finish = editor.localToScreen({ x: end.x, y: end.y });
       editor.pointerDown(start.x, start.y).pointerMove(finish.x, finish.y, { shiftKey: true });
       expect(editor.toolIf("select")?.state.type).toBe("resizing");
       editor.pointerUp(finish.x, finish.y);
@@ -175,7 +175,7 @@ describe("Select chooses on-curve snapping pivots from adjacent segments", () =>
   );
 
   it("commits a neighbor-pivot snap as one undoable and redoable movement", async () => {
-    await editor.dragScene({
+    await editor.dragLocal({
       down: { x: 100, y: 100 },
       start: { x: 220, y: 160 },
       end: { x: 220, y: 160 },

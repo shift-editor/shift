@@ -1,8 +1,10 @@
-import { Bounds, type Rect2D } from "@shift/geo";
+import { Mat } from "@shift/geo";
 import type { SegmentId } from "@shift/glyph-state";
 import type { ComponentId, NodeId, PointId } from "@shift/types";
-import type { NodePoint } from "../../types/coordinates";
+import type { LocalBounds, LocalPoint } from "../../types/coordinates";
+import { localBounds } from "../editor/spaces";
 import { SCREEN_HIT_RADIUS } from "../editor/rendering/constants";
+import { handleCullPaddingPx } from "../editor/rendering/markers/handleStyles";
 import { OutlineRenderer } from "../editor/rendering/Outline";
 import {
   Anchors,
@@ -69,19 +71,18 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
   /** Node-scoped variation outlines rendered by this glyph behavior plugin. */
   readonly outlines = new GlyphOutlines();
 
-  bounds(node: GlyphNode): Rect2D | null {
+  unitsTransform(_node: GlyphNode): Mat {
+    return Mat.Scale(1, -1);
+  }
+
+  bounds(node: GlyphNode): LocalBounds | null {
     const bounds = this.#view(node)?.bounds;
     if (!bounds) return null;
 
-    return Bounds.toRect(
-      Bounds.create(
-        { x: bounds.min.x + node.position.x, y: bounds.min.y + node.position.y },
-        { x: bounds.max.x + node.position.x, y: bounds.max.y + node.position.y },
-      ),
-    );
+    return localBounds(bounds);
   }
 
-  hit(node: GlyphNode, point: NodePoint): PointerTarget | null {
+  hit(node: GlyphNode, point: LocalPoint): PointerTarget | null {
     const geometry = this.#view(node);
     if (!geometry) return null;
 
@@ -446,7 +447,8 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     );
     this.#handles.draw(
       ctx,
-      node,
+      this.editor.screenTransform(node),
+      this.editor.visibleLocalBounds(node, handleCullPaddingPx(ctx.canvas.theme)),
       rootContours,
       this.editor.selection,
       this.editor.hover,
@@ -475,8 +477,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     ctx: RenderContext,
     contours: readonly GlyphRenderContour[],
   ): void {
-    const sceneBounds = this.editor.camera.visibleSceneBounds(64);
-    const origin = node.position;
+    const visible = this.editor.visibleLocalBounds(node, 64);
 
     this.#controlLines.draw(ctx.canvas, contours, (from, to, contourId) => {
       if (
@@ -486,15 +487,15 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
         return false;
       }
 
-      const minX = Math.min(from.x, to.x) + origin.x;
-      const maxX = Math.max(from.x, to.x) + origin.x;
-      const minY = Math.min(from.y, to.y) + origin.y;
-      const maxY = Math.max(from.y, to.y) + origin.y;
+      const minX = Math.min(from.x, to.x);
+      const maxX = Math.max(from.x, to.x);
+      const minY = Math.min(from.y, to.y);
+      const maxY = Math.max(from.y, to.y);
       return !(
-        maxX < sceneBounds.minX ||
-        minX > sceneBounds.maxX ||
-        maxY < sceneBounds.minY ||
-        minY > sceneBounds.maxY
+        maxX < visible.min.x ||
+        minX > visible.max.x ||
+        maxY < visible.min.y ||
+        minY > visible.max.y
       );
     });
   }

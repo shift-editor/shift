@@ -1,16 +1,13 @@
-import { Bounds, type Bounds as BoundsType } from "@shift/geo";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { useSignalState } from "@shift/editor/signals";
+import type { LocalBounds } from "@shift/editor/spaces";
 
 /**
- * Current selection bounds.
+ * Current selection bounds in the selected glyph's units.
  *
- * @returns null when the current selection has no bounded objects.
+ * @returns null when the selection has no bounded objects or spans several nodes.
  */
-export function useSelectionBounds(): BoundsType | null {
+export function useSelectionBounds(): LocalBounds | null {
   const editor = useEditor();
-  const rect = useSignalState(editor.selectionBoundsCell, { schedule: "frame" });
-  if (!rect) return null;
-
-  return Bounds.fromXYWH(rect.x, rect.y, rect.width, rect.height);
+  return useSignalState(editor.selectionBoundsCell, { schedule: "frame" });
 }

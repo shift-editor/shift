@@ -23,7 +23,7 @@ export class PullHandleBehavior implements PenBehavior {
     const stroke = PenStroke.active(ctx.tool);
     if (!stroke) return false;
 
-    const nodePoint = ctx.editor.getPointInNodeSpace(event.coords.scene, stroke.node.position);
+    const nodePoint = ctx.editor.toLocal(stroke.node, event.coords.scene);
     const target = PenTargets.forGeometry(stroke.layer.geometry).at(
       nodePoint,
       ctx.editor.hitRadius,
@@ -51,7 +51,7 @@ export class PullHandleBehavior implements PenBehavior {
     const stroke = PenStroke.active(ctx.tool);
     if (!stroke || !this.#pull) return true;
 
-    const pointer = ctx.editor.getPointInNodeSpace(event.coords.scene, stroke.node.position);
+    const pointer = ctx.editor.toLocal(stroke.node, event.coords.scene);
     const { pull } = state;
     const withinThreshold = Vec2.dist(pull.position, pointer) <= DRAG_THRESHOLD;
     if (!pull.handlePosition && withinThreshold) return true;

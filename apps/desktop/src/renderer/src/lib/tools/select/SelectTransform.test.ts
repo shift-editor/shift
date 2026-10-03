@@ -24,14 +24,14 @@ describe("Select bounding-box transforms preserve geometry outcomes", () => {
   });
 
   it("offers moving on a straight segment inside the selection without Cmd", () => {
-    const down = editor.projectSceneToScreen({ x: 150, y: 150 });
+    const down = editor.localToScreen({ x: 150, y: 150 });
     editor.pointerMove(down.x, down.y);
 
     expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "move" });
   });
 
   it("offers upgrading on Cmd-hover over a straight segment inside the selection", () => {
-    const down = editor.projectSceneToScreen({ x: 150, y: 150 });
+    const down = editor.localToScreen({ x: 150, y: 150 });
     editor.pointerMove(down.x, down.y, { metaKey: true });
 
     expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "bend" });
@@ -41,10 +41,10 @@ describe("Select bounding-box transforms preserve geometry outcomes", () => {
 
   describe("resizing", () => {
     it("changes only X when dragging the right edge", async () => {
-      const bounds = editor.selectionBounds();
+      const bounds = editor.selectionLocalRect();
       if (!bounds) throw new Error("Expected selection bounds");
 
-      await editor.dragScene({
+      await editor.dragLocal({
         down: { x: bounds.right, y: (bounds.top + bounds.bottom) / 2 },
         start: { x: bounds.right + 4, y: (bounds.top + bounds.bottom) / 2 },
         end: { x: bounds.right + 50, y: (bounds.top + bounds.bottom) / 2 },
@@ -55,10 +55,10 @@ describe("Select bounding-box transforms preserve geometry outcomes", () => {
     });
 
     it("changes only Y when dragging the bottom edge", async () => {
-      const bounds = editor.selectionBounds();
+      const bounds = editor.selectionLocalRect();
       if (!bounds) throw new Error("Expected selection bounds");
 
-      await editor.dragScene({
+      await editor.dragLocal({
         down: { x: (bounds.left + bounds.right) / 2, y: bounds.bottom },
         start: { x: (bounds.left + bounds.right) / 2, y: bounds.bottom + 4 },
         end: { x: (bounds.left + bounds.right) / 2, y: bounds.bottom + 50 },
@@ -69,10 +69,10 @@ describe("Select bounding-box transforms preserve geometry outcomes", () => {
     });
 
     it("resizes both axes from a corner", async () => {
-      const bounds = editor.selectionBounds();
+      const bounds = editor.selectionLocalRect();
       if (!bounds) throw new Error("Expected selection bounds");
 
-      await editor.dragScene({
+      await editor.dragLocal({
         down: { x: bounds.right, y: bounds.bottom },
         start: { x: bounds.right + 4, y: bounds.bottom + 4 },
         end: { x: bounds.right + 50, y: bounds.bottom + 25 },
@@ -83,10 +83,10 @@ describe("Select bounding-box transforms preserve geometry outcomes", () => {
     });
 
     it("uses one scale on both axes for a Shift-corner resize", async () => {
-      const bounds = editor.selectionBounds();
+      const bounds = editor.selectionLocalRect();
       if (!bounds) throw new Error("Expected selection bounds");
 
-      await editor.dragScene({
+      await editor.dragLocal({
         down: { x: bounds.right, y: bounds.bottom },
         start: { x: bounds.right + 4, y: bounds.bottom + 4 },
         end: { x: bounds.right + 100, y: bounds.bottom + 50 },
@@ -98,11 +98,11 @@ describe("Select bounding-box transforms preserve geometry outcomes", () => {
     });
 
     it("flips geometry after the dragged edge crosses the fixed edge", async () => {
-      const bounds = editor.selectionBounds();
+      const bounds = editor.selectionLocalRect();
       if (!bounds) throw new Error("Expected selection bounds");
       const centerY = (bounds.top + bounds.bottom) / 2;
 
-      await editor.dragScene({
+      await editor.dragLocal({
         down: { x: bounds.right, y: centerY },
         start: { x: bounds.right + 4, y: centerY },
         end: { x: 50, y: centerY },
@@ -116,10 +116,10 @@ describe("Select bounding-box transforms preserve geometry outcomes", () => {
       const node = editor.glyphNode;
       if (!node) throw new Error("Expected glyph node");
       editor.scene.updateNode({ id: node.id, position: { x: 400, y: 300 } });
-      const bounds = editor.selectionBounds();
+      const bounds = editor.selectionLocalRect();
       if (!bounds) throw new Error("Expected selection bounds");
 
-      await editor.dragScene({
+      await editor.dragLocal({
         down: { x: bounds.right, y: (bounds.top + bounds.bottom) / 2 },
         start: { x: bounds.right + 4, y: (bounds.top + bounds.bottom) / 2 },
         end: { x: bounds.right + 50, y: (bounds.top + bounds.bottom) / 2 },
@@ -130,11 +130,11 @@ describe("Select bounding-box transforms preserve geometry outcomes", () => {
     });
 
     it("restores original positions when Escape cancels resize", () => {
-      const bounds = editor.selectionBounds();
+      const bounds = editor.selectionLocalRect();
       if (!bounds) throw new Error("Expected selection bounds");
-      const down = editor.projectSceneToScreen({ x: bounds.right, y: bounds.bottom });
-      const start = editor.projectSceneToScreen({ x: bounds.right + 4, y: bounds.bottom + 4 });
-      const end = editor.projectSceneToScreen({ x: bounds.right + 50, y: bounds.bottom + 50 });
+      const down = editor.localToScreen({ x: bounds.right, y: bounds.bottom });
+      const start = editor.localToScreen({ x: bounds.right + 4, y: bounds.bottom + 4 });
+      const end = editor.localToScreen({ x: bounds.right + 50, y: bounds.bottom + 50 });
 
       editor.pointerDown(down.x, down.y).pointerMove(start.x, start.y).pointerMove(end.x, end.y);
       expect(editor.pointPosition(secondId)).not.toEqual({ x: 200, y: 200 });
@@ -145,9 +145,9 @@ describe("Select bounding-box transforms preserve geometry outcomes", () => {
     });
 
     it("commits resize as one undoable and redoable edit", async () => {
-      const bounds = editor.selectionBounds();
+      const bounds = editor.selectionLocalRect();
       if (!bounds) throw new Error("Expected selection bounds");
-      await editor.dragScene({
+      await editor.dragLocal({
         down: { x: bounds.right, y: bounds.bottom },
         start: { x: bounds.right + 4, y: bounds.bottom + 4 },
         end: { x: bounds.right + 50, y: bounds.bottom + 50 },
@@ -268,7 +268,7 @@ describe("Select bounding-box transforms preserve geometry outcomes", () => {
         ],
       },
     ])("keeps the $handle handle under the pointer", async ({ down, end, normal, centered }) => {
-      await editor.dragScene({ down, start: end, end, options: { altKey } });
+      await editor.dragLocal({ down, start: end, end, options: { altKey } });
 
       expect([editor.pointPosition(firstId), editor.pointPosition(secondId)]).toEqual(
         altKey ? centered : normal,
@@ -278,9 +278,9 @@ describe("Select bounding-box transforms preserve geometry outcomes", () => {
 
   describe("resize modifiers follow drag samples", () => {
     it.each([true, false])("switches Alt to %s using the original geometry", (altKey) => {
-      const down = editor.projectSceneToScreen({ x: 200, y: 150 });
-      const first = editor.projectSceneToScreen({ x: 225, y: 150 });
-      const second = editor.projectSceneToScreen({ x: 250, y: 150 });
+      const down = editor.localToScreen({ x: 200, y: 150 });
+      const first = editor.localToScreen({ x: 225, y: 150 });
+      const second = editor.localToScreen({ x: 250, y: 150 });
 
       editor.pointerDown(down.x, down.y, { altKey: !altKey });
       editor.pointerMove(first.x, first.y, { altKey: !altKey });
@@ -295,9 +295,9 @@ describe("Select bounding-box transforms preserve geometry outcomes", () => {
     it.each([true, false])(
       "commits the release position with the last drag Alt value of %s",
       async (altKey) => {
-        const down = editor.projectSceneToScreen({ x: 200, y: 150 });
-        const move = editor.projectSceneToScreen({ x: 240, y: 150 });
-        const end = editor.projectSceneToScreen({ x: 250, y: 150 });
+        const down = editor.localToScreen({ x: 200, y: 150 });
+        const move = editor.localToScreen({ x: 240, y: 150 });
+        const end = editor.localToScreen({ x: 250, y: 150 });
 
         editor.pointerDown(down.x, down.y, { altKey: !altKey });
         editor.pointerMove(move.x, move.y, { altKey });
@@ -309,9 +309,9 @@ describe("Select bounding-box transforms preserve geometry outcomes", () => {
     );
 
     it("switches Alt during a Shift resize and keeps one undoable edit", async () => {
-      const down = editor.projectSceneToScreen({ x: 200, y: 200 });
-      const move = editor.projectSceneToScreen({ x: 210, y: 205 });
-      const end = editor.projectSceneToScreen({ x: 250, y: 225 });
+      const down = editor.localToScreen({ x: 200, y: 200 });
+      const move = editor.localToScreen({ x: 210, y: 205 });
+      const end = editor.localToScreen({ x: 250, y: 225 });
 
       editor.pointerDown(down.x, down.y).pointerMove(move.x, move.y, { shiftKey: true });
       editor.pointerMove(end.x, end.y, { altKey: true, shiftKey: true }).pointerUp(end.x, end.y);
@@ -330,9 +330,9 @@ describe("Select bounding-box transforms preserve geometry outcomes", () => {
       const node = editor.glyphNode;
       if (!node) throw new Error("Expected glyph node");
       editor.scene.updateNode({ id: node.id, position: { x: 400, y: 300 } });
-      const down = editor.projectSceneToScreen({ x: 600, y: 450 });
-      const move = editor.projectSceneToScreen({ x: 625, y: 450 });
-      const end = editor.projectSceneToScreen({ x: 650, y: 450 });
+      const down = editor.localToScreen({ x: 200, y: 150 });
+      const move = editor.localToScreen({ x: 225, y: 150 });
+      const end = editor.localToScreen({ x: 250, y: 150 });
 
       editor.pointerDown(down.x, down.y).pointerMove(move.x, move.y);
       editor.pointerMove(end.x, end.y, { altKey: true }).pointerUp(end.x, end.y);
@@ -344,8 +344,8 @@ describe("Select bounding-box transforms preserve geometry outcomes", () => {
 
   describe("centred resizing preserves preview and edit behavior", () => {
     it("does not halve the shape on its first preview and cancels to the original positions", () => {
-      const down = editor.projectSceneToScreen({ x: 200, y: 150 });
-      const move = editor.projectSceneToScreen({ x: 210, y: 150 });
+      const down = editor.localToScreen({ x: 200, y: 150 });
+      const move = editor.localToScreen({ x: 210, y: 150 });
 
       editor
         .pointerDown(down.x, down.y, { altKey: true })
@@ -358,7 +358,7 @@ describe("Select bounding-box transforms preserve geometry outcomes", () => {
     });
 
     it("combines Alt with Shift and records one undoable resize", async () => {
-      await editor.dragScene({
+      await editor.dragLocal({
         down: { x: 200, y: 200 },
         start: { x: 210, y: 205 },
         end: { x: 250, y: 225 },
@@ -420,8 +420,8 @@ describe("Select bounding-box transforms preserve geometry outcomes", () => {
     ])(
       "updates the $corner cursor when crossing either pivot axis and returning",
       ({ down, normal, acrossX, acrossY, acrossBoth, cursor, flippedCursor }) => {
-        const start = editor.projectSceneToScreen(down);
-        const move = editor.projectSceneToScreen(normal);
+        const start = editor.localToScreen({ x: down.x, y: down.y });
+        const move = editor.localToScreen({ x: normal.x, y: normal.y });
         editor.pointerDown(start.x, start.y, { altKey }).pointerMove(move.x, move.y, { altKey });
         const positions = [editor.pointPosition(firstId), editor.pointPosition(secondId)];
 
@@ -432,7 +432,7 @@ describe("Select bounding-box transforms preserve geometry outcomes", () => {
           { position: acrossY, cursor: flippedCursor },
           { position: normal, cursor },
         ]) {
-          const point = editor.projectSceneToScreen(sample.position);
+          const point = editor.localToScreen({ x: sample.position.x, y: sample.position.y });
           editor.pointerMove(point.x, point.y, { altKey });
           expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: sample.cursor });
         }
@@ -447,8 +447,8 @@ describe("Select bounding-box transforms preserve geometry outcomes", () => {
       { edge: "top", down: { x: 150, y: 200 }, end: { x: 150, y: 50 }, cursor: "ns-resize" },
       { edge: "bottom", down: { x: 150, y: 100 }, end: { x: 150, y: 250 }, cursor: "ns-resize" },
     ])("keeps the $edge cursor on its axis after flipping", ({ down, end, cursor }) => {
-      const start = editor.projectSceneToScreen(down);
-      const move = editor.projectSceneToScreen(end);
+      const start = editor.localToScreen({ x: down.x, y: down.y });
+      const move = editor.localToScreen({ x: end.x, y: end.y });
       editor.pointerDown(start.x, start.y, { altKey }).pointerMove(move.x, move.y, { altKey });
 
       expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: cursor });
@@ -456,15 +456,15 @@ describe("Select bounding-box transforms preserve geometry outcomes", () => {
     });
 
     it("restores the original diagonal at zero scale and starts the next drag unflipped", () => {
-      const down = editor.projectSceneToScreen({ x: 200, y: 200 });
-      const crossed = editor.projectSceneToScreen({ x: 50, y: 200 });
-      const pivot = editor.projectSceneToScreen({ x: altKey ? 150 : 100, y: 200 });
+      const down = editor.localToScreen({ x: 200, y: 200 });
+      const crossed = editor.localToScreen({ x: 50, y: 200 });
+      const pivot = editor.localToScreen({ x: altKey ? 150 : 100, y: 200 });
       editor.pointerDown(down.x, down.y, { altKey }).pointerMove(crossed.x, crossed.y, { altKey });
       expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "nwse-resize" });
       editor.pointerMove(pivot.x, pivot.y, { altKey });
       expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "nesw-resize" });
       editor.escape();
-      const next = editor.projectSceneToScreen({ x: 225, y: 225 });
+      const next = editor.localToScreen({ x: 225, y: 225 });
       editor.pointerDown(down.x, down.y).pointerMove(next.x, next.y);
       expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "nesw-resize" });
       editor.escape();
@@ -473,11 +473,11 @@ describe("Select bounding-box transforms preserve geometry outcomes", () => {
 
   describe("rotation", () => {
     async function rotateAcrossBottomEdge(): Promise<void> {
-      const bounds = editor.selectionBounds();
+      const bounds = editor.selectionLocalRect();
       if (!bounds) throw new Error("Expected selection bounds");
       const offset = SELECT_BOUNDING_BOX_STYLE.rotationZoneOffsetPx;
 
-      await editor.dragScene({
+      await editor.dragLocal({
         down: { x: bounds.right + offset, y: bounds.bottom + offset },
         start: { x: bounds.right + offset + 4, y: bounds.bottom + offset + 4 },
         end: { x: bounds.left - offset, y: bounds.bottom + offset },
@@ -494,7 +494,7 @@ describe("Select bounding-box transforms preserve geometry outcomes", () => {
     });
 
     it("samples Shift on every rotation drag preview", () => {
-      const bounds = editor.selectionBounds();
+      const bounds = editor.selectionLocalRect();
       if (!bounds) throw new Error("Expected selection bounds");
       const center = Vec2.midpoint(
         { x: bounds.left, y: bounds.top },
@@ -507,8 +507,8 @@ describe("Select bounding-box transforms preserve geometry outcomes", () => {
         center,
         Vec2.rotate(Vec2.sub({ x: 100, y: 100 }, center), Math.PI / 12),
       );
-      const downScreen = editor.projectSceneToScreen(down);
-      const endScreen = editor.projectSceneToScreen(end);
+      const downScreen = editor.localToScreen({ x: down.x, y: down.y });
+      const endScreen = editor.localToScreen({ x: end.x, y: end.y });
 
       editor.pointerDown(downScreen.x, downScreen.y).pointerMove(endScreen.x, endScreen.y);
       const raw = editor.pointPosition(firstId);
@@ -535,21 +535,15 @@ describe("Select bounding-box transforms preserve geometry outcomes", () => {
     });
 
     it("restores original positions when Escape cancels rotation", () => {
-      const bounds = editor.selectionBounds();
+      const bounds = editor.selectionLocalRect();
       if (!bounds) throw new Error("Expected selection bounds");
       const offset = SELECT_BOUNDING_BOX_STYLE.rotationZoneOffsetPx;
-      const down = editor.projectSceneToScreen({
-        x: bounds.right + offset,
-        y: bounds.bottom + offset,
-      });
-      const start = editor.projectSceneToScreen({
+      const down = editor.localToScreen({ x: bounds.right + offset, y: bounds.bottom + offset });
+      const start = editor.localToScreen({
         x: bounds.right + offset + 4,
         y: bounds.bottom + offset + 4,
       });
-      const end = editor.projectSceneToScreen({
-        x: bounds.left - offset,
-        y: bounds.bottom + offset,
-      });
+      const end = editor.localToScreen({ x: bounds.left - offset, y: bounds.bottom + offset });
 
       editor.pointerDown(down.x, down.y).pointerMove(start.x, start.y).pointerMove(end.x, end.y);
       expect(editor.pointPosition(firstId)).not.toEqual({ x: 100, y: 100 });
@@ -616,7 +610,7 @@ describe("Select curve bending preserves edit lifecycle", () => {
   });
 
   it("keeps the normal cursor on Cmd-hover over a cubic", () => {
-    const down = editor.projectSceneToScreen(bendPoint);
+    const down = editor.localToScreen(bendPoint);
     editor.pointerMove(down.x, down.y);
     expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "default" });
 
@@ -625,7 +619,7 @@ describe("Select curve bending preserves edit lifecycle", () => {
   });
 
   it("keeps the normal cursor when Alt is pressed over a segment", () => {
-    const down = editor.projectSceneToScreen(bendPoint);
+    const down = editor.localToScreen(bendPoint);
     editor.pointerMove(down.x, down.y);
     expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "default" });
 
@@ -634,7 +628,7 @@ describe("Select curve bending preserves edit lifecycle", () => {
   });
 
   it("does not offer bending on a point or empty canvas", () => {
-    const down = editor.projectSceneToScreen({ x: 100, y: 200 });
+    const down = editor.localToScreen({ x: 100, y: 200 });
     editor.pointerMove(down.x, down.y);
     expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "default" });
 
@@ -643,7 +637,7 @@ describe("Select curve bending preserves edit lifecycle", () => {
   });
 
   it("shows the bend cursor for the whole bend drag", async () => {
-    const down = editor.projectSceneToScreen(bendPoint);
+    const down = editor.localToScreen(bendPoint);
     editor.pointerDown(down.x, down.y);
     editor.pointerMove(down.x + 4, down.y);
     expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "bend" });
@@ -658,9 +652,9 @@ describe("Select curve bending preserves edit lifecycle", () => {
   it("restores both controls when Escape cancels bending", () => {
     const oneBefore = editor.pointPosition(controlOneId);
     const twoBefore = editor.pointPosition(controlTwoId);
-    const down = editor.projectSceneToScreen(bendPoint);
-    const start = editor.projectSceneToScreen({ x: bendPoint.x + 4, y: bendPoint.y });
-    const end = editor.projectSceneToScreen({ x: bendPoint.x + 4, y: bendPoint.y + 40 });
+    const down = editor.localToScreen(bendPoint);
+    const start = editor.localToScreen({ x: bendPoint.x + 4, y: bendPoint.y });
+    const end = editor.localToScreen({ x: bendPoint.x + 4, y: bendPoint.y + 40 });
 
     editor.pointerDown(down.x, down.y);
     editor.pointerMove(start.x, start.y);
@@ -675,7 +669,7 @@ describe("Select curve bending preserves edit lifecycle", () => {
   });
 
   it("snaps each handle to the nearest 45° while Shift bends a flat curve", async () => {
-    await editor.dragScene({
+    await editor.dragLocal({
       down: bendPoint,
       start: { x: bendPoint.x + 4, y: bendPoint.y },
       end: { x: bendPoint.x, y: bendPoint.y + 40 },
@@ -692,9 +686,9 @@ describe("Select curve bending preserves edit lifecycle", () => {
   });
 
   it("reads Shift per drag sample so releasing it mid-drag frees the handles", () => {
-    const down = editor.projectSceneToScreen(bendPoint);
-    const start = editor.projectSceneToScreen({ x: bendPoint.x + 4, y: bendPoint.y });
-    const end = editor.projectSceneToScreen({ x: bendPoint.x, y: bendPoint.y + 40 });
+    const down = editor.localToScreen(bendPoint);
+    const start = editor.localToScreen({ x: bendPoint.x + 4, y: bendPoint.y });
+    const end = editor.localToScreen({ x: bendPoint.x, y: bendPoint.y + 40 });
     const handleOne = () => Vec2.sub(editor.pointPosition(controlOneId), { x: 100, y: 200 });
 
     editor.pointerDown(down.x, down.y);
@@ -707,7 +701,7 @@ describe("Select curve bending preserves edit lifecycle", () => {
   });
 
   it("keeps each handle's direction and changes only its length while Alt is held", async () => {
-    await editor.dragScene({
+    await editor.dragLocal({
       down: bendPoint,
       start: { x: bendPoint.x + 4, y: bendPoint.y },
       end: { x: bendPoint.x + 20, y: bendPoint.y + 40 },
@@ -719,7 +713,7 @@ describe("Select curve bending preserves edit lifecycle", () => {
     const bentPoint = layer.contours[0]?.segments()[0]?.pointAt(0.5);
     if (!bentPoint) throw new Error("Expected bent segment");
 
-    await editor.dragScene({
+    await editor.dragLocal({
       down: bentPoint,
       start: { x: bentPoint.x, y: bentPoint.y + 4 },
       end: { x: bentPoint.x - 10, y: bentPoint.y + 30 },
@@ -738,7 +732,7 @@ describe("Select curve bending preserves edit lifecycle", () => {
   it("commits bending as one undoable and redoable edit", async () => {
     const oneBefore = editor.pointPosition(controlOneId);
     const twoBefore = editor.pointPosition(controlTwoId);
-    await editor.dragScene({
+    await editor.dragLocal({
       down: bendPoint,
       start: { x: bendPoint.x + 4, y: bendPoint.y },
       end: { x: bendPoint.x + 4, y: bendPoint.y + 40 },
@@ -772,7 +766,7 @@ describe("Select Shift-bending snaps handles to 45° steps", () => {
     if (!cubic) throw new Error("Expected cubic");
     editor.selectTool("select");
 
-    await editor.dragScene({
+    await editor.dragLocal({
       down: { x: 200, y: 200 },
       start: { x: 204, y: 196 },
       end: { x: 260, y: 140 },

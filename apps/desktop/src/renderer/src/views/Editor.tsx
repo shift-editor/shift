@@ -10,6 +10,7 @@ import { RightSidebar } from "@/components/editor/RightSidebar";
 import { Canvas } from "@/components/editor/Canvas";
 import { CanvasContextMenu } from "@/components/editor/CanvasContextMenu";
 import { useEditor } from "@/workspace/WorkspaceContext";
+import { localBounds } from "@shift/editor/spaces";
 import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
 import { useFocusZone, ZoneContainer } from "@/context/FocusZoneContext";
 import { KeyboardRouter } from "@/lib/keyboard";
@@ -73,7 +74,8 @@ export const Editor = () => {
       },
     );
 
-    editor.fitInitialBounds(Bounds.toRect(glyphFrameBounds));
+    const node = editor.scene.node(nodeId);
+    if (node) editor.fitInitialBounds(editor.toSceneBounds(node, localBounds(glyphFrameBounds)));
     editor.editing.enter(nodeId);
     editor.toolManager.reset();
 

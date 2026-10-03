@@ -1,3 +1,4 @@
+import { scenePoint } from "../lib/editor/spaces";
 import { describe, expect, it } from "vitest";
 import {
   asAxisId,
@@ -15,7 +16,6 @@ import {
 import { createMemoryFontSession } from "../createMemoryFontSession";
 import type { SystemClipboard } from "../lib/clipboard";
 import { externalAxisLocationFromRecord } from "../lib/variation/location";
-import type { ScenePoint } from "../types/coordinates";
 import type { MemoryFontSource } from "../types/fontSession";
 
 const glyphId = asGlyphId("glyph_s");
@@ -72,12 +72,12 @@ describe("memory font editing", () => {
       y: 100,
     });
 
-    expect(editor.getPointerTarget({ x: 100, y: 100 } as ScenePoint).kind).toBe("point");
+    expect(editor.getPointerTarget(scenePoint(100, -100)).kind).toBe("point");
     expect(editor.positionSelection([regularPointId])).not.toBeNull();
 
-    const down = editor.projectSceneToScreen({ x: 100, y: 100 });
-    const start = editor.projectSceneToScreen({ x: 104, y: 100 });
-    const end = editor.projectSceneToScreen({ x: 150, y: 125 });
+    const down = editor.sceneToScreen(scenePoint(100, -100));
+    const start = editor.sceneToScreen(scenePoint(104, -100));
+    const end = editor.sceneToScreen(scenePoint(150, -125));
     const modifiers = { shiftKey: false, altKey: false, metaKey: false };
 
     editor.toolManager.handlePointerDown(down, modifiers);
