@@ -1,5 +1,5 @@
 import { expect, type Page } from "@playwright/test";
-import { asGlyphId, type GlyphId } from "@shift/types";
+import type { GlyphId } from "@shift/types";
 
 const FIRST_GLYPH_PREVIEW_POINT = { x: 50, y: 50 };
 const FIRST_GLYPH_NAME_POINT = { x: 50, y: 117 };
@@ -124,7 +124,7 @@ export async function waitForEditorReady(page: Page, glyphId: string): Promise<v
 export async function openFirstCatalogGlyph(page: Page): Promise<GlyphId> {
   await clickFirstCatalogGlyph(page);
   await page.waitForURL(/#\/editor\//);
-  const glyphId = asGlyphId(decodeURIComponent(new URL(page.url()).hash.slice("#/editor/".length)));
+  const glyphId = decodeURIComponent(new URL(page.url()).hash.slice("#/editor/".length)) as GlyphId;
   await waitForEditorReady(page, glyphId);
   return glyphId;
 }
