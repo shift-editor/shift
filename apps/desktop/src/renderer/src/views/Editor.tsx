@@ -141,8 +141,8 @@ export const Editor = () => {
   );
 };
 
-const LEFT_SIDEBAR_DEFAULT_SIZE = 15;
-const RIGHT_SIDEBAR_DEFAULT_SIZE = 15;
+const LEFT_SIDEBAR_DEFAULT_SIZE = 240;
+const RIGHT_SIDEBAR_DEFAULT_SIZE = 260;
 
 const EditorLayout = ({ children }: { children: ReactNode }) => {
   const editor = useEditor();
@@ -178,7 +178,7 @@ const EditorLayout = ({ children }: { children: ReactNode }) => {
       <ResizablePanelGroup
         data-testid="editor-layout-panels"
         direction="horizontal"
-        autoSaveId="shift:editor-layout"
+        autoSaveId="shift:workspace-layout"
         className="flex-1 overflow-hidden"
       >
         <ResizablePanel
@@ -188,8 +188,8 @@ const EditorLayout = ({ children }: { children: ReactNode }) => {
           id="left-sidebar"
           order={1}
           defaultSize={LEFT_SIDEBAR_DEFAULT_SIZE}
-          minSize={10}
-          maxSize={30}
+          minSize={160}
+          maxSize={400}
           collapsible
           collapsedSize={0}
         >
@@ -204,7 +204,7 @@ const EditorLayout = ({ children }: { children: ReactNode }) => {
           inset="start"
           onDoubleClick={() => leftSidebarPanelRef.current?.resize(LEFT_SIDEBAR_DEFAULT_SIZE)}
         />
-        <ResizablePanel id="canvas" order={2} minSize={30} data-shift-capture-target="editor">
+        <ResizablePanel id="canvas" order={2} minSize={300} data-shift-capture-target="editor">
           <ZoneContainer zone="canvas" className="h-full">
             {children}
           </ZoneContainer>
@@ -221,8 +221,8 @@ const EditorLayout = ({ children }: { children: ReactNode }) => {
           id="right-sidebar"
           order={3}
           defaultSize={RIGHT_SIDEBAR_DEFAULT_SIZE}
-          minSize={10}
-          maxSize={30}
+          minSize={180}
+          maxSize={420}
           collapsible
           collapsedSize={0}
         >

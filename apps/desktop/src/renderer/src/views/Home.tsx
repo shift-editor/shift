@@ -5,8 +5,8 @@ import { RightSidebar } from "@/components/editor/RightSidebar";
 import { Toolbar } from "@/components/chrome/Toolbar";
 import { useSidebarLayout } from "@/components/chrome/useSidebarLayout";
 
-const LEFT_SIDEBAR_DEFAULT_SIZE = 15;
-const RIGHT_SIDEBAR_DEFAULT_SIZE = 15;
+const LEFT_SIDEBAR_DEFAULT_SIZE = 240;
+const RIGHT_SIDEBAR_DEFAULT_SIZE = 260;
 
 export const Home = () => {
   const {
@@ -24,7 +24,7 @@ export const Home = () => {
       <ResizablePanelGroup
         data-testid="home-layout-panels"
         direction="horizontal"
-        autoSaveId="shift:home-layout"
+        autoSaveId="shift:workspace-layout"
         className="min-h-0 overflow-hidden"
       >
         <ResizablePanel
@@ -34,8 +34,8 @@ export const Home = () => {
           id="left-sidebar"
           order={1}
           defaultSize={LEFT_SIDEBAR_DEFAULT_SIZE}
-          minSize={10}
-          maxSize={30}
+          minSize={160}
+          maxSize={400}
           collapsible
           collapsedSize={0}
         >
@@ -48,7 +48,7 @@ export const Home = () => {
           inset="start"
           onDoubleClick={() => leftSidebarPanelRef.current?.resize(LEFT_SIDEBAR_DEFAULT_SIZE)}
         />
-        <ResizablePanel id="grid" order={2} minSize={30}>
+        <ResizablePanel id="grid" order={2} minSize={300}>
           <GlyphGrid />
         </ResizablePanel>
         <ResizableHandle
@@ -63,8 +63,8 @@ export const Home = () => {
           id="right-sidebar"
           order={3}
           defaultSize={RIGHT_SIDEBAR_DEFAULT_SIZE}
-          minSize={10}
-          maxSize={30}
+          minSize={180}
+          maxSize={420}
           collapsible
           collapsedSize={0}
         >

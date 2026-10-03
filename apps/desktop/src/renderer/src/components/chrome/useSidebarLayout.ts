@@ -34,7 +34,7 @@ export const useSidebarLayout = () => {
     const groupElement = panelElement?.parentElement;
     if (!panel || !content || !panelElement || !groupElement) return;
 
-    const expanding = panel.isCollapsed();
+    const expanding = panelElement.getBoundingClientRect().width <= 1;
     if (!expanding && content.style.width === "") {
       content.style.width = `${content.getBoundingClientRect().width}px`;
     }
@@ -43,8 +43,7 @@ export const useSidebarLayout = () => {
     if (expanding) {
       panel.expand();
       if (content.style.width === "") {
-        const groupWidth = groupElement.getBoundingClientRect().width;
-        content.style.width = `${(groupWidth * panel.getSize()) / 100}px`;
+        content.style.width = `${panel.getSize()}px`;
       }
     } else {
       panel.collapse();
