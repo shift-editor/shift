@@ -1,14 +1,14 @@
-import { Rect, Vec2, type Point2D, type Rect2D } from "@shift/geo";
+import { Bounds, Rect, Vec2, type Point2D, type Rect2D } from "@shift/geo";
 import type { Editor } from "../../editor/Editor";
 import type { Canvas } from "../../editor/rendering/Canvas";
 import { CanvasItem } from "../../editor/rendering/CanvasItem";
 import type { Coordinates } from "../../../types/coordinates";
+import { scenePoint } from "../../editor/spaces";
 import type { CursorType } from "../../../types/editor";
 import { edgeToCursor, type BoundingRectEdge } from "./cursor";
 import type { Select } from "./Select";
 import { track } from "../../signals/index";
 
-type YAxisDirection = "up" | "down";
 export type CornerHandle = "top-left" | "top-right" | "bottom-left" | "bottom-right";
 
 export type BoundingBoxHitResult =
@@ -122,11 +122,12 @@ export class SelectBoundingBox extends CanvasItem<SelectBoundingBoxProps> {
       componentSelection = true;
     }
 
-    const sceneRect =
+    const sceneBounds =
       state.type === "brushing"
-        ? this.#editor.selectionBounds(ids)
-        : this.#editor.selectionBoundsCell.value;
-    if (!sceneRect) return null;
+        ? this.#editor.selectionSceneBounds(ids)
+        : this.#editor.selectionSceneBoundsCell.value;
+    if (!sceneBounds) return null;
+    const sceneRect = Bounds.toRect(sceneBounds);
 
     this.#editor.camera.trackViewportTransform();
 
@@ -136,15 +137,14 @@ export class SelectBoundingBox extends CanvasItem<SelectBoundingBoxProps> {
     const sceneHandles = componentSelection
       ? getHandlePositions(
           sceneRect,
-          this.#editor.screenToUpmDistance(SELECT_BOUNDING_BOX_STYLE.handle.offsetPx),
-          this.#editor.screenToUpmDistance(SELECT_BOUNDING_BOX_STYLE.rotationZoneOffsetPx),
+          this.#editor.screenToSceneDistance(SELECT_BOUNDING_BOX_STYLE.handle.offsetPx),
+          this.#editor.screenToSceneDistance(SELECT_BOUNDING_BOX_STYLE.rotationZoneOffsetPx),
         )
       : null;
     const screenHandles = getHandlePositions(
       screenRect,
       SELECT_BOUNDING_BOX_STYLE.handle.offsetPx,
       SELECT_BOUNDING_BOX_STYLE.rotationZoneOffsetPx,
-      "down",
     );
 
     return {
@@ -251,11 +251,11 @@ export class SelectBoundingBox extends CanvasItem<SelectBoundingBoxProps> {
   #screenRect(rect: Rect2D): Rect2D {
     return rectFromPoints(
       [
-        { x: rect.left, y: rect.top },
-        { x: rect.right, y: rect.top },
-        { x: rect.right, y: rect.bottom },
-        { x: rect.left, y: rect.bottom },
-      ].map((point) => this.#editor.projectSceneToScreen(point)),
+        scenePoint(rect.left, rect.top),
+        scenePoint(rect.right, rect.top),
+        scenePoint(rect.right, rect.bottom),
+        scenePoint(rect.left, rect.bottom),
+      ].map((point) => this.#editor.sceneToScreen(point)),
     );
   }
 
@@ -275,26 +275,10 @@ export class SelectBoundingBox extends CanvasItem<SelectBoundingBoxProps> {
   }
 }
 
-function getExpandedHandleRect(
-  rect: Rect2D,
-  offset: number,
-  yAxisDirection: YAxisDirection,
-): ExpandedHandleRect {
-  const left = rect.left - offset;
-  const right = rect.right + offset;
-
-  if (yAxisDirection === "up") {
-    return {
-      left,
-      right,
-      top: rect.bottom + offset,
-      bottom: rect.top - offset,
-    };
-  }
-
+function getExpandedHandleRect(rect: Rect2D, offset: number): ExpandedHandleRect {
   return {
-    left,
-    right,
+    left: rect.left - offset,
+    right: rect.right + offset,
     top: rect.top - offset,
     bottom: rect.bottom + offset,
   };
@@ -304,10 +288,9 @@ export function getHandlePositions(
   rect: Rect2D,
   handleOffset: number,
   rotationZoneOffset: number,
-  yAxisDirection: YAxisDirection = "up",
 ): HandlePositions {
-  const alignmentRect = getExpandedHandleRect(rect, handleOffset, yAxisDirection);
-  const rotationRect = getExpandedHandleRect(rect, rotationZoneOffset, yAxisDirection);
+  const alignmentRect = getExpandedHandleRect(rect, handleOffset);
+  const rotationRect = getExpandedHandleRect(rect, rotationZoneOffset);
   const centerX = (alignmentRect.left + alignmentRect.right) / 2;
   const centerY = (alignmentRect.top + alignmentRect.bottom) / 2;
 

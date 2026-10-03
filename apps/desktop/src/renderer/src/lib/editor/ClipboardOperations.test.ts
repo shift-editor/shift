@@ -9,7 +9,7 @@ describe("editor clipboard operations", () => {
     editor = new TestEditor();
     await editor.startSession();
     editor.selectTool("shape");
-    await editor.dragScene({
+    await editor.dragLocal({
       down: { x: 20, y: 40 },
       start: { x: 30, y: 50 },
       end: { x: 130, y: 150 },

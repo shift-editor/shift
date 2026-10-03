@@ -1,3 +1,4 @@
+import { scenePoint } from "@shift/editor/spaces";
 import { beforeEach, describe, expect, it } from "vitest";
 import { TestEditor } from "@/testing/TestEditor";
 
@@ -8,13 +9,13 @@ describe("Select snaps only a single cubic handle around its owning endpoint", (
     editor = new TestEditor();
     await editor.startSession();
     editor.selectTool("pen");
-    await editor.clickGlyphLocal(100, 100);
-    await editor.dragScene({
+    await editor.clickLocal(100, 100);
+    await editor.dragLocal({
       down: { x: 400, y: 100 },
       start: { x: 410, y: 100 },
       end: { x: 500, y: 100 },
     });
-    await editor.dragScene({
+    await editor.dragLocal({
       down: { x: 700, y: 100 },
       start: { x: 710, y: 100 },
       end: { x: 800, y: 100 },
@@ -28,7 +29,7 @@ describe("Select snaps only a single cubic handle around its owning endpoint", (
       const cubic = editor.requireGlyphLayer().contours[0]!.segments()[0]!.asCubic()!;
       const pivot = handle === "controlStart" ? cubic.start : cubic.end;
       const end = { x: handle === "controlStart" ? 180 : 320, y: 160 };
-      await editor.dragScene({
+      await editor.dragLocal({
         down: editor.pointPosition(cubic[handle].id),
         start: end,
         end,
@@ -50,8 +51,8 @@ describe("Select snaps only a single cubic handle around its owning endpoint", (
     (handle) => {
       const cubic = editor.requireGlyphLayer().contours[0]!.segments()[0]!.asCubic()!;
       const pivot = handle === "controlStart" ? cubic.start : cubic.end;
-      const down = editor.projectSceneToScreen(cubic[handle]);
-      const end = editor.projectSceneToScreen({ x: handle === "controlStart" ? 180 : 320, y: 160 });
+      const down = editor.localToScreen(cubic[handle]);
+      const end = editor.localToScreen(scenePoint(handle === "controlStart" ? 180 : 320, 160));
       editor.pointerDown(down.x, down.y).pointerMove(end.x, end.y, { shiftKey: true });
       expect(editor.toolIf("select")?.state).toMatchObject({
         type: "translating",
@@ -68,7 +69,7 @@ describe("Select snaps only a single cubic handle around its owning endpoint", (
 
   it("leaves single-handle movement unconstrained without Shift", async () => {
     const cubic = editor.requireGlyphLayer().contours[0]!.segments()[0]!.asCubic()!;
-    await editor.dragScene({
+    await editor.dragLocal({
       down: editor.pointPosition(cubic.controlStart.id),
       start: { x: 180, y: 160 },
       end: { x: 180, y: 160 },
@@ -78,8 +79,8 @@ describe("Select snaps only a single cubic handle around its owning endpoint", (
 
   it("applies Shift changes on the current movement sample", () => {
     const cubic = editor.requireGlyphLayer().contours[0]!.segments()[0]!.asCubic()!;
-    const down = editor.projectSceneToScreen(cubic.controlStart);
-    const end = editor.projectSceneToScreen({ x: 180, y: 160 });
+    const down = editor.localToScreen(cubic.controlStart);
+    const end = editor.localToScreen({ x: 180, y: 160 });
     editor.pointerDown(down.x, down.y).pointerMove(end.x, end.y);
     expect(editor.pointPosition(cubic.controlStart.id)).toEqual({ x: 180, y: 160 });
     editor.pointerMove(end.x, end.y, { shiftKey: true });
@@ -95,8 +96,8 @@ describe("Select snaps only a single cubic handle around its owning endpoint", (
     "preserves snapped geometry when mouseup reports shiftKey=%s",
     async (shiftKey) => {
       const cubic = editor.requireGlyphLayer().contours[0]!.segments()[0]!.asCubic()!;
-      const down = editor.projectSceneToScreen(cubic.controlStart);
-      const end = editor.projectSceneToScreen({ x: 180, y: 160 });
+      const down = editor.localToScreen(cubic.controlStart);
+      const end = editor.localToScreen({ x: 180, y: 160 });
       editor.pointerDown(down.x, down.y).pointerMove(end.x, end.y, { shiftKey: true });
       editor.pointerUp(end.x, end.y, { shiftKey });
       await editor.settle();
@@ -108,9 +109,9 @@ describe("Select snaps only a single cubic handle around its owning endpoint", (
 
   it("includes the final queued pointer position in the constrained commit", async () => {
     const cubic = editor.requireGlyphLayer().contours[0]!.segments()[0]!.asCubic()!;
-    const down = editor.projectSceneToScreen(cubic.controlStart);
-    const start = editor.projectSceneToScreen({ x: 180, y: 160 });
-    const end = editor.projectSceneToScreen({ x: 220, y: 190 });
+    const down = editor.localToScreen(cubic.controlStart);
+    const start = editor.localToScreen({ x: 180, y: 160 });
+    const end = editor.localToScreen({ x: 220, y: 190 });
     editor.pointerDown(down.x, down.y).pointerMove(start.x, start.y, { shiftKey: true });
     editor.toolManager.handlePointerMove(end, { shiftKey: true, altKey: false });
     editor.pointerUp(end.x, end.y);
@@ -121,15 +122,15 @@ describe("Select snaps only a single cubic handle around its owning endpoint", (
 
   it("discards the preview on tool replacement and does not retain Shift in the next drag", async () => {
     const cubic = editor.requireGlyphLayer().contours[0]!.segments()[0]!.asCubic()!;
-    const down = editor.projectSceneToScreen(cubic.controlStart);
-    const end = editor.projectSceneToScreen({ x: 180, y: 160 });
+    const down = editor.localToScreen(cubic.controlStart);
+    const end = editor.localToScreen({ x: 180, y: 160 });
     editor.pointerDown(down.x, down.y).pointerMove(end.x, end.y, { shiftKey: true });
     expect(editor.pointPosition(cubic.controlStart.id).x).toBeCloseTo(100 + 50 * Math.sqrt(3));
     editor.selectTool("pen");
     expect(editor.pointPosition(cubic.controlStart.id)).toEqual({ x: 200, y: 100 });
     editor.selectTool("select");
     expect(editor.toolIf("select")?.state).toEqual({ type: "ready" });
-    await editor.dragScene({
+    await editor.dragLocal({
       down: { x: 200, y: 100 },
       start: { x: 180, y: 160 },
       end: { x: 180, y: 160 },
@@ -139,7 +140,7 @@ describe("Select snaps only a single cubic handle around its owning endpoint", (
 
   it("commits one snapped movement with exact undo and redo", async () => {
     const cubic = editor.requireGlyphLayer().contours[0]!.segments()[0]!.asCubic()!;
-    await editor.dragScene({
+    await editor.dragLocal({
       down: cubic.controlStart,
       start: { x: 180, y: 160 },
       end: { x: 180, y: 160 },
@@ -156,7 +157,7 @@ describe("Select snaps only a single cubic handle around its owning endpoint", (
   it("leaves multi-handle selection movement unchanged with Shift", async () => {
     const cubic = editor.requireGlyphLayer().contours[0]!.segments()[0]!.asCubic()!;
     editor.selection.select([cubic.controlStart.id, cubic.controlEnd.id]);
-    await editor.dragScene({
+    await editor.dragLocal({
       down: cubic.controlStart,
       start: { x: 180, y: 160 },
       end: { x: 180, y: 160 },
@@ -168,7 +169,7 @@ describe("Select snaps only a single cubic handle around its owning endpoint", (
 
   it("snaps a Bézier on-curve point around its original position", async () => {
     const cubic = editor.requireGlyphLayer().contours[0]!.segments()[0]!.asCubic()!;
-    await editor.dragScene({
+    await editor.dragLocal({
       down: cubic.start,
       start: { x: 130, y: 140 },
       end: { x: 130, y: 140 },
@@ -185,7 +186,7 @@ describe("Select snaps only a single cubic handle around its owning endpoint", (
       .map((segment) => segment.asCubic()!);
     const incoming = cubics[0]!;
     const outgoing = cubics[1]!;
-    await editor.dragScene({
+    await editor.dragLocal({
       down: incoming.controlEnd,
       start: { x: 320, y: 160 },
       end: { x: 320, y: 160 },
@@ -204,9 +205,9 @@ describe("Select does not angle-snap a handle locked to a line", () => {
     const editor = new TestEditor();
     await editor.startSession();
     editor.selectTool("pen");
-    await editor.clickGlyphLocal(100, 100);
-    await editor.clickGlyphLocal(400, 100);
-    await editor.dragScene({
+    await editor.clickLocal(100, 100);
+    await editor.clickLocal(400, 100);
+    await editor.dragLocal({
       down: { x: 700, y: 300 },
       start: { x: 710, y: 300 },
       end: { x: 800, y: 300 },
@@ -217,8 +218,8 @@ describe("Select does not angle-snap a handle locked to a line", () => {
     await editor.settle();
     editor.selectTool("select");
 
-    const down = editor.projectSceneToScreen(cubic.controlStart);
-    const end = editor.projectSceneToScreen({ x: 560, y: 160 });
+    const down = editor.localToScreen(cubic.controlStart);
+    const end = editor.localToScreen({ x: 560, y: 160 });
     editor.pointerDown(down.x, down.y).pointerMove(end.x, end.y, { shiftKey: true });
 
     expect(editor.toolIf("select")?.state).toMatchObject({

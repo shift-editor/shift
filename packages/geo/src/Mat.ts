@@ -180,12 +180,17 @@ export class Mat implements MatModel {
     );
   }
 
+  /** Return a new matrix with the same values as `m`, independent of it. */
+  static Copy(m: MatModel): Mat {
+    return new Mat(m.a, m.b, m.c, m.d, m.e, m.f);
+  }
+
   /**
    * Return the inverse of `m` as a new matrix.
    * @throws If the matrix is singular.
    */
   static Inverse(m: MatModel): Mat {
-    return new Mat(m.a, m.b, m.c, m.d, m.e, m.f).invert();
+    return Mat.Copy(m).invert();
   }
 
   /** Transform a point by the given matrix and return the result. */

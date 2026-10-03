@@ -93,17 +93,13 @@ export function ShiftEditor({ session }: ShiftEditorProps) {
 
     const handleWheel = (event: WheelEvent) => {
       event.preventDefault();
-      const screenPoint = CanvasSurface.localPoint(overlayCanvas, {
+      const screenPoint = CanvasSurface.screenPoint(overlayCanvas, {
         x: event.clientX,
         y: event.clientY,
       });
 
       if (event.metaKey || event.ctrlKey) {
-        editor.zoomToPoint(
-          screenPoint.x,
-          screenPoint.y,
-          zoomMultiplierFromWheel(event.deltaY, event.deltaMode),
-        );
+        editor.zoomToPoint(screenPoint, zoomMultiplierFromWheel(event.deltaY, event.deltaMode));
         return;
       }
 
@@ -123,7 +119,7 @@ export function ShiftEditor({ session }: ShiftEditorProps) {
   const screenPoint = useCallback(
     (event: ReactPointerEvent<HTMLCanvasElement>) => {
       editor.updateMousePosition(event.clientX, event.clientY);
-      return CanvasSurface.localPoint(event.currentTarget, {
+      return CanvasSurface.screenPoint(event.currentTarget, {
         x: event.clientX,
         y: event.clientY,
       });

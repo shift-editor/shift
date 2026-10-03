@@ -1,4 +1,4 @@
-import { Vec2, type Point2D } from "@shift/geo";
+import { Vec2 } from "@shift/geo";
 import { Point } from "@shift/glyph-state";
 import type { HandleState } from "../../../../../types/graphics";
 import type { MarkerShape } from "../../markers/types";
@@ -66,14 +66,5 @@ export class PointHandleItem {
       default:
         return 0;
     }
-  }
-
-  isVisibleInScene(
-    drawOffset: Point2D,
-    bounds: { minX: number; maxX: number; minY: number; maxY: number },
-  ): boolean {
-    const x = this.point.x + drawOffset.x;
-    const y = this.point.y + drawOffset.y;
-    return x >= bounds.minX && x <= bounds.maxX && y >= bounds.minY && y <= bounds.maxY;
   }
 }

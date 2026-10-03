@@ -41,13 +41,13 @@ describe("editor boolean operations", () => {
     editor.font.createAxis(weightAxis());
     await editor.settle();
     editor.selectTool("shape");
-    await editor.dragScene({
+    await editor.dragLocal({
       down: { x: 10, y: 10 },
       start: { x: 20, y: 20 },
       end: { x: 100, y: 100 },
     });
     editor.selectTool("shape");
-    await editor.dragScene({
+    await editor.dragLocal({
       down: { x: 60, y: 60 },
       start: { x: 70, y: 70 },
       end: { x: 150, y: 150 },

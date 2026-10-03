@@ -8,7 +8,7 @@ describe("Pen applies Shift direction snapping", () => {
     editor = new TestEditor();
     await editor.startSession();
     editor.selectTool("pen");
-    await editor.clickGlyphLocal(100, 100);
+    await editor.clickLocal(100, 100);
   });
 
   it.each([
@@ -18,8 +18,8 @@ describe("Pen applies Shift direction snapping", () => {
   ])(
     "publishes complete topology and mirrored handles at $angle degrees on the first preview",
     ({ pointer, angle }) => {
-      const down = editor.projectSceneToScreen({ x: 300, y: 100 });
-      const end = editor.projectSceneToScreen(pointer);
+      const down = editor.localToScreen({ x: 300, y: 100 });
+      const end = editor.localToScreen({ x: pointer.x, y: pointer.y });
       editor.pointerDown(down.x, down.y).pointerMove(end.x, end.y, { shiftKey: true });
       const cubic = editor.openContour!.segments()[0]!.asCubic()!;
       const state = editor.toolIf("pen")?.state;
@@ -41,8 +41,8 @@ describe("Pen applies Shift direction snapping", () => {
   );
 
   it("applies Shift changes on the current drag sample without accumulating previews", () => {
-    const down = editor.projectSceneToScreen({ x: 300, y: 100 });
-    const end = editor.projectSceneToScreen({ x: 380, y: 160 });
+    const down = editor.localToScreen({ x: 300, y: 100 });
+    const end = editor.localToScreen({ x: 380, y: 160 });
     editor.pointerDown(down.x, down.y).pointerMove(end.x, end.y);
     expect(editor.openContour!.segments()[0]!.asCubic()!.controlEnd.position).toEqual({
       x: 220,
@@ -60,14 +60,14 @@ describe("Pen applies Shift direction snapping", () => {
   });
 
   it("publishes a direction guide while Shift snaps a closing drag", async () => {
-    await editor.dragScene({
+    await editor.dragLocal({
       down: { x: 300, y: 100 },
       start: { x: 340, y: 120 },
       end: { x: 380, y: 180 },
     });
-    await editor.clickGlyphLocal(300, 300);
-    const down = editor.projectSceneToScreen({ x: 100, y: 100 });
-    const end = editor.projectSceneToScreen({ x: 100, y: 162 });
+    await editor.clickLocal(300, 300);
+    const down = editor.localToScreen({ x: 100, y: 100 });
+    const end = editor.localToScreen({ x: 100, y: 162 });
 
     editor.pointerDown(down.x, down.y).pointerMove(end.x, end.y, { shiftKey: true });
 
@@ -79,8 +79,8 @@ describe("Pen applies Shift direction snapping", () => {
   });
 
   it("keeps visual feedback for horizontal Pen handle snapping", () => {
-    const down = editor.projectSceneToScreen({ x: 300, y: 100 });
-    const end = editor.projectSceneToScreen({ x: 380, y: 100 });
+    const down = editor.localToScreen({ x: 300, y: 100 });
+    const end = editor.localToScreen({ x: 380, y: 100 });
     editor.pointerDown(down.x, down.y).pointerMove(end.x, end.y, { shiftKey: true });
     const state = editor.toolIf("pen")?.state;
     if (state?.type !== "dragging") throw new Error("Expected Pen drag preview");
@@ -93,8 +93,8 @@ describe("Pen applies Shift direction snapping", () => {
   it.each([false, true])(
     "preserves a constrained creation when mouseup reports shiftKey=%s",
     async (shiftKey) => {
-      const down = editor.projectSceneToScreen({ x: 300, y: 100 });
-      const end = editor.projectSceneToScreen({ x: 380, y: 160 });
+      const down = editor.localToScreen({ x: 300, y: 100 });
+      const end = editor.localToScreen({ x: 380, y: 160 });
       editor.pointerDown(down.x, down.y).pointerMove(end.x, end.y, { shiftKey: true });
       const preview = editor.openContour!.segments()[0]!.asCubic()!.controlEnd.position;
       expect(preview.x).toBeCloseTo(300 - 50 * Math.sqrt(3));
@@ -107,9 +107,9 @@ describe("Pen applies Shift direction snapping", () => {
   );
 
   it("commits the final queued position while leaving the anchor and prior control fixed", async () => {
-    const down = editor.projectSceneToScreen({ x: 300, y: 100 });
-    const start = editor.projectSceneToScreen({ x: 380, y: 160 });
-    const end = editor.projectSceneToScreen({ x: 420, y: 190 });
+    const down = editor.localToScreen({ x: 300, y: 100 });
+    const start = editor.localToScreen({ x: 380, y: 160 });
+    const end = editor.localToScreen({ x: 420, y: 190 });
     editor.pointerDown(down.x, down.y).pointerMove(start.x, start.y, { shiftKey: true });
     editor.toolManager.handlePointerMove(end, { shiftKey: true, altKey: false });
     editor.pointerUp(end.x, end.y);
@@ -123,7 +123,7 @@ describe("Pen applies Shift direction snapping", () => {
   });
 
   it("undoes and redoes topology and snapped positions together", async () => {
-    await editor.dragScene({
+    await editor.dragLocal({
       down: { x: 300, y: 100 },
       start: { x: 380, y: 160 },
       end: { x: 380, y: 160 },
@@ -144,13 +144,13 @@ describe("Pen applies Shift direction snapping", () => {
   });
 
   it("carries the snapped outgoing handle into the next cubic", async () => {
-    await editor.dragScene({
+    await editor.dragLocal({
       down: { x: 300, y: 100 },
       start: { x: 380, y: 160 },
       end: { x: 380, y: 160 },
       options: { shiftKey: true },
     });
-    await editor.dragScene({
+    await editor.dragLocal({
       down: { x: 500, y: 100 },
       start: { x: 580, y: 180 },
       end: { x: 580, y: 180 },
@@ -164,7 +164,7 @@ describe("Pen applies Shift direction snapping", () => {
   });
 
   it("discards a consecutive snapped curve without damaging its previous smoothness or tangent", async () => {
-    await editor.dragScene({
+    await editor.dragLocal({
       down: { x: 300, y: 100 },
       start: { x: 380, y: 160 },
       end: { x: 380, y: 160 },
@@ -175,8 +175,8 @@ describe("Pen applies Shift direction snapping", () => {
       position: point.position,
       smooth: point.smooth,
     }));
-    const down = editor.projectSceneToScreen({ x: 500, y: 100 });
-    const end = editor.projectSceneToScreen({ x: 580, y: 160 });
+    const down = editor.localToScreen({ x: 500, y: 100 });
+    const end = editor.localToScreen({ x: 580, y: 160 });
     editor.pointerDown(down.x, down.y).pointerMove(end.x, end.y, { shiftKey: true });
     expect(editor.pointCount).toBe(7);
     editor.escape();
@@ -190,8 +190,8 @@ describe("Pen applies Shift direction snapping", () => {
   });
 
   it("cancels point creation on tool replacement", () => {
-    const down = editor.projectSceneToScreen({ x: 300, y: 100 });
-    const end = editor.projectSceneToScreen({ x: 380, y: 160 });
+    const down = editor.localToScreen({ x: 300, y: 100 });
+    const end = editor.localToScreen({ x: 380, y: 160 });
     editor.pointerDown(down.x, down.y).pointerMove(end.x, end.y, { shiftKey: true });
     expect(editor.pointCount).toBe(4);
     editor.selectTool("select");
@@ -202,8 +202,8 @@ describe("Pen applies Shift direction snapping", () => {
   });
 
   it("allows the pointer to return to the anchor without invalid coordinates", () => {
-    const down = editor.projectSceneToScreen({ x: 300, y: 100 });
-    const end = editor.projectSceneToScreen({ x: 380, y: 160 });
+    const down = editor.localToScreen({ x: 300, y: 100 });
+    const end = editor.localToScreen({ x: 380, y: 160 });
     editor.pointerDown(down.x, down.y).pointerMove(end.x, end.y, { shiftKey: true });
     editor.pointerMove(down.x, down.y, { shiftKey: true });
     expect(editor.openContour!.segments()[0]!.asCubic()!.controlEnd.position).toEqual({
@@ -214,7 +214,7 @@ describe("Pen applies Shift direction snapping", () => {
   });
 
   it("snaps Shift-click placement around the previous point", async () => {
-    await editor.clickGlyphLocal(300, 160, { shiftKey: true });
+    await editor.clickLocal(300, 160, { shiftKey: true });
     const endpoint = editor.openContour!.lastPoint!;
     const length = Math.hypot(200, 60);
 
@@ -224,7 +224,7 @@ describe("Pen applies Shift direction snapping", () => {
   });
 
   it("uses the snapped preview anchor when dragging a new cubic", async () => {
-    await editor.dragScene({
+    await editor.dragLocal({
       down: { x: 300, y: 160 },
       start: { x: 340, y: 200 },
       end: { x: 380, y: 240 },

@@ -8,7 +8,7 @@ describe("sidebar glyph metrics", () => {
     editor = new TestEditor();
     await editor.startSession();
     editor.selectTool("shape");
-    editor.dragScene({
+    editor.dragLocal({
       down: { x: 100, y: 200 },
       start: { x: 110, y: 210 },
       end: { x: 150, y: 250 },

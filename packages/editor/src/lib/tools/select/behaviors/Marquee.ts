@@ -1,4 +1,5 @@
-import { Curve, Rect, Vec2, type Rect2D } from "@shift/geo";
+import { Bounds, Curve, Rect, type Rect2D } from "@shift/geo";
+import { sceneBounds } from "../../../editor/spaces";
 import type { SelectableId } from "../../../../types/object";
 import type { ToolContext } from "../../core/Behavior";
 import type { DragEndEvent, DragEvent, DragStartEvent } from "../../core/GestureDetector";
@@ -65,8 +66,8 @@ export class Marquee implements SelectBehavior {
       if (!glyph) continue;
 
       const geometry = glyph.geometryAt(ctx.editor.externalLocation);
-      const origin = Vec2.sub({ x: rect.x, y: rect.y }, node.position);
-      const localRect = Rect.fromXYWH(origin.x, origin.y, rect.width, rect.height);
+      const sceneRect = sceneBounds(Bounds.fromXYWH(rect.x, rect.y, rect.width, rect.height));
+      const localRect = Bounds.toRect(ctx.editor.toLocalBounds(node, sceneRect));
 
       for (const point of geometry.allPoints) {
         if (Rect.containsPoint(localRect, point)) ids.add(point.id);

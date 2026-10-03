@@ -1,3 +1,4 @@
+import type { LocalPoint } from "@shift/editor/spaces";
 import fs from "node:fs";
 import type { ElectronApplication, Page } from "@playwright/test";
 import type { GlyphId } from "@shift/types";
@@ -273,19 +274,22 @@ authoredTest(
       const object = componentId ? editor.object(componentId) : null;
       const bounds = object?.kind === "component" ? object.bounds() : null;
       const canvas = document.querySelector<HTMLCanvasElement>("#interactive-canvas");
-      if (!componentId || !bounds || !canvas) throw new Error("Expected selected component bounds");
+      if (!componentId || !object || !bounds || !canvas) {
+        throw new Error("Expected selected component bounds");
+      }
 
       const canvasBounds = canvas.getBoundingClientRect();
       for (let row = 1; row < 20; row += 1) {
         for (let column = 1; column < 20; column += 1) {
-          const scene = {
-            x: bounds.left + (bounds.width * column) / 20,
-            y: bounds.top + (bounds.height * row) / 20,
+          const local = {
+            x: bounds.min.x + ((bounds.max.x - bounds.min.x) * column) / 20,
+            y: bounds.min.y + ((bounds.max.y - bounds.min.y) * row) / 20,
           };
+          const scene = editor.toScene(object.node, local as LocalPoint);
           const target = editor.getPointerTarget(scene);
           if (target.kind !== "component" || target.id !== componentId) continue;
 
-          const screen = editor.projectSceneToScreen(scene);
+          const screen = editor.sceneToScreen(scene);
           return {
             componentId,
             x: canvasBounds.left + screen.x,

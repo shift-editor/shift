@@ -611,7 +611,7 @@ export class SlugGlyphCatalogRenderer implements GlyphCatalogRenderer {
   };
 
   #handlePointerMove = (event: PointerEvent): void => {
-    this.#pointer = CanvasSurface.localPoint(this.#container, {
+    this.#pointer = CanvasSurface.screenPoint(this.#container, {
       x: event.clientX,
       y: event.clientY,
     });
@@ -630,7 +630,7 @@ export class SlugGlyphCatalogRenderer implements GlyphCatalogRenderer {
 
     const layout = this.#layout(input);
     const frame = this.#currentFrame(layout, input);
-    const point = CanvasSurface.localPoint(this.#container, {
+    const point = CanvasSurface.screenPoint(this.#container, {
       x: event.clientX,
       y: event.clientY,
     });

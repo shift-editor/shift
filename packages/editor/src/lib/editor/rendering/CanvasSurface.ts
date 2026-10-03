@@ -1,4 +1,6 @@
 import type { Point2D, Rect2D } from "@shift/geo";
+import type { ScreenPoint } from "../../../types/coordinates";
+import { screenPoint } from "../spaces";
 
 /**
  * Immutable snapshot of a canvas element's current layout surface.
@@ -50,10 +52,15 @@ export class CanvasSurface {
     return rect;
   }
 
-  /** Converts a client-space point into coordinates local to an element. */
-  static localPoint(element: Element, point: Point2D): Point2D {
+  /**
+   * Converts a client-space point into logical pixels from an element's top-left.
+   *
+   * @param element - the canvas or container the pointer is over.
+   * @param point - viewport client coordinates, such as a pointer event's `clientX` and `clientY`.
+   */
+  static screenPoint(element: Element, point: Point2D): ScreenPoint {
     const rect = element.getBoundingClientRect();
-    return { x: point.x - rect.left, y: point.y - rect.top };
+    return screenPoint(point.x - rect.left, point.y - rect.top);
   }
 }
 

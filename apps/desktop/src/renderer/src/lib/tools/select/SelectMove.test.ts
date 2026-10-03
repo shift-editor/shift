@@ -26,7 +26,7 @@ describe("Select movement preserves selected geometry", () => {
   it("moves every point when dragging one point in a multi-point selection", async () => {
     editor.selection.select([firstId, middleId, lastId]);
 
-    const drag = await editor.dragScene({
+    const drag = await editor.dragLocal({
       down: editor.pointPosition(middleId),
       start: { x: 154, y: 150 },
       end: { x: 190, y: 180 },
@@ -45,7 +45,7 @@ describe("Select movement preserves selected geometry", () => {
     const segmentId = layer.contours[0]?.segments()[0]?.id;
     if (!segmentId) throw new Error("Expected segment");
 
-    const drag = await editor.dragScene({
+    const drag = await editor.dragLocal({
       down: { x: 125, y: 125 },
       start: { x: 129, y: 125 },
       end: { x: 160, y: 150 },
@@ -63,7 +63,7 @@ describe("Select movement preserves selected geometry", () => {
   it("moves the selection, not an unselected point dragged inside its bounding box", async () => {
     editor.selection.select([firstId, lastId]);
 
-    const drag = await editor.dragScene({
+    const drag = await editor.dragLocal({
       down: editor.pointPosition(middleId),
       start: { x: 154, y: 150 },
       end: { x: 190, y: 180 },
@@ -79,7 +79,7 @@ describe("Select movement preserves selected geometry", () => {
     const anchorId = layer.addAnchor("top", { x: 300, y: 300 });
     await editor.settle();
 
-    const drag = await editor.dragScene({
+    const drag = await editor.dragLocal({
       down: editor.anchorPosition(anchorId),
       start: { x: 304, y: 300 },
       end: { x: 330, y: 320 },
@@ -97,7 +97,7 @@ describe("Select movement preserves selected geometry", () => {
     await editor.settle();
     editor.selection.select([firstId, middleId, anchorId]);
 
-    const drag = await editor.dragScene({
+    const drag = await editor.dragLocal({
       down: editor.pointPosition(middleId),
       start: { x: 154, y: 150 },
       end: { x: 180, y: 170 },
@@ -119,7 +119,7 @@ describe("Select movement preserves selected geometry", () => {
     if (!contour) throw new Error("Expected contour");
     editor.selection.select([contour.id, firstId, middleId, lastId]);
 
-    const drag = await editor.dragScene({
+    const drag = await editor.dragLocal({
       down: editor.pointPosition(middleId),
       start: { x: 154, y: 150 },
       end: { x: 180, y: 170 },
@@ -135,9 +135,9 @@ describe("Select movement preserves selected geometry", () => {
 
   it("restores every previewed position when Escape cancels movement", () => {
     editor.selection.select([firstId, middleId, lastId]);
-    const down = editor.projectSceneToScreen(editor.pointPosition(middleId));
-    const start = editor.projectSceneToScreen({ x: 154, y: 150 });
-    const end = editor.projectSceneToScreen({ x: 190, y: 180 });
+    const down = editor.localToScreen(editor.pointPosition(middleId));
+    const start = editor.localToScreen({ x: 154, y: 150 });
+    const end = editor.localToScreen({ x: 190, y: 180 });
 
     editor.pointerDown(down.x, down.y).pointerMove(start.x, start.y).pointerMove(end.x, end.y);
     expect(editor.pointPosition(middleId)).not.toEqual({ x: 150, y: 150 });
@@ -150,7 +150,7 @@ describe("Select movement preserves selected geometry", () => {
 
   it("commits movement as one undoable and redoable edit", async () => {
     editor.selection.select([firstId, middleId, lastId]);
-    await editor.dragScene({
+    await editor.dragLocal({
       down: editor.pointPosition(middleId),
       start: { x: 154, y: 150 },
       end: { x: 190, y: 180 },
@@ -182,10 +182,10 @@ describe("Select movement preserves selected geometry", () => {
 
   it("recomputes each preview from the interaction base", () => {
     editor.selection.select([firstId]);
-    const down = editor.projectSceneToScreen(editor.pointPosition(firstId));
-    const start = editor.projectSceneToScreen({ x: 104, y: 100 });
-    const first = editor.projectSceneToScreen({ x: 120, y: 100 });
-    const second = editor.projectSceneToScreen({ x: 130, y: 100 });
+    const down = editor.localToScreen(editor.pointPosition(firstId));
+    const start = editor.localToScreen({ x: 104, y: 100 });
+    const first = editor.localToScreen({ x: 120, y: 100 });
+    const second = editor.localToScreen({ x: 130, y: 100 });
 
     editor.pointerDown(down.x, down.y).pointerMove(start.x, start.y).pointerMove(first.x, first.y);
     const firstPreview = editor.pointPosition(firstId);
@@ -211,7 +211,7 @@ describe("Select movement preserves selected geometry", () => {
     const incomingBefore = editor.pointPosition(incoming.controlEnd.id);
     const outgoingBefore = editor.pointPosition(outgoing.controlStart.id);
 
-    const drag = await editor.dragScene({
+    const drag = await editor.dragLocal({
       down: editor.pointPosition(middleId),
       start: { x: 154, y: 150 },
       end: { x: 180, y: 170 },
@@ -256,7 +256,7 @@ describe("Select movement preserves selected geometry", () => {
     editor.selection.select([middleId]);
     expect(editor.positionSelection([middleId])?.additionalLayers).toHaveLength(1);
 
-    const drag = await editor.dragScene({
+    const drag = await editor.dragLocal({
       down: editor.pointPosition(middleId),
       start: { x: 154, y: 150 },
       end: { x: 190, y: 180 },
@@ -278,7 +278,7 @@ describe("Select movement preserves selected geometry", () => {
   });
 
   it("does not move geometry before the drag threshold is crossed", async () => {
-    const point = editor.projectSceneToScreen(editor.pointPosition(firstId));
+    const point = editor.localToScreen(editor.pointPosition(firstId));
 
     editor
       .pointerDown(point.x, point.y)

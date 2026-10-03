@@ -1,3 +1,4 @@
+import type { LocalPoint } from "@shift/editor/spaces";
 import { execFile } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -316,14 +317,9 @@ test.describe("opening a font through the application shell", () => {
         segment,
         {
           x: view.xAdvanceCell.peek() / 2,
-          y: metrics.descender - editor.camera.screenToUpmDistance(15),
+          y: metrics.descender - editor.camera.screenToSceneDistance(15),
         },
-      ].map((point) =>
-        editor.projectSceneToScreen({
-          x: point.x + node.position.x,
-          y: point.y + node.position.y,
-        }),
-      );
+      ].map((point) => editor.sceneToScreen(editor.toScene(node, point as LocalPoint)));
     });
     const bounds = await canvas.boundingBox();
     if (!bounds) throw new Error("Expected canvas bounds");

@@ -1,5 +1,6 @@
 import { useContext, useCallback, useRef } from "react";
 
+import { CanvasSurface } from "@shift/editor/rendering";
 import { CanvasContext } from "@/context/CanvasContext";
 import { useEditor } from "@/workspace/WorkspaceContext";
 
@@ -12,12 +13,9 @@ export const InteractiveScene = () => {
   const getScreenPoint = useCallback(
     (e: React.PointerEvent<HTMLCanvasElement>) => {
       editor.updateMousePosition(e.clientX, e.clientY);
-      const bounds = overlayCanvasRef.current?.getBoundingClientRect();
-      if (bounds) {
-        return {
-          x: e.clientX - bounds.left,
-          y: e.clientY - bounds.top,
-        };
+      const overlayCanvas = overlayCanvasRef.current;
+      if (overlayCanvas) {
+        return CanvasSurface.screenPoint(overlayCanvas, { x: e.clientX, y: e.clientY });
       }
       return editor.getScreenMousePosition();
     },

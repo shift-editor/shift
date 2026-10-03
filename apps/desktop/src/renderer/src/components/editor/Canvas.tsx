@@ -32,7 +32,10 @@ export const Canvas: FC = () => {
     const wheelGesture = new WheelGesture();
 
     const handleWheel = (e: WheelEvent) => {
-      const screenPos = CanvasSurface.localPoint(interactiveCanvas, { x: e.clientX, y: e.clientY });
+      const screenPos = CanvasSurface.screenPoint(interactiveCanvas, {
+        x: e.clientX,
+        y: e.clientY,
+      });
       editor.updateMousePosition(e.clientX, e.clientY);
       editor.flushMousePosition();
 
@@ -42,7 +45,7 @@ export const Canvas: FC = () => {
         case "zoom": {
           e.preventDefault();
           const zoomFactor = zoomMultiplierFromWheel(e.deltaY, e.deltaMode);
-          editor.zoomToPoint(screenPos.x, screenPos.y, zoomFactor);
+          editor.zoomToPoint(screenPos, zoomFactor);
           return;
         }
         case "ignore":

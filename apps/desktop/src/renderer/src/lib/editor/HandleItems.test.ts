@@ -15,9 +15,9 @@ afterEach(async () => {
 
 describe("handle culling preserves authored neighbors and visibility", () => {
   it("does not turn a viewport's first visible point into a contour endpoint", async () => {
-    await editor.clickGlyphLocal(100, 100);
-    await editor.clickGlyphLocal(200, 150);
-    await editor.clickGlyphLocal(300, 100);
+    await editor.clickLocal(100, 100);
+    await editor.clickLocal(200, 150);
+    await editor.clickLocal(300, 100);
     const contours = editor.requireGlyphLayer().contours;
     const list = new HandleItems().fromContours(
       contours,
@@ -36,8 +36,8 @@ describe("handle culling preserves authored neighbors and visibility", () => {
   });
 
   it("keeps boundary endpoints and their direction toward offscreen neighbors", async () => {
-    await editor.clickGlyphLocal(100, 100);
-    await editor.clickGlyphLocal(200, 200);
+    await editor.clickLocal(100, 100);
+    await editor.clickLocal(200, 200);
     const contours = editor.requireGlyphLayer().contours;
     const list = new HandleItems().fromContours(
       contours,
@@ -54,7 +54,7 @@ describe("handle culling preserves authored neighbors and visibility", () => {
   });
 
   it("restores culled markers after the viewport moves without changing the glyph", async () => {
-    await editor.clickGlyphLocal(100, 100);
+    await editor.clickLocal(100, 100);
     const layer = editor.requireGlyphLayer();
     const geometry = layer.geometry;
     const items = new HandleItems();
@@ -86,7 +86,7 @@ describe("handle culling preserves authored neighbors and visibility", () => {
   });
 
   it("continues to exclude explicitly hidden markers inside the viewport", async () => {
-    await editor.clickGlyphLocal(100, 100);
+    await editor.clickLocal(100, 100);
     const layer = editor.requireGlyphLayer();
     const id = layer.allPoints[0]!.id;
     const release = editor.hideHandles(id);

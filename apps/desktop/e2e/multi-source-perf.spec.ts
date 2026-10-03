@@ -128,7 +128,7 @@ async function measureTransformGesture(
 
   const before = await positions();
   const bounds = await editor.selectionBounds();
-  const lowerRight = await editor.projectSceneToPage({ x: bounds.right, y: bounds.top });
+  const lowerRight = await editor.projectGlyphToPage({ x: bounds.right, y: bounds.top });
   const from = operation === "scale" ? lowerRight : { x: lowerRight.x + 8, y: lowerRight.y + 8 };
   const state = operation === "scale" ? "resizing" : "rotating";
   await editor.pointerDown(from);

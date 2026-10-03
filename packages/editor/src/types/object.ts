@@ -1,4 +1,4 @@
-import type { Rect2D } from "@shift/geo";
+import type { LocalBounds } from "./coordinates";
 import type { GlyphGeometry, SegmentId } from "@shift/glyph-state";
 import type { AnchorId, ComponentId, ContourId, NodeId, PointId } from "@shift/types";
 import type { GlyphLayer } from "../lib/model/Glyph";
@@ -35,12 +35,18 @@ export interface ShiftObjectBase<K extends string, I extends ShiftId> {
   /** Discriminant used to narrow this object to its concrete interface. */
   readonly kind: K;
 
+  /** Scene node this object belongs to; its units are the space of {@link bounds}. */
+  readonly node: ShiftNode;
+
   /**
-   * Returns this object's current scene-space bounds.
+   * Returns this object's current bounds in its node's own units.
+   *
+   * @remarks
+   * Convert to scene space through the node, with `Editor.toSceneBounds`.
    *
    * @returns null when the object has no bounds or its backing model is unavailable.
    */
-  bounds(): Rect2D | null;
+  bounds(): LocalBounds | null;
 }
 
 /**

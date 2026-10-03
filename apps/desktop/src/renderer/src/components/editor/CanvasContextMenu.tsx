@@ -36,7 +36,7 @@ export const CanvasContextMenu = ({ children }: CanvasContextMenuProps) => {
             event.currentTarget.querySelector<HTMLCanvasElement>("#interactive-canvas");
           if (!interactiveCanvas) return;
 
-          const screenPos = CanvasSurface.localPoint(interactiveCanvas, {
+          const screenPos = CanvasSurface.screenPoint(interactiveCanvas, {
             x: event.clientX,
             y: event.clientY,
           });

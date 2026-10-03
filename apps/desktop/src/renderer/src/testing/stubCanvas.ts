@@ -5,20 +5,18 @@
  * not pixel output. The setup.ts Path2D stub handles path construction.
  */
 
+import { Mat } from "@shift/geo";
 import { Canvas } from "@shift/editor/testing";
 import type { CameraTransform } from "@shift/editor/testing";
+import { spaceTransform } from "@shift/editor/spaces";
 
 const noop = () => {};
 
 const DEFAULT_CAMERA: CameraTransform = {
+  view: spaceTransform<"scene", "screen">(Mat.Identity()),
   zoom: 1,
-  panX: 0,
-  panY: 0,
-  centre: { x: 500, y: 400 },
+  logicalWidth: 1000,
   logicalHeight: 800,
-  layoutHeight: 800,
-  padding: 40,
-  descender: -200,
 };
 
 function createStubContext(): CanvasRenderingContext2D {

@@ -11,8 +11,9 @@
  *
  * @module
  */
-import { Vec2, type Point2D } from "@shift/geo";
-import type { Coordinates } from "../../../types/coordinates";
+import type { Point2D } from "@shift/geo";
+import type { Coordinates, SceneVector, ScreenVector } from "../../../types/coordinates";
+import { vectorBetween } from "../../editor/spaces";
 import type { PointerTarget } from "../../../types/target";
 
 /** Well-known key names that tools handle directly. */
@@ -38,8 +39,8 @@ interface PointerGestureInfo extends ModifierKeys {
 }
 
 export interface PointerDelta {
-  readonly screen: Point2D;
-  readonly scene: Point2D;
+  readonly screen: ScreenVector;
+  readonly scene: SceneVector;
 }
 
 type PointerMoveGestureEvent = PointerGestureInfo & {
@@ -346,7 +347,7 @@ export class GestureDetector {
 
 function pointerDelta(coords: Coordinates, origin: Coordinates): PointerDelta {
   return {
-    screen: Vec2.sub(coords.screen, origin.screen),
-    scene: Vec2.sub(coords.scene, origin.scene),
+    screen: vectorBetween(origin.screen, coords.screen),
+    scene: vectorBetween(origin.scene, coords.scene),
   };
 }

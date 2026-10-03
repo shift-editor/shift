@@ -1,4 +1,6 @@
-import { Bounds, Vec2, type Rect2D } from "@shift/geo";
+import { Bounds } from "@shift/geo";
+import { localBounds } from "../editor/spaces";
+import type { LocalBounds } from "../../types/coordinates";
 import type { GlyphGeometry } from "@shift/glyph-state";
 import type { AnchorId } from "@shift/types";
 import { track } from "../signals/index";
@@ -34,10 +36,10 @@ export class AnchorObject implements ShiftObjectOf<"anchor"> {
     return this.layer.geometry;
   }
 
-  bounds(): Rect2D | null {
+  bounds(): LocalBounds | null {
     const anchor = this.geometry.anchor(this.anchorId);
     if (!anchor) return null;
 
-    return Bounds.toRect(Bounds.fromPoint(Vec2.add(this.node.position, anchor)));
+    return localBounds(Bounds.fromPoint(anchor));
   }
 }

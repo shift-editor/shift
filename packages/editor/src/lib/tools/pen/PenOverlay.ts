@@ -1,4 +1,4 @@
-import { Vec2, type Point2D } from "@shift/geo";
+import type { Point2D } from "@shift/geo";
 import type { Canvas } from "../../editor/rendering/Canvas";
 import { CanvasItem } from "../../editor/rendering/CanvasItem";
 import { SnapLines } from "../../editor/rendering/overlays/SnapLines";
@@ -7,6 +7,7 @@ import type { Pen } from "./Pen";
 import { PenStroke } from "./PenStroke";
 import { PenTargets } from "./PenTargets";
 import type { PenOverlayProps } from "./types";
+import type { GlyphNode } from "../../../types/node";
 import { track } from "../../signals/index";
 
 /** Draws Pen interaction chrome that is not part of glyph topology. */
@@ -35,7 +36,7 @@ export class PenOverlay extends CanvasItem<PenOverlayProps> {
     return {
       state,
       pointer: this.#editor.input.pointerCell.value,
-      nodePosition: context?.glyphNode.position ?? null,
+      node: context?.glyphNode ?? null,
       lastOnCurvePoint: activeEndpoint?.position ?? null,
       pendingHandle,
     };
@@ -45,43 +46,47 @@ export class PenOverlay extends CanvasItem<PenOverlayProps> {
     const props = this.propsCell.value;
     if (!props) return;
 
+    const node = props.node;
+    if (!node) {
+      if (props.state.type === "ready" && props.pointer) {
+        this.#drawPointer(canvas, props.pointer.scene);
+      }
+      return;
+    }
+
+    canvas.withTransform(this.#editor.sceneTransform(node), () => {
+      this.#drawInNode(canvas, props, node);
+    });
+  }
+
+  #drawInNode(canvas: Canvas, props: PenOverlayProps, node: GlyphNode): void {
     switch (props.state.type) {
       case "ready":
-        this.#drawReady(canvas, props);
+        this.#drawReady(canvas, props, node);
         return;
       case "dragging": {
         const { start } = props.state.curve;
         if (start.kind !== "corner") {
-          this.#drawHandle(
-            canvas,
-            start.position,
-            start.outgoingHandlePosition,
-            props.nodePosition,
-          );
+          this.#drawHandle(canvas, start.position, start.outgoingHandlePosition);
         }
         this.#drawHandle(
           canvas,
           props.state.curve.anchorPosition,
           props.state.curve.handlePosition,
-          props.nodePosition,
         );
-        if (!props.nodePosition) return;
-
-        this.#snapLines.draw(canvas, props.state.guides, props.nodePosition);
+        this.#snapLines.draw(canvas, props.state.guides);
         return;
       }
       case "pulling": {
         const { pull } = props.state;
-        if (!pull.handlePosition || !props.nodePosition) return;
+        if (!pull.handlePosition) return;
 
-        this.#drawHandle(canvas, pull.position, pull.handlePosition, props.nodePosition);
-        this.#snapLines.draw(canvas, props.state.guides, props.nodePosition);
+        this.#drawHandle(canvas, pull.position, pull.handlePosition);
+        this.#snapLines.draw(canvas, props.state.guides);
         return;
       }
       case "closing":
-        if (!props.nodePosition) return;
-
-        this.#snapLines.draw(canvas, props.state.guides, props.nodePosition);
+        this.#snapLines.draw(canvas, props.state.guides);
         return;
       case "idle":
       case "anchored":
@@ -89,66 +94,56 @@ export class PenOverlay extends CanvasItem<PenOverlayProps> {
     }
   }
 
-  #drawReady(canvas: Canvas, props: PenOverlayProps): void {
+  #drawReady(canvas: Canvas, props: PenOverlayProps, node: GlyphNode): void {
     if (props.lastOnCurvePoint && props.pendingHandle) {
-      this.#drawHandle(canvas, props.lastOnCurvePoint, props.pendingHandle, props.nodePosition);
+      this.#drawHandle(canvas, props.lastOnCurvePoint, props.pendingHandle);
     }
 
     const pointer = props.pointer;
     if (!pointer) return;
 
-    let pointerPosition = pointer.scene;
-    if (props.lastOnCurvePoint && props.nodePosition) {
-      const stroke = PenStroke.active(this.#pen);
-      const nodePoint = this.#editor.getPointInNodeSpace(pointer.scene, props.nodePosition);
-      const target = stroke
-        ? PenTargets.forGeometry(stroke.layer.geometry).at(nodePoint, this.#editor.hitRadius)
-        : null;
-      const anchorPosition =
-        target?.type === "empty"
-          ? this.#pen.resolveAnchorPosition(
-              nodePoint,
-              this.#editor.input.modifiersCell.peek().shiftKey,
-            )
-          : nodePoint;
-      pointerPosition = Vec2.add(props.nodePosition, anchorPosition);
-
-      canvas.line(
-        Vec2.add(props.nodePosition, props.lastOnCurvePoint),
-        pointerPosition,
-        canvas.theme.preview.color,
-        canvas.theme.preview.widthPx,
-      );
-
-      if (target?.type === "empty" && this.#editor.input.modifiersCell.peek().shiftKey) {
-        this.#snapLines.draw(
-          canvas,
-          [{ kind: "direction", from: props.lastOnCurvePoint, to: anchorPosition }],
-          props.nodePosition,
-        );
-      }
+    const nodePoint = this.#editor.toLocal(node, pointer.scene);
+    if (!props.lastOnCurvePoint) {
+      this.#drawPointer(canvas, nodePoint);
+      return;
     }
 
-    const { fill, stroke, size, widthPx } = canvas.theme.penReady;
-    canvas.filledStrokeCircle(pointerPosition, size, fill, stroke, widthPx);
+    const stroke = PenStroke.active(this.#pen);
+    const target = stroke
+      ? PenTargets.forGeometry(stroke.layer.geometry).at(nodePoint, this.#editor.hitRadius)
+      : null;
+    const shiftKey = this.#editor.input.modifiersCell.peek().shiftKey;
+    const anchorPosition =
+      target?.type === "empty" ? this.#pen.resolveAnchorPosition(nodePoint, shiftKey) : nodePoint;
+
+    canvas.line(
+      props.lastOnCurvePoint,
+      anchorPosition,
+      canvas.theme.preview.color,
+      canvas.theme.preview.widthPx,
+    );
+
+    if (target?.type === "empty" && shiftKey) {
+      this.#snapLines.draw(canvas, [
+        { kind: "direction", from: props.lastOnCurvePoint, to: anchorPosition },
+      ]);
+    }
+
+    this.#drawPointer(canvas, anchorPosition);
   }
 
-  #drawHandle(
-    canvas: Canvas,
-    anchor: Point2D,
-    handle: Point2D,
-    nodePosition: Point2D | null,
-  ): void {
-    if (!nodePosition) return;
+  #drawPointer(canvas: Canvas, position: Point2D): void {
+    const { fill, stroke, size, widthPx } = canvas.theme.penReady;
+    canvas.filledStrokeCircle(position, size, fill, stroke, widthPx);
+  }
 
-    const anchorPos = Vec2.add(nodePosition, anchor);
-    const handlePos = Vec2.add(nodePosition, handle);
+  #drawHandle(canvas: Canvas, anchor: Point2D, handle: Point2D): void {
     const { stroke, widthPx } = canvas.theme.glyph;
-    canvas.line(anchorPos, handlePos, stroke, widthPx);
+    canvas.line(anchor, handle, stroke, widthPx);
 
     const controlStyle = canvas.theme.handle.control.idle;
     canvas.filledStrokeCircle(
-      handlePos,
+      handle,
       controlStyle.size,
       controlStyle.fill,
       controlStyle.stroke,

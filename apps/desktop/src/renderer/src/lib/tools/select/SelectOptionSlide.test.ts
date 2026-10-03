@@ -18,13 +18,13 @@ describe("Option slides a smooth junction along its handles", () => {
     editor = new TestEditor();
     await editor.startSession();
     editor.selectTool("pen");
-    await editor.clickGlyphLocal(100, 100);
-    await editor.dragScene({
+    await editor.clickLocal(100, 100);
+    await editor.dragLocal({
       down: { x: 400, y: 100 },
       start: { x: 410, y: 110 },
       end: { x: 500, y: 200 },
     });
-    await editor.dragScene({
+    await editor.dragLocal({
       down: { x: 700, y: 100 },
       start: { x: 710, y: 100 },
       end: { x: 800, y: 100 },
@@ -38,7 +38,7 @@ describe("Option slides a smooth junction along its handles", () => {
   });
 
   it("drags the on-curve point along the handle line and leaves both handles in place", async () => {
-    await editor.dragScene({
+    await editor.dragLocal({
       down: { x: 400, y: 100 },
       start: { x: 420, y: 100 },
       end: { x: 450, y: 100 },
@@ -51,7 +51,7 @@ describe("Option slides a smooth junction along its handles", () => {
   });
 
   it("moves the whole junction freely without Option", async () => {
-    await editor.dragScene({
+    await editor.dragLocal({
       down: { x: 400, y: 100 },
       start: { x: 420, y: 100 },
       end: { x: 450, y: 100 },
@@ -62,7 +62,7 @@ describe("Option slides a smooth junction along its handles", () => {
   });
 
   it("drags a handle along its own direction, changing only its length", async () => {
-    await editor.dragScene({
+    await editor.dragLocal({
       down: { x: 500, y: 200 },
       start: { x: 520, y: 200 },
       end: { x: 550, y: 200 },
@@ -93,7 +93,7 @@ describe("Option slides a smooth junction along its handles", () => {
   });
 
   it("undoes a slide as one edit", async () => {
-    await editor.dragScene({
+    await editor.dragLocal({
       down: { x: 400, y: 100 },
       start: { x: 420, y: 100 },
       end: { x: 450, y: 100 },
@@ -117,7 +117,7 @@ describe("Option on a corner point between lines", () => {
     ]);
     editor.selectTool("select");
 
-    await editor.dragScene({
+    await editor.dragLocal({
       down: { x: 300, y: 100 },
       start: { x: 320, y: 100 },
       end: { x: 350, y: 140 },

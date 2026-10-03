@@ -202,6 +202,17 @@ describe("Mat - 2D Affine Transform Matrix", () => {
     });
   });
 
+  describe("Copy static", () => {
+    it("is unaffected by later changes to the source", () => {
+      const source = Mat.Translate(5, 10);
+      const copy = Mat.Copy(source);
+
+      source.scale(2, 2);
+
+      expect(copy).toEqual(Mat.Translate(5, 10));
+    });
+  });
+
   describe("Inverse static", () => {
     it("should create inverse without mutating original", () => {
       const m = Mat.Translate(5, 10);

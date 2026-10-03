@@ -1,3 +1,4 @@
+import type { ScreenPoint } from "@shift/editor/spaces";
 import { workspaceTest as test, expect } from "./fixtures/electronApp";
 import { openScratchGlyph } from "./fixtures/scratchGlyph";
 import { activeSnapGuides } from "./fixtures/snapGuides";
@@ -28,11 +29,9 @@ test("keeps snapped Pen creation handles when Shift is released before mouseup",
     ({ down, end }) => {
       const editor = window.shift!.editor;
       const node = editor.scene.nodesOfKind("glyph")[0]!;
-      const anchor = editor.projectScreenToScene(down);
-      const pointer = editor.projectScreenToScene(end);
+      const anchor = editor.toLocal(node, editor.screenToScene(down as ScreenPoint));
+      const pointer = editor.toLocal(node, editor.screenToScene(end as ScreenPoint));
       const length = Math.hypot(pointer.x - anchor.x, pointer.y - anchor.y);
-      anchor.x -= node.position.x;
-      anchor.y -= node.position.y;
       return {
         anchor,
         incoming: {

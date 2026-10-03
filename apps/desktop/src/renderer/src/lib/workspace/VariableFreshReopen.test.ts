@@ -93,7 +93,7 @@ async function authorVariableFont(editor: TestEditor): Promise<VariableFixture> 
 
   editor.selectTool("select");
   editor.selection.select([boldPoint.id]);
-  editor.dragScene({
+  editor.dragLocal({
     down: boldPoint,
     start: { x: boldPoint.x + 4, y: boldPoint.y },
     end: { x: boldPoint.x + 44, y: boldPoint.y + 20 },
@@ -219,7 +219,7 @@ describe("saved variable-font outcomes survive a fresh workspace stack", () => {
     const savedPosition = { x: boldPoint.x, y: boldPoint.y };
     reopened.selectTool("select");
     reopened.selection.select([boldPoint.id]);
-    const drag = await reopened.dragScene({
+    const drag = await reopened.dragLocal({
       down: savedPosition,
       start: { x: savedPosition.x + 4, y: savedPosition.y },
       end: { x: savedPosition.x + 24, y: savedPosition.y + 30 },

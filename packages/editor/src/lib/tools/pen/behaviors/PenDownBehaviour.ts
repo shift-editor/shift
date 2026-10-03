@@ -13,7 +13,7 @@ export class PenDownBehaviour implements PenBehavior {
     const stroke = PenStroke.active(ctx.tool);
     if (!stroke) return false;
 
-    const nodePoint = editor.getPointInNodeSpace(event.coords.scene, stroke.node.position);
+    const nodePoint = editor.toLocal(stroke.node, event.coords.scene);
     const targets = PenTargets.forGeometry(stroke.layer.geometry);
     const target = targets.at(nodePoint, editor.hitRadius);
 
@@ -56,7 +56,7 @@ export class PenDownBehaviour implements PenBehavior {
     const stroke = PenStroke.active(ctx.tool);
     if (!stroke) return false;
 
-    const nodePoint = editor.getPointInNodeSpace(event.coords.scene, stroke.node.position);
+    const nodePoint = editor.toLocal(stroke.node, event.coords.scene);
     const targets = PenTargets.forGeometry(stroke.layer.geometry);
     const target = targets.at(nodePoint, editor.hitRadius);
     if (target.type === "segment") return false;

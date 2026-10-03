@@ -18,7 +18,7 @@ describe("fluent position edits preserve one frozen interaction base", () => {
     editor = new TestEditor();
     await editor.startSession();
     editor.selectTool("pen");
-    await editor.clickGlyphLocal(100, 100);
+    await editor.clickLocal(100, 100);
     pointId = editor.requireGlyphLayer().allPoints[0]!.id;
   });
 

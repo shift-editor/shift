@@ -18,8 +18,8 @@ describe("workspace ledger semantics (via TestEditor)", () => {
   const source = () => editor.glyphLayer!;
 
   it("undoes settled operations in reverse order", async () => {
-    await editor.clickGlyphLocal(10, 10);
-    await editor.clickGlyphLocal(20, 20);
+    await editor.clickLocal(10, 10);
+    await editor.clickLocal(20, 20);
     expect(editor.pointCount).toBe(2);
 
     await editor.undo();
@@ -31,8 +31,8 @@ describe("workspace ledger semantics (via TestEditor)", () => {
   });
 
   it("redoes undone entries in order", async () => {
-    await editor.clickGlyphLocal(10, 10);
-    await editor.clickGlyphLocal(20, 20);
+    await editor.clickLocal(10, 10);
+    await editor.clickLocal(20, 20);
 
     await editor.undo();
     await editor.undo();
@@ -47,11 +47,11 @@ describe("workspace ledger semantics (via TestEditor)", () => {
   });
 
   it("a new edit after undo truncates the redo branch", async () => {
-    await editor.clickGlyphLocal(10, 10);
-    await editor.clickGlyphLocal(20, 20);
+    await editor.clickLocal(10, 10);
+    await editor.clickLocal(20, 20);
 
     await editor.undo();
-    await editor.clickGlyphLocal(30, 30);
+    await editor.clickLocal(30, 30);
     expect(editor.pointCount).toBe(2);
 
     await editor.redo();

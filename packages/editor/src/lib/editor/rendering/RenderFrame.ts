@@ -56,7 +56,7 @@ export class BackgroundLayer extends CanvasItem<BackgroundLayerProps> {
     if (!props) return;
 
     for (const node of props.nodes) {
-      ctx.canvas.withTranslation(node.position, () => {
+      ctx.canvas.withTransform(this.#editor.sceneTransform(node), () => {
         this.#drawNode(ctx, node, "background");
       });
     }
@@ -132,7 +132,7 @@ export class SceneLayer extends CanvasItem<SceneLayerProps> {
     for (const node of props.nodes) {
       if (node.kind !== "glyph") continue;
 
-      ctx.canvas.withTranslation(node.position, () => {
+      ctx.canvas.withTransform(this.#editor.sceneTransform(node), () => {
         this.#editor.toolManager.drawScene(ctx.canvas);
       });
     }
@@ -146,7 +146,7 @@ export class SceneLayer extends CanvasItem<SceneLayerProps> {
     const definition = this.#editor.nodeDefinition(node.kind);
     if (!definition) return;
 
-    ctx.canvas.withTranslation(node.position, () => {
+    ctx.canvas.withTransform(this.#editor.sceneTransform(node), () => {
       definition.draw(node, ctx, pass);
     });
   }

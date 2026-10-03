@@ -57,7 +57,7 @@ export class BendCurve implements SelectBehavior {
     const object = ctx.editor.object(state.bend.segmentId);
     if (!objectIsKindOf(object, "segment")) return false;
 
-    const pointer = ctx.editor.getPointInNodeSpace(event.coords.scene, object.node.position);
+    const pointer = ctx.editor.toLocal(object.node, event.coords.scene);
     const controls = bentControls(state.bend, pointer, event);
     if (!controls) return true;
 
