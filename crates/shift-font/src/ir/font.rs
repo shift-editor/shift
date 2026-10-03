@@ -495,10 +495,7 @@ impl Font {
     /// absent; it does not synthesize a default value.
     pub fn metric_value(&self, source_id: SourceId, kind: MetricKind) -> Option<MetricValue> {
         let metric_id = self.metric_definition_for_kind(kind)?.id();
-        self.sources()
-            .iter()
-            .find(|source| source.id() == source_id)?
-            .metric_value(&metric_id)
+        self.source(source_id)?.metric_value(&metric_id)
     }
 
     /// Replaces metric definitions while retaining source values by stable ID.
@@ -826,6 +823,13 @@ impl Font {
         &self.data().sources
     }
 
+    /// Returns the source with `source_id`, whatever its role.
+    pub fn source(&self, source_id: SourceId) -> Option<&Source> {
+        self.sources()
+            .iter()
+            .find(|source| source.id() == source_id)
+    }
+
     /// Returns the master sources, in source order: the sources the editor shows, edits, and
     /// interpolates.
     ///
@@ -836,15 +840,14 @@ impl Font {
     }
 
     /// Returns `glyph`'s layers on [master sources](Self::masters), in no particular order.
-    pub fn master_layers<'a>(&'a self, glyph: &'a Glyph) -> impl Iterator<Item = &'a GlyphLayer> {
-        glyph
-            .layers()
-            .values()
-            .map(Arc::as_ref)
-            .filter(move |layer| {
-                self.masters()
-                    .any(|source| source.id() == layer.source_id())
-            })
+    pub fn master_layers<'a>(
+        &'a self,
+        glyph: &'a Glyph,
+    ) -> impl Iterator<Item = &'a Arc<GlyphLayer>> {
+        glyph.layers().values().filter(move |layer| {
+            self.source(layer.source_id())
+                .is_some_and(Source::is_master)
+        })
     }
 
     /// Reorders sources without changing their identities or values.
@@ -964,11 +967,7 @@ impl Font {
     }
 
     pub fn default_source(&self) -> Option<&Source> {
-        let default_source_id = self.data().default_source_id.clone()?;
-        self.data()
-            .sources
-            .iter()
-            .find(|source| source.id() == default_source_id)
+        self.source(self.data().default_source_id.clone()?)
     }
 
     pub fn is_variable(&self) -> bool {
@@ -1207,7 +1206,7 @@ impl Font {
         glyph_id: GlyphId,
         source_id: SourceId,
     ) -> CoreResult<()> {
-        if !self.sources().iter().any(|source| source.id() == source_id) {
+        if self.source(source_id.clone()).is_none() {
             return Err(CoreError::SourceNotFound(source_id));
         }
         if self.index().layer_owner.contains_key(&layer_id) {
@@ -1229,11 +1228,7 @@ impl Font {
     }
 
     pub fn insert_glyph_layer(&mut self, glyph_id: GlyphId, layer: GlyphLayer) -> CoreResult<()> {
-        if !self
-            .sources()
-            .iter()
-            .any(|source| source.id() == layer.source_id())
-        {
+        if self.source(layer.source_id()).is_none() {
             return Err(CoreError::SourceNotFound(layer.source_id()));
         }
 

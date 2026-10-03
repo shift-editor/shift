@@ -354,12 +354,7 @@ impl FontWorkspace {
                 }
                 FontChange::AxisCreated(change) => steps.push(LedgerStep::Axis {
                     pre: None,
-                    post: self
-                        .font
-                        .axes()
-                        .iter()
-                        .find(|axis| axis.id() == change.axis.id())
-                        .cloned(),
+                    post: self.font.axis(change.axis.id()).cloned(),
                     pre_locations: Vec::new(),
                 }),
                 FontChange::AxisUpdated(change) => steps.push(LedgerStep::Axis {
@@ -419,12 +414,7 @@ impl FontWorkspace {
                 }
                 FontChange::SourceCreated(change) => steps.push(LedgerStep::Source {
                     pre: None,
-                    post: self
-                        .font
-                        .sources()
-                        .iter()
-                        .find(|source| source.id() == change.source.id())
-                        .cloned(),
+                    post: self.font.source(change.source.id()).cloned(),
                 }),
                 FontChange::SourceDeleted(change) => steps.push(LedgerStep::Source {
                     pre: pre
@@ -735,9 +725,7 @@ impl FontWorkspace {
                     side.orient((pre_order, pre_default), (post_order, post_default));
                 font.set_source_order(&to_order)?;
                 match to_default {
-                    Some(source_id)
-                        if font.sources().iter().any(|source| source.id() == source_id) =>
-                    {
+                    Some(source_id) if font.source(source_id.clone()).is_some() => {
                         font.set_default_source_id(source_id);
                     }
                     Some(source_id) => {
@@ -1221,7 +1209,7 @@ fn capture_font_level_pre_state(
             if pre.axes.iter().any(|axis| axis.id() == axis_id) {
                 return;
             }
-            let Some(axis) = font.axes().iter().find(|axis| axis.id() == axis_id) else {
+            let Some(axis) = font.axis(axis_id.clone()) else {
                 return;
             };
             pre.axes.push(axis.clone());
@@ -1233,7 +1221,7 @@ fn capture_font_level_pre_state(
             if pre.axes.iter().any(|axis| axis.id() == *axis_id) {
                 return;
             }
-            let Some(axis) = font.axes().iter().find(|axis| axis.id() == *axis_id) else {
+            let Some(axis) = font.axis(axis_id.clone()) else {
                 return;
             };
             pre.axes.push(axis.clone());
