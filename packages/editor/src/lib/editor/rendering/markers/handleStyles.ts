@@ -138,10 +138,17 @@ export function buildMarkerStyles(theme: EditorRenderTheme) {
  * @returns Conservative CSS-pixel padding for viewport culling.
  */
 export function handleCullPaddingPx(theme: EditorRenderTheme): number {
+  const cached = cullPaddingByTheme.get(theme);
+  if (cached !== undefined) return cached;
+
   const styles = buildMarkerStyles(theme);
-  return Math.max(
+  const padding = Math.max(
     ...Object.values(styles).flatMap((states) =>
       Object.values(states).map((style) => Math.hypot(style.extentX, style.extentY)),
     ),
   );
+  cullPaddingByTheme.set(theme, padding);
+  return padding;
 }
+
+const cullPaddingByTheme = new WeakMap<EditorRenderTheme, number>();
