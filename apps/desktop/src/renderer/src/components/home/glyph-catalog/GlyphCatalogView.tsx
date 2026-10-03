@@ -71,15 +71,18 @@ export const GlyphCatalogView = () => {
   const allGlyphsSelected = categoryFilters.length === 0 && selectedLanguageId === null;
 
   return (
-    <div className="flex flex-col gap-2">
-      <Input
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        placeholder="Search glyphs..."
-        size="md"
-        icon={<Search className="w-3 h-3 text-muted" />}
-        iconPosition="left"
-      />
+    <div className="flex flex-col gap-2 pt-2">
+      <div className="-mx-1">
+        <Input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search glyphs..."
+          size="md"
+          icon={<Search className="w-3 h-3 text-muted" />}
+          iconPosition="left"
+          className="h-6 w-full"
+        />
+      </div>
       <Separator className="-mx-3 w-auto" />
 
       <div>
