@@ -29,7 +29,11 @@ import {
 import { EditorDriver } from "./fixtures/EditorDriver";
 import { createAuthoredDocument } from "./fixtures/fontSource";
 import { exportedGlyphNames, savedGlyphNames } from "./fixtures/savedDocument";
-import { clickFirstCatalogGlyph, waitForEditorReady } from "./fixtures/appLocators";
+import {
+  clickFirstCatalogGlyph,
+  openFirstCatalogGlyph,
+  waitForEditorReady,
+} from "./fixtures/appLocators";
 
 const execFileAsync = promisify(execFile);
 
@@ -491,16 +495,7 @@ convertiblePreviewTest(
   "Save As keeps a preview glyph route in the new workspace",
   async ({ electronApp, page, saveShiftPath, testRoot }) => {
     const workspacePage = await openSelectedPreview(page, electronApp);
-    // H has only a default layer; glyphs with extra UFO layers cannot open after conversion (#493).
-    const glyphHandle = await workspacePage.waitForFunction(
-      () => window.shiftSession?.catalog.glyphsCell.peek().find((glyph) => glyph.name === "H")?.id,
-    );
-    const glyphId = await glyphHandle.jsonValue();
-    if (!glyphId) throw new Error("Expected glyph H in the preview catalog");
-    await workspacePage.evaluate((id) => {
-      window.location.hash = `#/editor/${encodeURIComponent(id)}`;
-    }, glyphId);
-    await waitForEditorReady(workspacePage, glyphId);
+    const glyphId = await openFirstCatalogGlyph(workspacePage);
 
     // Conversion reloads the window into the new workspace.
     const reloaded = workspacePage.waitForEvent("load");
@@ -511,7 +506,7 @@ convertiblePreviewTest(
       .toBe("workspace");
 
     await waitForEditorReady(workspacePage, glyphId);
-    expect(savedGlyphNames(saveShiftPath, testRoot)).toContain("H");
+    expect(savedGlyphNames(saveShiftPath, testRoot)).toContain("A");
   },
 );
 

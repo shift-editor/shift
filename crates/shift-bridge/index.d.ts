@@ -48,6 +48,13 @@ export declare class Bridge {
   discardWorkspaceChanges(): NapiDocumentState
   getMetadata(): NapiFontMetadata
   getMetrics(): NapiFontMetrics
+  /**
+   * Lists glyph records with only the layers the editor models.
+   *
+   * Layers on non-master sources, such as a UFO's background or support layers, stay in the
+   * store and round-trip through export, but [`Self::get_sources`] does not expose their
+   * sources. Their records omit them so every listed layer has a known source.
+   */
   getGlyphs(): Array<NapiGlyphRecord>
   /**
    * Applies one intent set as a single atomic workspace apply: every kind

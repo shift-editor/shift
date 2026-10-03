@@ -802,6 +802,19 @@ describe("font-level intents make the font variable", () => {
     expect(renderModel.xAdvance).toBe(483);
     expect(renderModel.sidebearings).toEqual({ lsb: 20, rsb: 20 });
   });
+
+  it("opens an imported UFO glyph that also has background and support layers", async () => {
+    const stack = createWorkspaceStack();
+    await stack.openWorkspace(
+      resolve(process.cwd(), "../../fixtures/fonts/mutatorsans/MutatorSansLightCondensed.ufo"),
+    );
+    const record = stack.font.recordForName("A" as GlyphName);
+    if (!record) throw new Error("Expected A fixture glyph");
+
+    const glyph = await stack.font.loadGlyph(record.id);
+
+    expect(glyph.layers.map((layer) => layer.sourceId)).toEqual([stack.font.defaultSource.id]);
+  });
 });
 
 function continuousAxis(axisId: AxisId): Axis {

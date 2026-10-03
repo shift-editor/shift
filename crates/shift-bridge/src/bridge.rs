@@ -1310,6 +1310,11 @@ impl Bridge {
     Ok(FontMetrics::from(self.font()?.metrics()).into())
   }
 
+  /// Lists glyph records with only the layers the editor models.
+  ///
+  /// Layers on non-master sources, such as a UFO's background or support layers, stay in the
+  /// store and round-trip through export, but [`Self::get_sources`] does not expose their
+  /// sources. Their records omit them so every listed layer has a known source.
   #[napi]
   pub fn get_glyphs(&self) -> errors::Result<Vec<NapiGlyphRecord>> {
     let workspace = self.workspace()?;
@@ -1317,6 +1322,7 @@ impl Bridge {
     let source_order = font
       .sources()
       .iter()
+      .filter(|source| source.is_master())
       .enumerate()
       .map(|(index, source)| (source.id().to_string(), index))
       .collect::<HashMap<_, _>>();
@@ -1328,6 +1334,9 @@ impl Bridge {
         record.component_base_glyph_ids =
           component_references.remove(&glyph.id()).unwrap_or_default();
         let mut record = NapiGlyphRecord::from(record);
+        record
+          .layers
+          .retain(|layer| source_order.contains_key(&layer.source_id));
         record.layers.sort_by(|left, right| {
           source_order
             .get(&left.source_id)
