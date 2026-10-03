@@ -1,5 +1,5 @@
 import type { PointId, ContourId } from "@shift/types";
-import type { Bounds, MatModel } from "@shift/geo";
+import { handleCullPaddingPx } from "../markers/handleStyles";
 import type { GlyphContour } from "../../../model/ComponentGlyph";
 import type { Hover } from "../../Hover";
 import type { Selection } from "../../Selection";
@@ -21,16 +21,13 @@ export class Handles {
   readonly #canvas = new CanvasHandleRenderer();
 
   /**
-   * Draws point handles for the given contours.
+   * Draws point handles for the given contours in the canvas's current units.
    *
-   * @param toScreen - Maps the contours' units to screen pixels; the canvas
-   * context is expected to be in the same units.
-   * @param visible - Region, in the contours' units, outside which handles are culled.
+   * @remarks
+   * Handles outside the visible canvas are culled.
    */
   draw(
     ctx: RenderContext,
-    toScreen: MatModel,
-    visible: Bounds,
     contours: readonly GlyphContour[],
     selection: Selection,
     hover: Hover,
@@ -45,10 +42,18 @@ export class Handles {
         interpolated,
       },
       isVisible,
-      visible,
+      ctx.canvas.visibleBounds(handleCullPaddingPx(ctx.canvas.theme)),
     );
 
-    if (this.#markers.draw(ctx.markers, list, ctx.canvas.camera, toScreen, ctx.canvas.theme))
+    if (
+      this.#markers.draw(
+        ctx.markers,
+        list,
+        ctx.canvas.camera,
+        ctx.canvas.transform,
+        ctx.canvas.theme,
+      )
+    )
       return;
 
     this.#canvas.draw(ctx.canvas, list.items);

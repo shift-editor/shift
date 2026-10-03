@@ -1,5 +1,5 @@
-import type { Point2D } from "@shift/geo";
-import type { Canvas } from "../Canvas";
+import type { ScreenCanvas } from "../Canvas";
+import type { ScreenPoint } from "../../../../types/coordinates";
 import type { HandleState, HandleType } from "../../../../types/graphics";
 import type { HandleStyle } from "../Theme";
 import { Vec2 } from "@shift/geo";
@@ -7,8 +7,8 @@ import { Vec2 } from "@shift/geo";
 const START_TRIANGLE_GAP = 3;
 
 export function drawHandle(
-  canvas: Canvas,
-  point: Point2D,
+  canvas: ScreenCanvas,
+  point: ScreenPoint,
   type: Exclude<HandleType, "first" | "last" | "direction">,
   state: HandleState,
 ): void {
@@ -29,127 +29,122 @@ export function drawHandle(
 }
 
 export function drawHandleFirst(
-  canvas: Canvas,
-  point: Point2D,
+  canvas: ScreenCanvas,
+  point: ScreenPoint,
   angle: number,
   state: HandleState,
 ): void {
   const style = canvas.theme.handle.first[state];
-  const sizeUpm = canvas.pxToUpm(style.size);
-  const barSizeUpm = canvas.pxToUpm(style.barSize);
-  const lineWidthUpm = canvas.pxToUpm(style.lineWidth);
-  const gapUpm = canvas.pxToUpm(START_TRIANGLE_GAP);
+  const size = style.size;
 
   canvas.ctx.save();
-  canvas.ctx.lineWidth = lineWidthUpm;
+  canvas.ctx.lineWidth = style.lineWidth;
 
   // Draw bar
   const perpAngle = angle + Math.PI / 2;
   canvas.ctx.strokeStyle = style.barStroke;
-  drawHorizontalLine(canvas.ctx, point.x, point.y, barSizeUpm, perpAngle);
+  drawHorizontalLine(canvas.ctx, point.x, point.y, style.barSize, perpAngle);
 
   // Draw triangle
   canvas.ctx.fillStyle = style.fill;
   canvas.ctx.strokeStyle = style.stroke;
   const direction = Vec2.fromAngle(angle);
-  const triangleOffset = Vec2.scale(direction, gapUpm + sizeUpm);
+  const triangleOffset = Vec2.scale(direction, START_TRIANGLE_GAP + size);
   const trianglePos = Vec2.add(point, triangleOffset);
-  drawTriangle(canvas.ctx, trianglePos.x, trianglePos.y, sizeUpm, angle);
+  drawTriangle(canvas.ctx, trianglePos.x, trianglePos.y, size, angle);
 
   if (style.overlayColor) {
     canvas.ctx.strokeStyle = style.overlayColor;
-    drawHorizontalLine(canvas.ctx, point.x, point.y, barSizeUpm, perpAngle);
+    drawHorizontalLine(canvas.ctx, point.x, point.y, style.barSize, perpAngle);
     canvas.ctx.fillStyle = style.overlayColor;
-    drawTriangle(canvas.ctx, trianglePos.x, trianglePos.y, sizeUpm, angle);
+    drawTriangle(canvas.ctx, trianglePos.x, trianglePos.y, size, angle);
   }
 
   canvas.ctx.restore();
 }
 
 export function drawHandleDirection(
-  canvas: Canvas,
-  point: Point2D,
+  canvas: ScreenCanvas,
+  point: ScreenPoint,
   angle: number,
   state: HandleState,
 ): void {
   const style = canvas.theme.handle.direction[state];
-  const sizeUpm = canvas.pxToUpm(style.size);
-  const lineWidthUpm = canvas.pxToUpm(style.lineWidth);
+  const size = style.size;
 
   canvas.ctx.save();
-  canvas.ctx.lineWidth = lineWidthUpm;
+  canvas.ctx.lineWidth = style.lineWidth;
   canvas.ctx.fillStyle = style.fill;
   canvas.ctx.strokeStyle = style.stroke;
-  drawTriangle(canvas.ctx, point.x, point.y, sizeUpm, angle);
+  drawTriangle(canvas.ctx, point.x, point.y, size, angle);
 
   if (style.overlayColor) {
     canvas.ctx.fillStyle = style.overlayColor;
     canvas.ctx.strokeStyle = style.overlayColor;
-    drawTriangle(canvas.ctx, point.x, point.y, sizeUpm, angle);
+    drawTriangle(canvas.ctx, point.x, point.y, size, angle);
   }
 
   canvas.ctx.restore();
 }
 
 export function drawHandleLast(
-  canvas: Canvas,
-  anchor: Point2D,
-  prev: Point2D,
+  canvas: ScreenCanvas,
+  anchor: ScreenPoint,
+  prev: ScreenPoint,
   state: HandleState,
 ): void {
   const style = canvas.theme.handle.last[state];
-  const sizeUpm = canvas.pxToUpm(style.size);
-  const lineWidthUpm = canvas.pxToUpm(style.lineWidth);
+  const size = style.size;
 
   canvas.ctx.save();
-  canvas.ctx.lineWidth = lineWidthUpm;
+  canvas.ctx.lineWidth = style.lineWidth;
   canvas.ctx.fillStyle = style.fill;
   canvas.ctx.strokeStyle = style.stroke;
 
   const angle = Vec2.angleTo(anchor, prev);
   const perpAngle = angle + Math.PI / 2;
-  drawHorizontalLine(canvas.ctx, anchor.x, anchor.y, sizeUpm, perpAngle);
+  drawHorizontalLine(canvas.ctx, anchor.x, anchor.y, size, perpAngle);
 
   if (style.overlayColor) {
     canvas.ctx.fillStyle = style.overlayColor;
     canvas.ctx.strokeStyle = style.overlayColor;
-    drawHorizontalLine(canvas.ctx, anchor.x, anchor.y, sizeUpm, perpAngle);
+    drawHorizontalLine(canvas.ctx, anchor.x, anchor.y, size, perpAngle);
   }
 
   canvas.ctx.restore();
 }
 
-function drawCorner(canvas: Canvas, point: Point2D, style: HandleStyle): void {
-  const sizeUpm = canvas.pxToUpm(style.size);
-  const half = sizeUpm / 2;
+function drawCorner(canvas: ScreenCanvas, point: ScreenPoint, style: HandleStyle): void {
+  const size = style.size;
+  const half = size / 2;
 
   canvas.ctx.save();
-  canvas.ctx.lineWidth = canvas.pxToUpm(style.lineWidth);
+  canvas.ctx.lineWidth = style.lineWidth;
   canvas.ctx.fillStyle = style.fill;
   canvas.ctx.strokeStyle = style.stroke;
-  canvas.ctx.fillRect(point.x - half, point.y - half, sizeUpm, sizeUpm);
-  canvas.ctx.strokeRect(point.x - half, point.y - half, sizeUpm, sizeUpm);
+  canvas.ctx.fillRect(point.x - half, point.y - half, size, size);
+  canvas.ctx.strokeRect(point.x - half, point.y - half, size, size);
 
   if (style.overlayColor) {
     canvas.ctx.fillStyle = style.overlayColor;
     canvas.ctx.strokeStyle = style.overlayColor;
-    canvas.ctx.fillRect(point.x - half, point.y - half, sizeUpm, sizeUpm);
-    canvas.ctx.strokeRect(point.x - half, point.y - half, sizeUpm, sizeUpm);
+    canvas.ctx.fillRect(point.x - half, point.y - half, size, size);
+    canvas.ctx.strokeRect(point.x - half, point.y - half, size, size);
   }
 
   canvas.ctx.restore();
 }
 
-function drawCircleHandle(canvas: Canvas, point: Point2D, style: HandleStyle): void {
-  const radiusUpm = canvas.pxToUpm(style.size);
+function drawCircleHandle(canvas: ScreenCanvas, point: ScreenPoint, style: HandleStyle): void {
+  const radius = style.size;
 
   canvas.ctx.save();
-  canvas.ctx.lineWidth = canvas.pxToUpm(style.lineWidth);
+  canvas.ctx.lineWidth = style.lineWidth;
   canvas.ctx.fillStyle = style.fill;
   canvas.ctx.strokeStyle = style.stroke;
 
   canvas.ctx.beginPath();
-  canvas.ctx.arc(point.x, point.y, radiusUpm, 0, Math.PI * 2);
+  canvas.ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
   canvas.ctx.stroke();
   canvas.ctx.fill();
 
@@ -157,7 +152,7 @@ function drawCircleHandle(canvas: Canvas, point: Point2D, style: HandleStyle): v
     canvas.ctx.fillStyle = style.overlayColor;
     canvas.ctx.strokeStyle = style.overlayColor;
     canvas.ctx.beginPath();
-    canvas.ctx.arc(point.x, point.y, radiusUpm, 0, Math.PI * 2);
+    canvas.ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
     canvas.ctx.stroke();
     canvas.ctx.fill();
   }
@@ -165,9 +160,9 @@ function drawCircleHandle(canvas: Canvas, point: Point2D, style: HandleStyle): v
   canvas.ctx.restore();
 }
 
-function drawDiamond(canvas: Canvas, point: Point2D, style: HandleStyle): void {
-  const sizeUpm = canvas.pxToUpm(style.size);
-  const half = sizeUpm / 2;
+function drawDiamond(canvas: ScreenCanvas, point: ScreenPoint, style: HandleStyle): void {
+  const size = style.size;
+  const half = size / 2;
 
   const points = [
     { x: point.x, y: point.y - half },
@@ -177,7 +172,7 @@ function drawDiamond(canvas: Canvas, point: Point2D, style: HandleStyle): void {
   ];
 
   canvas.ctx.save();
-  canvas.ctx.lineWidth = canvas.pxToUpm(style.lineWidth);
+  canvas.ctx.lineWidth = style.lineWidth;
   canvas.ctx.fillStyle = style.fill;
   canvas.ctx.strokeStyle = style.stroke;
 

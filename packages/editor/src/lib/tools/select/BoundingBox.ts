@@ -1,6 +1,6 @@
 import { Bounds, Rect, Vec2, type Point2D, type Rect2D } from "@shift/geo";
 import type { Editor } from "../../editor/Editor";
-import type { Canvas } from "../../editor/rendering/Canvas";
+import type { Canvas, ScreenCanvas } from "../../editor/rendering/Canvas";
 import { CanvasItem } from "../../editor/rendering/CanvasItem";
 import type { Coordinates } from "../../../types/coordinates";
 import { scenePoint } from "../../editor/spaces";
@@ -87,7 +87,8 @@ interface ExpandedHandleRect {
 export interface SelectBoundingBoxProps {
   readonly sceneRect: Rect2D;
   readonly screenRect: Rect2D;
-  readonly sceneHandles: HandlePositions | null;
+  /** Whether corner handles are drawn; hit zones exist either way. */
+  readonly showHandles: boolean;
   readonly screenHandles: HandlePositions;
   readonly hitRadiusPx: number;
 }
@@ -134,13 +135,6 @@ export class SelectBoundingBox extends CanvasItem<SelectBoundingBoxProps> {
     const screenRect = this.#screenRect(sceneRect);
     if (!hasBoundingBoxArea(sceneRect)) return null;
 
-    const sceneHandles = componentSelection
-      ? getHandlePositions(
-          sceneRect,
-          this.#editor.screenToSceneDistance(SELECT_BOUNDING_BOX_STYLE.handle.offsetPx),
-          this.#editor.screenToSceneDistance(SELECT_BOUNDING_BOX_STYLE.rotationZoneOffsetPx),
-        )
-      : null;
     const screenHandles = getHandlePositions(
       screenRect,
       SELECT_BOUNDING_BOX_STYLE.handle.offsetPx,
@@ -150,7 +144,7 @@ export class SelectBoundingBox extends CanvasItem<SelectBoundingBoxProps> {
     return {
       sceneRect,
       screenRect,
-      sceneHandles,
+      showHandles: componentSelection,
       screenHandles,
       hitRadiusPx: SELECT_BOUNDING_BOX_STYLE.hitRadiusPx,
     };
@@ -244,8 +238,10 @@ export class SelectBoundingBox extends CanvasItem<SelectBoundingBoxProps> {
     const props = this.propsCell.value;
     if (!props) return;
 
-    this.#drawRect(canvas, props.sceneRect);
-    if (props.sceneHandles) this.#drawHandles(canvas, props.sceneHandles);
+    canvas.withScreenSpace((screen) => {
+      this.#drawRect(screen, props.screenRect);
+      if (props.showHandles) this.#drawHandles(screen, props.screenHandles);
+    });
   }
 
   #screenRect(rect: Rect2D): Rect2D {
@@ -259,13 +255,13 @@ export class SelectBoundingBox extends CanvasItem<SelectBoundingBoxProps> {
     );
   }
 
-  #drawRect(canvas: Canvas, rect: Rect2D): void {
+  #drawRect(canvas: ScreenCanvas, rect: Rect2D): void {
     const { widthPx, dashPx } = SELECT_BOUNDING_BOX_STYLE;
     const stroke = canvas.theme.segment.selectedColor;
     canvas.strokeRect(rect.x, rect.y, rect.width, rect.height, stroke, widthPx, dashPx);
   }
 
-  #drawHandles(canvas: Canvas, handles: HandlePositions): void {
+  #drawHandles(canvas: ScreenCanvas, handles: HandlePositions): void {
     const style = SELECT_BOUNDING_BOX_STYLE.handle;
     const fill = canvas.theme.handle.corner.idle.fill;
     const stroke = canvas.theme.segment.selectedColor;
@@ -387,7 +383,7 @@ function rectFromPoints(points: readonly Point2D[]): Rect2D {
 }
 
 function drawHandle(
-  canvas: Canvas,
+  canvas: ScreenCanvas,
   center: Point2D,
   style: SelectBoundingBoxStyle["handle"],
   fill: string,
@@ -395,9 +391,9 @@ function drawHandle(
 ): void {
   canvas.ctx.save();
 
-  const radius = canvas.pxToUpm(style.radiusPx);
+  const radius = style.radiusPx;
   const size = radius * 2;
-  canvas.ctx.lineWidth = canvas.pxToUpm(style.widthPx);
+  canvas.ctx.lineWidth = style.widthPx;
   canvas.ctx.fillStyle = fill;
   canvas.ctx.strokeStyle = stroke;
   canvas.ctx.fillRect(center.x - radius, center.y - radius, size, size);

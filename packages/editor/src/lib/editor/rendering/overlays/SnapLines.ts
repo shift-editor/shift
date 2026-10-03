@@ -12,7 +12,6 @@ export class SnapLines {
    */
   draw(canvas: Canvas, guides: readonly PositionGuide[]): void {
     const { color, widthPx, crossSizePx } = canvas.theme.snap;
-    const crossHalf = canvas.pxToUpm(crossSizePx);
     const markers = new Map<string, Point2D>();
 
     for (const guide of guides) {
@@ -25,12 +24,14 @@ export class SnapLines {
       }
     }
 
-    const diagonal: Point2D = { x: crossHalf, y: crossHalf };
-    const antiDiagonal: Point2D = { x: crossHalf, y: -crossHalf };
-
-    for (const marker of markers.values()) {
-      canvas.line(Vec2.sub(marker, diagonal), Vec2.add(marker, diagonal), color, widthPx);
-      canvas.line(Vec2.sub(marker, antiDiagonal), Vec2.add(marker, antiDiagonal), color, widthPx);
-    }
+    const diagonal: Point2D = { x: crossSizePx, y: crossSizePx };
+    const antiDiagonal: Point2D = { x: crossSizePx, y: -crossSizePx };
+    canvas.withScreenSpace((screen, project) => {
+      for (const marker of markers.values()) {
+        const cross = project.point(marker);
+        screen.line(Vec2.sub(cross, diagonal), Vec2.add(cross, diagonal), color, widthPx);
+        screen.line(Vec2.sub(cross, antiDiagonal), Vec2.add(cross, antiDiagonal), color, widthPx);
+      }
+    });
   }
 }

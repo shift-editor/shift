@@ -4,7 +4,6 @@ import type { ComponentId, NodeId, PointId } from "@shift/types";
 import type { LocalBounds, LocalPoint } from "../../types/coordinates";
 import { localBounds } from "../editor/spaces";
 import { SCREEN_HIT_RADIUS } from "../editor/rendering/constants";
-import { handleCullPaddingPx } from "../editor/rendering/markers/handleStyles";
 import { OutlineRenderer } from "../editor/rendering/Outline";
 import {
   Anchors,
@@ -441,14 +440,11 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
       this.#hoveredSegmentId(node),
     );
     this.#drawControlLines(
-      node,
       ctx,
       rootContours.map((contour) => contour.contour),
     );
     this.#handles.draw(
       ctx,
-      this.editor.screenTransform(node),
-      this.editor.visibleLocalBounds(node, handleCullPaddingPx(ctx.canvas.theme)),
       rootContours,
       this.editor.selection,
       this.editor.hover,
@@ -468,16 +464,12 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
       view,
       this.editor.debugOverlays,
       this.#hoveredSegmentId(node),
-      ctx.canvas.pxToUpm(SCREEN_HIT_RADIUS),
+      SCREEN_HIT_RADIUS,
     );
   }
 
-  #drawControlLines(
-    node: GlyphNode,
-    ctx: RenderContext,
-    contours: readonly GlyphRenderContour[],
-  ): void {
-    const visible = this.editor.visibleLocalBounds(node, 64);
+  #drawControlLines(ctx: RenderContext, contours: readonly GlyphRenderContour[]): void {
+    const visible = ctx.canvas.visibleBounds(64);
 
     this.#controlLines.draw(ctx.canvas, contours, (from, to, contourId) => {
       if (

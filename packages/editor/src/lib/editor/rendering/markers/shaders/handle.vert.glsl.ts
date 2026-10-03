@@ -44,8 +44,13 @@ vec2 screenToClip(vec2 screen) {
 void main() {
   vec2 screen = (u_to_screen * vec3(a_position, 1.0)).xy;
 
+  // a_rotation is measured in the marker's own units; map its direction to
+  // the screen so flipped or rotated units turn the marker the same way.
+  vec2 direction = (u_to_screen * vec3(cos(a_rotation), sin(a_rotation), 0.0)).xy;
+  float screen_rotation = atan(direction.y, direction.x);
+
   vec2 local = a_unit * a_extent;
-  vec2 rotated = rotatePoint(local, -a_rotation);
+  vec2 rotated = rotatePoint(local, screen_rotation);
   vec2 clip = screenToClip(screen + rotated);
 
   gl_Position = vec4(clip, 0.0, 1.0);

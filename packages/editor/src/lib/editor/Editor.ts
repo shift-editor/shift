@@ -38,7 +38,6 @@ import type {
 import {
   applyLinear,
   applyTransform,
-  composeTransforms,
   invertTransform,
   localBounds,
   sceneBounds,
@@ -1453,15 +1452,6 @@ export class Editor {
   }
 
   /**
-   * Returns the transform from a node's own units to screen pixels, read without tracking.
-   *
-   * @param node - a node in the scene; its ancestors are resolved by `parentId`.
-   */
-  screenTransform(node: ShiftNode): SpaceTransform<"local", "screen"> {
-    return composeTransforms(this.#camera.viewCell.peek(), this.sceneTransform(node));
-  }
-
-  /**
    * Returns a point in a node's own units as a scene point.
    *
    * @param node - the node whose units `point` is measured in.
@@ -1528,22 +1518,6 @@ export class Editor {
   nodeBounds(node: ShiftNode): SceneBounds | null {
     const bounds = this.nodeDefinition(node.kind).bounds(node);
     return bounds ? this.toSceneBounds(node, bounds) : null;
-  }
-
-  /**
-   * Returns the part of the scene visible in the canvas, in a node's own units.
-   *
-   * @param node - the node whose units the result is measured in.
-   * @param marginPx - extra logical pixels on every side, so content just off-screen is included.
-   * @returns fresh bounds; read without tracking.
-   */
-  visibleLocalBounds(node: ShiftNode, marginPx: number): LocalBounds {
-    const visible = this.#camera.visibleSceneBounds(marginPx);
-    const bounds = sceneBounds({
-      min: { x: visible.minX, y: visible.minY },
-      max: { x: visible.maxX, y: visible.maxY },
-    });
-    return this.toLocalBounds(node, bounds);
   }
 
   /**
@@ -1712,11 +1686,6 @@ export class Editor {
 
   public get hitRadius(): number {
     return this.#camera.hitRadius;
-  }
-
-  /** @knipclassignore Indirectly consumed through Renderer. */
-  public screenToSceneDistance(pixels: number): number {
-    return this.#camera.screenToSceneDistance(pixels);
   }
 
   /** @knipclassignore Indirectly consumed through Renderer. */
