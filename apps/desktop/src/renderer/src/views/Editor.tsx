@@ -150,8 +150,8 @@ export const Editor = () => {
   );
 };
 
-const LEFT_SIDEBAR_DEFAULT_SIZE = 15;
-const RIGHT_SIDEBAR_DEFAULT_SIZE = 15;
+const LEFT_SIDEBAR_DEFAULT_SIZE = 240;
+const RIGHT_SIDEBAR_DEFAULT_SIZE = 260;
 
 const EditorLayout = ({
   cursorStyle,
@@ -182,7 +182,7 @@ const EditorLayout = ({
       <ResizablePanelGroup
         data-testid="editor-layout-panels"
         direction="horizontal"
-        autoSaveId="shift:editor-layout"
+        autoSaveId="shift:workspace-layout"
         className="flex-1 overflow-hidden"
       >
         <ResizablePanel
@@ -192,8 +192,8 @@ const EditorLayout = ({
           id="left-sidebar"
           order={1}
           defaultSize={LEFT_SIDEBAR_DEFAULT_SIZE}
-          minSize={10}
-          maxSize={30}
+          minSize={160}
+          maxSize={400}
           collapsible
           collapsedSize={0}
         >
@@ -208,7 +208,7 @@ const EditorLayout = ({
           inset="start"
           onDoubleClick={() => leftSidebarPanelRef.current?.resize(LEFT_SIDEBAR_DEFAULT_SIZE)}
         />
-        <ResizablePanel id="canvas" order={2} minSize={30}>
+        <ResizablePanel id="canvas" order={2} minSize={300}>
           <ZoneContainer zone="canvas" className="h-full">
             {children}
           </ZoneContainer>
@@ -225,8 +225,8 @@ const EditorLayout = ({
           id="right-sidebar"
           order={3}
           defaultSize={RIGHT_SIDEBAR_DEFAULT_SIZE}
-          minSize={10}
-          maxSize={30}
+          minSize={180}
+          maxSize={420}
           collapsible
           collapsedSize={0}
         >

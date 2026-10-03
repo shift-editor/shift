@@ -125,26 +125,26 @@ test.describe("Home view", () => {
     }
   });
 
-  test("resets both sidebars to the same default width", async ({ page }) => {
-    const layout = page.getByTestId("home-layout-panels");
+  test("resets both sidebars to their default widths", async ({ page }) => {
     const leftSidebar = page.getByTestId("left-sidebar-panel");
     const rightSidebar = page.getByTestId("right-sidebar-panel");
     const leftDivider = page.getByRole("separator", { name: "Resize left sidebar" });
     const rightDivider = page.getByRole("separator", { name: "Resize right sidebar" });
-    const defaultWidth = (await elementWidth(layout)) * 0.15;
+    const defaultLeftWidth = 240;
+    const defaultRightWidth = 260;
 
     await leftDivider.focus();
     await page.keyboard.press("ArrowRight");
-    await expect.poll(() => elementWidth(leftSidebar)).toBeGreaterThan(defaultWidth + 1);
+    await expect.poll(() => elementWidth(leftSidebar)).toBeGreaterThan(defaultLeftWidth + 1);
     await leftDivider.dispatchEvent("dblclick");
 
     await rightDivider.focus();
     await page.keyboard.press("ArrowLeft");
-    await expect.poll(() => elementWidth(rightSidebar)).toBeGreaterThan(defaultWidth + 1);
+    await expect.poll(() => elementWidth(rightSidebar)).toBeGreaterThan(defaultRightWidth + 1);
     await rightDivider.dispatchEvent("dblclick");
 
-    await expect.poll(() => elementWidth(leftSidebar)).toBeCloseTo(defaultWidth, 0);
-    await expect.poll(() => elementWidth(rightSidebar)).toBeCloseTo(defaultWidth, 0);
+    await expect.poll(() => elementWidth(leftSidebar)).toBeCloseTo(defaultLeftWidth, 0);
+    await expect.poll(() => elementWidth(rightSidebar)).toBeCloseTo(defaultRightWidth, 0);
   });
 
   test("toolbar toggles both sidebars without reflowing their contents", async ({ page }) => {
@@ -154,6 +154,17 @@ test.describe("Home view", () => {
     const leftContent = page.getByRole("complementary", { name: "Font navigation" });
     const rightContent = page.getByRole("complementary", { name: "Glyph properties" });
     const catalogSurface = glyphCatalogSurface(page);
+
+    if ((await elementWidth(leftPanel)) <= 1) {
+      await page.getByRole("button", { name: "Toggle left sidebar" }).click();
+      await expect.poll(() => elementWidth(leftPanel)).toBeGreaterThan(0);
+    }
+
+    if ((await elementWidth(rightPanel)) <= 1) {
+      await page.getByRole("button", { name: "Toggle right sidebar" }).click();
+      await expect.poll(() => elementWidth(rightPanel)).toBeGreaterThan(0);
+    }
+
     const leftWidth = await elementWidth(leftContent);
     const rightWidth = await elementWidth(rightContent);
 

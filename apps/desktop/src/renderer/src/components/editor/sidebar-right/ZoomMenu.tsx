@@ -38,7 +38,7 @@ export const ZoomMenu = () => {
           />
         }
       >
-        {Math.round(zoom * 100)}%
+        <span className="tabular-nums">{Math.round(zoom * 100)}%</span>
         <ChevronDown aria-hidden className="h-3 w-3" />
       </MenuTrigger>
       <MenuPortal>

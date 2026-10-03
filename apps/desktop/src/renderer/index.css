@@ -161,7 +161,7 @@
 }
 
 .sidebar-layout-animating > [data-panel] {
-  transition: flex-grow 150ms ease-out;
+  transition: width 150ms ease-out;
 }
 
 .sidebar-layout-animating:has([data-resize-handle-state="drag"]) > [data-panel] {
