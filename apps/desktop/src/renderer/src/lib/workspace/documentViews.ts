@@ -1,14 +1,23 @@
-import type { GlyphId, WorkspaceDocumentState } from "@shift/types";
+import { z } from "zod";
+import { asGlyphId, type WorkspaceDocumentState } from "@shift/types";
+
+const documentViewSchema = z
+  .object({
+    glyphId: z.string().startsWith("glyph_").transform(asGlyphId).optional(),
+  })
+  .strict();
+
+const storedViewSchema = documentViewSchema
+  .extend({
+    key: z.string().min(1),
+    usedAt: z.number().int().nonnegative(),
+  })
+  .strict();
 
 /** What a viewer last saw in one document, restored when the document resumes. */
-export type DocumentView = {
-  glyphId?: GlyphId;
-};
+export type DocumentView = z.output<typeof documentViewSchema>;
 
-type StoredView = DocumentView & {
-  key: string;
-  usedAt: number;
-};
+type StoredView = z.output<typeof storedViewSchema>;
 
 type ViewStorage = Pick<Storage, "getItem" | "setItem">;
 
@@ -70,14 +79,12 @@ export class DocumentViews {
       return [];
     }
 
-    return Array.isArray(parsed) ? parsed.filter(isStoredView) : [];
+    if (!Array.isArray(parsed)) return [];
+
+    // Drop entries individually so one malformed view cannot forget every document.
+    return parsed.flatMap((value) => {
+      const result = storedViewSchema.safeParse(value);
+      return result.success ? [result.data] : [];
+    });
   }
-}
-
-function isStoredView(value: unknown): value is StoredView {
-  if (typeof value !== "object" || value === null) return false;
-
-  const view = value as Record<string, unknown>;
-  const glyphIdValid = view.glyphId === undefined || typeof view.glyphId === "string";
-  return typeof view.key === "string" && typeof view.usedAt === "number" && glyphIdValid;
 }

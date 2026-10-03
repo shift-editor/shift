@@ -46,4 +46,21 @@ describe("DocumentViews", () => {
     expect(() => views.write("doc-1", { glyphId: asGlyphId("glyph_a") })).not.toThrow();
     expect(views.read("doc-1")).toBeNull();
   });
+
+  it("forgets malformed views without losing valid ones", () => {
+    const storage = memoryStorage();
+    storage.setItem(
+      "shift.documentViews",
+      JSON.stringify([
+        { key: "doc-1", usedAt: 2, glyphId: "glyph_a" },
+        { key: "doc-2", usedAt: 1, glyphId: "not-a-glyph-id" },
+        { key: "doc-3", usedAt: "yesterday" },
+        { key: "doc-4", usedAt: 1, camera: { zoom: 2 } },
+      ]),
+    );
+    const views = new DocumentViews(() => storage);
+
+    expect(views.read("doc-1")).toEqual({ glyphId: asGlyphId("glyph_a") });
+    expect(["doc-2", "doc-3", "doc-4"].map((key) => views.read(key))).toEqual([null, null, null]);
+  });
 });
