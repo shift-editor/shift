@@ -14,4 +14,23 @@ export { computed, effect, useSignalState } from "@shift/editor/signals";
 export type { Signal } from "@shift/editor/signals";
 export { externalAxisLocationFromRecord } from "@shift/editor/variation";
 export type { DesignAxisLocation, ExternalAxisLocation } from "@shift/editor/variation";
-export type { FontSnapshot, GlyphId, GlyphPreview, GlyphRecord, GlyphSnapshot } from "@shift/types";
+export type {
+  AxisCoordinate,
+  EditorGlyph,
+  EditorInspection,
+  EditorTool,
+  EditorView,
+  ShiftCapabilities,
+  ShiftSession,
+  ShiftSessionMode,
+} from "@shift/runtime";
+export type {
+  FontSnapshot,
+  GlyphId,
+  GlyphPreview,
+  GlyphRecord,
+  GlyphSnapshot,
+  SegmentId,
+  SelectableId,
+  ShiftId,
+} from "@shift/types";

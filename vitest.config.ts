@@ -5,6 +5,7 @@ export default defineConfig({
     projects: [
       "apps/desktop/vitest.config.ts",
       "packages/geo/vitest.config.ts",
+      "packages/mcp/vitest.config.ts",
       "packages/validation/vitest.config.ts",
       "packages/ui/vitest.config.ts",
       "packages/glyph-info/vitest.config.ts",

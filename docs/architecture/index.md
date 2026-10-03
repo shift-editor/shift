@@ -15,7 +15,7 @@ Central routing table for Shift's distributed documentation. Before creating new
 
 | Path pattern                | Canonical doc                                                                      | Purpose                                                                                     |
 | --------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `crates/fontsrc/**`         | [`crates/fontsrc/docs/DOCS.md`](../../crates/fontsrc/docs/DOCS.md)               | Shift-independent authored font source reading and writing                                  |
+| `crates/fontsrc/**`         | [`crates/fontsrc/docs/DOCS.md`](../../crates/fontsrc/docs/DOCS.md)                 | Shift-independent authored font source reading and writing                                  |
 | `crates/shift-backends/**`  | [`crates/shift-backends/docs/DOCS.md`](../../crates/shift-backends/docs/DOCS.md)   | Font format backends for reading/writing various font formats                               |
 | `crates/shift-font/**`      | [`crates/shift-font/docs/DOCS.md`](../../crates/shift-font/docs/DOCS.md)           | First-class Rust font object model and editing behavior                                     |
 | `crates/shift-slug/**`      | [`crates/shift-slug/docs/DOCS.md`](../../crates/shift-slug/docs/DOCS.md)           | GPU-independent Slug curves, retained compilation, and packing                              |
@@ -54,6 +54,8 @@ Central routing table for Shift's distributed documentation. Before creating new
 | `packages/types/**`                    | [`packages/types/docs/DOCS.md`](../../packages/types/docs/DOCS.md)               | Branded IDs, generated bridge DTO facade, and shared domain types  |
 | `packages/geo/**`                      | [`packages/geo/docs/DOCS.md`](../../packages/geo/docs/DOCS.md)                   | Geometry utilities (Vec2, Curve, Polygon, Mat)                     |
 | `packages/glyph-state/**`              | [`packages/glyph-state/docs/DOCS.md`](../../packages/glyph-state/docs/DOCS.md)   | Glyph-domain geometry (contour traversal, segment parsing, bounds) |
+| `packages/mcp/**`                      | [`packages/mcp/docs/DOCS.md`](../../packages/mcp/docs/DOCS.md)                   | Local code-mode access to the live desktop application             |
+| `packages/runtime/**`                  | [`packages/runtime/docs/DOCS.md`](../../packages/runtime/docs/DOCS.md)           | Shared protocol and plugin capability contracts                    |
 | `packages/ui/**`                       | [`packages/ui/docs/DOCS.md`](../../packages/ui/docs/DOCS.md)                     | UI component library wrapping Base UI primitives                   |
 | `packages/validation/**`               | [`packages/validation/docs/DOCS.md`](../../packages/validation/docs/DOCS.md)     | Point sequence validation and persistence schemas                  |
 | `packages/rules/**`                    | [`packages/rules/docs/DOCS.md`](../../packages/rules/docs/DOCS.md)               | Point editing rules engine for geometric constraints               |

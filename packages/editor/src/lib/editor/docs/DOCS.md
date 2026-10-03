@@ -92,7 +92,7 @@ editor/
 - **`Canvas`** -- Thin wrapper around `CanvasRenderingContext2D` with `pxToUpm()` conversion and themed drawing primitives. Carries `CameraTransform` and `EditorRenderTheme`.
 - **`CameraTransform`** -- Value object: `{ zoom, panX, panY, centre, upmScale, logicalHeight, layoutHeight, padding, descender }`. Snapshot of viewport state passed to rendering code.
 - **`Selection`** -- Ordered branded-ID selection state. It exposes `stateCell` and unwrapped ID getters; `Editor.selectionBoundsCell` resolves current live objects and their bounds.
-- **`SelectableId`** -- Branded identity accepted by selection regardless of the object's concrete kind.
+- **`SelectableId`** -- Identity union imported from `@shift/types` and accepted by selection regardless of the object's concrete kind.
 - **`Coordinates`** -- Pair of `{ screen, scene }` for a single pointer position. Node-local coordinates are derived after hit testing identifies the node being acted on.
 - **`PositionSelection`** -- One active reference `GlyphLayer` and normalized point/anchor targets plus the corresponding targets on every completely matched editing layer. It contains edit ownership only, not scene placement or pointer coordinates.
 - **`editingSourceIdsCell`** -- Session-only source selection for multi-source editing. The active source remains the reference; additional selected sources render as comparison outlines.
@@ -198,7 +198,7 @@ Glyph geometry exposes domain hit queries for points, anchors, and segments. Too
 ### Add a new selectable entity kind
 
 1. Define or import its branded identity and guard.
-2. Add the identity to `ShiftId` and `SelectableId` in the object type boundary.
+2. Add the identity to `ShiftId` and `SelectableId` in `@shift/types`.
 3. Resolve it in `Editor.object()` and provide live object bounds.
 4. Add editor tests for lookup, selection bounds, and invalidation after edits.
 

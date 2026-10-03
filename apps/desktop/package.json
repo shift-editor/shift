@@ -62,6 +62,8 @@
     "@shift/geo": "workspace:*",
     "@shift/glyph-info": "workspace:*",
     "@shift/glyph-state": "workspace:*",
+    "@shift/mcp": "workspace:*",
+    "@shift/runtime": "workspace:*",
     "@shift/types": "workspace:*",
     "@shift/ui": "workspace:*",
     "@shift/validation": "workspace:*",

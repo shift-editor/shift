@@ -15,11 +15,12 @@ import type {
   LayerId,
   PointData,
   PointId,
+  SegmentId,
   SourceId,
   WorkspaceGlyphLayerSnapshot,
   WorkspaceSnapshot,
 } from "@shift/types";
-import { segmentIdFor, type SegmentId } from "@shift/glyph-state";
+import { segmentIdFor } from "@shift/glyph-state";
 import { Validate } from "@shift/validation";
 import {
   batch,

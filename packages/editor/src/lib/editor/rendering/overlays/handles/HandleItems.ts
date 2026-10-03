@@ -1,6 +1,5 @@
-import type { PointId, ContourId } from "@shift/types";
 import { Bounds, type Bounds as BoundsType } from "@shift/geo";
-import type { SelectableId } from "../../../../../types/object";
+import type { ContourId, PointId, SelectableId } from "@shift/types";
 import type { HandleState } from "../../../../../types/graphics";
 import type { Hover } from "../../../Hover";
 import type { Selection } from "../../../Selection";

@@ -11,10 +11,10 @@ import type {
   GlyphSnapshot,
   LayerId,
   PointId,
+  SegmentId,
   Source,
   SourceId,
 } from "@shift/types";
-import type { SegmentId } from "@shift/glyph-state";
 import type { Glyph, GlyphLayer } from "../lib/model/Glyph";
 import type { Signal } from "../lib/signals/signal";
 import type { DesignAxisLocation } from "./variation";

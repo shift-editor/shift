@@ -17,6 +17,7 @@ export const PLATFORM_SPECS = [
   "document-crash.spec.ts",
   "document-lifecycle.spec.ts",
   "document-recovery.spec.ts",
+  "live-agent.spec.ts",
   "platform-integration.spec.ts",
   "recent-files.spec.ts",
   "variable-font-recovery.spec.ts",

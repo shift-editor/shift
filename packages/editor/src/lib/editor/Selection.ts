@@ -1,7 +1,8 @@
 import { computed, type Signal } from "../signals/signal";
 import type { ShiftStore } from "../store/ShiftStore";
 import { uniqueInOrder } from "../utils/utils";
-import { currentSelectionId, type SelectableId } from "../../types/object";
+import type { SelectableId } from "@shift/types";
+import { currentSelectionId } from "../../types/object";
 import type { ShiftEditorRecord } from "../../types/records";
 
 export interface SelectionState {

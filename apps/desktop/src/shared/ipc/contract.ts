@@ -39,6 +39,7 @@ export type RendererErrorReport = {
  * channels here only when preload needs a new main-process capability.
  */
 export type RendererToMain = {
+  "agent.connect": () => void;
   "commands.run": (id: CommandId) => void;
   "clipboard.readText": () => string;
   "clipboard.writeText": (text: string) => void;

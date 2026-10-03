@@ -15,6 +15,10 @@ import type { RecentDocument } from "../recents";
 export interface ShiftHost {
   /** Operating system that owns the current application window. */
   platform: NodeJS.Platform;
+  /** Connects this renderer to main-owned live agent requests. */
+  agent: {
+    connect: () => Promise<void>;
+  };
   /** Runs app commands owned by the main process. */
   commands: {
     /**

@@ -66,6 +66,12 @@ importers:
       '@shift/glyph-state':
         specifier: workspace:*
         version: link:../../packages/glyph-state
+      '@shift/mcp':
+        specifier: workspace:*
+        version: link:../../packages/mcp
+      '@shift/runtime':
+        specifier: workspace:*
+        version: link:../../packages/runtime
       '@shift/types':
         specifier: workspace:*
         version: link:../../packages/types
@@ -301,6 +307,43 @@ importers:
         specifier: ^4.1.10
         version: 4.1.10(@types/node@25.3.0)(jsdom@26.1.0)(vite@6.4.3(@types/node@25.3.0)(jiti@2.6.1)(lightningcss@1.30.1)(terser@5.49.0)(tsx@4.21.0))
 
+  packages/mcp:
+    dependencies:
+      '@jitl/quickjs-singlefile-cjs-release-sync':
+        specifier: 0.32.0
+        version: 0.32.0
+      '@modelcontextprotocol/node':
+        specifier: 2.1.0
+        version: 2.1.0(@modelcontextprotocol/server@2.2.0)(hono@4.13.12)
+      '@modelcontextprotocol/server':
+        specifier: 2.2.0
+        version: 2.2.0
+      '@shift/runtime':
+        specifier: workspace:*
+        version: link:../runtime
+      quickjs-emscripten-core:
+        specifier: 0.32.0
+        version: 0.32.0
+      zod:
+        specifier: ^4.1.12
+        version: 4.3.6
+    devDependencies:
+      '@shift/types':
+        specifier: workspace:*
+        version: link:../types
+      '@types/node':
+        specifier: ^25.3.0
+        version: 25.3.0
+      oxlint:
+        specifier: ^1.85.0
+        version: 1.85.0
+      typescript:
+        specifier: ^5.5.4
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.10
+        version: 4.1.10(@types/node@25.3.0)(jsdom@26.1.0)(vite@6.4.3(@types/node@25.3.0)(jiti@2.6.1)(lightningcss@1.30.1)(terser@5.49.0)(tsx@4.21.0))
+
   packages/rules:
     dependencies:
       '@shift/geo':
@@ -317,6 +360,31 @@ importers:
         specifier: ^4.1.10
         version: 4.1.10(@types/node@25.3.0)(jsdom@26.1.0)(vite@6.4.3(@types/node@25.3.0)(jiti@2.6.1)(lightningcss@1.30.1)(terser@5.49.0)(tsx@4.21.0))
 
+  packages/runtime:
+    dependencies:
+      '@shift/geo':
+        specifier: workspace:*
+        version: link:../geo
+      '@shift/types':
+        specifier: workspace:*
+        version: link:../types
+      zod:
+        specifier: ^4.1.12
+        version: 4.3.6
+    devDependencies:
+      oxfmt:
+        specifier: ^0.49.0
+        version: 0.49.0
+      oxlint:
+        specifier: ^1.85.0
+        version: 1.85.0
+      tsdown:
+        specifier: 0.23.0
+        version: 0.23.0(@typescript/native-preview@7.0.0-dev.20260707.2)(oxc-resolver@11.17.1)(tsx@4.21.0)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.5.4
+        version: 5.9.3
+
   packages/sdk:
     dependencies:
       '@base-ui-components/react':
@@ -332,6 +400,9 @@ importers:
       '@shift/editor':
         specifier: workspace:*
         version: link:../editor
+      '@shift/runtime':
+        specifier: workspace:*
+        version: link:../runtime
       '@shift/types':
         specifier: workspace:*
         version: link:../types
@@ -1061,6 +1132,12 @@ packages:
   '@floating-ui/utils@0.2.10':
     resolution: {integrity: sha512-aGTxbpbg8/b5JfU1HXSrbH3wXZuLPJcNEcZQFMxLs3oSzgtVu6nFPkbbGGUvBcUjKV2YyB9Wxxabo+HEH9tcRQ==}
 
+  '@hono/node-server@1.19.17':
+    resolution: {integrity: sha512-dSneS5qhiauZWGDCeK4o695Xd9nUNjviSZCMQrj10eetr8Uln1ucn6bbphOM6UynAMMtNIzZNSpL9vnASJwrPQ==}
+    engines: {node: '>=18.14.1'}
+    peerDependencies:
+      hono: ^4
+
   '@inquirer/ansi@2.0.4':
     resolution: {integrity: sha512-DpcZrQObd7S0R/U3bFdkcT5ebRwbTTC4D3tCc1vsJizmgPLxNJBo+AAFmrZwe8zk30P2QzgzGWZ3Q9uJwWuhIg==}
     engines: {node: '>=23.5.0 || ^22.13.0 || ^21.7.0 || ^20.12.0'}
@@ -1199,6 +1276,12 @@ packages:
     resolution: {integrity: sha512-wgm9Ehl2jpeqP3zw/7mo3kRHFp5MEDhqAdwy1fTGkHAwnkGOVsgpvQhL8B5n1qlb01jV3n/bI0ZfZp5lWA1k4w==}
     engines: {node: '>=18.0.0'}
 
+  '@jitl/quickjs-ffi-types@0.32.0':
+    resolution: {integrity: sha512-v9T+GQpmk43VDJ7d72sf0Nexhk+ArvtUihW27dy7lqAl0zBObFKtSBBIm5RBjwIhE8VwsPPm9PNuvPvNqLWUEg==}
+
+  '@jitl/quickjs-singlefile-cjs-release-sync@0.32.0':
+    resolution: {integrity: sha512-NjUUcw26PoeJHND6nmflAH8nIvAJvxJ2qkSPi95wfiBqPim80GtcdWommroiWb8hh1/7fVettEwodAsGt2Mrsg==}
+
   '@jridgewell/gen-mapping@0.3.12':
     resolution: {integrity: sha512-OuLGC46TjB5BbN1dH8JULVVZY4WTdkF7tV9Ys6wLL1rubZnCMstOhNHueU5bLCrnRuDhKPDM4g6sw4Bel5Gzqg==}
 
@@ -1240,6 +1323,24 @@ packages:
 
   '@microsoft/tsdoc@0.17.0':
     resolution: {integrity: sha512-p68VexhnH7ojf3U27RdryUDqnKJgKaWUbCL96vJR7N0mqDuhKG5OIECk3sCPPdynxjk+yoVhRkScqtv5KQjzsw==}
+
+  '@modelcontextprotocol/core@2.2.0':
+    resolution: {integrity: sha512-iLhmprRmWI8EcosOA3wVvww22z02NkgqhV4fBH6f/odQBsi7xnJc0HGmi21yWO+/iKw2yzqVE127Zhna5/+JXw==}
+    engines: {node: '>=20'}
+
+  '@modelcontextprotocol/node@2.1.0':
+    resolution: {integrity: sha512-6xg3iWVcOfiL8Y7rI6xUqXD0lI2AY5q3djsa/cOi1IJUSwx06t0gvhSwU/6mIIohrFlt40/ANUG56DQ0HLhILQ==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      '@modelcontextprotocol/server': ^2.1.0
+      hono: ^4.11.4
+    peerDependenciesMeta:
+      hono:
+        optional: true
+
+  '@modelcontextprotocol/server@2.2.0':
+    resolution: {integrity: sha512-qFnltjus6Gk8Lx6J1w2RXmr3YPN22MNT6qD6zjAkaiWIlFIFxWClz0rXHNuJF/KSUyn5YGhkSvXkWDbQHVLFEQ==}
+    engines: {node: '>=20'}
 
   '@napi-rs/cli@3.6.2':
     resolution: {integrity: sha512-jy5rABUh9tbE/vPRzw9kGzGuqZiVslyDQUV8LkvjzqVX/oJMN7g0U1uhtr9L3W1H+iRM/urXHXUf+CE4n8FvLA==}
@@ -3789,6 +3890,10 @@ packages:
     resolution: {integrity: sha512-T2UbfbBEF32wiepXIsMlTW9+dDYC6wMh/t/vYA4tuOMKqWz/n3vr1NFSxQiyP+zk2mXsoMA/i/7qV6LKut1t1A==}
     engines: {node: '>= 0.4'}
 
+  hono@4.13.12:
+    resolution: {integrity: sha512-6E2QDAc9Ick9Sq77ZrGS/dk2WUYni91aufTw6LJKpV7w8kW5/GxVUc650FOADOmlwg3K+f7Pun6XlV+pYmW6gw==}
+    engines: {node: '>=16.9.0'}
+
   hookable@6.1.2:
     resolution: {integrity: sha512-+abwxtiEA52GCVIsQqut3S/uKTbUwYIp4Pe/vv+6py5XiXBCqMZHg6pA6Y5qhgLSEys0/cYuPbO0z1QFj5ZCmg==}
 
@@ -4439,6 +4544,9 @@ packages:
   quick-lru@5.1.1:
     resolution: {integrity: sha512-WuyALRjWPDGtt/wzJiadO5AXY+8hZ80hVpe6MyivgraREW751X3SbhRvG3eLKOYN+8VEvqLcf3wdnt44Z4S4SA==}
     engines: {node: '>=10'}
+
+  quickjs-emscripten-core@0.32.0:
+    resolution: {integrity: sha512-QFnPfjFey8EqknSrSxe1hZrf1/8z7/6s1QzGOmKo6++02r7QRRX7ZoyNaZh7JuVjWsVW87KnQrbZqnHkOAzUyg==}
 
   react-dom@19.2.8:
     resolution: {integrity: sha512-rVprimfGBG3DR+Tq0IQG2DT5PxKth1WIGDmj5yPmlzr4YBe7uyE+Du4oVqTDXZSHGGGXRtTJEGSSePyQCMBglQ==}
@@ -5824,6 +5932,10 @@ snapshots:
 
   '@floating-ui/utils@0.2.10': {}
 
+  '@hono/node-server@1.19.17(hono@4.13.12)':
+    dependencies:
+      hono: 4.13.12
+
   '@inquirer/ansi@2.0.4': {}
 
   '@inquirer/checkbox@5.1.2(@types/node@25.3.0)':
@@ -5947,6 +6059,12 @@ snapshots:
     dependencies:
       minipass: 7.1.2
 
+  '@jitl/quickjs-ffi-types@0.32.0': {}
+
+  '@jitl/quickjs-singlefile-cjs-release-sync@0.32.0':
+    dependencies:
+      '@jitl/quickjs-ffi-types': 0.32.0
+
   '@jridgewell/gen-mapping@0.3.12':
     dependencies:
       '@jridgewell/sourcemap-codec': 1.5.5
@@ -6019,6 +6137,22 @@ snapshots:
       resolve: 1.22.12
 
   '@microsoft/tsdoc@0.17.0': {}
+
+  '@modelcontextprotocol/core@2.2.0':
+    dependencies:
+      zod: 4.3.6
+
+  '@modelcontextprotocol/node@2.1.0(@modelcontextprotocol/server@2.2.0)(hono@4.13.12)':
+    dependencies:
+      '@hono/node-server': 1.19.17(hono@4.13.12)
+      '@modelcontextprotocol/server': 2.2.0
+    optionalDependencies:
+      hono: 4.13.12
+
+  '@modelcontextprotocol/server@2.2.0':
+    dependencies:
+      '@modelcontextprotocol/core': 2.2.0
+      zod: 4.3.6
 
   '@napi-rs/cli@3.6.2(@emnapi/runtime@1.8.1)(@types/node@25.3.0)(supports-color@8.1.1)':
     dependencies:
@@ -8154,6 +8288,8 @@ snapshots:
     dependencies:
       function-bind: 1.1.2
 
+  hono@4.13.12: {}
+
   hookable@6.1.2: {}
 
   hosted-git-info@4.1.0:
@@ -8833,6 +8969,10 @@ snapshots:
   queue-microtask@1.2.3: {}
 
   quick-lru@5.1.1: {}
+
+  quickjs-emscripten-core@0.32.0:
+    dependencies:
+      '@jitl/quickjs-ffi-types': 0.32.0
 
   react-dom@19.2.8(react@19.2.8):
     dependencies:
