@@ -1,5 +1,5 @@
 import { expect, type Page } from "@playwright/test";
-import type { GlyphId } from "@shift/types";
+import { asGlyphId, type GlyphId } from "@shift/types";
 
 const FIRST_GLYPH_PREVIEW_POINT = { x: 50, y: 50 };
 const FIRST_GLYPH_NAME_POINT = { x: 50, y: 117 };
@@ -113,6 +113,20 @@ export async function waitForEditorReady(page: Page, glyphId: string): Promise<v
       ),
     )
     .toBe(true);
+}
+
+/**
+ * Opens the first catalog glyph through the catalog surface.
+ *
+ * @param page - authored or preview workspace window showing the catalog.
+ * @returns the glyph identity in the editor route it opened.
+ */
+export async function openFirstCatalogGlyph(page: Page): Promise<GlyphId> {
+  await clickFirstCatalogGlyph(page);
+  await page.waitForURL(/#\/editor\//);
+  const glyphId = asGlyphId(decodeURIComponent(new URL(page.url()).hash.slice("#/editor/".length)));
+  await waitForEditorReady(page, glyphId);
+  return glyphId;
 }
 
 /**
