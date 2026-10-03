@@ -383,9 +383,7 @@ impl Font {
 fn interpolation_reference_layer(font: &Font, glyph: &crate::Glyph) -> Option<Arc<GlyphLayer>> {
     if let Some(default_source_id) = font.default_source_id() {
         let default_is_master = font
-            .sources()
-            .iter()
-            .find(|source| source.id() == default_source_id)
+            .source(default_source_id.clone())
             .is_some_and(crate::Source::is_master);
         if default_is_master {
             if let Some(layer) = glyph
@@ -398,15 +396,7 @@ fn interpolation_reference_layer(font: &Font, glyph: &crate::Glyph) -> Option<Ar
         }
     }
 
-    glyph
-        .layers()
-        .values()
-        .filter(|layer| {
-            font.sources()
-                .iter()
-                .find(|source| source.id() == layer.source_id())
-                .is_some_and(crate::Source::is_master)
-        })
+    font.master_layers(glyph)
         .cloned()
         .reduce(|preferred, candidate| {
             if layer_complexity(&candidate) > layer_complexity(&preferred) {
@@ -678,11 +668,7 @@ mod tests {
         let interpolation = font.glyph_interpolation(&glyph.id()).unwrap().unwrap();
 
         for (expected_index, source_id) in interpolation.basis().source_ids().iter().enumerate() {
-            let source = font
-                .sources()
-                .iter()
-                .find(|source| source.id() == *source_id)
-                .unwrap();
+            let source = font.source(source_id.clone()).unwrap();
             let weights = interpolation
                 .basis()
                 .weights_at(source.location(), font.axes())

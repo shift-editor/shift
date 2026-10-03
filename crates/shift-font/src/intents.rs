@@ -734,7 +734,7 @@ impl Font {
         if self.sources().iter().any(|source| source.name() == name) {
             return Err(CoreError::DuplicateSourceName(name.to_string()));
         }
-        if self.sources().iter().any(|source| source.id() == source_id) {
+        if self.source(source_id.clone()).is_some() {
             return Err(CoreError::DuplicateSourceId(source_id));
         }
         if let Some(existing) = self.sources().iter().find(|source| {
@@ -747,7 +747,7 @@ impl Font {
         }
 
         for (axis_id, _) in location.iter() {
-            if !self.axes().iter().any(|axis| axis.id() == *axis_id) {
+            if self.axis(axis_id.clone()).is_none() {
                 return Err(CoreError::AxisNotFound(axis_id.clone()));
             }
         }
@@ -782,9 +782,7 @@ impl Font {
         changes: &mut FontChangeSet,
     ) -> CoreResult<()> {
         let mut source = self
-            .sources()
-            .iter()
-            .find(|source| source.id() == *source_id)
+            .source(source_id.clone())
             .cloned()
             .ok_or_else(|| CoreError::SourceNotFound(source_id.clone()))?;
         source.set_name(name.trim().to_string());
@@ -1299,9 +1297,7 @@ impl Font {
                     }
                     let source_id = layer.source_id();
                     let location = self
-                        .sources()
-                        .iter()
-                        .find(|source| source.id() == source_id)
+                        .source(source_id.clone())
                         .ok_or(CoreError::SourceNotFound(source_id))?
                         .location()
                         .clone();
