@@ -141,22 +141,14 @@ body {
   }
 }
 
-/* Keep scrollbars legible without introducing a host-defined track color. */
-@utility scrollbar-themed {
-  scrollbar-color: var(--color-control-muted) var(--color-surface);
-
-  &::-webkit-scrollbar {
-    width: 10px;
+/* Overlay-style scrollbars everywhere: thumbs only show while their element is scrolling (see trackScrollActivity). */
+@layer base {
+  * {
+    scrollbar-color: transparent transparent;
   }
 
-  &::-webkit-scrollbar-track {
-    background: var(--color-surface);
-  }
-
-  &::-webkit-scrollbar-thumb {
-    border: 2px solid var(--color-surface);
-    border-radius: 9999px;
-    background: var(--color-control-muted);
+  [data-scrolling] {
+    scrollbar-color: var(--color-control-muted) transparent;
   }
 }
 
