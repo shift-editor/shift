@@ -104,6 +104,8 @@ export type RecoveryApp = {
   page: Page;
   documentPath: string;
   crashAndRecover: () => Promise<Page>;
+  /** Like `crashAndRecover`, but returns the recovered window as soon as it loads, on any route. */
+  crashAndRecoverWindow: () => Promise<Page>;
   crashAndReopenDocument: () => Promise<Page>;
   canonicalGlyphNames: () => string[];
   canonicalVariableFont: () => CanonicalVariableFont;

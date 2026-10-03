@@ -6,8 +6,9 @@ import {
   type GlyphCategoryCatalog,
   type LanguageCatalog,
 } from "@shift/glyph-info";
-import { asGlyphId, type GlyphId, type GlyphName } from "@shift/types";
+import type { GlyphName } from "@shift/types";
 import { effect, signal, useSignalState } from "@shift/editor/signals";
+import { editorPath, glyphIdFromPath } from "@/lib/editorRoute";
 import { useFontSession } from "@/workspace/WorkspaceContext";
 import { getGlyphInfo } from "@/workspace/glyphInfo";
 import { useListSelection } from "@/hooks/useListSelection";
@@ -152,7 +153,7 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
       if (result.status === "stale") return;
 
       setOpenedGlyph(result.result);
-      navigateRef.current(`/editor/${encodeURIComponent(glyph.id)}`);
+      navigateRef.current(editorPath(glyph.id));
     },
     [catalog],
   );
@@ -362,18 +363,4 @@ function glyphId(glyph: GlyphCatalogItem) {
 
 function sameCategoryFilter(left: GlyphCategoryFilter, right: GlyphCategoryFilter) {
   return left.category === right.category && left.subCategoryKey === right.subCategoryKey;
-}
-
-function glyphIdFromPath(pathname: string): GlyphId | null {
-  const prefix = "/editor/";
-  if (!pathname.startsWith(prefix)) return null;
-
-  let value: string;
-  try {
-    value = decodeURIComponent(pathname.slice(prefix.length));
-  } catch {
-    return null;
-  }
-
-  return value.length > 0 ? asGlyphId(value) : null;
 }

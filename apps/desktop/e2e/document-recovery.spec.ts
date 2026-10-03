@@ -1,5 +1,7 @@
 import type { Page } from "@playwright/test";
 import type { GlyphName } from "@shift/types";
+import { EditorDriver } from "./fixtures/EditorDriver";
+import { waitForEditorReady } from "./fixtures/appLocators";
 import { expect, recoveryTest as test } from "./fixtures/electronApp";
 
 test.setTimeout(90_000);
@@ -64,6 +66,20 @@ test("recovers edits made after a previous recovery", async ({ recoveryApp }) =>
   await waitForGlyphsAndState(recoveredAgain, [firstGlyph, secondGlyph], true, true);
   expect(recoveryApp.canonicalGlyphNames()).not.toContain(firstGlyph);
   expect(recoveryApp.canonicalGlyphNames()).not.toContain(secondGlyph);
+});
+
+test("reopens a saved document on the glyph it was editing after forced termination", async ({
+  recoveryApp,
+}) => {
+  const editor = new EditorDriver(recoveryApp.page);
+  await editor.openGlyphByUnicode("41");
+  const glyph = await editor.activeGlyph();
+  if (!glyph) throw new Error("Expected glyph A to be open before the crash");
+
+  const reopened = await recoveryApp.crashAndRecoverWindow();
+
+  await waitForEditorReady(reopened, glyph.glyphId);
+  expect(await reopened.evaluate(() => window.shift?.documentStateCell.peek()?.dirty)).toBe(false);
 });
 
 /** Creates a glyph in one transaction so a single undo removes it. */

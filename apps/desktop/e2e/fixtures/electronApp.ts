@@ -269,6 +269,13 @@ export const recoveryTest = test.extend<{ recoveryApp: RecoveryApp }>({
         page = await readyWorkspacePage(app);
         return page;
       },
+      crashAndRecoverWindow: async () => {
+        await killApp(app);
+        app = await launch(false);
+        page = await app.firstWindow();
+        await page.waitForLoadState("domcontentloaded");
+        return page;
+      },
       crashAndReopenDocument: async () => {
         await killApp(app);
         app = await launch(true);

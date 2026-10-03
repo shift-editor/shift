@@ -11,6 +11,7 @@ import { DebugProvider } from "@/context/DebugProvider";
 import { SettingsNavigationProvider } from "@/context/SettingsNavigationProvider";
 import { GlyphCatalogProvider } from "@/context/GlyphCatalogProvider";
 import { PreviewNoticeProvider } from "@/context/PreviewNoticeProvider";
+import { useDocumentViewMemory } from "@/hooks/useDocumentViewMemory";
 import { AboutScreen } from "@/views/AboutScreen";
 import { FeedbackScreen } from "@/views/FeedbackScreen";
 import { UpdateScreen } from "@/views/UpdateScreen";
@@ -56,6 +57,7 @@ export const Screens = () => {
 
 const FontSessionScreens = () => {
   const location = useLocation();
+  useDocumentViewMemory();
 
   // Preserve the resident catalog atlas across screen navigation. Route visibility
   // must not own the WebGPU device or trigger another complete atlas upload.

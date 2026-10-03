@@ -63,4 +63,26 @@ describe("AppLifecycle document close authorization", () => {
 
     expect(secondClosed).toBe(true);
   });
+
+  it("reports the quit reason only once every document agrees", async () => {
+    let secondAgrees = false;
+    const document = (agrees: () => boolean): CloseConfirmation => ({
+      shouldConfirmClose: () => true,
+      prepareClose: async () => agrees(),
+      commitClose: async () => {},
+      cancelClose() {},
+    });
+    const lifecycle = new AppLifecycle({
+      documentForWindow: () => null,
+      documents: () => [document(() => true), document(() => secondAgrees)],
+      log: silentLogger,
+    });
+
+    await expect(lifecycle.confirmQuit("update")).resolves.toBe(false);
+    expect(lifecycle.quitReason).toBeNull();
+
+    secondAgrees = true;
+    await expect(lifecycle.confirmQuit("update")).resolves.toBe(true);
+    expect(lifecycle.quitReason).toBe("update");
+  });
 });
