@@ -233,9 +233,7 @@ impl Font {
             return Ok(None);
         };
         let exact_source_shapes = self
-            .sources()
-            .iter()
-            .filter(|source| source.is_master())
+            .masters()
             .filter_map(|source| {
                 let layer = glyph
                     .layers()
@@ -371,7 +369,7 @@ impl Font {
             self.structural_components(glyph_id, &layers, projections, &fallback_source_id)?;
 
         let mut exact_source_components = Vec::new();
-        for source in self.sources().iter().filter(|source| source.is_master()) {
+        for source in self.masters() {
             let source_id = source.id();
             let source_components =
                 self.structural_components(glyph_id, &layers, projections, &source_id)?;

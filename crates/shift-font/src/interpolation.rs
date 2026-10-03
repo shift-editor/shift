@@ -332,7 +332,7 @@ impl Font {
 
         let mut compatible_sources = Vec::new();
 
-        for source in self.sources().iter().filter(|source| source.is_master()) {
+        for source in self.masters() {
             let Some(layer) = glyph.layer_for_source(source.id()) else {
                 continue;
             };

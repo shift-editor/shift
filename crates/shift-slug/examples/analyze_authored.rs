@@ -144,9 +144,7 @@ fn collect_weight_sets(
 
 fn validation_locations(font: &shift_font::Font) -> Vec<DesignLocation> {
     let mut locations = font
-        .sources()
-        .iter()
-        .filter(|source| source.is_master())
+        .masters()
         .map(|source| source.location().clone())
         .collect::<Vec<_>>();
     for step in 0..17 {
@@ -188,9 +186,7 @@ fn validate_locations(
                 }
             }
             let exact_source_id = font
-                .sources()
-                .iter()
-                .filter(|source| source.is_master())
+                .masters()
                 .find(|source| source.location().is_equivalent_to(location, font.axes()))
                 .map(shift_font::Source::id);
             let atlas_index = glyph.authored.glyph_for_source(exact_source_id.as_ref());
