@@ -16,7 +16,6 @@ export const LeftSidebar = () => {
       style={{ overflowAnchor: "none" }}
     >
       <div ref={contentRef} className="min-h-full space-y-1.5 px-3">
-        <Separator />
         <GlyphCatalogView />
         <Separator className="-mx-3 w-auto" />
         <SourcesSection />
