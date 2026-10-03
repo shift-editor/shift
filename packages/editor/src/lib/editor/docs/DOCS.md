@@ -89,7 +89,7 @@ editor/
 - **`FontStore`** -- Session-owned font state injected privately into Editor for synchronous lookup of already-loaded Glyph objects.
 - **`Camera`** -- Owns zoom/pan signals, the computed view matrix (`Mat`), and all coordinate projection methods (`screenToScene`, `sceneToScreen`, `screenToSceneDistance`).
 - **`Renderer`** -- Manages four stacked canvas layers (background, scene, markers/WebGL, overlay), their `FrameHandler` instances, and the canvas item layers that draw each pass.
-- **`Canvas`** -- Thin wrapper around `CanvasRenderingContext2D` with `pxToUnits()` conversion, `withSceneSpace()`/`withTransform()`, and themed drawing primitives. Carries `CameraTransform` and `EditorRenderTheme`.
+- **`Canvas`** -- Thin wrapper around `CanvasRenderingContext2D` that tracks the current units-to-screen transform (`withSceneSpace()`/`withTransform()`/`withScreenSpace()`). Geometry is drawn in the current units; widths, dashes and radii are screen pixels applied in screen space, so nothing converts pixels to units. Carries `CameraTransform` and `EditorRenderTheme`.
 - **`CameraTransform`** -- Value object: `{ view, zoom, logicalWidth, logicalHeight }`. Snapshot of viewport state passed to rendering code.
 - **`Selection`** -- Ordered branded-ID selection state. It exposes `stateCell` and unwrapped ID getters; `Editor.selectionBoundsCell` resolves current live objects and their bounds.
 - **`SelectableId`** -- Branded identity accepted by selection regardless of the object's concrete kind.
@@ -135,7 +135,7 @@ Tools receive screen and scene coordinates from the pointer pipeline. Scene/node
 | handles    | WebGL (regl) | GPU-rendered point handles                                  | `#sceneEffect` (via scene render) |
 | overlay    | Canvas 2D    | Bounding box outline, tool overlays                         | `#overlayEffect`                  |
 
-Background, scene, and overlays start in scene space (`Canvas.withSceneSpace()` applies the view); each node draws inside `withTransform(sceneTransform(node))`, and the marker layer receives the same node-to-screen matrix as one uniform. Tool-owned controls convert pixel-sized handles and strokes at draw time.
+Background, scene, and overlays start in scene space (`Canvas.withSceneSpace()` applies the view); each node draws inside `withTransform(sceneTransform(node))`, and the marker layer receives the same node-to-screen matrix as one uniform. Pixel-sized chrome (handles, crosses, icons) projects its anchor points with `Canvas.toScreen()` and draws inside `withScreenSpace()`.
 
 ### Rendering pipeline
 

@@ -35,32 +35,29 @@ export function drawHandleFirst(
   state: HandleState,
 ): void {
   const style = canvas.theme.handle.first[state];
-  const sizeUnits = canvas.pxToUnits(style.size);
-  const barSizeUnits = canvas.pxToUnits(style.barSize);
-  const lineWidthUnits = canvas.pxToUnits(style.lineWidth);
-  const gapUnits = canvas.pxToUnits(START_TRIANGLE_GAP);
+  const size = style.size;
 
   canvas.ctx.save();
-  canvas.ctx.lineWidth = lineWidthUnits;
+  canvas.ctx.lineWidth = style.lineWidth;
 
   // Draw bar
   const perpAngle = angle + Math.PI / 2;
   canvas.ctx.strokeStyle = style.barStroke;
-  drawHorizontalLine(canvas.ctx, point.x, point.y, barSizeUnits, perpAngle);
+  drawHorizontalLine(canvas.ctx, point.x, point.y, style.barSize, perpAngle);
 
   // Draw triangle
   canvas.ctx.fillStyle = style.fill;
   canvas.ctx.strokeStyle = style.stroke;
   const direction = Vec2.fromAngle(angle);
-  const triangleOffset = Vec2.scale(direction, gapUnits + sizeUnits);
+  const triangleOffset = Vec2.scale(direction, START_TRIANGLE_GAP + size);
   const trianglePos = Vec2.add(point, triangleOffset);
-  drawTriangle(canvas.ctx, trianglePos.x, trianglePos.y, sizeUnits, angle);
+  drawTriangle(canvas.ctx, trianglePos.x, trianglePos.y, size, angle);
 
   if (style.overlayColor) {
     canvas.ctx.strokeStyle = style.overlayColor;
-    drawHorizontalLine(canvas.ctx, point.x, point.y, barSizeUnits, perpAngle);
+    drawHorizontalLine(canvas.ctx, point.x, point.y, style.barSize, perpAngle);
     canvas.ctx.fillStyle = style.overlayColor;
-    drawTriangle(canvas.ctx, trianglePos.x, trianglePos.y, sizeUnits, angle);
+    drawTriangle(canvas.ctx, trianglePos.x, trianglePos.y, size, angle);
   }
 
   canvas.ctx.restore();
@@ -73,19 +70,18 @@ export function drawHandleDirection(
   state: HandleState,
 ): void {
   const style = canvas.theme.handle.direction[state];
-  const sizeUnits = canvas.pxToUnits(style.size);
-  const lineWidthUnits = canvas.pxToUnits(style.lineWidth);
+  const size = style.size;
 
   canvas.ctx.save();
-  canvas.ctx.lineWidth = lineWidthUnits;
+  canvas.ctx.lineWidth = style.lineWidth;
   canvas.ctx.fillStyle = style.fill;
   canvas.ctx.strokeStyle = style.stroke;
-  drawTriangle(canvas.ctx, point.x, point.y, sizeUnits, angle);
+  drawTriangle(canvas.ctx, point.x, point.y, size, angle);
 
   if (style.overlayColor) {
     canvas.ctx.fillStyle = style.overlayColor;
     canvas.ctx.strokeStyle = style.overlayColor;
-    drawTriangle(canvas.ctx, point.x, point.y, sizeUnits, angle);
+    drawTriangle(canvas.ctx, point.x, point.y, size, angle);
   }
 
   canvas.ctx.restore();
@@ -98,58 +94,57 @@ export function drawHandleLast(
   state: HandleState,
 ): void {
   const style = canvas.theme.handle.last[state];
-  const sizeUnits = canvas.pxToUnits(style.size);
-  const lineWidthUnits = canvas.pxToUnits(style.lineWidth);
+  const size = style.size;
 
   canvas.ctx.save();
-  canvas.ctx.lineWidth = lineWidthUnits;
+  canvas.ctx.lineWidth = style.lineWidth;
   canvas.ctx.fillStyle = style.fill;
   canvas.ctx.strokeStyle = style.stroke;
 
   const angle = Vec2.angleTo(anchor, prev);
   const perpAngle = angle + Math.PI / 2;
-  drawHorizontalLine(canvas.ctx, anchor.x, anchor.y, sizeUnits, perpAngle);
+  drawHorizontalLine(canvas.ctx, anchor.x, anchor.y, size, perpAngle);
 
   if (style.overlayColor) {
     canvas.ctx.fillStyle = style.overlayColor;
     canvas.ctx.strokeStyle = style.overlayColor;
-    drawHorizontalLine(canvas.ctx, anchor.x, anchor.y, sizeUnits, perpAngle);
+    drawHorizontalLine(canvas.ctx, anchor.x, anchor.y, size, perpAngle);
   }
 
   canvas.ctx.restore();
 }
 
 function drawCorner(canvas: Canvas, point: Point2D, style: HandleStyle): void {
-  const sizeUnits = canvas.pxToUnits(style.size);
-  const half = sizeUnits / 2;
+  const size = style.size;
+  const half = size / 2;
 
   canvas.ctx.save();
-  canvas.ctx.lineWidth = canvas.pxToUnits(style.lineWidth);
+  canvas.ctx.lineWidth = style.lineWidth;
   canvas.ctx.fillStyle = style.fill;
   canvas.ctx.strokeStyle = style.stroke;
-  canvas.ctx.fillRect(point.x - half, point.y - half, sizeUnits, sizeUnits);
-  canvas.ctx.strokeRect(point.x - half, point.y - half, sizeUnits, sizeUnits);
+  canvas.ctx.fillRect(point.x - half, point.y - half, size, size);
+  canvas.ctx.strokeRect(point.x - half, point.y - half, size, size);
 
   if (style.overlayColor) {
     canvas.ctx.fillStyle = style.overlayColor;
     canvas.ctx.strokeStyle = style.overlayColor;
-    canvas.ctx.fillRect(point.x - half, point.y - half, sizeUnits, sizeUnits);
-    canvas.ctx.strokeRect(point.x - half, point.y - half, sizeUnits, sizeUnits);
+    canvas.ctx.fillRect(point.x - half, point.y - half, size, size);
+    canvas.ctx.strokeRect(point.x - half, point.y - half, size, size);
   }
 
   canvas.ctx.restore();
 }
 
 function drawCircleHandle(canvas: Canvas, point: Point2D, style: HandleStyle): void {
-  const radiusUpm = canvas.pxToUnits(style.size);
+  const radius = style.size;
 
   canvas.ctx.save();
-  canvas.ctx.lineWidth = canvas.pxToUnits(style.lineWidth);
+  canvas.ctx.lineWidth = style.lineWidth;
   canvas.ctx.fillStyle = style.fill;
   canvas.ctx.strokeStyle = style.stroke;
 
   canvas.ctx.beginPath();
-  canvas.ctx.arc(point.x, point.y, radiusUpm, 0, Math.PI * 2);
+  canvas.ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
   canvas.ctx.stroke();
   canvas.ctx.fill();
 
@@ -157,7 +152,7 @@ function drawCircleHandle(canvas: Canvas, point: Point2D, style: HandleStyle): v
     canvas.ctx.fillStyle = style.overlayColor;
     canvas.ctx.strokeStyle = style.overlayColor;
     canvas.ctx.beginPath();
-    canvas.ctx.arc(point.x, point.y, radiusUpm, 0, Math.PI * 2);
+    canvas.ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
     canvas.ctx.stroke();
     canvas.ctx.fill();
   }
@@ -166,8 +161,8 @@ function drawCircleHandle(canvas: Canvas, point: Point2D, style: HandleStyle): v
 }
 
 function drawDiamond(canvas: Canvas, point: Point2D, style: HandleStyle): void {
-  const sizeUnits = canvas.pxToUnits(style.size);
-  const half = sizeUnits / 2;
+  const size = style.size;
+  const half = size / 2;
 
   const points = [
     { x: point.x, y: point.y - half },
@@ -177,7 +172,7 @@ function drawDiamond(canvas: Canvas, point: Point2D, style: HandleStyle): void {
   ];
 
   canvas.ctx.save();
-  canvas.ctx.lineWidth = canvas.pxToUnits(style.lineWidth);
+  canvas.ctx.lineWidth = style.lineWidth;
   canvas.ctx.fillStyle = style.fill;
   canvas.ctx.strokeStyle = style.stroke;
 

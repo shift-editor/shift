@@ -464,7 +464,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
       view,
       this.editor.debugOverlays,
       this.#hoveredSegmentId(node),
-      ctx.canvas.pxToUnits(SCREEN_HIT_RADIUS),
+      SCREEN_HIT_RADIUS,
     );
   }
 

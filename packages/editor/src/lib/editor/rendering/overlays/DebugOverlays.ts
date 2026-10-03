@@ -13,7 +13,7 @@ export class DebugOverlays {
       glyphBbox: boolean;
     },
     hoveredSegmentId: SegmentId | null,
-    hitRadiusUpm: number,
+    hitRadiusPx: number,
   ): void {
     const { debug } = canvas.theme;
 
@@ -24,7 +24,7 @@ export class DebugOverlays {
       this.#drawTightBounds(canvas, view, hoveredSegmentId, debug.tightBounds);
     }
     if (overlays.hitRadii) {
-      this.#drawHitRadii(canvas, view, hitRadiusUpm, debug.hitRadii);
+      this.#drawHitRadii(canvas, view, hitRadiusPx, debug.hitRadii);
     }
     if (overlays.glyphBbox) {
       this.#drawGlyphBbox(canvas, view, debug.glyphBbox);
@@ -61,10 +61,9 @@ export class DebugOverlays {
     }
   }
 
-  #drawHitRadii(canvas: Canvas, view: GlyphRenderModel, hitRadiusUpm: number, color: string): void {
-    const r = hitRadiusUpm * canvas.camera.zoom;
+  #drawHitRadii(canvas: Canvas, view: GlyphRenderModel, hitRadiusPx: number, color: string): void {
     for (const point of view.allPoints) {
-      canvas.strokeCircle({ x: point.x, y: point.y }, r, color, 1);
+      canvas.strokeCircle({ x: point.x, y: point.y }, hitRadiusPx, color, 1);
     }
   }
 

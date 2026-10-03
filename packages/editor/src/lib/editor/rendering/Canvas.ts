@@ -7,18 +7,19 @@ import type { CameraTransform } from "../managers/Camera";
  *
  * @remarks
  * Tracks the transform from the current drawing units to logical screen
- * pixels, so pixel-sized strokes and markers stay the same size on screen
- * whatever units the caller draws in. Transforms applied directly to `ctx`
- * are not tracked; keep them to leaf drawing that does not size in pixels.
- * Generic — knows nothing about fonts or glyphs.
+ * pixels. Geometry is given in the current units; every width, dash, and
+ * radius is given in screen pixels and is applied in screen space, so it
+ * stays the same size on screen whatever units the caller draws in.
+ * Transforms applied directly to `ctx` are not tracked; keep them to leaf
+ * drawing. Generic — knows nothing about fonts or glyphs.
  */
 export class Canvas {
   readonly ctx: CanvasRenderingContext2D;
   readonly theme: EditorRenderTheme;
   #camera: CameraTransform;
   #transform = Mat.Identity();
-  #pixelsPerUnit = 1;
-  readonly #saved: { transform: Mat; pixelsPerUnit: number }[] = [];
+  #inverse: Mat | null = null;
+  readonly #saved: Mat[] = [];
 
   constructor(
     ctx: CanvasRenderingContext2D,
@@ -39,7 +40,7 @@ export class Canvas {
   set camera(camera: CameraTransform) {
     this.#camera = camera;
     this.#transform = Mat.Identity();
-    this.#pixelsPerUnit = 1;
+    this.#inverse = null;
     this.#saved.length = 0;
   }
 
@@ -52,9 +53,17 @@ export class Canvas {
     return this.#transform;
   }
 
-  /** Converts a length in screen pixels to the current drawing units. */
-  pxToUnits(px: number): number {
-    return px / this.#pixelsPerUnit;
+  /** Returns a point in the current drawing units as logical screen pixels. */
+  toScreen(point: Point2D): Point2D {
+    return Mat.applyToPoint(this.#transform, point);
+  }
+
+  /** Returns the on-screen angle of a direction given in the current drawing units. */
+  toScreenAngle(angle: number): number {
+    const { a, b, c, d } = this.#transform;
+    const x = Math.cos(angle);
+    const y = Math.sin(angle);
+    return Math.atan2(b * x + d * y, a * x + c * y);
   }
 
   /**
@@ -64,7 +73,7 @@ export class Canvas {
    * @returns fresh bounds covering the four transformed canvas corners.
    */
   visibleBounds(marginPx: number): Bounds {
-    const inverse = Mat.Inverse(this.#transform);
+    const inverse = this.#inverted();
     const min = -marginPx;
     const maxX = this.#camera.logicalWidth + marginPx;
     const maxY = this.#camera.logicalHeight + marginPx;
@@ -78,29 +87,38 @@ export class Canvas {
     return Bounds.fromPoints(corners)!;
   }
 
-  line(from: Point2D, to: Point2D, stroke: string, widthPx: number): void {
+  /**
+   * Strokes the context's current path with a width in screen pixels.
+   *
+   * @remarks
+   * Build the path on `ctx` in the current drawing units first; the stroke is
+   * applied in screen space and leaves the path in place.
+   */
+  stroke(stroke: string, widthPx: number, dashPx: readonly number[] = []): void {
     this.ctx.save();
+    this.#applyToContext(this.#inverted());
     this.ctx.strokeStyle = stroke;
-    this.ctx.lineWidth = this.pxToUnits(widthPx);
-    this.ctx.setLineDash([]);
-    this.ctx.beginPath();
-    this.ctx.moveTo(from.x, from.y);
-    this.ctx.lineTo(to.x, to.y);
+    this.ctx.lineWidth = widthPx;
+    this.ctx.setLineDash(dashPx as number[]);
     this.ctx.stroke();
     this.ctx.restore();
   }
 
-  /** @knipclassignore */
-  dashedLine(from: Point2D, to: Point2D, stroke: string, widthPx: number, dashPx: number[]): void {
-    this.ctx.save();
-    this.ctx.strokeStyle = stroke;
-    this.ctx.lineWidth = this.pxToUnits(widthPx);
-    this.ctx.setLineDash(dashPx.map((d) => this.pxToUnits(d)));
+  line(from: Point2D, to: Point2D, stroke: string, widthPx: number): void {
+    this.dashedLine(from, to, stroke, widthPx, []);
+  }
+
+  dashedLine(
+    from: Point2D,
+    to: Point2D,
+    stroke: string,
+    widthPx: number,
+    dashPx: readonly number[],
+  ): void {
     this.ctx.beginPath();
     this.ctx.moveTo(from.x, from.y);
     this.ctx.lineTo(to.x, to.y);
-    this.ctx.stroke();
-    this.ctx.restore();
+    this.stroke(stroke, widthPx, dashPx);
   }
 
   fillRect(x: number, y: number, w: number, h: number, fill: string): void {
@@ -117,14 +135,11 @@ export class Canvas {
     h: number,
     stroke: string,
     widthPx: number,
-    dashPx: number[] = [],
+    dashPx: readonly number[] = [],
   ): void {
-    this.ctx.save();
-    this.ctx.strokeStyle = stroke;
-    this.ctx.lineWidth = this.pxToUnits(widthPx);
-    this.ctx.setLineDash(dashPx.map((d) => this.pxToUnits(d)));
-    this.ctx.strokeRect(x, y, w, h);
-    this.ctx.restore();
+    this.ctx.beginPath();
+    this.ctx.rect(x, y, w, h);
+    this.stroke(stroke, widthPx, dashPx);
   }
 
   fillPath(path: Path2D, fill: string): void {
@@ -135,11 +150,15 @@ export class Canvas {
   }
 
   strokePath(path: Path2D, stroke: string, widthPx: number): void {
+    const screenPath = new Path2D();
+    screenPath.addPath(path, this.#transform);
+
     this.ctx.save();
+    this.#applyToContext(this.#inverted());
     this.ctx.strokeStyle = stroke;
-    this.ctx.lineWidth = this.pxToUnits(widthPx);
+    this.ctx.lineWidth = widthPx;
     this.ctx.setLineDash([]);
-    this.ctx.stroke(path);
+    this.ctx.stroke(screenPath);
     this.ctx.restore();
   }
 
@@ -175,29 +194,23 @@ export class Canvas {
    * @param draw - Drawing operation to run with one unit equal to one screen pixel.
    */
   withScreenSpace(draw: (canvas: Canvas) => void): void {
-    this.withTransform(Mat.Inverse(this.#transform), draw);
+    this.withTransform(this.#inverted(), draw);
   }
 
   /** @knipclassignore */
   circle(center: Point2D, radiusPx: number, fill: string): void {
-    const r = this.pxToUnits(radiusPx);
-    this.ctx.save();
+    this.#screenCircle(center, radiusPx);
     this.ctx.fillStyle = fill;
-    this.ctx.beginPath();
-    this.ctx.arc(center.x, center.y, r, 0, Math.PI * 2);
     this.ctx.fill();
     this.ctx.restore();
   }
 
   /** @knipclassignore */
   strokeCircle(center: Point2D, radiusPx: number, stroke: string, widthPx: number): void {
-    const r = this.pxToUnits(radiusPx);
-    this.ctx.save();
+    this.#screenCircle(center, radiusPx);
     this.ctx.strokeStyle = stroke;
-    this.ctx.lineWidth = this.pxToUnits(widthPx);
+    this.ctx.lineWidth = widthPx;
     this.ctx.setLineDash([]);
-    this.ctx.beginPath();
-    this.ctx.arc(center.x, center.y, r, 0, Math.PI * 2);
     this.ctx.stroke();
     this.ctx.restore();
   }
@@ -209,11 +222,8 @@ export class Canvas {
     stroke: string,
     widthPx: number,
   ): void {
-    const r = this.pxToUnits(radiusPx);
-    this.ctx.save();
-    this.ctx.lineWidth = this.pxToUnits(widthPx);
-    this.ctx.beginPath();
-    this.ctx.arc(center.x, center.y, r, 0, Math.PI * 2);
+    this.#screenCircle(center, radiusPx);
+    this.ctx.lineWidth = widthPx;
     this.ctx.strokeStyle = stroke;
     this.ctx.stroke();
     this.ctx.fillStyle = fill;
@@ -224,7 +234,7 @@ export class Canvas {
   /** Saves the context state and the tracked transform. */
   save(): void {
     this.ctx.save();
-    this.#saved.push({ transform: Mat.Copy(this.#transform), pixelsPerUnit: this.#pixelsPerUnit });
+    this.#saved.push(Mat.Copy(this.#transform));
   }
 
   /** Restores the context state and the tracked transform from the matching {@link save}. */
@@ -233,8 +243,8 @@ export class Canvas {
     const saved = this.#saved.pop();
     if (!saved) return;
 
-    this.#transform = saved.transform;
-    this.#pixelsPerUnit = saved.pixelsPerUnit;
+    this.#transform = saved;
+    this.#inverse = null;
   }
 
   /** @knipclassignore */
@@ -253,6 +263,12 @@ export class Canvas {
   }
 
   #apply(transform: MatModel): void {
+    this.#applyToContext(transform);
+    this.#transform.multiply(transform);
+    this.#inverse = null;
+  }
+
+  #applyToContext(transform: MatModel): void {
     this.ctx.transform(
       transform.a,
       transform.b,
@@ -261,9 +277,20 @@ export class Canvas {
       transform.e,
       transform.f,
     );
-    this.#transform.multiply(transform);
-    const { a, b, c, d } = this.#transform;
-    this.#pixelsPerUnit = Math.sqrt(Math.abs(a * d - b * c));
+  }
+
+  #inverted(): Mat {
+    this.#inverse ??= Mat.Inverse(this.#transform);
+    return this.#inverse;
+  }
+
+  /** Opens a save, enters screen space, and traces a circle path; the caller paints and restores. */
+  #screenCircle(center: Point2D, radiusPx: number): void {
+    const screen = this.toScreen(center);
+    this.ctx.save();
+    this.#applyToContext(this.#inverted());
+    this.ctx.beginPath();
+    this.ctx.arc(screen.x, screen.y, radiusPx, 0, Math.PI * 2);
   }
 
   /** @knipclassignore */

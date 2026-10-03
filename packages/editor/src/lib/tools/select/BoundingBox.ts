@@ -391,9 +391,9 @@ function drawHandle(
 ): void {
   canvas.ctx.save();
 
-  const radius = canvas.pxToUnits(style.radiusPx);
+  const radius = style.radiusPx;
   const size = radius * 2;
-  canvas.ctx.lineWidth = canvas.pxToUnits(style.widthPx);
+  canvas.ctx.lineWidth = style.widthPx;
   canvas.ctx.fillStyle = fill;
   canvas.ctx.strokeStyle = stroke;
   canvas.ctx.fillRect(center.x - radius, center.y - radius, size, size);
