@@ -496,7 +496,10 @@ convertiblePreviewTest(
     await expect(workspacePage.locator("#interactive-canvas")).toBeVisible();
     const glyphId = decodeURIComponent(new URL(workspacePage.url()).hash.slice("#/editor/".length));
 
+    // Conversion reloads the window into the new workspace.
+    const reloaded = workspacePage.waitForEvent("load");
     await runCommand(workspacePage, electronApp, "file.saveAs");
+    await reloaded;
     await expect
       .poll(() => workspacePage.evaluate(() => window.shiftSession?.mode))
       .toBe("workspace");

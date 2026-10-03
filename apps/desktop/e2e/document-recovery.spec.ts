@@ -76,7 +76,7 @@ test("reopens a saved document on the glyph it was editing after forced terminat
   const glyph = await editor.activeGlyph();
   if (!glyph) throw new Error("Expected glyph A to be open before the crash");
 
-  const reopened = await recoveryApp.crashAndRecoverWindow();
+  const reopened = await recoveryApp.crashAndRecoverWindow(glyph.glyphId);
 
   await waitForEditorReady(reopened, glyph.glyphId);
   expect(await reopened.evaluate(() => window.shift?.documentStateCell.peek()?.dirty)).toBe(false);

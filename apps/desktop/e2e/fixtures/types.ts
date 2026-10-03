@@ -105,10 +105,10 @@ export type RecoveryApp = {
   documentPath: string;
   crashAndRecover: () => Promise<Page>;
   /**
-   * Like `crashAndRecover`, but persists renderer storage before the kill and returns the
-   * recovered window as soon as it loads, on any route.
+   * Like `crashAndRecover`, but first waits until `persistedText` is in renderer storage on
+   * disk, and returns the recovered window as soon as it loads, on any route.
    */
-  crashAndRecoverWindow: () => Promise<Page>;
+  crashAndRecoverWindow: (persistedText: string) => Promise<Page>;
   crashAndReopenDocument: () => Promise<Page>;
   canonicalGlyphNames: () => string[];
   canonicalVariableFont: () => CanonicalVariableFont;
