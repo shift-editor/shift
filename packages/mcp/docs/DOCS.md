@@ -40,16 +40,23 @@ Returns the TypeScript declarations available inside code mode.
 
 ### `shift.execute`
 
-Accepts an async zero-argument JavaScript function and returns its JSON result. The first slice exposes:
+Accepts an async zero-argument JavaScript function and returns its JSON result. For a targeted live session:
 
 ```ts
 async () => {
-  const sessions = await shift.sessions.list();
-  return shift.editor.inspect({ windowId: sessions[0].windowId });
+  const session = (await shift.sessions.list()).find(({ sessionId }) => sessionId === "...");
+  if (!session) throw new Error("Target session closed");
+  const font = await shift.font.get({ windowId: session.windowId });
+  const page = await shift.glyphs.list({ windowId: session.windowId, limit: 20 });
+  return {
+    family: font.metadata.familyName,
+    count: font.glyphCount,
+    names: page.items.map((g) => g.name),
+  };
 };
 ```
 
-`shift.sessions.list()` returns one entry per open font window. `shift.editor.inspect()` returns renderer-owned facts: route, current glyph occurrence, active and editing sources, external location, selection, tool, gesture flags, and authored edit status.
+`shift.sessions.list()` returns one entry per open font window. `shift.editor.inspect()` returns renderer-owned UI facts. `shift.font.get()` returns metadata, metrics, axes, sources, named instances, and glyph count even on Home. `shift.glyphs.list()` returns bounded directory pages with `nextCursor`; passing an explicit `sourceId` includes each glyph's authored structure for code-mode aggregation. `shift.glyphs.get()` returns one directory entry by exact `name` or stable `glyphId` (not both), and `shift.layers.get()` returns authored positions and structure for one glyph/source pair. Untrusted inputs are parsed using `@shift/runtime`'s shared Zod schemas; the code-mode sandbox remains bounded.
 
 ## Desktop ownership
 
@@ -76,6 +83,7 @@ Do not expose internal `Editor`, `FontStore`, `WorkspaceHost`, NAPI, SQLite rows
 - Focus is descriptive only. Always pass a `windowId` from the same `sessions.list()` result used to choose a target.
 - A renderer can exist before its agent lane connects. Check `editorConnected` or retry session discovery rather than substituting another window.
 - Code-mode results must be JSON-serializable and remain under the configured output bound.
+- Preview fonts have no authored layers; source-scoped structure reads fail explicitly. Directory cursors do not freeze a changing font; scope counts to an explicit source and restart if the directory changes.
 
 ## Verification
 

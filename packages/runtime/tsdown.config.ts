@@ -13,6 +13,6 @@ export default defineConfig({
   sourcemap: false,
   clean: true,
   deps: {
-    alwaysBundle: ["@shift/types"],
+    alwaysBundle: ["@shift/types", "@shift/geo"],
   },
 });

@@ -1,4 +1,12 @@
-import type { EditorView } from "@shift/runtime";
+import type {
+  EditorView,
+  FontOverview,
+  GlyphPage,
+  GlyphSelector,
+  GlyphSummary,
+  LayerView,
+} from "@shift/runtime";
+import type { GlyphId, SourceId } from "@shift/types";
 import type { MessagePortMain } from "electron";
 import type { AgentCallMap, AgentEventMap } from "../../shared/agent/protocol";
 import { Channel, electronPortTransport } from "../../shared/workspace/channel";
@@ -28,6 +36,30 @@ export class AgentClient {
   inspectEditor(): Promise<EditorView> {
     if (!this.#channel) return Promise.reject(new Error("agent renderer is not connected"));
     return this.#channel.call("editor.inspect", undefined);
+  }
+
+  getFont(): Promise<FontOverview> {
+    return this.#call("font.get", undefined);
+  }
+
+  listGlyphs(input: { limit?: number; cursor?: string; sourceId?: SourceId }): Promise<GlyphPage> {
+    return this.#call("glyphs.list", input);
+  }
+
+  getGlyph(selector: GlyphSelector): Promise<GlyphSummary> {
+    return this.#call("glyphs.get", selector);
+  }
+
+  getLayer(glyphId: GlyphId, sourceId: SourceId): Promise<LayerView | null> {
+    return this.#call("layers.get", { glyphId, sourceId });
+  }
+
+  #call<K extends keyof AgentCallMap>(
+    operation: K,
+    input: AgentCallMap[K]["request"],
+  ): Promise<AgentCallMap[K]["response"]> {
+    if (!this.#channel) return Promise.reject(new Error("agent renderer is not connected"));
+    return this.#channel.call(operation, input);
   }
 
   /** Disconnects the renderer and rejects pending inspection calls. */

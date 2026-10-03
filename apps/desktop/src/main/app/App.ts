@@ -853,6 +853,19 @@ export class App {
       editor: {
         inspect: ({ windowId }) => this.#inspectEditor(windowId),
       },
+      font: {
+        get: ({ windowId }) => this.#windowForAgentRequest(windowId).agent.getFont(),
+      },
+      glyphs: {
+        list: ({ windowId, limit, cursor, sourceId }) =>
+          this.#windowForAgentRequest(windowId).agent.listGlyphs({ limit, cursor, sourceId }),
+        get: ({ windowId, ...selector }) =>
+          this.#windowForAgentRequest(windowId).agent.getGlyph(selector),
+      },
+      layers: {
+        get: ({ windowId, glyphId, sourceId }) =>
+          this.#windowForAgentRequest(windowId).agent.getLayer(glyphId, sourceId),
+      },
     });
     const mcp = new ShiftMcpServer({
       execute: (code) => sandbox.execute(code),
@@ -927,6 +940,15 @@ export class App {
       sessionId: session.sessionId,
       mode: session.mode,
     };
+  }
+
+  #windowForAgentRequest(windowId: number): Window {
+    const window = this.#windows.windowForId(windowId);
+    if (!window) throw new Error(`Shift window ${windowId} is not open`);
+    if (!this.#workspaces.getForBrowserWindow(window.window)) {
+      throw new Error(`Shift window ${windowId} has no font session`);
+    }
+    return window;
   }
 
   #fontSessionForSender(sender: WebContents, operation: string): FontSessionHost {

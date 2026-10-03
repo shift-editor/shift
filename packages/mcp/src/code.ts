@@ -5,7 +5,7 @@ import {
   type QuickJSContext,
   type QuickJSWASMModule,
 } from "quickjs-emscripten-core";
-import type { ShiftCapabilities } from "@shift/runtime";
+import { shiftInputSchemas, type ShiftCapabilities } from "@shift/runtime";
 
 const EXECUTION_TIMEOUT_MS = 3_000;
 const MEMORY_LIMIT_BYTES = 16 * 1024 * 1024;
@@ -38,6 +38,18 @@ export async function executeShiftCode(
 
     return capabilities.editor.inspect({ windowId });
   });
+  installAsyncJsonFunction(vm, "__shiftGetFont", deadline, (input) =>
+    capabilities.font.get(shiftInputSchemas["font.get"].parse(input)),
+  );
+  installAsyncJsonFunction(vm, "__shiftListGlyphs", deadline, (input) =>
+    capabilities.glyphs.list(shiftInputSchemas["glyphs.list"].parse(input)),
+  );
+  installAsyncJsonFunction(vm, "__shiftGetGlyph", deadline, (input) =>
+    capabilities.glyphs.get(shiftInputSchemas["glyphs.get"].parse(input)),
+  );
+  installAsyncJsonFunction(vm, "__shiftGetLayer", deadline, (input) =>
+    capabilities.layers.get(shiftInputSchemas["layers.get"].parse(input)),
+  );
 
   const bootstrap = `
     "use strict";
@@ -47,6 +59,16 @@ export async function executeShiftCode(
       }),
       editor: Object.freeze({
         inspect: async ({ windowId }) => JSON.parse(await __shiftInspectEditor(windowId)),
+      }),
+      font: Object.freeze({
+        get: async (input) => JSON.parse(await __shiftGetFont(input)),
+      }),
+      glyphs: Object.freeze({
+        list: async (input) => JSON.parse(await __shiftListGlyphs(input)),
+        get: async (input) => JSON.parse(await __shiftGetGlyph(input)),
+      }),
+      layers: Object.freeze({
+        get: async (input) => JSON.parse(await __shiftGetLayer(input)),
       }),
     });
     (async () => {

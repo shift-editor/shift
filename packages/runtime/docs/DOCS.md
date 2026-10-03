@@ -17,7 +17,8 @@ Host-neutral capability contracts shared by Shift protocol adapters and future p
 packages/runtime/
   src/
     capabilities.ts       -- canonical capability and observation contracts
-    index.ts              -- public type exports
+    inputs.ts             -- Zod validation of untrusted code-mode arguments
+    index.ts              -- public capability types and input schemas
   scripts/
     generate-code-api.mjs -- deterministic self-contained declaration generator
   generated/
@@ -29,13 +30,15 @@ packages/runtime/
 - `ShiftCapabilities` -- nested live operations exposed by a host.
 - `ShiftSession` -- explicitly addressable live window/session identity and mode.
 - `EditorInspection` -- point-in-time editor observation paired with its explicit target.
+- `FontOverview`, `GlyphPage`, `GlyphSummary`, and `LayerView` -- read-only font, paged directory, and source-specific authored geometry views.
+- `shiftInputSchemas` -- reusable runtime validation of untrusted capability inputs before IPC.
 - `EditorView` -- renderer-owned portion of an editor observation.
 - `EditorGlyph` -- active glyph occurrence using canonical domain identifiers.
 - `ShiftSessionMode` -- alias of the canonical `FontSessionMode`, including memory hosts.
 
 ## How it works
 
-A host implements `ShiftCapabilities` by routing each operation to the subsystem that owns the truth. The desktop host lists window/session identity in Electron main and requests editor observations from the targeted renderer. Other hosts may provide memory sessions while preserving the same capability shape.
+A host implements `ShiftCapabilities` by routing each operation to the subsystem that owns the truth. The desktop host lists window/session identity in Electron main and requests editor and font observations from the targeted renderer. Source-scoped glyph listings and layer reads use workspace glyph snapshots, not renderer editor-model loading. `FontOverview.sources` lists global masters; `GlyphSummary.sourceIds` also advertises glyph-specific support layers. `glyphs.get` accepts exactly one of a stable `glyphId` or an exact glyph `name` and uses the font directory's name index. Every advertised layer is readable by `sourceId`, even if it is not a global master. Previews offer font and glyph directory facts, but no authored layer views. A missing layer in a known source returns `null`; unknown targets and preview-authored requests fail explicitly. Directory pages carry an opaque cursor, not a frozen revision; consumers should restart a scan if the font changes between pages. Other hosts may provide memory sessions while preserving the same capability shape.
 
 The code-API generator bundles only declarations reachable from `capabilities.ts`, including the canonical branded identifiers from `@shift/types`, then adds the code-mode global `shift`. `@shift/mcp` imports that generated file as text for `shift.describe`; it does not maintain another declaration.
 

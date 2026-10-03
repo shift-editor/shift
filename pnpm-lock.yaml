@@ -362,9 +362,15 @@ importers:
 
   packages/runtime:
     dependencies:
+      '@shift/geo':
+        specifier: workspace:*
+        version: link:../geo
       '@shift/types':
         specifier: workspace:*
         version: link:../types
+      zod:
+        specifier: ^4.1.12
+        version: 4.3.6
     devDependencies:
       oxfmt:
         specifier: ^0.49.0

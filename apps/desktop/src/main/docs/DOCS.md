@@ -153,7 +153,7 @@ Message lanes reject in-flight calls when their remote port closes. An unexpecte
 
 ### IPC
 
-Renderer IPC in `App` is limited to shell capabilities: command execution, clipboard, update-window progress/actions, optional document-lane and agent-lane port transfer, immutable session mode, readiness, and shared session sync-lane port transfer. Font data stays on the sync lane between renderer and utility. The agent lane returns renderer-owned view facts only; main adds the explicit window and font-session identities before returning an MCP result.
+Renderer IPC in `App` is limited to shell capabilities: command execution, clipboard, update-window progress/actions, optional document-lane and agent-lane port transfer, immutable session mode, readiness, and shared session sync-lane port transfer. Font data stays on the sync lane between renderer and utility. The agent lane returns renderer-owned view facts and read-only font projections. Source-specific authored reads obtain workspace snapshots through the existing serialized sync lane rather than loading every glyph into the editor. Main resolves the explicit window and session before routing each MCP call; editor observations also carry their window and session identities.
 
 ## Workflow recipes
 

@@ -18,6 +18,24 @@ const capabilities: ShiftCapabilities = {
       throw new Error("No open Shift window");
     },
   },
+  font: {
+    async get() {
+      throw new Error("No open Shift window");
+    },
+  },
+  glyphs: {
+    async list() {
+      throw new Error("No open Shift window");
+    },
+    async get() {
+      throw new Error("No open Shift window");
+    },
+  },
+  layers: {
+    async get() {
+      throw new Error("No open Shift window");
+    },
+  },
 };
 
 const execute = (code: string) => executeShiftCode(capabilities, code);

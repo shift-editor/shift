@@ -41,6 +41,50 @@ const capabilities: ShiftCapabilities = {
       };
     },
   },
+  font: {
+    async get() {
+      return {
+        mode: "workspace",
+        metadata: { familyName: "Example" },
+        metrics: { unitsPerEm: 1000 },
+        glyphCount: 1,
+        axes: [],
+        sources: [],
+        namedInstances: [],
+      };
+    },
+  },
+  glyphs: {
+    async list() {
+      return {
+        items: [
+          {
+            id: asGlyphId("glyph-a"),
+            name: "A",
+            unicodes: [65],
+            componentBaseGlyphIds: [],
+            sourceIds: [],
+          },
+        ],
+        nextCursor: null,
+      };
+    },
+    async get({ glyphId, name }) {
+      if (name !== undefined && name !== "A") throw new Error(`Glyph ${name} is not in this font`);
+      return {
+        id: glyphId ?? asGlyphId("glyph-a"),
+        name: "A",
+        unicodes: [65],
+        componentBaseGlyphIds: [],
+        sourceIds: [],
+      };
+    },
+  },
+  layers: {
+    async get() {
+      return null;
+    },
+  },
 };
 
 describe("Shift code mode exposes bounded live capabilities", () => {
@@ -51,6 +95,36 @@ describe("Shift code mode exposes bounded live capabilities", () => {
     );
 
     expect(result).toMatchObject({ windowId: 7, glyph: { name: "A" }, selectionIds: ["point-a"] });
+  });
+
+  it("composes font and glyph reads through the typed capabilities", async () => {
+    const result = await executeShiftCode(
+      capabilities,
+      "async () => { const font = await shift.font.get({ windowId: 7 }); const page = await shift.glyphs.list({ windowId: 7, limit: 1 }); const glyph = await shift.glyphs.get({ windowId: 7, glyphId: page.items[0].id }); const layer = await shift.layers.get({ windowId: 7, glyphId: glyph.id, sourceId: 'source-a' }); return { family: font.metadata.familyName, glyph: glyph.name, nextCursor: page.nextCursor, layer }; }",
+    );
+
+    expect(result).toEqual({ family: "Example", glyph: "A", nextCursor: null, layer: null });
+  });
+
+  it("gets a glyph by exact name and rejects ambiguous selectors", async () => {
+    const result = await executeShiftCode(
+      capabilities,
+      "async () => shift.glyphs.get({ windowId: 7, name: 'A' })",
+    );
+    expect(result).toMatchObject({ id: "glyph-a", name: "A" });
+
+    await expect(
+      executeShiftCode(
+        capabilities,
+        "async () => shift.glyphs.get({ windowId: 7, name: 'A', glyphId: 'glyph-a' })",
+      ),
+    ).rejects.toThrow();
+  });
+
+  it("rejects an invalid glyph page before it reaches the host", async () => {
+    await expect(
+      executeShiftCode(capabilities, "async () => shift.glyphs.list({ windowId: 7, limit: 0 })"),
+    ).rejects.toThrow();
   });
 
   it("cannot access Node process globals", async () => {

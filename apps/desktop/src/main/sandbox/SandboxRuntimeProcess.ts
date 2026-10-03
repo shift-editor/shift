@@ -52,6 +52,10 @@ export class SandboxRuntimeProcess {
     serveChannel<SandboxHostCallMap, SandboxHostEventMap>(transport, {
       "shift.sessions.list": () => this.#capabilities.sessions.list(),
       "shift.editor.inspect": (input) => this.#capabilities.editor.inspect(input),
+      "shift.font.get": (input) => this.#capabilities.font.get(input),
+      "shift.glyphs.list": (input) => this.#capabilities.glyphs.list(input),
+      "shift.glyphs.get": (input) => this.#capabilities.glyphs.get(input),
+      "shift.layers.get": (input) => this.#capabilities.layers.get(input),
     });
 
     this.#process = proc;

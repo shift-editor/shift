@@ -17,6 +17,16 @@ const capabilities: ShiftCapabilities = {
   editor: {
     inspect: (input) => host.call("shift.editor.inspect", input),
   },
+  font: {
+    get: (input) => host.call("shift.font.get", input),
+  },
+  glyphs: {
+    list: (input) => host.call("shift.glyphs.list", input),
+    get: (input) => host.call("shift.glyphs.get", input),
+  },
+  layers: {
+    get: (input) => host.call("shift.layers.get", input),
+  },
 };
 const runtime = serveChannel<SandboxCallMap, SandboxEventMap>(transport, {
   "sandbox.execute": ({ code }) => executeShiftCode(capabilities, code),

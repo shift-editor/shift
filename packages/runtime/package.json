@@ -22,7 +22,9 @@
     "lint:check": "oxlint --deny-warnings src/"
   },
   "dependencies": {
-    "@shift/types": "workspace:*"
+    "@shift/geo": "workspace:*",
+    "@shift/types": "workspace:*",
+    "zod": "^4.1.12"
   },
   "devDependencies": {
     "oxfmt": "^0.49.0",
