@@ -29,7 +29,7 @@ import {
 import { EditorDriver } from "./fixtures/EditorDriver";
 import { createAuthoredDocument } from "./fixtures/fontSource";
 import { exportedGlyphNames, savedGlyphNames } from "./fixtures/savedDocument";
-import { clickFirstCatalogGlyph } from "./fixtures/appLocators";
+import { clickFirstCatalogGlyph, waitForEditorReady } from "./fixtures/appLocators";
 
 const execFileAsync = promisify(execFile);
 
@@ -445,6 +445,23 @@ convertiblePreviewTest(
         window.shift?.font.glyphRecords().some((glyph) => glyph.name === "newGlyph"),
       ),
     ).toBe(true);
+  },
+);
+
+convertiblePreviewTest(
+  "Save keeps the open glyph when a preview becomes a Shift document",
+  async ({ electronApp, page }) => {
+    const workspacePage = await openSelectedPreview(page, electronApp);
+    const editor = new EditorDriver(workspacePage);
+    await editor.openGlyphByName("A");
+    const glyph = await editor.activeGlyph();
+    if (!glyph) throw new Error("Expected the preview to open glyph A");
+
+    await runCommand(workspacePage, electronApp, "file.save");
+    await expect
+      .poll(() => workspacePage.evaluate(() => window.shiftSession?.mode))
+      .toBe("workspace");
+    await waitForEditorReady(workspacePage, glyph.glyphId);
   },
 );
 

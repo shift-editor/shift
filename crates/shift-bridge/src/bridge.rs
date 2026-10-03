@@ -8,7 +8,7 @@ use shift_backends::{
   AxisIndex as SourceAxisIndex, ExportFormat, FontDirectory, FontExportRequest, FontExportResult,
   FontExporter, FontSource, FontView, GlyphIndex, GlyphPointKind as SourceGlyphPointKind,
   GlyphProjection as SourceGlyphProjection, GlyphShape as SourceGlyphShape, OpenedFont,
-  ProjectedGlyph as SourceProjectedGlyph, SourceAtlasDescriptor, VariationAxisKind,
+  ProjectedGlyph as SourceProjectedGlyph, SourceAtlasDescriptor, SourceGlyphIds, VariationAxisKind,
 };
 use shift_font::composite::resolved_contours_to_svg_path;
 use shift_font::{
@@ -1045,9 +1045,11 @@ struct SourceIdentity {
 }
 
 impl SourceIdentity {
-  fn new(directory: &FontDirectory) -> BridgeResult<Self> {
-    let glyph_ids = (0..directory.glyphs().len())
-      .map(|_| GlyphId::new())
+  fn new(directory: &FontDirectory, glyph_ids: &SourceGlyphIds) -> BridgeResult<Self> {
+    let glyph_ids = directory
+      .glyphs()
+      .iter()
+      .map(|glyph| glyph_ids.glyph_id(&glyph.name))
       .collect::<Vec<_>>()
       .into_boxed_slice();
     let glyph_indices = glyph_ids
@@ -1244,7 +1246,10 @@ impl Bridge {
   #[napi]
   pub fn open_font_source(&mut self, path: String) -> errors::Result<NapiFontSnapshot> {
     let source = FontLoader::new().open_source(Path::new(&path))?;
-    let identity = SourceIdentity::new(source.directory())?;
+    let identity = SourceIdentity::new(
+      source.directory(),
+      &SourceGlyphIds::for_path(Path::new(&path)),
+    )?;
     let snapshot = wire_font_snapshot(&source, &identity)?;
     self.workspace = None;
     self.font_source = Some(source);

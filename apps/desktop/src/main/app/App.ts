@@ -385,11 +385,12 @@ export class App {
     const session = this.#workspaces.getForBrowserWindow(owner.window);
     if (!session?.document) throw new Error("document reopen requires an authored workspace");
 
+    const route = editorRoute(owner);
     const reopened = await this.#workspaces.reopenSession(session.workspaceId);
     const bounds = owner.window.isDestroyed() ? undefined : owner.window.getBounds();
     const window = this.#createWindow(false, bounds);
     this.#workspaces.attachWindow(reopened.workspaceId, window);
-    this.#loadWorkspace(window);
+    this.#loadWorkspace(window, route);
 
     for (const staleWindow of staleWindows) {
       if (!staleWindow.window.isDestroyed()) staleWindow.window.destroy();
@@ -401,8 +402,8 @@ export class App {
     return session?.allWindows() ?? [];
   }
 
-  #loadWorkspace(window: Window): void {
-    this.#loadRenderer(window, "/home");
+  #loadWorkspace(window: Window, route: string = "/home"): void {
+    this.#loadRenderer(window, route);
   }
 
   #loadRenderer(window: Window, hash: string): void {
@@ -870,4 +871,12 @@ function launcherBounds(): Rectangle {
     width,
     height,
   };
+}
+
+/** The editor route a document window was showing, so its replacement can land there too. */
+function editorRoute(window: Window): string | undefined {
+  if (window.window.isDestroyed()) return undefined;
+
+  const route = new URL(window.window.webContents.getURL()).hash.slice(1);
+  return route.startsWith("/editor/") ? route : undefined;
 }

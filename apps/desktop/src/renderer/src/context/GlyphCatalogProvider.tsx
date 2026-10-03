@@ -39,6 +39,7 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
   const canAuthor = session.mode === "workspace";
   const workspace = session.workspace;
 
+  const fontLoaded = useSignalState(session.editor.font.loadedCell);
   const availableGlyphs = useSignalState(catalog.glyphsCell);
   const storedLanguageIds = useSignalState(
     workspace ? workspace.editor.font.languageIdsCell : NO_LANGUAGE_IDS,
@@ -167,6 +168,8 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
       }
       return;
     }
+    // A window can load straight onto an editor route; judge the glyph only once the font is in.
+    if (!fontLoaded) return;
     if (!availableGlyphs.some((glyph) => glyph.id === sourceGlyphId)) {
       openRequestRef.current.invalidate();
       openedGlyphKeyRef.current = null;
@@ -195,7 +198,7 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
     return () => {
       active = false;
     };
-  }, [availableGlyphs, catalog, routeLocation.pathname]);
+  }, [availableGlyphs, catalog, fontLoaded, routeLocation.pathname]);
 
   useEffect(() => {
     const openedGlyphId = openedGlyphKeyRef.current;

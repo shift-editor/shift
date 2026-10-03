@@ -392,6 +392,25 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     );
   });
 
+  it("keeps a preview's glyph ids when the source becomes a document", async () => {
+    await shell.call("source.open", { path: convertibleFontPath });
+    const previewSync = await connectSyncLane();
+    const preview = await previewSync.call("source.snapshot", undefined);
+    await shell.call("source.close", undefined);
+
+    await shell.call("workspace.createFromSource", {
+      sourcePath: convertibleFontPath,
+      documentPath: path.join(tmpRoot, "Converted.shift"),
+    });
+    const documentSync = await connectSyncLane();
+    const document = await documentSync.call("workspace.snapshot", undefined);
+
+    const idsByName = (glyphs: readonly { name: string; id: string }[] = []) =>
+      Object.fromEntries(glyphs.map((glyph) => [glyph.name, glyph.id]));
+    expect(preview?.font.glyphs.length).toBeGreaterThan(0);
+    expect(idsByName(document?.glyphs)).toEqual(idsByName(preview?.font.glyphs));
+  });
+
   it("replaces an occupied destination during conversion", async () => {
     const occupiedPath = path.join(tmpRoot, "Occupied.shift");
     const previousDestination = Buffer.from("replace me");
