@@ -196,6 +196,24 @@ export class EditorDriver {
   }
 
   /**
+   * Projects a position in the open glyph's own units into Playwright page coordinates.
+   * @param position - Glyph-local position, such as a value from {@link selectionBounds}.
+   */
+  async projectGlyphToPage(position: Point2D): Promise<Point2D> {
+    const [canvasPosition, bounds] = await Promise.all([
+      this.page.evaluate((localPosition) => {
+        const editor = window.shiftSession?.editor;
+        const node = editor?.scene.nodesOfKind("glyph")[0];
+        if (!editor || !node) throw new Error("Expected an open glyph node");
+
+        return editor.sceneToScreen(editor.toScene(node, localPosition as LocalPoint));
+      }, position),
+      this.canvasBounds(),
+    ]);
+    return { x: bounds.x + canvasPosition.x, y: bounds.y + canvasPosition.y };
+  }
+
+  /**
    * Projects a canvas-local position into scene coordinates.
    * @param position - Point relative to the canvas origin.
    */

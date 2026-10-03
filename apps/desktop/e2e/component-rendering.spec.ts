@@ -122,7 +122,7 @@ test("selected components expose editable transforms in the properties sidebar",
     x: initialBounds.x + initialBounds.width / 2,
     y: initialBounds.y + initialBounds.height / 2,
   };
-  const dragStart = await editor.projectSceneToPage(center);
+  const dragStart = await editor.projectGlyphToPage(center);
   await editor.pointerDown(dragStart);
   try {
     await editor.pointerMove({ x: dragStart.x + 25, y: dragStart.y + 15 }, 3);
