@@ -12,7 +12,7 @@ export class SnapLines {
    */
   draw(canvas: Canvas, guides: readonly PositionGuide[]): void {
     const { color, widthPx, crossSizePx } = canvas.theme.snap;
-    const crossHalf = canvas.pxToUpm(crossSizePx);
+    const crossHalf = canvas.pxToUnits(crossSizePx);
     const markers = new Map<string, Point2D>();
 
     for (const guide of guides) {

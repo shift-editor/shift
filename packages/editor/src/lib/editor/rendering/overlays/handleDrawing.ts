@@ -35,32 +35,32 @@ export function drawHandleFirst(
   state: HandleState,
 ): void {
   const style = canvas.theme.handle.first[state];
-  const sizeUpm = canvas.pxToUpm(style.size);
-  const barSizeUpm = canvas.pxToUpm(style.barSize);
-  const lineWidthUpm = canvas.pxToUpm(style.lineWidth);
-  const gapUpm = canvas.pxToUpm(START_TRIANGLE_GAP);
+  const sizeUnits = canvas.pxToUnits(style.size);
+  const barSizeUnits = canvas.pxToUnits(style.barSize);
+  const lineWidthUnits = canvas.pxToUnits(style.lineWidth);
+  const gapUnits = canvas.pxToUnits(START_TRIANGLE_GAP);
 
   canvas.ctx.save();
-  canvas.ctx.lineWidth = lineWidthUpm;
+  canvas.ctx.lineWidth = lineWidthUnits;
 
   // Draw bar
   const perpAngle = angle + Math.PI / 2;
   canvas.ctx.strokeStyle = style.barStroke;
-  drawHorizontalLine(canvas.ctx, point.x, point.y, barSizeUpm, perpAngle);
+  drawHorizontalLine(canvas.ctx, point.x, point.y, barSizeUnits, perpAngle);
 
   // Draw triangle
   canvas.ctx.fillStyle = style.fill;
   canvas.ctx.strokeStyle = style.stroke;
   const direction = Vec2.fromAngle(angle);
-  const triangleOffset = Vec2.scale(direction, gapUpm + sizeUpm);
+  const triangleOffset = Vec2.scale(direction, gapUnits + sizeUnits);
   const trianglePos = Vec2.add(point, triangleOffset);
-  drawTriangle(canvas.ctx, trianglePos.x, trianglePos.y, sizeUpm, angle);
+  drawTriangle(canvas.ctx, trianglePos.x, trianglePos.y, sizeUnits, angle);
 
   if (style.overlayColor) {
     canvas.ctx.strokeStyle = style.overlayColor;
-    drawHorizontalLine(canvas.ctx, point.x, point.y, barSizeUpm, perpAngle);
+    drawHorizontalLine(canvas.ctx, point.x, point.y, barSizeUnits, perpAngle);
     canvas.ctx.fillStyle = style.overlayColor;
-    drawTriangle(canvas.ctx, trianglePos.x, trianglePos.y, sizeUpm, angle);
+    drawTriangle(canvas.ctx, trianglePos.x, trianglePos.y, sizeUnits, angle);
   }
 
   canvas.ctx.restore();
@@ -73,19 +73,19 @@ export function drawHandleDirection(
   state: HandleState,
 ): void {
   const style = canvas.theme.handle.direction[state];
-  const sizeUpm = canvas.pxToUpm(style.size);
-  const lineWidthUpm = canvas.pxToUpm(style.lineWidth);
+  const sizeUnits = canvas.pxToUnits(style.size);
+  const lineWidthUnits = canvas.pxToUnits(style.lineWidth);
 
   canvas.ctx.save();
-  canvas.ctx.lineWidth = lineWidthUpm;
+  canvas.ctx.lineWidth = lineWidthUnits;
   canvas.ctx.fillStyle = style.fill;
   canvas.ctx.strokeStyle = style.stroke;
-  drawTriangle(canvas.ctx, point.x, point.y, sizeUpm, angle);
+  drawTriangle(canvas.ctx, point.x, point.y, sizeUnits, angle);
 
   if (style.overlayColor) {
     canvas.ctx.fillStyle = style.overlayColor;
     canvas.ctx.strokeStyle = style.overlayColor;
-    drawTriangle(canvas.ctx, point.x, point.y, sizeUpm, angle);
+    drawTriangle(canvas.ctx, point.x, point.y, sizeUnits, angle);
   }
 
   canvas.ctx.restore();
@@ -98,53 +98,53 @@ export function drawHandleLast(
   state: HandleState,
 ): void {
   const style = canvas.theme.handle.last[state];
-  const sizeUpm = canvas.pxToUpm(style.size);
-  const lineWidthUpm = canvas.pxToUpm(style.lineWidth);
+  const sizeUnits = canvas.pxToUnits(style.size);
+  const lineWidthUnits = canvas.pxToUnits(style.lineWidth);
 
   canvas.ctx.save();
-  canvas.ctx.lineWidth = lineWidthUpm;
+  canvas.ctx.lineWidth = lineWidthUnits;
   canvas.ctx.fillStyle = style.fill;
   canvas.ctx.strokeStyle = style.stroke;
 
   const angle = Vec2.angleTo(anchor, prev);
   const perpAngle = angle + Math.PI / 2;
-  drawHorizontalLine(canvas.ctx, anchor.x, anchor.y, sizeUpm, perpAngle);
+  drawHorizontalLine(canvas.ctx, anchor.x, anchor.y, sizeUnits, perpAngle);
 
   if (style.overlayColor) {
     canvas.ctx.fillStyle = style.overlayColor;
     canvas.ctx.strokeStyle = style.overlayColor;
-    drawHorizontalLine(canvas.ctx, anchor.x, anchor.y, sizeUpm, perpAngle);
+    drawHorizontalLine(canvas.ctx, anchor.x, anchor.y, sizeUnits, perpAngle);
   }
 
   canvas.ctx.restore();
 }
 
 function drawCorner(canvas: Canvas, point: Point2D, style: HandleStyle): void {
-  const sizeUpm = canvas.pxToUpm(style.size);
-  const half = sizeUpm / 2;
+  const sizeUnits = canvas.pxToUnits(style.size);
+  const half = sizeUnits / 2;
 
   canvas.ctx.save();
-  canvas.ctx.lineWidth = canvas.pxToUpm(style.lineWidth);
+  canvas.ctx.lineWidth = canvas.pxToUnits(style.lineWidth);
   canvas.ctx.fillStyle = style.fill;
   canvas.ctx.strokeStyle = style.stroke;
-  canvas.ctx.fillRect(point.x - half, point.y - half, sizeUpm, sizeUpm);
-  canvas.ctx.strokeRect(point.x - half, point.y - half, sizeUpm, sizeUpm);
+  canvas.ctx.fillRect(point.x - half, point.y - half, sizeUnits, sizeUnits);
+  canvas.ctx.strokeRect(point.x - half, point.y - half, sizeUnits, sizeUnits);
 
   if (style.overlayColor) {
     canvas.ctx.fillStyle = style.overlayColor;
     canvas.ctx.strokeStyle = style.overlayColor;
-    canvas.ctx.fillRect(point.x - half, point.y - half, sizeUpm, sizeUpm);
-    canvas.ctx.strokeRect(point.x - half, point.y - half, sizeUpm, sizeUpm);
+    canvas.ctx.fillRect(point.x - half, point.y - half, sizeUnits, sizeUnits);
+    canvas.ctx.strokeRect(point.x - half, point.y - half, sizeUnits, sizeUnits);
   }
 
   canvas.ctx.restore();
 }
 
 function drawCircleHandle(canvas: Canvas, point: Point2D, style: HandleStyle): void {
-  const radiusUpm = canvas.pxToUpm(style.size);
+  const radiusUpm = canvas.pxToUnits(style.size);
 
   canvas.ctx.save();
-  canvas.ctx.lineWidth = canvas.pxToUpm(style.lineWidth);
+  canvas.ctx.lineWidth = canvas.pxToUnits(style.lineWidth);
   canvas.ctx.fillStyle = style.fill;
   canvas.ctx.strokeStyle = style.stroke;
 
@@ -166,8 +166,8 @@ function drawCircleHandle(canvas: Canvas, point: Point2D, style: HandleStyle): v
 }
 
 function drawDiamond(canvas: Canvas, point: Point2D, style: HandleStyle): void {
-  const sizeUpm = canvas.pxToUpm(style.size);
-  const half = sizeUpm / 2;
+  const sizeUnits = canvas.pxToUnits(style.size);
+  const half = sizeUnits / 2;
 
   const points = [
     { x: point.x, y: point.y - half },
@@ -177,7 +177,7 @@ function drawDiamond(canvas: Canvas, point: Point2D, style: HandleStyle): void {
   ];
 
   canvas.ctx.save();
-  canvas.ctx.lineWidth = canvas.pxToUpm(style.lineWidth);
+  canvas.ctx.lineWidth = canvas.pxToUnits(style.lineWidth);
   canvas.ctx.fillStyle = style.fill;
   canvas.ctx.strokeStyle = style.stroke;
 

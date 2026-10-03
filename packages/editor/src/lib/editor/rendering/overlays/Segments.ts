@@ -31,7 +31,7 @@ export class Segments {
     const theme = canvas.theme.segment;
 
     if (selected.length > 0) {
-      const lw = canvas.pxToUpm(theme.selectedWidthPx);
+      const lw = canvas.pxToUnits(theme.selectedWidthPx);
       canvas.ctx.save();
       canvas.ctx.strokeStyle = theme.selectedColor;
       canvas.ctx.lineWidth = lw;
@@ -45,7 +45,7 @@ export class Segments {
     }
 
     if (hovered && !selected.some((s) => s.id === hovered.id)) {
-      const lw = canvas.pxToUpm(theme.hoverWidthPx);
+      const lw = canvas.pxToUnits(theme.hoverWidthPx);
       canvas.ctx.save();
       canvas.ctx.strokeStyle = theme.hoverColor;
       canvas.ctx.lineWidth = lw;

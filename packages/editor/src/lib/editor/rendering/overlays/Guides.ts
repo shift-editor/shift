@@ -12,7 +12,7 @@ function getLockPath(): Path2D {
 export class Guides {
   draw(canvas: Canvas, metrics: GlyphGuideMetrics, advance: number, readOnly: boolean): void {
     const { color, widthPx } = canvas.theme.guides;
-    const lw = canvas.pxToUpm(widthPx);
+    const lw = canvas.pxToUnits(widthPx);
 
     canvas.ctx.save();
     canvas.ctx.strokeStyle = color;
@@ -45,8 +45,8 @@ export class Guides {
   }
 
   #drawLock(canvas: Canvas, descender: number, advance: number): void {
-    const size = canvas.pxToUpm(LOCK_SIZE_PX);
-    const gap = canvas.pxToUpm(LOCK_GAP_PX);
+    const size = canvas.pxToUnits(LOCK_SIZE_PX);
+    const gap = canvas.pxToUnits(LOCK_GAP_PX);
 
     canvas.ctx.save();
     canvas.ctx.translate((advance - size) / 2, descender - gap);

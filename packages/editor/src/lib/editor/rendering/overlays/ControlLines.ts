@@ -16,7 +16,7 @@ export class ControlLines {
     isLineVisible?: (from: Point, to: Point, contourId: ContourId) => boolean,
   ): void {
     const { color, widthPx } = canvas.theme.controlLine;
-    const lw = canvas.pxToUpm(widthPx);
+    const lw = canvas.pxToUnits(widthPx);
 
     canvas.ctx.save();
     canvas.ctx.strokeStyle = color;

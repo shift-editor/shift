@@ -89,7 +89,7 @@ editor/
 - **`FontStore`** -- Session-owned font state injected privately into Editor for synchronous lookup of already-loaded Glyph objects.
 - **`Camera`** -- Owns zoom/pan signals, the computed view matrix (`Mat`), and all coordinate projection methods (`screenToScene`, `sceneToScreen`, `screenToSceneDistance`).
 - **`Renderer`** -- Manages four stacked canvas layers (background, scene, markers/WebGL, overlay), their `FrameHandler` instances, and the canvas item layers that draw each pass.
-- **`Canvas`** -- Thin wrapper around `CanvasRenderingContext2D` with `pxToUpm()` conversion, `withSceneSpace()`/`withTransform()`, and themed drawing primitives. Carries `CameraTransform` and `EditorRenderTheme`.
+- **`Canvas`** -- Thin wrapper around `CanvasRenderingContext2D` with `pxToUnits()` conversion, `withSceneSpace()`/`withTransform()`, and themed drawing primitives. Carries `CameraTransform` and `EditorRenderTheme`.
 - **`CameraTransform`** -- Value object: `{ view, zoom, logicalWidth, logicalHeight }`. Snapshot of viewport state passed to rendering code.
 - **`Selection`** -- Ordered branded-ID selection state. It exposes `stateCell` and unwrapped ID getters; `Editor.selectionBoundsCell` resolves current live objects and their bounds.
 - **`SelectableId`** -- Branded identity accepted by selection regardless of the object's concrete kind.
@@ -143,7 +143,7 @@ Background, scene, and overlays start in scene space (`Canvas.withSceneSpace()` 
 
 1. Content pass -- `GlyphNodeDefinition` draws distinct translucent fills for closed root and component contours, stroked outlines, a themed blue outline over the full directly hovered component subtree, and optional debug overlays while editing. Display rendering fills closed contours and strokes open contours; it never implicitly fills an open gap. Registered source and named-instance references are then stroked directly as outline-only locations for that glyph node.
 2. Delegates to `ToolManager.drawScene()` inside each glyph node's transform.
-3. Controls pass -- draws hovered/selected segments, then control lines with frustum culling via `Editor.visibleLocalBounds()`, then handles (GPU marker rendering with CPU fallback), then anchors.
+3. Controls pass -- draws hovered/selected segments, then control lines with frustum culling via `Canvas.visibleBounds()`, then handles (GPU marker rendering with CPU fallback), then anchors.
 
 ### Zoom-to-cursor
 

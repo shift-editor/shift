@@ -220,8 +220,6 @@ export class Editor {
     get screenMousePositionCell(): Signal<ScreenPoint>;
     // (undocumented)
     screenToScene(screen: ScreenPoint): ScenePoint;
-    screenToSceneDistance(pixels: number): number;
-    screenTransform(node: ShiftNode): SpaceTransform<"local", "screen">;
     selectAll(): void;
     // Warning: (ae-forgotten-export) The symbol "Selection_2" needs to be exported by the entry point index.d.ts
     readonly selection: Selection_2;
@@ -311,7 +309,6 @@ export class Editor {
     undo(): Promise<void>;
     // (undocumented)
     updateMousePosition(clientX: number, clientY: number): void;
-    visibleLocalBounds(node: ShiftNode, marginPx: number): LocalBounds;
     // (undocumented)
     get xAdvance(): number;
     // (undocumented)
@@ -699,7 +696,7 @@ export function useSignalState<T>(signal: Signal<T>, options?: UseSignalOptions)
 
 // Warnings were encountered during analysis:
 //
-// dist/Editor-oT8CmWIR.d.ts:3995:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
+// dist/Editor-Cgkj8rwq.d.ts:4020:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 
