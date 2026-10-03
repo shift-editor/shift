@@ -20,11 +20,5 @@
     "../validation/src/**/*.ts",
     "../ui/src/**/*"
   ],
-  "exclude": [
-    "node_modules",
-    "dist",
-    "**/*.test.ts",
-    "**/*.typecheck.ts",
-    "../editor/src/testing/**"
-  ]
+  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.test-d.ts", "../editor/src/testing/**"]
 }

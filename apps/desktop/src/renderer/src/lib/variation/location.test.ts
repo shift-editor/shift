@@ -11,7 +11,7 @@ import type {
   CoordinateSpacesRemainDistinct,
   MappingAcceptsExternalLocation,
   MappingReturnsDesignLocation,
-} from "./location.typecheck";
+} from "./location.test-d";
 
 const coordinateSpaceContract: readonly [
   MappingAcceptsExternalLocation,
