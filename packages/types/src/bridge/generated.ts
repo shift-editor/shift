@@ -64,11 +64,8 @@ export interface BridgeApi {
   getMetadata(): FontMetadata
   getMetrics(): FontMetrics
   /**
-   * Lists glyph records with only the layers the editor models.
-   *
-   * Layers on non-master sources, such as a UFO's background or support layers, stay in the
-   * store and round-trip through export, but [`Self::get_sources`] does not expose their
-   * sources. Their records omit them so every listed layer has a known source.
+   * Lists glyph records whose layers are only those on [`Font::masters`], so every listed
+   * layer's source is one [`Self::get_sources`] returns.
    */
   getGlyphs(): Array<GlyphRecord>
   /**

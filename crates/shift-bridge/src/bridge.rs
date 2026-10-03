@@ -1310,19 +1310,14 @@ impl Bridge {
     Ok(FontMetrics::from(self.font()?.metrics()).into())
   }
 
-  /// Lists glyph records with only the layers the editor models.
-  ///
-  /// Layers on non-master sources, such as a UFO's background or support layers, stay in the
-  /// store and round-trip through export, but [`Self::get_sources`] does not expose their
-  /// sources. Their records omit them so every listed layer has a known source.
+  /// Lists glyph records whose layers are only those on [`Font::masters`], so every listed
+  /// layer's source is one [`Self::get_sources`] returns.
   #[napi]
   pub fn get_glyphs(&self) -> errors::Result<Vec<NapiGlyphRecord>> {
     let workspace = self.workspace()?;
     let font = workspace.font();
     let source_order = font
-      .sources()
-      .iter()
-      .filter(|source| source.is_master())
+      .masters()
       .enumerate()
       .map(|(index, source)| (source.id().to_string(), index))
       .collect::<HashMap<_, _>>();
@@ -1333,10 +1328,14 @@ impl Bridge {
         let mut record = GlyphRecord::from(glyph);
         record.component_base_glyph_ids =
           component_references.remove(&glyph.id()).unwrap_or_default();
+        let master_layer_ids = font
+          .master_layers(glyph)
+          .map(|layer| layer.id().to_string())
+          .collect::<HashSet<_>>();
         let mut record = NapiGlyphRecord::from(record);
         record
           .layers
-          .retain(|layer| source_order.contains_key(&layer.source_id));
+          .retain(|layer| master_layer_ids.contains(&layer.id));
         record.layers.sort_by(|left, right| {
           source_order
             .get(&left.source_id)
@@ -1554,8 +1553,7 @@ impl Bridge {
       .collect::<Vec<_>>();
     let font = self.acquire_and_font(&glyph_ids, AcquireScope::Glyphs)?;
     let source_order = font
-      .sources()
-      .iter()
+      .masters()
       .enumerate()
       .map(|(index, source)| (source.id(), index))
       .collect::<HashMap<_, _>>();
@@ -1568,11 +1566,7 @@ impl Bridge {
 
       let projection = font.glyph_projection(&glyph_id)?.as_ref().map(Into::into);
 
-      let mut layers = glyph
-        .layers()
-        .values()
-        .map(|layer| layer.as_ref())
-        .collect::<Vec<_>>();
+      let mut layers = font.master_layers(glyph).collect::<Vec<_>>();
       layers.sort_by(|left, right| {
         source_order
           .get(&left.source_id())
@@ -2121,9 +2115,7 @@ impl Bridge {
       .map(|(index, definition)| (definition.id().to_string(), index))
       .collect::<HashMap<_, _>>();
     let mut sources = font
-      .sources()
-      .iter()
-      .filter(|source| source.is_master())
+      .masters()
       .map(Source::from)
       .map(NapiSource::from)
       .collect::<Vec<_>>();
