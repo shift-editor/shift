@@ -29,7 +29,11 @@ import {
 import { EditorDriver } from "./fixtures/EditorDriver";
 import { createAuthoredDocument } from "./fixtures/fontSource";
 import { exportedGlyphNames, savedGlyphNames } from "./fixtures/savedDocument";
-import { clickFirstCatalogGlyph } from "./fixtures/appLocators";
+import {
+  clickFirstCatalogGlyph,
+  openFirstCatalogGlyph,
+  waitForEditorReady,
+} from "./fixtures/appLocators";
 
 const execFileAsync = promisify(execFile);
 
@@ -488,20 +492,20 @@ for (const { format, sourcePath, sourceRoot } of [
 }
 
 convertiblePreviewTest(
-  "Save As replaces a preview glyph route with the new workspace Home",
+  "Save As keeps a preview glyph route in the new workspace",
   async ({ electronApp, page, saveShiftPath, testRoot }) => {
     const workspacePage = await openSelectedPreview(page, electronApp);
-    await clickFirstCatalogGlyph(workspacePage);
-    await workspacePage.waitForURL(/#\/editor\//);
-    await expect(workspacePage.locator("#interactive-canvas")).toBeVisible();
+    const glyphId = await openFirstCatalogGlyph(workspacePage);
 
+    // Conversion reloads the window into the new workspace.
+    const reloaded = workspacePage.waitForEvent("load");
     await runCommand(workspacePage, electronApp, "file.saveAs");
-    await waitForWorkspaceReady(workspacePage);
-
-    await expect(workspacePage).toHaveURL(/#\/home$/);
+    await reloaded;
     await expect
       .poll(() => workspacePage.evaluate(() => window.shiftSession?.mode))
       .toBe("workspace");
+
+    await waitForEditorReady(workspacePage, glyphId);
     expect(savedGlyphNames(saveShiftPath, testRoot)).toContain("A");
   },
 );

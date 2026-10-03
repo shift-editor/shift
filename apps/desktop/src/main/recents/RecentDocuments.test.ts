@@ -150,4 +150,30 @@ describe("RecentDocuments", () => {
 
     expect(new RecentDocuments(storePath).list()).toEqual([]);
   });
+
+  it("reports files still open when Shift last stopped, once", () => {
+    const recents = new RecentDocuments(storePath);
+    const open = { path: font("Open.shift"), documentId: "doc-1" };
+    const closed = { path: font("Closed.shift"), documentId: "doc-2" };
+    recents.record(closed, 1);
+    recents.record(open, 2);
+    recents.setOpen(closed, true);
+    recents.setOpen(open, true);
+
+    recents.setOpen(closed, false);
+
+    expect(new RecentDocuments(storePath).takeOpen()).toEqual([open]);
+    expect(new RecentDocuments(storePath).takeOpen()).toEqual([]);
+  });
+
+  it("reports nothing open after a normal quit", () => {
+    const recents = new RecentDocuments(storePath);
+    const document = { path: font("Fraunces.shift"), documentId: "doc-1" };
+    recents.record(document, 1);
+    recents.setOpen(document, true);
+
+    recents.clearOpen();
+
+    expect(new RecentDocuments(storePath).takeOpen()).toEqual([]);
+  });
 });

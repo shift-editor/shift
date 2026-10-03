@@ -1,3 +1,4 @@
+use crate::SourceGlyphIds;
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
     path::{Path, PathBuf},
@@ -41,7 +42,7 @@ pub(crate) fn stream_retained(
         FormatBackendError::Ufo("UFO header is missing its default source".into())
     })?;
     let layers = load_layer_directories(&retained, &mut header, default_source_id)?;
-    let (glyph_ids, glyphs) = build_glyph_directory(layers);
+    let (glyph_ids, glyphs) = build_glyph_directory(&SourceGlyphIds::for_path(ufo_path), layers);
 
     Ok((header, GlifGlyphStream::new(glyph_ids, glyphs)))
 }
@@ -180,6 +181,7 @@ fn read_layer_info(layer_path: &Path) -> FormatBackendResult<(Option<String>, pl
 }
 
 fn build_glyph_directory(
+    source_glyph_ids: &SourceGlyphIds,
     layers: Vec<LayerDirectory>,
 ) -> (HashMap<String, GlyphId>, Vec<GlifGlyph>) {
     let mut ordered_names = Vec::new();
@@ -193,7 +195,7 @@ fn build_glyph_directory(
     }
     let glyph_ids = ordered_names
         .iter()
-        .map(|name| (name.clone(), GlyphId::new()))
+        .map(|name| (name.clone(), source_glyph_ids.glyph_id(name)))
         .collect::<HashMap<_, _>>();
     let glyphs = ordered_names
         .into_iter()

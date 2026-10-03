@@ -1,3 +1,4 @@
+use crate::SourceGlyphIds;
 use std::{collections::HashMap, path::Path, sync::Arc};
 
 use glyphs_reader::Font as GlyphsFont;
@@ -80,10 +81,11 @@ pub(crate) fn stream_font(
         GlyphsFont::load(Path::new(path))
             .map_err(|error| FormatBackendError::Glyphs(error.to_string()))?,
     );
-    stream_retained(source)
+    stream_retained(Path::new(path), source)
 }
 
 pub(crate) fn stream_retained(
+    path: &Path,
     source: Arc<GlyphsFont>,
 ) -> FormatBackendResult<(Font, GlyphsGlyphStream, ImportReport)> {
     let report = import_report(&source);
@@ -94,9 +96,10 @@ pub(crate) fn stream_retained(
         .values()
         .map(|glyph| glyph.name.to_string())
         .collect::<Vec<_>>();
+    let source_glyph_ids = SourceGlyphIds::for_path(path);
     let glyph_ids = glyph_names
         .iter()
-        .map(|name| (name.clone(), GlyphId::new()))
+        .map(|name| (name.clone(), source_glyph_ids.glyph_id(name)))
         .collect();
 
     Ok((

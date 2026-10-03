@@ -1,5 +1,6 @@
 import type { ElectronApplication, Page } from "@playwright/test";
 import type { GlyphName } from "@shift/types";
+import { waitForEditorReady } from "./fixtures/appLocators";
 import { expect, workspaceTest as test, waitForWorkspaceReady } from "./fixtures/electronApp";
 
 test.setTimeout(90_000);
@@ -17,6 +18,19 @@ test("reopens a crashed document renderer with completed edits", async ({ electr
   await waitForGlyph(reopenedPage, glyphName);
 
   await expect.poll(() => electronApp.windows().length).toBe(1);
+});
+
+test("reopens a crashed document renderer on the glyph it was editing", async ({
+  electronApp,
+  page,
+  editor,
+}) => {
+  await editor.openGlyphByUnicode("41");
+  const glyph = await editor.activeGlyph();
+  if (!glyph) throw new Error("Expected an active glyph before the crash");
+
+  const reopenedPage = await crashRendererAndWaitForWindow(electronApp, page);
+  await waitForEditorReady(reopenedPage, glyph.glyphId);
 });
 
 test("reopens after a document render failure", async ({ electronApp, page }) => {

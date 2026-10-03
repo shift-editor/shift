@@ -8,7 +8,7 @@ use shift_backends::{
   AxisIndex as SourceAxisIndex, ExportFormat, FontDirectory, FontExportRequest, FontExportResult,
   FontExporter, FontSource, FontView, GlyphIndex, GlyphPointKind as SourceGlyphPointKind,
   GlyphProjection as SourceGlyphProjection, GlyphShape as SourceGlyphShape, OpenedFont,
-  ProjectedGlyph as SourceProjectedGlyph, SourceAtlasDescriptor, VariationAxisKind,
+  ProjectedGlyph as SourceProjectedGlyph, SourceAtlasDescriptor, SourceGlyphIds, VariationAxisKind,
 };
 use shift_font::composite::resolved_contours_to_svg_path;
 use shift_font::{
@@ -1045,9 +1045,11 @@ struct SourceIdentity {
 }
 
 impl SourceIdentity {
-  fn new(directory: &FontDirectory) -> BridgeResult<Self> {
-    let glyph_ids = (0..directory.glyphs().len())
-      .map(|_| GlyphId::new())
+  fn new(directory: &FontDirectory, glyph_ids: &SourceGlyphIds) -> BridgeResult<Self> {
+    let glyph_ids = directory
+      .glyphs()
+      .iter()
+      .map(|glyph| glyph_ids.glyph_id(&glyph.name))
       .collect::<Vec<_>>()
       .into_boxed_slice();
     let glyph_indices = glyph_ids
@@ -1244,7 +1246,10 @@ impl Bridge {
   #[napi]
   pub fn open_font_source(&mut self, path: String) -> errors::Result<NapiFontSnapshot> {
     let source = FontLoader::new().open_source(Path::new(&path))?;
-    let identity = SourceIdentity::new(source.directory())?;
+    let identity = SourceIdentity::new(
+      source.directory(),
+      &SourceGlyphIds::for_path(Path::new(&path)),
+    )?;
     let snapshot = wire_font_snapshot(&source, &identity)?;
     self.workspace = None;
     self.font_source = Some(source);
@@ -1305,13 +1310,14 @@ impl Bridge {
     Ok(FontMetrics::from(self.font()?.metrics()).into())
   }
 
+  /// Lists glyph records whose layers are only those on [`Font::masters`], so every listed
+  /// layer's source is one [`Self::get_sources`] returns.
   #[napi]
   pub fn get_glyphs(&self) -> errors::Result<Vec<NapiGlyphRecord>> {
     let workspace = self.workspace()?;
     let font = workspace.font();
     let source_order = font
-      .sources()
-      .iter()
+      .masters()
       .enumerate()
       .map(|(index, source)| (source.id().to_string(), index))
       .collect::<HashMap<_, _>>();
@@ -1322,7 +1328,14 @@ impl Bridge {
         let mut record = GlyphRecord::from(glyph);
         record.component_base_glyph_ids =
           component_references.remove(&glyph.id()).unwrap_or_default();
+        let master_layer_ids = font
+          .master_layers(glyph)
+          .map(|layer| layer.id().to_string())
+          .collect::<HashSet<_>>();
         let mut record = NapiGlyphRecord::from(record);
+        record
+          .layers
+          .retain(|layer| master_layer_ids.contains(&layer.id));
         record.layers.sort_by(|left, right| {
           source_order
             .get(&left.source_id)
@@ -1540,8 +1553,7 @@ impl Bridge {
       .collect::<Vec<_>>();
     let font = self.acquire_and_font(&glyph_ids, AcquireScope::Glyphs)?;
     let source_order = font
-      .sources()
-      .iter()
+      .masters()
       .enumerate()
       .map(|(index, source)| (source.id(), index))
       .collect::<HashMap<_, _>>();
@@ -1554,11 +1566,7 @@ impl Bridge {
 
       let projection = font.glyph_projection(&glyph_id)?.as_ref().map(Into::into);
 
-      let mut layers = glyph
-        .layers()
-        .values()
-        .map(|layer| layer.as_ref())
-        .collect::<Vec<_>>();
+      let mut layers = font.master_layers(glyph).collect::<Vec<_>>();
       layers.sort_by(|left, right| {
         source_order
           .get(&left.source_id())
@@ -2107,9 +2115,7 @@ impl Bridge {
       .map(|(index, definition)| (definition.id().to_string(), index))
       .collect::<HashMap<_, _>>();
     let mut sources = font
-      .sources()
-      .iter()
-      .filter(|source| source.is_master())
+      .masters()
       .map(Source::from)
       .map(NapiSource::from)
       .collect::<Vec<_>>();

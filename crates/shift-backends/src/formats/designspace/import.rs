@@ -1,3 +1,4 @@
+use crate::SourceGlyphIds;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     fs,
@@ -177,7 +178,8 @@ fn stream_designspace(
         },
     );
 
-    let (glyph_ids, glyphs) = build_glyph_directory(&directories);
+    let (glyph_ids, glyphs) =
+        build_glyph_directory(&SourceGlyphIds::for_path(designspace_path), &directories);
     Ok((header, GlifGlyphStream::new(glyph_ids, glyphs)))
 }
 
@@ -273,7 +275,8 @@ fn stream_axisless_designspace(
         },
     );
 
-    let (glyph_ids, glyphs) = build_glyph_directory(&directories);
+    let (glyph_ids, glyphs) =
+        build_glyph_directory(&SourceGlyphIds::for_path(designspace_path), &directories);
     Ok((header, GlifGlyphStream::new(glyph_ids, glyphs)))
 }
 
@@ -346,6 +349,7 @@ fn add_axes(
 }
 
 fn build_glyph_directory(
+    source_glyph_ids: &SourceGlyphIds,
     directories: &[SourceDirectory],
 ) -> (HashMap<String, GlyphId>, Vec<GlifGlyph>) {
     let names = directories
@@ -354,7 +358,7 @@ fn build_glyph_directory(
         .collect::<BTreeSet<_>>();
     let glyph_ids = names
         .iter()
-        .map(|name| (name.clone(), GlyphId::new()))
+        .map(|name| (name.clone(), source_glyph_ids.glyph_id(name)))
         .collect::<HashMap<_, _>>();
     let glyphs = names
         .into_iter()

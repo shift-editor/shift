@@ -29,6 +29,7 @@ export class AppLifecycle {
   readonly #log: ShiftLogger;
 
   #quitState: QuitState = "idle";
+  #quitReason: CloseReason | null = null;
   #quitConfirmation: Promise<boolean> | null = null;
   #confirmedWindowCloses = new Set<number>();
   #pendingWindowCloses = new Set<number>();
@@ -52,6 +53,11 @@ export class AppLifecycle {
         process.on("SIGTERM", () => this.terminate());
       });
     }
+  }
+
+  /** Reports why the app is quitting once every document has agreed to it; null otherwise. */
+  get quitReason(): CloseReason | null {
+    return this.#quitState === "confirmed" ? this.#quitReason : null;
   }
 
   /** Reports whether forced termination has permanently superseded document close flows. */
@@ -101,6 +107,7 @@ export class AppLifecycle {
     if (this.#quitConfirmation) return this.#quitConfirmation;
 
     this.#quitState = "confirming";
+    this.#quitReason = reason;
     this.#log.info("quit preparation started", { reason });
     const confirmation = this.#prepareAndCommitDocuments(reason);
     this.#quitConfirmation = confirmation;

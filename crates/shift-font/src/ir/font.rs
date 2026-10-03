@@ -826,6 +826,27 @@ impl Font {
         &self.data().sources
     }
 
+    /// Returns the master sources, in source order: the sources the editor shows, edits, and
+    /// interpolates.
+    ///
+    /// Layer sources, such as a UFO's background or support layers, are excluded. They stay in
+    /// the font and round-trip through export, but the editor never addresses them.
+    pub fn masters(&self) -> impl Iterator<Item = &Source> {
+        self.sources().iter().filter(|source| source.is_master())
+    }
+
+    /// Returns `glyph`'s layers on [master sources](Self::masters), in no particular order.
+    pub fn master_layers<'a>(&'a self, glyph: &'a Glyph) -> impl Iterator<Item = &'a GlyphLayer> {
+        glyph
+            .layers()
+            .values()
+            .map(Arc::as_ref)
+            .filter(move |layer| {
+                self.masters()
+                    .any(|source| source.id() == layer.source_id())
+            })
+    }
+
     /// Reorders sources without changing their identities or values.
     ///
     /// # Errors
