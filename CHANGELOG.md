@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.1.2](https://github.com/shift-editor/shift/compare/v0.1.1...v0.1.2) (2026-10-03)
+
+
+### Features
+
+* **desktop:** reopen documents on their last glyph after interruptions ([#495](https://github.com/shift-editor/shift/issues/495)) ([1942499](https://github.com/shift-editor/shift/commit/19424990c1d9e86347ffd20bc72dc5334fafb555))
+* **editor:** show contour direction and first point in the object tree ([#485](https://github.com/shift-editor/shift/issues/485)) ([d641450](https://github.com/shift-editor/shift/commit/d6414501aa94c4ff626b3a3b6dcc9273425e5844))
+
+
+### Bug Fixes
+
+* **desktop:** keep New and Open commands enabled without active windows ([#491](https://github.com/shift-editor/shift/issues/491)) ([b001475](https://github.com/shift-editor/shift/commit/b001475c4bdce0e7b6f0b79d25516c33e0e48d09))
+* make desktop chrome and canvas overlays follow the theme ([#469](https://github.com/shift-editor/shift/issues/469)) ([8dfe36f](https://github.com/shift-editor/shift/commit/8dfe36f01346a85790a5812b44a28e5e2e8c40b8))
+
 ## [0.1.1](https://github.com/shift-editor/shift/compare/v0.1.0...v0.1.1) (2026-10-01)
 
 
