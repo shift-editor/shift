@@ -556,14 +556,10 @@ export class App {
       },
       document: {
         create: async () => {
-          if (!window) return;
-
-          await this.#createWorkspaceFromWindow(window);
+          await this.#createWorkspaceFromWindow(window ?? null);
         },
         open: async () => {
-          if (!window) return;
-
-          await this.#openWorkspaceFromWindow(window);
+          await this.#openWorkspaceFromWindow(window ?? null);
         },
         canSave: () =>
           document !== null ||
@@ -712,7 +708,7 @@ export class App {
     }
   }
 
-  async #createWorkspaceFromWindow(opener: Window): Promise<void> {
+  async #createWorkspaceFromWindow(opener: Window | null): Promise<void> {
     try {
       const session = await this.#workspaces.createUntitled();
       this.#openWorkspaceWindow(opener, session);
@@ -722,7 +718,7 @@ export class App {
     }
   }
 
-  async #openWorkspaceFromWindow(opener: Window): Promise<void> {
+  async #openWorkspaceFromWindow(opener: Window | null): Promise<void> {
     let openPath: string | null;
     try {
       openPath = await this.#nativeDialogs.openFont(opener);
@@ -741,19 +737,21 @@ export class App {
    *
    * @returns whether a workspace window now shows the file.
    */
-  async #openPathFromWindow(opener: Window, sourcePath: string): Promise<boolean> {
-    const openerIsLauncher = this.#workspaces.getForBrowserWindow(opener.window) === null;
-    if (openerIsLauncher) this.#replacedLaunchers.add(opener);
+  async #openPathFromWindow(opener: Window | null, sourcePath: string): Promise<boolean> {
+    const openerIsLauncher = opener
+      ? this.#workspaces.getForBrowserWindow(opener.window) === null
+      : false;
+    if (openerIsLauncher && opener) this.#replacedLaunchers.add(opener);
 
     try {
       const session = await this.#workspaces.openPath(sourcePath);
-      if (this.#focusExistingWorkspaceWindow(opener, session)) return true;
+      if (opener && this.#focusExistingWorkspaceWindow(opener, session)) return true;
 
       this.#openWorkspaceWindow(opener, session);
       return true;
     } catch (error) {
       this.#log.warn("open document failed", error);
-      if (openerIsLauncher) this.#restoreLauncherRecents(opener);
+      if (openerIsLauncher && opener) this.#restoreLauncherRecents(opener);
       await this.#nativeDialogs.showOpenFailure(opener, this.applicationName);
       return false;
     }
@@ -803,27 +801,31 @@ export class App {
     }
   }
 
-  #focusExistingWorkspaceWindow(opener: Window, session: FontSessionHost): boolean {
+  #focusExistingWorkspaceWindow(opener: Window | null, session: FontSessionHost): boolean {
     const existingWindow = session.activeWindow();
     if (!existingWindow) return false;
 
     existingWindow.focus();
-    if (this.#workspaces.getForBrowserWindow(opener.window) === null) {
+    if (opener && this.#workspaces.getForBrowserWindow(opener.window) === null) {
       this.#closeReplacedLauncher(opener);
     }
     return true;
   }
 
-  #openWorkspaceWindow(opener: Window, session: FontSessionHost): void {
-    const closeOpener = this.#workspaces.getForBrowserWindow(opener.window) === null;
+  #openWorkspaceWindow(opener: Window | null, session: FontSessionHost): void {
+    const closeOpener = opener
+      ? this.#workspaces.getForBrowserWindow(opener.window) === null
+      : false;
 
-    const bounds = screen.getDisplayMatching(opener.window.getBounds()).workArea;
+    const bounds = opener
+      ? screen.getDisplayMatching(opener.window.getBounds()).workArea
+      : screen.getPrimaryDisplay().workArea;
     const workspaceWindow = this.#createWindow(false, bounds);
 
     this.#workspaces.attachWindow(session.workspaceId, workspaceWindow);
     this.#loadWorkspace(workspaceWindow);
 
-    if (closeOpener) this.#closeReplacedLauncher(opener);
+    if (closeOpener && opener) this.#closeReplacedLauncher(opener);
   }
 
   #closeReplacedLauncher(launcher: Window): void {
