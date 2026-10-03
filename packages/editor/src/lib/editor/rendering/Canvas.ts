@@ -58,14 +58,6 @@ export class Canvas {
     return Mat.applyToPoint(this.#transform, point);
   }
 
-  /** Returns the on-screen angle of a direction given in the current drawing units. */
-  toScreenAngle(angle: number): number {
-    const { a, b, c, d } = this.#transform;
-    const x = Math.cos(angle);
-    const y = Math.sin(angle);
-    return Math.atan2(b * x + d * y, a * x + c * y);
-  }
-
   /**
    * Returns the canvas area, grown by a margin, in the current drawing units.
    *
@@ -149,16 +141,24 @@ export class Canvas {
     this.ctx.restore();
   }
 
+  /**
+   * Strokes a retained path in place with a width in screen pixels.
+   *
+   * @remarks
+   * A `Path2D` is read through the transform active when it is stroked, so
+   * the width is scaled into the current units instead of resetting to
+   * screen space. Exact for uniform scale; under non-uniform scale the width
+   * is the geometric mean of the two axes.
+   */
   strokePath(path: Path2D, stroke: string, widthPx: number): void {
-    const screenPath = new Path2D();
-    screenPath.addPath(path, this.#transform);
+    const { a, b, c, d } = this.#transform;
+    const pixelsPerUnit = Math.sqrt(Math.abs(a * d - b * c));
 
     this.ctx.save();
-    this.#applyToContext(this.#inverted());
     this.ctx.strokeStyle = stroke;
-    this.ctx.lineWidth = widthPx;
+    this.ctx.lineWidth = widthPx / pixelsPerUnit;
     this.ctx.setLineDash([]);
-    this.ctx.stroke(screenPath);
+    this.ctx.stroke(path);
     this.ctx.restore();
   }
 
@@ -298,4 +298,12 @@ export class Canvas {
     const { width, height } = this.ctx.canvas;
     this.ctx.clearRect(0, 0, width, height);
   }
+}
+
+/** Returns the angle a direction makes after the linear part of `transform` is applied. */
+export function angleThrough(transform: MatModel, angle: number): number {
+  const { a, b, c, d } = transform;
+  const x = Math.cos(angle);
+  const y = Math.sin(angle);
+  return Math.atan2(b * x + d * y, a * x + c * y);
 }
