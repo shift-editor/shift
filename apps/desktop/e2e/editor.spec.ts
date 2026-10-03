@@ -1,4 +1,4 @@
-import type { Locator } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { workspaceTest as test, expect } from "./fixtures/electronApp";
 import type { EditorDriver } from "./fixtures/EditorDriver";
 import { editorSidebar, glyphProperties } from "./fixtures/appLocators";
@@ -239,6 +239,22 @@ async function elementWidth(element: Locator): Promise<number> {
   return (await element.boundingBox())?.width ?? 0;
 }
 
+/** True when the element is the topmost hit target at `offsetX` from its left edge. */
+async function receivesPointerAt(element: Locator, offsetX: number): Promise<boolean> {
+  return element.evaluate((node, offset) => {
+    const bounds = node.getBoundingClientRect();
+    const hit = document.elementFromPoint(bounds.x + offset, bounds.y + bounds.height / 2);
+
+    return hit === node;
+  }, offsetX);
+}
+
+/** Resizes a focused divider with the keyboard, which persists the layout like a drag does. */
+async function nudgeDivider(page: Page, divider: Locator, key: string, presses: number) {
+  await divider.focus();
+  for (let press = 0; press < presses; press += 1) await page.keyboard.press(key);
+}
+
 test.describe("Editor view", () => {
   test.beforeEach(async ({ editor }) => {
     await editor.openGlyphByUnicode("41");
@@ -432,21 +448,68 @@ test.describe("Editor view", () => {
     const rightSidebar = layout.getByTestId("right-sidebar-panel");
     const leftDivider = layout.getByRole("separator", { name: "Resize left sidebar" });
     const rightDivider = layout.getByRole("separator", { name: "Resize right sidebar" });
-    const layoutWidth = await elementWidth(layout);
-    const defaultWidth = layoutWidth * 0.15;
+    const defaultLeftWidth = 240;
+    const defaultRightWidth = 260;
 
     await leftDivider.focus();
     await page.keyboard.press("ArrowRight");
-    await expect.poll(() => elementWidth(leftSidebar)).toBeGreaterThan(defaultWidth);
+    await expect.poll(() => elementWidth(leftSidebar)).toBeGreaterThan(defaultLeftWidth);
     await leftDivider.dispatchEvent("dblclick");
-    await expect.poll(() => elementWidth(leftSidebar)).toBeCloseTo(defaultWidth, 0);
+    await expect.poll(() => elementWidth(leftSidebar)).toBeCloseTo(defaultLeftWidth, 0);
 
     await rightDivider.focus();
     await page.keyboard.press("ArrowLeft");
-    await expect.poll(() => elementWidth(rightSidebar)).toBeGreaterThan(defaultWidth);
+    await expect.poll(() => elementWidth(rightSidebar)).toBeGreaterThan(defaultRightWidth);
     await rightDivider.dispatchEvent("dblclick");
-    await expect.poll(() => elementWidth(rightSidebar)).toBeCloseTo(defaultWidth, 0);
-    await expect.poll(() => elementWidth(leftSidebar)).toBeCloseTo(defaultWidth, 0);
+    await expect.poll(() => elementWidth(rightSidebar)).toBeCloseTo(defaultRightWidth, 0);
+    await expect.poll(() => elementWidth(leftSidebar)).toBeCloseTo(defaultLeftWidth, 0);
+  });
+
+  test("keeps the whole divider grab area above the canvas", async ({ page, editor }) => {
+    await editor.waitForCanvasRender();
+    const layout = page.getByTestId("editor-layout-panels");
+
+    for (const name of ["Resize left sidebar", "Resize right sidebar"]) {
+      const divider = layout.getByRole("separator", { name });
+      const width = (await divider.boundingBox())?.width ?? 0;
+      expect(width).toBeGreaterThan(8);
+
+      for (const offsetX of [1, width / 2, width - 1]) {
+        expect(await receivesPointerAt(divider, offsetX)).toBe(true);
+      }
+    }
+  });
+
+  test("shares sidebar widths between the catalog and the editor", async ({ page, editor }) => {
+    await editor.waitForCanvasRender();
+    const editorLayout = page.getByTestId("editor-layout-panels");
+    const homeLayout = page.getByTestId("home-layout-panels");
+    const editorSidebarPanel = editorLayout.getByTestId("left-sidebar-panel");
+    const homeSidebarPanel = homeLayout.getByTestId("left-sidebar-panel");
+    const initialWidth = await elementWidth(editorSidebarPanel);
+
+    await nudgeDivider(
+      page,
+      editorLayout.getByRole("separator", { name: "Resize left sidebar" }),
+      "ArrowRight",
+      4,
+    );
+    await expect.poll(() => elementWidth(editorSidebarPanel)).toBeCloseTo(initialWidth + 40, 0);
+
+    await page.getByRole("button", { name: "Font overview", exact: true }).click();
+    await page.waitForURL(/#\/home/);
+    await expect.poll(() => elementWidth(homeSidebarPanel)).toBeCloseTo(initialWidth + 40, 0);
+
+    await nudgeDivider(
+      page,
+      homeLayout.getByRole("separator", { name: "Resize left sidebar" }),
+      "ArrowLeft",
+      3,
+    );
+    await expect.poll(() => elementWidth(homeSidebarPanel)).toBeCloseTo(initialWidth + 10, 0);
+
+    await editor.openGlyphByUnicode("41");
+    await expect.poll(() => elementWidth(editorSidebarPanel)).toBeCloseTo(initialWidth + 10, 0);
   });
 
   test("toolbar toggles both sidebars without reflowing their contents", async ({ page }) => {
@@ -455,6 +518,17 @@ test.describe("Editor view", () => {
     const rightPanel = layout.getByTestId("right-sidebar-panel");
     const leftContent = editorSidebar(page);
     const rightContent = page.getByRole("complementary", { name: "Glyph properties" });
+
+    if ((await elementWidth(leftPanel)) <= 1) {
+      await page.getByRole("button", { name: "Toggle left sidebar" }).click();
+      await expect.poll(() => elementWidth(leftPanel)).toBeGreaterThan(0);
+    }
+
+    if ((await elementWidth(rightPanel)) <= 1) {
+      await page.getByRole("button", { name: "Toggle right sidebar" }).click();
+      await expect.poll(() => elementWidth(rightPanel)).toBeGreaterThan(0);
+    }
+
     const leftWidth = await elementWidth(leftContent);
     const rightWidth = await elementWidth(rightContent);
 
@@ -682,6 +756,21 @@ test.describe("Editor view", () => {
     });
     await scaleAnchor.hover();
     await expect(page.getByRole("tooltip")).toHaveText("Anchor top left");
+  });
+
+  test("keeps the zoom button the same width while the zoom percentage changes", async ({
+    page,
+  }) => {
+    const zoomButton = page.getByRole("button", { name: /^Zoom options, / });
+    const widths: number[] = [];
+
+    for (const zoom of [0.53, 0.57, 0.64]) {
+      await page.evaluate((value) => window.shift!.editor.setZoom(value), zoom);
+      await expect(zoomButton).toHaveAccessibleName(`Zoom options, ${Math.round(zoom * 100)}%`);
+      widths.push(await elementWidth(zoomButton));
+    }
+
+    expect(widths.map((width) => width.toFixed(2))).toEqual(Array(3).fill(widths[0]!.toFixed(2)));
   });
 
   test("keeps advance width text current after a sidebar metrics edit", async ({

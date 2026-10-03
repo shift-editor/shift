@@ -1,12 +1,12 @@
 # Shared UI (`@shift/ui`)
 
-<!-- reviewed: 2026-09-26 review-every: 90d -->
+<!-- reviewed: 2026-10-03 review-every: 90d -->
 
 Shared UI component library for Shift, wrapping Base UI primitives with Tailwind styling and Shift design tokens.
 
 ## Architecture Invariants
 
-- **Architecture Invariant:** Interactive components delegate to a headless primitive library rather than reimplementing widget behavior -- `@base-ui-components/react` by default, with the Resizable family wrapping `react-resizable-panels`. This keeps accessibility, keyboard handling, and ARIA attributes with the primitive. Components may render structural wrapper elements (e.g. `Input`'s positioning `div`/`span`s) around the primitive.
+- **Architecture Invariant:** Interactive components delegate to a headless primitive library rather than reimplementing widget behavior -- `@base-ui-components/react` by default, with custom desktop-native primitives for split layouts (`resizable/`) that manage fixed-pixel sidebars, flexible center content, keyboard ARIA separator semantics, and pointer-capture dragging without percentage squishing. Panel sizes live in a per-group mutable layout and are written straight to the DOM (never React state), so a drag does not re-render the tree; render and the imperative writer share one style function so they cannot drift, and a collapsed panel is persisted as the width it will re-open at, never zero. Groups mounted at the same time with one `autoSaveId` (the catalog stays mounted behind the editor) adopt each other's committed widths, so a resize in either view applies to both. Components may render structural wrapper elements (e.g. `Input`'s positioning `div`/`span`s) around the primitive.
 - **Architecture Invariant:** All application state and business logic live in the consuming app, not in this package. Components add Tailwind classes via `cn`; small self-contained interaction behavior that belongs to the widget itself is allowed (e.g. `Input`'s Cmd/Ctrl+A select-all).
 - **Architecture Invariant:** Each component lives in its own directory with a barrel `index.ts`. The package root `index.ts` re-exports everything -- consumers import from `@shift/ui`, never from deep paths.
 - **Architecture Invariant:** The `cn` utility (clsx + tailwind-merge) must be used for all className composition. This ensures Tailwind class conflicts are resolved correctly when consumers pass overrides.
@@ -34,7 +34,7 @@ packages/ui/
       popover/             -- Popover trigger, portal, positioner, popup, title, and close
       progress/            -- Progress root with styled track and indicator
       radio/               -- RadioGroup and selectable RadioCard preset control
-      resizable/           -- ResizablePanelGroup, ResizablePanel, ResizableHandle over react-resizable-panels
+      resizable/           -- ResizablePanelGroup, ResizablePanel, ResizableHandle with desktop-native pixel sizing
       select/              -- Select trigger, popup, list, item, and indicator primitives
       separator/           -- Separator (horizontal/vertical)
       slider/              -- Slider with thumb-level accessible name
