@@ -106,7 +106,7 @@ export const MissingGlyphsPopover = ({
             <div
               role="group"
               aria-label={`Missing glyphs for ${languageName}`}
-              className="scrollbar-themed max-h-80 overflow-y-auto p-1"
+              className="max-h-80 overflow-y-auto p-1"
               onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
             >
               <div className="relative" style={{ height: (glyphs?.length ?? 0) * ROW_HEIGHT }}>

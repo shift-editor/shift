@@ -24,6 +24,28 @@ describe("color themes", () => {
     expect(resolveThemeSelection("gruvbox-light", "dark").id).toBe("gruvbox-light");
   });
 
+  it("keeps the toolbar distinct from the canvas and its hover in every override theme", () => {
+    for (const theme of colorThemes.filter((theme) => theme.id !== "shift-light")) {
+      const properties = new Map<string, string>();
+      const root = {
+        dataset: {},
+        style: {
+          colorScheme: "",
+          setProperty: (name: string, value: string) => properties.set(name, value),
+          removeProperty: () => "",
+        },
+      } as unknown as HTMLElement;
+
+      applyResolvedTheme(theme, root);
+      expect(properties.get("--color-icon-button-hover"), theme.id).not.toBe(
+        properties.get("--color-chrome"),
+      );
+      expect(properties.get("--color-chrome"), theme.id).not.toBe(
+        properties.get("--color-surface-muted"),
+      );
+    }
+  });
+
   it("applies theme metadata and removes overrides for Shift Light", () => {
     const properties = new Map<string, string>();
     const root = {

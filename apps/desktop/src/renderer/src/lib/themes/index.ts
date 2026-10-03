@@ -281,21 +281,23 @@ function colorThemeVariables(theme: ColorTheme): Record<string, string> {
   const muted = dark ? withAlpha(palette.base05, 0.6) : palette.base03;
   const handleOverlay = dark ? palette.base07 : palette.base00;
   const surface = dark ? palette.base01 : palette.base00;
-  const chrome =
-    palette.base02 === surface ? withAlpha(palette.base05, dark ? 0.08 : 0.12) : palette.base02;
+  // Light palettes put a strong selection colour in base02, so light chrome tints the canvas (base01)
+  // toward the text colour instead; on Shift Light's palette this reproduces its #e2e2e2 chrome.
+  const darkChrome = palette.base02 === surface ? withAlpha(palette.base05, 0.08) : palette.base02;
+  const chrome = dark ? darkChrome : mix(palette.base01, palette.base05, 0.07);
 
   return {
     "--color-background": palette.base00,
     "--color-surface": surface,
     "--color-surface-muted": palette.base01,
     "--color-chrome": chrome,
-    "--color-hover": dark ? withAlpha(palette.base05, 0.16) : palette.base02,
+    "--color-hover": withAlpha(palette.base05, dark ? 0.16 : 0.1),
     "--color-surface-hover": dark ? withAlpha(palette.base05, 0.12) : palette.base01,
     "--color-surface-inverse": palette.base07,
     "--color-on-surface-inverse": palette.base00,
     "--color-input": dark ? withAlpha(palette.base05, 0.12) : palette.base01,
     "--color-icon-button": dark ? withAlpha(palette.base05, 0.12) : palette.base01,
-    "--color-icon-button-hover": dark ? withAlpha(palette.base05, 0.2) : palette.base02,
+    "--color-icon-button-hover": withAlpha(palette.base05, dark ? 0.2 : 0.14),
     "--color-line": dark ? palette.base03 : palette.base06,
     "--color-line-subtle": dark ? withAlpha(palette.base05, 0.2) : palette.base01,
     "--color-shadow-ambient": dark ? "rgba(0, 0, 0, 0.55)" : "rgba(50, 50, 93, 0.25)",
@@ -341,6 +343,7 @@ function colorThemeVariables(theme: ColorTheme): Record<string, string> {
     "--editor-handle-overlay-anchor": withAlpha(handleOverlay, 0.75),
     "--editor-snap-color": palette.base08,
     "--editor-segment-hover-color": palette.base0D,
+    "--editor-component-hover-outline": palette.base0D,
     "--editor-segment-selected-color": palette.base0D,
     "--editor-preview-color": palette.base0D,
     "--editor-variation-outline-color": withAlpha(palette.base0D, 0.45),
@@ -398,6 +401,17 @@ function relativeLuminance(color: string): number {
     return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
   };
   return 0.2126 * channel(1) + 0.7152 * channel(3) + 0.0722 * channel(5);
+}
+
+function mix(color: string, tint: string, amount: number): string {
+  const channel = (offset: number) => {
+    const base = Number.parseInt(color.slice(offset, offset + 2), 16);
+    const target = Number.parseInt(tint.slice(offset, offset + 2), 16);
+    return Math.round(base + (target - base) * amount)
+      .toString(16)
+      .padStart(2, "0");
+  };
+  return `#${channel(1)}${channel(3)}${channel(5)}`;
 }
 
 function withAlpha(color: string, alpha: number): string {

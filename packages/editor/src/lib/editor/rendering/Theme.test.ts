@@ -15,6 +15,7 @@ describe("editor render theme", () => {
       ["--editor-guides-color", "#123456"],
       ["--editor-variation-outline-color", "#654321"],
       ["--editor-read-only-lock-color", "#abcdef"],
+      ["--editor-component-hover-outline", "#83a598"],
     ]);
     const style = {
       getPropertyValue: (name: string) => colors.get(name) ?? "",
@@ -25,6 +26,7 @@ describe("editor render theme", () => {
     expect(theme.guides.color).toBe("#123456");
     expect(theme.variationOutline.color).toBe("#654321");
     expect(theme.readOnlyLock.color).toBe("#abcdef");
+    expect(theme.component.hoverOutline.stroke).toBe("#83a598");
   });
 
   it("builds GPU marker colors from the active render theme", () => {
