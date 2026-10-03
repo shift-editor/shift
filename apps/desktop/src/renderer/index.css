@@ -93,6 +93,7 @@
   --editor-handle-overlay-anchor: rgba(255, 255, 255, 0.75);
   --editor-snap-color: #ff3b30;
   --editor-segment-hover-color: #1886d7;
+  --editor-component-hover-outline: #1886d7;
   --editor-segment-selected-color: #1886d7;
   --editor-preview-color: #1886d7;
   --editor-variation-outline-color: rgba(12, 146, 244, 0.45);

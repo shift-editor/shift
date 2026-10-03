@@ -343,6 +343,7 @@ function colorThemeVariables(theme: ColorTheme): Record<string, string> {
     "--editor-handle-overlay-anchor": withAlpha(handleOverlay, 0.75),
     "--editor-snap-color": palette.base08,
     "--editor-segment-hover-color": palette.base0D,
+    "--editor-component-hover-outline": palette.base0D,
     "--editor-segment-selected-color": palette.base0D,
     "--editor-preview-color": palette.base0D,
     "--editor-variation-outline-color": withAlpha(palette.base0D, 0.45),
