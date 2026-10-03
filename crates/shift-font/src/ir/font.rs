@@ -839,14 +839,20 @@ impl Font {
         self.sources().iter().filter(|source| source.is_master())
     }
 
-    /// Returns `glyph`'s layers on [master sources](Self::masters), in no particular order.
+    /// Returns `glyph`'s layers on [master sources](Self::masters), in source order, and by
+    /// layer ID among layers on the same source.
     pub fn master_layers<'a>(
         &'a self,
         glyph: &'a Glyph,
     ) -> impl Iterator<Item = &'a Arc<GlyphLayer>> {
-        glyph.layers().values().filter(move |layer| {
-            self.source(layer.source_id())
-                .is_some_and(Source::is_master)
+        self.masters().flat_map(move |source| {
+            let mut layers = glyph
+                .layers()
+                .values()
+                .filter(|layer| layer.source_id() == source.id())
+                .collect::<Vec<_>>();
+            layers.sort_by(|left, right| left.id().as_str().cmp(right.id().as_str()));
+            layers
         })
     }
 
