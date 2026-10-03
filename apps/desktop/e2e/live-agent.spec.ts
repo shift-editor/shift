@@ -4,7 +4,7 @@ import { promisify } from "node:util";
 import { workspaceTest as test, expect, UFO_FONT_PATH } from "./fixtures/electronApp";
 
 const execFileAsync = promisify(execFile);
-const MCP_CLIENT = path.resolve(__dirname, "../../../.agents/skills/shift/scripts/client.mjs");
+const MCP_CLIENT = path.resolve(__dirname, "../../../packages/mcp-client/src/cli.mjs");
 
 async function runShiftCode(testRoot: string, code: string): Promise<unknown> {
   const descriptor = path.join(testRoot, "user-data", "mcp.json");
@@ -46,11 +46,12 @@ test.describe("authored font reads from Home", () => {
         if (!sparse) throw new Error("Missing sparse-layer fixture");
         const support = await shift.layers.get({ windowId, glyphId: a.id, sourceId: supportId });
         const absent = await shift.layers.get({ windowId, glyphId: sparse.id, sourceId: supportId });
-        const supportPage = await shift.glyphs.list({ windowId, limit: 1, sourceId: supportId });
+        const supportPage = await shift.glyphs.list({ windowId, limit: 100, sourceId: supportId });
         return {
           supportLayerId: support?.layerId,
           absent,
-          supportStructure: supportPage.items[0].structure,
+          sparseStructure: supportPage.items.find(({ id }) => id === sparse.id)?.structure,
+          supportStructure: supportPage.items.find(({ id }) => id === a.id)?.structure,
           familyName: font.metadata.familyName,
           unitsPerEm: font.metrics.unitsPerEm,
           glyphCount: font.glyphCount,
@@ -74,6 +75,7 @@ test.describe("authored font reads from Home", () => {
       mode: "workspace",
       anchors: ["top"],
       absent: null,
+      sparseStructure: null,
       supportLayerId: expect.any(String),
     });
     const page = result as {

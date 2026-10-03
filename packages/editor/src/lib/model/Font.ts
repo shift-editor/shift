@@ -11,6 +11,7 @@ import type {
   GlyphEntry,
   GlyphHandle,
   GlyphId,
+  GlyphLayerSnapshot,
   GlyphPreview,
   GlyphRecord,
   GlyphSnapshotRequest,
@@ -613,6 +614,54 @@ export class Font {
 
   glyphRecords(): readonly GlyphRecord[] {
     return this.#directoryCell.peek().records;
+  }
+
+  /**
+   * Reads accepted authored layers without loading glyphs into the editor.
+   *
+   * @remarks
+   * Workspace reads follow pending writes; gesture previews are not included.
+   * The returned snapshots do not publish glyph models or mutate the font.
+   *
+   * @param input - Glyph IDs to read in order and an authored source identity.
+   * @returns One snapshot per glyph ID, or `null` when that glyph lacks a layer in a known source.
+   * @throws {Error} when workspace authorship is unavailable, an identity is unknown, or an advertised layer cannot be read.
+   */
+  async readAuthoredLayers({
+    glyphIds,
+    sourceId,
+  }: {
+    glyphIds: readonly GlyphId[];
+    sourceId: SourceId;
+  }): Promise<readonly (GlyphLayerSnapshot | null)[]> {
+    if (!this.#editCoordinator) throw new Error("Authored layers are unavailable in this font");
+
+    const sourceIsKnown =
+      this.sources.some((source) => source.id === sourceId) ||
+      this.glyphRecords().some((glyph) =>
+        glyph.layers.some((layer) => layer.sourceId === sourceId),
+      );
+    if (!sourceIsKnown) throw new Error(`Source ${sourceId} is not in this font`);
+
+    const records = glyphIds.map((glyphId) => {
+      if (!this.entryForId(glyphId)) throw new Error(`Glyph ${glyphId} is not in this font`);
+      return this.recordForId(glyphId);
+    });
+    const requests = glyphIds
+      .filter((glyphId) =>
+        this.recordForId(glyphId)?.layers.some((layer) => layer.sourceId === sourceId),
+      )
+      .map((glyphId) => ({ glyphId }));
+    const snapshots = await this.#editCoordinator.readGlyphSnapshots(requests);
+    const byId = new Map(snapshots.map((snapshot) => [snapshot.glyphId, snapshot]));
+
+    return records.map((record) => {
+      if (!record?.layers.some((layer) => layer.sourceId === sourceId)) return null;
+
+      const layer = byId.get(record.id)?.layers.find((layer) => layer.sourceId === sourceId);
+      if (!layer) throw new Error(`Authored layer for glyph ${record.id} was not returned`);
+      return layer;
+    });
   }
 
   /**

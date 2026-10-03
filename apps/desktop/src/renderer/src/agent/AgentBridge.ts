@@ -6,7 +6,7 @@ import type {
   GlyphSummary,
   LayerView,
 } from "@shift/runtime";
-import type { GlyphId, GlyphState, SourceId } from "@shift/types";
+import type { GlyphId, SourceId } from "@shift/types";
 import { GlyphGeometry } from "@shift/glyph-state";
 import type { ShiftHost } from "@shared/host/ShiftHost";
 import type { AgentCallMap, AgentEventMap } from "@shared/agent/protocol";
@@ -80,7 +80,6 @@ export class AgentBridge {
     cursor?: string;
     sourceId?: SourceId;
   }): Promise<GlyphPage> {
-    if (sourceId) this.#requireAuthoredSource(sourceId);
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
       throw new Error("glyphs.list limit must be between 1 and 100");
     }
@@ -104,28 +103,12 @@ export class AgentBridge {
     const page = entries.slice(start, start + limit);
     const items = page.map((entry) => glyphSummary(this.#session, entry.id));
     if (sourceId) {
-      const requested = items.filter((item) => item.sourceIds.includes(sourceId));
-      if (this.#session.workspace) {
-        const snapshots = await this.#session.workspace.editCoordinator.readGlyphSnapshots(
-          requested.map(({ id }) => ({ glyphId: id })),
-        );
-        const byId = new Map(snapshots.map((snapshot) => [snapshot.glyphId, snapshot]));
-        for (const item of items) {
-          if (!item.sourceIds.includes(sourceId)) {
-            item.structure = null;
-            continue;
-          }
-          const structure = byId.get(item.id)?.layers.find((layer) => layer.sourceId === sourceId)
-            ?.state.structure;
-          if (!structure) throw new Error(`Authored layer for glyph ${item.id} was not returned`);
-          item.structure = structure;
-        }
-      } else {
-        const glyphs = await font.loadGlyphs(requested.map(({ id }) => id));
-        const byId = new Map(glyphs.map((glyph) => [glyph.id, glyph]));
-        for (const item of items) {
-          item.structure = byId.get(item.id)?.layerForSource(sourceId)?.state.structure ?? null;
-        }
+      const layers = await font.readAuthoredLayers({
+        glyphIds: page.map(({ id }) => id),
+        sourceId,
+      });
+      for (const [index, item] of items.entries()) {
+        item.structure = layers[index]?.state.structure ?? null;
       }
     }
 
@@ -147,28 +130,10 @@ export class AgentBridge {
   }
 
   async #getLayer(glyphId: GlyphId, sourceId: SourceId): Promise<LayerView | null> {
-    this.#requireAuthoredSource(sourceId);
-    const font = this.#session.font;
-    const entry = font.entryForId(glyphId);
-    if (!entry) throw new Error(`Glyph ${glyphId} is not in this font`);
-    if (!font.recordForId(glyphId)?.layers.some((layer) => layer.sourceId === sourceId)) {
-      return null;
-    }
+    const [layer] = await this.#session.font.readAuthoredLayers({ glyphIds: [glyphId], sourceId });
+    if (!layer) return null;
 
-    let state: GlyphState;
-    if (this.#session.workspace) {
-      const snapshots = await this.#session.workspace.editCoordinator.readGlyphSnapshots([
-        { glyphId },
-      ]);
-      const layer = snapshots[0]?.layers.find((layer) => layer.sourceId === sourceId);
-      if (!layer) throw new Error(`Authored layer for glyph ${glyphId} was not returned`);
-      state = layer.state;
-    } else {
-      const glyph = await font.loadGlyph(glyphId);
-      const layer = glyph.layerForSource(sourceId);
-      if (!layer) throw new Error(`Authored layer for glyph ${glyphId} was not returned`);
-      state = layer.state;
-    }
+    const state = layer.state;
     const geometry = GlyphGeometry.fromState(state);
 
     return {
@@ -187,21 +152,6 @@ export class AgentBridge {
         smooth,
       })),
     };
-  }
-
-  #requireAuthoredSource(sourceId: SourceId): void {
-    if (this.#session.mode === "preview") {
-      throw new Error("Authored layers are unavailable in preview sessions");
-    }
-    const font = this.#session.font;
-    if (
-      !font.sources.some(({ id }) => id === sourceId) &&
-      !font
-        .glyphEntries()
-        .some(({ id }) => font.recordForId(id)?.layers.some((layer) => layer.sourceId === sourceId))
-    ) {
-      throw new Error(`Source ${sourceId} is not in this font`);
-    }
   }
 
   #inspectEditor(): EditorView {

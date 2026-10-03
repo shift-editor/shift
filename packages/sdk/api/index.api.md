@@ -490,6 +490,10 @@ export class Font {
     nextAvailableGlyphName(name: GlyphName): GlyphName;
     pointIdsForSegment(segmentId: SegmentId): readonly PointId[] | null;
     primaryUnicodeForName(name: GlyphName): Unicode | null;
+    readAuthoredLayers(input: {
+        glyphIds: readonly GlyphId[];
+        sourceId: SourceId;
+    }): Promise<readonly (GlyphLayerSnapshot | null)[]>;
     // (undocumented)
     recordForId(glyphId: GlyphId): GlyphRecord | null;
     // (undocumented)
@@ -514,6 +518,23 @@ export class Font {
     updateMetadata(metadata: FontMetadata): Promise<void>;
     updateNamedInstance(instance: NamedInstance): Promise<void>;
     updateSource(source: Source): Promise<void>;
+}
+
+// @public
+export interface FontOverview {
+    // (undocumented)
+    axes: Axis[];
+    // (undocumented)
+    glyphCount: number;
+    // (undocumented)
+    metadata: FontMetadata;
+    // (undocumented)
+    metrics: FontMetrics;
+    // (undocumented)
+    mode: ShiftSessionMode;
+    // (undocumented)
+    namedInstances: NamedInstance[];
+    sources: Source[];
 }
 
 // @public (undocumented)
@@ -620,6 +641,24 @@ export type GlyphId = string & {
     readonly [GlyphIdBrand]: typeof GlyphIdBrand;
 };
 
+// @public (undocumented)
+export interface GlyphLayerSnapshot {
+    // (undocumented)
+    glyphId: GlyphId;
+    // (undocumented)
+    sourceId: SourceId;
+    // (undocumented)
+    state: GlyphState;
+}
+
+// @public
+export interface GlyphPage {
+    // (undocumented)
+    items: GlyphSummary[];
+    // (undocumented)
+    nextCursor: string | null;
+}
+
 // @public
 export interface GlyphPreview {
     // (undocumented)
@@ -654,18 +693,73 @@ export interface GlyphRecord {
     unicodes: Array<Unicode>;
 }
 
+// @public
+export type GlyphSelector = {
+    glyphId: GlyphId;
+    name?: never;
+} | {
+    name: GlyphName;
+    glyphId?: never;
+};
+
 // @public (undocumented)
 export interface GlyphSnapshot {
     // (undocumented)
     glyphId: GlyphId;
-    // Warning: (ae-forgotten-export) The symbol "GlyphLayerSnapshot" needs to be exported by the entry point index.d.ts
-    //
     // (undocumented)
     layers: Array<GlyphLayerSnapshot>;
     // Warning: (ae-forgotten-export) The symbol "GlyphProjection" needs to be exported by the entry point index.d.ts
     //
     // (undocumented)
     projection?: GlyphProjection;
+}
+
+// @public
+export interface GlyphSummary {
+    // (undocumented)
+    componentBaseGlyphIds: GlyphId[];
+    // (undocumented)
+    id: GlyphId;
+    // (undocumented)
+    name: string;
+    sourceIds: SourceId[];
+    // Warning: (ae-forgotten-export) The symbol "GlyphStructure" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    structure?: GlyphStructure | null;
+    // (undocumented)
+    unicodes: number[];
+}
+
+// @public
+export interface LayerView {
+    // (undocumented)
+    anchors: {
+        id: AnchorId;
+        name: string | null;
+        x: number;
+        y: number;
+    }[];
+    // (undocumented)
+    bounds: Bounds | null;
+    // (undocumented)
+    glyphId: GlyphId;
+    // (undocumented)
+    layerId: LayerId;
+    // (undocumented)
+    points: {
+        id: PointId;
+        x: number;
+        y: number;
+        pointType: PointType;
+        smooth: boolean;
+    }[];
+    // (undocumented)
+    sourceId: SourceId;
+    // (undocumented)
+    structure: GlyphStructure;
+    // (undocumented)
+    xAdvance: number;
 }
 
 // @public
@@ -721,6 +815,32 @@ export interface ShiftCapabilities {
         }): Promise<EditorInspection>;
     };
     // (undocumented)
+    font: {
+        get(input: {
+            windowId: number;
+        }): Promise<FontOverview>;
+    };
+    // (undocumented)
+    glyphs: {
+        list(input: {
+            windowId: number;
+            limit?: number;
+            cursor?: string;
+            sourceId?: SourceId;
+        }): Promise<GlyphPage>;
+        get(input: {
+            windowId: number;
+        } & GlyphSelector): Promise<GlyphSummary>;
+    };
+    // (undocumented)
+    layers: {
+        get(input: {
+            windowId: number;
+            glyphId: GlyphId;
+            sourceId: SourceId;
+        }): Promise<LayerView | null>;
+    };
+    // (undocumented)
     sessions: {
         list(): Promise<ShiftSession[]>;
     };
@@ -770,7 +890,8 @@ export function useSignalState<T>(signal: Signal<T>, options?: UseSignalOptions)
 
 // Warnings were encountered during analysis:
 //
-// dist/Editor-Ch6PpQ3W.d.ts:3726:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
+// dist/Editor-CBzTw075.d.ts:3726:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:155:5 - (ae-forgotten-export) The symbol "PointType" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

@@ -1,0 +1,23 @@
+{
+  "name": "@shift/mcp-client",
+  "version": "0.0.1",
+  "license": "MIT OR Apache-2.0",
+  "private": true,
+  "description": "Command-line client for a running Shift MCP server",
+  "type": "module",
+  "bin": {
+    "shift-mcp": "./src/cli.mjs"
+  },
+  "scripts": {
+    "lint:check": "oxlint --deny-warnings src/",
+    "test": "vitest run --config vitest.config.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/client": "2.2.0"
+  },
+  "devDependencies": {
+    "@shift/mcp": "workspace:*",
+    "oxlint": "^1.85.0",
+    "vitest": "^4.1.10"
+  }
+}

@@ -9,10 +9,10 @@ Use the live MCP connection when the user refers to the font, glyph, source, sel
 
 ## Connect
 
-Run scripts relative to this skill directory:
+From a Shift checkout with dependencies installed, use the packaged client:
 
 ```sh
-node scripts/client.mjs connections
+pnpm exec shift-mcp connections
 ```
 
 The client discovers run descriptors for Shift, Shift Nightly, and development builds. Set `SHIFT_MCP_DESCRIPTOR=/absolute/path/to/mcp.json` when Shift uses a custom user-data directory. If multiple applications are running, pass `--descriptor <path>` explicitly; never guess.
@@ -20,7 +20,7 @@ The client discovers run descriptors for Shift, Shift Nightly, and development b
 ## Discover the API
 
 ```sh
-node scripts/client.mjs describe --descriptor <path>
+pnpm exec shift-mcp describe --descriptor <path>
 ```
 
 The typed API exposes `shift.sessions.list()`, `shift.editor.inspect({ windowId })`, `shift.font.get({ windowId })`, `shift.glyphs.list({ windowId, limit?, cursor?, sourceId? })`, `shift.glyphs.get({ windowId, glyphId })` or `shift.glyphs.get({ windowId, name })`, and `shift.layers.get({ windowId, glyphId, sourceId })` inside `shift.execute`.
@@ -30,7 +30,7 @@ The typed API exposes `shift.sessions.list()`, `shift.editor.inspect({ windowId 
 Pass an async zero-argument function on stdin to avoid shell escaping:
 
 ```sh
-node scripts/client.mjs execute --descriptor <path> <<'EOF'
+pnpm exec shift-mcp execute --descriptor <path> <<'EOF'
 async () => {
   const sessions = await shift.sessions.list();
   const session = sessions.find(({ sessionId }) => sessionId === "...");

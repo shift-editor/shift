@@ -152,6 +152,7 @@ export type {
   GlyphEntry,
   GlyphHandle,
   GlyphLayerRecord,
+  GlyphLayerSnapshot,
   GlyphName,
   GlyphInterpolation,
   GlyphLayerShape,

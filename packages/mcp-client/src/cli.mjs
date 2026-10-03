@@ -4,50 +4,58 @@ import { readFile, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
+import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 
 const APP_NAMES = ["Shift Dev", "Shift Nightly Dev", "Shift", "Shift Nightly"];
-let requestId = 0;
 
 async function main() {
   const command = process.argv[2];
   const { descriptorPath, operands } = parseArguments(process.argv.slice(3));
 
-  switch (command) {
-    case "connections": {
-      const connections = await discoverConnections();
-      console.log(
-        JSON.stringify(
-          connections.map(({ descriptorPath: discoveredPath, connection }) => ({
-            descriptorPath: discoveredPath,
-            url: connection.url,
-          })),
-          null,
-          2,
-        ),
-      );
-      return;
-    }
-    case "describe": {
-      const connection = await selectConnection(descriptorPath);
-      await initialize(connection);
-      const result = await callTool(connection, "shift.describe", {});
-      printToolText(result);
-      return;
-    }
-    case "execute": {
-      const connection = await selectConnection(descriptorPath);
-      const code = operands.length > 0 ? operands.join(" ") : await readStdin();
-      if (!code.trim()) throw new Error("execute requires code as an argument or on stdin");
+  if (command === "connections") {
+    const connections = await discoverConnections();
+    const output = JSON.stringify(
+      connections.map(({ descriptorPath: discoveredPath, connection }) => ({
+        descriptorPath: discoveredPath,
+        url: connection.url,
+      })),
+      null,
+      2,
+    );
+    process.stdout.write(`${output}\n`);
+    return;
+  }
 
-      await initialize(connection);
-      const result = await callTool(connection, "shift.execute", { code });
-      printToolText(result);
-      return;
-    }
-    default:
-      throw new Error(
-        "usage: client.mjs connections | describe [--descriptor path] | execute [--descriptor path] [code]",
-      );
+  if (command !== "describe" && command !== "execute") {
+    throw new Error(
+      "usage: shift-mcp connections | describe [--descriptor path] | execute [--descriptor path] [code]",
+    );
+  }
+
+  const connection = await selectConnection(descriptorPath);
+  const code = command === "execute" ? operands.join(" ") || (await readStdin()) : null;
+  if (command === "execute" && !code.trim()) {
+    throw new Error("execute requires code as an argument or on stdin");
+  }
+
+  const client = new Client({ name: "shift-mcp", version: "0.0.1" });
+  const transport = new StreamableHTTPClientTransport(new URL(connection.url), {
+    authProvider: { token: async () => connection.token },
+  });
+  try {
+    await client.connect(transport);
+    const result = await client.callTool({
+      name: command === "describe" ? "shift.describe" : "shift.execute",
+      arguments: command === "execute" ? { code } : {},
+    });
+    const text = result.content
+      .filter((item) => item.type === "text")
+      .map((item) => item.text)
+      .join("\n");
+    if (result.isError) throw new Error(text);
+    process.stdout.write(`${text}\n`);
+  } finally {
+    await client.close();
   }
 }
 
@@ -129,63 +137,6 @@ async function readConnection(descriptorPath) {
   }
 
   return connection;
-}
-
-async function initialize(connection) {
-  await request(connection, "initialize", {
-    protocolVersion: "2025-06-18",
-    capabilities: {},
-    clientInfo: { name: "shift-agent-skill", version: "0.1.0" },
-  });
-}
-
-async function callTool(connection, name, args) {
-  const response = await request(connection, "tools/call", { name, arguments: args });
-  if (response.isError) throw new Error(toolText(response));
-  return response;
-}
-
-async function request(connection, method, params) {
-  requestId += 1;
-  const response = await fetch(connection.url, {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${connection.token}`,
-      accept: "application/json, text/event-stream",
-      "content-type": "application/json",
-      "mcp-protocol-version": "2025-06-18",
-    },
-    body: JSON.stringify({ jsonrpc: "2.0", id: requestId, method, params }),
-  });
-
-  const text = await response.text();
-  if (!response.ok) throw new Error(`Shift MCP request failed (${response.status}): ${text}`);
-
-  const message = parseMessage(text);
-  if (message.error) throw new Error(message.error.message ?? JSON.stringify(message.error));
-  return message.result;
-}
-
-function parseMessage(body) {
-  if (!body.startsWith("event:")) return JSON.parse(body);
-
-  const dataLines = body
-    .split("\n")
-    .filter((line) => line.startsWith("data: "))
-    .map((line) => line.slice("data: ".length));
-  if (dataLines.length === 0) throw new Error("Shift MCP returned an empty event stream");
-  return JSON.parse(dataLines[dataLines.length - 1]);
-}
-
-function toolText(result) {
-  return (result.content ?? [])
-    .filter((item) => item.type === "text")
-    .map((item) => item.text)
-    .join("\n");
-}
-
-function printToolText(result) {
-  console.log(toolText(result));
 }
 
 async function readStdin() {

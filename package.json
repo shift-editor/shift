@@ -69,6 +69,7 @@
     "node": ">=24.0.0 <25"
   },
   "devDependencies": {
+    "@shift/mcp-client": "workspace:*",
     "@typescript/native-preview": "7.0.0-dev.20260707.2",
     "js-yaml": "4.3.1",
     "knip": "^5.84.1",

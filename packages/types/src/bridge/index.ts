@@ -70,6 +70,7 @@ export type {
   GlyphChangedEntities,
   GlyphComponents,
   GlyphEntry,
+  GlyphLayerSnapshot,
   GlyphLayerRecord,
   GlyphLayerShape,
   GlyphName,

@@ -10,7 +10,7 @@ Local code-mode access to the live Shift desktop application.
 - **Architecture Invariant:** The server binds to `127.0.0.1` on a random port, validates localhost Host and Origin headers, and requires a random secret generated for one application run. It never listens on a public interface.
 - **Architecture Invariant:** Agent-written code runs in a fresh QuickJS runtime with bounded time, memory, source size, and result size. Desktop hosts that runtime in a dedicated utility process so generated code cannot block or crash Electron main. It has no Node.js, filesystem, environment, Electron, or network globals.
 - **Architecture Invariant:** Every editor request names a window explicitly. Focus changes never retarget an in-flight or subsequent call.
-- **Architecture Invariant:** MCP is not Shift's canonical font API. Shared document and editor capabilities remain usable by future plugin and protocol hosts without MCP.
+- **Architecture Invariant:** MCP is not Shift's canonical font API. Shared document and editor capabilities remain usable by future plugin and protocol hosts without MCP. The desktop host asks `Font.readAuthoredLayers()` for accepted authored snapshots; `@shift/mcp-client` owns connection discovery and uses the MCP client transport rather than embedding JSON-RPC handling in agent skills.
 
 ## Codemap
 
@@ -97,6 +97,7 @@ pnpm typecheck
 ## Related
 
 - [`packages/runtime/docs/DOCS.md`](../../runtime/docs/DOCS.md) -- canonical protocol and plugin capability contracts.
+- [`packages/mcp-client/src/cli.mjs`](../../mcp-client/src/cli.mjs) -- packaged `shift-mcp` command for run-scoped descriptor discovery and MCP calls.
 - [`apps/desktop/src/main/docs/DOCS.md`](../../../apps/desktop/src/main/docs/DOCS.md) -- Electron lifecycle, window/session identity, and renderer lanes.
 - [`apps/desktop/src/preload/docs/DOCS.md`](../../../apps/desktop/src/preload/docs/DOCS.md) -- authenticated `MessagePort` transfer into the renderer.
 - [`docs/architecture/index.md`](../../../docs/architecture/index.md) -- repository documentation routing and API boundaries.
