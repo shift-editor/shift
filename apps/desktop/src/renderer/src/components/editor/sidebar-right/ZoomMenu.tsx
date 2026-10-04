@@ -16,7 +16,7 @@ import { useEditor } from "@/workspace/WorkspaceContext";
 export const ZoomMenu = () => {
   const editor = useEditor();
   const zoom = useSignalState(editor.zoomCell);
-  const selection = useSignalState(editor.selection.stateCell);
+  const selection = useSignalState(editor.selection.stateCell, { schedule: "frame" });
 
   const isMac = getShiftHost().platform === "darwin";
   const primaryModifier = isMac ? "⌘" : "Ctrl+";
