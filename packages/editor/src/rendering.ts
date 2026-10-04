@@ -3,7 +3,7 @@ export {
   CanvasSurface,
   MarkerCanvasSurface,
 } from "./lib/editor/rendering/CanvasSurface";
-export { FrameHandler } from "./lib/editor/rendering/FrameHandler";
+export { FrameHandler, type FrameClock } from "./lib/editor/rendering/FrameHandler";
 export { ContourPath } from "./lib/graphics/ContourPath";
 export {
   LOCK_GAP_PX,
