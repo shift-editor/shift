@@ -8,7 +8,7 @@
 // Warning: (ae-forgotten-export) The symbol "ComputedSignal" needs to be exported by the entry point index.d.ts
 //
 // @public
-export function computed<T>(fn: () => T, options?: ComputedOptions): ComputedSignal<T>;
+export function computed<T>(fn: () => T, options?: ComputedOptions<T>): ComputedSignal<T>;
 
 // @public
 export function createMemoryFontSession(input: MemoryFontSessionOptions): MemoryFontSession;
@@ -346,7 +346,7 @@ export class Font {
     // Warning: (ae-forgotten-export) The symbol "AxisMapping" needs to be exported by the entry point index.d.ts
     get axisMappingsCell(): Signal<AxisMapping[]>;
     cloneGlyphLayer(glyphId: GlyphId, sourceId: SourceId, fromLayerId: LayerId): LayerId;
-    get committedFontCell(): Signal<Font>;
+    get committedRevisionCell(): Signal<number>;
     componentBaseNamesForName(name: GlyphName): readonly GlyphName[];
     contourIdForPoint(pointId: PointId): ContourId | null;
     contourIdForSegment(segmentId: SegmentId): ContourId | null;
@@ -395,7 +395,7 @@ export class Font {
     glyphRecords(): readonly GlyphRecord[];
     get glyphRecordsCell(): Signal<readonly GlyphRecord[]>;
     hasGlyph(glyphId: GlyphId): boolean;
-    get invalidGlyphIdsCell(): Signal<readonly GlyphId[] | null>;
+    get invalidGlyphsCell(): Signal<GlyphInvalidation>;
     isVariable(): boolean;
     get languageIdsCell(): Signal<readonly string[] | null>;
     // Warning: (ae-forgotten-export) The symbol "AnchorId" needs to be exported by the entry point index.d.ts
@@ -569,6 +569,11 @@ export type GlyphId = string & {
 };
 
 // @public
+export interface GlyphInvalidation {
+    readonly glyphIds: readonly GlyphId[] | null;
+}
+
+// @public
 export interface GlyphPreview {
     // (undocumented)
     glyphId: GlyphId;
@@ -696,7 +701,7 @@ export function useSignalState<T>(signal: Signal<T>, options?: UseSignalOptions)
 
 // Warnings were encountered during analysis:
 //
-// dist/Editor-DorHl-Q6.d.ts:4062:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
+// dist/Editor-OaDxSoCq.d.ts:4078:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

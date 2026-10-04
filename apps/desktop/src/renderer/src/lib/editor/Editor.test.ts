@@ -30,6 +30,22 @@ describe("Editor scene bootstrap", () => {
     });
   });
 
+  it("keeps the scene value when only the selection changes, and updates it when a node moves", async () => {
+    const [pointId] = await editor.drawOpenContour([
+      { x: 100, y: 100 },
+      { x: 200, y: 100 },
+    ]);
+    const scene = editor.scene.cell.peek();
+
+    editor.selection.select([pointId!]);
+    expect(editor.scene.cell.peek()).toBe(scene);
+
+    const [node] = editor.scene.nodes();
+    editor.scene.updateNode({ id: node!.id, position: { x: 40, y: 0 } });
+    expect(editor.scene.cell.peek()).not.toBe(scene);
+    expect(editor.scene.nodes()[0]?.position).toEqual({ x: 40, y: 0 });
+  });
+
   it("can place the same glyph id twice with distinct node ids", () => {
     const record = editor.font.recordForName("A")!;
     const left = mintNodeId();

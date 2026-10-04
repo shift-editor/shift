@@ -65,6 +65,8 @@ _Origin:_ typing a character whose glyph wasn't loaded laid it out at advance 0 
 
 - Signals compare with `Object.is`. Mutating a value in place and re-setting the same reference notifies nobody. Build a new reference.
 - Setting a new-but-equal value notifies everyone. When a write runs on a broad trigger (every directory change, every workspace echo), compare first and skip the set — e.g. `Glyph.replaceComponentGlyphs` skips unchanged sets so directory updates don't invalidate every render model.
+- A computed that rebuilds an equal object on each run (a filtered list, a `{ nodes }` wrapper) still reads as changed under the default `Object.is`. When it sits under a broad source, give it a structural `equals` so readers don't rerun — e.g. `Scene` compares nodes by identity so selection writes to the shared store don't reach scene readers.
+- Never publish an object mutated in place by re-setting it. Keep it in a plain field, bump a revision signal after each change, and hand readers a value with a new identity (a fresh view, a wrapper, or the revision itself) — see the coordinate buffers and `FontStore.committedRevisionCell`. A computed that returns the same object after a change looks unchanged and its readers will not rerun.
 
 ### 6. Effects are for side effects
 

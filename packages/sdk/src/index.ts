@@ -3,6 +3,7 @@ export type {
   Editor,
   Font,
   Glyph,
+  GlyphInvalidation,
   GlyphReader,
   MemoryFontSession,
   MemoryFontSessionOptions,

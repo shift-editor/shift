@@ -56,7 +56,8 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
   const observeAtlasInvalidation = useCallback<GlyphCatalogSource["observeAtlasInvalidation"]>(
     (listener) => {
       const subscription = effect(
-        () => listener(catalog.invalidGlyphIdsCell.value, catalog.glyphsCell.value.map(glyphId)),
+        () =>
+          listener(catalog.invalidGlyphsCell.value.glyphIds, catalog.glyphsCell.value.map(glyphId)),
         { name: "glyphCatalog.atlas" },
       );
       return () => subscription.dispose();

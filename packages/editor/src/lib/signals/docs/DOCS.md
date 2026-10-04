@@ -1,6 +1,6 @@
 # Reactive
 
-<!-- reviewed: 2026-08-18 review-every: 90d -->
+<!-- reviewed: 2026-10-04 review-every: 90d -->
 
 Fine-grained reactivity system providing automatic dependency tracking and efficient updates for the Shift editor.
 
@@ -10,10 +10,12 @@ For rules on writing and reviewing reactive code, and triage when something does
 
 - **Architecture Invariant:** Signals use `Object.is` equality by default. Mutating an object in place and re-setting the same reference will **not** notify subscribers. Always create a new reference (e.g., `new Set(...)`) to trigger updates.
 - **Architecture Invariant:** `computed` is lazy -- it only recomputes when `.value` is accessed after a dependency change. It never eagerly evaluates. Accessing `.value` inside a `batch` returns the up-to-date derived value immediately.
+- **Architecture Invariant:** A computed that recomputes to an equal value (by `ComputedOptions.equals`, default `Object.is`) keeps its previous value and does not rerun its readers. An effect runs only when a dependency actually changed value, never merely because an ancestor was written.
+- **Architecture Invariant:** Data mutated in place is published through a revision, never by re-setting the same object. The hot-path coordinate buffers (`ContourBuffer`, `AnchorBuffer`, `ComponentBuffer`) keep their `PackedArray` in a plain field, bump a `revision` signal after each in-place change, and expose a fresh `subarray` view per revision. Every value that crosses a signal therefore has a new identity when it changes, so `Object.is` comparison is sound everywhere.
 - **Architecture Invariant:** An unscheduled `effect` runs its callback immediately on construction (synchronously). An effect created with `EffectOptions.schedule` instead defers **every** run — including the first — through the provided scheduler, coalescing repeated triggers into one run; `Effect.cancel()` drops a pending scheduled run without disposing the effect. `useSignalState` uses this with `{ schedule: "frame" }` to defer notifications to `requestAnimationFrame`.
 - **Architecture Invariant:** During `batch`, only effects are deferred. Computed values remain available with fresh data inside the batch body.
 - **Architecture Invariant: CRITICAL:** The module-level `currentComputation` variable is the sole mechanism for dependency tracking. Any code that saves/restores it incorrectly will silently break the entire reactive graph. `untracked` and the internal `#recompute`/`execute` methods carefully save and restore this variable.
-- **Architecture Invariant: CRITICAL:** Re-entrant notification is guarded by the `isNotifying` flag. Signals written during notification are queued in `pendingNotifications` and flushed after the current notification pass. Without this, subscribers could see inconsistent state.
+- **Architecture Invariant: CRITICAL:** A write only marks nodes stale; marking never runs user code. Unscheduled effects run afterwards in a flush at the end of the write (or the outermost `batch`), so an effect never observes a half-updated graph, and an effect reached through several paths runs once.
 - **Architecture Invariant:** Signal-bearing fields and accessors use the `*Cell` suffix. The plain noun is the unwrapped snapshot value: `zoomCell` is `Signal<number>`, `zoom` is `number`.
 - **Architecture Invariant: Convention:** `fooCell` accessors are for raw state or cheap computeds that are safe to subscribe to via `useSignalState`. Expensive derived values (bounds, paths, sidebearings) are exposed as plain getters and pulled on demand. For React live display of a derived value, write a purpose-specific hook (e.g. `useSelectionBounds`) that subscribes to the raw inputs and pulls the getter at render time.
 - **Architecture Invariant:** Signal diagnostics retain only weak references to nodes. Registry-wide inspection sees live nodes, including externally owned disposed nodes, but does not keep an otherwise unowned graph alive; garbage collection determines when nodes disappear.
@@ -45,8 +47,9 @@ The shared glyph sidebar reads live sidebearings and advance through `useGlyphMe
 - `Effect` -- handle returned by `effect()` with `.dispose()` (stop and clean up) and `.cancel()` (drop a pending scheduled run without disposing).
 - `EffectOptions` -- optional `name` for debug output and `schedule` to route executions through an external clock (e.g. `requestAnimationFrame`), coalescing repeated triggers.
 - `SignalOptions<T>` -- optional config with `equals` for custom equality (pass `() => false` to always notify).
-- `Computation` -- internal interface for anything that tracks dependencies (`execute()` + `dependencies`).
-- `SignalNode` -- internal interface for anything that can be unsubscribed from (`_unsubscribe()`).
+- `ComputedOptions<T>` -- optional `name` and `equals`. `equals` decides when a recomputed value counts as unchanged.
+- `Computation` -- internal interface for anything that tracks dependencies (`_stale()` + `dependencies`).
+- `SignalNode` -- internal interface for anything that can be read and unsubscribed from (`_unsubscribe()`, `_refresh()`).
 
 ## How it works
 
@@ -54,11 +57,13 @@ The shared glyph sidebar reads live sidebearings and advance through `useGlyphMe
 
 **Cleanup on re-run.** Before each re-execution, both `ComputedImpl` and `EffectImpl` unsubscribe from all previous dependencies and clear their dependency set. The new execution then re-tracks only the dependencies actually read, which enables dynamic dependency graphs (e.g., conditional branches that read different signals).
 
-**Notification.** `SignalImpl.set()` checks equality, then calls `_notify()`. During notification, subscriber computations are copied to an array to avoid mutation-during-iteration issues. Each subscriber's `execute()` is called. For `ComputedImpl`, `execute()` marks it dirty and propagates to its own subscribers (lazy chain) -- but only when it was not already dirty; an already-dirty computed does not re-notify. For `EffectImpl`, `execute()` delegates to an internal request path: an unscheduled effect runs its body immediately, while a scheduled effect sets a pending flag and defers to its scheduler, which later runs the body (coalescing repeated requests into one run).
+**Marking (push).** Every computed and effect is `CLEAN`, `CHECK` (an ancestor changed; it may need to rerun) or `DIRTY` (a direct dependency changed). `SignalImpl.set()` checks equality, then marks each direct subscriber `DIRTY`. A computed that leaves `CLEAN` marks its own subscribers `CHECK`; one already stale stops there. Unscheduled effects that become stale join a queue; scheduled effects ask their scheduler for a run.
 
-**Batching.** `batch()` increments a `batchDepth` counter. While `batchDepth > 0`, effects are added to `pendingEffects` instead of executed. When the outermost batch exits, all pending effects run. Nested batches are supported via depth counting.
+**Refreshing (pull).** Reading a stale computed, or running a queued effect, first refreshes it. A `CHECK` node refreshes its computed dependencies in read order and stops as soon as it becomes `DIRTY`; a `DIRTY` node recomputes. A recompute compares the new value with the previous one; an equal value is discarded in favour of the previous one, and only a changed value marks its subscribers `DIRTY`. A node that refreshes without becoming `DIRTY` returns to `CLEAN` without running.
 
-**Re-entrant writes.** If a signal is written during `_notify()` (i.e., an effect writes another signal), the `isNotifying` flag causes the write to be queued in `pendingNotifications`. After the current notification pass finishes, queued signals are flushed.
+**Flushing.** After marking, the write flushes the effect queue unless a `batch` is open or a flush is already running. Effects written to by other effects during the flush join the same queue. A scheduled effect refreshes when its scheduler fires, so a frame where nothing changed value skips the run. `Effect.execute()` forces a run; `Effect.cancel()` drops a pending scheduled run and settles the effect's dependencies, so later changes reach it again.
+
+**Batching.** `batch()` increments a `batchDepth` counter and flushes when the outermost batch exits. Nested batches are supported via depth counting.
 
 **React bridge.** `useSignalState` uses React's `useSyncExternalStore`. It creates an `effect` that reads `signal.value` (establishing tracking) and calls the store's `callback` on change. The snapshot function uses `.peek()` to avoid double-tracking.
 
@@ -87,15 +92,28 @@ The shared glyph sidebar reads live sidebearings and advance through `useGlyphMe
 
 Use `.peek()` inside mutators or event handlers where you need the current value but do not want to establish a reactive dependency.
 
-### Force-notify even when the reference is the same
+### Publish data that is mutated in place
 
-Pass `{ equals: () => false }` as the second argument to `signal()`. This is useful for mutable objects where identity does not change but contents do.
+Keep the mutable object in a plain field and pair it with a revision signal. Bump the revision after each change, and expose the data through a computed that tracks the revision and returns a value with a new identity (a fresh view or wrapper), never the same object:
+
+```ts
+readonly #coordinates = new PackedArray(2, values);
+readonly #revision = signal(0);
+readonly valuesCell = computed(() => {
+  track(this.#revision);
+  return this.#coordinates.view; // a new subarray each time
+});
+```
+
+For a stable owner that only needs to announce "something changed", expose the revision itself (see `FontStore.committedRevisionCell`). For an event stream, publish a new event object each time (see `FontStore.invalidGlyphsCell`). Avoid `{ equals: () => false }`: it works for a signal's direct readers, but any computed that passes the same object along will compare it as unchanged.
 
 ## Gotchas
 
 - **Object mutation is invisible.** Mutating properties on a signal's current value does not trigger updates. You must `.set()` a new reference.
 - **Unscheduled effects run synchronously.** Setting a signal inside an effect body can trigger other unscheduled effects immediately (unless inside a `batch`). Careless writes inside effects can cause cascading re-executions. Scheduled effects defer to their scheduler instead.
-- **Computed propagates eagerly on dirty, evaluates lazily.** When a computed's dependency changes, it marks itself dirty and immediately notifies its own subscribers (which may be other computeds or effects). But it does not recompute its value until `.value` is accessed.
+- **Computed marks eagerly, evaluates lazily.** When a computed's dependency changes, it marks its subscribers `CHECK` immediately, but it does not recompute until something reads it or refreshes through it.
+- **A computed that returns the same object after an in-place change looks unchanged.** Its readers will not rerun. Return a new view, wrapper or revision instead (see "Publish data that is mutated in place").
+- **A computed that builds a fresh object on every run gains nothing from the default equality.** Give it a structural `equals` (see `Scene`'s node-wise comparison) when readers should not rerun for an identical rebuild.
 - **`peek()` inside a computed breaks reactivity.** If a computed reads a signal via `.peek()`, it will not re-derive when that signal changes. This is intentional but easy to forget.
 - **Use `track(cell)` for invalidation-only dependencies.** Inside a computed/effect, prefer `track(fooCell)` when the code needs to subscribe to `fooCell` but does not need the current value. Prefer `const foo = fooCell.value` when the value is actually used.
 - **Circular computed chains.** There is no cycle detection. A computed that reads itself (directly or indirectly) will hit the `#computing` re-entrancy guard and return the stale value.

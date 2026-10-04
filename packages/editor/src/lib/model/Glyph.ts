@@ -95,7 +95,7 @@ import { DeletePoints } from "./DeletePoints";
 import { JoinContours, type ContourEnd } from "./JoinContours";
 import { GlyphLayerState } from "./GlyphLayerState";
 import type { ContourBuffer } from "./ContourBuffer";
-import type { LayerBuffers } from "./LayerBuffers";
+import type { LayerBuffers, LayerChangeToken } from "./LayerBuffers";
 import { LayerIntents } from "../workspace/LayerIntents";
 import type {
   ComponentTransformSelection,
@@ -502,7 +502,7 @@ export class GlyphLayer {
   }
 
   /** @internal Tracks any numeric layer change without materializing full geometry. */
-  get buffersChangedCell(): Signal<LayerBuffers> {
+  get buffersChangedCell(): Signal<LayerChangeToken> {
     return this.#writer.layerState.buffersChangedCell;
   }
 
