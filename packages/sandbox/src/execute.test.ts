@@ -1,7 +1,7 @@
 import { asGlyphId, asNodeId, asPointId, asSourceId } from "@shift/types";
 import type { ShiftCapabilities } from "@shift/runtime";
 import { describe, expect, it } from "vitest";
-import { executeShiftCode } from "./code";
+import { executeShiftCode } from "./execute";
 
 const capabilities: ShiftCapabilities = {
   sessions: {
@@ -87,7 +87,7 @@ const capabilities: ShiftCapabilities = {
   },
 };
 
-describe("Shift code mode exposes bounded live capabilities", () => {
+describe("Shift sandbox executes bounded code over live capabilities", () => {
   it("composes session discovery and editor inspection", async () => {
     const result = await executeShiftCode(
       capabilities,
@@ -133,15 +133,22 @@ describe("Shift code mode exposes bounded live capabilities", () => {
     );
   });
 
+  it("starts each execution in a fresh realm", async () => {
+    await executeShiftCode(capabilities, "async () => { globalThis.ephemeral = 1; return null; }");
+    await expect(
+      executeShiftCode(capabilities, "async () => typeof globalThis.ephemeral"),
+    ).resolves.toBe("undefined");
+  });
+
   it("requires a JSON-compatible result", async () => {
     await expect(executeShiftCode(capabilities, "async () => undefined")).rejects.toThrow(
-      "shift.execute must return a JSON value",
+      "Shift script must return a JSON value",
     );
   });
 
   it("stops code that never settles", async () => {
     await expect(
       executeShiftCode(capabilities, "async () => await new Promise(() => {})"),
-    ).rejects.toThrow("shift.execute timed out");
+    ).rejects.toThrow("Shift script timed out");
   });
 });

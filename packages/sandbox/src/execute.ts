@@ -13,13 +13,20 @@ const MAX_CODE_BYTES = 16 * 1024;
 const MAX_RESULT_BYTES = 64 * 1024;
 let quickJsPromise: Promise<QuickJSWASMModule> | null = null;
 
-/** Executes agent-written JavaScript against only the supplied Shift capabilities. */
+/**
+ * Executes one-shot JavaScript against only the supplied Shift capabilities.
+ *
+ * @param capabilities - Host-owned operations exposed as `shift` in a fresh realm.
+ * @param code - Async zero-argument function source with a bounded size.
+ * @returns the JSON-compatible result; no realm state survives the call.
+ * @throws {Error} when execution fails, times out, or exceeds its resource limits.
+ */
 export async function executeShiftCode(
   capabilities: ShiftCapabilities,
   code: string,
 ): Promise<unknown> {
   if (Buffer.byteLength(code, "utf8") > MAX_CODE_BYTES) {
-    throw new Error(`shift.execute code exceeds ${MAX_CODE_BYTES} bytes`);
+    throw new Error(`Shift script exceeds ${MAX_CODE_BYTES} bytes`);
   }
 
   const QuickJS = await loadQuickJS();
@@ -73,16 +80,16 @@ export async function executeShiftCode(
     });
     (async () => {
       const entry = (${code});
-      if (typeof entry !== "function") throw new Error("shift.execute code must evaluate to a function");
+      if (typeof entry !== "function") throw new Error("Shift script must evaluate to a function");
       const result = await entry();
       const json = JSON.stringify(result);
-      if (json === undefined) throw new Error("shift.execute must return a JSON value");
+      if (json === undefined) throw new Error("Shift script must return a JSON value");
       return json;
     })();
   `;
 
   try {
-    const evaluation = vm.evalCode(bootstrap, "shift-agent.js");
+    const evaluation = vm.evalCode(bootstrap, "shift-script.js");
     const promiseHandle = vm.unwrapResult(evaluation);
     const settledPromise = vm.resolvePromise(promiseHandle);
     vm.runtime.executePendingJobs();
@@ -99,7 +106,7 @@ export async function executeShiftCode(
     resultHandle.dispose();
 
     if (Buffer.byteLength(json, "utf8") > MAX_RESULT_BYTES) {
-      throw new Error(`shift.execute result exceeds ${MAX_RESULT_BYTES} bytes`);
+      throw new Error(`Shift script result exceeds ${MAX_RESULT_BYTES} bytes`);
     }
 
     return JSON.parse(json) as unknown;
@@ -155,7 +162,7 @@ async function withDeadline<T>(promise: Promise<T>, deadline: number): Promise<T
   const timeoutMs = Math.max(0, deadline - Date.now());
   let timeout: NodeJS.Timeout | undefined;
   const expired = new Promise<never>((_, reject) => {
-    timeout = setTimeout(() => reject(new Error("shift.execute timed out")), timeoutMs);
+    timeout = setTimeout(() => reject(new Error("Shift script timed out")), timeoutMs);
   });
 
   try {

@@ -1,6 +1,6 @@
 # @shift/runtime
 
-<!-- reviewed: 2026-10-02 review-every: 90d -->
+<!-- reviewed: 2026-10-04 review-every: 90d -->
 
 Host-neutral capability contracts shared by Shift protocol adapters and future plugin hosts.
 
@@ -78,5 +78,6 @@ pnpm typecheck
 ## Related
 
 - [`packages/types/docs/DOCS.md`](../../types/docs/DOCS.md) -- canonical domain identities and snapshots.
-- [`packages/mcp/docs/DOCS.md`](../../mcp/docs/DOCS.md) -- local MCP adapter and code-mode executor.
+- [`packages/sandbox/docs/DOCS.md`](../../sandbox/docs/DOCS.md) -- host-neutral code execution over these contracts.
+- [`packages/mcp/docs/DOCS.md`](../../mcp/docs/DOCS.md) -- local MCP transport adapter.
 - [`apps/desktop/src/main/docs/DOCS.md`](../../../apps/desktop/src/main/docs/DOCS.md) -- desktop capability routing and sandbox process ownership.

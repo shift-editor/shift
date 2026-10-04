@@ -12,7 +12,7 @@ import { createShiftLogger, type ShiftLogger } from "../logging";
 
 const HARD_EXECUTION_TIMEOUT_MS = 5_000;
 
-/** Owns the isolated process used for agent and future plugin code execution. */
+/** Owns the isolated process used for bounded Shift code execution. */
 export class SandboxRuntimeProcess {
   readonly #capabilities: ShiftCapabilities;
   readonly #log: ShiftLogger;

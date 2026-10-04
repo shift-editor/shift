@@ -218,6 +218,7 @@ export class App {
         path.join(app.getPath("userData"), "recent-documents.json"),
       );
       this.#recents.onChanged(() => this.#publishRecents());
+      await this.#startSandbox();
       await this.#startMcp();
 
       const restoredSessions = await this.#workspaces.restoreRecoveries();
@@ -262,6 +263,7 @@ export class App {
     app.on("will-quit", () => {
       this.#log.info("will quit: disposing app services");
       void this.#stopMcp();
+      this.#stopSandbox();
       for (const session of this.#workspaces.list()) {
         this.#workspaces.unregister(session.workspaceId);
       }
@@ -845,7 +847,8 @@ export class App {
     launcher.close();
   }
 
-  async #startMcp(): Promise<void> {
+  /** Starts the app-owned execution process independently of MCP availability. */
+  async #startSandbox(): Promise<void> {
     const sandbox = new SandboxRuntimeProcess({
       sessions: {
         list: () => Promise.resolve(this.#agentSessions()),
@@ -867,6 +870,19 @@ export class App {
           this.#windowForAgentRequest(windowId).agent.getLayer(glyphId, sourceId),
       },
     });
+    this.#sandbox = sandbox;
+    try {
+      await sandbox.start();
+    } catch (error) {
+      sandbox.stop();
+      this.#log.error("failed to start sandbox", error);
+    }
+  }
+
+  async #startMcp(): Promise<void> {
+    const sandbox = this.#sandbox;
+    if (!sandbox) throw new Error("Sandbox runtime was not initialized");
+
     let port: number;
     switch (app.getName()) {
       case "Shift":
@@ -893,12 +909,9 @@ export class App {
     });
 
     try {
-      await sandbox.start();
       await mcp.start();
-      this.#sandbox = sandbox;
       this.#mcp = mcp;
     } catch (error) {
-      sandbox.stop();
       try {
         await mcp.stop();
       } catch (stopError) {
@@ -910,12 +923,9 @@ export class App {
 
   async #stopMcp(): Promise<void> {
     const mcp = this.#mcp;
-    const sandbox = this.#sandbox;
     this.#mcp = null;
-    this.#sandbox = null;
 
     const stoppingMcp = mcp?.stop();
-    sandbox?.stop();
     if (!stoppingMcp) return;
 
     try {
@@ -923,6 +933,11 @@ export class App {
     } catch (error) {
       this.#log.error("failed to stop MCP server", error);
     }
+  }
+
+  #stopSandbox(): void {
+    this.#sandbox?.stop();
+    this.#sandbox = null;
   }
 
   #agentSessions(): ShiftSession[] {

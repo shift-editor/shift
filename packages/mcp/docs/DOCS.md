@@ -8,7 +8,7 @@ Local code-mode access to the live Shift desktop application.
 
 - **Architecture Invariant:** `@shift/mcp` is an adapter over `ShiftCapabilities` from `@shift/runtime`. It does not own font, document, editor, window, persistence state, or the reusable plugin contract.
 - **Architecture Invariant:** The Fastify MCP adapter binds only to `127.0.0.1`, validates localhost Host and Origin headers, and requires a persistent, private bearer token. Release, Nightly, Dev, and Nightly Dev use distinct fixed ports; a collision leaves MCP unavailable rather than selecting another port. Explicit test instances use port `0`.
-- **Architecture Invariant:** Agent-written code runs in a fresh QuickJS runtime with bounded time, memory, source size, and result size. Desktop hosts that runtime in a dedicated utility process so generated code cannot block or crash Electron main. It has no Node.js, filesystem, environment, Electron, or network globals.
+- **Architecture Invariant:** `@shift/mcp` owns only the protocol adapter. `@shift/sandbox` owns bounded QuickJS execution against `ShiftCapabilities`; the desktop app owns the utility-process supervisor independently of whether the MCP listener starts.
 - **Architecture Invariant:** Every editor request names a window explicitly. Focus changes never retarget an in-flight or subsequent call.
 - **Architecture Invariant:** MCP is not Shift's canonical font API. Shared document and editor capabilities remain usable by future plugin and protocol hosts without MCP. The desktop host asks `Font.readAuthoredLayers()` for accepted authored snapshots; agent clients connect through native MCP support rather than a Shift-specific client CLI.
 
@@ -18,8 +18,6 @@ Local code-mode access to the live Shift desktop application.
 src/
   declarations.ts -- loads @shift/runtime's generated declaration for shift.describe
   types.ts        -- MCP connection contract
-  code.ts         -- bounded QuickJS execution over ShiftCapabilities
-  runtime.ts      -- isolated-runtime-only package surface
   server.ts       -- MCP tools, Fastify loopback HTTP, persistent token, connection descriptor
   index.ts        -- main-process-safe public package surface
 ```
@@ -60,7 +58,7 @@ async () => {
 
 ## Desktop ownership
 
-Electron main starts one `ShiftMcpServer` and one `SandboxRuntimeProcess` after `app.whenReady()`. It writes `mcp.json` under the distribution-specific user-data directory with mode `0600` on POSIX. The descriptor contains the loopback URL and persistent token; an existing valid, private token is reused on restart, while an invalid or insecure descriptor prevents MCP startup. Shutdown leaves the credential in place. The token is local connection material, not a user login. MCP delegates execution to the sandbox utility process, and main serves only the typed capability requests that return from that process. A hard host deadline terminates the sandbox if its internal QuickJS deadline cannot settle.
+Electron main starts an app-owned `SandboxRuntimeProcess` and then one `ShiftMcpServer` after `app.whenReady()`. MCP startup failure leaves the sandbox available for other execution hosts. The MCP server writes `mcp.json` under the distribution-specific user-data directory with mode `0600` on POSIX. The descriptor contains the loopback URL and persistent token; an existing valid, private token is reused on restart, while an invalid or insecure descriptor prevents MCP startup. Shutdown leaves the credential in place. The token is local connection material, not a user login. MCP delegates execution to the app-owned sandbox utility process, and main serves only the typed capability requests that return from that process. A hard host deadline terminates the process if its internal QuickJS deadline cannot settle; a later execution restarts it.
 
 Each renderer serves an agent request lane over a transferred `MessagePort`. Main pairs renderer observations with the explicit window and font-session identities before returning them. Launcher windows are excluded from session discovery.
 
@@ -97,6 +95,7 @@ pnpm typecheck
 ## Related
 
 - [`packages/runtime/docs/DOCS.md`](../../runtime/docs/DOCS.md) -- canonical protocol and plugin capability contracts.
+- [`packages/sandbox/docs/DOCS.md`](../../sandbox/docs/DOCS.md) -- reusable execution boundary and process lifecycle.
 - [`docs/mcp.md`](../../../docs/mcp.md) -- one-time user-scoped native MCP setup for installed Shift builds.
 - [`apps/desktop/src/main/docs/DOCS.md`](../../../apps/desktop/src/main/docs/DOCS.md) -- Electron lifecycle, window/session identity, and renderer lanes.
 - [`apps/desktop/src/preload/docs/DOCS.md`](../../../apps/desktop/src/preload/docs/DOCS.md) -- authenticated `MessagePort` transfer into the renderer.

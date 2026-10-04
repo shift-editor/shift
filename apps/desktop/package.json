@@ -65,6 +65,7 @@
     "@shift/glyph-state": "workspace:*",
     "@shift/mcp": "workspace:*",
     "@shift/runtime": "workspace:*",
+    "@shift/sandbox": "workspace:*",
     "@shift/types": "workspace:*",
     "@shift/ui": "workspace:*",
     "@shift/validation": "workspace:*",

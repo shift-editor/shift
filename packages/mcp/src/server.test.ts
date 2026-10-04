@@ -3,7 +3,7 @@ import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/cli
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { executeShiftCode } from "./code";
+import { executeShiftCode } from "@shift/sandbox";
 import { ShiftMcpServer } from "./server";
 import type { ShiftCapabilities } from "@shift/runtime";
 import type { ShiftMcpConnection } from "./types";

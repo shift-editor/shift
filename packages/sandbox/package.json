@@ -1,9 +1,9 @@
 {
-  "name": "@shift/mcp",
+  "name": "@shift/sandbox",
   "version": "0.0.1",
   "license": "MIT OR Apache-2.0",
   "private": true,
-  "description": "Live MCP access to the Shift font editor",
+  "description": "Bounded Shift code execution over typed capabilities",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -21,16 +21,12 @@
     "test:watch": "vitest --config vitest.config.ts"
   },
   "dependencies": {
-    "@modelcontextprotocol/fastify": "2.0.0",
-    "@modelcontextprotocol/node": "2.1.0",
-    "@modelcontextprotocol/server": "2.2.0",
-    "fastify": "^5.12.5",
+    "@jitl/quickjs-singlefile-cjs-release-sync": "0.32.0",
     "@shift/runtime": "workspace:*",
-    "zod": "^4.1.12"
+    "quickjs-emscripten-core": "0.32.0"
   },
   "devDependencies": {
-    "@modelcontextprotocol/client": "2.2.0",
-    "@shift/sandbox": "workspace:*",
+    "@shift/types": "workspace:*",
     "@types/node": "^25.3.0",
     "oxlint": "^1.85.0",
     "typescript": "^5.5.4",

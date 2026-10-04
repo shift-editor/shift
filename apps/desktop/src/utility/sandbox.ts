@@ -1,4 +1,4 @@
-import { executeShiftCode } from "@shift/mcp/runtime";
+import { executeShiftCode } from "@shift/sandbox";
 import type { ShiftCapabilities } from "@shift/runtime";
 import { Channel, parentPortTransport, serveChannel } from "../shared/workspace/channel";
 import type {

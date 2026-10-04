@@ -56,6 +56,7 @@ Central routing table for Shift's distributed documentation. Before creating new
 | `packages/glyph-state/**`              | [`packages/glyph-state/docs/DOCS.md`](../../packages/glyph-state/docs/DOCS.md)   | Glyph-domain geometry (contour traversal, segment parsing, bounds) |
 | `packages/mcp/**`                      | [`packages/mcp/docs/DOCS.md`](../../packages/mcp/docs/DOCS.md)                   | Local code-mode access to the live desktop application             |
 | `packages/runtime/**`                  | [`packages/runtime/docs/DOCS.md`](../../packages/runtime/docs/DOCS.md)           | Shared protocol and plugin capability contracts                    |
+| `packages/sandbox/**`                  | [`packages/sandbox/docs/DOCS.md`](../../packages/sandbox/docs/DOCS.md)           | Bounded code execution independent of protocol adapters           |
 | `packages/ui/**`                       | [`packages/ui/docs/DOCS.md`](../../packages/ui/docs/DOCS.md)                     | UI component library wrapping Base UI primitives                   |
 | `packages/validation/**`               | [`packages/validation/docs/DOCS.md`](../../packages/validation/docs/DOCS.md)     | Point sequence validation and persistence schemas                  |
 | `packages/rules/**`                    | [`packages/rules/docs/DOCS.md`](../../packages/rules/docs/DOCS.md)               | Point editing rules engine for geometric constraints               |

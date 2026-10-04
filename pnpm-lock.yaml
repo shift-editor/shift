@@ -72,6 +72,9 @@ importers:
       '@shift/runtime':
         specifier: workspace:*
         version: link:../../packages/runtime
+      '@shift/sandbox':
+        specifier: workspace:*
+        version: link:../../packages/sandbox
       '@shift/types':
         specifier: workspace:*
         version: link:../../packages/types
@@ -312,9 +315,6 @@ importers:
 
   packages/mcp:
     dependencies:
-      '@jitl/quickjs-singlefile-cjs-release-sync':
-        specifier: 0.32.0
-        version: 0.32.0
       '@modelcontextprotocol/fastify':
         specifier: 2.0.0
         version: 2.0.0(@modelcontextprotocol/server@2.2.0)(fastify@5.12.5)
@@ -330,9 +330,6 @@ importers:
       fastify:
         specifier: ^5.12.5
         version: 5.12.5
-      quickjs-emscripten-core:
-        specifier: 0.32.0
-        version: 0.32.0
       zod:
         specifier: ^4.1.12
         version: 4.3.6
@@ -340,9 +337,9 @@ importers:
       '@modelcontextprotocol/client':
         specifier: 2.2.0
         version: 2.2.0
-      '@shift/types':
+      '@shift/sandbox':
         specifier: workspace:*
-        version: link:../types
+        version: link:../sandbox
       '@types/node':
         specifier: ^25.3.0
         version: 25.3.0
@@ -396,6 +393,34 @@ importers:
       typescript:
         specifier: ^5.5.4
         version: 5.9.3
+
+  packages/sandbox:
+    dependencies:
+      '@jitl/quickjs-singlefile-cjs-release-sync':
+        specifier: 0.32.0
+        version: 0.32.0
+      '@shift/runtime':
+        specifier: workspace:*
+        version: link:../runtime
+      quickjs-emscripten-core:
+        specifier: 0.32.0
+        version: 0.32.0
+    devDependencies:
+      '@shift/types':
+        specifier: workspace:*
+        version: link:../types
+      '@types/node':
+        specifier: ^25.3.0
+        version: 25.3.0
+      oxlint:
+        specifier: ^1.85.0
+        version: 1.85.0
+      typescript:
+        specifier: ^5.5.4
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.10
+        version: 4.1.10(@types/node@25.3.0)(jsdom@26.1.0)(vite@6.4.3(@types/node@25.3.0)(jiti@2.6.1)(lightningcss@1.30.1)(terser@5.49.0)(tsx@4.21.0))
 
   packages/sdk:
     dependencies:
