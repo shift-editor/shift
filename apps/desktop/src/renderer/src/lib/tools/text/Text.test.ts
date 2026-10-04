@@ -23,7 +23,7 @@ describe("Text tool creates and edits placed runs", () => {
   });
 
   it("creates a run and scene node in one undoable click", async () => {
-    await editor.clickGlyphLocal(800, 0);
+    await editor.clickLocal(800, 0);
     const node = editor.scene.nodesOfKind("textRun")[0]!;
     expect(editor.text.run(node.runId)?.items).toEqual([]);
     expect(editor.textEditing.state?.nodeId).toBe(node.id);
@@ -36,23 +36,23 @@ describe("Text tool creates and edits placed runs", () => {
   });
 
   it("a second click on the empty caret does not create another run", async () => {
-    await editor.clickGlyphLocal(800, 0);
-    await editor.clickGlyphLocal(800, 0);
+    await editor.clickLocal(800, 0);
+    await editor.clickLocal(800, 0);
     expect(editor.scene.nodesOfKind("textRun")).toHaveLength(1);
   });
 
   it("clicking an existing text target places a caret instead of creating another run", async () => {
-    await editor.clickGlyphLocal(800, 0);
+    await editor.clickLocal(800, 0);
     const node = editor.scene.nodesOfKind("textRun")[0]!;
     editor.textEditing.insert([glyphTextItem("A", 65)]);
     const advance = editor.text.layoutCell(node.runId).peek()!.totalAdvance;
-    await editor.clickGlyphLocal(800 + advance * 0.25, 0);
+    await editor.clickLocal(800 + advance * 0.25, 0);
     expect(editor.scene.nodesOfKind("textRun")).toHaveLength(1);
     expect(editor.textEditing.state?.focus).toBeNull();
   });
 
   it("dragging over text extends the item selection", async () => {
-    await editor.clickGlyphLocal(800, 0);
+    await editor.clickLocal(800, 0);
     const node = editor.scene.nodesOfKind("textRun")[0]!;
     editor.textEditing.insert([glyphTextItem("A", 65), glyphTextItem("A", 65)]);
     const advance = editor.text.layoutCell(node.runId).peek()!.totalAdvance / 2;
@@ -65,7 +65,7 @@ describe("Text tool creates and edits placed runs", () => {
   });
 
   it("Escape discards an empty run and undo restores the node without focus", async () => {
-    await editor.clickGlyphLocal(800, 0);
+    await editor.clickLocal(800, 0);
     const node = editor.scene.nodesOfKind("textRun")[0]!;
     editor.escape();
     expect(editor.scene.node(node.id)).toBeNull();
@@ -108,7 +108,7 @@ describe("typing a glyph not yet loaded this session", () => {
     expect(editor.glyphForId(bId)).toBeNull();
 
     editor.selectTool("text");
-    await editor.clickGlyphLocal(800, 0);
+    await editor.clickLocal(800, 0);
     const node = editor.scene.nodesOfKind("textRun")[0]!;
     editor.textEditing.insert([glyphTextItem("B", 66)]);
     const layout = editor.text.layoutCell(node.runId);

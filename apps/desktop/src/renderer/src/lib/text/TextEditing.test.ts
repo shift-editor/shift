@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { TestEditor } from "@/testing/TestEditor";
+import { localPoint, scenePoint } from "@shift/editor/spaces";
 import { clusterForCaret, glyphTextItem } from "@shift/editor/text";
 
 describe("placed proof text editing", () => {
@@ -11,17 +12,17 @@ describe("placed proof text editing", () => {
   });
 
   it("click creates an empty scene node with an editable caret", async () => {
-    await editor.clickGlyphLocal(800, 0);
+    await editor.clickLocal(800, 0);
     const node = editor.scene.nodesOfKind("textRun")[0]!;
     expect(node.position).toEqual({ x: 800, y: 0 });
     expect(editor.text.run(node.runId)?.items).toEqual([]);
     expect(editor.textEditing.state).toMatchObject({ nodeId: node.id, anchor: null, focus: null });
     expect(editor.toolIf("text")?.state.type).toBe("editing");
-    expect(editor.getPointerTarget({ x: 800, y: 0 })).toMatchObject({ kind: "text", cluster: 0 });
+    expect(editor.getPointerTarget(scenePoint(800, 0))).toMatchObject({ kind: "text", cluster: 0 });
   });
 
   it("inserts text and replays content and caret through undo and redo", async () => {
-    await editor.clickGlyphLocal(800, 0);
+    await editor.clickLocal(800, 0);
     const node = editor.scene.nodesOfKind("textRun")[0]!;
     editor.textEditing.insert([glyphTextItem("A", 65)]);
     const item = editor.text.run(node.runId)!.items[0]!;
@@ -35,7 +36,7 @@ describe("placed proof text editing", () => {
   });
 
   it("select-all includes linebreaks and undo restores the prior caret", async () => {
-    await editor.clickGlyphLocal(800, 0);
+    await editor.clickLocal(800, 0);
     editor.textEditing.insertText("A\nA");
     const prior = editor.textEditing.state?.focus;
     editor.textEditing.selectAll();
@@ -51,7 +52,7 @@ describe("placed proof text editing", () => {
   });
 
   it("arrows and Backspace edit across a linebreak and undo restores it", async () => {
-    await editor.clickGlyphLocal(800, 0);
+    await editor.clickLocal(800, 0);
     editor.textEditing.insertText("A\nA");
     const node = editor.scene.nodesOfKind("textRun")[0]!;
     editor.textEditing.move(-1, "character");
@@ -68,7 +69,7 @@ describe("placed proof text editing", () => {
   });
 
   it("vertical movement uses line clusters and Shift extends the selection", async () => {
-    await editor.clickGlyphLocal(800, 0);
+    await editor.clickLocal(800, 0);
     editor.textEditing.insertText("A\nA");
     const node = editor.scene.nodesOfKind("textRun")[0]!;
     editor.textEditing.moveVertical(-1, true);
@@ -80,7 +81,7 @@ describe("placed proof text editing", () => {
   });
 
   it("caret movement preserves layout identity while item edits rebuild it", async () => {
-    await editor.clickGlyphLocal(800, 0);
+    await editor.clickLocal(800, 0);
     const node = editor.scene.nodesOfKind("textRun")[0]!;
     const layoutCell = editor.text.layoutCell(node.runId);
     const initial = layoutCell.peek();
@@ -94,7 +95,7 @@ describe("placed proof text editing", () => {
   });
 
   it("a caret stays on its item when another item is inserted before it", async () => {
-    await editor.clickGlyphLocal(800, 0);
+    await editor.clickLocal(800, 0);
     editor.textEditing.insert([glyphTextItem("A", 65), glyphTextItem("A", 65)]);
     const node = editor.scene.nodesOfKind("textRun")[0]!;
     const target = editor.text.run(node.runId)!.items[1]!.id;
@@ -106,7 +107,7 @@ describe("placed proof text editing", () => {
   });
 
   it("Escape deletes an empty node; undo restores it without reopening editing", async () => {
-    await editor.clickGlyphLocal(800, 0);
+    await editor.clickLocal(800, 0);
     const node = editor.scene.nodesOfKind("textRun")[0]!;
     editor.escape();
     expect(editor.scene.node(node.id)).toBeNull();
@@ -118,7 +119,7 @@ describe("placed proof text editing", () => {
   });
 
   it("hit testing maps a placed and scaled glyph to its item cluster", async () => {
-    await editor.clickGlyphLocal(800, 0);
+    await editor.clickLocal(800, 0);
     const original = editor.scene.nodesOfKind("textRun")[0]!;
     editor.textEditing.insert([glyphTextItem("A", 65)]);
     editor.scene.updateNode({
@@ -127,14 +128,18 @@ describe("placed proof text editing", () => {
     });
     const node = editor.scene.nodeOfKind(original.id, "textRun")!;
     const advance = editor.text.layoutCell(node.runId).peek()!.totalAdvance;
-    const target = editor.nodeDefinition("textRun").hit(node, { x: advance, y: 0 });
+    const target = editor.nodeDefinition("textRun").hit(node, localPoint(advance * 0.75, 0));
     expect(target).toMatchObject({
       kind: "text",
       cluster: 1,
       itemId: editor.text.run(node.runId)!.items[0]!.id,
     });
-    expect(editor.nodeDefinition("textRun").bounds(node)?.width).toBeCloseTo(advance * 2);
-    expect(editor.getPointerTarget({ x: 800 + advance, y: 0 })).toMatchObject({
+    expect(
+      editor.toSceneBounds(node, editor.nodeDefinition("textRun").bounds(node)!),
+    ).toMatchObject({
+      max: { x: expect.closeTo(800 + advance * 2) },
+    });
+    expect(editor.getPointerTarget(scenePoint(800 + advance * 1.5, 0))).toMatchObject({
       kind: "text",
       node: { id: node.id },
       cluster: 1,

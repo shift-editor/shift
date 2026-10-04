@@ -410,7 +410,10 @@ function translatingState(startPos: Point2D, shiftKey: boolean): TranslatingStat
 function boundingBoxOwnsDrag(editor: Editor, select: Select, event: DragStartEvent): boolean {
   const { target } = event;
   const targetSelected =
-    target.kind !== "canvas" && target.kind !== "node" && editor.selection.isSelected(target.id);
+    target.kind !== "canvas" &&
+    target.kind !== "node" &&
+    target.kind !== "text" &&
+    editor.selection.isSelected(target.id);
 
   return !targetSelected && select.boundingBox.containsTranslationPoint(event.origin);
 }

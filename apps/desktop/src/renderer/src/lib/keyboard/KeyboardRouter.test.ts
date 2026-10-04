@@ -199,7 +199,7 @@ describe("KeyboardRouter", () => {
 
     it("does not intercept plain typing once the text caret is placed", async () => {
       editor.selectTool("text");
-      await editor.clickGlyphLocal(800, 0);
+      await editor.clickLocal(800, 0);
       const e = createKeyboardEvent({ key: "r" });
 
       const handled = await router.handleKeyDown(e);
@@ -485,7 +485,7 @@ describe("KeyboardRouter", () => {
     it("does not intercept paste once the text caret is placed", async () => {
       await editor.copy();
       editor.selectTool("text");
-      await editor.clickGlyphLocal(800, 0);
+      await editor.clickLocal(800, 0);
       const pointsBefore = editor.pointCount;
       const e = createKeyboardEvent({ key: "v", metaKey: true });
 
@@ -496,7 +496,7 @@ describe("KeyboardRouter", () => {
 
     it("does not intercept copy once the text caret is placed", async () => {
       editor.selectTool("text");
-      await editor.clickGlyphLocal(800, 0);
+      await editor.clickLocal(800, 0);
       const bufferBefore = editor.clipboardBuffer;
       const e = createKeyboardEvent({ key: "c", metaKey: true });
 
@@ -596,7 +596,7 @@ describe("KeyboardRouter", () => {
 
     it("does not activate the hand tool on space once the text caret is placed", async () => {
       editor.selectTool("text");
-      await editor.clickGlyphLocal(800, 0);
+      await editor.clickLocal(800, 0);
       const e = createKeyboardEvent({ key: " ", code: "Space" });
 
       await router.handleKeyDown(e);

@@ -157,7 +157,6 @@ export class Editor {
     readonly input: EditorInput;
     // Warning: (ae-forgotten-export) The symbol "PasteOptions" needs to be exported by the entry point index.d.ts
     insertContent(content: ShiftContent, options?: PasteOptions): readonly SelectableId[] | null;
-    insertTextCodepoint(codepoint: number): void;
     get isDragging(): boolean;
     // (undocumented)
     get isEditing(): boolean;
@@ -273,12 +272,10 @@ export class Editor {
     //
     // (undocumented)
     readonly text: Text_2;
-    // Warning: (ae-forgotten-export) The symbol "TextRun" needs to be exported by the entry point index.d.ts
-    get textRun(): TextRun;
-    // Warning: (ae-forgotten-export) The symbol "TextRuns" needs to be exported by the entry point index.d.ts
+    // Warning: (ae-forgotten-export) The symbol "TextEditing" needs to be exported by the entry point index.d.ts
     //
     // (undocumented)
-    get textRuns(): TextRuns;
+    readonly textEditing: TextEditing;
     toggleAllSourcesForEditing(): boolean;
     toLocal(node: ShiftNode, point: ScenePoint): LocalPoint;
     toLocalBounds(node: ShiftNode, bounds: SceneBounds): LocalBounds;
@@ -696,7 +693,7 @@ export function useSignalState<T>(signal: Signal<T>, options?: UseSignalOptions)
 
 // Warnings were encountered during analysis:
 //
-// dist/Editor-DorHl-Q6.d.ts:4062:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
+// dist/Editor-C--MMc3a.d.ts:4169:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 
