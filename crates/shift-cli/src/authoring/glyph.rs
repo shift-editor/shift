@@ -188,7 +188,7 @@ fn resolve_glyph_id(font: &Font, selector: &str) -> Result<GlyphId> {
 
 pub(super) fn resolve_source_id(font: &Font, selector: &str) -> Result<SourceId> {
     if let Ok(source_id) = selector.parse::<SourceId>()
-        && font.sources().iter().any(|source| source.id() == source_id)
+        && font.source(source_id.clone()).is_some()
     {
         return Ok(source_id);
     }

@@ -258,6 +258,16 @@ impl Axis {
         self.hidden
     }
 
+    /// Changes the authored name without changing stable identity.
+    pub fn set_name(&mut self, name: String) {
+        self.name = name;
+    }
+
+    /// Changes the authored tag without changing stable identity.
+    pub fn set_tag(&mut self, tag: String) {
+        self.tag = tag;
+    }
+
     pub fn set_role(&mut self, role: AxisRole) {
         self.role = role;
     }

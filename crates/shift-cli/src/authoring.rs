@@ -170,6 +170,17 @@ pub(super) fn require_finite(value: f64, label: &str) -> Result<()> {
     Ok(())
 }
 
+pub(super) fn resolve_axis_id(font: &Font, selector: &str) -> Result<AxisId> {
+    if let Ok(axis_id) = selector.parse::<AxisId>()
+        && font.axis(axis_id.clone()).is_some()
+    {
+        return Ok(axis_id);
+    }
+
+    font.axis_id_by_tag(selector)
+        .ok_or_else(|| miette!("axis {selector:?} does not exist; use its tag or full id"))
+}
+
 // Parsing resolves identity and numeric syntax only. Callers construct the
 // appropriate nominal location; parsing never applies an axis mapping.
 fn parse_location(font: &Font, coordinates: &[String]) -> Result<BTreeMap<AxisId, f64>> {

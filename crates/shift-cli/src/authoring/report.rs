@@ -271,7 +271,7 @@ pub(super) fn report_changes(font: &Font, changes: &FontChangeSet) -> Vec<Author
                             .location()
                             .iter()
                             .filter_map(|(axis_id, value)| {
-                                let axis = font.axes().iter().find(|axis| axis.id() == *axis_id)?;
+                                let axis = font.axis(axis_id.clone())?;
                                 Some((axis.tag().to_string(), *value))
                             })
                             .collect(),

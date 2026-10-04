@@ -1,11 +1,11 @@
 //! Axis edits preserve identity, role, labels, visibility, and dependent coordinates.
 
 use miette::{Result, bail, miette};
-use shift_font::{Axis, AxisKind, FontIntent, FontIntentSet};
+use shift_font::{AxisKind, FontIntent, FontIntentSet};
 
 use crate::cli::SetAxisArgs;
 
-use super::{AuthoringReport, apply_mutation, glyph::load_font};
+use super::{AuthoringReport, apply_mutation, glyph::load_font, resolve_axis_id};
 
 /// Edits axis naming or continuous range through domain validation.
 ///
@@ -18,45 +18,39 @@ use super::{AuthoringReport, apply_mutation, glyph::load_font};
 /// range edit, invalid dependent authoring, or document/persistence failure.
 pub fn set_axis(args: SetAxisArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
+    let axis_id = resolve_axis_id(&font, &args.axis)?;
     let current = font
-        .axes()
-        .iter()
-        .find(|axis| axis.tag() == args.axis || axis.id().to_string() == args.axis)
-        .ok_or_else(|| {
-            miette!(
-                "axis {:?} does not exist; use its tag or full id",
-                args.axis
-            )
-        })?;
+        .axis(axis_id)
+        .ok_or_else(|| miette!("axis {:?} does not exist", args.axis))?;
     let changes_range = args.minimum.is_some() || args.default.is_some() || args.maximum.is_some();
     if args.tag.is_none() && args.name.is_none() && !changes_range {
         bail!("axis set requires a name, tag, or range edit");
     }
-    let tag = args.tag.unwrap_or_else(|| current.tag().to_string());
-    let name = args.name.unwrap_or_else(|| current.name().to_string());
-    let mut axis = match current.kind() {
-        AxisKind::Continuous {
-            minimum,
-            default,
-            maximum,
-        } => Axis::continuous_with_id(
-            current.id(),
-            tag,
-            name,
-            args.minimum.unwrap_or(*minimum),
-            args.default.unwrap_or(*default),
-            args.maximum.unwrap_or(*maximum),
-        ),
-        AxisKind::Discrete { values, default } => {
-            if changes_range {
+
+    let mut axis = current.clone();
+    if let Some(tag) = args.tag {
+        axis.set_tag(tag);
+    }
+    if let Some(name) = args.name {
+        axis.set_name(name);
+    }
+    if changes_range {
+        match current.kind() {
+            AxisKind::Continuous {
+                minimum,
+                default,
+                maximum,
+            } => axis.set_kind(AxisKind::Continuous {
+                minimum: args.minimum.unwrap_or(*minimum),
+                default: args.default.unwrap_or(*default),
+                maximum: args.maximum.unwrap_or(*maximum),
+            }),
+            AxisKind::Discrete { .. } => {
                 bail!("discrete axes permit name/tag edits only");
             }
-            Axis::discrete_with_id(current.id(), tag, name, values.clone(), *default)
         }
-    };
-    axis.set_role(current.role());
-    axis.set_hidden(current.is_hidden());
-    axis.set_labels(current.labels().to_vec());
+    }
+
     apply_mutation(
         &args.path,
         &args.mutation,

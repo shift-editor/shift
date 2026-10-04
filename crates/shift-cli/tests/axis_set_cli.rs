@@ -54,6 +54,60 @@ fn mapped_axis_rename_preserves_identity_labels_visibility_and_all_dependents() 
 }
 
 #[test]
+fn renamed_axis_remains_addressable_by_stable_id_and_new_tag() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("Lab.shift");
+    let before = sample_variable_font();
+    let axis_id = before.axes()[0].id();
+    let id = axis_id.to_string();
+    drop(ShiftStore::create_document(&path, &before).unwrap());
+
+    for (selector, name) in [("wght", "Mass"), (id.as_str(), "Text"), ("WGHT", "Weight")] {
+        let output = shift(&[
+            "axis",
+            "set",
+            path.to_str().unwrap(),
+            selector,
+            "--tag",
+            "WGHT",
+            "--name",
+            name,
+            "--json",
+        ]);
+        assert!(output.status.success(), "{:?}", output.stderr);
+        let after = load_font(path.to_str().unwrap());
+        let axis = after.axis(axis_id.clone()).unwrap();
+        assert_eq!(axis.tag(), "WGHT");
+        assert_eq!(axis.name(), name);
+        assert_eq!(after.sources(), before.sources());
+        assert_eq!(after.axis_mappings(), before.axis_mappings());
+        let report: Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert_eq!(report["changes"][0]["axisId"], id);
+    }
+
+    let bytes = std::fs::read(&path).unwrap();
+    for selector in ["wght", "axis_missing"] {
+        let output = shift(&[
+            "axis",
+            "set",
+            path.to_str().unwrap(),
+            selector,
+            "--name",
+            "Must Not Persist",
+            "--json",
+        ]);
+        assert!(!output.status.success());
+        let report: Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert_eq!(report["valid"], false);
+        assert_eq!(
+            report["error"]["summary"],
+            format!("axis {selector:?} does not exist; use its tag or full id")
+        );
+        assert_eq!(std::fs::read(&path).unwrap(), bytes);
+    }
+}
+
+#[test]
 fn expanded_unmapped_range_survives_compilation_without_changing_glyphs_or_masters() {
     let temp = tempfile::tempdir().unwrap();
     let path = temp.path().join("Lab.shift");

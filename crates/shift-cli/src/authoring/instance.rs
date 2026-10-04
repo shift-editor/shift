@@ -145,9 +145,9 @@ fn resolve_instance<'a>(font: &'a Font, selector: &str) -> Result<&'a NamedInsta
 
 fn standard_weights(font: &Font) -> Result<Vec<FontIntent>> {
     let axis = font
-        .axes()
-        .iter()
-        .find(|axis| axis.tag() == "wght" && axis.role() == AxisRole::External)
+        .axis_id_by_tag("wght")
+        .and_then(|axis_id| font.axis(axis_id))
+        .filter(|axis| axis.role() == AxisRole::External)
         .ok_or_else(|| miette!("--standard-weights requires an external wght axis"))?;
     let mut intents = Vec::new();
     for (value, name) in STANDARD_WEIGHTS {

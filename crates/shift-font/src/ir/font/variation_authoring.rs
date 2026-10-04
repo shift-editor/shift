@@ -69,6 +69,7 @@ impl Font {
 
         match &authoring.default_source_id {
             Some(id) => {
+                // Default-source membership belongs to the target, not the current font.
                 let source = authoring
                     .sources
                     .iter()
@@ -104,7 +105,7 @@ impl Font {
             }
         }
         for axis in &authoring.axes {
-            match self.axes().iter().find(|current| current.id() == axis.id()) {
+            match self.axis(axis.id()) {
                 None => changes.push(FontChange::axis_created(axis)),
                 Some(current) if current != axis => changes.push(FontChange::axis_updated(axis)),
                 _ => {}

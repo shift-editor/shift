@@ -1,6 +1,6 @@
 use crate::{
     test_support::sample_variable_font, Axis, AxisId, CoreError, DesignLocation, FontChange,
-    SourceId,
+    Source, SourceId,
 };
 
 #[test]
@@ -69,6 +69,34 @@ fn malformed_structural_snapshots_fail_before_changing_any_font_data() {
         }
         assert_eq!(font, before);
     }
+}
+
+#[test]
+fn restoring_a_default_source_that_exists_only_in_the_target_succeeds() {
+    let mut font = sample_variable_font();
+    let mut target = font.clone();
+    let source_id = target.add_source(Source::new("Restored".to_string(), DesignLocation::new()));
+    target.set_default_source_id(source_id.clone());
+    assert!(font.source(source_id).is_none());
+
+    font.restore_variation_authoring(target.variation_authoring())
+        .unwrap();
+
+    assert_eq!(font, target);
+}
+
+#[test]
+fn a_current_default_source_missing_from_the_target_is_rejected_atomically() {
+    let mut font = sample_variable_font();
+    let before = font.clone();
+    let source_id = font.default_source_id().unwrap();
+    let mut target = font.variation_authoring();
+    target.sources.retain(|source| source.id() != source_id);
+
+    let error = font.restore_variation_authoring(target).unwrap_err();
+
+    assert!(matches!(error, CoreError::SourceNotFound(id) if id == source_id));
+    assert_eq!(font, before);
 }
 
 #[test]

@@ -81,6 +81,7 @@ Stable IDs are identity. Names and Unicode values are editable metadata.
 
 - `GlyphId` identifies a glyph.
 - `SourceId` identifies a source.
+- `AxisId` identifies an axis independently of its editable tag and name; locations address axes by this ID.
 - `LayerId` identifies a glyph layer: the authored data for one glyph at one source.
 - `ContourId`, `PointId`, `ComponentId`, `AnchorId`, and glyph-layer `GuidelineId` identify one authored node anywhere in the font; authoring operations mint them rather than accepting user-chosen values.
 - `AxisMappingId` identifies a font-owned mapping independently of its editable name.
