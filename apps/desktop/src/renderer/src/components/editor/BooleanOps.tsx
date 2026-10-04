@@ -12,7 +12,7 @@ import { formatSidebarShortcut, sidebarShortcuts } from "@/lib/keyboard/sidebarS
 
 export const BooleanOps = () => {
   const editor = useEditor();
-  useSignalState(editor.selection.stateCell);
+  useSignalState(editor.selection.stateCell, { schedule: "frame" });
   const selectedContourIds = selectedBooleanContourIds(editor);
   if (!selectedContourIds) return null;
 

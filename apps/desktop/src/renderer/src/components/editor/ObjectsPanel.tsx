@@ -39,7 +39,7 @@ export const ObjectsPanel = () => {
     [editor],
   );
   const objectTree = useSignalState(objectTreeCell, { schedule: "frame" });
-  const selection = useSignalState(editor.selection.stateCell);
+  const selection = useSignalState(editor.selection.stateCell, { schedule: "frame" });
   const selectedIds = useMemo(() => new Set(selection.ids), [selection.ids]);
   const [collapsedSectionIds, setCollapsedSectionIds] = useState<ReadonlySet<ObjectTreeSectionId>>(
     () => new Set(),
