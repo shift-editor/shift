@@ -108,6 +108,8 @@ export class Selection {
       this.clear();
       return;
     }
+    // Marquee drags rewrite the selection on every pointer move; most moves select the same ids.
+    if (sameIds(this.stateCell.peek().ids, ids)) return;
 
     this.#store.put({
       id: currentSelectionId,
@@ -116,4 +118,8 @@ export class Selection {
       ids,
     });
   }
+}
+
+function sameIds(current: readonly SelectableId[], next: readonly SelectableId[]): boolean {
+  return current.length === next.length && current.every((id, index) => id === next[index]);
 }
