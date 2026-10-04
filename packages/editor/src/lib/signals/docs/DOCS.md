@@ -97,12 +97,26 @@ Use `.peek()` inside mutators or event handlers where you need the current value
 Keep the mutable object in a plain field and pair it with a revision signal. Bump the revision after each change, and expose the data through a computed that tracks the revision and returns a value with a new identity (a fresh view or wrapper), never the same object:
 
 ```ts
-readonly #coordinates = new PackedArray(2, values);
-readonly #revision = signal(0);
-readonly valuesCell = computed(() => {
-  track(this.#revision);
-  return this.#coordinates.view; // a new subarray each time
-});
+import { computed, signal, track } from "../signal";
+import { PackedArray } from "../../model/PackedArray";
+
+export class PointValues {
+  readonly #coordinates: PackedArray;
+  readonly #revision = signal(0);
+  readonly valuesCell = computed(() => {
+    track(this.#revision);
+    return this.#coordinates.view; // a new subarray each time
+  });
+
+  constructor(values: Float64Array) {
+    this.#coordinates = new PackedArray(2, values);
+  }
+
+  move(index: number, x: number, y: number): void {
+    this.#coordinates.setItem(index, [x, y]);
+    this.#revision.update((revision) => revision + 1);
+  }
+}
 ```
 
 For a stable owner that only needs to announce "something changed", expose the revision itself (see `FontStore.committedRevisionCell`). For an event stream, publish a new event object each time (see `FontStore.invalidGlyphsCell`). Avoid `{ equals: () => false }`: it works for a signal's direct readers, but any computed that passes the same object along will compare it as unchanged.
