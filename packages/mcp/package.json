@@ -26,13 +26,16 @@
   },
   "dependencies": {
     "@jitl/quickjs-singlefile-cjs-release-sync": "0.32.0",
+    "@modelcontextprotocol/fastify": "2.0.0",
     "@modelcontextprotocol/node": "2.1.0",
     "@modelcontextprotocol/server": "2.2.0",
+    "fastify": "^5.12.5",
     "@shift/runtime": "workspace:*",
     "quickjs-emscripten-core": "0.32.0",
     "zod": "^4.1.12"
   },
   "devDependencies": {
+    "@modelcontextprotocol/client": "2.2.0",
     "@shift/types": "workspace:*",
     "@types/node": "^25.3.0",
     "oxlint": "^1.85.0",

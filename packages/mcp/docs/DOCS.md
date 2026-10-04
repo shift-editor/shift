@@ -1,16 +1,16 @@
 # MCP
 
-<!-- reviewed: 2026-10-02 review-every: 90d -->
+<!-- reviewed: 2026-10-04 review-every: 90d -->
 
 Local code-mode access to the live Shift desktop application.
 
 ## Architecture Invariants
 
 - **Architecture Invariant:** `@shift/mcp` is an adapter over `ShiftCapabilities` from `@shift/runtime`. It does not own font, document, editor, window, persistence state, or the reusable plugin contract.
-- **Architecture Invariant:** The server binds to `127.0.0.1` on a random port, validates localhost Host and Origin headers, and requires a random secret generated for one application run. It never listens on a public interface.
+- **Architecture Invariant:** The Fastify MCP adapter binds only to `127.0.0.1`, validates localhost Host and Origin headers, and requires a persistent, private bearer token. Release, Nightly, Dev, and Nightly Dev use distinct fixed ports; a collision leaves MCP unavailable rather than selecting another port. Explicit test instances use port `0`.
 - **Architecture Invariant:** Agent-written code runs in a fresh QuickJS runtime with bounded time, memory, source size, and result size. Desktop hosts that runtime in a dedicated utility process so generated code cannot block or crash Electron main. It has no Node.js, filesystem, environment, Electron, or network globals.
 - **Architecture Invariant:** Every editor request names a window explicitly. Focus changes never retarget an in-flight or subsequent call.
-- **Architecture Invariant:** MCP is not Shift's canonical font API. Shared document and editor capabilities remain usable by future plugin and protocol hosts without MCP. The desktop host asks `Font.readAuthoredLayers()` for accepted authored snapshots; `@shift/mcp-client` owns connection discovery and uses the MCP client transport rather than embedding JSON-RPC handling in agent skills.
+- **Architecture Invariant:** MCP is not Shift's canonical font API. Shared document and editor capabilities remain usable by future plugin and protocol hosts without MCP. The desktop host asks `Font.readAuthoredLayers()` for accepted authored snapshots; agent clients connect through native MCP support rather than a Shift-specific client CLI.
 
 ## Codemap
 
@@ -20,7 +20,7 @@ src/
   types.ts        -- MCP connection contract
   code.ts         -- bounded QuickJS execution over ShiftCapabilities
   runtime.ts      -- isolated-runtime-only package surface
-  server.ts       -- MCP tools, loopback HTTP, run secret, connection descriptor
+  server.ts       -- MCP tools, Fastify loopback HTTP, persistent token, connection descriptor
   index.ts        -- main-process-safe public package surface
 ```
 
@@ -30,7 +30,7 @@ src/
 - `ShiftSession` -- explicit window and font-session identity, mode, focus, and editor connection status.
 - `EditorInspection` -- point-in-time renderer observation for one explicitly targeted session.
 - `ShiftMcpServer` -- loopback MCP lifecycle, authentication, connection descriptor, and tool registration.
-- `ShiftMcpConnection` -- run-scoped local URL and bearer token written to the private descriptor.
+- `ShiftMcpConnection` -- local URL and persistent bearer token written to the private descriptor.
 
 ## How it works
 
@@ -60,7 +60,7 @@ async () => {
 
 ## Desktop ownership
 
-Electron main starts one `ShiftMcpServer` and one `SandboxRuntimeProcess` after `app.whenReady()`. It writes `mcp.json` under the distribution-specific user-data directory with mode `0600`. The descriptor contains the loopback URL and run secret; it is local connection material, not a user login. MCP delegates execution to the sandbox utility process, and main serves only the typed capability requests that return from that process. A hard host deadline terminates the sandbox if its internal QuickJS deadline cannot settle.
+Electron main starts one `ShiftMcpServer` and one `SandboxRuntimeProcess` after `app.whenReady()`. It writes `mcp.json` under the distribution-specific user-data directory with mode `0600` on POSIX. The descriptor contains the loopback URL and persistent token; an existing valid, private token is reused on restart, while an invalid or insecure descriptor prevents MCP startup. Shutdown leaves the credential in place. The token is local connection material, not a user login. MCP delegates execution to the sandbox utility process, and main serves only the typed capability requests that return from that process. A hard host deadline terminates the sandbox if its internal QuickJS deadline cannot settle.
 
 Each renderer serves an agent request lane over a transferred `MessagePort`. Main pairs renderer observations with the explicit window and font-session identities before returning them. Launcher windows are excluded from session discovery.
 
@@ -79,7 +79,7 @@ Do not expose internal `Editor`, `FontStore`, `WorkspaceHost`, NAPI, SQLite rows
 
 ## Gotchas
 
-- The connection descriptor is removed during graceful shutdown, but an application crash can leave a stale descriptor. A client must treat connection failure as authoritative.
+- The connection descriptor survives shutdown. A client must treat connection failure as authoritative when Shift is not running. The descriptor is checked for file type and, on POSIX, private mode before the token is reused; Windows relies on user-data directory ACLs.
 - Focus is descriptive only. Always pass a `windowId` from the same `sessions.list()` result used to choose a target.
 - A renderer can exist before its agent lane connects. Check `editorConnected` or retry session discovery rather than substituting another window.
 - Code-mode results must be JSON-serializable and remain under the configured output bound.
@@ -97,7 +97,7 @@ pnpm typecheck
 ## Related
 
 - [`packages/runtime/docs/DOCS.md`](../../runtime/docs/DOCS.md) -- canonical protocol and plugin capability contracts.
-- [`packages/mcp-client/src/cli.mjs`](../../mcp-client/src/cli.mjs) -- packaged `shift-mcp` command for run-scoped descriptor discovery and MCP calls.
+- [`docs/mcp.md`](../../../docs/mcp.md) -- one-time user-scoped native MCP setup for installed Shift builds.
 - [`apps/desktop/src/main/docs/DOCS.md`](../../../apps/desktop/src/main/docs/DOCS.md) -- Electron lifecycle, window/session identity, and renderer lanes.
 - [`apps/desktop/src/preload/docs/DOCS.md`](../../../apps/desktop/src/preload/docs/DOCS.md) -- authenticated `MessagePort` transfer into the renderer.
 - [`docs/architecture/index.md`](../../../docs/architecture/index.md) -- repository documentation routing and API boundaries.

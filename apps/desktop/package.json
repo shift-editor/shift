@@ -33,6 +33,7 @@
   },
   "license": "MIT OR Apache-2.0",
   "devDependencies": {
+    "@modelcontextprotocol/client": "2.2.0",
     "@electron-forge/cli": "8.0.0-alpha.10",
     "@electron-forge/plugin-vite": "8.0.0-alpha.10",
     "@electron-forge/shared-types": "8.0.0-alpha.10",

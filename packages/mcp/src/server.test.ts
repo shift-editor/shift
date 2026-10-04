@@ -1,4 +1,5 @@
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -72,11 +73,11 @@ afterEach(async () => {
 });
 
 describe("Shift MCP local connection", () => {
-  it("publishes a private run-scoped descriptor and rejects missing secrets", async () => {
+  it("keeps a private credential across restarts and rejects unauthorized callers", async () => {
     const directory = await mkdtemp(path.join(tmpdir(), "shift-mcp-"));
     temporaryDirectories.push(directory);
     const descriptorPath = path.join(directory, "connection.json");
-    const server = new ShiftMcpServer({ execute, descriptorPath });
+    const server = new ShiftMcpServer({ execute, descriptorPath, port: 0 });
     startedServers.push(server);
 
     const connection = await server.start();
@@ -96,15 +97,20 @@ describe("Shift MCP local connection", () => {
     expect(foreignOrigin.status).toBe(403);
 
     await server.stop();
-    await expect(stat(descriptorPath)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(JSON.parse(await readFile(descriptorPath, "utf8"))).toEqual(connection);
+
+    const restarted = await server.start();
+    expect(restarted.token).toBe(connection.token);
+    expect(JSON.parse(await readFile(descriptorPath, "utf8"))).toEqual(restarted);
   });
 
-  it("accepts an MCP initialization with the run-scoped secret", async () => {
+  it("accepts an MCP initialization with the persistent secret", async () => {
     const directory = await mkdtemp(path.join(tmpdir(), "shift-mcp-"));
     temporaryDirectories.push(directory);
     const server = new ShiftMcpServer({
       execute,
       descriptorPath: path.join(directory, "connection.json"),
+      port: 0,
     });
     startedServers.push(server);
     const connection = await server.start();
@@ -128,5 +134,69 @@ describe("Shift MCP local connection", () => {
       result: { content: [{ text: expect.stringContaining("declare global") }] },
     });
     expect(executed).toMatchObject({ result: { content: [{ text: "[]" }] } });
+  });
+
+  it("connects with a native MCP client", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "shift-mcp-"));
+    temporaryDirectories.push(directory);
+    const server = new ShiftMcpServer({
+      execute,
+      descriptorPath: path.join(directory, "connection.json"),
+      port: 0,
+    });
+    startedServers.push(server);
+    const connection = await server.start();
+    const client = new Client({ name: "shift-test", version: "1.0.0" });
+    const transport = new StreamableHTTPClientTransport(new URL(connection.url), {
+      authProvider: { token: async () => connection.token },
+    });
+
+    try {
+      await client.connect(transport);
+      const result = await client.callTool({
+        name: "shift.execute",
+        arguments: { code: "async () => await shift.sessions.list()" },
+      });
+      expect(result.content).toMatchObject([{ type: "text", text: "[]" }]);
+    } finally {
+      await client.close();
+    }
+  });
+
+  it("rejects malformed or insecure credential files without replacing them", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "shift-mcp-"));
+    temporaryDirectories.push(directory);
+    const descriptorPath = path.join(directory, "connection.json");
+    const server = new ShiftMcpServer({ execute, descriptorPath, port: 0 });
+    startedServers.push(server);
+    await writeFile(descriptorPath, "invalid JSON", { mode: 0o600 });
+    await expect(server.start()).rejects.toThrow();
+    expect(await readFile(descriptorPath, "utf8")).toBe("invalid JSON");
+
+    if (process.platform === "win32") return;
+    await chmod(descriptorPath, 0o644);
+    await expect(server.start()).rejects.toThrow(/insecure Shift MCP descriptor/);
+  });
+
+  it("does not fall back to another port when its port is occupied", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "shift-mcp-"));
+    temporaryDirectories.push(directory);
+    const first = new ShiftMcpServer({
+      execute,
+      descriptorPath: path.join(directory, "first.json"),
+      port: 0,
+    });
+    startedServers.push(first);
+    const connection = await first.start();
+    const secondPath = path.join(directory, "second.json");
+    const second = new ShiftMcpServer({
+      execute,
+      descriptorPath: secondPath,
+      port: Number(new URL(connection.url).port),
+    });
+    startedServers.push(second);
+
+    await expect(second.start()).rejects.toMatchObject({ code: "EADDRINUSE" });
+    await expect(stat(secondPath)).rejects.toMatchObject({ code: "ENOENT" });
   });
 });

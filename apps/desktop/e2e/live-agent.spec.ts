@@ -1,27 +1,39 @@
-import { execFile } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { promisify } from "node:util";
+import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
+import type { ShiftMcpConnection } from "@shift/mcp";
 import { workspaceTest as test, expect, UFO_FONT_PATH } from "./fixtures/electronApp";
-
-const execFileAsync = promisify(execFile);
-const MCP_CLIENT = path.resolve(__dirname, "../../../packages/mcp-client/src/cli.mjs");
 
 async function runShiftCode(testRoot: string, code: string): Promise<unknown> {
   const descriptor = path.join(testRoot, "user-data", "mcp.json");
-  const { stdout } = await execFileAsync(process.execPath, [
-    MCP_CLIENT,
-    "execute",
-    "--descriptor",
-    descriptor,
-    code,
-  ]);
-  return JSON.parse(stdout);
+  const connection = JSON.parse(await readFile(descriptor, "utf8")) as ShiftMcpConnection;
+  const client = new Client({ name: "shift-e2e", version: "1.0.0" });
+  const transport = new StreamableHTTPClientTransport(new URL(connection.url), {
+    authProvider: { token: async () => connection.token },
+  });
+
+  try {
+    await client.connect(transport);
+    const result = await client.callTool({ name: "shift.execute", arguments: { code } });
+    const text = result.content
+      .filter((item) => item.type === "text")
+      .map((item) => item.text)
+      .join("\n");
+    if (result.isError) throw new Error(text);
+    return JSON.parse(text);
+  } finally {
+    await client.close();
+  }
 }
 
 test.describe("authored font reads from Home", () => {
   test.use({ startupFontPath: UFO_FONT_PATH });
 
-  test("paginates glyphs and reads named source anchors", async ({ testRoot }) => {
+  test("paginates glyphs and reads named source anchors", async ({
+    page: workspacePage,
+    testRoot,
+  }) => {
+    await expect(workspacePage).toHaveURL(/#\/home/);
     const result = await runShiftCode(
       testRoot,
       `async () => {

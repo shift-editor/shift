@@ -1,14 +1,10 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { rmSync } from "node:fs";
-import { mkdir, rename, writeFile } from "node:fs/promises";
-import { createServer, type Server } from "node:http";
+import { lstat, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
-import {
-  localhostHostValidation,
-  localhostOriginValidation,
-  toNodeHandler,
-} from "@modelcontextprotocol/node";
+import { createMcpFastifyApp } from "@modelcontextprotocol/fastify";
+import { toNodeHandler } from "@modelcontextprotocol/node";
 import { createMcpHandler, McpServer } from "@modelcontextprotocol/server";
+import type { FastifyInstance } from "fastify";
 import * as z from "zod/v4";
 import { SHIFT_CODE_TYPES } from "./declarations";
 import type { ShiftMcpConnection } from "./types";
@@ -25,6 +21,7 @@ export interface ShiftMcpLogger {
 export interface ShiftMcpServerOptions {
   execute(code: string): Promise<unknown>;
   descriptorPath: string;
+  port: number;
   logger?: ShiftMcpLogger;
 }
 
@@ -32,56 +29,51 @@ export interface ShiftMcpServerOptions {
 export class ShiftMcpServer {
   readonly #execute: (code: string) => Promise<unknown>;
   readonly #descriptorPath: string;
+  readonly #port: number;
   readonly #logger: ShiftMcpLogger | undefined;
-  #httpServer: Server | null = null;
+  #httpServer: FastifyInstance | null = null;
   #closeHandler: (() => Promise<void>) | null = null;
   #connection: ShiftMcpConnection | null = null;
 
   /**
    * Creates an unstarted server bound to a host-owned isolated executor.
    *
-   * @param options - execution callback, private descriptor path, and optional diagnostics sink.
+   * @param options - execution callback, private descriptor path, port, and optional diagnostics sink.
    */
   constructor(options: ShiftMcpServerOptions) {
     this.#execute = options.execute;
     this.#descriptorPath = options.descriptorPath;
+    this.#port = options.port;
     this.#logger = options.logger;
   }
 
-  /** Starts a random loopback port and publishes same-user connection details. */
+  /** Starts the loopback server and publishes persistent same-user connection details. */
   async start(): Promise<ShiftMcpConnection> {
     if (this.#connection) return this.#connection;
 
-    const token = randomBytes(32).toString("base64url");
+    const token = await readOrCreateToken(this.#descriptorPath);
     const handler = createMcpHandler(() => this.#createProtocolServer());
     const nodeHandler = toNodeHandler(handler, {
       maxRequestBodySize: 128 * 1024,
       onerror: (error) => this.#logger?.error("MCP request failed", error),
     });
-    const validateHost = localhostHostValidation();
-    const validateOrigin = localhostOriginValidation();
-    const httpServer = createServer((request, response) => {
-      if (!validateHost(request, response) || !validateOrigin(request, response)) return;
-
-      const requestPath = new URL(request.url ?? "/", `http://${LOOPBACK_HOST}`).pathname;
-      if (requestPath !== MCP_PATH) {
-        response.writeHead(404).end();
-        return;
-      }
-
+    const httpServer = createMcpFastifyApp();
+    httpServer.all(MCP_PATH, { bodyLimit: 128 * 1024 }, async (request, reply) => {
       if (!hasBearerToken(request.headers.authorization, token)) {
-        response.writeHead(401, { "content-type": "application/json" });
-        response.end(JSON.stringify({ error: "invalid Shift MCP connection secret" }));
-        return;
+        return reply.code(401).send({ error: "invalid Shift MCP connection secret" });
       }
 
-      void nodeHandler(request, response);
+      reply.hijack();
+      await nodeHandler(request.raw, reply.raw, request.body);
     });
 
     try {
-      const port = await listen(httpServer);
+      await httpServer.listen({ host: LOOPBACK_HOST, port: this.#port });
+      const address = httpServer.server.address();
+      if (!address || typeof address === "string")
+        throw new Error("Shift MCP server has no TCP port");
       const connection = {
-        url: `http://${LOOPBACK_HOST}:${port}${MCP_PATH}`,
+        url: `http://${LOOPBACK_HOST}:${address.port}${MCP_PATH}`,
         token,
         descriptorPath: this.#descriptorPath,
       } satisfies ShiftMcpConnection;
@@ -93,13 +85,13 @@ export class ShiftMcpServer {
       this.#logger?.info("MCP server started", { url: connection.url });
       return connection;
     } catch (error) {
-      httpServer.close();
+      await httpServer.close();
       await handler.close();
       throw error;
     }
   }
 
-  /** Stops accepting requests and removes the run-scoped connection descriptor. */
+  /** Stops accepting requests while retaining the user's connection credential. */
   async stop(): Promise<void> {
     const httpServer = this.#httpServer;
     const closeHandler = this.#closeHandler;
@@ -108,9 +100,7 @@ export class ShiftMcpServer {
     this.#closeHandler = null;
     this.#connection = null;
 
-    const closingServer = httpServer ? closeServer(httpServer) : Promise.resolve();
-    if (connection) rmSync(connection.descriptorPath, { force: true });
-    await closingServer;
+    if (httpServer) await httpServer.close();
     if (closeHandler) await closeHandler();
     if (connection) this.#logger?.info("MCP server stopped");
   }
@@ -162,37 +152,28 @@ function hasBearerToken(header: string | undefined, token: string): boolean {
   return timingSafeEqual(supplied, expected);
 }
 
-async function listen(server: Server): Promise<number> {
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(0, LOOPBACK_HOST, () => {
-      server.off("error", reject);
-      resolve();
-    });
-  });
+async function readOrCreateToken(descriptorPath: string): Promise<string> {
+  try {
+    const file = await lstat(descriptorPath);
+    if (!file.isFile() || (process.platform !== "win32" && (file.mode & 0o077) !== 0)) {
+      throw new Error(`insecure Shift MCP descriptor: ${descriptorPath}`);
+    }
 
-  const address = server.address();
-  if (!address || typeof address === "string") throw new Error("Shift MCP server has no TCP port");
-  return address.port;
-}
-
-async function closeServer(server: Server): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
-    server.close((error) => {
-      if (error) {
-        reject(error);
-        return;
-      }
-
-      resolve();
-    });
-  });
+    const connection = JSON.parse(await readFile(descriptorPath, "utf8")) as ShiftMcpConnection;
+    if (typeof connection?.token !== "string" || !/^[\w-]{43}$/.test(connection.token)) {
+      throw new Error(`invalid Shift MCP descriptor: ${descriptorPath}`);
+    }
+    return connection.token;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    return randomBytes(32).toString("base64url");
+  }
 }
 
 async function publishConnection(connection: ShiftMcpConnection): Promise<void> {
   const directory = path.dirname(connection.descriptorPath);
   const temporaryPath = `${connection.descriptorPath}.${process.pid}.tmp`;
   await mkdir(directory, { recursive: true, mode: 0o700 });
-  await writeFile(temporaryPath, `${JSON.stringify(connection)}\n`, { mode: 0o600 });
+  await writeFile(temporaryPath, `${JSON.stringify(connection)}\n`, { mode: 0o600, flag: "wx" });
   await rename(temporaryPath, connection.descriptorPath);
 }

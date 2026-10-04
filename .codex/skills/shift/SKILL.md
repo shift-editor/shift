@@ -9,35 +9,23 @@ Use the live MCP connection when the user refers to the font, glyph, source, sel
 
 ## Connect
 
-From a Shift checkout with dependencies installed, use the packaged client:
-
-```sh
-pnpm exec shift-mcp connections
-```
-
-The client discovers run descriptors for Shift, Shift Nightly, and development builds. Set `SHIFT_MCP_DESCRIPTOR=/absolute/path/to/mcp.json` when Shift uses a custom user-data directory. If multiple applications are running, pass `--descriptor <path>` explicitly; never guess.
+Configure your agent's native MCP client once with the running app's URL and private token; see the [one-time setup guide](../../../docs/mcp.md). Release, Nightly, Dev, and Nightly Dev have separate named connections. Never check in or disclose the token. No Shift-specific client CLI is needed.
 
 ## Discover the API
 
-```sh
-pnpm exec shift-mcp describe --descriptor <path>
-```
-
-The typed API exposes `shift.sessions.list()`, `shift.editor.inspect({ windowId })`, `shift.font.get({ windowId })`, `shift.glyphs.list({ windowId, limit?, cursor?, sourceId? })`, `shift.glyphs.get({ windowId, glyphId })` or `shift.glyphs.get({ windowId, name })`, and `shift.layers.get({ windowId, glyphId, sourceId })` inside `shift.execute`.
+Call the native `shift.describe` MCP tool. The typed API exposes `shift.sessions.list()`, `shift.editor.inspect({ windowId })`, `shift.font.get({ windowId })`, `shift.glyphs.list({ windowId, limit?, cursor?, sourceId? })`, `shift.glyphs.get({ windowId, glyphId })` or `shift.glyphs.get({ windowId, name })`, and `shift.layers.get({ windowId, glyphId, sourceId })` inside `shift.execute`.
 
 ## Execute code
 
-Pass an async zero-argument function on stdin to avoid shell escaping:
+Call the native `shift.execute` MCP tool, passing an async zero-argument function in its `code` argument:
 
-```sh
-pnpm exec shift-mcp execute --descriptor <path> <<'EOF'
+```js
 async () => {
   const sessions = await shift.sessions.list();
   const session = sessions.find(({ sessionId }) => sessionId === "...");
   if (!session) throw new Error("Target Shift session is not open");
   return shift.editor.inspect({ windowId: session.windowId });
 }
-EOF
 ```
 
 Always target the explicit `windowId` returned by `sessions.list()`. Do not assume focus is stable. `editor.inspect()` reports a point-in-time renderer observation; `font.get()` returns Home-safe metadata, metrics, axes, global master sources, named instances, and glyph count. Individual glyphs may advertise additional authored `sourceIds` for non-master support layers; those IDs are also valid for layer reads. `glyphs.get()` resolves one glyph by exact name or stable ID, without scanning the directory; provide exactly one of `name` or `glyphId`. `glyphs.list()` returns directory entries with an opaque `nextCursor` (pass it back as `cursor` until null). Supply a specific `sourceId` to include authored `structure` for each glyph in a bounded page; `null` means no layer in that source. `layers.get()` returns positions and structure for one authored glyph/source layer, or `null` if the layer is absent. Preview sessions expose font and glyph directory facts but have no authored layers; these operations are read-only.

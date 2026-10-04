@@ -1,6 +1,6 @@
 # Main
 
-<!-- reviewed: 2026-10-02 -->
+<!-- reviewed: 2026-10-04 -->
 
 Electron main process: app startup, windows, menus, document dialogs, and workspace session ownership.
 
@@ -23,7 +23,7 @@ Electron main process: app startup, windows, menus, document dialogs, and worksp
 - **Architecture Invariant:** Disposable Slug pages live under the app-wide `derived-cache/slug-atlases` root beside `working-documents`, never inside authored `.shift` content. Utility processes share the one-GiB byte-budgeted LRU; each process validates an artifact index once and then verifies and decompresses its fixed pages independently. Staging paths use readable `run-{pid}-{id}/page-{index}-{id}.zst` names, and every retry owns a distinct file until publication. The LRU scans after an artifact is opened or published, never after every page stream. Stale, corrupt, and evicted entries rebuild.
 - **Architecture Invariant:** Recovery discovery prunes only storage that cannot contain authored work: empty workspace directories, document bindings with no working store or recovery overlay, and SQLite sidecars whose primary file is absent. Working stores and recovery overlays are recoverable and never expire by age. A stale binding whose exact recovery overlay is absent is detached from a surviving working store so unsaved-workspace discovery can recover that store. Malformed or unknown artifacts are retained and reported rather than deleted.
 - **Architecture Invariant:** IPC channels are type-safe. `ipcMain.handle` calls use the typed wrapper from `shared/ipc/main`, and channel names and payload types live in `shared/ipc/contract.ts` and `shared/workspace/protocol.ts`.
-- **Architecture Invariant:** Main owns one run-scoped local MCP server. It binds only to loopback, publishes a random connection secret under the distribution-specific user-data root, resolves every request through an explicit window/session identity, and routes renderer observations over a per-window typed request lane.
+- **Architecture Invariant:** Main owns one local MCP server per app instance. It binds only to loopback on the distribution's fixed port (Shift `17461`, Nightly `17462`, Dev `17463`, Nightly Dev `17464`; E2E uses an explicit ephemeral port), retains a private bearer token under the distribution-specific user-data root across launches, resolves every request through an explicit window/session identity, and routes renderer observations over a per-window typed request lane. Port collisions disable MCP without preventing the app from opening.
 - **Architecture Invariant:** Generated agent and plugin code never executes in Electron main or a renderer. `SandboxRuntimeProcess` supervises a dedicated utility process, serves only typed capabilities back into main, and terminates the process when a hard execution deadline expires.
 
 ## Codemap

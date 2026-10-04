@@ -867,9 +867,28 @@ export class App {
           this.#windowForAgentRequest(windowId).agent.getLayer(glyphId, sourceId),
       },
     });
+    let port: number;
+    switch (app.getName()) {
+      case "Shift":
+        port = 17461;
+        break;
+      case "Shift Nightly":
+        port = 17462;
+        break;
+      case "Shift Dev":
+        port = 17463;
+        break;
+      case "Shift Nightly Dev":
+        port = 17464;
+        break;
+      default:
+        throw new Error(`Unknown Shift distribution: ${app.getName()}`);
+    }
+
     const mcp = new ShiftMcpServer({
       execute: (code) => sandbox.execute(code),
       descriptorPath: path.join(app.getPath("userData"), "mcp.json"),
+      port: process.env.NODE_ENV === "test" ? 0 : port,
       logger: createShiftLogger("app.mcp"),
     });
 
