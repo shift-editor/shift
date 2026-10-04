@@ -29,6 +29,13 @@ export const Bounds = {
     return { min: { x: min.x, y: min.y }, max: { x: max.x, y: max.y } };
   },
 
+  /** Whether two bounds (or two empty results) have identical corners. */
+  equals(a: Bounds | null, b: Bounds | null): boolean {
+    if (a === b) return true;
+    if (!a || !b) return false;
+    return a.min.x === b.min.x && a.min.y === b.min.y && a.max.x === b.max.x && a.max.y === b.max.y;
+  },
+
   /** Create a zero-area bounds located at a single point. */
   fromPoint(p: Point2D): Bounds {
     return { min: { x: p.x, y: p.y }, max: { x: p.x, y: p.y } };

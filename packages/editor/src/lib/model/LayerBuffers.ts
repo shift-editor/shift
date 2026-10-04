@@ -111,7 +111,7 @@ export class LayerBuffers {
     this.boundsCell = computed(
       () =>
         LayerBuffers.#bounds(this.contoursCell.value.map((contour) => contour.boundsCell.value)),
-      { name: "glyphLayer.buffers.bounds" },
+      { name: "glyphLayer.buffers.bounds", equals: Bounds.equals },
     );
     this.sidebearingsCell = computed(
       () => {
@@ -119,7 +119,10 @@ export class LayerBuffers {
         if (!bounds) return { lsb: null, rsb: null };
         return { lsb: bounds.min.x, rsb: this.xAdvanceCell.value - bounds.max.x };
       },
-      { name: "glyphLayer.buffers.sidebearings" },
+      {
+        name: "glyphLayer.buffers.sidebearings",
+        equals: (prev, next) => prev.lsb === next.lsb && prev.rsb === next.rsb,
+      },
     );
   }
 
