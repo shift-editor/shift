@@ -39,7 +39,9 @@ export class Scene {
         });
         return { nodes: tree.walk(), tree };
       },
-      { name: "editor.scene" },
+      // Selection and other session records share this store; only a change to a node record
+      // should reach scene readers.
+      { name: "editor.scene", equals: sameScene },
     );
     this.#nodesById = computed(
       () => {
@@ -197,4 +199,11 @@ function copyNode<T extends ShiftNode>(node: T): T {
     ...node,
     position: { ...node.position },
   };
+}
+
+function sameScene(prev: SceneValue, next: SceneValue): boolean {
+  return (
+    prev.nodes.length === next.nodes.length &&
+    prev.nodes.every((node, index) => node === next.nodes[index])
+  );
 }

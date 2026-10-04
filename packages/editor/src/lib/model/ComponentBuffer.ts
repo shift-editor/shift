@@ -1,13 +1,21 @@
 import type { DecomposedTransform } from "@shift/geo";
 import type { ComponentData } from "@shift/types";
-import { computed, signal, type ComputedSignal, type WritableSignal } from "../signals/signal";
+import {
+  computed,
+  signal,
+  type ComputedSignal,
+  type WritableSignal,
+  track,
+} from "../signals/signal";
 import { PackedArray } from "./PackedArray";
 
 /** Component metadata and its fixed-width decomposed transform record. */
 export class ComponentBuffer {
   readonly data: ComponentData;
 
-  readonly #transformCell: WritableSignal<PackedArray>;
+  readonly #transform: PackedArray;
+  /** Bumped after each in-place change to `#transform`; readers track this, not the array. */
+  readonly #revision: WritableSignal<number>;
   readonly valuesCell: ComputedSignal<Float64Array>;
 
   constructor(data: ComponentData, values: Float64Array, componentIndex: number) {
@@ -16,17 +24,22 @@ export class ComponentBuffer {
     }
 
     this.data = data;
-    this.#transformCell = signal(new PackedArray(9, values), {
-      equals: () => false,
-      name: `glyphLayer.component[${componentIndex}].transform`,
-    });
-    this.valuesCell = computed(() => this.#transformCell.value.view, {
-      name: `glyphLayer.component[${componentIndex}].values`,
-    });
+    this.#transform = new PackedArray(9, values);
+    this.#revision = signal(0, { name: `glyphLayer.component[${componentIndex}].transform` });
+    this.valuesCell = computed(
+      () => {
+        track(this.#revision);
+        // A fresh view over the same memory, so readers see a new value per revision.
+        return this.#transform.view;
+      },
+      {
+        name: `glyphLayer.component[${componentIndex}].values`,
+      },
+    );
   }
 
   get transform(): DecomposedTransform {
-    const values = this.#transformCell.peek().view;
+    const values = this.#transform.view;
     return {
       translateX: values[0],
       translateY: values[1],
@@ -61,7 +74,12 @@ export class ComponentBuffer {
       throw new RangeError("ComponentBuffer replacement requires nine values");
     }
 
-    const transform = this.#transformCell.peek();
-    if (transform.replace(values)) this.#transformCell.set(transform);
+    const transform = this.#transform;
+    if (transform.replace(values)) this.#markChanged();
+  }
+
+  /** Publishes an in-place change to the packed values. */
+  #markChanged(): void {
+    this.#revision.update((revision) => revision + 1);
   }
 }
