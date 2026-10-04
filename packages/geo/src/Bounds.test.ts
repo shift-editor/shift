@@ -9,6 +9,14 @@ describe("Bounds", () => {
       expect(b.max).toEqual({ x: 3, y: 4 });
     });
 
+    it("equals compares corners, treating two empty results as equal", () => {
+      const b = Bounds.create({ x: 1, y: 2 }, { x: 3, y: 4 });
+      expect(Bounds.equals(b, Bounds.create({ x: 1, y: 2 }, { x: 3, y: 4 }))).toBe(true);
+      expect(Bounds.equals(b, Bounds.create({ x: 1, y: 2 }, { x: 3, y: 5 }))).toBe(false);
+      expect(Bounds.equals(null, null)).toBe(true);
+      expect(Bounds.equals(b, null)).toBe(false);
+    });
+
     it("fromPoint creates degenerate bounds", () => {
       const b = Bounds.fromPoint({ x: 5, y: 10 });
       expect(b.min).toEqual({ x: 5, y: 10 });

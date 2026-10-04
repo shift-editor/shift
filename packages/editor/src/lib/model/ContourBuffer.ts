@@ -1,4 +1,4 @@
-import type { Bounds as BoundsType } from "@shift/geo";
+import { Bounds, type Bounds as BoundsType } from "@shift/geo";
 import type { ContourData, PointId, PointSeed } from "@shift/types";
 import {
   Contour,
@@ -67,8 +67,10 @@ export class ContourBuffer {
     this.segmentsCell = computed(() => this.contourCell.value.segments(), {
       name: `glyphLayer.contour[${contourIndex}].segments`,
     });
+    // Most drags move points inside the contour's box; equal bounds keep readers from rerunning.
     this.boundsCell = computed(() => this.contourCell.value.bounds, {
       name: `glyphLayer.contour[${contourIndex}].bounds`,
+      equals: Bounds.equals,
     });
   }
 
