@@ -116,6 +116,20 @@ export async function waitForEditorReady(page: Page, glyphId: string): Promise<v
 }
 
 /**
+ * Opens the first catalog glyph through the catalog surface.
+ *
+ * @param page - authored or preview workspace window showing the catalog.
+ * @returns the glyph identity in the editor route it opened.
+ */
+export async function openFirstCatalogGlyph(page: Page): Promise<GlyphId> {
+  await clickFirstCatalogGlyph(page);
+  await page.waitForURL(/#\/editor\//);
+  const glyphId = decodeURIComponent(new URL(page.url()).hash.slice("#/editor/".length)) as GlyphId;
+  await waitForEditorReady(page, glyphId);
+  return glyphId;
+}
+
+/**
  * Acquires a glyph, navigates to its editor route, and waits for scene publication.
  *
  * @param page - authored or preview workspace window navigating to the editor.

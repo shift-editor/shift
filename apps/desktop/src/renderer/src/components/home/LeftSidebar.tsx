@@ -12,7 +12,7 @@ export const LeftSidebar = () => {
     <aside
       ref={scrollRef}
       aria-label="Font navigation"
-      className="scrollbar-themed h-full w-full min-w-0 overflow-y-auto border-r border-line-subtle bg-surface"
+      className="h-full w-full min-w-0 overflow-y-auto border-r border-line-subtle bg-surface"
       style={{ overflowAnchor: "none" }}
     >
       <div ref={contentRef} className="min-h-full space-y-1.5 px-3">

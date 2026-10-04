@@ -1,4 +1,4 @@
-import { Bounds, Mat, Vec2, type Point2D } from "@shift/geo";
+import { Bounds, Mat, type Point2D } from "@shift/geo";
 import { Point, type Contour, type Segment } from "@shift/glyph-state";
 import type { PointId } from "@shift/types";
 
@@ -8,6 +8,7 @@ import type { GlyphLayerPositionTarget } from "../../../model/Glyph";
 import type { ComponentTransformEdit } from "../../../model/ComponentTransformEdit";
 import type { DragEvent, DragStartEvent, ToolEvent } from "../../core/GestureDetector";
 import { DirectionSnap, PositionReference } from "../../../model/positions";
+import { scenePoint, vectorBetween } from "../../../editor/spaces";
 import { objectIsKindOf, type ShiftObjectOf } from "../../../../types/object";
 import type { PositionCondition } from "../../../../types/positionEdit";
 import type { SelectBehavior, SelectState } from "../types";
@@ -85,7 +86,15 @@ export class Translate implements SelectBehavior {
     if (prev.type !== "translating") ctx.editor.hover.clear();
     if (event.type !== "drag") return;
 
-    const delta = Vec2.sub(next.translate.lastPos, next.translate.startPos);
+    const node = ctx.editor.selectionNode();
+    if (!node) return;
+
+    const { startPos, lastPos } = next.translate;
+    const sceneDelta = vectorBetween(
+      scenePoint(startPos.x, startPos.y),
+      scenePoint(lastPos.x, lastPos.y),
+    );
+    const delta = ctx.editor.toLocalVector(node, sceneDelta);
     if (this.#componentEdit) {
       this.#componentEdit.preview(() => Mat.Translate(delta.x, delta.y));
       ctx.setState({

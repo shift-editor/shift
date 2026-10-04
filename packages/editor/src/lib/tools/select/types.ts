@@ -5,6 +5,7 @@ import type { CornerHandle } from "./BoundingBox";
 import type { Behavior } from "../core/Behavior";
 import type { Select } from "./Select";
 import type { PositionGuide } from "../../../types/positionEdit";
+import type { LocalBounds } from "../../../types/coordinates";
 
 export interface DragTarget {
   pointIds: PointId[];
@@ -37,7 +38,7 @@ export interface ResizeDrag {
   /** Original selection bounds in scene coordinates, used for pointer measurements. */
   initialBounds: Rect2D;
   /** Original target-position bounds in glyph-local coordinates, used for transform pivots. */
-  localBounds: Rect2D;
+  localBounds: LocalBounds;
   /** Scene-space pivot chosen for the latest resize sample. */
   anchorPoint: Point2D;
   uniformScale: boolean;
@@ -52,6 +53,7 @@ export interface RotateDrag {
   corner: CornerHandle;
   startPos: Point2D;
   lastPos: Point2D;
+  /** Rotation pivot in the node's units; angles are measured around it in the same units. */
   center: Point2D;
   startAngle: number;
   currentAngle: number;

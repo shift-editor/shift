@@ -21,9 +21,9 @@ describe("Select edit ghost", () => {
   });
 
   function startPointDrag(): void {
-    const down = editor.projectSceneToScreen({ x: 200, y: 100 });
-    const threshold = editor.projectSceneToScreen({ x: 210, y: 120 });
-    const next = editor.projectSceneToScreen({ x: 240, y: 160 });
+    const down = editor.localToScreen({ x: 200, y: 100 });
+    const threshold = editor.localToScreen({ x: 210, y: 120 });
+    const next = editor.localToScreen({ x: 240, y: 160 });
 
     editor.pointerDown(down.x, down.y);
     editor.pointerMove(threshold.x, threshold.y);
@@ -40,7 +40,7 @@ describe("Select edit ghost", () => {
 
   it("clears the ghost when the drag commits", async () => {
     startPointDrag();
-    const up = editor.projectSceneToScreen({ x: 240, y: 160 });
+    const up = editor.localToScreen({ x: 240, y: 160 });
     editor.pointerUp(up.x, up.y);
     await editor.settle();
 

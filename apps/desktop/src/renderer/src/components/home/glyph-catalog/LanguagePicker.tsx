@@ -144,7 +144,7 @@ export const LanguagePicker = ({
             <div
               role="group"
               aria-label="Scripts to track"
-              className="scrollbar-themed max-h-80 overflow-y-auto px-2 pb-2"
+              className="max-h-80 overflow-y-auto px-2 pb-2"
             >
               {visibleScripts.length === 0 ? (
                 <div className="px-1 py-4 text-center text-ui text-muted">No scripts found</div>

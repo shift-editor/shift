@@ -247,6 +247,10 @@ export function readEditorRenderTheme(
   theme.glyph.editableFill = readColor("--editor-glyph-editable-fill", theme.glyph.editableFill);
   theme.glyph.stroke = readColor("--editor-glyph-stroke", theme.glyph.stroke);
   theme.component.fill = readColor("--editor-component-fill", theme.component.fill);
+  theme.component.hoverOutline.stroke = readColor(
+    "--editor-component-hover-outline",
+    theme.component.hoverOutline.stroke,
+  );
   theme.controlLine.color = readColor("--editor-control-line-color", theme.controlLine.color);
 
   const handleFill = readColor("--editor-handle-fill", theme.handle.corner.idle.fill);

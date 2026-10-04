@@ -73,7 +73,10 @@ async function liveShapeDraft(editor: EditorDriver) {
     const contour = object.geometry.contour(object.contourId)!;
     return {
       id,
-      bounds: editor.selectionBounds()!,
+      bounds: (() => {
+        const b = editor.selectionBounds()!;
+        return { x: b.min.x, y: b.min.y, width: b.max.x - b.min.x, height: b.max.y - b.min.y };
+      })(),
       points: contour.points.length,
       handles: editor.handlesVisible(contour.id),
     };
@@ -293,10 +296,13 @@ test.describe("Toolbar tools", () => {
       { x: bounds.x + bounds.width * 0.85, y: bounds.y + bounds.height * 0.4 },
       5,
     );
-    const draft = await page.evaluate(() => ({
-      ids: window.shift!.editor.selection.ids,
-      bounds: window.shift!.editor.selectionBounds()!,
-    }));
+    const draft = await page.evaluate(() => {
+      const b = window.shift!.editor.selectionBounds()!;
+      return {
+        ids: window.shift!.editor.selection.ids,
+        bounds: { width: b.max.x - b.min.x, height: b.max.y - b.min.y },
+      };
+    });
     const properties = page.getByRole("complementary", { name: "Glyph properties" });
     const width = properties.getByLabel("Width", { exact: true });
     const height = properties.getByLabel("Height", { exact: true });

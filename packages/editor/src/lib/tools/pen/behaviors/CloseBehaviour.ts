@@ -19,7 +19,7 @@ export class CloseBehavior implements PenBehavior {
     const stroke = PenStroke.active(ctx.tool);
     if (!stroke) return true;
 
-    const pointer = ctx.editor.getPointInNodeSpace(event.coords.scene, stroke.node.position);
+    const pointer = ctx.editor.toLocal(stroke.node, event.coords.scene);
     const { close } = state;
     const withinThreshold = Vec2.dist(close.firstPosition, pointer) <= DRAG_THRESHOLD;
     if (!close.handlePosition && withinThreshold) return true;

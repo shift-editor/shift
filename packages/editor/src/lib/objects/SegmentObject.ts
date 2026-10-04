@@ -1,6 +1,7 @@
-import { Bounds, Vec2, type Rect2D } from "@shift/geo";
 import type { GlyphGeometry } from "@shift/glyph-state";
 import type { ContourId, PointId, SegmentId } from "@shift/types";
+import type { LocalBounds } from "../../types/coordinates";
+import { localBounds } from "../editor/spaces";
 import { track } from "../signals/index";
 import type { GlyphLayer } from "../model/Glyph";
 import type { ShiftObjectOf } from "../../types/object";
@@ -36,13 +37,10 @@ export class SegmentObject implements ShiftObjectOf<"segment"> {
     return this.layer.geometry;
   }
 
-  bounds(): Rect2D | null {
+  bounds(): LocalBounds | null {
     const segment = this.geometry.segment(this.segmentId);
     if (!segment) return null;
 
-    return Bounds.toRect({
-      min: Vec2.add(this.node.position, segment.bounds.min),
-      max: Vec2.add(this.node.position, segment.bounds.max),
-    });
+    return localBounds(segment.bounds);
   }
 }

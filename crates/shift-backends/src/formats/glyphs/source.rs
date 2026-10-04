@@ -179,7 +179,7 @@ fn project_glyphs_glyph(
 
 impl FontImporter for GlyphsFont {
     fn begin_import(&self) -> BackendResult<FontImport> {
-        let (header, stream, report) = super::stream_retained(self.source.clone())
+        let (header, stream, report) = super::stream_retained(&self.path, self.source.clone())
             .map_err(|source| BackendError::load(FontFormat::Glyphs, self.path.clone(), source))?;
         Ok(FontImport::new(
             header,

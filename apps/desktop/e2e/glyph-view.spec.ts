@@ -1,3 +1,4 @@
+import type { LocalPoint } from "@shift/editor/spaces";
 import type { Page } from "@playwright/test";
 import type { GlyphId, GlyphName } from "@shift/types";
 import { expect, workspaceTest as test } from "./fixtures/electronApp";
@@ -47,13 +48,19 @@ async function cameraFrame(page: Page) {
     const canvas = document.querySelector<HTMLCanvasElement>("#interactive-canvas");
     if (!workspace || !canvas) throw new Error("Expected editor canvas");
 
-    const metrics = workspace.font.metricsAtLocation(workspace.editor.externalLocation);
+    const editor = workspace.editor;
+    const node = editor.scene.nodesOfKind("glyph")[0];
+    if (!node) throw new Error("Expected glyph node");
+    const toScreen = (x: number, y: number) =>
+      editor.sceneToScreen(editor.toScene(node, { x, y } as LocalPoint));
+
+    const metrics = workspace.font.metricsAtLocation(editor.externalLocation);
     return {
-      transform: workspace.editor.getCameraTransform(),
-      origin: workspace.editor.projectSceneToScreen({ x: 0, y: 0 }),
-      advance: workspace.editor.projectSceneToScreen({ x: workspace.editor.xAdvance, y: 0 }),
-      ascender: workspace.editor.projectSceneToScreen({ x: 0, y: metrics.ascender }),
-      descender: workspace.editor.projectSceneToScreen({ x: 0, y: metrics.descender }),
+      transform: editor.getCameraTransform(),
+      origin: toScreen(0, 0),
+      advance: toScreen(editor.xAdvance, 0),
+      ascender: toScreen(0, metrics.ascender),
+      descender: toScreen(0, metrics.descender),
       viewport: { width: canvas.clientWidth, height: canvas.clientHeight },
     };
   });

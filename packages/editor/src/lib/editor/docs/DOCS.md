@@ -22,7 +22,7 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 
 **Architecture Invariant:** `Font.loadGlyph()` is the only asynchronous Glyph acquisition API. `Editor.glyphForId()` is the synchronous runtime and NodeDefinition lookup: it returns the canonical complete Glyph when available, returns `null` otherwise, and never starts I/O. Use `Font.recordForId()` when code must distinguish a nonexistent current-font ID from a Glyph that has not been acquired. `LatestRequest` permits only the latest asynchronous catalog request to publish; superseded or invalidated results never replace the requested route glyph.
 
-**Architecture Invariant:** Pointer events carry only `screen` and `scene` coordinates (`Coordinates`). Node-local conversion is not global: rendering enters a node's space via `ctx.canvas.withTranslation(node.position, ...)`, and hit-test paths derive node-local coordinates after identifying the target node.
+**Architecture Invariant:** Pointer events carry only `screen` and `scene` coordinates (`Coordinates`). Node-local conversion is not global: rendering enters a node's space via `ctx.canvas.withTransform(editor.sceneTransform(node), ...)`, and hit-test paths derive node-local coordinates with `Editor.toLocal` after identifying the target node.
 
 **Architecture Invariant:** `EditorInput` owns raw pointer position, modifiers, and primary-button state. `pointerDownCell` becomes true on accepted pointer-down and resets on release, cancellation, or an editor interaction reset. Gesture interpretation remains separate: a click is emitted on release only when the press never crossed the drag threshold.
 
@@ -87,10 +87,10 @@ editor/
 - **`HistoryCapture`** -- One explicit action boundary. `finish()` records its net effects; `cancel()` restores its starting records unless committed workspace effects must remain replayable.
 - **`RecordChange`** -- Stable record identity with complete `before` and `after` values; `null` represents creation or deletion.
 - **`FontStore`** -- Session-owned font state injected privately into Editor for synchronous lookup of already-loaded Glyph objects.
-- **`Camera`** -- Owns zoom/pan/UPM signals, computed affine matrices (`Mat`), and all coordinate projection methods (`projectScreenToScene`, `projectSceneToScreen`, `screenToUpmDistance`).
+- **`Camera`** -- Owns zoom/pan signals, the computed view matrix (`Mat`), and all coordinate projection methods (`screenToScene`, `sceneToScreen`, `screenToSceneDistance`).
 - **`Renderer`** -- Manages four stacked canvas layers (background, scene, markers/WebGL, overlay), their `FrameHandler` instances, and the canvas item layers that draw each pass.
-- **`Canvas`** -- Thin wrapper around `CanvasRenderingContext2D` with `pxToUpm()` conversion and themed drawing primitives. Carries `CameraTransform` and `EditorRenderTheme`.
-- **`CameraTransform`** -- Value object: `{ zoom, panX, panY, centre, upmScale, logicalHeight, layoutHeight, padding, descender }`. Snapshot of viewport state passed to rendering code.
+- **`Canvas`** -- Thin wrapper around `CanvasRenderingContext2D` that tracks the current units-to-screen transform (`withSceneSpace()`/`withTransform()`/`withScreenSpace()`). Geometry is drawn in the current units; widths, dashes and radii are screen pixels applied in screen space, so nothing converts pixels to units. Carries `CameraTransform` and `EditorRenderTheme`.
+- **`CameraTransform`** -- Value object: `{ view, zoom, logicalWidth, logicalHeight }`. Snapshot of viewport state passed to rendering code.
 - **`Selection`** -- Ordered branded-ID selection state. It exposes `stateCell` and unwrapped ID getters; `Editor.selectionBoundsCell` resolves current live objects and their bounds.
 - **`SelectableId`** -- Identity union imported from `@shift/types` and accepted by selection regardless of the object's concrete kind.
 - **`Coordinates`** -- Pair of `{ screen, scene }` for a single pointer position. Node-local coordinates are derived after hit testing identifies the node being acted on.
@@ -113,16 +113,18 @@ A session composition constructs `Editor` with the public `Font` model and its m
 ### Coordinate pipeline
 
 ```
-Screen (canvas pixels, Y-down)
-  -> Camera.projectScreenToScene() [affine matrix inverse]
-Scene (UPM space, Y-up, viewport-relative)
-  -> node-local transform for the hit scene node
-Node-local (origin defined by the placed node)
+Screen (logical canvas pixels, Y-down)
+  -> Camera.screenToScene()  [inverse of view = Translate(pan)·Scale(zoom)]
+Scene (Y-down, infinite, independent of canvas size)
+  -> Editor.toLocal(node, …)  [inverse of sceneTransform(node)]
+Node-local (the node's own units; glyphs are font units, Y-up)
 ```
 
 Tools receive screen and scene coordinates from the pointer pipeline. Scene/node hit testing resolves any node-local coordinates needed by glyph editing tools.
 
-`Camera` computes the UPM-to-screen matrix as: baseline positioning + Y-flip + scale, composed with pan + zoom. The inverse is lazily computed. Both are `ComputedSignal<Mat>` so any dependent computed/effect auto-invalidates.
+`Camera` computes the scene-to-screen view as `Translate(pan)·Scale(zoom)`; it never depends on the canvas size. The inverse is lazily computed. Both are computed signals, so any dependent computed/effect auto-invalidates.
+
+`Editor.sceneTransform(node)` is `frameToScene(node)·unitsTransform(node)`. Frames carry placement only (each node's `position` in its parent's frame); units are the node kind's own content transform (glyphs flip Y) and never apply to children.
 
 ### Four canvas layers
 
@@ -133,7 +135,7 @@ Tools receive screen and scene coordinates from the pointer pipeline. Scene/node
 | handles    | WebGL (regl) | GPU-rendered point handles                                  | `#sceneEffect` (via scene render) |
 | overlay    | Canvas 2D    | Bounding box outline, tool overlays                         | `#overlayEffect`                  |
 
-Background, scene, and overlays are drawn in UPM space (`Canvas.withSceneSpace()` applies the affine transform). Tool-owned controls convert pixel-sized handles and strokes at draw time.
+Background, scene, and overlays start in scene space (`Canvas.withSceneSpace()` applies the view); each node draws inside `withTransform(sceneTransform(node))`, and the marker layer receives the same node-to-screen matrix as one uniform. Pixel-sized chrome (handles, anchors, crosses, icons) draws inside `withScreenSpace((screen, project) => …)`: `project` maps positions and angles from the outer units, and screen-only helpers require the `ScreenCanvas` it hands out, so they cannot be called from node units.
 
 ### Rendering pipeline
 
@@ -141,7 +143,7 @@ Background, scene, and overlays are drawn in UPM space (`Canvas.withSceneSpace()
 
 1. Content pass -- `GlyphNodeDefinition` draws distinct translucent fills for closed root and component contours, stroked outlines, a themed blue outline over the full directly hovered component subtree, and optional debug overlays while editing. Display rendering fills closed contours and strokes open contours; it never implicitly fills an open gap. Registered source and named-instance references are then stroked directly as outline-only locations for that glyph node.
 2. Delegates to `ToolManager.drawScene()` inside each glyph node's transform.
-3. Controls pass -- draws hovered/selected segments, then control lines with frustum culling via `Camera.visibleSceneBounds()`, then handles (GPU marker rendering with CPU fallback), then anchors.
+3. Controls pass -- draws hovered/selected segments, then control lines with frustum culling via `Canvas.visibleBounds()`, then handles (GPU marker rendering with CPU fallback), then anchors.
 
 ### Zoom-to-cursor
 

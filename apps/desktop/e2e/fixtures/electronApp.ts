@@ -1,4 +1,4 @@
-import { test as base, type ElectronApplication, type Page } from "@playwright/test";
+import { test as base, expect, type ElectronApplication, type Page } from "@playwright/test";
 import { createBridge } from "@shift/bridge";
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -269,6 +269,18 @@ export const recoveryTest = test.extend<{ recoveryApp: RecoveryApp }>({
         page = await readyWorkspacePage(app);
         return page;
       },
+      crashAndRecoverWindow: async (persistedText) => {
+        // Chromium writes renderer storage to disk in batches, and a flush only starts the
+        // write. Wait until the text is on disk, as if the user had lingered, so the test
+        // checks reopen behavior rather than racing that write.
+        await app.evaluate(({ session }) => session.defaultSession.flushStorageData());
+        await expect.poll(() => localStorageOnDiskContains(userDataDir, persistedText)).toBe(true);
+        await killApp(app);
+        app = await launch(false);
+        page = await app.firstWindow();
+        await page.waitForLoadState("domcontentloaded");
+        return page;
+      },
       crashAndReopenDocument: async () => {
         await killApp(app);
         app = await launch(true);
@@ -357,4 +369,13 @@ export async function navigateToEditor(page: Page, hexCodepoint: string): Promis
   await new EditorDriver(page).openGlyphByUnicode(hexCodepoint);
 }
 
-export { expect } from "@playwright/test";
+export { expect };
+
+function localStorageOnDiskContains(userDataDir: string, text: string): boolean {
+  const directory = path.join(userDataDir, "Local Storage", "leveldb");
+  if (!fs.existsSync(directory)) return false;
+
+  return fs
+    .readdirSync(directory)
+    .some((file) => fs.readFileSync(path.join(directory, file)).includes(text));
+}

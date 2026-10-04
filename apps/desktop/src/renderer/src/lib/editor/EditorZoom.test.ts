@@ -16,7 +16,7 @@ describe("viewport zoom actions", () => {
       { x: 300, y: 300 },
       { x: 100, y: 300 },
     ]) {
-      await editor.clickGlyphLocal(point.x, point.y);
+      await editor.clickLocal(point.x, point.y);
     }
     editor.escape();
   });
@@ -28,7 +28,7 @@ describe("viewport zoom actions", () => {
     editor.setZoom(0.25);
     editor.zoomToFit();
 
-    expect(editor.projectSceneToScreen(Bounds.center(bounds))).toEqual(editor.camera.centre);
+    expect(editor.localToScreen(Bounds.center(bounds))).toEqual(editor.camera.centre);
     expect(editor.zoom).toBeGreaterThan(0.25);
   });
 
@@ -40,16 +40,15 @@ describe("viewport zoom actions", () => {
     editor.setZoom(0.25);
     editor.zoomToSelection();
 
-    const centre = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
-    expect(editor.projectSceneToScreen(centre)).toEqual(editor.camera.centre);
+    expect(editor.localToScreen(Bounds.center(bounds))).toEqual(editor.camera.centre);
   });
 
   it("sets an absolute zoom level around the viewport centre", () => {
-    const sceneCentre = editor.projectScreenToScene(editor.camera.centre);
+    const sceneCentre = editor.screenToScene(editor.camera.centre);
 
     editor.setZoom(2);
 
     expect(editor.zoom).toBe(2);
-    expect(editor.projectSceneToScreen(sceneCentre)).toEqual(editor.camera.centre);
+    expect(editor.sceneToScreen(sceneCentre)).toEqual(editor.camera.centre);
   });
 });

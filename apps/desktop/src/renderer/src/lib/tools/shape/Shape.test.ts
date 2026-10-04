@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { TestEditor } from "@/testing/TestEditor";
 import { Ellipse } from "@shift/editor/tools";
 import { Rectangle } from "@shift/editor/tools";
-import { Mat, Rect } from "@shift/geo";
+import { Bounds, Mat, Rect } from "@shift/geo";
 import { ContourPath } from "@shift/editor/testing";
 
 // Restored from the WS6 behavioral inventory (git show ef037c6e^); asserts
@@ -45,7 +45,7 @@ describe("Shape tool", () => {
   it("drag then release commits a closed 4-point rectangle contour", async () => {
     const contoursBefore = contours().length;
 
-    await editor.dragScene({
+    await editor.dragLocal({
       down: { x: 10, y: 10 },
       start: { x: 50, y: 30 },
       end: { x: 110, y: 90 },
@@ -60,7 +60,7 @@ describe("Shape tool", () => {
   });
 
   it("selects the committed rectangle and returns to the Select tool", async () => {
-    await editor.dragScene({
+    await editor.dragLocal({
       down: { x: 10, y: 10 },
       start: { x: 50, y: 30 },
       end: { x: 110, y: 90 },
@@ -76,7 +76,7 @@ describe("Shape tool", () => {
       .get("shape")!
       .menuItems!.find((item) => item.id === "ellipse")!
       .onSelect();
-    await editor.dragScene({
+    await editor.dragLocal({
       down: { x: 10, y: 20 },
       start: { x: 80, y: 60 },
       end: { x: 210, y: 120 },
@@ -122,7 +122,7 @@ describe("Shape tool", () => {
   });
 
   it("a committed rectangle is one undo step", async () => {
-    await editor.dragScene({
+    await editor.dragLocal({
       down: { x: 10, y: 10 },
       start: { x: 50, y: 30 },
       end: { x: 110, y: 90 },
@@ -153,7 +153,7 @@ describe.each(["rectangle", "ellipse"] as const)("%s drawing lifecycle", (kind) 
     { x: 210, y: -80 },
     { x: -190, y: -80 },
   ])("creates tight bounds in every drag direction: %j", async (end) => {
-    await editor.dragScene({ down: { x: 10, y: 20 }, start: { x: 80, y: 60 }, end });
+    await editor.dragLocal({ down: { x: 10, y: 20 }, start: { x: 80, y: 60 }, end });
     const bounds = editor.glyphContours[0].bounds;
     expect(bounds?.min).toEqual({ x: Math.min(10, end.x), y: Math.min(20, end.y) });
     expect(bounds?.max).toEqual({ x: Math.max(10, end.x), y: Math.max(20, end.y) });
@@ -175,7 +175,7 @@ describe.each(["rectangle", "ellipse"] as const)("%s drawing lifecycle", (kind) 
     const shape = kind === "ellipse" ? new Ellipse() : new Rectangle();
     const bounds = Rect.fromPoints({ x: 10, y: 20 }, { x: 210, y: 120 });
     const preview = ContourPath.fromPoints(shape.createPoints(bounds), true);
-    await editor.dragScene({
+    await editor.dragLocal({
       down: { x: 10, y: 20 },
       start: { x: 80, y: 60 },
       end: { x: 210, y: 120 },
@@ -188,7 +188,7 @@ describe.each(["rectangle", "ellipse"] as const)("%s drawing lifecycle", (kind) 
   it.each([1, -1])(
     "constrains Shift drags to equal dimensions in direction %i",
     async (direction) => {
-      await editor.dragScene({
+      await editor.dragLocal({
         down: { x: 10, y: 20 },
         start: { x: 80, y: 60 },
         end: { x: 10 + direction * 200, y: 20 + direction * 100 },
@@ -217,9 +217,9 @@ describe.each(["rectangle", "ellipse"] as const)("%s drawing lifecycle", (kind) 
     editor.pointerDown(10, 10).pointerMove(100, 60);
     const contour = editor.glyphContours[0];
     const bounds = editor.selectionBoundsCell.peek()!;
-    expect(bounds.width).toBeGreaterThan(0);
+    expect(Bounds.width(bounds)).toBeGreaterThan(0);
     editor.pointerMove(200, 90);
-    expect(editor.selectionBoundsCell.peek()!.width).toBeGreaterThan(bounds.width);
+    expect(Bounds.width(editor.selectionBoundsCell.peek()!)).toBeGreaterThan(Bounds.width(bounds));
     const points = editor.glyphContours[0].points;
     editor.pointerUp(200, 90);
     await editor.settle();
@@ -231,15 +231,15 @@ describe.each(["rectangle", "ellipse"] as const)("%s drawing lifecycle", (kind) 
   it("updates the live dimensions when Shift changes without pointer movement", () => {
     editor.pointerDown(10, 10).pointerMove(110, 60);
     const bounds = editor.selectionBoundsCell.peek()!;
-    expect(bounds.width).not.toBeCloseTo(bounds.height);
+    expect(Bounds.width(bounds)).not.toBeCloseTo(Bounds.height(bounds));
     editor.keyDown("Shift", { shiftKey: true });
     const constrained = editor.selectionBoundsCell.peek()!;
-    expect(constrained.width).toBeCloseTo(constrained.height);
+    expect(Bounds.width(constrained)).toBeCloseTo(Bounds.height(constrained));
     editor.escape();
   });
 
   it("leaves other contours visible and restores the previous selection on cancellation", async () => {
-    await editor.dragScene({
+    await editor.dragLocal({
       down: { x: 0, y: 0 },
       start: { x: 50, y: 50 },
       end: { x: 100, y: 100 },
@@ -264,7 +264,7 @@ describe.each(["rectangle", "ellipse"] as const)("%s drawing lifecycle", (kind) 
   });
 
   it("rejects a final drag smaller than three glyph units", async () => {
-    await editor.dragScene({
+    await editor.dragLocal({
       down: { x: 10, y: 20 },
       start: { x: 80, y: 60 },
       end: { x: 12, y: 100 },
@@ -274,7 +274,7 @@ describe.each(["rectangle", "ellipse"] as const)("%s drawing lifecycle", (kind) 
   });
 
   it("restores the complete shape through a single undo and redo", async () => {
-    await editor.dragScene({
+    await editor.dragLocal({
       down: { x: 10, y: 20 },
       start: { x: 80, y: 60 },
       end: { x: 210, y: 120 },

@@ -130,6 +130,27 @@ fn short_id_suffix() -> String {
         .collect()
 }
 
+/// Encodes a stable 64-bit FNV-1a hash of `namespace` and `name` in the short-ID alphabet.
+fn derived_id_suffix(namespace: &str, name: &str) -> String {
+    const FNV_OFFSET_BASIS: u64 = 0xcbf2_9ce4_8422_2325;
+    const FNV_PRIME: u64 = 0x0100_0000_01b3;
+
+    let bytes = namespace
+        .bytes()
+        .chain(std::iter::once(0))
+        .chain(name.bytes());
+    let hash = bytes.fold(FNV_OFFSET_BASIS, |hash, byte| {
+        (hash ^ u64::from(byte)).wrapping_mul(FNV_PRIME)
+    });
+
+    (0..SHORT_ID_SUFFIX_LENGTH)
+        .map(|index| {
+            let bits = (hash >> (index * 6)) as u8 & SHORT_ID_ALPHABET_MASK;
+            SHORT_ID_ALPHABET[bits as usize] as char
+        })
+        .collect()
+}
+
 typed_id!(PointId, "point");
 typed_id!(ContourId, "contour");
 typed_id!(ComponentId, "component");
@@ -137,6 +158,20 @@ typed_id!(AnchorId, "anchor");
 typed_id!(GuidelineId, "guideline");
 typed_id!(LayerId, "layer");
 typed_id!(GlyphId, "glyph");
+
+impl GlyphId {
+    /// Derives the ID a glyph read from a font source gets on import.
+    ///
+    /// Every reader of the same source derives the same ID for the same glyph name, so
+    /// glyphs keep their identity when a preview is converted into a document. Glyphs
+    /// created while editing still use [`GlyphId::new`].
+    ///
+    /// `source_key` identifies the source font, such as its canonical path, so same-named
+    /// glyphs from different fonts get different IDs. `name` must be unique within the source.
+    pub fn from_source(source_key: &str, name: &str) -> Self {
+        Self(format!("glyph_{}", derived_id_suffix(source_key, name)))
+    }
+}
 typed_id!(SourceId, "source");
 typed_id!(AxisId, "axis");
 typed_id!(AxisLabelId, "axisLabel");
@@ -219,5 +254,24 @@ mod tests {
         assert_eq!(id.to_string(), "contour_test");
         let parsed: ContourId = "contour_test".parse().unwrap();
         assert_eq!(id, parsed);
+    }
+
+    #[test]
+    fn source_glyph_id_is_stable_for_the_same_source_and_name() {
+        let first = GlyphId::from_source("/fonts/Mutator.ufo", "A");
+        let second = GlyphId::from_source("/fonts/Mutator.ufo", "A");
+
+        assert_eq!(first, second);
+        let suffix = first.as_str().strip_prefix("glyph_").unwrap();
+        assert_eq!(suffix.len(), SHORT_ID_SUFFIX_LENGTH);
+        assert!(suffix.bytes().all(|byte| SHORT_ID_ALPHABET.contains(&byte)));
+    }
+
+    #[test]
+    fn source_glyph_id_differs_across_sources_and_names() {
+        let a = GlyphId::from_source("/fonts/Mutator.ufo", "A");
+
+        assert_ne!(a, GlyphId::from_source("/fonts/Other.ufo", "A"));
+        assert_ne!(a, GlyphId::from_source("/fonts/Mutator.ufo", "B"));
     }
 }

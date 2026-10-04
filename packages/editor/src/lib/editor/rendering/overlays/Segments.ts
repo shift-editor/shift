@@ -32,29 +32,17 @@ export class Segments {
     const theme = canvas.theme.segment;
 
     if (selected.length > 0) {
-      const lw = canvas.pxToUpm(theme.selectedWidthPx);
-      canvas.ctx.save();
-      canvas.ctx.strokeStyle = theme.selectedColor;
-      canvas.ctx.lineWidth = lw;
-      canvas.ctx.setLineDash([]);
       canvas.ctx.beginPath();
       for (const seg of selected) {
         appendSegmentCurve(canvas.ctx, seg);
       }
-      canvas.ctx.stroke();
-      canvas.ctx.restore();
+      canvas.stroke(theme.selectedColor, theme.selectedWidthPx);
     }
 
     if (hovered && !selected.some((s) => s.id === hovered.id)) {
-      const lw = canvas.pxToUpm(theme.hoverWidthPx);
-      canvas.ctx.save();
-      canvas.ctx.strokeStyle = theme.hoverColor;
-      canvas.ctx.lineWidth = lw;
-      canvas.ctx.setLineDash([]);
       canvas.ctx.beginPath();
       appendSegmentCurve(canvas.ctx, hovered);
-      canvas.ctx.stroke();
-      canvas.ctx.restore();
+      canvas.stroke(theme.hoverColor, theme.hoverWidthPx);
     }
   }
 }

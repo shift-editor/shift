@@ -1,4 +1,4 @@
-import type { Point2D } from "@shift/geo";
+import type { ScreenPoint } from "../../../types/coordinates";
 import type { Editor } from "../../editor/Editor";
 import type { ToolSwitchHandler, TemporaryToolOptions } from "../../../types/editor";
 import type { ToolName } from "./createContext";
@@ -43,11 +43,11 @@ export class ToolManager implements ToolSwitchHandler {
   private temporaryOptions: TemporaryToolOptions | null = null;
 
   private pendingPointerMove: {
-    screenPoint: Point2D;
+    screenPoint: ScreenPoint;
     modifiers: Modifiers;
   } | null = null;
   private frameId: number | null = null;
-  private lastScreenPoint: Point2D | null = null;
+  private lastScreenPoint: ScreenPoint | null = null;
 
   constructor(editor: Editor) {
     this.editor = editor;
@@ -148,7 +148,7 @@ export class ToolManager implements ToolSwitchHandler {
     this.#clearOverride();
   }
 
-  handlePointerDown(screenPoint: Point2D, modifiers: Modifiers): void {
+  handlePointerDown(screenPoint: ScreenPoint, modifiers: Modifiers): void {
     const coords = this.editor.fromScreen(screenPoint);
     this.editor.input.setModifiers(modifiers);
     this.editor.input.setPointer(coords);
@@ -158,7 +158,7 @@ export class ToolManager implements ToolSwitchHandler {
   }
 
   handlePointerMove(
-    screenPoint: Point2D,
+    screenPoint: ScreenPoint,
     modifiers: Modifiers,
     options?: { force?: boolean },
   ): void {
@@ -218,7 +218,7 @@ export class ToolManager implements ToolSwitchHandler {
     this.dispatchEvents(events);
   }
 
-  handlePointerUp(screenPoint: Point2D, modifiers: Modifiers = DEFAULT_MODIFIERS): void {
+  handlePointerUp(screenPoint: ScreenPoint, modifiers: Modifiers = DEFAULT_MODIFIERS): void {
     this.flushPointerMoves();
 
     const coords = this.editor.fromScreen(screenPoint);

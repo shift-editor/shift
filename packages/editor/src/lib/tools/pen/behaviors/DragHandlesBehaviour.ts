@@ -94,7 +94,7 @@ export class HandleBehavior implements PenBehavior {
     const start = stroke?.activeEndpoint;
     if (!stroke || !start) return null;
 
-    const handlePosition = pen.editor.getPointInNodeSpace(event.coords.scene, stroke.node.position);
+    const handlePosition = pen.editor.toLocal(stroke.node, event.coords.scene);
     if (Vec2.dist(state.anchorPosition, handlePosition) <= DRAG_THRESHOLD) return null;
 
     const curve = {
@@ -137,7 +137,7 @@ export class HandleBehavior implements PenBehavior {
     const stroke = PenStroke.active(pen);
     if (!stroke) return state;
 
-    const handlePosition = pen.editor.getPointInNodeSpace(event.coords.scene, stroke.node.position);
+    const handlePosition = pen.editor.toLocal(stroke.node, event.coords.scene);
     const curve = { ...state.curve, handlePosition };
 
     return { ...state, curve, shiftKey: event.shiftKey };

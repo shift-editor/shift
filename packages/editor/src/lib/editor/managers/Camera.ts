@@ -1,37 +1,61 @@
 import { clamp } from "../../utils/utils";
 import { Mat, Vec2, type Point2D, type Rect2D } from "@shift/geo";
 import {
+  batch,
   signal,
   computed,
   type WritableSignal,
   type Signal,
   type ComputedSignal,
 } from "../../signals/signal";
+import type {
+  SceneBounds,
+  ScenePoint,
+  SceneVector,
+  ScreenPoint,
+  ScreenVector,
+  SpaceTransform,
+} from "../../../types/coordinates";
 import { SCREEN_HIT_RADIUS } from "../rendering/constants";
+import {
+  applyLinear,
+  applyTransform,
+  invertTransform,
+  screenPoint,
+  spaceTransform,
+  transformBounds,
+} from "../spaces";
 
-/** Lower bound for zoom level. Prevents the glyph from becoming invisible. */
+/** Smallest zoom, in screen pixels per scene unit. */
 const MIN_ZOOM = 0.01;
-/** Upper bound for zoom level. Prevents extreme magnification artifacts. */
+/** Largest zoom, in screen pixels per scene unit. */
 const MAX_ZOOM = 32;
-/** Preferred padding in screen pixels around the glyph drawing area. */
-const DEFAULT_PADDING = 300;
-/** Keep the zoom-1 glyph scale stable as the viewport gets vertically constrained. */
-const MIN_GLYPH_VIEW_HEIGHT = 200;
+/** Fraction of the canvas that fitted bounds fill along their tighter axis. */
+const FIT_FILL = 0.85;
 
 /**
- * Snapshot of the camera values needed to project UPM-space drawing into screen space.
+ * Snapshot of the camera values one frame draws with.
+ *
+ * @remarks
+ * Correct for one frame only; it goes stale as soon as the pan or zoom changes.
  */
 export interface CameraTransform {
+  /** Scene → screen, in logical pixels. */
+  view: SpaceTransform<"scene", "screen">;
+  /** Screen pixels per scene unit. */
   zoom: number;
-  panX: number;
-  panY: number;
-  centre: Point2D;
+  /** Canvas width in logical pixels. */
+  logicalWidth: number;
+  /** Canvas height in logical pixels. */
   logicalHeight: number;
-  layoutHeight: number;
-  padding: number;
-  descender: number;
 }
 
+/**
+ * Scene-space rectangle covered by the viewport, reused across frames.
+ *
+ * @remarks
+ * Mutable so per-frame culling allocates nothing. Edges are inclusive.
+ */
 export class VisibleSceneBounds {
   constructor(
     public minX: number,
@@ -40,6 +64,7 @@ export class VisibleSceneBounds {
     public maxY: number,
   ) {}
 
+  /** Overwrites all four edges in place and returns this object. */
   set(minX: number, maxX: number, minY: number, maxY: number): this {
     this.minX = minX;
     this.maxX = maxX;
@@ -48,6 +73,7 @@ export class VisibleSceneBounds {
     return this;
   }
 
+  /** Returns whether the scene point lies inside the rectangle or on an edge. */
   contains(point: Point2D): boolean {
     return (
       point.x >= this.minX && point.x <= this.maxX && point.y >= this.minY && point.y <= this.maxY
@@ -56,58 +82,44 @@ export class VisibleSceneBounds {
 }
 
 /**
- * Owns the UPM-to-screen and screen-to-UPM coordinate transformations.
+ * Maps between scene space and screen space for one canvas viewport.
  *
- * The glyph coordinate system (UPM space) has Y-up with the origin at the
- * baseline; screen space has Y-down with the origin at the top-left corner of
- * the canvas. Camera maintains two lazily-computed affine matrices
- * that map between these spaces, incorporating zoom, pan, DPR, descender
- * offset, and padding.
+ * @remarks
+ * The camera's state is `pan` and `zoom`. `pan` is the screen position, in
+ * logical pixels, at which the scene origin is drawn; `zoom` is screen pixels
+ * per scene unit. Screen space is Y-down with its origin at the canvas
+ * top-left. Scene space is Y-down too, so the view has no flip.
  *
- * Tools, hit-testing, and rendering all go through this camera to convert
- * positions, distances, and radii between the two coordinate systems.
+ * The view depends only on `pan` and `zoom`, never on the canvas size, so
+ * resizing the canvas leaves every scene point where it was on screen.
  */
 export class Camera {
-  readonly #zoom: WritableSignal<number>;
-  readonly #panX: WritableSignal<number>;
-  readonly #panY: WritableSignal<number>;
-  readonly #upm: WritableSignal<number>;
-  readonly #descender: WritableSignal<number>;
+  readonly #zoom = signal(1, { name: "camera.zoom" });
+  readonly #pan = signal<Point2D>(
+    { x: 0, y: 0 },
+    { name: "camera.pan", equals: (a, b) => a.x === b.x && a.y === b.y },
+  );
 
   #canvasRect: Rect2D;
-  #layoutHeight: number;
-  #initialFitBounds: Rect2D | null | undefined;
+  #initialFitBounds: SceneBounds | null;
 
   readonly #visibleSceneBounds = new VisibleSceneBounds(0, 0, 0, 0);
 
-  #mouseX: number;
-  #mouseY: number;
   #pendingClientX: number;
   #pendingClientY: number;
 
-  readonly #screenMousePosition: WritableSignal<Point2D>;
-  readonly #upmToScreenMatrix: ComputedSignal<Mat>;
-  readonly #screenToUpmMatrix: ComputedSignal<Mat>;
+  readonly #screenMousePosition: WritableSignal<ScreenPoint>;
+  readonly #view: ComputedSignal<SpaceTransform<"scene", "screen">>;
+  readonly #inverseView: ComputedSignal<SpaceTransform<"screen", "scene">>;
 
   constructor() {
-    this.#zoom = signal(1, { name: "camera.zoom" });
-    this.#panX = signal(0, { name: "camera.panX" });
-    this.#panY = signal(0, { name: "camera.panY" });
-    this.#upm = signal(1000, { name: "camera.upm" });
-    this.#descender = signal(-200, { name: "camera.descender" });
-    this.#layoutHeight = 0;
-    this.#initialFitBounds = undefined;
+    this.#initialFitBounds = null;
 
-    this.#mouseX = 0;
-    this.#mouseY = 0;
     this.#pendingClientX = 0;
     this.#pendingClientY = 0;
-    this.#screenMousePosition = signal<Point2D>(
-      { x: 0, y: 0 },
-      {
-        name: "camera.screenMousePosition",
-      },
-    );
+    this.#screenMousePosition = signal<ScreenPoint>(screenPoint(0, 0), {
+      name: "camera.screenMousePosition",
+    });
 
     this.#canvasRect = {
       x: 0,
@@ -120,292 +132,325 @@ export class Camera {
       bottom: 0,
     };
 
-    this.#upmToScreenMatrix = computed(
+    this.#view = computed(
       () => {
-        this.#upm.value;
-        const padding = this.padding;
-        const baselineY = this.layoutHeight - padding - this.#descender.value;
+        const pan = this.#pan.value;
         const zoom = this.#zoom.value;
 
-        const upmTransform = Mat.Identity().translate(padding, baselineY).scale(1, -1);
-
-        const panX = this.#panX.value + this.centre.x * (1 - zoom);
-        const panY = this.#panY.value + this.centre.y * (1 - zoom);
-        const viewTransform = Mat.Identity().translate(panX, panY).scale(zoom, zoom);
-
-        return Mat.Compose(viewTransform, upmTransform);
+        const view = Mat.Compose(Mat.Translate(pan.x, pan.y), Mat.Scale(zoom, zoom));
+        return spaceTransform(view);
       },
-      { name: "camera.upmToScreenMatrix" },
+      { name: "camera.view" },
     );
 
-    this.#screenToUpmMatrix = computed(
-      () => {
-        return Mat.Inverse(this.#upmToScreenMatrix.value);
-      },
-      { name: "camera.screenToUpmMatrix" },
-    );
+    this.#inverseView = computed(() => invertTransform(this.#view.value), {
+      name: "camera.inverseView",
+    });
   }
 
+  /**
+   * Records the canvas's page position and logical size.
+   *
+   * @remarks
+   * Does not change the view. While initial framing is active, refits it to the
+   * new size.
+   *
+   * @param rect - canvas bounds in page CSS pixels; `left` and `top` convert client
+   * pointer coordinates into canvas pixels.
+   * @see {@link fitInitialBounds}
+   */
   setRect(rect: Rect2D) {
-    const shouldPreserveProjection = this.logicalWidth > 0 && this.logicalHeight > 0;
-    const before = shouldPreserveProjection ? this.projectScreenToScene(0, 0) : null;
-
     this.#canvasRect = rect;
-    if (this.#layoutHeight <= 0 && rect.height > 0) {
-      this.#layoutHeight = rect.height;
-    }
-    this.#upmToScreenMatrix.invalidate();
-    this.#screenToUpmMatrix.invalidate();
 
-    if (this.#initialFitBounds) {
-      this.fitToBounds(this.#initialFitBounds);
-      return;
-    }
-
-    if (!before) return;
-
-    const after = this.projectScreenToScene(0, 0);
-    const zoom = this.zoomLevel;
-    this.#panX.update((panX) => panX - (before.x - after.x) * zoom);
-    this.#panY.update((panY) => panY + (before.y - after.y) * zoom);
+    if (this.#initialFitBounds) this.fitToBounds(this.#initialFitBounds);
   }
 
-  /** @knipclassignore */
-  get upm(): number {
-    return this.#upm.peek();
-  }
-
-  /** @knipclassignore */
-  set upm(value: number) {
-    this.#upm.set(value);
-  }
-
-  /** @knipclassignore */
-  get descender(): number {
-    return this.#descender.peek();
-  }
-
-  /** @knipclassignore */
-  set descender(value: number) {
-    this.#descender.set(value);
-  }
-
-  get padding(): number {
-    const maxPadding = (this.layoutHeight - MIN_GLYPH_VIEW_HEIGHT) / 2;
-    return Math.max(0, Math.min(DEFAULT_PADDING, maxPadding));
-  }
-
+  /** Canvas width in logical pixels; 0 before the first {@link setRect}. */
   get logicalWidth(): number {
     return this.#canvasRect.width;
   }
 
+  /** Canvas height in logical pixels; 0 before the first {@link setRect}. */
   get logicalHeight(): number {
     return this.#canvasRect.height;
   }
 
-  get layoutHeight(): number {
-    return this.#layoutHeight;
-  }
-
+  /** Reactive zoom, in screen pixels per scene unit. */
   public get zoomCell(): Signal<number> {
     return this.#zoom;
   }
 
+  /** Current zoom, in screen pixels per scene unit, read without tracking. */
   get zoomLevel(): number {
     return this.#zoom.peek();
   }
 
-  get centre(): Point2D {
-    return { x: this.logicalWidth / 2, y: this.logicalHeight / 2 };
+  /** Canvas centre in logical pixels; the anchor for zooms that have no pointer. */
+  get centre(): ScreenPoint {
+    return screenPoint(this.logicalWidth / 2, this.logicalHeight / 2);
   }
 
-  get pan(): Point2D {
-    return { x: this.#panX.peek(), y: this.#panY.peek() };
-  }
-
-  get panX(): number {
-    return this.#panX.peek();
-  }
-
-  get panY(): number {
-    return this.#panY.peek();
+  /** Reactive screen position of the scene origin, in logical pixels. */
+  get panCell(): Signal<Point2D> {
+    return this.#pan;
   }
 
   /**
-   * Track the camera inputs used to build UPM-space render transforms.
+   * Current screen position of the scene origin, read without tracking.
    *
-   * Call this only inside a render dependency boundary. It intentionally reads
-   * the source cells, rather than a derived transform object, so debug output
-   * shows the exact camera input that caused a redraw.
+   * @see {@link setPan}
+   */
+  get pan(): Point2D {
+    return this.#pan.peek();
+  }
+
+  /**
+   * Reactive scene-to-screen matrix.
+   *
+   * @remarks
+   * Depends only on `pan` and `zoom`. Use {@link screenToScene} for the
+   * reverse direction rather than inverting this per call.
+   */
+  get viewCell(): Signal<SpaceTransform<"scene", "screen">> {
+    return this.#view;
+  }
+
+  /**
+   * Subscribes the current reactive scope to every camera input.
+   *
+   * @remarks
+   * Reads the source signals rather than the derived matrix so that signal
+   * debugging names the exact input (pan or zoom) that caused a redraw.
    */
   trackViewportTransform(): void {
     this.#zoom.value;
-    this.#panX.value;
-    this.#panY.value;
-    this.#upm.value;
-    this.#descender.value;
+    this.#pan.value;
   }
 
-  /** Hit-test radius in UPM units. Grows as you zoom out so handles remain clickable. */
+  /**
+   * Pointer hit radius in scene units at the current zoom.
+   *
+   * @remarks
+   * Constant on screen, so it grows in scene units as the camera zooms out.
+   */
   get hitRadius(): number {
-    return this.screenToUpmDistance(SCREEN_HIT_RADIUS);
+    return this.screenToSceneDistance(SCREEN_HIT_RADIUS);
   }
 
-  get mousePosition(): Point2D {
-    return this.projectScreenToScene(this.#mouseX, this.#mouseY);
+  /**
+   * Last published pointer position in scene space, read without tracking.
+   *
+   * @see {@link flushMousePosition}
+   */
+  get mousePosition(): ScenePoint {
+    return this.screenToScene(this.#screenMousePosition.peek());
   }
 
-  get screenMousePositionCell(): Signal<Point2D> {
+  /** Reactive pointer position in canvas logical pixels; changes on {@link flushMousePosition}. */
+  get screenMousePositionCell(): Signal<ScreenPoint> {
     return this.#screenMousePosition;
   }
 
-  get screenMousePosition(): Point2D {
+  /** Last published pointer position in canvas logical pixels, read without tracking. */
+  get screenMousePosition(): ScreenPoint {
     return this.#screenMousePosition.peek();
   }
 
-  getScreenMousePosition(): Point2D {
+  /** Last published pointer position in canvas logical pixels, read without tracking. */
+  getScreenMousePosition(): ScreenPoint {
     return this.#screenMousePosition.peek();
   }
 
   /**
-   * Buffers a raw client mouse position. Call {@link flushMousePosition} to
-   * commit it to the screen-space signal. This two-phase update avoids
-   * redundant UPM projections during high-frequency mouse events.
+   * Buffers a pointer position without publishing it.
+   *
+   * @remarks
+   * Call {@link flushMousePosition} to publish. Buffering lets high-frequency
+   * pointer events update the reactive position once per frame.
+   *
+   * @param clientX - horizontal position in viewport client pixels.
+   * @param clientY - vertical position in viewport client pixels.
    */
   updateMousePosition(clientX: number, clientY: number): void {
     this.#pendingClientX = clientX;
     this.#pendingClientY = clientY;
   }
 
+  /** Publishes the buffered pointer position in canvas logical pixels, floored to whole pixels. */
   flushMousePosition(): void {
-    this.#mouseX = Math.floor(this.#pendingClientX - this.#canvasRect.left);
-    this.#mouseY = Math.floor(this.#pendingClientY - this.#canvasRect.top);
-    this.#screenMousePosition.set({ x: this.#mouseX, y: this.#mouseY });
-  }
-
-  /** Screen pixels (Y-down, origin top-left) to scene (UPM, Y-up, origin baseline). */
-  public projectScreenToScene(x: number, y: number): Point2D {
-    return Mat.applyToPoint(this.#screenToUpmMatrix.peek(), { x, y });
-  }
-
-  /** Scene (UPM, Y-up, origin baseline) to screen pixels (Y-down, origin top-left). */
-  public projectSceneToScreen(x: number, y: number): Point2D {
-    return Mat.applyToPoint(this.#upmToScreenMatrix.peek(), { x, y });
-  }
-
-  setPan(x: number, y: number): void {
-    this.#initialFitBounds = null;
-    this.#panX.set(x);
-    this.#panY.set(y);
+    this.#screenMousePosition.set(
+      screenPoint(
+        Math.floor(this.#pendingClientX - this.#canvasRect.left),
+        Math.floor(this.#pendingClientY - this.#canvasRect.top),
+      ),
+    );
   }
 
   /**
-   * Zooms toward or away from a screen-space point, adjusting pan so the
-   * point under the cursor stays fixed. Used for scroll-wheel zoom.
+   * Converts a canvas point to scene space, read without tracking.
+   *
+   * @param screen - logical pixels from the canvas's top-left, Y-down.
+   * @returns a new scene-space point.
    */
-  public zoomToPoint(screenX: number, screenY: number, zoomDelta: number): void {
+  public screenToScene(screen: ScreenPoint): ScenePoint {
+    return applyTransform(this.#inverseView.peek(), screen);
+  }
+
+  /**
+   * Converts a scene point to canvas logical pixels, read without tracking.
+   *
+   * @param scene - a scene-space point.
+   * @returns a new point in logical pixels from the canvas top-left, Y-down.
+   */
+  public sceneToScreen(scene: ScenePoint): ScreenPoint {
+    return applyTransform(this.#view.peek(), scene);
+  }
+
+  /**
+   * Converts a canvas displacement to scene units, read without tracking.
+   *
+   * @remarks
+   * Applies only the view's scale; a displacement is unaffected by pan.
+   *
+   * @param screen - a displacement in logical pixels.
+   */
+  public screenToSceneVector(screen: ScreenVector): SceneVector {
+    return applyLinear(this.#inverseView.peek(), screen);
+  }
+
+  /**
+   * Moves the camera so the scene origin is drawn at the given screen position.
+   *
+   * @remarks
+   * Ends initial framing.
+   *
+   * @param pan - screen position of the scene origin, in logical pixels.
+   */
+  setPan(pan: Point2D): void {
     this.#initialFitBounds = null;
-    const before = this.projectScreenToScene(screenX, screenY);
-
-    const newZoom = clamp(this.#zoom.peek() * zoomDelta, MIN_ZOOM, MAX_ZOOM);
-    this.#zoom.set(newZoom);
-
-    const after = this.projectScreenToScene(screenX, screenY);
-
-    const deltaX = (before.x - after.x) * newZoom;
-    const deltaY = (before.y - after.y) * newZoom;
-
-    this.#panX.update((panX) => panX - deltaX);
-    this.#panY.update((panY) => panY + deltaY);
+    this.#pan.set(pan);
   }
 
+  /**
+   * Scales the zoom while keeping the scene point under a screen position fixed.
+   *
+   * @remarks
+   * The resulting zoom is clamped to the supported range. Ends initial framing.
+   *
+   * @param anchor - the screen position that stays over the same scene point.
+   * @param zoomDelta - multiplier applied to the current zoom; above 1 zooms in.
+   */
+  public zoomToPoint(anchor: ScreenPoint, factor: number): void {
+    this.#initialFitBounds = null;
+    const clampedZoom = clamp(factor * this.zoomLevel, MIN_ZOOM, MAX_ZOOM);
+    const before = applyTransform(this.#inverseView.peek(), anchor);
+
+    batch(() => {
+      this.#zoom.set(clampedZoom);
+
+      const afterScreen = applyTransform(this.#view.peek(), before);
+      const correction = Vec2.sub(anchor, afterScreen);
+
+      this.#pan.update((pan) => Vec2.add(pan, correction));
+    });
+  }
+
+  /** Zooms in by 25% around the canvas centre. */
   zoomIn(): void {
-    this.zoomToPoint(this.centre.x, this.centre.y, 1.25);
+    this.zoomToPoint(this.centre, 1.25);
   }
 
+  /** Zooms out around the canvas centre, undoing one {@link zoomIn}. */
   zoomOut(): void {
-    this.zoomToPoint(this.centre.x, this.centre.y, 0.8);
+    this.zoomToPoint(this.centre, 0.8);
   }
 
-  /** Sets an absolute zoom level around the viewport centre. */
+  /**
+   * Sets an absolute zoom around the canvas centre.
+   *
+   * @remarks
+   * Ignores non-finite and non-positive values; otherwise clamps like
+   * {@link zoomToPoint}.
+   *
+   * @param zoom - target screen pixels per scene unit.
+   */
   setZoom(zoom: number): void {
     if (!Number.isFinite(zoom) || zoom <= 0) return;
 
-    this.zoomToPoint(this.centre.x, this.centre.y, zoom / this.zoomLevel);
+    this.zoomToPoint(this.centre, zoom / this.zoomLevel);
   }
 
   /**
-   * Starts initial framing that follows canvas resizes until the user moves the camera.
+   * Frames bounds and keeps refitting them on resize until the camera is moved.
    *
-   * @param bounds - Scene-space bounds used for the first viewport frame.
+   * @remarks
+   * Panning, zooming, or fitting other bounds ends initial framing.
+   *
+   * @param bounds - scene-space rectangle to frame; copied, so later changes to
+   * the caller's object have no effect.
    */
-  fitInitialBounds(bounds: Rect2D): void {
+  fitInitialBounds(bounds: SceneBounds): void {
     this.#initialFitBounds = { ...bounds };
     this.fitToBounds(this.#initialFitBounds);
   }
 
   /**
-   * Fits scene-space bounds into the current canvas as a one-time camera operation.
+   * Zooms and pans once so the bounds fill most of the canvas, centred.
    *
-   * @param bounds - Scene-space rectangle to centre and fit.
+   * @remarks
+   * Does nothing for empty or non-finite bounds, or before the canvas has a size.
+   * Ends initial framing unless these are the initial bounds.
+   *
+   * @param bounds - scene-space rectangle to frame.
    */
-  fitToBounds(bounds: Rect2D): void {
+  fitToBounds(bounds: SceneBounds): void {
     if (bounds !== this.#initialFitBounds) this.#initialFitBounds = null;
 
-    if (
-      !Number.isFinite(bounds.width) ||
-      !Number.isFinite(bounds.height) ||
-      bounds.width <= 0 ||
-      bounds.height <= 0 ||
-      this.logicalWidth <= 0 ||
-      this.logicalHeight <= 0
-    )
-      return;
+    const width = bounds.max.x - bounds.min.x;
+    const height = bounds.max.y - bounds.min.y;
+    const boundsHaveArea =
+      Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0;
+    const viewportHasSize = this.logicalWidth > 0 && this.logicalHeight > 0;
+    if (!boundsHaveArea || !viewportHasSize) return;
 
-    const scale = clamp(
-      Math.min(this.logicalWidth / bounds.width, this.logicalHeight / bounds.height) * 0.85,
+    const zoom = clamp(
+      FIT_FILL * Math.min(this.logicalWidth / width, this.logicalHeight / height),
       MIN_ZOOM,
       MAX_ZOOM,
     );
-    const boundsCentre = {
-      x: bounds.x + bounds.width / 2,
-      y: bounds.y + bounds.height / 2,
-    };
 
-    this.#zoom.set(scale);
+    const boundsCentre = { x: bounds.min.x + width / 2, y: bounds.min.y + height / 2 };
+    const pan = Vec2.sub(this.centre, Vec2.scale(boundsCentre, zoom));
 
-    const boundsCentreScreen = this.projectSceneToScreen(boundsCentre.x, boundsCentre.y);
-    const movement = Vec2.sub(this.centre, boundsCentreScreen);
-
-    this.#panX.update((panX) => panX + movement.x);
-    this.#panY.update((panY) => panY + movement.y);
+    batch(() => {
+      this.#zoom.set(zoom);
+      this.#pan.set(pan);
+    });
   }
 
-  public screenToUpmDistance(screenDistance: number): number {
+  /**
+   * Converts a length in screen pixels to scene units at the current zoom.
+   *
+   * @param screenDistance - length in logical pixels.
+   */
+  public screenToSceneDistance(screenDistance: number): number {
     return screenDistance / this.zoomLevel;
   }
 
-  /** Returns a reusable bounds object for the current camera frame. Do not retain it. */
+  /**
+   * Returns the scene-space rectangle visible in the canvas, grown by a margin.
+   *
+   * @param cullMarginPx - extra logical pixels on every side, so content just
+   * off-screen is still included.
+   * @returns a shared object that the next call overwrites; copy it to keep it.
+   */
   visibleSceneBounds(cullMarginPx: number): VisibleSceneBounds {
-    const logicalWidth = this.logicalWidth;
-    const logicalHeight = this.logicalHeight;
-    const centreX = logicalWidth / 2;
-    const centreY = logicalHeight / 2;
-    const zoom = this.zoomLevel;
-    const viewTranslateX = this.panX + centreX * (1 - zoom);
-    const viewTranslateY = this.panY + centreY * (1 - zoom);
-    const baselineY = this.layoutHeight - this.padding - this.descender;
-    const zoomedScale = zoom;
-    const minScreenX = -cullMarginPx;
-    const maxScreenX = logicalWidth + cullMarginPx;
-    const minScreenY = -cullMarginPx;
-    const maxScreenY = logicalHeight + cullMarginPx;
+    const canvas = {
+      min: screenPoint(-cullMarginPx, -cullMarginPx),
+      max: screenPoint(this.logicalWidth + cullMarginPx, this.logicalHeight + cullMarginPx),
+    };
+    const { min, max } = transformBounds(this.#inverseView.peek(), canvas);
 
-    return this.#visibleSceneBounds.set(
-      (minScreenX - viewTranslateX - this.padding * zoom) / zoomedScale,
-      (maxScreenX - viewTranslateX - this.padding * zoom) / zoomedScale,
-      (baselineY * zoom + viewTranslateY - maxScreenY) / zoomedScale,
-      (baselineY * zoom + viewTranslateY - minScreenY) / zoomedScale,
-    );
+    return this.#visibleSceneBounds.set(min.x, max.x, min.y, max.y);
   }
 }

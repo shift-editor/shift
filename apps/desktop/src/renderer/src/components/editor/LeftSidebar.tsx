@@ -28,7 +28,7 @@ export const LeftSidebar = () => (
         <ObjectsPanel />
       </TabsPanel>
       <TabsPanel value="variations" keepMounted className="min-h-0 flex-1 overflow-hidden">
-        <div className="scrollbar-themed h-full overflow-y-auto px-1 pb-2">
+        <div className="h-full overflow-y-auto px-1 pb-2">
           <VariationPanel />
         </div>
       </TabsPanel>

@@ -1,3 +1,4 @@
+import type { LocalPoint } from "@shift/editor/spaces";
 import { execFile } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -29,7 +30,11 @@ import {
 import { EditorDriver } from "./fixtures/EditorDriver";
 import { createAuthoredDocument } from "./fixtures/fontSource";
 import { exportedGlyphNames, savedGlyphNames } from "./fixtures/savedDocument";
-import { clickFirstCatalogGlyph } from "./fixtures/appLocators";
+import {
+  clickFirstCatalogGlyph,
+  openFirstCatalogGlyph,
+  waitForEditorReady,
+} from "./fixtures/appLocators";
 
 const execFileAsync = promisify(execFile);
 
@@ -312,14 +317,9 @@ test.describe("opening a font through the application shell", () => {
         segment,
         {
           x: view.xAdvanceCell.peek() / 2,
-          y: metrics.descender - editor.camera.screenToUpmDistance(15),
+          y: metrics.descender - editor.camera.screenToSceneDistance(15),
         },
-      ].map((point) =>
-        editor.projectSceneToScreen({
-          x: point.x + node.position.x,
-          y: point.y + node.position.y,
-        }),
-      );
+      ].map((point) => editor.sceneToScreen(editor.toScene(node, point as LocalPoint)));
     });
     const bounds = await canvas.boundingBox();
     if (!bounds) throw new Error("Expected canvas bounds");
@@ -488,20 +488,20 @@ for (const { format, sourcePath, sourceRoot } of [
 }
 
 convertiblePreviewTest(
-  "Save As replaces a preview glyph route with the new workspace Home",
+  "Save As keeps a preview glyph route in the new workspace",
   async ({ electronApp, page, saveShiftPath, testRoot }) => {
     const workspacePage = await openSelectedPreview(page, electronApp);
-    await clickFirstCatalogGlyph(workspacePage);
-    await workspacePage.waitForURL(/#\/editor\//);
-    await expect(workspacePage.locator("#interactive-canvas")).toBeVisible();
+    const glyphId = await openFirstCatalogGlyph(workspacePage);
 
+    // Conversion reloads the window into the new workspace.
+    const reloaded = workspacePage.waitForEvent("load");
     await runCommand(workspacePage, electronApp, "file.saveAs");
-    await waitForWorkspaceReady(workspacePage);
-
-    await expect(workspacePage).toHaveURL(/#\/home$/);
+    await reloaded;
     await expect
       .poll(() => workspacePage.evaluate(() => window.shiftSession?.mode))
       .toBe("workspace");
+
+    await waitForEditorReady(workspacePage, glyphId);
     expect(savedGlyphNames(saveShiftPath, testRoot)).toContain("A");
   },
 );

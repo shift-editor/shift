@@ -93,6 +93,7 @@
   --editor-handle-overlay-anchor: rgba(255, 255, 255, 0.75);
   --editor-snap-color: #ff3b30;
   --editor-segment-hover-color: #1886d7;
+  --editor-component-hover-outline: #1886d7;
   --editor-segment-selected-color: #1886d7;
   --editor-preview-color: #1886d7;
   --editor-variation-outline-color: rgba(12, 146, 244, 0.45);
@@ -127,6 +128,11 @@
     0 1px 3px -1px var(--color-shadow-key);
 }
 
+/* Unstyled text follows the theme instead of the browser's color-scheme default. */
+body {
+  color: var(--color-primary);
+}
+
 /* Hide scrollbar while preserving scroll behavior */
 @utility scrollbar-hidden {
   scrollbar-width: none;
@@ -136,22 +142,14 @@
   }
 }
 
-/* Keep scrollbars legible without introducing a host-defined track color. */
-@utility scrollbar-themed {
-  scrollbar-color: var(--color-control-muted) var(--color-surface);
-
-  &::-webkit-scrollbar {
-    width: 10px;
+/* Overlay-style scrollbars everywhere: thumbs only show while their element is scrolling (see trackScrollActivity). */
+@layer base {
+  * {
+    scrollbar-color: transparent transparent;
   }
 
-  &::-webkit-scrollbar-track {
-    background: var(--color-surface);
-  }
-
-  &::-webkit-scrollbar-thumb {
-    border: 2px solid var(--color-surface);
-    border-radius: 9999px;
-    background: var(--color-control-muted);
+  [data-scrolling] {
+    scrollbar-color: var(--color-control-muted) transparent;
   }
 }
 

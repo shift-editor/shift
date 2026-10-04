@@ -38,6 +38,10 @@
       "types": "./src/testing/index.ts",
       "import": "./src/testing/index.ts"
     },
+    "./spaces": {
+      "types": "./src/spaces.ts",
+      "import": "./src/spaces.ts"
+    },
     "./text": {
       "types": "./src/text.ts",
       "import": "./src/text.ts"

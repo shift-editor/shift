@@ -86,7 +86,8 @@ export type PenBehavior = Behavior<PenState, Pen>;
 export interface PenOverlayProps {
   readonly state: PenState;
   readonly pointer: Coordinates | null;
-  readonly nodePosition: Point2D | null;
+  /** Glyph node the pen draws into; converts between its units and the scene. */
+  readonly node: GlyphNode | null;
   readonly lastOnCurvePoint: Point2D | null;
   /** The active endpoint's handle waiting for the next segment; cleared when the stroke ends. */
   readonly pendingHandle: Point2D | null;

@@ -22,8 +22,8 @@ describe("Select translates segment selections in 90-degree directions", () => {
   it.each([false, true])(
     "snaps a single line with preselection=%s, including its auto-selected point IDs",
     async (selected) => {
-      if (selected) await editor.clickGlyphLocal(150, 100);
-      await editor.dragScene({
+      if (selected) await editor.clickLocal(150, 100);
+      await editor.dragLocal({
         down: { x: 150, y: 100 },
         start: { x: 210, y: 180 },
         end: { x: 210, y: 180 },
@@ -39,10 +39,10 @@ describe("Select translates segment selections in 90-degree directions", () => {
     const layer = editor.requireGlyphLayer();
     layer.closeContour(layer.contours[0]!.id);
     await editor.settle();
-    await editor.clickGlyphLocal(150, 100);
-    await editor.clickGlyphLocal(200, 200, { shiftKey: true });
+    await editor.clickLocal(150, 100);
+    await editor.clickLocal(200, 200, { shiftKey: true });
     expect(editor.selection.ids).toHaveLength(2);
-    await editor.dragScene({
+    await editor.dragLocal({
       down: { x: 200, y: 200 },
       start: { x: 260, y: 280 },
       end: { x: 260, y: 280 },
@@ -54,9 +54,9 @@ describe("Select translates segment selections in 90-degree directions", () => {
   });
 
   it("uses the segment group when dragging inside its combined bounds", async () => {
-    await editor.clickGlyphLocal(150, 100);
-    await editor.clickGlyphLocal(300, 150, { shiftKey: true });
-    await editor.dragScene({
+    await editor.clickLocal(150, 100);
+    await editor.clickLocal(300, 150, { shiftKey: true });
+    await editor.dragLocal({
       down: { x: 200, y: 200 },
       start: { x: 280, y: 260 },
       end: { x: 280, y: 260 },
@@ -68,10 +68,10 @@ describe("Select translates segment selections in 90-degree directions", () => {
   });
 
   it("omits guides for axis-aligned segment snapping", async () => {
-    await editor.clickGlyphLocal(150, 100);
-    await editor.clickGlyphLocal(300, 150, { shiftKey: true });
-    const down = editor.projectSceneToScreen({ x: 200, y: 200 });
-    const end = editor.projectSceneToScreen({ x: 280, y: 260 });
+    await editor.clickLocal(150, 100);
+    await editor.clickLocal(300, 150, { shiftKey: true });
+    const down = editor.localToScreen({ x: 200, y: 200 });
+    const end = editor.localToScreen({ x: 280, y: 260 });
     editor.pointerDown(down.x, down.y).pointerMove(end.x, end.y, { shiftKey: true });
     editor.pointerMove(end.x, end.y, { shiftKey: true });
     expect(editor.toolIf("select")?.state).toMatchObject({
@@ -88,8 +88,8 @@ describe("Select translates segment selections in 90-degree directions", () => {
     await editor.settle();
     const cubic = layer.contours[0]!.segments()[0]!.asCubic()!;
     const before = cubic.controlStart.y;
-    await editor.clickGlyphLocal(200, 100);
-    await editor.dragScene({
+    await editor.clickLocal(200, 100);
+    await editor.dragLocal({
       down: { x: 200, y: 100 },
       start: { x: 260, y: 180 },
       end: { x: 260, y: 180 },
@@ -108,7 +108,7 @@ describe("Select translates segment selections in 90-degree directions", () => {
     layer.closeContour(layer.contours[0]!.id);
     await editor.settle();
     editor.selection.select([layer.contours[0]!.segments()[2]!.id, middleId]);
-    await editor.dragScene({
+    await editor.dragLocal({
       down: { x: 200, y: 200 },
       start: { x: 260, y: 280 },
       end: { x: 260, y: 280 },
@@ -125,7 +125,7 @@ describe("Select translates segment selections in 90-degree directions", () => {
     layer.closeContour(layer.contours[0]!.id);
     await editor.settle();
     editor.selection.select([layer.contours[0]!.segments()[2]!.id, anchorId]);
-    await editor.dragScene({
+    await editor.dragLocal({
       down: { x: 200, y: 200 },
       start: { x: 260, y: 280 },
       end: { x: 260, y: 280 },
@@ -136,10 +136,10 @@ describe("Select translates segment selections in 90-degree directions", () => {
   });
 
   it("resizes a selection edge even when a selected segment occupies that edge", async () => {
-    await editor.clickGlyphLocal(150, 100);
-    await editor.clickGlyphLocal(300, 150, { shiftKey: true });
-    const down = editor.projectSceneToScreen({ x: 150, y: 100 });
-    const end = editor.projectSceneToScreen({ x: 210, y: 180 });
+    await editor.clickLocal(150, 100);
+    await editor.clickLocal(300, 150, { shiftKey: true });
+    const down = editor.localToScreen({ x: 150, y: 100 });
+    const end = editor.localToScreen({ x: 210, y: 180 });
     editor.pointerDown(down.x, down.y).pointerMove(end.x, end.y, { shiftKey: true });
     expect(editor.toolIf("select")?.state.type).toBe("resizing");
     editor.pointerUp(end.x, end.y);
@@ -150,10 +150,10 @@ describe("Select translates segment selections in 90-degree directions", () => {
   });
 
   it("resizes from a selection corner even when a selected segment endpoint occupies it", async () => {
-    await editor.clickGlyphLocal(150, 100);
-    await editor.clickGlyphLocal(300, 150, { shiftKey: true });
-    const down = editor.projectSceneToScreen({ x: 100, y: 100 });
-    const end = editor.projectSceneToScreen({ x: 130, y: 140 });
+    await editor.clickLocal(150, 100);
+    await editor.clickLocal(300, 150, { shiftKey: true });
+    const down = editor.localToScreen({ x: 100, y: 100 });
+    const end = editor.localToScreen({ x: 130, y: 140 });
     editor.pointerDown(down.x, down.y).pointerMove(end.x, end.y, { shiftKey: true });
     expect(editor.toolIf("select")?.state.type).toBe("resizing");
     editor.escape();
@@ -161,7 +161,7 @@ describe("Select translates segment selections in 90-degree directions", () => {
   });
 
   it("leaves segment movement unchanged without Shift", async () => {
-    await editor.dragScene({
+    await editor.dragLocal({
       down: { x: 150, y: 100 },
       start: { x: 210, y: 180 },
       end: { x: 210, y: 180 },
@@ -171,8 +171,8 @@ describe("Select translates segment selections in 90-degree directions", () => {
   });
 
   it("recomputes from the frozen base as Shift toggles and Escape cancels", () => {
-    const down = editor.projectSceneToScreen({ x: 150, y: 100 });
-    const end = editor.projectSceneToScreen({ x: 210, y: 180 });
+    const down = editor.localToScreen({ x: 150, y: 100 });
+    const end = editor.localToScreen({ x: 210, y: 180 });
     editor.pointerDown(down.x, down.y).pointerMove(end.x, end.y, { shiftKey: true });
     expect(editor.pointPosition(firstId)).toEqual({ x: 100, y: 200 });
     editor.pointerMove(end.x, end.y);
@@ -186,9 +186,9 @@ describe("Select translates segment selections in 90-degree directions", () => {
   });
 
   it("preserves the final queued Shift sample through release, undo, and redo", async () => {
-    const down = editor.projectSceneToScreen({ x: 150, y: 100 });
-    const start = editor.projectSceneToScreen({ x: 180, y: 140 });
-    const end = editor.projectSceneToScreen({ x: 210, y: 180 });
+    const down = editor.localToScreen({ x: 150, y: 100 });
+    const start = editor.localToScreen({ x: 180, y: 140 });
+    const end = editor.localToScreen({ x: 210, y: 180 });
     editor.pointerDown(down.x, down.y).pointerMove(start.x, start.y, { shiftKey: true });
     editor.toolManager.handlePointerMove(end, { shiftKey: true, altKey: false });
     editor.pointerUp(end.x, end.y);

@@ -1,33 +1,32 @@
 import { NodeDefinition } from "./NodeDefinition";
 import { OutlineRenderer } from "../editor/rendering/Outline";
-import type { NodePoint } from "../../types/coordinates";
+import type { LocalBounds, LocalPoint } from "../../types/coordinates";
+import { localBounds } from "../editor/spaces";
 import type { TextRunNode } from "../../types/node";
 import type { RenderContext, RenderPass } from "../../types/rendering";
 import type { PointerTarget } from "../../types/target";
-import { Rect, type Rect2D } from "@shift/geo";
+import { Mat, Rect, type Rect2D } from "@shift/geo";
 
 export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
   readonly kind: TextRunNode["kind"] = "textRun";
 
   readonly #outline = new OutlineRenderer();
 
-  bounds(node: TextRunNode): Rect2D | null {
+  unitsTransform(_node: TextRunNode): Mat {
+    return Mat.Scale(1, -1);
+  }
+
+  bounds(node: TextRunNode): LocalBounds | null {
     const local = this.#localBounds(node);
     if (!local) return null;
 
-    return {
-      x: local.x + node.position.x,
-      y: local.y + node.position.y,
-      width: local.width,
-      height: local.height,
-      left: local.left + node.position.x,
-      top: local.top + node.position.y,
-      right: local.right + node.position.x,
-      bottom: local.bottom + node.position.y,
-    };
+    return localBounds({
+      min: { x: local.left, y: local.top },
+      max: { x: local.right, y: local.bottom },
+    });
   }
 
-  hit(node: TextRunNode, point: NodePoint): PointerTarget | null {
+  hit(node: TextRunNode, point: LocalPoint): PointerTarget | null {
     const bounds = this.#localBounds(node);
     if (!bounds || !Rect.containsPoint(bounds, point)) return null;
 

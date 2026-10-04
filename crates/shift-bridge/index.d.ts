@@ -48,6 +48,10 @@ export declare class Bridge {
   discardWorkspaceChanges(): NapiDocumentState
   getMetadata(): NapiFontMetadata
   getMetrics(): NapiFontMetrics
+  /**
+   * Lists glyph records whose layers are only those on [`Font::masters`], so every listed
+   * layer's source is one [`Self::get_sources`] returns.
+   */
   getGlyphs(): Array<NapiGlyphRecord>
   /**
    * Applies one intent set as a single atomic workspace apply: every kind

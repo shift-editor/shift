@@ -16,12 +16,7 @@ export class ControlLines {
     isLineVisible?: (from: Point, to: Point, contourId: ContourId) => boolean,
   ): void {
     const { color, widthPx } = canvas.theme.controlLine;
-    const lw = canvas.pxToUpm(widthPx);
 
-    canvas.ctx.save();
-    canvas.ctx.strokeStyle = color;
-    canvas.ctx.lineWidth = lw;
-    canvas.ctx.setLineDash([]);
     canvas.ctx.beginPath();
     let hasLines = false;
 
@@ -47,9 +42,6 @@ export class ControlLines {
       }
     }
 
-    if (hasLines) {
-      canvas.ctx.stroke();
-    }
-    canvas.ctx.restore();
+    if (hasLines) canvas.stroke(color, widthPx);
   }
 }

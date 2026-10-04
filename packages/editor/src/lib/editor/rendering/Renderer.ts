@@ -169,7 +169,7 @@ export class Renderer {
       markers: this.#markerLayer,
     };
 
-    canvas.withSceneSpace({ x: 0, y: 0 }, () => {
+    canvas.withSceneSpace(() => {
       this.#backgroundLayer.draw(ctx);
     });
   }
@@ -185,7 +185,7 @@ export class Renderer {
 
     this.#markerLayer.begin();
     try {
-      canvas.withSceneSpace({ x: 0, y: 0 }, () => {
+      canvas.withSceneSpace(() => {
         this.#sceneLayer.draw(ctx);
       });
     } finally {
@@ -197,7 +197,7 @@ export class Renderer {
     const canvas = this.#getCanvas("overlay");
     if (!canvas) return;
 
-    canvas.withSceneSpace({ x: 0, y: 0 }, () => {
+    canvas.withSceneSpace(() => {
       this.#overlayLayer.draw(canvas);
     });
   }

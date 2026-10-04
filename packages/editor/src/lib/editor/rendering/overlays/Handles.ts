@@ -4,7 +4,6 @@ import type { GlyphContour } from "../../../model/ComponentGlyph";
 import type { Hover } from "../../Hover";
 import type { Selection } from "../../Selection";
 import type { HandleState } from "../../../../types/graphics";
-import type { GlyphNode } from "../../../../types/node";
 import type { RenderContext } from "../../../../types/rendering";
 import { HandleItems } from "./handles/HandleItems";
 import { MarkerHandleRenderer } from "./handles/MarkerHandleRenderer";
@@ -21,9 +20,14 @@ export class Handles {
   readonly #markers = new MarkerHandleRenderer();
   readonly #canvas = new CanvasHandleRenderer();
 
+  /**
+   * Draws point handles for the given contours in the canvas's current units.
+   *
+   * @remarks
+   * Handles outside the visible canvas are culled.
+   */
   draw(
     ctx: RenderContext,
-    node: GlyphNode,
     contours: readonly GlyphContour[],
     selection: Selection,
     hover: Hover,
@@ -41,7 +45,15 @@ export class Handles {
       ctx.canvas.visibleBounds(handleCullPaddingPx(ctx.canvas.theme)),
     );
 
-    if (this.#markers.draw(ctx.markers, list, ctx.canvas.camera, node.position, ctx.canvas.theme))
+    if (
+      this.#markers.draw(
+        ctx.markers,
+        list,
+        ctx.canvas.camera,
+        ctx.canvas.transform,
+        ctx.canvas.theme,
+      )
+    )
       return;
 
     this.#canvas.draw(ctx.canvas, list.items);

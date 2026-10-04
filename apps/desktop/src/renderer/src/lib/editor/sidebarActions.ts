@@ -1,6 +1,6 @@
 import type { Editor } from "@shift/editor";
 import type { AlignmentType } from "@shift/editor/transform";
-import { Mat } from "@shift/geo";
+import { Bounds, Mat } from "@shift/geo";
 import type { ContourId } from "@shift/types";
 
 export function alignSelection(editor: Editor, alignment: AlignmentType): boolean {
@@ -40,10 +40,11 @@ export function flipSelection(editor: Editor, axis: "horizontal" | "vertical"): 
   const bounds = editor.selectionBounds();
   if (!selection || !bounds || pointIds.length === 0) return false;
 
-  selection.layer.reflect(pointIds, axis === "horizontal" ? "vertical" : "horizontal", {
-    x: bounds.x + bounds.width / 2,
-    y: bounds.y + bounds.height / 2,
-  });
+  selection.layer.reflect(
+    pointIds,
+    axis === "horizontal" ? "vertical" : "horizontal",
+    Bounds.center(bounds),
+  );
   return true;
 }
 

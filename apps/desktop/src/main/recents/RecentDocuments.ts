@@ -25,6 +25,8 @@ type RecentEntry = {
   documentId: string | null;
   openedAt: number;
   thumbnail?: Thumbnail;
+  /** Set while the document is open; still set at launch only if Shift did not quit normally. */
+  open?: true;
 };
 
 /**
@@ -116,8 +118,12 @@ export class RecentDocuments {
   record(visit: RecentDocumentVisit, openedAt: number = Date.now()): void {
     const previous = this.#entries.find((entry) => sameDocument(entry, visit));
     const remaining = this.#entries.filter((entry) => !sameDocument(entry, visit));
-    const recorded: RecentEntry = { path: visit.path, documentId: visit.documentId, openedAt };
-    if (previous?.thumbnail) recorded.thumbnail = previous.thumbnail;
+    const recorded: RecentEntry = {
+      ...previous,
+      path: visit.path,
+      documentId: visit.documentId,
+      openedAt,
+    };
 
     this.#entries = [recorded, ...remaining].slice(0, RECENT_DOCUMENTS_LIMIT);
     this.#changed();
@@ -162,6 +168,42 @@ export class RecentDocuments {
       .sort((a, b) => b.openedAt - a.openedAt)
       .slice(0, RECENT_DOCUMENTS_LIMIT);
     this.#changed();
+  }
+
+  /**
+   * Records whether a recent file is open, so files open when Shift stops unexpectedly
+   * reopen on the next launch.
+   *
+   * @param visit - File whose session opened or ended; ignored when it is not in recents.
+   * @param open - Whether the file is now open.
+   */
+  setOpen(visit: RecentDocumentVisit, open: boolean): void {
+    const entry = this.#entries.find((candidate) => sameDocument(candidate, visit));
+    if (!entry || (entry.open === true) === open) return;
+
+    const { open: _open, ...closed } = entry;
+    const updated: RecentEntry = open ? { ...closed, open: true } : closed;
+    this.#entries = this.#entries.map((candidate) => (candidate === entry ? updated : candidate));
+    writeEntries(this.#filePath, this.#entries);
+  }
+
+  /** Records that no file is open, as after a normal quit. */
+  clearOpen(): void {
+    if (!this.#entries.some((entry) => entry.open)) return;
+
+    this.#entries = this.#entries.map(({ open: _open, ...entry }) => entry);
+    writeEntries(this.#filePath, this.#entries);
+  }
+
+  /**
+   * Returns the files still open when Shift last stopped and clears every mark.
+   *
+   * @returns open files, newest first; empty after a normal quit.
+   */
+  takeOpen(): RecentDocumentVisit[] {
+    const open = this.#entries.filter((entry) => entry.open);
+    this.clearOpen();
+    return open.map((entry) => ({ path: entry.path, documentId: entry.documentId }));
   }
 
   /** Removes every entry. */
@@ -252,11 +294,13 @@ function isRecentEntry(value: unknown): value is RecentEntry {
   const entry = value as Record<string, unknown>;
   const documentIdValid = entry.documentId === null || typeof entry.documentId === "string";
   const thumbnailValid = entry.thumbnail === undefined || isThumbnail(entry.thumbnail);
+  const openValid = entry.open === undefined || entry.open === true;
   return (
     typeof entry.path === "string" &&
     typeof entry.openedAt === "number" &&
     documentIdValid &&
-    thumbnailValid
+    thumbnailValid &&
+    openValid
   );
 }
 

@@ -1,3 +1,4 @@
+import { scenePoint } from "@shift/editor/spaces";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -65,7 +66,7 @@ describe("Editor scene bootstrap", () => {
 
     expect(leftNode.glyphId).toBe(record.id);
     expect(rightNode.glyphId).toBe(record.id);
-    expect(editor.getPointInNodeSpace({ x: 710, y: 20 }, { x: 700, y: 0 })).toEqual({
+    expect(editor.toLocal(rightNode, scenePoint(710, -20))).toEqual({
       x: 10,
       y: 20,
     });
@@ -80,9 +81,9 @@ describe("Editor scene bootstrap", () => {
 
   it("resolves authored points through the ownership index and keeps their bounds live", async () => {
     editor.selectTool("pen");
-    await editor.clickGlyphLocal(0, 0);
-    await editor.clickGlyphLocal(100, 0);
-    await editor.clickGlyphLocal(100, 100);
+    await editor.clickLocal(0, 0);
+    await editor.clickLocal(100, 0);
+    await editor.clickLocal(100, 100);
 
     const layer = editor.requireGlyphLayer();
     const point = layer.allPoints[0];
@@ -93,9 +94,9 @@ describe("Editor scene bootstrap", () => {
 
     expect(object.layer).toBe(layer);
 
-    let x = object.bounds()?.x ?? Number.NaN;
+    let x = object.bounds()?.min.x ?? Number.NaN;
     const subscription = effect(() => {
-      x = object.bounds()?.x ?? Number.NaN;
+      x = object.bounds()?.min.x ?? Number.NaN;
     });
 
     layer.movePoints([point.id], { x: 25, y: 0 });
@@ -107,9 +108,9 @@ describe("Editor scene bootstrap", () => {
 
   it("creates and selects a source by materializing the opened glyph", async () => {
     editor.selectTool("pen");
-    await editor.clickGlyphLocal(0, 0);
-    await editor.clickGlyphLocal(100, 0);
-    await editor.clickGlyphLocal(100, 100);
+    await editor.clickLocal(0, 0);
+    await editor.clickLocal(100, 0);
+    await editor.clickLocal(100, 100);
 
     const node = editor.glyphNode;
     if (!node) throw new Error("Expected opened glyph node");
@@ -227,8 +228,8 @@ describe("Editor scene bootstrap", () => {
 
   it("materializes the opened glyph when selecting a sparse source", async () => {
     editor.selectTool("pen");
-    await editor.clickGlyphLocal(0, 0);
-    await editor.clickGlyphLocal(100, 0);
+    await editor.clickLocal(0, 0);
+    await editor.clickLocal(100, 0);
 
     const node = editor.glyphNode;
     if (!node) throw new Error("Expected opened glyph node");

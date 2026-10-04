@@ -89,9 +89,9 @@ describe("KeyboardRouter", () => {
       canvasActive = false;
       editor.setCameraRect({ width: 1000, height: 800 } as Rect2D);
       editor.selectTool("pen");
-      await editor.clickGlyphLocal(100, 100);
-      await editor.clickGlyphLocal(300, 100);
-      await editor.clickGlyphLocal(300, 300);
+      await editor.clickLocal(100, 100);
+      await editor.clickLocal(300, 100);
+      await editor.clickLocal(300, 300);
       editor.escape();
       editor.setZoom(0.25);
 
@@ -107,9 +107,9 @@ describe("KeyboardRouter", () => {
       canvasActive = false;
       editor.setCameraRect({ width: 1000, height: 800 } as Rect2D);
       editor.selectTool("pen");
-      await editor.clickGlyphLocal(100, 100);
-      await editor.clickGlyphLocal(300, 100);
-      await editor.clickGlyphLocal(300, 300);
+      await editor.clickLocal(100, 100);
+      await editor.clickLocal(300, 100);
+      await editor.clickLocal(300, 300);
       editor.escape();
       editor.selectAll();
       editor.setZoom(0.25);
@@ -346,13 +346,13 @@ describe("KeyboardRouter", () => {
       { key: "s", code: "KeyS", area: 6_500 },
     ])("Alt+Shift+$key applies a Boolean edit", async ({ key, code, area }) => {
       editor.selectTool("shape");
-      await editor.dragScene({
+      await editor.dragLocal({
         down: { x: 10, y: 10 },
         start: { x: 20, y: 20 },
         end: { x: 100, y: 100 },
       });
       editor.selectTool("shape");
-      await editor.dragScene({
+      await editor.dragLocal({
         down: { x: 60, y: 60 },
         start: { x: 70, y: 70 },
         end: { x: 150, y: 150 },

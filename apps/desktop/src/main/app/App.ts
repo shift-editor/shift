@@ -39,6 +39,8 @@ import { SandboxRuntimeProcess } from "../sandbox/SandboxRuntimeProcess";
 const SLUG_ATLAS_PROFILING_ENABLED =
   process.env.SHIFT_PROFILE_SLUG_ATLAS !== undefined &&
   process.env.SHIFT_PROFILE_SLUG_ATLAS !== "0";
+/** Loads a reopened document on Home and has the renderer return it to its last glyph. */
+const RESUME_ROUTE = "/home?resume";
 const LAUNCHER_MIN_WIDTH = 880;
 const LAUNCHER_WIDTH = 960;
 const LAUNCHER_HEIGHT = 720;
@@ -69,6 +71,8 @@ export class App {
   #workspaces: WorkspaceManager;
   #documentsRoot: string | null = null;
   #recents: RecentDocuments | null = null;
+  /** The recents entry each document session was last recorded under. */
+  #documentVisits = new WeakMap<FontSessionHost, RecentDocumentVisit>();
   /** Launchers a font open is replacing; they stop receiving recents so no half-ready card flashes. */
   #replacedLaunchers = new WeakSet<Window>();
   #pendingOpenPaths: string[] = [];
@@ -135,7 +139,11 @@ export class App {
       nativeDialogs: this.#nativeDialogs,
       onSessionCrashed: (session) => this.#handleDocumentCrash(session, null),
       onDocumentVisited: (visit, session) => {
+        const previous = this.#documentVisits.get(session);
+        if (previous && previous.path !== visit.path) this.#recents?.setOpen(previous, false);
+        this.#documentVisits.set(session, visit);
         this.#recents?.record(visit);
+        this.#recents?.setOpen(visit, true);
         if (this.#recents?.needsSpecimen(visit)) void this.#buildSpecimen(visit, session);
       },
       onDocumentSaved: (visit, session) => void this.#buildSpecimen(visit, session),
@@ -221,12 +229,11 @@ export class App {
       await this.#startSandbox();
       await this.#startMcp();
 
+      // Taken before recovery, which marks the documents it restores open again.
+      const openAtLastExit = this.#recents.takeOpen();
       const restoredSessions = await this.#workspaces.restoreRecoveries();
-      for (const session of restoredSessions) {
-        const window = this.#createWindow(false, undefined, true);
-        this.#workspaces.attachWindow(session.workspaceId, window);
-        this.#loadWorkspace(window);
-      }
+      for (const session of restoredSessions) this.#showResumedWorkspace(session);
+      await this.#reopenDocuments(openAtLastExit);
 
       this.#appIcon.install();
       this.#applicationMenu.install();
@@ -241,9 +248,12 @@ export class App {
         default:
           try {
             const session = await this.#workspaces.openPath(process.env.SHIFT_E2E_FONT_PATH);
-            const window = this.#createWindow(false);
-            this.#workspaces.attachWindow(session.workspaceId, window);
-            this.#loadWorkspace(window);
+            // A document Shift reopened on launch already has its window.
+            if (session.windows.size === 0) {
+              const window = this.#createWindow(false);
+              this.#workspaces.attachWindow(session.workspaceId, window);
+              this.#loadWorkspace(window);
+            }
           } catch (error) {
             this.#log.error("failed to open E2E workspace", error);
           }
@@ -264,6 +274,8 @@ export class App {
       this.#log.info("will quit: disposing app services");
       void this.#stopMcp();
       this.#stopSandbox();
+      // Only an ordinary quit forgets open documents; an update restart reopens them.
+      if (this.#lifecycle.quitReason === "quit") this.#recents?.clearOpen();
       for (const session of this.#workspaces.list()) {
         this.#workspaces.unregister(session.workspaceId);
       }
@@ -300,9 +312,7 @@ export class App {
         const session = this.#workspaces.getForBrowserWindow(window.window);
         this.#workspaces.detachWindow(window);
         window.agent.dispose();
-        if (session?.windows.size === 0) {
-          this.#workspaces.unregister(session.workspaceId);
-        }
+        if (session?.windows.size === 0) this.#endSession(session);
         this.#windows.remove(window);
         this.#applicationMenu.updateCommandStates();
       },
@@ -399,7 +409,7 @@ export class App {
     const bounds = owner.window.isDestroyed() ? undefined : owner.window.getBounds();
     const window = this.#createWindow(false, bounds);
     this.#workspaces.attachWindow(reopened.workspaceId, window);
-    this.#loadWorkspace(window);
+    this.#loadWorkspace(window, RESUME_ROUTE);
 
     for (const staleWindow of staleWindows) {
       if (!staleWindow.window.isDestroyed()) staleWindow.window.destroy();
@@ -411,8 +421,37 @@ export class App {
     return session?.allWindows() ?? [];
   }
 
-  #loadWorkspace(window: Window): void {
-    this.#loadRenderer(window, "/home");
+  #loadWorkspace(window: Window, route: string = "/home"): void {
+    this.#loadRenderer(window, route);
+  }
+
+  /** Shows a workspace reopened after an interruption, asking the renderer to resume its view. */
+  #showResumedWorkspace(session: FontSessionHost): void {
+    const window = this.#createWindow(false, undefined, true);
+    this.#workspaces.attachWindow(session.workspaceId, window);
+    this.#loadWorkspace(window, RESUME_ROUTE);
+  }
+
+  /** Ends a session whose last window closed; while quitting, its document stays marked open. */
+  #endSession(session: FontSessionHost): void {
+    this.#workspaces.unregister(session.workspaceId);
+    if (this.#lifecycle.quitReason !== null || this.#lifecycle.terminating) return;
+
+    const visit = this.#documentVisits.get(session);
+    if (visit) this.#recents?.setOpen(visit, false);
+  }
+
+  /** Reopens documents that were open when Shift last stopped without a normal quit. */
+  async #reopenDocuments(visits: readonly RecentDocumentVisit[]): Promise<void> {
+    for (const visit of visits) {
+      try {
+        const session = await this.#workspaces.openPath(visit.path);
+        // Recovery may already have restored this document.
+        if (session.windows.size === 0) this.#showResumedWorkspace(session);
+      } catch (error) {
+        this.#log.warn("failed to reopen document", { path: visit.path, error });
+      }
+    }
   }
 
   #loadRenderer(window: Window, hash: string): void {
@@ -572,14 +611,10 @@ export class App {
       },
       document: {
         create: async () => {
-          if (!window) return;
-
-          await this.#createWorkspaceFromWindow(window);
+          await this.#createWorkspaceFromWindow(window ?? null);
         },
         open: async () => {
-          if (!window) return;
-
-          await this.#openWorkspaceFromWindow(window);
+          await this.#openWorkspaceFromWindow(window ?? null);
         },
         canSave: () =>
           document !== null ||
@@ -652,7 +687,7 @@ export class App {
 
         const authored = await this.#workspaces.createDocumentFromPreview(sourcePath, documentPath);
         if (this.#workspaces.getForBrowserWindow(window.window) !== preview) {
-          this.#workspaces.unregister(authored.workspaceId);
+          this.#endSession(authored);
           return;
         }
 
@@ -661,11 +696,11 @@ export class App {
           this.#workspaces.attachWindow(authored.workspaceId, window);
         } catch (error) {
           this.#workspaces.attachWindow(preview.workspaceId, window);
-          this.#workspaces.unregister(authored.workspaceId);
+          this.#endSession(authored);
           throw error;
         }
 
-        if (preview.windows.size === 0) this.#workspaces.unregister(preview.workspaceId);
+        if (preview.windows.size === 0) this.#endSession(preview);
         this.#applicationMenu.updateCommandStates();
         window.window.webContents.reload();
       } catch (error) {
@@ -728,7 +763,7 @@ export class App {
     }
   }
 
-  async #createWorkspaceFromWindow(opener: Window): Promise<void> {
+  async #createWorkspaceFromWindow(opener: Window | null): Promise<void> {
     try {
       const session = await this.#workspaces.createUntitled();
       this.#openWorkspaceWindow(opener, session);
@@ -738,7 +773,7 @@ export class App {
     }
   }
 
-  async #openWorkspaceFromWindow(opener: Window): Promise<void> {
+  async #openWorkspaceFromWindow(opener: Window | null): Promise<void> {
     let openPath: string | null;
     try {
       openPath = await this.#nativeDialogs.openFont(opener);
@@ -757,19 +792,21 @@ export class App {
    *
    * @returns whether a workspace window now shows the file.
    */
-  async #openPathFromWindow(opener: Window, sourcePath: string): Promise<boolean> {
-    const openerIsLauncher = this.#workspaces.getForBrowserWindow(opener.window) === null;
-    if (openerIsLauncher) this.#replacedLaunchers.add(opener);
+  async #openPathFromWindow(opener: Window | null, sourcePath: string): Promise<boolean> {
+    const openerIsLauncher = opener
+      ? this.#workspaces.getForBrowserWindow(opener.window) === null
+      : false;
+    if (openerIsLauncher && opener) this.#replacedLaunchers.add(opener);
 
     try {
       const session = await this.#workspaces.openPath(sourcePath);
-      if (this.#focusExistingWorkspaceWindow(opener, session)) return true;
+      if (opener && this.#focusExistingWorkspaceWindow(opener, session)) return true;
 
       this.#openWorkspaceWindow(opener, session);
       return true;
     } catch (error) {
       this.#log.warn("open document failed", error);
-      if (openerIsLauncher) this.#restoreLauncherRecents(opener);
+      if (openerIsLauncher && opener) this.#restoreLauncherRecents(opener);
       await this.#nativeDialogs.showOpenFailure(opener, this.applicationName);
       return false;
     }
@@ -819,27 +856,31 @@ export class App {
     }
   }
 
-  #focusExistingWorkspaceWindow(opener: Window, session: FontSessionHost): boolean {
+  #focusExistingWorkspaceWindow(opener: Window | null, session: FontSessionHost): boolean {
     const existingWindow = session.activeWindow();
     if (!existingWindow) return false;
 
     existingWindow.focus();
-    if (this.#workspaces.getForBrowserWindow(opener.window) === null) {
+    if (opener && this.#workspaces.getForBrowserWindow(opener.window) === null) {
       this.#closeReplacedLauncher(opener);
     }
     return true;
   }
 
-  #openWorkspaceWindow(opener: Window, session: FontSessionHost): void {
-    const closeOpener = this.#workspaces.getForBrowserWindow(opener.window) === null;
+  #openWorkspaceWindow(opener: Window | null, session: FontSessionHost): void {
+    const closeOpener = opener
+      ? this.#workspaces.getForBrowserWindow(opener.window) === null
+      : false;
 
-    const bounds = screen.getDisplayMatching(opener.window.getBounds()).workArea;
+    const bounds = opener
+      ? screen.getDisplayMatching(opener.window.getBounds()).workArea
+      : screen.getPrimaryDisplay().workArea;
     const workspaceWindow = this.#createWindow(false, bounds);
 
     this.#workspaces.attachWindow(session.workspaceId, workspaceWindow);
     this.#loadWorkspace(workspaceWindow);
 
-    if (closeOpener) this.#closeReplacedLauncher(opener);
+    if (closeOpener && opener) this.#closeReplacedLauncher(opener);
   }
 
   #closeReplacedLauncher(launcher: Window): void {

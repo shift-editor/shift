@@ -6,8 +6,9 @@ import {
   type GlyphCategoryCatalog,
   type LanguageCatalog,
 } from "@shift/glyph-info";
-import { asGlyphId, type GlyphId, type GlyphName } from "@shift/types";
+import type { GlyphName } from "@shift/types";
 import { effect, signal, useSignalState } from "@shift/editor/signals";
+import { editorPath, glyphIdFromPath } from "@/lib/editorRoute";
 import { useFontSession } from "@/workspace/WorkspaceContext";
 import { getGlyphInfo } from "@/workspace/glyphInfo";
 import { useListSelection } from "@/hooks/useListSelection";
@@ -39,6 +40,7 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
   const canAuthor = session.mode === "workspace";
   const workspace = session.workspace;
 
+  const fontLoaded = useSignalState(session.editor.font.loadedCell);
   const availableGlyphs = useSignalState(catalog.glyphsCell);
   const storedLanguageIds = useSignalState(
     workspace ? workspace.editor.font.languageIdsCell : NO_LANGUAGE_IDS,
@@ -151,7 +153,7 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
       if (result.status === "stale") return;
 
       setOpenedGlyph(result.result);
-      navigateRef.current(`/editor/${encodeURIComponent(glyph.id)}`);
+      navigateRef.current(editorPath(glyph.id));
     },
     [catalog],
   );
@@ -167,6 +169,8 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
       }
       return;
     }
+    // A window can load straight onto an editor route; judge the glyph only once the font is in.
+    if (!fontLoaded) return;
     if (!availableGlyphs.some((glyph) => glyph.id === sourceGlyphId)) {
       openRequestRef.current.invalidate();
       openedGlyphKeyRef.current = null;
@@ -195,7 +199,7 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
     return () => {
       active = false;
     };
-  }, [availableGlyphs, catalog, routeLocation.pathname]);
+  }, [availableGlyphs, catalog, fontLoaded, routeLocation.pathname]);
 
   useEffect(() => {
     const openedGlyphId = openedGlyphKeyRef.current;
@@ -359,18 +363,4 @@ function glyphId(glyph: GlyphCatalogItem) {
 
 function sameCategoryFilter(left: GlyphCategoryFilter, right: GlyphCategoryFilter) {
   return left.category === right.category && left.subCategoryKey === right.subCategoryKey;
-}
-
-function glyphIdFromPath(pathname: string): GlyphId | null {
-  const prefix = "/editor/";
-  if (!pathname.startsWith(prefix)) return null;
-
-  let value: string;
-  try {
-    value = decodeURIComponent(pathname.slice(prefix.length));
-  } catch {
-    return null;
-  }
-
-  return value.length > 0 ? asGlyphId(value) : null;
 }

@@ -25,7 +25,10 @@ export interface Node {
   /** Sort key among siblings under the same parent. */
   index: string;
 
-  /** Scene-space position of this placed occurrence. */
+  /**
+   * Origin of this node's frame within its parent's frame, or within the scene
+   * for a root node; Y-down, in scene units.
+   */
   position: Point2D;
 }
 

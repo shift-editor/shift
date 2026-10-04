@@ -1,3 +1,4 @@
+import type { LocalPoint } from "@shift/editor/spaces";
 import type { Page } from "@playwright/test";
 import {
   workspaceTest,
@@ -130,10 +131,7 @@ previewTest(
       const node = editor.scene.nodesOfKind("glyph")[0]!;
       const point = editor.glyphForId(node.glyphId)!.geometryAt(editor.externalLocation)
         .allPoints[0]!;
-      return editor.projectSceneToScreen({
-        x: point.x + node.position.x,
-        y: point.y + node.position.y,
-      });
+      return editor.sceneToScreen(editor.toScene(node, { x: point.x, y: point.y } as LocalPoint));
     });
     const bounds = await workspacePage.locator("#interactive-canvas").boundingBox();
     if (!bounds) throw new Error("Expected interactive canvas bounds");

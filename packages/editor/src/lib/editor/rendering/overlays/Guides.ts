@@ -12,12 +12,7 @@ function getLockPath(): Path2D {
 export class Guides {
   draw(canvas: Canvas, metrics: GlyphGuideMetrics, advance: number, readOnly: boolean): void {
     const { color, widthPx } = canvas.theme.guides;
-    const lw = canvas.pxToUpm(widthPx);
 
-    canvas.ctx.save();
-    canvas.ctx.strokeStyle = color;
-    canvas.ctx.lineWidth = lw;
-    canvas.ctx.setLineDash([]);
     canvas.ctx.beginPath();
 
     // Horizontal metric lines
@@ -38,21 +33,23 @@ export class Guides {
     canvas.ctx.moveTo(advance, metrics.descender);
     canvas.ctx.lineTo(advance, metrics.ascender);
 
-    canvas.ctx.stroke();
-    canvas.ctx.restore();
+    canvas.stroke(color, widthPx);
 
     if (readOnly) this.#drawLock(canvas, metrics.descender, advance);
   }
 
+  /** Draws the lock icon centred under the descender line, sized in screen pixels. */
   #drawLock(canvas: Canvas, descender: number, advance: number): void {
-    const size = canvas.pxToUpm(LOCK_SIZE_PX);
-    const gap = canvas.pxToUpm(LOCK_GAP_PX);
+    const scale = LOCK_SIZE_PX / LOCK_VIEW_BOX_SIZE;
 
-    canvas.ctx.save();
-    canvas.ctx.translate((advance - size) / 2, descender - gap);
-    canvas.ctx.scale(size / LOCK_VIEW_BOX_SIZE, -size / LOCK_VIEW_BOX_SIZE);
-    canvas.ctx.fillStyle = canvas.theme.readOnlyLock.color;
-    canvas.ctx.fill(getLockPath());
-    canvas.ctx.restore();
+    canvas.withScreenSpace((screen, project) => {
+      const anchor = project.point({ x: advance / 2, y: descender });
+      screen.ctx.save();
+      screen.ctx.translate(anchor.x - LOCK_SIZE_PX / 2, anchor.y + LOCK_GAP_PX);
+      screen.ctx.scale(scale, scale);
+      screen.ctx.fillStyle = screen.theme.readOnlyLock.color;
+      screen.ctx.fill(getLockPath());
+      screen.ctx.restore();
+    });
   }
 }

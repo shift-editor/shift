@@ -10,6 +10,7 @@ pub mod import;
 mod import_report;
 mod metrics;
 mod shift2fontir;
+mod source_glyph_ids;
 mod traits;
 
 pub use errors::{BackendError, BackendResult, FormatBackendError, FormatBackendResult};
@@ -29,4 +30,5 @@ pub use format::FontFormat;
 pub use glyph_subset::GlyphSubsetView;
 pub use import::{FontImport, GlyphDirectoryEntry, ImportBatchLimit};
 pub use import_report::{ImportLoss, ImportLossKind, ImportReport};
+pub use source_glyph_ids::SourceGlyphIds;
 pub use traits::{FontBackend, FontReader, FontView, FontWriter};

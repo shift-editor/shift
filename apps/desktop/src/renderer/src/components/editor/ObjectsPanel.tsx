@@ -172,7 +172,7 @@ export const ObjectsPanel = () => {
   return (
     <div
       ref={containerRef}
-      className="scrollbar-themed h-full overflow-y-auto px-1 pb-2"
+      className="h-full overflow-y-auto px-1 pb-2"
       onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
     >
       <nav aria-label="Glyph objects" className="flex flex-col gap-2 pt-2">

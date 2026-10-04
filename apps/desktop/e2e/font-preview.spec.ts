@@ -3,14 +3,13 @@ import type { Locator, Page } from "@playwright/test";
 import type { GlyphId } from "@shift/types";
 import { previewTest as test, expect } from "./fixtures/perfApp";
 import {
-  clickFirstCatalogGlyph,
   editorShell,
   fontNavigation,
   glyphCatalogCanvas,
   glyphCatalogSurface,
   glyphProperties,
+  openFirstCatalogGlyph,
   settingsDetails,
-  waitForEditorReady,
 } from "./fixtures/appLocators";
 import type { EditorDriver } from "./fixtures/EditorDriver";
 
@@ -188,10 +187,7 @@ async function expectPaintedGrid(page: Page, glyphCanvas: Locator): Promise<void
 
 async function openFirstPreviewGlyph(editor: EditorDriver): Promise<GlyphId> {
   const page = editor.page;
-  await clickFirstCatalogGlyph(page);
-  await page.waitForURL(/#\/editor\//);
-  const glyphId = decodeURIComponent(new URL(page.url()).hash.slice("#/editor/".length)) as GlyphId;
-  await waitForEditorReady(page, glyphId);
+  const glyphId = await openFirstCatalogGlyph(page);
   await editor.waitForCanvasRender();
   return glyphId;
 }

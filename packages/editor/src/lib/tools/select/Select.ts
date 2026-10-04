@@ -202,7 +202,10 @@ export class Select extends BaseTool<SelectState, Select> {
     const object = this.editor.objects(this.editor.selection.ids)[0];
     if (!object) return;
 
-    this.#snapLines.draw(canvas, state.translate.guides, object.node.position);
+    const guides = state.translate.guides;
+    canvas.withTransform(this.editor.sceneTransform(object.node), () => {
+      this.#snapLines.draw(canvas, guides);
+    });
   }
 }
 

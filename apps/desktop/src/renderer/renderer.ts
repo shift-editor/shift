@@ -30,6 +30,9 @@ import "./index.css";
 import React from "react";
 import { createRoot } from "react-dom/client";
 import App from "./src/app/App";
+import { trackScrollActivity } from "./src/lib/themes/scrollActivity";
+
+trackScrollActivity();
 
 // Mount the React app
 const container = document.getElementById("root");

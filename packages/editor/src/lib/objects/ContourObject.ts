@@ -1,4 +1,5 @@
-import { Bounds, Vec2, type Rect2D } from "@shift/geo";
+import { localBounds } from "../editor/spaces";
+import type { LocalBounds } from "../../types/coordinates";
 import type { GlyphGeometry } from "@shift/glyph-state";
 import type { ContourId } from "@shift/types";
 import { track } from "../signals/index";
@@ -34,13 +35,10 @@ export class ContourObject implements ShiftObjectOf<"contour"> {
     return this.layer.geometry;
   }
 
-  bounds(): Rect2D | null {
+  bounds(): LocalBounds | null {
     const bounds = this.geometry.contour(this.contourId)?.bounds;
     if (!bounds) return null;
 
-    return Bounds.toRect({
-      min: Vec2.add(this.node.position, bounds.min),
-      max: Vec2.add(this.node.position, bounds.max),
-    });
+    return localBounds(bounds);
   }
 }

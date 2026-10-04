@@ -5,35 +5,33 @@ import type { Canvas } from "../Canvas";
 /** Draws direction feedback as solid lines with screen-sized endpoint crosses. */
 export class SnapLines {
   /**
-   * Draws direction guides in scene space without retaining feedback or changing geometry.
+   * Draws direction guides without retaining feedback or changing geometry.
    *
-   * @param canvas - Overlay canvas already transformed into scene space.
-   * @param guides - Glyph-local preview feedback; metric guides are not drawn.
-   * @param nodePosition - Scene placement of the glyph that owns the preview.
+   * @param canvas - Canvas already transformed into the units the guides are measured in.
+   * @param guides - Preview feedback; metric guides are not drawn.
    */
-  draw(canvas: Canvas, guides: readonly PositionGuide[], nodePosition: Point2D): void {
+  draw(canvas: Canvas, guides: readonly PositionGuide[]): void {
     const { color, widthPx, crossSizePx } = canvas.theme.snap;
-    const crossHalf = canvas.pxToUpm(crossSizePx);
     const markers = new Map<string, Point2D>();
 
     for (const guide of guides) {
       if (guide.kind !== "direction") continue;
 
-      const from = Vec2.add(nodePosition, guide.from);
-      const to = Vec2.add(nodePosition, guide.to);
-      canvas.line(from, to, color, widthPx);
+      canvas.line(guide.from, guide.to, color, widthPx);
 
-      for (const endpoint of [from, to]) {
+      for (const endpoint of [guide.from, guide.to]) {
         markers.set(`${endpoint.x}:${endpoint.y}`, endpoint);
       }
     }
 
-    const diagonal: Point2D = { x: crossHalf, y: crossHalf };
-    const antiDiagonal: Point2D = { x: crossHalf, y: -crossHalf };
-
-    for (const marker of markers.values()) {
-      canvas.line(Vec2.sub(marker, diagonal), Vec2.add(marker, diagonal), color, widthPx);
-      canvas.line(Vec2.sub(marker, antiDiagonal), Vec2.add(marker, antiDiagonal), color, widthPx);
-    }
+    const diagonal: Point2D = { x: crossSizePx, y: crossSizePx };
+    const antiDiagonal: Point2D = { x: crossSizePx, y: -crossSizePx };
+    canvas.withScreenSpace((screen, project) => {
+      for (const marker of markers.values()) {
+        const cross = project.point(marker);
+        screen.line(Vec2.sub(cross, diagonal), Vec2.add(cross, diagonal), color, widthPx);
+        screen.line(Vec2.sub(cross, antiDiagonal), Vec2.add(cross, antiDiagonal), color, widthPx);
+      }
+    });
   }
 }

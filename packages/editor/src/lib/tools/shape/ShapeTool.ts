@@ -1,4 +1,4 @@
-import type { Point2D, Rect2D } from "@shift/geo";
+import type { Rect2D } from "@shift/geo";
 import type { ContourId, PointId } from "@shift/types";
 import { BaseTool, type ToolName } from "../core";
 import type { ToolContext } from "../core/Behavior";
@@ -10,6 +10,8 @@ import type { Editor } from "../../editor/Editor";
 import type { GlyphLayerEdit } from "../../model/GlyphLayerEdit";
 import { batch, type Signal } from "../../signals/index";
 import type { CursorType } from "../../../types/editor";
+import type { GlyphNode } from "../../../types/node";
+import { scenePoint } from "../../editor/spaces";
 
 export class ShapeTool extends BaseTool<ShapeState, ShapeTool> {
   readonly id: ToolName = "shape";
@@ -19,7 +21,7 @@ export class ShapeTool extends BaseTool<ShapeState, ShapeTool> {
   #shape: Shape | null = null;
   #contourId: ContourId | null = null;
   #pointIds: readonly PointId[] = [];
-  #origin: Point2D = { x: 0, y: 0 };
+  #node: GlyphNode | null = null;
   #done: (() => void) | null = null;
 
   constructor(editor: Editor, shapeKindCell: Signal<ShapeKind>) {
@@ -69,7 +71,7 @@ export class ShapeTool extends BaseTool<ShapeState, ShapeTool> {
     const layer = this.editor.glyphForId(node.glyphId)?.layerForSource(node.sourceId);
     if (!layer || this.editor.sessionMode === "preview") return false;
 
-    this.#origin = node.position;
+    this.#node = node;
     const rect = this.getRect(state);
     if (!rect) return false;
 
@@ -133,10 +135,15 @@ export class ShapeTool extends BaseTool<ShapeState, ShapeTool> {
   }
 
   private getRect(state: ShapeState): Rect2D | null {
-    if (state.type !== "dragging") return null;
+    if (state.type !== "dragging" || !this.#node) return null;
 
-    let width = state.currentPos.x - state.startPos.x;
-    let height = state.currentPos.y - state.startPos.y;
+    const start = this.editor.toLocal(this.#node, scenePoint(state.startPos.x, state.startPos.y));
+    const current = this.editor.toLocal(
+      this.#node,
+      scenePoint(state.currentPos.x, state.currentPos.y),
+    );
+    let width = current.x - start.x;
+    let height = current.y - start.y;
 
     if (this.editor.currentModifiers.shiftKey) {
       const size = Math.max(Math.abs(width), Math.abs(height));
@@ -144,8 +151,7 @@ export class ShapeTool extends BaseTool<ShapeState, ShapeTool> {
       height = height < 0 ? -size : size;
     }
 
-    const x = state.startPos.x - this.#origin.x;
-    const y = state.startPos.y - this.#origin.y;
+    const { x, y } = start;
 
     return {
       x,

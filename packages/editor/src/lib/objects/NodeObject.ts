@@ -1,4 +1,4 @@
-import type { Rect2D } from "@shift/geo";
+import type { LocalBounds } from "../../types/coordinates";
 import type { NodeId } from "@shift/types";
 import type { NodeDefinition } from "../nodes/NodeDefinition";
 import type { ShiftObjectOf } from "../../types/object";
@@ -30,11 +30,11 @@ export class NodeObject implements ShiftObjectOf<"node"> {
   }
 
   /**
-   * Returns scene-space bounds for this node.
+   * Returns this node's bounds in its own units.
    *
    * @returns null when this node kind has no registered bounds behavior.
    */
-  bounds(): Rect2D | null {
+  bounds(): LocalBounds | null {
     return this.#definition?.bounds(this.node) ?? null;
   }
 }

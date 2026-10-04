@@ -1,4 +1,4 @@
-import { Bounds, Mat, Vec2 } from "@shift/geo";
+import { Bounds, Mat, Vec2, type Point2D } from "@shift/geo";
 import type { ToolContext } from "../../core/Behavior";
 import type { Editor } from "../../../editor/Editor";
 import type { DragEvent, DragStartEvent, ToolEvent } from "../../core/GestureDetector";
@@ -7,8 +7,12 @@ import type { Select } from "../Select";
 import { AngleSnap, PositionEdits, PositionList, type RotateEdit } from "../../../model/positions";
 import type { ComponentTransformEdit } from "../../../model/ComponentTransformEdit";
 import type { PositionCondition } from "../../../../types/positionEdit";
+import type { ScenePoint } from "../../../../types/coordinates";
+import type { ShiftNode } from "../../../../types/node";
 
 export class Rotate implements SelectBehavior {
+  #editor: Editor | null = null;
+  #node: ShiftNode | null = null;
   #edit: RotateEdit | null = null;
   #componentEdit: ComponentTransformEdit | null = null;
   #componentAngleSnap: AngleSnap | null = null;
@@ -111,7 +115,24 @@ export class Rotate implements SelectBehavior {
     });
   }
 
+  /**
+   * Returns the pointer's angle around `center`, measured in the node's units.
+   *
+   * @remarks
+   * The rotation is applied to the node's geometry, so the angle is measured in
+   * the same units. A node that flips Y relative to the scene would otherwise
+   * turn a clockwise drag into a counter-clockwise rotation.
+   */
+  #angleFrom(center: Point2D, pointer: ScenePoint): number {
+    const editor = this.#editor;
+    const node = this.#node;
+    const local = editor && node ? editor.toLocal(node, pointer) : pointer;
+    return Vec2.angleTo(center, local);
+  }
+
   #cleanup(): void {
+    this.#editor = null;
+    this.#node = null;
     this.#edit = null;
     this.#componentEdit = null;
     this.#componentAngleSnap = null;
@@ -131,7 +152,7 @@ export class Rotate implements SelectBehavior {
       rotate: {
         ...state.rotate,
         lastPos: currentPos,
-        currentAngle: Vec2.angleTo(state.rotate.center, currentPos),
+        currentAngle: this.#angleFrom(state.rotate.center, currentPos),
         shiftKey: event.shiftKey,
       },
     };
@@ -145,6 +166,13 @@ export class Rotate implements SelectBehavior {
     const positionSelection = editor.positionSelection(editor.selection.ids);
     if (!componentSelection && !positionSelection) return null;
 
+    const node = editor.selectionNode();
+    if (!node) return null;
+    this.#editor = editor;
+    this.#node = node;
+
+    let center: Point2D;
+
     const condition: PositionCondition = {
       when: () => {
         const state = tool.getState();
@@ -153,6 +181,11 @@ export class Rotate implements SelectBehavior {
     };
 
     if (componentSelection) {
+      const bounds = componentSelection.bounds;
+      center = Vec2.midpoint(
+        { x: bounds.left, y: bounds.top },
+        { x: bounds.right, y: bounds.bottom },
+      );
       this.#componentAngleSnap = AngleSnap.everyDegrees(15, condition);
       this.#componentEdit =
         componentSelection.layer.beginComponentTransformEdit(componentSelection);
@@ -164,7 +197,7 @@ export class Rotate implements SelectBehavior {
       const localBounds = Bounds.fromPoints(localPositions);
       if (!localBounds) return null;
 
-      const center = Bounds.center(localBounds);
+      center = Bounds.center(localBounds);
       this.#edit = PositionEdits.fromSelection(positionSelection)
         .rotate(positionSelection.targets, center)
         .angleSnappedBy(AngleSnap.everyDegrees(15, condition));
@@ -173,8 +206,7 @@ export class Rotate implements SelectBehavior {
     }
 
     const corner = hit.corner;
-    const center = hit.center;
-    const startAngle = Vec2.angleTo(center, event.origin.scene);
+    const startAngle = this.#angleFrom(center, event.origin.scene);
 
     return {
       type: "rotating",

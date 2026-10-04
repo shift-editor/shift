@@ -1,3 +1,4 @@
+import type { LocalPoint } from "@shift/editor/spaces";
 import type { Locator } from "@playwright/test";
 import { workspaceTest as test, expect } from "./fixtures/electronApp";
 import type { EditorDriver } from "./fixtures/EditorDriver";
@@ -159,20 +160,31 @@ test("switches Alt during proportional resizing and preserves release geometry",
   if (!canvasBounds) throw new Error("Expected interactive canvas bounds");
   const { initialBounds, down, normal, centered, crossed } = await page.evaluate(() => {
     const editor = window.shift!.editor;
-    const initialBounds = editor.selectionBounds();
-    if (!initialBounds) throw new Error("Expected selection bounds");
+    const node = editor.scene.nodesOfKind("glyph")[0];
+    const b = editor.selectionBounds();
+    if (!b || !node) throw new Error("Expected selection bounds");
+    const initialBounds = {
+      x: b.min.x,
+      y: b.min.y,
+      width: b.max.x - b.min.x,
+      height: b.max.y - b.min.y,
+      right: b.max.x,
+      bottom: b.max.y,
+    };
+    const toScreen = (point: { x: number; y: number }) =>
+      editor.sceneToScreen(editor.toScene(node, point as LocalPoint));
     return {
       initialBounds,
-      down: editor.projectSceneToScreen({ x: initialBounds.right, y: initialBounds.bottom }),
-      normal: editor.projectSceneToScreen({
+      down: toScreen({ x: initialBounds.right, y: initialBounds.bottom }),
+      normal: toScreen({
         x: initialBounds.right + initialBounds.width * 0.1,
         y: initialBounds.bottom + initialBounds.height * 0.02,
       }),
-      centered: editor.projectSceneToScreen({
+      centered: toScreen({
         x: initialBounds.right + initialBounds.width * 0.15,
         y: initialBounds.bottom + initialBounds.height * 0.03,
       }),
-      crossed: editor.projectSceneToScreen({
+      crossed: toScreen({
         x: initialBounds.x + initialBounds.width * 0.25,
         y: initialBounds.bottom + initialBounds.height * 0.03,
       }),
@@ -490,10 +502,7 @@ test.describe("Editor view", () => {
       if (!segment) throw new Error("Expected segment");
       const point = segment.pointAt(0.5);
 
-      return editor.projectSceneToScreen({
-        x: point.x + node.position.x,
-        y: point.y + node.position.y,
-      });
+      return editor.sceneToScreen(editor.toScene(node, point as LocalPoint));
     });
 
     await canvas.hover({ position: down });
@@ -556,13 +565,11 @@ test.describe("Editor view", () => {
         id: segment.id,
         controls: [1 / 3, 2 / 3].map((t) => segment.pointAt(t)),
         sceneControls: [1 / 3, 2 / 3].map((t) => {
-          const point = segment.pointAt(t);
-          return { x: point.x + node.position.x, y: point.y + node.position.y };
+          return editor.toScene(node, segment.pointAt(t) as LocalPoint);
         }),
-        hover: editor.projectSceneToScreen({
-          x: middle.x + node.position.x,
-          y: middle.y + node.position.y,
-        }),
+        hover: editor.sceneToScreen(
+          editor.toScene(node, { x: middle.x, y: middle.y } as LocalPoint),
+        ),
       };
     });
     // The Select tool's upgrade preview item publishes the scene positions it draws;
@@ -747,15 +754,17 @@ test.describe("Editor view", () => {
       if (!canvasBounds) throw new Error("Expected interactive canvas bounds");
       const { down, end } = await page.evaluate(() => {
         const editor = window.shift!.editor;
+        const node = editor.scene.nodesOfKind("glyph")[0];
         const bounds = editor.selectionBounds();
-        if (!bounds) throw new Error("Expected selection bounds");
+        if (!bounds || !node) throw new Error("Expected selection bounds");
+        const width = bounds.max.x - bounds.min.x;
+        const height = bounds.max.y - bounds.min.y;
+        const toScreen = (point: { x: number; y: number }) =>
+          editor.sceneToScreen(editor.toScene(node, point as LocalPoint));
 
         return {
-          down: editor.projectSceneToScreen({ x: bounds.right, y: bounds.bottom }),
-          end: editor.projectSceneToScreen({
-            x: bounds.right + bounds.width * 0.15,
-            y: bounds.bottom + bounds.height * 0.03,
-          }),
+          down: toScreen({ x: bounds.max.x, y: bounds.max.y }),
+          end: toScreen({ x: bounds.max.x + width * 0.15, y: bounds.max.y + height * 0.03 }),
         };
       });
 

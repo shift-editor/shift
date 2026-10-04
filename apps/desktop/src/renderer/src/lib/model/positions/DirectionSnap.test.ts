@@ -12,7 +12,7 @@ describe("direction snapping distinguishes the moving reference from its fixed p
     editor = new TestEditor();
     await editor.startSession();
     editor.selectTool("pen");
-    await editor.clickGlyphLocal(100, 100);
+    await editor.clickLocal(100, 100);
     pointId = editor.requireGlyphLayer().allPoints[0]!.id;
   });
 
@@ -39,7 +39,7 @@ describe("direction snapping distinguishes the moving reference from its fixed p
   });
 
   it("keeps a point pivot frozen even when it is also a movement target", async () => {
-    await editor.clickGlyphLocal(0, 100);
+    await editor.clickLocal(0, 100);
     const layer = editor.requireGlyphLayer();
     const pivot = layer.allPoints[1]!.id;
     const edit = layer.positions
