@@ -31,6 +31,8 @@ export interface WheelGestureSample {
   readonly timeStamp: number;
   /** Whether the zoom modifier (Meta or Control) was held for this sample. */
   readonly zoomModifier: boolean;
+  /** Scroll distance of this sample, such as `Math.hypot(deltaX, deltaY)`; never negative. */
+  readonly magnitude: number;
 }
 
 /** Viewport response to one wheel sample: zoom, ignore trailing zoom momentum, or pan. */
