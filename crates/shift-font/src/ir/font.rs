@@ -28,6 +28,9 @@ mod change_set;
 /// `eng-latin`) as a plist array of strings.
 pub const LANGUAGES_LIB_KEY: &str = "com.shift.languages";
 
+#[path = "font/variation_authoring.rs"]
+mod variation_authoring;
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FontMetadata {
@@ -617,12 +620,15 @@ impl Font {
     ///
     /// External value/range edits never rewrite existing product coordinates.
     /// Changing an external axis to internal removes that coordinate; the
-    /// reverse inserts the new external default.
+    /// reverse inserts the new external default. Master coordinates are never
+    /// relocated: unmapped edits must retain their bounds and default origin.
+    /// Axes participating in mappings permit naming edits but not kind/range
+    /// edits, which require an explicit mapping-authoring operation.
     ///
     /// # Errors
     ///
     /// Returns a validation error when the axis is unknown or the replacement
-    /// invalidates labels, mappings, or named products.
+    /// invalidates labels, mappings, master locations, or named products.
     pub fn replace_axis(&mut self, axis: Axis) -> CoreResult<Axis> {
         axis.validate()?;
         let index = self
@@ -632,6 +638,43 @@ impl Font {
             .require(&axis.id())?;
         let mut axes = self.axes().to_vec();
         let previous = axes[index].clone();
+        if axes
+            .iter()
+            .any(|existing| existing.id() != axis.id() && existing.tag() == axis.tag())
+        {
+            return Err(CoreError::DuplicateAxisTag(axis.tag().to_string()));
+        }
+        let mapped = self.axis_mappings().iter().any(|mapping| {
+            mapping.inputs().contains(&axis.id()) || mapping.outputs().contains(&axis.id())
+        });
+        if mapped && previous.kind() != axis.kind() {
+            return Err(CoreError::InvalidAxis {
+                axis_id: axis.id(),
+                message: "mapped-axis kind/range edits require explicit mapping authoring"
+                    .to_string(),
+            });
+        }
+        if !mapped {
+            for source in self.sources().iter().filter(|source| source.is_master()) {
+                let value = source
+                    .location()
+                    .get(&axis.id())
+                    .unwrap_or(previous.default());
+                let is_default = self.default_source_id().as_ref() == Some(&source.id());
+                variation_authoring::validate_source_axis(&axis, source, value, is_default)?;
+                if source.location().get(&axis.id()).is_none()
+                    && previous.default() != axis.default()
+                {
+                    return Err(CoreError::InvalidAxis {
+                        axis_id: axis.id(),
+                        message: format!(
+                            "changing the default would implicitly relocate master {}",
+                            source.name()
+                        ),
+                    });
+                }
+            }
+        }
         axes[index] = axis.clone();
         validate_axis_label_ids(&axes)?;
         validate_axis_mappings(&axes, self.axis_mappings())?;
@@ -1663,6 +1706,14 @@ fn validate_axis_mappings(axes: &[Axis], mappings: &[AxisMapping]) -> CoreResult
 
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "font/axis_authoring_tests.rs"]
+mod axis_authoring_tests;
+
+#[cfg(test)]
+#[path = "font/variation_authoring_tests.rs"]
+mod variation_authoring_tests;
 
 #[cfg(test)]
 mod tests {

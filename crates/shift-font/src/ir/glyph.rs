@@ -8,9 +8,9 @@ use crate::entity::{
 use crate::guideline::Guideline;
 use crate::lib_data::LibData;
 use crate::point::Point;
-use crate::GlyphName;
+use crate::{CoreError, CoreResult, GlyphName};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -132,6 +132,80 @@ impl GlyphLayer {
         }
 
         layer
+    }
+
+    /// Replaces drawing content in font units, preserving layer identity and auxiliary data.
+    ///
+    /// Contours, anchors, and components retain the supplied order and identities.
+    /// Height, source binding, guidelines, and library data are unchanged.
+    /// Font-wide identity and component-reference validation belongs to the font intent path.
+    ///
+    /// # Errors
+    ///
+    /// Rejects duplicate drawing identities and non-finite numeric values before mutation.
+    pub fn replace_content(
+        &mut self,
+        width: f64,
+        contours: Vec<Contour>,
+        anchors: Vec<Anchor>,
+        components: Vec<Component>,
+    ) -> CoreResult<()> {
+        let mut point_ids = HashSet::new();
+        let mut anchor_ids = HashSet::new();
+        let mut new_contours = EntityList::new();
+        let mut new_components = EntityList::new();
+        let mut finite = width.is_finite();
+
+        for contour in contours {
+            for point in contour.points() {
+                if !point_ids.insert(point.id()) {
+                    return Err(CoreError::DuplicatePointId(point.id()));
+                }
+                finite &= point.x().is_finite() && point.y().is_finite();
+            }
+            let contour_id = contour.id();
+            if new_contours.insert(contour).is_some() {
+                return Err(CoreError::DuplicateContourId(contour_id));
+            }
+        }
+        for anchor in &anchors {
+            if !anchor_ids.insert(anchor.id()) {
+                return Err(CoreError::DuplicateAnchorId(anchor.id()));
+            }
+            finite &= anchor.x().is_finite() && anchor.y().is_finite();
+        }
+        for component in components {
+            let transform = component.transform();
+            finite &= [
+                transform.translate_x,
+                transform.translate_y,
+                transform.rotation,
+                transform.scale_x,
+                transform.scale_y,
+                transform.skew_x,
+                transform.skew_y,
+                transform.t_center_x,
+                transform.t_center_y,
+            ]
+            .iter()
+            .all(|value| value.is_finite());
+            let component_id = component.id();
+            if new_components.insert(component).is_some() {
+                return Err(CoreError::DuplicateComponentId(component_id));
+            }
+        }
+        if !finite {
+            return Err(CoreError::InvalidPositionUpdateInput {
+                kind: "layer content",
+                message: "all numeric values must be finite".to_string(),
+            });
+        }
+
+        self.width = width;
+        self.contours = new_contours;
+        self.anchors = anchors;
+        self.components = new_components;
+        Ok(())
     }
 
     pub fn width(&self) -> f64 {

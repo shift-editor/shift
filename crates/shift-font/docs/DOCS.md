@@ -14,6 +14,8 @@ First-class Rust font object model for Shift.
 - **Architecture Invariant:** Named instances own complete external locations but no source or geometry. Sources own design-space locations.
 - **Architecture Invariant:** The default source is the required master origin at the axes' default location, not an arbitrary fallback. `DeleteSource` rejects both the default source and the last source; replacing the default requires a future explicit atomic operation that preserves a valid origin.
 - **Architecture Invariant:** Mapping edits never rewrite external named-instance intent.
+- **Architecture Invariant:** Ordinary axis replacement preserves identity and never relocates dependents implicitly. Unmapped masters must stay within bounds and the default master at the replacement origin; mapped kind/range changes require explicit mapping authoring.
+- **Architecture Invariant:** `VariationAuthoring` is an owned snapshot of axes, mappings, sources/default identity, and named instances, including authored order. Restoration validates the complete structural target without replaying creation-time source uniqueness or axis-edit placement guards. Axis deletion retains masters and drawings even when remaining coordinates collapse; history restoration does not promise compiler readiness.
 - **Architecture Invariant:** Fontdrasil exclusively constructs variation sample order, supports, and numeric deltas. `shift-font` exposes compiled `VariationBasis` and `AxisMappingBasis` values; TypeScript and transport layers only evaluate or translate them.
 - **Architecture Invariant:** Authored metadata and font metrics are independent. Metadata edits replace the complete metadata snapshot without rewriting metrics.
 - **Architecture Invariant:** UPM is font-global. Metric identities and semantic roles are font-owned; positions, overshoots, and optional technical metrics are authored on master sources.
@@ -53,6 +55,7 @@ crates/shift-font/src/
 - `AxisMapping` owns an ordered set of mapping points. Independent mappings transform one external axis; the optional cross-axis group maps one design-space location to another.
 - `ExternalLocation` and `DesignLocation` are serde-transparent nominal wrappers around `Location`. Mapping accepts only the former and interpolation/projection accepts only the latter.
 - `NamedInstance` is an explicit named product preset at a complete external location. It owns no source, layer, or compiler representation.
+- `VariationAuthoring` carries complete coupled authoring for `Font::variation_authoring` / `Font::restore_variation_authoring`; it excludes glyph geometry, metadata, UPM, metric definitions, and compiled bases.
 - `MetricDefinition` gives one metric row stable identity and a standard or custom semantic role.
 - `Source` is an editable designspace position with a name, location, complete metric values, and optional technical metrics.
 - `SourceMetricInterpolation` owns metric identity, optional technical-field participation, variation regions, and delta ordering for source-owned metrics.
@@ -107,6 +110,8 @@ Coordinates, advance width, smooth flags, anchor positions, and component transf
 
 `Font::projection(location)` expects an internal authoring location. Apply external axis mappings before constructing it. Resolution prefers an exact authored layer, then compatible interpolation, then the default or preferred fallback. A globally authored source with no glyph layer is not blank by definition: it uses interpolation/fallback while remaining non-editable at that source. Component branches resolve independently at the same location and are flattened through the same `GlyphComponents` semantics exposed to renderers.
 
+`Font::restore_variation_authoring` validates a complete target before installing any fields and derives replace-grade change records. Stable identities, references, axis/mapping/product validity, and source values are checked together. Restore metric definitions first: source values reference the font's current definitions. Source-existence changes and corresponding layer restoration must share one workspace transaction. Ordinary authoring still uses ordinary mutation validation; restoration is not a source-creation shortcut.
+
 ## Boundaries
 
 `shift-font` should not expose TypeScript-facing wire contracts. Those belong in `shift-wire`.
@@ -151,6 +156,8 @@ Transport and workspace layers should pass stable identity to find the model obj
 2. Never leave an empty contour record behind: follow `remove_points`, which prunes emptied contours and returns the pruned `ContourId` values so the font-wide structure index stays consistent.
 3. Bulk position paths take `BulkNodePositionUpdates` flat ID/coordinate slices; validate coordinate length against the ID count before mutating anything so a malformed batch never half-applies.
 4. Verify: `cargo test -p shift-font`.
+
+`ReplaceGlyphLayerContent` replaces advance, contours, anchors, and components in one structural edit. `GlyphLayer::replace_content` validates local identity uniqueness and finite values before mutation; the intent validates font-wide identity and component references before installing the replacement. Layer identity, source binding, height, guidelines, and library data survive. The workspace acquires the target layer and any supplied component bases before validation and records exact pre/post snapshots for undo/redo. Replacement emits a component-specific change even when the new component list is empty, so removing drawing content also removes durable dependency edges.
 
 Component authoring uses `AddComponent`, `SetComponentTransforms`, `RemoveComponents`, and `DecomposeComponents`. Add creates a direct reference with caller-minted identity, translated so its first `_name` anchor meets the most recently placed matching `name` anchor among earlier siblings at the same source (`composite::anchor_aligned_offset`); without a match the transform is identity. Transform replacement validates all direct component identities before mutating and records one values-only layer replacement. Decomposition replaces selected direct references with fresh local contours, recursively flattening each selected subtree at the target layer's source location after component transforms are resolved.
 

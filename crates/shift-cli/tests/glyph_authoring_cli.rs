@@ -1,40 +1,9 @@
-use std::io::Write;
-use std::process::{Command, Output, Stdio};
+mod support;
 
 use serde_json::Value;
-use shift_font::{Font, test_support::sample_font};
+use shift_font::test_support::sample_font;
 use shift_store::ShiftStore;
-
-fn shift(args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_shift-cli"))
-        .args(args)
-        .output()
-        .expect("shift CLI should run")
-}
-
-fn load_font(path: &str) -> Font {
-    ShiftStore::open_document(path)
-        .unwrap()
-        .load_font_state()
-        .unwrap()
-}
-
-fn shift_with_stdin(args: &[&str], input: &str) -> Output {
-    let mut child = Command::new(env!("CARGO_BIN_EXE_shift-cli"))
-        .args(args)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("shift CLI should run");
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(input.as_bytes())
-        .unwrap();
-    child.wait_with_output().unwrap()
-}
+use support::{load_font, shift, shift_with_stdin};
 
 #[test]
 fn authors_glyph_geometry_and_copies_a_layer_through_the_cli() {
