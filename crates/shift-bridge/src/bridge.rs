@@ -388,12 +388,12 @@ fn source_axis_mappings(
       let input_axis_ids = mapping
         .input_axes
         .iter()
-        .map(|axis| source_axis_id(identity, *axis))
+        .map(|axis| identity.axis_id(*axis))
         .collect::<BridgeResult<Vec<_>>>()?;
       let output_axis_ids = mapping
         .output_axes
         .iter()
-        .map(|axis| source_axis_id(identity, *axis))
+        .map(|axis| identity.axis_id(*axis))
         .collect::<BridgeResult<Vec<_>>>()?;
       let points = mapping
         .points
@@ -427,17 +427,6 @@ fn source_axis_mappings(
       Ok(mapped)
     })
     .collect()
-}
-
-fn source_axis_id(identity: &SourceIdentity, axis: SourceAxisIndex) -> BridgeResult<AxisId> {
-  identity
-    .axis_ids
-    .get(axis.to_usize())
-    .cloned()
-    .ok_or_else(|| BridgeError::InvalidInput {
-      kind: "source axis mapping",
-      value: axis.to_u32().to_string(),
-    })
 }
 
 fn source_location(
@@ -515,14 +504,7 @@ fn wire_source_glyph(
                 .supports
                 .iter()
                 .map(|support| {
-                  let axis_id = identity
-                    .axis_ids
-                    .get(support.axis.to_usize())
-                    .cloned()
-                    .ok_or_else(|| BridgeError::InvalidInput {
-                      kind: "source projection axis",
-                      value: support.axis.to_u32().to_string(),
-                    })?;
+                  let axis_id = identity.axis_id(support.axis)?;
                   Ok(InterpolationSupport {
                     axis_id,
                     lower: support.lower,
@@ -546,14 +528,7 @@ fn wire_source_glyph(
         .exact_shapes
         .iter()
         .map(|exact| {
-          let source_id = identity
-            .source_ids
-            .get(exact.source.to_usize())
-            .cloned()
-            .ok_or_else(|| BridgeError::InvalidInput {
-              kind: "source projection exact source",
-              value: exact.source.to_u32().to_string(),
-            })?;
+          let source_id = identity.source_id(exact.source)?;
           Ok(GlyphSourceShape {
             source_id,
             shape: wire_source_shape(
@@ -570,14 +545,7 @@ fn wire_source_glyph(
       let exact_source_components = exact_sources
         .iter()
         .map(|source| {
-          let source_id = identity
-            .source_ids
-            .get(source.to_usize())
-            .cloned()
-            .ok_or_else(|| BridgeError::InvalidInput {
-              kind: "source projection exact components",
-              value: source.to_u32().to_string(),
-            })?;
+          let source_id = identity.source_id(*source)?;
           Ok(GlyphSourceComponents {
             source_id,
             components: wire_source_components(
@@ -812,14 +780,7 @@ fn napi_source_atlas_page(
             .iter()
             .filter(|(root, _, _)| root == glyph)
             .map(|(_, source, glyph_index)| {
-              let source_id = identity
-                .source_ids
-                .get(*source as usize)
-                .cloned()
-                .ok_or_else(|| BridgeError::InvalidInput {
-                  kind: "source atlas exact source",
-                  value: source.to_string(),
-                })?;
+              let source_id = identity.source_id(shift_backends::SourceIndex::new(*source))?;
               Ok(NapiSlugExactSource {
                 source_id: source_id.to_string(),
                 glyph_index: *glyph_index,
@@ -1094,6 +1055,38 @@ impl SourceIdentity {
       .ok_or_else(|| BridgeError::InvalidInput {
         kind: "source glyph index",
         value: index.to_u32().to_string(),
+      })
+  }
+
+  /// Returns the font axis id at a retained source's axis index.
+  ///
+  /// # Errors
+  ///
+  /// Returns [`BridgeError::InvalidInput`] when the index is outside the source's axes.
+  fn axis_id(&self, axis: SourceAxisIndex) -> BridgeResult<AxisId> {
+    self
+      .axis_ids
+      .get(axis.to_usize())
+      .cloned()
+      .ok_or_else(|| BridgeError::InvalidInput {
+        kind: "source axis index",
+        value: axis.to_u32().to_string(),
+      })
+  }
+
+  /// Returns the font source id at a retained source index.
+  ///
+  /// # Errors
+  ///
+  /// Returns [`BridgeError::InvalidInput`] when the index is outside the source's sources.
+  fn source_id(&self, source: shift_backends::SourceIndex) -> BridgeResult<SourceId> {
+    self
+      .source_ids
+      .get(source.to_usize())
+      .cloned()
+      .ok_or_else(|| BridgeError::InvalidInput {
+        kind: "source index",
+        value: source.to_u32().to_string(),
       })
   }
 
