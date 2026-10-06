@@ -7,7 +7,9 @@ export {
   AngleSnap,
   DirectionSnap,
   MetricSnap,
+  PointAlignmentSnap,
   PointRuleConstraint,
   PositionEdits,
   PositionReference,
+  SnapSet,
 } from "./lib/model/positions";

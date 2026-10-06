@@ -26,6 +26,8 @@ export interface EditorRenderTheme {
     hoverOutline: { stroke: string; widthPx: number };
   };
   controlLine: { color: string; widthPx: number };
+  /** Neutral circular halo behind idle and hovered on-curve points resting exactly on a metric line. */
+  metricMarker: { haloFill: string; haloRadiusPx: number };
   handle: {
     corner: HandleStateStyles;
     smooth: HandleStateStyles;
@@ -88,6 +90,10 @@ const DEFAULT_EDITOR_RENDER_THEME: EditorRenderTheme = {
     hoverOutline: { stroke: "#1886D7", widthPx: 1.5 },
   },
   controlLine: { color: "rgba(136, 136, 136, 0.65)", widthPx: 0.75 },
+  metricMarker: {
+    haloFill: "rgba(0, 0, 0, 0.1)",
+    haloRadiusPx: 8,
+  },
   handle: {
     corner: {
       interpolated: { fill: "#ffffff", stroke: "rgba(0, 0, 0, 0.65)", size: 6, lineWidth: 0.5 },
@@ -197,7 +203,7 @@ const DEFAULT_EDITOR_RENDER_THEME: EditorRenderTheme = {
       selected: { fill: "#ffffff", stroke: "#0C92F4", size: 12, lineWidth: 2 },
     },
   },
-  snap: { color: "#ff3b30", widthPx: 1, crossSizePx: 2 },
+  snap: { color: "#ff3b30", widthPx: 0.5, crossSizePx: 2 },
   segment: {
     hoverColor: "#1886D7",
     selectedColor: "#1886D7",
@@ -252,6 +258,10 @@ export function readEditorRenderTheme(
     theme.component.hoverOutline.stroke,
   );
   theme.controlLine.color = readColor("--editor-control-line-color", theme.controlLine.color);
+  theme.metricMarker.haloFill = readColor(
+    "--editor-metric-marker-fill",
+    theme.metricMarker.haloFill,
+  );
 
   const handleFill = readColor("--editor-handle-fill", theme.handle.corner.idle.fill);
   const interpolatedStroke = readColor(

@@ -17,6 +17,7 @@ import {
 import { displayAdvance } from "../utils/unicode";
 import { computed, keyedCache, track } from "../signals/index";
 import type { GlyphRenderModel } from "../model/Glyph";
+import { standardMetricLines } from "../model/positions";
 import type { GlyphContour } from "../model/ComponentGlyph";
 import type { HandleState } from "../../types/graphics";
 import type { GlyphRenderContour } from "../../types/glyphRender";
@@ -227,22 +228,33 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
   }
 
   #drawBackground(node: GlyphNode, ctx: RenderContext): void {
-    const glyph = this.editor.glyphForId(node.glyphId);
-    if (!glyph) return;
-
     const view = this.#view(node);
     if (!view) return;
 
-    const unicode = glyph.entry.unicodes[0] ?? null;
+    const advance = this.#displayAdvance(node, view);
+    if (advance === null) return;
+
+    const metrics = this.#trackedMetrics();
+    this.#guides.draw(ctx.canvas, metrics, advance, this.editor.sessionMode === "preview");
+  }
+
+  /** Advance the metric lines are drawn across, subscribed for redraw; null for an unknown glyph. */
+  #displayAdvance(node: GlyphNode, view: GlyphRenderModel): number | null {
+    const glyph = this.editor.glyphForId(node.glyphId);
+    if (!glyph) return null;
+
     track(view.xAdvanceCell);
+    const unicode = glyph.entry.unicodes[0] ?? null;
+    return displayAdvance(view.xAdvanceCell.peek(), glyph.name, unicode);
+  }
 
-    const advance = displayAdvance(view.xAdvanceCell.peek(), glyph.name, unicode);
-
+  /** Metrics of the active source, or interpolated at the current location, subscribed for redraw. */
+  #trackedMetrics(): SourceMetrics {
     track(this.editor.externalLocationCell);
     track(this.editor.activeSourceIdCell);
     track(this.editor.font.sourceMetricsInterpolationCell);
 
-    this.#guides.draw(ctx.canvas, this.#metrics(), advance, this.editor.sessionMode === "preview");
+    return this.#metrics();
   }
 
   /** Vertical metrics for the active source, or interpolated at the design location. */
@@ -467,16 +479,23 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
       this.#selectedSegmentIds(node),
       this.#hoveredSegmentId(node),
     );
-    this.#drawControlLines(
-      ctx,
-      rootContours.map((contour) => contour.contour),
-    );
+    const controlContours = rootContours.map((contour) => contour.contour);
+    this.#drawControlLines(ctx, controlContours);
+    const advance = this.#displayAdvance(node, view);
+    const metricLines =
+      advance === null
+        ? undefined
+        : {
+            heights: new Set(standardMetricLines(this.#trackedMetrics()).map(({ y }) => y)),
+            advance,
+          };
     this.#handles.draw(
       ctx,
       rootContours,
       this.editor.selection,
       this.editor.hover,
       interpolated,
+      metricLines,
       (pointId, contourId) => this.editor.handlesVisible(pointId, contourId),
     );
     this.#anchors.draw(ctx.canvas, view.anchors, {

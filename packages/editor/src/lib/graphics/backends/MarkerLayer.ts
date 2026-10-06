@@ -215,9 +215,11 @@ export class MarkerLayer {
         },
         blend: {
           enable: true,
+          // The fragment shader emits premultiplied colour for a premultiplied canvas,
+          // so the source is added as-is; scaling it by alpha again darkens edges.
           func: {
-            srcRGB: "src alpha",
-            srcAlpha: "src alpha",
+            srcRGB: "one",
+            srcAlpha: "one",
             dstRGB: "one minus src alpha",
             dstAlpha: "one minus src alpha",
           },

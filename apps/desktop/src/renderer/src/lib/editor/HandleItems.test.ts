@@ -104,3 +104,34 @@ describe("handle culling preserves authored neighbors and visibility", () => {
     }
   });
 });
+
+describe("handles mark on-curve points resting exactly on a metric", () => {
+  it("marks idle points on a metric line and leaves others alone", async () => {
+    await editor.clickLocal(100, 500);
+    // Cmd stops the pen snapping these points onto lines they should sit just off.
+    await editor.clickLocal(200, 499, { metaKey: true });
+    await editor.clickLocal(700, 500, { metaKey: true });
+    const contours = editor.requireGlyphLayer().contours;
+    const list = new HandleItems().fromContours(contours, {
+      selection: editor.selection,
+      hover: editor.hover,
+      metricLines: { heights: new Set([0, 500]), advance: 600 },
+    });
+
+    expect(list.items.map((item) => item.showsMetricMarker)).toEqual([true, false, false]);
+  });
+
+  it("lets selection take over the look of a point on a metric", async () => {
+    await editor.clickLocal(100, 500);
+    const contours = editor.requireGlyphLayer().contours;
+    editor.selection.select([contours[0]!.points[0]!.id]);
+    const list = new HandleItems().fromContours(contours, {
+      selection: editor.selection,
+      hover: editor.hover,
+      metricLines: { heights: new Set([500]), advance: 600 },
+    });
+
+    expect(list.items[0]!.onMetric).toBe(true);
+    expect(list.items[0]!.showsMetricMarker).toBe(false);
+  });
+});

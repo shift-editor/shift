@@ -2,7 +2,12 @@ import type { MatModel } from "@shift/geo";
 import type { CameraTransform } from "../../../managers/Camera";
 import type { MarkerLayer } from "../../../../graphics/backends/MarkerLayer";
 import { MARKER_INSTANCE_FLOATS } from "../../markers/types";
-import { buildMarkerStyles, type CachedInstanceStyle } from "../../markers/handleStyles";
+import {
+  buildMarkerStyles,
+  METRIC_HALO_SHAPE_ID,
+  type CachedInstanceStyle,
+} from "../../markers/handleStyles";
+import { parseCssColor, TRANSPARENT, type GpuColor } from "../../markers/color";
 import type { EditorRenderTheme } from "../../Theme";
 import type { HandleDisplayList } from "./HandleItems";
 import type { PointHandleItem } from "./PointHandleItem";
@@ -17,6 +22,8 @@ export class MarkerHandleRenderer {
   #uploadedInstanceCount = 0;
   #theme: EditorRenderTheme | null = null;
   #styles: ReturnType<typeof buildMarkerStyles> | null = null;
+  #metricHaloFill: GpuColor = TRANSPARENT;
+  #metricHaloRadiusPx = 0;
 
   #resetUpload(): void {
     this.#uploadedList = null;
@@ -41,6 +48,8 @@ export class MarkerHandleRenderer {
     if (theme !== this.#theme) {
       this.#theme = theme;
       this.#styles = buildMarkerStyles(theme);
+      this.#metricHaloFill = parseCssColor(theme.metricMarker.haloFill);
+      this.#metricHaloRadiusPx = theme.metricMarker.haloRadiusPx;
       this.#resetUpload();
     }
 
@@ -67,7 +76,10 @@ export class MarkerHandleRenderer {
 
   #pack(list: HandleDisplayList, styles: ReturnType<typeof buildMarkerStyles> | null): number {
     const { items } = list;
-    const requiredLength = items.length * MARKER_INSTANCE_FLOATS;
+    // Each on-metric handle packs a halo instance before itself.
+    let instanceCount = items.length;
+    for (const item of items) if (item.showsMetricMarker) instanceCount++;
+    const requiredLength = instanceCount * MARKER_INSTANCE_FLOATS;
     if (requiredLength === 0 || !styles) return 0;
 
     let packed = this.#packedInstances;
@@ -79,11 +91,33 @@ export class MarkerHandleRenderer {
 
     let index = 0;
     for (const item of items) {
-      this.#writeInstance(packed, index, item, styles[item.shape][item.state]);
+      const style = styles[item.shape][item.state];
+      if (item.showsMetricMarker) {
+        this.#writeInstance(packed, index, item, this.#metricHalo());
+        index++;
+      }
+      this.#writeInstance(packed, index, item, style);
       index++;
     }
 
     return index;
+  }
+
+  /** A filled, strokeless circle around the handle, drawn beneath it. */
+  #metricHalo(): CachedInstanceStyle {
+    const radius = this.#metricHaloRadiusPx;
+    return {
+      shapeId: METRIC_HALO_SHAPE_ID,
+      size: radius,
+      lineWidth: 0,
+      fillColor: this.#metricHaloFill,
+      strokeColor: TRANSPARENT,
+      overlayColor: TRANSPARENT,
+      barSize: 0,
+      barStrokeColor: TRANSPARENT,
+      extentX: radius + 2,
+      extentY: radius + 2,
+    };
   }
 
   #writeInstance(

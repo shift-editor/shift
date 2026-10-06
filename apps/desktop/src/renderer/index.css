@@ -75,6 +75,7 @@
 :root {
   --editor-cursor-color: #0c92f4;
   --editor-guides-color: rgba(37, 99, 235, 0.5);
+  --editor-metric-marker-fill: rgba(0, 0, 0, 0.1);
   --editor-selection-fill: rgba(59, 130, 246, 0.1);
   --editor-selection-stroke: rgba(59, 130, 246, 0.5);
   --editor-glyph-fill: #000000;

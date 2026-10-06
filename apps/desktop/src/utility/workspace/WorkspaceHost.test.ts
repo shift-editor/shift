@@ -1150,7 +1150,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
   it("pen intents apply atomically with client-minted ids through the channel", async () => {
     const sync = await connectSyncLane();
     const snapshot = await createWorkspace(sync);
-    const { layerId, intents } = createGlyphALayer(snapshot.sources[0].id);
+    const { glyphId, layerId, intents } = createGlyphALayer(snapshot.sources[0].id);
     const created = await applyWorkspace(sync, {
       intents,
     });
@@ -1184,7 +1184,15 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     expect(structure?.contours[0].id).toBe(contourId);
     expect(structure?.contours[0].closed).toBe(true);
     expect(structure?.contours[0].points.map((point) => point.id)).toEqual([p1, p2]);
-    expect(applied.next).toBeUndefined();
+    expect(applied.next?.glyphs).toEqual([
+      {
+        id: glyphId,
+        name: "A",
+        unicodes: [65],
+        layers: [{ id: layerId, sourceId: snapshot.sources[0].id }],
+        componentBaseGlyphIds: [],
+      },
+    ]);
     expect(applied.dependents).toEqual([]);
   });
 

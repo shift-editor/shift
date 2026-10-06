@@ -1,5 +1,6 @@
 import type { PointId, ContourId } from "@shift/types";
 import { Bounds, type Bounds as BoundsType } from "@shift/geo";
+import { Point } from "@shift/glyph-state";
 import type { SelectableId } from "../../../../../types/object";
 import type { HandleState } from "../../../../../types/graphics";
 import type { Hover } from "../../../Hover";
@@ -8,10 +9,18 @@ import type { GlyphRenderContour } from "../../../../../types/glyphRender";
 import { nextPoint, previousPoint } from "../contourNeighbors";
 import { PointHandleItem } from "./PointHandleItem";
 
+/** Where the standard metric lines are drawn: these heights, from x = 0 to the advance. */
+export interface MetricLineExtent {
+  readonly heights: ReadonlySet<number>;
+  readonly advance: number;
+}
+
 export interface HandleStateSource {
   readonly selection: Selection;
   readonly hover: Hover;
   readonly interpolated?: boolean;
+  /** Metric lines; on-curve points lying exactly on one, within its drawn extent, are flagged. */
+  readonly metricLines?: MetricLineExtent;
 }
 
 export class HandleDisplayList {
@@ -36,6 +45,7 @@ export class HandleItems {
         const contour = contours[contourIndex]!;
         return this.#state(contour.points[pointIndex]!.id, contour.id, source);
       },
+      (point) => Point.isOnCurve(point) && onMetricLine(point, source.metricLines),
       isVisible,
       visibleBounds,
     );
@@ -44,6 +54,7 @@ export class HandleItems {
   #fromShapes(
     contours: readonly GlyphRenderContour[],
     stateForPoint: (contourIndex: number, pointIndex: number) => HandleState,
+    onMetric: (point: Point) => boolean,
     isVisible?: (pointId: PointId, contourId: ContourId) => boolean,
     visibleBounds?: BoundsType,
   ): HandleDisplayList {
@@ -63,10 +74,11 @@ export class HandleItems {
         const prev = previousPoint(points, index, contour.closed);
         const next = nextPoint(points, index, contour.closed);
         const state = stateForPoint(contourIndex, index);
+        const metric = onMetric(point);
         const item = this.#pool[itemCount];
 
         if (item) {
-          item.reset(point, prev, next, index, count, contour.closed, state);
+          item.reset(point, prev, next, index, count, contour.closed, state, metric);
           this.#items[itemCount] = item;
         } else {
           this.#items[itemCount] = new PointHandleItem(
@@ -77,6 +89,7 @@ export class HandleItems {
             count,
             contour.closed,
             state,
+            metric,
           );
           this.#pool[itemCount] = this.#items[itemCount]!;
         }
@@ -98,4 +111,9 @@ export class HandleItems {
 
     return "idle";
   }
+}
+
+function onMetricLine(point: Point, lines: MetricLineExtent | undefined): boolean {
+  if (!lines?.heights.has(point.y)) return false;
+  return point.x >= 0 && point.x <= lines.advance;
 }

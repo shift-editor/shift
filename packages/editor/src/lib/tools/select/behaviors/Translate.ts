@@ -4,7 +4,7 @@ import type { PointId } from "@shift/types";
 
 import type { ToolContext } from "../../core/Behavior";
 import type { Editor } from "../../../editor/Editor";
-import type { GlyphLayerPositionTarget } from "../../../model/Glyph";
+import type { GlyphLayer, GlyphLayerPositionTarget } from "../../../model/Glyph";
 import type { ComponentTransformEdit } from "../../../model/ComponentTransformEdit";
 import type { DragEvent, DragStartEvent, ToolEvent } from "../../core/GestureDetector";
 import { DirectionSnap, PositionReference } from "../../../model/positions";
@@ -41,9 +41,12 @@ export class Translate implements SelectBehavior {
       drag?.discard();
       componentEdit?.discard();
     });
-    ctx.setState(translatingState(event.origin.scene, event.shiftKey));
+    ctx.setState(translatingState(event.origin.scene, event.shiftKey, event.accelKey));
 
-    if (drag && !event.altKey) this.#configureDirectionSnap(ctx.editor, ctx.tool, drag);
+    if (drag && !event.altKey) {
+      this.#configureDirectionSnap(ctx.editor, ctx.tool, drag);
+      this.#configurePositionSnap(ctx.editor, ctx.tool, drag);
+    }
 
     return true;
   }
@@ -161,6 +164,34 @@ export class Translate implements SelectBehavior {
     drag.move
       .from(centre)
       .directionSnappedBy(DirectionSnap.everyDegrees(90, condition).around(centre).withoutGuides());
+  }
+
+  /** Snaps dragged points to source metrics and into line with on-screen points that stay put. */
+  #configurePositionSnap(editor: Editor, select: Select, drag: TranslateInteraction): void {
+    const { layer, targets } = drag.selection;
+    const moving = targets.points ?? [];
+    const candidates = snapCandidates(layer, moving);
+    if (candidates.length === 0) return;
+
+    const condition: PositionCondition = {
+      when: () => {
+        const state = select.getState();
+        return state.type === "translating" && !state.translate.accelKey;
+      },
+    };
+    // A group never aligns with its own edges, but their ends are still marked on a snap line.
+    const movingIds = new Set(moving);
+    const neighbours =
+      candidates.length > 1 ? edgeNeighbours(layer, movingIds) : new Set<PointId>();
+    const excluding = new Set([...movingIds, ...neighbours]);
+    drag.move.snappedBy(
+      editor.snapping.forLayer(layer, editor.selectionNode(), {
+        excluding,
+        marking: neighbours,
+        condition,
+      }),
+      candidates.map((pointId) => PositionReference.point(pointId)),
+    );
   }
 
   #pointSnapPivot(object: ShiftObjectOf<"point">): PositionReference | null {
@@ -388,16 +419,22 @@ export class Translate implements SelectBehavior {
         ...state.translate,
         lastPos: currentPos,
         shiftKey: event.shiftKey,
+        accelKey: event.accelKey,
       },
     };
   }
 }
 
-function translatingState(startPos: Point2D, shiftKey: boolean): TranslatingState {
+function translatingState(
+  startPos: Point2D,
+  shiftKey: boolean,
+  accelKey: boolean,
+): TranslatingState {
   return {
     type: "translating",
     translate: {
       shiftKey,
+      accelKey,
       startPos,
       lastPos: startPos,
       totalDelta: { x: 0, y: 0 },
@@ -416,6 +453,34 @@ function boundingBoxOwnsDrag(editor: Editor, select: Select, event: DragStartEve
     editor.selection.isSelected(target.id);
 
   return !targetSelected && select.boundingBox.containsTranslationPoint(event.origin);
+}
+
+/** A lone dragged point snaps itself; a group snaps through its on-curve corners. */
+function snapCandidates(layer: GlyphLayer, pointIds: readonly PointId[]): PointId[] {
+  if (pointIds.length === 1) return [...pointIds];
+
+  return pointIds.filter((pointId) => {
+    const point = layer.geometry.point(pointId);
+    return point !== null && Point.isOnCurve(point);
+  });
+}
+
+/**
+ * Stationary points joined by a segment to a moving point: the far ends of the edges a
+ * dragged group carries, whose alignment with the group it keeps on its own.
+ */
+function edgeNeighbours(layer: GlyphLayer, moving: ReadonlySet<PointId>): Set<PointId> {
+  const neighbours = new Set<PointId>();
+
+  for (const contour of layer.contours) {
+    for (const segment of contour.segments()) {
+      if (moving.has(segment.startId)) neighbours.add(segment.endId);
+      if (moving.has(segment.endId)) neighbours.add(segment.startId);
+    }
+  }
+
+  for (const pointId of moving) neighbours.delete(pointId);
+  return neighbours;
 }
 
 /** Whether `handle` sits on a smooth anchor whose other side is a line, locking its direction. */

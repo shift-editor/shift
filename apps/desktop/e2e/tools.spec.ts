@@ -20,33 +20,39 @@ async function dragWithSyntheticPointerEnd(
     );
   });
 
-  await page.mouse.move(point.startPagePosition.x, point.startPagePosition.y);
-  await page.mouse.down();
-  await page.mouse.move(point.endPagePosition.x, point.endPagePosition.y, { steps: 5 });
-  const pointerId = Number(await canvas.getAttribute("data-e2e-pointer-id"));
-  await canvas.evaluate(
-    (element, event) => {
-      element.dispatchEvent(
-        new PointerEvent(event.type, {
-          bubbles: true,
-          pointerId: event.pointerId,
-          pointerType: "mouse",
-          isPrimary: true,
-          button: -1,
-          buttons: 0,
-          clientX: event.x,
-          clientY: event.y,
-        }),
-      );
-    },
-    {
-      type,
-      pointerId,
-      x: point.endPagePosition.x,
-      y: point.endPagePosition.y,
-    },
-  );
-  await page.mouse.up();
+  const suspendSnappingKey = process.platform === "darwin" ? "Meta" : "Control";
+  await page.keyboard.down(suspendSnappingKey);
+  try {
+    await page.mouse.move(point.startPagePosition.x, point.startPagePosition.y);
+    await page.mouse.down();
+    await page.mouse.move(point.endPagePosition.x, point.endPagePosition.y, { steps: 5 });
+    const pointerId = Number(await canvas.getAttribute("data-e2e-pointer-id"));
+    await canvas.evaluate(
+      (element, event) => {
+        element.dispatchEvent(
+          new PointerEvent(event.type, {
+            bubbles: true,
+            pointerId: event.pointerId,
+            pointerType: "mouse",
+            isPrimary: true,
+            button: -1,
+            buttons: 0,
+            clientX: event.x,
+            clientY: event.y,
+          }),
+        );
+      },
+      {
+        type,
+        pointerId,
+        x: point.endPagePosition.x,
+        y: point.endPagePosition.y,
+      },
+    );
+    await page.mouse.up();
+  } finally {
+    await page.keyboard.up(suspendSnappingKey);
+  }
 }
 
 /** Selects a shape kind and leaves a live draft pressed between two canvas positions. */

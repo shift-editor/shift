@@ -37,15 +37,18 @@ export class PenDownBehaviour implements PenBehavior {
         ctx.setState({ type: "ready" });
         return true;
 
-      case "empty":
+      case "point":
+      case "empty": {
+        const anchor = ctx.tool.anchorFor(target, nodePoint, event).position;
         if (stroke.activeContour) {
-          stroke.appendOnCurve(ctx.tool.resolveAnchorPosition(nodePoint, event.shiftKey));
+          stroke.appendOnCurve(anchor);
         } else {
-          stroke.startContour(nodePoint);
+          stroke.startContour(anchor);
         }
 
         ctx.setState({ type: "ready" });
         return true;
+      }
     }
   }
 
@@ -94,8 +97,8 @@ export class PenDownBehaviour implements PenBehavior {
     }
 
     const anchorPosition =
-      target.type === "empty"
-        ? ctx.tool.resolveAnchorPosition(nodePoint, event.shiftKey)
+      target.type === "empty" || target.type === "point"
+        ? ctx.tool.anchorFor(target, nodePoint, event).position
         : nodePoint;
     ctx.setState({ type: "anchored", anchorPosition });
     return true;

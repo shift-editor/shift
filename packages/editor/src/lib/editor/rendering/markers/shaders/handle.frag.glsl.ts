@@ -63,10 +63,16 @@ void main() {
       strokeCoverage(barDistance, v_line_width * ${POLYGON_STROKE_SCALE}),
       max(shapeCoverage(triangleDistance), strokeCoverage(triangleDistance, v_line_width * ${POLYGON_STROKE_SCALE}))
     );
-  } else {
+  } else if (v_shape < 5.5) {
     distance = sdSegment(v_local, vec2(-v_size * 0.5, 0.0), vec2(v_size * 0.5, 0.0));
     color = v_stroke_color * strokeCoverage(distance, v_line_width * ${POLYGON_STROKE_SCALE});
     coverage = strokeCoverage(distance, v_line_width * ${POLYGON_STROKE_SCALE});
+  } else {
+    // Halo: a translucent filled disc whose fill alpha applies once, premultiplied.
+    distance = sdCircle(v_local, v_size);
+    coverage = shapeCoverage(distance);
+    float haloAlpha = v_fill_color.a * coverage;
+    color = vec4(v_fill_color.rgb * haloAlpha, haloAlpha);
   }
 
   if (coverage <= 0.0 && color.a <= 0.0) {
@@ -74,8 +80,8 @@ void main() {
   }
 
   if (v_overlay_color.a > 0.0) {
-    vec4 overlay = vec4(v_overlay_color.rgb, v_overlay_color.a * coverage);
-    color = mix(color, overlay, overlay.a);
+    float overlayAlpha = v_overlay_color.a * coverage;
+    color = color * (1.0 - overlayAlpha) + vec4(v_overlay_color.rgb * overlayAlpha, overlayAlpha);
   }
 
   gl_FragColor = color;

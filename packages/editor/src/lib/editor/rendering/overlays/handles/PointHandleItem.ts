@@ -2,6 +2,7 @@ import { Vec2 } from "@shift/geo";
 import { Point } from "@shift/glyph-state";
 import type { HandleState } from "../../../../../types/graphics";
 import type { MarkerShape } from "../../markers/types";
+import { showsMetricMarker } from "../../markers/handleStyles";
 
 export class PointHandleItem {
   point: Point;
@@ -11,6 +12,8 @@ export class PointHandleItem {
   count: number;
   contourClosed: boolean;
   state: HandleState;
+  /** Whether this on-curve point rests exactly on a standard metric line. */
+  onMetric: boolean;
 
   constructor(
     point: Point,
@@ -20,6 +23,7 @@ export class PointHandleItem {
     count: number,
     contourClosed: boolean,
     state: HandleState,
+    onMetric: boolean,
   ) {
     this.point = point;
     this.prev = prev;
@@ -28,6 +32,7 @@ export class PointHandleItem {
     this.count = count;
     this.contourClosed = contourClosed;
     this.state = state;
+    this.onMetric = onMetric;
   }
 
   reset(
@@ -38,6 +43,7 @@ export class PointHandleItem {
     count: number,
     contourClosed: boolean,
     state: HandleState,
+    onMetric: boolean,
   ): void {
     this.point = point;
     this.prev = prev;
@@ -46,6 +52,12 @@ export class PointHandleItem {
     this.count = count;
     this.contourClosed = contourClosed;
     this.state = state;
+    this.onMetric = onMetric;
+  }
+
+  /** Whether this handle draws the on-metric halo and stroke in its current state. */
+  get showsMetricMarker(): boolean {
+    return this.onMetric && showsMetricMarker(this.state);
   }
 
   get shape(): MarkerShape {

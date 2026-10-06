@@ -75,6 +75,7 @@ import {
 } from "../clipboard";
 import { cursorToCSS } from "../styles/cursor";
 import { Hover } from "./Hover";
+import { Snapping } from "./Snapping";
 import { Renderer } from "./rendering/Renderer";
 import { Scene } from "./Scene";
 import type { Canvas2DSurface, MarkerCanvasSurface } from "./rendering/CanvasSurface";
@@ -175,6 +176,8 @@ export class Editor {
   readonly editing: Editing;
   readonly history: EditorHistory;
   readonly hover: Hover;
+  /** Builds the snap targets tools use while moving or placing glyph points. */
+  readonly snapping: Snapping;
   readonly font: Font;
   /** Immutable persistence and editing capability; glyph edits still require an authored layer. */
   readonly sessionMode: FontSessionMode;
@@ -295,6 +298,7 @@ export class Editor {
     );
     this.history.onCaptureFinishing((changed) => this.#runContentHooks(changed));
     this.hover = new Hover();
+    this.snapping = new Snapping(this);
     this.#selectionBounds = computed(
       () => {
         track(this.selection.stateCell);
@@ -1482,6 +1486,23 @@ export class Editor {
    */
   toLocalBounds(node: ShiftNode, bounds: SceneBounds): LocalBounds {
     return transformBounds(invertTransform(this.sceneTransform(node)), bounds);
+  }
+
+  /**
+   * Returns the canvas rectangle currently on screen in a node's own units, read without tracking.
+   *
+   * @param node - the node whose units the result is measured in.
+   * @returns null before the canvas has a size, when nothing is known to be on screen.
+   */
+  visibleLocalBounds(node: ShiftNode): LocalBounds | null {
+    if (this.#camera.logicalWidth <= 0 || this.#camera.logicalHeight <= 0) return null;
+
+    const visible = this.#camera.visibleSceneBounds(0);
+    const bounds = Bounds.create(
+      { x: visible.minX, y: visible.minY },
+      { x: visible.maxX, y: visible.maxY },
+    );
+    return this.toLocalBounds(node, sceneBounds(bounds));
   }
 
   /**
