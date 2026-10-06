@@ -200,7 +200,7 @@ impl InterpolationBasis {
     ///
     /// # Errors
     ///
-    /// Returns [`CoreError::AxisNotFound`] when `axes` omits an axis referenced
+    /// Returns [`crate::CoreError::AxisNotFound`] when `axes` omits an axis referenced
     /// by an interpolation region.
     pub fn weights_at(&self, location: &DesignLocation, axes: &[Axis]) -> CoreResult<Vec<f64>> {
         self.basis.evaluate(location.as_untyped(), axes)
@@ -258,7 +258,7 @@ impl GlyphInterpolation {
     ///
     /// # Errors
     ///
-    /// Returns [`CoreError::AxisNotFound`] if `axes` does not contain every
+    /// Returns [`crate::CoreError::AxisNotFound`] if `axes` does not contain every
     /// support axis, or a glyph-value shape error if the interpolation model
     /// and its structural reference layer are inconsistent.
     pub fn resolve(&self, location: &DesignLocation, axes: &[Axis]) -> CoreResult<GlyphLayer> {
@@ -306,7 +306,7 @@ impl Font {
     ///
     /// # Errors
     ///
-    /// Returns [`CoreError::GlyphNotFound`] when `glyph_id` is not in the font.
+    /// Returns [`crate::CoreError::GlyphNotFound`] when `glyph_id` is not in the font.
     pub fn glyph_interpolation(
         &self,
         glyph_id: &GlyphId,
