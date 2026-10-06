@@ -18,7 +18,7 @@ import { useEditor } from "@/workspace/WorkspaceContext";
 
 export const CanvasContextMenu = ({ children }: CanvasContextMenuProps) => {
   const editor = useEditor();
-  useSignalState(editor.selection.stateCell);
+  useSignalState(editor.selection.stateCell, { schedule: "frame" });
   const runCommand = useCallback(async (commandId: CommandId) => {
     try {
       await getShiftHost().commands.run(commandId);

@@ -14,10 +14,13 @@ import type {
   WorkspaceEditEvent,
   WorkspaceEffect,
 } from "../../../types/history";
-import type { ShiftEditorRecord } from "../../../types/records";
+import type { ShiftEditorRecord, ShiftRecordId } from "../../../types/records";
 import type { StoreChange } from "../../../types/store";
 import { HistoryCapture } from "./HistoryCapture";
 import { editorRecordsEqual, recordChanges } from "./recordChanges";
+
+/** Bounds how many rounds of finishing listeners one capture runs; each round only sees new changes. */
+const MAX_FINISHING_PASSES = 4;
 
 /**
  * Interleaves TypeScript editor records with ordered workspace undo entries.
@@ -37,6 +40,7 @@ export class EditorHistory {
   readonly #redoEntries: HistoryEntry[] = [];
   readonly #pending = new Map<PendingEditId, PendingHistoryEffect>();
 
+  readonly #finishingListeners = new Set<(changed: ReadonlySet<ShiftRecordId>) => void>();
   #capture: HistoryCaptureContext | null = null;
   #recordingDepth = 0;
   #discardingRedo: Promise<void> | null = null;
@@ -85,8 +89,25 @@ export class EditorHistory {
       label,
       changes: new Map(),
       editIds: [],
+      touched: new Set(),
     };
     return capture;
+  }
+
+  /**
+   * Runs a listener as each capture finishes, while it is still open.
+   *
+   * @remarks
+   * The listener receives the record ids the capture changed. Its own writes
+   * join the same capture, and it is called again with just those ids until
+   * nothing new changes (bounded). Captures cancelled, or edits made outside
+   * a capture or inside `withoutRecording`, do not notify.
+   *
+   * @returns a function that removes the listener.
+   */
+  onCaptureFinishing(listener: (changed: ReadonlySet<ShiftRecordId>) => void): () => void {
+    this.#finishingListeners.add(listener);
+    return () => this.#finishingListeners.delete(listener);
   }
 
   /**
@@ -111,6 +132,21 @@ export class EditorHistory {
       capture.cancel();
       throw error;
     }
+  }
+
+  /**
+   * Runs an action inside the open capture, or as its own captured action when none is open.
+   *
+   * @remarks
+   * Tool events already run inside a capture; code reachable from both tool
+   * events and direct calls uses this to record exactly one entry either way.
+   *
+   * @param label - Action name used only when this call opens the capture.
+   * @param body - Synchronous action.
+   * @returns the body's result.
+   */
+  captureOrJoin<T>(label: string, body: () => T): T {
+    return this.capturing ? body() : this.capture(label, body);
   }
 
   /**
@@ -222,6 +258,8 @@ export class EditorHistory {
     const context = this.#capture;
     if (context?.capture !== capture) return;
 
+    this.#notifyFinishing(context);
+
     const changes = recordChanges(context.changes.values());
     this.#capture = null;
 
@@ -290,10 +328,19 @@ export class EditorHistory {
     }
   }
 
+  #notifyFinishing(context: HistoryCaptureContext): void {
+    for (let pass = 0; pass < MAX_FINISHING_PASSES && context.touched.size > 0; pass++) {
+      const changed = context.touched;
+      context.touched = new Set();
+      for (const listener of this.#finishingListeners) listener(changed);
+    }
+  }
+
   #storeChanged(change: StoreChange<ShiftEditorRecord>): void {
     const context = this.#capture;
     if (!context || this.#recordingDepth > 0 || this.#disposed) return;
 
+    context.touched.add(change.id);
     const previous = context.changes.get(change.id);
     context.changes.set(change.id, {
       id: change.id,
@@ -476,18 +523,28 @@ export class EditorHistory {
     if (records) this.#applyRecordChanges(records.changes, reverse);
   }
 
+  /**
+   * Restores one side of a capture's record changes.
+   *
+   * @remarks
+   * Session-scoped records (selection, editing, caret) apply after document
+   * records, because they are validated against the document they refer to.
+   * Any record type opts in by declaring `scope: "session"`.
+   */
   #applyRecordChanges(changes: readonly RecordChange[], reverse: boolean): void {
     batch(() => {
+      const session: RecordChange[] = [];
       for (const change of changes) {
         const record = reverse ? change.before : change.after;
-        if (record?.type === "selection" || record?.type === "editing") continue;
+        if (isSessionRecord(record ?? (reverse ? change.after : change.before))) {
+          session.push(change);
+          continue;
+        }
         this.#applyRecord(change.id, record);
       }
 
-      for (const change of changes) {
-        const record = reverse ? change.before : change.after;
-        if (record?.type !== "selection" && record?.type !== "editing") continue;
-        this.#applyRecord(change.id, record);
+      for (const change of session) {
+        this.#applyRecord(change.id, reverse ? change.before : change.after);
       }
     });
   }
@@ -510,6 +567,12 @@ export class EditorHistory {
       case "editing": {
         const nodeIds = record.nodeIds.filter((id) => this.#editor.scene.node(id) !== null);
         return nodeIds.length > 0 ? { ...record, nodeIds } : null;
+      }
+      case "textEditing": {
+        const node = this.#editor.scene.nodeOfKind(record.nodeId, "textRun");
+        if (!node || !this.#editor.text.run(node.runId)) return null;
+        // Outside Text mode the caret is kept, not shown.
+        return this.#editor.tool?.id === "text" ? record : { ...record, active: false };
       }
       default:
         return record;
@@ -614,4 +677,9 @@ function replaceRecordEffect(
   }
 
   return effects.length > 0 ? { ...entry, effects } : null;
+}
+
+/** Whether a record is session state rather than document content. */
+function isSessionRecord(record: ShiftEditorRecord | null): boolean {
+  return record !== null && "scope" in record && record.scope === "session";
 }

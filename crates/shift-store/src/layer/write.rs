@@ -1,3 +1,4 @@
+use crate::error::OrMissing;
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use shift_font as font;
 
@@ -15,11 +16,7 @@ impl ShiftStore {
     /// rows in one transaction. The workspace revision advances only after
     /// encoding and index derivation have succeeded.
     pub fn replace_glyph_layer(&mut self, layer: &font::GlyphLayer) -> Result<(), StoreError> {
-        let owner =
-            layer_owner(&self.conn, &layer.id())?.ok_or_else(|| StoreError::MissingEntity {
-                kind: "glyph layer",
-                id: layer.id().to_string(),
-            })?;
+        let owner = layer_owner(&self.conn, &layer.id())?.or_missing("glyph layer", &layer.id())?;
         if let Some(recovery) = self.recovery.as_mut() {
             return recovery.replace_layer(&owner, layer);
         }
@@ -128,10 +125,7 @@ pub(crate) fn rewrite_layer_in_tx(
     tx: &Transaction<'_>,
     layer: &font::GlyphLayer,
 ) -> Result<(), StoreError> {
-    let owner = layer_owner(tx, &layer.id())?.ok_or_else(|| StoreError::MissingEntity {
-        kind: "glyph layer",
-        id: layer.id().to_string(),
-    })?;
+    let owner = layer_owner(tx, &layer.id())?.or_missing("glyph layer", &layer.id())?;
     write_layer_in_tx(tx, &owner, layer)
 }
 

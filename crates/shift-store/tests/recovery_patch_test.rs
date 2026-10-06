@@ -379,7 +379,7 @@ fn recovery_overlay_adds_a_new_glyph_and_layer_without_copying_the_directory() {
     assert_eq!(directory.glyph_count(), post.glyph_count());
     assert_eq!(
         directory
-            .glyph(glyph_id.clone())
+            .glyph(&glyph_id)
             .expect("new glyph in merged directory")
             .layers()
             .get(&layer_id)

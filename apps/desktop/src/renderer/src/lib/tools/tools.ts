@@ -40,6 +40,13 @@ function builtInToolManifests(): readonly ToolManifest[] {
       shortcut: "p",
     },
     {
+      id: "text",
+      create: (api) => new TextTool(api),
+      icon: TextIcon,
+      tooltip: "Text Tool (T)",
+      shortcut: "t",
+    },
+    {
       id: "hand",
       create: (api) => new Hand(api),
       icon: HandIcon,
@@ -81,15 +88,6 @@ function builtInToolManifests(): readonly ToolManifest[] {
         },
       ],
     },
-    {
-      id: "text",
-      create: (api) => new TextTool(api),
-      icon: TextIcon,
-      tooltip: "Text Tool (T)",
-      shortcut: "t",
-      hidden: true,
-      disabled: true,
-    },
   ];
 }
 
@@ -97,7 +95,8 @@ export function registerBuiltInTools(editor: Editor): void {
   for (const manifest of builtInToolManifests()) {
     manifest.disabled =
       manifest.disabled ||
-      (editor.sessionMode === "preview" && (manifest.id === "pen" || manifest.id === "shape"));
+      (editor.sessionMode === "preview" &&
+        (manifest.id === "pen" || manifest.id === "shape" || manifest.id === "text"));
 
     editor.registerTool(manifest);
   }

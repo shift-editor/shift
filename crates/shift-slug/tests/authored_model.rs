@@ -319,7 +319,7 @@ fn component_model_resolves_varying_decomposed_transform() {
     let mut font = sample_variable_font();
     let glyph_id = font.glyphs_by_unicode(0x41).next().unwrap().id();
     let layers = font
-        .glyph(glyph_id.clone())
+        .glyph(&glyph_id)
         .unwrap()
         .layers()
         .values()
@@ -357,7 +357,7 @@ fn component_model_resolves_varying_decomposed_transform() {
         .map(|(layer_id, _)| layer_id)
         .collect::<Vec<_>>();
     for (index, layer_id) in layer_ids.into_iter().enumerate() {
-        font.layer_mut(layer_id)
+        font.layer_mut(&layer_id)
             .unwrap()
             .add_component(Component::with_transform(
                 child_id.clone(),
@@ -500,7 +500,7 @@ fn component_model_accepts_a_component_specific_interpolation_basis() {
     let mut font = sample_variable_font();
     let root_id = font.glyphs_by_unicode(0x41).next().unwrap().id();
     let root_source_ids = font
-        .glyph(root_id.clone())
+        .glyph(&root_id)
         .unwrap()
         .layers()
         .values()
@@ -531,14 +531,14 @@ fn component_model_accepts_a_component_specific_interpolation_basis() {
     font.insert_glyph(child).unwrap();
 
     let root_layer_ids = font
-        .glyph(root_id.clone())
+        .glyph(&root_id)
         .unwrap()
         .layers()
         .values()
         .map(|layer| layer.id())
         .collect::<Vec<_>>();
     for (source_index, layer_id) in root_layer_ids.into_iter().enumerate() {
-        font.layer_mut(layer_id)
+        font.layer_mut(&layer_id)
             .unwrap()
             .add_component(Component::with_transform(
                 child_id.clone(),

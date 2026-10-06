@@ -1,3 +1,4 @@
+use crate::length::{ensure_total, to_u32, within, OrOverflow};
 use crate::{
     curve::{
         cubic_subdivision_counts_from_commands,
@@ -91,18 +92,18 @@ pub fn pack_variable_params(
         params.band_count,
         params.atlas_split_offset,
         0,
-        as_u32(params.layout.base_curves.offset)?,
-        as_u32(params.layout.curve_deltas.offset)?,
-        as_u32(params.layout.sparse_deltas.offset)?,
-        as_u32(params.layout.glyphs.offset)?,
-        as_u32(params.layout.sources.offset)?,
-        as_u32(params.layout.source_advances.offset)?,
-        as_u32(params.layout.component_glyphs.offset)?,
-        as_u32(params.layout.component_parts.offset)?,
-        as_u32(params.layout.components.offset)?,
-        as_u32(params.layout.component_sources.offset)?,
+        to_u32(params.layout.base_curves.offset)?,
+        to_u32(params.layout.curve_deltas.offset)?,
+        to_u32(params.layout.sparse_deltas.offset)?,
+        to_u32(params.layout.glyphs.offset)?,
+        to_u32(params.layout.sources.offset)?,
+        to_u32(params.layout.source_advances.offset)?,
+        to_u32(params.layout.component_glyphs.offset)?,
+        to_u32(params.layout.component_parts.offset)?,
+        to_u32(params.layout.components.offset)?,
+        to_u32(params.layout.component_sources.offset)?,
         0,
-        as_u32(params.layout.line_bits.offset)?,
+        to_u32(params.layout.line_bits.offset)?,
     ];
     let mut bytes = [0; VARIABLE_PARAMS_BYTES];
     for (index, word) in words.into_iter().enumerate() {
@@ -248,25 +249,22 @@ impl VariableAtlas {
                 .ok_or(SlugError::GlyphIndexOutOfRange(*glyph_index))?;
             let advance_glyph = match component_glyph_index(glyph) {
                 Some(component_index) => {
-                    let component = self
-                        .component_glyphs
-                        .get(component_index)
-                        .ok_or(SlugError::LengthOverflow)?;
+                    let component = self.component_glyphs.get(component_index).or_overflow()?;
                     *self
                         .glyphs
                         .get(component.root_glyph_index as usize)
-                        .ok_or(SlugError::LengthOverflow)?
+                        .or_overflow()?
                 }
                 None => glyph,
             };
             let advance_start = advance_glyph.source_start as usize;
             let advance_end = advance_start
                 .checked_add(advance_glyph.source_count as usize)
-                .ok_or(SlugError::LengthOverflow)?;
+                .or_overflow()?;
             let minimum_advance = self
                 .source_advances
                 .get(advance_start..advance_end)
-                .ok_or(SlugError::LengthOverflow)?
+                .or_overflow()?
                 .iter()
                 .copied()
                 .fold(f32::INFINITY, f32::min);
@@ -326,15 +324,12 @@ impl VariableAtlas {
         let curve_start = glyph.curve_start as usize;
         let curve_end = curve_start
             .checked_add(glyph.curve_count as usize)
-            .ok_or(SlugError::LengthOverflow)?;
+            .or_overflow()?;
         let source_start = glyph.source_start as usize;
         let source_end = source_start
             .checked_add(glyph.source_count as usize)
-            .ok_or(SlugError::LengthOverflow)?;
-        let sources = self
-            .sources
-            .get(source_start..source_end)
-            .ok_or(SlugError::LengthOverflow)?;
+            .or_overflow()?;
+        let sources = self.sources.get(source_start..source_end).or_overflow()?;
         let mut weight_sum = 0.0_f32;
         for source in sources {
             weight_sum += *weights.get(source.weight_index as usize).ok_or(
@@ -355,44 +350,32 @@ impl VariableAtlas {
                 let delta_start = source.delta_start as usize;
                 let delta_end = delta_start
                     .checked_add(glyph.curve_count as usize)
-                    .ok_or(SlugError::LengthOverflow)?;
+                    .or_overflow()?;
                 for (curve, delta) in curves.iter_mut().zip(
                     self.curve_deltas
                         .get(delta_start..delta_end)
-                        .ok_or(SlugError::LengthOverflow)?,
+                        .or_overflow()?,
                 ) {
                     *curve = add_scaled_curve(*curve, *delta, weight);
                 }
                 continue;
             };
 
-            let delta_start = *self
-                .sparse_deltas
-                .get(descriptor_start)
-                .ok_or(SlugError::LengthOverflow)? as usize;
-            let delta_count = *self
-                .sparse_deltas
-                .get(descriptor_start + 1)
-                .ok_or(SlugError::LengthOverflow)? as usize;
-            let delta_end = delta_start
-                .checked_add(delta_count)
-                .ok_or(SlugError::LengthOverflow)?;
+            let delta_start = *self.sparse_deltas.get(descriptor_start).or_overflow()? as usize;
+            let delta_count = *self.sparse_deltas.get(descriptor_start + 1).or_overflow()? as usize;
+            let delta_end = delta_start.checked_add(delta_count).or_overflow()?;
             let index_start = descriptor_start + 2;
-            let index_end = index_start
-                .checked_add(delta_count)
-                .ok_or(SlugError::LengthOverflow)?;
+            let index_end = index_start.checked_add(delta_count).or_overflow()?;
             let deltas = self
                 .curve_deltas
                 .get(delta_start..delta_end)
-                .ok_or(SlugError::LengthOverflow)?;
+                .or_overflow()?;
             let indices = self
                 .sparse_deltas
                 .get(index_start..index_end)
-                .ok_or(SlugError::LengthOverflow)?;
+                .or_overflow()?;
             for (local_index, delta) in indices.iter().zip(deltas) {
-                let curve = curves
-                    .get_mut(*local_index as usize)
-                    .ok_or(SlugError::LengthOverflow)?;
+                let curve = curves.get_mut(*local_index as usize).or_overflow()?;
                 *curve = add_scaled_curve(*curve, *delta, weight);
             }
         }
@@ -421,21 +404,18 @@ impl VariableAtlas {
             let component_glyph = self
                 .component_glyphs
                 .get(component_glyph_index)
-                .ok_or(SlugError::LengthOverflow)?;
+                .or_overflow()?;
             return self.resolve_advance_with_weights(component_glyph.root_glyph_index, weights);
         }
         let source_start = glyph.source_start as usize;
         let source_end = source_start
             .checked_add(glyph.source_count as usize)
-            .ok_or(SlugError::LengthOverflow)?;
-        let sources = self
-            .sources
-            .get(source_start..source_end)
-            .ok_or(SlugError::LengthOverflow)?;
+            .or_overflow()?;
+        let sources = self.sources.get(source_start..source_end).or_overflow()?;
         let advances = self
             .source_advances
             .get(source_start..source_end)
-            .ok_or(SlugError::LengthOverflow)?;
+            .or_overflow()?;
         sources
             .iter()
             .zip(advances)
@@ -510,7 +490,7 @@ impl VariableAtlas {
         let total_length = line_bits
             .offset
             .checked_add(line_bits.length)
-            .ok_or(SlugError::LengthOverflow)?;
+            .or_overflow()?;
 
         Ok(VariableLayout {
             base_curves,
@@ -673,7 +653,7 @@ impl VariableAtlasBuilder {
     ) -> Result<u32, SlugError> {
         let base_commands: Vec<_> = base_commands.into_iter().collect();
         let source_commands: Vec<_> = source_commands.into_iter().collect();
-        let glyph_index = as_u32(self.atlas.glyphs.len())?;
+        let glyph_index = to_u32(self.atlas.glyphs.len())?;
 
         if command_topology(&base_commands) != command_topology(&source_commands) {
             return Err(SlugError::VariableTopologyMismatch { glyph_index });
@@ -757,7 +737,7 @@ impl VariableAtlasBuilder {
         let base_curves: Vec<_> = base_curves.into_iter().collect();
         let line_flags: Vec<_> = line_flags.into_iter().collect();
         let source_curves: Vec<_> = source_curves.into_iter().collect();
-        let glyph_index = as_u32(self.atlas.glyphs.len())?;
+        let glyph_index = to_u32(self.atlas.glyphs.len())?;
         if source_curves
             .iter()
             .any(|(_, curves)| curves.len() != base_curves.len())
@@ -768,15 +748,10 @@ impl VariableAtlasBuilder {
             return Err(SlugError::VariableLineFlagMismatch { glyph_index });
         }
 
-        let curve_start = as_u32(self.atlas.base_curves.len())?;
-        let curve_count = as_u32(base_curves.len())?;
+        let curve_start = to_u32(self.atlas.base_curves.len())?;
+        let curve_count = to_u32(base_curves.len())?;
         let source_start = direct_source_offset(self.atlas.sources.len())?;
-        let source_count = as_u32(
-            source_curves
-                .len()
-                .checked_add(1)
-                .ok_or(SlugError::LengthOverflow)?,
-        )?;
+        let source_count = to_u32(source_curves.len().checked_add(1).or_overflow()?)?;
         let mut bounds = variable_bounds(
             base_curves
                 .iter()
@@ -812,13 +787,13 @@ impl VariableAtlasBuilder {
                 byte_length(changed.len(), CURVE_BYTES + std::mem::size_of::<u32>())?;
             let sparse_bytes = sparse_values_bytes
                 .checked_add(2 * std::mem::size_of::<u32>())
-                .ok_or(SlugError::LengthOverflow)?;
-            let delta_start = as_u32(
+                .or_overflow()?;
+            let delta_start = to_u32(
                 self.atlas
                     .curve_deltas
                     .len()
                     .checked_add(curve_deltas.len())
-                    .ok_or(SlugError::LengthOverflow)?,
+                    .or_overflow()?,
             )?;
             if sparse_bytes < dense_bytes {
                 let descriptor_start = self
@@ -826,11 +801,11 @@ impl VariableAtlasBuilder {
                     .sparse_deltas
                     .len()
                     .checked_add(sparse_deltas.len())
-                    .ok_or(SlugError::LengthOverflow)?;
+                    .or_overflow()?;
                 sparse_deltas.push(delta_start);
-                sparse_deltas.push(as_u32(changed.len())?);
+                sparse_deltas.push(to_u32(changed.len())?);
                 for (local_index, delta) in changed {
-                    sparse_deltas.push(as_u32(local_index)?);
+                    sparse_deltas.push(to_u32(local_index)?);
                     curve_deltas.push(delta);
                 }
                 sources.push(VariableSource {
@@ -857,9 +832,9 @@ impl VariableAtlasBuilder {
             .base_curves
             .len()
             .checked_add(base_curves.len())
-            .ok_or(SlugError::LengthOverflow)?;
+            .or_overflow()?;
         let required_line_words = total_curves.div_ceil(32);
-        as_u32(required_line_words)?;
+        to_u32(required_line_words)?;
 
         append_line_flags(
             &mut self.atlas.line_bits,
@@ -911,13 +886,11 @@ impl VariableAtlasBuilder {
             });
         }
         let start = glyph.source_start as usize;
-        let end = start
-            .checked_add(expected)
-            .ok_or(SlugError::LengthOverflow)?;
+        let end = start.checked_add(expected).or_overflow()?;
         self.atlas
             .source_advances
             .get_mut(start..end)
-            .ok_or(SlugError::LengthOverflow)?
+            .or_overflow()?
             .copy_from_slice(&advances);
         Ok(())
     }
@@ -1100,9 +1073,7 @@ where
     }
 
     fn pad_to(&mut self, target: usize) -> Result<(), SlugError> {
-        let padding = target
-            .checked_sub(self.position())
-            .ok_or(SlugError::LengthOverflow)?;
+        let padding = target.checked_sub(self.position()).or_overflow()?;
         const ZEROS: [u8; 256] = [0; 256];
         let mut remaining = padding;
         while remaining != 0 {
@@ -1224,14 +1195,11 @@ fn next_section(
     stride: usize,
     alignment: usize,
 ) -> Result<Section, SlugError> {
-    let previous_end = previous
-        .offset
-        .checked_add(previous.length)
-        .ok_or(SlugError::LengthOverflow)?;
+    let previous_end = previous.offset.checked_add(previous.length).or_overflow()?;
     let offset = previous_end
         .checked_add(alignment - 1)
         .map(|value| value & !(alignment - 1))
-        .ok_or(SlugError::LengthOverflow)?;
+        .or_overflow()?;
 
     Ok(Section {
         offset,
@@ -1240,44 +1208,19 @@ fn next_section(
 }
 
 fn byte_length(count: usize, stride: usize) -> Result<usize, SlugError> {
-    count.checked_mul(stride).ok_or(SlugError::LengthOverflow)
-}
-
-fn ensure_total(current: usize, additional: usize) -> Result<(), SlugError> {
-    let total = current
-        .checked_add(additional)
-        .ok_or(SlugError::LengthOverflow)?;
-    as_u32(total).map(|_| ())
-}
-
-fn as_u32(value: usize) -> Result<u32, SlugError> {
-    u32::try_from(value).map_err(|_| SlugError::LengthOverflow)
+    count.checked_mul(stride).or_overflow()
 }
 
 fn direct_source_offset(offset: usize) -> Result<u32, SlugError> {
-    let offset = as_u32(offset)?;
-    if offset <= GLYPH_OFFSET_MASK {
-        Ok(offset)
-    } else {
-        Err(SlugError::LengthOverflow)
-    }
+    within(to_u32(offset)?, GLYPH_OFFSET_MASK)
 }
 
 fn dense_delta_offset(offset: u32) -> Result<u32, SlugError> {
-    if offset <= SOURCE_OFFSET_MASK {
-        Ok(offset)
-    } else {
-        Err(SlugError::LengthOverflow)
-    }
+    within(offset, SOURCE_OFFSET_MASK)
 }
 
 fn tagged_sparse_offset(offset: usize) -> Result<u32, SlugError> {
-    let offset = as_u32(offset)?;
-    if offset <= SOURCE_OFFSET_MASK {
-        Ok(SPARSE_SOURCE_FLAG | offset)
-    } else {
-        Err(SlugError::LengthOverflow)
-    }
+    Ok(SPARSE_SOURCE_FLAG | within(to_u32(offset)?, SOURCE_OFFSET_MASK)?)
 }
 
 fn sparse_descriptor_start(source: VariableSource) -> Option<usize> {

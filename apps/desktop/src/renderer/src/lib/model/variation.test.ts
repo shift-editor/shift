@@ -313,46 +313,6 @@ describe("variable editing across sources", () => {
     expect(Math.max(...xs)).toBeCloseTo(100 + (200 - 100) * 0.5);
   });
 
-  it("updates an editor text run with interpolated advances between masters", async () => {
-    const editor = new TestEditor();
-    await editor.startSession();
-    const glyph = editor.glyphForId(editor.glyphRecord!.id)!;
-    const regular = editor.requireGlyphLayer();
-    regular.setXAdvance(300);
-    await editor.settle();
-
-    const axisId = editor.font.createAxis({
-      tag: "wght",
-      name: "Weight",
-      role: "external",
-      axisType: "continuous",
-      minimum: 100,
-      default: 400,
-      maximum: 900,
-      labels: [],
-      hidden: false,
-    });
-    await editor.settle();
-    const sourceId = editor.createSource("Bold", externalAxisLocationFromRecord({ [axisId]: 700 }));
-    await editor.settle();
-    glyph.layerForSource(sourceId)!.setXAdvance(500);
-    await editor.settle();
-    editor.setSourceToDefault();
-
-    const run = editor.textRuns.editorRun();
-    run.setSingleGlyph(glyph.handle);
-    expect(run.layoutCell.peek()?.totalAdvance).toBeCloseTo(300);
-
-    const mid = withExternalAxisValue(
-      defaultExternalAxisLocation(editor.font.getAxes()),
-      editor.font.getAxes()[0]!,
-      550,
-    );
-    editor.setExternalLocation(mid);
-
-    expect(run.layoutCell.peek()?.totalAdvance).toBeCloseTo(400);
-  });
-
   it("materializes interpolated geometry and metrics at a new source", async () => {
     const glyph = await loadGlyph(stack, glyphId);
     const axis = stack.font.getAxes()[0]!;

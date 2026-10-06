@@ -232,6 +232,7 @@ export class Translate implements SelectBehavior {
         }
         break;
       case "node":
+      case "text":
       case "canvas":
         if (!select.boundingBox.containsTranslationPoint(event.origin)) return null;
         break;
@@ -265,6 +266,7 @@ export class Translate implements SelectBehavior {
         return this.#fromSegmentTarget(editor, event);
       case "component":
       case "node":
+      case "text":
       case "canvas":
         return this.#fromInsideSelectionBounds(editor, select, event);
     }
@@ -408,7 +410,10 @@ function translatingState(startPos: Point2D, shiftKey: boolean): TranslatingStat
 function boundingBoxOwnsDrag(editor: Editor, select: Select, event: DragStartEvent): boolean {
   const { target } = event;
   const targetSelected =
-    target.kind !== "canvas" && target.kind !== "node" && editor.selection.isSelected(target.id);
+    target.kind !== "canvas" &&
+    target.kind !== "node" &&
+    target.kind !== "text" &&
+    editor.selection.isSelected(target.id);
 
   return !targetSelected && select.boundingBox.containsTranslationPoint(event.origin);
 }

@@ -5,6 +5,7 @@ import {
   isContourId,
   isComponentId,
   isNodeId,
+  isTextItemId,
   isPointId,
   type AnchorId,
   type ComponentId,
@@ -90,9 +91,7 @@ import type { Glyph, GlyphLayer } from "../model/Glyph";
 import type { DeleteMode, GlyphGeometrySelection } from "../../types/glyph";
 import type { Modifiers } from "../tools/core/GestureDetector";
 import { Text } from "../text/Text";
-import { TextRuns } from "../text/TextRuns";
-import { TextRun } from "../text/TextRun";
-import { glyphTextItem, Positioner } from "../text/layout";
+import { TextEditing } from "../text/TextEditing";
 
 import type { ToolManifest, ToolShortcutEntry } from "../../types/tools";
 import type { ToolStateScope } from "../../types/editor";
@@ -105,7 +104,7 @@ import type { ComponentTransformSelection } from "../../types/componentTransform
 import type { ComponentTargets } from "../../types/componentTargets";
 import type { PositionSelection } from "../../types/positionEdit";
 import type { SelectableId, ShiftId, ShiftObject } from "../../types/object";
-import type { ShiftEditorRecord } from "../../types/records";
+import type { ShiftEditorRecord, ShiftRecordId } from "../../types/records";
 import type { GlyphNode, NodeKind, ShiftNode } from "../../types/node";
 import {
   AnchorObject,
@@ -113,6 +112,7 @@ import {
   ContourObject,
   NodeObject,
   PointObject,
+  TextItemObject,
   SegmentObject,
 } from "../objects";
 import type { NodeDefinition } from "../nodes/NodeDefinition";
@@ -180,6 +180,7 @@ export class Editor {
   readonly sessionMode: FontSessionMode;
   readonly scene: Scene;
   readonly text: Text;
+  readonly textEditing: TextEditing;
   readonly #nodeDefinitions: NodeDefinitionByKind;
   readonly #store: ShiftStore<ShiftEditorRecord>;
   readonly #fontStore: FontStore;
@@ -224,8 +225,6 @@ export class Editor {
 
   #events: EventEmitter;
 
-  #textRuns: TextRuns;
-
   readonly gesture: EditorGesture;
   readonly input: EditorInput;
   #toolState: {
@@ -269,6 +268,7 @@ export class Editor {
       this.#editingSourceIdsCell,
     );
     this.text = new Text(this.#store, this);
+    this.textEditing = new TextEditing(this.#store, this);
 
     const GlyphDefinition = options.nodeDefinitions?.glyph ?? GlyphNodeDefinition;
     const TextRunDefinition = options.nodeDefinitions?.textRun ?? TextRunNodeDefinition;
@@ -293,6 +293,7 @@ export class Editor {
       this.#store,
       this.sessionMode === "workspace" ? this.font.editCoordinator : null,
     );
+    this.history.onCaptureFinishing((changed) => this.#runContentHooks(changed));
     this.hover = new Hover();
     this.#selectionBounds = computed(
       () => {
@@ -366,8 +367,6 @@ export class Editor {
     );
 
     this.#clipboard = new Clipboard(options.clipboard);
-
-    this.#textRuns = new TextRuns(this, new Positioner());
 
     this.#renderer = new Renderer(this);
 
@@ -816,6 +815,21 @@ export class Editor {
         return new ComponentObject(component, node, layer);
       }
       return null;
+    }
+
+    if (isTextItemId(id)) {
+      const location = this.text.itemLocation(id);
+      const node = location
+        ? this.scene.nodesOfKind("textRun").find((run) => run.runId === location.run.id)
+        : null;
+      if (!location || !node) return null;
+
+      const { item } = location;
+      const glyphId =
+        item.kind === "glyph"
+          ? (this.font.entryForName(item.glyphName as GlyphName)?.id ?? null)
+          : null;
+      return new TextItemObject(node, id, glyphId);
     }
 
     return null;
@@ -1397,28 +1411,6 @@ export class Editor {
     this.setExternalLocation(this.font.defaultLocation());
   }
 
-  public get textRuns(): TextRuns {
-    return this.#textRuns;
-  }
-
-  /** The currently-active text run. Convenience for `editor.textRuns.active`. */
-  public get textRun(): TextRun {
-    return this.#textRuns.active;
-  }
-
-  /** Resolve a unicode codepoint to a glyph item and insert into the active text run. */
-  public insertTextCodepoint(codepoint: number): void {
-    const handle = this.font.glyphHandleForUnicode(codepoint);
-    if (!handle) return;
-    const record = this.font.recordForName(handle.name);
-    if (record) {
-      this.font.loadGlyph(record.id).catch((error) => {
-        console.error("failed to load inserted text glyph", error);
-      });
-    }
-    this.textRun.insert(glyphTextItem(handle.name, codepoint));
-  }
-
   public getToolState(scope: ToolStateScope, toolId: string, key: string): unknown {
     return this.#getToolScopeMap(scope).get(this.#toolStateKey(toolId, key));
   }
@@ -1437,12 +1429,13 @@ export class Editor {
   }
 
   /**
-   * Returns the transform from a node's own units to scene space, read without tracking.
+   * Returns the transform from a node's own units to scene space.
    *
    * @remarks
    * Places the node's frame through its ancestors' frames, then applies the
    * node's own units. Callers that need to redraw on placement changes track
-   * `scene.cell`.
+   * `scene.cell`; a parent that lays out its children (a text run) tracks its
+   * own layout when read inside a reactive boundary.
    *
    * @param node - a node in the scene; its ancestors are resolved by `parentId`.
    */
@@ -1526,14 +1519,58 @@ export class Editor {
    *
    * @remarks
    * Frames carry placement only. Each node's units apply to its own content and
-   * never to its children's frames.
+   * never to its children's frames. A parent that lays out its children
+   * supplies their positions through `NodeDefinition.childPosition`.
    */
   #frameToScene(node: ShiftNode): Mat {
-    const position = Mat.Translate(node.position.x, node.position.y);
     const parent = this.scene.node(node.parentId);
-    if (!parent) return position;
+    if (!parent) return Mat.Translate(node.position.x, node.position.y);
 
-    return Mat.Compose(this.#frameToScene(parent), position);
+    const position = this.nodeDefinition(parent.kind).childPosition(parent, node) ?? node.position;
+    return Mat.Compose(this.#frameToScene(parent), Mat.Translate(position.x, position.y));
+  }
+
+  /**
+   * Makes a node the one being edited, clearing selection and hover.
+   *
+   * @remarks
+   * The selection belonged to whatever was edited before. All three are
+   * session records, so inside a capture undo restores the previous node and
+   * its selection together.
+   */
+  enterNode(nodeId: NodeId): void {
+    this.selection.clear();
+    this.hover.clear();
+    this.editing.enter(nodeId);
+  }
+
+  /**
+   * Offers a double-click to the hit node's definition, then to each ancestor's.
+   *
+   * @returns true when a definition handled it.
+   */
+  doubleClickNode(target: PointerTarget): boolean {
+    const hit = targetNode(this.scene, target);
+    if (!hit) return false;
+
+    return this.history.captureOrJoin("Double-click", () => {
+      for (const node of [hit, ...this.scene.ancestors(hit.id)]) {
+        if (this.nodeDefinition(node.kind).onDoubleClick?.(node, target)) return true;
+      }
+      return false;
+    });
+  }
+
+  #runContentHooks(changed: ReadonlySet<ShiftRecordId>): void {
+    for (const node of this.scene.nodes()) {
+      if (!this.scene.node(node.id)) continue;
+      const definition = this.nodeDefinition(node.kind);
+      if (!definition.onContentChange) continue;
+
+      const contentId = definition.contentRecordId?.(node) ?? null;
+      const touched = changed.has(node.id) || (contentId !== null && changed.has(contentId));
+      if (touched) definition.onContentChange(node);
+    }
   }
 
   getPointerTarget(point: ScenePoint): PointerTarget {
@@ -1731,6 +1768,12 @@ export class Editor {
    */
   public fitInitialBounds(bounds: SceneBounds): void {
     this.#camera.fitInitialBounds(bounds);
+  }
+
+  /** Frames a glyph node's editing frame (`GlyphNodeDefinition.frameBounds`) until the user moves the camera. */
+  public fitGlyphFrame(node: GlyphNode): void {
+    const frame = this.nodeDefinition("glyph").frameBounds(node);
+    if (frame) this.fitInitialBounds(this.toSceneBounds(node, frame));
   }
 
   /**
@@ -2114,6 +2157,7 @@ export class Editor {
     this.#multiSourceEditing.dispose();
     this.#renderer.destroy();
     this.#toolManager.dispose();
+    this.text.dispose();
     this.history.dispose();
     this.#handlesCell.set(new Map());
     this.#events.dispose();
@@ -2125,5 +2169,21 @@ export class Editor {
 
   #getToolScopeMap(scope: ToolStateScope): Map<string, unknown> {
     return this.#toolState[scope];
+  }
+}
+
+/** The node a pointer target belongs to, or null for blank canvas. */
+function targetNode(scene: Scene, target: PointerTarget): ShiftNode | null {
+  switch (target.kind) {
+    case "canvas":
+      return null;
+    case "node":
+    case "text":
+      return target.node;
+    case "point":
+    case "anchor":
+    case "segment":
+    case "component":
+      return scene.node(target.nodeId);
   }
 }

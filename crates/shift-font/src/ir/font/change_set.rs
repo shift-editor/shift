@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use crate::{FontChange, FontChangeSet, Replacement, SourceCollection};
+use crate::{FontChange, FontChangeSet, Replacement, Require, SourceCollection};
 
 use super::*;
 
@@ -68,7 +68,7 @@ impl Font {
                 }
                 FontChange::Glyph(value) => {
                     let glyph_id = replacement_glyph_id(value)?;
-                    let current = self.glyph(glyph_id).cloned();
+                    let current = self.glyph(&glyph_id).cloned();
                     require_original(&current, &value.before, "glyph")?;
                 }
                 FontChange::Layer {
@@ -76,7 +76,7 @@ impl Font {
                 } => {
                     let layer_id = replacement_layer_id(layer)?;
                     let current = self
-                        .glyph(glyph_id.clone())
+                        .glyph(glyph_id)
                         .and_then(|glyph| glyph.layers().get(&layer_id))
                         .cloned();
                     require_original(&current, &layer.before, "glyph layer")?;
@@ -127,11 +127,7 @@ impl Font {
             };
             if layer.before.is_some() && layer.after.is_none() {
                 let layer_id = replacement_layer_id(layer)?;
-                let glyph = self
-                    .data_mut()
-                    .glyphs
-                    .get_mut(glyph_id)
-                    .ok_or_else(|| CoreError::GlyphNotFound(glyph_id.clone()))?;
+                let glyph = self.data_mut().glyphs.get_mut(glyph_id).require(glyph_id)?;
                 Arc::make_mut(glyph).remove_layer(layer_id);
             }
         }
@@ -177,11 +173,7 @@ impl Font {
             let Some(layer) = &layer.after else {
                 continue;
             };
-            let glyph = self
-                .data_mut()
-                .glyphs
-                .get_mut(glyph_id)
-                .ok_or_else(|| CoreError::GlyphNotFound(glyph_id.clone()))?;
+            let glyph = self.data_mut().glyphs.get_mut(glyph_id).require(glyph_id)?;
             Arc::make_mut(glyph).set_layer(layer.clone());
         }
 
@@ -218,9 +210,7 @@ impl Font {
 
         match self.default_source_id() {
             Some(source_id) => {
-                let source = self
-                    .source(source_id.clone())
-                    .ok_or(CoreError::SourceNotFound(source_id))?;
+                let source = self.require_source(&source_id)?;
                 if !source.is_master() {
                     return Err(CoreError::InvalidEntityOrder {
                         kind: "source",
@@ -239,9 +229,8 @@ impl Font {
 
         for glyph in self.glyphs() {
             for layer in glyph.layers().values() {
-                if self.source(layer.source_id()).is_none() {
-                    return Err(CoreError::SourceNotFound(layer.source_id()));
-                }
+                let source_id = layer.source_id();
+                self.require_source(&source_id)?;
             }
         }
 

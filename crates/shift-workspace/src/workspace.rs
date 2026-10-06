@@ -267,12 +267,12 @@ impl FontWorkspace {
                     layer_id,
                     component_ids,
                 } => {
-                    let Some(layer) = self.font.layer(layer_id.clone()) else {
+                    let Some(layer) = self.font.layer(layer_id) else {
                         continue;
                     };
                     component_roots.extend(component_ids.iter().filter_map(|component_id| {
                         layer
-                            .component(component_id.clone())
+                            .component(component_id)
                             .map(|component| component.base_glyph_id())
                     }));
                 }
@@ -491,7 +491,7 @@ impl FontWorkspace {
             .into_iter()
             .flat_map(|glyph_id| {
                 self.font
-                    .glyph(glyph_id)
+                    .glyph(&glyph_id)
                     .into_iter()
                     .flat_map(|glyph| glyph.layers().keys().cloned())
                     .collect::<Vec<_>>()
@@ -555,7 +555,7 @@ impl FontWorkspace {
         let mut evicted = Vec::new();
         let mut seen_layer_ids = HashSet::new();
         for glyph_id in glyph_ids {
-            let Some(glyph) = self.font.glyph(glyph_id.clone()) else {
+            let Some(glyph) = self.font.glyph(glyph_id) else {
                 continue;
             };
             for layer in glyph.layers().values().map(|layer| layer.as_ref()) {

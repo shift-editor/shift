@@ -10,7 +10,6 @@ import type {
   CaretPosition,
   TextItem,
   SourceMetrics,
-  GlyphAnchor,
   GlyphTextItem,
   Hit,
   Line,
@@ -20,7 +19,6 @@ import type {
   PositionedRun,
   SegmentedRun,
   TextItemId,
-  TextRunId,
 } from "./types";
 import type { Positioner } from "./Positioner";
 import type { Editor } from "../../editor/Editor";
@@ -34,6 +32,19 @@ export interface TextLayoutParams {
   editor: Editor;
   positioner: Positioner;
   externalLocation: Signal<ExternalAxisLocation>;
+}
+
+/** One positioned glyph with its layout-local placement resolved. */
+export interface PlacedGlyph {
+  readonly glyph: PositionedGlyph;
+  readonly lineIndex: number;
+  readonly runIndex: number;
+  /** Left edge of the advance box; the caret position before the glyph. */
+  readonly left: number;
+  /** Baseline of the glyph's line. */
+  readonly baseline: number;
+  /** Where the glyph's outline is drawn: `left`/`baseline` plus its own offsets. */
+  readonly origin: Point2D;
 }
 
 interface AssembledLayout {
@@ -50,11 +61,12 @@ export class TextLayout {
   /** @knipclassignore — bbox union over positioned glyphs; populated when shapeHitTest lands */
   readonly bounds: BoundsType | null;
   readonly bufferLength: number;
-  readonly #items: readonly TextItem[];
+  /** Every positioned glyph in line, run, and glyph order. */
+  readonly placedGlyphs: readonly PlacedGlyph[];
+  readonly #placedByItem: ReadonlyMap<TextItemId, PlacedGlyph>;
 
   constructor(params: TextLayoutParams) {
     const { items, origin, editor, positioner, externalLocation } = params;
-    this.#items = items;
     const activeSourceId = editor.activeSourceId;
     this.metrics = activeSourceId
       ? editor.font.metricsForSource(activeSourceId)
@@ -73,6 +85,19 @@ export class TextLayout {
     this.lines = lines;
     this.totalAdvance = totalAdvance;
     this.bounds = bounds;
+    this.placedGlyphs = placeGlyphs(lines, origin);
+    const placedByItem = new Map<TextItemId, PlacedGlyph>();
+    for (const placed of this.placedGlyphs) {
+      for (const itemId of placed.glyph.sourceItemIds) {
+        if (!placedByItem.has(itemId)) placedByItem.set(itemId, placed);
+      }
+    }
+    this.#placedByItem = placedByItem;
+  }
+
+  /** Returns the first glyph an item produced, or null for line breaks and unknown items. */
+  placedGlyphForItem(itemId: TextItemId): PlacedGlyph | null {
+    return this.#placedByItem.get(itemId) ?? null;
   }
 
   /**
@@ -88,29 +113,22 @@ export class TextLayout {
    * Returns null when no line / no glyph contains the point.
    */
   hitTest(p: Point2D, padding: number = 0): Hit | null {
-    for (const [lineIndex, line] of this.lines.entries()) {
-      const top = line.y + line.ascent;
-      const bottom = line.y + line.descent;
-      if (p.y > top + padding || p.y < bottom - padding) continue;
+    const lineIndex = this.lines.findIndex(
+      (line) => p.y <= line.y + line.ascent + padding && p.y >= line.y + line.descent - padding,
+    );
+    if (lineIndex < 0) return null;
 
-      let runBase = this.origin.x;
-      for (const [runIndex, run] of line.runs.entries()) {
-        for (const g of run.glyphs) {
-          const left = runBase + g.origin.x;
-          const right = left + g.xAdvance;
-          if (p.x >= left - padding && p.x < right + padding) {
-            const mid = left + g.xAdvance / 2;
-            return {
-              lineIndex,
-              runIndex,
-              cluster: g.cluster,
-              side: p.x < mid ? "left" : "right",
-            };
-          }
-        }
-        runBase += run.advance;
-      }
-      return null;
+    for (const placed of this.placedGlyphs) {
+      if (placed.lineIndex !== lineIndex) continue;
+      const right = placed.left + placed.glyph.xAdvance;
+      if (p.x < placed.left - padding || p.x >= right + padding) continue;
+      const mid = placed.left + placed.glyph.xAdvance / 2;
+      return {
+        lineIndex,
+        runIndex: placed.runIndex,
+        cluster: placed.glyph.cluster,
+        side: p.x < mid ? "left" : "right",
+      };
     }
     return null;
   }
@@ -127,76 +145,8 @@ export class TextLayout {
    */
   pointAt(cluster: number): CaretPosition | null {
     const lineHeight = this.metrics.ascender - this.metrics.descender + (this.metrics.lineGap ?? 0);
-    for (const line of this.lines) {
-      let runBase = this.origin.x;
-      for (const run of line.runs) {
-        for (const g of run.glyphs) {
-          if (g.cluster === cluster) {
-            return {
-              x: runBase + g.origin.x,
-              y: line.y + g.origin.y,
-              lineHeight,
-            };
-          }
-        }
-        runBase += run.advance;
-      }
-    }
-    return null;
-  }
-
-  glyphsForItem(itemId: TextItemId): readonly PositionedGlyph[] {
-    const glyphs: PositionedGlyph[] = [];
-    for (const line of this.lines) {
-      for (const run of line.runs) {
-        for (const glyph of run.glyphs) {
-          if (glyph.sourceItemIds.includes(itemId)) glyphs.push(glyph);
-        }
-      }
-    }
-    return glyphs;
-  }
-
-  primaryGlyphForItem(itemId: TextItemId): PositionedGlyph | null {
-    return this.glyphsForItem(itemId)[0] ?? null;
-  }
-
-  /**
-   * Resolve stable text-item identity to the current scene-space glyph edit
-   * origin.
-   *
-   *   itemId
-   *      │
-   *      ▼
-   *   PositionedGlyph { origin, xOffset/yOffset }
-   *      │
-   *      ▼
-   *   scene edit origin
-   */
-  editOriginForItem(itemId: TextItemId): Point2D | null {
-    for (const line of this.lines) {
-      let runBase = this.origin.x;
-      for (const run of line.runs) {
-        for (const glyph of run.glyphs) {
-          if (glyph.sourceItemIds.includes(itemId)) {
-            return {
-              x: runBase + glyph.origin.x + glyph.xOffset,
-              y: line.y + glyph.origin.y + glyph.yOffset,
-            };
-          }
-        }
-        runBase += run.advance;
-      }
-    }
-    return null;
-  }
-
-  anchorAtPoint(runId: TextRunId, p: Point2D, padding: number = 0): GlyphAnchor | null {
-    const hit = this.hitTest(p, padding);
-    if (!hit) return null;
-    const item = this.#items[hit.cluster];
-    if (!item || item.kind !== "glyph") return null;
-    return { runId, itemId: item.id };
+    const placed = this.placedGlyphs.find((candidate) => candidate.glyph.cluster === cluster);
+    return placed ? { x: placed.left, y: placed.baseline, lineHeight } : null;
   }
 
   /** @knipclassignore — convenience for caret construction at a cluster */
@@ -337,4 +287,27 @@ function assembleLayout(
   }
 
   return { lines, totalAdvance, bounds: null };
+}
+
+function placeGlyphs(lines: readonly Line[], origin: Point2D): PlacedGlyph[] {
+  const placed: PlacedGlyph[] = [];
+  for (const [lineIndex, line] of lines.entries()) {
+    let runBase = origin.x;
+    for (const [runIndex, run] of line.runs.entries()) {
+      for (const glyph of run.glyphs) {
+        const left = runBase + glyph.origin.x;
+        const baseline = line.y + glyph.origin.y;
+        placed.push({
+          glyph,
+          lineIndex,
+          runIndex,
+          left,
+          baseline,
+          origin: { x: left + glyph.xOffset, y: baseline + glyph.yOffset },
+        });
+      }
+      runBase += run.advance;
+    }
+  }
+  return placed;
 }

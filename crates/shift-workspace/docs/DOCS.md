@@ -1,6 +1,6 @@
 # shift-workspace
 
-<!-- reviewed: 2026-10-03 review-every: 90d -->
+<!-- reviewed: 2026-10-06 review-every: 90d -->
 
 Backend runtime object for an open Shift font workspace.
 

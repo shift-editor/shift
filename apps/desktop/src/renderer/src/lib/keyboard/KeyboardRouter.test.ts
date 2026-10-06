@@ -187,14 +187,14 @@ describe("KeyboardRouter", () => {
       expect(editor.toolIf("select")?.state).toEqual({ type: "ready" });
     });
 
-    it("does not intercept plain typing while the text tool is active", async () => {
+    it("does not intercept plain typing in Text mode", async () => {
       editor.selectTool("text");
-      const e = createKeyboardEvent({ key: "s" });
+      const e = createKeyboardEvent({ key: "r" });
 
       const handled = await router.handleKeyDown(e);
 
       expect(handled).toBe(false);
-      expect(editor.toolIf("text")?.state).toEqual({ type: "typing" });
+      expect(editor.toolIf("text")?.state).toEqual({ type: "editing" });
     });
   });
 
@@ -471,7 +471,7 @@ describe("KeyboardRouter", () => {
       expect(editor.pointCount).toBeGreaterThan(pointsBefore);
     });
 
-    it("does not intercept paste while the text tool is active", async () => {
+    it("does not intercept paste in Text mode", async () => {
       await editor.copy();
       editor.selectTool("text");
       const pointsBefore = editor.pointCount;
@@ -482,7 +482,7 @@ describe("KeyboardRouter", () => {
       expect(editor.pointCount).toBe(pointsBefore);
     });
 
-    it("does not intercept copy while the text tool is active", async () => {
+    it("does not intercept copy in Text mode", async () => {
       editor.selectTool("text");
       const bufferBefore = editor.clipboardBuffer;
       const e = createKeyboardEvent({ key: "c", metaKey: true });
@@ -572,13 +572,13 @@ describe("KeyboardRouter", () => {
       expect(editor.toolIf("select")?.state).toEqual({ type: "ready" });
     });
 
-    it("does not activate the hand tool on space while the text tool is active", async () => {
+    it("does not activate the hand tool on space in Text mode", async () => {
       editor.selectTool("text");
       const e = createKeyboardEvent({ key: " ", code: "Space" });
 
       await router.handleKeyDown(e);
 
-      expect(editor.toolIf("text")?.state).toEqual({ type: "typing" });
+      expect(editor.toolIf("text")?.state).toEqual({ type: "editing" });
     });
   });
 

@@ -14,8 +14,8 @@ import {
   BendCurve,
   SelectHover,
   SegmentDoubleClick,
+  NodeDoubleClick,
 } from "./behaviors";
-import { TextRunHover } from "./behaviors/TextRunHover";
 import type { CursorType } from "../../../types/editor";
 import { objectIsKindOf, type ShiftObject } from "../../../types/object";
 import type { Canvas } from "../../editor/rendering/Canvas";
@@ -37,7 +37,7 @@ export class Select extends BaseTool<SelectState, Select> {
   readonly behaviors: SelectBehavior[] = [
     new ToggleSmooth(),
     new SegmentDoubleClick(),
-    new TextRunHover(),
+    new NodeDoubleClick(),
     new UpgradeSegment(),
     new Selection(),
     new Nudge(),
@@ -174,6 +174,7 @@ export class Select extends BaseTool<SelectState, Select> {
   }
 
   override deactivate(): void {
+    this.editor.hover.clear();
     this.setState({ type: "idle" });
   }
 

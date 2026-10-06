@@ -260,7 +260,7 @@ fn layer_intents(
 
 fn resolve_glyph_id(font: &Font, selector: &str) -> Result<GlyphId> {
     if let Ok(glyph_id) = selector.parse::<GlyphId>()
-        && font.glyph(glyph_id.clone()).is_some()
+        && font.glyph(&glyph_id).is_some()
     {
         return Ok(glyph_id);
     }

@@ -1,3 +1,4 @@
+use crate::error::OrMissing;
 use std::collections::HashSet;
 
 use rusqlite::{OptionalExtension, Transaction, params};
@@ -117,7 +118,7 @@ fn validate_glyph_order(
 
     let first_appended_order = post_font.glyph_count().saturating_sub(appended.len());
     for (offset, glyph_id) in appended.iter().enumerate() {
-        if post_font.glyph_order(glyph_id.clone()) != Some(first_appended_order + offset) {
+        if post_font.glyph_order(glyph_id) != Some(first_appended_order + offset) {
             return Err(font::CoreError::InvalidEntityOrder {
                 kind: "glyph",
                 message: format!("appended identity {glyph_id} is not in the tail segment"),
@@ -133,10 +134,7 @@ fn validate_glyph_order(
                 |row| row.get::<_, i64>(0),
             )
             .optional()?
-            .ok_or_else(|| StoreError::MissingEntity {
-                kind: "glyph",
-                id: glyph_id.to_string(),
-            })?;
+            .or_missing("glyph", glyph_id)?;
         let expected = post_font.glyph_count() + popped.len() - offset - 1;
         if order_index != expected as i64 {
             return Err(font::CoreError::InvalidEntityOrder {
@@ -409,10 +407,7 @@ fn replace_glyph(
                     |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)),
                 )
                 .optional()?
-                .ok_or_else(|| StoreError::MissingEntity {
-                    kind: "glyph",
-                    id: glyph_id.to_string(),
-                })?;
+                .or_missing("glyph", &glyph_id)?;
             if order_index + 1 != count {
                 return Err(font::CoreError::InvalidEntityOrder {
                     kind: "glyph",
@@ -1126,11 +1121,7 @@ fn typed_json(kind: &'static str, value: serde_json::Value) -> serde_json::Value
 }
 
 fn require_changed(rows_changed: usize, kind: &'static str, id: String) -> Result<(), StoreError> {
-    if rows_changed == 0 {
-        Err(StoreError::MissingEntity { kind, id })
-    } else {
-        Ok(())
-    }
+    (rows_changed > 0).then_some(()).or_missing(kind, &id)
 }
 
 fn layer_row_id(layer_id: &font::LayerId) -> String {

@@ -1,6 +1,6 @@
 # shift-font
 
-<!-- reviewed: 2026-10-03 review-every: 90d -->
+<!-- reviewed: 2026-10-06 review-every: 90d -->
 
 First-class Rust font object model for Shift.
 

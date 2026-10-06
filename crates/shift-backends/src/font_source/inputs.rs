@@ -1,3 +1,4 @@
+use shift_slug::length::OrOverflow;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use rayon::prelude::*;
@@ -386,9 +387,7 @@ fn flatten_shape(
     let shape = selected_shape(projection, evaluation);
     let mut cursor = 1_usize;
     for contour in &shape.contours {
-        let end = cursor
-            .checked_add(contour.points.len() * 2)
-            .ok_or(shift_slug::SlugError::LengthOverflow)?;
+        let end = cursor.checked_add(contour.points.len() * 2).or_overflow()?;
         let coordinates = values
             .get(cursor..end)
             .ok_or_else(|| invalid("source atlas contour values are missing"))?;
@@ -404,9 +403,7 @@ fn flatten_shape(
         append_contour(&points, contour.closed, segments)?;
         cursor = end;
     }
-    cursor = cursor
-        .checked_add(shape.anchors.len() * 2)
-        .ok_or(shift_slug::SlugError::LengthOverflow)?;
+    cursor = cursor.checked_add(shape.anchors.len() * 2).or_overflow()?;
     for component in &shape.components {
         let transform_values = values
             .get(cursor..cursor + 6)

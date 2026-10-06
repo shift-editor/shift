@@ -685,7 +685,7 @@ fn glyph_rename_preserves_authored_order() {
     let mut store = ShiftStore::open_memory_for_test().unwrap();
     store.replace_font_state(&font).unwrap();
 
-    let original = font.glyph(second_id.clone()).unwrap().clone();
+    let original = font.glyph(&second_id).unwrap().clone();
     let mut replacement = original.clone();
     replacement.set_name("second.alt");
     store
@@ -762,8 +762,8 @@ fn applies_layer_metrics_and_contour_point_changes() {
     let contour_id = contour.id();
     replacement.add_contour(contour);
     let point = replacement
-        .contour_mut(contour_id)
-        .and_then(|contour| contour.get_point_mut(point_id.clone()))
+        .contour_mut(&contour_id)
+        .and_then(|contour| contour.get_point_mut(&point_id))
         .unwrap();
     point.set_position(40.0, 50.0);
     store

@@ -34,6 +34,9 @@ import { ContourBuffer } from "./ContourBuffer";
  * also owns the metadata that interprets it. Wire structure and values are
  * derived lazily from these records.
  */
+/** A fresh value after every change to a layer's packed values. Its contents are not meaningful. */
+export type LayerChangeToken = readonly unknown[];
+
 export class LayerBuffers {
   readonly xAdvanceCell: WritableSignal<number>;
   readonly contoursCell: WritableSignal<readonly ContourBuffer[]>;
@@ -45,7 +48,8 @@ export class LayerBuffers {
 
   readonly structureCell: ComputedSignal<GlyphStructure>;
   readonly snapshotCell: ComputedSignal<Float64Array>;
-  readonly changedCell: ComputedSignal<LayerBuffers>;
+  /** Changes identity whenever any packed value changes; compare it by identity only. */
+  readonly changedCell: ComputedSignal<LayerChangeToken>;
   readonly boundsCell: ComputedSignal<BoundsType | null>;
   readonly sidebearingsCell: ComputedSignal<GlyphSidebearings>;
 
@@ -96,19 +100,18 @@ export class LayerBuffers {
       { name: "glyphLayer.buffers.snapshot" },
     );
     this.changedCell = computed(
-      () => {
-        this.xAdvanceCell.value;
-        for (const contour of this.contoursCell.value) contour.valuesCell.value;
-        this.anchors.valuesCell.value;
-        for (const component of this.components) component.valuesCell.value;
-        return this;
-      },
+      () => [
+        this.xAdvanceCell.value,
+        ...this.contoursCell.value.map((contour) => contour.valuesCell.value),
+        this.anchors.valuesCell.value,
+        ...this.components.map((component) => component.valuesCell.value),
+      ],
       { name: "glyphLayer.buffers.changed" },
     );
     this.boundsCell = computed(
       () =>
         LayerBuffers.#bounds(this.contoursCell.value.map((contour) => contour.boundsCell.value)),
-      { name: "glyphLayer.buffers.bounds" },
+      { name: "glyphLayer.buffers.bounds", equals: Bounds.equals },
     );
     this.sidebearingsCell = computed(
       () => {
@@ -116,7 +119,10 @@ export class LayerBuffers {
         if (!bounds) return { lsb: null, rsb: null };
         return { lsb: bounds.min.x, rsb: this.xAdvanceCell.value - bounds.max.x };
       },
-      { name: "glyphLayer.buffers.sidebearings" },
+      {
+        name: "glyphLayer.buffers.sidebearings",
+        equals: (prev, next) => prev.lsb === next.lsb && prev.rsb === next.rsb,
+      },
     );
   }
 

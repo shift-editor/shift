@@ -1,6 +1,6 @@
 # shift-bridge
 
-<!-- reviewed: 2026-10-03 review-every: 90d -->
+<!-- reviewed: 2026-10-06 review-every: 90d -->
 
 NAPI bindings that expose the Rust font engine to Node.js and Electron as a `Bridge` class.
 

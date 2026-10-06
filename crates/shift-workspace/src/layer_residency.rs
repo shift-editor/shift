@@ -51,7 +51,7 @@ impl LayerResidency {
 
     pub(crate) fn retain_directory_layers(&mut self, font: &Font) {
         self.unloaded
-            .retain(|layer_id| font.layer(layer_id.clone()).is_some());
+            .retain(|layer_id| font.layer(layer_id).is_some());
     }
 
     pub(crate) fn loaded_count(&self, directory_layer_count: usize) -> usize {
