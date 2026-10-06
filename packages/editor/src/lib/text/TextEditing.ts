@@ -73,9 +73,9 @@ export class TextEditing {
   resume(nodeId: NodeId, caret: TextCaret): void {
     const kept = this.#store.get(currentTextEditingId);
     const node = this.#editor.scene.nodeOfKind(nodeId, "textRun");
-    const items = node ? (this.#editor.text.run(node.runId)?.items ?? []) : [];
     const exists = (candidate: TextCaret) =>
-      candidate === null || items.some((item) => item.id === candidate);
+      candidate === null ||
+      (node !== null && this.#editor.text.runForItem(candidate)?.id === node.runId);
     if (
       kept?.type === "textEditing" &&
       kept.nodeId === nodeId &&

@@ -7,10 +7,11 @@ import {
   type Unicode,
 } from "@shift/types";
 import { computed, keyedCache, signal, track } from "../signals";
-import type { ComputedSignal, Signal, WritableSignal } from "../signals";
+import type { ComputedSignal, Signal } from "../signals";
 import type { Editor } from "../editor/Editor";
 import type { Font } from "../model/Font";
 import type { ShiftStore } from "../store/ShiftStore";
+import type { StoreIndex } from "../store/StoreIndex";
 import type { ShiftEditorRecord } from "../../types/records";
 import type { TextRunRecord } from "../../types/text";
 import { glyphTextItem, lineBreakTextItem, Positioner, TextLayout, type TextItem } from "./layout";
@@ -23,9 +24,7 @@ export class Text {
   readonly #glyphsLoadedCell = signal(0);
   // non-reactive: dedupes in-flight glyph loads; only read by the imperative load path
   readonly #loading = new Set<GlyphId>();
-  readonly #runCells = new Map<RunId, WritableSignal<TextRunRecord | null>>();
-  // non-reactive: item id → owning run, kept in step with run records for imperative lookups
-  readonly #runByItem = new Map<TextItemId, RunId>();
+  readonly #runsByItem: StoreIndex<TextItemId, TextRunRecord>;
   readonly #unsubscribeStore: () => void;
   readonly #layouts = keyedCache({
     name: "text.layout",
@@ -35,7 +34,7 @@ export class Text {
       computed(
         () => {
           const runId = runIdCell.value;
-          const record = this.#runCell(runId).value;
+          const record = this.run(runId);
           track(this.#editor.externalLocationCell);
           track(this.#editor.activeSourceIdCell);
           track(this.#glyphsLoadedCell);
@@ -55,27 +54,18 @@ export class Text {
   constructor(store: ShiftStore<ShiftEditorRecord>, editor: Editor) {
     this.#store = store;
     this.#editor = editor;
+    this.#runsByItem = store.index("textrun", (run) => run.items.map((item) => item.id));
     this.#unsubscribeStore = store.onChange((change) => {
-      if (change.before?.type !== "textrun" && change.after?.type !== "textrun") return;
-      const runId = change.id as RunId;
-      const record = change.after?.type === "textrun" ? change.after : null;
-      this.#runCells.get(runId)?.set(record);
-      if (change.before?.type === "textrun") this.#unindexItems(change.before);
-      if (record) {
-        this.#indexItems(record);
-        this.#acquireGlyphs(record.items);
-      }
+      if (change.after?.type === "textrun") this.#acquireGlyphs(change.after.items);
     });
     for (const record of store.records()) {
-      if (record.type !== "textrun") continue;
-      this.#indexItems(record);
-      this.#acquireGlyphs(record.items);
+      if (record.type === "textrun") this.#acquireGlyphs(record.items);
     }
   }
 
   /** Returns the run holding an item and the item itself, or null for an unknown id. */
   itemLocation(id: TextItemId): { readonly run: TextRunRecord; readonly item: TextItem } | null {
-    const run = this.run(this.#runByItem.get(id) ?? null);
+    const run = this.runForItem(id);
     const item = run?.items.find((candidate) => candidate.id === id);
     return run && item ? { run, item } : null;
   }
@@ -102,10 +92,26 @@ export class Text {
     return record;
   }
 
+  /**
+   * Returns a run record.
+   *
+   * @remarks
+   * Reactive: inside a computed or effect, the reader reruns only when this run changes.
+   */
   run(id: RunId | null): TextRunRecord | null {
     if (!id) return null;
-    const record = this.#store.get(id);
+    const record = this.#store.record(id);
     return record?.type === "textrun" ? record : null;
+  }
+
+  /**
+   * Returns the run holding an item, or null for an unknown item.
+   *
+   * @remarks
+   * Reactive: the reader reruns when the item is added to or removed from a run.
+   */
+  runForItem(id: TextItemId): TextRunRecord | null {
+    return this.#runsByItem.get(id)[0] ?? null;
   }
 
   /** Replaces a run's items; the run's definition removes a child whose item went (`onContentChange`). */
@@ -144,28 +150,8 @@ export class Text {
 
   dispose(): void {
     this.#unsubscribeStore();
+    this.#runsByItem.dispose();
     this.#layouts.clear();
-    this.#runCells.clear();
-    this.#runByItem.clear();
-  }
-
-  #indexItems(run: TextRunRecord): void {
-    for (const item of run.items) this.#runByItem.set(item.id, run.id);
-  }
-
-  #unindexItems(run: TextRunRecord): void {
-    for (const item of run.items) {
-      if (this.#runByItem.get(item.id) === run.id) this.#runByItem.delete(item.id);
-    }
-  }
-
-  #runCell(id: RunId): WritableSignal<TextRunRecord | null> {
-    let cell = this.#runCells.get(id);
-    if (!cell) {
-      cell = signal(this.run(id), { name: `text.run.${id}` });
-      this.#runCells.set(id, cell);
-    }
-    return cell;
   }
 
   #acquireGlyphs(items: readonly TextItem[]): void {

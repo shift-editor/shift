@@ -1,3 +1,4 @@
+import type { NodeReference } from "../../types/records";
 import { Bounds, Mat } from "@shift/geo";
 import type { SourceMetrics } from "@shift/types";
 import type { SegmentId } from "@shift/glyph-state";
@@ -34,6 +35,11 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
   readonly kind: GlyphNode["kind"] = "glyph";
 
   readonly #outline = new OutlineRenderer();
+
+  /** A glyph node depends on the glyph it shows. */
+  override references(node: GlyphNode): readonly NodeReference[] {
+    return [node.glyphId];
+  }
   readonly #debugOverlays = new DebugOverlays();
   readonly #controlLines = new ControlLines();
   readonly #anchors = new Anchors();
