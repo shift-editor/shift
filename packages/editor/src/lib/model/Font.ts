@@ -541,6 +541,11 @@ export class Font {
     return this.#store.layerIdForPoint(pointId);
   }
 
+  /** Returns the glyph that owns a layer, or null when unknown. The glyph need not be loaded. */
+  glyphIdForLayer(layerId: LayerId): GlyphId | null {
+    return this.#store.glyphIdForLayer(layerId);
+  }
+
   /** Returns the contour owning a point id, or null when unknown. */
   contourIdForPoint(pointId: PointId): ContourId | null {
     return this.#store.contourIdForPoint(pointId);
