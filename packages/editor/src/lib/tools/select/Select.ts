@@ -200,12 +200,17 @@ export class Select extends BaseTool<SelectState, Select> {
     const state = this.getState();
     if (state.type !== "translating" || state.translate.guides.length === 0) return;
 
-    const object = this.editor.objects(this.editor.selection.ids)[0];
-    if (!object) return;
+    const ids = this.editor.selection.ids;
+    const selection = this.editor.positionSelection(ids);
+    const node = this.editor.selectionNode(ids);
+    if (!selection || !node) return;
 
     const guides = state.translate.guides;
-    canvas.withTransform(this.editor.sceneTransform(object.node), () => {
-      this.#snapLines.draw(canvas, guides);
+    const crossings = this.editor.snapping.crossings(selection.layer, [
+      this.editor.selectionBounds(ids),
+    ]);
+    canvas.withTransform(this.editor.sceneTransform(node), () => {
+      this.#snapLines.draw(canvas, guides, crossings);
     });
   }
 }

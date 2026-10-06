@@ -40,21 +40,41 @@ export interface DirectionPositionGuide {
   readonly to: Point2D;
 }
 
-/** Horizontal metric emitted while a reference position is snapped. */
+/** Horizontal metric that one snapped position, at glyph-local `(x, y)`, now sits on. */
 export interface MetricPositionGuide {
   readonly kind: "metric";
   readonly metric: MetricKind;
+  readonly x: number;
   readonly y: number;
 }
 
-/** Semantic visual guide emitted by a position edit preview. */
-export type PositionGuide = DirectionPositionGuide | MetricPositionGuide;
-
-/** Candidate correction returned by a position snap provider. */
-export interface PositionSnap {
+/** Axis-aligned line from a stationary point to a moving position that now shares its x or y. */
+export interface AlignmentPositionGuide {
+  readonly kind: "alignment";
+  readonly target: Point2D;
   readonly point: Point2D;
-  readonly distance: number;
+}
+
+/** Semantic visual guide emitted by a position edit preview. */
+export type PositionGuide = DirectionPositionGuide | MetricPositionGuide | AlignmentPositionGuide;
+
+/** Correction along one axis; its distance is the absolute offset. */
+export interface AxisSnap {
+  /** Signed font-unit offset added to the candidate coordinate on this axis. */
+  readonly offset: number;
   readonly guides: readonly PositionGuide[];
+}
+
+/**
+ * Candidate correction returned by a position snap provider.
+ *
+ * @remarks
+ * Axes snap independently so a y-only target, such as a metric, never blocks
+ * an x correction from another provider. A null axis leaves that coordinate free.
+ */
+export interface PositionSnap {
+  readonly x: AxisSnap | null;
+  readonly y: AxisSnap | null;
 }
 
 /** Source-neutral position snapping contract consumed by MoveEdit. */

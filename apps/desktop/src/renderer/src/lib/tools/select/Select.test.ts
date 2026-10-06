@@ -439,8 +439,9 @@ describe("Select tool", () => {
       "shows the normal bounding box for a nearly %s segment",
       async (_name, start, end, hit) => {
         editor.selectTool("pen");
-        await editor.clickLocal(start.x, start.y);
-        await editor.clickLocal(end.x, end.y);
+        // Cmd places points exactly, so the pen does not snap the segment straight.
+        await editor.clickLocal(start.x, start.y, { metaKey: true });
+        await editor.clickLocal(end.x, end.y, { metaKey: true });
         editor.selectTool("select");
         await editor.clickLocal(hit.x, hit.y);
 

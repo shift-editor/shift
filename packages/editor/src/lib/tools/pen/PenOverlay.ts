@@ -6,6 +6,7 @@ import type { Editor } from "../../editor/Editor";
 import type { Pen } from "./Pen";
 import { PenStroke } from "./PenStroke";
 import { PenTargets } from "./PenTargets";
+import { normalizeModifiers } from "../core/GestureDetector";
 import type { PenOverlayProps } from "./types";
 import type { GlyphNode } from "../../../types/node";
 import { track } from "../../signals/index";
@@ -103,33 +104,28 @@ export class PenOverlay extends CanvasItem<PenOverlayProps> {
     if (!pointer) return;
 
     const nodePoint = this.#editor.toLocal(node, pointer.scene);
-    if (!props.lastOnCurvePoint) {
-      this.#drawPointer(canvas, nodePoint);
-      return;
-    }
-
     const stroke = PenStroke.active(this.#pen);
     const target = stroke
       ? PenTargets.forGeometry(stroke.layer.geometry).at(nodePoint, this.#editor.hitRadius)
       : null;
-    const shiftKey = this.#editor.input.modifiersCell.peek().shiftKey;
-    const anchorPosition =
-      target?.type === "empty" ? this.#pen.resolveAnchorPosition(nodePoint, shiftKey) : nodePoint;
+    const modifiers = normalizeModifiers(this.#editor.input.modifiersCell.peek());
+    const anchor =
+      target?.type === "empty" || target?.type === "point"
+        ? this.#pen.anchorFor(target, nodePoint, modifiers)
+        : { position: nodePoint, guides: [] };
 
-    canvas.line(
-      props.lastOnCurvePoint,
-      anchorPosition,
-      canvas.theme.preview.color,
-      canvas.theme.preview.widthPx,
-    );
-
-    if (target?.type === "empty" && shiftKey) {
-      this.#snapLines.draw(canvas, [
-        { kind: "direction", from: props.lastOnCurvePoint, to: anchorPosition },
-      ]);
+    if (props.lastOnCurvePoint) {
+      canvas.line(
+        props.lastOnCurvePoint,
+        anchor.position,
+        canvas.theme.preview.color,
+        canvas.theme.preview.widthPx,
+      );
     }
 
-    this.#drawPointer(canvas, anchorPosition);
+    const crossings = stroke ? this.#editor.snapping.crossings(stroke.layer) : [];
+    this.#snapLines.draw(canvas, anchor.guides, crossings);
+    this.#drawPointer(canvas, anchor.position);
   }
 
   #drawPointer(canvas: Canvas, position: Point2D): void {

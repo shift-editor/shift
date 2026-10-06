@@ -197,7 +197,7 @@ const DEFAULT_EDITOR_RENDER_THEME: EditorRenderTheme = {
       selected: { fill: "#ffffff", stroke: "#0C92F4", size: 12, lineWidth: 2 },
     },
   },
-  snap: { color: "#ff3b30", widthPx: 1, crossSizePx: 2 },
+  snap: { color: "#ff3b30", widthPx: 0.5, crossSizePx: 2 },
   segment: {
     hoverColor: "#1886D7",
     selectedColor: "#1886D7",

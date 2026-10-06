@@ -268,6 +268,8 @@ export class Editor {
     setToolState(scope: ToolStateScope, toolId: string, key: string, value: unknown): void;
     setXAdvance(width: number): void;
     setZoom(zoom: number): void;
+    // Warning: (ae-forgotten-export) The symbol "Snapping" needs to be exported by the entry point index.d.ts
+    readonly snapping: Snapping;
     // (undocumented)
     startFpsMonitor(): void;
     // (undocumented)
@@ -310,6 +312,7 @@ export class Editor {
     undo(): Promise<void>;
     // (undocumented)
     updateMousePosition(clientX: number, clientY: number): void;
+    visibleLocalBounds(node: ShiftNode): LocalBounds | null;
     // (undocumented)
     get xAdvance(): number;
     // (undocumented)
@@ -702,7 +705,7 @@ export function useSignalState<T>(signal: Signal<T>, options?: UseSignalOptions)
 
 // Warnings were encountered during analysis:
 //
-// dist/Editor-BVKwSwUE.d.ts:4201:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
+// dist/Editor-6QD9jAiP.d.ts:4234:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

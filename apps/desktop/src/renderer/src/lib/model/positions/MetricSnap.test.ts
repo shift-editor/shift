@@ -16,16 +16,19 @@ describe("metric snapping follows authored horizontal metrics", () => {
   it("returns the nearest metric inside the radius", () => {
     const snap = MetricSnap.standard(metrics, 8).snap({ x: 40, y: 496 });
 
-    expect(snap?.point).toEqual({ x: 40, y: 500 });
-    expect(snap?.distance).toBe(4);
-    expect(snap?.guides).toEqual([{ kind: "metric", metric: "xHeight", y: 500 }]);
+    expect(snap).toEqual({
+      x: null,
+      y: { offset: 4, guides: [{ kind: "metric", metric: "xHeight", x: 40, y: 500 }] },
+    });
   });
 
   it("uses a non-zero authored baseline", () => {
     const snap = MetricSnap.standard(metrics, 8).snap({ x: 40, y: 4 });
 
-    expect(snap?.point).toEqual({ x: 40, y: 10 });
-    expect(snap?.guides[0]).toEqual({ kind: "metric", metric: "baseline", y: 10 });
+    expect(snap?.y).toEqual({
+      offset: 6,
+      guides: [{ kind: "metric", metric: "baseline", x: 40, y: 10 }],
+    });
   });
 
   it("does not fabricate absent optional metrics at zero", () => {
@@ -41,6 +44,14 @@ describe("metric snapping follows authored horizontal metrics", () => {
 
     expect(snapping.snap({ x: 40, y: 496 })).toBeNull();
     enabled = true;
-    expect(snapping.snap({ x: 40, y: 496 })?.point.y).toBe(500);
+    expect(snapping.snap({ x: 40, y: 496 })?.y?.offset).toBe(4);
+  });
+
+  it("only snaps over the lines' horizontal extent", () => {
+    const snapping = MetricSnap.standard(metrics, 8).across({ minX: 0, maxX: 600 });
+
+    expect(snapping.snap({ x: 300, y: 496 })?.y?.offset).toBe(4);
+    expect(snapping.snap({ x: 700, y: 496 })).toBeNull();
+    expect(snapping.snap({ x: -20, y: 496 })).toBeNull();
   });
 });

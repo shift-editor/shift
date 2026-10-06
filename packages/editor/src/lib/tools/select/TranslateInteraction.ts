@@ -11,6 +11,7 @@ import type { PointSlide } from "./PointSlide";
 
 export class TranslateInteraction {
   readonly move: MoveEdit;
+  readonly selection: PositionSelection;
   readonly startPos: Point2D;
 
   constructor(
@@ -19,6 +20,7 @@ export class TranslateInteraction {
     pointerStart: Point2D,
     slide: PointSlide | null = null,
   ) {
+    this.selection = selection;
     this.move = PositionEdits.fromSelection(selection).move(selection.targets);
 
     if (reference) {

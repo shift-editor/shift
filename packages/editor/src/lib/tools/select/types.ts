@@ -25,6 +25,8 @@ export interface BrushingDrag {
 export interface TranslateDrag {
   /** Shift from the latest processed drag sample, not the global keyboard state. */
   shiftKey: boolean;
+  /** Cmd (Ctrl off macOS) from the latest drag sample; suspends position snapping while held. */
+  accelKey: boolean;
   startPos: Point2D;
   lastPos: Point2D;
   totalDelta: Point2D;

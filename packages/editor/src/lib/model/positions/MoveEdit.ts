@@ -3,6 +3,7 @@ import type { AnchorId } from "@shift/types";
 import type { GlyphLayer } from "../Glyph";
 import type { GlyphLayerEdit } from "../GlyphLayerEdit";
 import type {
+  AxisSnap,
   PositionEdit,
   PositionEditPhase,
   PositionFeedback,
@@ -16,6 +17,7 @@ import type { MovementAxis } from "./MovementAxis";
 import { PointRuleConstraint } from "./PointRuleConstraint";
 import { PositionEditGroup } from "./PositionEditGroup";
 import { PositionReference } from "./PositionReference";
+import { nearerAxisSnap, settleSnap } from "./SnapSet";
 
 /** Preview-backed movement configured with operation-specific fluent modifiers. */
 export class MoveEdit implements PositionEdit {
@@ -31,6 +33,7 @@ export class MoveEdit implements PositionEdit {
   #directionGuides = true;
   #axisDirection: Point2D | null = null;
   #snapProvider: PositionSnapProvider | null = null;
+  #snapCandidates: readonly Point2D[] | null = null;
   #pointRules: PointRuleConstraint | null = null;
 
   constructor(
@@ -94,9 +97,28 @@ export class MoveEdit implements PositionEdit {
     return this;
   }
 
-  snappedBy(provider: PositionSnapProvider): this {
+  /**
+   * Attaches position snapping, tested from one or several moving positions.
+   *
+   * @remarks
+   * Every candidate is tested at its previewed position; the nearest correction
+   * on each axis moves the whole edit, and candidates that land on the same
+   * target all report guides.
+   *
+   * @param provider - Snap targets, usually a {@link SnapSet}.
+   * @param candidates - Moving positions to test; defaults to the `from(...)` reference.
+   * @returns This edit for fluent configuration before its first preview.
+   * @throws {Error} When preview has begun or a candidate does not exist in the layer.
+   */
+  snappedBy(provider: PositionSnapProvider, candidates?: readonly PositionReference[]): this {
     this.#assertConfiguring();
     this.#snapProvider = provider;
+    this.#snapCandidates =
+      candidates?.map((candidate) => {
+        const position = candidate.resolve(this.#layers.reference.layer);
+        if (!position) throw new Error("Snap candidate does not exist in this glyph layer");
+        return position;
+      }) ?? null;
     return this;
   }
 
@@ -113,8 +135,8 @@ export class MoveEdit implements PositionEdit {
   }
 
   preview(rawDelta: Point2D): PositionFeedback {
-    if (this.#snapProvider && !this.#reference) {
-      throw new Error("MoveEdit.snappedBy requires an explicit PositionReference");
+    if (this.#snapProvider && !this.#snapCandidates && !this.#reference) {
+      throw new Error("MoveEdit.snappedBy requires candidates or an explicit PositionReference");
     }
 
     if (this.#directionPivot && !this.#reference) {
@@ -148,12 +170,10 @@ export class MoveEdit implements PositionEdit {
       }
     }
 
-    if (this.#snapProvider && this.#reference) {
-      const snap = this.#snapProvider.snap(Vec2.add(this.#reference, delta));
-      if (snap) {
-        delta = Vec2.sub(snap.point, this.#reference);
-        guides.push(...snap.guides);
-      }
+    if (this.#snapProvider) {
+      const settled = settleSnap(this.#snapCandidatesAt(this.#snapProvider, delta));
+      delta = Vec2.add(delta, settled.offset);
+      guides.push(...settled.guides);
     }
 
     if (this.#axisDirection) {
@@ -196,6 +216,25 @@ export class MoveEdit implements PositionEdit {
 
     this.#phase = "discarded";
     this.#layers.cancel();
+  }
+
+  #snapCandidatesAt(
+    provider: PositionSnapProvider,
+    delta: Point2D,
+  ): { x: AxisSnap | null; y: AxisSnap | null } {
+    const candidates = this.#snapCandidates ?? (this.#reference ? [this.#reference] : []);
+    let x: AxisSnap | null = null;
+    let y: AxisSnap | null = null;
+
+    for (const candidate of candidates) {
+      const snap = provider.snap(Vec2.add(candidate, delta));
+      if (!snap) continue;
+
+      x = nearerAxisSnap(x, snap.x);
+      y = nearerAxisSnap(y, snap.y);
+    }
+
+    return { x, y };
   }
 
   #assertConfiguring(): void {
