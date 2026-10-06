@@ -80,7 +80,8 @@ impl ShiftStore {
             }
             let first_appended_order = post_font.glyph_count().saturating_sub(appended.len());
             for (offset, glyph_id) in appended.iter().enumerate() {
-                if post_font.glyph_order((*glyph_id).clone()) != Some(first_appended_order + offset)
+                if post_font.glyph_order(&(*glyph_id).clone())
+                    != Some(first_appended_order + offset)
                 {
                     return Err(font::CoreError::InvalidEntityOrder {
                         kind: "glyph",
@@ -136,7 +137,7 @@ impl ShiftStore {
         }
         if let Some(post_font) = post_font {
             for layer_id in touched_layer_ids {
-                if let Some(layer) = post_font.layer(layer_id) {
+                if let Some(layer) = post_font.layer(&layer_id) {
                     rewrite_layer_in_tx(&tx, layer)?;
                 }
             }
@@ -523,7 +524,7 @@ fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), S
         font::FontChange::ContourOpenClosedChanged(change) => {
             update_packed_layer(tx, &change.layer_id, |layer| {
                 let contour = layer
-                    .contour_mut(change.contour_id.clone())
+                    .contour_mut(&change.contour_id)
                     .or_missing("contour", &change.contour_id)?;
                 if change.closed {
                     contour.close();

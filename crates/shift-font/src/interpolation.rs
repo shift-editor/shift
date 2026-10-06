@@ -381,7 +381,7 @@ impl Font {
 fn interpolation_reference_layer(font: &Font, glyph: &crate::Glyph) -> Option<Arc<GlyphLayer>> {
     if let Some(default_source_id) = font.default_source_id() {
         let default_is_master = font
-            .source(default_source_id.clone())
+            .source(&default_source_id)
             .is_some_and(crate::Source::is_master);
         if default_is_master {
             if let Some(layer) = glyph
@@ -666,7 +666,7 @@ mod tests {
         let interpolation = font.glyph_interpolation(&glyph.id()).unwrap().unwrap();
 
         for (expected_index, source_id) in interpolation.basis().source_ids().iter().enumerate() {
-            let source = font.source(source_id.clone()).unwrap();
+            let source = font.source(source_id).unwrap();
             let weights = interpolation
                 .basis()
                 .weights_at(source.location(), font.axes())

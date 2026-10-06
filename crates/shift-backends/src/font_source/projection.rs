@@ -160,7 +160,7 @@ fn directory_mappings(font: &Font) -> Result<Vec<DirectoryMapping>, FontReadErro
             .ok_or_else(|| invalid(&format!("mapping references unknown axis {axis_id}")))
     };
     let coordinate = |location: &Location, axis_id: &AxisId| {
-        font.axis(axis_id.clone())
+        font.axis(axis_id)
             .map(|axis| location.get(axis_id).unwrap_or(axis.default()))
             .ok_or_else(|| invalid(&format!("mapping references unknown axis {axis_id}")))
     };

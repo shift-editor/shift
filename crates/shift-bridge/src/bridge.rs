@@ -1519,7 +1519,7 @@ impl Bridge {
     let mut snapshots = Vec::new();
     for request in requests {
       let glyph_id = request.glyph_id;
-      let Some(glyph) = font.glyph(glyph_id.clone()) else {
+      let Some(glyph) = font.glyph(&glyph_id) else {
         continue;
       };
 
@@ -1603,7 +1603,7 @@ impl Bridge {
       if !seen.insert(glyph_id.clone()) {
         continue;
       }
-      if font.glyph(glyph_id.clone()).is_none() {
+      if font.glyph(&glyph_id).is_none() {
         continue;
       }
 

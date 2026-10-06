@@ -270,12 +270,12 @@ impl FontWorkspace {
                     layer_id,
                     component_ids,
                 } => {
-                    let Some(layer) = self.font.layer(layer_id.clone()) else {
+                    let Some(layer) = self.font.layer(layer_id) else {
                         continue;
                     };
                     component_roots.extend(component_ids.iter().filter_map(|component_id| {
                         layer
-                            .component(component_id.clone())
+                            .component(component_id)
                             .map(|component| component.base_glyph_id())
                     }));
                 }
@@ -295,10 +295,10 @@ impl FontWorkspace {
             if pre.layers.iter().any(|pre| pre.layer.id() == *layer_id) {
                 continue;
             }
-            if let Some(glyph_id) = self.font.glyph_id_by_layer(layer_id.clone())
+            if let Some(glyph_id) = self.font.glyph_id_by_layer(layer_id)
                 && let Some(layer) = self
                     .font
-                    .glyph(glyph_id.clone())
+                    .glyph(&glyph_id)
                     .and_then(|glyph| glyph.layers().get(layer_id))
                     .cloned()
             {
@@ -348,14 +348,14 @@ impl FontWorkspace {
                     appended_glyphs.push(change.glyph_id.clone());
                     let glyph = self
                         .font
-                        .glyph(change.glyph_id.clone())
+                        .glyph(&change.glyph_id)
                         .cloned()
                         .expect("an appended glyph must exist in the committed font");
                     steps.push(LedgerStep::GlyphAppend { glyph });
                 }
                 FontChange::AxisCreated(change) => steps.push(LedgerStep::Axis {
                     pre: None,
-                    post: self.font.axis(change.axis.id()).cloned(),
+                    post: self.font.axis(&change.axis.id()).cloned(),
                     pre_locations: Vec::new(),
                 }),
                 FontChange::AxisUpdated(change) => steps.push(LedgerStep::Axis {
@@ -415,7 +415,7 @@ impl FontWorkspace {
                 }
                 FontChange::SourceCreated(change) => steps.push(LedgerStep::Source {
                     pre: None,
-                    post: self.font.source(change.source.id()).cloned(),
+                    post: self.font.source(&change.source.id()).cloned(),
                 }),
                 FontChange::SourceDeleted(change) => steps.push(LedgerStep::Source {
                     pre: pre
@@ -438,7 +438,7 @@ impl FontWorkspace {
                     if appended_glyphs.contains(&change.glyph_id) {
                         continue;
                     }
-                    let Some(layer) = self.font.layer(change.layer_id.clone()) else {
+                    let Some(layer) = self.font.layer(&change.layer_id) else {
                         continue;
                     };
                     steps.push(LedgerStep::GlyphLayer {
@@ -726,7 +726,7 @@ impl FontWorkspace {
                     side.orient((pre_order, pre_default), (post_order, post_default));
                 font.set_source_order(&to_order)?;
                 match to_default {
-                    Some(source_id) if font.source(source_id.clone()).is_some() => {
+                    Some(source_id) if font.source(&source_id).is_some() => {
                         font.set_default_source_id(source_id);
                     }
                     Some(source_id) => {
@@ -889,7 +889,7 @@ impl FontWorkspace {
             .into_iter()
             .flat_map(|glyph_id| {
                 self.font
-                    .glyph(glyph_id)
+                    .glyph(&glyph_id)
                     .into_iter()
                     .flat_map(|glyph| glyph.layers().keys().cloned())
                     .collect::<Vec<_>>()
@@ -953,7 +953,7 @@ impl FontWorkspace {
         let mut evicted = Vec::new();
         let mut seen_layer_ids = HashSet::new();
         for glyph_id in glyph_ids {
-            let Some(glyph) = self.font.glyph(glyph_id.clone()) else {
+            let Some(glyph) = self.font.glyph(glyph_id) else {
                 continue;
             };
             for layer in glyph.layers().values().map(|layer| layer.as_ref()) {
@@ -1210,7 +1210,7 @@ fn capture_font_level_pre_state(
             if pre.axes.iter().any(|axis| axis.id() == axis_id) {
                 return;
             }
-            let Some(axis) = font.axis(axis_id.clone()) else {
+            let Some(axis) = font.axis(&axis_id) else {
                 return;
             };
             pre.axes.push(axis.clone());
@@ -1222,7 +1222,7 @@ fn capture_font_level_pre_state(
             if pre.axes.iter().any(|axis| axis.id() == *axis_id) {
                 return;
             }
-            let Some(axis) = font.axis(axis_id.clone()) else {
+            let Some(axis) = font.axis(axis_id) else {
                 return;
             };
             pre.axes.push(axis.clone());

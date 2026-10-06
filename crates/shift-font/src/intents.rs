@@ -394,7 +394,7 @@ impl Font {
                 continue;
             }
 
-            let Some(candidate) = self.glyph(candidate_id) else {
+            let Some(candidate) = self.glyph(&candidate_id) else {
                 continue;
             };
             pending.extend(
@@ -446,8 +446,8 @@ impl Font {
             .into_iter()
             .map(|(layer_id, structural)| {
                 let layer = self
-                    .glyph_id_by_layer(layer_id.clone())
-                    .and_then(|glyph_id| self.glyph(glyph_id))
+                    .glyph_id_by_layer(&layer_id)
+                    .and_then(|glyph_id| self.glyph(&glyph_id))
                     .and_then(|glyph| glyph.layers().get(&layer_id))
                     .cloned()
                     .require(&layer_id)?;
@@ -734,7 +734,7 @@ impl Font {
         if self.sources().iter().any(|source| source.name() == name) {
             return Err(CoreError::DuplicateSourceName(name.to_string()));
         }
-        if self.source(source_id.clone()).is_some() {
+        if self.source(&source_id).is_some() {
             return Err(CoreError::DuplicateSourceId(source_id));
         }
         if let Some(existing) = self.sources().iter().find(|source| {
@@ -747,7 +747,7 @@ impl Font {
         }
 
         for (axis_id, _) in location.iter() {
-            if self.axis(axis_id.clone()).is_none() {
+            if self.axis(axis_id).is_none() {
                 return Err(CoreError::AxisNotFound(axis_id.clone()));
             }
         }
@@ -801,7 +801,7 @@ impl Font {
         source_id: SourceId,
         changes: &mut FontChangeSet,
     ) -> CoreResult<Vec<LayerId>> {
-        if self.glyph_id_by_layer(layer_id.clone()).is_some() {
+        if self.glyph_id_by_layer(&layer_id).is_some() {
             return Err(CoreError::DuplicateLayerId(layer_id));
         }
         if self
@@ -864,7 +864,7 @@ impl Font {
         source_id: SourceId,
         from_layer_id: LayerId,
     ) -> CoreResult<GlyphLayer> {
-        if self.glyph_id_by_layer(layer_id.clone()).is_some() {
+        if self.glyph_id_by_layer(&layer_id).is_some() {
             return Err(CoreError::DuplicateLayerId(layer_id));
         }
         if self
@@ -941,7 +941,7 @@ impl Font {
                         }
                     };
 
-                    let contour = layer.contour_mut(contour_id.clone()).require(&contour_id)?;
+                    let contour = layer.contour_mut(&contour_id).require(&contour_id)?;
 
                     let insert_at = match before {
                         Some(before_id) => Some(
@@ -1219,7 +1219,7 @@ impl Font {
 
                 let layer = self.require_layer_mut(layer_id)?;
                 for component_id in component_ids {
-                    if layer.component(component_id.clone()).is_none() {
+                    if layer.component(component_id).is_none() {
                         return Err(CoreError::InvalidComponentId(component_id.to_string()));
                     }
                 }
@@ -1250,7 +1250,7 @@ impl Font {
                 let change = {
                     let layer = self.require_layer_mut(layer_id)?;
                     for component_id in &component_ids {
-                        if layer.component(component_id.clone()).is_none() {
+                        if layer.component(component_id).is_none() {
                             return Err(CoreError::InvalidComponentId(component_id.to_string()));
                         }
                     }
@@ -1272,7 +1272,7 @@ impl Font {
                     let glyph_id = self.require_layer_owner(layer_id)?;
                     let layer = self.require_layer_mut(layer_id)?;
                     for component_id in &component_ids {
-                        if layer.component(component_id.clone()).is_none() {
+                        if layer.component(component_id).is_none() {
                             return Err(CoreError::InvalidComponentId(component_id.to_string()));
                         }
                     }
@@ -1339,8 +1339,8 @@ impl Font {
                     .map(|point_id| {
                         let contour_id = layer.contour_of_point(point_id.clone())?;
                         let point = layer
-                            .contour(contour_id)
-                            .and_then(|contour| contour.get_point(point_id.clone()))
+                            .contour(&contour_id)
+                            .and_then(|contour| contour.get_point(point_id))
                             .require(&point_id)?;
                         Ok(PointPosition {
                             point_id: point_id.clone(),
@@ -1415,7 +1415,7 @@ impl Font {
         let layer = self.require_layer(layer_id)?;
         let source_id = layer.source_id();
         let base_layer_at_source = |glyph_id: GlyphId| {
-            self.glyph(glyph_id)
+            self.glyph(&glyph_id)
                 .and_then(|glyph| glyph.layer_for_source(source_id.clone()))
         };
         let Some(component_layer) = base_layer_at_source(base_glyph_id.clone()) else {
@@ -1563,9 +1563,9 @@ mod tests {
         .unwrap();
 
         let component = font
-            .layer(root_layer_id.clone())
+            .layer(&root_layer_id)
             .unwrap()
-            .component(component_id.clone())
+            .component(&component_id)
             .unwrap();
         assert_eq!(component.base_glyph_id(), base_id);
         assert_eq!(component.base_glyph_name().as_str(), "base");
@@ -1578,7 +1578,7 @@ mod tests {
         })
         .unwrap();
 
-        assert!(font.layer(root_layer_id).unwrap().components().is_empty());
+        assert!(font.layer(&root_layer_id).unwrap().components().is_empty());
     }
 
     #[test]
@@ -1621,8 +1621,8 @@ mod tests {
         })
         .unwrap();
 
-        let layer = font.layer(root_layer_id).unwrap();
-        let mark = layer.component(mark_component_id).unwrap();
+        let layer = font.layer(&root_layer_id).unwrap();
+        let mark = layer.component(&mark_component_id).unwrap();
         assert_eq!(mark.matrix(), crate::Transform::translate(321.0, 0.0));
     }
 
@@ -1715,9 +1715,9 @@ mod tests {
         .unwrap();
 
         let transform = font
-            .layer(layer_id)
+            .layer(&layer_id)
             .unwrap()
-            .component(component_id)
+            .component(&component_id)
             .unwrap()
             .transform();
         assert_eq!(transform.translate_x, 12.0);
@@ -1783,7 +1783,7 @@ mod tests {
         })
         .unwrap();
 
-        let layer = font.layer(root_layer_id).unwrap();
+        let layer = font.layer(&root_layer_id).unwrap();
         let point = &layer.contours_iter().next().unwrap().points()[0];
         assert!(layer.components().is_empty());
         assert_eq!((point.x(), point.y()), (40.0, 25.0));
@@ -1837,7 +1837,7 @@ mod tests {
         .expect("materialized layer should apply");
 
         let layer = font
-            .layer(layer_id)
+            .layer(&layer_id)
             .expect("materialized layer should be present");
         assert_eq!(layer.interpolation_values(), values);
         assert_ne!(

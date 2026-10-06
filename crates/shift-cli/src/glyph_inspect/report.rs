@@ -29,7 +29,7 @@ impl GlyphInspection {
             .wrap_err_with(|| format!("failed to load font {}", path.display()))?;
         let glyph_id = resolve_glyph_id(&font, selector)?;
         let glyph = font
-            .glyph(glyph_id.clone())
+            .glyph(&glyph_id)
             .ok_or_else(|| miette!("glyph {selector:?} disappeared while inspecting the font"))?;
         let external = parse_location(&font, coordinates)?;
         let design = map_location(&external, font.axes(), font.axis_mappings())
@@ -112,7 +112,7 @@ impl GlyphInspection {
 
 fn resolve_glyph_id(font: &Font, selector: &str) -> Result<GlyphId> {
     if let Ok(glyph_id) = selector.parse::<GlyphId>()
-        && font.glyph(glyph_id.clone()).is_some()
+        && font.glyph(&glyph_id).is_some()
     {
         return Ok(glyph_id);
     }
@@ -250,11 +250,11 @@ fn inspect_components(
                 })?;
             let base_id = occurrence.base_glyph_id();
             let parent_name = font
-                .glyph(parent_id.clone())
+                .glyph(&parent_id)
                 .map(|glyph| glyph.name().to_string())
                 .unwrap_or_else(|| parent_id.to_string());
             let base_name = font
-                .glyph(base_id.clone())
+                .glyph(&base_id)
                 .map(|glyph| glyph.name().to_string())
                 .unwrap_or_else(|| component.base_glyph_name().to_string());
 
