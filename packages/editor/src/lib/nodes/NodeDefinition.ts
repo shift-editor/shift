@@ -5,6 +5,8 @@ import type { ShiftNode } from "../../types/node";
 import type { NodeReference } from "../../types/records";
 import type { PointerTarget } from "../../types/target";
 import type { RenderContext, RenderPass } from "../../types/rendering";
+import type { SelectableId } from "../../types/object";
+import type { TransformTarget } from "../../types/transformTarget";
 
 /**
  * Defines behavior shared by every scene node of one kind.
@@ -15,8 +17,9 @@ import type { RenderContext, RenderPass } from "../../types/rendering";
  * still resolve through `ShiftObject` references.
  *
  * Two kinds of method, kept apart:
- * - Queries (`unitsTransform`, `bounds`, `hit`, `childPosition`, `draw`) run
- *   during rendering and hit testing and must never write.
+ * - Queries (`unitsTransform`, `bounds`, `hit`, `childPosition`,
+ *   `transformTarget`, `draw`) run during rendering, hit testing, and gesture
+ *   starts and must never write. A transform target writes only once begun.
  * - Hooks (`onDoubleClick`, `onContentChange`) may write. The editor calls
  *   them inside a history capture, so their writes are one undo step with the
  *   action that triggered them.
@@ -91,6 +94,15 @@ export abstract class NodeDefinition<N extends ShiftNode = ShiftNode> {
    * @returns the referenced ids; empty when the node depends on nothing outside itself.
    */
   references?(node: N): readonly NodeReference[];
+
+  /**
+   * Resolves selected objects inside this node into something the transform box can move, scale, and rotate.
+   *
+   * @param node - the node every selected object belongs to.
+   * @param ids - the selected objects.
+   * @returns null when this kind cannot transform that selection as a whole.
+   */
+  transformTarget?(node: N, ids: readonly SelectableId[]): TransformTarget | null;
 
   /**
    * Responds to a double-click on this node or on one of its descendants.

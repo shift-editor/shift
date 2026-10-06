@@ -3,9 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { GlyphName } from "@shift/types";
+import { Mat } from "@shift/geo";
 import { TestEditor } from "@/testing/TestEditor";
 import { Point } from "@shift/glyph-state";
 import { glyphTextItem } from "@shift/editor/text";
+import type { Select } from "@shift/editor/tools";
 
 describe("Text tool edits the page run", () => {
   let editor: TestEditor;
@@ -188,6 +190,153 @@ describe("Select over the page run", () => {
     expect(editor.editing.nodeIds).toEqual([previous.id]);
   });
 
+  it("Escape deselects first, then leaves the edited glyph", () => {
+    const child = editor.runGlyph!;
+    editor.selectAll();
+    editor.escape();
+    expect(editor.selection.hasSelection()).toBe(false);
+    expect(editor.editing.nodeIds).toEqual([child.id]);
+
+    editor.escape();
+    expect(editor.editing.nodeIds).toEqual([]);
+    expect(editor.runGlyph?.id).toBe(child.id);
+  });
+
+  it("leaving the edited glyph is one undo step", async () => {
+    const child = editor.runGlyph!;
+    editor.selection.clear();
+    editor.escape();
+    await editor.undo();
+    expect(editor.editing.nodeIds).toEqual([child.id]);
+  });
+
+  it("the glyph you left hovers as text and double-clicking it edits it again", async () => {
+    const child = editor.runGlyph!;
+    editor.selection.clear();
+    editor.escape();
+
+    hoverLocal(200, 200);
+    expect(editor.hover.id).toBe(child.itemId);
+
+    const screen = editor.localToScreen({ x: 200, y: 200 });
+    await editor.click(screen.x, screen.y);
+    await editor.click(screen.x, screen.y);
+    expect(editor.editing.nodeIds).toEqual([child.id]);
+  });
+
+  describe("at the run level, with no glyph edited", () => {
+    const sidebearings = () => editor.requireGlyphLayer().sidebearings;
+    const xAdvance = () => editor.requireGlyphLayer().xAdvance;
+
+    beforeEach(() => {
+      editor.selection.clear();
+      editor.escape();
+    });
+
+    it("selecting a glyph puts the transform box around its outline", async () => {
+      const screen = editor.localToScreen({ x: secondOrigin() + 200, y: 200 });
+      await editor.click(screen.x, screen.y);
+
+      expect(editor.selectionLocalRect()).toMatchObject({
+        left: secondOrigin() + 100,
+        right: secondOrigin() + 300,
+      });
+      const box = (editor.toolManager.activeTool as Select).boundingBox;
+      expect(box.propsSnapshot()?.showHandles).toBe(true);
+    });
+
+    it("a marquee selects the glyphs it touches, never their points", async () => {
+      await editor.dragLocal({
+        down: { x: 150, y: 400 },
+        start: { x: 154, y: 396 },
+        end: { x: 250, y: 150 },
+      });
+
+      expect(editor.selection.ids).toEqual([editor.runGlyph!.itemId]);
+    });
+
+    it("dragging a glyph moves its outline inside a fixed advance as one undo step", async () => {
+      const before = sidebearings();
+      const advance = xAdvance();
+
+      await editor.dragLocal({
+        down: { x: secondOrigin() + 200, y: 200 },
+        start: { x: secondOrigin() + 204, y: 200 },
+        end: { x: secondOrigin() + 250, y: 200 },
+      });
+
+      expect(sidebearings()).toEqual({ lsb: before.lsb! + 50, rsb: before.rsb! - 50 });
+      expect(xAdvance()).toBe(advance);
+
+      await editor.undo();
+      expect(sidebearings()).toEqual(before);
+    });
+
+    it("dragging the box's right edge grows the outline right, keeping both sidebearings", async () => {
+      const screen = editor.localToScreen({ x: secondOrigin() + 200, y: 200 });
+      await editor.click(screen.x, screen.y);
+      const before = sidebearings();
+      const advance = xAdvance();
+      const box = editor.selectionLocalRect()!;
+      const middle = (box.top + box.bottom) / 2;
+
+      await editor.dragLocal({
+        down: { x: box.right, y: middle },
+        start: { x: box.right + 4, y: middle },
+        end: { x: box.right + 200, y: middle },
+      });
+
+      expect(sidebearings()).toEqual(before);
+      expect(xAdvance()).toBe(advance + 200);
+    });
+
+    it("dragging the box's left edge grows the outline left into its left sidebearing", async () => {
+      const screen = editor.localToScreen({ x: secondOrigin() + 200, y: 200 });
+      await editor.click(screen.x, screen.y);
+      const before = sidebearings();
+      const advance = xAdvance();
+      const box = editor.selectionLocalRect()!;
+      const middle = (box.top + box.bottom) / 2;
+
+      await editor.dragLocal({
+        down: { x: box.left, y: middle },
+        start: { x: box.left - 4, y: middle },
+        end: { x: box.left - 50, y: middle },
+      });
+
+      expect(sidebearings()).toEqual({ lsb: before.lsb! - 50, rsb: before.rsb });
+      expect(xAdvance()).toBe(advance);
+    });
+
+    it("an Alt resize grows both edges and keeps the right sidebearing", async () => {
+      const screen = editor.localToScreen({ x: secondOrigin() + 200, y: 200 });
+      await editor.click(screen.x, screen.y);
+      const before = sidebearings();
+      const advance = xAdvance();
+      const box = editor.selectionLocalRect()!;
+      const middle = (box.top + box.bottom) / 2;
+
+      await editor.dragLocal({
+        down: { x: box.right, y: middle },
+        start: { x: box.right + 4, y: middle },
+        end: { x: box.right + 50, y: middle },
+        options: { altKey: true },
+      });
+
+      expect(sidebearings()).toEqual({ lsb: before.lsb! - 50, rsb: before.rsb });
+      expect(xAdvance()).toBe(advance + 50);
+    });
+
+    it("select-all takes every glyph, and a glyph selected twice nudges once", () => {
+      const before = sidebearings();
+      editor.selectAll();
+      expect(editor.selection.ids).toEqual(editor.text.run(run().runId)!.items.map((i) => i.id));
+
+      editor.keyDown("ArrowRight");
+      expect(sidebearings()).toEqual({ lsb: before.lsb! + 1, rsb: before.rsb! - 1 });
+    });
+  });
+
   it("Pen clicks over a run glyph still draw into the edited glyph", async () => {
     const layer = editor.requireGlyphLayer();
     const before = layer.contours.length;
@@ -234,5 +383,51 @@ describe("double-clicking a component", () => {
     await editor.undo();
     expect(editor.text.run(run.runId)!.items).toHaveLength(1);
     expect(editor.runGlyph?.id).toBe(previous.id);
+  });
+});
+
+describe("transforming several run glyphs", () => {
+  it("scales each glyph from its own edge, and a component follows its scaled base once", async () => {
+    const editor = new TestEditor();
+    await editor.startSession();
+    await editor.addGlyph("B", 66);
+    const bRecord = editor.font.recordForName("B" as GlyphName)!;
+    const bLayer = (await editor.font.loadGlyph(bRecord.id)).layerForSource(
+      editor.font.defaultSource.id,
+    )!;
+    const contourId = bLayer.addContour();
+    for (const [x, y] of [
+      [100, 100],
+      [300, 100],
+      [300, 300],
+      [100, 300],
+    ] as const) {
+      bLayer.addPoint(contourId, Point.onCurve({ x, y }));
+    }
+    bLayer.closeContour(contourId);
+    bLayer.setXAdvance(500);
+    const aLayer = editor.requireGlyphLayer();
+    aLayer.addComponent(bRecord.id);
+    editor.selectTool("text");
+    editor.textEditing.insertText("B");
+    editor.escape();
+    editor.selection.clear();
+    editor.escape();
+    await editor.settle();
+
+    editor.selectAll();
+    const edit = editor.transformTarget()!.begin("scale");
+    edit.preview(({ bounds }) =>
+      Mat.Compose(
+        Mat.Translate(bounds.left, bounds.bottom),
+        Mat.Compose(Mat.Scale(2, 2), Mat.Translate(-bounds.left, -bounds.bottom)),
+      ),
+    );
+    edit.commit();
+    await editor.settle();
+
+    expect(bLayer.sidebearings).toEqual({ lsb: 100, rsb: 200 });
+    expect(bLayer.xAdvance).toBe(700);
+    expect(aLayer.components[0]?.matrix).toMatchObject({ a: 1, d: 1, e: 0, f: 0 });
   });
 });
