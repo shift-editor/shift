@@ -5,7 +5,7 @@ import type { DragEvent, DragStartEvent, ToolEvent } from "../../core/GestureDet
 import type { SelectBehavior, SelectState } from "../types";
 import type { Select } from "../Select";
 import { AngleSnap, PositionEdits, PositionList, type RotateEdit } from "../../../model/positions";
-import type { ComponentTransformEdit } from "../../../model/ComponentTransformEdit";
+import type { TransformEdit } from "../../../../types/transformTarget";
 import type { PositionCondition } from "../../../../types/positionEdit";
 import type { ScenePoint } from "../../../../types/coordinates";
 import type { ShiftNode } from "../../../../types/node";
@@ -14,8 +14,8 @@ export class Rotate implements SelectBehavior {
   #editor: Editor | null = null;
   #node: ShiftNode | null = null;
   #edit: RotateEdit | null = null;
-  #componentEdit: ComponentTransformEdit | null = null;
-  #componentAngleSnap: AngleSnap | null = null;
+  #transformEdit: TransformEdit | null = null;
+  #transformAngleSnap: AngleSnap | null = null;
   #done: (() => void) | null = null;
 
   onDragStart(
@@ -26,13 +26,13 @@ export class Rotate implements SelectBehavior {
     if (!ctx.editor.selection.hasSelection()) return false;
 
     const next = this.tryStartRotate(event, ctx.editor, ctx.tool);
-    if (!next || (!this.#edit && !this.#componentEdit)) return false;
+    if (!next || (!this.#edit && !this.#transformEdit)) return false;
 
     const edit = this.#edit;
-    const componentEdit = this.#componentEdit;
+    const transformEdit = this.#transformEdit;
     this.#done = ctx.onCancel(() => {
       edit?.discard();
-      componentEdit?.discard();
+      transformEdit?.discard();
     });
     ctx.setState(next);
     return true;
@@ -40,7 +40,7 @@ export class Rotate implements SelectBehavior {
 
   onDrag(state: SelectState, ctx: ToolContext<SelectState, Select>, event: DragEvent): boolean {
     if (state.type !== "rotating") return false;
-    if (!this.#edit && !this.#componentEdit) return false;
+    if (!this.#edit && !this.#transformEdit) return false;
 
     const next = this.nextRotatingState(state, event);
     ctx.setState(next);
@@ -52,7 +52,7 @@ export class Rotate implements SelectBehavior {
     if (state.type !== "rotating") return false;
 
     this.#edit?.commit();
-    this.#componentEdit?.commit("Rotate components");
+    this.#transformEdit?.commit();
     if (this.#done) this.#done();
     this.#cleanup();
 
@@ -87,16 +87,16 @@ export class Rotate implements SelectBehavior {
     }
 
     if (next.type !== "rotating" || event.type !== "drag") return;
-    if (!this.#edit && !this.#componentEdit) return;
+    if (!this.#edit && !this.#transformEdit) return;
 
     const rawAngle = next.rotate.currentAngle - next.rotate.startAngle;
     let deltaAngle = rawAngle;
-    if (this.#componentEdit) {
-      deltaAngle = this.#componentAngleSnap?.apply(rawAngle) ?? rawAngle;
-      this.#componentEdit.preview((layer) => {
+    if (this.#transformEdit) {
+      deltaAngle = this.#transformAngleSnap?.apply(rawAngle) ?? rawAngle;
+      this.#transformEdit.preview((part) => {
         const center = Vec2.midpoint(
-          { x: layer.bounds.left, y: layer.bounds.top },
-          { x: layer.bounds.right, y: layer.bounds.bottom },
+          { x: part.bounds.left, y: part.bounds.top },
+          { x: part.bounds.right, y: part.bounds.bottom },
         );
         const fromOrigin = Mat.Translate(-center.x, -center.y);
         const rotation = Mat.Rotate(deltaAngle);
@@ -134,8 +134,8 @@ export class Rotate implements SelectBehavior {
     this.#editor = null;
     this.#node = null;
     this.#edit = null;
-    this.#componentEdit = null;
-    this.#componentAngleSnap = null;
+    this.#transformEdit = null;
+    this.#transformAngleSnap = null;
     this.#done = null;
   }
 
@@ -143,7 +143,7 @@ export class Rotate implements SelectBehavior {
     state: SelectState & { type: "rotating" },
     event: DragEvent,
   ): SelectState & { type: "rotating" } {
-    if (!this.#edit && !this.#componentEdit) return state;
+    if (!this.#edit && !this.#transformEdit) return state;
 
     const currentPos = event.coords.scene;
 
@@ -162,9 +162,11 @@ export class Rotate implements SelectBehavior {
     const hit = tool.boundingBox.hit(event.origin);
     if (hit?.type !== "rotate") return null;
 
-    const componentSelection = editor.componentTransformSelection(editor.selection.ids);
-    const positionSelection = editor.positionSelection(editor.selection.ids);
-    if (!componentSelection && !positionSelection) return null;
+    const transformTarget = editor.transformTarget();
+    const positionSelection = transformTarget
+      ? null
+      : editor.positionSelection(editor.selection.ids);
+    if (!transformTarget && !positionSelection) return null;
 
     const node = editor.selectionNode();
     if (!node) return null;
@@ -180,15 +182,14 @@ export class Rotate implements SelectBehavior {
       },
     };
 
-    if (componentSelection) {
-      const bounds = componentSelection.bounds;
+    if (transformTarget) {
+      const bounds = transformTarget.bounds;
       center = Vec2.midpoint(
         { x: bounds.left, y: bounds.top },
         { x: bounds.right, y: bounds.bottom },
       );
-      this.#componentAngleSnap = AngleSnap.everyDegrees(15, condition);
-      this.#componentEdit =
-        componentSelection.layer.beginComponentTransformEdit(componentSelection);
+      this.#transformAngleSnap = AngleSnap.everyDegrees(15, condition);
+      this.#transformEdit = transformTarget.begin("rotate");
     } else if (positionSelection) {
       const localPositions = PositionList.fromTargetGroups(
         positionSelection.layer,
