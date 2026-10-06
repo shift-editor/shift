@@ -44,12 +44,12 @@ export interface NodeTarget {
   readonly point: LocalPoint;
 }
 
+/** A glyph in a text run, hit on its outline. */
 export interface TextPointerTarget {
   readonly kind: "text";
   readonly node: TextRunNode;
   readonly point: LocalPoint;
-  readonly cluster: number;
-  readonly itemId: TextItemId | null;
+  readonly itemId: TextItemId;
 }
 
 export interface CanvasTarget {

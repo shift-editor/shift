@@ -7,8 +7,9 @@ import type {
 } from "../../core/GestureDetector";
 import type { ToolContext } from "../../core/Behavior";
 import type { TextBehavior, TextState } from "../types";
+import type { ScenePoint } from "../../../../types/coordinates";
 
-/** Resolves canvas gestures into placed-run creation and caret positions. */
+/** Resolves canvas gestures inside the page run into caret positions; clicks elsewhere do nothing. */
 export class TypingBehavior implements TextBehavior {
   onClick(state: TextState, ctx: ToolContext<TextState>, event: ClickEvent): boolean {
     return this.#click(state, ctx, event);
@@ -24,42 +25,27 @@ export class TypingBehavior implements TextBehavior {
     event: ClickEvent | DoubleClickEvent,
   ): boolean {
     if (state.type === "idle") return false;
-    if (event.target.kind === "text") {
-      if (ctx.editor.textEditing.state?.nodeId !== event.target.node.id) {
-        ctx.editor.textEditing.begin(event.target.node.id);
-      }
-      ctx.editor.textEditing.placeAtCluster(event.target.cluster, event.shiftKey);
-    } else {
-      const run = ctx.editor.text.createRun([]);
-      const node = ctx.editor.scene.createNode({
-        kind: "textRun",
-        runId: run.id,
-        size: ctx.editor.font.metricsCell.peek().unitsPerEm,
-        position: event.coords.scene,
-      });
-      ctx.editor.textEditing.begin(node.id);
-    }
+    const caret = caretAt(ctx, event.coords.scene);
+    if (!caret) return false;
+    ctx.editor.textEditing.placeAtCluster(caret.cluster, event.shiftKey);
     ctx.setState({ type: "editing" });
     return true;
   }
 
   onDragStart(state: TextState, ctx: ToolContext<TextState>, event: DragStartEvent): boolean {
-    if (state.type === "idle" || event.target.kind !== "text") return false;
-    const nodeId = event.target.node.id;
-    if (ctx.editor.textEditing.state?.nodeId !== nodeId) ctx.editor.textEditing.begin(nodeId);
-    ctx.editor.textEditing.placeAtCluster(event.target.cluster);
+    if (state.type === "idle") return false;
+    const caret = caretAt(ctx, event.origin.scene);
+    if (!caret) return false;
+    ctx.editor.textEditing.placeAtCluster(caret.cluster);
     ctx.setState({ type: "editing" });
     return true;
   }
 
   onDrag(state: TextState, ctx: ToolContext<TextState>, event: DragEvent): boolean {
-    if (
-      state.type !== "editing" ||
-      event.target.kind !== "text" ||
-      event.target.node.id !== ctx.editor.textEditing.state?.nodeId
-    )
-      return false;
-    ctx.editor.textEditing.placeAtCluster(event.target.cluster, true);
+    if (state.type !== "editing") return false;
+    const caret = caretAt(ctx, event.coords.scene);
+    if (!caret) return false;
+    ctx.editor.textEditing.placeAtCluster(caret.cluster, true);
     return true;
   }
 
@@ -68,4 +54,13 @@ export class TypingBehavior implements TextBehavior {
     ctx.editor.setActiveTool("select");
     return true;
   }
+}
+
+/** Returns the caret cluster at a scene point in the run being edited. */
+function caretAt(ctx: ToolContext<TextState>, point: ScenePoint): { cluster: number } | null {
+  const editor = ctx.editor;
+  const run = editor.scene.nodeOfKind(editor.textEditing.state?.nodeId ?? null, "textRun");
+  if (!run) return null;
+  const cluster = editor.nodeDefinition("textRun").caretAt(run, editor.toLocal(run, point));
+  return cluster === null ? null : { cluster };
 }

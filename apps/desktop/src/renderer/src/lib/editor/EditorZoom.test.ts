@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { Bounds, type Rect2D } from "@shift/geo";
+import { scenePoint } from "@shift/editor/spaces";
 import { TestEditor } from "@/testing";
 
 describe("viewport zoom actions", () => {
@@ -22,13 +23,17 @@ describe("viewport zoom actions", () => {
   });
 
   it("centres all scene content when zooming to fit", () => {
-    const bounds = editor.sceneGlyphRenderModel?.bounds;
-    if (!bounds) throw new Error("Expected glyph bounds");
+    const nodeBounds = editor.scene.nodes().flatMap((node) => editor.nodeBounds(node) ?? []);
+    const bounds = nodeBounds.reduce<Bounds>(
+      (union, next) => Bounds.union(union, next),
+      nodeBounds[0]!,
+    );
+    const centre = Bounds.center(bounds);
 
     editor.setZoom(0.25);
     editor.zoomToFit();
 
-    expect(editor.localToScreen(Bounds.center(bounds))).toEqual(editor.camera.centre);
+    expect(editor.sceneToScreen(scenePoint(centre.x, centre.y))).toEqual(editor.camera.centre);
     expect(editor.zoom).toBeGreaterThan(0.25);
   });
 

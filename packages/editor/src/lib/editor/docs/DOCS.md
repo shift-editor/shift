@@ -10,7 +10,7 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 
 **Architecture Invariant:** `Editor` is a facade -- it delegates viewport, hover, rendering, and tool dispatch to named subsystem objects. Tools receive `Editor` directly but must not reach into private managers. Its immutable `sessionMode` defines editing and persistence capability: preview is read-only, memory is locally editable without persistence, and workspace is durably editable. In preview, Select consumes geometry hits without publishing hover or selection, marquee gestures publish no selection, and geometry clicks emit `previewMutationAttempted`. Main keeps Edit commands disabled in preview. Authored-layer resolution remains the final mutation boundary in editable sessions.
 
-**Architecture Invariant:** `Scene` owns generic, serializable `ShiftNode` records and placement only. It must not import or retain `Glyph`, `GlyphLayer`, or resolved geometry. Navigation finishes `Font.loadGlyph()` before entering the editor route, and the route synchronously confirms acquisition before publishing the ordinary ID-based glyph node.
+**Architecture Invariant:** `Scene` owns generic, serializable `ShiftNode` records and placement only. It must not import or retain `Glyph`, `GlyphLayer`, or resolved geometry. Navigation finishes `Font.loadGlyph()` before entering the editor route, and the route synchronously confirms acquisition before publishing the glyph as the canvas run's child node (`RunChildren.editItem`).
 
 **Architecture Invariant:** Node definitions are typed, editor-scoped behavior plugins shared by every scene node of their kind. Glyph-specific presentation state stays on `GlyphNodeDefinition`, not the generic `Editor`: its `GlyphOutlines` surface associates source and named-instance outline targets with a `NodeId`, while the definition resolves and strokes those locations during the ordinary content pass.
 
@@ -26,7 +26,7 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 
 **Architecture Invariant:** `EditorInput` owns raw pointer position, modifiers, and primary-button state. `pointerDownCell` becomes true on accepted pointer-down and resets on release, cancellation, or an editor interaction reset. Gesture interpretation remains separate: a click is emitted on release only when the press never crossed the drag threshold.
 
-**Architecture Invariant:** Text is placed by scene nodes, not by an editor-global draw offset. `TextRunNodeDefinition` renders and hit-tests layout in node space at `node.size / unitsPerEm`; `TextEditing` stores the active node and item-identity carets. In-context glyph editing will place a child GlyphNode from layout in a later slice.
+**Architecture Invariant:** Text is placed by scene nodes, not by an editor-global draw offset. `TextRunNodeDefinition` renders layout in node space at `node.size / unitsPerEm`; `TextEditing` stores the active node and item-identity carets. The edited glyph is a child `GlyphNode` of its run, placed from layout through `NodeDefinition.childPosition` and managed by `RunChildren`.
 
 **Architecture Invariant: CRITICAL:** `Camera` owns the affine matrices as lazily computed cells. Anything that reads viewport-derived values inside a `computed` or `effect` will auto-track. Calling `setRect()`, changing zoom/pan, or changing UPM invalidates both matrices and triggers downstream redraws automatically. Never cache matrix results outside a signal.
 
@@ -124,7 +124,7 @@ Tools receive screen and scene coordinates from the pointer pipeline. Scene/node
 
 `Camera` computes the scene-to-screen view as `Translate(pan)·Scale(zoom)`; it never depends on the canvas size. The inverse is lazily computed. Both are computed signals, so any dependent computed/effect auto-invalidates.
 
-`Editor.sceneTransform(node)` is `frameToScene(node)·unitsTransform(node)`. Frames carry placement only (each node's `position` in its parent's frame); units are the node kind's own content transform (glyphs flip Y) and never apply to children.
+`Editor.sceneTransform(node)` is `frameToScene(node)·unitsTransform(node)`. Frames carry placement only (each node's `position` in its parent's frame, or the position its parent's definition lays it out at via `childPosition`); units are the node kind's own content transform (glyphs flip Y) and never apply to children. `Scene.nodes()` returns parents before children, so drawing paints children over their parent and hit testing (in reverse) tries children first.
 
 ### Four canvas layers
 

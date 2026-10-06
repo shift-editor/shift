@@ -1,4 +1,11 @@
-import { mintRunId, type GlyphId, type GlyphName, type RunId, type Unicode } from "@shift/types";
+import {
+  mintRunId,
+  type GlyphId,
+  type GlyphName,
+  type RunId,
+  type TextItemId,
+  type Unicode,
+} from "@shift/types";
 import { computed, keyedCache, signal, track } from "../signals";
 import type { ComputedSignal, Signal, WritableSignal } from "../signals";
 import type { Editor } from "../editor/Editor";
@@ -76,9 +83,24 @@ export class Text {
     return record?.type === "textrun" ? record : null;
   }
 
+  /** Replaces a run's items; child glyph nodes are left to `RunChildren.removeDetached`. */
   setItems(id: RunId, items: readonly TextItem[]): void {
     const run = this.run(id);
     if (run) this.#store.put({ ...run, items: [...items] });
+  }
+
+  /**
+   * Inserts items into a run directly after one of its items.
+   *
+   * @returns false when the run or `afterId` is missing.
+   */
+  insertAfter(id: RunId, afterId: TextItemId, items: readonly TextItem[]): boolean {
+    const current = this.run(id)?.items;
+    const index = current?.findIndex((item) => item.id === afterId) ?? -1;
+    if (!current || index < 0) return false;
+
+    this.setItems(id, [...current.slice(0, index + 1), ...items, ...current.slice(index + 1)]);
+    return true;
   }
 
   deleteRun(id: RunId): void {

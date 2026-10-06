@@ -114,6 +114,21 @@ export class EditorHistory {
   }
 
   /**
+   * Runs an action inside the open capture, or as its own captured action when none is open.
+   *
+   * @remarks
+   * Tool events already run inside a capture; code reachable from both tool
+   * events and direct calls uses this to record exactly one entry either way.
+   *
+   * @param label - Action name used only when this call opens the capture.
+   * @param body - Synchronous action.
+   * @returns the body's result.
+   */
+  captureOrJoin<T>(label: string, body: () => T): T {
+    return this.capturing ? body() : this.capture(label, body);
+  }
+
+  /**
    * Runs one asynchronous editor action and records its completed effects.
    *
    * @remarks

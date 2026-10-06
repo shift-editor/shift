@@ -26,10 +26,14 @@ export class SelectHover implements SelectBehavior {
         return false;
       }
 
-      case "node":
-      case "text": {
+      case "node": {
         ctx.editor.hover.clear();
         return false;
+      }
+
+      case "text": {
+        ctx.editor.hover.set(target.itemId);
+        return true;
       }
 
       case "point": {

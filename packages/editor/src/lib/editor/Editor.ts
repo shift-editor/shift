@@ -5,6 +5,7 @@ import {
   isContourId,
   isComponentId,
   isNodeId,
+  isTextItemId,
   isPointId,
   type AnchorId,
   type ComponentId,
@@ -91,6 +92,7 @@ import type { DeleteMode, GlyphGeometrySelection } from "../../types/glyph";
 import type { Modifiers } from "../tools/core/GestureDetector";
 import { Text } from "../text/Text";
 import { TextEditing } from "../text/TextEditing";
+import { RunChildren } from "../text/RunChildren";
 
 import type { ToolManifest, ToolShortcutEntry } from "../../types/tools";
 import type { ToolStateScope } from "../../types/editor";
@@ -111,6 +113,7 @@ import {
   ContourObject,
   NodeObject,
   PointObject,
+  TextItemObject,
   SegmentObject,
 } from "../objects";
 import type { NodeDefinition } from "../nodes/NodeDefinition";
@@ -178,6 +181,8 @@ export class Editor {
   readonly sessionMode: FontSessionMode;
   readonly scene: Scene;
   readonly text: Text;
+  /** Text runs' child glyph nodes: the glyph each run edits in place. */
+  readonly runChildren: RunChildren;
   readonly textEditing: TextEditing;
   readonly #nodeDefinitions: NodeDefinitionByKind;
   readonly #store: ShiftStore<ShiftEditorRecord>;
@@ -267,6 +272,7 @@ export class Editor {
     );
     this.text = new Text(this.#store, this);
     this.textEditing = new TextEditing(this.#store, this);
+    this.runChildren = new RunChildren(this);
 
     const GlyphDefinition = options.nodeDefinitions?.glyph ?? GlyphNodeDefinition;
     const TextRunDefinition = options.nodeDefinitions?.textRun ?? TextRunNodeDefinition;
@@ -810,6 +816,20 @@ export class Editor {
         const layer =
           node.sourceId === this.activeSourceId ? glyph.layerForSource(node.sourceId) : null;
         return new ComponentObject(component, node, layer);
+      }
+      return null;
+    }
+
+    if (isTextItemId(id)) {
+      for (const node of this.scene.nodesOfKind("textRun")) {
+        const item = this.text.run(node.runId)?.items.find((candidate) => candidate.id === id);
+        if (!item) continue;
+
+        const glyphId =
+          item.kind === "glyph"
+            ? (this.font.recordForName(item.glyphName as GlyphName)?.id ?? null)
+            : null;
+        return new TextItemObject(node, id, glyphId);
       }
       return null;
     }
@@ -1411,12 +1431,13 @@ export class Editor {
   }
 
   /**
-   * Returns the transform from a node's own units to scene space, read without tracking.
+   * Returns the transform from a node's own units to scene space.
    *
    * @remarks
    * Places the node's frame through its ancestors' frames, then applies the
    * node's own units. Callers that need to redraw on placement changes track
-   * `scene.cell`.
+   * `scene.cell`; a parent that lays out its children (a text run) tracks its
+   * own layout when read inside a reactive boundary.
    *
    * @param node - a node in the scene; its ancestors are resolved by `parentId`.
    */
@@ -1500,14 +1521,15 @@ export class Editor {
    *
    * @remarks
    * Frames carry placement only. Each node's units apply to its own content and
-   * never to its children's frames.
+   * never to its children's frames. A parent that lays out its children
+   * supplies their positions through `NodeDefinition.childPosition`.
    */
   #frameToScene(node: ShiftNode): Mat {
-    const position = Mat.Translate(node.position.x, node.position.y);
     const parent = this.scene.node(node.parentId);
-    if (!parent) return position;
+    if (!parent) return Mat.Translate(node.position.x, node.position.y);
 
-    return Mat.Compose(this.#frameToScene(parent), position);
+    const position = this.nodeDefinition(parent.kind).childPosition(parent, node) ?? node.position;
+    return Mat.Compose(this.#frameToScene(parent), Mat.Translate(position.x, position.y));
   }
 
   getPointerTarget(point: ScenePoint): PointerTarget {

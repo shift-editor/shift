@@ -187,19 +187,8 @@ describe("KeyboardRouter", () => {
       expect(editor.toolIf("select")?.state).toEqual({ type: "ready" });
     });
 
-    it("switches tools from the text tool before a caret is placed", async () => {
+    it("does not intercept plain typing in Text mode", async () => {
       editor.selectTool("text");
-      const e = createKeyboardEvent({ key: "r" });
-
-      const handled = await router.handleKeyDown(e);
-
-      expect(handled).toBe(true);
-      expect(editor.toolIf("shape")?.state).toEqual({ type: "ready" });
-    });
-
-    it("does not intercept plain typing once the text caret is placed", async () => {
-      editor.selectTool("text");
-      await editor.clickLocal(800, 0);
       const e = createKeyboardEvent({ key: "r" });
 
       const handled = await router.handleKeyDown(e);
@@ -482,10 +471,9 @@ describe("KeyboardRouter", () => {
       expect(editor.pointCount).toBeGreaterThan(pointsBefore);
     });
 
-    it("does not intercept paste once the text caret is placed", async () => {
+    it("does not intercept paste in Text mode", async () => {
       await editor.copy();
       editor.selectTool("text");
-      await editor.clickLocal(800, 0);
       const pointsBefore = editor.pointCount;
       const e = createKeyboardEvent({ key: "v", metaKey: true });
 
@@ -494,9 +482,8 @@ describe("KeyboardRouter", () => {
       expect(editor.pointCount).toBe(pointsBefore);
     });
 
-    it("does not intercept copy once the text caret is placed", async () => {
+    it("does not intercept copy in Text mode", async () => {
       editor.selectTool("text");
-      await editor.clickLocal(800, 0);
       const bufferBefore = editor.clipboardBuffer;
       const e = createKeyboardEvent({ key: "c", metaKey: true });
 
@@ -585,18 +572,8 @@ describe("KeyboardRouter", () => {
       expect(editor.toolIf("select")?.state).toEqual({ type: "ready" });
     });
 
-    it("activates the hand tool on space from the text tool before a caret is placed", async () => {
+    it("does not activate the hand tool on space in Text mode", async () => {
       editor.selectTool("text");
-      const e = createKeyboardEvent({ key: " ", code: "Space" });
-
-      await router.handleKeyDown(e);
-
-      expect(editor.toolIf("hand")?.state).toEqual({ type: "ready" });
-    });
-
-    it("does not activate the hand tool on space once the text caret is placed", async () => {
-      editor.selectTool("text");
-      await editor.clickLocal(800, 0);
       const e = createKeyboardEvent({ key: " ", code: "Space" });
 
       await router.handleKeyDown(e);

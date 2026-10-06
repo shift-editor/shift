@@ -1,9 +1,17 @@
 import type { LocalBounds } from "./coordinates";
 import type { GlyphGeometry, SegmentId } from "@shift/glyph-state";
-import type { AnchorId, ComponentId, ContourId, NodeId, PointId } from "@shift/types";
+import type {
+  AnchorId,
+  ComponentId,
+  ContourId,
+  GlyphId,
+  NodeId,
+  PointId,
+  TextItemId,
+} from "@shift/types";
 import type { GlyphLayer } from "../lib/model/Glyph";
 import type { ComponentGlyph } from "../lib/model/ComponentGlyph";
-import type { GlyphNode, ShiftNode } from "./node";
+import type { GlyphNode, ShiftNode, TextRunNode } from "./node";
 
 declare const SelectionIdBrand: unique symbol;
 
@@ -12,7 +20,14 @@ export type SelectionId = string & { readonly [SelectionIdBrand]: typeof Selecti
 export const currentSelectionId = "selection:current" as SelectionId;
 
 /** Identifies an editor-addressable scene node or glyph object. */
-export type ShiftId = NodeId | PointId | AnchorId | ContourId | SegmentId | ComponentId;
+export type ShiftId =
+  | NodeId
+  | PointId
+  | AnchorId
+  | ContourId
+  | SegmentId
+  | ComponentId
+  | TextItemId;
 
 /** Identifies objects that can be selected by the editor. */
 export type SelectableId = ShiftId;
@@ -139,6 +154,13 @@ export interface ShiftObjectKindMap {
     readonly component: ComponentGlyph;
     readonly componentId: ComponentId;
     readonly componentPath: readonly ComponentId[];
+  };
+
+  readonly textItem: ShiftObjectBase<"textItem", TextItemId> & {
+    readonly node: TextRunNode;
+    readonly itemId: TextItemId;
+    /** Glyph shown by the item; null for line breaks and unresolved names. */
+    readonly glyphId: GlyphId | null;
   };
 }
 

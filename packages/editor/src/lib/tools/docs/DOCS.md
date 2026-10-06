@@ -323,5 +323,5 @@ onDragCancel(state, ctx) {
 - `PositionEdits` — creates standalone or scoped fluent move, rotate, and scale interactions over normalized position targets.
 - `GlyphLayerEdit` — active preview/finish/cancel owner used by fluent edits and arbitrary BendCurve patches.
 - `Coordinates` — `{ screen, scene }` coordinate bundle on pointer events.
-- `TextTool` — ready/editing text tool that creates scene text nodes and edits their document runs through `editor.textEditing`; the hidden textarea handles native typing.
+- `TextTool` — Text mode: suspends glyph editing so every glyph draws filled, edits the page run through `editor.textEditing`, and places the caret with `TextRunNodeDefinition.caretAt`; it never creates runs. The hidden textarea handles native typing.
 - `KeyboardRouter` — binds tool shortcuts registered via `getToolShortcuts`.

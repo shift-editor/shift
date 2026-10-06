@@ -43,15 +43,20 @@ export class TextEditing {
     return this.stateCell.peek();
   }
 
-  /** Begins editing within the caller's pointer capture. */
-  begin(nodeId: NodeId, caret: TextCaret = null): void {
+  /**
+   * Begins editing within the caller's pointer capture.
+   *
+   * @param caret - focus caret; null is the start of the run.
+   * @param anchor - selection anchor; defaults to `caret`, a collapsed caret.
+   */
+  begin(nodeId: NodeId, caret: TextCaret = null, anchor: TextCaret = caret): void {
     if (!this.#editor.scene.nodeOfKind(nodeId, "textRun")) return;
     this.#store.put({
       id: currentTextEditingId,
       type: "textEditing",
       scope: "session",
       nodeId,
-      anchor: caret,
+      anchor,
       focus: caret,
     });
     this.#goalX = null;
@@ -171,7 +176,7 @@ export class TextEditing {
         anchor: anchor === undefined ? extendedAnchor : anchor,
         focus: caret,
       });
-    if (label && !this.#editor.history.capturing) this.#editor.history.capture(label, write);
+    if (label) this.#editor.history.captureOrJoin(label, write);
     else write();
   }
 
@@ -196,10 +201,10 @@ export class TextEditing {
     if (!result) return;
     const write = () => {
       this.#editor.text.setItems(run.id, result.items);
+      this.#editor.runChildren.removeDetached(run.id);
       this.#store.put({ ...state, anchor: result.anchor, focus: result.focus });
     };
-    if (this.#editor.history.capturing) write();
-    else this.#editor.history.capture(label, write);
+    this.#editor.history.captureOrJoin(label, write);
     this.#goalX = null;
   }
 }

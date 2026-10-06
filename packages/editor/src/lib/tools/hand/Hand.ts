@@ -2,12 +2,11 @@ import { BaseTool, type ToolName } from "../core";
 import type { CursorType } from "../../../types/editor";
 import type { HandState } from "./types";
 import { HandReadyBehavior, HandDraggingBehavior } from "./behaviors";
-import { NodeId } from "@shift/types";
 
 export class Hand extends BaseTool<HandState> {
   readonly id: ToolName = "hand";
 
-  #stashedEditingNodes: NodeId[] = [];
+  #restoreEditing: (() => void) | null = null;
 
   readonly behaviors = [HandReadyBehavior, HandDraggingBehavior];
 
@@ -21,15 +20,14 @@ export class Hand extends BaseTool<HandState> {
   }
 
   override activate(): void {
-    this.#stashedEditingNodes = [...this.editor.editing.nodeIds];
-    this.editor.editing.clear();
+    this.#restoreEditing = this.editor.editing.suspend();
 
     this.setState({ type: "ready" });
   }
 
   override deactivate(): void {
-    this.editor.editing.set(this.#stashedEditingNodes);
-    this.#stashedEditingNodes = [];
+    if (this.#restoreEditing) this.#restoreEditing();
+    this.#restoreEditing = null;
 
     this.setState({ type: "idle" });
   }

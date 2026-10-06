@@ -2,42 +2,91 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { TestEditor } from "@/testing/TestEditor";
 import { localPoint, scenePoint } from "@shift/editor/spaces";
 import { clusterForCaret, glyphTextItem } from "@shift/editor/text";
+import type { GlyphNode, TextRunNode } from "@shift/editor/types";
 
-describe("placed proof text editing", () => {
+describe("page run text editing", () => {
   let editor: TestEditor;
+  let run: TextRunNode;
+  let child: GlyphNode;
+
+  const items = () => editor.text.run(run.runId)!.items;
+
   beforeEach(async () => {
     editor = new TestEditor();
     await editor.startSession();
+    run = editor.textRun!;
+    child = editor.runGlyph!;
     editor.selectTool("text");
   });
 
-  it("click creates an empty scene node with an editable caret", async () => {
-    await editor.clickLocal(800, 0);
-    const node = editor.scene.nodesOfKind("textRun")[0]!;
-    expect(node.position).toEqual({ x: 800, y: 0 });
-    expect(editor.text.run(node.runId)?.items).toEqual([]);
-    expect(editor.textEditing.state).toMatchObject({ nodeId: node.id, anchor: null, focus: null });
+  it("entering Text mode puts the caret after the edited glyph and stops editing it", () => {
+    expect(editor.textEditing.state).toMatchObject({ nodeId: run.id, focus: child.itemId });
+    expect(editor.editing.nodeIds).toEqual([]);
     expect(editor.toolIf("text")?.state.type).toBe("editing");
-    expect(editor.getPointerTarget(scenePoint(800, 0))).toMatchObject({ kind: "text", cluster: 0 });
+  });
+
+  it("leaving Text mode ends text editing and re-enters the glyph", () => {
+    editor.escape();
+    expect(editor.textEditing.state).toBeNull();
+    expect(editor.editing.nodeIds).toEqual([child.id]);
+    expect(editor.toolIf("select")?.state.type).toBe("ready");
+  });
+
+  it("returning to Text mode restores the caret and selection from the last visit", () => {
+    editor.textEditing.insertText("AA");
+    editor.textEditing.move(-1, "character", true);
+    const { anchor, focus } = editor.textEditing.state!;
+    editor.escape();
+    editor.selectTool("text");
+    expect(editor.textEditing.state).toMatchObject({ anchor, focus });
+  });
+
+  it("returning to Text mode puts the caret after the edited glyph when the old caret's item is gone", async () => {
+    editor.textEditing.insert([glyphTextItem("A", 65)]);
+    editor.escape();
+    await editor.undo();
+    editor.selectTool("text");
+    expect(editor.textEditing.state).toMatchObject({ anchor: child.itemId, focus: child.itemId });
   });
 
   it("inserts text and replays content and caret through undo and redo", async () => {
-    await editor.clickLocal(800, 0);
-    const node = editor.scene.nodesOfKind("textRun")[0]!;
     editor.textEditing.insert([glyphTextItem("A", 65)]);
-    const item = editor.text.run(node.runId)!.items[0]!;
+    const item = items()[1]!;
     expect(editor.textEditing.state?.focus).toBe(item.id);
     await editor.undo();
-    expect(editor.text.run(node.runId)?.items).toEqual([]);
-    expect(editor.textEditing.state?.focus).toBeNull();
+    expect(items()).toHaveLength(1);
+    expect(editor.textEditing.state?.focus).toBe(child.itemId);
     await editor.redo();
-    expect(editor.text.run(node.runId)?.items[0]?.id).toBe(item.id);
+    expect(items()[1]?.id).toBe(item.id);
     expect(editor.textEditing.state?.focus).toBe(item.id);
   });
 
+  it("typing before the edited glyph pushes it right", () => {
+    const before = editor.toScene(child, localPoint(0, 0));
+    editor.textEditing.placeAtCluster(0);
+    editor.textEditing.insert([glyphTextItem("A", 65)]);
+    const advance = editor.text.layoutCell(run.runId).peek()!.totalAdvance / 2;
+    expect(editor.toScene(child, localPoint(0, 0))).toEqual({ x: before.x + advance, y: before.y });
+  });
+
+  it("deleting the edited glyph's item deletes its child; undo restores both", async () => {
+    editor.textEditing.deleteBackward();
+    expect(items()).toEqual([]);
+    expect(editor.scene.node(child.id)).toBeNull();
+    await editor.undo();
+    expect(items()[0]?.id).toBe(child.itemId);
+    expect(editor.scene.node(child.id)).not.toBeNull();
+  });
+
+  it("leaving Text mode after deleting the edited glyph edits nothing", () => {
+    editor.textEditing.deleteBackward();
+    editor.escape();
+    expect(editor.editing.nodeIds).toEqual([]);
+    expect(editor.scene.nodesOfKind("textRun")).toHaveLength(1);
+  });
+
   it("select-all includes linebreaks and undo restores the prior caret", async () => {
-    await editor.clickLocal(800, 0);
-    editor.textEditing.insertText("A\nA");
+    editor.textEditing.insertText("\nA");
     const prior = editor.textEditing.state?.focus;
     editor.textEditing.selectAll();
     expect(editor.textEditing.selectedItems.map((item) => item.kind)).toEqual([
@@ -52,38 +101,28 @@ describe("placed proof text editing", () => {
   });
 
   it("arrows and Backspace edit across a linebreak and undo restores it", async () => {
-    await editor.clickLocal(800, 0);
-    editor.textEditing.insertText("A\nA");
-    const node = editor.scene.nodesOfKind("textRun")[0]!;
+    editor.textEditing.insertText("\nA");
     editor.textEditing.move(-1, "character");
-    expect(editor.textEditing.state?.focus).toBe(editor.text.run(node.runId)!.items[1]!.id);
+    expect(editor.textEditing.state?.focus).toBe(items()[1]!.id);
     editor.textEditing.deleteBackward();
-    expect(editor.text.run(node.runId)?.items.map((item) => item.kind)).toEqual(["glyph", "glyph"]);
+    expect(items().map((item) => item.kind)).toEqual(["glyph", "glyph"]);
     await editor.undo();
-    expect(editor.text.run(node.runId)?.items.map((item) => item.kind)).toEqual([
-      "glyph",
-      "linebreak",
-      "glyph",
-    ]);
-    expect(editor.textEditing.state?.focus).toBe(editor.text.run(node.runId)!.items[1]!.id);
+    expect(items().map((item) => item.kind)).toEqual(["glyph", "linebreak", "glyph"]);
+    expect(editor.textEditing.state?.focus).toBe(items()[1]!.id);
   });
 
-  it("vertical movement uses line clusters and Shift extends the selection", async () => {
-    await editor.clickLocal(800, 0);
-    editor.textEditing.insertText("A\nA");
-    const node = editor.scene.nodesOfKind("textRun")[0]!;
+  it("vertical movement uses line clusters and Shift extends the selection", () => {
+    editor.textEditing.insertText("\nA");
     editor.textEditing.moveVertical(-1, true);
     expect(editor.textEditing.selectedItems.map((item) => item.kind)).toEqual([
       "linebreak",
       "glyph",
     ]);
-    expect(editor.textEditing.state?.focus).toBe(editor.text.run(node.runId)!.items[0]!.id);
+    expect(editor.textEditing.state?.focus).toBe(items()[0]!.id);
   });
 
-  it("caret movement preserves layout identity while item edits rebuild it", async () => {
-    await editor.clickLocal(800, 0);
-    const node = editor.scene.nodesOfKind("textRun")[0]!;
-    const layoutCell = editor.text.layoutCell(node.runId);
+  it("caret movement preserves layout identity while item edits rebuild it", () => {
+    const layoutCell = editor.text.layoutCell(run.runId);
     const initial = layoutCell.peek();
     editor.textEditing.placeAtCluster(0);
     expect(layoutCell.peek()).toBe(initial);
@@ -94,55 +133,27 @@ describe("placed proof text editing", () => {
     expect(layoutCell.peek()).toBe(populated);
   });
 
-  it("a caret stays on its item when another item is inserted before it", async () => {
-    await editor.clickLocal(800, 0);
-    editor.textEditing.insert([glyphTextItem("A", 65), glyphTextItem("A", 65)]);
-    const node = editor.scene.nodesOfKind("textRun")[0]!;
-    const target = editor.text.run(node.runId)!.items[1]!.id;
+  it("a caret stays on its item when another item is inserted before it", () => {
+    editor.textEditing.insert([glyphTextItem("A", 65)]);
+    const target = items()[1]!.id;
     editor.textEditing.placeAtCluster(0);
     editor.textEditing.insert([glyphTextItem("A", 65)]);
-    const items = editor.text.run(node.runId)!.items;
-    expect(items[2]?.id).toBe(target);
-    expect(clusterForCaret(items, target)).toBe(3);
+    expect(items()[2]?.id).toBe(target);
+    expect(clusterForCaret(items(), target)).toBe(3);
   });
 
-  it("Escape deletes an empty node; undo restores it without reopening editing", async () => {
-    await editor.clickLocal(800, 0);
-    const node = editor.scene.nodesOfKind("textRun")[0]!;
-    editor.escape();
-    expect(editor.scene.node(node.id)).toBeNull();
-    expect(editor.text.run(node.runId)).toBeNull();
-    expect(editor.toolIf("select")?.state.type).toBe("ready");
-    await editor.undo();
-    expect(editor.scene.node(node.id)).not.toBeNull();
-    expect(editor.textEditing.state).toBeNull();
-  });
-
-  it("hit testing maps a placed and scaled glyph to its item cluster", async () => {
-    await editor.clickLocal(800, 0);
-    const original = editor.scene.nodesOfKind("textRun")[0]!;
+  it("caret placement maps a point in a scaled run to its cluster", () => {
     editor.textEditing.insert([glyphTextItem("A", 65)]);
     editor.scene.updateNode({
-      id: original.id,
+      id: run.id,
       size: editor.font.metricsCell.peek().unitsPerEm * 2,
     });
-    const node = editor.scene.nodeOfKind(original.id, "textRun")!;
-    const advance = editor.text.layoutCell(node.runId).peek()!.totalAdvance;
-    const target = editor.nodeDefinition("textRun").hit(node, localPoint(advance * 0.75, 0));
-    expect(target).toMatchObject({
-      kind: "text",
-      cluster: 1,
-      itemId: editor.text.run(node.runId)!.items[0]!.id,
-    });
-    expect(
-      editor.toSceneBounds(node, editor.nodeDefinition("textRun").bounds(node)!),
-    ).toMatchObject({
-      max: { x: expect.closeTo(800 + advance * 2) },
-    });
-    expect(editor.getPointerTarget(scenePoint(800 + advance * 1.5, 0))).toMatchObject({
-      kind: "text",
-      node: { id: node.id },
-      cluster: 1,
-    });
+    const node = editor.scene.nodeOfKind(run.id, "textRun")!;
+    const advance = editor.text.layoutCell(node.runId).peek()!.totalAdvance / 2;
+    const definition = editor.nodeDefinition("textRun");
+
+    expect(definition.caretAt(node, localPoint(advance * 1.75, 0))).toBe(2);
+    expect(definition.caretAt(node, editor.toLocal(node, scenePoint(advance * 3.5, 0)))).toBe(2);
+    expect(definition.caretAt(node, localPoint(advance * 10, 0))).toBeNull();
   });
 });

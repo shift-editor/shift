@@ -1,3 +1,4 @@
+import { track } from "../../signals";
 import { displayAdvance, isNonSpacingGlyph } from "../../utils/unicode";
 import type { GlyphTextItem, PositionedRun, SegmentedRun } from "./types";
 import type { Editor } from "../../editor/Editor";
@@ -34,6 +35,8 @@ export class Positioner {
       let bounds: Bounds | null = null;
 
       if (record && renderModel) {
+        // Inside the run's layout computed: spacing edits re-run the layout.
+        track(renderModel.xAdvanceCell);
         glyphName = record.name;
         bounds = renderModel.bounds;
       }

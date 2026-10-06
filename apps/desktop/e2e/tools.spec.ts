@@ -320,23 +320,25 @@ test.describe("Toolbar tools", () => {
     expect(await page.evaluate((id) => window.shift!.editor.object(id), draft.ids[0])).toBeNull();
   });
 
-  test("renders a scaled text run and caret on the canvas", async ({ page, editor }) => {
+  test("Text mode draws the run filled with the caret after the typed text", async ({
+    page,
+    editor,
+  }) => {
     await editor.selectTool("text");
-    await editor.waitForCanvasRender();
-    await editor.pointerDown(await editor.canvasPagePoint({ x: 0.65, y: 0.4 }));
-    await editor.pointerUp();
+    await expect(page.getByRole("textbox", { name: "Text input" })).toBeFocused();
     await page.keyboard.type("AB");
     await expect
       .poll(() =>
         page.evaluate(() => {
           const editor = window.shift!.editor;
-          const node = editor.scene.nodesOfKind("textRun")[0];
-          if (!node) return null;
-          const run = editor.text.run(node.runId);
-          const layout = editor.text.layoutCell(node.runId).peek();
-          return run && layout
+          const run = editor.scene.nodesOfKind("textRun")[0];
+          const items = run ? editor.text.run(run.runId)?.items : null;
+          const layout = run ? editor.text.layoutCell(run.runId).peek() : null;
+          return items && layout
             ? {
-                codepoints: run.items.map((item) => (item.kind === "glyph" ? item.codepoint : 10)),
+                codepoints: items.map((item) => (item.kind === "glyph" ? item.codepoint : 10)),
+                editingNodes: editor.editing.nodeIds.length,
+                caretAtEnd: editor.textEditing.state?.focus === items[items.length - 1]?.id,
                 glyphsLoaded: layout.lines.every((line) =>
                   line.runs.every((part) =>
                     part.glyphs.every((glyph) => glyph.glyphId && editor.glyphForId(glyph.glyphId)),
@@ -346,24 +348,13 @@ test.describe("Toolbar tools", () => {
             : null;
         }),
       )
-      .toEqual({ codepoints: [65, 66], glyphsLoaded: true });
-    await page.evaluate(() => {
-      const editor = window.shift!.editor;
-      const node = editor.scene.nodesOfKind("textRun")[0]!;
-      editor.scene.updateNode({
-        id: node.id,
-        size: editor.font.metricsCell.peek().unitsPerEm * 0.6,
-      });
-    });
+      .toEqual({ codepoints: [65, 65, 66], editingNodes: 0, caretAtEnd: true, glyphsLoaded: true });
     await page.mouse.move(0, 0);
-    await expectCanvasSnapshot(editor, "canvas-text-AB-scaled-caret.png");
+    await expectCanvasSnapshot(editor, "canvas-text-mode-AAB.png");
   });
 
-  test("native text input edits the placed run with arrows and undo", async ({ page, editor }) => {
+  test("native text input edits the page run with arrows and undo", async ({ page, editor }) => {
     await editor.selectTool("text");
-    await editor.waitForCanvasRender();
-    await editor.pointerDown(await editor.canvasPagePoint({ x: 0.85, y: 0.4 }));
-    await editor.pointerUp();
     await expect(page.getByRole("textbox", { name: "Text input" })).toBeFocused();
     await page.keyboard.type("Hi");
     await editor.press("ArrowLeft");
@@ -371,43 +362,70 @@ test.describe("Toolbar tools", () => {
     const codepoints = () =>
       page.evaluate(() => {
         const editor = window.shift!.editor;
-        const node = editor.scene.nodesOfKind("textRun")[0]!;
+        const run = editor.scene.nodesOfKind("textRun")[0]!;
         return editor.text
-          .run(node.runId)!
+          .run(run.runId)!
           .items.map((item) => (item.kind === "glyph" ? item.codepoint : 10));
       });
-    await expect.poll(codepoints).toEqual([72, 88, 105]);
+    await expect.poll(codepoints).toEqual([65, 72, 88, 105]);
     await editor.undo();
-    await expect.poll(codepoints).toEqual([72, 105]);
+    await expect.poll(codepoints).toEqual([65, 72, 105]);
     await editor.redo();
-    await expect.poll(codepoints).toEqual([72, 88, 105]);
+    await expect.poll(codepoints).toEqual([65, 72, 88, 105]);
   });
 
-  test("Text shortcut opens an editable run through native text input", async ({
+  test("opening another glyph replaces the canvas run's text and undo restores it", async ({
     page,
     editor,
   }) => {
+    const runState = () =>
+      page.evaluate(() => {
+        const editor = window.shift!.editor;
+        const run = editor.scene.nodesOfKind("textRun")[0];
+        const child = editor.scene.nodesOfKind("glyph")[0];
+        return {
+          codepoints: run
+            ? editor.text
+                .run(run.runId)!
+                .items.map((item) => (item.kind === "glyph" ? item.codepoint : 10))
+            : null,
+          edited: child ? editor.glyphForId(child.glyphId)?.name : null,
+        };
+      });
+    await editor.selectTool("text");
+    await expect(page.getByRole("textbox", { name: "Text input" })).toBeFocused();
+    await page.keyboard.type("BB");
+    await editor.press("Escape");
+    await expect.poll(runState).toEqual({ codepoints: [65, 66, 66], edited: "A" });
+
+    await editor.openGlyphByUnicode("42");
+    await expect.poll(runState).toEqual({ codepoints: [66], edited: "B" });
+
+    await editor.undo();
+    await expect.poll(runState).toEqual({ codepoints: [65, 66, 66], edited: "A" });
+  });
+
+  test("Text shortcut enters Text mode and Escape returns to editing the glyph", async ({
+    page,
+    editor,
+  }) => {
+    const editedGlyph = () =>
+      page.evaluate(() => {
+        const editor = window.shift!.editor;
+        return {
+          child: editor.scene.nodesOfKind("glyph")[0]?.id ?? null,
+          editing: editor.editing.nodeIds,
+        };
+      });
+    const before = await editedGlyph();
+
     await editor.press("t");
     await expect(editor.toolButton("text")).toHaveAttribute("aria-pressed", "true");
-    await editor.waitForCanvasRender();
-    await editor.pointerDown(await editor.canvasPagePoint({ x: 0.85, y: 0.4 }));
-    await editor.pointerUp();
     await expect(page.getByRole("textbox", { name: "Text input" })).toBeFocused();
-    await page.keyboard.type("Hi");
-    await expect
-      .poll(() =>
-        page.evaluate(() => {
-          const editor = window.shift!.editor;
-          const node = editor.scene.nodesOfKind("textRun")[0];
-          return node
-            ? editor.text
-                .run(node.runId)
-                ?.items.map((item) => (item.kind === "glyph" ? item.codepoint : 10))
-            : null;
-        }),
-      )
-      .toEqual([72, 105]);
+    await expect.poll(async () => (await editedGlyph()).editing).toEqual([]);
+
     await editor.press("Escape");
     await expect(editor.toolButton("select")).toHaveAttribute("aria-pressed", "true");
+    await expect.poll(editedGlyph).toEqual({ child: before.child, editing: [before.child] });
   });
 });

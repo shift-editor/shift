@@ -208,6 +208,8 @@ export class Editor {
     requestTemporaryTool(toolId: ToolName, options?: TemporaryToolOptions): void;
     // (undocumented)
     returnFromTemporaryTool(): void;
+    // Warning: (ae-forgotten-export) The symbol "RunChildren" needs to be exported by the entry point index.d.ts
+    readonly runChildren: RunChildren;
     // Warning: (ae-forgotten-export) The symbol "Scene" needs to be exported by the entry point index.d.ts
     //
     // (undocumented)
@@ -693,7 +695,7 @@ export function useSignalState<T>(signal: Signal<T>, options?: UseSignalOptions)
 
 // Warnings were encountered during analysis:
 //
-// dist/Editor-C--MMc3a.d.ts:4169:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
+// dist/Editor-DrxAQ-5C.d.ts:4183:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

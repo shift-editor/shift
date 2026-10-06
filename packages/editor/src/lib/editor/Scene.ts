@@ -29,7 +29,7 @@ export class Scene {
           if (record.type === "node") nodes.push(record);
         }
 
-        return { nodes };
+        return { nodes: treeOrder(nodes) };
       },
       { name: "editor.scene" },
     );
@@ -68,6 +68,14 @@ export class Scene {
     return this.#cell.peek();
   }
 
+  /**
+   * Returns every node with each parent before its children.
+   *
+   * @remarks
+   * Drawing in this order paints children over their parent; hit testing in
+   * reverse tries children first. A node whose parent is missing is treated as
+   * a root.
+   */
   nodes(): readonly ShiftNode[] {
     return this.#cell.peek().nodes;
   }
@@ -76,6 +84,11 @@ export class Scene {
     if (!nodeId) return null;
 
     return this.#nodesById.peek().get(nodeId) ?? null;
+  }
+
+  /** Returns the nodes whose `parentId` is `nodeId`, in tree order. */
+  children(nodeId: NodeId): readonly ShiftNode[] {
+    return this.nodes().filter((node) => node.parentId === nodeId);
   }
 
   nodeOfKind<K extends ShiftNode["kind"]>(
@@ -154,6 +167,29 @@ export class Scene {
 
     return `a${siblingCount}`;
   }
+}
+
+function treeOrder(nodes: readonly ShiftNodeRecord[]): ShiftNodeRecord[] {
+  const ids = new Set(nodes.map((node) => node.id));
+  const childrenByParent = new Map<NodeId, ShiftNodeRecord[]>();
+  const roots: ShiftNodeRecord[] = [];
+  for (const node of nodes) {
+    if (node.parentId === null || !ids.has(node.parentId)) {
+      roots.push(node);
+      continue;
+    }
+    const siblings = childrenByParent.get(node.parentId);
+    if (siblings) siblings.push(node);
+    else childrenByParent.set(node.parentId, [node]);
+  }
+
+  const ordered: ShiftNodeRecord[] = [];
+  const visit = (node: ShiftNodeRecord): void => {
+    ordered.push(node);
+    for (const child of childrenByParent.get(node.id) ?? []) visit(child);
+  };
+  for (const root of roots) visit(root);
+  return ordered;
 }
 
 function copyNode<T extends ShiftNode>(node: T): T {

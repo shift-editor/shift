@@ -1,3 +1,4 @@
+import { glyphTextItem } from "@shift/editor/text";
 /**
  * TestEditor — a real Editor with input simulation for testing.
  *
@@ -20,7 +21,6 @@ import { Bounds, type Point2D, type Rect2D } from "@shift/geo";
 import {
   mintGlyphId,
   mintLayerId,
-  mintNodeId,
   type GlyphId,
   type GlyphName,
   type AnchorId,
@@ -31,7 +31,7 @@ import {
 import type { Contour } from "@shift/glyph-state";
 import type { SystemClipboard } from "@shift/editor/clipboard";
 import { createWorkspaceStack, type WorkspaceStack } from "./workspaceStack";
-import type { GlyphNode } from "@shift/editor/types";
+import type { GlyphNode, TextRunNode } from "@shift/editor/types";
 import type { FontSessionMode, WorkspaceDocumentState } from "@shared/workspace/protocol";
 
 const DEFAULT_MODIFIERS = { shiftKey: false, altKey: false, metaKey: false };
@@ -164,19 +164,33 @@ export class TestEditor extends Editor {
     return this.font.loadGlyph(record.id);
   }
 
+  /** The canvas's text run; the editor route creates it on the first open. */
+  get textRun(): TextRunNode | null {
+    return this.scene.nodesOfKind("textRun")[0] ?? null;
+  }
+
+  /** The glyph edited in place in {@link textRun}. */
+  get runGlyph(): GlyphNode | null {
+    const run = this.textRun;
+    return run ? this.runChildren.glyph(run) : null;
+  }
+
+  /** Opens a glyph as the editor route does: the canvas run becomes that glyph, edited in place. */
   #placeGlyph(glyphId: GlyphId): void {
-    this.scene.setNodes([
-      {
-        id: mintNodeId(),
-        type: "node",
-        kind: "glyph",
-        parentId: null,
-        index: "a0",
-        glyphId,
-        sourceId: this.font.defaultSource.id,
-        position: { x: 0, y: 0 },
-      },
-    ]);
+    const glyph = this.glyphForId(glyphId);
+    if (!glyph) throw new Error("placed glyph is not loaded");
+    const record = this.text.createRun([]);
+    const run = this.scene.createNode<TextRunNode>({
+      kind: "textRun",
+      runId: record.id,
+      size: this.font.metricsCell.peek().unitsPerEm,
+      position: { x: 0, y: 0 },
+    });
+    const item = glyphTextItem(glyph.name, glyph.entry.unicodes[0] ?? null);
+    this.text.setItems(record.id, [item]);
+    const child = this.runChildren.editItem(run, item.id, this.font.defaultSource.id);
+    if (!child) throw new Error("placed glyph is not loaded");
+    this.editing.enter(child.id);
   }
 
   /** Awaits every queued and in-flight apply; geometry reads confirmed truth after. */

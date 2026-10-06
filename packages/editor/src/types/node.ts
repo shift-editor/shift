@@ -1,5 +1,5 @@
 import type { Point2D } from "@shift/geo";
-import type { GlyphId, NodeId, RunId, SourceId } from "@shift/types";
+import type { GlyphId, NodeId, RunId, SourceId, TextItemId } from "@shift/types";
 
 /**
  * Describes a placed object in the editor scene.
@@ -48,6 +48,15 @@ export interface GlyphNode extends Node {
 
   /** Source identity selecting the authored layer shown by this scene node. */
   readonly sourceId: SourceId;
+
+  /**
+   * Run item this glyph occupies when its parent is a text run.
+   *
+   * @remarks
+   * The run places the node at the item's layout position and stops drawing
+   * the item itself. Absent for glyph nodes placed directly in the scene.
+   */
+  readonly itemId?: TextItemId;
 }
 
 /**
