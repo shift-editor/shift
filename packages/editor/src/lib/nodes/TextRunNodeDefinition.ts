@@ -4,14 +4,19 @@ import { Caret, type PlacedGlyph, type TextLayout } from "../text/layout";
 import { clusterForCaret } from "../text/edit";
 import type { LocalBounds, LocalPoint } from "../../types/coordinates";
 import { localBounds } from "../editor/spaces";
-import type { GlyphNode, NodeTransaction, ShiftNode, TextRunNode } from "../../types/node";
+import type { GlyphNode, ShiftNode, TextRunNode } from "../../types/node";
 import type { ShiftRecordId } from "../../types/records";
-import { editRunItem } from "../text/runChildren";
 import type { RenderContext, RenderPass } from "../../types/rendering";
 import type { PointerTarget } from "../../types/target";
 import type { GlyphRenderModel } from "../model/Glyph";
 import { Mat, type Point2D } from "@shift/geo";
-import { isTextItemId, type ComponentId, type GlyphId, type TextItemId } from "@shift/types";
+import {
+  isTextItemId,
+  type ComponentId,
+  type GlyphId,
+  type GlyphName,
+  type TextItemId,
+} from "@shift/types";
 import { track } from "../signals";
 
 /**
@@ -19,9 +24,9 @@ import { track } from "../signals";
  *
  * @remarks
  * A run edits at most one of its glyphs in place through a child `GlyphNode`
- * pointing at an item. This definition places the child at its item and stops
- * drawing and hitting that item; its hooks switch the child on double-click
- * and delete it when its item is removed.
+ * pointing at an item. This definition places the child at its item, stops
+ * drawing and hitting that item, switches the child (`editItem`, also on
+ * double-click), and deletes it when its item is removed.
  */
 export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
   readonly kind: TextRunNode["kind"] = "textRun";
@@ -65,11 +70,8 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
    * Double-clicking a run glyph edits it in place; double-clicking a component
    * of the edited glyph opens its base glyph right after it.
    */
-  override onDoubleClick(node: TextRunNode, target: PointerTarget, tx: NodeTransaction): boolean {
+  override onDoubleClick(node: TextRunNode, target: PointerTarget): boolean {
     const child = this.childGlyph(node);
-    const sourceId =
-      child?.sourceId ?? this.editor.activeSourceId ?? this.editor.font.defaultSource.id;
-
     let itemId: TextItemId | null = null;
     if (target.kind === "text" && target.node.id === node.id) itemId = target.itemId;
     if (target.kind === "component" && child?.itemId && target.nodeId === child.id) {
@@ -77,18 +79,54 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     }
     if (!itemId) return false;
 
-    const edited = editRunItem(this.editor, tx, node, itemId, sourceId);
+    const edited = this.editItem(node, itemId);
     if (!edited) return false;
-    tx.enterEditing(edited.id);
+    this.editor.enterNode(edited.id);
     return true;
   }
 
   /** Deletes the child glyph when its item is no longer in the run. */
-  override onContentChange(node: TextRunNode, tx: NodeTransaction): void {
+  override onContentChange(node: TextRunNode): void {
     const child = this.childGlyph(node);
     if (!child?.itemId) return;
     const items = this.editor.text.run(node.runId)?.items ?? [];
-    if (!items.some((item) => item.id === child.itemId)) tx.deleteNode(child.id);
+    if (!items.some((item) => item.id === child.itemId)) this.editor.scene.deleteNode(child.id);
+  }
+
+  /**
+   * Makes one of the run's items its child glyph, replacing any previous child.
+   *
+   * @remarks
+   * Writes scene records, so call it inside a history capture (hooks already
+   * are). Replaces rather than re-points the child (delete and create), so
+   * per-node caches never see a node change glyph. The new child shows the
+   * previous child's source, or the active source. Does not enter the child.
+   *
+   * @returns null when the item is not a glyph in the run or its glyph is not loaded.
+   */
+  editItem(node: TextRunNode, itemId: TextItemId): GlyphNode | null {
+    const item = this.editor.text
+      .run(node.runId)
+      ?.items.find((candidate) => candidate.id === itemId);
+    if (item?.kind !== "glyph") return null;
+
+    const current = this.childGlyph(node);
+    if (current?.itemId === itemId) return current;
+
+    const entry = this.editor.font.entryForName(item.glyphName as GlyphName);
+    if (!entry || !this.editor.glyphForId(entry.id)) return null;
+
+    const sourceId =
+      current?.sourceId ?? this.editor.activeSourceId ?? this.editor.font.defaultSource.id;
+    if (current) this.editor.scene.deleteNode(current.id);
+    return this.editor.scene.createNode<GlyphNode>({
+      kind: "glyph",
+      parentId: node.id,
+      itemId,
+      glyphId: entry.id,
+      sourceId,
+      position: { x: 0, y: 0 },
+    });
   }
 
   /**

@@ -103,12 +103,14 @@ export class Editor {
     get editingSourceIds(): ReadonlySet<SourceId>;
     // (undocumented)
     get editingSourceIdsCell(): Signal<ReadonlySet<SourceId>>;
-    // Warning: (ae-forgotten-export) The symbol "NodeTransaction" needs to be exported by the entry point index.d.ts
-    editNodes<T>(label: string, body: (tx: NodeTransaction) => T): T;
+    // Warning: (ae-forgotten-export) The symbol "NodeId" needs to be exported by the entry point index.d.ts
+    enterNode(nodeId: NodeId): void;
     get externalLocation(): ExternalAxisLocation;
     // (undocumented)
     get externalLocationCell(): Signal<ExternalAxisLocation>;
     fitBounds(bounds: SceneBounds): void;
+    // Warning: (ae-forgotten-export) The symbol "GlyphNode" needs to be exported by the entry point index.d.ts
+    fitGlyphFrame(node: GlyphNode): void;
     fitInitialBounds(bounds: SceneBounds): void;
     // (undocumented)
     flushMousePosition(): void;
@@ -695,7 +697,7 @@ export function useSignalState<T>(signal: Signal<T>, options?: UseSignalOptions)
 
 // Warnings were encountered during analysis:
 //
-// dist/Editor-Dr67zz9c.d.ts:4198:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
+// dist/Editor-Cz57WBoP.d.ts:4183:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

@@ -1,4 +1,3 @@
-import { editRunItem, glyphTextItem } from "@shift/editor/text";
 /**
  * TestEditor — a real Editor with input simulation for testing.
  *
@@ -177,25 +176,18 @@ export class TestEditor extends Editor {
 
   /** Opens a glyph as the editor route does: the canvas run becomes that glyph, edited in place. */
   #placeGlyph(glyphId: GlyphId): void {
-    const glyph = this.glyphForId(glyphId);
-    if (!glyph) throw new Error("placed glyph is not loaded");
-    const record = this.text.createRun([]);
+    const item = this.text.glyphItem(glyphId);
+    if (!item || !this.glyphForId(glyphId)) throw new Error("placed glyph is not loaded");
+    const record = this.text.createRun([item]);
     const run = this.scene.createNode<TextRunNode>({
       kind: "textRun",
       runId: record.id,
       size: this.font.metricsCell.peek().unitsPerEm,
       position: { x: 0, y: 0 },
     });
-    const item = glyphTextItem(glyph.name, glyph.entry.unicodes[0] ?? null);
-    this.text.setItems(record.id, [item]);
-    const child = this.history.withoutRecording(() =>
-      this.editNodes("Open glyph", (tx) => {
-        const edited = editRunItem(this, tx, run, item.id, this.font.defaultSource.id);
-        if (edited) tx.enterEditing(edited.id);
-        return edited;
-      }),
-    );
+    const child = this.nodeDefinition("textRun").editItem(run, item.id);
     if (!child) throw new Error("placed glyph is not loaded");
+    this.enterNode(child.id);
   }
 
   /** Awaits every queued and in-flight apply; geometry reads confirmed truth after. */
