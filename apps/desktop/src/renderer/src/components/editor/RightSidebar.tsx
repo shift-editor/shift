@@ -28,7 +28,7 @@ export const RightSidebar = () => {
     ? availableGlyphs.find((candidate) => candidate.id === glyphId)?.displayName
     : undefined;
   const familyName = useSignalState(session.catalog.familyNameCell) ?? "Untitled";
-  const selection = useSignalState(editor.selection.stateCell);
+  const selection = useSignalState(editor.selection.stateCell, { schedule: "frame" });
 
   const hasTransformSelection = selection.ids.some(
     (id) => isPointId(id) || isContourId(id) || isSegmentId(id) || isComponentId(id),

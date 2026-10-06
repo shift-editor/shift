@@ -830,3 +830,114 @@ describe("edge cases", () => {
     fx1.dispose();
   });
 });
+
+describe("change propagation", () => {
+  function runNext(queue: (() => void)[]): void {
+    const next = queue.shift();
+    if (next) next();
+  }
+
+  it("does not rerun an effect when a computed recomputes to the same value", () => {
+    const count = signal(1);
+    const isPositive = computed(() => count.value > 0);
+    const seen: boolean[] = [];
+    const subscription = effect(() => {
+      seen.push(isPositive.value);
+    });
+
+    count.value = 2;
+    count.value = -1;
+
+    expect(seen).toEqual([true, false]);
+    subscription.dispose();
+  });
+
+  it("uses a computed's equals to decide whether readers rerun", () => {
+    const items = signal<readonly number[]>([1, 2]);
+    const evens = computed(() => items.value.filter((item) => item % 2 === 0), {
+      equals: (prev, next) => prev.length === next.length && prev.every((v, i) => v === next[i]),
+    });
+    const seen: (readonly number[])[] = [];
+    const subscription = effect(() => {
+      seen.push(evens.value);
+    });
+
+    items.value = [1, 2, 3];
+    items.value = [2, 4];
+
+    expect(seen).toEqual([[2], [2, 4]]);
+    subscription.dispose();
+  });
+
+  it("runs an effect once with consistent values when a diamond's sources change", () => {
+    const base = signal(1);
+    const double = computed(() => base.value * 2);
+    const triple = computed(() => base.value * 3);
+    const seen: [number, number][] = [];
+    const subscription = effect(() => {
+      seen.push([double.value, triple.value]);
+    });
+
+    base.value = 2;
+
+    expect(seen).toEqual([
+      [2, 3],
+      [4, 6],
+    ]);
+    subscription.dispose();
+  });
+
+  it("defers effects reached through computeds until a batch ends", () => {
+    const a = signal(1);
+    const b = signal(2);
+    const sum = computed(() => a.value + b.value);
+    const seen: number[] = [];
+    const subscription = effect(() => {
+      seen.push(sum.value);
+    });
+
+    batch(() => {
+      a.value = 10;
+      b.value = 20;
+    });
+
+    expect(seen).toEqual([3, 30]);
+    subscription.dispose();
+  });
+
+  it("still reaches an effect that read a computed it then made stale during its own run", () => {
+    const count = signal(0);
+    const doubled = computed(() => count.value * 2);
+    const seen: number[] = [];
+    const subscription = effect(() => {
+      seen.push(doubled.value);
+      if (count.peek() === 0) count.value = 1;
+    });
+
+    count.value = 5;
+
+    expect(seen).toEqual([0, 10]);
+    subscription.dispose();
+  });
+
+  it("skips a scheduled effect whose computed dependencies settled on the same value", () => {
+    const queued: (() => void)[] = [];
+    const count = signal(1);
+    const isPositive = computed(() => count.value > 0);
+    let runs = 0;
+    const subscription = effect(
+      () => {
+        isPositive.value;
+        runs++;
+      },
+      { schedule: (execute) => queued.push(execute) },
+    );
+    runNext(queued);
+
+    count.value = 5;
+    runNext(queued);
+
+    expect(runs).toBe(1);
+    subscription.dispose();
+  });
+});

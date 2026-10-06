@@ -114,7 +114,7 @@ const DistributeButtonsRow = React.memo(function DistributeButtonsRow({
 export const TransformSection = () => {
   const editor = useEditor();
   const isMac = getShiftHost().platform === "darwin";
-  const selection = useSignalState(editor.selection.stateCell);
+  const selection = useSignalState(editor.selection.stateCell, { schedule: "frame" });
   const positionSelection = useMemo(
     () => editor.positionSelection(selection.ids),
     [editor, selection],

@@ -40,7 +40,11 @@ export const Canvas: FC = () => {
       editor.flushMousePosition();
 
       switch (
-        wheelGesture.classify({ timeStamp: e.timeStamp, zoomModifier: e.metaKey || e.ctrlKey })
+        wheelGesture.classify({
+          timeStamp: e.timeStamp,
+          zoomModifier: e.metaKey || e.ctrlKey,
+          magnitude: Math.hypot(e.deltaX, e.deltaY),
+        })
       ) {
         case "zoom": {
           e.preventDefault();

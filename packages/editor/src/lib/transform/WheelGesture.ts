@@ -7,13 +7,16 @@ export const WHEEL_GESTURE_IDLE_MS = 120;
  * Keeps trackpad zoom momentum from turning into pan after the modifier is released.
  *
  * @remarks
- * A modifier wheel sample starts or extends a zoom gesture. Unmodified samples that arrive
- * within {@link WHEEL_GESTURE_IDLE_MS} of the previous gesture sample are momentum and
- * extend the gesture without panning. Classification uses event timestamps rather than
- * timers, so the result depends only on the sample sequence.
+ * A modifier wheel sample starts or extends a zoom gesture. An unmodified sample is momentum,
+ * and extends the gesture without panning, only while it arrives within
+ * {@link WHEEL_GESTURE_IDLE_MS} of the previous gesture sample and is no larger than it:
+ * momentum decays, so a growing sample is a new pan. Without the size check, a pan started
+ * right after a zoom kept renewing the window and never moved the view. Classification uses
+ * event timestamps rather than timers, so the result depends only on the sample sequence.
  */
 export class WheelGesture {
   #lastGestureTime: number | null = null;
+  #lastGestureMagnitude = 0;
 
   constructor(readonly idleMs = WHEEL_GESTURE_IDLE_MS) {}
 
@@ -25,11 +28,16 @@ export class WheelGesture {
   classify(sample: WheelGestureSample): WheelGestureAction {
     if (sample.zoomModifier) {
       this.#lastGestureTime = sample.timeStamp;
+      this.#lastGestureMagnitude = sample.magnitude;
       return "zoom";
     }
 
-    if (this.#lastGestureTime !== null && sample.timeStamp - this.#lastGestureTime < this.idleMs) {
+    const withinGesture =
+      this.#lastGestureTime !== null && sample.timeStamp - this.#lastGestureTime < this.idleMs;
+    const decaying = sample.magnitude <= this.#lastGestureMagnitude;
+    if (withinGesture && decaying) {
       this.#lastGestureTime = sample.timeStamp;
+      this.#lastGestureMagnitude = sample.magnitude;
       return "ignore";
     }
 

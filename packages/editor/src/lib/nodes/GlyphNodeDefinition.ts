@@ -309,7 +309,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     switch (target.kind) {
       case "source": {
         track(this.editor.font.sourcesCell);
-        track(this.editor.font.committedFontCell);
+        track(this.editor.font.committedRevisionCell);
         const externalLocation = this.editor.font.externalLocationForSource(target.sourceId);
         if (!externalLocation) return null;
 
@@ -439,7 +439,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
   } {
     track(this.editor.font.axesCell);
     track(this.editor.font.sourcesCell);
-    track(this.editor.font.committedFontCell);
+    track(this.editor.font.committedRevisionCell);
     track(this.editor.activeSourceIdCell);
     track(this.editor.externalLocationCell);
     const interpolated =

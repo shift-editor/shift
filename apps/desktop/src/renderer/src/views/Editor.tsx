@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
 import { useParams } from "react-router";
 
@@ -16,6 +16,7 @@ import { useFocusZone, ZoneContainer } from "@/context/FocusZoneContext";
 import { KeyboardRouter } from "@/lib/keyboard";
 import { getShiftHost } from "@/host/shiftHost";
 import { useSignalState } from "@shift/editor/signals";
+import { useSignalEffect } from "@/hooks/useSignalEffect";
 import { asGlyphId } from "@shift/types";
 
 export const Editor = () => {
@@ -25,8 +26,6 @@ export const Editor = () => {
   const glyphId = glyphIdParam ? asGlyphId(glyphIdParam) : null;
   // Route acquisition publishes openedGlyph after materializing the canonical Glyph.
   const glyph = openedGlyph && glyphId ? editor.glyphForId(glyphId) : null;
-  const cursorStyle = useSignalState(editor.cursorCell);
-  const gesture = useSignalState(editor.gesture.cell);
   const activeSourceId = useSignalState(editor.activeSourceIdCell);
 
   const { activeZone, claimZone } = useFocusZone();
@@ -134,7 +133,7 @@ export const Editor = () => {
   if (!glyph) return null;
 
   return (
-    <EditorLayout cursorStyle={cursorStyle} gesture={gesture.phase}>
+    <EditorLayout>
       <CanvasContextMenu>
         <Canvas />
       </CanvasContextMenu>
@@ -145,15 +144,9 @@ export const Editor = () => {
 const LEFT_SIDEBAR_DEFAULT_SIZE = 15;
 const RIGHT_SIDEBAR_DEFAULT_SIZE = 15;
 
-const EditorLayout = ({
-  cursorStyle,
-  gesture,
-  children,
-}: {
-  cursorStyle: string;
-  gesture: string;
-  children: ReactNode;
-}) => {
+const EditorLayout = ({ children }: { children: ReactNode }) => {
+  const editor = useEditor();
+  const shellRef = useRef<HTMLDivElement>(null);
   const {
     leftSidebarPanelRef,
     rightSidebarPanelRef,
@@ -163,12 +156,23 @@ const EditorLayout = ({
     toggleRightSidebar,
   } = useSidebarLayout();
 
+  // Cursor and gesture change on every pointer event. Writing them to the shell directly keeps
+  // those events from re-rendering the toolbar, sidebars, and canvas beneath it.
+  useSignalEffect(() => {
+    const cursor = editor.cursorCell.value;
+    const phase = editor.gesture.cell.value.phase;
+    const shell = shellRef.current;
+    if (!shell) return;
+
+    shell.style.setProperty("--shift-cursor", cursor);
+    shell.dataset.gesture = phase;
+  });
+
   return (
     <div
+      ref={shellRef}
       data-testid="editor-shell"
       className="shift-editor-shell flex h-screen w-screen min-w-150 flex-col bg-background"
-      data-gesture={gesture}
-      style={{ "--shift-cursor": cursorStyle } as React.CSSProperties}
     >
       <Toolbar toggleLeftSidebar={toggleLeftSidebar} toggleRightSidebar={toggleRightSidebar} />
       <ResizablePanelGroup
