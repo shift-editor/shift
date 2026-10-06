@@ -1,11 +1,14 @@
 import { mintNodeId, type NodeId } from "@shift/types";
+import { Tree } from "../utils/Tree";
 import { computed, type Signal } from "../signals/index";
 import type { ShiftStore } from "../store/ShiftStore";
 import type { ShiftEditorRecord, ShiftNodeRecord } from "../../types/records";
 import type { CreateNode, ShiftNode, UpdateNode } from "../../types/node";
 
 export interface SceneValue {
+  /** Every node, parents before children, siblings by `index`. */
   readonly nodes: readonly ShiftNode[];
+  readonly tree: Tree<NodeId, ShiftNode>;
 }
 
 /**
@@ -29,7 +32,12 @@ export class Scene {
           if (record.type === "node") nodes.push(record);
         }
 
-        return { nodes: treeOrder(nodes) };
+        const tree = Tree.from<NodeId, ShiftNode>(nodes, {
+          id: (node) => node.id,
+          parentId: (node) => node.parentId,
+          order: (a, b) => compareIndex(a.index, b.index),
+        });
+        return { nodes: tree.walk(), tree };
       },
       { name: "editor.scene" },
     );
@@ -86,9 +94,14 @@ export class Scene {
     return this.#nodesById.peek().get(nodeId) ?? null;
   }
 
-  /** Returns the nodes whose `parentId` is `nodeId`, in tree order. */
+  /** Returns a node's children, ordered by `index`. */
   children(nodeId: NodeId): readonly ShiftNode[] {
-    return this.nodes().filter((node) => node.parentId === nodeId);
+    return this.#cell.peek().tree.children(nodeId);
+  }
+
+  /** Returns a node's parent, or null for root nodes. */
+  parent(nodeId: NodeId): ShiftNode | null {
+    return this.#cell.peek().tree.parent(nodeId);
   }
 
   nodeOfKind<K extends ShiftNode["kind"]>(
@@ -169,27 +182,9 @@ export class Scene {
   }
 }
 
-function treeOrder(nodes: readonly ShiftNodeRecord[]): ShiftNodeRecord[] {
-  const ids = new Set(nodes.map((node) => node.id));
-  const childrenByParent = new Map<NodeId, ShiftNodeRecord[]>();
-  const roots: ShiftNodeRecord[] = [];
-  for (const node of nodes) {
-    if (node.parentId === null || !ids.has(node.parentId)) {
-      roots.push(node);
-      continue;
-    }
-    const siblings = childrenByParent.get(node.parentId);
-    if (siblings) siblings.push(node);
-    else childrenByParent.set(node.parentId, [node]);
-  }
-
-  const ordered: ShiftNodeRecord[] = [];
-  const visit = (node: ShiftNodeRecord): void => {
-    ordered.push(node);
-    for (const child of childrenByParent.get(node.id) ?? []) visit(child);
-  };
-  for (const root of roots) visit(root);
-  return ordered;
+function compareIndex(a: string, b: string): number {
+  if (a === b) return 0;
+  return a < b ? -1 : 1;
 }
 
 function copyNode<T extends ShiftNode>(node: T): T {
