@@ -19,7 +19,6 @@ pub mod point;
 pub mod segment;
 pub mod source;
 pub mod variation;
-pub mod variation_authoring;
 
 pub use anchor::Anchor;
 pub use axis::{
@@ -47,4 +46,3 @@ pub use point::{Point, PointType};
 pub use segment::{CurveSegment, CurveSegmentIter};
 pub use source::{Source, SourceRole};
 pub use variation::AxisMappingBasis;
-pub use variation_authoring::VariationAuthoring;

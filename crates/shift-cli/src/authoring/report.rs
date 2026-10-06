@@ -238,79 +238,76 @@ pub(super) fn report_changes(font: &Font, changes: &FontChangeSet) -> Vec<Author
         });
     }
 
-    report.extend(
-        changes
-            .entity_changes()
-            .into_iter()
-            .filter_map(|change| match change {
-                FontEntityChange::Axis(EntityChange::Created(axis)) => {
-                    Some(AuthoringChange::AxisCreated {
-                        axis_id: axis.id().to_string(),
-                        tag: axis.tag().to_string(),
-                        name: axis.name().to_string(),
-                        minimum: axis.minimum(),
-                        default: axis.default(),
-                        maximum: axis.maximum(),
-                    })
-                }
-                FontEntityChange::Axis(EntityChange::Updated { after: axis, .. }) => {
-                    Some(AuthoringChange::AxisUpdated {
-                        axis_id: axis.id().to_string(),
-                        tag: axis.tag().to_string(),
-                        name: axis.name().to_string(),
-                        minimum: axis.minimum(),
-                        default: axis.default(),
-                        maximum: axis.maximum(),
-                    })
-                }
-                FontEntityChange::Source(EntityChange::Created(source)) => {
-                    Some(AuthoringChange::SourceCreated {
-                        source_id: source.id().to_string(),
-                        name: source.name().to_string(),
-                        location: source
-                            .location()
-                            .iter()
-                            .filter_map(|(axis_id, value)| {
-                                let axis = font.axis(axis_id.clone())?;
-                                Some((axis.tag().to_string(), *value))
-                            })
-                            .collect(),
-                    })
-                }
-                FontEntityChange::Source(EntityChange::Updated { after: source, .. }) => {
-                    Some(AuthoringChange::SourceUpdated {
-                        metrics: SourceMetrics::from_source(font, source),
-                    })
-                }
-                FontEntityChange::Glyph(EntityChange::Created(glyph)) => {
-                    Some(AuthoringChange::GlyphCreated {
-                        glyph_id: glyph.id().to_string(),
-                        name: glyph.glyph_name().to_string(),
-                        unicodes: format_unicodes(glyph.unicodes()),
-                    })
-                }
-                FontEntityChange::Glyph(EntityChange::Updated { after: glyph, .. }) => {
-                    Some(AuthoringChange::GlyphUpdated {
-                        glyph_id: glyph.id().to_string(),
-                        name: glyph.glyph_name().to_string(),
-                        unicodes: format_unicodes(glyph.unicodes()),
-                    })
-                }
-                FontEntityChange::Layer {
-                    change: EntityChange::Created(layer),
-                    ..
-                } => Some(AuthoringChange::GlyphLayerCreated {
-                    layer: LayerReport::from_layer(font, layer)?,
-                }),
-                FontEntityChange::Layer {
-                    change: EntityChange::Updated { after: layer, .. },
-                    ..
-                } => Some(AuthoringChange::GlyphLayerUpdated {
-                    layer: LayerReport::from_layer(font, layer)?,
-                }),
-                _ => None,
+    report.extend(changes.entity_changes().into_iter().filter_map(|change| {
+        match change {
+            FontEntityChange::Axis(EntityChange::Created(axis)) => {
+                Some(AuthoringChange::AxisCreated {
+                    axis_id: axis.id().to_string(),
+                    tag: axis.tag().to_string(),
+                    name: axis.name().to_string(),
+                    minimum: axis.minimum(),
+                    default: axis.default(),
+                    maximum: axis.maximum(),
+                })
+            }
+            FontEntityChange::Axis(EntityChange::Updated { after: axis, .. }) => {
+                Some(AuthoringChange::AxisUpdated {
+                    axis_id: axis.id().to_string(),
+                    tag: axis.tag().to_string(),
+                    name: axis.name().to_string(),
+                    minimum: axis.minimum(),
+                    default: axis.default(),
+                    maximum: axis.maximum(),
+                })
+            }
+            FontEntityChange::Source(EntityChange::Created(source)) => {
+                Some(AuthoringChange::SourceCreated {
+                    source_id: source.id().to_string(),
+                    name: source.name().to_string(),
+                    location: source
+                        .location()
+                        .iter()
+                        .filter_map(|(axis_id, value)| {
+                            let axis = font.axis(axis_id.clone())?;
+                            Some((axis.tag().to_string(), *value))
+                        })
+                        .collect(),
+                })
+            }
+            FontEntityChange::Source(EntityChange::Updated { after: source, .. }) => {
+                Some(AuthoringChange::SourceUpdated {
+                    metrics: SourceMetrics::from_source(font, source),
+                })
+            }
+            FontEntityChange::Glyph(EntityChange::Created(glyph)) => {
+                Some(AuthoringChange::GlyphCreated {
+                    glyph_id: glyph.id().to_string(),
+                    name: glyph.glyph_name().to_string(),
+                    unicodes: format_unicodes(glyph.unicodes()),
+                })
+            }
+            FontEntityChange::Glyph(EntityChange::Updated { after: glyph, .. }) => {
+                Some(AuthoringChange::GlyphUpdated {
+                    glyph_id: glyph.id().to_string(),
+                    name: glyph.glyph_name().to_string(),
+                    unicodes: format_unicodes(glyph.unicodes()),
+                })
+            }
+            FontEntityChange::Layer {
+                change: EntityChange::Created(layer),
+                ..
+            } => Some(AuthoringChange::GlyphLayerCreated {
+                layer: LayerReport::from_layer(font, layer)?,
             }),
-    );
+            FontEntityChange::Layer {
+                change: EntityChange::Updated { after: layer, .. },
+                ..
+            } => Some(AuthoringChange::GlyphLayerUpdated {
+                layer: LayerReport::from_layer(font, layer)?,
+            }),
+            _ => None,
+        }
+    }));
 
     if impact.contains(FontChangeImpact::NAMED_INSTANCES) {
         let instances = font

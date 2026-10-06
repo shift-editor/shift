@@ -1379,10 +1379,9 @@ impl Font {
                     anchors.clone(),
                     components.clone(),
                 )?;
-                let change = FontChange::layer_components_replaced(&layer);
                 self.replace_glyph_layers(vec![layer])?;
 
-                Ok(change)
+                Ok(())
             }
             FontIntent::SetXAdvance { layer_id, width } => {
                 let layer = self.require_layer_mut(layer_id)?;

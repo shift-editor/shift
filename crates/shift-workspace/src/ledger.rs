@@ -5,7 +5,7 @@
 //! is in-memory: history survives a renderer reload while the workspace process
 //! remains alive, but not a utility crash.
 
-use shift_font::{FontChange, FontChangeSet, GlyphLayer, LayerId};
+use shift_font::{EntityChange, FontChangeSet, FontEntityChange, LayerId};
 
 /// Maximum entries retained independently by each stack. The oldest entry on
 /// the stack being extended falls off first; a fresh apply also clears redo.
@@ -25,34 +25,16 @@ impl LedgerEntry {
     /// Layers whose current payloads must be resident before replay.
     pub(crate) fn layer_ids(&self) -> Vec<LayerId> {
         self.change_set
-            .changes
-            .iter()
-            .flat_map(change_layer_ids)
+            .entity_changes()
+            .into_iter()
+            .filter_map(|entity| match entity {
+                FontEntityChange::Layer { change, .. } => Some(match change {
+                    EntityChange::Created(layer) | EntityChange::Deleted(layer) => layer.id(),
+                    EntityChange::Updated { after, .. } => after.id(),
+                }),
+                _ => None,
+            })
             .collect()
-    }
-}
-
-fn change_layer_ids(change: &FontChange) -> Vec<LayerId> {
-    match change {
-        FontChange::Glyph(value) => value
-            .before
-            .iter()
-            .chain(value.after.iter())
-            .flat_map(|glyph| glyph.layers().keys().cloned())
-            .collect(),
-        FontChange::Layer { layer, .. } => layer
-            .before
-            .iter()
-            .chain(layer.after.iter())
-            .map(|layer| GlyphLayer::id(layer))
-            .collect(),
-        FontChange::Metadata(_)
-        | FontChange::LibValue { .. }
-        | FontChange::Axes(_)
-        | FontChange::AxisMappings(_)
-        | FontChange::MetricDefinitions(_)
-        | FontChange::NamedInstances(_)
-        | FontChange::Sources(_) => Vec::new(),
     }
 }
 

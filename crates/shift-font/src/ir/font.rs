@@ -1,4 +1,4 @@
-use crate::axis::{Axis, AxisMapping, DesignLocation};
+use crate::axis::{Axis, AxisKind, AxisMapping, DesignLocation};
 use crate::binary_data::BinaryData;
 use crate::collection::EntityList;
 use crate::entity::{
@@ -27,9 +27,6 @@ mod change_set;
 /// Font lib key holding tracked Hyperglot language ids (for example
 /// `eng-latin`) as a plist array of strings.
 pub const LANGUAGES_LIB_KEY: &str = "com.shift.languages";
-
-#[path = "font/variation_authoring.rs"]
-mod variation_authoring;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -661,7 +658,7 @@ impl Font {
                     .get(&axis.id())
                     .unwrap_or(previous.default());
                 let is_default = self.default_source_id().as_ref() == Some(&source.id());
-                variation_authoring::validate_source_axis(&axis, source, value, is_default)?;
+                validate_source_axis(&axis, source, value, is_default)?;
                 if source.location().get(&axis.id()).is_none()
                     && previous.default() != axis.default()
                 {
@@ -1661,6 +1658,40 @@ fn validate_source_values(
     Ok(())
 }
 
+fn validate_source_axis(
+    axis: &Axis,
+    source: &Source,
+    value: f64,
+    is_default: bool,
+) -> CoreResult<()> {
+    let valid_value = match axis.kind() {
+        AxisKind::Continuous {
+            minimum, maximum, ..
+        } => value.is_finite() && value >= *minimum && value <= *maximum,
+        AxisKind::Discrete { values, .. } => values.contains(&value),
+    };
+    if !valid_value {
+        return Err(CoreError::InvalidAxis {
+            axis_id: axis.id(),
+            message: format!(
+                "master {} ({}) value {value} is outside the replacement axis",
+                source.name(),
+                source.id()
+            ),
+        });
+    }
+    if is_default && value != axis.default() {
+        return Err(CoreError::InvalidAxis {
+            axis_id: axis.id(),
+            message: format!(
+                "default master {} must remain at the axis origin; explicit relocation is required",
+                source.name()
+            ),
+        });
+    }
+    Ok(())
+}
+
 fn validate_axis_mappings(axes: &[Axis], mappings: &[AxisMapping]) -> CoreResult<()> {
     let mut mapping_ids = HashSet::new();
     let mut mapping_names = HashSet::new();
@@ -1710,10 +1741,6 @@ fn validate_axis_mappings(axes: &[Axis], mappings: &[AxisMapping]) -> CoreResult
 #[cfg(test)]
 #[path = "font/axis_authoring_tests.rs"]
 mod axis_authoring_tests;
-
-#[cfg(test)]
-#[path = "font/variation_authoring_tests.rs"]
-mod variation_authoring_tests;
 
 #[cfg(test)]
 mod tests {
