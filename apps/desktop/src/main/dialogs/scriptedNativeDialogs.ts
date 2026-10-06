@@ -46,6 +46,16 @@ export const scriptedNativeDialogs: NativeDialogs = {
     return documentCrashChoice(process.env.SHIFT_E2E_DOCUMENT_CRASH_CHOICE);
   },
 
+  async openTheme() {
+    return process.env.SHIFT_E2E_OPEN_THEME_PATH || null;
+  },
+
+  async exportTheme() {
+    return process.env.SHIFT_E2E_EXPORT_THEME_PATH || null;
+  },
+
+  async showThemeImportFailure() {},
+
   async showSaveFailure() {},
 
   async showExportFailure() {},

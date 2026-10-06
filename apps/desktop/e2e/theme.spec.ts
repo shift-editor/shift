@@ -1,4 +1,5 @@
 import { colorThemes } from "../src/renderer/src/lib/themes";
+import fs from "node:fs";
 import type { Page } from "@playwright/test";
 import type { ThemeId } from "../src/renderer/src/lib/themes";
 import { workspaceTest as test, expect, waitForWorkspaceReady } from "./fixtures/electronApp";
@@ -161,5 +162,89 @@ test.describe("Theme", () => {
         (await markerCanvas.screenshot(markerScreenshotOptions)).equals(markersBefore),
       )
       .toBe(false);
+  });
+});
+
+async function openAppearanceSettings(page: Page): Promise<void> {
+  await page.getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("button", { name: "Appearance", exact: true }).click();
+}
+
+function cssVariable(page: Page, name: string): Promise<string> {
+  return page.evaluate(
+    (variable) => getComputedStyle(document.documentElement).getPropertyValue(variable).trim(),
+    name,
+  );
+}
+
+test.describe("Custom themes", () => {
+  test("creates, edits, and keeps a custom theme across a reload", async ({ page }) => {
+    await openAppearanceSettings(page);
+    await page.getByRole("radio", { name: /Nord/ }).click();
+    await page.getByRole("button", { name: "New Theme" }).click();
+
+    await page.getByRole("textbox", { name: "Name" }).fill("Midnight");
+    const background = page.getByRole("textbox", { name: "Background hex value" });
+    await background.fill("#102030");
+    await background.press("Enter");
+    await expect.poll(() => cssVariable(page, "--color-background")).toBe("#102030");
+    await page.getByRole("button", { name: "Save Theme" }).click();
+
+    await expect(page.getByRole("radio", { name: /Midnight/ })).toBeChecked();
+    await expect(page.locator("html")).toHaveAttribute("data-color-theme", "user:midnight");
+
+    await page.reload();
+    await waitForWorkspaceReady(page);
+    await expect(page.locator("html")).toHaveAttribute("data-color-theme", "user:midnight");
+    expect(await cssVariable(page, "--color-background")).toBe("#102030");
+  });
+
+  test("cancelling the theme editor restores the selected theme", async ({ page }) => {
+    await openAppearanceSettings(page);
+    await page.getByRole("radio", { name: /Dracula/ }).click();
+    await page.getByRole("button", { name: "Duplicate" }).click();
+    const background = page.getByRole("textbox", { name: "Background hex value" });
+    await background.fill("#ff0000");
+    await background.press("Enter");
+    await expect.poll(() => cssVariable(page, "--color-background")).toBe("#ff0000");
+
+    await page.getByRole("button", { name: "Cancel" }).click();
+
+    await expect(page.getByRole("radio", { name: /Dracula/ })).toBeChecked();
+    await expect.poll(() => cssVariable(page, "--color-background")).toBe("#282a36");
+    await expect(page.getByRole("radio", { name: /Dracula Copy/ })).toHaveCount(0);
+  });
+
+  test("System follows the OS between the chosen light and dark themes", async ({ page }) => {
+    await openAppearanceSettings(page);
+    await page.getByRole("combobox", { name: "Light" }).click();
+    await page.getByRole("option", { name: "Gruvbox Light" }).click();
+    await page.getByRole("combobox", { name: "Dark" }).click();
+    await page.getByRole("option", { name: "Nord" }).click();
+    await page.getByRole("radio", { name: /System/ }).click();
+
+    await page.emulateMedia({ colorScheme: "light" });
+    await expect(page.locator("html")).toHaveAttribute("data-color-theme", "gruvbox-light");
+    await page.emulateMedia({ colorScheme: "dark" });
+    await expect(page.locator("html")).toHaveAttribute("data-color-theme", "nord");
+  });
+});
+
+test.describe("Imported themes", () => {
+  test.use({ scriptedDialogs: true });
+
+  test("imports a Base16 scheme file and applies it", async ({ page, importThemePath }) => {
+    const colors = ["1d2021", "3c3836", "504945", "665c54", "bdae93", "d5c4a1", "ebdbb2", "fbf1c7"]
+      .concat(["fb4934", "fe8019", "fabd2f", "b8bb26", "8ec07c", "83a598", "d3869b", "d65d0e"])
+      .map((color, index) => `base0${index.toString(16).toUpperCase()}: "${color}"`);
+    fs.writeFileSync(importThemePath, ['scheme: "Hard Gruvbox"', ...colors].join("\n"));
+
+    await openAppearanceSettings(page);
+    await page.getByRole("button", { name: "Import…" }).click();
+
+    await expect(page.getByRole("radio", { name: /Hard Gruvbox/ })).toBeChecked();
+    await expect(page.locator("html")).toHaveAttribute("data-color-theme", "user:hard-gruvbox");
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    expect(await cssVariable(page, "--color-accent")).toBe("#83a598");
   });
 });

@@ -6,6 +6,7 @@ import type {
 } from "../workspace/protocol";
 import type { UpdateProgress } from "../update/types";
 import type { RecentDocument } from "../recents";
+import type { ColorTheme, ThemeImportResult } from "../themes";
 
 export type DocumentCallMap = {
   "document.state": { request: void; response: WorkspaceDocumentState | null };
@@ -74,6 +75,15 @@ export type RendererToMain = {
   "recents.reveal": (path: string) => void;
   /** Asks for the new location of a missing file, opens it, and drops the stale entry. */
   "recents.locate": (path: string) => void;
+  "themes.list": () => ColorTheme[];
+  /** Creates or replaces a user theme; main rejects malformed themes and non-user ids. */
+  "themes.save": (theme: ColorTheme) => void;
+  "themes.remove": (id: string) => void;
+  /** Asks for a Base16 scheme file and copies it into the user's themes. */
+  "themes.import": () => ThemeImportResult;
+  /** Asks for a destination and writes the theme there as a Base16 scheme. */
+  "themes.export": (theme: ColorTheme) => void;
+  "themes.revealFolder": () => void;
 };
 
 /**
@@ -96,4 +106,6 @@ export type MainToRenderer = {
   "update.ready": (version: string) => void;
   /** Recent files changed after an open, Save As, removal, or Clear Menu. */
   "recents.changed": (documents: RecentDocument[]) => void;
+  /** User themes changed after a save, import, or removal from any window. */
+  "themes.changed": (themes: ColorTheme[]) => void;
 };

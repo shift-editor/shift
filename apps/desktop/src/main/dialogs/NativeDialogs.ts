@@ -95,6 +95,31 @@ export interface NativeDialogs {
   ): Promise<DocumentCrashChoice>;
 
   /**
+   * Selects one Base16 color scheme file to import.
+   *
+   * @param window - native window that should own the choice.
+   * @returns the selected path, or null when the user cancels.
+   */
+  openTheme(window: Window | null): Promise<string | null>;
+
+  /**
+   * Selects a destination for an exported color theme.
+   *
+   * @param window - native window that should own the choice.
+   * @param suggestedName - file name to propose, including its extension.
+   * @returns the selected path, or null when the user cancels.
+   */
+  exportTheme(window: Window | null, suggestedName: string): Promise<string | null>;
+
+  /**
+   * Shows a blocking failure after a selected theme file is not a complete Base16 scheme.
+   *
+   * @param window - native window that should own the message.
+   * @param applicationName - product name shown by the native shell.
+   */
+  showThemeImportFailure(window: Window | null, applicationName: string): Promise<void>;
+
+  /**
    * Shows a blocking, nontechnical failure after a document save fails.
    *
    * @param window - native window that should own the message.

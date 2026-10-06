@@ -28,6 +28,8 @@ export type ShiftFixtures = {
   saveAsShiftPath: string;
   copyShiftPath: string;
   exportTtfPath: string;
+  /** Base16 scheme file that scripted dialogs choose for Import Color Theme. */
+  importThemePath: string;
 };
 
 export type ShiftOptions = {

@@ -821,7 +821,7 @@ These are allowed to jump around when energy is high, but they should not silent
 
 - [ ] General (auto-save, default UPM)
 - [ ] Editor (grid size, snap threshold, handle size)
-- [ ] Appearance (theme, colors)
+- [x] Appearance (theme, colors)
 - [ ] Shortcuts (customizable keybindings)
 
 **Workflow Improvements**

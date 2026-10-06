@@ -9,6 +9,7 @@ import {
   type Rectangle,
   type WebContents,
 } from "electron";
+import fs from "node:fs";
 import path from "node:path";
 import { Window } from "../windows/Window";
 import { getRendererSource } from "../utils";
@@ -32,6 +33,8 @@ import { isConvertiblePreviewPath } from "../../shared/workspace/previewConversi
 import { OPEN_FONT_EXTENSIONS } from "../../shared/openFontExtensions";
 import { RecentDocuments } from "../recents/RecentDocuments";
 import type { RecentDocumentVisit } from "../../shared/recents";
+import { UserThemes } from "../themes/UserThemes";
+import { parseColorTheme, slugifyThemeName } from "../../shared/themes";
 
 const SLUG_ATLAS_PROFILING_ENABLED =
   process.env.SHIFT_PROFILE_SLUG_ATLAS !== undefined &&
@@ -66,6 +69,7 @@ export class App {
   #workspaces: WorkspaceManager;
   #documentsRoot: string | null = null;
   #recents: RecentDocuments | null = null;
+  #userThemes: UserThemes | null = null;
   /** The recents entry each document session was last recorded under. */
   #documentVisits = new WeakMap<FontSessionHost, RecentDocumentVisit>();
   /** Launchers a font open is replacing; they stop receiving recents so no half-ready card flashes. */
@@ -221,6 +225,8 @@ export class App {
         path.join(app.getPath("userData"), "recent-documents.json"),
       );
       this.#recents.onChanged(() => this.#publishRecents());
+      this.#userThemes = new UserThemes(path.join(app.getPath("userData"), "themes"));
+      this.#userThemes.onChanged(() => this.#publishThemes());
 
       // Taken before recovery, which marks the documents it restores open again.
       const openAtLastExit = this.#recents.takeOpen();
@@ -494,6 +500,46 @@ export class App {
     });
     ipc.handle(ipcMain, "update.later", () => {
       this.#updater.later();
+    });
+    ipc.handle(ipcMain, "themes.list", () => {
+      return this.#userThemes?.list() ?? [];
+    });
+    ipc.handle(ipcMain, "themes.save", (_event, value) => {
+      const theme = parseColorTheme(value);
+      if (!theme) throw new Error("themes.save received a malformed theme");
+
+      this.#requireUserThemes().save(theme);
+    });
+    ipc.handle(ipcMain, "themes.remove", (_event, id) => {
+      this.#userThemes?.remove(id);
+    });
+    ipc.handle(ipcMain, "themes.import", async (event) => {
+      const window = this.#requireWindowForWebContents(event.sender);
+      const sourcePath = await this.#nativeDialogs.openTheme(window);
+      if (!sourcePath) return { status: "canceled" };
+
+      const theme = this.#requireUserThemes().import(sourcePath);
+      if (theme) return { status: "imported", theme };
+
+      this.#log.warn("importing color theme failed", sourcePath);
+      await this.#nativeDialogs.showThemeImportFailure(window, this.applicationName);
+      return { status: "invalid" };
+    });
+    ipc.handle(ipcMain, "themes.export", async (event, value) => {
+      const theme = parseColorTheme(value);
+      if (!theme) throw new Error("themes.export received a malformed theme");
+
+      const window = this.#requireWindowForWebContents(event.sender);
+      const destination = await this.#nativeDialogs.exportTheme(
+        window,
+        `${slugifyThemeName(theme.name)}.yaml`,
+      );
+      if (destination) this.#requireUserThemes().export(theme, destination);
+    });
+    ipc.handle(ipcMain, "themes.revealFolder", async () => {
+      const { directory } = this.#requireUserThemes();
+      fs.mkdirSync(directory, { recursive: true });
+      await shell.openPath(directory);
     });
     ipc.handle(ipcMain, "recents.list", () => {
       return this.#recents?.list() ?? [];
@@ -827,6 +873,19 @@ export class App {
       this.#recents?.setSpecimen(visit, specimen);
     } catch (error) {
       this.#log.warn("building recent file specimen failed", visit.path, error);
+    }
+  }
+
+  #requireUserThemes(): UserThemes {
+    if (!this.#userThemes) throw new Error("User themes are not loaded before app ready");
+    return this.#userThemes;
+  }
+
+  #publishThemes(): void {
+    const themes = this.#userThemes?.list() ?? [];
+    for (const window of this.#windows.allWindows()) {
+      if (window.window.isDestroyed()) continue;
+      ipc.send(window.window.webContents, "themes.changed", themes);
     }
   }
 

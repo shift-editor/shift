@@ -1,6 +1,9 @@
-export type ThemeAppearance = "light" | "dark";
+import type { ColorTheme, ThemeAppearance } from "@shared/themes";
 
-export type ThemeId =
+export type { Base16Key, Base16Palette, ColorTheme, ThemeAppearance } from "@shared/themes";
+
+/** Identity of a bundled theme; user themes use open `user:` ids. */
+export type BuiltInThemeId =
   | "shift-light"
   | "shift-dark"
   | "solarized-light"
@@ -11,33 +14,33 @@ export type ThemeId =
   | "gruvbox-dark"
   | "one-dark";
 
+/** Identity of any built-in or user theme. */
+export type ThemeId = string;
+
+/** Either a concrete theme or `system`, which follows the OS appearance. */
 export type ThemeSelection = "system" | ThemeId;
 
-export interface ColorTheme {
-  readonly id: ThemeId;
-  readonly name: string;
-  readonly appearance: ThemeAppearance;
-  readonly palette: {
-    readonly base00: string;
-    readonly base01: string;
-    readonly base02: string;
-    readonly base03: string;
-    readonly base04: string;
-    readonly base05: string;
-    readonly base06: string;
-    readonly base07: string;
-    readonly base08: string;
-    readonly base09: string;
-    readonly base0A: string;
-    readonly base0B: string;
-    readonly base0C: string;
-    readonly base0D: string;
-    readonly base0E: string;
-    readonly base0F: string;
-  };
+/** The user's theme choice plus the pair `system` alternates between. */
+export interface ThemePreferences {
+  readonly selection: ThemeSelection;
+  /** Theme `system` uses while the OS is light. */
+  readonly light: ThemeId;
+  /** Theme `system` uses while the OS is dark. */
+  readonly dark: ThemeId;
 }
 
-export const colorThemes: readonly ColorTheme[] = [
+export const defaultThemePreferences: ThemePreferences = {
+  selection: "shift-light",
+  light: "shift-light",
+  dark: "shift-dark",
+};
+
+interface BuiltInColorTheme extends ColorTheme {
+  readonly id: BuiltInThemeId;
+}
+
+/** Bundled themes, in gallery order. */
+export const colorThemes: readonly BuiltInColorTheme[] = [
   {
     id: "shift-light",
     name: "Shift Light",
@@ -247,13 +250,35 @@ export const colorThemes: readonly ColorTheme[] = [
   },
 ];
 
+/**
+ * Resolves the user's preferences to one theme.
+ *
+ * @remarks
+ * `system` picks the light or dark preference for the current OS appearance.
+ * A preference naming a theme that no longer exists, such as a deleted user
+ * theme, falls back to Shift Light or Shift Dark for the same appearance.
+ *
+ * @param preferences - persisted selection and system pair.
+ * @param systemAppearance - current OS appearance.
+ * @param themes - every available theme, built-in and user.
+ */
 export function resolveThemeSelection(
-  themeSelection: ThemeSelection,
+  preferences: ThemePreferences,
   systemAppearance: ThemeAppearance,
+  themes: readonly ColorTheme[] = colorThemes,
 ): ColorTheme {
-  const systemThemeId = systemAppearance === "dark" ? "shift-dark" : "shift-light";
-  const themeId = themeSelection === "system" ? systemThemeId : themeSelection;
-  return colorThemes.find((theme) => theme.id === themeId) ?? colorThemes[0];
+  const find = (id: ThemeId) => themes.find((theme) => theme.id === id);
+  const systemTheme = () =>
+    find(preferences[systemAppearance]) ?? builtInFallback(systemAppearance);
+
+  if (preferences.selection === "system") return systemTheme();
+
+  return find(preferences.selection) ?? systemTheme();
+}
+
+function builtInFallback(appearance: ThemeAppearance): ColorTheme {
+  const id: BuiltInThemeId = appearance === "dark" ? "shift-dark" : "shift-light";
+  return colorThemes.find((theme) => theme.id === id) ?? colorThemes[0];
 }
 
 export function applyResolvedTheme(

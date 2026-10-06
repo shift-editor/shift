@@ -7,6 +7,7 @@ import {
 import path from "node:path";
 import { message } from "../../shared/messages";
 import { OPEN_FONT_EXTENSIONS } from "../../shared/openFontExtensions";
+import { THEME_FILE_EXTENSIONS } from "../../shared/themes";
 import type { Window } from "../windows/Window";
 import type { NativeDialogs } from "./NativeDialogs";
 
@@ -158,6 +159,44 @@ export const electronNativeDialogs: NativeDialogs = {
       : await dialog.showMessageBox(options);
 
     return result.response === 0 ? "reopen" : "close";
+  },
+
+  async openTheme(window) {
+    const options: OpenDialogOptions = {
+      title: message("theme.import.title"),
+      filters: [{ name: message("theme.import.filter"), extensions: [...THEME_FILE_EXTENSIONS] }],
+      properties: ["openFile"],
+    };
+    const result = window
+      ? await dialog.showOpenDialog(window.window, options)
+      : await dialog.showOpenDialog(options);
+
+    if (result.canceled || result.filePaths.length !== 1) return null;
+
+    return result.filePaths[0];
+  },
+
+  async exportTheme(window, suggestedName) {
+    const options: SaveDialogOptions = {
+      title: message("theme.export.title"),
+      defaultPath: suggestedName,
+      filters: [{ name: message("theme.import.filter"), extensions: [...THEME_FILE_EXTENSIONS] }],
+      properties: ["createDirectory", "showOverwriteConfirmation"],
+    };
+    const result = window
+      ? await dialog.showSaveDialog(window.window, options)
+      : await dialog.showSaveDialog(options);
+
+    return result.canceled ? null : (result.filePath ?? null);
+  },
+
+  async showThemeImportFailure(window, applicationName) {
+    await showFailure(
+      window,
+      applicationName,
+      message("theme.importFailed.message"),
+      message("theme.importFailed.detail"),
+    );
   },
 
   async showSaveFailure(window, applicationName) {

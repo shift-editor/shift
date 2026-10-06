@@ -87,5 +87,11 @@
   "settings.sourceSaveFailed": "Changes to this source couldn’t be saved. Try again.",
   "settings.instanceSaveFailed": "Changes to this instance couldn’t be saved. Try again.",
   "settings.axisSaveFailed": "Changes to this axis couldn’t be saved. Try again.",
-  "settings.mappingSaveFailed": "Changes to this mapping couldn’t be saved. Try again."
+  "settings.mappingSaveFailed": "Changes to this mapping couldn’t be saved. Try again.",
+
+  "theme.import.title": "Import Color Theme",
+  "theme.import.filter": "Base16 Color Schemes",
+  "theme.export.title": "Export Color Theme",
+  "theme.importFailed.message": "This file isn’t a color theme Shift can use.",
+  "theme.importFailed.detail": "Choose a Base16 scheme in YAML or JSON that defines all 16 colors, base00 through base0F."
 }

@@ -146,3 +146,34 @@ export const SelectItemText = React.forwardRef<
   <BaseSelect.ItemText ref={ref} className={cn("col-start-2", className)} {...props} />
 ));
 SelectItemText.displayName = "SelectItemText";
+
+export interface SelectGroupProps extends React.ComponentPropsWithoutRef<typeof BaseSelect.Group> {}
+
+/** Related options under one {@link SelectGroupLabel}, separated from the options above. */
+export const SelectGroup = React.forwardRef<
+  React.ElementRef<typeof BaseSelect.Group>,
+  SelectGroupProps
+>(({ className, ...props }, ref) => (
+  <BaseSelect.Group
+    ref={ref}
+    className={cn("mt-1 border-t border-line-subtle pt-1", className)}
+    {...props}
+  />
+));
+SelectGroup.displayName = "SelectGroup";
+
+export interface SelectGroupLabelProps extends React.ComponentPropsWithoutRef<
+  typeof BaseSelect.GroupLabel
+> {}
+
+export const SelectGroupLabel = React.forwardRef<
+  React.ElementRef<typeof BaseSelect.GroupLabel>,
+  SelectGroupLabelProps
+>(({ className, ...props }, ref) => (
+  <BaseSelect.GroupLabel
+    ref={ref}
+    className={cn("flex h-6 items-center px-2 text-xs text-muted select-none", className)}
+    {...props}
+  />
+));
+SelectGroupLabel.displayName = "SelectGroupLabel";

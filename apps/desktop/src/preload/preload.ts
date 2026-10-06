@@ -48,6 +48,15 @@ const shiftHost: ShiftHost = {
     locate: invoke(ipcRenderer, "recents.locate"),
     onChanged: listen(ipcRenderer, "recents.changed"),
   },
+  themes: {
+    list: invoke(ipcRenderer, "themes.list"),
+    save: invoke(ipcRenderer, "themes.save"),
+    remove: invoke(ipcRenderer, "themes.remove"),
+    import: invoke(ipcRenderer, "themes.import"),
+    export: invoke(ipcRenderer, "themes.export"),
+    revealFolder: invoke(ipcRenderer, "themes.revealFolder"),
+    onChanged: listen(ipcRenderer, "themes.changed"),
+  },
   clipboard: {
     writeText: invoke(ipcRenderer, "clipboard.writeText"),
     readText: invoke(ipcRenderer, "clipboard.readText"),

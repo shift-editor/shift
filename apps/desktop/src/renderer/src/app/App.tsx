@@ -4,6 +4,7 @@ import { HashRouter } from "react-router";
 import { TooltipProvider } from "@shift/ui";
 
 import { ThemeProvider } from "@/context/ThemeContext";
+import { getShiftHost } from "@/host/shiftHost";
 import { FocusZoneProvider } from "@/context/FocusZoneContext";
 import { ZoomToast } from "@/components/chrome/ZoomToast";
 
@@ -30,7 +31,7 @@ export const App = () => {
   }, []);
 
   return (
-    <ThemeProvider defaultTheme="shift-light">
+    <ThemeProvider defaultTheme="shift-light" userThemeSource={getShiftHost().themes}>
       <TooltipProvider delayDuration={500}>
         <ZoomToast>
           <FocusZoneProvider defaultZone="canvas">

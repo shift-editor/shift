@@ -119,6 +119,10 @@ export const test = base.extend<ShiftFixtures & ShiftOptions>({
     await use(path.join(testRoot, "exported.ttf"));
   },
 
+  importThemePath: async ({ testRoot }, use) => {
+    await use(path.join(testRoot, "import-theme.yaml"));
+  },
+
   electronProcesses: async ({ testRoot: _testRoot }, use, testInfo) => {
     // Depends on testRoot so every process exits before its directory is removed.
     const processes = new ElectronProcesses();
@@ -149,6 +153,7 @@ export const test = base.extend<ShiftFixtures & ShiftOptions>({
       testRoot,
       saveShiftPath,
       exportTtfPath,
+      importThemePath,
     },
     use,
   ) => {
@@ -164,6 +169,7 @@ export const test = base.extend<ShiftFixtures & ShiftOptions>({
         environment.SHIFT_E2E_SAVE_SHIFT_PATHS = JSON.stringify(saveShiftPaths);
       }
       environment.SHIFT_E2E_EXPORT_TTF_PATH = exportTtfPath;
+      environment.SHIFT_E2E_OPEN_THEME_PATH = importThemePath;
       environment.SHIFT_E2E_DIRTY_DOCUMENT_CHOICE = dirtyDocumentChoice;
       if (dirtyDocumentChoices) {
         environment.SHIFT_E2E_DIRTY_DOCUMENT_CHOICES = dirtyDocumentChoices.join(",");

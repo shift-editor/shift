@@ -3,6 +3,7 @@ import type { UpdateProgress } from "../update/types";
 import type { RendererErrorReport } from "../ipc/contract";
 import type { FontSessionMode } from "../workspace/protocol";
 import type { RecentDocument } from "../recents";
+import type { ColorTheme, ThemeImportResult } from "../themes";
 
 /**
  * Renderer-facing API for Electron app-shell behavior.
@@ -143,6 +144,35 @@ export interface ShiftHost {
      * @returns an unsubscribe function.
      */
     onChanged: (callback: (documents: RecentDocument[]) => void) => () => void;
+  };
+  /** Main-owned color themes the user created or imported, stored as Base16 scheme files. */
+  themes: {
+    /** Returns every readable user theme, sorted by name. */
+    list: () => Promise<ColorTheme[]>;
+    /**
+     * Creates or replaces a user theme.
+     *
+     * @throws {Error} when the theme is malformed or its id is not a user theme id.
+     */
+    save: (theme: ColorTheme) => Promise<void>;
+    remove: (id: string) => Promise<void>;
+    /**
+     * Asks for a Base16 YAML or JSON scheme and adds it to the user's themes.
+     *
+     * @remarks
+     * Main shows a native failure message when the file is not a complete scheme.
+     */
+    import: () => Promise<ThemeImportResult>;
+    /** Asks for a destination and writes the theme there as a Base16 YAML scheme. */
+    export: (theme: ColorTheme) => Promise<void>;
+    /** Opens the folder that holds user theme files in the platform file manager. */
+    revealFolder: () => Promise<void>;
+    /**
+     * Subscribes to user theme changes made from any window.
+     *
+     * @returns an unsubscribe function.
+     */
+    onChanged: (callback: (themes: ColorTheme[]) => void) => () => void;
   };
   /** System clipboard access owned by the app shell. */
   clipboard: {

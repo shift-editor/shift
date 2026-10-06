@@ -69,6 +69,8 @@ export {
   SelectItem,
   SelectItemIndicator,
   SelectItemText,
+  SelectGroup,
+  SelectGroupLabel,
   type SelectProps,
   type SelectTriggerProps,
   type SelectIconProps,
@@ -76,6 +78,8 @@ export {
   type SelectPopupProps,
   type SelectItemProps,
   type SelectItemIndicatorProps,
+  type SelectGroupProps,
+  type SelectGroupLabelProps,
 } from "./components/select";
 export { Slider, type SliderProps } from "./components/slider";
 export {
