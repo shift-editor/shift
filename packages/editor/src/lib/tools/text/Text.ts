@@ -34,7 +34,7 @@ export class TextTool extends BaseTool<TextState> {
       return;
     }
 
-    const items = this.editor.text.run(run.runId)?.items ?? [];
+    const items = this.editor.text.items(run);
     const childItemId = this.editor.nodeDefinition("textRun").childGlyph(run)?.itemId;
     this.editor.textEditing.resume(run.id, childItemId ?? items[items.length - 1]?.id ?? null);
     this.setState({ type: "editing" });
