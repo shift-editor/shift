@@ -1,5 +1,5 @@
 import { computed, type Signal } from "../signals";
-import type { GlyphName, NodeId } from "@shift/types";
+import type { NodeId } from "@shift/types";
 import type { ShiftStore } from "../store/ShiftStore";
 import type { ShiftEditorRecord } from "../../types/records";
 import {
@@ -8,7 +8,7 @@ import {
   type TextEditingRecord,
   type TextEditResult,
 } from "../../types/text";
-import { Caret, type GlyphTextItem, type TextItem } from "./layout";
+import { Caret, type TextItem } from "./layout";
 import {
   caretForCluster,
   clusterForCaret,
@@ -19,16 +19,6 @@ import {
   wordCluster,
 } from "./edit";
 import type { Editor } from "../editor/Editor";
-import type { GlyphLayer } from "../model/Glyph";
-
-/**
- * Which part of a glyph's spacing {@link TextEditing.adjustSpacing} changes.
- *
- * - `left`: the left sidebearing; positive adds space.
- * - `right`: the right sidebearing; positive adds space.
- * - `outline`: the outline inside a fixed advance; positive moves it right.
- */
-export type SpacingEdge = "left" | "right" | "outline";
 
 /** Owns the session caret for one placed text node; text content belongs to Text. */
 export class TextEditing {
@@ -200,65 +190,6 @@ export class TextEditing {
     const items = this.#items();
     if (!items) return;
     this.#place(items.length, true, "Select text", null);
-  }
-
-  /**
-   * Changes the spacing of the glyphs the caret targets at the active source, as one undo step.
-   *
-   * @remarks
-   * A collapsed caret targets the glyph after it, or the glyph before it when
-   * nothing follows. A selection targets each distinct glyph in it once.
-   * Glyphs without an outline, not yet loaded, or without a layer at the
-   * active source are skipped.
-   *
-   * @param delta - Change in UPM units; see {@link SpacingEdge} for the sign.
-   */
-  adjustSpacing(edge: SpacingEdge, delta: number): void {
-    const layers = this.#spacingLayers();
-    if (layers.length === 0 || delta === 0) return;
-    this.#editor.transaction("Adjust spacing", () => {
-      for (const layer of layers) {
-        const { lsb, rsb } = layer.sidebearings;
-        if (lsb === null || rsb === null) continue;
-        switch (edge) {
-          case "left":
-            layer.setLeftSidebearing(lsb + delta);
-            break;
-          case "right":
-            layer.setRightSidebearing(rsb + delta);
-            break;
-          case "outline":
-            layer.translateLayer(delta, 0);
-            break;
-        }
-      }
-    });
-  }
-
-  #spacingLayers(): GlyphLayer[] {
-    const sourceId = this.#editor.activeSourceId;
-    if (!sourceId || this.#editor.sessionMode !== "workspace") return [];
-    const names = new Set(this.#spacingItems().map((item) => item.glyphName));
-    const layers: GlyphLayer[] = [];
-    for (const name of names) {
-      const entry = this.#editor.font.entryForName(name as GlyphName);
-      const layer = entry && this.#editor.glyphForId(entry.id)?.layerForSource(sourceId);
-      if (layer) layers.push(layer);
-    }
-    return layers;
-  }
-
-  #spacingItems(): GlyphTextItem[] {
-    const state = this.state;
-    const items = this.#items();
-    if (!state || !items) return [];
-    if (state.anchor !== state.focus) {
-      return this.selectedItems.filter((item) => item.kind === "glyph");
-    }
-    const cluster = clusterForCaret(items, state.focus);
-    const next = items[cluster];
-    const target = next?.kind === "glyph" ? next : items[cluster - 1];
-    return target?.kind === "glyph" ? [target] : [];
   }
 
   #place(cluster: number, extend: boolean, label?: string, anchor?: TextCaret): void {

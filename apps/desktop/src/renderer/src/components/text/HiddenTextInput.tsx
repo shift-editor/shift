@@ -1,12 +1,7 @@
 import { useCallback, useRef } from "react";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { useSignalState } from "@shift/editor/signals";
-import {
-  glyphTextItem,
-  lineBreakTextItem,
-  type SpacingEdge,
-  type TextItem,
-} from "@shift/editor/text";
+import { glyphTextItem, lineBreakTextItem, type TextItem } from "@shift/editor/text";
 
 /** Receives native text, clipboard, and IME events while a text node is active. */
 export function TextInput() {
@@ -74,17 +69,8 @@ export function TextInput() {
         e.preventDefault();
         return;
       case "ArrowLeft":
-      case "ArrowRight": {
-        const direction = e.key === "ArrowLeft" ? -1 : 1;
-        const spacing = spacingKey(e, direction);
-        if (spacing) textEditing.adjustSpacing(spacing.edge, spacing.delta);
-        else textEditing.move(direction, e.altKey ? "word" : "character", extend);
-        e.preventDefault();
-        return;
-      }
-      case "Home":
-      case "End":
-        textEditing.move(e.key === "Home" ? -1 : 1, "line", extend);
+      case "ArrowRight":
+        textEditing.move(e.key === "ArrowLeft" ? -1 : 1, horizontalGranularity(e), extend);
         e.preventDefault();
         return;
       case "ArrowUp":
@@ -157,22 +143,10 @@ export function TextInput() {
   );
 }
 
-/**
- * Maps a horizontal arrow to a spacing change, Glyphs-style: the arrow points
- * where the edge moves. ⌘ = right sidebearing, ⌥⌘ (or ⌃, when Mission
- * Control leaves it free) = left sidebearing, ⌃⌘ = outline; ⇧ = ×10.
- */
-function spacingKey(
-  e: React.KeyboardEvent,
-  direction: -1 | 1,
-): { edge: SpacingEdge; delta: number } | null {
-  const step = e.shiftKey ? 10 : 1;
-  if (e.metaKey && e.ctrlKey) return { edge: "outline", delta: direction * step };
-  if ((e.metaKey && e.altKey) || (e.ctrlKey && !e.metaKey && !e.altKey)) {
-    return { edge: "left", delta: -direction * step };
-  }
-  if (e.metaKey) return { edge: "right", delta: direction * step };
-  return null;
+function horizontalGranularity(e: React.KeyboardEvent): "character" | "word" | "line" {
+  if (e.altKey) return "word";
+  if (e.metaKey) return "line";
+  return "character";
 }
 
 function clipboardText(item: TextItem): string {
