@@ -105,6 +105,7 @@ export class Editor {
     get editingSourceIdsCell(): Signal<ReadonlySet<SourceId>>;
     // Warning: (ae-forgotten-export) The symbol "NodeId" needs to be exported by the entry point index.d.ts
     enterNode(nodeId: NodeId): void;
+    exitNodes(): void;
     get externalLocation(): ExternalAxisLocation;
     // (undocumented)
     get externalLocationCell(): Signal<ExternalAxisLocation>;
@@ -702,7 +703,7 @@ export function useSignalState<T>(signal: Signal<T>, options?: UseSignalOptions)
 
 // Warnings were encountered during analysis:
 //
-// dist/Editor-D15hk309.d.ts:4201:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
+// dist/Editor-Bv7XQyJZ.d.ts:4201:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

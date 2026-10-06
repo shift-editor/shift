@@ -57,11 +57,17 @@ export class Marquee implements SelectBehavior {
     return true;
   }
 
-  /** Points inside the rect, plus segments it touches without catching just one end point. */
+  /**
+   * Points inside the rect, plus segments it touches without catching just one end point.
+   *
+   * @remarks
+   * A run's glyph gives up its points only while edited, as with clicks.
+   */
   private getIdsInRect(rect: Rect2D, ctx: ToolContext<SelectState>): Set<SelectableId> {
     const ids = new Set<SelectableId>();
 
     for (const node of ctx.editor.scene.nodesOfKind("glyph")) {
+      if (node.parentId !== null && !ctx.editor.editing.has(node.id)) continue;
       const glyph = ctx.editor.glyphForId(node.glyphId);
       if (!glyph) continue;
 

@@ -25,7 +25,8 @@ import { track } from "../signals";
  * @remarks
  * A run edits at most one of its glyphs in place through a child `GlyphNode`
  * pointing at an item. This definition places the child at its item, stops
- * drawing and hitting that item, switches the child (`editItem`, also on
+ * drawing and hitting that item while the child is edited, switches the
+ * child (`editItem`, also on
  * double-click), and deletes it when its item is removed.
  */
 export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
@@ -168,8 +169,9 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
    * Hit-tests the run's glyph outlines: inside a fill or within hit radius of a contour.
    *
    * @remarks
-   * The child's item is skipped; the child answers for its own glyph. Later
-   * glyphs win where outlines overlap. Caret placement uses {@link caretAt}.
+   * While the child is edited its item is skipped, so the child answers for
+   * its own glyph; otherwise the child is plain text and the run hits it.
+   * Later glyphs win where outlines overlap. Caret placement uses {@link caretAt}.
    */
   hit(node: TextRunNode, point: LocalPoint): PointerTarget | null {
     const layout = this.editor.text.layoutCell(node.runId).peek();
@@ -282,18 +284,25 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     );
   }
 
-  /** The glyphs the run draws itself: every loaded glyph except the child's item. */
+  /** The glyphs the run draws and hits itself: every loaded glyph except an edited child's item. */
   *#runGlyphs(
     node: TextRunNode,
     layout: TextLayout,
   ): Iterable<{ placed: PlacedGlyph; itemId: TextItemId; model: GlyphRenderModel }> {
-    const childItemId = this.childGlyph(node)?.itemId;
+    const skip = this.#editedChildItemId(node);
     for (const placed of layout.placedGlyphs) {
       const itemId = placed.glyph.sourceItemIds[0];
-      if (!itemId || itemId === childItemId || !placed.glyph.glyphId) continue;
+      if (!itemId || itemId === skip || !placed.glyph.glyphId) continue;
       const model = this.#model(placed.glyph.glyphId);
       if (model) yield { placed, itemId, model };
     }
+  }
+
+  /** The child's item while the child is edited; otherwise the child is plain text. */
+  #editedChildItemId(node: TextRunNode): TextItemId | null {
+    const child = this.childGlyph(node);
+    if (!child?.itemId || !this.editor.editing.has(child.id)) return null;
+    return child.itemId;
   }
 
   #model(glyphId: GlyphId): GlyphRenderModel | null {
