@@ -68,7 +68,7 @@ export class ShapeTool extends BaseTool<ShapeState, ShapeTool> {
     const [node] = nodes;
     if (!node) return false;
 
-    const layer = this.editor.glyphForId(node.glyphId)?.layerForSource(node.sourceId);
+    const layer = this.editor.layerForGlyph(node.glyphId, node.sourceId);
     if (!layer || this.editor.sessionMode === "preview") return false;
 
     this.#node = node;

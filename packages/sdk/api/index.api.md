@@ -169,6 +169,7 @@ export class Editor {
     // Warning: (ae-forgotten-export) The symbol "GlyphGeometrySelection" needs to be exported by the entry point index.d.ts
     // Warning: (ae-forgotten-export) The symbol "GlyphLayer" needs to be exported by the entry point index.d.ts
     layerForGeometry(ids: GlyphGeometrySelection): GlyphLayer | null;
+    layerForGlyph(glyphId: GlyphId, sourceId: SourceId): GlyphLayer | null;
     nodeBounds(node: ShiftNode): SceneBounds | null;
     // Warning: (ae-forgotten-export) The symbol "GlyphNodeDefinition" needs to be exported by the entry point index.d.ts
     //
@@ -391,6 +392,7 @@ export class Font {
     // Warning: (ae-forgotten-export) The symbol "GlyphHandle" needs to be exported by the entry point index.d.ts
     glyphHandleForName(name: GlyphName): GlyphHandle;
     glyphHandleForUnicode(unicode: Unicode): GlyphHandle;
+    glyphIdForLayer(layerId: LayerId): GlyphId | null;
     glyphPreviews(glyphIds: readonly GlyphId[], location: DesignAxisLocation): Promise<readonly GlyphPreview[]>;
     // (undocumented)
     glyphRecords(): readonly GlyphRecord[];
@@ -702,7 +704,7 @@ export function useSignalState<T>(signal: Signal<T>, options?: UseSignalOptions)
 
 // Warnings were encountered during analysis:
 //
-// dist/Editor-OEcry7p1.d.ts:4203:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
+// dist/Editor-BfBT18d7.d.ts:4205:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

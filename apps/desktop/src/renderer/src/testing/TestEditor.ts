@@ -211,7 +211,7 @@ export class TestEditor extends Editor {
     const node = this.glyphNode;
     if (!node) return null;
 
-    return this.glyphForId(node.glyphId)?.layerForSource(sourceId) ?? null;
+    return this.layerForGlyph(node.glyphId, sourceId) ?? null;
   }
 
   requireGlyphLayer(): GlyphLayer {

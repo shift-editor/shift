@@ -123,6 +123,11 @@ export class FontStore {
     return this.#invalidGlyphs;
   }
 
+  /** Returns the glyph that owns a layer, from the glyph directory; the glyph need not be loaded. */
+  glyphIdForLayer(layerId: LayerId): GlyphId | null {
+    return this.#indexCell.peek().glyphByLayer.get(layerId) ?? null;
+  }
+
   layerIdForPoint(pointId: PointId): LayerId | null {
     return this.#glyphObjectIndexCell.peek().layerIdByPointId.get(pointId) ?? null;
   }

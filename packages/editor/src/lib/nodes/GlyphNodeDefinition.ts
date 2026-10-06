@@ -393,7 +393,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     const sourceId = this.editor.activeSourceIdCell.peek();
     if (!sourceId) return;
 
-    const layer = this.editor.glyphForId(node.glyphId)?.layerForSource(sourceId);
+    const layer = this.editor.layerForGlyph(node.glyphId, sourceId);
     if (!layer) return;
 
     track(layer.editBaseOutlineCell);

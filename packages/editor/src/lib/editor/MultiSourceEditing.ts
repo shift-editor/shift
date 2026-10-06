@@ -279,14 +279,8 @@ export class MultiSourceEditing {
   }
 
   #glyphForLayer(layer: GlyphLayer): Glyph | null {
-    for (const node of this.#scene.nodesOfKind("glyph")) {
-      if (node.sourceId !== layer.sourceId) continue;
-
-      const glyph = this.#glyphForId(node.glyphId);
-      if (glyph?.layerForSource(node.sourceId)?.id === layer.id) return glyph;
-    }
-
-    return null;
+    const glyphId = this.#font.glyphIdForLayer(layer.id);
+    return glyphId ? this.#glyphForId(glyphId) : null;
   }
 }
 
