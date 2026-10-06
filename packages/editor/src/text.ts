@@ -1,4 +1,5 @@
 export { TextEditing } from "./lib/text/TextEditing";
+export type { SpacingEdge } from "./lib/text/TextEditing";
 export {
   caretForCluster,
   clusterForCaret,
