@@ -1,3 +1,4 @@
+use crate::error::OrMissing;
 use std::collections::{HashMap, HashSet};
 
 use rayon::prelude::*;
@@ -224,10 +225,7 @@ fn read_layer_directory(
 
     let mut decoded_byte_lengths = Vec::with_capacity(keys.len());
     for key in keys {
-        let facts = facts.get(key).ok_or_else(|| StoreError::MissingEntity {
-            kind: "glyph layer",
-            id: key.clone(),
-        })?;
+        let facts = facts.get(key).or_missing("glyph layer", key)?;
         decoded_byte_lengths.push(facts.validate()?);
     }
 
