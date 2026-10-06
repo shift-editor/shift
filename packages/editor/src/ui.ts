@@ -7,6 +7,7 @@ export {
 } from "./ui/EditableSidebarInput";
 export { EditorToolbar, type EditorToolbarHost, type EditorToolbarProps } from "./ui/EditorToolbar";
 export { GlyphSidebar, type GlyphSidebarHost, type GlyphSidebarProps } from "./ui/GlyphSidebar";
+export { setGlyphMetric, sidebarGlyphs } from "./ui/glyphTargets";
 export { ShiftEditor, type ShiftEditorProps } from "./ui/ShiftEditor";
 export { ShiftEditorChrome, type ShiftEditorChromeProps } from "./ui/ShiftEditorChrome";
 export { ShiftEditorRoot, type ShiftEditorRootProps } from "./ui/ShiftEditorRoot";
@@ -26,4 +27,4 @@ export {
   type VariationSidebarProps,
   type VariationSidebarSectionHost,
 } from "./ui/VariationSidebar";
-export type { EditorUISession } from "./ui/types";
+export type { EditorUISession, GlyphMetric } from "./ui/types";

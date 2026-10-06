@@ -14,3 +14,6 @@ export interface EditorUISession {
   readonly font: Font;
   readonly editor: Editor;
 }
+
+/** A glyph metric the glyph sidebar edits: the advance width or one sidebearing. */
+export type GlyphMetric = "advance" | "left" | "right";

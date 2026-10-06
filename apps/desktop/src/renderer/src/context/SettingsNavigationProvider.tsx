@@ -22,10 +22,7 @@ export const SettingsNavigationProvider = ({ children }: { children: ReactNode }
           return;
         }
         if (id === "glyph.addComponent") {
-          if (
-            session.mode === "workspace" &&
-            session.editor.scene.nodesOfKind("glyph").length === 1
-          ) {
+          if (session.mode === "workspace" && session.editor.editing.node("glyph") !== null) {
             setComponentPickerOpen(true);
           }
           return;

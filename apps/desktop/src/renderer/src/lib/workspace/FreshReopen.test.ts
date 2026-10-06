@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { Point } from "@shift/glyph-state";
+import { setGlyphMetric, sidebarGlyphs } from "@shift/editor/ui";
 import { TestEditor } from "@/testing/TestEditor";
 
 function persistedGlyph(editor: TestEditor) {
@@ -107,7 +108,7 @@ describe("saved editor outcomes survive a fresh workspace stack", () => {
       start: { x: 704, y: 104 },
       end: { x: 780, y: 180 },
     });
-    original.setXAdvance(700);
+    setGlyphMetric(original, sidebarGlyphs(original), "advance", 700);
     await expect(original.font.editCoordinator.state()).resolves.toMatchObject({
       dirty: true,
       needsSaveAs: true,
@@ -125,7 +126,7 @@ describe("saved editor outcomes survive a fresh workspace stack", () => {
       start: { x: firstPoint.x + 4, y: firstPoint.y },
       end: { x: firstPoint.x + 40, y: firstPoint.y + 30 },
     });
-    original.setXAdvance(720);
+    setGlyphMetric(original, sidebarGlyphs(original), "advance", 720);
     await expect(original.font.editCoordinator.state()).resolves.toMatchObject({ dirty: true });
     await expect(original.save()).resolves.toMatchObject({ dirty: false });
     const expected = persistedGlyph(original);

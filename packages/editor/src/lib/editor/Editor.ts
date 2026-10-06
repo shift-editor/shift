@@ -291,7 +291,7 @@ export class Editor {
     };
 
     this.selection = new Selection(this.#store);
-    this.editing = new Editing(this.#store);
+    this.editing = new Editing(this.#store, this.scene);
     this.history = new EditorHistory(
       this,
       this.#store,
@@ -570,9 +570,8 @@ export class Editor {
     const activeSourceId = this.activeSourceId;
     if (this.sessionMode !== "workspace" || !activeSourceId) return null;
 
-    const glyphNodes = this.scene.nodesOfKind("glyph");
-    const [node] = glyphNodes;
-    if (!node || glyphNodes.length !== 1) return null;
+    const node = this.editing.node("glyph");
+    if (!node) return null;
 
     const glyph = this.#fontStore.glyphForId(node.glyphId);
     if (!glyph) return null;
@@ -623,9 +622,8 @@ export class Editor {
     // Load the base first so the component draws its outline as soon as it is added.
     await this.font.loadGlyph(baseGlyphId);
 
-    const glyphNodes = this.scene.nodesOfKind("glyph");
-    const [node] = glyphNodes;
-    if (!node || glyphNodes.length !== 1 || node.glyphId === baseGlyphId) return null;
+    const node = this.editing.node("glyph");
+    if (!node || node.glyphId === baseGlyphId) return null;
 
     const glyph = this.#fontStore.glyphForId(node.glyphId);
     if (!glyph) return null;
@@ -1229,11 +1227,7 @@ export class Editor {
   /** Reactive scene-space bounds of the current selection; see {@link selectionSceneBounds}. */
   /** Selects every glyph item of every run; the run level's select-all. */
   #selectAllGlyphItems(): void {
-    const ids = this.scene
-      .nodesOfKind("textRun")
-      .flatMap((node) => this.text.run(node.runId)?.items ?? [])
-      .filter((item) => item.kind === "glyph")
-      .map((item) => item.id);
+    const ids = this.text.glyphItems().map((item) => item.id);
     if (ids.length === 0) return;
 
     this.history.capture("Select all", () => this.selection.select(ids));
@@ -1259,10 +1253,7 @@ export class Editor {
     const sourceId = this.activeSourceId;
     if (!sourceId) return;
 
-    const glyphNodes = this.scene.nodesOfKind("glyph");
-    if (glyphNodes.length !== 1) return;
-
-    const [node] = glyphNodes;
+    const node = this.editing.node("glyph");
     if (!node) return;
 
     const layer = this.layerForGlyph(node.glyphId, sourceId);
@@ -1418,10 +1409,7 @@ export class Editor {
   }
 
   #ensureCurrentGlyphLayer(sourceId: SourceId, valuesFor: (glyph: Glyph) => Float64Array): void {
-    const glyphNodes = this.scene.nodesOfKind("glyph");
-    if (glyphNodes.length !== 1) return;
-
-    const [node] = glyphNodes;
+    const node = this.editing.node("glyph");
     if (!node) return;
 
     const glyph = this.#fontStore.glyphForId(node.glyphId);
@@ -1684,73 +1672,6 @@ export class Editor {
     this.#camera.setRect(rect);
   }
 
-  public get xAdvance(): number {
-    const sourceId = this.activeSourceId;
-    if (!sourceId) return 0;
-
-    const glyphNodes = this.scene.nodesOfKind("glyph");
-    if (glyphNodes.length !== 1) return 0;
-
-    const [node] = glyphNodes;
-    if (!node) return 0;
-
-    return this.layerForGlyph(node.glyphId, sourceId)?.xAdvance ?? 0;
-  }
-
-  /**
-   * Sets the current glyph layer's horizontal advance.
-   *
-   * @param width - New advance width in UPM units.
-   */
-  public setXAdvance(width: number): void {
-    const sourceId = this.activeSourceId;
-    if (!sourceId) return;
-
-    const glyphNodes = this.scene.nodesOfKind("glyph");
-    if (glyphNodes.length !== 1) return;
-
-    const [node] = glyphNodes;
-    if (!node) return;
-
-    this.layerForGlyph(node.glyphId, sourceId)?.setXAdvance(width);
-  }
-
-  /**
-   * Sets the current glyph layer's left sidebearing.
-   *
-   * @param value - Desired left sidebearing in UPM units.
-   */
-  public setLeftSidebearing(value: number): void {
-    const sourceId = this.activeSourceId;
-    if (!sourceId) return;
-
-    const glyphNodes = this.scene.nodesOfKind("glyph");
-    if (glyphNodes.length !== 1) return;
-
-    const [node] = glyphNodes;
-    if (!node) return;
-
-    this.layerForGlyph(node.glyphId, sourceId)?.setLeftSidebearing(value);
-  }
-
-  /**
-   * Sets the current glyph layer's right sidebearing.
-   *
-   * @param value - Desired right sidebearing in UPM units.
-   */
-  public setRightSidebearing(value: number): void {
-    const sourceId = this.activeSourceId;
-    if (!sourceId) return;
-
-    const glyphNodes = this.scene.nodesOfKind("glyph");
-    if (glyphNodes.length !== 1) return;
-
-    const [node] = glyphNodes;
-    if (!node) return;
-
-    this.layerForGlyph(node.glyphId, sourceId)?.setRightSidebearing(value);
-  }
-
   public get screenMousePositionCell(): Signal<ScreenPoint> {
     return this.#camera.screenMousePositionCell;
   }
@@ -1975,10 +1896,7 @@ export class Editor {
     const sourceId = this.activeSourceId;
     if (!sourceId) return null;
 
-    const glyphNodes = this.scene.nodesOfKind("glyph");
-    if (glyphNodes.length !== 1) return null;
-
-    const [node] = glyphNodes;
+    const node = this.editing.node("glyph");
     if (!node) return null;
 
     const layer = this.layerForGlyph(node.glyphId, sourceId);
@@ -2178,10 +2096,7 @@ export class Editor {
     const sourceId = this.activeSourceId;
     if (!sourceId) return;
 
-    const glyphNodes = this.scene.nodesOfKind("glyph");
-    if (glyphNodes.length !== 1) return;
-
-    const [node] = glyphNodes;
+    const node = this.editing.node("glyph");
     if (!node) return;
 
     const layer = this.layerForGlyph(node.glyphId, sourceId);

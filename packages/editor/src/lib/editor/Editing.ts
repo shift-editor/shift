@@ -3,6 +3,8 @@ import type { ShiftStore } from "../store/ShiftStore";
 import { uniqueInOrder } from "../utils/utils";
 import { currentEditingId } from "../../types/editing";
 import type { ShiftEditorRecord } from "../../types/records";
+import type { ShiftNode } from "../../types/node";
+import type { Scene } from "./Scene";
 import type { NodeId } from "@shift/types";
 
 export interface EditingState {
@@ -22,14 +24,16 @@ function emptyEditingState(): EditingState {
  */
 export class Editing {
   readonly #store: ShiftStore<ShiftEditorRecord>;
+  readonly #scene: Scene;
   readonly #nodeIds: Signal<ReadonlySet<NodeId>>;
   readonly stateCell: Signal<EditingState>;
 
-  constructor(store: ShiftStore<ShiftEditorRecord>) {
+  constructor(store: ShiftStore<ShiftEditorRecord>, scene: Scene) {
     this.#store = store;
+    this.#scene = scene;
     this.stateCell = computed(
       () => {
-        const record = this.#store.cell.value.get(currentEditingId);
+        const record = this.#store.record(currentEditingId);
         if (record?.type !== "editing") return emptyEditingState();
 
         return { nodeIds: record.nodeIds };
@@ -52,6 +56,16 @@ export class Editing {
    */
   get nodeIds(): readonly NodeId[] {
     return [...this.stateCell.peek().nodeIds];
+  }
+
+  /**
+   * Returns the entered node of one kind.
+   *
+   * @returns null when no node of `kind` is entered, or more than one is.
+   */
+  node<K extends ShiftNode["kind"]>(kind: K): Extract<ShiftNode, { kind: K }> | null {
+    const entered = this.nodeIds.flatMap((id) => this.#scene.nodeOfKind(id, kind) ?? []);
+    return entered.length === 1 ? (entered[0] ?? null) : null;
   }
 
   has(nodeId: NodeId): boolean {

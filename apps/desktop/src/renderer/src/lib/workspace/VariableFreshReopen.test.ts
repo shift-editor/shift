@@ -18,6 +18,7 @@ import {
   withExternalAxisValue,
 } from "@shift/editor/variation";
 import { TestEditor } from "@/testing/TestEditor";
+import { setGlyphMetric, sidebarGlyphs } from "@shift/editor/ui";
 
 interface VariableFixture {
   axisId: AxisId;
@@ -48,7 +49,7 @@ async function authorVariableFont(editor: TestEditor): Promise<VariableFixture> 
   });
   if (!inserted) throw new Error("Expected regular contour");
 
-  editor.setXAdvance(400);
+  setGlyphMetric(editor, sidebarGlyphs(editor), "advance", 400);
   await editor.settle();
   const glyphId = editor.glyphRecord?.id;
   const regularLayer = editor.requireGlyphLayer();
@@ -98,7 +99,7 @@ async function authorVariableFont(editor: TestEditor): Promise<VariableFixture> 
     start: { x: boldPoint.x + 4, y: boldPoint.y },
     end: { x: boldPoint.x + 44, y: boldPoint.y + 20 },
   });
-  editor.setXAdvance(700);
+  setGlyphMetric(editor, sidebarGlyphs(editor), "advance", 700);
   await editor.settle();
 
   const bold = editor.font.source(boldSourceId);
