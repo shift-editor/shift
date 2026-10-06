@@ -29,6 +29,11 @@ export interface TextEditingRecord {
   readonly nodeId: NodeId;
   readonly anchor: TextCaret;
   readonly focus: TextCaret;
+  /**
+   * Whether Text mode is showing this caret. An inactive record keeps the
+   * caret and selection for the next visit.
+   */
+  readonly active: boolean;
 }
 
 /** Stores document-scoped proof text content. */

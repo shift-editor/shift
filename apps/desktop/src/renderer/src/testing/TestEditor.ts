@@ -1,4 +1,4 @@
-import { glyphTextItem } from "@shift/editor/text";
+import { editRunItem, glyphTextItem } from "@shift/editor/text";
 /**
  * TestEditor — a real Editor with input simulation for testing.
  *
@@ -172,7 +172,7 @@ export class TestEditor extends Editor {
   /** The glyph edited in place in {@link textRun}. */
   get runGlyph(): GlyphNode | null {
     const run = this.textRun;
-    return run ? this.runChildren.glyph(run) : null;
+    return run ? this.nodeDefinition("textRun").childGlyph(run) : null;
   }
 
   /** Opens a glyph as the editor route does: the canvas run becomes that glyph, edited in place. */
@@ -188,7 +188,7 @@ export class TestEditor extends Editor {
     });
     const item = glyphTextItem(glyph.name, glyph.entry.unicodes[0] ?? null);
     this.text.setItems(record.id, [item]);
-    const child = this.runChildren.editItem(run, item.id, this.font.defaultSource.id);
+    const child = editRunItem(this, run, item.id, this.font.defaultSource.id);
     if (!child) throw new Error("placed glyph is not loaded");
     this.editing.enter(child.id);
   }

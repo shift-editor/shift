@@ -19,6 +19,7 @@ import {
   wordCluster,
 } from "./edit";
 import type { Editor } from "../editor/Editor";
+import { removeDetachedChildren } from "./runChildren";
 
 /** Owns the session caret for one placed text node; text content belongs to Text. */
 export class TextEditing {
@@ -33,7 +34,7 @@ export class TextEditing {
     this.stateCell = computed(
       () => {
         const record = store.cell.value.get(currentTextEditingId);
-        return record?.type === "textEditing" ? record : null;
+        return record?.type === "textEditing" && record.active ? record : null;
       },
       { name: "editor.textEditing" },
     );
@@ -58,13 +59,41 @@ export class TextEditing {
       nodeId,
       anchor,
       focus: caret,
+      active: true,
     });
     this.#goalX = null;
   }
 
-  /** Ends transient text focus; callers decide whether the change is history-bearing. */
+  /**
+   * Shows the caret and selection kept from the last visit to a run, or begins at `caret`.
+   *
+   * @remarks
+   * Falls back to `caret` when the kept record is for another run or its
+   * items no longer exist.
+   */
+  resume(nodeId: NodeId, caret: TextCaret): void {
+    const kept = this.#store.get(currentTextEditingId);
+    const node = this.#editor.scene.nodeOfKind(nodeId, "textRun");
+    const items = node ? (this.#editor.text.run(node.runId)?.items ?? []) : [];
+    const exists = (candidate: TextCaret) =>
+      candidate === null || items.some((item) => item.id === candidate);
+    if (
+      kept?.type === "textEditing" &&
+      kept.nodeId === nodeId &&
+      exists(kept.anchor) &&
+      exists(kept.focus)
+    ) {
+      this.#store.put({ ...kept, active: true });
+      this.#goalX = null;
+      return;
+    }
+    this.begin(nodeId, caret);
+  }
+
+  /** Hides the caret and keeps it for {@link resume}; callers decide whether the change is history-bearing. */
   end(): void {
-    this.#store.delete(currentTextEditingId);
+    const kept = this.#store.get(currentTextEditingId);
+    if (kept?.type === "textEditing") this.#store.put({ ...kept, active: false });
     this.#goalX = null;
   }
 
@@ -201,7 +230,7 @@ export class TextEditing {
     if (!result) return;
     const write = () => {
       this.#editor.text.setItems(run.id, result.items);
-      this.#editor.runChildren.removeDetached(run.id);
+      removeDetachedChildren(this.#editor, run.id);
       this.#store.put({ ...state, anchor: result.anchor, focus: result.focus });
     };
     this.#editor.history.captureOrJoin(label, write);

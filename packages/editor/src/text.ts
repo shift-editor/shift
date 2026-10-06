@@ -1,4 +1,5 @@
 export { TextEditing } from "./lib/text/TextEditing";
+export { editRunItem, removeDetachedChildren } from "./lib/text/runChildren";
 export {
   caretForCluster,
   clusterForCaret,

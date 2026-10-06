@@ -9,10 +9,10 @@ Proof text is document-scoped item content projected through one implicit page r
 - `TextRunRecord.items` stores stable, client-minted `TextItemId` identities for glyphs and linebreaks. Indices/clusters are derived, never identity. `/name` parsing belongs to paste/import, not the stored representation.
 - Until pages exist, the canvas has one run. The desktop editor route creates it at the scene origin on the first open and replaces its text with each glyph opened from the grid; that interim policy lives in the route, not the editor package. Users never place runs and the Text tool never creates one.
 - The edited glyph is the run's child `GlyphNode { parentId: run, itemId }`. `TextRunNodeDefinition.childPosition` places it at its item's layout position, and the run skips drawing items a child occupies. A run has at most one child; switching replaces it (delete + create) so per-node caches never see a node change glyph.
-- `Text` owns records and layout only. A run's child glyph node goes through `RunChildren`, which takes the run explicitly and assumes nothing about how many runs exist. Callers that remove items call `RunChildren.removeDetached` in the same history capture, so undo restores an item and its child together.
+- `Text` owns records and layout only. `TextRunNodeDefinition` owns the read side of a run's child (`childPosition`, `childGlyph`, skipping its item); node definitions never write. The writes are the `runChildren` functions, which take the run explicitly and assume nothing about how many runs exist. Callers that remove items call `removeDetachedChildren` in the same history capture, so undo restores an item and its child together.
 - `Text.layoutCell(runId)` is the shared reactive layout, derived from items, source, axis location, completed glyph acquisition, and each laid-out glyph's advance. A missing glyph is loaded asynchronously; no layout or draw path starts I/O. Even an empty run has a caret at its origin.
 - `TextEditingRecord` owns the current node, anchor, and focus for one session. A `TextCaret` is the ID of the preceding item or null for the run start. Its cluster is `indexOf(itemId) + 1`; linebreaks count. Vertical goal-x is transient.
-- Text mode suspends glyph editing (`Editing.suspend`), so every glyph draws filled, and restores it on exit. The caret and selection from the last visit are kept in document tool state because tool instances do not outlive an activation.
+- Text mode suspends glyph editing (`Editing.suspend`), so every glyph draws filled, and restores it on exit. Leaving Text mode keeps the `TextEditingRecord` with `active: false`, so the next visit resumes the caret and selection; `TextEditing.stateCell` only exposes an active record. Undo outside Text mode restores the record inactive.
 - Two hit paths, never mixed: `TextRunNodeDefinition.hit` returns a text target only on a glyph's outline (fill or contour within hit radius), used by Select hover, click-select, and double-click. `TextRunNodeDefinition.caretAt` returns the nearest caret cluster in the line boxes and is called by the Text tool directly. Node definitions never branch on the active tool.
 - `TextItemId` is a selectable `ShiftId`: `Editor.object` resolves it to a `textItem` object, and hover/selection go through `editor.hover` / `editor.selection`. Text items report no bounds, so they never get the transform box.
 - `EditorHistory` captures complete text-run, node, and session-record replacements, never a second text undo stack. Entering or switching the edited glyph is its own undo step; plain selection is not.
@@ -22,7 +22,7 @@ Proof text is document-scoped item content projected through one implicit page r
 - `TextItemId` — stable branded identity of one glyph or linebreak item; also a selectable id.
 - `TextCaret` — ID of the preceding item, or null at the run start.
 - `TextRunRecord` — document-scoped item content; `TextRunNode` — its placed occurrence.
-- `RunChildren` — a run's child glyph node: which item it edits in place.
+- `PlacedGlyph` — a positioned glyph with its layout-local origin; `TextLayout.placedGlyphs` is the one walk over lines and runs.
 - `TextEditingRecord` — session-only node, anchor, and focus.
 - `TextLayout` and `Caret` — derived geometry and cluster-based navigation.
 
@@ -32,7 +32,7 @@ Proof text is document-scoped item content projected through one implicit page r
 - `TextEditing.ts`: session caret, navigation, selected items, history boundaries.
 - `edit.ts`: pure splice, deletion, selection, word, and selection-rectangle operations.
 - `layout/`: TextLayout, Positioner (literal LTR advances), and Caret.
-- `RunChildren.ts`: a run's child glyph node, editing an item in place, removing children whose item is gone.
+- `runChildren.ts`: `editRunItem` and `removeDetachedChildren`, the writes to a run's child glyph node.
 - `apps/desktop/src/renderer/src/views/Editor.tsx`: the interim one-run open policy.
 - `lib/nodes/TextRunNodeDefinition.ts`: scaled presentation, child placement, outline hits, caret lookup.
 - `lib/objects/TextItemObject.ts`: resolved object for a selected or hovered item.
@@ -46,9 +46,9 @@ Pointer actions use `ToolManager`'s click/drag history capture. Keyboard edits c
 
 ## Workflow recipes
 
-To add a text command, translate the current stable caret to a cluster, perform a pure item edit, then write the run, `RunChildren.removeDetached`, and the session record inside `EditorHistory.captureOrJoin`, which joins ToolManager's pointer capture or opens one for keyboard edits.
+To add a text command, translate the current stable caret to a cluster, perform a pure item edit, then write the run, `removeDetachedChildren`, and the session record inside `EditorHistory.captureOrJoin`, which joins ToolManager's pointer capture or opens one for keyboard edits.
 
-To change which glyph is edited, call `RunChildren.editItem(run, itemId, sourceId)` and `Editing.enter` the returned node inside one capture. To add a glyph first, use `Text.insertAfter`.
+To change which glyph is edited, call `editRunItem(editor, run, itemId, sourceId)` and `Editing.enter` the returned node inside one capture. To add a glyph first, use `Text.insertAfter`.
 
 ## Gotchas
 

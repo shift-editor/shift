@@ -49,6 +49,15 @@ describe("page run text editing", () => {
     expect(editor.textEditing.state).toMatchObject({ anchor: child.itemId, focus: child.itemId });
   });
 
+  it("undo outside Text mode keeps the caret without showing it", async () => {
+    editor.textEditing.insert([glyphTextItem("A", 65)]);
+    editor.escape();
+    await editor.undo();
+    expect(editor.textEditing.state).toBeNull();
+    editor.selectTool("text");
+    expect(editor.textEditing.state).toMatchObject({ focus: child.itemId, active: true });
+  });
+
   it("inserts text and replays content and caret through undo and redo", async () => {
     editor.textEditing.insert([glyphTextItem("A", 65)]);
     const item = items()[1]!;

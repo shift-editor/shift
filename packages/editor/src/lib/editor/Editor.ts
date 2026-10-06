@@ -92,7 +92,6 @@ import type { DeleteMode, GlyphGeometrySelection } from "../../types/glyph";
 import type { Modifiers } from "../tools/core/GestureDetector";
 import { Text } from "../text/Text";
 import { TextEditing } from "../text/TextEditing";
-import { RunChildren } from "../text/RunChildren";
 
 import type { ToolManifest, ToolShortcutEntry } from "../../types/tools";
 import type { ToolStateScope } from "../../types/editor";
@@ -181,8 +180,6 @@ export class Editor {
   readonly sessionMode: FontSessionMode;
   readonly scene: Scene;
   readonly text: Text;
-  /** Text runs' child glyph nodes: the glyph each run edits in place. */
-  readonly runChildren: RunChildren;
   readonly textEditing: TextEditing;
   readonly #nodeDefinitions: NodeDefinitionByKind;
   readonly #store: ShiftStore<ShiftEditorRecord>;
@@ -272,7 +269,6 @@ export class Editor {
     );
     this.text = new Text(this.#store, this);
     this.textEditing = new TextEditing(this.#store, this);
-    this.runChildren = new RunChildren(this);
 
     const GlyphDefinition = options.nodeDefinitions?.glyph ?? GlyphNodeDefinition;
     const TextRunDefinition = options.nodeDefinitions?.textRun ?? TextRunNodeDefinition;
@@ -821,17 +817,18 @@ export class Editor {
     }
 
     if (isTextItemId(id)) {
-      for (const node of this.scene.nodesOfKind("textRun")) {
-        const item = this.text.run(node.runId)?.items.find((candidate) => candidate.id === id);
-        if (!item) continue;
+      const location = this.text.itemLocation(id);
+      const node = location
+        ? this.scene.nodesOfKind("textRun").find((run) => run.runId === location.run.id)
+        : null;
+      if (!location || !node) return null;
 
-        const glyphId =
-          item.kind === "glyph"
-            ? (this.font.recordForName(item.glyphName as GlyphName)?.id ?? null)
-            : null;
-        return new TextItemObject(node, id, glyphId);
-      }
-      return null;
+      const { item } = location;
+      const glyphId =
+        item.kind === "glyph"
+          ? (this.font.recordForName(item.glyphName as GlyphName)?.id ?? null)
+          : null;
+      return new TextItemObject(node, id, glyphId);
     }
 
     return null;

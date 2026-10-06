@@ -1,17 +1,26 @@
 import { NodeDefinition } from "./NodeDefinition";
 import { OutlineRenderer } from "../editor/rendering/Outline";
-import { Caret, type TextLayout } from "../text/layout";
+import { Caret, type PlacedGlyph, type TextLayout } from "../text/layout";
 import { clusterForCaret } from "../text/edit";
 import type { LocalBounds, LocalPoint } from "../../types/coordinates";
 import { localBounds } from "../editor/spaces";
-import type { ShiftNode, TextRunNode } from "../../types/node";
+import type { GlyphNode, ShiftNode, TextRunNode } from "../../types/node";
 import type { RenderContext, RenderPass } from "../../types/rendering";
 import type { PointerTarget } from "../../types/target";
+import type { GlyphRenderModel } from "../model/Glyph";
 import { Mat, type Point2D } from "@shift/geo";
-import { isTextItemId, type TextItemId } from "@shift/types";
+import { isTextItemId, type GlyphId, type TextItemId } from "@shift/types";
 import { track } from "../signals";
 
-/** Projects one shared proof run through a placed, scaled scene node. */
+/**
+ * Projects one shared proof run through a placed, scaled scene node.
+ *
+ * @remarks
+ * A run edits at most one of its glyphs in place through a child `GlyphNode`
+ * pointing at an item. This definition owns the read side of that: it places
+ * the child at its item and stops drawing and hitting that item. Writes that
+ * change the child live in `lib/text/runChildren`.
+ */
 export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
   readonly kind: TextRunNode["kind"] = "textRun";
   readonly #outline = new OutlineRenderer();
@@ -32,11 +41,18 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     if (child.kind !== "glyph" || !child.itemId) return null;
     const layoutCell = this.editor.text.layoutCell(node.runId);
     track(layoutCell);
-    const layout = layoutCell.peek();
-    const origin = layout && itemOrigin(layout, child.itemId);
-    if (!origin) return null;
+    const placed = layoutCell.peek()?.placedGlyphForItem(child.itemId);
+    if (!placed) return null;
 
-    return Mat.applyToPoint(this.unitsTransform(node), origin);
+    return Mat.applyToPoint(this.unitsTransform(node), placed.origin);
+  }
+
+  /** Returns the run's child glyph node, the glyph edited in place, or null. */
+  childGlyph(node: TextRunNode): GlyphNode | null {
+    for (const child of this.editor.scene.children(node.id)) {
+      if (child.kind === "glyph") return child;
+    }
+    return null;
   }
 
   bounds(node: TextRunNode): LocalBounds | null {
@@ -59,40 +75,18 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
    * Hit-tests the run's glyph outlines: inside a fill or within hit radius of a contour.
    *
    * @remarks
-   * Items drawn by a child are skipped; the child answers for its own glyph.
-   * Later glyphs win. Caret placement uses {@link caretAt} instead.
+   * The child's item is skipped; the child answers for its own glyph. Later
+   * glyphs win where outlines overlap. Caret placement uses {@link caretAt}.
    */
   hit(node: TextRunNode, point: LocalPoint): PointerTarget | null {
     const layout = this.editor.text.layoutCell(node.runId).peek();
     if (!layout) return null;
 
-    const skip = this.#childItemIds(node);
     const radius = this.editor.hitRadius / this.#scale(node);
     let target: PointerTarget | null = null;
-    for (const line of layout.lines) {
-      let runBase = layout.origin.x;
-      for (const run of line.runs) {
-        for (const glyph of run.glyphs) {
-          const itemId = glyph.sourceItemIds[0];
-          if (!glyph.glyphId || !itemId || skip.has(itemId)) continue;
-          const model = this.editor
-            .glyphForId(glyph.glyphId)
-            ?.renderModelAt(this.editor.externalLocationCell, this.editor.activeSourceIdCell);
-          if (!model) continue;
-
-          const local = {
-            x: point.x - (runBase + glyph.origin.x + glyph.xOffset),
-            y: point.y - (line.y + glyph.origin.y + glyph.yOffset),
-          };
-          const onOutline = model.contours.some((contour) =>
-            contour.segments().some((segment) => segment.hit(local, radius)),
-          );
-          if (onOutline || model.fillHitsAt(local).length > 0) {
-            target = { kind: "text", node, point, itemId };
-          }
-        }
-        runBase += run.advance;
-      }
+    for (const { placed, itemId, model } of this.#runGlyphs(node, layout)) {
+      const local = { x: point.x - placed.origin.x, y: point.y - placed.origin.y };
+      if (hitsOutline(model, local, radius)) target = { kind: "text", node, point, itemId };
     }
     return target;
   }
@@ -136,76 +130,85 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     if (!layout) return;
 
     switch (pass) {
-      case "background": {
-        const editing = this.editor.textEditing.stateCell.peek();
-        if (editing?.nodeId !== node.id) break;
-        for (const rect of this.editor.textEditing.selectionRects) {
-          ctx.canvas.fillRect(
-            rect.x,
-            rect.bottom,
-            rect.width,
-            rect.top - rect.bottom,
-            ctx.canvas.theme.textRun.selectionFill,
-          );
-        }
-        break;
-      }
+      case "background":
+        this.#drawSelection(node, ctx);
+        return;
       case "content":
-        this.#drawGlyphs(ctx, layout, this.#childItemIds(node), this.#outlinedItemIds());
-        break;
-      case "controls": {
-        const editing = this.editor.textEditing.stateCell.peek();
-        const run = this.editor.text.run(node.runId);
-        if (editing?.nodeId !== node.id || !run) break;
-        const caret = Caret.atCluster(layout, clusterForCaret(run.items, editing.focus)).position();
-        ctx.canvas.line(
-          { x: caret.x, y: caret.y + layout.metrics.descender },
-          { x: caret.x, y: caret.y + layout.metrics.ascender },
-          ctx.canvas.theme.textRun.cursorColor,
-          ctx.canvas.theme.textRun.cursorWidthPx,
-        );
-        break;
-      }
+        this.#drawGlyphs(node, ctx, layout);
+        return;
+      case "controls":
+        this.#drawCaret(node, ctx, layout);
+        return;
       case "overlay":
-        break;
+        return;
     }
   }
 
-  #drawGlyphs(
-    ctx: RenderContext,
-    layout: TextLayout,
-    skip: ReadonlySet<TextItemId>,
-    outlined: ReadonlySet<TextItemId>,
-  ): void {
-    for (const line of layout.lines) {
-      let runBase = layout.origin.x;
-      for (const run of line.runs) {
-        for (const glyph of run.glyphs) {
-          if (!glyph.glyphId || glyph.sourceItemIds.some((id) => skip.has(id))) continue;
-          const renderModel = this.editor
-            .glyphForId(glyph.glyphId)
-            ?.renderModelAt(this.editor.externalLocationCell, this.editor.activeSourceIdCell);
-          if (!renderModel) continue;
-          renderModel.trackShape();
-          ctx.canvas.save();
-          ctx.canvas.translate(
-            runBase + glyph.origin.x + glyph.xOffset,
-            line.y + glyph.origin.y + glyph.yOffset,
-          );
-          const hoverStroke = {
-            color: ctx.canvas.theme.textRun.hoverOutline,
-            widthPx: ctx.canvas.theme.textRun.hoverOutlineWidthPx,
-          };
-          const isOutlined = glyph.sourceItemIds.some((id) => outlined.has(id));
-          this.#outline.draw(ctx.canvas, renderModel, {
-            fill: ctx.canvas.theme.glyph.fill,
-            stroke: isOutlined ? hoverStroke : null,
-          });
-          ctx.canvas.restore();
-        }
-        runBase += run.advance;
-      }
+  #drawSelection(node: TextRunNode, ctx: RenderContext): void {
+    if (this.editor.textEditing.stateCell.peek()?.nodeId !== node.id) return;
+    for (const rect of this.editor.textEditing.selectionRects) {
+      ctx.canvas.fillRect(
+        rect.x,
+        rect.bottom,
+        rect.width,
+        rect.top - rect.bottom,
+        ctx.canvas.theme.textRun.selectionFill,
+      );
     }
+  }
+
+  #drawGlyphs(node: TextRunNode, ctx: RenderContext, layout: TextLayout): void {
+    const outlined = this.#outlinedItemIds();
+    const outlineStroke = {
+      color: ctx.canvas.theme.textRun.hoverOutline,
+      widthPx: ctx.canvas.theme.textRun.hoverOutlineWidthPx,
+    };
+    for (const { placed, itemId, model } of this.#runGlyphs(node, layout)) {
+      model.trackShape();
+      ctx.canvas.save();
+      ctx.canvas.translate(placed.origin.x, placed.origin.y);
+      this.#outline.draw(ctx.canvas, model, {
+        fill: ctx.canvas.theme.glyph.fill,
+        stroke: outlined.has(itemId) ? outlineStroke : null,
+      });
+      ctx.canvas.restore();
+    }
+  }
+
+  #drawCaret(node: TextRunNode, ctx: RenderContext, layout: TextLayout): void {
+    const editing = this.editor.textEditing.stateCell.peek();
+    const run = this.editor.text.run(node.runId);
+    if (editing?.nodeId !== node.id || !run) return;
+
+    const caret = Caret.atCluster(layout, clusterForCaret(run.items, editing.focus)).position();
+    ctx.canvas.line(
+      { x: caret.x, y: caret.y + layout.metrics.descender },
+      { x: caret.x, y: caret.y + layout.metrics.ascender },
+      ctx.canvas.theme.textRun.cursorColor,
+      ctx.canvas.theme.textRun.cursorWidthPx,
+    );
+  }
+
+  /** The glyphs the run draws itself: every loaded glyph except the child's item. */
+  *#runGlyphs(
+    node: TextRunNode,
+    layout: TextLayout,
+  ): Iterable<{ placed: PlacedGlyph; itemId: TextItemId; model: GlyphRenderModel }> {
+    const childItemId = this.childGlyph(node)?.itemId;
+    for (const placed of layout.placedGlyphs) {
+      const itemId = placed.glyph.sourceItemIds[0];
+      if (!itemId || itemId === childItemId || !placed.glyph.glyphId) continue;
+      const model = this.#model(placed.glyph.glyphId);
+      if (model) yield { placed, itemId, model };
+    }
+  }
+
+  #model(glyphId: GlyphId): GlyphRenderModel | null {
+    return (
+      this.editor
+        .glyphForId(glyphId)
+        ?.renderModelAt(this.editor.externalLocationCell, this.editor.activeSourceIdCell) ?? null
+    );
   }
 
   /** Hovered and selected items, which the run outlines. */
@@ -219,34 +222,15 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     return ids;
   }
 
-  /** Items drawn by child glyph nodes instead of the run. */
-  #childItemIds(node: TextRunNode): ReadonlySet<TextItemId> {
-    const ids = new Set<TextItemId>();
-    for (const child of this.editor.scene.children(node.id)) {
-      if (child.kind === "glyph" && child.itemId) ids.add(child.itemId);
-    }
-    return ids;
-  }
-
   #scale(node: TextRunNode): number {
     return node.size / this.editor.font.metricsCell.peek().unitsPerEm;
   }
 }
 
-/** Returns the drawn origin of an item's glyph in run units, or null when the item has no positioned glyph. */
-function itemOrigin(layout: TextLayout, itemId: TextItemId): Point2D | null {
-  for (const line of layout.lines) {
-    let runBase = layout.origin.x;
-    for (const run of line.runs) {
-      for (const glyph of run.glyphs) {
-        if (!glyph.sourceItemIds.includes(itemId)) continue;
-        return {
-          x: runBase + glyph.origin.x + glyph.xOffset,
-          y: line.y + glyph.origin.y + glyph.yOffset,
-        };
-      }
-      runBase += run.advance;
-    }
-  }
-  return null;
+/** Whether a glyph-local point is inside a fill or within `radius` of a contour. */
+function hitsOutline(model: GlyphRenderModel, point: Point2D, radius: number): boolean {
+  const onContour = model.contours.some((contour) =>
+    contour.segments().some((segment) => segment.hit(point, radius)),
+  );
+  return onContour || model.fillHitsAt(point).length > 0;
 }

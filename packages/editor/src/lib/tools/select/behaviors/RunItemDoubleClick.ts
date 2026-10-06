@@ -1,3 +1,4 @@
+import { editRunItem } from "../../../text/runChildren";
 import type { ToolContext } from "../../core/Behavior";
 import type { DoubleClickEvent } from "../../core/GestureDetector";
 import type { SelectBehavior, SelectState } from "../types";
@@ -15,7 +16,7 @@ export class RunItemDoubleClick implements SelectBehavior {
     const editor = ctx.editor;
     const sourceId = editor.activeSourceId ?? editor.font.defaultSource.id;
     const enter = () => {
-      const child = editor.runChildren.editItem(run, itemId, sourceId);
+      const child = editRunItem(editor, run, itemId, sourceId);
       if (!child) return false;
       editor.selection.clear();
       editor.hover.clear();

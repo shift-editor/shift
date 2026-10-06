@@ -11,7 +11,7 @@ import { Canvas } from "@/components/editor/Canvas";
 import { CanvasContextMenu } from "@/components/editor/CanvasContextMenu";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { localBounds } from "@shift/editor/spaces";
-import { glyphTextItem } from "@shift/editor/text";
+import { editRunItem, glyphTextItem, removeDetachedChildren } from "@shift/editor/text";
 import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
 import { useFocusZone, ZoneContainer } from "@/context/FocusZoneContext";
 import { KeyboardRouter } from "@/lib/keyboard";
@@ -58,7 +58,7 @@ export const Editor = () => {
       });
     }
     const textRun = run;
-    const previous = editor.runChildren.glyph(textRun);
+    const previous = editor.nodeDefinition("textRun").childGlyph(textRun);
     const open = () => {
       if (previous?.glyphId === glyph.id) {
         editor.editing.enter(previous.id);
@@ -66,8 +66,8 @@ export const Editor = () => {
       }
       const item = glyphTextItem(glyph.name, glyph.entry.unicodes[0] ?? null);
       editor.text.setItems(textRun.runId, [item]);
-      editor.runChildren.removeDetached(textRun.runId);
-      const child = editor.runChildren.editItem(textRun, item.id, sourceId);
+      removeDetachedChildren(editor, textRun.runId);
+      const child = editRunItem(editor, textRun, item.id, sourceId);
       if (child) editor.editing.enter(child.id);
       return child;
     };
@@ -105,7 +105,7 @@ export const Editor = () => {
     if (!glyph) return;
 
     const run = editor.scene.nodesOfKind("textRun")[0];
-    const node = run ? editor.runChildren.glyph(run) : null;
+    const node = run ? editor.nodeDefinition("textRun").childGlyph(run) : null;
     if (!node) return;
 
     const sourceId = activeSourceId ?? editor.font.defaultSource.id;

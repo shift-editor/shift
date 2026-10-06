@@ -1,4 +1,4 @@
-import { glyphTextItem } from "../../../text/layout";
+import { editRunItem } from "../../../text/runChildren";
 import type { ToolContext } from "../../core/Behavior";
 import type { DoubleClickEvent } from "../../core/GestureDetector";
 import type { SelectBehavior, SelectState } from "../types";
@@ -7,8 +7,9 @@ import type { SelectBehavior, SelectState } from "../types";
  * Double-clicking a component opens its base glyph next to the edited glyph.
  *
  * @remarks
- * Inserts the base glyph into the page run right after the edited glyph's item
- * and edits it, as one undo step. Loads the base glyph first when needed.
+ * Inserts the base glyph into the run right after the edited glyph's item and
+ * edits it, as one undo step. A drawn component's base is always loaded:
+ * `Font.loadGlyphs` loads component bases with the glyph that uses them.
  */
 export class ComponentDoubleClick implements SelectBehavior {
   onDoubleClick(
@@ -19,33 +20,22 @@ export class ComponentDoubleClick implements SelectBehavior {
     if (state.type !== "ready" || event.target.kind !== "component") return false;
 
     const editor = ctx.editor;
-    const node = editor.scene.nodeOfKind(event.target.nodeId, "glyph");
-    const run = editor.scene.nodeOfKind(node?.parentId ?? null, "textRun");
-    const object = editor.object(event.target.componentId);
-    if (!node?.itemId || !run || object?.kind !== "component") return false;
+    const edited = editor.scene.nodeOfKind(event.target.nodeId, "glyph");
+    const run = editor.scene.nodeOfKind(edited?.parentId ?? null, "textRun");
+    const component = editor.object(event.target.componentId);
+    if (!edited?.itemId || !run || component?.kind !== "component") return false;
 
-    const afterId = node.itemId;
-    const baseGlyphId = object.component.glyphId;
-    const sourceId = node.sourceId;
-    const open = () => {
-      const record = editor.font.recordForId(baseGlyphId);
-      if (!record) return;
-      const item = glyphTextItem(record.name, record.unicodes[0] ?? null);
-      if (!editor.text.insertAfter(run.runId, afterId, [item])) return;
-      const child = editor.runChildren.editItem(run, item.id, sourceId);
-      if (!child) return;
+    const afterId = edited.itemId;
+    const base = editor.text.glyphItem(component.component.glyphId);
+    if (!base) return false;
+
+    return editor.history.captureOrJoin("Open component base", () => {
+      if (!editor.text.insertAfter(run.runId, afterId, [base])) return false;
+      const child = editRunItem(editor, run, base.id, edited.sourceId);
+      if (!child) return false;
       editor.selection.clear();
       editor.editing.enter(child.id);
-    };
-
-    if (editor.glyphForId(baseGlyphId)) {
-      editor.history.captureOrJoin("Open component base", open);
-    } else {
-      void editor.font
-        .loadGlyph(baseGlyphId)
-        .then(() => editor.history.capture("Open component base", open))
-        .catch((error: unknown) => console.error("failed to load component base glyph", error));
-    }
-    return true;
+      return true;
+    });
   }
 }

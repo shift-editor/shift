@@ -1,5 +1,5 @@
 export { TextLayout } from "./TextLayout";
-export type { TextLayoutParams } from "./TextLayout";
+export type { PlacedGlyph, TextLayoutParams } from "./TextLayout";
 export { Caret } from "./Caret";
 export { Positioner } from "./Positioner";
 export { glyphTextItem, lineBreakTextItem } from "./types";
@@ -7,7 +7,6 @@ export type {
   CaretPosition,
   TextItem,
   Direction,
-  GlyphAnchor,
   GlyphTextItem,
   Hit,
   Line,
@@ -16,5 +15,4 @@ export type {
   PositionedRun,
   SegmentedRun,
   TextItemId,
-  TextRunId,
 } from "./types";

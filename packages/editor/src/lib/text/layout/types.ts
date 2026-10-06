@@ -1,13 +1,7 @@
 import type { Bounds, Point2D } from "@shift/geo";
 import { mintTextItemId, type GlyphId, type SourceMetrics, type TextItemId } from "@shift/types";
 
-export type TextRunId = string;
 export type { TextItemId };
-
-export interface GlyphAnchor {
-  runId: TextRunId;
-  itemId: TextItemId;
-}
 
 /**
  * A single item in a text buffer. Either a glyph (typed character or picked
