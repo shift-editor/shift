@@ -22,6 +22,8 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
+mod change_set;
+
 /// Font lib key holding tracked Hyperglot language ids (for example
 /// `eng-latin`) as a plist array of strings.
 pub const LANGUAGES_LIB_KEY: &str = "com.shift.languages";
@@ -1539,6 +1541,15 @@ fn validate_source(
             second: source.id(),
         });
     }
+
+    validate_source_values(source, axes, definitions)
+}
+
+fn validate_source_values(
+    source: &Source,
+    axes: &[Axis],
+    definitions: &[MetricDefinition],
+) -> CoreResult<()> {
     for (axis_id, value) in source.location().iter() {
         if !axes.iter().any(|axis| axis.id() == *axis_id) {
             return Err(CoreError::AxisNotFound(axis_id.clone()));

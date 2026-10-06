@@ -1,5 +1,33 @@
+use std::sync::Arc;
+
 use shift_font::test_support::sample_font;
 use shift_store::ShiftStore;
+
+fn source_collection(font: &shift_font::Font) -> shift_font::SourceCollection {
+    shift_font::SourceCollection {
+        sources: font.sources().to_vec(),
+        default_source_id: font.default_source_id(),
+    }
+}
+
+fn glyph_created(glyph: &shift_font::Glyph) -> shift_font::FontChange {
+    shift_font::FontChange::Glyph(shift_font::Replacement::new(None, Some(glyph.clone())))
+}
+
+fn glyph_deleted(glyph: &shift_font::Glyph) -> shift_font::FontChange {
+    shift_font::FontChange::Glyph(shift_font::Replacement::new(Some(glyph.clone()), None))
+}
+
+fn layer_deleted(
+    glyph_id: shift_font::GlyphId,
+    layer: &shift_font::GlyphLayer,
+) -> shift_font::FontChange {
+    shift_font::FontChange::Layer {
+        glyph_id,
+        layer: shift_font::Replacement::new(Some(Arc::new(layer.clone())), None),
+        structural: true,
+    }
+}
 
 #[test]
 fn recovery_preserves_store_only_font_and_source_fields() {
@@ -32,21 +60,21 @@ fn recovery_preserves_store_only_font_and_source_fields() {
         .expect("publish canonical document");
     drop(working);
 
-    let mut post = original;
+    let mut post = original.clone();
     post.metadata_mut().family_name = Some("Recovered Sans".to_string());
     let source_id = shift_font::SourceId::from_raw("regular");
     post.source_mut(source_id.clone())
         .expect("regular source")
         .set_line_gap(Some(99.0));
-    let source = post
-        .sources()
-        .iter()
-        .find(|source| source.id() == source_id)
-        .expect("updated source")
-        .clone();
     let change = shift_font::FontChangeSet::new(vec![
-        shift_font::FontChange::font_metadata_updated(post.metadata()),
-        shift_font::FontChange::source_updated(&source),
+        shift_font::FontChange::Metadata(Box::new(shift_font::Replacement::new(
+            original.metadata().clone(),
+            post.metadata().clone(),
+        ))),
+        shift_font::FontChange::Sources(shift_font::Replacement::new(
+            source_collection(&original),
+            source_collection(&post),
+        )),
     ]);
     let mut document = ShiftStore::open_document_with_recovery(&document_path, &recovery_path)
         .expect("open with recovery");
@@ -99,12 +127,6 @@ fn recovery_overlay_reopens_and_saves_semantic_directory_changes() {
     post.source_mut(regular_source_id.clone())
         .expect("regular source")
         .set_line_gap(Some(99.0));
-    let regular_source = post
-        .sources()
-        .iter()
-        .find(|source| source.id() == regular_source_id)
-        .expect("updated source")
-        .clone();
     post.set_axis_mappings(Vec::new()).expect("clear mappings");
     post.set_named_instances(Vec::new())
         .expect("clear instances");
@@ -113,12 +135,30 @@ fn recovery_overlay_reopens_and_saves_semantic_directory_changes() {
     post.set_metric_definitions(metric_definitions.clone())
         .expect("replace metric definitions");
     let changes = shift_font::FontChangeSet::new(vec![
-        shift_font::FontChange::font_metadata_updated(post.metadata()),
-        shift_font::FontChange::axis_updated(&weight),
-        shift_font::FontChange::axis_mappings_updated(post.axis_mappings()),
-        shift_font::FontChange::named_instances_updated(post.named_instances()),
-        shift_font::FontChange::metric_definitions_updated(&metric_definitions),
-        shift_font::FontChange::source_updated(&regular_source),
+        shift_font::FontChange::Metadata(Box::new(shift_font::Replacement::new(
+            original.metadata().clone(),
+            post.metadata().clone(),
+        ))),
+        shift_font::FontChange::Axes(shift_font::Replacement::new(
+            original.axes().to_vec(),
+            post.axes().to_vec(),
+        )),
+        shift_font::FontChange::AxisMappings(shift_font::Replacement::new(
+            original.axis_mappings().to_vec(),
+            post.axis_mappings().to_vec(),
+        )),
+        shift_font::FontChange::NamedInstances(shift_font::Replacement::new(
+            original.named_instances().to_vec(),
+            post.named_instances().to_vec(),
+        )),
+        shift_font::FontChange::MetricDefinitions(shift_font::Replacement::new(
+            original.metric_definitions().to_vec(),
+            metric_definitions,
+        )),
+        shift_font::FontChange::Sources(shift_font::Replacement::new(
+            source_collection(&original),
+            source_collection(&post),
+        )),
     ]);
 
     let mut document = ShiftStore::open_document_with_recovery(&document_path, &recovery_path)
@@ -150,14 +190,14 @@ fn metric_definition_replacement_preserves_untouched_source_values() {
     let original = sample_font();
     drop(ShiftStore::create_document(&document_path, &original).expect("create document"));
 
-    let mut post = original;
+    let mut post = original.clone();
     let mut definitions = post.metric_definitions().to_vec();
     definitions[0].set_name("Recovered Ascender".to_string());
     post.set_metric_definitions(definitions.clone())
         .expect("replace metric definitions");
-    let changes = shift_font::FontChangeSet::from(
-        shift_font::FontChange::metric_definitions_updated(&definitions),
-    );
+    let changes = shift_font::FontChangeSet::from(shift_font::FontChange::MetricDefinitions(
+        shift_font::Replacement::new(original.metric_definitions().to_vec(), definitions),
+    ));
 
     let mut document = ShiftStore::open_document_with_recovery(&document_path, &recovery_path)
         .expect("open with recovery");
@@ -166,6 +206,59 @@ fn metric_definition_replacement_preserves_untouched_source_values() {
         .expect("write metric recovery change");
     document.save_document().expect("save recovered document");
     drop(document);
+
+    let saved = ShiftStore::open_document(&document_path).expect("open saved document");
+    assert_eq!(saved.load_font_state().unwrap(), post);
+}
+
+#[test]
+fn recovery_persists_collection_reordering_without_entity_updates() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let document_path = temp.path().join("Dogfood.shift");
+    let recovery_path = temp.path().join("recovery.sqlite");
+    let original = sample_font();
+    drop(ShiftStore::create_document(&document_path, &original).expect("create document"));
+
+    let mut post = original.clone();
+    let axis_order = post
+        .axes()
+        .iter()
+        .rev()
+        .map(shift_font::Axis::id)
+        .collect::<Vec<_>>();
+    post.set_axis_order(&axis_order).expect("reorder axes");
+    let source_order = post
+        .sources()
+        .iter()
+        .rev()
+        .map(shift_font::Source::id)
+        .collect::<Vec<_>>();
+    post.set_source_order(&source_order)
+        .expect("reorder sources");
+    let changes = shift_font::FontChangeSet::new(vec![
+        shift_font::FontChange::Axes(shift_font::Replacement::new(
+            original.axes().to_vec(),
+            post.axes().to_vec(),
+        )),
+        shift_font::FontChange::Sources(shift_font::Replacement::new(
+            source_collection(&original),
+            source_collection(&post),
+        )),
+    ]);
+    assert!(changes.entity_changes().is_empty());
+
+    let mut document = ShiftStore::open_document_with_recovery(&document_path, &recovery_path)
+        .expect("open with recovery");
+    document
+        .apply_change_set_with_font(&changes, &post, true)
+        .expect("persist reordered collections");
+    drop(document);
+
+    let mut reopened = ShiftStore::open_document_with_recovery(&document_path, &recovery_path)
+        .expect("reopen recovered document");
+    assert_eq!(reopened.load_font_state().unwrap(), post);
+    reopened.save_document().expect("save recovered document");
+    drop(reopened);
 
     let saved = ShiftStore::open_document(&document_path).expect("open saved document");
     assert_eq!(saved.load_font_state().unwrap(), post);
@@ -258,24 +351,18 @@ fn recovery_overlay_adds_a_new_glyph_and_layer_without_copying_the_directory() {
     glyph.set_layer(layer.clone());
     let mut post = original.clone();
     post.insert_glyph(glyph.clone()).expect("insert glyph");
-    let changes = shift_font::FontChangeSet::new(vec![
-        shift_font::FontChange::glyph_appended(&glyph),
-        shift_font::FontChange::glyph_layer_created(glyph_id.clone(), &layer),
-    ]);
+    let changes = shift_font::FontChangeSet::from(glyph_created(&glyph));
 
     let mut document = ShiftStore::open_document_with_recovery(&document_path, &recovery_path)
         .expect("open with recovery");
-    let non_tail_id = original.glyphs().next().expect("sample glyph").id();
+    let non_tail = original.glyphs().next().expect("sample glyph");
+    let non_tail_id = non_tail.id();
     let tail_id = original.glyphs().last().expect("sample tail glyph").id();
     assert_ne!(non_tail_id, tail_id);
     let mut invalid_post = original.clone();
     invalid_post.pop_glyph(tail_id).expect("pop tail glyph");
     let error = document
-        .apply_change_set_with_font(
-            &shift_font::FontChange::glyph_popped(non_tail_id).into(),
-            &invalid_post,
-            true,
-        )
+        .apply_change_set_with_font(&glyph_deleted(non_tail).into(), &invalid_post, true)
         .unwrap_err();
     assert!(matches!(
         error,
@@ -331,11 +418,7 @@ fn recovery_overlay_adds_a_new_glyph_and_layer_without_copying_the_directory() {
     let mut reverted = post.clone();
     reverted.pop_glyph(glyph_id.clone()).expect("pop glyph");
     document
-        .apply_change_set_with_font(
-            &shift_font::FontChange::glyph_popped(glyph_id.clone()).into(),
-            &reverted,
-            true,
-        )
+        .apply_change_set_with_font(&glyph_deleted(&glyph).into(), &reverted, true)
         .unwrap();
     assert_eq!(
         document.load_font_directory().unwrap().glyph_count(),
@@ -367,11 +450,7 @@ fn recovery_overlay_adds_a_new_glyph_and_layer_without_copying_the_directory() {
     document.save_document().expect("save additions");
 
     document
-        .apply_change_set_with_font(
-            &shift_font::FontChange::glyph_popped(glyph_id.clone()).into(),
-            &reverted,
-            true,
-        )
+        .apply_change_set_with_font(&glyph_deleted(&glyph).into(), &reverted, true)
         .expect("pop the saved tail glyph");
     assert_eq!(document.load_font_state().unwrap(), reverted);
     let recovery = rusqlite::Connection::open(&recovery_path).expect("inspect saved pop");
@@ -420,15 +499,18 @@ fn parent_deletion_does_not_reinsert_an_earlier_layer_override() {
     layer.set_width(777.0);
     document.replace_glyph_layer(&layer).unwrap();
 
-    let mut post = original;
+    let mut post = original.clone();
     let removed_layer = post
         .remove_glyph_layer(layer_id.clone())
         .expect("remove glyph layer");
     post.remove_source(source_id.clone())
         .expect("remove source");
     let changes = shift_font::FontChangeSet::new(vec![
-        shift_font::FontChange::glyph_layer_deleted(glyph_id, &removed_layer),
-        shift_font::FontChange::source_deleted(source_id),
+        layer_deleted(glyph_id, &removed_layer),
+        shift_font::FontChange::Sources(shift_font::Replacement::new(
+            source_collection(&original),
+            source_collection(&post),
+        )),
     ]);
     document
         .apply_change_set_with_font(&changes, &post, true)

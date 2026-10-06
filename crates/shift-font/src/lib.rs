@@ -22,8 +22,8 @@
 //!
 //! # Boundaries
 //!
-//! `shift-font` defines domain objects, local mutation methods, change records,
-//! geometry helpers, component resolution, and variation helpers.
+//! `shift-font` defines domain objects, local mutation methods, reversible
+//! changesets, geometry helpers, component resolution, and variation helpers.
 //!
 //! Canonical document persistence belongs to `shift-store`; workspace and recovery
 //! orchestration belongs to `shift-workspace`. Transport belongs to `shift-bridge`

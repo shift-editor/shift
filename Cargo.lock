@@ -2377,6 +2377,7 @@ dependencies = [
 name = "shift-font"
 version = "0.1.0"
 dependencies = [
+ "bitflags 2.9.1",
  "fontdrasil",
  "getrandom 0.3.3",
  "indexmap",

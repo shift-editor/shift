@@ -1,6 +1,6 @@
 # shift-workspace
 
-<!-- reviewed: 2026-09-26 review-every: 90d -->
+<!-- reviewed: 2026-10-06 review-every: 90d -->
 
 Backend runtime object for an open Shift font workspace.
 
@@ -16,12 +16,10 @@ Backend runtime object for an open Shift font workspace.
 - **Architecture Invariant:** Recovery allocation and document-address binding policy remain outside Rust. `FontWorkspace` verifies `DocumentIdentity` and opens the paths selected by the utility process.
 - **Architecture Invariant:** The workspace is the domain object future bridge or utility-process transports should wrap.
 - **Architecture Invariant:** `slug_atlas_cache_revision()` reads a durable authored revision as an opaque string for disposable derived-cache addressing. Native documents combine canonical `saved_commit_id` with the recovery revision, so every completed unsaved mutation invalidates derived output across process restarts.
-- **Architecture Invariant:** Ledger layer pairs retain the original touched-layer structural classification. Values-only undo/redo restores the target snapshot's canonical numeric values without rebuilding identity indexes or emitting structure; structural replay installs and emits the complete target structure in both directions. Replay compares pre/post ordered components and preserves component-specific replacement events so durable dependency indexes and projections refresh on undo and redo.
-- **Architecture Invariant:** Ledger replay restores complete named-instance collections after axis topology so undo/redo never observes an instance against the wrong external-axis shape.
-- **Architecture Invariant:** Metadata ledger entries store complete pre/post snapshots and replay them independently of font metrics.
-- **Architecture Invariant:** Metric-definition ledger state replays before complete source snapshots so source metric IDs are always valid during undo and redo.
-- **Architecture Invariant:** Source and axis topology entries retain complete pre/post identity order. Replay restores entities first, then restores collection order and the source collection's default identity; SQLite persists the same dense order in that transaction.
-- **Architecture Invariant:** `LedgerStep::GlyphAppend` represents the only authored glyph-topology transition. Redo appends in application order and undo pops in reverse order; persistence materializes and rewrites only those tail rows, never the complete glyph directory.
+- **Architecture Invariant:** Each ledger entry stores exactly one `shift-font::FontChangeSet`. Undo applies `change_set.inverted()` and redo reapplies the recorded changeset; the workspace owns no parallel pre-state model, inverse intents, or domain-specific replay helpers.
+- **Architecture Invariant:** `shift-font` owns replay atomicity and coupled persisted-state validation. Every replacement must match its expected original, and the complete target is validated without rerunning intent-specific guards before the live font changes; `shift-store` persists that same accepted target in one transaction.
+- **Architecture Invariant:** Layer residency is reacquired from all layer snapshots referenced by the changeset before replay. Values-only replacements retain their structural classification, while structural replacements invalidate glyph projections in both directions.
+- **Architecture Invariant:** Glyph creation remains append-only. Changeset inversion reverses replacement order, so batched undo pops glyphs from the directory tail and redo appends them in authored order without renumbering the existing directory.
 - **Architecture Invariant:** After every successful apply, undo, or redo, loading the merged durable store produces the live `Font`; a failed transition changes neither live state, durable state, nor ledger availability.
 - **Architecture Invariant:** Undo and redo retain at most 100 entries per stack. Extending either stack drops that stack's oldest entry; a fresh apply or explicit `discard_redo` clears redo. Discarding redo changes neither live font state nor the current/saved history positions.
 - **Architecture Invariant:** Document `dirty` compares the ledger's current history position with its saved position; the durable authored revision remains monotonic and is not an undo cursor. Undo/redo persist their resulting dirty value atomically with replay. A resumed dirty workspace has no reachable saved position because its in-memory ledger does not survive process restart.
@@ -36,7 +34,7 @@ crates/shift-workspace/src/
   import_pipeline.rs -- bounded parser/parallel-packer/single-writer pipeline and progress observer
   import_staging.rs  -- sibling staged-store creation, atomic installation, and parent sync
   layer_residency.rs -- complete read sets, bounded acquisition, and safe eviction
-  ledger.rs        -- bounded snapshot-pair undo/redo entries
+  ledger.rs        -- bounded reversible-changeset undo/redo entries
   workspace.rs     -- `FontWorkspace` orchestration and workspace errors
 crates/shift-workspace/examples/
   profile_streaming_import.rs -- shared release-mode foreign/native import profiler
@@ -96,11 +94,10 @@ observations rather than CI assertions.
 
 ### Making a new intent undoable
 
-1. Layer-scoped intents need no ledger wiring: `FontWorkspace::apply` acquires the intent's `required_layer_ids`, snapshots pre states, and derives `LayerPair` steps from the touched layers in the returned `AppliedIntents` automatically.
-2. Font-level intents must capture their pre state in `capture_font_level_pre_state` and be mapped to a `LedgerStep` variant in `ledger_steps` (both in `workspace.rs`).
-3. Add a matching `replay_*` helper (like `replay_named_instances`) and dispatch it from `replay`; `ReplaySide::Pre` (undo) and `ReplaySide::Post` (redo) share the same path, so one helper covers both directions.
-4. Respect replay ordering: axis topology before named instances, metric definitions before complete source snapshots, and collection order/default identity after entity existence.
-5. Verify: `cargo test -p shift-workspace` with a test that applies, undoes, and redoes the intent, asserting exact `Font` equality with a reloaded merged store after every transition.
+1. Add the intent and reversible change scope in `shift-font`. `FontWorkspace::apply` acquires the intent's `required_layer_ids` and records the returned `FontChangeSet` without mapping it into workspace-specific history types.
+2. Add persistence for a new `FontChange` variant in `shift-store`; recovery should use `FontChangeSet::impact()` for invalidated projections and `entity_changes()` for entity lifecycle. Pure collection reordering still requires rewriting surviving order indices.
+3. Do not add inverse intents or replay helpers. Undo calls `Font::apply_change_set` with `change_set.inverted()`; redo uses the original changeset.
+4. Verify with a workspace test that applies, undoes, and redoes the intent, asserting exact `Font` equality with a reloaded merged store after every transition.
 
 ### Adding a read that touches layer payloads
 

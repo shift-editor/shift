@@ -2,11 +2,10 @@
 //!
 //! Intents are what a caller ASKS for; [`FontChange`] records are what the
 //! workspace persists. The vocabularies are deliberately distinct: intents
-//! carry caller-minted ids and insertion anchors, records carry
-//! post-mutation snapshots for the store. CS1 covers the pen scope; later
-//! milestones add variants alongside the tools that emit them.
+//! carry caller-minted ids and insertion anchors, while changesets retain
+//! expected originals and replacements for atomic persistence and inversion.
 
-use crate::changes::{AnchorPosition, FontChange, FontChangeSet, PointPosition};
+use crate::changes::{FontChange, FontChangeSet, Replacement, SourceCollection};
 use crate::composite::anchor_aligned_offset;
 use crate::error::{CoreError, CoreResult};
 use crate::interpolation::GlyphInterpolationValues;
@@ -19,7 +18,7 @@ use crate::ir::{
 use crate::layer_edit::BulkNodePositionUpdates;
 use crate::source::source_locations_equal;
 use crate::Require;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::sync::Arc;
 
 /// A point to create, with stable identity minted by a trusted caller.
@@ -162,7 +161,7 @@ pub enum FontIntent {
         metadata: FontMetadata,
     },
     /// Replaces the tracked language list stored under
-    /// [`LANGUAGES_LIB_KEY`](crate::LANGUAGES_LIB_KEY).
+    /// [`LANGUAGES_LIB_KEY`].
     ///
     /// Ids are Hyperglot language ids. Blank ids are dropped and duplicates
     /// keep their first position; an empty list is stored as an empty array,
@@ -368,7 +367,7 @@ pub struct TouchedLayer {
     pub structural: bool,
 }
 
-/// Outcome of applying an intent set: canonical records for the store plus
+/// Outcome of applying an intent set: one reversible changeset plus
 /// replace-grade layer state for echo assembly.
 pub struct AppliedIntents {
     pub changes: FontChangeSet,
@@ -409,12 +408,15 @@ impl Font {
         false
     }
 
-    /// Validates and applies an intent set, producing the canonical change
-    /// records. All-or-nothing only when the caller applies to a clone and
-    /// swaps on success (the workspace's commit pattern).
+    /// Validates and applies an intent set, producing one reversible changeset.
+    ///
+    /// Mutations are staged on a copy. Repeated writes to the same scope are
+    /// coalesced into the first original value and final replacement value.
     pub fn apply_intents(&mut self, set: FontIntentSet) -> CoreResult<AppliedIntents> {
-        let mut changes = FontChangeSet::default();
+        let before = self.clone();
+        let mut after = self.clone();
         let mut touched: Vec<(LayerId, bool)> = Vec::new();
+        let mut glyph_ids = Vec::new();
 
         let touch =
             |touched: &mut Vec<(LayerId, bool)>, layer_id: LayerId, structural| match touched
@@ -427,120 +429,215 @@ impl Font {
 
         for intent in &set.intents {
             let Some(layer_id) = intent.layer_id() else {
-                for layer_id in self.apply_font_intent(intent, &mut changes)? {
+                let (layer_ids, glyph_id) = after.apply_font_intent(intent)?;
+                for layer_id in layer_ids {
                     touch(&mut touched, layer_id, true);
+                }
+                if let Some(glyph_id) = glyph_id {
+                    if !glyph_ids.contains(&glyph_id) {
+                        glyph_ids.push(glyph_id);
+                    }
                 }
                 continue;
             };
 
             let layer_id = layer_id.clone();
             let structural = intent.structural();
-
-            let change = self.apply_intent(intent)?;
-            changes.push(change);
-
+            after.apply_intent(intent)?;
             touch(&mut touched, layer_id, structural);
         }
 
-        let layers = touched
-            .into_iter()
-            .map(|(layer_id, structural)| {
-                let layer = self
-                    .glyph_id_by_layer(&layer_id)
-                    .and_then(|glyph_id| self.glyph(&glyph_id))
-                    .and_then(|glyph| glyph.layers().get(&layer_id))
-                    .cloned()
-                    .require(&layer_id)?;
-                Ok(TouchedLayer { layer, structural })
-            })
-            .collect::<CoreResult<Vec<_>>>()?;
+        let mut changes = FontChangeSet::default();
+        if before.metadata() != after.metadata() {
+            changes.push(FontChange::Metadata(Box::new(Replacement::new(
+                before.metadata().clone(),
+                after.metadata().clone(),
+            ))));
+        }
 
+        let lib_keys = before
+            .lib()
+            .keys()
+            .chain(after.lib().keys())
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        for key in lib_keys {
+            let original = before.lib().get(&key).cloned();
+            let replacement = after.lib().get(&key).cloned();
+            if original != replacement {
+                changes.push(FontChange::LibValue {
+                    key,
+                    value: Replacement::new(original, replacement),
+                });
+            }
+        }
+
+        if before.axes() != after.axes() {
+            changes.push(FontChange::Axes(Replacement::new(
+                before.axes().to_vec(),
+                after.axes().to_vec(),
+            )));
+        }
+        if before.axis_mappings() != after.axis_mappings() {
+            changes.push(FontChange::AxisMappings(Replacement::new(
+                before.axis_mappings().to_vec(),
+                after.axis_mappings().to_vec(),
+            )));
+        }
+        if before.metric_definitions() != after.metric_definitions() {
+            changes.push(FontChange::MetricDefinitions(Replacement::new(
+                before.metric_definitions().to_vec(),
+                after.metric_definitions().to_vec(),
+            )));
+        }
+        if before.named_instances() != after.named_instances() {
+            changes.push(FontChange::NamedInstances(Replacement::new(
+                before.named_instances().to_vec(),
+                after.named_instances().to_vec(),
+            )));
+        }
+
+        let before_sources = SourceCollection {
+            sources: before.sources().to_vec(),
+            default_source_id: before.default_source_id(),
+        };
+        let after_sources = SourceCollection {
+            sources: after.sources().to_vec(),
+            default_source_id: after.default_source_id(),
+        };
+        if before_sources != after_sources {
+            changes.push(FontChange::Sources(Replacement::new(
+                before_sources,
+                after_sources,
+            )));
+        }
+
+        for glyph_id in &glyph_ids {
+            let original = before.glyph(glyph_id).cloned();
+            let replacement = after.glyph(glyph_id).cloned();
+            if original != replacement {
+                changes.push(FontChange::Glyph(Replacement::new(original, replacement)));
+            }
+        }
+
+        let mut layers = Vec::new();
+        for (layer_id, structural) in touched {
+            let original_owner = before.glyph_id_by_layer(&layer_id);
+            let replacement_owner = after.glyph_id_by_layer(&layer_id);
+            let glyph_id = match (&original_owner, &replacement_owner) {
+                (Some(original), Some(replacement)) if original != replacement => {
+                    return Err(CoreError::LayerGlyphMismatch {
+                        layer_id,
+                        glyph_id: original.clone(),
+                        actual_glyph_id: replacement.clone(),
+                    });
+                }
+                (Some(glyph_id), _) | (_, Some(glyph_id)) => glyph_id.clone(),
+                (None, None) => return Err(CoreError::LayerNotFound(layer_id)),
+            };
+
+            let original = before
+                .glyph(&glyph_id)
+                .and_then(|glyph| glyph.layers().get(&layer_id))
+                .cloned();
+            let replacement = after
+                .glyph(&glyph_id)
+                .and_then(|glyph| glyph.layers().get(&layer_id))
+                .cloned();
+            if original == replacement {
+                continue;
+            }
+
+            if !glyph_ids.contains(&glyph_id) {
+                changes.push(FontChange::Layer {
+                    glyph_id,
+                    layer: Replacement::new(original, replacement.clone()),
+                    structural,
+                });
+            }
+            if let Some(layer) = replacement {
+                layers.push(TouchedLayer { layer, structural });
+            }
+        }
+
+        *self = after;
         Ok(AppliedIntents { changes, layers })
     }
 
-    /// Applies one font-level intent, pushing every change it produces.
-    /// Returns the created layer ids so the caller can mark them touched.
+    /// Applies one font-level intent and returns touched layer plus glyph identities.
     fn apply_font_intent(
         &mut self,
         intent: &FontIntent,
-        changes: &mut FontChangeSet,
-    ) -> CoreResult<Vec<LayerId>> {
+    ) -> CoreResult<(Vec<LayerId>, Option<GlyphId>)> {
         match intent {
             FontIntent::CreateGlyph {
                 glyph_id,
                 name,
                 unicodes,
-            } => self.apply_create_glyph(glyph_id.clone(), name, unicodes.clone(), changes),
+            } => {
+                let glyph_id = self.apply_create_glyph(glyph_id.clone(), name, unicodes.clone())?;
+                Ok((Vec::new(), Some(glyph_id)))
+            }
             FontIntent::UpdateGlyph {
                 glyph_id,
                 new_name,
                 new_unicodes,
             } => {
-                changes.push(self.apply_update_glyph(
-                    glyph_id.clone(),
-                    new_name.clone(),
-                    new_unicodes.clone(),
-                )?);
-                Ok(Vec::new())
+                self.apply_update_glyph(glyph_id.clone(), new_name.clone(), new_unicodes.clone())?;
+                Ok((Vec::new(), Some(glyph_id.clone())))
             }
             FontIntent::UpdateFontMetadata { metadata } => {
                 self.replace_metadata(metadata.clone());
-                changes.push(FontChange::font_metadata_updated(metadata));
-                Ok(Vec::new())
+                Ok((Vec::new(), None))
             }
             FontIntent::SetLanguages { language_ids } => {
-                self.apply_set_languages(language_ids, changes);
-                Ok(Vec::new())
+                self.apply_set_languages(language_ids);
+                Ok((Vec::new(), None))
             }
             FontIntent::CreateAxis { axis } => {
-                self.apply_create_axis(axis, changes)?;
-                Ok(Vec::new())
+                self.apply_create_axis(axis)?;
+                Ok((Vec::new(), None))
             }
             FontIntent::UpdateAxis { axis } => {
-                self.apply_update_axis(axis, changes)?;
-                Ok(Vec::new())
+                self.apply_update_axis(axis)?;
+                Ok((Vec::new(), None))
             }
             FontIntent::DeleteAxis { axis_id } => {
-                self.apply_delete_axis(axis_id, changes)?;
-                Ok(Vec::new())
+                self.apply_delete_axis(axis_id)?;
+                Ok((Vec::new(), None))
             }
             FontIntent::SetAxisMappings { mappings } => {
                 self.set_axis_mappings(mappings.clone())?;
-                changes.push(FontChange::axis_mappings_updated(mappings));
-                Ok(Vec::new())
+                Ok((Vec::new(), None))
             }
             FontIntent::SetMetricDefinitions { definitions } => {
                 self.set_metric_definitions(definitions.clone())?;
-                changes.push(FontChange::metric_definitions_updated(definitions));
-                for source in self.sources() {
-                    changes.push(FontChange::source_updated(source));
-                }
-                Ok(Vec::new())
+                Ok((Vec::new(), None))
             }
             FontIntent::CreateNamedInstance { instance } => {
                 self.add_named_instance(instance.clone())?;
-                changes.push(FontChange::named_instances_updated(self.named_instances()));
-                Ok(Vec::new())
+                Ok((Vec::new(), None))
             }
             FontIntent::UpdateNamedInstance { instance } => {
                 self.replace_named_instance(instance.clone())?;
-                changes.push(FontChange::named_instances_updated(self.named_instances()));
-                Ok(Vec::new())
+                Ok((Vec::new(), None))
             }
             FontIntent::DeleteNamedInstance { instance_id } => {
                 self.remove_named_instance(instance_id.clone())?;
-                changes.push(FontChange::named_instances_updated(self.named_instances()));
-                Ok(Vec::new())
+                Ok((Vec::new(), None))
             }
             FontIntent::DeleteSource { source_id } => {
-                self.apply_delete_source(source_id, changes)?;
-                Ok(Vec::new())
+                let layer_ids = self.apply_delete_source(source_id)?;
+                Ok((layer_ids, None))
             }
             FontIntent::CreateSource {
                 source_id,
                 name,
                 location,
-            } => self.apply_create_source(source_id.clone(), name, location, changes),
+            } => {
+                self.apply_create_source(source_id.clone(), name, location)?;
+                Ok((Vec::new(), None))
+            }
             FontIntent::UpdateSource {
                 source_id,
                 name,
@@ -560,46 +657,51 @@ impl Font {
                     *line_gap,
                     *underline_position,
                     *underline_thickness,
-                    changes,
                 )?;
-                Ok(Vec::new())
+                Ok((Vec::new(), None))
             }
             FontIntent::CreateGlyphLayer {
                 layer_id,
                 glyph_id,
                 source_id,
-            } => self.apply_create_glyph_layer(
-                layer_id.clone(),
-                glyph_id.clone(),
-                source_id.clone(),
-                changes,
-            ),
+            } => {
+                let layer_ids = self.apply_create_glyph_layer(
+                    layer_id.clone(),
+                    glyph_id.clone(),
+                    source_id.clone(),
+                )?;
+                Ok((layer_ids, None))
+            }
             FontIntent::CloneGlyphLayer {
                 layer_id,
                 glyph_id,
                 source_id,
                 from_layer_id,
-            } => self.apply_clone_glyph_layer(
-                layer_id.clone(),
-                glyph_id.clone(),
-                source_id.clone(),
-                from_layer_id.clone(),
-                changes,
-            ),
+            } => {
+                let layer_ids = self.apply_clone_glyph_layer(
+                    layer_id.clone(),
+                    glyph_id.clone(),
+                    source_id.clone(),
+                    from_layer_id.clone(),
+                )?;
+                Ok((layer_ids, None))
+            }
             FontIntent::MaterializeGlyphLayer {
                 layer_id,
                 glyph_id,
                 source_id,
                 from_layer_id,
                 values,
-            } => self.apply_materialize_glyph_layer(
-                layer_id.clone(),
-                glyph_id.clone(),
-                source_id.clone(),
-                from_layer_id.clone(),
-                values,
-                changes,
-            ),
+            } => {
+                let layer_ids = self.apply_materialize_glyph_layer(
+                    layer_id.clone(),
+                    glyph_id.clone(),
+                    source_id.clone(),
+                    from_layer_id.clone(),
+                    values,
+                )?;
+                Ok((layer_ids, None))
+            }
             _ => unreachable!("editing intents take the layer path"),
         }
     }
@@ -609,8 +711,7 @@ impl Font {
         glyph_id: Option<GlyphId>,
         name: &str,
         unicodes: Vec<u32>,
-        changes: &mut FontChangeSet,
-    ) -> CoreResult<Vec<LayerId>> {
+    ) -> CoreResult<GlyphId> {
         let name = name.trim();
         let glyph_name =
             GlyphName::new(name).map_err(|_| CoreError::InvalidGlyphName(name.to_string()))?;
@@ -619,15 +720,14 @@ impl Font {
         }
 
         let glyph_id = glyph_id.unwrap_or_default();
-        let mut glyph = Glyph::with_id(glyph_id, glyph_name.clone());
+        let mut glyph = Glyph::with_id(glyph_id.clone(), glyph_name.clone());
         glyph.set_unicodes(unicodes);
-        changes.push(FontChange::glyph_appended(&glyph));
 
         self.insert_glyph(glyph)?;
-        Ok(Vec::new())
+        Ok(glyph_id)
     }
 
-    fn apply_set_languages(&mut self, language_ids: &[String], changes: &mut FontChangeSet) {
+    fn apply_set_languages(&mut self, language_ids: &[String]) {
         let mut seen = HashSet::new();
         let values = language_ids
             .iter()
@@ -636,24 +736,14 @@ impl Font {
             .map(|id| LibValue::String(id.to_string()))
             .collect();
         let value = LibValue::Array(values);
-        changes.push(FontChange::font_lib_value_updated(
-            LANGUAGES_LIB_KEY,
-            Some(&value),
-        ));
         self.lib_mut().set(LANGUAGES_LIB_KEY.to_string(), value);
     }
 
-    fn apply_create_axis(&mut self, axis: &Axis, changes: &mut FontChangeSet) -> CoreResult<()> {
-        let previous_instances = self.named_instances().to_vec();
-        self.add_axis(axis.clone())?;
-        changes.push(FontChange::axis_created(axis));
-        if self.named_instances() != previous_instances {
-            changes.push(FontChange::named_instances_updated(self.named_instances()));
-        }
-        Ok(())
+    fn apply_create_axis(&mut self, axis: &Axis) -> CoreResult<()> {
+        self.add_axis(axis.clone())
     }
 
-    fn apply_update_axis(&mut self, axis: &Axis, changes: &mut FontChangeSet) -> CoreResult<()> {
+    fn apply_update_axis(&mut self, axis: &Axis) -> CoreResult<()> {
         if self
             .axes()
             .iter()
@@ -662,38 +752,16 @@ impl Font {
             return Err(CoreError::DuplicateAxisTag(axis.tag().to_string()));
         }
 
-        let previous_instances = self.named_instances().to_vec();
         self.replace_axis(axis.clone())?;
-        changes.push(FontChange::axis_updated(axis));
-        if self.named_instances() != previous_instances {
-            changes.push(FontChange::named_instances_updated(self.named_instances()));
-        }
         Ok(())
     }
 
-    fn apply_delete_axis(
-        &mut self,
-        axis_id: &AxisId,
-        changes: &mut FontChangeSet,
-    ) -> CoreResult<()> {
-        let previous_mappings = self.axis_mappings().to_vec();
-        let previous_instances = self.named_instances().to_vec();
+    fn apply_delete_axis(&mut self, axis_id: &AxisId) -> CoreResult<()> {
         self.remove_axis(axis_id.clone())?;
-        if self.axis_mappings() != previous_mappings {
-            changes.push(FontChange::axis_mappings_updated(self.axis_mappings()));
-        }
-        changes.push(FontChange::axis_deleted(axis_id.clone()));
-        if self.named_instances() != previous_instances {
-            changes.push(FontChange::named_instances_updated(self.named_instances()));
-        }
         Ok(())
     }
 
-    fn apply_delete_source(
-        &mut self,
-        source_id: &SourceId,
-        changes: &mut FontChangeSet,
-    ) -> CoreResult<()> {
+    fn apply_delete_source(&mut self, source_id: &SourceId) -> CoreResult<Vec<LayerId>> {
         if self.sources().len() <= 1 {
             return Err(CoreError::CannotDeleteLastSource);
         }
@@ -701,23 +769,21 @@ impl Font {
             return Err(CoreError::CannotDeleteDefaultSource(source_id.clone()));
         }
 
-        let layers: Vec<(GlyphId, GlyphLayer)> = self
+        let layer_ids = self
             .glyphs()
             .filter_map(|glyph| {
                 glyph
                     .layer_for_source(source_id.clone())
-                    .map(|layer| (glyph.id(), layer.clone()))
+                    .map(GlyphLayer::id)
             })
-            .collect();
+            .collect::<Vec<_>>();
 
-        for (glyph_id, layer) in layers {
-            changes.push(FontChange::glyph_layer_deleted(glyph_id, &layer));
-            self.remove_glyph_layer(layer.id())?;
+        for layer_id in &layer_ids {
+            self.remove_glyph_layer(layer_id.clone())?;
         }
 
         self.remove_source(source_id.clone()).require(&source_id)?;
-        changes.push(FontChange::source_deleted(source_id.clone()));
-        Ok(())
+        Ok(layer_ids)
     }
 
     fn apply_create_source(
@@ -725,8 +791,7 @@ impl Font {
         source_id: SourceId,
         name: &str,
         location: &DesignLocation,
-        changes: &mut FontChangeSet,
-    ) -> CoreResult<Vec<LayerId>> {
+    ) -> CoreResult<()> {
         let name = name.trim();
         if name.is_empty() {
             return Err(CoreError::InvalidSourceName(name.to_string()));
@@ -762,10 +827,9 @@ impl Font {
             source.set_underline_thickness(default_source.underline_thickness());
         }
         source.fill_metric_values(self.metric_definitions(), self.metrics().units_per_em);
-        changes.push(FontChange::source_created(&source));
         self.add_source(source);
 
-        Ok(Vec::new())
+        Ok(())
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -779,9 +843,8 @@ impl Font {
         line_gap: Option<f64>,
         underline_position: Option<f64>,
         underline_thickness: Option<f64>,
-        changes: &mut FontChangeSet,
     ) -> CoreResult<()> {
-        let mut source = self.require_source(source_id).cloned()?;
+        let mut source = self.require_source(source_id)?.clone();
         source.set_name(name.trim().to_string());
         source.set_location(location.clone());
         source.set_metric_values(metric_values.clone());
@@ -789,8 +852,7 @@ impl Font {
         source.set_line_gap(line_gap);
         source.set_underline_position(underline_position);
         source.set_underline_thickness(underline_thickness);
-        self.replace_source(source.clone())?;
-        changes.push(FontChange::source_updated(&source));
+        self.replace_source(source)?;
         Ok(())
     }
 
@@ -799,7 +861,6 @@ impl Font {
         layer_id: LayerId,
         glyph_id: GlyphId,
         source_id: SourceId,
-        changes: &mut FontChangeSet,
     ) -> CoreResult<Vec<LayerId>> {
         if self.glyph_id_by_layer(&layer_id).is_some() {
             return Err(CoreError::DuplicateLayerId(layer_id));
@@ -815,9 +876,7 @@ impl Font {
         }
         let layer = GlyphLayer::with_width(layer_id.clone(), source_id, self.default_layer_width());
 
-        self.insert_glyph_layer(glyph_id.clone(), layer.clone())?;
-        changes.push(FontChange::glyph_layer_created(glyph_id, &layer));
-
+        self.insert_glyph_layer(glyph_id, layer)?;
         Ok(vec![layer_id])
     }
 
@@ -827,14 +886,11 @@ impl Font {
         glyph_id: GlyphId,
         source_id: SourceId,
         from_layer_id: LayerId,
-        changes: &mut FontChangeSet,
     ) -> CoreResult<Vec<LayerId>> {
         let layer =
             self.cloned_glyph_layer(layer_id.clone(), glyph_id.clone(), source_id, from_layer_id)?;
 
-        self.insert_glyph_layer(glyph_id.clone(), layer.clone())?;
-        changes.push(FontChange::glyph_layer_created(glyph_id, &layer));
-
+        self.insert_glyph_layer(glyph_id, layer)?;
         Ok(vec![layer_id])
     }
 
@@ -845,15 +901,12 @@ impl Font {
         source_id: SourceId,
         from_layer_id: LayerId,
         values: &GlyphInterpolationValues,
-        changes: &mut FontChangeSet,
     ) -> CoreResult<Vec<LayerId>> {
         let mut layer =
             self.cloned_glyph_layer(layer_id.clone(), glyph_id.clone(), source_id, from_layer_id)?;
         layer.apply_interpolation_values(values)?;
 
-        self.insert_glyph_layer(glyph_id.clone(), layer.clone())?;
-        changes.push(FontChange::glyph_layer_created(glyph_id, &layer));
-
+        self.insert_glyph_layer(glyph_id, layer)?;
         Ok(vec![layer_id])
     }
 
@@ -897,24 +950,15 @@ impl Font {
         glyph_id: GlyphId,
         new_name: GlyphName,
         new_unicodes: Vec<u32>,
-    ) -> CoreResult<FontChange> {
-        let old_glyph = self.require_glyph(&glyph_id)?;
-        let old_name = old_glyph.glyph_name().clone();
-        let old_unicodes = old_glyph.unicodes().to_vec();
+    ) -> CoreResult<()> {
+        self.require_glyph(&glyph_id)?;
 
-        self.rename_glyph(glyph_id.clone(), new_name.clone())?;
-        self.set_glyph_unicodes(glyph_id.clone(), new_unicodes.clone())?;
-
-        Ok(FontChange::glyph_identity_changed(
-            glyph_id,
-            old_name,
-            new_name,
-            old_unicodes,
-            new_unicodes,
-        ))
+        self.rename_glyph(glyph_id.clone(), new_name)?;
+        self.set_glyph_unicodes(glyph_id, new_unicodes)?;
+        Ok(())
     }
 
-    fn apply_intent(&mut self, intent: &FontIntent) -> CoreResult<FontChange> {
+    fn apply_intent(&mut self, intent: &FontIntent) -> CoreResult<()> {
         match intent {
             FontIntent::AddPoints {
                 layer_id,
@@ -929,7 +973,7 @@ impl Font {
                     }
                 }
 
-                let change = {
+                {
                     let layer = self.require_layer_mut(layer_id)?;
                     let contour_id = match (contour_id, before) {
                         (Some(contour_id), _) => contour_id.clone(),
@@ -949,12 +993,11 @@ impl Font {
                                 .points()
                                 .iter()
                                 .position(|point| point.id() == *before_id)
-                                .require(&before_id)?,
+                                .require(before_id)?,
                         ),
                         None => None,
                     };
 
-                    let mut ids = Vec::with_capacity(points.len());
                     for (offset, seed) in points.iter().enumerate() {
                         let point = crate::ir::Point::new(
                             seed.id.clone(),
@@ -968,14 +1011,11 @@ impl Font {
                             Some(index) => contour.insert_point(index + offset, point),
                             None => contour.push_point(point),
                         }
-                        ids.push(seed.id.clone());
                     }
-
-                    FontChange::points_added(layer_id.clone(), contour, ids)
-                };
+                }
 
                 self.record_point_ids(points.iter().map(|seed| seed.id.clone()));
-                Ok(change)
+                Ok(())
             }
             FontIntent::AddContour {
                 layer_id,
@@ -986,19 +1026,18 @@ impl Font {
                     return Err(CoreError::DuplicateContourId(contour_id.clone()));
                 }
 
-                let change = {
+                {
                     let layer = self.require_layer_mut(layer_id)?;
                     let mut contour = Contour::with_id(contour_id.clone());
                     if *closed {
                         contour.close();
                     }
 
-                    layer.add_contour(contour.clone());
-                    FontChange::contour_added(layer_id.clone(), &contour)
-                };
+                    layer.add_contour(contour);
+                }
 
                 self.record_contour_id(contour_id.clone());
-                Ok(change)
+                Ok(())
             }
             FontIntent::SetContourClosed {
                 layer_id,
@@ -1012,11 +1051,7 @@ impl Font {
                     layer.open_contour(contour_id.clone())?;
                 }
 
-                Ok(FontChange::contour_open_closed_changed(
-                    layer_id.clone(),
-                    contour_id.clone(),
-                    *closed,
-                ))
+                Ok(())
             }
             FontIntent::MovePoints {
                 layer_id,
@@ -1040,20 +1075,7 @@ impl Font {
                     anchor_coords: None,
                 })?;
 
-                let positions = point_ids
-                    .iter()
-                    .zip(coords.chunks_exact(2))
-                    .map(|(point_id, xy)| PointPosition {
-                        point_id: point_id.clone(),
-                        x: xy[0],
-                        y: xy[1],
-                    })
-                    .collect();
-
-                Ok(FontChange::point_positions_changed(
-                    layer_id.clone(),
-                    positions,
-                ))
+                Ok(())
             }
             FontIntent::SetPointSmooth {
                 layer_id,
@@ -1063,20 +1085,15 @@ impl Font {
                 let layer = self.require_layer_mut(layer_id)?;
                 layer.set_point_smooth(point_id.clone(), *smooth)?;
 
-                Ok(FontChange::point_smooth_changed(
-                    layer_id.clone(),
-                    point_id.clone(),
-                    *smooth,
-                ))
+                Ok(())
             }
             FontIntent::RemovePoints {
                 layer_id,
                 point_ids,
             } => {
-                let (change, empty_contours) = {
+                let empty_contours = {
                     let layer = self.require_layer_mut(layer_id)?;
-                    let empty_contours = layer.remove_points(point_ids)?;
-                    (FontChange::layer_geometry_replaced(layer), empty_contours)
+                    layer.remove_points(point_ids)?
                 };
 
                 if empty_contours.is_empty() {
@@ -1085,7 +1102,7 @@ impl Font {
                     self.rebuild_structure_index()?;
                 }
 
-                Ok(change)
+                Ok(())
             }
             FontIntent::AddAnchors { layer_id, anchors } => {
                 let mut anchor_ids = HashSet::new();
@@ -1095,7 +1112,7 @@ impl Font {
                     }
                 }
 
-                let change = {
+                {
                     let layer = self.require_layer_mut(layer_id)?;
                     for seed in anchors {
                         layer.add_anchor(Anchor::with_id(
@@ -1105,12 +1122,10 @@ impl Font {
                             seed.y,
                         ));
                     }
-
-                    FontChange::layer_geometry_replaced(layer)
-                };
+                }
 
                 self.record_anchor_ids(anchors.iter().map(|seed| seed.id.clone()));
-                Ok(change)
+                Ok(())
             }
             FontIntent::MoveAnchors {
                 layer_id,
@@ -1134,33 +1149,19 @@ impl Font {
                     anchor_coords: Some(coords),
                 })?;
 
-                let positions = anchor_ids
-                    .iter()
-                    .zip(coords.chunks_exact(2))
-                    .map(|(anchor_id, xy)| AnchorPosition {
-                        anchor_id: anchor_id.clone(),
-                        x: xy[0],
-                        y: xy[1],
-                    })
-                    .collect();
-
-                Ok(FontChange::anchor_positions_changed(
-                    layer_id.clone(),
-                    positions,
-                ))
+                Ok(())
             }
             FontIntent::RemoveAnchors {
                 layer_id,
                 anchor_ids,
             } => {
-                let change = {
+                {
                     let layer = self.require_layer_mut(layer_id)?;
                     layer.remove_anchors(anchor_ids)?;
-                    FontChange::layer_geometry_replaced(layer)
-                };
+                }
 
                 self.forget_anchor_ids(anchor_ids);
-                Ok(change)
+                Ok(())
             }
             FontIntent::AddComponent {
                 layer_id,
@@ -1180,7 +1181,7 @@ impl Font {
                 }
 
                 let transform = self.anchor_aligned_component_transform(layer_id, base_glyph_id)?;
-                let change = {
+                {
                     let layer = self.require_layer_mut(layer_id)?;
                     layer.add_component(Component::with_id(
                         component_id.clone(),
@@ -1188,11 +1189,10 @@ impl Font {
                         base_glyph_name,
                         transform,
                     ));
-                    FontChange::layer_components_replaced(layer)
-                };
+                }
 
                 self.rebuild_structure_index()?;
-                Ok(change)
+                Ok(())
             }
             FontIntent::SetComponentTransforms {
                 layer_id,
@@ -1240,14 +1240,14 @@ impl Font {
                     )?;
                 }
 
-                Ok(FontChange::layer_geometry_replaced(layer))
+                Ok(())
             }
             FontIntent::RemoveComponents {
                 layer_id,
                 component_ids,
             } => {
                 let component_ids = component_ids.iter().cloned().collect::<HashSet<_>>();
-                let change = {
+                {
                     let layer = self.require_layer_mut(layer_id)?;
                     for component_id in &component_ids {
                         if layer.component(component_id).is_none() {
@@ -1257,11 +1257,10 @@ impl Font {
                     for component_id in &component_ids {
                         layer.remove_component(component_id.clone());
                     }
-                    FontChange::layer_components_replaced(layer)
-                };
+                }
 
                 self.rebuild_structure_index()?;
-                Ok(change)
+                Ok(())
             }
             FontIntent::DecomposeComponents {
                 layer_id,
@@ -1285,7 +1284,7 @@ impl Font {
                     projection.component_contours(&glyph_id, &component_ids)?
                 };
 
-                let change = {
+                {
                     let layer = self.require_layer_mut(layer_id)?;
                     for component_id in &component_ids {
                         layer.remove_component(component_id.clone());
@@ -1300,11 +1299,10 @@ impl Font {
                         }
                         layer.add_contour(contour);
                     }
-                    FontChange::layer_components_replaced(layer)
-                };
+                }
 
                 self.rebuild_structure_index()?;
-                Ok(change)
+                Ok(())
             }
             FontIntent::ReverseContour {
                 layer_id,
@@ -1313,7 +1311,7 @@ impl Font {
                 let layer = self.require_layer_mut(layer_id)?;
                 layer.reverse_contour(contour_id.clone())?;
 
-                Ok(FontChange::layer_geometry_replaced(layer))
+                Ok(())
             }
             FontIntent::SetContourStart {
                 layer_id,
@@ -1323,7 +1321,7 @@ impl Font {
                 let layer = self.require_layer_mut(layer_id)?;
                 layer.set_contour_start(contour_id.clone(), point_id.clone())?;
 
-                Ok(FontChange::layer_geometry_replaced(layer))
+                Ok(())
             }
             FontIntent::TranslatePoints {
                 layer_id,
@@ -1334,32 +1332,13 @@ impl Font {
                 let layer = self.require_layer_mut(layer_id)?;
                 layer.move_points(point_ids, *dx, *dy)?;
 
-                let positions = point_ids
-                    .iter()
-                    .map(|point_id| {
-                        let contour_id = layer.contour_of_point(point_id.clone())?;
-                        let point = layer
-                            .contour(&contour_id)
-                            .and_then(|contour| contour.get_point(point_id))
-                            .require(&point_id)?;
-                        Ok(PointPosition {
-                            point_id: point_id.clone(),
-                            x: point.x(),
-                            y: point.y(),
-                        })
-                    })
-                    .collect::<CoreResult<Vec<_>>>()?;
-
-                Ok(FontChange::point_positions_changed(
-                    layer_id.clone(),
-                    positions,
-                ))
+                Ok(())
             }
             FontIntent::SetXAdvance { layer_id, width } => {
                 let layer = self.require_layer_mut(layer_id)?;
                 layer.set_x_advance(*width);
 
-                Ok(FontChange::layer_metrics_changed(layer))
+                Ok(())
             }
             FontIntent::ApplyBooleanOp {
                 layer_id,
@@ -1367,18 +1346,17 @@ impl Font {
                 contour_id_b,
                 operation,
             } => {
-                let change = {
+                {
                     let layer = self.require_layer_mut(layer_id)?;
                     layer.apply_boolean_op(
                         contour_id_a.clone(),
                         contour_id_b.clone(),
                         *operation,
                     )?;
-                    FontChange::layer_geometry_replaced(layer)
-                };
+                }
 
                 self.rebuild_structure_index()?;
-                Ok(change)
+                Ok(())
             }
             FontIntent::CreateGlyph { .. }
             | FontIntent::UpdateGlyph { .. }

@@ -9,7 +9,10 @@ use std::path::{Path, PathBuf};
 
 use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
 use serde::Serialize;
-use shift_font::{Axis, DesignLocation, Font, FontChange, FontIntent, FontIntentSet, SourceId};
+use shift_font::{
+    Axis, DesignLocation, EntityChange, Font, FontChangeImpact, FontChangeSet, FontEntityChange,
+    FontIntent, FontIntentSet, SourceId,
+};
 use shift_store::ShiftStore;
 use shift_workspace::FontWorkspace;
 
@@ -242,7 +245,7 @@ pub(super) fn apply_mutation(
         .apply(set, None)
         .into_diagnostic()
         .wrap_err("authoring change is invalid")?;
-    let changes = report_changes(workspace.font(), outcome.changes.changes);
+    let changes = report_changes(workspace.font(), &outcome.changes);
 
     if !options.dry_run {
         if options.output.is_some() {
@@ -267,69 +270,78 @@ pub(super) fn apply_mutation(
     })
 }
 
-fn report_changes(font: &Font, changes: Vec<FontChange>) -> Vec<AuthoringChange> {
-    changes
+fn report_changes(font: &Font, changes: &FontChangeSet) -> Vec<AuthoringChange> {
+    let mut report = changes
+        .entity_changes()
         .into_iter()
         .filter_map(|change| match change {
-            FontChange::AxisCreated(change) => Some(AuthoringChange::AxisCreated {
-                axis_id: change.axis.id().to_string(),
-                tag: change.axis.tag().to_string(),
-                name: change.axis.name().to_string(),
-                minimum: change.axis.minimum(),
-                default: change.axis.default(),
-                maximum: change.axis.maximum(),
-            }),
-            FontChange::SourceCreated(change) => Some(AuthoringChange::SourceCreated {
-                source_id: change.source.id().to_string(),
-                name: change.source.name().to_string(),
-                location: change
-                    .source
-                    .location()
-                    .iter()
-                    .filter_map(|(axis_id, value)| {
-                        let tag = font
-                            .axes()
-                            .iter()
-                            .find(|axis| axis.id() == *axis_id)?
-                            .tag()
-                            .to_string();
-                        Some((tag, *value))
-                    })
-                    .collect(),
-            }),
-            FontChange::GlyphAppended(change) => Some(AuthoringChange::GlyphCreated {
-                glyph_id: change.glyph_id.to_string(),
-                name: change.name.to_string(),
-                unicodes: change
-                    .unicodes
-                    .into_iter()
-                    .map(|unicode| format!("U+{unicode:04X}"))
-                    .collect(),
-            }),
-            FontChange::GlyphLayerCreated(change) => {
-                let layer = font.layer(&change.layer_id)?;
-                Some(AuthoringChange::GlyphLayerCreated {
-                    layer_id: change.layer_id.to_string(),
-                    glyph_id: change.glyph_id.to_string(),
-                    source_id: change.source_id.to_string(),
-                    advance: layer.width(),
-                    contour_count: layer.contours().len(),
-                    point_count: layer
-                        .contours_iter()
-                        .map(|contour| contour.points().len())
-                        .sum(),
-                    anchor_count: layer.anchors().len(),
-                    component_count: layer.components().len(),
+            FontEntityChange::Axis(EntityChange::Created(axis)) => {
+                Some(AuthoringChange::AxisCreated {
+                    axis_id: axis.id().to_string(),
+                    tag: axis.tag().to_string(),
+                    name: axis.name().to_string(),
+                    minimum: axis.minimum(),
+                    default: axis.default(),
+                    maximum: axis.maximum(),
                 })
             }
-            FontChange::NamedInstancesUpdated(change) => {
-                Some(AuthoringChange::NamedInstancesUpdated {
-                    count: change.instances.len(),
+            FontEntityChange::Source(EntityChange::Created(source)) => {
+                Some(AuthoringChange::SourceCreated {
+                    source_id: source.id().to_string(),
+                    name: source.name().to_string(),
+                    location: source
+                        .location()
+                        .iter()
+                        .filter_map(|(axis_id, value)| {
+                            let tag = font
+                                .axes()
+                                .iter()
+                                .find(|axis| axis.id() == *axis_id)?
+                                .tag()
+                                .to_string();
+                            Some((tag, *value))
+                        })
+                        .collect(),
                 })
             }
+            FontEntityChange::Glyph(EntityChange::Created(glyph)) => {
+                Some(AuthoringChange::GlyphCreated {
+                    glyph_id: glyph.id().to_string(),
+                    name: glyph.glyph_name().to_string(),
+                    unicodes: glyph
+                        .unicodes()
+                        .iter()
+                        .map(|unicode| format!("U+{unicode:04X}"))
+                        .collect(),
+                })
+            }
+            FontEntityChange::Layer {
+                glyph_id,
+                change: EntityChange::Created(layer),
+            } => Some(AuthoringChange::GlyphLayerCreated {
+                layer_id: layer.id().to_string(),
+                glyph_id: glyph_id.to_string(),
+                source_id: layer.source_id().to_string(),
+                advance: layer.width(),
+                contour_count: layer.contours().len(),
+                point_count: layer
+                    .contours_iter()
+                    .map(|contour| contour.points().len())
+                    .sum(),
+                anchor_count: layer.anchors().len(),
+                component_count: layer.components().len(),
+            }),
             _ => None,
         })
-        .collect()
+        .collect::<Vec<_>>();
+
+    if changes.impact().contains(FontChangeImpact::NAMED_INSTANCES) {
+        report.push(AuthoringChange::NamedInstancesUpdated {
+            count: font.named_instances().len(),
+        });
+    }
+
+    report
 }
 
 fn parse_location(font: &Font, coordinates: &[String]) -> Result<DesignLocation> {

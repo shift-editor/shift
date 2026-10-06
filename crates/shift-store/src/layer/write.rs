@@ -120,25 +120,13 @@ fn encoded_len(bytes: u64) -> Result<i64, StoreError> {
     })
 }
 
+#[cfg(test)]
 pub(crate) fn rewrite_layer_in_tx(
     tx: &Transaction<'_>,
     layer: &font::GlyphLayer,
 ) -> Result<(), StoreError> {
     let owner = layer_owner(tx, &layer.id())?.or_missing("glyph layer", &layer.id())?;
     write_layer_in_tx(tx, &owner, layer)
-}
-
-pub(crate) fn create_empty_layer_in_tx(
-    tx: &Transaction<'_>,
-    glyph_id: &font::GlyphId,
-    layer_id: font::LayerId,
-    source_id: font::SourceId,
-    width: f64,
-    height: Option<f64>,
-) -> Result<(), StoreError> {
-    let mut layer = font::GlyphLayer::with_width(layer_id, source_id, width);
-    layer.set_height(height);
-    write_layer_in_tx(tx, glyph_id, &layer)
 }
 
 fn write_component_index(
