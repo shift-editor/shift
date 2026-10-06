@@ -2,6 +2,7 @@ import type { Mat, Point2D } from "@shift/geo";
 import type { Editor } from "../editor/Editor";
 import type { LocalBounds, LocalPoint } from "../../types/coordinates";
 import type { ShiftNode } from "../../types/node";
+import type { ShiftRecordId } from "../../types/records";
 import type { PointerTarget } from "../../types/target";
 import type { RenderContext, RenderPass } from "../../types/rendering";
 
@@ -12,6 +13,13 @@ import type { RenderContext, RenderPass } from "../../types/rendering";
  * A definition is created once per editor and registered by `kind`. It owns
  * kind-level behavior such as hit testing, bounds, and drawing; selected IDs
  * still resolve through `ShiftObject` references.
+ *
+ * Two kinds of method, kept apart:
+ * - Queries (`unitsTransform`, `bounds`, `hit`, `childPosition`, `draw`) run
+ *   during rendering and hit testing and must never write.
+ * - Hooks (`onDoubleClick`, `onContentChange`) may write. The editor calls
+ *   them inside a history capture, so their writes are one undo step with the
+ *   action that triggered them.
  */
 export abstract class NodeDefinition<N extends ShiftNode = ShiftNode> {
   /**
@@ -69,6 +77,41 @@ export abstract class NodeDefinition<N extends ShiftNode = ShiftNode> {
   childPosition(_parent: N, _child: ShiftNode): Point2D | null {
     return null;
   }
+
+  /**
+   * Names the record holding this node's content, when it is not the node itself.
+   *
+   * @remarks
+   * A text run's content is its `TextRunRecord`. When that record changes in a
+   * capture, the editor calls {@link onContentChange} for the node.
+   *
+   * @returns null when the node has no separate content record.
+   */
+  contentRecordId?(node: N): ShiftRecordId | null;
+
+  /**
+   * Responds to a double-click on this node or on one of its descendants.
+   *
+   * @remarks
+   * The editor asks the hit node first, then each ancestor, until one returns
+   * true. Runs inside a capture.
+   *
+   * @param node - the node asked; the hit node or one of its ancestors.
+   * @param target - what the pointer hit.
+   * @returns true when handled.
+   */
+  onDoubleClick?(node: N, target: PointerTarget): boolean;
+
+  /**
+   * Brings the node's children and fields back in step after its content changed.
+   *
+   * @remarks
+   * Called as a capture finishes, for each node whose record or content record
+   * changed in it, whoever made the change. A text run deletes the child whose
+   * item was removed. Changes made here can trigger further calls until
+   * nothing else changes.
+   */
+  onContentChange?(node: N): void;
 
   /**
    * Paints a node for one render pass.

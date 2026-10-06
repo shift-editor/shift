@@ -104,7 +104,7 @@ import type { ComponentTransformSelection } from "../../types/componentTransform
 import type { ComponentTargets } from "../../types/componentTargets";
 import type { PositionSelection } from "../../types/positionEdit";
 import type { SelectableId, ShiftId, ShiftObject } from "../../types/object";
-import type { ShiftEditorRecord } from "../../types/records";
+import type { ShiftEditorRecord, ShiftRecordId } from "../../types/records";
 import type { GlyphNode, NodeKind, ShiftNode } from "../../types/node";
 import {
   AnchorObject,
@@ -293,6 +293,7 @@ export class Editor {
       this.#store,
       this.sessionMode === "workspace" ? this.font.editCoordinator : null,
     );
+    this.history.onCaptureFinishing((changed) => this.#runContentHooks(changed));
     this.hover = new Hover();
     this.#selectionBounds = computed(
       () => {
@@ -1529,6 +1530,49 @@ export class Editor {
     return Mat.Compose(this.#frameToScene(parent), Mat.Translate(position.x, position.y));
   }
 
+  /**
+   * Makes a node the one being edited, clearing selection and hover.
+   *
+   * @remarks
+   * The selection belonged to whatever was edited before. All three are
+   * session records, so inside a capture undo restores the previous node and
+   * its selection together.
+   */
+  enterNode(nodeId: NodeId): void {
+    this.selection.clear();
+    this.hover.clear();
+    this.editing.enter(nodeId);
+  }
+
+  /**
+   * Offers a double-click to the hit node's definition, then to each ancestor's.
+   *
+   * @returns true when a definition handled it.
+   */
+  doubleClickNode(target: PointerTarget): boolean {
+    const hit = targetNode(this.scene, target);
+    if (!hit) return false;
+
+    return this.history.captureOrJoin("Double-click", () => {
+      for (const node of [hit, ...this.scene.ancestors(hit.id)]) {
+        if (this.nodeDefinition(node.kind).onDoubleClick?.(node, target)) return true;
+      }
+      return false;
+    });
+  }
+
+  #runContentHooks(changed: ReadonlySet<ShiftRecordId>): void {
+    for (const node of this.scene.nodes()) {
+      if (!this.scene.node(node.id)) continue;
+      const definition = this.nodeDefinition(node.kind);
+      if (!definition.onContentChange) continue;
+
+      const contentId = definition.contentRecordId?.(node) ?? null;
+      const touched = changed.has(node.id) || (contentId !== null && changed.has(contentId));
+      if (touched) definition.onContentChange(node);
+    }
+  }
+
   getPointerTarget(point: ScenePoint): PointerTarget {
     const nodes = this.scene.nodes();
     for (let i = nodes.length - 1; i >= 0; i--) {
@@ -1724,6 +1768,12 @@ export class Editor {
    */
   public fitInitialBounds(bounds: SceneBounds): void {
     this.#camera.fitInitialBounds(bounds);
+  }
+
+  /** Frames a glyph node's editing frame (`GlyphNodeDefinition.frameBounds`) until the user moves the camera. */
+  public fitGlyphFrame(node: GlyphNode): void {
+    const frame = this.nodeDefinition("glyph").frameBounds(node);
+    if (frame) this.fitInitialBounds(this.toSceneBounds(node, frame));
   }
 
   /**
@@ -2119,5 +2169,21 @@ export class Editor {
 
   #getToolScopeMap(scope: ToolStateScope): Map<string, unknown> {
     return this.#toolState[scope];
+  }
+}
+
+/** The node a pointer target belongs to, or null for blank canvas. */
+function targetNode(scene: Scene, target: PointerTarget): ShiftNode | null {
+  switch (target.kind) {
+    case "canvas":
+      return null;
+    case "node":
+    case "text":
+      return target.node;
+    case "point":
+    case "anchor":
+    case "segment":
+    case "component":
+      return scene.node(target.nodeId);
   }
 }

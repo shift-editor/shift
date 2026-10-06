@@ -108,7 +108,7 @@ export class Text {
     return record?.type === "textrun" ? record : null;
   }
 
-  /** Replaces a run's items; child glyph nodes are left to `removeDetachedChildren`. */
+  /** Replaces a run's items; the run's definition removes a child whose item went (`onContentChange`). */
   setItems(id: RunId, items: readonly TextItem[]): void {
     const run = this.run(id);
     if (run) this.#store.put({ ...run, items: [...items] });
