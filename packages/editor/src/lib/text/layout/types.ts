@@ -1,5 +1,11 @@
 import type { Bounds, Point2D } from "@shift/geo";
-import { mintTextItemId, type GlyphId, type SourceMetrics, type TextItemId } from "@shift/types";
+import {
+  type GlyphName,
+  mintTextItemId,
+  type GlyphId,
+  type SourceMetrics,
+  type TextItemId,
+} from "@shift/types";
 
 export type { TextItemId };
 
@@ -13,7 +19,7 @@ export type TextItem = GlyphTextItem | LineBreakTextItem;
 export interface GlyphTextItem {
   id: TextItemId;
   kind: "glyph";
-  glyphName: string;
+  glyphName: GlyphName;
   /** Source codepoint when typed via keyboard; null when picked from a glyph UI. */
   codepoint: number | null;
 }
@@ -25,7 +31,7 @@ export interface LineBreakTextItem {
 
 /** Build a glyph text item. `codepoint` is null when the source isn't a typed character. */
 export function glyphTextItem(
-  glyphName: string,
+  glyphName: GlyphName,
   codepoint: number | null = null,
   id: TextItemId = mintTextItemId(),
 ): GlyphTextItem {
@@ -40,7 +46,7 @@ export function lineBreakTextItem(id: TextItemId = mintTextItemId()): LineBreakT
 export interface PositionedGlyph {
   /** Stable document glyph identity resolved during layout; null when unresolved. */
   glyphId: GlyphId | null;
-  glyphName: string;
+  glyphName: GlyphName;
   sourceItemIds: readonly TextItemId[];
   origin: Point2D;
   xAdvance: number;
