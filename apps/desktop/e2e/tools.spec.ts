@@ -374,7 +374,7 @@ test.describe("Toolbar tools", () => {
     await expect.poll(codepoints).toEqual([65, 72, 88, 105]);
   });
 
-  test("opening another glyph replaces the canvas run's text and undo restores it", async ({
+  test("opening another glyph from the grid replaces the canvas run's text", async ({
     page,
     editor,
   }) => {
@@ -400,9 +400,6 @@ test.describe("Toolbar tools", () => {
 
     await editor.openGlyphByUnicode("42");
     await expect.poll(runState).toEqual({ codepoints: [66], edited: "B" });
-
-    await editor.undo();
-    await expect.poll(runState).toEqual({ codepoints: [65, 66, 66], edited: "A" });
   });
 
   test("Text shortcut enters Text mode and Escape returns to editing the glyph", async ({

@@ -45,7 +45,6 @@ export const Editor = () => {
   useEffect(() => {
     if (!glyph) return undefined;
 
-    editor.toolManager.reset();
     const sourceId = editor.activeSourceId ?? editor.font.defaultSource.id;
     let run = editor.scene.nodesOfKind("textRun")[0];
     if (!run) {
@@ -71,9 +70,10 @@ export const Editor = () => {
       if (child) editor.editing.enter(child.id);
       return child;
     };
-    // Switching away from an existing child is one undo step; the first open is not.
-    const switching = previous !== null && previous.glyphId !== glyph.id;
-    const node = switching ? editor.history.capture("Edit glyph", open) : open();
+    // Route hydration is navigation, never a history entry.
+    const node = editor.history.withoutRecording(open);
+    // Tools activate against the glyph node they find, so reset after it is placed.
+    editor.toolManager.reset();
 
     const metrics = editor.font.metricsAtLocation(editor.externalLocation);
     const view = glyph.renderModelAt(editor.externalLocationCell, editor.activeSourceIdCell);
