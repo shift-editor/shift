@@ -151,10 +151,13 @@ fn metric_edits_target_only_the_selected_master_and_preserve_overshoots() {
     );
     assert_eq!(after.default_source(), before.default_source());
     assert_eq!(after.metadata(), before.metadata());
-    assert_eq!(after.source(bold.id()).unwrap().location(), bold.location());
-    assert_eq!(after.source(bold.id()).unwrap().lib(), bold.lib());
-    assert_eq!(after.source(bold.id()).unwrap().color(), bold.color());
-    assert_eq!(after.source(bold.id()).unwrap().line_gap(), Some(36.5));
+    assert_eq!(
+        after.source(&bold.id()).unwrap().location(),
+        bold.location()
+    );
+    assert_eq!(after.source(&bold.id()).unwrap().lib(), bold.lib());
+    assert_eq!(after.source(&bold.id()).unwrap().color(), bold.color());
+    assert_eq!(after.source(&bold.id()).unwrap().line_gap(), Some(36.5));
     assert_eq!(
         after.metric_value(bold.id(), MetricKind::CapHeight),
         before.metric_value(bold.id(), MetricKind::CapHeight)

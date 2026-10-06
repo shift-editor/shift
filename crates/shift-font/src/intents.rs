@@ -1355,11 +1355,11 @@ impl Font {
                 components,
             } => {
                 let glyph_id = self
-                    .glyph_id_by_layer(layer_id.clone())
+                    .glyph_id_by_layer(layer_id)
                     .ok_or_else(|| CoreError::LayerNotFound(layer_id.clone()))?;
                 for component in components {
                     let base_glyph_id = component.base_glyph_id();
-                    if self.glyph(base_glyph_id.clone()).is_none() {
+                    if self.glyph(&base_glyph_id).is_none() {
                         return Err(CoreError::GlyphNotFound(base_glyph_id));
                     }
                     if self.component_reference_would_cycle(&glyph_id, &base_glyph_id) {
@@ -1370,7 +1370,7 @@ impl Font {
                     }
                 }
                 let mut layer = self
-                    .layer(layer_id.clone())
+                    .layer(layer_id)
                     .ok_or_else(|| CoreError::LayerNotFound(layer_id.clone()))?
                     .clone();
                 layer.replace_content(

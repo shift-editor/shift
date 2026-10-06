@@ -20,7 +20,7 @@ pub fn set_axis(args: SetAxisArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
     let axis_id = resolve_axis_id(&font, &args.axis)?;
     let current = font
-        .axis(axis_id)
+        .axis(&axis_id)
         .ok_or_else(|| miette!("axis {:?} does not exist", args.axis))?;
     let changes_range = args.minimum.is_some() || args.default.is_some() || args.maximum.is_some();
     if args.tag.is_none() && args.name.is_none() && !changes_range {

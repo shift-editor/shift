@@ -32,7 +32,7 @@ fn mapped_axis_rename_preserves_identity_labels_visibility_and_all_dependents() 
     ]);
     assert!(output.status.success(), "{:?}", output.stderr);
     let after = load_font(path.to_str().unwrap());
-    let axis = after.axis(original.id()).unwrap();
+    let axis = after.axis(&original.id()).unwrap();
     assert_eq!(axis.tag(), "WGHT");
     assert_eq!(axis.name(), "Mass");
     assert_eq!(axis.kind(), original.kind());
@@ -76,7 +76,7 @@ fn renamed_axis_remains_addressable_by_stable_id_and_new_tag() {
         ]);
         assert!(output.status.success(), "{:?}", output.stderr);
         let after = load_font(path.to_str().unwrap());
-        let axis = after.axis(axis_id.clone()).unwrap();
+        let axis = after.axis(&axis_id).unwrap();
         assert_eq!(axis.tag(), "WGHT");
         assert_eq!(axis.name(), name);
         assert_eq!(after.sources(), before.sources());

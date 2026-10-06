@@ -95,8 +95,8 @@ fn range_expansion_does_not_relocate_masters_or_layer_only_sources() {
     );
     font.replace_axis(replacement).unwrap();
     assert_eq!(font.sources(), before.sources());
-    assert_eq!(font.axis(axis.id()).unwrap().minimum(), 0.0);
-    assert_eq!(font.axis(axis.id()).unwrap().maximum(), 1000.0);
+    assert_eq!(font.axis(&axis.id()).unwrap().minimum(), 0.0);
+    assert_eq!(font.axis(&axis.id()).unwrap().maximum(), 1000.0);
 }
 
 #[test]
@@ -127,7 +127,7 @@ fn mapped_ranges_require_mapping_authoring_but_renames_preserve_design_locations
     assert_eq!(font.sources(), before.sources());
     assert_eq!(font.named_instances(), before.named_instances());
     assert_eq!(font.axis_mappings(), before.axis_mappings());
-    assert_eq!(font.axis(axis.id()).unwrap().tag(), "WGHT");
+    assert_eq!(font.axis(&axis.id()).unwrap().tag(), "WGHT");
 }
 
 #[test]

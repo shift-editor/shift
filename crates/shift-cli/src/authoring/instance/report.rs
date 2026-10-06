@@ -23,7 +23,7 @@ impl InstanceReport {
                 .location()
                 .iter()
                 .filter_map(|(axis_id, value)| {
-                    let axis = font.axis(axis_id.clone())?;
+                    let axis = font.axis(axis_id)?;
                     Some((axis.tag().to_string(), *value))
                 })
                 .collect(),

@@ -17,7 +17,7 @@ fn layer_set_replaces_content_without_changing_identity_or_auxiliary_data() {
         .unwrap()
         .id();
     before
-        .layer_mut(layer_id.clone())
+        .layer_mut(&layer_id)
         .unwrap()
         .add_contour(Contour::new());
     drop(ShiftStore::create_document(&path, &before).unwrap());
@@ -42,8 +42,8 @@ fn layer_set_replaces_content_without_changing_identity_or_auxiliary_data() {
     assert_eq!(report["changes"][0]["pointCount"], 3);
     assert_eq!(report["changes"][0]["componentCount"], 0);
     let after = load_font(path.to_str().unwrap());
-    let layer = after.layer(layer_id.clone()).unwrap();
-    let original = before.layer(layer_id).unwrap();
+    let layer = after.layer(&layer_id).unwrap();
+    let original = before.layer(&layer_id).unwrap();
     assert_eq!(layer.width(), 720.0);
     assert_eq!(layer.source_id(), original.source_id());
     assert_eq!(layer.height(), original.height());
@@ -104,7 +104,7 @@ fn layer_set_creates_an_absent_layer_then_can_replace_it_with_a_blank_drawing() 
         .unwrap();
     assert!(shift_with_stdin(&args, r#"{"advance":0}"#).status.success());
     let font = load_font(path.to_str().unwrap());
-    let layer = font.layer(layer_id).unwrap();
+    let layer = font.layer(&layer_id).unwrap();
     assert_eq!(layer.width(), 0.0);
     assert!(layer.is_empty());
 }

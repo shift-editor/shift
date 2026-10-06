@@ -102,7 +102,7 @@ impl LayerReport {
     fn from_layer(font: &Font, layer: &GlyphLayer) -> Option<Self> {
         Some(Self {
             layer_id: layer.id().to_string(),
-            glyph_id: font.glyph_id_by_layer(layer.id())?.to_string(),
+            glyph_id: font.glyph_id_by_layer(&layer.id())?.to_string(),
             source_id: layer.source_id().to_string(),
             advance: layer.width(),
             contour_count: layer.contours().len(),
@@ -268,7 +268,7 @@ pub(super) fn report_changes(font: &Font, changes: &FontChangeSet) -> Vec<Author
                         .location()
                         .iter()
                         .filter_map(|(axis_id, value)| {
-                            let axis = font.axis(axis_id.clone())?;
+                            let axis = font.axis(axis_id)?;
                             Some((axis.tag().to_string(), *value))
                         })
                         .collect(),

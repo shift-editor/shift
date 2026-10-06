@@ -172,7 +172,7 @@ pub(super) fn require_finite(value: f64, label: &str) -> Result<()> {
 
 pub(super) fn resolve_axis_id(font: &Font, selector: &str) -> Result<AxisId> {
     if let Ok(axis_id) = selector.parse::<AxisId>()
-        && font.axis(axis_id.clone()).is_some()
+        && font.axis(&axis_id).is_some()
     {
         return Ok(axis_id);
     }

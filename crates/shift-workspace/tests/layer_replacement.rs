@@ -17,7 +17,7 @@ fn drawing_and_identity_batch_is_one_exact_undo_step_in_native_recovery() {
         .layer_id_for_glyph_source(glyph_id.clone(), source_id.clone())
         .unwrap();
     before
-        .layer_mut(layer_id.clone())
+        .layer_mut(&layer_id)
         .unwrap()
         .add_contour(Contour::new());
     drop(ShiftStore::create_document(&path, &before).unwrap());
@@ -69,8 +69,8 @@ fn drawing_and_identity_batch_is_one_exact_undo_step_in_native_recovery() {
 
     assert_eq!(workspace.loaded_layer_count(), 2);
     let after = workspace.store().load_font_state().unwrap();
-    let layer = after.layer(layer_id.clone()).unwrap();
-    let original = before.layer(layer_id.clone()).unwrap();
+    let layer = after.layer(&layer_id).unwrap();
+    let original = before.layer(&layer_id).unwrap();
     assert_eq!(layer.contours_iter().next().unwrap(), &contour);
     assert_eq!(layer.width(), 720.0);
     assert_eq!(layer.height(), original.height());
@@ -79,7 +79,7 @@ fn drawing_and_identity_batch_is_one_exact_undo_step_in_native_recovery() {
     assert_eq!(layer.anchors()[0].y(), 90.0);
     assert!(layer.components().is_empty());
     assert_eq!(after.glyph_by_name("A").unwrap().unicodes(), &[0x41]);
-    assert_eq!(after.layer(new_layer_id.clone()).unwrap().width(), 620.0);
+    assert_eq!(after.layer(&new_layer_id).unwrap().width(), 620.0);
     assert!(
         workspace
             .store()
@@ -117,8 +117,8 @@ fn drawing_and_identity_batch_is_one_exact_undo_step_in_native_recovery() {
         .acquire_glyphs(&[glyph_id], shift_workspace::AcquireScope::Glyphs)
         .unwrap();
     assert_eq!(
-        reopened.font().layer(layer_id).unwrap(),
-        after.layer(original.id()).unwrap()
+        reopened.font().layer(&layer_id).unwrap(),
+        after.layer(&original.id()).unwrap()
     );
 }
 
@@ -159,10 +159,7 @@ fn invalid_second_replacement_leaves_live_durable_and_history_truth_unchanged() 
         None,
     );
     assert!(result.is_err());
-    assert_eq!(
-        workspace.font().layer(layer_id.clone()),
-        before.layer(layer_id)
-    );
+    assert_eq!(workspace.font().layer(&layer_id), before.layer(&layer_id));
     assert_eq!(workspace.store().load_font_state().unwrap(), before);
     assert_eq!(std::fs::read(path).unwrap(), bytes);
     assert!(!workspace.is_dirty().unwrap());

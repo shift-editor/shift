@@ -25,7 +25,7 @@ fn replacement_preserves_auxiliary_data_and_refreshes_structure_identity() {
         }],
     })
     .unwrap();
-    let replacement = font.layer(layer.id()).unwrap();
+    let replacement = font.layer(&layer.id()).unwrap();
     assert_eq!(replacement.source_id(), layer.source_id());
     assert_eq!(replacement.height(), layer.height());
     assert_eq!(replacement.guidelines(), layer.guidelines());
