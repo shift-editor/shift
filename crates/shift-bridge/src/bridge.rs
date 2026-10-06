@@ -14,11 +14,10 @@ use shift_font::composite::resolved_contours_to_svg_path;
 use shift_font::{
   AnchorId, AnchorSeed, Axis as FontAxis, AxisId, AxisLabel, AxisLabelId, AxisLabelRange,
   AxisMapping as FontAxisMapping, AxisMappingId, AxisMappingPoint as FontAxisMappingPoint,
-  AxisRole, BooleanOp, ComponentId, ContourId, Font, FontChange, FontIntent, FontIntentSet,
+  AxisRole, BooleanOp, ComponentId, ContourId, Font, FontChangeImpact, FontIntent, FontIntentSet,
   FontMetadata as FontMetadataModel, Glyph, GlyphId, LayerId, Location as FontLocation,
   MetricDefinition as FontMetricDefinition, MetricId, MetricKind, MetricValue,
   NamedInstance as FontNamedInstance, NamedInstanceId, PointId, PointSeed, SourceId,
-  LANGUAGES_LIB_KEY,
 };
 use shift_slug::{
   build_authored_atlas_page_profiled, build_authored_atlas_profiled,
@@ -1368,40 +1367,17 @@ impl Bridge {
   /// records grain (glyphs/axes/sources lists) rides along whenever the
   /// change set touched that structure.
   fn applied_echo(&self, outcome: shift_font::AppliedIntents) -> errors::Result<NapiAppliedChange> {
-    let mut metadata_changed = false;
-    let mut languages_changed = false;
-    let mut glyphs_changed = false;
-    let mut axes_changed = false;
-    let mut axis_mappings_changed = false;
-    let mut metric_definitions_changed = false;
-    let mut named_instances_changed = false;
-    let mut sources_changed = false;
-    for change in &outcome.changes.changes {
-      match change {
-        FontChange::FontMetadataUpdated(_) => metadata_changed = true,
-        FontChange::FontLibValueUpdated(change) if change.key == LANGUAGES_LIB_KEY => {
-          languages_changed = true;
-        }
-        FontChange::GlyphAppended(_)
-        | FontChange::GlyphPopped(_)
-        | FontChange::GlyphIdentityChanged(_)
-        | FontChange::GlyphLayerCreated(_)
-        | FontChange::GlyphLayerDeleted(_)
-        | FontChange::LayerComponentsReplaced(_) => glyphs_changed = true,
-        // Axis structure reshapes every source location's design space.
-        FontChange::AxisCreated(_) | FontChange::AxisUpdated(_) | FontChange::AxisDeleted(_) => {
-          axes_changed = true;
-          sources_changed = true;
-        }
-        FontChange::AxisMappingsUpdated(_) => axis_mappings_changed = true,
-        FontChange::MetricDefinitionsUpdated(_) => metric_definitions_changed = true,
-        FontChange::NamedInstancesUpdated(_) => named_instances_changed = true,
-        FontChange::SourceCreated(_)
-        | FontChange::SourceUpdated(_)
-        | FontChange::SourceDeleted(_) => sources_changed = true,
-        _ => {}
-      }
-    }
+    let impact = outcome.changes.impact();
+    let metadata_changed = impact.contains(FontChangeImpact::METADATA);
+    let languages_changed = impact.contains(FontChangeImpact::LANGUAGES);
+    let glyphs_changed = impact.contains(FontChangeImpact::GLYPHS);
+    let axes_changed = impact.contains(FontChangeImpact::AXES);
+    let axis_mappings_changed = impact.contains(FontChangeImpact::AXIS_MAPPINGS);
+    let axis_mapping_bases_changed = impact.contains(FontChangeImpact::AXIS_MAPPING_BASES);
+    let metric_definitions_changed = impact.contains(FontChangeImpact::METRIC_DEFINITIONS);
+    let source_metrics_changed = impact.contains(FontChangeImpact::SOURCE_METRICS);
+    let named_instances_changed = impact.contains(FontChangeImpact::NAMED_INSTANCES);
+    let sources_changed = impact.contains(FontChangeImpact::SOURCES);
 
     let touched_layer_ids: Vec<LayerId> = outcome
       .layers
@@ -1428,17 +1404,7 @@ impl Bridge {
       })
       .collect();
 
-    let font_changed = metadata_changed
-      || languages_changed
-      || glyphs_changed
-      || axes_changed
-      || axis_mappings_changed
-      || metric_definitions_changed
-      || named_instances_changed
-      || sources_changed;
-    let source_metrics_interpolation_changed =
-      axes_changed || metric_definitions_changed || sources_changed;
-    let next = font_changed
+    let next = (!impact.is_empty())
       .then(|| -> errors::Result<NapiFontReplacement> {
         Ok(NapiFontReplacement {
           metadata: metadata_changed.then(|| self.get_metadata()).transpose()?,
@@ -1447,13 +1413,13 @@ impl Bridge {
           axis_mappings: axis_mappings_changed
             .then(|| self.get_axis_mappings())
             .transpose()?,
-          axis_mapping_bases: (axes_changed || axis_mappings_changed)
+          axis_mapping_bases: axis_mapping_bases_changed
             .then(|| self.get_axis_mapping_bases())
             .transpose()?,
           metric_definitions: metric_definitions_changed
             .then(|| self.get_metric_definitions())
             .transpose()?,
-          source_metrics_interpolation: source_metrics_interpolation_changed
+          source_metrics_interpolation: source_metrics_changed
             .then(
               || -> errors::Result<NapiSourceMetricsInterpolationReplacement> {
                 Ok(NapiSourceMetricsInterpolationReplacement {
@@ -1484,8 +1450,8 @@ impl Bridge {
     })
   }
 
-  /// Replays the most recent ledger entry's pre states; `null` when the
-  /// undo stack is empty.
+  /// Applies the most recent ledger entry's inverse changeset; `null` when
+  /// the undo stack is empty.
   #[napi]
   pub fn undo(&mut self) -> errors::Result<Option<NapiAppliedChange>> {
     let Some(outcome) = self.workspace_mut()?.undo()? else {
@@ -1496,8 +1462,8 @@ impl Bridge {
     Ok(Some(self.applied_echo(outcome)?))
   }
 
-  /// Replays the most recent undone entry's post states; `null` when the
-  /// redo stack is empty.
+  /// Reapplies the most recently undone changeset; `null` when the redo
+  /// stack is empty.
   #[napi]
   pub fn redo(&mut self) -> errors::Result<Option<NapiAppliedChange>> {
     let Some(outcome) = self.workspace_mut()?.redo()? else {

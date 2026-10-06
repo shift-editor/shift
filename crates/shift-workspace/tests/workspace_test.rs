@@ -1,10 +1,10 @@
 use std::{fs, path::PathBuf};
 
 use shift_font::{
-    AnchorId, AnchorSeed, Axis, AxisId, BooleanOp, ContourId, DesignLocation, ExternalLocation,
-    Font, FontChange, FontIntent, FontIntentSet, Glyph, GlyphId, GlyphLayer, GlyphName,
-    LANGUAGES_LIB_KEY, LayerId, NamedInstance, NamedInstanceId, PointId, PointSeed, PointType,
-    Source, SourceId, error::CoreError,
+    AnchorId, AnchorSeed, Axis, AxisId, BooleanOp, ContourId, DesignLocation, EntityChange,
+    ExternalLocation, Font, FontChange, FontEntityChange, FontIntent, FontIntentSet, Glyph,
+    GlyphId, GlyphLayer, GlyphName, LANGUAGES_LIB_KEY, LayerId, NamedInstance, NamedInstanceId,
+    PointId, PointSeed, PointType, Source, SourceId, error::CoreError,
 };
 use shift_store::ShiftStore;
 use shift_workspace::{AcquireScope, FontWorkspace, NewWorkspace, WorkspaceError, WorkspaceSource};
@@ -1094,9 +1094,16 @@ fn create_glyph_undo_redo_removes_and_restores_glyph_identity() {
 
     let undone = workspace.undo().unwrap().expect("createGlyph should undo");
     assert_eq!(workspace.font().glyph_count(), 0);
-    assert!(undone.changes.changes.iter().any(
-        |change| matches!(change, FontChange::GlyphPopped(change) if change.glyph_id == glyph_id)
-    ));
+    assert!(
+        undone
+            .changes
+            .entity_changes()
+            .iter()
+            .any(|change| matches!(
+                change,
+                FontEntityChange::Glyph(EntityChange::Deleted(glyph)) if glyph.id() == glyph_id
+            ))
+    );
 
     let redone = workspace.redo().unwrap().expect("createGlyph should redo");
     assert_eq!(workspace.font().glyph_count(), 1);
@@ -1138,9 +1145,19 @@ fn create_glyph_layer_undo_redo_removes_and_restores_sparse_layer() {
         .undo()
         .unwrap()
         .expect("createGlyphLayer should undo");
-    assert!(undone.changes.changes.iter().any(
-        |change| matches!(change, FontChange::GlyphLayerDeleted(change) if change.layer_id == layer_id)
-    ));
+    assert!(
+        undone
+            .changes
+            .entity_changes()
+            .iter()
+            .any(|change| matches!(
+                change,
+                FontEntityChange::Layer {
+                    change: EntityChange::Deleted(layer),
+                    ..
+                } if layer.id() == layer_id
+            ))
+    );
     assert_eq!(
         workspace
             .font()
@@ -1230,11 +1247,16 @@ fn delete_source_undo_redo_removes_and_restores_existing_sparse_layers() {
     assert!(workspace.font().layer(layer_id.clone()).is_none());
 
     let undone = workspace.undo().unwrap().expect("deleteSource should undo");
-    assert!(undone
-        .changes
-        .changes
-        .iter()
-        .any(|change| matches!(change, FontChange::SourceCreated(change) if change.source.id() == source_id)));
+    assert!(
+        undone
+            .changes
+            .entity_changes()
+            .iter()
+            .any(|change| matches!(
+                change,
+                FontEntityChange::Source(EntityChange::Created(source)) if source.id() == source_id
+            ))
+    );
     assert!(
         workspace
             .font()
@@ -1255,11 +1277,19 @@ fn delete_source_undo_redo_removes_and_restores_existing_sparse_layers() {
     assert_persisted_font_matches_workspace(&mut workspace);
 
     let redone = workspace.redo().unwrap().expect("deleteSource should redo");
-    assert!(redone
-        .changes
-        .changes
-        .iter()
-        .any(|change| matches!(change, FontChange::GlyphLayerDeleted(change) if change.layer_id == layer_id)));
+    assert!(
+        redone
+            .changes
+            .entity_changes()
+            .iter()
+            .any(|change| matches!(
+                change,
+                FontEntityChange::Layer {
+                    change: EntityChange::Deleted(layer),
+                    ..
+                } if layer.id() == layer_id
+            ))
+    );
     assert!(
         workspace
             .font()
@@ -1979,9 +2009,9 @@ fn update_glyph_undo_redo_restores_old_identity() {
     assert_eq!(glyph.unicodes(), &[97]);
 
     let undone = workspace.undo().unwrap().expect("updateGlyph should undo");
-    assert!(undone.changes.changes.iter().any(|change| matches!(
+    assert!(undone.changes.entity_changes().iter().any(|change| matches!(
         change,
-        FontChange::GlyphIdentityChanged(change) if change.glyph_id == glyph_id
+        FontEntityChange::Glyph(EntityChange::Updated { after, .. }) if after.id() == glyph_id
     )));
     let glyph = workspace.font().glyph(glyph_id.clone()).unwrap();
     assert_eq!(glyph.glyph_name().to_string(), "A");
@@ -1992,9 +2022,9 @@ fn update_glyph_undo_redo_restores_old_identity() {
     );
 
     let redone = workspace.redo().unwrap().expect("updateGlyph should redo");
-    assert!(redone.changes.changes.iter().any(|change| matches!(
+    assert!(redone.changes.entity_changes().iter().any(|change| matches!(
         change,
-        FontChange::GlyphIdentityChanged(change) if change.glyph_id == glyph_id
+        FontEntityChange::Glyph(EntityChange::Updated { after, .. }) if after.id() == glyph_id
     )));
     let glyph = workspace.font().glyph(glyph_id.clone()).unwrap();
     assert_eq!(glyph.glyph_name().to_string(), "A.alt");
@@ -2090,7 +2120,7 @@ fn metadata_replacement_is_persisted_and_undoable_without_changing_metrics() {
     assert_eq!(workspace.font().metrics(), &original_metrics);
     assert!(applied.changes.changes.iter().any(|change| matches!(
         change,
-        FontChange::FontMetadataUpdated(change) if change.metadata == updated
+        FontChange::Metadata(value) if value.after == updated
     )));
     let stored = workspace
         .font_info()
@@ -2108,7 +2138,7 @@ fn metadata_replacement_is_persisted_and_undoable_without_changing_metrics() {
         .expect("metadata update should undo");
     assert!(undone.changes.changes.iter().any(|change| matches!(
         change,
-        FontChange::FontMetadataUpdated(change) if change.metadata == original_metadata
+        FontChange::Metadata(value) if value.after == original_metadata
     )));
     assert_eq!(workspace.font().metadata(), &original_metadata);
     assert_eq!(workspace.font().metrics(), &original_metrics);
@@ -2167,7 +2197,7 @@ fn tracked_languages_persist_across_resume_and_undo_restores_absence() {
     let undone = workspace.undo().unwrap().expect("setLanguages should undo");
     assert!(undone.changes.changes.iter().any(|change| matches!(
         change,
-        FontChange::FontLibValueUpdated(change) if change.key == LANGUAGES_LIB_KEY
+        FontChange::LibValue { key, .. } if key == LANGUAGES_LIB_KEY
     )));
     assert_eq!(
         workspace.font().language_ids(),
@@ -2341,7 +2371,7 @@ fn named_instance_crud_is_undoable_and_keeps_external_location() {
         .expect("instance delete should undo");
     assert!(undone.changes.changes.iter().any(|change| matches!(
         change,
-        FontChange::NamedInstancesUpdated(change) if change.instances == [updated.clone()]
+        FontChange::NamedInstances(value) if value.after == [updated.clone()]
     )));
     assert_eq!(
         workspace.font().named_instances(),
@@ -2417,10 +2447,16 @@ fn delete_axis_undo_redo_restores_full_axis_definition() {
     assert!(workspace.font().axes().is_empty());
 
     let undone = workspace.undo().unwrap().expect("deleteAxis should undo");
-    assert!(undone.changes.changes.iter().any(|change| matches!(
-        change,
-        FontChange::AxisCreated(change) if change.axis.id() == axis_id
-    )));
+    assert!(
+        undone
+            .changes
+            .entity_changes()
+            .iter()
+            .any(|change| matches!(
+                change,
+                FontEntityChange::Axis(EntityChange::Created(axis)) if axis.id() == axis_id
+            ))
+    );
     assert_eq!(workspace.font().axes(), std::slice::from_ref(&axis));
 
     // Deleting the axis also stripped source location values; undo must
@@ -2442,10 +2478,16 @@ fn delete_axis_undo_redo_restores_full_axis_definition() {
     assert_eq!(locations[0].value, 700.0);
 
     let redone = workspace.redo().unwrap().expect("deleteAxis should redo");
-    assert!(redone.changes.changes.iter().any(|change| matches!(
-        change,
-        FontChange::AxisDeleted(change) if change.axis_id == axis_id
-    )));
+    assert!(
+        redone
+            .changes
+            .entity_changes()
+            .iter()
+            .any(|change| matches!(
+                change,
+                FontEntityChange::Axis(EntityChange::Deleted(axis)) if axis.id() == axis_id
+            ))
+    );
     assert!(workspace.font().axes().is_empty());
 
     workspace

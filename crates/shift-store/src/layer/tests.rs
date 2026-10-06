@@ -1,4 +1,7 @@
-use std::time::{Duration, Instant};
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use rusqlite::params;
 use shift_font as font;
@@ -657,6 +660,8 @@ fn post_font_change_set_rewrites_touched_layer_without_decoding_old_payload() {
         .unwrap()
         .as_ref()
         .clone();
+    let original = layer.clone();
+    let glyph_id = post_font.glyph_id_by_layer(layer.id()).unwrap();
     layer.set_width(layer.width() + 41.0);
     post_font.replace_glyph_layers(vec![layer.clone()]).unwrap();
     store
@@ -668,7 +673,11 @@ fn post_font_change_set_rewrites_touched_layer_without_decoding_old_payload() {
             [layer.id().to_string()],
         )
         .unwrap();
-    let changes = font::FontChangeSet::new(vec![font::FontChange::layer_metrics_changed(&layer)]);
+    let changes = font::FontChangeSet::new(vec![font::FontChange::Layer {
+        glyph_id,
+        layer: font::Replacement::new(Some(Arc::new(original)), Some(Arc::new(layer.clone()))),
+        structural: false,
+    }]);
 
     store
         .apply_change_set_with_font(&changes, &post_font, true)

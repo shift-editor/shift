@@ -1,12 +1,14 @@
 # shift-bridge
 
-<!-- reviewed: 2026-09-26 review-every: 90d -->
+<!-- reviewed: 2026-10-03 review-every: 90d -->
 
 NAPI bindings that expose the Rust font engine to Node.js and Electron as a `Bridge` class.
 
 ## Architecture Invariants
 
 **Architecture Invariant:** The bridge does not own hidden edit sessions or durable font state directly. It owns an optional `FontWorkspace` and forwards mutation transactions into `shift-workspace`. **WHY:** Renderer selection state stays in TypeScript, transport stays in `shift-bridge`, and workspace/store synchronization has one Rust owner.
+
+**Architecture Invariant:** Mutation echoes select complete renderer projections from `FontChangeSet::impact()`. The bridge translates those domain impacts into transport fields; it does not reconstruct transitive font coupling by matching individual change variants.
 
 **Architecture Invariant:** Public cross-process DTOs live in `shift-wire`; NAPI-specific wrappers for snapshots, projections, and Slug atlas values live under `shift-wire::bridges::napi`. `shift-bridge` only normalizes backend source data into those canonical types. **WHY:** Wire shapes remain independent of the native module implementation, while NAPI can still return efficient values such as `Float64Array`. `shift-bridge` and `shift-wire` are the only crates that may link the NAPI runtime — enforced by `scripts/check-invariants.py` (`napi-boundary`).
 
