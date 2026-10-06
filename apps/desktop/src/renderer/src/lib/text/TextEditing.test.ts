@@ -87,6 +87,15 @@ describe("page run text editing", () => {
     expect(editor.scene.node(child.id)).not.toBeNull();
   });
 
+  it("removing the edited glyph's item by any writer deletes its child in the same undo step", async () => {
+    editor.escape();
+    editor.history.capture("Clear run", () => editor.text.setItems(run.runId, []));
+    expect(editor.scene.node(child.id)).toBeNull();
+    await editor.undo();
+    expect(items()[0]?.id).toBe(child.itemId);
+    expect(editor.scene.node(child.id)).not.toBeNull();
+  });
+
   it("leaving Text mode after deleting the edited glyph edits nothing", () => {
     editor.textEditing.deleteBackward();
     editor.escape();

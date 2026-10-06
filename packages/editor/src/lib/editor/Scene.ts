@@ -99,6 +99,11 @@ export class Scene {
     return this.#cell.peek().tree.children(nodeId);
   }
 
+  /** Yields a node's ancestors, nearest first. */
+  ancestors(nodeId: NodeId): Iterable<ShiftNode> {
+    return this.#cell.peek().tree.ancestors(nodeId);
+  }
+
   /** Returns a node's parent, or null for root nodes. */
   parent(nodeId: NodeId): ShiftNode | null {
     return this.#cell.peek().tree.parent(nodeId);

@@ -11,7 +11,8 @@ import { Canvas } from "@/components/editor/Canvas";
 import { CanvasContextMenu } from "@/components/editor/CanvasContextMenu";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { localBounds } from "@shift/editor/spaces";
-import { editRunItem, glyphTextItem, removeDetachedChildren } from "@shift/editor/text";
+import { editRunItem, glyphTextItem } from "@shift/editor/text";
+import type { NodeTransaction } from "@shift/editor/types";
 import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
 import { useFocusZone, ZoneContainer } from "@/context/FocusZoneContext";
 import { KeyboardRouter } from "@/lib/keyboard";
@@ -58,20 +59,19 @@ export const Editor = () => {
     }
     const textRun = run;
     const previous = editor.nodeDefinition("textRun").childGlyph(textRun);
-    const open = () => {
+    const open = (tx: NodeTransaction) => {
       if (previous?.glyphId === glyph.id) {
-        editor.editing.enter(previous.id);
+        tx.enterEditing(previous.id);
         return previous;
       }
       const item = glyphTextItem(glyph.name, glyph.entry.unicodes[0] ?? null);
       editor.text.setItems(textRun.runId, [item]);
-      removeDetachedChildren(editor, textRun.runId);
-      const child = editRunItem(editor, textRun, item.id, sourceId);
-      if (child) editor.editing.enter(child.id);
+      const child = editRunItem(editor, tx, textRun, item.id, sourceId);
+      if (child) tx.enterEditing(child.id);
       return child;
     };
     // Route hydration is navigation, never a history entry.
-    const node = editor.history.withoutRecording(open);
+    const node = editor.history.withoutRecording(() => editor.editNodes("Open glyph", open));
     // Tools activate against the glyph node they find, so reset after it is placed.
     editor.toolManager.reset();
 

@@ -9,6 +9,5 @@ export { ToggleSmooth } from "./ToggleSmooth";
 export { UpgradeSegment } from "./UpgradeSegment";
 export { BendCurve } from "./BendCurve";
 export { SegmentDoubleClick } from "./SegmentDoubleClick";
-export { RunItemDoubleClick } from "./RunItemDoubleClick";
-export { ComponentDoubleClick } from "./ComponentDoubleClick";
+export { NodeDoubleClick } from "./NodeDoubleClick";
 export { SelectHover } from "./SelectHover";

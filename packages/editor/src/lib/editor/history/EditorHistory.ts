@@ -14,10 +14,13 @@ import type {
   WorkspaceEditEvent,
   WorkspaceEffect,
 } from "../../../types/history";
-import type { ShiftEditorRecord } from "../../../types/records";
+import type { ShiftEditorRecord, ShiftRecordId } from "../../../types/records";
 import type { StoreChange } from "../../../types/store";
 import { HistoryCapture } from "./HistoryCapture";
 import { editorRecordsEqual, recordChanges } from "./recordChanges";
+
+/** Bounds how many rounds of finishing listeners one capture runs; each round only sees new changes. */
+const MAX_FINISHING_PASSES = 4;
 
 /**
  * Interleaves TypeScript editor records with ordered workspace undo entries.
@@ -37,6 +40,7 @@ export class EditorHistory {
   readonly #redoEntries: HistoryEntry[] = [];
   readonly #pending = new Map<PendingEditId, PendingHistoryEffect>();
 
+  readonly #finishingListeners = new Set<(changed: ReadonlySet<ShiftRecordId>) => void>();
   #capture: HistoryCaptureContext | null = null;
   #recordingDepth = 0;
   #discardingRedo: Promise<void> | null = null;
@@ -85,8 +89,25 @@ export class EditorHistory {
       label,
       changes: new Map(),
       editIds: [],
+      touched: new Set(),
     };
     return capture;
+  }
+
+  /**
+   * Runs a listener as each capture finishes, while it is still open.
+   *
+   * @remarks
+   * The listener receives the record ids the capture changed. Its own writes
+   * join the same capture, and it is called again with just those ids until
+   * nothing new changes (bounded). Captures cancelled, or edits made outside
+   * a capture or inside `withoutRecording`, do not notify.
+   *
+   * @returns a function that removes the listener.
+   */
+  onCaptureFinishing(listener: (changed: ReadonlySet<ShiftRecordId>) => void): () => void {
+    this.#finishingListeners.add(listener);
+    return () => this.#finishingListeners.delete(listener);
   }
 
   /**
@@ -237,6 +258,8 @@ export class EditorHistory {
     const context = this.#capture;
     if (context?.capture !== capture) return;
 
+    this.#notifyFinishing(context);
+
     const changes = recordChanges(context.changes.values());
     this.#capture = null;
 
@@ -305,10 +328,19 @@ export class EditorHistory {
     }
   }
 
+  #notifyFinishing(context: HistoryCaptureContext): void {
+    for (let pass = 0; pass < MAX_FINISHING_PASSES && context.touched.size > 0; pass++) {
+      const changed = context.touched;
+      context.touched = new Set();
+      for (const listener of this.#finishingListeners) listener(changed);
+    }
+  }
+
   #storeChanged(change: StoreChange<ShiftEditorRecord>): void {
     const context = this.#capture;
     if (!context || this.#recordingDepth > 0 || this.#disposed) return;
 
+    context.touched.add(change.id);
     const previous = context.changes.get(change.id);
     context.changes.set(change.id, {
       id: change.id,

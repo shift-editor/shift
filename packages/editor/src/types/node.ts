@@ -104,3 +104,19 @@ export type CreateNode<N extends ShiftNode = ShiftNode> = N extends ShiftNode
 export type UpdateNode<N extends ShiftNode = ShiftNode> = N extends ShiftNode
   ? Pick<N, "id"> & Partial<Omit<N, "id" | "type" | "kind">>
   : never;
+
+/**
+ * The scene writes available inside one edit.
+ *
+ * @remarks
+ * Only exists inside an open history capture: node definition hooks receive
+ * one, and `Editor.editNodes` hands one to imperative callers. Everything
+ * written through it lands in that capture's single undo step.
+ */
+export interface NodeTransaction {
+  createNode<N extends ShiftNode>(node: CreateNode<N>): N;
+  updateNode(update: UpdateNode): void;
+  deleteNode(nodeId: NodeId): void;
+  /** Makes `nodeId` the node being edited, clearing selection and hover. */
+  enterEditing(nodeId: NodeId): void;
+}

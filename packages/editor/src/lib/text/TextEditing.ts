@@ -19,7 +19,6 @@ import {
   wordCluster,
 } from "./edit";
 import type { Editor } from "../editor/Editor";
-import { removeDetachedChildren } from "./runChildren";
 
 /** Owns the session caret for one placed text node; text content belongs to Text. */
 export class TextEditing {
@@ -230,7 +229,6 @@ export class TextEditing {
     if (!result) return;
     const write = () => {
       this.#editor.text.setItems(run.id, result.items);
-      removeDetachedChildren(this.#editor, run.id);
       this.#store.put({ ...state, anchor: result.anchor, focus: result.focus });
     };
     this.#editor.history.captureOrJoin(label, write);

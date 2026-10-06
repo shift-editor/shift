@@ -43,6 +43,8 @@ export interface HistoryCaptureContext {
   readonly label: string;
   readonly changes: Map<ShiftRecordId, RecordChange>;
   readonly editIds: PendingEditId[];
+  /** Records changed since finishing listeners last saw them. */
+  touched: Set<ShiftRecordId>;
 }
 
 export interface PendingHistoryEffect {
