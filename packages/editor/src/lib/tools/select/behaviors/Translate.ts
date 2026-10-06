@@ -5,12 +5,13 @@ import type { PointId } from "@shift/types";
 import type { ToolContext } from "../../core/Behavior";
 import type { Editor } from "../../../editor/Editor";
 import type { GlyphLayerPositionTarget } from "../../../model/Glyph";
-import type { ComponentTransformEdit } from "../../../model/ComponentTransformEdit";
 import type { DragEvent, DragStartEvent, ToolEvent } from "../../core/GestureDetector";
 import { DirectionSnap, PositionReference } from "../../../model/positions";
 import { scenePoint, vectorBetween } from "../../../editor/spaces";
-import { objectIsKindOf, type ShiftObjectOf } from "../../../../types/object";
+import { objectIsKindOf, type SelectableId, type ShiftObjectOf } from "../../../../types/object";
+import type { PointerTarget } from "../../../../types/target";
 import type { PositionCondition } from "../../../../types/positionEdit";
+import type { TransformEdit } from "../../../../types/transformTarget";
 import type { SelectBehavior, SelectState } from "../types";
 import type { Select } from "../Select";
 import { TranslateInteraction } from "../TranslateInteraction";
@@ -21,7 +22,7 @@ type TranslatingState = Extract<SelectState, { type: "translating" }>;
 
 export class Translate implements SelectBehavior {
   #drag: TranslateInteraction | null = null;
-  #componentEdit: ComponentTransformEdit | null = null;
+  #transformEdit: TransformEdit | null = null;
   #done: (() => void) | null = null;
 
   onDragStart(
@@ -31,15 +32,15 @@ export class Translate implements SelectBehavior {
   ): boolean {
     if (state.type !== "idle" && state.type !== "ready") return false;
 
-    const componentEdit = this.#fromComponentDragStart(ctx.editor, ctx.tool, event);
-    const drag = componentEdit ? null : this.#fromDragStart(ctx.editor, ctx.tool, event);
-    if (!drag && !componentEdit) return false;
+    const transformEdit = this.#fromTransformDragStart(ctx.editor, ctx.tool, event);
+    const drag = transformEdit ? null : this.#fromDragStart(ctx.editor, ctx.tool, event);
+    if (!drag && !transformEdit) return false;
 
     this.#drag = drag;
-    this.#componentEdit = componentEdit;
+    this.#transformEdit = transformEdit;
     this.#done = ctx.onCancel(() => {
       drag?.discard();
-      componentEdit?.discard();
+      transformEdit?.discard();
     });
     ctx.setState(translatingState(event.origin.scene, event.shiftKey));
 
@@ -50,7 +51,7 @@ export class Translate implements SelectBehavior {
 
   onDrag(state: SelectState, ctx: ToolContext<SelectState>, event: DragEvent): boolean {
     if (state.type !== "translating") return false;
-    if (!this.#drag && !this.#componentEdit) return false;
+    if (!this.#drag && !this.#transformEdit) return false;
 
     const nextState = this.#nextTranslatingState(state, event);
     ctx.setState(nextState);
@@ -61,7 +62,7 @@ export class Translate implements SelectBehavior {
     if (state.type !== "translating") return false;
 
     this.#commitDrag(ctx.editor);
-    this.#componentEdit?.commit("Move components");
+    this.#transformEdit?.commit();
     if (this.#done) this.#done();
 
     this.#cleanup();
@@ -95,8 +96,8 @@ export class Translate implements SelectBehavior {
       scenePoint(lastPos.x, lastPos.y),
     );
     const delta = ctx.editor.toLocalVector(node, sceneDelta);
-    if (this.#componentEdit) {
-      this.#componentEdit.preview(() => Mat.Translate(delta.x, delta.y));
+    if (this.#transformEdit) {
+      this.#transformEdit.preview(() => Mat.Translate(delta.x, delta.y));
       ctx.setState({
         ...next,
         translate: { ...next.translate, totalDelta: delta, guides: [] },
@@ -216,23 +217,24 @@ export class Translate implements SelectBehavior {
 
   #cleanup(): void {
     this.#drag = null;
-    this.#componentEdit = null;
+    this.#transformEdit = null;
     this.#done = null;
   }
 
-  #fromComponentDragStart(
+  /** Moves a whole component or text glyph, selecting it first when the box does not own the drag. */
+  #fromTransformDragStart(
     editor: Editor,
     select: Select,
     event: DragStartEvent,
-  ): ComponentTransformEdit | null {
+  ): TransformEdit | null {
     switch (event.target.kind) {
       case "component":
+      case "text":
         if (!boundingBoxOwnsDrag(editor, select, event)) {
-          editor.selection.select([event.target.id]);
+          editor.selection.select([targetId(event.target)]);
         }
         break;
       case "node":
-      case "text":
       case "canvas":
         if (!select.boundingBox.containsTranslationPoint(event.origin)) return null;
         break;
@@ -242,10 +244,7 @@ export class Translate implements SelectBehavior {
         return null;
     }
 
-    const selection = editor.componentTransformSelection(editor.selection.ids);
-    if (!selection) return null;
-
-    return selection.layer.beginComponentTransformEdit(selection);
+    return editor.transformTarget()?.begin("move") ?? null;
   }
 
   #fromDragStart(
@@ -407,13 +406,17 @@ function translatingState(startPos: Point2D, shiftKey: boolean): TranslatingStat
 }
 
 /** Whether an unselected target sits inside the selection's bounding box, which then moves instead. */
+/** The selectable identity of an object target. */
+function targetId(target: Exclude<PointerTarget, { kind: "canvas" | "node" }>): SelectableId {
+  return target.kind === "text" ? target.itemId : target.id;
+}
+
 function boundingBoxOwnsDrag(editor: Editor, select: Select, event: DragStartEvent): boolean {
   const { target } = event;
   const targetSelected =
     target.kind !== "canvas" &&
     target.kind !== "node" &&
-    target.kind !== "text" &&
-    editor.selection.isSelected(target.id);
+    editor.selection.isSelected(targetId(target));
 
   return !targetSelected && select.boundingBox.containsTranslationPoint(event.origin);
 }

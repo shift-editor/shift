@@ -61,19 +61,32 @@ export class Marquee implements SelectBehavior {
    * Points inside the rect, plus segments it touches without catching just one end point.
    *
    * @remarks
-   * A run's glyph gives up its points only while edited, as with clicks.
+   * A run's glyph gives up its points only while edited, as with clicks. With
+   * nothing edited, the rect selects the run glyphs whose outline box it touches.
    */
   private getIdsInRect(rect: Rect2D, ctx: ToolContext<SelectState>): Set<SelectableId> {
     const ids = new Set<SelectableId>();
+    const editor = ctx.editor;
+    const sceneRect = sceneBounds(Bounds.fromXYWH(rect.x, rect.y, rect.width, rect.height));
 
-    for (const node of ctx.editor.scene.nodesOfKind("glyph")) {
-      if (node.parentId !== null && !ctx.editor.editing.has(node.id)) continue;
-      const glyph = ctx.editor.glyphForId(node.glyphId);
+    if (!editor.editing.hasScope()) {
+      const definition = editor.nodeDefinition("textRun");
+      for (const node of editor.scene.nodesOfKind("textRun")) {
+        const localRect = editor.toLocalBounds(node, sceneRect);
+        for (const item of editor.text.run(node.runId)?.items ?? []) {
+          const bounds = definition.itemBounds(node, item.id);
+          if (bounds && Bounds.overlaps(bounds, localRect)) ids.add(item.id);
+        }
+      }
+    }
+
+    for (const node of editor.scene.nodesOfKind("glyph")) {
+      if (node.parentId !== null && !editor.editing.has(node.id)) continue;
+      const glyph = editor.glyphForId(node.glyphId);
       if (!glyph) continue;
 
-      const geometry = glyph.geometryAt(ctx.editor.externalLocation);
-      const sceneRect = sceneBounds(Bounds.fromXYWH(rect.x, rect.y, rect.width, rect.height));
-      const localRect = Bounds.toRect(ctx.editor.toLocalBounds(node, sceneRect));
+      const geometry = glyph.geometryAt(editor.externalLocation);
+      const localRect = Bounds.toRect(editor.toLocalBounds(node, sceneRect));
 
       for (const point of geometry.allPoints) {
         if (Rect.containsPoint(localRect, point)) ids.add(point.id);

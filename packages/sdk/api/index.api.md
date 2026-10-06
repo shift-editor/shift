@@ -234,6 +234,7 @@ export class Editor {
     selectionNode(ids?: readonly SelectableId[]): ShiftNode | null;
     // Warning: (ae-forgotten-export) The symbol "SceneBounds" needs to be exported by the entry point index.d.ts
     selectionSceneBounds(ids?: readonly SelectableId[]): SceneBounds | null;
+    // (undocumented)
     get selectionSceneBoundsCell(): Signal<SceneBounds | null>;
     selectSource(sourceId: SourceId): void;
     // Warning: (ae-forgotten-export) The symbol "SourceSelectionMode" needs to be exported by the entry point index.d.ts
@@ -307,6 +308,8 @@ export class Editor {
     // Warning: (ae-forgotten-export) The symbol "ScreenVector" needs to be exported by the entry point index.d.ts
     toSceneVector(vector: ScreenVector): SceneVector;
     transaction<TResult>(label: string, body: () => TResult): TResult;
+    // Warning: (ae-forgotten-export) The symbol "TransformTarget" needs to be exported by the entry point index.d.ts
+    transformTarget(ids?: readonly SelectableId[]): TransformTarget | null;
     // (undocumented)
     undo(): Promise<void>;
     // (undocumented)
@@ -703,7 +706,7 @@ export function useSignalState<T>(signal: Signal<T>, options?: UseSignalOptions)
 
 // Warnings were encountered during analysis:
 //
-// dist/Editor-Bv7XQyJZ.d.ts:4201:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
+// dist/Editor-IwxnUuFv.d.ts:4239:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

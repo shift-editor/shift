@@ -91,6 +91,7 @@ import { PositionList } from "./positions/PositionList";
 import { GlyphLayerPositionPatch } from "./GlyphLayerPositionPatch";
 import { GlyphLayerEdit } from "./GlyphLayerEdit";
 import { ComponentTransformEdit } from "./ComponentTransformEdit";
+import { GlyphTransformEdit, type GlyphTransformOptions } from "./GlyphTransformEdit";
 import { DeletePoints } from "./DeletePoints";
 import { JoinContours, type ContourEnd } from "./JoinContours";
 import { GlyphLayerState } from "./GlyphLayerState";
@@ -690,6 +691,11 @@ export class GlyphLayer {
   /** Begins a reversible edit that mutates this layer's reactive topology directly. */
   beginEdit(): GlyphLayerEdit {
     return new GlyphLayerEdit(this, this.#writer.layerState);
+  }
+
+  /** Begins one reversible preview cycle that moves, scales, or rotates this whole layer. */
+  beginTransformEdit(options: GlyphTransformOptions): GlyphTransformEdit {
+    return new GlyphTransformEdit(this, this.#writer.layerState, options);
   }
 
   /** Begins one reversible preview cycle across matched component source layers. */

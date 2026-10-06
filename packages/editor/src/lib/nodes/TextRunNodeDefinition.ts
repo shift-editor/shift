@@ -8,8 +8,8 @@ import type { GlyphNode, ShiftNode, TextRunNode } from "../../types/node";
 import type { ShiftRecordId } from "../../types/records";
 import type { RenderContext, RenderPass } from "../../types/rendering";
 import type { PointerTarget } from "../../types/target";
-import type { GlyphRenderModel } from "../model/Glyph";
-import { Mat, type Point2D } from "@shift/geo";
+import type { GlyphLayer, GlyphRenderModel } from "../model/Glyph";
+import { Bounds, Mat, type Point2D, type Rect2D } from "@shift/geo";
 import {
   isTextItemId,
   type ComponentId,
@@ -17,7 +17,16 @@ import {
   type GlyphName,
   type TextItemId,
 } from "@shift/types";
-import { track } from "../signals";
+import { batch, track } from "../signals";
+import type { SelectableId } from "../../types/object";
+import type { TransformAction, TransformTarget } from "../../types/transformTarget";
+import type { GlyphTransformEdit } from "../model/GlyphTransformEdit";
+
+const GLYPH_LABELS: Record<TransformAction, string> = {
+  move: "Move glyphs",
+  scale: "Scale glyphs",
+  rotate: "Rotate glyphs",
+};
 
 /**
  * Projects one shared proof run through a placed, scaled scene node.
@@ -163,6 +172,107 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     );
 
     return localBounds({ min: { x: 0, y: bottom }, max: { x: width, y: top } });
+  }
+
+  /**
+   * Returns one item's outline bounds in the run's units.
+   *
+   * @remarks
+   * Tracks the layout and the glyph's outline, so the transform box follows
+   * respacing and edits.
+   *
+   * @returns null for line breaks, missing glyphs, and glyphs without an outline.
+   */
+  itemBounds(node: TextRunNode, itemId: TextItemId): LocalBounds | null {
+    const layoutCell = this.editor.text.layoutCell(node.runId);
+    track(layoutCell);
+    const placed = layoutCell.peek()?.placedGlyphForItem(itemId);
+    const model = placed?.glyph.glyphId ? this.#model(placed.glyph.glyphId) : null;
+    if (!placed || !model) return null;
+
+    track(model.boundsCell);
+    const bounds = model.bounds;
+    if (!bounds) return null;
+
+    const { x, y } = placed.origin;
+    return localBounds({
+      min: { x: bounds.min.x + x, y: bounds.min.y + y },
+      max: { x: bounds.max.x + x, y: bounds.max.y + y },
+    });
+  }
+
+  /**
+   * Selected glyphs transform whole at the active source, each distinct glyph once.
+   *
+   * @remarks
+   * Each glyph is its own part, pivoting on its own bounds, so a scale keeps
+   * every glyph on its own baseline and edge; a glyph selected several times
+   * is placed by its first selected item. The outline lands where the box
+   * shows; scaling keeps the right sidebearing, moving and rotating keep the
+   * advance. Components built on another selected
+   * glyph follow that glyph instead of transforming again.
+   *
+   * @returns null when any selected item is not a loaded glyph with a layer at the active source.
+   */
+  override transformTarget(
+    node: TextRunNode,
+    ids: readonly SelectableId[],
+  ): TransformTarget | null {
+    const sourceId = this.editor.activeSourceId;
+    const layout = this.editor.text.layoutCell(node.runId).peek();
+    if (!sourceId || !layout || this.editor.sessionMode !== "workspace") return null;
+
+    const parts = new Map<GlyphId, { layer: GlyphLayer; origin: Point2D; bounds: Rect2D }>();
+    let bounds: Bounds | null = null;
+    for (const id of ids) {
+      if (!isTextItemId(id)) return null;
+      const placed = layout.placedGlyphForItem(id);
+      const glyphId = placed?.glyph.glyphId;
+      const layer = glyphId ? this.editor.glyphForId(glyphId)?.layerForSource(sourceId) : null;
+      const itemBounds = this.itemBounds(node, id);
+      if (!placed || !glyphId || !layer || !itemBounds) return null;
+
+      bounds = bounds ? Bounds.union(bounds, itemBounds) : itemBounds;
+      if (!parts.has(glyphId)) {
+        parts.set(glyphId, { layer, origin: placed.origin, bounds: Bounds.toRect(itemBounds) });
+      }
+    }
+    if (!bounds) return null;
+
+    const transformedGlyphIds = new Set(parts.keys());
+    return {
+      bounds: Bounds.toRect(bounds),
+      begin: (action) => {
+        const edits: { edit: GlyphTransformEdit; bounds: Rect2D }[] = [];
+        try {
+          for (const { layer, origin, bounds } of parts.values()) {
+            const keepRightSidebearing = action === "scale";
+            const edit = layer.beginTransformEdit({
+              origin,
+              keepRightSidebearing,
+              transformedGlyphIds,
+            });
+            edits.push({ edit, bounds });
+          }
+        } catch (error) {
+          for (const { edit } of edits) edit.discard();
+          throw error;
+        }
+        return {
+          preview: (deltaFor) =>
+            batch(() => {
+              for (const { edit, bounds } of edits) edit.preview(deltaFor({ bounds }));
+            }),
+          commit: () =>
+            this.editor.transaction(GLYPH_LABELS[action], () => {
+              for (const { edit } of edits) edit.commit();
+            }),
+          discard: () => {
+            for (const { edit } of edits) edit.discard();
+          },
+        };
+      },
+    };
   }
 
   /**
