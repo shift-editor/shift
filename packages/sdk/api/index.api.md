@@ -87,6 +87,8 @@ export class Editor {
     destroy(): void;
     // (undocumented)
     detachRenderSurfaces(): void;
+    // Warning: (ae-forgotten-export) The symbol "PointerTarget" needs to be exported by the entry point index.d.ts
+    doubleClickNode(target: PointerTarget): boolean;
     get draggingCell(): Signal<boolean>;
     // (undocumented)
     duplicateSelection(): PointId[];
@@ -101,6 +103,8 @@ export class Editor {
     get editingSourceIds(): ReadonlySet<SourceId>;
     // (undocumented)
     get editingSourceIdsCell(): Signal<ReadonlySet<SourceId>>;
+    // Warning: (ae-forgotten-export) The symbol "NodeTransaction" needs to be exported by the entry point index.d.ts
+    editNodes<T>(label: string, body: (tx: NodeTransaction) => T): T;
     get externalLocation(): ExternalAxisLocation;
     // (undocumented)
     get externalLocationCell(): Signal<ExternalAxisLocation>;
@@ -122,8 +126,6 @@ export class Editor {
     getCameraTransform(): CameraTransform;
     // (undocumented)
     getMousePosition(): ScenePoint;
-    // Warning: (ae-forgotten-export) The symbol "PointerTarget" needs to be exported by the entry point index.d.ts
-    //
     // (undocumented)
     getPointerTarget(point: ScenePoint): PointerTarget;
     // (undocumented)
@@ -693,7 +695,7 @@ export function useSignalState<T>(signal: Signal<T>, options?: UseSignalOptions)
 
 // Warnings were encountered during analysis:
 //
-// dist/Editor-BR2_y0Qt.d.ts:4183:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
+// dist/Editor-Dr67zz9c.d.ts:4198:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

@@ -188,9 +188,14 @@ export class TestEditor extends Editor {
     });
     const item = glyphTextItem(glyph.name, glyph.entry.unicodes[0] ?? null);
     this.text.setItems(record.id, [item]);
-    const child = editRunItem(this, run, item.id, this.font.defaultSource.id);
+    const child = this.history.withoutRecording(() =>
+      this.editNodes("Open glyph", (tx) => {
+        const edited = editRunItem(this, tx, run, item.id, this.font.defaultSource.id);
+        if (edited) tx.enterEditing(edited.id);
+        return edited;
+      }),
+    );
     if (!child) throw new Error("placed glyph is not loaded");
-    this.editing.enter(child.id);
   }
 
   /** Awaits every queued and in-flight apply; geometry reads confirmed truth after. */

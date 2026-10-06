@@ -104,8 +104,8 @@ import type { ComponentTransformSelection } from "../../types/componentTransform
 import type { ComponentTargets } from "../../types/componentTargets";
 import type { PositionSelection } from "../../types/positionEdit";
 import type { SelectableId, ShiftId, ShiftObject } from "../../types/object";
-import type { ShiftEditorRecord } from "../../types/records";
-import type { GlyphNode, NodeKind, ShiftNode } from "../../types/node";
+import type { ShiftEditorRecord, ShiftRecordId } from "../../types/records";
+import type { GlyphNode, NodeKind, NodeTransaction, ShiftNode } from "../../types/node";
 import {
   AnchorObject,
   ComponentObject,
@@ -184,6 +184,16 @@ export class Editor {
   readonly #nodeDefinitions: NodeDefinitionByKind;
   readonly #store: ShiftStore<ShiftEditorRecord>;
   readonly #fontStore: FontStore;
+  readonly #nodeTransaction: NodeTransaction = {
+    createNode: (node) => this.scene.createNode(node),
+    updateNode: (update) => this.scene.updateNode(update),
+    deleteNode: (nodeId) => this.scene.deleteNode(nodeId),
+    enterEditing: (nodeId) => {
+      this.selection.clear();
+      this.hover.clear();
+      this.editing.enter(nodeId);
+    },
+  };
 
   /**
    * Rendering and camera infrastructure.
@@ -293,6 +303,7 @@ export class Editor {
       this.#store,
       this.sessionMode === "workspace" ? this.font.editCoordinator : null,
     );
+    this.history.onCaptureFinishing((changed) => this.#runContentHooks(changed));
     this.hover = new Hover();
     this.#selectionBounds = computed(
       () => {
@@ -1529,6 +1540,49 @@ export class Editor {
     return Mat.Compose(this.#frameToScene(parent), Mat.Translate(position.x, position.y));
   }
 
+  /**
+   * Runs scene writes as one edit, inside the open capture or a new one.
+   *
+   * @remarks
+   * The transaction is the same one node definition hooks receive. Content
+   * hooks run for the nodes the edit touched when its capture finishes.
+   *
+   * @param label - Action name used only when this call opens the capture.
+   * @returns the body's result.
+   */
+  editNodes<T>(label: string, body: (tx: NodeTransaction) => T): T {
+    return this.history.captureOrJoin(label, () => body(this.#nodeTransaction));
+  }
+
+  /**
+   * Offers a double-click to the hit node's definition, then to each ancestor's.
+   *
+   * @returns true when a definition handled it.
+   */
+  doubleClickNode(target: PointerTarget): boolean {
+    const hit = targetNode(this.scene, target);
+    if (!hit) return false;
+
+    return this.editNodes("Double-click", (tx) => {
+      for (const node of [hit, ...this.scene.ancestors(hit.id)]) {
+        if (this.nodeDefinition(node.kind).onDoubleClick?.(node, target, tx)) return true;
+      }
+      return false;
+    });
+  }
+
+  #runContentHooks(changed: ReadonlySet<ShiftRecordId>): void {
+    for (const node of this.scene.nodes()) {
+      if (!this.scene.node(node.id)) continue;
+      const definition = this.nodeDefinition(node.kind);
+      if (!definition.onContentChange) continue;
+
+      const contentId = definition.contentRecordId?.(node) ?? null;
+      const touched = changed.has(node.id) || (contentId !== null && changed.has(contentId));
+      if (touched) definition.onContentChange(node, this.#nodeTransaction);
+    }
+  }
+
   getPointerTarget(point: ScenePoint): PointerTarget {
     const nodes = this.scene.nodes();
     for (let i = nodes.length - 1; i >= 0; i--) {
@@ -2119,5 +2173,21 @@ export class Editor {
 
   #getToolScopeMap(scope: ToolStateScope): Map<string, unknown> {
     return this.#toolState[scope];
+  }
+}
+
+/** The node a pointer target belongs to, or null for blank canvas. */
+function targetNode(scene: Scene, target: PointerTarget): ShiftNode | null {
+  switch (target.kind) {
+    case "canvas":
+      return null;
+    case "node":
+    case "text":
+      return target.node;
+    case "point":
+    case "anchor":
+    case "segment":
+    case "component":
+      return scene.node(target.nodeId);
   }
 }

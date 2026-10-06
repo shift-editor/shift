@@ -4,12 +4,14 @@ import { Caret, type PlacedGlyph, type TextLayout } from "../text/layout";
 import { clusterForCaret } from "../text/edit";
 import type { LocalBounds, LocalPoint } from "../../types/coordinates";
 import { localBounds } from "../editor/spaces";
-import type { GlyphNode, ShiftNode, TextRunNode } from "../../types/node";
+import type { GlyphNode, NodeTransaction, ShiftNode, TextRunNode } from "../../types/node";
+import type { ShiftRecordId } from "../../types/records";
+import { editRunItem } from "../text/runChildren";
 import type { RenderContext, RenderPass } from "../../types/rendering";
 import type { PointerTarget } from "../../types/target";
 import type { GlyphRenderModel } from "../model/Glyph";
 import { Mat, type Point2D } from "@shift/geo";
-import { isTextItemId, type GlyphId, type TextItemId } from "@shift/types";
+import { isTextItemId, type ComponentId, type GlyphId, type TextItemId } from "@shift/types";
 import { track } from "../signals";
 
 /**
@@ -17,9 +19,9 @@ import { track } from "../signals";
  *
  * @remarks
  * A run edits at most one of its glyphs in place through a child `GlyphNode`
- * pointing at an item. This definition owns the read side of that: it places
- * the child at its item and stops drawing and hitting that item. Writes that
- * change the child live in `lib/text/runChildren`.
+ * pointing at an item. This definition places the child at its item and stops
+ * drawing and hitting that item; its hooks switch the child on double-click
+ * and delete it when its item is removed.
  */
 export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
   readonly kind: TextRunNode["kind"] = "textRun";
@@ -53,6 +55,59 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
       if (child.kind === "glyph") return child;
     }
     return null;
+  }
+
+  override contentRecordId(node: TextRunNode): ShiftRecordId {
+    return node.runId;
+  }
+
+  /**
+   * Double-clicking a run glyph edits it in place; double-clicking a component
+   * of the edited glyph opens its base glyph right after it.
+   */
+  override onDoubleClick(node: TextRunNode, target: PointerTarget, tx: NodeTransaction): boolean {
+    const child = this.childGlyph(node);
+    const sourceId =
+      child?.sourceId ?? this.editor.activeSourceId ?? this.editor.font.defaultSource.id;
+
+    let itemId: TextItemId | null = null;
+    if (target.kind === "text" && target.node.id === node.id) itemId = target.itemId;
+    if (target.kind === "component" && child?.itemId && target.nodeId === child.id) {
+      itemId = this.#insertComponentBase(node, child.itemId, target.componentId);
+    }
+    if (!itemId) return false;
+
+    const edited = editRunItem(this.editor, tx, node, itemId, sourceId);
+    if (!edited) return false;
+    tx.enterEditing(edited.id);
+    return true;
+  }
+
+  /** Deletes the child glyph when its item is no longer in the run. */
+  override onContentChange(node: TextRunNode, tx: NodeTransaction): void {
+    const child = this.childGlyph(node);
+    if (!child?.itemId) return;
+    const items = this.editor.text.run(node.runId)?.items ?? [];
+    if (!items.some((item) => item.id === child.itemId)) tx.deleteNode(child.id);
+  }
+
+  /**
+   * Inserts a component's base glyph after an item.
+   *
+   * @remarks
+   * A drawn component's base is always loaded: `Font.loadGlyphs` loads
+   * component bases with the glyph that uses them.
+   */
+  #insertComponentBase(
+    node: TextRunNode,
+    afterId: TextItemId,
+    componentId: ComponentId,
+  ): TextItemId | null {
+    const component = this.editor.object(componentId);
+    if (component?.kind !== "component") return null;
+    const base = this.editor.text.glyphItem(component.component.glyphId);
+    if (!base || !this.editor.text.insertAfter(node.runId, afterId, [base])) return null;
+    return base.id;
   }
 
   bounds(node: TextRunNode): LocalBounds | null {
