@@ -188,6 +188,40 @@ describe("Select over the page run", () => {
     expect(editor.editing.nodeIds).toEqual([previous.id]);
   });
 
+  it("Escape deselects first, then leaves the edited glyph", () => {
+    const child = editor.runGlyph!;
+    editor.selectAll();
+    editor.escape();
+    expect(editor.selection.hasSelection()).toBe(false);
+    expect(editor.editing.nodeIds).toEqual([child.id]);
+
+    editor.escape();
+    expect(editor.editing.nodeIds).toEqual([]);
+    expect(editor.runGlyph?.id).toBe(child.id);
+  });
+
+  it("leaving the edited glyph is one undo step", async () => {
+    const child = editor.runGlyph!;
+    editor.selection.clear();
+    editor.escape();
+    await editor.undo();
+    expect(editor.editing.nodeIds).toEqual([child.id]);
+  });
+
+  it("the glyph you left hovers as text and double-clicking it edits it again", async () => {
+    const child = editor.runGlyph!;
+    editor.selection.clear();
+    editor.escape();
+
+    hoverLocal(200, 200);
+    expect(editor.hover.id).toBe(child.itemId);
+
+    const screen = editor.localToScreen({ x: 200, y: 200 });
+    await editor.click(screen.x, screen.y);
+    await editor.click(screen.x, screen.y);
+    expect(editor.editing.nodeIds).toEqual([child.id]);
+  });
+
   it("Pen clicks over a run glyph still draw into the edited glyph", async () => {
     const layer = editor.requireGlyphLayer();
     const before = layer.contours.length;

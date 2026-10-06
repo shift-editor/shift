@@ -1624,6 +1624,13 @@ export class Editor {
     this.editing.enter(nodeId);
   }
 
+  /** Leaves every edited node, so glyphs draw and hit as plain content. */
+  exitNodes(): void {
+    this.selection.clear();
+    this.hover.clear();
+    this.editing.clear();
+  }
+
   /**
    * Offers a double-click to the hit node's definition, then to each ancestor's.
    *

@@ -277,7 +277,8 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
 
     if (editing) {
       this.#drawEditableContent(node, ctx, view);
-    } else {
+    } else if (node.parentId === null) {
+      // A run child you are not editing is plain text; its parent run draws it.
       this.#drawDisplayContent(ctx, view);
     }
 
