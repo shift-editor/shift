@@ -155,3 +155,21 @@ describe("ShiftStore indexes", () => {
     expect(index.get("A")).toEqual([]);
   });
 });
+
+describe("ShiftStore records of one type", () => {
+  it("reruns a reader only when a record of its type changes", () => {
+    const first = run("A");
+    const store = new ShiftStore<ShiftEditorRecord>([first]);
+    const seen: (readonly ShiftEditorRecord[])[] = [];
+    const reader = effect(() => {
+      seen.push(store.recordsOfType("textrun"));
+    });
+
+    store.put({ id: currentSelectionId, type: "selection", scope: "session", ids: [] });
+    const second = run("B");
+    store.put(second);
+    reader.dispose();
+
+    expect(seen).toEqual([[first], [first, second]]);
+  });
+});

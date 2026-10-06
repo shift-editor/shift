@@ -37,11 +37,7 @@ export class Scene {
     this.#byReference = store.index("node", references);
     this.#cell = computed(
       () => {
-        const nodes: ShiftNodeRecord[] = [];
-        for (const record of this.#store.cell.value.values()) {
-          if (record.type === "node") nodes.push(record);
-        }
-
+        const nodes = this.#store.recordsOfType("node");
         const tree = Tree.from<NodeId, ShiftNode>(nodes, {
           id: (node) => node.id,
           parentId: (node) => node.parentId,
@@ -49,9 +45,9 @@ export class Scene {
         });
         return { nodes: tree.walk(), tree };
       },
-      // Selection and other session records share this store; only a change to a node record
-      // should reach scene readers.
-      { name: "editor.scene", equals: sameScene },
+      // Reads only node records, so selection, editing, and run writes to the shared store
+      // never rebuild the scene.
+      { name: "editor.scene" },
     );
     this.#nodesById = computed(
       () => {
@@ -222,11 +218,4 @@ function copyNode<T extends ShiftNode>(node: T): T {
     ...node,
     position: { ...node.position },
   };
-}
-
-function sameScene(prev: SceneValue, next: SceneValue): boolean {
-  return (
-    prev.nodes.length === next.nodes.length &&
-    prev.nodes.every((node, index) => node === next.nodes[index])
-  );
 }

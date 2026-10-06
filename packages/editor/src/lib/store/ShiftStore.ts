@@ -8,6 +8,8 @@ export class ShiftStore<R extends ShiftRecord = ShiftRecord> {
   // non-reactive: subscriber registry; listeners are invoked imperatively, never read in computeds
   readonly #changeListeners = new Set<(change: StoreChange<R>) => void>();
   readonly #recordCells = new Map<R["id"], WritableSignal<R | null>>();
+  // non-reactive: one lazily created index per record type; each index holds its own signals
+  readonly #typeIndexes = new Map<R["type"], StoreIndex<R["type"], R>>();
 
   constructor(records: readonly R[] = []) {
     this.#cell = signal<ReadonlyMap<R["id"], R>>(
@@ -42,6 +44,28 @@ export class ShiftStore<R extends ShiftRecord = ShiftRecord> {
     }
     track(cell);
     return cell.peek();
+  }
+
+  /**
+   * Returns every record of one type.
+   *
+   * @remarks
+   * Reactive: inside a computed or effect, the reader reruns only when a
+   * record of `type` is put or deleted, not when records of other types
+   * change. Records keep the order they were first put in.
+   */
+  recordsOfType<T extends R["type"]>(type: T): readonly Extract<R, { type: T }>[] {
+    let index = this.#typeIndexes.get(type);
+    if (!index) {
+      index = new StoreIndex<R["type"], R>(
+        this,
+        (record): record is R => record.type === type,
+        () => [type],
+      );
+      this.#typeIndexes.set(type, index);
+    }
+    // The index for `type` only ever files records whose type is `type`.
+    return index.get(type) as readonly Extract<R, { type: T }>[];
   }
 
   /**
