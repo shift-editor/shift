@@ -93,7 +93,7 @@ fn bounded_batch_load_matches_complete_font_layers() {
 
     assert_eq!(layers.len(), layer_ids.len() - 1);
     for layer in layers {
-        assert_eq!(font.layer(layer.id()).unwrap(), &layer);
+        assert_eq!(font.layer(&layer.id()).unwrap(), &layer);
     }
 }
 
@@ -222,7 +222,7 @@ fn dependent_lookup_preserves_results_across_component_query_batches() {
         .unwrap()
         .base_glyph_id();
     let target = font
-        .glyph(base_glyph_id)
+        .glyph(&base_glyph_id)
         .unwrap()
         .layers()
         .keys()
@@ -287,7 +287,7 @@ fn mixed_compressed_and_uncompressed_layers_load_in_stable_order() {
         .take(2)
         .collect::<Vec<_>>();
     layer_ids.sort_by(|left, right| left.as_str().cmp(right.as_str()));
-    let uncompressed_layer = font.layer(layer_ids[0].clone()).unwrap();
+    let uncompressed_layer = font.layer(&layer_ids[0].clone()).unwrap();
     let encoded = encode_layer(uncompressed_layer).unwrap();
     let decoded_blake3 = blake3::hash(&encoded);
     store
@@ -313,7 +313,7 @@ fn mixed_compressed_and_uncompressed_layers_load_in_stable_order() {
     assert_eq!(loaded[0].id(), layer_ids[0]);
     assert_eq!(loaded[1].id(), layer_ids[1]);
     for layer in loaded {
-        assert_eq!(font.layer(layer.id()).unwrap(), &layer);
+        assert_eq!(font.layer(&layer.id()).unwrap(), &layer);
     }
 }
 
@@ -382,7 +382,7 @@ fn layer_rewrite_transitions_from_uncompressed_to_zstd_consistently() {
         decoded_byte_length: encoded.len() as u64,
         decoded_blake3: *blake3::hash(&encoded).as_bytes(),
     };
-    let glyph_id = font.glyph_id_by_layer(layer.id()).unwrap();
+    let glyph_id = font.glyph_id_by_layer(&layer.id()).unwrap();
     let tx = store.conn.transaction().unwrap();
     store_stored_layer_in_tx(
         &tx,
@@ -461,7 +461,7 @@ fn false_decoded_length_and_hash_are_rejected() {
             if detail.contains("decoded byte length")
     ));
 
-    let encoded = encode_layer(font.layer(layer_id.clone()).unwrap()).unwrap();
+    let encoded = encode_layer(font.layer(layer_id).unwrap()).unwrap();
     store
         .conn
         .execute(
@@ -501,7 +501,7 @@ fn directory_open_never_reads_malformed_payloads() {
 
     let directory = store.load_font_directory().unwrap();
     assert_eq!(directory.glyph_count(), font.glyph_count());
-    assert!(directory.layer(layer_id.clone()).unwrap().is_empty());
+    assert!(directory.layer(layer_id).unwrap().is_empty());
     assert!(store.load_glyph_layer(layer_id).is_err());
     assert!(
         store
@@ -531,7 +531,7 @@ fn directory_retains_layer_when_payload_row_is_missing() {
 
     let directory = store.load_font_directory().unwrap();
 
-    assert!(directory.layer(layer_id.clone()).is_some());
+    assert!(directory.layer(layer_id).is_some());
     assert!(store.load_font_state().is_err());
 }
 
@@ -621,7 +621,7 @@ fn replacement_updates_payload_directory_references_and_revision_atomically() {
         .unwrap()
         .as_ref()
         .clone();
-    let owner = font.glyph_id_by_layer(layer.id()).unwrap();
+    let owner = font.glyph_id_by_layer(&layer.id()).unwrap();
     layer.set_width(layer.width() + 23.0);
     layer.clear_components();
 

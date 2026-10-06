@@ -169,7 +169,7 @@ fn unique_glyph_ids(font: &Font, glyph_ids: &[GlyphId]) -> Result<Vec<GlyphId>, 
     let mut unique = Vec::with_capacity(glyph_ids.len());
 
     for glyph_id in glyph_ids {
-        if font.glyph(glyph_id.clone()).is_none() {
+        if font.glyph(glyph_id).is_none() {
             return Err(CoreError::GlyphNotFound(glyph_id.clone()).into());
         }
         if seen.insert(glyph_id.clone()) {

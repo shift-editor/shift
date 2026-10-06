@@ -81,7 +81,7 @@ fn stream_font(path: &Path) -> Font {
     assert_eq!(font.glyph_count(), expected_count);
     for entry in directory {
         assert_eq!(
-            font.glyph(entry.glyph_id).map(Glyph::glyph_name),
+            font.glyph(&entry.glyph_id).map(Glyph::glyph_name),
             Some(&entry.name)
         );
     }

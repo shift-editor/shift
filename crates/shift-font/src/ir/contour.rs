@@ -130,12 +130,12 @@ impl Contour {
         self.points.insert(index, point);
     }
 
-    pub fn get_point(&self, id: PointId) -> Option<&Point> {
-        self.points.iter().find(|p| p.id() == id)
+    pub fn get_point(&self, id: &PointId) -> Option<&Point> {
+        self.points.iter().find(|p| p.id() == *id)
     }
 
-    pub fn get_point_mut(&mut self, id: PointId) -> Option<&mut Point> {
-        self.points.iter_mut().find(|p| p.id() == id)
+    pub fn get_point_mut(&mut self, id: &PointId) -> Option<&mut Point> {
+        self.points.iter_mut().find(|p| p.id() == *id)
     }
 
     pub fn get_point_at(&self, index: usize) -> Option<&Point> {
@@ -307,8 +307,8 @@ mod tests {
         let id2 = c.add_point(30.0, 40.0, PointType::OffCurve, false);
 
         assert_eq!(c.len(), 2);
-        assert!(c.get_point(id1).is_some());
-        assert!(c.get_point(id2).is_some());
+        assert!(c.get_point(&id1).is_some());
+        assert!(c.get_point(&id2).is_some());
     }
 
     #[test]

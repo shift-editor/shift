@@ -276,7 +276,7 @@ fn component_font() -> (shift_font::Font, GlyphId) {
     let mut font = sample_variable_font();
     let root_id = font.glyphs_by_unicode(0x41).next().unwrap().id();
     let layers = font
-        .glyph(root_id.clone())
+        .glyph(&root_id.clone())
         .unwrap()
         .layers()
         .values()
@@ -308,7 +308,7 @@ fn component_font() -> (shift_font::Font, GlyphId) {
     font.insert_glyph(mark).unwrap();
 
     for (source_index, (layer_id, _)) in layers.into_iter().enumerate() {
-        let layer = font.layer_mut(layer_id).unwrap();
+        let layer = font.layer_mut(&layer_id).unwrap();
         layer.add_component(Component::with_transform(
             base_id.clone(),
             "gpu-component-base",

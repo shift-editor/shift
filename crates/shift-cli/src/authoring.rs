@@ -307,7 +307,7 @@ fn report_changes(font: &Font, changes: Vec<FontChange>) -> Vec<AuthoringChange>
                     .collect(),
             }),
             FontChange::GlyphLayerCreated(change) => {
-                let layer = font.layer(change.layer_id.clone())?;
+                let layer = font.layer(&change.layer_id)?;
                 Some(AuthoringChange::GlyphLayerCreated {
                     layer_id: change.layer_id.to_string(),
                     glyph_id: change.glyph_id.to_string(),

@@ -41,7 +41,8 @@ Every new helper gets Rustdoc with an `# Errors` section (see `rustdoc`) and a u
 
 ## Lookups and ids
 
-- Take ids by reference in new lookups: `fn require_glyph(&self, id: &GlyphId)`. Ids are `String` newtypes; passing them by value forces a clone at every call.
+- Lookups take ids by reference: `fn glyph(&self, id: &GlyphId)`. Ids are `String` newtypes; a by-value parameter forces every caller that keeps its id to clone it. Take an id by value only when the function stores or returns it.
+- Never pass `&id.clone()`; borrow the id you have.
 - Never clone an id only to build an error that is probably not returned. Use `ok_or_else` or the helpers above, which format the id only on failure. `ok_or(CoreError::X(id.clone()))` clones on every call, including successful ones.
 - `Option` lookups (`font.glyph(id)`) are for "absent is a normal answer". Use `require_*` when absence is an error for this caller.
 
