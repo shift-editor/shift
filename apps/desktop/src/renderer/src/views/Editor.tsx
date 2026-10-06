@@ -11,12 +11,13 @@ import { Canvas } from "@/components/editor/Canvas";
 import { CanvasContextMenu } from "@/components/editor/CanvasContextMenu";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { localBounds } from "@shift/editor/spaces";
+import { editRunItem, glyphTextItem, removeDetachedChildren } from "@shift/editor/text";
 import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
 import { useFocusZone, ZoneContainer } from "@/context/FocusZoneContext";
 import { KeyboardRouter } from "@/lib/keyboard";
 import { getShiftHost } from "@/host/shiftHost";
 import { useSignalState } from "@shift/editor/signals";
-import { asGlyphId, mintNodeId } from "@shift/types";
+import { asGlyphId } from "@shift/types";
 import { Bounds } from "@shift/geo";
 
 export const Editor = () => {
@@ -38,25 +39,41 @@ export const Editor = () => {
     claimZone("canvas");
   }, [claimZone, glyph]);
 
-  // GlyphGrid acquires the complete Glyph before navigating. The route only
-  // publishes a scene node after synchronous acquisition is confirmed.
+  // GlyphGrid acquires the complete Glyph before navigating. Until pages exist,
+  // the canvas has one text run at the scene origin that outlives the route, and
+  // opening a glyph replaces the run's text with that glyph and edits it in place.
   useEffect(() => {
     if (!glyph) return undefined;
 
-    const nodeId = mintNodeId();
     const sourceId = editor.activeSourceId ?? editor.font.defaultSource.id;
-    editor.scene.setNodes([
-      {
-        id: nodeId,
-        type: "node",
-        kind: "glyph",
-        parentId: null,
-        index: "a0",
-        glyphId: glyph.id,
-        sourceId,
+    let run = editor.scene.nodesOfKind("textRun")[0];
+    if (!run) {
+      const record = editor.text.createRun([]);
+      run = editor.scene.createNode({
+        kind: "textRun",
+        runId: record.id,
+        size: editor.font.metricsCell.peek().unitsPerEm,
         position: { x: 0, y: 0 },
-      },
-    ]);
+      });
+    }
+    const textRun = run;
+    const previous = editor.nodeDefinition("textRun").childGlyph(textRun);
+    const open = () => {
+      if (previous?.glyphId === glyph.id) {
+        editor.editing.enter(previous.id);
+        return previous;
+      }
+      const item = glyphTextItem(glyph.name, glyph.entry.unicodes[0] ?? null);
+      editor.text.setItems(textRun.runId, [item]);
+      removeDetachedChildren(editor, textRun.runId);
+      const child = editRunItem(editor, textRun, item.id, sourceId);
+      if (child) editor.editing.enter(child.id);
+      return child;
+    };
+    // Route hydration is navigation, never a history entry.
+    const node = editor.history.withoutRecording(open);
+    // Tools activate against the glyph node they find, so reset after it is placed.
+    editor.toolManager.reset();
 
     const metrics = editor.font.metricsAtLocation(editor.externalLocation);
     const view = glyph.renderModelAt(editor.externalLocationCell, editor.activeSourceIdCell);
@@ -74,26 +91,21 @@ export const Editor = () => {
       },
     );
 
-    const node = editor.scene.node(nodeId);
     if (node) editor.fitInitialBounds(editor.toSceneBounds(node, localBounds(glyphFrameBounds)));
-    editor.editing.enter(nodeId);
-    editor.toolManager.reset();
 
     return () => {
       editor.toolManager.reset();
       editor.selection.clear();
       editor.hover.clear();
-      if (editor.editing.has(nodeId)) editor.editing.clear();
-      editor.scene.deleteNode(nodeId);
+      editor.editing.clear();
     };
   }, [editor, glyph]);
 
   useEffect(() => {
     if (!glyph) return;
 
-    const node = editor.scene
-      .nodesOfKind("glyph")
-      .find((candidate) => candidate.glyphId === glyph.id);
+    const run = editor.scene.nodesOfKind("textRun")[0];
+    const node = run ? editor.nodeDefinition("textRun").childGlyph(run) : null;
     if (!node) return;
 
     const sourceId = activeSourceId ?? editor.font.defaultSource.id;

@@ -1,4 +1,4 @@
-import type { Mat } from "@shift/geo";
+import type { Mat, Point2D } from "@shift/geo";
 import type { Editor } from "../editor/Editor";
 import type { LocalBounds, LocalPoint } from "../../types/coordinates";
 import type { ShiftNode } from "../../types/node";
@@ -54,6 +54,21 @@ export abstract class NodeDefinition<N extends ShiftNode = ShiftNode> {
    * @returns the top target for this node, or null when the node was not hit.
    */
   abstract hit(node: N, point: LocalPoint): PointerTarget | null;
+
+  /**
+   * Returns where this node lays out one of its children.
+   *
+   * @remarks
+   * Kinds that lay out their children (text runs) override this. The result
+   * replaces the child's authored `position` as its frame origin.
+   *
+   * @param _parent - scene node handled by this definition.
+   * @param _child - a node whose `parentId` is `_parent`.
+   * @returns the child's frame origin in the parent's frame, or null to use the child's own position.
+   */
+  childPosition(_parent: N, _child: ShiftNode): Point2D | null {
+    return null;
+  }
 
   /**
    * Paints a node for one render pass.

@@ -9,6 +9,11 @@ import type {
   NormalizedKeyboardEvent,
 } from "./types";
 
+/** Text keys belong to the caret only once a click has placed one; a ready text tool keeps canvas shortcuts. */
+function isTyping(ctx: KeyContext): boolean {
+  return ctx.editor.toolIf("text")?.state.type === "editing";
+}
+
 export interface KeymapHandlers {
   activateTemporaryHand: (ctx: KeyContext) => boolean;
   releaseTemporaryHand: (ctx: KeyContext) => boolean;
@@ -46,7 +51,7 @@ export function createGlobalKeyDownBindings(runCommand: KeyboardCommandHandler):
     ...(["left", "center-h", "right", "top", "center-v", "bottom"] as const).map((alignment) => ({
       id: `global.align.${alignment}`,
       preventDefault: true,
-      when: (ctx: KeyContext) => ctx.activeTool !== "text",
+      when: (ctx: KeyContext) => !isTyping(ctx),
       match: (event: NormalizedKeyboardEvent) =>
         matchChord(event, sidebarShortcuts[`align.${alignment}`]),
       run: (ctx: KeyContext) => alignSelection(ctx.editor, alignment),
@@ -54,7 +59,7 @@ export function createGlobalKeyDownBindings(runCommand: KeyboardCommandHandler):
     ...(["union", "intersect", "subtract"] as const).map((operation) => ({
       id: `global.boolean.${operation}`,
       preventDefault: true,
-      when: (ctx: KeyContext) => ctx.activeTool !== "text",
+      when: (ctx: KeyContext) => !isTyping(ctx),
       match: (event: NormalizedKeyboardEvent) =>
         matchChord(event, sidebarShortcuts[`boolean.${operation}`]),
       run: (ctx: KeyContext) => applyBooleanSelection(ctx.editor, operation),
@@ -62,7 +67,7 @@ export function createGlobalKeyDownBindings(runCommand: KeyboardCommandHandler):
     ...(["horizontal", "vertical"] as const).map((axis) => ({
       id: `global.flip.${axis}`,
       preventDefault: true,
-      when: (ctx: KeyContext) => ctx.activeTool !== "text",
+      when: (ctx: KeyContext) => !isTyping(ctx),
       match: (event: NormalizedKeyboardEvent) =>
         matchChord(event, sidebarShortcuts[`flip.${axis}`]),
       run: (ctx: KeyContext) => flipSelection(ctx.editor, axis),
@@ -70,7 +75,7 @@ export function createGlobalKeyDownBindings(runCommand: KeyboardCommandHandler):
     {
       id: "global.copy",
       preventDefault: true,
-      when: (ctx) => ctx.activeTool !== "text",
+      when: (ctx) => !isTyping(ctx),
       match: (event) =>
         matchChord(event, {
           key: "c",
@@ -83,7 +88,7 @@ export function createGlobalKeyDownBindings(runCommand: KeyboardCommandHandler):
     {
       id: "global.cut",
       preventDefault: true,
-      when: (ctx) => ctx.activeTool !== "text",
+      when: (ctx) => !isTyping(ctx),
       match: (event) =>
         matchChord(event, {
           key: "x",
@@ -96,7 +101,7 @@ export function createGlobalKeyDownBindings(runCommand: KeyboardCommandHandler):
     {
       id: "global.paste",
       preventDefault: true,
-      when: (ctx) => ctx.activeTool !== "text",
+      when: (ctx) => !isTyping(ctx),
       match: (event) =>
         matchChord(event, {
           key: "v",
@@ -194,7 +199,7 @@ export function createCanvasKeyDownBindings(handlers: KeymapHandlers): KeyBindin
     {
       id: "canvas.temporaryHand.activate",
       preventDefault: true,
-      when: (ctx) => ctx.activeTool !== "text",
+      when: (ctx) => !isTyping(ctx),
       match: (event) =>
         matchChord(event, {
           code: "Space",
@@ -208,7 +213,7 @@ export function createCanvasKeyDownBindings(handlers: KeymapHandlers): KeyBindin
     {
       id: "canvas.toolShortcut",
       preventDefault: true,
-      when: (ctx) => ctx.activeTool !== "text",
+      when: (ctx) => !isTyping(ctx),
       match: (event, ctx) => {
         if (event.primaryModifier || event.shiftKey || event.altKey) return false;
         return ctx.editor
@@ -233,7 +238,7 @@ export function createCanvasKeyDownBindings(handlers: KeymapHandlers): KeyBindin
     {
       id: "canvas.deleteSelection",
       preventDefault: true,
-      when: (ctx) => ctx.activeTool !== "text",
+      when: (ctx) => !isTyping(ctx),
       match: (event) => event.key === "Delete" || event.key === "Backspace",
       run: (ctx, event) => ctx.editor.deleteSelection(event.shiftKey ? "gap" : "fit"),
     },

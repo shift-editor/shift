@@ -82,6 +82,9 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
   }
 
   hit(node: GlyphNode, point: LocalPoint): PointerTarget | null {
+    // A run child you are not editing is plain text; its parent run answers the hit.
+    if (node.parentId !== null && !this.#isEditing(node)) return null;
+
     const geometry = this.#view(node);
     if (!geometry) return null;
 

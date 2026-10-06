@@ -1,3 +1,4 @@
+import { track } from "../../signals";
 import { displayAdvance, isNonSpacingGlyph } from "../../utils/unicode";
 import type { GlyphTextItem, PositionedRun, SegmentedRun } from "./types";
 import type { Editor } from "../../editor/Editor";
@@ -6,7 +7,7 @@ import type { GlyphRenderModel } from "../../model/Glyph";
 import type { Signal } from "../../signals/signal";
 import type { ExternalAxisLocation } from "../../../types/variation";
 import type { Bounds, Point2D } from "@shift/geo";
-import type { GlyphRecord, Source } from "@shift/types";
+import type { GlyphEntry, GlyphName, Source } from "@shift/types";
 
 /**
  * No-shape positioner — literal LTR advance walk, `cluster = clusterStart + i`.
@@ -27,14 +28,16 @@ export class Positioner {
     const source = editor.activeSource ?? editor.font.sourceAtOrDefault(externalLocation.peek());
 
     for (const [idx, g] of run.glyphs.entries()) {
-      const record = editor.font.recordForName(g.glyphName);
-      const glyph = record ? editor.glyphForId(record.id) : null;
+      const entry = editor.font.entryForName(g.glyphName as GlyphName);
+      const glyph = entry ? editor.glyphForId(entry.id) : null;
       const renderModel = glyph?.renderModelAt(externalLocation, editor.activeSourceIdCell) ?? null;
       let glyphName = g.glyphName;
       let bounds: Bounds | null = null;
 
-      if (record && renderModel) {
-        glyphName = record.name;
+      if (entry && renderModel) {
+        // Inside the run's layout computed: spacing edits re-run the layout.
+        track(renderModel.xAdvanceCell);
+        glyphName = entry.name;
         bounds = renderModel.bounds;
       }
 
@@ -44,7 +47,7 @@ export class Positioner {
       totalAdvance += xAdvance;
 
       glyphs.push({
-        glyphId: record?.id ?? null,
+        glyphId: entry?.id ?? null,
         glyphName,
         sourceItemIds: [g.id],
         origin,
@@ -119,6 +122,6 @@ export function resolveGlyphOffset(
   };
 }
 
-function recordForTextItem(item: GlyphTextItem, font: Font): GlyphRecord | null {
-  return font.recordForName(item.glyphName);
+function recordForTextItem(item: GlyphTextItem, font: Font): GlyphEntry | null {
+  return font.entryForName(item.glyphName as GlyphName);
 }

@@ -1,11 +1,14 @@
 import { mintNodeId, type NodeId } from "@shift/types";
+import { Tree } from "../utils/Tree";
 import { computed, type Signal } from "../signals/index";
 import type { ShiftStore } from "../store/ShiftStore";
 import type { ShiftEditorRecord, ShiftNodeRecord } from "../../types/records";
 import type { CreateNode, ShiftNode, UpdateNode } from "../../types/node";
 
 export interface SceneValue {
+  /** Every node, parents before children, siblings by `index`. */
   readonly nodes: readonly ShiftNode[];
+  readonly tree: Tree<NodeId, ShiftNode>;
 }
 
 /**
@@ -29,7 +32,12 @@ export class Scene {
           if (record.type === "node") nodes.push(record);
         }
 
-        return { nodes };
+        const tree = Tree.from<NodeId, ShiftNode>(nodes, {
+          id: (node) => node.id,
+          parentId: (node) => node.parentId,
+          order: (a, b) => compareIndex(a.index, b.index),
+        });
+        return { nodes: tree.walk(), tree };
       },
       { name: "editor.scene" },
     );
@@ -68,6 +76,14 @@ export class Scene {
     return this.#cell.peek();
   }
 
+  /**
+   * Returns every node with each parent before its children.
+   *
+   * @remarks
+   * Drawing in this order paints children over their parent; hit testing in
+   * reverse tries children first. A node whose parent is missing is treated as
+   * a root.
+   */
   nodes(): readonly ShiftNode[] {
     return this.#cell.peek().nodes;
   }
@@ -76,6 +92,16 @@ export class Scene {
     if (!nodeId) return null;
 
     return this.#nodesById.peek().get(nodeId) ?? null;
+  }
+
+  /** Returns a node's children, ordered by `index`. */
+  children(nodeId: NodeId): readonly ShiftNode[] {
+    return this.#cell.peek().tree.children(nodeId);
+  }
+
+  /** Returns a node's parent, or null for root nodes. */
+  parent(nodeId: NodeId): ShiftNode | null {
+    return this.#cell.peek().tree.parent(nodeId);
   }
 
   nodeOfKind<K extends ShiftNode["kind"]>(
@@ -154,6 +180,11 @@ export class Scene {
 
     return `a${siblingCount}`;
   }
+}
+
+function compareIndex(a: string, b: string): number {
+  if (a === b) return 0;
+  return a < b ? -1 : 1;
 }
 
 function copyNode<T extends ShiftNode>(node: T): T {

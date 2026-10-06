@@ -114,6 +114,21 @@ export class EditorHistory {
   }
 
   /**
+   * Runs an action inside the open capture, or as its own captured action when none is open.
+   *
+   * @remarks
+   * Tool events already run inside a capture; code reachable from both tool
+   * events and direct calls uses this to record exactly one entry either way.
+   *
+   * @param label - Action name used only when this call opens the capture.
+   * @param body - Synchronous action.
+   * @returns the body's result.
+   */
+  captureOrJoin<T>(label: string, body: () => T): T {
+    return this.capturing ? body() : this.capture(label, body);
+  }
+
+  /**
    * Runs one asynchronous editor action and records its completed effects.
    *
    * @remarks
@@ -476,18 +491,28 @@ export class EditorHistory {
     if (records) this.#applyRecordChanges(records.changes, reverse);
   }
 
+  /**
+   * Restores one side of a capture's record changes.
+   *
+   * @remarks
+   * Session-scoped records (selection, editing, caret) apply after document
+   * records, because they are validated against the document they refer to.
+   * Any record type opts in by declaring `scope: "session"`.
+   */
   #applyRecordChanges(changes: readonly RecordChange[], reverse: boolean): void {
     batch(() => {
+      const session: RecordChange[] = [];
       for (const change of changes) {
         const record = reverse ? change.before : change.after;
-        if (record?.type === "selection" || record?.type === "editing") continue;
+        if (isSessionRecord(record ?? (reverse ? change.after : change.before))) {
+          session.push(change);
+          continue;
+        }
         this.#applyRecord(change.id, record);
       }
 
-      for (const change of changes) {
-        const record = reverse ? change.before : change.after;
-        if (record?.type !== "selection" && record?.type !== "editing") continue;
-        this.#applyRecord(change.id, record);
+      for (const change of session) {
+        this.#applyRecord(change.id, reverse ? change.before : change.after);
       }
     });
   }
@@ -510,6 +535,12 @@ export class EditorHistory {
       case "editing": {
         const nodeIds = record.nodeIds.filter((id) => this.#editor.scene.node(id) !== null);
         return nodeIds.length > 0 ? { ...record, nodeIds } : null;
+      }
+      case "textEditing": {
+        const node = this.#editor.scene.nodeOfKind(record.nodeId, "textRun");
+        if (!node || !this.#editor.text.run(node.runId)) return null;
+        // Outside Text mode the caret is kept, not shown.
+        return this.#editor.tool?.id === "text" ? record : { ...record, active: false };
       }
       default:
         return record;
@@ -614,4 +645,9 @@ function replaceRecordEffect(
   }
 
   return effects.length > 0 ? { ...entry, effects } : null;
+}
+
+/** Whether a record is session state rather than document content. */
+function isSessionRecord(record: ShiftEditorRecord | null): boolean {
+  return record !== null && "scope" in record && record.scope === "session";
 }

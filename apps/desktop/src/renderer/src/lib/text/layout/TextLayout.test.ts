@@ -69,36 +69,31 @@ describe("TextLayout", () => {
     expect(layout.pointAt(1)?.x).toBe(aAdvance);
   });
 
-  it("resolves edit origin by item id on the current line", () => {
+  it("places an item's glyph by item id on the current line", () => {
     const a = glyph("A", 65);
     const b = glyph("B", 66);
     const layout = makeLayout([a, b], editor);
     const aAdvance = xAdvance("A", editor);
 
-    expect(layout.editOriginForItem(b.id)).toEqual({ x: aAdvance, y: 0 });
-    expect(layout.primaryGlyphForItem(b.id)?.sourceItemIds).toEqual([b.id]);
-    expect(layout.primaryGlyphForItem(b.id)?.glyphId).toBe(editor.font.recordForName("B")?.id);
+    const placed = layout.placedGlyphForItem(b.id);
+    expect(placed?.origin).toEqual({ x: aAdvance, y: 0 });
+    expect(placed?.glyph.sourceItemIds).toEqual([b.id]);
+    expect(placed?.glyph.glyphId).toBe(editor.font.recordForName("B")?.id);
   });
 
-  it("resolves edit origin by item id after a linebreak", () => {
+  it("places an item's glyph by item id after a linebreak", () => {
     const b = glyph("B", 66);
     const layout = makeLayout([glyph("A", 65), lineBreakTextItem(), b], editor);
 
-    expect(layout.editOriginForItem(b.id)).toEqual({
-      x: 0,
-      y: layout.lines[1].y,
-    });
+    expect(layout.placedGlyphForItem(b.id)?.origin).toEqual({ x: 0, y: layout.lines[1].y });
   });
 
-  it("returns anchors with item ids rather than cluster-only hits", () => {
-    const b = glyph("B", 66);
-    const layout = makeLayout([glyph("A", 65), b], editor);
-    const aAdvance = xAdvance("A", editor);
+  it("has no placed glyph for a line break", () => {
+    const linebreak = lineBreakTextItem();
+    const layout = makeLayout([glyph("A", 65), linebreak, glyph("B", 66)], editor);
 
-    expect(layout.anchorAtPoint("run-1", { x: aAdvance + 1, y: 0 })).toEqual({
-      runId: "run-1",
-      itemId: b.id,
-    });
+    expect(layout.placedGlyphForItem(linebreak.id)).toBeNull();
+    expect(layout.placedGlyphs.map((placed) => placed.lineIndex)).toEqual([0, 1]);
   });
 });
 

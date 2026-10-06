@@ -67,8 +67,9 @@ test.describe("Glyph rendering — S (quadratic curves)", () => {
     await page.evaluate(() => {
       const editor = window.shift!.editor;
       const node = editor.scene.nodesOfKind("glyph")[0]!;
-      const position = { x: 200, y: -300 };
-      editor.scene.updateNode({ id: node.id, position });
+      // A glyph inside a text run is placed by the run, so move the run.
+      const placement = editor.scene.node(node.parentId) ?? node;
+      editor.scene.updateNode({ id: placement.id, position: { x: 200, y: -300 } });
       const placed = editor.scene.node(node.id)!;
       editor.zoomIn();
       const camera = editor.getCameraTransform();

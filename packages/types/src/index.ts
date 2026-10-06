@@ -18,6 +18,7 @@ export type {
   NamedInstanceId,
   NodeId,
   RunId,
+  TextItemId,
   SourceId,
 } from "./ids";
 export {
@@ -50,6 +51,7 @@ export {
   isNamedInstanceId,
   isNodeId,
   isRunId,
+  isTextItemId,
   isSourceId,
   mintContourId,
   mintAnchorId,
@@ -64,6 +66,7 @@ export {
   mintNamedInstanceId,
   mintNodeId,
   mintRunId,
+  mintTextItemId,
   mintSourceId,
 } from "./ids";
 

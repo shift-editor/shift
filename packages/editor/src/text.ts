@@ -1,5 +1,13 @@
-export { TextBuffer } from "./lib/text/TextBuffer";
-export { TextInteraction } from "./lib/text/TextInteraction";
+export { TextEditing } from "./lib/text/TextEditing";
+export { editRunItem, removeDetachedChildren } from "./lib/text/runChildren";
+export {
+  caretForCluster,
+  clusterForCaret,
+  deleteText,
+  selectionRange,
+  spliceText,
+  wordCluster,
+} from "./lib/text/edit";
 export { glyphTextItem, lineBreakTextItem } from "./lib/text/layout/types";
 export type { GlyphTextItem, SegmentedRun, TextItem } from "./lib/text/layout/types";
 export {

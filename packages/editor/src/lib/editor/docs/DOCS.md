@@ -1,6 +1,6 @@
 # Editor
 
-<!-- reviewed: 2026-09-26 -->
+<!-- reviewed: 2026-09-28 -->
 
 Central orchestrator for the canvas-based glyph editing surface, wiring viewport transforms, selection, rendering, hit testing, and tool management into a single facade.
 
@@ -10,7 +10,7 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 
 **Architecture Invariant:** `Editor` is a facade -- it delegates viewport, hover, rendering, and tool dispatch to named subsystem objects. Tools receive `Editor` directly but must not reach into private managers. Its immutable `sessionMode` defines editing and persistence capability: preview is read-only, memory is locally editable without persistence, and workspace is durably editable. In preview, Select consumes geometry hits without publishing hover or selection, marquee gestures publish no selection, and geometry clicks emit `previewMutationAttempted`. Main keeps Edit commands disabled in preview. Authored-layer resolution remains the final mutation boundary in editable sessions.
 
-**Architecture Invariant:** `Scene` owns generic, serializable `ShiftNode` records and placement only. It must not import or retain `Glyph`, `GlyphLayer`, or resolved geometry. Navigation finishes `Font.loadGlyph()` before entering the editor route, and the route synchronously confirms acquisition before publishing the ordinary ID-based glyph node.
+**Architecture Invariant:** `Scene` owns generic, serializable `ShiftNode` records and placement only. It must not import or retain `Glyph`, `GlyphLayer`, or resolved geometry. Navigation finishes `Font.loadGlyph()` before entering the editor route, and the route synchronously confirms acquisition before publishing the glyph as the canvas run's child node (`editRunItem`).
 
 **Architecture Invariant:** Node definitions are typed, editor-scoped behavior plugins shared by every scene node of their kind. Glyph-specific presentation state stays on `GlyphNodeDefinition`, not the generic `Editor`: its `GlyphOutlines` surface associates source and named-instance outline targets with a `NodeId`, while the definition resolves and strokes those locations during the ordinary content pass.
 
@@ -26,7 +26,7 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 
 **Architecture Invariant:** `EditorInput` owns raw pointer position, modifiers, and primary-button state. `pointerDownCell` becomes true on accepted pointer-down and resets on release, cancellation, or an editor interaction reset. Gesture interpretation remains separate: a click is emitted on release only when the press never crossed the drag threshold.
 
-**Architecture Invariant:** `drawOffset` is derived render state. Text tools focus glyphs by `GlyphAnchor { runId, itemId }`; `Editor` resolves that anchor through `TextRuns` and `TextLayout.editOriginForItem()`. Tools must not set text-run edit placement coordinates directly.
+**Architecture Invariant:** Text is placed by scene nodes, not by an editor-global draw offset. `TextRunNodeDefinition` renders layout in node space at `node.size / unitsPerEm`; `TextEditing` stores the active node and item-identity carets. The edited glyph is a child `GlyphNode` of its run, placed from layout through `NodeDefinition.childPosition`; writes to it go through the text module's `runChildren` functions, never the node definition.
 
 **Architecture Invariant: CRITICAL:** `Camera` owns the affine matrices as lazily computed cells. Anything that reads viewport-derived values inside a `computed` or `effect` will auto-track. Calling `setRect()`, changing zoom/pan, or changing UPM invalidates both matrices and triggers downstream redraws automatically. Never cache matrix results outside a signal.
 
@@ -38,7 +38,7 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 
 **Architecture Invariant:** Lifecycle events (`EventEmitter`) are for one-shot imperative actions; `LifecycleEventMap` contains `destroying` and the one-shot `previewMutationAttempted` notice. Continuous state changes use signals. Do not mix the two patterns.
 
-**Architecture Invariant:** `Editor.toolCell` is the public active-tool state surface. It derives `{ id, state }` from the active tool instance and its `stateCell`; consumers use `toolIf(id)` for built-in state narrowing and do not reach through `ToolManager` for active state. Entering or leaving a glyph route resets the active tool instance, selection, hover, and editing scope so transient interaction state cannot cross glyphs. Route changes do not reset `EditorHistory`; replay filters stale session identities while preserving the workspace timeline.
+**Architecture Invariant:** `Editor.toolCell` is the public active-tool state surface. It derives `{ id, state }` from the active tool instance and its `stateCell`; consumers use `toolIf(id)` for built-in state narrowing and do not reach through `ToolManager` for active state. Entering or leaving a glyph route resets the active tool instance, selection, hover, and editing scope so transient interaction state cannot cross glyphs. Route changes do not reset `EditorHistory`; replay filters stale session identities while preserving the workspace timeline. Replay restores document records before records that declare `scope: "session"`, so any record type can take part by declaring its scope.
 
 **Architecture Invariant:** `ToolManager` is authoritative for installed manifests. `Editor.toolRegistryCell` derives reactive toolbar metadata, including hidden and disabled flags, from that collection. Both flags suppress user tool shortcuts while preserving programmatic activation, and `registerTool()` returns the `ToolRegistration` that exclusively owns replacement and removal of the contributed ID.
 
@@ -124,7 +124,7 @@ Tools receive screen and scene coordinates from the pointer pipeline. Scene/node
 
 `Camera` computes the scene-to-screen view as `Translate(pan)·Scale(zoom)`; it never depends on the canvas size. The inverse is lazily computed. Both are computed signals, so any dependent computed/effect auto-invalidates.
 
-`Editor.sceneTransform(node)` is `frameToScene(node)·unitsTransform(node)`. Frames carry placement only (each node's `position` in its parent's frame); units are the node kind's own content transform (glyphs flip Y) and never apply to children.
+`Editor.sceneTransform(node)` is `frameToScene(node)·unitsTransform(node)`. Frames carry placement only (each node's `position` in its parent's frame, or the position its parent's definition lays it out at via `childPosition`); units are the node kind's own content transform (glyphs flip Y) and never apply to children. `Scene` builds a `Tree` snapshot (the generic one in `lib/utils/Tree.ts`) once per scene change: `Scene.nodes()` walks it parents first with siblings by `index`, so drawing paints children over their parent and hit testing (in reverse) tries children first; `children` and `parent` are lookups into it.
 
 ### Four canvas layers
 

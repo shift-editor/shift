@@ -1,95 +1,94 @@
 # Text
 
-<!-- reviewed: 2026-08-18 review-every: 90d -->
+<!-- reviewed: 2026-10-04 review-every: 90d -->
 
-Text editing is split into stable editor identity and derived layout geometry.
+Proof text is document-scoped item content projected through one implicit page run, edited by one session caret, with the edited glyph placed inside the run.
 
 ## Architecture Invariants
 
-- **Architecture Invariant:** `TextItemId` is the durable identity for editable text items. Buffer indices and layout clusters may move after insert/delete operations; focus must remain attached to `item.id`. This exists so glyph-editing focus survives edits happening elsewhere in the run.
-- **Architecture Invariant:** Clusters are layout metadata, not editor identity. A cluster index is whole-buffer monotonic and counts linebreaks; any shaped layout must map output glyphs back to source identities through `PositionedGlyph.sourceItemIds`.
-- **Architecture Invariant:** `TextLayout` owns identity-to-geometry resolution. Call `editOriginForItem(itemId)` to get the current scene-space edit origin; do not cache text-run placement coordinates in tools — a rebuilt layout silently invalidates them.
-- **Architecture Invariant:** Layout is derived and rebuilt whole. `TextRun.layoutCell` recomputes from buffer items, `originX`, the external axis location, and the active source; cursor and anchor moves never rebuild layout because `caretCell` and `selectionRectsCell` are layered on top. This keeps keystroke latency independent of layout cost.
-- **Architecture Invariant:** Direct glyph editing uses the implicit editor run (`TextRuns.editorRun()`). Real text runs and the implicit editor run share anchor/focus/placement machinery, but only real text runs are persisted as user text content.
-- **Architecture Invariant:** Buffer mutations flow through `TextRun` methods, not raw `TextBuffer` calls. `TextRun` calls `TextInteraction.adjustForBufferChange` after every item-moving mutation so held editing/suspended indices stay coherent with the buffer.
-- **Architecture Invariant:** `Positioner` is the permanent no-shape product mode, not a placeholder: a literal LTR advance walk with `cluster = clusterStart + i`. It resolves advances through each glyph's `GlyphRenderModel` at the current location, so text runs interpolate during axis scrubbing without a shaping pass.
-
-## Codemap
-
-```text
-lib/text/
-  Text.ts             — document-scoped text run records and per-node layout construction
-  TextBuffer.ts       — pure item/cursor/anchor/originX state with per-field signals
-  TextInteraction.ts  — per-run editing slot, suspended target, and hover state
-  TextRun.ts          — composes buffer + interaction; layout/caret/selection signals; goal-x nav
-  TextRuns.ts         — per-glyph run store, active-run switching, implicit editor run, persistence
-  layout/
-    TextLayout.ts     — segment → position → assemble pipeline, hit testing, identity resolution
-    Positioner.ts     — no-shape LTR advance walk with display advances and mark offsets
-    Caret.ts          — immutable cluster caret with vertical goal-x navigation
-    types.ts          — TextItem, PositionedGlyph, Line, and GlyphAnchor contracts
-```
+- `TextRunRecord.items` stores stable, client-minted `TextItemId` identities for glyphs and linebreaks. Indices/clusters are derived, never identity. `/name` parsing belongs to paste/import, not the stored representation.
+- Until pages exist, the canvas has one run. The desktop editor route creates it at the scene origin on the first open and replaces its text with each glyph opened from the grid; that interim policy lives in the route, not the editor package. Users never place runs and the Text tool never creates one.
+- The edited glyph is the run's child `GlyphNode { parentId: run, itemId }`. `TextRunNodeDefinition.childPosition` places it at its item's layout position, and the run skips drawing items a child occupies. A run has at most one child; switching replaces it (delete + create) so per-node caches never see a node change glyph.
+- `Text` owns records and layout only. `TextRunNodeDefinition` owns the read side of a run's child (`childPosition`, `childGlyph`, skipping its item); node definitions never write. The writes are the `runChildren` functions, which take the run explicitly and assume nothing about how many runs exist. Callers that remove items call `removeDetachedChildren` in the same history capture, so undo restores an item and its child together.
+- `Text.layoutCell(runId)` is the shared reactive layout, derived from items, source, axis location, completed glyph acquisition, and each laid-out glyph's advance. A missing glyph is loaded asynchronously; no layout or draw path starts I/O. Even an empty run has a caret at its origin.
+- `TextEditingRecord` owns the current node, anchor, and focus for one session. A `TextCaret` is the ID of the preceding item or null for the run start. Its cluster is `indexOf(itemId) + 1`; linebreaks count. Vertical goal-x is transient.
+- Text mode suspends glyph editing (`Editing.suspend`), so every glyph draws filled, and restores it on exit. Leaving Text mode keeps the `TextEditingRecord` with `active: false`, so the next visit resumes the caret and selection; `TextEditing.stateCell` only exposes an active record. Undo outside Text mode restores the record inactive.
+- Two hit paths, never mixed: `TextRunNodeDefinition.hit` returns a text target only on a glyph's outline (fill or contour within hit radius), used by Select hover, click-select, and double-click. `TextRunNodeDefinition.caretAt` returns the nearest caret cluster in the line boxes and is called by the Text tool directly. Node definitions never branch on the active tool.
+- `TextItemId` is a selectable `ShiftId`: `Editor.object` resolves it to a `textItem` object, and hover/selection go through `editor.hover` / `editor.selection`. Text items report no bounds, so they never get the transform box.
+- `EditorHistory` captures complete text-run, node, and session-record replacements, never a second text undo stack. Entering or switching the edited glyph is its own undo step; plain selection is not.
 
 ## Key Types
 
-- `TextItemId` -- stable identity for a glyph or linebreak item.
-- `TextItem` -- `GlyphTextItem | LineBreakTextItem`. Linebreaks are structural separators, never positioned glyphs, but they consume a cluster index.
-- `GlyphAnchor` -- `{ runId, itemId }`; the durable bridge from editor focus to current layout.
-- `FocusedGlyph` -- resolved anchor with the current item, glyph handle, and edit origin.
-- `PositionedGlyph` -- one laid-out glyph with origin, advances, offsets, cluster, and `sourceItemIds`. Simple layout is one-to-one; shaped layout may be many-to-one or one-to-many.
-- `Line` -- one paragraph's positioned runs plus baseline `y`, ascent/descent, and the `clusterStart`/`clusterEnd` window used by caret navigation.
-- `Caret` -- immutable cluster position over a `TextLayout`; every navigation method returns a new instance.
-- `TextRun` -- one editing surface composing `TextBuffer` and `TextInteraction`, exposing `layoutCell`, `caretCell`, and `selectionRectsCell`.
-- `TextRuns` -- per-glyph-name store of runs, the active-run signal, and the implicit editor run.
-- `TextRunRecord` -- persisted document-scoped proof text source owned by `Text`, placed on canvas by scene nodes.
+- `TextItemId` — stable branded identity of one glyph or linebreak item; also a selectable id.
+- `TextCaret` — ID of the preceding item, or null at the run start.
+- `TextRunRecord` — document-scoped item content; `TextRunNode` — its placed occurrence.
+- `PlacedGlyph` — a positioned glyph with its layout-local origin; `TextLayout.placedGlyphs` is the one walk over lines and runs.
+- `TextEditingRecord` — session-only node, anchor, and focus.
+- `TextLayout` and `Caret` — derived geometry and cluster-based navigation.
+
+## Codemap
+
+- `Text.ts`: run records, imported text parser, reactive layout, glyph acquisition.
+- `TextEditing.ts`: session caret, navigation, selected items, history boundaries.
+- `edit.ts`: pure splice, deletion, selection, word, and selection-rectangle operations.
+- `layout/`: TextLayout, Positioner (literal LTR advances), and Caret.
+- `runChildren.ts`: `editRunItem` and `removeDetachedChildren`, the writes to a run's child glyph node.
+- `apps/desktop/src/renderer/src/views/Editor.tsx`: the interim one-run open policy.
+- `lib/nodes/TextRunNodeDefinition.ts`: scaled presentation, child placement, outline hits, caret lookup.
+- `lib/objects/TextItemObject.ts`: resolved object for a selected or hovered item.
+- `lib/tools/text/`: Text mode and caret gestures.
+- `lib/tools/select/behaviors/RunItemDoubleClick.ts`, `ComponentDoubleClick.ts`: switching the edited glyph from Select.
+- `apps/desktop/src/renderer/src/components/text/HiddenTextInput.tsx`: native text and keyboard adapter; owns Undo/Redo while focused because the global keyboard router deliberately ignores editable fields.
 
 ## How it works
 
-There are two content surfaces over one layout pipeline. `Text` owns document-scoped `TextRunRecord` values (raw proof strings, including `/name` slash escapes) and builds a node-local `TextLayout` for each placed text run node. `TextRuns` owns the interactive editing runs: one `TextRun` per glyph name so each glyph keeps its own typing context, plus a default run and the implicit `__editor__` run used by single-glyph focus.
-
-Layout is a pure derivation: buffer items are split into paragraphs on linebreak items, each paragraph is segmented into runs (one LTR run today; the `SegmentedRun[]` shape is kept so BiDi can slot in later), each run is positioned by `Positioner`, and `assembleLayout` stacks one `Line` per paragraph at `origin.y - lineHeight * n` (y is negative-down, matching font conventions). Metrics come from the active source when one is selected and are otherwise interpolated at the current external location via `Font.metricsAtLocation`, so line height follows axis scrubbing. `Positioner` resolves each glyph through the font directory and its `GlyphRenderModel`, which makes advances and bounds location-live as well; mark glyphs get a synthetic offset from their attaching `_name` anchor or bounds center.
-
-Focus resolution runs the pipeline backwards: a click hit-tests advance boxes to a cluster, the cluster maps to a `GlyphAnchor` holding item identity, and `TextRuns.resolveAnchor` re-reads the current buffer and layout to produce a `FocusedGlyph` with the current `editOrigin` that drives the editor's draw offset. Anchors survive layout rebuilds because only the final resolution step touches geometry.
-
-Persistence stores `TextBuffer` snapshots per glyph key, skipping the default key and empty buffers. Deserialization repopulates the run map and then forces `activeCell` to re-resolve through a sentinel key — consumers that read the active run before load would otherwise hold a stale empty run.
+Pointer actions use `ToolManager`'s click/drag history capture. Keyboard edits capture a replacement run record and the session caret together. `ShiftStore.onChange` notifies only the edited run's layout cell; changing the caret record does not rebuild layout. Missing glyphs load asynchronously and bump a layout version once available. Node definitions read snapshots during draw; background and scene layer props declare reactive redraw dependencies.
 
 ## Workflow recipes
 
-### Adding a keyboard navigation command
+To add a text command, translate the current stable caret to a cluster, perform a pure item edit, then write the run, `removeDetachedChildren`, and the session record inside `EditorHistory.captureOrJoin`, which joins ToolManager's pointer capture or opens one for keyboard edits.
 
-1. Add the movement method to `TextRun` (see `moveCursorToLineStart`/`moveCursorToLineEnd` or `placeCaretAtPoint` for the shape): peek `#layout`, compute a target cluster, then `buffer.placeCaret` or `buffer.extendSelection` depending on `extend`. (`moveCursorByWord` is the layout-free variant — it walks `buffer.items` directly.)
-2. Reset `#goalX` for horizontal moves; thread it through `Caret.nextLine`/`Caret.previousLine` for vertical ones.
-3. Wire the keystroke in the hidden text input component that drives text editing.
-4. Verify: `pnpm test:desktop src/renderer/src/lib/text` and `pnpm typecheck`
-
-### Extending layout output with a new per-glyph field
-
-1. Add the field to `PositionedGlyph` in `layout/types.ts`.
-2. Populate it in `Positioner.position` — layout code must not reach around the positioner to compute placement.
-3. Consume it through `TextLayout` accessors (`glyphsForItem`, `editOriginForItem`) rather than walking `lines` in callers.
-4. Verify: `pnpm test:desktop src/renderer/src/lib/text/layout/Positioner.test.ts` and `pnpm test:desktop src/renderer/src/lib/text/layout/TextLayout.test.ts`
+To change which glyph is edited, call `editRunItem(editor, run, itemId, sourceId)` and `Editing.enter` the returned node inside one capture. To add a glyph first, use `Text.insertAfter`.
 
 ## Gotchas
 
-- Cluster arithmetic counts linebreaks: the next paragraph's `clusterStart` is `previous.clusterStart + previous.glyphs.length + 1`, and `Line.clusterEnd` is one _past_ the last cluster (covering the trailing linebreak or the after-last caret slot). Off-by-one bugs here surface as carets landing on the wrong line.
-- y is negative-down: line N's baseline is `origin.y - lineHeight * n`, ascent is positive, descent negative. A hit test band is `[y + descent, y + ascent]` — flipping the comparison finds no lines.
-- `TextRun.seed` is a no-op when the buffer already has items, so `originX` is _not_ re-applied on tool re-activation. That guard is deliberate: without it the run shifts every time the user toggles Select/Text after the draw offset has moved.
-- Mutating `TextBuffer` directly (instead of through `TextRun.insert`/`delete`) skips `adjustForBufferChange`, leaving `TextInteraction.editing` pointing at the wrong slot or at deleted items.
-- `TextRuns.deserialize` must toggle the active key through a sentinel; the run map is not a signal, and an auto-save effect holding a pre-load run reference would otherwise serialize empty state over the loaded data.
-- Empty paragraphs still produce a `Line`, and the caret can legally sit on them; caret code that assumes every line has glyphs breaks on `[A, \n, \n, B]`.
+Empty runs have no `TextLayout.lines`, but still need a visible caret and a small caret area. Child placement tracks the run layout only when read inside a reactive boundary; imperative reads see the current layout. Linebreaks consume clusters and can be selected despite not producing a positioned glyph. `ShiftStore.cell` is whole-map reactive: do not read it in `layoutCell`, or caret changes will rebuild every run.
+
+## Legacy test migration ledger
+
+Every row names a removed or rewritten test from the legacy suites or toolbar E2E. Their original source remains in git history.
+
+| Removed test                                               | Protected truth                                | Replacement or intentionally removed behavior                                                                                    |
+| ---------------------------------------------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| TextBuffer: starts empty                                   | Empty content, no selection at start           | `edit.test.ts`: starts with an empty selection; `TextEditing.test.ts`: entering Text mode puts the caret after the edited glyph  |
+| TextBuffer: insert places item at cursor                   | Insert and collapse after new item             | `edit.test.ts`: insertion advances both carets                                                                                   |
+| TextBuffer: insert replaces an active selection            | Splice selected interval, collapse caret       | `edit.test.ts`: replaces a forward or backward selection                                                                         |
+| TextBuffer: delete removes item before cursor              | Backspace removes preceding item               | `edit.test.ts`: backspace removes the preceding item                                                                             |
+| TextBuffer: delete at buffer start                         | No-op at start                                 | `edit.test.ts`: backspace at the beginning                                                                                       |
+| TextBuffer: delete with active selection                   | Selected deletion and collapse to start        | `edit.test.ts`: deletion of selected items                                                                                       |
+| TextBuffer: selectAll spans 0..length                      | Full item range, including linebreaks          | `edit.test.ts`: select-all spans the item buffer; `TextEditing.test.ts`: selection history                                       |
+| TextBuffer: placeCaret clamps                              | Clamp and collapse                             | `edit.test.ts`: caret placement clamps; `tools/text/Text.test.ts`: clicking a glyph in the run places the caret                  |
+| TextBuffer: snapshot then restore                          | Content and caret restore together             | `TextEditing.test.ts`: inserts text and replays content and caret. `originX` is intentionally removed with drawOffset            |
+| TextBuffer: itemById follows logical item                  | IDs survive moves and vanish on deletion       | `edit.test.ts`: an item identity follows insertions and deletions before it                                                      |
+| TextInteraction: starts with everything null               | No active interaction at start                 | `TextEditing.test.ts`: entering and leaving Text mode                                                                            |
+| TextInteraction: setEditing stores target                  | In-place glyph target by index                 | Replaced by the page run's child glyph and `RunItemDoubleClick`                                                                  |
+| TextInteraction: suspend moves editing                     | Suspend in-place glyph target across tool exit | Replaced by the page run's child glyph and `RunItemDoubleClick`                                                                  |
+| TextInteraction: resume restores suspended target          | Resume in-place glyph target                   | Replaced by the page run's child glyph and `RunItemDoubleClick`                                                                  |
+| TextInteraction: resume with nothing                       | No suspended glyph target                      | Intentionally removed along with suspension                                                                                      |
+| TextInteraction: clear resets context                      | End focus and clear hover                      | `TextEditing.test.ts`: leaving Text mode ends text editing; run hover is Select's outline hover                                  |
+| TextInteraction: adjust nulls deleted indices              | Deleted glyph target no longer resolves        | `edit.test.ts`: an item identity follows insertion/deletion (absent ID resolves to no cluster); in-context target owner deferred |
+| TextInteraction: adjust shifts after deletion              | Surviving identity follows reordered items     | `edit.test.ts`: an item identity follows insertions and deletions before it                                                      |
+| TextInteraction: adjust shifts after insertion             | Surviving identity follows reordered items     | `TextEditing.test.ts`: a caret stays on its item when another is inserted before it                                              |
+| TextInteraction: snapshot then restore                     | Transient context round-trips                  | `TextEditing.test.ts`: inserts text and replays content and caret; suspended glyph target intentionally removed                  |
+| Text tool: publishes typing until Escape returns to Select | Active text tool escapes to Select             | `tools/text/Text.test.ts`: starts editing and returns to Select on Escape                                                        |
+| E2E tools: hides unavailable tools                         | Text tool hidden before rebuild                | Intentionally replaced by `tools.spec.ts`: text shortcut activates the toolbar and native input; text tool is now available      |
 
 ## Verification
 
-```bash
-pnpm typecheck
-pnpm test:desktop src/renderer/src/lib/text
-python3 scripts/context-drift-check.py
-```
-
-`pnpm test:desktop` covers the buffer, interaction, caret, positioner, and layout unit tests in this module.
+`pnpm test:desktop src/renderer/src/lib/text` covers layout, pure edits, and real-editor interactions. Also run `pnpm typecheck`, `pnpm lint:check`, `pnpm format:check`, `pnpm check:browser`, and `python3 scripts/context-drift-check.py`. Manual desktop verification must cover typing, selection, undo, Escape, axis scrubbing, opening glyphs from the grid, and double-clicking run glyphs and components.
 
 ## Related
 
-- [`Renderer font model`](../../model/docs/DOCS.md) -- `Font` directory lookups, `GlyphRenderModel` advances/bounds, and source metrics interpolation consumed by layout
-- [`editor`](../../editor/docs/DOCS.md) -- `Editor` owns the active source/location signals layout tracks, and consumes `FocusedGlyph.editOrigin` as its draw offset
-- [`signals`](../../signals/docs/DOCS.md) -- `computed`/`batch` primitives behind the per-field buffer cells and derived layout
+- [`Editor`](../../editor/docs/DOCS.md) — record history, scene placement, and renderer ownership.
+- [`Tools`](../../tools/docs/DOCS.md) — text tool states and pointer capture lifecycle.
+- [`Signals`](../../signals/docs/DOCS.md) — per-run reactive invalidation.

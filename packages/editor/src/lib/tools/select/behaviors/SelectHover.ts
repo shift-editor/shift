@@ -31,6 +31,11 @@ export class SelectHover implements SelectBehavior {
         return false;
       }
 
+      case "text": {
+        ctx.editor.hover.set(target.itemId);
+        return true;
+      }
+
       case "point": {
         ctx.editor.hover.set(target.id);
         return true;
