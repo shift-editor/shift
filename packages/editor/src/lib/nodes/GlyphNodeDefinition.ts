@@ -1,4 +1,5 @@
-import { Mat } from "@shift/geo";
+import { Bounds, Mat } from "@shift/geo";
+import type { SourceMetrics } from "@shift/types";
 import type { SegmentId } from "@shift/glyph-state";
 import type { ComponentId, NodeId, PointId } from "@shift/types";
 import type { LocalBounds, LocalPoint } from "../../types/coordinates";
@@ -79,6 +80,27 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     if (!bounds) return null;
 
     return localBounds(bounds);
+  }
+
+  /**
+   * Returns the glyph's editing frame in its own units.
+   *
+   * @remarks
+   * The advance box from descender to ascender, grown to include any outline
+   * that reaches past it. Unlike {@link bounds}, an empty glyph still has a
+   * frame. Metrics follow the active source, as the metric guides do.
+   */
+  frameBounds(node: GlyphNode): LocalBounds | null {
+    const view = this.#view(node);
+    if (!view) return null;
+
+    const metrics = this.#metrics();
+    const advanceBox = Bounds.create(
+      { x: 0, y: metrics.descender },
+      { x: view.xAdvanceCell.peek(), y: metrics.ascender },
+    );
+    const outline = view.bounds;
+    return localBounds(outline ? Bounds.union(advanceBox, outline) : advanceBox);
   }
 
   hit(node: GlyphNode, point: LocalPoint): PointerTarget | null {
@@ -220,12 +242,15 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     track(this.editor.activeSourceIdCell);
     track(this.editor.font.sourceMetricsInterpolationCell);
 
+    this.#guides.draw(ctx.canvas, this.#metrics(), advance, this.editor.sessionMode === "preview");
+  }
+
+  /** Vertical metrics for the active source, or interpolated at the design location. */
+  #metrics(): SourceMetrics {
     const activeSourceId = this.editor.activeSourceId;
-    const metrics = activeSourceId
+    return activeSourceId
       ? this.editor.font.metricsForSource(activeSourceId)
       : this.editor.font.metricsAtLocation(this.editor.externalLocation);
-
-    this.#guides.draw(ctx.canvas, metrics, advance, this.editor.sessionMode === "preview");
   }
 
   #drawContent(node: GlyphNode, ctx: RenderContext, editing: boolean): void {

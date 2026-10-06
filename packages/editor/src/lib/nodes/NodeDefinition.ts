@@ -1,7 +1,7 @@
 import type { Mat, Point2D } from "@shift/geo";
 import type { Editor } from "../editor/Editor";
 import type { LocalBounds, LocalPoint } from "../../types/coordinates";
-import type { NodeTransaction, ShiftNode } from "../../types/node";
+import type { ShiftNode } from "../../types/node";
 import type { ShiftRecordId } from "../../types/records";
 import type { PointerTarget } from "../../types/target";
 import type { RenderContext, RenderPass } from "../../types/rendering";
@@ -17,9 +17,9 @@ import type { RenderContext, RenderPass } from "../../types/rendering";
  * Two kinds of method, kept apart:
  * - Queries (`unitsTransform`, `bounds`, `hit`, `childPosition`, `draw`) run
  *   during rendering and hit testing and must never write.
- * - Hooks (`onDoubleClick`, `onContentChange`) run inside a history capture
- *   and write through the `NodeTransaction` they receive, so their changes
- *   are one undo step with the action that triggered them.
+ * - Hooks (`onDoubleClick`, `onContentChange`) may write. The editor calls
+ *   them inside a history capture, so their writes are one undo step with the
+ *   action that triggered them.
  */
 export abstract class NodeDefinition<N extends ShiftNode = ShiftNode> {
   /**
@@ -100,7 +100,7 @@ export abstract class NodeDefinition<N extends ShiftNode = ShiftNode> {
    * @param target - what the pointer hit.
    * @returns true when handled.
    */
-  onDoubleClick?(node: N, target: PointerTarget, tx: NodeTransaction): boolean;
+  onDoubleClick?(node: N, target: PointerTarget): boolean;
 
   /**
    * Brings the node's children and fields back in step after its content changed.
@@ -111,7 +111,7 @@ export abstract class NodeDefinition<N extends ShiftNode = ShiftNode> {
    * item was removed. Changes made here can trigger further calls until
    * nothing else changes.
    */
-  onContentChange?(node: N, tx: NodeTransaction): void;
+  onContentChange?(node: N): void;
 
   /**
    * Paints a node for one render pass.

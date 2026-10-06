@@ -105,7 +105,7 @@ import type { ComponentTargets } from "../../types/componentTargets";
 import type { PositionSelection } from "../../types/positionEdit";
 import type { SelectableId, ShiftId, ShiftObject } from "../../types/object";
 import type { ShiftEditorRecord, ShiftRecordId } from "../../types/records";
-import type { GlyphNode, NodeKind, NodeTransaction, ShiftNode } from "../../types/node";
+import type { GlyphNode, NodeKind, ShiftNode } from "../../types/node";
 import {
   AnchorObject,
   ComponentObject,
@@ -184,16 +184,6 @@ export class Editor {
   readonly #nodeDefinitions: NodeDefinitionByKind;
   readonly #store: ShiftStore<ShiftEditorRecord>;
   readonly #fontStore: FontStore;
-  readonly #nodeTransaction: NodeTransaction = {
-    createNode: (node) => this.scene.createNode(node),
-    updateNode: (update) => this.scene.updateNode(update),
-    deleteNode: (nodeId) => this.scene.deleteNode(nodeId),
-    enterEditing: (nodeId) => {
-      this.selection.clear();
-      this.hover.clear();
-      this.editing.enter(nodeId);
-    },
-  };
 
   /**
    * Rendering and camera infrastructure.
@@ -1541,17 +1531,17 @@ export class Editor {
   }
 
   /**
-   * Runs scene writes as one edit, inside the open capture or a new one.
+   * Makes a node the one being edited, clearing selection and hover.
    *
    * @remarks
-   * The transaction is the same one node definition hooks receive. Content
-   * hooks run for the nodes the edit touched when its capture finishes.
-   *
-   * @param label - Action name used only when this call opens the capture.
-   * @returns the body's result.
+   * The selection belonged to whatever was edited before. All three are
+   * session records, so inside a capture undo restores the previous node and
+   * its selection together.
    */
-  editNodes<T>(label: string, body: (tx: NodeTransaction) => T): T {
-    return this.history.captureOrJoin(label, () => body(this.#nodeTransaction));
+  enterNode(nodeId: NodeId): void {
+    this.selection.clear();
+    this.hover.clear();
+    this.editing.enter(nodeId);
   }
 
   /**
@@ -1563,9 +1553,9 @@ export class Editor {
     const hit = targetNode(this.scene, target);
     if (!hit) return false;
 
-    return this.editNodes("Double-click", (tx) => {
+    return this.history.captureOrJoin("Double-click", () => {
       for (const node of [hit, ...this.scene.ancestors(hit.id)]) {
-        if (this.nodeDefinition(node.kind).onDoubleClick?.(node, target, tx)) return true;
+        if (this.nodeDefinition(node.kind).onDoubleClick?.(node, target)) return true;
       }
       return false;
     });
@@ -1579,7 +1569,7 @@ export class Editor {
 
       const contentId = definition.contentRecordId?.(node) ?? null;
       const touched = changed.has(node.id) || (contentId !== null && changed.has(contentId));
-      if (touched) definition.onContentChange(node, this.#nodeTransaction);
+      if (touched) definition.onContentChange(node);
     }
   }
 
@@ -1778,6 +1768,12 @@ export class Editor {
    */
   public fitInitialBounds(bounds: SceneBounds): void {
     this.#camera.fitInitialBounds(bounds);
+  }
+
+  /** Frames a glyph node's editing frame (`GlyphNodeDefinition.frameBounds`) until the user moves the camera. */
+  public fitGlyphFrame(node: GlyphNode): void {
+    const frame = this.nodeDefinition("glyph").frameBounds(node);
+    if (frame) this.fitInitialBounds(this.toSceneBounds(node, frame));
   }
 
   /**
