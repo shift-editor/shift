@@ -1,11 +1,13 @@
-import { batch, signal, type Signal, type WritableSignal } from "../signals/index";
+import { batch, signal, track, type Signal, type WritableSignal } from "../signals/index";
 import type { ShiftRecord } from "../../types/records";
 import type { StoreChange } from "../../types/store";
+import { StoreIndex } from "./StoreIndex";
 
 export class ShiftStore<R extends ShiftRecord = ShiftRecord> {
   readonly #cell: WritableSignal<ReadonlyMap<R["id"], R>>;
   // non-reactive: subscriber registry; listeners are invoked imperatively, never read in computeds
   readonly #changeListeners = new Set<(change: StoreChange<R>) => void>();
+  readonly #recordCells = new Map<R["id"], WritableSignal<R | null>>();
 
   constructor(records: readonly R[] = []) {
     this.#cell = signal<ReadonlyMap<R["id"], R>>(
@@ -22,6 +24,47 @@ export class ShiftStore<R extends ShiftRecord = ShiftRecord> {
 
   records(): readonly R[] {
     return [...this.#cell.peek().values()];
+  }
+
+  /**
+   * Returns one record, subscribing only to that record.
+   *
+   * @remarks
+   * Reactive: inside a computed or effect, the reader reruns when this record
+   * is put or deleted, and not when any other record changes. Returns null for
+   * a missing record and keeps the subscription, so a later put reaches the reader.
+   */
+  record(id: R["id"]): R | null {
+    let cell = this.#recordCells.get(id);
+    if (!cell) {
+      cell = signal(this.get(id), { name: "editor.store.record" });
+      this.#recordCells.set(id, cell);
+    }
+    track(cell);
+    return cell.peek();
+  }
+
+  /**
+   * Creates a reactive reverse lookup over one record type.
+   *
+   * @remarks
+   * Each record of `type` is filed under every key `keys` returns for it. The
+   * index applies each change incrementally and readers subscribe per key; see
+   * {@link StoreIndex}. Create an index once, in the module that owns the
+   * concept, expose it through named methods, and dispose it with that module.
+   *
+   * @param type - record type to index.
+   * @param keys - keys a record is found under; may be empty.
+   */
+  index<T extends R["type"], K>(
+    type: T,
+    keys: (record: Extract<R, { type: T }>) => Iterable<K>,
+  ): StoreIndex<K, Extract<R, { type: T }>> {
+    return new StoreIndex<K, Extract<R, { type: T }>>(
+      this,
+      (record): record is Extract<R, { type: T }> => record.type === type,
+      keys,
+    );
   }
 
   /**
@@ -76,6 +119,7 @@ export class ShiftStore<R extends ShiftRecord = ShiftRecord> {
   }
 
   #emitChange(change: StoreChange<R>): void {
+    this.#recordCells.get(change.id)?.set(change.after);
     for (const listener of this.#changeListeners) listener(change);
   }
 }
