@@ -20,6 +20,7 @@ use shift_font::{
   NamedInstance as FontNamedInstance, NamedInstanceId, PointId, PointSeed, SourceId,
   LANGUAGES_LIB_KEY,
 };
+use shift_slug::length::OrOverflow;
 use shift_slug::{
   build_authored_atlas_page_profiled, build_authored_atlas_profiled,
   retained::compile_page as compile_retained_page, AuthoredAtlas, AuthoredAtlasProfile,
@@ -150,8 +151,8 @@ impl TryFrom<DocumentIdentity> for NapiDocumentIdentity {
 
 fn napi_slug_section(section: SlugSection) -> BridgeResult<NapiSlugSection> {
   Ok(NapiSlugSection {
-    offset: u32::try_from(section.offset).map_err(|_| shift_slug::SlugError::LengthOverflow)?,
-    length: u32::try_from(section.length).map_err(|_| shift_slug::SlugError::LengthOverflow)?,
+    offset: u32::try_from(section.offset).or_overflow()?,
+    length: u32::try_from(section.length).or_overflow()?,
   })
 }
 
@@ -168,8 +169,7 @@ fn napi_slug_layout(layout: VariableLayout) -> BridgeResult<NapiSlugLayout> {
     components: napi_slug_section(layout.components)?,
     component_sources: napi_slug_section(layout.component_sources)?,
     line_bits: napi_slug_section(layout.line_bits)?,
-    total_length: u32::try_from(layout.total_length)
-      .map_err(|_| shift_slug::SlugError::LengthOverflow)?,
+    total_length: u32::try_from(layout.total_length).or_overflow()?,
   })
 }
 
@@ -793,8 +793,7 @@ fn napi_source_atlas_page(
     generation,
     page_index,
     band_count: atlas.band_count(),
-    weight_count: u32::try_from(weights.len())
-      .map_err(|_| shift_slug::SlugError::LengthOverflow)?,
+    weight_count: u32::try_from(weights.len()).or_overflow()?,
     layout: napi_slug_layout(layout)?,
     preview_extents: NapiSlugPreviewExtents {
       horizontal: f64::from(preview_extents.horizontal),
@@ -831,12 +830,9 @@ fn napi_source_atlas_page(
       })
       .collect::<BridgeResult<Vec<_>>>()?,
     weights,
-    atlas_glyph_count: u32::try_from(statistics.glyph_count)
-      .map_err(|_| shift_slug::SlugError::LengthOverflow)?,
-    curve_count: u32::try_from(statistics.curve_count)
-      .map_err(|_| shift_slug::SlugError::LengthOverflow)?,
-    component_count: u32::try_from(statistics.component_count)
-      .map_err(|_| shift_slug::SlugError::LengthOverflow)?,
+    atlas_glyph_count: u32::try_from(statistics.glyph_count).or_overflow()?,
+    curve_count: u32::try_from(statistics.curve_count).or_overflow()?,
+    component_count: u32::try_from(statistics.component_count).or_overflow()?,
   })
 }
 
@@ -886,12 +882,9 @@ fn napi_slug_atlas(
     },
     glyphs,
     weight_sets,
-    atlas_glyph_count: u32::try_from(statistics.glyph_count)
-      .map_err(|_| shift_slug::SlugError::LengthOverflow)?,
-    curve_count: u32::try_from(statistics.curve_count)
-      .map_err(|_| shift_slug::SlugError::LengthOverflow)?,
-    component_count: u32::try_from(statistics.component_count)
-      .map_err(|_| shift_slug::SlugError::LengthOverflow)?,
+    atlas_glyph_count: u32::try_from(statistics.glyph_count).or_overflow()?,
+    curve_count: u32::try_from(statistics.curve_count).or_overflow()?,
+    component_count: u32::try_from(statistics.component_count).or_overflow()?,
   })
 }
 
@@ -1688,10 +1681,7 @@ impl Bridge {
     let started = Instant::now();
     let layout = authored.atlas().layout(alignment as usize)?;
     let layout_elapsed = started.elapsed();
-    self.slug_generation = self
-      .slug_generation
-      .checked_add(1)
-      .ok_or(shift_slug::SlugError::LengthOverflow)?;
+    self.slug_generation = self.slug_generation.checked_add(1).or_overflow()?;
     let generation = self.slug_generation;
     let result = napi_slug_atlas(generation, &authored, layout)?;
     log_slug_atlas_profile(
@@ -1738,10 +1728,7 @@ impl Bridge {
     let started = Instant::now();
     let layout = authored.atlas().layout(alignment as usize)?;
     let layout_elapsed = started.elapsed();
-    self.slug_generation = self
-      .slug_generation
-      .checked_add(1)
-      .ok_or(shift_slug::SlugError::LengthOverflow)?;
+    self.slug_generation = self.slug_generation.checked_add(1).or_overflow()?;
     let generation = self.slug_generation;
     let result = napi_slug_atlas(generation, &authored, layout)?;
     log_slug_atlas_profile(
@@ -1873,10 +1860,7 @@ impl Bridge {
     coordinates: Vec<f64>,
     alignment: u32,
   ) -> errors::Result<NapiCatalogAtlasPage> {
-    self.slug_generation = self
-      .slug_generation
-      .checked_add(1)
-      .ok_or(shift_slug::SlugError::LengthOverflow)?;
+    self.slug_generation = self.slug_generation.checked_add(1).or_overflow()?;
     let generation = self.slug_generation;
     let (atlas, descriptor, location, layout) = {
       let source = self.font_source()?;

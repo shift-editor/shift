@@ -1,3 +1,4 @@
+use crate::length::OrOverflow;
 use std::collections::HashSet;
 use std::time::{Duration, Instant};
 
@@ -205,11 +206,8 @@ fn collect_weight_sets(
             continue;
         }
 
-        let count = u32::try_from(interpolation.basis().source_ids().len())
-            .map_err(|_| SlugError::LengthOverflow)?;
-        let end = next_weight_index
-            .checked_add(count)
-            .ok_or(SlugError::LengthOverflow)?;
+        let count = u32::try_from(interpolation.basis().source_ids().len()).or_overflow()?;
+        let end = next_weight_index.checked_add(count).or_overflow()?;
         sets.push(AuthoredWeightSet::new(
             interpolation.basis().clone(),
             (next_weight_index..end).collect(),

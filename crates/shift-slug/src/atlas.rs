@@ -1,3 +1,4 @@
+use crate::length::{ensure_total, to_u32, OrOverflow};
 use std::cmp::Ordering;
 
 use crate::{
@@ -147,31 +148,25 @@ impl AtlasBuilder {
         commands: impl IntoIterator<Item = OutlineCommand<f32>>,
     ) -> Result<u32, SlugError> {
         let curves = curves_from_commands(commands)?;
-        let curve_start = as_u32(self.atlas.curves.len())?;
-        let curve_count = as_u32(curves.len())?;
+        let curve_start = to_u32(self.atlas.curves.len())?;
+        let curve_count = to_u32(curves.len())?;
         let bounds = glyph_bounds(&curves);
         let (local_bands, local_indices) = build_bands(&curves, bounds, self.atlas.band_count)?;
-        let index_start = as_u32(self.atlas.curve_indices.len())?;
-        let band_start = as_u32(self.atlas.bands.len())?;
-        let glyph_index = as_u32(self.atlas.glyphs.len())?;
+        let index_start = to_u32(self.atlas.curve_indices.len())?;
+        let band_start = to_u32(self.atlas.bands.len())?;
+        let glyph_index = to_u32(self.atlas.glyphs.len())?;
 
         let mut bands = Vec::with_capacity(local_bands.len());
         for band in local_bands {
             bands.push(Band {
-                start: index_start
-                    .checked_add(band.start)
-                    .ok_or(SlugError::LengthOverflow)?,
+                start: index_start.checked_add(band.start).or_overflow()?,
                 count: band.count,
             });
         }
 
         let mut indices = Vec::with_capacity(local_indices.len());
         for local_index in local_indices {
-            indices.push(
-                curve_start
-                    .checked_add(local_index)
-                    .ok_or(SlugError::LengthOverflow)?,
-            );
+            indices.push(curve_start.checked_add(local_index).or_overflow()?);
         }
 
         ensure_total(self.atlas.curves.len(), curves.len())?;
@@ -231,7 +226,7 @@ fn build_bands(
     let mut vertical = vec![Vec::new(); count];
 
     for (curve_index, curve) in curves.iter().copied().enumerate() {
-        let curve_index = as_u32(curve_index)?;
+        let curve_index = to_u32(curve_index)?;
         let curve_bounds = curve.bounds();
         let (first, last) = band_span(
             curve_bounds.min_y,
@@ -276,8 +271,8 @@ fn build_bands(
     let mut ranges = Vec::with_capacity(count * 2);
     let mut indices = Vec::new();
     for band in horizontal.into_iter().chain(vertical) {
-        let start = as_u32(indices.len())?;
-        let count = as_u32(band.len())?;
+        let start = to_u32(indices.len())?;
+        let count = to_u32(band.len())?;
         ensure_total(indices.len(), band.len())?;
         ranges.push(Band { start, count });
         indices.extend(band);
@@ -307,15 +302,4 @@ fn band_span(
 
 fn descending(left: f32, right: f32) -> Ordering {
     right.total_cmp(&left)
-}
-
-fn as_u32(value: usize) -> Result<u32, SlugError> {
-    u32::try_from(value).map_err(|_| SlugError::LengthOverflow)
-}
-
-fn ensure_total(current: usize, additional: usize) -> Result<(), SlugError> {
-    let total = current
-        .checked_add(additional)
-        .ok_or(SlugError::LengthOverflow)?;
-    as_u32(total).map(|_| ())
 }

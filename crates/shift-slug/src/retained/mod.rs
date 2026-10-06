@@ -1,3 +1,4 @@
+use crate::length::OrOverflow;
 use crate::{Curve, Point, SlugError, SlugPreviewExtents, VariableAtlas, VariableAtlasBuilder};
 
 mod weights;
@@ -39,9 +40,7 @@ impl GlyphShape {
 
     fn value_count(&self) -> Result<usize, SlugError> {
         self.segments.iter().try_fold(1_usize, |count, segment| {
-            count
-                .checked_add(segment.point_count() * 2)
-                .ok_or(SlugError::LengthOverflow)
+            count.checked_add(segment.point_count() * 2).or_overflow()
         })
     }
 }

@@ -1,3 +1,4 @@
+use crate::length::OrOverflow;
 use std::collections::{hash_map::Entry, HashMap};
 use std::time::Instant;
 
@@ -192,7 +193,7 @@ pub(super) fn add_default_component_projection_glyph(
     for (component_index, component) in projection.components().components().iter().enumerate() {
         component_indexes.insert(
             component.component_path().as_slice().to_vec(),
-            u32::try_from(component_index).map_err(|_| crate::SlugError::LengthOverflow)?,
+            u32::try_from(component_index).or_overflow()?,
         );
     }
 
@@ -201,8 +202,7 @@ pub(super) fn add_default_component_projection_glyph(
     for (component_index, occurrence) in projection.components().components().iter().enumerate() {
         let parent_projection =
             projection_for(compilation.projection_set, &occurrence.parent_glyph_id())?;
-        let source_start =
-            u32::try_from(component_sources.len()).map_err(|_| crate::SlugError::LengthOverflow)?;
+        let source_start = u32::try_from(component_sources.len()).or_overflow()?;
         let source_context = AuthoredComponentSourceContext {
             weight_sets: compilation.weight_sets,
             constant_weight_index: compilation.constant_weight_index,
@@ -216,9 +216,9 @@ pub(super) fn add_default_component_projection_glyph(
             &source_context,
         )?;
         let source_count = u32::try_from(component_sources.len())
-            .map_err(|_| crate::SlugError::LengthOverflow)?
+            .or_overflow()?
             .checked_sub(source_start)
-            .ok_or(crate::SlugError::LengthOverflow)?;
+            .or_overflow()?;
 
         let parent_component =
             component_index_for_path(&component_indexes, occurrence.parent_path().as_slice())?;
@@ -244,7 +244,7 @@ pub(super) fn add_default_component_projection_glyph(
             builder,
             &mut parts,
             direct_glyphs[&occurrence.base_glyph_id()],
-            u32::try_from(component_index).map_err(|_| crate::SlugError::LengthOverflow)?,
+            u32::try_from(component_index).or_overflow()?,
             &mut output_curve_start,
         )?;
     }
@@ -382,10 +382,7 @@ fn component_index_for_path(
     if path.is_empty() {
         return Ok(ROOT_COMPONENT);
     }
-    indexes
-        .get(path)
-        .copied()
-        .ok_or_else(|| crate::SlugError::LengthOverflow.into())
+    indexes.get(path).copied().or_overflow().map_err(Into::into)
 }
 
 fn append_part(
@@ -404,7 +401,7 @@ fn append_part(
     });
     *output_curve_start = output_curve_start
         .checked_add(glyph.curve_count)
-        .ok_or(crate::SlugError::LengthOverflow)?;
+        .or_overflow()?;
     Ok(())
 }
 
