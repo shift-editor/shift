@@ -1,3 +1,4 @@
+use crate::length::OrOverflow;
 use crate::SlugError;
 
 /// Byte stride of [`RenderInstance`] in the shared WGSL storage layout.
@@ -38,7 +39,7 @@ pub fn pack_render_instances(instances: &[RenderInstance]) -> Result<Vec<u8>, Sl
     let byte_length = instances
         .len()
         .checked_mul(RENDER_INSTANCE_BYTES)
-        .ok_or(SlugError::LengthOverflow)?;
+        .or_overflow()?;
     let mut bytes = Vec::with_capacity(byte_length);
     for instance in instances {
         for value in instance.pixel_rect.into_iter().chain(instance.em_transform) {

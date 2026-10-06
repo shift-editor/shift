@@ -18,7 +18,7 @@ Callers use typed APIs from this crate rather than preparing SQL or opening a se
 
 ## Recovery boundary
 
-`RecoveryOverlay` is an app-data SQLite database bound to one `DocumentId` and `base_commit_id`. A completed semantic edit transaction writes only replacement rows, complete replacement layer BLOBs, earned component rows, collection-replacement markers, and deletion tombstones, and advances the durable recovery revision used to invalidate derived caches. The canonical `.shift` remains the last explicitly saved document.
+`RecoveryOverlay` is an app-data SQLite database bound to one `DocumentId` and `base_commit_id`. A completed semantic edit transaction projects one reversible `FontChangeSet` into replacement rows, complete replacement layer BLOBs, earned component rows, collection-replacement markers, and deletion tombstones, then advances the durable recovery revision used to invalidate derived caches. Entity lifecycle is derived centrally by `shift-font`; ordered collection replacements still rewrite every surviving row's order index because pure reordering does not fabricate entity updates. The canonical `.shift` remains the last explicitly saved document.
 
 Recovery states are `Clean`, `Dirty`, `SavePending`, and `Conflict`:
 
@@ -97,6 +97,6 @@ src/
     references.rs   # component dependency queries and index validation
     tests.rs        # integrated SQLite layer behavior
   write_mode.rs     # shared insert/upsert policy for canonical write paths
-  change_set.rs     # transactional workspace changes and one final touched-layer write
+  change_set.rs     # transactional reversible replacements and touched-layer writes
   workspace_state.rs
 ```

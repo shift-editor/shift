@@ -1,5 +1,6 @@
 //! Native glyph interpolation over Shift sources and internal locations.
 
+use crate::Require;
 use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::str::FromStr;
 use std::sync::Arc;
@@ -11,8 +12,7 @@ use fontdrasil::variations::{
 };
 
 use crate::{
-    Axis, AxisId, CoreError, CoreResult, DesignLocation, Font, GlyphId, GlyphLayer, Location,
-    SourceId,
+    Axis, AxisId, CoreResult, DesignLocation, Font, GlyphId, GlyphLayer, Location, SourceId,
 };
 
 mod layer_match;
@@ -200,7 +200,7 @@ impl InterpolationBasis {
     ///
     /// # Errors
     ///
-    /// Returns [`CoreError::AxisNotFound`] when `axes` omits an axis referenced
+    /// Returns [`crate::CoreError::AxisNotFound`] when `axes` omits an axis referenced
     /// by an interpolation region.
     pub fn weights_at(&self, location: &DesignLocation, axes: &[Axis]) -> CoreResult<Vec<f64>> {
         self.basis.evaluate(location.as_untyped(), axes)
@@ -258,7 +258,7 @@ impl GlyphInterpolation {
     ///
     /// # Errors
     ///
-    /// Returns [`CoreError::AxisNotFound`] if `axes` does not contain every
+    /// Returns [`crate::CoreError::AxisNotFound`] if `axes` does not contain every
     /// support axis, or a glyph-value shape error if the interpolation model
     /// and its structural reference layer are inconsistent.
     pub fn resolve(&self, location: &DesignLocation, axes: &[Axis]) -> CoreResult<GlyphLayer> {
@@ -306,7 +306,7 @@ impl Font {
     ///
     /// # Errors
     ///
-    /// Returns [`CoreError::GlyphNotFound`] when `glyph_id` is not in the font.
+    /// Returns [`crate::CoreError::GlyphNotFound`] when `glyph_id` is not in the font.
     pub fn glyph_interpolation(
         &self,
         glyph_id: &GlyphId,
@@ -319,9 +319,7 @@ impl Font {
         glyph_id: &GlyphId,
         bases: &mut HashMap<Vec<SourceId>, Arc<InterpolationBasis>>,
     ) -> CoreResult<Option<GlyphInterpolation>> {
-        let glyph = self
-            .glyph(glyph_id.clone())
-            .ok_or_else(|| CoreError::GlyphNotFound(glyph_id.clone()))?;
+        let glyph = self.require_glyph(glyph_id)?;
         if !self.is_variable() {
             return Ok(None);
         }
@@ -383,7 +381,7 @@ impl Font {
 fn interpolation_reference_layer(font: &Font, glyph: &crate::Glyph) -> Option<Arc<GlyphLayer>> {
     if let Some(default_source_id) = font.default_source_id() {
         let default_is_master = font
-            .source(default_source_id.clone())
+            .source(&default_source_id)
             .is_some_and(crate::Source::is_master);
         if default_is_master {
             if let Some(layer) = glyph
@@ -535,7 +533,7 @@ fn region_scalar(
         let axis = axes
             .iter()
             .find(|axis| axis.id() == support.axis_id)
-            .ok_or_else(|| CoreError::AxisNotFound(support.axis_id.clone()))?;
+            .require(&support.axis_id)?;
         let value = location.get(&axis.id()).unwrap_or(axis.default());
         let normalized = axis.normalize(value);
 
@@ -668,7 +666,7 @@ mod tests {
         let interpolation = font.glyph_interpolation(&glyph.id()).unwrap().unwrap();
 
         for (expected_index, source_id) in interpolation.basis().source_ids().iter().enumerate() {
-            let source = font.source(source_id.clone()).unwrap();
+            let source = font.source(source_id).unwrap();
             let weights = interpolation
                 .basis()
                 .weights_at(source.location(), font.axes())

@@ -36,7 +36,7 @@ export const PreviewNoticeDialog = ({
         <DialogTitle className="text-base font-medium text-primary">
           {message(canConvert ? "preview.convertible.title" : "preview.readOnly.title")}
         </DialogTitle>
-        <p className="mt-2 text-sm text-muted">
+        <p className="mt-2 text-sm text-primary">
           {message(canConvert ? "preview.convertible.description" : "preview.readOnly.description")}
         </p>
         <div className="mt-3 flex justify-end gap-2">

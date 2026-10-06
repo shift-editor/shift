@@ -1,10 +1,10 @@
 use std::{fs, path::PathBuf};
 
 use shift_font::{
-    AnchorId, AnchorSeed, Axis, AxisId, BooleanOp, ContourId, DesignLocation, ExternalLocation,
-    Font, FontChange, FontIntent, FontIntentSet, Glyph, GlyphId, GlyphLayer, GlyphName,
-    LANGUAGES_LIB_KEY, LayerId, NamedInstance, NamedInstanceId, PointId, PointSeed, PointType,
-    Source, SourceId, error::CoreError,
+    AnchorId, AnchorSeed, Axis, AxisId, BooleanOp, ContourId, DesignLocation, EntityChange,
+    ExternalLocation, Font, FontChange, FontEntityChange, FontIntent, FontIntentSet, Glyph,
+    GlyphId, GlyphLayer, GlyphName, LANGUAGES_LIB_KEY, LayerId, NamedInstance, NamedInstanceId,
+    PointId, PointSeed, PointType, Source, SourceId, error::CoreError,
 };
 use shift_store::ShiftStore;
 use shift_workspace::{AcquireScope, FontWorkspace, NewWorkspace, WorkspaceError, WorkspaceSource};
@@ -464,7 +464,7 @@ fn large_ttf_reopens_directory_first_and_acquires_only_requested_layers() {
         .flat_map(|glyph_id| {
             workspace
                 .font()
-                .glyph(glyph_id.clone())
+                .glyph(glyph_id)
                 .unwrap()
                 .layers()
                 .values()
@@ -485,7 +485,7 @@ fn large_ttf_reopens_directory_first_and_acquires_only_requested_layers() {
     assert_eq!(resumed.loaded_layer_count(), expected.len());
     assert!(resumed.loaded_layer_count() < total_layers);
     for (layer_id, layer) in expected {
-        assert_eq!(resumed.font().layer(layer_id).unwrap(), &layer);
+        assert_eq!(resumed.font().layer(&layer_id).unwrap(), &layer);
     }
 }
 
@@ -543,7 +543,7 @@ fn configured_large_corpus_streams_resumes_and_acquires() {
     workspace.undo().unwrap().expect("glyph append should undo");
     let undo_elapsed = undo_started.elapsed();
     assert_eq!(workspace.font().glyph_count(), glyph_count);
-    assert!(workspace.font().glyph(appended_id).is_none());
+    assert!(workspace.font().glyph(&appended_id).is_none());
     assert_eq!(
         workspace
             .store()
@@ -602,14 +602,7 @@ fn designspace_and_ufo_sources_roundtrip_through_lazy_component_acquisition() {
     assert!(closure.len() > 1);
     let closure_layer_count = closure
         .iter()
-        .map(|glyph_id| {
-            workspace
-                .font()
-                .glyph(glyph_id.clone())
-                .unwrap()
-                .layers()
-                .len()
-        })
+        .map(|glyph_id| workspace.font().glyph(glyph_id).unwrap().layers().len())
         .sum::<usize>();
     assert_eq!(workspace.loaded_layer_count(), 0);
     workspace
@@ -617,7 +610,7 @@ fn designspace_and_ufo_sources_roundtrip_through_lazy_component_acquisition() {
         .unwrap();
     let expected_root_layers = workspace
         .font()
-        .glyph(root.clone())
+        .glyph(&root)
         .unwrap()
         .layers()
         .values()
@@ -634,7 +627,7 @@ fn designspace_and_ufo_sources_roundtrip_through_lazy_component_acquisition() {
     assert_eq!(resumed.loaded_layer_count(), closure_layer_count);
     assert!(resumed.loaded_layer_count() < total_layers);
     for (layer_id, layer) in expected_root_layers {
-        assert_eq!(resumed.font().layer(layer_id).unwrap(), &layer);
+        assert_eq!(resumed.font().layer(&layer_id).unwrap(), &layer);
     }
 }
 
@@ -655,14 +648,7 @@ fn glyphs_source_imports_directory_first_and_acquires_component_closure() {
         .unwrap();
     let closure_layer_count = closure
         .iter()
-        .map(|glyph_id| {
-            workspace
-                .font()
-                .glyph(glyph_id.clone())
-                .unwrap()
-                .layers()
-                .len()
-        })
+        .map(|glyph_id| workspace.font().glyph(glyph_id).unwrap().layers().len())
         .sum::<usize>();
 
     assert!(closure.len() > 1);
@@ -670,7 +656,7 @@ fn glyphs_source_imports_directory_first_and_acquires_component_closure() {
     assert!(
         workspace
             .font()
-            .glyph(root.clone())
+            .glyph(&root)
             .unwrap()
             .layers()
             .values()
@@ -684,7 +670,7 @@ fn glyphs_source_imports_directory_first_and_acquires_component_closure() {
     assert_eq!(
         workspace
             .font()
-            .glyph(root.clone())
+            .glyph(&root)
             .unwrap()
             .layers()
             .values()
@@ -703,7 +689,7 @@ fn glyphs_source_imports_directory_first_and_acquires_component_closure() {
     assert_eq!(
         resumed
             .font()
-            .glyph(root)
+            .glyph(&root)
             .unwrap()
             .layers()
             .values()
@@ -733,7 +719,7 @@ fn ufo_source_roundtrips_through_lazy_acquisition() {
         .unwrap();
     let expected = workspace
         .font()
-        .glyph(glyph_id.clone())
+        .glyph(&glyph_id)
         .unwrap()
         .layers()
         .values()
@@ -750,7 +736,7 @@ fn ufo_source_roundtrips_through_lazy_acquisition() {
 
     assert_eq!(resumed.loaded_layer_count(), expected.len());
     for (layer_id, layer) in expected {
-        assert_eq!(resumed.font().layer(layer_id).unwrap(), &layer);
+        assert_eq!(resumed.font().layer(&layer_id).unwrap(), &layer);
     }
 }
 
@@ -839,7 +825,7 @@ fn failed_acquisition_keeps_placeholders_and_allows_an_unrelated_retry() {
     assert_eq!(requested.len(), 2);
     let corrupt_layer_id = workspace
         .font()
-        .glyph(requested[0].clone())
+        .glyph(&requested[0].clone())
         .unwrap()
         .layers()
         .keys()
@@ -865,7 +851,13 @@ fn failed_acquisition_keeps_placeholders_and_allows_an_unrelated_retry() {
         WorkspaceError::Store(shift_store::StoreError::LayerDecompression(_))
     ));
     assert_eq!(workspace.loaded_layer_count(), 0);
-    assert!(workspace.font().layer(corrupt_layer_id).unwrap().is_empty());
+    assert!(
+        workspace
+            .font()
+            .layer(&corrupt_layer_id)
+            .unwrap()
+            .is_empty()
+    );
 
     workspace
         .acquire_glyphs(std::slice::from_ref(&requested[1]), AcquireScope::Glyphs)
@@ -947,25 +939,25 @@ fn resumed_layers_are_acquired_and_evictable_without_losing_authored_state() {
 
     let mut workspace = FontWorkspace::resume(&store_path).unwrap();
     assert_eq!(workspace.loaded_layer_count(), 0);
-    assert!(workspace.font().layer(layer_id.clone()).unwrap().is_empty());
+    assert!(workspace.font().layer(&layer_id).unwrap().is_empty());
 
     workspace
         .acquire_glyphs(std::slice::from_ref(&glyph_id), AcquireScope::Glyphs)
         .unwrap();
     assert_eq!(workspace.loaded_layer_count(), 1);
-    let authored = workspace.font().layer(layer_id.clone()).unwrap().clone();
+    let authored = workspace.font().layer(&layer_id).unwrap().clone();
     assert_eq!(authored.contours_iter().next().unwrap().points().len(), 4);
 
     workspace
         .evict_glyphs(&[glyph_id.clone(), glyph_id.clone()])
         .unwrap();
     assert_eq!(workspace.loaded_layer_count(), 0);
-    assert!(workspace.font().layer(layer_id.clone()).unwrap().is_empty());
+    assert!(workspace.font().layer(&layer_id).unwrap().is_empty());
 
     workspace
         .acquire_glyphs(std::slice::from_ref(&glyph_id), AcquireScope::Glyphs)
         .unwrap();
-    assert_eq!(workspace.font().layer(layer_id).unwrap(), &authored);
+    assert_eq!(workspace.font().layer(&layer_id).unwrap(), &authored);
 }
 
 #[test]
@@ -993,7 +985,7 @@ fn intent_on_directory_layer_acquires_before_persisting() {
         )
         .unwrap();
 
-    let layer = workspace.font().layer(layer_id.clone()).unwrap();
+    let layer = workspace.font().layer(&layer_id).unwrap();
     assert_eq!(workspace.loaded_layer_count(), 1);
     assert_eq!(layer.width(), 777.0);
     assert_eq!(layer.contours_iter().next().unwrap().points().len(), 4);
@@ -1003,7 +995,7 @@ fn intent_on_directory_layer_acquires_before_persisting() {
     resumed
         .acquire_glyphs(std::slice::from_ref(&glyph_id), AcquireScope::Glyphs)
         .unwrap();
-    let layer = resumed.font().layer(layer_id).unwrap();
+    let layer = resumed.font().layer(&layer_id).unwrap();
     assert_eq!(layer.width(), 777.0);
     assert_eq!(layer.contours_iter().next().unwrap().points().len(), 4);
 }
@@ -1017,7 +1009,7 @@ fn undo_after_eviction_reacquires_and_tracks_restored_layer_as_loaded() {
     let glyph_id = create_glyph(&mut workspace, "A", vec![65]);
     let layer_id = create_glyph_layer(&mut workspace, glyph_id.clone(), source_id);
     add_square_contour(&mut workspace, &layer_id, (10.0, 20.0), 100.0);
-    let original_width = workspace.font().layer(layer_id.clone()).unwrap().width();
+    let original_width = workspace.font().layer(&layer_id).unwrap().width();
 
     workspace
         .apply(
@@ -1037,7 +1029,7 @@ fn undo_after_eviction_reacquires_and_tracks_restored_layer_as_loaded() {
 
     workspace.undo().unwrap().expect("advance edit should undo");
 
-    let layer = workspace.font().layer(layer_id).unwrap();
+    let layer = workspace.font().layer(&layer_id).unwrap();
     assert_eq!(workspace.loaded_layer_count(), 1);
     assert_eq!(layer.width(), original_width);
     assert_eq!(layer.contours_iter().next().unwrap().points().len(), 4);
@@ -1063,7 +1055,7 @@ fn apply_set_x_advance_updates_existing_layer() {
         .unwrap();
 
     assert_eq!(outcome.layers[0].layer.width(), 640.0);
-    assert_eq!(workspace.font().layer(layer_id).unwrap().width(), 640.0);
+    assert_eq!(workspace.font().layer(&layer_id).unwrap().width(), 640.0);
 }
 
 #[test]
@@ -1086,7 +1078,7 @@ fn create_glyph_undo_redo_removes_and_restores_glyph_identity() {
     assert!(
         workspace
             .font()
-            .glyph(glyph_id.clone())
+            .glyph(&glyph_id)
             .unwrap()
             .layers()
             .is_empty()
@@ -1094,14 +1086,21 @@ fn create_glyph_undo_redo_removes_and_restores_glyph_identity() {
 
     let undone = workspace.undo().unwrap().expect("createGlyph should undo");
     assert_eq!(workspace.font().glyph_count(), 0);
-    assert!(undone.changes.changes.iter().any(
-        |change| matches!(change, FontChange::GlyphPopped(change) if change.glyph_id == glyph_id)
-    ));
+    assert!(
+        undone
+            .changes
+            .entity_changes()
+            .iter()
+            .any(|change| matches!(
+                change,
+                FontEntityChange::Glyph(EntityChange::Deleted(glyph)) if glyph.id() == glyph_id
+            ))
+    );
 
     let redone = workspace.redo().unwrap().expect("createGlyph should redo");
     assert_eq!(workspace.font().glyph_count(), 1);
     assert!(redone.layers.is_empty());
-    assert!(workspace.font().glyph(glyph_id).is_some());
+    assert!(workspace.font().glyph(&glyph_id).is_some());
 }
 
 #[test]
@@ -1138,9 +1137,19 @@ fn create_glyph_layer_undo_redo_removes_and_restores_sparse_layer() {
         .undo()
         .unwrap()
         .expect("createGlyphLayer should undo");
-    assert!(undone.changes.changes.iter().any(
-        |change| matches!(change, FontChange::GlyphLayerDeleted(change) if change.layer_id == layer_id)
-    ));
+    assert!(
+        undone
+            .changes
+            .entity_changes()
+            .iter()
+            .any(|change| matches!(
+                change,
+                FontEntityChange::Layer {
+                    change: EntityChange::Deleted(layer),
+                    ..
+                } if layer.id() == layer_id
+            ))
+    );
     assert_eq!(
         workspace
             .font()
@@ -1173,7 +1182,7 @@ fn create_glyph_layer_initializes_width_from_font_upm() {
 
     let layer_id = create_glyph_layer(&mut workspace, glyph_id, source_id);
 
-    assert_eq!(workspace.font().layer(layer_id).unwrap().width(), 1024.0);
+    assert_eq!(workspace.font().layer(&layer_id).unwrap().width(), 1024.0);
 }
 
 #[test]
@@ -1227,14 +1236,19 @@ fn delete_source_undo_redo_removes_and_restores_existing_sparse_layers() {
             .iter()
             .all(|source| source.id() != source_id)
     );
-    assert!(workspace.font().layer(layer_id.clone()).is_none());
+    assert!(workspace.font().layer(&layer_id).is_none());
 
     let undone = workspace.undo().unwrap().expect("deleteSource should undo");
-    assert!(undone
-        .changes
-        .changes
-        .iter()
-        .any(|change| matches!(change, FontChange::SourceCreated(change) if change.source.id() == source_id)));
+    assert!(
+        undone
+            .changes
+            .entity_changes()
+            .iter()
+            .any(|change| matches!(
+                change,
+                FontEntityChange::Source(EntityChange::Created(source)) if source.id() == source_id
+            ))
+    );
     assert!(
         workspace
             .font()
@@ -1242,10 +1256,7 @@ fn delete_source_undo_redo_removes_and_restores_existing_sparse_layers() {
             .iter()
             .any(|source| source.id() == source_id)
     );
-    assert_eq!(
-        workspace.font().layer(layer_id.clone()).unwrap().width(),
-        640.0
-    );
+    assert_eq!(workspace.font().layer(&layer_id).unwrap().width(), 640.0);
     assert_eq!(
         workspace
             .font()
@@ -1255,11 +1266,19 @@ fn delete_source_undo_redo_removes_and_restores_existing_sparse_layers() {
     assert_persisted_font_matches_workspace(&mut workspace);
 
     let redone = workspace.redo().unwrap().expect("deleteSource should redo");
-    assert!(redone
-        .changes
-        .changes
-        .iter()
-        .any(|change| matches!(change, FontChange::GlyphLayerDeleted(change) if change.layer_id == layer_id)));
+    assert!(
+        redone
+            .changes
+            .entity_changes()
+            .iter()
+            .any(|change| matches!(
+                change,
+                FontEntityChange::Layer {
+                    change: EntityChange::Deleted(layer),
+                    ..
+                } if layer.id() == layer_id
+            ))
+    );
     assert!(
         workspace
             .font()
@@ -1268,7 +1287,7 @@ fn delete_source_undo_redo_removes_and_restores_existing_sparse_layers() {
             .all(|source| source.id() != source_id)
     );
     assert_persisted_font_matches_workspace(&mut workspace);
-    assert!(workspace.font().layer(layer_id).is_none());
+    assert!(workspace.font().layer(&layer_id).is_none());
 }
 
 #[test]
@@ -1672,16 +1691,16 @@ fn assert_layer_undo_redo(
     layer_id: &LayerId,
     intents: Vec<FontIntent>,
 ) {
-    let pre = workspace.font().layer(layer_id.clone()).unwrap().clone();
+    let pre = workspace.font().layer(layer_id).unwrap().clone();
     workspace.apply(FontIntentSet { intents }, None).unwrap();
-    let post = workspace.font().layer(layer_id.clone()).unwrap().clone();
+    let post = workspace.font().layer(layer_id).unwrap().clone();
     assert_ne!(pre, post, "intent should change the layer");
 
     workspace.undo().unwrap().expect("intent should undo");
-    assert_eq!(workspace.font().layer(layer_id.clone()).unwrap(), &pre);
+    assert_eq!(workspace.font().layer(layer_id).unwrap(), &pre);
 
     workspace.redo().unwrap().expect("intent should redo");
-    assert_eq!(workspace.font().layer(layer_id.clone()).unwrap(), &post);
+    assert_eq!(workspace.font().layer(layer_id).unwrap(), &post);
 }
 
 #[test]
@@ -1754,7 +1773,7 @@ fn set_contour_closed_undo_redo_restores_layer() {
 fn move_points_undo_redo_restores_exact_coordinates_without_structure() {
     let (_temp, mut workspace, layer_id) = workspace_with_layer();
     let (_, point_ids) = add_square_contour(&mut workspace, &layer_id, (0.0, 0.0), 100.0);
-    let pre = workspace.font().layer(layer_id.clone()).unwrap().clone();
+    let pre = workspace.font().layer(&layer_id).unwrap().clone();
 
     let applied = workspace
         .apply(
@@ -1768,7 +1787,7 @@ fn move_points_undo_redo_restores_exact_coordinates_without_structure() {
             None,
         )
         .unwrap();
-    let post = workspace.font().layer(layer_id.clone()).unwrap().clone();
+    let post = workspace.font().layer(&layer_id).unwrap().clone();
     assert!(!applied.layers[0].structural);
 
     let undone = workspace
@@ -1776,14 +1795,14 @@ fn move_points_undo_redo_restores_exact_coordinates_without_structure() {
         .unwrap()
         .expect("position edit should undo");
     assert!(!undone.layers[0].structural);
-    assert_eq!(workspace.font().layer(layer_id.clone()).unwrap(), &pre);
+    assert_eq!(workspace.font().layer(&layer_id).unwrap(), &pre);
 
     let redone = workspace
         .redo()
         .unwrap()
         .expect("position edit should redo");
     assert!(!redone.layers[0].structural);
-    assert_eq!(workspace.font().layer(layer_id).unwrap(), &post);
+    assert_eq!(workspace.font().layer(&layer_id).unwrap(), &post);
 }
 
 #[test]
@@ -1898,9 +1917,9 @@ fn set_contour_start_undo_redo_restores_layer() {
     );
     let contour = workspace
         .font()
-        .layer(layer_id)
+        .layer(&layer_id)
         .unwrap()
-        .contour(contour_id)
+        .contour(&contour_id)
         .unwrap();
     assert_eq!(contour.points()[0].id(), point_ids[2]);
 }
@@ -1974,16 +1993,16 @@ fn update_glyph_undo_redo_restores_old_identity() {
         )
         .unwrap();
 
-    let glyph = workspace.font().glyph(glyph_id.clone()).unwrap();
+    let glyph = workspace.font().glyph(&glyph_id).unwrap();
     assert_eq!(glyph.glyph_name().to_string(), "A.alt");
     assert_eq!(glyph.unicodes(), &[97]);
 
     let undone = workspace.undo().unwrap().expect("updateGlyph should undo");
-    assert!(undone.changes.changes.iter().any(|change| matches!(
+    assert!(undone.changes.entity_changes().iter().any(|change| matches!(
         change,
-        FontChange::GlyphIdentityChanged(change) if change.glyph_id == glyph_id
+        FontEntityChange::Glyph(EntityChange::Updated { after, .. }) if after.id() == glyph_id
     )));
-    let glyph = workspace.font().glyph(glyph_id.clone()).unwrap();
+    let glyph = workspace.font().glyph(&glyph_id).unwrap();
     assert_eq!(glyph.glyph_name().to_string(), "A");
     assert_eq!(glyph.unicodes(), &[65]);
     assert_eq!(
@@ -1992,11 +2011,11 @@ fn update_glyph_undo_redo_restores_old_identity() {
     );
 
     let redone = workspace.redo().unwrap().expect("updateGlyph should redo");
-    assert!(redone.changes.changes.iter().any(|change| matches!(
+    assert!(redone.changes.entity_changes().iter().any(|change| matches!(
         change,
-        FontChange::GlyphIdentityChanged(change) if change.glyph_id == glyph_id
+        FontEntityChange::Glyph(EntityChange::Updated { after, .. }) if after.id() == glyph_id
     )));
-    let glyph = workspace.font().glyph(glyph_id.clone()).unwrap();
+    let glyph = workspace.font().glyph(&glyph_id).unwrap();
     assert_eq!(glyph.glyph_name().to_string(), "A.alt");
     assert_eq!(glyph.unicodes(), &[97]);
     assert_eq!(workspace.font().glyph_id_by_name("A.alt"), Some(glyph_id));
@@ -2090,7 +2109,7 @@ fn metadata_replacement_is_persisted_and_undoable_without_changing_metrics() {
     assert_eq!(workspace.font().metrics(), &original_metrics);
     assert!(applied.changes.changes.iter().any(|change| matches!(
         change,
-        FontChange::FontMetadataUpdated(change) if change.metadata == updated
+        FontChange::Metadata(value) if value.after == updated
     )));
     let stored = workspace
         .font_info()
@@ -2108,7 +2127,7 @@ fn metadata_replacement_is_persisted_and_undoable_without_changing_metrics() {
         .expect("metadata update should undo");
     assert!(undone.changes.changes.iter().any(|change| matches!(
         change,
-        FontChange::FontMetadataUpdated(change) if change.metadata == original_metadata
+        FontChange::Metadata(value) if value.after == original_metadata
     )));
     assert_eq!(workspace.font().metadata(), &original_metadata);
     assert_eq!(workspace.font().metrics(), &original_metrics);
@@ -2167,7 +2186,7 @@ fn tracked_languages_persist_across_resume_and_undo_restores_absence() {
     let undone = workspace.undo().unwrap().expect("setLanguages should undo");
     assert!(undone.changes.changes.iter().any(|change| matches!(
         change,
-        FontChange::FontLibValueUpdated(change) if change.key == LANGUAGES_LIB_KEY
+        FontChange::LibValue { key, .. } if key == LANGUAGES_LIB_KEY
     )));
     assert_eq!(
         workspace.font().language_ids(),
@@ -2341,7 +2360,7 @@ fn named_instance_crud_is_undoable_and_keeps_external_location() {
         .expect("instance delete should undo");
     assert!(undone.changes.changes.iter().any(|change| matches!(
         change,
-        FontChange::NamedInstancesUpdated(change) if change.instances == [updated.clone()]
+        FontChange::NamedInstances(value) if value.after == [updated.clone()]
     )));
     assert_eq!(
         workspace.font().named_instances(),
@@ -2417,10 +2436,16 @@ fn delete_axis_undo_redo_restores_full_axis_definition() {
     assert!(workspace.font().axes().is_empty());
 
     let undone = workspace.undo().unwrap().expect("deleteAxis should undo");
-    assert!(undone.changes.changes.iter().any(|change| matches!(
-        change,
-        FontChange::AxisCreated(change) if change.axis.id() == axis_id
-    )));
+    assert!(
+        undone
+            .changes
+            .entity_changes()
+            .iter()
+            .any(|change| matches!(
+                change,
+                FontEntityChange::Axis(EntityChange::Created(axis)) if axis.id() == axis_id
+            ))
+    );
     assert_eq!(workspace.font().axes(), std::slice::from_ref(&axis));
 
     // Deleting the axis also stripped source location values; undo must
@@ -2442,10 +2467,16 @@ fn delete_axis_undo_redo_restores_full_axis_definition() {
     assert_eq!(locations[0].value, 700.0);
 
     let redone = workspace.redo().unwrap().expect("deleteAxis should redo");
-    assert!(redone.changes.changes.iter().any(|change| matches!(
-        change,
-        FontChange::AxisDeleted(change) if change.axis_id == axis_id
-    )));
+    assert!(
+        redone
+            .changes
+            .entity_changes()
+            .iter()
+            .any(|change| matches!(
+                change,
+                FontEntityChange::Axis(EntityChange::Deleted(axis)) if axis.id() == axis_id
+            ))
+    );
     assert!(workspace.font().axes().is_empty());
 
     workspace

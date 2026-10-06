@@ -1,3 +1,4 @@
+use crate::error::OrMissing;
 use std::collections::HashSet;
 
 use rusqlite::{Transaction, params};
@@ -43,59 +44,67 @@ impl RecoveryOverlay {
             });
         }
 
-        let mut metadata_changed = false;
-        let mut font_lib_changed = false;
-        let mut mappings_changed = false;
-        let mut definitions_changed = false;
-        let mut instances_changed = false;
+        let impact = change_set.impact();
+        let metadata_changed = impact.contains(font::FontChangeImpact::METADATA);
+        let font_lib_changed = change_set
+            .changes
+            .iter()
+            .any(|change| matches!(change, font::FontChange::LibValue { .. }));
+        let mappings_changed = impact.contains(font::FontChangeImpact::AXIS_MAPPINGS);
+        let definitions_changed = impact.contains(font::FontChangeImpact::METRIC_DEFINITIONS);
+        let instances_changed = impact.contains(font::FontChangeImpact::NAMED_INSTANCES);
         let mut axis_ids = HashSet::new();
         let mut source_ids = HashSet::new();
         let mut glyph_ids = HashSet::new();
         let mut layer_ids = HashSet::new();
 
+        // Entity lifecycle omits pure reordering by design. Ordered relational
+        // collections must still rewrite every surviving row's order index.
         for change in &change_set.changes {
             match change {
-                font::FontChange::FontMetadataUpdated(_) => metadata_changed = true,
-                font::FontChange::FontLibValueUpdated(_) => font_lib_changed = true,
-                font::FontChange::AxisCreated(_) => {
-                    axis_ids.extend(post_font.axes().iter().map(font::Axis::id));
-                    source_ids.extend(post_font.sources().iter().map(font::Source::id));
+                font::FontChange::Axes(value) => {
+                    axis_ids.extend(value.after.iter().map(font::Axis::id));
                 }
-                font::FontChange::AxisUpdated(change) => {
-                    axis_ids.insert(change.axis.id());
+                font::FontChange::Sources(value) => {
+                    source_ids.extend(value.after.sources.iter().map(font::Source::id));
                 }
-                font::FontChange::AxisDeleted(change) => {
-                    axis_ids.insert(change.axis_id.clone());
-                    axis_ids.extend(post_font.axes().iter().map(font::Axis::id));
-                    source_ids.extend(post_font.sources().iter().map(font::Source::id));
-                }
-                font::FontChange::AxisMappingsUpdated(_) => mappings_changed = true,
-                font::FontChange::MetricDefinitionsUpdated(_) => definitions_changed = true,
-                font::FontChange::NamedInstancesUpdated(_) => instances_changed = true,
-                font::FontChange::SourceCreated(_) => {
-                    source_ids.extend(post_font.sources().iter().map(font::Source::id));
-                }
-                font::FontChange::SourceUpdated(change) => {
-                    source_ids.insert(change.source.id());
-                }
-                font::FontChange::SourceDeleted(change) => {
-                    source_ids.insert(change.source_id.clone());
-                    source_ids.extend(post_font.sources().iter().map(font::Source::id));
-                }
-                font::FontChange::GlyphAppended(change) => {
-                    glyph_ids.insert(change.glyph_id.clone());
-                }
-                font::FontChange::GlyphPopped(change) => {
-                    glyph_ids.insert(change.glyph_id.clone());
-                }
-                font::FontChange::GlyphIdentityChanged(change) => {
-                    glyph_ids.insert(change.glyph_id.clone());
-                }
-                _ => {
-                    if let Some(layer_id) = change.layer_id() {
-                        layer_ids.insert(layer_id.clone());
+                _ => {}
+            }
+        }
+
+        for entity in change_set.entity_changes() {
+            match entity {
+                font::FontEntityChange::Axis(change) => match change {
+                    font::EntityChange::Created(axis)
+                    | font::EntityChange::Updated { after: axis, .. }
+                    | font::EntityChange::Deleted(axis) => {
+                        axis_ids.insert(axis.id());
                     }
-                }
+                },
+                font::FontEntityChange::Source(change) => match change {
+                    font::EntityChange::Created(source)
+                    | font::EntityChange::Updated { after: source, .. }
+                    | font::EntityChange::Deleted(source) => {
+                        source_ids.insert(source.id());
+                    }
+                },
+                font::FontEntityChange::Glyph(change) => match change {
+                    font::EntityChange::Created(glyph)
+                    | font::EntityChange::Updated { after: glyph, .. }
+                    | font::EntityChange::Deleted(glyph) => {
+                        glyph_ids.insert(glyph.id());
+                    }
+                },
+                font::FontEntityChange::Layer { change, .. } => match change {
+                    font::EntityChange::Created(layer)
+                    | font::EntityChange::Updated { after: layer, .. }
+                    | font::EntityChange::Deleted(layer) => {
+                        layer_ids.insert(layer.id());
+                    }
+                },
+                font::FontEntityChange::AxisMapping(_)
+                | font::FontEntityChange::MetricDefinition(_)
+                | font::FontEntityChange::NamedInstance(_) => {}
             }
         }
 
@@ -163,13 +172,10 @@ impl RecoveryOverlay {
         }
 
         for glyph_id in glyph_ids {
-            if let Some(glyph) = post_font.glyph(glyph_id.clone()) {
-                let order_index = post_font.glyph_order(glyph_id.clone()).ok_or_else(|| {
-                    StoreError::MissingEntity {
-                        kind: "glyph order",
-                        id: glyph_id.to_string(),
-                    }
-                })?;
+            if let Some(glyph) = post_font.glyph(&glyph_id) {
+                let order_index = post_font
+                    .glyph_order(&glyph_id)
+                    .or_missing("glyph order", &glyph_id)?;
                 clear_tombstone(&tx, GLYPHS, glyph_id.as_str())?;
                 write_glyph_directory_in_tx(&tx, glyph, order_index as i64, WriteMode::Upsert)?;
                 mark_replaced(&tx, GLYPH_UNICODES, glyph_id.as_str())?;
