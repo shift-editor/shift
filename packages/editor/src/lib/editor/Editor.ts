@@ -826,7 +826,7 @@ export class Editor {
       const { item } = location;
       const glyphId =
         item.kind === "glyph"
-          ? (this.font.recordForName(item.glyphName as GlyphName)?.id ?? null)
+          ? (this.font.entryForName(item.glyphName as GlyphName)?.id ?? null)
           : null;
       return new TextItemObject(node, id, glyphId);
     }

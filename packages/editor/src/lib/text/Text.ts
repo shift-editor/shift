@@ -86,8 +86,8 @@ export class Text {
    * @returns null when the glyph is not in the font.
    */
   glyphItem(glyphId: GlyphId): TextItem | null {
-    const record = this.#editor.font.recordForId(glyphId);
-    return record ? glyphTextItem(record.name, record.unicodes[0] ?? null) : null;
+    const entry = this.#editor.font.entryForId(glyphId);
+    return entry ? glyphTextItem(entry.name, entry.unicodes[0] ?? null) : null;
   }
 
   /** Stores an independent proof text source. */
@@ -171,8 +171,8 @@ export class Text {
   #acquireGlyphs(items: readonly TextItem[]): void {
     for (const item of items) {
       if (item.kind !== "glyph") continue;
-      const glyph = this.#editor.font.recordForName(item.glyphName);
-      if (glyph && !this.#editor.glyphForId(glyph.id)) this.#loadGlyph(glyph.id);
+      const entry = this.#editor.font.entryForName(item.glyphName as GlyphName);
+      if (entry && !this.#editor.glyphForId(entry.id)) this.#loadGlyph(entry.id);
     }
   }
 

@@ -27,15 +27,15 @@ export function editRunItem(
   const current = editor.nodeDefinition("textRun").childGlyph(run);
   if (current?.itemId === itemId) return current;
 
-  const record = editor.font.recordForName(item.glyphName as GlyphName);
-  if (!record || !editor.glyphForId(record.id)) return null;
+  const entry = editor.font.entryForName(item.glyphName as GlyphName);
+  if (!entry || !editor.glyphForId(entry.id)) return null;
 
   if (current) editor.scene.deleteNode(current.id);
   return editor.scene.createNode({
     kind: "glyph",
     parentId: run.id,
     itemId,
-    glyphId: record.id,
+    glyphId: entry.id,
     sourceId,
     position: { x: 0, y: 0 },
   });
