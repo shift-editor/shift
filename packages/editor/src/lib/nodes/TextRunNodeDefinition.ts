@@ -9,10 +9,24 @@ import type { NodeReference } from "../../types/records";
 import type { RenderContext, RenderPass } from "../../types/rendering";
 import type { PointerTarget } from "../../types/target";
 import type { SpacingGap, SpacingSide } from "../../types/spacing";
-import type { GlyphRenderModel } from "../model/Glyph";
-import { Mat, type Point2D } from "@shift/geo";
-import { isTextItemId, type ComponentId, type GlyphId, type TextItemId } from "@shift/types";
-import { track } from "../signals";
+import type { GlyphLayer, GlyphRenderModel } from "../model/Glyph";
+import { Bounds, Mat, type Point2D, type Rect2D } from "@shift/geo";
+import {
+  isTextItemId,
+  type ComponentId,
+  type GlyphId,
+  type ShiftId,
+  type TextItemId,
+} from "@shift/types";
+import { batch, track } from "../signals";
+import type { TransformAction, TransformTarget } from "../../types/transformTarget";
+import type { GlyphTransformEdit } from "../model/GlyphTransformEdit";
+
+const GLYPH_LABELS: Record<TransformAction, string> = {
+  move: "Move glyphs",
+  scale: "Scale glyphs",
+  rotate: "Rotate glyphs",
+};
 
 /**
  * Projects one shared proof run through a placed, scaled scene node.
@@ -162,6 +176,108 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
   }
 
   /**
+   * Returns one item's outline bounds in the run's units.
+   *
+   * @remarks
+   * Tracks the layout and the glyph's outline, so the transform box follows
+   * respacing and edits.
+   *
+   * @returns null for line breaks, missing glyphs, and glyphs without an outline.
+   */
+  itemBounds(node: TextRunNode, itemId: TextItemId): LocalBounds | null {
+    const layoutCell = this.editor.text.layoutCell(node.runId);
+    track(layoutCell);
+    const placed = layoutCell.peek()?.placedGlyphForItem(itemId);
+    const model = placed?.glyph.glyphId ? this.#model(placed.glyph.glyphId) : null;
+    if (!placed || !model) return null;
+
+    track(model.boundsCell);
+    const bounds = model.bounds;
+    if (!bounds) return null;
+
+    const { x, y } = placed.origin;
+    return localBounds({
+      min: { x: bounds.min.x + x, y: bounds.min.y + y },
+      max: { x: bounds.max.x + x, y: bounds.max.y + y },
+    });
+  }
+
+  /**
+   * Selected glyphs transform whole at the active source, each distinct glyph once.
+   *
+   * @remarks
+   * Each glyph is its own part, pivoting on its own bounds, so a scale keeps
+   * every glyph on its own baseline and edge; a glyph selected several times
+   * is placed by its first selected item. The outline lands where the box
+   * shows; scaling keeps the right sidebearing, moving and rotating keep the
+   * advance. Components built on another selected
+   * glyph follow that glyph instead of transforming again.
+   *
+   * @returns null when any selected item is not a loaded glyph with a layer at the active source.
+   */
+  override transformTarget(node: TextRunNode, ids: readonly ShiftId[]): TransformTarget | null {
+    const sourceId = this.editor.activeSourceId;
+    const layout = this.editor.text.layoutCell(node.runId).peek();
+    if (!sourceId || !layout || this.editor.sessionMode !== "workspace") return null;
+
+    const parts = new Map<GlyphId, { layer: GlyphLayer; origin: Point2D; bounds: Rect2D }>();
+    let bounds: Bounds | null = null;
+    for (const id of ids) {
+      if (!isTextItemId(id)) return null;
+      const placed = layout.placedGlyphForItem(id);
+      const glyphId = placed?.glyph.glyphId;
+      const layer = glyphId ? this.editor.glyphForId(glyphId)?.layerForSource(sourceId) : null;
+      const itemBounds = this.itemBounds(node, id);
+      if (!placed || !glyphId || !layer || !itemBounds) return null;
+
+      bounds = bounds ? Bounds.union(bounds, itemBounds) : itemBounds;
+      if (!parts.has(glyphId)) {
+        parts.set(glyphId, {
+          layer,
+          origin: placed.origin,
+          bounds: Bounds.toRect(itemBounds),
+        });
+      }
+    }
+    if (!bounds) return null;
+
+    const transformedGlyphIds = new Set(parts.keys());
+    return {
+      bounds: Bounds.toRect(bounds),
+      begin: (action) => {
+        const edits: { edit: GlyphTransformEdit; bounds: Rect2D }[] = [];
+        try {
+          for (const { layer, origin, bounds } of parts.values()) {
+            const keepRightSidebearing = action === "scale";
+            const edit = layer.beginTransformEdit({
+              origin,
+              keepRightSidebearing,
+              transformedGlyphIds,
+            });
+            edits.push({ edit, bounds });
+          }
+        } catch (error) {
+          for (const { edit } of edits) edit.discard();
+          throw error;
+        }
+        return {
+          preview: (deltaFor) =>
+            batch(() => {
+              for (const { edit, bounds } of edits) edit.preview(deltaFor({ bounds }));
+            }),
+          commit: () =>
+            this.editor.transaction(GLYPH_LABELS[action], () => {
+              for (const { edit } of edits) edit.commit();
+            }),
+          discard: () => {
+            for (const { edit } of edits) edit.discard();
+          },
+        };
+      },
+    };
+  }
+
+  /**
    * Hit-tests the run's glyph outlines: inside a fill or within hit radius of a contour.
    *
    * @remarks
@@ -176,7 +292,10 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     const radius = this.editor.hitRadius / this.#scale(node);
     let target: PointerTarget | null = null;
     for (const { placed, itemId, model } of this.#runGlyphs(node, layout)) {
-      const local = { x: point.x - placed.origin.x, y: point.y - placed.origin.y };
+      const local = {
+        x: point.x - placed.origin.x,
+        y: point.y - placed.origin.y,
+      };
       if (hitsOutline(model, local, radius)) target = { kind: "text", node, point, itemId };
     }
     return target;
@@ -393,7 +512,11 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
   *#runGlyphs(
     node: TextRunNode,
     layout: TextLayout,
-  ): Iterable<{ placed: PlacedGlyph; itemId: TextItemId; model: GlyphRenderModel }> {
+  ): Iterable<{
+    placed: PlacedGlyph;
+    itemId: TextItemId;
+    model: GlyphRenderModel;
+  }> {
     const skip = this.#editedChildItemId(node);
     for (const placed of layout.placedGlyphs) {
       const itemId = placed.glyph.sourceItemIds[0];

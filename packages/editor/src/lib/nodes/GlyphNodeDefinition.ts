@@ -1,6 +1,6 @@
 import type { NodeReference } from "../../types/records";
 import { Bounds, Mat } from "@shift/geo";
-import type { ComponentId, NodeId, PointId, SegmentId, SourceMetrics } from "@shift/types";
+import type { ComponentId, NodeId, PointId, SegmentId, ShiftId, SourceMetrics } from "@shift/types";
 import type { LocalBounds, LocalPoint } from "../../types/coordinates";
 import { localBounds } from "../editor/spaces";
 import { SCREEN_HIT_RADIUS } from "../editor/rendering/constants";
@@ -24,11 +24,18 @@ import { NodeDefinition } from "./NodeDefinition";
 import type { GlyphNode } from "../../types/node";
 import type { RenderContext, RenderPass } from "../../types/rendering";
 import type { PointerTarget } from "../../types/target";
+import type { TransformAction, TransformTarget } from "../../types/transformTarget";
 import type { GlyphOutlineTarget, ResolvedGlyphOutlineTarget } from "../../types/glyphOutline";
 import { emptyExternalAxisLocation, externalAxisLocationFromLocation } from "../variation/location";
 import { GlyphOutlines } from "./GlyphOutlines";
 
 const EMPTY_OUTLINE_LOCATION = emptyExternalAxisLocation();
+
+const COMPONENT_LABELS: Record<TransformAction, string> = {
+  move: "Move components",
+  scale: "Scale components",
+  rotate: "Rotate components",
+};
 
 export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
   readonly kind: GlyphNode["kind"] = "glyph";
@@ -217,6 +224,24 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
       case "overlay":
         return;
     }
+  }
+
+  /** Selected components transform their placement in every source being edited. */
+  override transformTarget(_node: GlyphNode, ids: readonly ShiftId[]): TransformTarget | null {
+    const selection = this.editor.componentTransformSelection(ids);
+    if (!selection) return null;
+
+    return {
+      bounds: selection.bounds,
+      begin: (action) => {
+        const edit = selection.layer.beginComponentTransformEdit(selection);
+        return {
+          preview: (deltaFor) => edit.preview(deltaFor),
+          commit: () => edit.commit(COMPONENT_LABELS[action]),
+          discard: () => edit.discard(),
+        };
+      },
+    };
   }
 
   #view(node: GlyphNode): GlyphRenderModel | null {

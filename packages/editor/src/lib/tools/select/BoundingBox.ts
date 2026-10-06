@@ -111,16 +111,14 @@ export class SelectBoundingBox extends CanvasItem<SelectBoundingBoxProps> {
     const ids =
       state.type === "brushing" ? state.selection.initialSelection : this.#editor.selection.ids;
     const selection = this.#editor.positionSelection(ids);
-    let componentSelection = false;
+    let transformsWhole = false;
     if (selection) {
       const pointCount = selection.targets.points?.length ?? 0;
       const anchorCount = selection.targets.anchors?.length ?? 0;
       if (pointCount + anchorCount <= 1) return null;
     } else {
-      const objects = this.#editor.objects(ids);
-      if (objects.length === 0 || objects.some((object) => object.kind !== "component"))
-        return null;
-      componentSelection = true;
+      if (!this.#editor.transformTarget(ids)) return null;
+      transformsWhole = true;
     }
 
     const sceneBounds =
@@ -144,7 +142,7 @@ export class SelectBoundingBox extends CanvasItem<SelectBoundingBoxProps> {
     return {
       sceneRect,
       screenRect,
-      showHandles: componentSelection,
+      showHandles: transformsWhole,
       screenHandles,
       hitRadiusPx: SELECT_BOUNDING_BOX_STYLE.hitRadiusPx,
     };
