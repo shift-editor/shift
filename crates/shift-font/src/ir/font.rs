@@ -16,6 +16,7 @@ use crate::metrics::{FontMetrics, MetricDefinition, MetricKind, MetricValue};
 use crate::named_instance::{validate_named_instances, NamedInstance};
 use crate::source::source_locations_equal;
 use crate::source::Source;
+use crate::Require;
 use crate::{AxisLabelId, GlyphName, NamedInstanceId};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::{HashMap, HashSet};
@@ -626,7 +627,7 @@ impl Font {
             .axes()
             .iter()
             .position(|existing| existing.id() == axis.id())
-            .ok_or_else(|| CoreError::AxisNotFound(axis.id()))?;
+            .require(&axis.id())?;
         let mut axes = self.axes().to_vec();
         let previous = axes[index].clone();
         axes[index] = axis.clone();
@@ -704,7 +705,7 @@ impl Font {
             .axes()
             .iter()
             .position(|axis| axis.id() == axis_id)
-            .ok_or_else(|| CoreError::AxisNotFound(axis_id.clone()))?;
+            .require(&axis_id)?;
         let mut axes = self.axes().to_vec();
         let axis = axes.remove(index);
         let mut mappings = self.axis_mappings().to_vec();
@@ -783,7 +784,7 @@ impl Font {
             .named_instances()
             .iter()
             .position(|existing| existing.id() == instance.id())
-            .ok_or_else(|| CoreError::NamedInstanceNotFound(instance.id()))?;
+            .require(&instance.id())?;
         let mut instances = self.named_instances().to_vec();
         let previous = std::mem::replace(&mut instances[index], instance);
         self.set_named_instances(instances)?;
@@ -803,7 +804,7 @@ impl Font {
             .named_instances()
             .iter()
             .position(|instance| instance.id() == instance_id)
-            .ok_or_else(|| CoreError::NamedInstanceNotFound(instance_id.clone()))?;
+            .require(&instance_id)?;
         Ok(self.data_mut().named_instances.remove(index))
     }
 
@@ -932,7 +933,7 @@ impl Font {
             .sources()
             .iter()
             .position(|current| current.id() == source.id())
-            .ok_or_else(|| CoreError::SourceNotFound(source.id()))?;
+            .require(&source.id())?;
         Ok(std::mem::replace(
             &mut self.data_mut().sources[index],
             source,
@@ -1036,6 +1037,75 @@ impl Font {
             .glyphs
             .get_mut(&glyph_id)
             .and_then(|glyph| Arc::make_mut(glyph).layer_mut(layer_id))
+    }
+
+    /// Returns the glyph with `glyph_id`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::GlyphNotFound`] when the font has no such glyph.
+    pub fn require_glyph(&self, glyph_id: &GlyphId) -> CoreResult<&Glyph> {
+        self.data()
+            .glyphs
+            .get(glyph_id)
+            .map(Arc::as_ref)
+            .require(glyph_id)
+    }
+
+    /// Returns the id of the glyph that owns `layer_id`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::LayerNotFound`] when no glyph owns the layer.
+    pub fn require_layer_owner(&self, layer_id: &LayerId) -> CoreResult<GlyphId> {
+        self.index()
+            .layer_owner
+            .get(layer_id)
+            .cloned()
+            .require(layer_id)
+    }
+
+    /// Returns the glyph layer with `layer_id`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::LayerNotFound`] when no glyph owns the layer.
+    pub fn require_layer(&self, layer_id: &LayerId) -> CoreResult<&GlyphLayer> {
+        self.layer(layer_id.clone()).require(layer_id)
+    }
+
+    /// Returns the glyph layer with `layer_id` for editing, unsharing its glyph first.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::LayerNotFound`] when no glyph owns the layer.
+    pub fn require_layer_mut(&mut self, layer_id: &LayerId) -> CoreResult<&mut GlyphLayer> {
+        self.layer_mut(layer_id.clone()).require(layer_id)
+    }
+
+    /// Returns the source with `source_id`, whatever its role.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::SourceNotFound`] when the font has no such source.
+    pub fn require_source(&self, source_id: &SourceId) -> CoreResult<&Source> {
+        self.sources()
+            .iter()
+            .find(|source| source.id() == *source_id)
+            .require(source_id)
+    }
+
+    /// Returns the axis with `axis_id`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::AxisNotFound`] when the font has no such axis.
+    pub fn require_axis(&self, axis_id: &AxisId) -> CoreResult<&Axis> {
+        self.data()
+            .axes
+            .iter()
+            .find(|axis| axis.id() == *axis_id)
+            .require(axis_id)
     }
 
     pub fn insert_glyph(&mut self, glyph: Glyph) -> CoreResult<GlyphId> {
@@ -1172,8 +1242,7 @@ impl Font {
             });
         }
 
-        self.remove_glyph(glyph_id.clone())
-            .ok_or(CoreError::GlyphNotFound(glyph_id))
+        self.remove_glyph(glyph_id.clone()).require(&glyph_id)
     }
 
     pub fn glyph_count(&self) -> usize {
@@ -1182,11 +1251,7 @@ impl Font {
 
     pub fn rename_glyph(&mut self, glyph_id: GlyphId, name: GlyphName) -> CoreResult<()> {
         let mut state = (*self.state).clone();
-        let glyph = state
-            .data
-            .glyphs
-            .get_mut(&glyph_id)
-            .ok_or(CoreError::GlyphNotFound(glyph_id))?;
+        let glyph = state.data.glyphs.get_mut(&glyph_id).require(&glyph_id)?;
         Arc::make_mut(glyph).set_name(name);
         state.rebuild_index()?;
         self.state = Arc::new(state);
@@ -1195,11 +1260,7 @@ impl Font {
 
     pub fn set_glyph_unicodes(&mut self, glyph_id: GlyphId, unicodes: Vec<u32>) -> CoreResult<()> {
         let mut state = (*self.state).clone();
-        let glyph = state
-            .data
-            .glyphs
-            .get_mut(&glyph_id)
-            .ok_or(CoreError::GlyphNotFound(glyph_id))?;
+        let glyph = state.data.glyphs.get_mut(&glyph_id).require(&glyph_id)?;
         Arc::make_mut(glyph).set_unicodes(unicodes);
         state.rebuild_index()?;
         self.state = Arc::new(state);
@@ -1262,9 +1323,7 @@ impl Font {
         layer_id: LayerId,
         values: &GlyphInterpolationValues,
     ) -> CoreResult<()> {
-        let glyph_id = self
-            .glyph_id_by_layer(layer_id.clone())
-            .ok_or(CoreError::LayerNotFound(layer_id.clone()))?;
+        let glyph_id = self.require_layer_owner(&layer_id)?;
         let state = self.state_mut();
         let glyph = state
             .data
@@ -1273,7 +1332,7 @@ impl Font {
             .expect("layer owner was resolved before mutation");
         let layer = Arc::make_mut(glyph)
             .layer_mut(layer_id.clone())
-            .ok_or(CoreError::LayerNotFound(layer_id))?;
+            .require(&layer_id)?;
 
         layer.apply_interpolation_values(values)
     }
@@ -1298,16 +1357,14 @@ impl Font {
                 return Err(CoreError::DuplicateLayerId(layer_id));
             }
 
-            let glyph_id = self
-                .glyph_id_by_layer(layer_id.clone())
-                .ok_or(CoreError::LayerNotFound(layer_id.clone()))?;
+            let glyph_id = self.require_layer_owner(&layer_id)?;
             let previous = self
                 .data()
                 .glyphs
                 .get(&glyph_id)
                 .and_then(|glyph| glyph.layers().get(&layer_id))
                 .cloned()
-                .ok_or(CoreError::LayerNotFound(layer_id.clone()))?;
+                .require(&layer_id)?;
             if layer.source_id() != previous.source_id() {
                 return Err(CoreError::LayerSourceMismatch {
                     layer_id,
@@ -1343,18 +1400,12 @@ impl Font {
     }
 
     pub fn remove_glyph_layer(&mut self, layer_id: LayerId) -> CoreResult<GlyphLayer> {
-        let glyph_id = self
-            .glyph_id_by_layer(layer_id.clone())
-            .ok_or(CoreError::LayerNotFound(layer_id.clone()))?;
+        let glyph_id = self.require_layer_owner(&layer_id)?;
         let state = self.state_mut();
-        let glyph = state
-            .data
-            .glyphs
-            .get_mut(&glyph_id)
-            .ok_or(CoreError::GlyphNotFound(glyph_id.clone()))?;
+        let glyph = state.data.glyphs.get_mut(&glyph_id).require(&glyph_id)?;
         let layer = Arc::make_mut(glyph)
             .remove_layer(layer_id.clone())
-            .ok_or(CoreError::LayerNotFound(layer_id))?;
+            .require(&layer_id)?;
         state.index.remove_layer(glyph_id, &layer);
         Ok(layer)
     }

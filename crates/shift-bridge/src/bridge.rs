@@ -20,6 +20,7 @@ use shift_font::{
   NamedInstance as FontNamedInstance, NamedInstanceId, PointId, PointSeed, SourceId,
   LANGUAGES_LIB_KEY,
 };
+use shift_slug::length::OrOverflow;
 use shift_slug::{
   build_authored_atlas_page_profiled, build_authored_atlas_profiled,
   retained::compile_page as compile_retained_page, AuthoredAtlas, AuthoredAtlasProfile,
@@ -150,8 +151,8 @@ impl TryFrom<DocumentIdentity> for NapiDocumentIdentity {
 
 fn napi_slug_section(section: SlugSection) -> BridgeResult<NapiSlugSection> {
   Ok(NapiSlugSection {
-    offset: u32::try_from(section.offset).map_err(|_| shift_slug::SlugError::LengthOverflow)?,
-    length: u32::try_from(section.length).map_err(|_| shift_slug::SlugError::LengthOverflow)?,
+    offset: u32::try_from(section.offset).or_overflow()?,
+    length: u32::try_from(section.length).or_overflow()?,
   })
 }
 
@@ -168,8 +169,7 @@ fn napi_slug_layout(layout: VariableLayout) -> BridgeResult<NapiSlugLayout> {
     components: napi_slug_section(layout.components)?,
     component_sources: napi_slug_section(layout.component_sources)?,
     line_bits: napi_slug_section(layout.line_bits)?,
-    total_length: u32::try_from(layout.total_length)
-      .map_err(|_| shift_slug::SlugError::LengthOverflow)?,
+    total_length: u32::try_from(layout.total_length).or_overflow()?,
   })
 }
 
@@ -388,12 +388,12 @@ fn source_axis_mappings(
       let input_axis_ids = mapping
         .input_axes
         .iter()
-        .map(|axis| source_axis_id(identity, *axis))
+        .map(|axis| identity.axis_id(*axis))
         .collect::<BridgeResult<Vec<_>>>()?;
       let output_axis_ids = mapping
         .output_axes
         .iter()
-        .map(|axis| source_axis_id(identity, *axis))
+        .map(|axis| identity.axis_id(*axis))
         .collect::<BridgeResult<Vec<_>>>()?;
       let points = mapping
         .points
@@ -427,17 +427,6 @@ fn source_axis_mappings(
       Ok(mapped)
     })
     .collect()
-}
-
-fn source_axis_id(identity: &SourceIdentity, axis: SourceAxisIndex) -> BridgeResult<AxisId> {
-  identity
-    .axis_ids
-    .get(axis.to_usize())
-    .cloned()
-    .ok_or_else(|| BridgeError::InvalidInput {
-      kind: "source axis mapping",
-      value: axis.to_u32().to_string(),
-    })
 }
 
 fn source_location(
@@ -515,14 +504,7 @@ fn wire_source_glyph(
                 .supports
                 .iter()
                 .map(|support| {
-                  let axis_id = identity
-                    .axis_ids
-                    .get(support.axis.to_usize())
-                    .cloned()
-                    .ok_or_else(|| BridgeError::InvalidInput {
-                      kind: "source projection axis",
-                      value: support.axis.to_u32().to_string(),
-                    })?;
+                  let axis_id = identity.axis_id(support.axis)?;
                   Ok(InterpolationSupport {
                     axis_id,
                     lower: support.lower,
@@ -546,14 +528,7 @@ fn wire_source_glyph(
         .exact_shapes
         .iter()
         .map(|exact| {
-          let source_id = identity
-            .source_ids
-            .get(exact.source.to_usize())
-            .cloned()
-            .ok_or_else(|| BridgeError::InvalidInput {
-              kind: "source projection exact source",
-              value: exact.source.to_u32().to_string(),
-            })?;
+          let source_id = identity.source_id(exact.source)?;
           Ok(GlyphSourceShape {
             source_id,
             shape: wire_source_shape(
@@ -570,14 +545,7 @@ fn wire_source_glyph(
       let exact_source_components = exact_sources
         .iter()
         .map(|source| {
-          let source_id = identity
-            .source_ids
-            .get(source.to_usize())
-            .cloned()
-            .ok_or_else(|| BridgeError::InvalidInput {
-              kind: "source projection exact components",
-              value: source.to_u32().to_string(),
-            })?;
+          let source_id = identity.source_id(*source)?;
           Ok(GlyphSourceComponents {
             source_id,
             components: wire_source_components(
@@ -793,8 +761,7 @@ fn napi_source_atlas_page(
     generation,
     page_index,
     band_count: atlas.band_count(),
-    weight_count: u32::try_from(weights.len())
-      .map_err(|_| shift_slug::SlugError::LengthOverflow)?,
+    weight_count: u32::try_from(weights.len()).or_overflow()?,
     layout: napi_slug_layout(layout)?,
     preview_extents: NapiSlugPreviewExtents {
       horizontal: f64::from(preview_extents.horizontal),
@@ -813,14 +780,7 @@ fn napi_source_atlas_page(
             .iter()
             .filter(|(root, _, _)| root == glyph)
             .map(|(_, source, glyph_index)| {
-              let source_id = identity
-                .source_ids
-                .get(*source as usize)
-                .cloned()
-                .ok_or_else(|| BridgeError::InvalidInput {
-                  kind: "source atlas exact source",
-                  value: source.to_string(),
-                })?;
+              let source_id = identity.source_id(shift_backends::SourceIndex::new(*source))?;
               Ok(NapiSlugExactSource {
                 source_id: source_id.to_string(),
                 glyph_index: *glyph_index,
@@ -831,12 +791,9 @@ fn napi_source_atlas_page(
       })
       .collect::<BridgeResult<Vec<_>>>()?,
     weights,
-    atlas_glyph_count: u32::try_from(statistics.glyph_count)
-      .map_err(|_| shift_slug::SlugError::LengthOverflow)?,
-    curve_count: u32::try_from(statistics.curve_count)
-      .map_err(|_| shift_slug::SlugError::LengthOverflow)?,
-    component_count: u32::try_from(statistics.component_count)
-      .map_err(|_| shift_slug::SlugError::LengthOverflow)?,
+    atlas_glyph_count: u32::try_from(statistics.glyph_count).or_overflow()?,
+    curve_count: u32::try_from(statistics.curve_count).or_overflow()?,
+    component_count: u32::try_from(statistics.component_count).or_overflow()?,
   })
 }
 
@@ -886,12 +843,9 @@ fn napi_slug_atlas(
     },
     glyphs,
     weight_sets,
-    atlas_glyph_count: u32::try_from(statistics.glyph_count)
-      .map_err(|_| shift_slug::SlugError::LengthOverflow)?,
-    curve_count: u32::try_from(statistics.curve_count)
-      .map_err(|_| shift_slug::SlugError::LengthOverflow)?,
-    component_count: u32::try_from(statistics.component_count)
-      .map_err(|_| shift_slug::SlugError::LengthOverflow)?,
+    atlas_glyph_count: u32::try_from(statistics.glyph_count).or_overflow()?,
+    curve_count: u32::try_from(statistics.curve_count).or_overflow()?,
+    component_count: u32::try_from(statistics.component_count).or_overflow()?,
   })
 }
 
@@ -1101,6 +1055,38 @@ impl SourceIdentity {
       .ok_or_else(|| BridgeError::InvalidInput {
         kind: "source glyph index",
         value: index.to_u32().to_string(),
+      })
+  }
+
+  /// Returns the font axis id at a retained source's axis index.
+  ///
+  /// # Errors
+  ///
+  /// Returns [`BridgeError::InvalidInput`] when the index is outside the source's axes.
+  fn axis_id(&self, axis: SourceAxisIndex) -> BridgeResult<AxisId> {
+    self
+      .axis_ids
+      .get(axis.to_usize())
+      .cloned()
+      .ok_or_else(|| BridgeError::InvalidInput {
+        kind: "source axis index",
+        value: axis.to_u32().to_string(),
+      })
+  }
+
+  /// Returns the font source id at a retained source index.
+  ///
+  /// # Errors
+  ///
+  /// Returns [`BridgeError::InvalidInput`] when the index is outside the source's sources.
+  fn source_id(&self, source: shift_backends::SourceIndex) -> BridgeResult<SourceId> {
+    self
+      .source_ids
+      .get(source.to_usize())
+      .cloned()
+      .ok_or_else(|| BridgeError::InvalidInput {
+        kind: "source index",
+        value: source.to_u32().to_string(),
       })
   }
 
@@ -1574,12 +1560,8 @@ impl Bridge {
     let target_layer_id = parse::<LayerId>(&target_layer_id)?;
     let (reference_glyph_id, target_glyph_id) = {
       let font = self.font()?;
-      let reference_glyph_id = font
-        .glyph_id_by_layer(reference_layer_id.clone())
-        .ok_or_else(|| shift_font::CoreError::LayerNotFound(reference_layer_id.clone()))?;
-      let target_glyph_id = font
-        .glyph_id_by_layer(target_layer_id.clone())
-        .ok_or_else(|| shift_font::CoreError::LayerNotFound(target_layer_id.clone()))?;
+      let reference_glyph_id = font.require_layer_owner(&reference_layer_id)?;
+      let target_glyph_id = font.require_layer_owner(&target_layer_id)?;
       (reference_glyph_id, target_glyph_id)
     };
     if reference_glyph_id != target_glyph_id {
@@ -1592,12 +1574,8 @@ impl Bridge {
     }
 
     let font = self.acquire_and_font(&[reference_glyph_id], AcquireScope::Glyphs)?;
-    let reference = font
-      .layer(reference_layer_id.clone())
-      .ok_or(shift_font::CoreError::LayerNotFound(reference_layer_id))?;
-    let target = font
-      .layer(target_layer_id.clone())
-      .ok_or(shift_font::CoreError::LayerNotFound(target_layer_id))?;
+    let reference = font.require_layer(&reference_layer_id)?;
+    let target = font.require_layer(&target_layer_id)?;
 
     Ok(WireLayerMatch::from_layers(reference, target).into())
   }
@@ -1688,10 +1666,7 @@ impl Bridge {
     let started = Instant::now();
     let layout = authored.atlas().layout(alignment as usize)?;
     let layout_elapsed = started.elapsed();
-    self.slug_generation = self
-      .slug_generation
-      .checked_add(1)
-      .ok_or(shift_slug::SlugError::LengthOverflow)?;
+    self.slug_generation = self.slug_generation.checked_add(1).or_overflow()?;
     let generation = self.slug_generation;
     let result = napi_slug_atlas(generation, &authored, layout)?;
     log_slug_atlas_profile(
@@ -1738,10 +1713,7 @@ impl Bridge {
     let started = Instant::now();
     let layout = authored.atlas().layout(alignment as usize)?;
     let layout_elapsed = started.elapsed();
-    self.slug_generation = self
-      .slug_generation
-      .checked_add(1)
-      .ok_or(shift_slug::SlugError::LengthOverflow)?;
+    self.slug_generation = self.slug_generation.checked_add(1).or_overflow()?;
     let generation = self.slug_generation;
     let result = napi_slug_atlas(generation, &authored, layout)?;
     log_slug_atlas_profile(
@@ -1873,10 +1845,7 @@ impl Bridge {
     coordinates: Vec<f64>,
     alignment: u32,
   ) -> errors::Result<NapiCatalogAtlasPage> {
-    self.slug_generation = self
-      .slug_generation
-      .checked_add(1)
-      .ok_or(shift_slug::SlugError::LengthOverflow)?;
+    self.slug_generation = self.slug_generation.checked_add(1).or_overflow()?;
     let generation = self.slug_generation;
     let (atlas, descriptor, location, layout) = {
       let source = self.font_source()?;

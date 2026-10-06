@@ -14,6 +14,7 @@
 //!   non-cyclic branches still contribute geometry.
 
 use crate::curve::segment_bounds;
+use crate::Require;
 use crate::{
     ComponentId, Contour, CoreError, CoreResult, CurveSegment, CurveSegmentIter, GlyphId,
     GlyphLayer, Point, PointId, Transform,
@@ -171,10 +172,7 @@ fn layer_for_glyph<'a>(
     layers: &HashMap<GlyphId, &'a GlyphLayer>,
     glyph_id: &GlyphId,
 ) -> CoreResult<&'a GlyphLayer> {
-    layers
-        .get(glyph_id)
-        .copied()
-        .ok_or_else(|| CoreError::GlyphNotFound(glyph_id.clone()))
+    layers.get(glyph_id).copied().require(&glyph_id)
 }
 
 fn layer_for_component<'a>(

@@ -1,5 +1,6 @@
 //! Location-independent glyph backing and location-bound read-only resolution.
 
+use crate::Require;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
@@ -528,10 +529,7 @@ impl GlyphProjectionSet {
             return Ok(true);
         }
 
-        let projection = self
-            .projections
-            .get(glyph_id)
-            .ok_or_else(|| CoreError::GlyphNotFound(glyph_id.clone()))?;
+        let projection = self.projections.get(glyph_id).require(&glyph_id)?;
         let Some(projection) = projection else {
             return Ok(false);
         };

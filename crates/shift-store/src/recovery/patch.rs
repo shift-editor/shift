@@ -1,3 +1,4 @@
+use crate::error::OrMissing;
 use std::collections::HashSet;
 
 use rusqlite::{Transaction, params};
@@ -164,12 +165,9 @@ impl RecoveryOverlay {
 
         for glyph_id in glyph_ids {
             if let Some(glyph) = post_font.glyph(glyph_id.clone()) {
-                let order_index = post_font.glyph_order(glyph_id.clone()).ok_or_else(|| {
-                    StoreError::MissingEntity {
-                        kind: "glyph order",
-                        id: glyph_id.to_string(),
-                    }
-                })?;
+                let order_index = post_font
+                    .glyph_order(glyph_id.clone())
+                    .or_missing("glyph order", &glyph_id)?;
                 clear_tombstone(&tx, GLYPHS, glyph_id.as_str())?;
                 write_glyph_directory_in_tx(&tx, glyph, order_index as i64, WriteMode::Upsert)?;
                 mark_replaced(&tx, GLYPH_UNICODES, glyph_id.as_str())?;

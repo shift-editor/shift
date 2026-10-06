@@ -1,3 +1,4 @@
+use crate::error::OrMissing;
 use std::collections::{BTreeMap, HashMap};
 
 use rusqlite::params;
@@ -397,10 +398,7 @@ fn load_glyphs(
         let layer = if include_layer_payloads {
             loaded_layers
                 .remove(&layer_id)
-                .ok_or_else(|| StoreError::MissingEntity {
-                    kind: "glyph layer payload",
-                    id: layer_id.to_string(),
-                })?
+                .or_missing("glyph layer payload", &layer_id)?
         } else {
             let mut layer = font::GlyphLayer::with_width(layer_id, source_id, width);
             layer.set_height(height);

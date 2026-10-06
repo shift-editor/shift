@@ -1,3 +1,4 @@
+use crate::length::OrOverflow;
 use crate::{Atlas, Glyph, SlugError};
 
 const CURVE_BYTES: usize = 24;
@@ -54,10 +55,7 @@ impl Layout {
         let curve_indices = next_section_with_length(curves, index_length, alignment)?;
         let glyphs = next_section(curve_indices, atlas.glyphs().len(), GLYPH_BYTES, alignment)?;
         let bands = next_section(glyphs, atlas.bands().len(), BAND_BYTES, alignment)?;
-        let total_length = bands
-            .offset
-            .checked_add(bands.length)
-            .ok_or(SlugError::LengthOverflow)?;
+        let total_length = bands.offset.checked_add(bands.length).or_overflow()?;
 
         Ok(Self {
             curves,
@@ -161,7 +159,7 @@ fn validate_compact_eligibility(atlas: &Atlas) -> Result<(), SlugError> {
     for (glyph_index, glyph) in atlas.glyphs().iter().enumerate() {
         if glyph.curve_count > u32::from(u16::MAX) + 1 {
             return Err(SlugError::CompactIndexOverflow {
-                glyph_index: u32::try_from(glyph_index).map_err(|_| SlugError::LengthOverflow)?,
+                glyph_index: u32::try_from(glyph_index).or_overflow()?,
                 curve_count: glyph.curve_count,
             });
         }
@@ -178,7 +176,7 @@ fn write_compact_indices(
     let mut pending_low = None;
 
     for (glyph_index, glyph) in atlas.glyphs().iter().copied().enumerate() {
-        let glyph_index = u32::try_from(glyph_index).map_err(|_| SlugError::LengthOverflow)?;
+        let glyph_index = u32::try_from(glyph_index).or_overflow()?;
         if glyph.curve_count > u32::from(u16::MAX) + 1 {
             return Err(SlugError::CompactIndexOverflow {
                 glyph_index,
@@ -193,7 +191,7 @@ fn write_compact_indices(
         let curve_end = glyph
             .curve_start
             .checked_add(glyph.curve_count)
-            .ok_or(SlugError::LengthOverflow)?;
+            .or_overflow()?;
         for global_index in &atlas.curve_indices()[start..end] {
             if *global_index < glyph.curve_start || *global_index >= curve_end {
                 return Err(SlugError::LengthOverflow);
@@ -224,27 +222,17 @@ fn write_compact_indices(
 }
 
 fn glyph_index_range(atlas: &Atlas, glyph: Glyph) -> Result<(usize, usize), SlugError> {
-    let band_start = usize::try_from(glyph.band_start).map_err(|_| SlugError::LengthOverflow)?;
+    let band_start = usize::try_from(glyph.band_start).or_overflow()?;
     let band_length = usize::try_from(glyph.band_count)
-        .map_err(|_| SlugError::LengthOverflow)?
+        .or_overflow()?
         .checked_mul(2)
-        .ok_or(SlugError::LengthOverflow)?;
-    let band_end = band_start
-        .checked_add(band_length)
-        .ok_or(SlugError::LengthOverflow)?;
-    let glyph_bands = atlas
-        .bands()
-        .get(band_start..band_end)
-        .ok_or(SlugError::LengthOverflow)?;
-    let first = glyph_bands.first().ok_or(SlugError::LengthOverflow)?;
-    let last = glyph_bands.last().ok_or(SlugError::LengthOverflow)?;
-    let start = usize::try_from(first.start).map_err(|_| SlugError::LengthOverflow)?;
-    let end = usize::try_from(
-        last.start
-            .checked_add(last.count)
-            .ok_or(SlugError::LengthOverflow)?,
-    )
-    .map_err(|_| SlugError::LengthOverflow)?;
+        .or_overflow()?;
+    let band_end = band_start.checked_add(band_length).or_overflow()?;
+    let glyph_bands = atlas.bands().get(band_start..band_end).or_overflow()?;
+    let first = glyph_bands.first().or_overflow()?;
+    let last = glyph_bands.last().or_overflow()?;
+    let start = usize::try_from(first.start).or_overflow()?;
+    let end = usize::try_from(last.start.checked_add(last.count).or_overflow()?).or_overflow()?;
     if end > atlas.curve_indices().len() {
         return Err(SlugError::LengthOverflow);
     }
@@ -255,7 +243,7 @@ fn index_byte_length(count: usize, encoding: CurveIndexEncoding) -> Result<usize
     match encoding {
         CurveIndexEncoding::GlobalU32 => byte_length(count, WIDE_INDEX_BYTES),
         CurveIndexEncoding::GlyphLocalU16 => {
-            let words = count.checked_add(1).ok_or(SlugError::LengthOverflow)? / 2;
+            let words = count.checked_add(1).or_overflow()? / 2;
             byte_length(words, PACKED_INDEX_WORD_BYTES)
         }
     }
@@ -275,10 +263,7 @@ fn next_section_with_length(
     length: usize,
     alignment: usize,
 ) -> Result<Section, SlugError> {
-    let previous_end = previous
-        .offset
-        .checked_add(previous.length)
-        .ok_or(SlugError::LengthOverflow)?;
+    let previous_end = previous.offset.checked_add(previous.length).or_overflow()?;
 
     Ok(Section {
         offset: align(previous_end, alignment)?,
@@ -290,11 +275,11 @@ fn align(value: usize, alignment: usize) -> Result<usize, SlugError> {
     value
         .checked_add(alignment - 1)
         .map(|value| value & !(alignment - 1))
-        .ok_or(SlugError::LengthOverflow)
+        .or_overflow()
 }
 
 fn byte_length(count: usize, stride: usize) -> Result<usize, SlugError> {
-    count.checked_mul(stride).ok_or(SlugError::LengthOverflow)
+    count.checked_mul(stride).or_overflow()
 }
 
 fn write(target: &mut [u8], offset: &mut usize, value: &[u8]) {

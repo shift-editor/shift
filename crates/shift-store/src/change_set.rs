@@ -1,3 +1,4 @@
+use crate::error::OrMissing;
 use std::collections::HashSet;
 
 use rusqlite::{OptionalExtension, Transaction, params};
@@ -89,18 +90,7 @@ impl ShiftStore {
                 }
             }
             for (offset, glyph_id) in popped.iter().enumerate() {
-                let order_index = self
-                    .conn
-                    .query_row(
-                        "SELECT order_index FROM glyphs WHERE id = ?1",
-                        [glyph_id.to_string()],
-                        |row| row.get::<_, i64>(0),
-                    )
-                    .optional()?
-                    .ok_or_else(|| StoreError::MissingEntity {
-                        kind: "glyph",
-                        id: glyph_id.to_string(),
-                    })?;
+                let order_index = order_index(&self.conn, "glyphs", "glyph", &glyph_id)?;
                 let expected = post_font.glyph_count() + popped.len() - offset - 1;
                 if order_index != expected as i64 {
                     return Err(font::CoreError::InvalidEntityOrder {
@@ -361,17 +351,7 @@ fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), S
         }
         font::FontChange::AxisUpdated(change) => {
             let axis_id = change.axis.id();
-            let order_index = tx
-                .query_row(
-                    "SELECT order_index FROM axes WHERE id = ?1",
-                    [axis_id.to_string()],
-                    |row| row.get(0),
-                )
-                .optional()?
-                .ok_or_else(|| StoreError::MissingEntity {
-                    kind: "axis",
-                    id: axis_id.to_string(),
-                })?;
+            let order_index = order_index(tx, "axes", "axis", &axis_id)?;
             upsert_axis_with_order(tx, &change.axis, order_index)
         }
         font::FontChange::AxisDeleted(change) => {
@@ -446,17 +426,7 @@ fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), S
         }
         font::FontChange::SourceUpdated(change) => {
             let source = &change.source;
-            let order_index = tx
-                .query_row(
-                    "SELECT order_index FROM sources WHERE id = ?1",
-                    [source.id().to_string()],
-                    |row| row.get(0),
-                )
-                .optional()?
-                .ok_or_else(|| StoreError::MissingEntity {
-                    kind: "source",
-                    id: source.id().to_string(),
-                })?;
+            let order_index = order_index(tx, "sources", "source", &source.id())?;
             write_source_snapshot_in_tx(tx, source, order_index)
         }
         font::FontChange::SourceDeleted(change) => {
@@ -499,10 +469,7 @@ fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), S
                     |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)),
                 )
                 .optional()?
-                .ok_or_else(|| StoreError::MissingEntity {
-                    kind: "glyph",
-                    id: change.glyph_id.to_string(),
-                })?;
+                .or_missing("glyph", &change.glyph_id)?;
             if order_index + 1 != count {
                 return Err(font::CoreError::InvalidEntityOrder {
                     kind: "glyph",
@@ -557,10 +524,7 @@ fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), S
             update_packed_layer(tx, &change.layer_id, |layer| {
                 let contour = layer
                     .contour_mut(change.contour_id.clone())
-                    .ok_or_else(|| StoreError::MissingEntity {
-                        kind: "contour",
-                        id: change.contour_id.to_string(),
-                    })?;
+                    .or_missing("contour", &change.contour_id)?;
                 if change.closed {
                     contour.close();
                 } else {
@@ -587,10 +551,7 @@ fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), S
                     .contours_iter_mut()
                     .flat_map(|contour| contour.points_mut())
                     .find(|point| point.id() == change.point_id)
-                    .ok_or_else(|| StoreError::MissingEntity {
-                        kind: "point",
-                        id: change.point_id.to_string(),
-                    })?;
+                    .or_missing("point", &change.point_id)?;
                 point.set_smooth(change.smooth);
                 Ok(())
             })
@@ -602,10 +563,7 @@ fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), S
                         .contours_iter_mut()
                         .flat_map(|contour| contour.points_mut())
                         .find(|point| point.id() == position.point_id)
-                        .ok_or_else(|| StoreError::MissingEntity {
-                            kind: "point",
-                            id: position.point_id.to_string(),
-                        })?;
+                        .or_missing("point", &position.point_id)?;
                     point.set_position(position.x, position.y);
                 }
                 Ok(())
@@ -679,12 +637,8 @@ fn update_packed_layer(
     layer_id: &font::LayerId,
     update: impl FnOnce(&mut font::GlyphLayer) -> Result<(), StoreError>,
 ) -> Result<(), StoreError> {
-    let mut layer = crate::layer::load_glyph_layer_from_conn(tx, layer_id)?.ok_or_else(|| {
-        StoreError::MissingEntity {
-            kind: "glyph layer",
-            id: layer_id.to_string(),
-        }
-    })?;
+    let mut layer = crate::layer::load_glyph_layer_from_conn(tx, layer_id)?
+        .or_missing("glyph layer", &layer_id)?;
     update(&mut layer)?;
     rewrite_layer_in_tx(tx, &layer)
 }
@@ -767,6 +721,28 @@ fn axis_exists(tx: &Transaction<'_>, axis_id: &font::AxisId) -> Result<bool, Sto
     .map_err(StoreError::from)
 }
 
+/// Returns the `order_index` of the row with `id` in an ordered entity table.
+///
+/// # Errors
+///
+/// Returns [`StoreError::MissingEntity`] naming `kind` when no row has `id`,
+/// or the SQLite error when the query fails.
+fn order_index(
+    conn: &rusqlite::Connection,
+    table: &'static str,
+    kind: &'static str,
+    id: &impl ToString,
+) -> Result<i64, StoreError> {
+    let id = id.to_string();
+    conn.query_row(
+        &format!("SELECT order_index FROM {table} WHERE id = ?1"),
+        [id.as_str()],
+        |row| row.get::<_, i64>(0),
+    )
+    .optional()?
+    .or_missing(kind, &id)
+}
+
 /// Deletes one ordered row and compacts every later position in the same transaction.
 fn delete_ordered_row(
     tx: &Transaction<'_>,
@@ -774,17 +750,7 @@ fn delete_ordered_row(
     kind: &'static str,
     id: String,
 ) -> Result<(), StoreError> {
-    let order_index = tx
-        .query_row(
-            &format!("SELECT order_index FROM {table} WHERE id = ?1"),
-            [id.as_str()],
-            |row| row.get::<_, i64>(0),
-        )
-        .optional()?
-        .ok_or_else(|| StoreError::MissingEntity {
-            kind,
-            id: id.clone(),
-        })?;
+    let order_index = order_index(tx, table, kind, &id)?;
     tx.execute(&format!("DELETE FROM {table} WHERE id = ?1"), [id.as_str()])?;
     tx.execute(
         &format!("UPDATE {table} SET order_index = order_index - 1 WHERE order_index > ?1"),
