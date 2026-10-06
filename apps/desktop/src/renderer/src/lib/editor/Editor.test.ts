@@ -36,6 +36,24 @@ describe("Editor scene bootstrap", () => {
     expect(editor.editing.nodeIds).toEqual([child!.id]);
   });
 
+  it("finds the nodes that depend on a run or a glyph, and follows their removal", () => {
+    const [run, child] = editor.scene.nodes();
+    if (run?.kind !== "textRun" || child?.kind !== "glyph")
+      throw new Error("Expected run and glyph");
+    const dependents: number[] = [];
+    const reader = effect(() => {
+      dependents.push(editor.scene.nodesReferencing(child.glyphId).length);
+    });
+
+    expect(editor.scene.nodesReferencing(run.runId)).toEqual([run]);
+    expect(editor.scene.nodesReferencing(child.glyphId)).toEqual([child]);
+
+    editor.scene.deleteNode(child.id);
+    reader.dispose();
+
+    expect(dependents).toEqual([1, 0]);
+  });
+
   it("keeps the scene value when only the selection changes, and updates it when a node moves", async () => {
     const [pointId] = await editor.drawOpenContour([
       { x: 100, y: 100 },

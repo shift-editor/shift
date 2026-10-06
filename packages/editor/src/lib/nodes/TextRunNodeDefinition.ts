@@ -5,7 +5,7 @@ import { clusterForCaret } from "../text/edit";
 import type { LocalBounds, LocalPoint } from "../../types/coordinates";
 import { localBounds } from "../editor/spaces";
 import type { GlyphNode, ShiftNode, TextRunNode } from "../../types/node";
-import type { ShiftRecordId } from "../../types/records";
+import type { NodeReference } from "../../types/records";
 import type { RenderContext, RenderPass } from "../../types/rendering";
 import type { PointerTarget } from "../../types/target";
 import type { GlyphRenderModel } from "../model/Glyph";
@@ -62,8 +62,9 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     return null;
   }
 
-  override contentRecordId(node: TextRunNode): ShiftRecordId {
-    return node.runId;
+  /** A run node depends on its run record. */
+  override references(node: TextRunNode): readonly NodeReference[] {
+    return [node.runId];
   }
 
   /**

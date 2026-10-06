@@ -2,7 +2,8 @@ import { mintNodeId, type NodeId } from "@shift/types";
 import { Tree } from "../utils/Tree";
 import { computed, type Signal } from "../signals/index";
 import type { ShiftStore } from "../store/ShiftStore";
-import type { ShiftEditorRecord, ShiftNodeRecord } from "../../types/records";
+import type { StoreIndex } from "../store/StoreIndex";
+import type { NodeReference, ShiftEditorRecord, ShiftNodeRecord } from "../../types/records";
 import type { CreateNode, ShiftNode, UpdateNode } from "../../types/node";
 
 export interface SceneValue {
@@ -22,9 +23,18 @@ export class Scene {
   readonly #cell: Signal<SceneValue>;
   readonly #nodesById: Signal<ReadonlyMap<NodeId, ShiftNode>>;
   readonly #nodesByKind: Signal<ReadonlyMap<ShiftNode["kind"], readonly ShiftNode[]>>;
+  readonly #byReference: StoreIndex<NodeReference, ShiftNodeRecord>;
 
-  constructor(store: ShiftStore<ShiftEditorRecord>) {
+  /**
+   * @param store - editor store holding node records.
+   * @param references - what a node depends on; usually its definition's `references`.
+   */
+  constructor(
+    store: ShiftStore<ShiftEditorRecord>,
+    references: (node: ShiftNode) => readonly NodeReference[] = () => [],
+  ) {
     this.#store = store;
+    this.#byReference = store.index("node", references);
     this.#cell = computed(
       () => {
         const nodes: ShiftNodeRecord[] = [];
@@ -94,6 +104,19 @@ export class Scene {
     if (!nodeId) return null;
 
     return this.#nodesById.peek().get(nodeId) ?? null;
+  }
+
+  /**
+   * Returns the nodes that depend on a record or glyph.
+   *
+   * @remarks
+   * A node depends on whatever its definition's `references` names: a text
+   * run node on its run record, a glyph node on its glyph. Reactive: inside a
+   * computed or effect, the reader reruns only when the nodes filed under `id`
+   * change.
+   */
+  nodesReferencing(id: NodeReference): readonly ShiftNode[] {
+    return this.#byReference.get(id);
   }
 
   /** Returns a node's children, ordered by `index`. */
