@@ -11,7 +11,6 @@ import { Canvas } from "@/components/editor/Canvas";
 import { CanvasContextMenu } from "@/components/editor/CanvasContextMenu";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import type { TextRunNode } from "@shift/editor/types";
-import type { Editor as ShiftEditor } from "@shift/editor";
 import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
 import { useFocusZone, ZoneContainer } from "@/context/FocusZoneContext";
 import { KeyboardRouter } from "@/lib/keyboard";
@@ -45,7 +44,14 @@ export const Editor = () => {
     if (!glyph) return undefined;
 
     const runs = editor.nodeDefinition("textRun");
-    const run = editor.scene.nodesOfKind("textRun")[0] ?? createCanvasRun(editor);
+    const run =
+      editor.scene.nodesOfKind("textRun")[0] ??
+      editor.scene.createNode<TextRunNode>({
+        kind: "textRun",
+        runId: editor.text.createRun([]).id,
+        size: editor.font.metricsCell.peek().unitsPerEm,
+        position: { x: 0, y: 0 },
+      });
     const previous = runs.childGlyph(run);
     const open = () => {
       if (previous?.glyphId === glyph.id) {
@@ -226,14 +232,3 @@ const EditorLayout = ({
     </div>
   );
 };
-
-/** Creates the canvas's text run at the scene origin. */
-function createCanvasRun(editor: ShiftEditor): TextRunNode {
-  const record = editor.text.createRun([]);
-  return editor.scene.createNode<TextRunNode>({
-    kind: "textRun",
-    runId: record.id,
-    size: editor.font.metricsCell.peek().unitsPerEm,
-    position: { x: 0, y: 0 },
-  });
-}
