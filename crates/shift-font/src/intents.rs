@@ -18,6 +18,7 @@ use crate::ir::{
 };
 use crate::layer_edit::BulkNodePositionUpdates;
 use crate::source::source_locations_equal;
+use crate::Require;
 use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
 
@@ -449,7 +450,7 @@ impl Font {
                     .and_then(|glyph_id| self.glyph(glyph_id))
                     .and_then(|glyph| glyph.layers().get(&layer_id))
                     .cloned()
-                    .ok_or(CoreError::LayerNotFound(layer_id))?;
+                    .require(&layer_id)?;
                 Ok(TouchedLayer { layer, structural })
             })
             .collect::<CoreResult<Vec<_>>>()?;
@@ -714,8 +715,7 @@ impl Font {
             self.remove_glyph_layer(layer.id())?;
         }
 
-        self.remove_source(source_id.clone())
-            .ok_or_else(|| CoreError::SourceNotFound(source_id.clone()))?;
+        self.remove_source(source_id.clone()).require(&source_id)?;
         changes.push(FontChange::source_deleted(source_id.clone()));
         Ok(())
     }
@@ -781,10 +781,7 @@ impl Font {
         underline_thickness: Option<f64>,
         changes: &mut FontChangeSet,
     ) -> CoreResult<()> {
-        let mut source = self
-            .source(source_id.clone())
-            .cloned()
-            .ok_or_else(|| CoreError::SourceNotFound(source_id.clone()))?;
+        let mut source = self.require_source(source_id).cloned()?;
         source.set_name(name.trim().to_string());
         source.set_location(location.clone());
         source.set_metric_values(metric_values.clone());
@@ -880,9 +877,7 @@ impl Font {
             });
         }
 
-        let from_glyph_id = self
-            .glyph_id_by_layer(from_layer_id.clone())
-            .ok_or_else(|| CoreError::LayerNotFound(from_layer_id.clone()))?;
+        let from_glyph_id = self.require_layer_owner(&from_layer_id)?;
         if from_glyph_id != glyph_id {
             return Err(CoreError::LayerGlyphMismatch {
                 layer_id: from_layer_id,
@@ -891,9 +886,7 @@ impl Font {
             });
         }
 
-        let source_layer = self
-            .layer(from_layer_id.clone())
-            .ok_or(CoreError::LayerNotFound(from_layer_id))?;
+        let source_layer = self.require_layer(&from_layer_id)?;
         let layer = source_layer.clone_with_fresh_ids(layer_id, source_id);
 
         Ok(layer)
@@ -905,9 +898,7 @@ impl Font {
         new_name: GlyphName,
         new_unicodes: Vec<u32>,
     ) -> CoreResult<FontChange> {
-        let old_glyph = self
-            .glyph(glyph_id.clone())
-            .ok_or(CoreError::GlyphNotFound(glyph_id.clone()))?;
+        let old_glyph = self.require_glyph(&glyph_id)?;
         let old_name = old_glyph.glyph_name().clone();
         let old_unicodes = old_glyph.unicodes().to_vec();
 
@@ -939,7 +930,7 @@ impl Font {
                 }
 
                 let change = {
-                    let layer = self.layer_mut_or_err(layer_id)?;
+                    let layer = self.require_layer_mut(layer_id)?;
                     let contour_id = match (contour_id, before) {
                         (Some(contour_id), _) => contour_id.clone(),
                         (None, Some(before_id)) => layer.contour_of_point(before_id.clone())?,
@@ -950,9 +941,7 @@ impl Font {
                         }
                     };
 
-                    let contour = layer
-                        .contour_mut(contour_id.clone())
-                        .ok_or(CoreError::ContourNotFound(contour_id))?;
+                    let contour = layer.contour_mut(contour_id.clone()).require(&contour_id)?;
 
                     let insert_at = match before {
                         Some(before_id) => Some(
@@ -960,7 +949,7 @@ impl Font {
                                 .points()
                                 .iter()
                                 .position(|point| point.id() == *before_id)
-                                .ok_or(CoreError::PointNotFound(before_id.clone()))?,
+                                .require(&before_id)?,
                         ),
                         None => None,
                     };
@@ -998,7 +987,7 @@ impl Font {
                 }
 
                 let change = {
-                    let layer = self.layer_mut_or_err(layer_id)?;
+                    let layer = self.require_layer_mut(layer_id)?;
                     let mut contour = Contour::with_id(contour_id.clone());
                     if *closed {
                         contour.close();
@@ -1016,7 +1005,7 @@ impl Font {
                 contour_id,
                 closed,
             } => {
-                let layer = self.layer_mut_or_err(layer_id)?;
+                let layer = self.require_layer_mut(layer_id)?;
                 if *closed {
                     layer.close_contour(contour_id.clone())?;
                 } else {
@@ -1043,7 +1032,7 @@ impl Font {
                     )));
                 }
 
-                let layer = self.layer_mut_or_err(layer_id)?;
+                let layer = self.require_layer_mut(layer_id)?;
                 layer.apply_bulk_node_positions(BulkNodePositionUpdates {
                     point_ids: Some(point_ids),
                     point_coords: Some(coords),
@@ -1071,7 +1060,7 @@ impl Font {
                 point_id,
                 smooth,
             } => {
-                let layer = self.layer_mut_or_err(layer_id)?;
+                let layer = self.require_layer_mut(layer_id)?;
                 layer.set_point_smooth(point_id.clone(), *smooth)?;
 
                 Ok(FontChange::point_smooth_changed(
@@ -1085,7 +1074,7 @@ impl Font {
                 point_ids,
             } => {
                 let (change, empty_contours) = {
-                    let layer = self.layer_mut_or_err(layer_id)?;
+                    let layer = self.require_layer_mut(layer_id)?;
                     let empty_contours = layer.remove_points(point_ids)?;
                     (FontChange::layer_geometry_replaced(layer), empty_contours)
                 };
@@ -1107,7 +1096,7 @@ impl Font {
                 }
 
                 let change = {
-                    let layer = self.layer_mut_or_err(layer_id)?;
+                    let layer = self.require_layer_mut(layer_id)?;
                     for seed in anchors {
                         layer.add_anchor(Anchor::with_id(
                             seed.id.clone(),
@@ -1137,7 +1126,7 @@ impl Font {
                     )));
                 }
 
-                let layer = self.layer_mut_or_err(layer_id)?;
+                let layer = self.require_layer_mut(layer_id)?;
                 layer.apply_bulk_node_positions(BulkNodePositionUpdates {
                     point_ids: None,
                     point_coords: None,
@@ -1165,7 +1154,7 @@ impl Font {
                 anchor_ids,
             } => {
                 let change = {
-                    let layer = self.layer_mut_or_err(layer_id)?;
+                    let layer = self.require_layer_mut(layer_id)?;
                     layer.remove_anchors(anchor_ids)?;
                     FontChange::layer_geometry_replaced(layer)
                 };
@@ -1181,14 +1170,8 @@ impl Font {
                 if self.has_component_id(component_id) {
                     return Err(CoreError::DuplicateComponentId(component_id.clone()));
                 }
-                let glyph_id = self
-                    .glyph_id_by_layer(layer_id.clone())
-                    .ok_or_else(|| CoreError::LayerNotFound(layer_id.clone()))?;
-                let base_glyph_name = self
-                    .glyph(base_glyph_id.clone())
-                    .ok_or_else(|| CoreError::GlyphNotFound(base_glyph_id.clone()))?
-                    .glyph_name()
-                    .clone();
+                let glyph_id = self.require_layer_owner(layer_id)?;
+                let base_glyph_name = self.require_glyph(base_glyph_id)?.glyph_name().clone();
                 if self.component_reference_would_cycle(&glyph_id, base_glyph_id) {
                     return Err(CoreError::CyclicComponentReference {
                         glyph_id,
@@ -1198,7 +1181,7 @@ impl Font {
 
                 let transform = self.anchor_aligned_component_transform(layer_id, base_glyph_id)?;
                 let change = {
-                    let layer = self.layer_mut_or_err(layer_id)?;
+                    let layer = self.require_layer_mut(layer_id)?;
                     layer.add_component(Component::with_id(
                         component_id.clone(),
                         base_glyph_id.clone(),
@@ -1234,7 +1217,7 @@ impl Font {
                     });
                 }
 
-                let layer = self.layer_mut_or_err(layer_id)?;
+                let layer = self.require_layer_mut(layer_id)?;
                 for component_id in component_ids {
                     if layer.component(component_id.clone()).is_none() {
                         return Err(CoreError::InvalidComponentId(component_id.to_string()));
@@ -1265,7 +1248,7 @@ impl Font {
             } => {
                 let component_ids = component_ids.iter().cloned().collect::<HashSet<_>>();
                 let change = {
-                    let layer = self.layer_mut_or_err(layer_id)?;
+                    let layer = self.require_layer_mut(layer_id)?;
                     for component_id in &component_ids {
                         if layer.component(component_id.clone()).is_none() {
                             return Err(CoreError::InvalidComponentId(component_id.to_string()));
@@ -1286,21 +1269,15 @@ impl Font {
             } => {
                 let component_ids = component_ids.iter().cloned().collect::<HashSet<_>>();
                 let (glyph_id, location) = {
-                    let glyph_id = self
-                        .glyph_id_by_layer(layer_id.clone())
-                        .ok_or_else(|| CoreError::LayerNotFound(layer_id.clone()))?;
-                    let layer = self.layer_mut_or_err(layer_id)?;
+                    let glyph_id = self.require_layer_owner(layer_id)?;
+                    let layer = self.require_layer_mut(layer_id)?;
                     for component_id in &component_ids {
                         if layer.component(component_id.clone()).is_none() {
                             return Err(CoreError::InvalidComponentId(component_id.to_string()));
                         }
                     }
                     let source_id = layer.source_id();
-                    let location = self
-                        .source(source_id.clone())
-                        .ok_or(CoreError::SourceNotFound(source_id))?
-                        .location()
-                        .clone();
+                    let location = self.require_source(&source_id)?.location().clone();
                     (glyph_id, location)
                 };
                 let resolved_contours = {
@@ -1309,7 +1286,7 @@ impl Font {
                 };
 
                 let change = {
-                    let layer = self.layer_mut_or_err(layer_id)?;
+                    let layer = self.require_layer_mut(layer_id)?;
                     for component_id in &component_ids {
                         layer.remove_component(component_id.clone());
                     }
@@ -1333,7 +1310,7 @@ impl Font {
                 layer_id,
                 contour_id,
             } => {
-                let layer = self.layer_mut_or_err(layer_id)?;
+                let layer = self.require_layer_mut(layer_id)?;
                 layer.reverse_contour(contour_id.clone())?;
 
                 Ok(FontChange::layer_geometry_replaced(layer))
@@ -1343,7 +1320,7 @@ impl Font {
                 contour_id,
                 point_id,
             } => {
-                let layer = self.layer_mut_or_err(layer_id)?;
+                let layer = self.require_layer_mut(layer_id)?;
                 layer.set_contour_start(contour_id.clone(), point_id.clone())?;
 
                 Ok(FontChange::layer_geometry_replaced(layer))
@@ -1354,7 +1331,7 @@ impl Font {
                 dx,
                 dy,
             } => {
-                let layer = self.layer_mut_or_err(layer_id)?;
+                let layer = self.require_layer_mut(layer_id)?;
                 layer.move_points(point_ids, *dx, *dy)?;
 
                 let positions = point_ids
@@ -1364,7 +1341,7 @@ impl Font {
                         let point = layer
                             .contour(contour_id)
                             .and_then(|contour| contour.get_point(point_id.clone()))
-                            .ok_or(CoreError::PointNotFound(point_id.clone()))?;
+                            .require(&point_id)?;
                         Ok(PointPosition {
                             point_id: point_id.clone(),
                             x: point.x(),
@@ -1379,7 +1356,7 @@ impl Font {
                 ))
             }
             FontIntent::SetXAdvance { layer_id, width } => {
-                let layer = self.layer_mut_or_err(layer_id)?;
+                let layer = self.require_layer_mut(layer_id)?;
                 layer.set_x_advance(*width);
 
                 Ok(FontChange::layer_metrics_changed(layer))
@@ -1391,7 +1368,7 @@ impl Font {
                 operation,
             } => {
                 let change = {
-                    let layer = self.layer_mut_or_err(layer_id)?;
+                    let layer = self.require_layer_mut(layer_id)?;
                     layer.apply_boolean_op(
                         contour_id_a.clone(),
                         contour_id_b.clone(),
@@ -1435,9 +1412,7 @@ impl Font {
         layer_id: &LayerId,
         base_glyph_id: &GlyphId,
     ) -> CoreResult<DecomposedTransform> {
-        let layer = self
-            .layer(layer_id.clone())
-            .ok_or_else(|| CoreError::LayerNotFound(layer_id.clone()))?;
+        let layer = self.require_layer(layer_id)?;
         let source_id = layer.source_id();
         let base_layer_at_source = |glyph_id: GlyphId| {
             self.glyph(glyph_id)
@@ -1463,11 +1438,6 @@ impl Font {
             translate_y: dy,
             ..Default::default()
         })
-    }
-
-    fn layer_mut_or_err(&mut self, layer_id: &LayerId) -> CoreResult<&mut GlyphLayer> {
-        self.layer_mut(layer_id.clone())
-            .ok_or(CoreError::LayerNotFound(layer_id.clone()))
     }
 }
 

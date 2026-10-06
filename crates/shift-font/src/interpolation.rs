@@ -1,5 +1,6 @@
 //! Native glyph interpolation over Shift sources and internal locations.
 
+use crate::Require;
 use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::str::FromStr;
 use std::sync::Arc;
@@ -11,8 +12,7 @@ use fontdrasil::variations::{
 };
 
 use crate::{
-    Axis, AxisId, CoreError, CoreResult, DesignLocation, Font, GlyphId, GlyphLayer, Location,
-    SourceId,
+    Axis, AxisId, CoreResult, DesignLocation, Font, GlyphId, GlyphLayer, Location, SourceId,
 };
 
 mod layer_match;
@@ -319,9 +319,7 @@ impl Font {
         glyph_id: &GlyphId,
         bases: &mut HashMap<Vec<SourceId>, Arc<InterpolationBasis>>,
     ) -> CoreResult<Option<GlyphInterpolation>> {
-        let glyph = self
-            .glyph(glyph_id.clone())
-            .ok_or_else(|| CoreError::GlyphNotFound(glyph_id.clone()))?;
+        let glyph = self.require_glyph(glyph_id)?;
         if !self.is_variable() {
             return Ok(None);
         }
@@ -535,7 +533,7 @@ fn region_scalar(
         let axis = axes
             .iter()
             .find(|axis| axis.id() == support.axis_id)
-            .ok_or_else(|| CoreError::AxisNotFound(support.axis_id.clone()))?;
+            .require(&support.axis_id)?;
         let value = location.get(&axis.id()).unwrap_or(axis.default());
         let normalized = axis.normalize(value);
 

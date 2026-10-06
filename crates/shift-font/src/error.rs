@@ -216,3 +216,63 @@ pub enum CoreError {
 }
 
 pub type CoreResult<T> = Result<T, CoreError>;
+
+/// An entity id whose absence has a dedicated [`CoreError`] variant.
+///
+/// Lets a lookup report a missing entity with [`Require::require`] instead of
+/// naming the error variant at every call site.
+pub trait EntityRef {
+    /// The error reported when no entity with this id exists.
+    fn not_found(&self) -> CoreError;
+}
+
+macro_rules! entity_ref {
+    ($($id:ty => $variant:ident),* $(,)?) => {
+        $(impl EntityRef for $id {
+            fn not_found(&self) -> CoreError {
+                CoreError::$variant(self.clone())
+            }
+        })*
+    };
+}
+
+impl<T: EntityRef + ?Sized> EntityRef for &T {
+    fn not_found(&self) -> CoreError {
+        (**self).not_found()
+    }
+}
+
+entity_ref! {
+    PointId => PointNotFound,
+    ContourId => ContourNotFound,
+    AnchorId => AnchorNotFound,
+    GlyphId => GlyphNotFound,
+    LayerId => LayerNotFound,
+    SourceId => SourceNotFound,
+    AxisId => AxisNotFound,
+    NamedInstanceId => NamedInstanceNotFound,
+}
+
+/// Turns the `Option` of a lookup into the missing entity's [`CoreError`].
+///
+/// ```
+/// use shift_font::{CoreError, GlyphId, Require};
+///
+/// let id = GlyphId::new();
+/// let found: Option<&str> = None;
+/// assert!(matches!(found.require(&id), Err(CoreError::GlyphNotFound(missing)) if missing == id));
+/// ```
+pub trait Require<T> {
+    /// Returns the found value, or `id`'s not-found error.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`EntityRef::not_found`] for `id` when the lookup found nothing.
+    fn require<I: EntityRef + ?Sized>(self, id: &I) -> CoreResult<T>;
+}
+
+impl<T> Require<T> for Option<T> {
+    fn require<I: EntityRef + ?Sized>(self, id: &I) -> CoreResult<T> {
+        self.ok_or_else(|| id.not_found())
+    }
+}

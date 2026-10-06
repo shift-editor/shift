@@ -1,3 +1,4 @@
+use shift_font::Require;
 use std::{
     collections::{HashMap, HashSet},
     io,
@@ -1470,8 +1471,7 @@ fn replay_source(
     }
 
     if let Some(source) = from {
-        font.remove_source(source.id())
-            .ok_or(CoreError::SourceNotFound(source.id()))?;
+        font.remove_source(source.id()).require(&source.id())?;
         changes.push(FontChange::source_deleted(source.id()));
     }
 

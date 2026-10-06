@@ -1,3 +1,4 @@
+use crate::Require;
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 
@@ -70,7 +71,7 @@ impl AxisMappingBasis {
             let axis = axes
                 .iter()
                 .find(|axis| axis.id() == *axis_id)
-                .ok_or_else(|| CoreError::AxisNotFound(axis_id.clone()))?;
+                .require(&axis_id)?;
             let base = location.get(axis_id).unwrap_or(axis.default());
             result.set(
                 axis_id.clone(),

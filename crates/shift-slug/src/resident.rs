@@ -1,4 +1,5 @@
 use crate::length::OrOverflow;
+use shift_font::Require;
 use std::collections::HashSet;
 use std::time::{Duration, Instant};
 
@@ -230,9 +231,7 @@ fn collect_projection<'a>(
 
     projections.push(root);
     for glyph_id in root.component_glyph_ids() {
-        let projection = projection_set
-            .projection(glyph_id)
-            .ok_or_else(|| CoreError::GlyphNotFound(glyph_id.clone()))?;
+        let projection = projection_set.projection(glyph_id).require(&glyph_id)?;
         collect_projection(projection_set, projection, seen, projections)?;
     }
 

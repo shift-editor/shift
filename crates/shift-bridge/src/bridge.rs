@@ -1567,12 +1567,8 @@ impl Bridge {
     let target_layer_id = parse::<LayerId>(&target_layer_id)?;
     let (reference_glyph_id, target_glyph_id) = {
       let font = self.font()?;
-      let reference_glyph_id = font
-        .glyph_id_by_layer(reference_layer_id.clone())
-        .ok_or_else(|| shift_font::CoreError::LayerNotFound(reference_layer_id.clone()))?;
-      let target_glyph_id = font
-        .glyph_id_by_layer(target_layer_id.clone())
-        .ok_or_else(|| shift_font::CoreError::LayerNotFound(target_layer_id.clone()))?;
+      let reference_glyph_id = font.require_layer_owner(&reference_layer_id)?;
+      let target_glyph_id = font.require_layer_owner(&target_layer_id)?;
       (reference_glyph_id, target_glyph_id)
     };
     if reference_glyph_id != target_glyph_id {
@@ -1585,12 +1581,8 @@ impl Bridge {
     }
 
     let font = self.acquire_and_font(&[reference_glyph_id], AcquireScope::Glyphs)?;
-    let reference = font
-      .layer(reference_layer_id.clone())
-      .ok_or(shift_font::CoreError::LayerNotFound(reference_layer_id))?;
-    let target = font
-      .layer(target_layer_id.clone())
-      .ok_or(shift_font::CoreError::LayerNotFound(target_layer_id))?;
+    let reference = font.require_layer(&reference_layer_id)?;
+    let target = font.require_layer(&target_layer_id)?;
 
     Ok(WireLayerMatch::from_layers(reference, target).into())
   }

@@ -1,4 +1,5 @@
 use crate::length::OrOverflow;
+use shift_font::Require;
 use std::collections::{hash_map::Entry, HashMap};
 use std::time::Instant;
 
@@ -64,9 +65,7 @@ pub fn add_authored_glyph_with_weight_sets(
 ) -> Result<AuthoredGlyph, AuthoredSlugError> {
     let glyph_id = projection.glyph_id();
     let projection_set = font.glyph_projection_set(std::slice::from_ref(&glyph_id))?;
-    let projection = projection_set
-        .projection(&glyph_id)
-        .ok_or_else(|| shift_font::CoreError::GlyphNotFound(glyph_id.clone()))?;
+    let projection = projection_set.projection(&glyph_id).require(&glyph_id)?;
     let checkpoint = builder.checkpoint();
     let mut defaults = AuthoredDefaultGlyphs::new();
     let mut inserted_defaults = Vec::new();
@@ -275,7 +274,8 @@ fn projection_for<'a>(
 ) -> Result<&'a GlyphProjection, AuthoredSlugError> {
     projection_set
         .projection(glyph_id)
-        .ok_or_else(|| shift_font::CoreError::GlyphNotFound(glyph_id.clone()).into())
+        .require(glyph_id)
+        .map_err(Into::into)
 }
 
 fn projection_weight_indices<'a>(
@@ -484,7 +484,7 @@ fn resolved_source_glyph<'a>(
                     font.axes(),
                     font.sources(),
                 )?
-                .ok_or_else(|| shift_font::CoreError::GlyphNotFound(projection.glyph_id()))?;
+                .require(&projection.glyph_id())?;
             Ok(entry.insert(resolved))
         }
     }
