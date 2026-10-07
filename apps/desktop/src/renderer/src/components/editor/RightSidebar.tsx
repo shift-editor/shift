@@ -1,8 +1,7 @@
-import { useParams } from "react-router";
 import { GlyphSidebar } from "@shift/editor/ui";
 import { useSignalState } from "@shift/editor/signals";
 import { isSegmentId } from "@shift/glyph-state";
-import { asGlyphId, isAnchorId, isComponentId, isContourId, isPointId } from "@shift/types";
+import { isAnchorId, isComponentId, isContourId, isPointId, type GlyphId } from "@shift/types";
 import { Button } from "@shift/ui";
 import { BooleanOps } from "./BooleanOps";
 import { AnchorSection } from "./sidebar-right/AnchorSection";
@@ -21,12 +20,9 @@ export const RightSidebar = () => {
   const showPreviewNotice = usePreviewNotice();
   const readOnlyFont = session.mode === "preview";
   const editor = useEditor();
-  const { glyphId: glyphIdParam } = useParams();
   const { availableGlyphs } = useGlyphCatalog();
-  const glyphId = glyphIdParam ? asGlyphId(glyphIdParam) : null;
-  const glyphLabel = glyphId
-    ? availableGlyphs.find((candidate) => candidate.id === glyphId)?.displayName
-    : undefined;
+  const glyphLabel = (glyphId: GlyphId) =>
+    availableGlyphs.find((candidate) => candidate.id === glyphId)?.displayName;
   const familyName = useSignalState(session.catalog.familyNameCell) ?? "Untitled";
   const selection = useSignalState(editor.selection.stateCell, { schedule: "frame" });
 
