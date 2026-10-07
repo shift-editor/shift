@@ -248,7 +248,10 @@ export class Editor {
     this.sessionMode = options.sessionMode;
     this.#store = new ShiftStore();
     this.#fontStore = options.fontStore;
-    this.scene = new Scene(this.#store);
+    this.scene = new Scene(
+      this.#store,
+      (node) => this.nodeDefinition(node.kind).references?.(node) ?? [],
+    );
 
     const initialExternalLocation = emptyExternalAxisLocation();
 
@@ -823,10 +826,8 @@ export class Editor {
 
     if (isTextItemId(id)) {
       const location = this.text.itemLocation(id);
-      const node = location
-        ? this.scene.nodesOfKind("textRun").find((run) => run.runId === location.run.id)
-        : null;
-      if (!location || !node) return null;
+      const node = location ? this.scene.nodesReferencing(location.run.id)[0] : null;
+      if (!location || node?.kind !== "textRun") return null;
 
       const { item } = location;
       const glyphId =
@@ -1583,14 +1584,18 @@ export class Editor {
   }
 
   #runContentHooks(changed: ReadonlySet<ShiftRecordId>): void {
-    for (const node of this.scene.nodes()) {
-      if (!this.scene.node(node.id)) continue;
-      const definition = this.nodeDefinition(node.kind);
-      if (!definition.onContentChange) continue;
+    const touched = new Set<ShiftNode>();
+    for (const id of changed) {
+      const node = isNodeId(id) ? this.scene.node(id) : null;
+      if (node) touched.add(node);
+      for (const dependent of this.scene.nodesReferencing(id)) touched.add(dependent);
+    }
 
-      const contentId = definition.contentRecordId?.(node) ?? null;
-      const touched = changed.has(node.id) || (contentId !== null && changed.has(contentId));
-      if (touched) definition.onContentChange(node);
+    for (const node of touched) {
+      if (!this.scene.node(node.id)) continue;
+
+      const definition = this.nodeDefinition(node.kind);
+      if (definition.onContentChange) definition.onContentChange(node);
     }
   }
 

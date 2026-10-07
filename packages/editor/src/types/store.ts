@@ -6,3 +6,9 @@ export interface StoreChange<R extends ShiftRecord> {
   readonly before: R | null;
   readonly after: R | null;
 }
+
+/** The store surface a `StoreIndex` follows: its current records and its change stream. */
+export interface StoreIndexSource {
+  records(): readonly ShiftRecord[];
+  onChange(listener: (change: StoreChange<ShiftRecord>) => void): () => void;
+}

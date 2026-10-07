@@ -2,7 +2,7 @@ import type { Mat, Point2D } from "@shift/geo";
 import type { Editor } from "../editor/Editor";
 import type { LocalBounds, LocalPoint } from "../../types/coordinates";
 import type { ShiftNode } from "../../types/node";
-import type { ShiftRecordId } from "../../types/records";
+import type { NodeReference } from "../../types/records";
 import type { PointerTarget } from "../../types/target";
 import type { RenderContext, RenderPass } from "../../types/rendering";
 
@@ -79,15 +79,18 @@ export abstract class NodeDefinition<N extends ShiftNode = ShiftNode> {
   }
 
   /**
-   * Names the record holding this node's content, when it is not the node itself.
+   * Names the records and glyphs this node depends on.
    *
    * @remarks
-   * A text run's content is its `TextRunRecord`. When that record changes in a
-   * capture, the editor calls {@link onContentChange} for the node.
+   * The scene files each node under its references, so
+   * `scene.nodesReferencing(id)` finds every node that depends on `id`. When a
+   * referenced record changes in a capture, the editor calls
+   * {@link onContentChange} for the node. Must be a pure function of the node's
+   * record: the scene recomputes it only when the node record changes.
    *
-   * @returns null when the node has no separate content record.
+   * @returns the referenced ids; empty when the node depends on nothing outside itself.
    */
-  contentRecordId?(node: N): ShiftRecordId | null;
+  references?(node: N): readonly NodeReference[];
 
   /**
    * Responds to a double-click on this node or on one of its descendants.

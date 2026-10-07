@@ -2,7 +2,8 @@ import { mintNodeId, type NodeId } from "@shift/types";
 import { Tree } from "../utils/Tree";
 import { computed, type Signal } from "../signals/index";
 import type { ShiftStore } from "../store/ShiftStore";
-import type { ShiftEditorRecord, ShiftNodeRecord } from "../../types/records";
+import type { StoreIndex } from "../store/StoreIndex";
+import type { NodeReference, ShiftEditorRecord, ShiftNodeRecord } from "../../types/records";
 import type { CreateNode, ShiftNode, UpdateNode } from "../../types/node";
 
 export interface SceneValue {
@@ -22,16 +23,21 @@ export class Scene {
   readonly #cell: Signal<SceneValue>;
   readonly #nodesById: Signal<ReadonlyMap<NodeId, ShiftNode>>;
   readonly #nodesByKind: Signal<ReadonlyMap<ShiftNode["kind"], readonly ShiftNode[]>>;
+  readonly #byReference: StoreIndex<NodeReference, ShiftNodeRecord>;
 
-  constructor(store: ShiftStore<ShiftEditorRecord>) {
+  /**
+   * @param store - editor store holding node records.
+   * @param references - what a node depends on; usually its definition's `references`.
+   */
+  constructor(
+    store: ShiftStore<ShiftEditorRecord>,
+    references: (node: ShiftNode) => readonly NodeReference[] = () => [],
+  ) {
     this.#store = store;
+    this.#byReference = store.index("node", references);
     this.#cell = computed(
       () => {
-        const nodes: ShiftNodeRecord[] = [];
-        for (const record of this.#store.cell.value.values()) {
-          if (record.type === "node") nodes.push(record);
-        }
-
+        const nodes = this.#store.recordsOfType("node");
         const tree = Tree.from<NodeId, ShiftNode>(nodes, {
           id: (node) => node.id,
           parentId: (node) => node.parentId,
@@ -39,9 +45,9 @@ export class Scene {
         });
         return { nodes: tree.walk(), tree };
       },
-      // Selection and other session records share this store; only a change to a node record
-      // should reach scene readers.
-      { name: "editor.scene", equals: sameScene },
+      // Reads only node records, so selection, editing, and run writes to the shared store
+      // never rebuild the scene.
+      { name: "editor.scene" },
     );
     this.#nodesById = computed(
       () => {
@@ -94,6 +100,19 @@ export class Scene {
     if (!nodeId) return null;
 
     return this.#nodesById.peek().get(nodeId) ?? null;
+  }
+
+  /**
+   * Returns the nodes that depend on a record or glyph.
+   *
+   * @remarks
+   * A node depends on whatever its definition's `references` names: a text
+   * run node on its run record, a glyph node on its glyph. Reactive: inside a
+   * computed or effect, the reader reruns only when the nodes filed under `id`
+   * change.
+   */
+  nodesReferencing(id: NodeReference): readonly ShiftNode[] {
+    return this.#byReference.get(id);
   }
 
   /** Returns a node's children, ordered by `index`. */
@@ -199,11 +218,4 @@ function copyNode<T extends ShiftNode>(node: T): T {
     ...node,
     position: { ...node.position },
   };
-}
-
-function sameScene(prev: SceneValue, next: SceneValue): boolean {
-  return (
-    prev.nodes.length === next.nodes.length &&
-    prev.nodes.every((node, index) => node === next.nodes[index])
-  );
 }
