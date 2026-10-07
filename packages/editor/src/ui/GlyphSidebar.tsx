@@ -27,7 +27,7 @@ export interface GlyphSidebarProps {
  *
  * @remarks
  * Shows the glyph metrics section the inspector returns for the current
- * subject (ADR 0002), and sends edits to its target. A metric the glyphs
+ * subject, and sends edits to its target. A metric the glyphs
  * disagree on shows empty, and an edit applies to every glyph.
  */
 export function GlyphSidebar({ session, host = {} }: GlyphSidebarProps) {

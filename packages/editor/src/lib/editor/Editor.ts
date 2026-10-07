@@ -926,7 +926,7 @@ export class Editor {
   }
 
   /**
-   * What the inspector describes, as the active tool supplies it (ADR 0002).
+   * What the inspector describes, as the active tool supplies it.
    *
    * @remarks
    * Derived from the tool's own state — text editing, selection, editing scope

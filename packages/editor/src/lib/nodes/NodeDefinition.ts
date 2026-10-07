@@ -110,7 +110,7 @@ export abstract class NodeDefinition<N extends ShiftNode = ShiftNode> {
    * Returns the inspector sections that describe this node or parts of it.
    *
    * @remarks
-   * A query: never writes. Called with the active subject (ADR 0002); the
+   * A query: never writes. Called with the active subject; the
    * sections' targets own their reads and writes.
    *
    * @param parts - ids inside the node the subject names; empty means the node itself.

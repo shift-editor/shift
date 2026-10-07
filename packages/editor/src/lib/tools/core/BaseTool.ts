@@ -110,7 +110,7 @@ export abstract class BaseTool<S extends ToolState, TTool = unknown, Settings = 
    *
    * @remarks
    * Reactive. Defaults to the single entered node; a tool whose own state
-   * says what you are working on overrides it (ADR 0002).
+   * says what you are working on overrides it.
    *
    * @returns null when nothing is entered, or several nodes are.
    */

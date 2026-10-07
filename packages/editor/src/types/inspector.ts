@@ -7,7 +7,7 @@ import type { ShiftId } from "./object";
  *
  * @remarks
  * Distinct from the selection, which is what operations act on. The active
- * tool supplies it; see ADR 0002.
+ * tool supplies it.
  */
 export interface Subject {
   readonly node: ShiftNode;
