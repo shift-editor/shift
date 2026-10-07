@@ -1,6 +1,4 @@
-import { Mat, type DecomposedTransform } from "@shift/geo";
-import type { GlyphPosition } from "@shift/glyph-state";
-import type { ComponentId } from "@shift/types";
+import { Mat } from "@shift/geo";
 import { batch } from "../signals";
 import type { Sidebearing } from "../../types/spacing";
 import type { GlyphLayer } from "./Glyph";
@@ -11,20 +9,19 @@ import type { GlyphLayerState } from "./GlyphLayerState";
  *
  * @remarks
  * `"rsb"` changes the right sidebearing by moving the advance. `"lsb"`
- * changes the left sidebearing by moving every point, anchor, and component
- * and the advance together, so the right sidebearing stays. Previews are
- * evaluated against the state captured at construction. Construction opens
- * the layer's exclusive local-edit slot; finish with {@link commit} or
- * {@link discard}.
+ * changes the left sidebearing by moving the whole layer (points, anchors,
+ * and components) and the advance together, so the right sidebearing stays.
+ * Previews restore the layer values captured at construction and apply the
+ * same whole-layer transform the commit sends, so preview and result agree.
+ * Construction opens the layer's exclusive local-edit slot; finish with
+ * {@link commit} or {@link discard}.
  */
 export class SidebearingEdit {
   readonly #layer: GlyphLayer;
   readonly #state: GlyphLayerState;
   readonly #sidebearing: Sidebearing;
+  readonly #base: Float64Array;
   readonly #xAdvance: number;
-  readonly #positions: readonly GlyphPosition[];
-  readonly #componentIds: readonly ComponentId[];
-  readonly #transforms: readonly DecomposedTransform[];
 
   #delta = 0;
   #closed = false;
@@ -34,25 +31,11 @@ export class SidebearingEdit {
    * @throws {Error} When the layer already has an active edit.
    */
   constructor(layer: GlyphLayer, state: GlyphLayerState, sidebearing: Sidebearing) {
-    const buffers = state.buffers;
     this.#layer = layer;
     this.#state = state;
     this.#sidebearing = sidebearing;
-    this.#xAdvance = buffers.xAdvance;
-    this.#positions =
-      sidebearing === "lsb"
-        ? buffers.positionsFor([
-            ...layer.allPoints.map((point) => ({ kind: "point" as const, id: point.id })),
-            ...layer.anchors.map((anchor) => ({ kind: "anchor" as const, id: anchor.id })),
-          ])
-        : [];
-    this.#componentIds =
-      sidebearing === "lsb" ? buffers.components.map((component) => component.data.id) : [];
-    this.#transforms = this.#componentIds.map((id) => {
-      const transform = buffers.componentTransform(id);
-      if (!transform) throw new Error("sidebearing edit lost a component");
-      return transform;
-    });
+    this.#base = state.buffers.snapshot;
+    this.#xAdvance = state.buffers.xAdvance;
 
     state.beginEdit(() => this.#reapply());
   }
@@ -77,10 +60,7 @@ export class SidebearingEdit {
 
     this.#layer.transaction(label, () => {
       this.#state.finishEdit(() => {
-        if (this.#sidebearing === "lsb") {
-          this.#layer.applyPositionPatch(this.#shiftedPositions(delta));
-          this.#layer.setComponentTransforms(this.#componentIds, this.#shiftedTransforms(delta));
-        }
+        if (this.#sidebearing === "lsb") this.#layer.transformLayer(Mat.Translate(delta, 0));
         this.#layer.setXAdvance(this.#xAdvance + delta);
       });
     });
@@ -95,24 +75,10 @@ export class SidebearingEdit {
 
   #reapply(): void {
     const buffers = this.#state.buffers;
-    const delta = this.#delta;
     batch(() => {
-      if (this.#sidebearing === "lsb") {
-        buffers.patchPositions(this.#shiftedPositions(delta));
-        buffers.setComponentTransforms(this.#componentIds, this.#shiftedTransforms(delta));
-      }
-      buffers.setXAdvance(this.#xAdvance + delta);
+      buffers.replaceValues(this.#base);
+      if (this.#sidebearing === "lsb") buffers.transformLayer(Mat.Translate(this.#delta, 0));
+      buffers.setXAdvance(this.#xAdvance + this.#delta);
     });
-  }
-
-  #shiftedPositions(delta: number): GlyphPosition[] {
-    return this.#positions.map((position) => ({ ...position, x: position.x + delta }));
-  }
-
-  #shiftedTransforms(delta: number): DecomposedTransform[] {
-    const shift = Mat.Translate(delta, 0);
-    return this.#transforms.map((transform) =>
-      Mat.toDecomposed(Mat.Compose(shift, Mat.fromDecomposed(transform))),
-    );
   }
 }

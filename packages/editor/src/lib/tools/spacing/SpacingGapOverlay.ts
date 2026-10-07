@@ -2,6 +2,7 @@ import type { Canvas, ScreenCanvas, ScreenProjection } from "../../editor/render
 import type { Editor } from "../../editor/Editor";
 import type { SpacingGap, SpacingSideName } from "../../../types/spacing";
 import { spacingLabelRect, spacingLabelText } from "./SpacingLabel";
+import type { SpacingHalf } from "./RunSpacing";
 
 /**
  * Draws a spacing gap as two hatched halves meeting at the advance boundary.
@@ -17,22 +18,22 @@ import { spacingLabelRect, spacingLabelText } from "./SpacingLabel";
 export function drawSpacingGap(
   canvas: Canvas,
   editor: Editor,
-  gap: SpacingGap,
-  active: SpacingSideName,
+  active: SpacingHalf,
   options: SpacingGapDrawOptions = {},
 ): void {
+  const { gap } = active;
+  const matched = options.matched ? active.other() : null;
   canvas.withTransform(editor.sceneTransform(gap.node), (local) => {
     local.withScreenSpace((screen, project) => {
       for (const side of ["left", "right"] as const) {
-        const strong = side === active || side === options.matched;
+        const strong = side === active.side || side === matched?.side;
         drawHalf(screen, project, gap, side, strong, side === options.selected);
       }
-      drawLabel(screen, editor, gap, active, {
+      drawLabel(screen, editor, active, {
         hovered: options.labelHovered ?? false,
         ringed: options.snapped ?? false,
       });
-      if (options.matched)
-        drawLabel(screen, editor, gap, options.matched, { hovered: false, ringed: true });
+      if (matched) drawLabel(screen, editor, matched, { hovered: false, ringed: true });
     });
   });
 }
@@ -43,8 +44,8 @@ export interface SpacingGapDrawOptions {
   readonly labelHovered?: boolean;
   /** The half the arrow keys change, which gets an outline. */
   readonly selected?: SpacingSideName | null;
-  /** A half the active one snapped to: drawn strong, with its own ringed pill. */
-  readonly matched?: SpacingSideName | null;
+  /** Whether the active half snapped to the gap's other half, which is then drawn strong with a ringed pill. */
+  readonly matched?: boolean;
   /** Whether the active value snapped, which rings its pill. */
   readonly snapped?: boolean;
 }
@@ -129,21 +130,20 @@ function halfColors(
 function drawLabel(
   screen: ScreenCanvas,
   editor: Editor,
-  gap: SpacingGap,
-  side: SpacingSideName,
+  half: SpacingHalf,
   { hovered, ringed }: { readonly hovered: boolean; readonly ringed: boolean },
 ): void {
-  const rect = spacingLabelRect(editor, gap, side);
-  const text = spacingLabelText(gap, side);
-  const half = gap[side];
-  if (!rect || !text || !half) return;
+  const rect = spacingLabelRect(editor, half);
+  const text = spacingLabelText(half);
+  const glyphSide = half.glyphSide;
+  if (!rect || !text || !glyphSide) return;
 
   const theme = screen.theme.spacing;
   const ctx = screen.ctx;
   ctx.save();
   ctx.beginPath();
   ctx.roundRect(rect.x, rect.y, rect.width, rect.height, rect.height / 2);
-  ctx.fillStyle = labelFill(theme, half.sidebearing < 0, hovered);
+  ctx.fillStyle = labelFill(theme, glyphSide.sidebearing < 0, hovered);
   ctx.fill();
   if (ringed) {
     ctx.strokeStyle = theme.labelText;

@@ -1,10 +1,8 @@
+import type { Rect2D } from "@shift/geo";
 import { BaseTool, type ToolName } from "../core";
 import type { Canvas } from "../../editor/rendering/Canvas";
 import type { CursorType } from "../../../types/editor";
-import type { Rect2D } from "@shift/geo";
 import {
-  followedHit,
-  setSidebearing,
   SpacingDrag,
   SpacingEditingClose,
   SpacingHover,
@@ -12,18 +10,10 @@ import {
   SpacingNudge,
   SpacingSelectClick,
 } from "./behaviors";
+import { RunSpacing, type SpacingHalf } from "./RunSpacing";
 import { spacingLabelRect } from "./SpacingLabel";
 import { drawSpacingGap } from "./SpacingGapOverlay";
-import type { SpacingBehavior, SpacingHit, SpacingState } from "./types";
-
-/** Whether two hits are the same gap, by its two glyphs. */
-function sameGapItems(a: SpacingHit, b: SpacingHit): boolean {
-  return (
-    a.gap.node.id === b.gap.node.id &&
-    a.gap.left?.itemId === b.gap.left?.itemId &&
-    a.gap.right?.itemId === b.gap.right?.itemId
-  );
-}
+import type { SpacingBehavior, SpacingState } from "./types";
 
 /**
  * Spacing mode: shows the space between glyphs in proof text.
@@ -37,7 +27,7 @@ function sameGapItems(a: SpacingHit, b: SpacingHit): boolean {
  * in it selects it for the arrow keys, which hide the overlays while they
  * nudge. Deactivating restores glyph editing on the current glyph.
  */
-export class SpacingTool extends BaseTool<SpacingState> {
+export class SpacingTool extends BaseTool<SpacingState, SpacingTool> {
   readonly id: ToolName = "spacing";
   readonly behaviors: SpacingBehavior[] = [
     SpacingEditingClose,
@@ -47,6 +37,8 @@ export class SpacingTool extends BaseTool<SpacingState> {
     SpacingNudge,
     SpacingHover,
   ];
+  /** The gaps of the editor's text runs, which every behavior measures through. */
+  readonly runs = new RunSpacing(this.editor);
 
   #restoreEditing: (() => void) | null = null;
   #wasEditing = false;
@@ -76,18 +68,86 @@ export class SpacingTool extends BaseTool<SpacingState> {
     this.setState({ type: "idle" });
   }
 
-  /**
-   * The half holding the dragged glyph's other sidebearing: for a right
-   * sidebearing, the gap before that glyph; for a left one, the gap after it.
-   */
-  #otherSidebearingHit(dragged: SpacingHit): SpacingHit | null {
-    const itemId = dragged.gap[dragged.side]?.itemId;
-    if (!itemId) return null;
+  /** The half whose value is open for typing, or null. */
+  get editing(): SpacingHalf | null {
+    const state = this.getState();
+    return state.type === "editing" ? state.hit : null;
+  }
 
-    const gaps = this.editor.nodeDefinition("textRun").spacingGaps(dragged.gap.node);
-    const side = dragged.side === "left" ? "right" : "left";
-    const gap = gaps.find((candidate) => candidate[side]?.itemId === itemId);
-    return gap ? { gap, side } : null;
+  /** The open value's pill in screen pixels, for anchoring its editor. */
+  editingAnchor(): Rect2D | null {
+    const half = this.editing;
+    return half ? spacingLabelRect(this.editor, half) : null;
+  }
+
+  /**
+   * Sets the open half's sidebearing at the active source, as one undo step.
+   *
+   * @param value - The new sidebearing in units; rounded, and ignored when unchanged.
+   */
+  setEditedSidebearing(value: number): void {
+    const half = this.editing;
+    if (!half?.set(this.editor, value)) return;
+    this.setState({ type: "editing", hit: this.runs.refresh(half) });
+  }
+
+  /** Opens the other half of the same gap, when it has one. */
+  switchEditedSide(): void {
+    const other = this.editing?.other();
+    if (other) this.setState({ type: "editing", hit: other });
+  }
+
+  /** Closes the open value and returns to hovering. */
+  endEditing(): void {
+    const half = this.editing;
+    if (!half) return;
+    const edited = this.runs.refresh(half);
+    this.setState({ type: "ready", hit: edited, selected: edited });
+  }
+
+  override drawOverlay(canvas: Canvas): void {
+    const state = this.getState();
+    switch (state.type) {
+      case "idle":
+        return;
+      case "editing":
+        drawSpacingGap(canvas, this.editor, state.hit);
+        return;
+      case "dragging":
+        this.#drawDrag(canvas, state);
+        return;
+      case "ready":
+        this.#drawReady(canvas, state);
+        return;
+    }
+  }
+
+  /** The dragged gap, and the gap holding the matched value when the drag snapped to the glyph's other side. */
+  #drawDrag(canvas: Canvas, state: Extract<SpacingState, { type: "dragging" }>): void {
+    drawSpacingGap(canvas, this.editor, state.hit, {
+      matched: state.snap === "otherHalf",
+      snapped: state.snap !== null,
+    });
+    if (state.snap !== "otherSidebearing") return;
+
+    const opposite = this.runs.oppositeHalf(state.hit);
+    if (opposite) drawSpacingGap(canvas, this.editor, opposite, { snapped: true });
+  }
+
+  /** The hovered gap and the selected half, unless a key press asked for a clear view. */
+  #drawReady(canvas: Canvas, state: Extract<SpacingState, { type: "ready" }>): void {
+    if (state.quiet) return;
+    const { hit, selected } = state;
+    const selectedHere = selected !== null && hit !== null && selected.sameGapAs(hit);
+    if (selected && !selectedHere) {
+      drawSpacingGap(canvas, this.editor, selected, { selected: selected.side });
+    }
+    if (hit) {
+      drawSpacingGap(canvas, this.editor, hit, {
+        labelHovered: Boolean(state.overLabel),
+        selected: selectedHere ? selected.side : null,
+      });
+    }
   }
 
   #editCurrentGlyph(): void {
@@ -98,80 +158,6 @@ export class SpacingTool extends BaseTool<SpacingState> {
         this.editor.editing.enter(child.id);
         return;
       }
-    }
-  }
-
-  /** The half whose value is open for typing, or null. */
-  get editing(): SpacingHit | null {
-    const state = this.getState();
-    return state.type === "editing" ? state.hit : null;
-  }
-
-  /** The open value's pill in screen pixels, for anchoring its editor. */
-  editingAnchor(): Rect2D | null {
-    const hit = this.editing;
-    return hit ? spacingLabelRect(this.editor, hit.gap, hit.side) : null;
-  }
-
-  /**
-   * Sets the open half's sidebearing at the active source, as one undo step.
-   *
-   * @param value - The new sidebearing in units; rounded, and ignored when unchanged.
-   */
-  setEditedSidebearing(value: number): void {
-    const hit = this.editing;
-    if (!hit || !setSidebearing(this.editor, hit, value)) return;
-    this.setState({ type: "editing", hit: followedHit(this.editor, hit) });
-  }
-
-  /** Opens the other half of the same gap, when it has one. */
-  switchEditedSide(): void {
-    const hit = this.editing;
-    if (!hit) return;
-    const side = hit.side === "left" ? "right" : "left";
-    if (hit.gap[side]) this.setState({ type: "editing", hit: { gap: hit.gap, side } });
-  }
-
-  /** Closes the open value and returns to hovering. */
-  endEditing(): void {
-    const hit = this.editing;
-    if (!hit) return;
-    const edited = followedHit(this.editor, hit);
-    this.setState({ type: "ready", hit: edited, selected: edited });
-  }
-
-  override drawOverlay(canvas: Canvas): void {
-    const state = this.getState();
-    if (state.type === "idle") return;
-    if (state.type === "dragging") {
-      const otherHalf = state.hit.side === "left" ? "right" : "left";
-      drawSpacingGap(canvas, this.editor, state.hit.gap, state.hit.side, {
-        matched: state.snap === "otherHalf" ? otherHalf : null,
-        snapped: state.snap !== null,
-      });
-      const matched =
-        state.snap === "otherSidebearing" ? this.#otherSidebearingHit(state.hit) : null;
-      if (matched) {
-        drawSpacingGap(canvas, this.editor, matched.gap, matched.side, { snapped: true });
-      }
-      return;
-    }
-    if (state.type === "editing") {
-      drawSpacingGap(canvas, this.editor, state.hit.gap, state.hit.side);
-      return;
-    }
-    if (state.quiet) return;
-
-    const { hit, selected } = state;
-    const selectedHere = selected && hit && sameGapItems(selected, hit);
-    if (selected && !selectedHere) {
-      drawSpacingGap(canvas, this.editor, selected.gap, selected.side, { selected: selected.side });
-    }
-    if (hit) {
-      drawSpacingGap(canvas, this.editor, hit.gap, hit.side, {
-        labelHovered: Boolean(state.overLabel),
-        selected: selectedHere ? selected.side : null,
-      });
     }
   }
 }

@@ -1,23 +1,19 @@
 import type { Behavior } from "../core/Behavior";
 import type { ScenePoint } from "../../../types/coordinates";
-import type { SpacingGap, SpacingSideName } from "../../../types/spacing";
+import type { SpacingHalf } from "./RunSpacing";
+import type { SpacingTool } from "./Spacing";
 
 /** A value a dragged sidebearing snaps to. */
 export type SpacingSnap = "otherHalf" | "otherSidebearing";
-
-/** The gap under the pointer and the half of it the pointer is over. */
-export interface SpacingHit {
-  readonly gap: SpacingGap;
-  readonly side: SpacingSideName;
-}
 
 export type SpacingState =
   | { type: "idle" }
   | {
       type: "ready";
-      hit: SpacingHit | null;
+      /** The half under the pointer. */
+      hit: SpacingHalf | null;
       /** The half arrow keys change, chosen by clicking, dragging, or typing it. */
-      selected: SpacingHit | null;
+      selected: SpacingHalf | null;
       /** Whether the pointer is over the active half's value pill, which opens on click. */
       overLabel?: boolean;
       /** Set by a key press to hide every overlay until the pointer moves. */
@@ -25,11 +21,11 @@ export type SpacingState =
     }
   | {
       type: "dragging";
-      hit: SpacingHit;
+      hit: SpacingHalf;
       origin: ScenePoint;
       /** What the dragged value snapped to: the gap's other half, the glyph's other sidebearing, or nothing. */
       snap: SpacingSnap | null;
     }
-  | { type: "editing"; hit: SpacingHit };
+  | { type: "editing"; hit: SpacingHalf };
 
-export type SpacingBehavior = Behavior<SpacingState>;
+export type SpacingBehavior = Behavior<SpacingState, SpacingTool>;

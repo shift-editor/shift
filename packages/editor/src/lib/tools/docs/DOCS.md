@@ -30,7 +30,7 @@ State machine-based tool system for the Shift font editor: translates pointer/ke
 
 - **Architecture Invariant:** `ToolEvent` pointer events carry a `coords: Coordinates` bundle (`screen`, `scene`). Use `event.coords.scene` for scene-space hit-testing and resolve node-local coordinates from the hit target when a tool needs them.
 
-- **Architecture Invariant:** The Spacing tool never stores gap geometry. A `SpacingGap` is measured on demand from the run layout and each glyph's live outline (`TextRunNodeDefinition.spacingGapAt`). After any edit, the gap is found again by its two text items (`spacingGapBetween`), never by the pointer: a sidebearing change moves the glyphs under a still pointer, and a negative sidebearing can leave the pointer outside the gap entirely.
+- **Architecture Invariant:** The Spacing tool never stores gap geometry. A `SpacingGap` is measured on demand from the run layout and each glyph's live outline (`TextRunNodeDefinition.spacingGapAt`). After any edit, `RunSpacing.refresh` finds the gap again by its two text items (`spacingGapBetween`), never by the pointer: a sidebearing change moves the glyphs under a still pointer, and a negative sidebearing can leave the pointer outside the gap entirely.
 
 - **Architecture Invariant:** A gap has two halves, `left` and `right`; the left half is the left glyph's **right** sidebearing. `SpacingSideName` names halves and `Sidebearing` (`lsb`/`rsb`) names a glyph's sides; convert only through `sidebearingOfHalf`. Passing a half where a sidebearing is expected edits the wrong side.
 
@@ -63,6 +63,8 @@ tools/
   spacing/
     Spacing.ts           — SpacingTool: hover, selection, value popover contract, overlay drawing
     behaviors.ts         — hover, pill click, select click, drag with snapping, keyboard nudge and Tab
+    RunSpacing.ts        — SpacingHalf (one half of a gap) and RunSpacing (find, refresh, and walk halves)
+    SnapTargets.ts       — the values a dragged sidebearing snaps to
     SpacingGapOverlay.ts — hatched halves, value pill, selection outline, snap feedback
     SpacingLabel.ts      — value pill geometry shared by drawing and hit-testing
 apps/desktop/src/renderer/src/lib/tools/
@@ -344,4 +346,4 @@ onDragCancel(state, ctx) {
 - `Coordinates` — `{ screen, scene }` coordinate bundle on pointer events.
 - `TextTool` — Text mode: suspends glyph editing so every glyph draws filled, edits the page run through `editor.textEditing`, and places the caret with `TextRunNodeDefinition.caretAt`; it never creates runs. The hidden textarea handles native typing.
 - `KeyboardRouter` — binds tool shortcuts registered via `getToolShortcuts`.
-- `SpacingTool` — Spacing mode: suspends glyph editing, measures gaps through `TextRunNodeDefinition.spacingGapAt`, and changes sidebearings through `SidebearingEdit` (drags) or `GlyphLayer.setLeftSidebearing` / `setRightSidebearing` (typed values and nudges). Selecting a half makes its glyph the run's current glyph, so the glyph sidebar follows it.
+- `SpacingTool` — Spacing mode: suspends glyph editing, measures gaps through `TextRunNodeDefinition.spacingGapAt`, and changes sidebearings through `SidebearingEdit` (drags, previewed and committed as one whole-layer `transformLayer` plus an advance change) or `SpacingHalf.set` (typed values and nudges). Selecting a half makes its glyph the run's current glyph, so the glyph sidebar follows it.
