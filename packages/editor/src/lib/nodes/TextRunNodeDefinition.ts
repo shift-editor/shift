@@ -10,13 +10,7 @@ import type { RenderContext, RenderPass } from "../../types/rendering";
 import type { PointerTarget } from "../../types/target";
 import type { GlyphRenderModel } from "../model/Glyph";
 import { Mat, type Point2D } from "@shift/geo";
-import {
-  isTextItemId,
-  type ComponentId,
-  type GlyphId,
-  type GlyphName,
-  type TextItemId,
-} from "@shift/types";
+import { isTextItemId, type ComponentId, type GlyphId, type TextItemId } from "@shift/types";
 import { track } from "../signals";
 
 /**
@@ -90,7 +84,7 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
   override onContentChange(node: TextRunNode): void {
     const child = this.childGlyph(node);
     if (!child?.itemId) return;
-    const items = this.editor.text.run(node.runId)?.items ?? [];
+    const items = this.editor.text.items(node);
     if (!items.some((item) => item.id === child.itemId)) this.editor.scene.deleteNode(child.id);
   }
 
@@ -114,7 +108,7 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     const current = this.childGlyph(node);
     if (current?.itemId === itemId) return current;
 
-    const entry = this.editor.font.entryForName(item.glyphName as GlyphName);
+    const entry = this.editor.font.entryForName(item.glyphName);
     if (!entry || !this.editor.glyphForId(entry.id)) return null;
 
     const sourceId =

@@ -7,7 +7,7 @@ import type { GlyphRenderModel } from "../../model/Glyph";
 import type { Signal } from "../../signals/signal";
 import type { ExternalAxisLocation } from "../../../types/variation";
 import type { Bounds, Point2D } from "@shift/geo";
-import type { GlyphEntry, GlyphName, Source } from "@shift/types";
+import type { GlyphEntry, Source } from "@shift/types";
 
 /**
  * No-shape positioner — literal LTR advance walk, `cluster = clusterStart + i`.
@@ -28,7 +28,7 @@ export class Positioner {
     const source = editor.activeSource ?? editor.font.sourceAtOrDefault(externalLocation.peek());
 
     for (const [idx, g] of run.glyphs.entries()) {
-      const entry = editor.font.entryForName(g.glyphName as GlyphName);
+      const entry = editor.font.entryForName(g.glyphName);
       const glyph = entry ? editor.glyphForId(entry.id) : null;
       const renderModel = glyph?.renderModelAt(externalLocation, editor.activeSourceIdCell) ?? null;
       let glyphName = g.glyphName;
@@ -123,5 +123,5 @@ export function resolveGlyphOffset(
 }
 
 function recordForTextItem(item: GlyphTextItem, font: Font): GlyphEntry | null {
-  return font.entryForName(item.glyphName as GlyphName);
+  return font.entryForName(item.glyphName);
 }

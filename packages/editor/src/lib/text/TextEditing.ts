@@ -210,7 +210,7 @@ export class TextEditing {
 
   #items(): readonly TextItem[] | null {
     const node = this.#editor.scene.nodeOfKind(this.state?.nodeId ?? null, "textRun");
-    return node ? (this.#editor.text.run(node.runId)?.items ?? null) : null;
+    return node ? this.#editor.text.items(node) : null;
   }
 
   #edit(

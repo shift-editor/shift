@@ -13,6 +13,7 @@ import type { Font } from "../model/Font";
 import type { ShiftStore } from "../store/ShiftStore";
 import type { StoreIndex } from "../store/StoreIndex";
 import type { ShiftEditorRecord } from "../../types/records";
+import type { TextRunNode } from "../../types/node";
 import type { TextRunRecord } from "../../types/text";
 import { glyphTextItem, lineBreakTextItem, Positioner, TextLayout, type TextItem } from "./layout";
 
@@ -105,6 +106,16 @@ export class Text {
   }
 
   /**
+   * Returns the items of the run a node places.
+   *
+   * @remarks
+   * Reactive like {@link run}. Empty when the run record is gone.
+   */
+  items(node: TextRunNode): readonly TextItem[] {
+    return this.run(node.runId)?.items ?? [];
+  }
+
+  /**
    * Returns the run holding an item, or null for an unknown item.
    *
    * @remarks
@@ -157,7 +168,7 @@ export class Text {
   #acquireGlyphs(items: readonly TextItem[]): void {
     for (const item of items) {
       if (item.kind !== "glyph") continue;
-      const entry = this.#editor.font.entryForName(item.glyphName as GlyphName);
+      const entry = this.#editor.font.entryForName(item.glyphName);
       if (entry && !this.#editor.glyphForId(entry.id)) this.#loadGlyph(entry.id);
     }
   }
