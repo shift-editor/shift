@@ -54,6 +54,28 @@ describe("Editor scene bootstrap", () => {
     expect(dependents).toEqual([1, 0]);
   });
 
+  it("resolves authored points and contours to their layer and the node showing it", async () => {
+    const [pointId] = await editor.drawOpenContour([
+      { x: 100, y: 100 },
+      { x: 200, y: 100 },
+    ]);
+    const contourId = editor.font.contourIdForPoint(pointId!);
+
+    const point = editor.object(pointId!);
+    const contour = editor.object(contourId!);
+
+    expect(point).toMatchObject({
+      kind: "point",
+      layer: editor.glyphLayer,
+      node: editor.glyphNode,
+    });
+    expect(contour).toMatchObject({
+      kind: "contour",
+      layer: editor.glyphLayer,
+      node: editor.glyphNode,
+    });
+  });
+
   it("keeps the scene value when only the selection changes, and updates it when a node moves", async () => {
     const [pointId] = await editor.drawOpenContour([
       { x: 100, y: 100 },
