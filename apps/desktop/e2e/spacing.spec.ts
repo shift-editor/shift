@@ -8,24 +8,32 @@ type Half = "left" | "right";
 /** The gap between the run's two glyphs: after the line-start gap, before the line-end one. */
 const BETWEEN = 1;
 
-/** Page position of the middle of a gap's half, where its value pill sits. */
+/**
+ * Page position inside a gap's half, as a fraction of the line's height from its top.
+ *
+ * @param height - 0.5 is the middle, where the value pill sits; nearer 0 clears the pill.
+ */
 async function halfPagePoint(
   page: Page,
   editor: EditorDriver,
   gapIndex: number,
   side: Half,
+  height = 0.5,
 ): Promise<Point2D> {
   const [canvas, bounds] = await Promise.all([
     page.evaluate(
-      ({ gapIndex, side }) => {
+      ({ gapIndex, side, height }) => {
         const editor = window.shift!.editor;
         const run = editor.scene.nodesOfKind("textRun")[0]!;
         const gap = editor.nodeDefinition("textRun").spacingGaps(run)[gapIndex]!;
         const half = gap[side]!;
-        const middle = { x: (half.edge + gap.boundary) / 2, y: (gap.top + gap.bottom) / 2 };
-        return editor.sceneToScreen(editor.toScene(run, middle as never));
+        const point = {
+          x: (half.edge + gap.boundary) / 2,
+          y: gap.top + (gap.bottom - gap.top) * height,
+        };
+        return editor.sceneToScreen(editor.toScene(run, point as never));
       },
-      { gapIndex, side },
+      { gapIndex, side, height },
     ),
     editor.canvasBounds(),
   ]);
@@ -60,6 +68,11 @@ function rightSidebearing(page: Page): Promise<number | null> {
   });
 }
 
+/** The popover's field; the glyph sidebar has its own "Right sidebearing" fields. */
+function valueField(page: Page) {
+  return page.getByRole("dialog").getByLabel("Right sidebearing");
+}
+
 async function hover(editor: EditorDriver, point: Point2D): Promise<void> {
   await editor.pointerMove(point);
   await editor.flushPointerMoves();
@@ -83,7 +96,8 @@ test.describe("Spacing tool", () => {
     page,
     editor,
   }) => {
-    const point = await halfPagePoint(page, editor, BETWEEN, "left");
+    // Above the pill, so the click selects the half rather than opening its value.
+    const point = await halfPagePoint(page, editor, BETWEEN, "left", 0.2);
     await hover(editor, point);
     await page.mouse.click(point.x, point.y);
     await expect.poll(() => selectedHalf(page)).toBe("left:0");
@@ -107,7 +121,7 @@ test.describe("Spacing tool", () => {
     await hover(editor, pill);
     await page.mouse.click(pill.x, pill.y);
 
-    const field = page.getByLabel("Right sidebearing");
+    const field = valueField(page);
     await expect(field).toBeFocused();
     await field.fill(String(before + 37));
     await editor.press("Enter");
@@ -125,7 +139,7 @@ test.describe("Spacing tool", () => {
     await hover(editor, pill);
     await page.mouse.click(pill.x, pill.y);
 
-    const field = page.getByLabel("Right sidebearing");
+    const field = valueField(page);
     await expect(field).toBeFocused();
     await field.fill("999");
     await editor.press("Escape");
