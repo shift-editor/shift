@@ -1124,10 +1124,21 @@ describe("Select tool in preview sessions", () => {
     editor.selectTool("select");
   });
 
-  it("disables authoring tools while keeping Select available", () => {
+  it("disables authoring tools while keeping Select and Text available", () => {
     expect(editor.toolRegistry.get("select")?.disabled).toBeFalsy();
+    expect(editor.toolRegistry.get("text")?.disabled).toBeFalsy();
     expect(editor.toolRegistry.get("pen")?.disabled).toBe(true);
     expect(editor.toolRegistry.get("shape")?.disabled).toBe(true);
+  });
+
+  it("types proof text in Text mode", async () => {
+    const run = editor.textRun!;
+    editor.selectTool("text");
+    editor.textEditing.insertText("AA");
+    await editor.settle();
+
+    expect(editor.toolIf("text")?.state.type).toBe("editing");
+    expect(editor.text.run(run.runId)!.items).toHaveLength(3);
   });
 
   it("draws a marquee without hover or selection state", async () => {
