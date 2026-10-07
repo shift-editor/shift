@@ -93,10 +93,10 @@ function builtInToolManifests(): readonly ToolManifest[] {
 
 export function registerBuiltInTools(editor: Editor): void {
   for (const manifest of builtInToolManifests()) {
+    // Preview sessions cannot author outlines, but proof text is not font data, so Text stays.
     manifest.disabled =
       manifest.disabled ||
-      (editor.sessionMode === "preview" &&
-        (manifest.id === "pen" || manifest.id === "shape" || manifest.id === "text"));
+      (editor.sessionMode === "preview" && (manifest.id === "pen" || manifest.id === "shape"));
 
     editor.registerTool(manifest);
   }

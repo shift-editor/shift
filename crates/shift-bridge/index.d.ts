@@ -61,13 +61,13 @@ export declare class Bridge {
    */
   apply(intents: Array<NapiFontIntent>, label?: string | undefined | null): NapiAppliedChange
   /**
-   * Replays the most recent ledger entry's pre states; `null` when the
-   * undo stack is empty.
+   * Applies the most recent ledger entry's inverse changeset; `null` when
+   * the undo stack is empty.
    */
   undo(): NapiAppliedChange | null
   /**
-   * Replays the most recent undone entry's post states; `null` when the
-   * redo stack is empty.
+   * Reapplies the most recently undone changeset; `null` when the redo
+   * stack is empty.
    */
   redo(): NapiAppliedChange | null
   /** Permanently removes every redo entry without changing font or dirty state. */
