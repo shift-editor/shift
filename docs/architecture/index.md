@@ -63,7 +63,6 @@ Central routing table for Shift's distributed documentation. Before creating new
 | Concern                   | Canonical doc                                                    | Purpose                                                      |
 | ------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------ |
 | Canonical `.shift` format | [`ADR 0001`](decisions/0001-canonical-sqlite-shift-documents.md) | SQLite document, identity, Save, and recovery decision       |
-| Inspector subjects        | [`ADR 0002`](decisions/0002-inspector-subjects.md)               | What the inspector describes, per mode and node type         |
 | Desktop releases          | [`docs/releases.md`](../releases.md)                             | Release states, versioning, workflows, signing, and rollback |
 
 ## API Boundaries
