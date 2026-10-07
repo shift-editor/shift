@@ -52,6 +52,12 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 
 **Architecture Invariant:** `Selection` is a dumb ordered set of branded object IDs. Mutations go through `select()`, `add()`, `remove()`, and `toggle()`; behavior and live bounds come from resolving those IDs through `Editor.object()`.
 
+**Architecture Invariant:** The inspector describes a subject, not the selection. `Editor.subjectCell` reads the active tool's `subject()`: the Text tool supplies its run plus the glyph items the caret targets, Select supplies the entered node while editing inside one and otherwise the selection's node with the selected ids as parts, and every other tool inherits the single entered node from `BaseTool`. The subject is derived, never stored: its inputs (text editing, selection, editing scope) are session records that undo restores, so a stored copy could only drift from them. Store it only when something other than the active tool must set it, such as pinning the inspector.
+
+**Architecture Invariant:** Inspector sections own their reads and writes. `NodeDefinition.inspect(node, parts)` returns sections whose targets, such as `glyphMetricsTarget`, supply live values, editability, and writes applied as one undo step. Presentation code renders a target's values and calls its writes; it never decides which glyphs a section covers and never writes layers, sources, or transactions itself.
+
+**Architecture Invariant:** Geometry operations (component insertion, select-all, paste, booleans, Pen, Shape) act on the entered glyph node through `Editing.node("glyph")`, never on "the only glyph node in the scene". A scene can hold several glyph nodes, and counting them silently disables these operations.
+
 **Architecture Invariant:** `Editor.insertContent()` inserts each non-empty contour's points through one `GlyphLayer.addPoints(contourId, edits)` call. All contours share one workspace transaction and undo step; returned identities preserve contour and point order, and portable geometry receives the requested offset exactly once.
 
 **Architecture Invariant:** Glyph-domain hit testing belongs to glyph geometry and editor glyph lookup helpers. Tool-specific controls, such as select bounding-box handles, are owned and hit-tested by the tool that renders them.
@@ -83,6 +89,8 @@ editor/
 ## Key Types
 
 - **`Editor`** -- Facade class. Owns `Selection`, `Hover`, `Camera`, `Renderer`, `ToolManager`, `Clipboard`, `EventEmitter`, and the workspace transaction facade. Its immutable `sessionMode` lets Select suppress geometry interaction; geometry clicks publish `previewMutationAttempted` for presentation code. The canvas lock is display-only. Passed directly to tools and NodeDefinitions; `glyphForId()` exposes already-acquired canonical Glyphs without exposing FontStore.
+- **`Subject`** -- What the inspector describes: one node plus optional parts (item or point ids); empty parts mean the node itself. Supplied by the active tool.
+- **`InspectorSection`** -- One inspector block returned by `NodeDefinition.inspect`; carries a target such as `GlyphMetricsTarget` that owns its reads and writes.
 - **`Scene`** -- Owns generic, serializable placed-node records and node-level queries. Glyph acquisition and retained object ownership remain outside Scene.
 - **`ShiftStore<ShiftEditorRecord>`** -- Editor-owned generic record store for scene nodes, selection, editing, and text runs. Reactive readers subscribe narrowly: `record(id)` to one record, `recordsOfType(type)` to one record type (the scene reads only node records), and `index(type, keys)` to one key of a reverse lookup that applies each change incrementally (`Scene.nodesReferencing`, `Text.runForItem`). Readers of `cell` rerun on every write.
 - **`EditorHistory`** -- TypeScript action timeline over whole editor records plus ordered workspace markers. Captures finish synchronously; undo and redo await the workspace queue.
@@ -198,6 +206,15 @@ Glyph geometry exposes domain hit queries for points, anchors, and segments. Too
 2. Instantiate it as a private field on `GlyphNodeDefinition` alongside the existing drawers (e.g. `#myIndicator = new MyIndicator()`), or on the owning tool if it is tool-specific.
 3. Call `#myIndicator.draw(canvas, ...)` from the appropriate canvas item layer or tool draw hook.
 4. If it depends on new state, read that state in the appropriate effect. Position interactions should publish semantic `PositionGuide` values and delegate their visual treatment to `SnapLines` rather than drawing snap geometry directly.
+
+### Describe a new node kind in the inspector
+
+1. Add a section kind to `InspectorSection` and a target type beside `GlyphMetricsTarget`, with reactive reads and writes that apply as one undo step.
+2. Build the target in `lib/`, as `glyphMetricsTarget` does; never in `ui/`.
+3. Implement `inspect(node, parts)` on the node kind's definition, returning the section.
+4. Override the tool's `subject()` only if the entered node is not what the inspector should describe while that tool is active.
+5. Render the section in the sidebar from its target alone.
+6. Add `TestEditor` tests that drive the tool and assert on what the inspector describes and what its writes change, including undo.
 
 ### Add a new selectable entity kind
 
