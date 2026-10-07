@@ -141,6 +141,17 @@ pub enum FontIntent {
         contour_id_b: ContourId,
         operation: BooleanOp,
     },
+    /// Replaces drawing content while preserving layer identity, source, height, guidelines, and lib.
+    ///
+    /// Values use font units and supplied entity identities. The complete replacement
+    /// is validated before installation and refreshes component dependencies.
+    ReplaceGlyphLayerContent {
+        layer_id: LayerId,
+        width: f64,
+        contours: Vec<Contour>,
+        anchors: Vec<Anchor>,
+        components: Vec<Component>,
+    },
     /// Creates glyph identity and metadata only. Authored editable data is
     /// created by explicit `CreateGlyphLayer` intents.
     CreateGlyph {
@@ -263,7 +274,8 @@ impl FontIntent {
             | Self::SetContourStart { layer_id, .. }
             | Self::TranslatePoints { layer_id, .. }
             | Self::SetXAdvance { layer_id, .. }
-            | Self::ApplyBooleanOp { layer_id, .. } => Some(layer_id),
+            | Self::ApplyBooleanOp { layer_id, .. }
+            | Self::ReplaceGlyphLayerContent { layer_id, .. } => Some(layer_id),
 
             Self::CreateGlyph { .. }
             | Self::UpdateGlyph { .. }
@@ -311,7 +323,8 @@ impl FontIntent {
             | Self::SetContourStart { layer_id, .. }
             | Self::TranslatePoints { layer_id, .. }
             | Self::SetXAdvance { layer_id, .. }
-            | Self::ApplyBooleanOp { layer_id, .. } => vec![layer_id.clone()],
+            | Self::ApplyBooleanOp { layer_id, .. }
+            | Self::ReplaceGlyphLayerContent { layer_id, .. } => vec![layer_id.clone()],
             Self::CloneGlyphLayer { from_layer_id, .. }
             | Self::MaterializeGlyphLayer { from_layer_id, .. } => {
                 vec![from_layer_id.clone()]
@@ -1334,6 +1347,42 @@ impl Font {
 
                 Ok(())
             }
+            FontIntent::ReplaceGlyphLayerContent {
+                layer_id,
+                width,
+                contours,
+                anchors,
+                components,
+            } => {
+                let glyph_id = self
+                    .glyph_id_by_layer(layer_id)
+                    .ok_or_else(|| CoreError::LayerNotFound(layer_id.clone()))?;
+                for component in components {
+                    let base_glyph_id = component.base_glyph_id();
+                    if self.glyph(&base_glyph_id).is_none() {
+                        return Err(CoreError::GlyphNotFound(base_glyph_id));
+                    }
+                    if self.component_reference_would_cycle(&glyph_id, &base_glyph_id) {
+                        return Err(CoreError::CyclicComponentReference {
+                            glyph_id,
+                            base_glyph_id,
+                        });
+                    }
+                }
+                let mut layer = self
+                    .layer(layer_id)
+                    .ok_or_else(|| CoreError::LayerNotFound(layer_id.clone()))?
+                    .clone();
+                layer.replace_content(
+                    *width,
+                    contours.clone(),
+                    anchors.clone(),
+                    components.clone(),
+                )?;
+                self.replace_glyph_layers(vec![layer])?;
+
+                Ok(())
+            }
             FontIntent::SetXAdvance { layer_id, width } => {
                 let layer = self.require_layer_mut(layer_id)?;
                 layer.set_x_advance(*width);
@@ -1418,6 +1467,9 @@ impl Font {
         })
     }
 }
+
+#[cfg(test)]
+mod replacement_tests;
 
 #[cfg(test)]
 mod tests {

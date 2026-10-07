@@ -8,143 +8,28 @@ use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
-use serde::Serialize;
-use shift_font::{
-    Axis, DesignLocation, EntityChange, Font, FontChangeImpact, FontChangeSet, FontEntityChange,
-    FontIntent, FontIntentSet, SourceId,
-};
+use shift_font::{Axis, AxisId, DesignLocation, Font, FontIntent, FontIntentSet, SourceId};
 use shift_store::ShiftStore;
 use shift_workspace::FontWorkspace;
 
 use crate::cli::{AddAxisArgs, AddSourceArgs, CreateFontArgs, MutationArgs};
 
+mod axis;
+mod font_info;
 mod glyph;
+mod glyph_batch;
+mod input;
+mod instance;
+mod layer_payload;
+mod report;
 
-pub use glyph::{add_glyph, add_layer, copy_layer};
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AuthoringReport {
-    pub valid: bool,
-    pub document: PathBuf,
-    pub output: PathBuf,
-    pub wrote: bool,
-    pub changes: Vec<AuthoringChange>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(
-    tag = "kind",
-    rename_all = "camelCase",
-    rename_all_fields = "camelCase"
-)]
-pub enum AuthoringChange {
-    FontCreated {
-        document_id: Option<String>,
-    },
-    AxisCreated {
-        axis_id: String,
-        tag: String,
-        name: String,
-        minimum: f64,
-        default: f64,
-        maximum: f64,
-    },
-    SourceCreated {
-        source_id: String,
-        name: String,
-        location: BTreeMap<String, f64>,
-    },
-    GlyphCreated {
-        glyph_id: String,
-        name: String,
-        unicodes: Vec<String>,
-    },
-    GlyphLayerCreated {
-        layer_id: String,
-        glyph_id: String,
-        source_id: String,
-        advance: f64,
-        contour_count: usize,
-        point_count: usize,
-        anchor_count: usize,
-        component_count: usize,
-    },
-    NamedInstancesUpdated {
-        count: usize,
-    },
-}
-
-impl AuthoringReport {
-    pub fn render(&self) -> String {
-        let mut lines = vec![self.document.display().to_string(), String::new()];
-        for change in &self.changes {
-            match change {
-                AuthoringChange::FontCreated { document_id } => {
-                    let id = document_id.as_deref().unwrap_or("assigned when written");
-                    lines.push(format!("+ font    {id}"));
-                }
-                AuthoringChange::AxisCreated {
-                    axis_id,
-                    tag,
-                    name,
-                    minimum,
-                    default,
-                    maximum,
-                } => lines.push(format!(
-                    "+ axis    {name} ({tag})  {axis_id}  {minimum} · {default} · {maximum}"
-                )),
-                AuthoringChange::SourceCreated {
-                    source_id,
-                    name,
-                    location,
-                } => {
-                    let location = location
-                        .iter()
-                        .map(|(tag, value)| format!("{tag}={value}"))
-                        .collect::<Vec<_>>()
-                        .join(", ");
-                    lines.push(format!("+ source  {name}  {source_id}  {location}"));
-                }
-                AuthoringChange::GlyphCreated {
-                    glyph_id,
-                    name,
-                    unicodes,
-                } => {
-                    let unicodes = unicodes.join(", ");
-                    let suffix = if unicodes.is_empty() {
-                        String::new()
-                    } else {
-                        format!("  {unicodes}")
-                    };
-                    lines.push(format!("+ glyph   {name}  {glyph_id}{suffix}"));
-                }
-                AuthoringChange::GlyphLayerCreated {
-                    layer_id,
-                    glyph_id,
-                    source_id,
-                    advance,
-                    contour_count,
-                    point_count,
-                    anchor_count,
-                    component_count,
-                } => lines.push(format!(
-                    "+ layer   {layer_id}  {glyph_id} @ {source_id}  advance {advance}; {contour_count} contours, {point_count} points, {anchor_count} anchors, {component_count} components"
-                )),
-                AuthoringChange::NamedInstancesUpdated { count } => {
-                    lines.push(format!("~ instances  {count} product locations completed"));
-                }
-            }
-        }
-        lines.push(String::new());
-        if self.wrote {
-            lines.push(format!("Saved {}", self.output.display()));
-        } else {
-            lines.push("Valid. No files written.".to_string());
-        }
-        lines.join("\n")
-    }
-}
+pub use axis::set_axis;
+pub use font_info::{font_info, set_font};
+pub use glyph::{add_glyph, add_layer, copy_layer, set_layer};
+pub use glyph_batch::set_glyphs;
+pub use instance::{add_instance, remove_instance, set_instance};
+use report::report_changes;
+pub use report::{AuthoringChange, AuthoringReport};
 
 /// Creates a canonical SQLite `.shift` document with the model's default source.
 ///
@@ -212,11 +97,14 @@ pub fn add_axis(args: AddAxisArgs) -> Result<AuthoringReport> {
 /// Returns an error for malformed coordinates, unknown or repeated tags,
 /// non-finite values, invalid source authoring, or persistence failures.
 pub fn add_source(args: AddSourceArgs) -> Result<AuthoringReport> {
-    let font = ShiftStore::open_document(&args.path)
-        .and_then(|store| store.load_font_state())
-        .into_diagnostic()
-        .wrap_err("failed to load Shift font")?;
-    let location = parse_location(&font, &args.location)?;
+    let font = glyph::load_font(&args.path)?;
+    let mut location = DesignLocation::new();
+    for axis in font.axes() {
+        location.set(axis.id(), axis.default());
+    }
+    for (axis_id, value) in parse_location(&font, &args.location)? {
+        location.set(axis_id, value);
+    }
     let source_id = SourceId::new();
     let set = FontIntentSet {
         intents: vec![FontIntent::CreateSource {
@@ -241,11 +129,16 @@ pub(super) fn apply_mutation(
     let mut workspace = FontWorkspace::open_document(path, recovery.path().join("recovery.sqlite"))
         .into_diagnostic()
         .wrap_err("failed to open Shift document")?;
-    let outcome = workspace
-        .apply(set, None)
-        .into_diagnostic()
-        .wrap_err("authoring change is invalid")?;
-    let changes = report_changes(workspace.font(), &outcome.changes);
+    let changes = if set.intents.is_empty() {
+        Vec::new()
+    } else {
+        let outcome = workspace
+            .apply(set, None)
+            .into_diagnostic()
+            .wrap_err("authoring change is invalid")?;
+        report_changes(workspace.font(), &outcome.changes)
+    };
+    let wrote = !options.dry_run && (options.output.is_some() || !changes.is_empty());
 
     if !options.dry_run {
         if options.output.is_some() {
@@ -265,91 +158,33 @@ pub(super) fn apply_mutation(
         valid: true,
         document: path.to_path_buf(),
         output: destination,
-        wrote: !options.dry_run,
+        wrote,
         changes,
     })
 }
 
-fn report_changes(font: &Font, changes: &FontChangeSet) -> Vec<AuthoringChange> {
-    let mut report = changes
-        .entity_changes()
-        .into_iter()
-        .filter_map(|change| match change {
-            FontEntityChange::Axis(EntityChange::Created(axis)) => {
-                Some(AuthoringChange::AxisCreated {
-                    axis_id: axis.id().to_string(),
-                    tag: axis.tag().to_string(),
-                    name: axis.name().to_string(),
-                    minimum: axis.minimum(),
-                    default: axis.default(),
-                    maximum: axis.maximum(),
-                })
-            }
-            FontEntityChange::Source(EntityChange::Created(source)) => {
-                Some(AuthoringChange::SourceCreated {
-                    source_id: source.id().to_string(),
-                    name: source.name().to_string(),
-                    location: source
-                        .location()
-                        .iter()
-                        .filter_map(|(axis_id, value)| {
-                            let tag = font
-                                .axes()
-                                .iter()
-                                .find(|axis| axis.id() == *axis_id)?
-                                .tag()
-                                .to_string();
-                            Some((tag, *value))
-                        })
-                        .collect(),
-                })
-            }
-            FontEntityChange::Glyph(EntityChange::Created(glyph)) => {
-                Some(AuthoringChange::GlyphCreated {
-                    glyph_id: glyph.id().to_string(),
-                    name: glyph.glyph_name().to_string(),
-                    unicodes: glyph
-                        .unicodes()
-                        .iter()
-                        .map(|unicode| format!("U+{unicode:04X}"))
-                        .collect(),
-                })
-            }
-            FontEntityChange::Layer {
-                glyph_id,
-                change: EntityChange::Created(layer),
-            } => Some(AuthoringChange::GlyphLayerCreated {
-                layer_id: layer.id().to_string(),
-                glyph_id: glyph_id.to_string(),
-                source_id: layer.source_id().to_string(),
-                advance: layer.width(),
-                contour_count: layer.contours().len(),
-                point_count: layer
-                    .contours_iter()
-                    .map(|contour| contour.points().len())
-                    .sum(),
-                anchor_count: layer.anchors().len(),
-                component_count: layer.components().len(),
-            }),
-            _ => None,
-        })
-        .collect::<Vec<_>>();
-
-    if changes.impact().contains(FontChangeImpact::NAMED_INSTANCES) {
-        report.push(AuthoringChange::NamedInstancesUpdated {
-            count: font.named_instances().len(),
-        });
+pub(super) fn require_finite(value: f64, label: &str) -> Result<()> {
+    if !value.is_finite() {
+        bail!("{label} must be finite");
     }
-
-    report
+    Ok(())
 }
 
-fn parse_location(font: &Font, coordinates: &[String]) -> Result<DesignLocation> {
-    let mut location = DesignLocation::new();
-    for axis in font.axes() {
-        location.set(axis.id(), axis.default());
+pub(super) fn resolve_axis_id(font: &Font, selector: &str) -> Result<AxisId> {
+    if let Ok(axis_id) = selector.parse::<AxisId>()
+        && font.axis(&axis_id).is_some()
+    {
+        return Ok(axis_id);
     }
 
+    font.axis_id_by_tag(selector)
+        .ok_or_else(|| miette!("axis {selector:?} does not exist; use its tag or full id"))
+}
+
+// Parsing resolves identity and numeric syntax only. Callers construct the
+// appropriate nominal location; parsing never applies an axis mapping.
+fn parse_location(font: &Font, coordinates: &[String]) -> Result<BTreeMap<AxisId, f64>> {
+    let mut location = BTreeMap::new();
     let mut seen = HashSet::new();
     for coordinate in coordinates {
         let Some((tag, value)) = coordinate.split_once('=') else {
@@ -369,11 +204,10 @@ fn parse_location(font: &Font, coordinates: &[String]) -> Result<DesignLocation>
             .parse::<f64>()
             .into_diagnostic()
             .wrap_err_with(|| format!("invalid value for axis tag {tag:?}"))?;
-        if !value.is_finite() {
-            bail!("location value for axis tag {tag:?} must be finite");
-        }
+        let label = format!("location value for axis tag {tag:?}");
+        require_finite(value, &label)?;
 
-        location.set(axis_id, value);
+        location.insert(axis_id, value);
     }
 
     Ok(location)

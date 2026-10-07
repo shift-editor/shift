@@ -7,6 +7,13 @@ use clap::{Args, ColorChoice, Parser, Subcommand, ValueHint};
 use crate::glyph_inspect::GlyphInspectView;
 use crate::inspect::InspectView;
 
+mod font;
+pub use font::{FontInfoArgs, SetFontArgs};
+mod variation;
+pub use variation::{
+    AddInstanceArgs, InstanceCommand, RemoveInstanceArgs, SetAxisArgs, SetInstanceArgs,
+};
+
 const CLAP_STYLES: Styles = Styles::styled()
     .header(AnsiColor::BrightCyan.on_default().effects(Effects::BOLD))
     .usage(AnsiColor::BrightCyan.on_default().effects(Effects::BOLD))
@@ -37,7 +44,7 @@ pub enum Command {
     /// Compile a SQLite .shift document to a TrueType font.
     Compile(CompileArgs),
 
-    /// Create a Shift font document.
+    /// Inspect or author font metadata and source metrics.
     Font {
         #[command(subcommand)]
         command: FontCommand,
@@ -47,6 +54,12 @@ pub enum Command {
     Axis {
         #[command(subcommand)]
         command: AxisCommand,
+    },
+
+    /// Author named product presets in external/user coordinates.
+    Instance {
+        #[command(subcommand)]
+        command: InstanceCommand,
     },
 
     /// Author master sources.
@@ -72,12 +85,21 @@ pub enum Command {
 pub enum FontCommand {
     /// Create a new .shift document with its default Regular source.
     Create(CreateFontArgs),
+
+    /// Read authored metadata and one master's metrics without loading outlines.
+    Info(FontInfoArgs),
+
+    /// Set naming, attribution, license metadata, and one master's metrics atomically.
+    Set(Box<SetFontArgs>),
 }
 
 #[derive(Debug, Subcommand)]
 pub enum AxisCommand {
     /// Add a continuous axis.
     Add(AddAxisArgs),
+
+    /// Edit axis naming or range without relocating masters or product presets.
+    Set(SetAxisArgs),
 }
 
 #[derive(Debug, Subcommand)]
@@ -91,6 +113,9 @@ pub enum GlyphCommand {
     /// Add glyph identity and Unicode assignments without creating layers.
     Add(AddGlyphArgs),
 
+    /// Create or update glyphs and their layers atomically from JSON.
+    Set(SetGlyphsArgs),
+
     /// Inspect one glyph from any supported font source.
     Inspect(InspectGlyphArgs),
 }
@@ -98,7 +123,10 @@ pub enum GlyphCommand {
 #[derive(Debug, Subcommand)]
 pub enum LayerCommand {
     /// Add one authored layer from a semantic JSON payload.
-    Add(AddLayerArgs),
+    Add(LayerPayloadArgs),
+
+    /// Create or replace one layer's drawing content from JSON.
+    Set(LayerPayloadArgs),
 
     /// Copy one glyph's authored layer to another source with fresh internal ids.
     Copy(CopyLayerArgs),
@@ -207,7 +235,7 @@ pub struct AddGlyphArgs {
 }
 
 #[derive(Debug, Args)]
-pub struct AddLayerArgs {
+pub struct LayerPayloadArgs {
     /// Path to the canonical SQLite .shift document.
     #[arg(value_hint = ValueHint::FilePath)]
     pub path: PathBuf,
@@ -221,6 +249,20 @@ pub struct AddLayerArgs {
     pub source: String,
 
     /// JSON layer payload path, or - to read it from stdin.
+    #[arg(long, value_hint = ValueHint::FilePath)]
+    pub input: PathBuf,
+
+    #[command(flatten)]
+    pub mutation: MutationArgs,
+}
+
+#[derive(Debug, Args)]
+pub struct SetGlyphsArgs {
+    /// Path to the canonical SQLite .shift document.
+    #[arg(value_hint = ValueHint::FilePath)]
+    pub path: PathBuf,
+
+    /// JSON glyph batch path, or - to read it from stdin.
     #[arg(long, value_hint = ValueHint::FilePath)]
     pub input: PathBuf,
 

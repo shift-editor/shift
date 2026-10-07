@@ -629,6 +629,14 @@ authoredTest(
 
     const userField = settings.getByLabel("User mapping point 2", { exact: true });
     const sourceField = settings.getByLabel("Source mapping point 2", { exact: true });
+    // Click completion does not await the Settings form's workspace save.
+    // Capture confirmed coordinates only after both added points are durable.
+    await expect.poll(mappingCoordinates).toEqual([
+      [0, 0],
+      [25, 25],
+      [50, 50],
+      [100, 100],
+    ]);
     const before = await mappingCoordinates();
     const beforeCenter = await centerOf("mapping-point-2");
     const neighborCenter = await centerOf("mapping-point-3");

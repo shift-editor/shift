@@ -263,6 +263,10 @@ impl FontWorkspace {
                 FontIntent::AddComponent { base_glyph_id, .. } => {
                     component_roots.push(base_glyph_id.clone());
                 }
+                FontIntent::ReplaceGlyphLayerContent { components, .. } => {
+                    component_roots
+                        .extend(components.iter().map(|component| component.base_glyph_id()));
+                }
                 FontIntent::DecomposeComponents {
                     layer_id,
                     component_ids,

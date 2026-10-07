@@ -90,6 +90,149 @@ Shift mints every new entity ID. Human and agent workflows may read returned IDs
 
 Identity is not part of the layer payload. `pointType` defaults to `onCurve`; accepted values are `onCurve`, `offCurve`, and `qCurve`. A new layer payload currently authors contours and anchors. `layer copy` preserves complete authored layer content, including components, while minting fresh internal identities.
 
+### Replacing drawings
+
+`layer set` creates a missing layer or replaces an existing layer's drawing:
+
+```sh
+shift layer set Lab.shift --glyph A --source Regular --input A-regular.json
+```
+
+An existing layer keeps its stable ID, source binding, height, guidelines, and library data.
+Advance, contours, anchors, and components are replaced. **Existing components are removed**
+because the payload only supports outlines and anchors. Replaced points, contours, and anchors
+receive fresh identities; omitted outlines and anchors produce an empty drawing.
+
+Both `layer add` and `layer set` accept `svgPath` instead of `contours`:
+
+```json
+{
+  "advance": 600,
+  "svgPath": "M0 0 L300 700 L600 0 Z",
+  "anchors": [{ "name": "top", "x": 300, "y": 700 }]
+}
+```
+
+`svgPath` is SVG path **syntax**, not an SVG-file import: path data alone has no viewport
+or inherent axis orientation. Here its coordinates are font units with **Y pointing up**.
+An ordinary SVG document uses Y-down by default and would need a transform before its drawing
+is used in glyph space. Shift does not flip `svgPath` coordinates. Absolute/relative moves, lines, horizontal/vertical lines,
+cubic/quadratic curves, shorthand curves, and closed subpaths are supported. Arc commands
+(`A`/`a`) are rejected rather than approximated. `contours` and `svgPath` cannot be combined.
+
+### Atomic glyph batches
+
+`glyph set` creates or updates glyph identities and drawings from one JSON document:
+
+```sh
+shift glyph set Lab.shift --input glyphs.json
+shift glyph set Lab.shift --input - --dry-run --json < glyphs.json
+```
+
+```json
+{
+  "glyphs": [
+    {
+      "name": "A",
+      "unicodes": ["U+0041"],
+      "source": "Regular",
+      "layer": { "advance": 600, "svgPath": "M0 0 L300 700 L600 0 Z" }
+    },
+    { "name": "space", "unicodes": ["U+0020"] }
+  ]
+}
+```
+
+- Omitted `unicodes` preserves existing assignments; `[]` clears them.
+- Omitted `layer` authors identity only; it does not create or clear a layer.
+- Omitted `source` selects the default source. Explicit selectors accept source names or full IDs.
+- A name may repeat for distinct sources. Repeated glyph/source pairs and conflicting
+  supplied Unicode lists are rejected, including equivalent source name/ID selectors.
+- Layer payloads have the same replacement semantics as `layer set`.
+- Unknown fields and caller-supplied identities are rejected.
+
+All entries are planned before one atomic workspace application; the CLI does not replay a
+scratch font or load unrelated geometry. Entry errors identify the glyph and one-based entry
+number; malformed JSON reports its line and column. An invalid entry leaves every canonical
+byte unchanged, including otherwise valid entries earlier in the batch.
+
+### Font metadata and source metrics
+
+```sh
+shift font info Lab.shift
+shift font info Lab.shift --source Bold --json
+shift font set Lab.shift --family-name "Packet Mono" --style-name Book --version 1.125
+shift font set Lab.shift --ascender 850 --descender -230 --x-height 480 --cap-height 720
+shift font set Lab.shift --source Bold --ascender 900 --line-gap 24 --italic-angle -8
+shift font set Lab.shift --copyright "Copyright 2026 Shift Test Lab" \
+  --designer "Shift Test Lab" --designer-url https://shift.graphics/team \
+  --license "<license text>" --license-url https://openfontlicense.org/
+```
+
+`font info` reads authored metadata, font-global units per em, and one source's metrics
+without acquiring glyph payloads. JSON includes the complete Shift metadata fields,
+a formatted `version`, and a `source` object containing its identity, role, and standard
+metric positions. Missing authored metrics are `null`; the report does not substitute
+compiler-padded ascenders or line-height estimates.
+
+`font set` preserves omitted fields and applies metadata and metric changes atomically.
+Family/style/version, copyright, designer, designer URL, license text, and license URL
+are global metadata. Source names and locations are not renamed by metadata edits.
+Metric flags target the selected master, or the default source when `--source` is omitted.
+`--source` without metric flags is an error; layer-only/background sources cannot receive
+font metrics. Existing overshoots and all unmentioned source values are preserved.
+A missing standard metric definition is introduced through the model's normal default-value
+policy for other masters. Fractional font-unit values are preserved.
+
+Versions accept `MAJOR` or exactly `MAJOR.NNN`, such as `3` or `3.125`. Ambiguous forms such
+as `1.5` are rejected; major values must be between 0 and 32767. Metadata values cannot be
+blank. Supplied attribution and license text, including newlines, are stored verbatim;
+the CLI does not generate a license or verify licensing compliance. UPM and glyph geometry
+are never rescaled by `font set`.
+
+### Axis edits
+
+```sh
+shift axis set Lab.shift wght --name Mass --tag WGHT
+shift axis set Lab.shift wght --min 100 --max 1000
+```
+
+Select an axis by its current tag or full stable ID. `axis set` preserves identity,
+authored order, role, visibility, labels, mappings, master locations, and instance
+coordinates. Omitted fields survive; no dependent value is relocated implicitly.
+For an unmapped axis, masters must remain inside the replacement range and the
+default master must remain at the replacement default. Labels and named instances
+must also remain valid. Mapped axes allow naming edits only when their kind/range
+is unchanged; changing mapped bounds/defaults requires explicit mapping authoring.
+Discrete axes permit name/tag edits only. Empty edits and duplicate tags fail.
+
+### Named instances
+
+```sh
+shift instance add Lab.shift --name Book --location wght=450 \
+  --postscript-name PacketMono-Book
+shift instance set Lab.shift Book --location wght=475 --name Text
+shift instance set Lab.shift Text --clear-postscript-name
+shift instance remove Lab.shift Text
+shift instance add Lab.shift --standard-weights
+```
+
+Instances are product presets, not masters: these commands never create or delete
+sources or drawings. Locations are external/user-space `TAG=VALUE` coordinates;
+axis mappings are not applied to the stored preset. Repeat `--location` or separate
+coordinates with commas. Add fills omitted external axes with their defaults;
+set replaces only supplied coordinates and preserves omitted fields, identity,
+order, and PostScript name. Clear a PostScript name explicitly with
+`--clear-postscript-name`. Select existing products by unique name or full stable
+ID; ambiguous names require an ID. JSON reports the complete ordered collection.
+
+`--standard-weights` adds missing in-range external `wght` presets from 100 (Thin)
+through 900 (Black), with other external axes at their defaults. It preserves all
+existing products, names, IDs, and order, skipping occupied locations. Discrete
+axes use only authored values. Reapplying the presets is a no-op with `wrote: false`
+and no changes; this convenience option cannot be combined with individual
+name/location/PostScript flags. It does not generate outlines or static fonts.
+
 Every mutation supports:
 
 - `--dry-run` to execute real domain validation without writing;
@@ -120,4 +263,12 @@ cargo run -p shift-cli -- glyph add --help
 cargo run -p shift-cli -- glyph inspect --help
 cargo run -p shift-cli -- layer add --help
 cargo run -p shift-cli -- layer copy --help
+cargo run -p shift-cli -- layer set --help
+cargo run -p shift-cli -- glyph set --help
+cargo run -p shift-cli -- font info --help
+cargo run -p shift-cli -- font set --help
+cargo run -p shift-cli -- axis set --help
+cargo run -p shift-cli -- instance add --help
+cargo run -p shift-cli -- instance set --help
+cargo run -p shift-cli -- instance remove --help
 ```

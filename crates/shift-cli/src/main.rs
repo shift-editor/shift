@@ -6,11 +6,14 @@ mod inspect;
 use std::io::{self, IsTerminal, Write};
 
 use authoring::{
-    AuthoringReport, add_axis, add_glyph, add_layer, add_source, copy_layer, create_font,
+    AuthoringReport, add_axis, add_glyph, add_instance, add_layer, add_source, copy_layer,
+    create_font, font_info, remove_instance, set_axis, set_font, set_glyphs, set_instance,
+    set_layer,
 };
 use clap::Parser;
 use cli::{
-    AxisCommand, Cli, Command, CompileArgs, FontCommand, GlyphCommand, LayerCommand, SourceCommand,
+    AxisCommand, Cli, Command, CompileArgs, FontCommand, GlyphCommand, InstanceCommand,
+    LayerCommand, SourceCommand,
 };
 use glyph_inspect::GlyphInspection;
 use inspect::{InspectReport, RenderMode};
@@ -30,11 +33,43 @@ fn main() -> miette::Result<()> {
                 let json = args.json;
                 write_authoring_result(create_font(args), json)
             }
+            FontCommand::Info(args) => {
+                let json = args.json;
+                let report = font_info(args)?;
+                let output = if json {
+                    serde_json::to_string_pretty(&report).into_diagnostic()?
+                } else {
+                    report.render()
+                };
+                write_stdout(&output)
+            }
+            FontCommand::Set(args) => {
+                let json = args.mutation.json;
+                write_authoring_result(set_font(*args), json)
+            }
         },
         Command::Axis { command } => match command {
             AxisCommand::Add(args) => {
                 let json = args.mutation.json;
                 write_authoring_result(add_axis(args), json)
+            }
+            AxisCommand::Set(args) => {
+                let json = args.mutation.json;
+                write_authoring_result(set_axis(args), json)
+            }
+        },
+        Command::Instance { command } => match command {
+            InstanceCommand::Add(args) => {
+                let json = args.mutation.json;
+                write_authoring_result(add_instance(args), json)
+            }
+            InstanceCommand::Set(args) => {
+                let json = args.mutation.json;
+                write_authoring_result(set_instance(args), json)
+            }
+            InstanceCommand::Remove(args) => {
+                let json = args.mutation.json;
+                write_authoring_result(remove_instance(args), json)
             }
         },
         Command::Source { command } => match command {
@@ -48,12 +83,20 @@ fn main() -> miette::Result<()> {
                 let json = args.mutation.json;
                 write_authoring_result(add_glyph(args), json)
             }
+            GlyphCommand::Set(args) => {
+                let json = args.mutation.json;
+                write_authoring_result(set_glyphs(args), json)
+            }
             GlyphCommand::Inspect(args) => inspect_glyph(args),
         },
         Command::Layer { command } => match command {
             LayerCommand::Add(args) => {
                 let json = args.mutation.json;
                 write_authoring_result(add_layer(args), json)
+            }
+            LayerCommand::Set(args) => {
+                let json = args.mutation.json;
+                write_authoring_result(set_layer(args), json)
             }
             LayerCommand::Copy(args) => {
                 let json = args.mutation.json;
