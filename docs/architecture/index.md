@@ -15,7 +15,7 @@ Central routing table for Shift's distributed documentation. Before creating new
 
 | Path pattern                | Canonical doc                                                                      | Purpose                                                                                     |
 | --------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `crates/fontsrc/**`         | [`crates/fontsrc/docs/DOCS.md`](../../crates/fontsrc/docs/DOCS.md)               | Shift-independent authored font source reading and writing                                  |
+| `crates/fontsrc/**`         | [`crates/fontsrc/docs/DOCS.md`](../../crates/fontsrc/docs/DOCS.md)                 | Shift-independent authored font source reading and writing                                  |
 | `crates/shift-backends/**`  | [`crates/shift-backends/docs/DOCS.md`](../../crates/shift-backends/docs/DOCS.md)   | Font format backends for reading/writing various font formats                               |
 | `crates/shift-font/**`      | [`crates/shift-font/docs/DOCS.md`](../../crates/shift-font/docs/DOCS.md)           | First-class Rust font object model and editing behavior                                     |
 | `crates/shift-slug/**`      | [`crates/shift-slug/docs/DOCS.md`](../../crates/shift-slug/docs/DOCS.md)           | GPU-independent Slug curves, retained compilation, and packing                              |
@@ -63,6 +63,7 @@ Central routing table for Shift's distributed documentation. Before creating new
 | Concern                   | Canonical doc                                                    | Purpose                                                      |
 | ------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------ |
 | Canonical `.shift` format | [`ADR 0001`](decisions/0001-canonical-sqlite-shift-documents.md) | SQLite document, identity, Save, and recovery decision       |
+| Inspector subjects        | [`ADR 0002`](decisions/0002-inspector-subjects.md)               | What the inspector describes, per mode and node type         |
 | Desktop releases          | [`docs/releases.md`](../releases.md)                             | Release states, versioning, workflows, signing, and rollback |
 
 ## API Boundaries
