@@ -32,6 +32,7 @@ import type { SystemClipboard } from "@shift/editor/clipboard";
 import { createWorkspaceStack, type WorkspaceStack } from "./workspaceStack";
 import type { GlyphNode, TextRunNode } from "@shift/editor/types";
 import type { FontSessionMode, WorkspaceDocumentState } from "@shared/workspace/protocol";
+import type { GlyphMetricsTarget } from "@shift/editor/types";
 
 const DEFAULT_MODIFIERS = { shiftKey: false, altKey: false, metaKey: false };
 
@@ -161,6 +162,11 @@ export class TestEditor extends Editor {
     if (!record) throw new Error("createGlyph did not echo the new record");
 
     return this.font.loadGlyph(record.id);
+  }
+
+  /** The glyph metrics the inspector shows for the current subject, or null. */
+  glyphMetrics(): GlyphMetricsTarget | null {
+    return this.inspect().find((section) => section.kind === "glyphMetrics")?.metrics ?? null;
   }
 
   /** The canvas's text run; the editor route creates it on the first open. */

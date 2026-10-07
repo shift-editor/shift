@@ -162,6 +162,8 @@ export class Editor {
     readonly input: EditorInput;
     // Warning: (ae-forgotten-export) The symbol "PasteOptions" needs to be exported by the entry point index.d.ts
     insertContent(content: ShiftContent, options?: PasteOptions): readonly SelectableId[] | null;
+    // Warning: (ae-forgotten-export) The symbol "InspectorSection" needs to be exported by the entry point index.d.ts
+    inspect(): readonly InspectorSection[];
     get isDragging(): boolean;
     // (undocumented)
     get isEditing(): boolean;
@@ -258,23 +260,22 @@ export class Editor {
     setDebugOverlays(overlays: DebugOverlays): void;
     setExternalLocation(location: ExternalAxisLocation): void;
     setLanguageIds(ids: readonly string[]): void;
-    setLeftSidebearing(value: number): void;
     // (undocumented)
     setPan(pan: Point2D): void;
     // Warning: (ae-forgotten-export) The symbol "EditorRenderTheme" needs to be exported by the entry point index.d.ts
     //
     // (undocumented)
     setRenderTheme(theme: EditorRenderTheme): void;
-    setRightSidebearing(value: number): void;
     setSourceToDefault(): void;
     // (undocumented)
     setToolState(scope: ToolStateScope, toolId: string, key: string, value: unknown): void;
-    setXAdvance(width: number): void;
     setZoom(zoom: number): void;
     // (undocumented)
     startFpsMonitor(): void;
     // (undocumented)
     stopFpsMonitor(): void;
+    // Warning: (ae-forgotten-export) The symbol "Subject" needs to be exported by the entry point index.d.ts
+    get subjectCell(): Signal<Subject | null>;
     // Warning: (ae-forgotten-export) The symbol "Text_2" needs to be exported by the entry point index.d.ts
     //
     // (undocumented)
@@ -315,8 +316,6 @@ export class Editor {
     undo(): Promise<void>;
     // (undocumented)
     updateMousePosition(clientX: number, clientY: number): void;
-    // (undocumented)
-    get xAdvance(): number;
     // (undocumented)
     get zoom(): number;
     // (undocumented)
@@ -708,7 +707,7 @@ export function useSignalState<T>(signal: Signal<T>, options?: UseSignalOptions)
 
 // Warnings were encountered during analysis:
 //
-// dist/Editor-DvgVbTU2.d.ts:4243:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
+// dist/Editor-BB2STIjP.d.ts:4105:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

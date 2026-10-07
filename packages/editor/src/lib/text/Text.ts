@@ -15,7 +15,14 @@ import type { StoreIndex } from "../store/StoreIndex";
 import type { ShiftEditorRecord } from "../../types/records";
 import type { TextRunNode } from "../../types/node";
 import type { TextRunRecord } from "../../types/text";
-import { glyphTextItem, lineBreakTextItem, Positioner, TextLayout, type TextItem } from "./layout";
+import {
+  glyphTextItem,
+  lineBreakTextItem,
+  Positioner,
+  TextLayout,
+  type GlyphTextItem,
+  type TextItem,
+} from "./layout";
 
 /** Owns proof text records and one reactive layout per run identity. */
 export class Text {
@@ -113,6 +120,18 @@ export class Text {
    */
   items(node: TextRunNode): readonly TextItem[] {
     return this.run(node.runId)?.items ?? [];
+  }
+
+  /**
+   * Returns every glyph item across all runs, run by run in creation order.
+   *
+   * @remarks
+   * Reactive: the reader reruns when any run is created, edited, or deleted.
+   */
+  glyphItems(): readonly GlyphTextItem[] {
+    return this.#store
+      .recordsOfType("textrun")
+      .flatMap((run) => run.items.filter((item): item is GlyphTextItem => item.kind === "glyph"));
   }
 
   /**

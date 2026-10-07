@@ -48,7 +48,7 @@ async function authorVariableFont(editor: TestEditor): Promise<VariableFixture> 
   });
   if (!inserted) throw new Error("Expected regular contour");
 
-  editor.setXAdvance(400);
+  editor.glyphMetrics()!.set("advance", 400);
   await editor.settle();
   const glyphId = editor.glyphRecord?.id;
   const regularLayer = editor.requireGlyphLayer();
@@ -98,7 +98,7 @@ async function authorVariableFont(editor: TestEditor): Promise<VariableFixture> 
     start: { x: boldPoint.x + 4, y: boldPoint.y },
     end: { x: boldPoint.x + 44, y: boldPoint.y + 20 },
   });
-  editor.setXAdvance(700);
+  editor.glyphMetrics()!.set("advance", 700);
   await editor.settle();
 
   const bold = editor.font.source(boldSourceId);

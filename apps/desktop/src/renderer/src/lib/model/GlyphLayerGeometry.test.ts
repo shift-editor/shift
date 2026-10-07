@@ -362,7 +362,7 @@ describe("GlyphLayer metrics", () => {
       const positions = layer().allPoints.map(({ x, y }) => ({ x, y }));
       const advance = layer().xAdvance;
 
-      editor.setLeftSidebearing(displayed);
+      editor.glyphMetrics()!.set("left", displayed);
       await editor.settle();
 
       expect(layer().allPoints.map(({ x, y }) => ({ x, y }))).toEqual(positions);

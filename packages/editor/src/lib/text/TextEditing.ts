@@ -1,4 +1,4 @@
-import { computed, type Signal } from "../signals";
+import { computed, track, type Signal } from "../signals";
 import type { NodeId } from "@shift/types";
 import type { ShiftStore } from "../store/ShiftStore";
 import type { ShiftEditorRecord } from "../../types/records";
@@ -8,7 +8,7 @@ import {
   type TextEditingRecord,
   type TextEditResult,
 } from "../../types/text";
-import { Caret, type TextItem } from "./layout";
+import { Caret, type GlyphTextItem, type TextItem } from "./layout";
 import {
   caretForCluster,
   clusterForCaret,
@@ -94,6 +94,30 @@ export class TextEditing {
     const kept = this.#store.get(currentTextEditingId);
     if (kept?.type === "textEditing") this.#store.put({ ...kept, active: false });
     this.#goalX = null;
+  }
+
+  /**
+   * Returns the glyph items the caret targets: each distinct glyph in a
+   * selection, or the glyph after a collapsed caret (before it when nothing
+   * glyph follows).
+   *
+   * @remarks
+   * Reactive: reads the text editing state and the run's items. Empty outside
+   * Text mode.
+   */
+  targetItems(): readonly GlyphTextItem[] {
+    track(this.stateCell);
+    const state = this.stateCell.peek();
+    const items = this.#items();
+    if (!state || !items) return [];
+    if (state.anchor !== state.focus) {
+      return this.selectedItems.filter((item): item is GlyphTextItem => item.kind === "glyph");
+    }
+
+    const cluster = clusterForCaret(items, state.focus);
+    const after = items[cluster];
+    const target = after?.kind === "glyph" ? after : items[cluster - 1];
+    return target?.kind === "glyph" ? [target] : [];
   }
 
   get selectedItems(): readonly TextItem[] {

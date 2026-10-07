@@ -1,61 +1,31 @@
-import type { GlyphSidebearings } from "@shift/glyph-state";
 import { useMemo } from "react";
 import type { Editor } from "../lib/editor/Editor";
-import type { Glyph } from "../lib/model/Glyph";
 import { computed, useSignalState } from "../lib/signals";
+import type { GlyphMetricsTarget, GlyphMetricValues } from "../types/inspector";
 
-const EMPTY_SIDEBEARINGS: GlyphSidebearings = { lsb: null, rsb: null };
-
-export interface GlyphMetricsState {
-  readonly glyph: Glyph | null;
-  readonly sidebearings: GlyphSidebearings;
-  readonly xAdvance: number;
-  /** Whether the displayed glyph has an authored layer at the active source or location. */
-  readonly hasLayer: boolean;
+export interface GlyphMetricsView {
+  /** The inspector's glyph metrics target, or null when the subject has none. */
+  readonly target: GlyphMetricsTarget | null;
+  readonly values: GlyphMetricValues;
 }
 
-const EMPTY_METRICS: GlyphMetricsState = {
-  glyph: null,
-  sidebearings: EMPTY_SIDEBEARINGS,
-  xAdvance: 0,
-  hasLayer: false,
+const NO_METRICS: GlyphMetricsView = {
+  target: null,
+  values: { lsb: null, rsb: null, xAdvance: null, editable: false, sidebearingsEditable: false },
 };
 
-/**
- * Tracks live metrics for the single glyph placed in the scene.
- *
- * Returns empty metrics when the scene holds zero or several glyph nodes, so
- * metric edits never target an ambiguous occurrence.
- */
-export function useGlyphMetrics(editor: Editor): GlyphMetricsState {
-  const metricsCell = useMemo(
+/** Tracks the glyph metrics section the inspector shows for the current subject. */
+export function useGlyphMetrics(editor: Editor): GlyphMetricsView {
+  const viewCell = useMemo(
     () =>
-      computed((): GlyphMetricsState => {
-        const glyphNodes = editor.scene.cell.value.nodes.filter((node) => node.kind === "glyph");
-        const node = glyphNodes.length === 1 ? glyphNodes[0] : null;
-        if (!node) return EMPTY_METRICS;
+      computed((): GlyphMetricsView => {
+        const section = editor.inspect().find((candidate) => candidate.kind === "glyphMetrics");
+        if (!section) return NO_METRICS;
 
-        const glyph = editor.glyphForId(node.glyphId);
-        if (!glyph) return EMPTY_METRICS;
-
-        const externalLocation = editor.externalLocationCell.value;
-        const activeSourceId = editor.activeSourceIdCell.value;
-        const renderModel = glyph.renderModelAt(
-          editor.externalLocationCell,
-          editor.activeSourceIdCell,
-        );
-
-        return {
-          glyph,
-          sidebearings: renderModel.sidebearingsCell.value,
-          xAdvance: renderModel.xAdvanceCell.value,
-          hasLayer: activeSourceId
-            ? glyph.layerForSource(activeSourceId) !== null
-            : glyph.layerAt(externalLocation) !== null,
-        };
+        return { target: section.metrics, values: section.metrics.values() };
       }),
     [editor],
   );
 
-  return useSignalState(metricsCell, { schedule: "frame" });
+  return useSignalState(viewCell, { schedule: "frame" });
 }

@@ -26,23 +26,23 @@ export interface GlyphSidebarProps {
  * Renders the glyph inspector: codepoint, sidebearings, advance, and name.
  *
  * @remarks
- * Metrics are live for the single glyph placed in the scene and empty when
- * there are none or several. They are editable only when the session can edit
- * layers and the glyph has a layer at the active source or location.
+ * Shows the glyph metrics section the inspector returns for the current
+ * subject, and sends edits to its target. A metric the glyphs
+ * disagree on shows empty, and an edit applies to every glyph.
  */
 export function GlyphSidebar({ session, host = {} }: GlyphSidebarProps) {
   const { editor, font } = session;
   const metadata = useSignalState(font.metadataCell);
   const zoom = useSignalState(editor.zoomCell);
-  const { glyph, sidebearings, xAdvance, hasLayer } = useGlyphMetrics(editor);
+  const { target, values } = useGlyphMetrics(editor);
+  const glyphs = target?.glyphs ?? [];
+  const glyph = glyphs.length === 1 ? (glyphs[0] ?? null) : null;
 
-  // Metric edits go through workspace layer intents, which memory sessions lack.
-  const editable = session.mode !== "memory" && hasLayer;
-  const leftSidebearing = sidebearings.lsb === null ? null : Math.round(sidebearings.lsb);
-  const rightSidebearing = sidebearings.rsb === null ? null : Math.round(sidebearings.rsb);
-  const sidebearingsEditable = editable && leftSidebearing !== null && rightSidebearing !== null;
+  const { editable, sidebearingsEditable } = values;
+  const leftSidebearing = values.lsb === null ? null : Math.round(values.lsb);
+  const rightSidebearing = values.rsb === null ? null : Math.round(values.rsb);
   const unicode = glyph?.unicode ?? null;
-  const glyphLabel = glyph === null ? null : (host.glyphLabel ?? glyph.name);
+  const glyphLabel = glyphLabelFor(glyphs, host.glyphLabel);
 
   return (
     <aside
@@ -88,7 +88,7 @@ export function GlyphSidebar({ session, host = {} }: GlyphSidebarProps) {
                   value={leftSidebearing}
                   disabled={!sidebearingsEditable}
                   onValueChange={
-                    sidebearingsEditable ? (value) => editor.setLeftSidebearing(value) : undefined
+                    sidebearingsEditable ? (value) => target?.set("left", value) : undefined
                   }
                 />
                 <div className="px-2">
@@ -102,7 +102,7 @@ export function GlyphSidebar({ session, host = {} }: GlyphSidebarProps) {
                   value={rightSidebearing}
                   disabled={!sidebearingsEditable}
                   onValueChange={
-                    sidebearingsEditable ? (value) => editor.setRightSidebearing(value) : undefined
+                    sidebearingsEditable ? (value) => target?.set("right", value) : undefined
                   }
                 />
               </div>
@@ -110,9 +110,9 @@ export function GlyphSidebar({ session, host = {} }: GlyphSidebarProps) {
                 <EditableSidebarInput
                   ariaLabel="Advance width"
                   className="text-center"
-                  value={glyph ? Math.round(xAdvance) : null}
+                  value={values.xAdvance === null ? null : Math.round(values.xAdvance)}
                   disabled={!editable}
-                  onValueChange={editable ? (value) => editor.setXAdvance(value) : undefined}
+                  onValueChange={editable ? (value) => target?.set("advance", value) : undefined}
                 />
               </div>
               <div
@@ -128,4 +128,13 @@ export function GlyphSidebar({ session, host = {} }: GlyphSidebarProps) {
       </div>
     </aside>
   );
+}
+
+/** Names one glyph, counts several, and shows nothing for none. */
+function glyphLabelFor(glyphs: readonly { name: string }[], hostLabel?: string): string | null {
+  const [only] = glyphs;
+  if (glyphs.length === 0 || !only) return null;
+  if (glyphs.length > 1) return `${glyphs.length} glyphs`;
+
+  return hostLabel ?? only.name;
 }

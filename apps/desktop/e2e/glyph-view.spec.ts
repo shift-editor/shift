@@ -55,10 +55,12 @@ async function cameraFrame(page: Page) {
       editor.sceneToScreen(editor.toScene(node, { x, y } as LocalPoint));
 
     const metrics = workspace.font.metricsAtLocation(editor.externalLocation);
+    const sourceId = editor.activeSourceId;
+    const xAdvance = sourceId ? (editor.layerForGlyph(node.glyphId, sourceId)?.xAdvance ?? 0) : 0;
     return {
       transform: editor.getCameraTransform(),
       origin: toScreen(0, 0),
-      advance: toScreen(editor.xAdvance, 0),
+      advance: toScreen(xAdvance, 0),
       ascender: toScreen(0, metrics.ascender),
       descender: toScreen(0, metrics.descender),
       viewport: { width: canvas.clientWidth, height: canvas.clientHeight },
