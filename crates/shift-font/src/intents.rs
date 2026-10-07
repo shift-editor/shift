@@ -13,7 +13,7 @@ use crate::ir::{
     Anchor, AnchorId, Axis, AxisId, AxisMapping, BooleanOp, Component, ComponentId, Contour,
     ContourId, DecomposedTransform, DesignLocation, Font, FontMetadata, Glyph, GlyphId, GlyphLayer,
     GlyphName, LayerId, LibValue, MetricDefinition, MetricId, MetricValue, NamedInstance,
-    NamedInstanceId, PointId, PointType, Source, SourceId, LANGUAGES_LIB_KEY,
+    NamedInstanceId, PointId, PointType, Source, SourceId, Transform, LANGUAGES_LIB_KEY,
 };
 use crate::layer_edit::BulkNodePositionUpdates;
 use crate::source::source_locations_equal;
@@ -128,6 +128,12 @@ pub enum FontIntent {
         point_ids: Vec<PointId>,
         dx: f64,
         dy: f64,
+    },
+    /// Affine transform of the whole layer: every contour point, anchor, and
+    /// component placement. The advance width is unchanged.
+    TransformLayer {
+        layer_id: LayerId,
+        transform: Transform,
     },
     SetXAdvance {
         layer_id: LayerId,
@@ -273,6 +279,7 @@ impl FontIntent {
             | Self::ReverseContour { layer_id, .. }
             | Self::SetContourStart { layer_id, .. }
             | Self::TranslatePoints { layer_id, .. }
+            | Self::TransformLayer { layer_id, .. }
             | Self::SetXAdvance { layer_id, .. }
             | Self::ApplyBooleanOp { layer_id, .. }
             | Self::ReplaceGlyphLayerContent { layer_id, .. } => Some(layer_id),
@@ -322,6 +329,7 @@ impl FontIntent {
             | Self::ReverseContour { layer_id, .. }
             | Self::SetContourStart { layer_id, .. }
             | Self::TranslatePoints { layer_id, .. }
+            | Self::TransformLayer { layer_id, .. }
             | Self::SetXAdvance { layer_id, .. }
             | Self::ApplyBooleanOp { layer_id, .. }
             | Self::ReplaceGlyphLayerContent { layer_id, .. } => vec![layer_id.clone()],
@@ -364,6 +372,7 @@ impl FontIntent {
                 | Self::MoveAnchors { .. }
                 | Self::SetComponentTransforms { .. }
                 | Self::TranslatePoints { .. }
+                | Self::TransformLayer { .. }
                 | Self::SetXAdvance { .. }
         )
     }
@@ -1347,6 +1356,28 @@ impl Font {
 
                 Ok(())
             }
+            FontIntent::TransformLayer {
+                layer_id,
+                transform,
+            } => {
+                let values = [
+                    transform.xx,
+                    transform.xy,
+                    transform.yx,
+                    transform.yy,
+                    transform.dx,
+                    transform.dy,
+                ];
+                if values.iter().any(|value| !value.is_finite()) {
+                    return Err(CoreError::InvalidPositionUpdateInput {
+                        kind: "layer transform",
+                        message: "values must be finite".to_string(),
+                    });
+                }
+
+                self.require_layer_mut(layer_id)?.transform_layer(transform);
+                Ok(())
+            }
             FontIntent::ReplaceGlyphLayerContent {
                 layer_id,
                 width,
@@ -1715,6 +1746,46 @@ mod tests {
                 glyph_id: rejected_glyph_id,
                 base_glyph_id,
             }) if rejected_glyph_id == child_id && base_glyph_id == parent_id
+        ));
+    }
+
+    #[test]
+    fn transform_layer_intent_moves_the_whole_layer_and_rejects_non_finite_values() {
+        let mut font = Font::new();
+        let source_id = font.default_source_id().unwrap();
+        let layer_id = LayerId::new();
+        let mut layer = GlyphLayer::new(layer_id.clone(), source_id);
+        let anchor_id = layer.add_anchor(Anchor::new(Some("top".to_string()), 10.0, 0.0));
+        let mut glyph = Glyph::new("root");
+        glyph.set_layer(layer);
+        font.insert_glyph(glyph).unwrap();
+
+        font.apply_intents(FontIntentSet {
+            intents: vec![FontIntent::TransformLayer {
+                layer_id: layer_id.clone(),
+                transform: Transform::translate(25.0, 0.0),
+            }],
+        })
+        .unwrap();
+        let anchor = font
+            .require_layer(&layer_id)
+            .unwrap()
+            .anchor(&anchor_id)
+            .unwrap();
+        assert_eq!(anchor.x(), 35.0);
+
+        let rejected = font.apply_intents(FontIntentSet {
+            intents: vec![FontIntent::TransformLayer {
+                layer_id,
+                transform: Transform::translate(f64::NAN, 0.0),
+            }],
+        });
+        assert!(matches!(
+            rejected,
+            Err(CoreError::InvalidPositionUpdateInput {
+                kind: "layer transform",
+                ..
+            })
         ));
     }
 

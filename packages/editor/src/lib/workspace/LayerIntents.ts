@@ -17,7 +17,7 @@ import type {
   SetContourStartIntent,
   SetPointSmoothIntent,
   SetXAdvanceIntent,
-  TranslatePointsIntent,
+  TransformLayerIntent,
 } from "@shift/types";
 import type { PendingEditId } from "../../types/editing";
 import type { FontOptions } from "../../types/font";
@@ -91,10 +91,10 @@ export class LayerIntents {
     });
   }
 
-  translatePoints(payload: Payload<TranslatePointsIntent>): PendingEditId {
+  transformLayer(payload: Payload<TransformLayerIntent>): PendingEditId {
     return this.#editCoordinator.push({
-      kind: "translatePoints",
-      translatePoints: { layerId: this.#layerId, ...payload },
+      kind: "transformLayer",
+      transformLayer: { layerId: this.#layerId, ...payload },
     });
   }
 

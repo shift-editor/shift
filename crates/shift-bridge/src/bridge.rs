@@ -17,7 +17,7 @@ use shift_font::{
   AxisRole, BooleanOp, ComponentId, ContourId, Font, FontChangeImpact, FontIntent, FontIntentSet,
   FontMetadata as FontMetadataModel, Glyph, GlyphId, LayerId, Location as FontLocation,
   MetricDefinition as FontMetricDefinition, MetricId, MetricKind, MetricValue,
-  NamedInstance as FontNamedInstance, NamedInstanceId, PointId, PointSeed, SourceId,
+  NamedInstance as FontNamedInstance, NamedInstanceId, PointId, PointSeed, SourceId, Transform,
 };
 use shift_slug::length::OrOverflow;
 use shift_slug::{
@@ -2307,6 +2307,27 @@ fn map_intent(intent: NapiFontIntent) -> errors::Result<FontIntent> {
         dy: payload.dy,
       })
     }
+    "transformLayer" => {
+      let payload = intent
+        .transform_layer
+        .ok_or_else(|| missing("transformLayer"))?;
+      let [xx, xy, yx, yy, dx, dy] =
+        <[f64; 6]>::try_from(payload.matrix.as_slice()).map_err(|_| BridgeError::InvalidInput {
+          kind: "transformLayer matrix value count",
+          value: payload.matrix.len().to_string(),
+        })?;
+      Ok(FontIntent::TransformLayer {
+        layer_id: parse::<LayerId>(&payload.layer_id)?,
+        transform: Transform {
+          xx,
+          xy,
+          yx,
+          yy,
+          dx,
+          dy,
+        },
+      })
+    }
     "setXAdvance" => {
       let payload = intent.set_x_advance.ok_or_else(|| missing("setXAdvance"))?;
       Ok(FontIntent::SetXAdvance {
@@ -2692,7 +2713,7 @@ mod tests {
     NapiMovePointsIntent, NapiNamedInstance, NapiPointSeed, NapiPointType, NapiRemoveAnchorsIntent,
     NapiRemovePointsIntent, NapiReverseContourIntent, NapiSetContourClosedIntent,
     NapiSetLanguagesIntent, NapiSetPointSmoothIntent, NapiSetXAdvanceIntent,
-    NapiTranslatePointsIntent, NapiUpdateNamedInstanceIntent,
+    NapiTransformLayerIntent, NapiTranslatePointsIntent, NapiUpdateNamedInstanceIntent,
   };
   use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -2717,6 +2738,7 @@ mod tests {
       reverse_contour: None,
       set_contour_start: None,
       translate_points: None,
+      transform_layer: None,
       set_x_advance: None,
       apply_boolean_op: None,
       create_glyph: None,
@@ -3531,6 +3553,22 @@ mod tests {
     assert!(translated.layers[0].structure.is_none());
     assert_eq!(translated.layers[0].values[1], 10.0);
     assert_eq!(translated.layers[0].values[2], 5.0);
+
+    // transform the whole layer: a value-only echo with every point moved
+    let transformed = bridge
+      .apply(
+        vec![NapiFontIntent {
+          transform_layer: Some(NapiTransformLayerIntent {
+            layer_id: layer_id.clone(),
+            matrix: vec![1.0, 0.0, 0.0, 1.0, 100.0, 0.0],
+          }),
+          ..skeleton_intent("transformLayer")
+        }],
+        None,
+      )
+      .unwrap();
+    assert!(transformed.layers[0].structure.is_none());
+    assert_eq!(transformed.layers[0].values[1], 110.0);
 
     // reverse the contour: same point ids, reversed order, structural echo
     let reversed = bridge

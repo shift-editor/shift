@@ -76,13 +76,13 @@ export interface BridgeApi {
    */
   apply(intents: Array<FontIntent>, label?: string | undefined | null): AppliedChange
   /**
-   * Replays the most recent ledger entry's pre states; `null` when the
-   * undo stack is empty.
+   * Applies the most recent ledger entry's inverse changeset; `null` when
+   * the undo stack is empty.
    */
   undo(): AppliedChange | null
   /**
-   * Replays the most recent undone entry's post states; `null` when the
-   * redo stack is empty.
+   * Reapplies the most recently undone changeset; `null` when the redo
+   * stack is empty.
    */
   redo(): AppliedChange | null
   /** Permanently removes every redo entry without changing font or dirty state. */
@@ -490,7 +490,7 @@ export interface FontIntent {
    * "removeAnchors" | "addComponent" | "setComponentTransforms" |
    * "removeComponents" | "decomposeComponents" |
    * "reverseContour" | "setContourStart" | "translatePoints" |
-   * "setXAdvance" | "applyBooleanOp".
+   * "transformLayer" | "setXAdvance" | "applyBooleanOp".
    * Font-level kinds additionally include metadata replacement, tracked
    * language replacement, axis create/update/delete, mapping replacement,
    * named-instance create/update/delete, source create/delete, and glyph
@@ -514,6 +514,7 @@ export interface FontIntent {
   reverseContour?: ReverseContourIntent
   setContourStart?: SetContourStartIntent
   translatePoints?: TranslatePointsIntent
+  transformLayer?: TransformLayerIntent
   setXAdvance?: SetXAdvanceIntent
   applyBooleanOp?: BooleanOpIntent
   createGlyph?: CreateGlyphIntent
@@ -1010,6 +1011,13 @@ export interface SourceMetricValue {
 export interface SourceMetricValues {
   sourceId: SourceId
   values: Float64Array
+}
+
+/** Affine transform of a whole layer: points, anchors, and component placements. */
+export interface TransformLayerIntent {
+  layerId: LayerId
+  /** Six affine values `[a, b, c, d, e, f]`: `x' = a·x + c·y + e`, `y' = b·x + d·y + f`. */
+  matrix: Array<number>
 }
 
 /** Affine move: O(selection-ids) wire instead of O(N) coords. */

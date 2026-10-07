@@ -1,4 +1,10 @@
-import { Bounds, type Bounds as BoundsType, type DecomposedTransform } from "@shift/geo";
+import {
+  Bounds,
+  Mat,
+  type Bounds as BoundsType,
+  type DecomposedTransform,
+  type MatModel,
+} from "@shift/geo";
 import type {
   AnchorId,
   AnchorSeed,
@@ -331,15 +337,42 @@ export class LayerBuffers {
     return this.contour(contourId)?.setContourStart(pointId) ?? false;
   }
 
-  translatePoints(pointIds: readonly PointId[], dx: number, dy: number): boolean {
-    const ids = [...new Set(pointIds)];
-    const positions = this.positionsFor(ids.map((id) => ({ kind: "point", id })));
-    if (positions.length !== ids.length) return false;
-
+  /**
+   * Maps every contour point and anchor through `matrix` and composes it onto each component.
+   *
+   * @remarks
+   * Mirrors Rust's `GlyphLayer::transform_layer`, so a local preview matches
+   * the authoritative result: a pure translation is added to each component's
+   * translation, leaving its other decomposed values exact. The advance width
+   * is unchanged.
+   */
+  transformLayer(matrix: MatModel): boolean {
+    const positions = this.positionsFor([
+      ...this.contours.flatMap((contour) =>
+        contour.data.points.map((point) => ({ kind: "point" as const, id: point.id })),
+      ),
+      ...this.anchors.anchorsCell
+        .peek()
+        .map((anchor) => ({ kind: "anchor" as const, id: anchor.id })),
+    ]);
     this.patchPositions(
-      positions.map((position) => ({ ...position, x: position.x + dx, y: position.y + dy })),
+      positions.map((position) => ({ ...position, ...Mat.applyToPoint(matrix, position) })),
     );
-    return true;
+
+    const translationOnly = matrix.a === 1 && matrix.b === 0 && matrix.c === 0 && matrix.d === 1;
+    const transforms = this.components.map(({ transform }) =>
+      translationOnly
+        ? {
+            ...transform,
+            translateX: transform.translateX + matrix.e,
+            translateY: transform.translateY + matrix.f,
+          }
+        : Mat.toDecomposed(Mat.Compose(matrix, Mat.fromDecomposed(transform))),
+    );
+    return this.setComponentTransforms(
+      this.components.map((component) => component.data.id),
+      transforms,
+    );
   }
 
   setXAdvance(width: number): boolean {
