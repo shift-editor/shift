@@ -3,6 +3,8 @@ import { BaseTool, type ToolName } from "../core/BaseTool";
 import { TypingBehavior } from "./behaviors/TypingBehavior";
 import type { TextBehavior, TextState } from "./types";
 import type { CursorType } from "../../../types/editor";
+import type { Subject } from "../../../types/inspector";
+import { track } from "../../signals";
 
 /**
  * Text mode: edits a run's text with every glyph drawn filled.
@@ -42,6 +44,16 @@ export class TextTool extends BaseTool<TextState> {
 
   protected override isEditing(state: TextState): boolean {
     return state.type === "editing";
+  }
+
+  /** The run being typed in, plus the glyphs the caret targets. */
+  override subject(): Subject | null {
+    track(this.editor.textEditing.stateCell);
+    const state = this.editor.textEditing.state;
+    const node = this.editor.scene.nodeOfKind(state?.nodeId ?? null, "textRun");
+    if (!node) return null;
+
+    return { node, parts: this.editor.textEditing.targetItems().map((item) => item.id) };
   }
 
   override deactivate(): void {

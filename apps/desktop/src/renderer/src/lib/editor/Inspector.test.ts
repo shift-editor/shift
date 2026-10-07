@@ -1,12 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { setGlyphMetric, sidebarGlyphs } from "@shift/editor/ui";
 import { glyphTextItem } from "@shift/editor/text";
 import { TestEditor } from "@/testing/TestEditor";
 
-describe("the glyph sidebar targets what you are working on", () => {
+describe("the inspector describes the active tool's subject", () => {
   let editor: TestEditor;
 
-  const names = () => sidebarGlyphs(editor).map((glyph) => glyph.name);
+  const names = () => editor.glyphMetrics()?.glyphs.map((glyph) => glyph.name) ?? [];
   const advance = (name: string) => {
     const glyphId = editor.font.entryForName(name)!.id;
     return editor.layerForGlyph(glyphId, editor.activeSourceId!)?.xAdvance;
@@ -18,23 +17,31 @@ describe("the glyph sidebar targets what you are working on", () => {
     await editor.addGlyph("B", 66);
   });
 
-  it("targets the entered glyph outside Text mode", () => {
+  it("describes the entered glyph, also while its points are selected", async () => {
+    expect(names()).toEqual(["A"]);
+
+    const [pointId] = await editor.drawOpenContour([
+      { x: 100, y: 100 },
+      { x: 200, y: 100 },
+    ]);
+    editor.selection.select([pointId!]);
+
     expect(names()).toEqual(["A"]);
   });
 
-  it("targets the glyph at the caret in Text mode, not the glyph edited before", () => {
+  it("describes the glyph at the caret in Text mode, not the glyph edited before", () => {
     editor.selectTool("text");
     editor.textEditing.insert([glyphTextItem("B", 66)]);
     expect(names()).toEqual(["B"]);
     const before = advance("A");
 
-    setGlyphMetric(editor, sidebarGlyphs(editor), "advance", 777);
+    editor.glyphMetrics()!.set("advance", 777);
 
     expect(advance("B")).toBe(777);
     expect(advance("A")).toBe(before);
   });
 
-  it("edits every selected glyph in Text mode as one undo step", async () => {
+  it("edits every glyph in a Text mode range as one undo step", async () => {
     editor.selectTool("text");
     editor.textEditing.insert([glyphTextItem("B", 66)]);
     editor.textEditing.move(-1, "character", true);
@@ -42,10 +49,21 @@ describe("the glyph sidebar targets what you are working on", () => {
     expect(names()).toEqual(["A", "B"]);
     const before = { A: advance("A"), B: advance("B") };
 
-    setGlyphMetric(editor, sidebarGlyphs(editor), "advance", 640);
+    editor.glyphMetrics()!.set("advance", 640);
     expect({ A: advance("A"), B: advance("B") }).toEqual({ A: 640, B: 640 });
 
     await editor.undo();
     expect({ A: advance("A"), B: advance("B") }).toEqual(before);
+  });
+
+  it("describes the selected run glyphs at run level", () => {
+    editor.selectTool("text");
+    editor.textEditing.insert([glyphTextItem("B", 66)]);
+    editor.selectTool("select");
+    editor.exitNodes();
+
+    editor.selection.select(editor.text.glyphItems().map((item) => item.id));
+
+    expect(names()).toEqual(["A", "B"]);
   });
 });

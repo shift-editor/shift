@@ -121,6 +121,7 @@ import { GlyphNodeDefinition } from "../nodes/GlyphNodeDefinition";
 import { TextRunNodeDefinition } from "../nodes/TextRunNodeDefinition";
 import type { NodeDefinitionByKind, NodeDefinitionConstructors } from "../../types/nodeDefinition";
 import { MultiSourceEditing } from "./MultiSourceEditing";
+import type { InspectorSection, Subject } from "../../types/inspector";
 
 interface EditorOptions {
   font: Font;
@@ -183,6 +184,7 @@ export class Editor {
   readonly text: Text;
   readonly textEditing: TextEditing;
   readonly #nodeDefinitions: NodeDefinitionByKind;
+  readonly #subjectCell: Signal<Subject | null>;
   readonly #store: ShiftStore<ShiftEditorRecord>;
   readonly #fontStore: FontStore;
 
@@ -299,6 +301,9 @@ export class Editor {
     );
     this.history.onCaptureFinishing((changed) => this.#runContentHooks(changed));
     this.hover = new Hover();
+    this.#subjectCell = computed(() => this.#toolManager.activeToolCell.value?.subject() ?? null, {
+      name: "editor.subject",
+    });
     this.#selectionBounds = computed(
       () => {
         track(this.selection.stateCell);
@@ -918,6 +923,31 @@ export class Editor {
       componentIds: targets.componentIds,
       bounds: Bounds.toRect(bounds),
     });
+  }
+
+  /**
+   * What the inspector describes, as the active tool supplies it (ADR 0002).
+   *
+   * @remarks
+   * Derived from the tool's own state — text editing, selection, editing scope
+   * — so undo restores it with them.
+   */
+  get subjectCell(): Signal<Subject | null> {
+    return this.#subjectCell;
+  }
+
+  /**
+   * Returns the inspector sections for the current subject.
+   *
+   * @remarks
+   * Reactive. Asks the definition of the subject's node; empty without a subject.
+   */
+  public inspect(): readonly InspectorSection[] {
+    track(this.#subjectCell);
+    const subject = this.#subjectCell.peek();
+    if (!subject) return [];
+
+    return this.nodeDefinition(subject.node.kind).inspect?.(subject.node, subject.parts) ?? [];
   }
 
   /**

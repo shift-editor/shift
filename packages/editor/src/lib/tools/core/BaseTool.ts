@@ -4,6 +4,7 @@ import type { ToolName, ToolState } from "./createContext";
 import type { Canvas } from "../../editor/rendering/Canvas";
 import type { Behavior, ToolContext } from "./Behavior";
 import {
+  track,
   batch,
   computed,
   signal,
@@ -12,6 +13,7 @@ import {
   type WritableSignal,
 } from "../../signals/signal";
 import type { CursorType } from "../../../types/editor";
+import type { Subject } from "../../../types/inspector";
 
 export type { ToolName, ToolState };
 
@@ -103,6 +105,23 @@ export abstract class BaseTool<S extends ToolState, TTool = unknown, Settings = 
   deactivate?(): void;
 
   /** Permanently severs this instance's reactive dependencies; it cannot be resumed. */
+  /**
+   * Returns what the inspector should describe while this tool is active.
+   *
+   * @remarks
+   * Reactive. Defaults to the single entered node; a tool whose own state
+   * says what you are working on overrides it (ADR 0002).
+   *
+   * @returns null when nothing is entered, or several nodes are.
+   */
+  subject(): Subject | null {
+    track(this.editor.editing.stateCell);
+    track(this.editor.scene.cell);
+    const [nodeId, ...rest] = this.editor.editing.nodeIds;
+    const node = rest.length === 0 ? this.editor.scene.node(nodeId ?? null) : null;
+    return node ? { node, parts: [] } : null;
+  }
+
   dispose(): void {
     try {
       this.#cancelDrag();

@@ -30,6 +30,8 @@ import type { TransformAction, TransformTarget } from "../../types/transformTarg
 import type { GlyphOutlineTarget, ResolvedGlyphOutlineTarget } from "../../types/glyphOutline";
 import { emptyExternalAxisLocation, externalAxisLocationFromLocation } from "../variation/location";
 import { GlyphOutlines } from "./GlyphOutlines";
+import type { InspectorSection } from "../../types/inspector";
+import { glyphMetricsTarget } from "../inspector/glyphMetricsTarget";
 
 const EMPTY_OUTLINE_LOCATION = emptyExternalAxisLocation();
 
@@ -43,6 +45,14 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
   readonly kind: GlyphNode["kind"] = "glyph";
 
   readonly #outline = new OutlineRenderer();
+
+  /** A glyph node is described by its glyph's metrics. */
+  override inspect(node: GlyphNode): readonly InspectorSection[] {
+    const glyph = this.editor.glyphForId(node.glyphId);
+    return glyph
+      ? [{ kind: "glyphMetrics", metrics: glyphMetricsTarget(this.editor, [glyph]) }]
+      : [];
+  }
 
   /** A glyph node depends on the glyph it shows. */
   override references(node: GlyphNode): readonly NodeReference[] {

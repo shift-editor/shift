@@ -26,6 +26,13 @@ export type { RenderGlyph } from "./types/glyphRender";
 export type { CanvasRef } from "./types/graphics";
 export type { CubicHandle } from "./types/handle";
 export type { GlyphNode, TextRunNode } from "./types/node";
+export type {
+  GlyphMetric,
+  GlyphMetricsTarget,
+  GlyphMetricValues,
+  InspectorSection,
+  Subject,
+} from "./types/inspector";
 export { NUDGES_VALUES, nudgeMagnitude, type NudgeMagnitude } from "./types/nudge";
 export { currentSelectionId, objectIsKindOf, type SelectableId } from "./types/object";
 export type { ListSelectionMode } from "./types/listSelection";

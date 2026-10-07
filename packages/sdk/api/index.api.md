@@ -162,6 +162,8 @@ export class Editor {
     readonly input: EditorInput;
     // Warning: (ae-forgotten-export) The symbol "PasteOptions" needs to be exported by the entry point index.d.ts
     insertContent(content: ShiftContent, options?: PasteOptions): readonly SelectableId[] | null;
+    // Warning: (ae-forgotten-export) The symbol "InspectorSection" needs to be exported by the entry point index.d.ts
+    inspect(): readonly InspectorSection[];
     get isDragging(): boolean;
     // (undocumented)
     get isEditing(): boolean;
@@ -272,6 +274,8 @@ export class Editor {
     startFpsMonitor(): void;
     // (undocumented)
     stopFpsMonitor(): void;
+    // Warning: (ae-forgotten-export) The symbol "Subject" needs to be exported by the entry point index.d.ts
+    get subjectCell(): Signal<Subject | null>;
     // Warning: (ae-forgotten-export) The symbol "Text_2" needs to be exported by the entry point index.d.ts
     //
     // (undocumented)
@@ -703,7 +707,7 @@ export function useSignalState<T>(signal: Signal<T>, options?: UseSignalOptions)
 
 // Warnings were encountered during analysis:
 //
-// dist/Editor-8MkAq6q-.d.ts:4243:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
+// dist/Editor-BlZRR2JN.d.ts:4105:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

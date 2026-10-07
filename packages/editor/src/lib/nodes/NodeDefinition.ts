@@ -7,6 +7,8 @@ import type { PointerTarget } from "../../types/target";
 import type { RenderContext, RenderPass } from "../../types/rendering";
 import type { SelectableId } from "../../types/object";
 import type { TransformTarget } from "../../types/transformTarget";
+import type { InspectorSection } from "../../types/inspector";
+import type { ShiftId } from "../../types/object";
 
 /**
  * Defines behavior shared by every scene node of one kind.
@@ -103,6 +105,17 @@ export abstract class NodeDefinition<N extends ShiftNode = ShiftNode> {
    * @returns null when this kind cannot transform that selection as a whole.
    */
   transformTarget?(node: N, ids: readonly SelectableId[]): TransformTarget | null;
+
+  /**
+   * Returns the inspector sections that describe this node or parts of it.
+   *
+   * @remarks
+   * A query: never writes. Called with the active subject (ADR 0002); the
+   * sections' targets own their reads and writes.
+   *
+   * @param parts - ids inside the node the subject names; empty means the node itself.
+   */
+  inspect?(node: N, parts: readonly ShiftId[]): readonly InspectorSection[];
 
   /**
    * Responds to a double-click on this node or on one of its descendants.

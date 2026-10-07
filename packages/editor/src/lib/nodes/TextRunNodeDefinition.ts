@@ -8,13 +8,16 @@ import type { GlyphNode, ShiftNode, TextRunNode } from "../../types/node";
 import type { NodeReference } from "../../types/records";
 import type { RenderContext, RenderPass } from "../../types/rendering";
 import type { PointerTarget } from "../../types/target";
-import type { GlyphLayer, GlyphRenderModel } from "../model/Glyph";
+import type { Glyph, GlyphLayer, GlyphRenderModel } from "../model/Glyph";
 import { Bounds, Mat, type Point2D, type Rect2D } from "@shift/geo";
 import { isTextItemId, type ComponentId, type GlyphId, type TextItemId } from "@shift/types";
 import { batch, track } from "../signals";
 import type { SelectableId } from "../../types/object";
 import type { TransformAction, TransformTarget } from "../../types/transformTarget";
 import type { GlyphTransformEdit } from "../model/GlyphTransformEdit";
+import type { InspectorSection } from "../../types/inspector";
+import { glyphMetricsTarget } from "../inspector/glyphMetricsTarget";
+import type { ShiftId } from "../../types/object";
 
 const GLYPH_LABELS: Record<TransformAction, string> = {
   move: "Move glyphs",
@@ -64,6 +67,24 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
       if (child.kind === "glyph") return child;
     }
     return null;
+  }
+
+  /** Run items are described by the metrics of their glyphs, each glyph once. */
+  override inspect(_node: TextRunNode, parts: readonly ShiftId[]): readonly InspectorSection[] {
+    const glyphs = new Map<GlyphId, Glyph>();
+    for (const id of parts) {
+      const item = isTextItemId(id) ? this.editor.text.itemLocation(id)?.item : null;
+      if (item?.kind !== "glyph") continue;
+
+      const entry = this.editor.font.entryForName(item.glyphName);
+      const glyph = entry ? this.editor.glyphForId(entry.id) : null;
+      if (entry && glyph) glyphs.set(entry.id, glyph);
+    }
+    if (glyphs.size === 0) return [];
+
+    return [
+      { kind: "glyphMetrics", metrics: glyphMetricsTarget(this.editor, [...glyphs.values()]) },
+    ];
   }
 
   /** A run node depends on its run record. */

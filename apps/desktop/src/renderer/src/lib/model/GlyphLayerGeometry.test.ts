@@ -2,7 +2,6 @@ import { describe, expect, it, beforeEach } from "vitest";
 import { Point } from "@shift/glyph-state";
 import type { PointId } from "@shift/types";
 import { TestEditor } from "@/testing/TestEditor";
-import { setGlyphMetric, sidebarGlyphs } from "@shift/editor/ui";
 
 describe("GlyphLayer point movement", () => {
   let editor: TestEditor;
@@ -363,7 +362,7 @@ describe("GlyphLayer metrics", () => {
       const positions = layer().allPoints.map(({ x, y }) => ({ x, y }));
       const advance = layer().xAdvance;
 
-      setGlyphMetric(editor, sidebarGlyphs(editor), "left", displayed);
+      editor.glyphMetrics()!.set("left", displayed);
       await editor.settle();
 
       expect(layer().allPoints.map(({ x, y }) => ({ x, y }))).toEqual(positions);

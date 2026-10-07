@@ -24,6 +24,8 @@ import { SelectBoundingBox } from "./BoundingBox";
 import { SelectMarquee } from "./Marquee";
 import { SelectUpgradePreview } from "./SelectUpgradePreview";
 import { EndpointDrop } from "./EndpointDrop";
+import type { Subject } from "../../../types/inspector";
+import { track } from "../../signals";
 
 export type { BoundingRectEdge, SelectState };
 
@@ -171,6 +173,20 @@ export class Select extends BaseTool<SelectState, Select> {
 
   override activate(): void {
     this.setState({ type: "ready" });
+  }
+
+  /**
+   * The entered node while editing inside one; otherwise the node every
+   * selected object belongs to, with the selection as its parts.
+   */
+  override subject(): Subject | null {
+    track(this.editor.editing.stateCell);
+    if (this.editor.editing.hasScope()) return super.subject();
+
+    track(this.editor.selection.stateCell);
+    const ids = this.editor.selection.ids;
+    const node = ids.length > 0 ? this.editor.selectionNode(ids) : null;
+    return node ? { node, parts: ids } : null;
   }
 
   override deactivate(): void {

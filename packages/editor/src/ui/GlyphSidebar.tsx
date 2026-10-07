@@ -5,7 +5,6 @@ import { formatCodepointAsUPlus } from "../lib/utils/unicode";
 import { EditableSidebarInput } from "./EditableSidebarInput";
 import { ShiftIcon } from "./ShiftIcon";
 import type { EditorUISession } from "./types";
-import { setGlyphMetric } from "./glyphTargets";
 import { useGlyphMetrics } from "./useGlyphMetrics";
 
 /** Application content merged into the glyph sidebar. */
@@ -27,24 +26,21 @@ export interface GlyphSidebarProps {
  * Renders the glyph inspector: codepoint, sidebearings, advance, and name.
  *
  * @remarks
- * Metrics are live for the glyphs the sidebar targets (see `sidebarGlyphs`):
- * the caret's glyphs in Text mode, otherwise the selected run glyphs or the
- * entered glyph. A metric the glyphs disagree on shows empty, and an edit
- * applies to every target. Editable only when the session can edit layers and
- * every target has a layer at the active source or location.
+ * Shows the glyph metrics section the inspector returns for the current
+ * subject (ADR 0002), and sends edits to its target. A metric the glyphs
+ * disagree on shows empty, and an edit applies to every glyph.
  */
 export function GlyphSidebar({ session, host = {} }: GlyphSidebarProps) {
   const { editor, font } = session;
   const metadata = useSignalState(font.metadataCell);
   const zoom = useSignalState(editor.zoomCell);
-  const { glyphs, sidebearings, xAdvance, hasLayer } = useGlyphMetrics(editor);
+  const { target, values } = useGlyphMetrics(editor);
+  const glyphs = target?.glyphs ?? [];
   const glyph = glyphs.length === 1 ? (glyphs[0] ?? null) : null;
 
-  // Metric edits go through workspace layer intents, which memory sessions lack.
-  const editable = session.mode !== "memory" && hasLayer;
-  const leftSidebearing = sidebearings.lsb === null ? null : Math.round(sidebearings.lsb);
-  const rightSidebearing = sidebearings.rsb === null ? null : Math.round(sidebearings.rsb);
-  const sidebearingsEditable = editable && leftSidebearing !== null && rightSidebearing !== null;
+  const { editable, sidebearingsEditable } = values;
+  const leftSidebearing = values.lsb === null ? null : Math.round(values.lsb);
+  const rightSidebearing = values.rsb === null ? null : Math.round(values.rsb);
   const unicode = glyph?.unicode ?? null;
   const glyphLabel = glyphLabelFor(glyphs, host.glyphLabel);
 
@@ -92,9 +88,7 @@ export function GlyphSidebar({ session, host = {} }: GlyphSidebarProps) {
                   value={leftSidebearing}
                   disabled={!sidebearingsEditable}
                   onValueChange={
-                    sidebearingsEditable
-                      ? (value) => setGlyphMetric(editor, glyphs, "left", value)
-                      : undefined
+                    sidebearingsEditable ? (value) => target?.set("left", value) : undefined
                   }
                 />
                 <div className="px-2">
@@ -108,9 +102,7 @@ export function GlyphSidebar({ session, host = {} }: GlyphSidebarProps) {
                   value={rightSidebearing}
                   disabled={!sidebearingsEditable}
                   onValueChange={
-                    sidebearingsEditable
-                      ? (value) => setGlyphMetric(editor, glyphs, "right", value)
-                      : undefined
+                    sidebearingsEditable ? (value) => target?.set("right", value) : undefined
                   }
                 />
               </div>
@@ -118,13 +110,9 @@ export function GlyphSidebar({ session, host = {} }: GlyphSidebarProps) {
                 <EditableSidebarInput
                   ariaLabel="Advance width"
                   className="text-center"
-                  value={xAdvance === null ? null : Math.round(xAdvance)}
+                  value={values.xAdvance === null ? null : Math.round(values.xAdvance)}
                   disabled={!editable}
-                  onValueChange={
-                    editable
-                      ? (value) => setGlyphMetric(editor, glyphs, "advance", value)
-                      : undefined
-                  }
+                  onValueChange={editable ? (value) => target?.set("advance", value) : undefined}
                 />
               </div>
               <div

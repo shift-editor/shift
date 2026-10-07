@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { TestEditor } from "@/testing/TestEditor";
-import { setGlyphMetric, sidebarGlyphs } from "@shift/editor/ui";
 
 describe("sidebar glyph metrics", () => {
   let editor: TestEditor;
@@ -21,7 +20,7 @@ describe("sidebar glyph metrics", () => {
     const layer = editor.requireGlyphLayer();
     const initialAdvance = layer.xAdvance;
 
-    setGlyphMetric(editor, sidebarGlyphs(editor), "advance", initialAdvance + 40);
+    editor.glyphMetrics()!.set("advance", initialAdvance + 40);
     await editor.settle();
     expect(layer.xAdvance).toBe(initialAdvance + 40);
 
@@ -37,7 +36,7 @@ describe("sidebar glyph metrics", () => {
     const initialRightSidebearing = layer.sidebearings.rsb;
     if (initialRightSidebearing === null) throw new Error("Expected an outlined glyph");
 
-    setGlyphMetric(editor, sidebarGlyphs(editor), "right", initialRightSidebearing + 30);
+    editor.glyphMetrics()!.set("right", initialRightSidebearing + 30);
     await editor.settle();
 
     expect(layer.sidebearings.rsb).toBe(initialRightSidebearing + 30);
@@ -50,7 +49,7 @@ describe("sidebar glyph metrics", () => {
     const initialRightSidebearing = layer.sidebearings.rsb;
     if (initialRightSidebearing === null) throw new Error("Expected an outlined glyph");
 
-    setGlyphMetric(editor, sidebarGlyphs(editor), "right", initialRightSidebearing + 30);
+    editor.glyphMetrics()!.set("right", initialRightSidebearing + 30);
     await editor.settle();
     await editor.undo();
     expect(layer.xAdvance).toBe(initialAdvance);
@@ -68,7 +67,7 @@ describe("sidebar glyph metrics", () => {
     const { lsb: initialLeftSidebearing, rsb: initialRightSidebearing } = layer.sidebearings;
     if (initialLeftSidebearing === null) throw new Error("Expected an outlined glyph");
 
-    setGlyphMetric(editor, sidebarGlyphs(editor), "left", initialLeftSidebearing + 25);
+    editor.glyphMetrics()!.set("left", initialLeftSidebearing + 25);
     await editor.settle();
 
     expect(layer.allPoints.map(({ x, y }) => ({ x, y }))).toEqual(
@@ -85,7 +84,7 @@ describe("sidebar glyph metrics", () => {
     const initialLeftSidebearing = layer.sidebearings.lsb;
     if (initialLeftSidebearing === null) throw new Error("Expected an outlined glyph");
 
-    setGlyphMetric(editor, sidebarGlyphs(editor), "left", initialLeftSidebearing + 25);
+    editor.glyphMetrics()!.set("left", initialLeftSidebearing + 25);
     await editor.settle();
     await editor.undo();
     expect(layer.xAdvance).toBe(initialAdvance);

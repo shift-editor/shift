@@ -1,74 +1,31 @@
-import type { GlyphSidebearings } from "@shift/glyph-state";
 import { useMemo } from "react";
 import type { Editor } from "../lib/editor/Editor";
-import type { Glyph } from "../lib/model/Glyph";
 import { computed, useSignalState } from "../lib/signals";
-import { sidebarGlyphs } from "./glyphTargets";
+import type { GlyphMetricsTarget, GlyphMetricValues } from "../types/inspector";
 
-export interface GlyphMetricsState {
-  /** The glyphs the sidebar shows and edits; see {@link sidebarGlyphs}. */
-  readonly glyphs: readonly Glyph[];
-  /** Each metric is null when the glyphs disagree on it, or a glyph has no outline. */
-  readonly sidebearings: GlyphSidebearings;
-  readonly xAdvance: number | null;
-  /** Whether every glyph has an authored layer at the active source or location. */
-  readonly hasLayer: boolean;
+export interface GlyphMetricsView {
+  /** The inspector's glyph metrics target, or null when the subject has none. */
+  readonly target: GlyphMetricsTarget | null;
+  readonly values: GlyphMetricValues;
 }
 
-const EMPTY_METRICS: GlyphMetricsState = {
-  glyphs: [],
-  sidebearings: { lsb: null, rsb: null },
-  xAdvance: null,
-  hasLayer: false,
+const NO_METRICS: GlyphMetricsView = {
+  target: null,
+  values: { lsb: null, rsb: null, xAdvance: null, editable: false, sidebearingsEditable: false },
 };
 
-/**
- * Tracks live metrics for the glyphs the sidebar targets.
- *
- * @remarks
- * A metric shows a value only when every target glyph has the same one, so
- * editing it never hides a difference between glyphs.
- */
-export function useGlyphMetrics(editor: Editor): GlyphMetricsState {
-  const metricsCell = useMemo(
+/** Tracks the glyph metrics section the inspector shows for the current subject. */
+export function useGlyphMetrics(editor: Editor): GlyphMetricsView {
+  const viewCell = useMemo(
     () =>
-      computed((): GlyphMetricsState => {
-        const glyphs = sidebarGlyphs(editor);
-        if (glyphs.length === 0) return EMPTY_METRICS;
+      computed((): GlyphMetricsView => {
+        const section = editor.inspect().find((candidate) => candidate.kind === "glyphMetrics");
+        if (!section) return NO_METRICS;
 
-        const externalLocation = editor.externalLocationCell.value;
-        const activeSourceId = editor.activeSourceIdCell.value;
-        const metrics = glyphs.map((glyph) => {
-          const model = glyph.renderModelAt(editor.externalLocationCell, editor.activeSourceIdCell);
-          return {
-            sidebearings: model.sidebearingsCell.value,
-            xAdvance: model.xAdvanceCell.value,
-            hasLayer: activeSourceId
-              ? glyph.layerForSource(activeSourceId) !== null
-              : glyph.layerAt(externalLocation) !== null,
-          };
-        });
-
-        return {
-          glyphs,
-          sidebearings: {
-            lsb: shared(metrics.map((metric) => metric.sidebearings.lsb)),
-            rsb: shared(metrics.map((metric) => metric.sidebearings.rsb)),
-          },
-          xAdvance: shared(metrics.map((metric) => metric.xAdvance)),
-          hasLayer: metrics.every((metric) => metric.hasLayer),
-        };
+        return { target: section.metrics, values: section.metrics.values() };
       }),
     [editor],
   );
 
-  return useSignalState(metricsCell, { schedule: "frame" });
-}
-
-/** The value every entry shares, or null when they differ or any is null. */
-function shared(values: readonly (number | null)[]): number | null {
-  const [first] = values;
-  if (first === undefined || first === null) return null;
-
-  return values.every((value) => value === first) ? first : null;
+  return useSignalState(viewCell, { schedule: "frame" });
 }
