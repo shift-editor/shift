@@ -190,6 +190,11 @@ export class LayerBuffers {
     return this.#contourForPoint(pointId)?.data.id ?? null;
   }
 
+  /** Every contour point's and anchor's current position. */
+  get positions(): GlyphPosition[] {
+    return [...this.contours.flatMap((contour) => contour.positions), ...this.anchors.positions];
+  }
+
   positionsFor(targets: readonly GlyphPositionTarget[]): GlyphPosition[] {
     const positions: GlyphPosition[] = [];
     for (const target of targets) {
@@ -342,36 +347,16 @@ export class LayerBuffers {
    *
    * @remarks
    * Mirrors Rust's `GlyphLayer::transform_layer`, so a local preview matches
-   * the authoritative result: a pure translation is added to each component's
-   * translation, leaving its other decomposed values exact. The advance width
-   * is unchanged.
+   * the authoritative result. The advance width is unchanged.
    */
   transformLayer(matrix: MatModel): boolean {
-    const positions = this.positionsFor([
-      ...this.contours.flatMap((contour) =>
-        contour.data.points.map((point) => ({ kind: "point" as const, id: point.id })),
-      ),
-      ...this.anchors.anchorsCell
-        .peek()
-        .map((anchor) => ({ kind: "anchor" as const, id: anchor.id })),
-    ]);
     this.patchPositions(
-      positions.map((position) => ({ ...position, ...Mat.applyToPoint(matrix, position) })),
+      this.positions.map((position) => ({ ...position, ...Mat.applyToPoint(matrix, position) })),
     );
 
-    const translationOnly = matrix.a === 1 && matrix.b === 0 && matrix.c === 0 && matrix.d === 1;
-    const transforms = this.components.map(({ transform }) =>
-      translationOnly
-        ? {
-            ...transform,
-            translateX: transform.translateX + matrix.e,
-            translateY: transform.translateY + matrix.f,
-          }
-        : Mat.toDecomposed(Mat.Compose(matrix, Mat.fromDecomposed(transform))),
-    );
     return this.setComponentTransforms(
       this.components.map((component) => component.data.id),
-      transforms,
+      this.components.map(({ transform }) => composeOnto(transform, matrix)),
     );
   }
 
@@ -506,4 +491,22 @@ export class LayerBuffers {
     }
     return result;
   }
+}
+
+/**
+ * A component placement after `matrix`, matching Rust's `GlyphLayer::transform_layer`.
+ *
+ * @remarks
+ * A pure translation is added to the placement's translation so its other
+ * decomposed values stay exact; anything else composes and re-decomposes.
+ */
+function composeOnto(transform: DecomposedTransform, matrix: MatModel): DecomposedTransform {
+  const translationOnly = matrix.a === 1 && matrix.b === 0 && matrix.c === 0 && matrix.d === 1;
+  if (!translationOnly) return Mat.toDecomposed(Mat.Compose(matrix, Mat.fromDecomposed(transform)));
+
+  return {
+    ...transform,
+    translateX: transform.translateX + matrix.e,
+    translateY: transform.translateY + matrix.f,
+  };
 }

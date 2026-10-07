@@ -98,6 +98,17 @@ export class ContourBuffer {
     return this.segmentsCell.peek().find((segment) => segment.id === segmentId) ?? null;
   }
 
+  /** Every point's current position, in contour order. */
+  get positions(): GlyphPosition[] {
+    const coordinates = this.#coordinates;
+    return this.data.points.map((point, index) => ({
+      kind: "point",
+      id: point.id,
+      x: coordinates.getComponent(index, 0),
+      y: coordinates.getComponent(index, 1),
+    }));
+  }
+
   position(pointId: PointId): GlyphPosition | null {
     const index = this.pointIndex(pointId);
     if (index < 0) return null;
