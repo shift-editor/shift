@@ -53,6 +53,17 @@ export class AnchorBuffer {
     return this.#dataCell;
   }
 
+  /** Every anchor's current position, in anchor order. */
+  get positions(): GlyphPosition[] {
+    const coordinates = this.#coordinates;
+    return this.#dataCell.peek().map((anchor, index) => ({
+      kind: "anchor",
+      id: anchor.id,
+      x: coordinates.getComponent(index, 0),
+      y: coordinates.getComponent(index, 1),
+    }));
+  }
+
   position(anchorId: AnchorId): GlyphPosition | null {
     const index = this.#dataCell.peek().findIndex((anchor) => anchor.id === anchorId);
     if (index < 0) return null;

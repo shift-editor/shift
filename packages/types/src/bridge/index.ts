@@ -28,6 +28,7 @@ export type {
   SlugPreviewExtents,
   SlugSection,
   SlugWeightSet,
+  TransformLayerIntent,
   TranslatePointsIntent,
   Axis,
   AxisLabel,

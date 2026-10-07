@@ -3,7 +3,7 @@ use crate::{
     boolean,
     error::{CoreError, CoreResult},
     Anchor, AnchorId, BooleanOp, ComponentId, Contour, ContourId, DecomposedTransform, GlyphLayer,
-    Point, PointId, PointType,
+    Point, PointId, PointType, Transform,
 };
 use std::collections::{HashMap, HashSet};
 
@@ -350,27 +350,43 @@ impl GlyphLayer {
         Ok(())
     }
 
-    /// Translate all editable glyph geometry in the active layer.
+    /// Transform all editable glyph geometry in the layer by one affine matrix.
+    ///
+    /// Contour points and anchors map through `transform`, and each
+    /// component's placement composes with it, so the layer moves, scales, or
+    /// rotates as a whole. A pure translation is added to each component's
+    /// translation, leaving its other decomposed values exact. The advance
+    /// width is left unchanged.
+    pub fn transform_layer(&mut self, transform: &Transform) {
+        for contour in self.contours_iter_mut() {
+            for point in contour.points_mut() {
+                let (x, y) = transform.transform_point(point.x(), point.y());
+                point.set_position(x, y);
+            }
+        }
+
+        for anchor in self.anchors_iter_mut() {
+            let (x, y) = transform.transform_point(anchor.x(), anchor.y());
+            anchor.set_position(x, y);
+        }
+
+        let translation_only = *transform == Transform::translate(transform.dx, transform.dy);
+        for component in self.components_iter_mut() {
+            if translation_only {
+                component.translate(transform.dx, transform.dy);
+            } else {
+                let matrix = transform.compose(component.transform().to_matrix());
+                component.set_transform(DecomposedTransform::from_matrix(&matrix));
+            }
+        }
+    }
+
+    /// Translate all editable glyph geometry in the layer.
     ///
     /// This moves contour points, anchors, and component transforms.
     /// Glyph advance width is intentionally left unchanged.
     pub fn translate_layer(&mut self, dx: f64, dy: f64) {
-        for contour in self.contours_iter_mut() {
-            for point in contour.points_mut() {
-                point.translate(dx, dy);
-            }
-        }
-
-        let anchor_ids: Vec<_> = self.anchors_iter().map(|anchor| anchor.id()).collect();
-        self.move_anchors(&anchor_ids, dx, dy);
-
-        let component_ids: Vec<_> = self.components().keys().cloned().collect();
-        for component_id in component_ids {
-            if let Some(mut component) = self.remove_component(component_id) {
-                component.translate(dx, dy);
-                self.add_component(component);
-            }
-        }
+        self.transform_layer(&Transform::translate(dx, dy));
     }
 }
 
@@ -929,6 +945,66 @@ mod tests {
         let matrix = component.matrix();
         assert_eq!(matrix.dx, 12.0);
         assert_eq!(matrix.dy, -7.0);
+    }
+
+    #[test]
+    fn transform_layer_scales_points_anchors_and_component_placements() {
+        let mut session = create_session();
+        let contour_id = session.add_empty_contour().id();
+        let point_id = session
+            .add_point_to_contour(contour_id.clone(), 10.0, 20.0, PointType::OnCurve, false)
+            .unwrap()
+            .point_id;
+        let anchor_id = session.add_anchor(Anchor::new(Some("top".to_string()), 30.0, 40.0));
+        let component_id = session.add_component(Component::new(GlyphId::from_raw("base"), "base"));
+        session
+            .set_component_transform(
+                &component_id,
+                DecomposedTransform {
+                    translate_x: 5.0,
+                    ..DecomposedTransform::identity()
+                },
+            )
+            .unwrap();
+        let original_width = session.width();
+
+        session.transform_layer(&Transform::scale(2.0, 3.0));
+
+        let point = session
+            .contour(&contour_id)
+            .unwrap()
+            .get_point(&point_id)
+            .unwrap();
+        let anchor = session.anchor(&anchor_id).unwrap();
+        let matrix = session.component(&component_id).unwrap().matrix();
+        assert_eq!((point.x(), point.y()), (20.0, 60.0));
+        assert_eq!((anchor.x(), anchor.y()), (60.0, 120.0));
+        assert!((matrix.xx - 2.0).abs() < 1e-9 && (matrix.yy - 3.0).abs() < 1e-9);
+        assert!((matrix.dx - 10.0).abs() < 1e-9);
+        assert_eq!(session.width(), original_width);
+    }
+
+    #[test]
+    fn translate_layer_keeps_component_rotation_exact_and_order() {
+        let mut session = create_session();
+        let first = session.add_component(Component::new(GlyphId::from_raw("a"), "a"));
+        let second = session.add_component(Component::new(GlyphId::from_raw("b"), "b"));
+        let rotated = DecomposedTransform {
+            rotation: 33.0,
+            ..DecomposedTransform::identity()
+        };
+        session.set_component_transform(&first, rotated).unwrap();
+
+        session.translate_layer(4.0, 0.0);
+
+        let order: Vec<_> = session
+            .components_iter()
+            .map(|component| component.id())
+            .collect();
+        assert_eq!(order, vec![first.clone(), second]);
+        let transform = session.component(&first).unwrap().transform();
+        assert_eq!(transform.rotation, 33.0);
+        assert_eq!(transform.translate_x, 4.0);
     }
 
     #[test]

@@ -1395,7 +1395,7 @@ pub struct NapiFontIntent {
     /// "removeAnchors" | "addComponent" | "setComponentTransforms" |
     /// "removeComponents" | "decomposeComponents" |
     /// "reverseContour" | "setContourStart" | "translatePoints" |
-    /// "setXAdvance" | "applyBooleanOp".
+    /// "transformLayer" | "setXAdvance" | "applyBooleanOp".
     /// Font-level kinds additionally include metadata replacement, tracked
     /// language replacement, axis create/update/delete, mapping replacement,
     /// named-instance create/update/delete, source create/delete, and glyph
@@ -1418,6 +1418,7 @@ pub struct NapiFontIntent {
     pub reverse_contour: Option<NapiReverseContourIntent>,
     pub set_contour_start: Option<NapiSetContourStartIntent>,
     pub translate_points: Option<NapiTranslatePointsIntent>,
+    pub transform_layer: Option<NapiTransformLayerIntent>,
     pub set_x_advance: Option<NapiSetXAdvanceIntent>,
     pub apply_boolean_op: Option<NapiBooleanOpIntent>,
     pub create_glyph: Option<NapiCreateGlyphIntent>,
@@ -1809,6 +1810,15 @@ pub struct NapiSetContourStartIntent {
     pub contour_id: String,
     #[napi(ts_type = "PointId")]
     pub point_id: String,
+}
+
+/// Affine transform of a whole layer: points, anchors, and component placements.
+#[napi(object)]
+pub struct NapiTransformLayerIntent {
+    #[napi(ts_type = "LayerId")]
+    pub layer_id: String,
+    /// Six affine values `[a, b, c, d, e, f]`: `x' = a·x + c·y + e`, `y' = b·x + d·y + f`.
+    pub matrix: Vec<f64>,
 }
 
 /// Affine move: O(selection-ids) wire instead of O(N) coords.

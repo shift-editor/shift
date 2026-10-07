@@ -17,7 +17,7 @@ import {
   type GlyphPositions,
   type GlyphSidebearings,
 } from "@shift/glyph-state";
-import type { Bounds, DecomposedTransform } from "@shift/geo";
+import type { Bounds, DecomposedTransform, MatModel } from "@shift/geo";
 import type { PendingEditId } from "../../types/editing";
 import {
   batch,
@@ -205,13 +205,8 @@ export class GlyphLayerState {
     return this.#applyEdit(editId, () => this.#buffers.peek().setContourStart(contourId, pointId));
   }
 
-  translatePoints(
-    editId: PendingEditId,
-    pointIds: readonly PointId[],
-    dx: number,
-    dy: number,
-  ): boolean {
-    return this.#applyEdit(editId, () => this.#buffers.peek().translatePoints(pointIds, dx, dy));
+  transformLayer(editId: PendingEditId, matrix: MatModel): boolean {
+    return this.#applyEdit(editId, () => this.#buffers.peek().transformLayer(matrix));
   }
 
   setXAdvance(editId: PendingEditId, width: number): void {
