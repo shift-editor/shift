@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 -960 960 960" fill="currentColor">
+<path d="M80-700h120v440H80z"/>
+<path transform="translate(510 -480) scale(0.75) translate(-480 480)" d="M280-320 120-480l160-160 57 56-64 64h414l-63-64 56-56 160 160-160 160-56-56 63-64H273l63 64-56 56Z"/>
+<path d="M800-800h80v640h-80z"/>
+</svg>

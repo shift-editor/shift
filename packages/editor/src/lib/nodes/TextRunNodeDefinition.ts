@@ -8,6 +8,7 @@ import type { GlyphNode, ShiftNode, TextRunNode } from "../../types/node";
 import type { NodeReference } from "../../types/records";
 import type { RenderContext, RenderPass } from "../../types/rendering";
 import type { PointerTarget } from "../../types/target";
+import type { SpacingGap, SpacingSide } from "../../types/spacing";
 import type { GlyphRenderModel } from "../model/Glyph";
 import { Mat, type Point2D } from "@shift/geo";
 import { isTextItemId, type ComponentId, type GlyphId, type TextItemId } from "@shift/types";
@@ -177,6 +178,115 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
       if (hitsOutline(model, local, radius)) target = { kind: "text", node, point, itemId };
     }
     return target;
+  }
+
+  /**
+   * Returns the spacing gap under a point, between two glyphs or at a line end.
+   *
+   * @remarks
+   * A gap spans the outline edges on either side of the advance boundary and
+   * the boundary itself, so negative sidebearings stay inside it, between the
+   * line's descender and ascender, grown by the hit radius so tight gaps stay
+   * reachable. Where gaps overlap, the one whose boundary is nearest wins. Outline edges come from each glyph's
+   * live outline, so the gap follows edits.
+   *
+   * @param node - the run node.
+   * @param point - a point in the run's own units.
+   */
+  spacingGapAt(node: TextRunNode, point: LocalPoint): SpacingGap | null {
+    const layout = this.editor.text.layoutCell(node.runId).peek();
+    if (!layout) return null;
+
+    const padding = this.editor.hitRadius / this.#scale(node);
+    let nearest: SpacingGap | null = null;
+    for (const gap of this.#gaps(node, layout)) {
+      if (point.y < gap.bottom - padding || point.y > gap.top + padding) continue;
+
+      // Negative sidebearings put an outline edge past the boundary, so span all three.
+      const xs = [gap.boundary, gap.left?.edge ?? gap.boundary, gap.right?.edge ?? gap.boundary];
+      if (point.x < Math.min(...xs) - padding || point.x > Math.max(...xs) + padding) continue;
+
+      const distance = Math.abs(point.x - gap.boundary);
+      if (!nearest || distance < Math.abs(point.x - nearest.boundary)) nearest = gap;
+    }
+    return nearest;
+  }
+
+  /**
+   * Returns the gap between two items, measured now; null when they are no longer neighbours.
+   *
+   * @param leftItemId - the item before the gap, or null at a line start.
+   * @param rightItemId - the item after the gap, or null at a line end.
+   */
+  spacingGapBetween(
+    node: TextRunNode,
+    leftItemId: TextItemId | null,
+    rightItemId: TextItemId | null,
+  ): SpacingGap | null {
+    const layout = this.editor.text.layoutCell(node.runId).peek();
+    if (!layout) return null;
+
+    for (const gap of this.#gaps(node, layout)) {
+      const left = gap.left?.itemId ?? null;
+      const right = gap.right?.itemId ?? null;
+      if (left === leftItemId && right === rightItemId) return gap;
+    }
+    return null;
+  }
+
+  /** Returns every gap of the run in reading order, measured now. */
+  spacingGaps(node: TextRunNode): SpacingGap[] {
+    const layout = this.editor.text.layoutCell(node.runId).peek();
+    return layout ? [...this.#gaps(node, layout)] : [];
+  }
+
+  /** Every gap of the run: before each line, between neighbours, and after each line. */
+  *#gaps(node: TextRunNode, layout: TextLayout): Iterable<SpacingGap> {
+    const { ascender, descender } = layout.metrics;
+    for (const line of this.#lines(layout)) {
+      const baseline = line[0]!.baseline;
+      const top = baseline + ascender;
+      const bottom = baseline + descender;
+
+      for (let index = 0; index <= line.length; index++) {
+        const before = line[index - 1];
+        const after = line[index];
+        const boundary = after ? after.left : before!.left + before!.glyph.xAdvance;
+        const left = before ? this.#spacingSide(before, boundary, "right") : null;
+        const right = after ? this.#spacingSide(after, boundary, "left") : null;
+        if (left || right) yield { node, left, right, boundary, top, bottom };
+      }
+    }
+  }
+
+  /** The run's placed glyphs grouped by line, in order; empty lines are skipped. */
+  #lines(layout: TextLayout): PlacedGlyph[][] {
+    const lines: PlacedGlyph[][] = [];
+    for (const placed of layout.placedGlyphs) {
+      const line = lines[lines.length - 1];
+      if (line && line[0]!.lineIndex === placed.lineIndex) line.push(placed);
+      else lines.push([placed]);
+    }
+    return lines;
+  }
+
+  /** The side of `placed` facing a gap at `boundary`; null without an outline. */
+  #spacingSide(
+    placed: PlacedGlyph,
+    boundary: number,
+    facing: "left" | "right",
+  ): SpacingSide | null {
+    const itemId = placed.glyph.sourceItemIds[0];
+    const glyphId = placed.glyph.glyphId;
+    const bounds = glyphId ? this.#model(glyphId)?.bounds : null;
+    if (!itemId || !glyphId || !bounds) return null;
+
+    if (facing === "right") {
+      const edge = placed.origin.x + bounds.max.x;
+      return { itemId, glyphId, sidebearing: boundary - edge, edge };
+    }
+    const edge = placed.origin.x + bounds.min.x;
+    return { itemId, glyphId, sidebearing: edge - boundary, edge };
   }
 
   /**

@@ -11,6 +11,7 @@ import { InteractiveScene } from "./InteractiveScene";
 import { StaticScene } from "./StaticScene";
 import { DebugPanel } from "../debug/DebugPanel";
 import { TextInput } from "../text/HiddenTextInput";
+import { SpacingValuePopover } from "../spacing/SpacingValuePopover";
 import { Vec2 } from "@shift/geo";
 
 export const Canvas: FC = () => {
@@ -94,6 +95,7 @@ export const Canvas: FC = () => {
         <InteractiveScene />
       </CanvasContextProvider>
       <TextInput />
+      <SpacingValuePopover container={containerRef} />
       {debug?.debugPanelOpen && <DebugPanel />}
     </div>
   );

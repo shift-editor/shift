@@ -4,6 +4,7 @@ import type { ShapeState } from "../shape/types";
 import type { SelectState } from "../select/types";
 import type { PenState } from "../pen/types";
 import type { TextState } from "../text/types";
+import type { SpacingState } from "../spacing/types";
 
 export interface ToolStateMap {
   hand: HandState;
@@ -11,6 +12,7 @@ export interface ToolStateMap {
   pen: PenState;
   shape: ShapeState;
   text: TextState;
+  spacing: SpacingState;
   disabled: ToolState;
 }
 

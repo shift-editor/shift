@@ -91,6 +91,8 @@ import { PositionList } from "./positions/PositionList";
 import { GlyphLayerPositionPatch } from "./GlyphLayerPositionPatch";
 import { GlyphLayerEdit } from "./GlyphLayerEdit";
 import { ComponentTransformEdit } from "./ComponentTransformEdit";
+import { SidebearingEdit } from "./SidebearingEdit";
+import type { Sidebearing } from "../../types/spacing";
 import { DeletePoints } from "./DeletePoints";
 import { JoinContours, type ContourEnd } from "./JoinContours";
 import { GlyphLayerState } from "./GlyphLayerState";
@@ -704,6 +706,15 @@ export class GlyphLayer {
   /** Begins a reversible edit that mutates this layer's reactive topology directly. */
   beginEdit(): GlyphLayerEdit {
     return new GlyphLayerEdit(this, this.#writer.layerState);
+  }
+
+  /**
+   * Begins one reversible preview cycle that changes one sidebearing of this layer.
+   *
+   * @param sidebearing - `"lsb"` moves the whole outline with the advance; `"rsb"` moves only the advance.
+   */
+  beginSidebearingEdit(sidebearing: Sidebearing): SidebearingEdit {
+    return new SidebearingEdit(this, this.#writer.layerState, sidebearing);
   }
 
   /** Begins one reversible preview cycle across matched component source layers. */

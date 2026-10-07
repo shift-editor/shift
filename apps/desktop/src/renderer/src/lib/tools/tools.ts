@@ -3,6 +3,7 @@ import HandIcon from "@/assets/toolbar/hand.svg";
 import PenIcon from "@/assets/toolbar/pen.svg";
 import SelectIcon from "@/assets/toolbar/select.svg";
 import ShapeIcon from "@/assets/toolbar/shape.svg";
+import SpacingIcon from "@/assets/toolbar/spacing.svg";
 import TextIcon from "@/assets/toolbar/text.svg";
 
 import type { Editor } from "@shift/editor";
@@ -14,6 +15,7 @@ import { Pen } from "@shift/editor/tools";
 import { Select } from "@shift/editor/tools";
 import { ShapeTool, type ShapeKind } from "@shift/editor/tools";
 import { TextTool } from "@shift/editor/tools";
+import { SpacingTool } from "@shift/editor/tools";
 
 function builtInToolManifests(): readonly ToolManifest[] {
   const shapeKindCell = signal<ShapeKind>("rectangle", { name: "tool.Shape.kind" });
@@ -45,6 +47,13 @@ function builtInToolManifests(): readonly ToolManifest[] {
       icon: TextIcon,
       tooltip: "Text Tool (T)",
       shortcut: "t",
+    },
+    {
+      id: "spacing",
+      create: (api) => new SpacingTool(api),
+      icon: SpacingIcon,
+      tooltip: "Spacing Tool (M)",
+      shortcut: "m",
     },
     {
       id: "hand",
