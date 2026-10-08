@@ -19,7 +19,7 @@ export interface KerningDrawOptions {
  * Draws a pair's kern and its pill, leaving the glyphs themselves clear.
  *
  * @remarks
- * The kern is a translucent strip between the two advance edges in the
+ * The kern is a strip of Ben-Day dots between the two advance edges in the
  * kerning colours, which no spacing overlay uses: violet when it tightens or
  * is zero, teal when it loosens. The pill below the baseline
  * shows the value, with a lock on a side that is a glyph exception. While the pointer is on the pill, other
@@ -59,7 +59,75 @@ function drawKern(
   const height = Math.abs(b.y - a.y);
 
   screen.fillRect(left, top, width, height, theme.fill);
-  if (selected) screen.strokeRect(left + 0.5, top + 0.5, width - 1, height - 1, theme.accent, 1);
+  fillBenDayDots(screen.ctx, left, top, width, height, theme.dots);
+  // A crisp edge holds the texture; the selected pair's edge is heavier.
+  const edge = selected ? 2 : 1;
+  screen.strokeRect(
+    left + edge / 2,
+    top + edge / 2,
+    Math.max(width - edge, 0),
+    height - edge,
+    theme.accent,
+    edge,
+  );
+}
+
+/** Distance between neighbouring dots in a row, in screen pixels. */
+const DOT_SPACING_PX = 8;
+const DOT_RADIUS_PX = 1.5;
+/** One tile of the dot grid per colour and pixel ratio; tiles are tiny and colours few. */
+const dotTiles = new Map<string, HTMLCanvasElement>();
+
+/**
+ * Fills a screen rectangle with Ben-Day dots: a staggered grid, every other
+ * row offset by half a step, anchored to the rectangle so the dots move with
+ * it when the view pans.
+ */
+function fillBenDayDots(
+  ctx: CanvasRenderingContext2D,
+  left: number,
+  top: number,
+  width: number,
+  height: number,
+  color: string,
+): void {
+  const ratio = Math.max(1, Math.round(globalThis.devicePixelRatio ?? 1));
+  const tile = dotTile(color, ratio);
+  const pattern = tile ? ctx.createPattern(tile, "repeat") : null;
+  if (!pattern) return;
+
+  pattern.setTransform(new DOMMatrix([1 / ratio, 0, 0, 1 / ratio, left, top]));
+  ctx.save();
+  ctx.fillStyle = pattern;
+  ctx.fillRect(left, top, width, height);
+  ctx.restore();
+}
+
+/** A square tile holding two dots on a diagonal, which repeats as a staggered grid. */
+function dotTile(color: string, ratio: number): HTMLCanvasElement | null {
+  const key = `${color}@${ratio}`;
+  const cached = dotTiles.get(key);
+  if (cached) return cached;
+  if (typeof document === "undefined") return null;
+
+  const size = DOT_SPACING_PX * ratio;
+  const tile = document.createElement("canvas");
+  tile.width = size;
+  tile.height = size;
+  const ctx = tile.getContext("2d");
+  if (!ctx) return null;
+
+  ctx.fillStyle = color;
+  for (const [x, y] of [
+    [0.25, 0.25],
+    [0.75, 0.75],
+  ] as const) {
+    ctx.beginPath();
+    ctx.arc(x * size, y * size, DOT_RADIUS_PX * ratio, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  dotTiles.set(key, tile);
+  return tile;
 }
 
 /**
