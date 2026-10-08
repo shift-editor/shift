@@ -344,10 +344,12 @@ fn plan(
                 }
                 Across::Keyword(AcrossKeyword::Instances) => (
                     "Instances".into(),
-                    base.named_instances()
-                        .into_iter()
-                        .map(|instance| (instance.name, instance.location))
-                        .collect(),
+                    distinct_captions(
+                        base.named_instances()
+                            .into_iter()
+                            .map(|instance| (instance.name, instance.location))
+                            .collect(),
+                    ),
                 ),
                 Across::Axis { axis, steps } => {
                     let range = base
@@ -803,6 +805,48 @@ fn guide_labels(metrics: &VerticalMetrics) -> Vec<(f32, String)> {
         .collect()
 }
 
+/// Adds the axes that vary to each caption when names alone repeat, as
+/// when instance names leave out width or optical size.
+fn distinct_captions(named: Vec<(String, UserLocation)>) -> Vec<(String, UserLocation)> {
+    let repeated = named
+        .iter()
+        .enumerate()
+        .any(|(index, (name, _))| named[..index].iter().any(|(other, _)| other == name));
+    if !repeated {
+        return named;
+    }
+    let varying_tags: Vec<String> = named
+        .iter()
+        .flat_map(|(_, location)| location.iter().map(|(tag, _)| tag.clone()))
+        .filter(|tag| {
+            let mut values = named.iter().filter_map(|(_, location)| {
+                location
+                    .iter()
+                    .find(|(other, _)| other == tag)
+                    .map(|(_, value)| *value)
+            });
+            let first = values.next();
+            values.any(|value| Some(value) != first)
+        })
+        .fold(Vec::new(), |mut tags, tag| {
+            if !tags.contains(&tag) {
+                tags.push(tag);
+            }
+            tags
+        });
+    named
+        .into_iter()
+        .map(|(name, location)| {
+            let varying: Vec<(String, f32)> = location
+                .iter()
+                .filter(|(tag, _)| varying_tags.contains(tag))
+                .cloned()
+                .collect();
+            (format!("{name} · {}", location_caption(&varying)), location)
+        })
+        .collect()
+}
+
 fn px(size: f32) -> String {
     format!("{} px", number(size))
 }
@@ -884,6 +928,27 @@ mod tests {
                 "cap height / ascender 700",
             ]
         );
+    }
+
+    #[test]
+    fn repeated_instance_names_gain_the_axes_that_vary() {
+        let named = vec![
+            (
+                "Bold".to_string(),
+                vec![("wght".into(), 700.0), ("wdth".into(), 75.0)],
+            ),
+            (
+                "Bold".to_string(),
+                vec![("wght".into(), 700.0), ("wdth".into(), 100.0)],
+            ),
+        ];
+
+        let captions: Vec<String> = distinct_captions(named)
+            .into_iter()
+            .map(|(caption, _)| caption)
+            .collect();
+
+        assert_eq!(captions, ["Bold · wdth 75", "Bold · wdth 100"]);
     }
 
     #[test]
