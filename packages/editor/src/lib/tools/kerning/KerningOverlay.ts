@@ -21,7 +21,7 @@ export interface KerningDrawOptions {
  * @remarks
  * The kern is a translucent strip between the two advance edges in the
  * kerning colours, which no spacing overlay uses: violet when it tightens or
- * is zero, teal when it loosens. The pill below the baseline
+ * is zero, teal when it loosens, and grey at an interpolated location. The pill below the baseline
  * shows the value, with a lock on a side that is a glyph exception. While the pointer is on the pill, other
  * glyphs of the run that kern through one of the pair's groups fill in the
  * kerning colour, showing the reach of a group edit.
@@ -32,8 +32,7 @@ export function drawKerningPair(
   pair: KerningPair,
   options: KerningDrawOptions = {},
 ): void {
-  // A loosening kern takes its own colour; zero and tightening share violet.
-  const theme = pair.amount > 0 ? canvas.theme.kerning.positive : canvas.theme.kerning.negative;
+  const theme = kerningTheme(canvas, editor, pair);
   canvas.withTransform(editor.sceneTransform(pair.gap.node), (local) => {
     if (options.hovered) drawGroupGlyphs(local, editor, pair, theme);
     local.withScreenSpace((screen, project) => {
@@ -41,6 +40,16 @@ export function drawKerningPair(
       drawPill(screen, editor, pair, theme, canvas.theme.spacing, options.hovered ?? false);
     });
   });
+}
+
+/**
+ * Grey between sources, where the kern is interpolated and read-only; else
+ * teal for a loosening kern and violet for a tightening or zero one.
+ */
+function kerningTheme(canvas: Canvas, editor: Editor, pair: KerningPair): KerningTheme {
+  const palettes = canvas.theme.kerning;
+  if (!editor.activeSourceId) return palettes.interpolated;
+  return pair.amount > 0 ? palettes.positive : palettes.negative;
 }
 
 function drawKern(

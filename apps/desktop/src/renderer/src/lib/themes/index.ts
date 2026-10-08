@@ -369,6 +369,8 @@ function colorThemeVariables(theme: ColorTheme): Record<string, string> {
     // one, so it never reads as a spacing half.
     "--editor-kerning": dark ? "#A78BFA" : "#7C3AED",
     "--editor-kerning-positive": dark ? "#2DD4BF" : "#0D9488",
+    // Interpolated spacing and kerning are read-only, like interpolated points: neutral grey.
+    "--editor-interpolated": dark ? "#9CA3AF" : "#8A8A8A",
     "--editor-text-composite-arm-fill": withAlpha(palette.base04, 0.22),
     "--editor-text-component-overlay-a": withAlpha(palette.base0B, 0.26),
     "--editor-text-component-overlay-b": withAlpha(palette.base0F, 0.26),
