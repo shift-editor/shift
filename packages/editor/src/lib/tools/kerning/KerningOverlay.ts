@@ -11,7 +11,7 @@ type LabelTheme = Canvas["theme"]["spacing"];
 export interface KerningDrawOptions {
   /** Whether the pointer is on the pill, which lightens and shows the groups' reach. */
   readonly hovered?: boolean;
-  /** Whether the arrow keys change this pair, which gives its strip a heavier, full-strength edge. */
+  /** Whether the arrow keys change this pair, which gives its strip a 1.5 px, full-strength edge. */
   readonly selected?: boolean;
 }
 
@@ -60,7 +60,7 @@ function drawKern(
 
   screen.fillRect(left, top, width, height, theme.fill);
   // A light edge while hovered; the selected pair's edge is full strength and heavier.
-  const edge = selected ? 2 : 1;
+  const edge = selected ? 1.5 : 1;
   screen.strokeRect(
     left + edge / 2,
     top + edge / 2,
