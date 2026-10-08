@@ -10,6 +10,16 @@ import type { EditorDriver } from "./EditorDriver";
 export const SCREENSHOT_STYLE_PATH = path.join(__dirname, "..", "editor.screenshot.css");
 
 /**
+ * How long a capture may take to settle into two identical frames before comparing.
+ *
+ * @remarks
+ * CI runs several apps at once, and a large 2× canvas can take longer than Playwright's
+ * default 5 s to produce two matching captures. Only the wait is longer; the comparison is
+ * unchanged.
+ */
+const SNAPSHOT_SETTLE_TIMEOUT_MS = 15_000;
+
+/**
  * Interface goldens compare exactly, but only on CI.
  *
  * @remarks
@@ -24,6 +34,7 @@ const INTERFACE_SNAPSHOT_OPTIONS = {
   caret: "hide",
   maxDiffPixels: 0,
   threshold: 0,
+  timeout: SNAPSHOT_SETTLE_TIMEOUT_MS,
 } as const;
 
 /**
@@ -43,6 +54,7 @@ const CANVAS_SNAPSHOT_OPTIONS = {
   maxDiffPixels: 0,
   threshold: 0.02,
   scale: "device",
+  timeout: SNAPSHOT_SETTLE_TIMEOUT_MS,
 } as const;
 
 /**
