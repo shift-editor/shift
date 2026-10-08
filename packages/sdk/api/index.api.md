@@ -648,7 +648,6 @@ export class Font {
     pointIdsForSegment(segmentId: SegmentId): readonly PointId[] | null;
     primaryUnicodeForName(name: GlyphName): Unicode | null;
     readLayers(layerIds: readonly LayerId[]): Promise<readonly GlyphLayerSnapshot[]>;
-    readLayersInSource(glyphIds: readonly GlyphId[], sourceId: SourceId): Promise<(GlyphLayerSnapshot | null)[]>;
     // (undocumented)
     recordForId(glyphId: GlyphId): GlyphRecord | null;
     // (undocumented)
@@ -1360,10 +1359,10 @@ export function useSignalState<T>(signal: Signal<T>, options?: UseSignalOptions)
 
 // Warnings were encountered during analysis:
 //
-// dist/Editor-30fbllZA.d.ts:2692:5 - (ae-forgotten-export) The symbol "Axis" needs to be exported by the entry point index.d.ts
-// dist/Editor-30fbllZA.d.ts:2693:5 - (ae-forgotten-export) The symbol "AxisMappingBasis" needs to be exported by the entry point index.d.ts
-// dist/Editor-30fbllZA.d.ts:2694:5 - (ae-forgotten-export) The symbol "Source" needs to be exported by the entry point index.d.ts
-// dist/Editor-30fbllZA.d.ts:4462:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
+// dist/Editor-C5wncrHA.d.ts:2692:5 - (ae-forgotten-export) The symbol "Axis" needs to be exported by the entry point index.d.ts
+// dist/Editor-C5wncrHA.d.ts:2693:5 - (ae-forgotten-export) The symbol "AxisMappingBasis" needs to be exported by the entry point index.d.ts
+// dist/Editor-C5wncrHA.d.ts:2694:5 - (ae-forgotten-export) The symbol "Source" needs to be exported by the entry point index.d.ts
+// dist/Editor-C5wncrHA.d.ts:4462:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

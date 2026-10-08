@@ -76,6 +76,9 @@ export class ShiftFontReader {
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
       throw new Error("glyphs.list limit must be between 1 and 100");
     }
+    if (sourceId && !this.#font.source(sourceId)) {
+      throw new Error(`Source ${sourceId} is not in this font`);
+    }
 
     const entries = this.#font.glyphEntries();
     let start = 0;
@@ -95,14 +98,15 @@ export class ShiftFontReader {
     const page = entries.slice(start, start + limit);
     const items = page.map((entry) => this.#glyphSummary(entry.id));
     if (sourceId) {
-      const layers = await this.#font.readLayersInSource(
-        page.map(({ id }) => id),
-        sourceId,
+      const font = this.#font;
+      const snapshots = await font.readLayers(
+        page.flatMap(({ id }) => font.layerIdFor(id, sourceId) ?? []),
       );
-      items.forEach((item, index) => {
-        const layer = layers[index];
+      const layers = new Map(snapshots.map((snapshot) => [snapshot.glyphId, snapshot]));
+      for (const item of items) {
+        const layer = layers.get(item.id);
         item.layer = layer ? ShiftLayer.fromSnapshot(layer).authored() : null;
-      });
+      }
     }
 
     const last = page.at(-1);

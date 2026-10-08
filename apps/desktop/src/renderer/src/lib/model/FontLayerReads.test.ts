@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { resolve } from "node:path";
-import { mintLayerId, mintSourceId, type GlyphName, type LayerId } from "@shift/types";
+import { mintLayerId, type GlyphName, type LayerId } from "@shift/types";
 import { GlyphGeometry } from "@shift/glyph-state";
 import { createWorkspaceStack, type WorkspaceStack } from "@/testing/workspaceStack";
 
@@ -85,25 +85,20 @@ describe("Font reads exact authored layers from accepted workspace state", () =>
     expect(resolved).toEqual(before[0]);
   });
 
-  it("reads each glyph's layer in one source, with null where a glyph has none", async () => {
+  it("finds the layer each glyph authors in a source, or null where it has none", () => {
     const source = stack.font.sources.find(({ id }) =>
       stack.font.glyphRecords().some((glyph) => !glyph.layers.some((l) => l.sourceId === id)),
     );
     if (!source) throw new Error("Expected a source with sparse glyph layers");
-    const glyphs = stack.font.glyphRecords();
 
-    const layers = await stack.font.readLayersInSource(
-      glyphs.map(({ id }) => id),
-      source.id,
-    );
-
-    expect(layers.map((layer) => layer?.state.layerId ?? null)).toEqual(
-      glyphs.map((glyph) => stack.font.layerIdFor(glyph.id, source.id)),
-    );
-    expect(layers).toContain(null);
-    expect(layers.some((layer) => layer !== null)).toBe(true);
-    await expect(stack.font.readLayersInSource([glyphs[0]!.id], mintSourceId())).rejects.toThrow(
-      "is not in this font",
-    );
+    for (const glyph of stack.font.glyphRecords()) {
+      const advertised = glyph.layers.find((layer) => layer.sourceId === source.id)?.id ?? null;
+      expect(stack.font.layerIdFor(glyph.id, source.id)).toBe(advertised);
+    }
+    expect(
+      stack.font
+        .glyphRecords()
+        .some((glyph) => stack.font.layerIdFor(glyph.id, source.id) === null),
+    ).toBe(true);
   });
 });

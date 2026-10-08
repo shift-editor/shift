@@ -633,33 +633,6 @@ export class Font {
     return this.#editCoordinator.readLayers(layerIds);
   }
 
-  /**
-   * Reads each glyph's authored layer in one source, without loading glyph models.
-   *
-   * @remarks
-   * One batched {@link readLayers} call over the store's glyph-source index.
-   *
-   * @param glyphIds - Glyph identities in the order results should follow.
-   * @param sourceId - Any source in {@link sources}; every listed glyph layer belongs to one.
-   * @returns One snapshot per glyph, or `null` where the glyph has no layer in the source.
-   * @throws {Error} when the source or a glyph is unknown, or workspace authorship is unavailable.
-   */
-  async readLayersInSource(
-    glyphIds: readonly GlyphId[],
-    sourceId: SourceId,
-  ): Promise<(GlyphLayerSnapshot | null)[]> {
-    if (!this.source(sourceId)) throw new Error(`Source ${sourceId} is not in this font`);
-
-    const layerIds = glyphIds.map((glyphId) => {
-      if (!this.entryForId(glyphId)) throw new Error(`Glyph ${glyphId} is not in this font`);
-      return this.layerIdFor(glyphId, sourceId);
-    });
-    const snapshots = await this.readLayers(layerIds.filter((layerId) => layerId !== null));
-    const byLayer = new Map(snapshots.map((snapshot) => [snapshot.state.layerId, snapshot]));
-
-    return layerIds.map((layerId) => (layerId ? (byLayer.get(layerId) ?? null) : null));
-  }
-
   /** The layer `glyphId` authors in `sourceId`, or `null` when it has none. */
   layerIdFor(glyphId: GlyphId, sourceId: SourceId): LayerId | null {
     return this.#store.layerIdForGlyphSource(glyphId, sourceId);
