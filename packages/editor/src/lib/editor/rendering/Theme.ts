@@ -17,10 +17,8 @@ export type HandleStateStyles<T extends HandleStyle = HandleStyle> = Record<Hand
 
 /** The colours of one sign of kern in the Kerning tool. */
 export interface KerningPalette {
-  /** The light tint under the strip's dots. */
+  /** The translucent strip between the two advance edges. */
   fill: string;
-  /** The Ben-Day dots that texture the strip between the two advance edges. */
-  dots: string;
   /** The value pill, the selected strip's edges, and glyphs a group edit reaches. */
   accent: string;
   accentHover: string;
@@ -288,14 +286,12 @@ const DEFAULT_EDITOR_RENDER_THEME: EditorRenderTheme = {
   },
   kerning: {
     negative: {
-      fill: "rgba(124, 58, 237, 0.08)",
-      dots: "rgba(124, 58, 237, 0.75)",
+      fill: "rgba(124, 58, 237, 0.12)",
       accent: "#7C3AED",
       accentHover: "rgba(124, 58, 237, 0.8)",
     },
     positive: {
-      fill: "rgba(13, 148, 136, 0.08)",
-      dots: "rgba(13, 148, 136, 0.75)",
+      fill: "rgba(13, 148, 136, 0.12)",
       accent: "#0D9488",
       accentHover: "rgba(13, 148, 136, 0.8)",
     },
@@ -473,8 +469,7 @@ export function readEditorRenderTheme(
   };
 
   const kerningPalette = (accent: string): KerningPalette => ({
-    fill: withAlpha(accent, 0.08),
-    dots: withAlpha(accent, 0.75),
+    fill: withAlpha(accent, 0.12),
     accent,
     accentHover: withAlpha(accent, 0.8),
   });
