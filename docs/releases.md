@@ -35,14 +35,14 @@ Use Conventional Commit prefixes. `feat`, `fix`, and `perf` appear in the public
 | macOS arm64/x64     | Signed and notarized ZIP for automatic updates; DMG for manual installation                                         |
 | Windows Nightly x64 | Unsigned per-user NSIS installer and automatic updates for installed N → N+1 testing                            |
 | Windows Release x64 | Manual GitHub downloads until Authenticode signing is configured                                                |
-| Linux Nightly x64   | Unsigned direct GitHub downloads (`.deb`, `.rpm`, and AppImage)                                                 |
-| Linux Release x64   | Signed RPM and checksum manifest; direct downloads plus signed APT/DNF repositories and an AppImage             |
+| Linux Nightly x64   | Unsigned direct GitHub downloads (`.deb`, `.rpm`, and AppImage); the AppImage updates itself                   |
+| Linux Release x64   | Signed RPM and checksum manifest; signed APT/DNF repositories, plus a self-updating AppImage                    |
 
 Packaged builds register `.shift` as a Shift Document with shared document artwork. Release is the preferred handler; Nightly remains an alternate so installing it does not take document ownership from Release. macOS composites the Shift badge onto its standard document shape from bundle metadata and the packaged asset catalog, Windows uses per-user NSIS registry entries, and Linux DEB/RPM packages install `application/x-shift-document` metadata and hicolor MIME icons. Both macOS distributions register as alternate viewers for TTF, OTF, Glyphs, Glyphspackage, UFO, and Designspace sources, which lists Shift under **Open With** without taking ownership of source-font formats.
 
-electron-updater compares the aligned numeric versions, verifies generated SHA-512 metadata, downloads packages, verifies macOS code signatures and configured Windows Authenticode publishers, and installs/relaunches. Metadata hashes detect package corruption; they do **not** authenticate an unsigned Windows publisher. Do not treat Windows automatic updates as production-ready until Authenticode signing and installed verification are complete.
+electron-updater compares the aligned numeric versions, verifies generated SHA-512 metadata, downloads packages, verifies macOS code signatures and configured Windows Authenticode publishers, and installs/relaunches. Metadata hashes detect package corruption; they do **not** authenticate an unsigned Windows publisher or an AppImage, whose updates are trusted through the HTTPS feed alone. Do not treat Windows automatic updates as production-ready until Authenticode signing and installed verification are complete.
 
-electron-builder generates architecture-specific `latest-mac.yml` files for exact versioned ZIP assets and `latest.yml` for the Windows Nightly NSIS installer. GitHub Pages hosts the fixed Release/Nightly metadata files. Versioned Release binaries and their differential-update blockmaps remain on GitHub Releases. Nightly metadata instead references immutable updater packages under `nightly/<full-commit>/` in Cloudflare R2. Because electron-updater cannot derive a previous blockmap URL across commit-addressed directories, Nightly updates fall back to full package downloads; Release differential updates are unchanged.
+electron-builder generates architecture-specific `latest-mac.yml` files for exact versioned ZIP assets, `latest.yml` for the Windows Nightly NSIS installer, and `latest-linux.yml` for Linux. `prepare-update-feed.mjs` keeps only the AppImage in the Linux feed: DEB and RPM installs update through APT/DNF, and the app never runs electron-updater's package installers. GitHub Pages hosts the fixed Release/Nightly metadata files. Versioned Release binaries and their differential-update blockmaps remain on GitHub Releases. Nightly metadata instead references immutable updater packages under `nightly/<full-commit>/` in Cloudflare R2. Because electron-updater cannot derive a previous blockmap URL across commit-addressed directories, Nightly updates fall back to full package downloads; Release differential updates are unchanged.
 
 Linux Release packages use the dedicated `Shift Package Signing` RSA-4096 key. The RPM carries an embedded signature, and the signed `SHA256SUMS.asc` authenticates every direct-download Linux format, including DEB and AppImage. The Release DEB embeds the public key and APT source as Debian conffiles so a direct install enrolls in authenticated APT updates; Nightly DEBs never enroll in the Release repository. APT authenticates package hashes through `InRelease`; DNF checks both the RPM signature and the detached `repomd.xml` signature. The public key is published as `shift-repository.gpg` with the GitHub release and at `https://packages.shift.graphics/keys/shift-repository.gpg`.
 
@@ -78,7 +78,7 @@ sudo curl -fsSL \
 sudo dnf install shift
 ```
 
-The AppImage remains a direct-download alternative. Verify it through the release's `SHA256SUMS` and `SHA256SUMS.asc`, make it executable, and run it without installing a repository.
+The AppImage remains a direct-download alternative. Verify it through the release's `SHA256SUMS` and `SHA256SUMS.asc`, make it executable, and run it without installing a repository. It then updates itself from its Release or Nightly feed when its folder is writable; an AppImage in a read-only location such as `/opt` falls back to manual downloads.
 
 ## Workflows
 

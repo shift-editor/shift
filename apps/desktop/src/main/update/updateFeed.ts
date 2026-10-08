@@ -12,6 +12,9 @@ export function updateFeed(feedBaseUrl: string, target: UpdateFeedTarget): Updat
     case "win32":
       if (target.distribution !== "nightly" || target.architecture !== "x64") return null;
       break;
+    case "linux":
+      if (target.linuxInstallation !== "appImage" || target.architecture !== "x64") return null;
+      break;
     default:
       return null;
   }

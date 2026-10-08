@@ -44,6 +44,7 @@ const updateOutputs = new Map([
   [`Shift-Nightly-${version}-macOS-x64.zip.blockmap`, "mac-x64-blockmap"],
   [`Shift-Nightly-${version}-Windows-x64-Setup.exe`, "windows"],
   [`Shift-Nightly-${version}-Windows-x64-Setup.exe.blockmap`, "blockmap"],
+  [`Shift-Nightly-${version}-Linux-x64.AppImage`, "linux-appimage"],
 ]);
 
 async function runScript(dist, publicOutput, updatesOutput, candidateVersion = version) {
