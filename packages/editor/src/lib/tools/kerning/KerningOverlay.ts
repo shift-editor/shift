@@ -158,7 +158,14 @@ function drawPill(
     const lock = pair.lock(editor, position);
     const rect = position === "first" ? layout.firstLock : layout.secondLock;
     ctx.globalAlpha = lock.toggleable ? 1 : 0.45;
-    drawLock(ctx, rect.x + rect.width / 2, rect.y + rect.height / 2, lock.locked, theme.labelText);
+    drawLock(
+      ctx,
+      rect.x + rect.width / 2,
+      rect.y + rect.height / 2,
+      rect.width,
+      lock.locked,
+      theme.labelText,
+    );
     ctx.globalAlpha = 1;
   }
 
@@ -193,32 +200,34 @@ function sideLabel(editor: Editor, side: KerningSide): string {
   return editor.font.entryForId(asGlyphId(side.id))?.name ?? side.id;
 }
 
-/** A 9 px padlock centred at (x, y); an open lock lifts its shackle to one side. */
+/** Lucide's `lock` and `lock-open` icons on their 24-unit grid. */
+const LOCK_BODY = { x: 3, y: 11, width: 18, height: 11, radius: 2 };
+const LOCK_SHACKLE = "M7 11V7a5 5 0 0 1 10 0v4";
+const OPEN_LOCK_SHACKLE = "M7 11V7a5 5 0 0 1 9.9-1";
+const LOCK_GRID = 24;
+/** Stroke width on the icon's grid, about 1.1 px at the pill's 12 px. */
+const LOCK_STROKE = 2.25;
+
+/** Draws Lucide's lock, closed or open, filling `size` px centred at (x, y). */
 function drawLock(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
+  size: number,
   locked: boolean,
   color: string,
 ): void {
+  const scale = size / LOCK_GRID;
   ctx.save();
-  ctx.translate(Math.round(x), Math.round(y));
-  ctx.fillStyle = color;
+  ctx.translate(x - size / 2, y - size / 2);
+  ctx.scale(scale, scale);
   ctx.strokeStyle = color;
-  ctx.lineWidth = 1.25;
-  ctx.fillRect(-3.5, -0.5, 7, 5);
+  ctx.lineWidth = LOCK_STROKE;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
   ctx.beginPath();
-  if (locked) {
-    ctx.moveTo(-2, -0.5);
-    ctx.lineTo(-2, -2.5);
-    ctx.arc(0, -2.5, 2, Math.PI, 0);
-    ctx.lineTo(2, -0.5);
-  } else {
-    ctx.moveTo(-2, -0.5);
-    ctx.lineTo(-2, -3);
-    ctx.arc(0, -3, 2, Math.PI, 0);
-    ctx.lineTo(2, -2);
-  }
+  ctx.roundRect(LOCK_BODY.x, LOCK_BODY.y, LOCK_BODY.width, LOCK_BODY.height, LOCK_BODY.radius);
   ctx.stroke();
+  ctx.stroke(new Path2D(locked ? LOCK_SHACKLE : OPEN_LOCK_SHACKLE));
   ctx.restore();
 }
