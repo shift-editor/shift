@@ -19,6 +19,8 @@ export type HandleStateStyles<T extends HandleStyle = HandleStyle> = Record<Hand
 export interface KerningPalette {
   /** The translucent strip between the two advance edges. */
   fill: string;
+  /** The strip's light edge while hovered. */
+  edge: string;
   /** The value pill, the selected strip's edges, and glyphs a group edit reaches. */
   accent: string;
   accentHover: string;
@@ -287,11 +289,13 @@ const DEFAULT_EDITOR_RENDER_THEME: EditorRenderTheme = {
   kerning: {
     negative: {
       fill: "rgba(124, 58, 237, 0.12)",
+      edge: "rgba(124, 58, 237, 0.45)",
       accent: "#7C3AED",
       accentHover: "rgba(124, 58, 237, 0.8)",
     },
     positive: {
       fill: "rgba(13, 148, 136, 0.12)",
+      edge: "rgba(13, 148, 136, 0.45)",
       accent: "#0D9488",
       accentHover: "rgba(13, 148, 136, 0.8)",
     },
@@ -470,6 +474,7 @@ export function readEditorRenderTheme(
 
   const kerningPalette = (accent: string): KerningPalette => ({
     fill: withAlpha(accent, 0.12),
+    edge: withAlpha(accent, 0.45),
     accent,
     accentHover: withAlpha(accent, 0.8),
   });
