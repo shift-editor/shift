@@ -115,6 +115,7 @@ function continuousAxis(
 function twoSourceBasis(axisId: AxisId, regularId: SourceId, boldId: SourceId): InterpolationBasis {
   return {
     sourceIds: [regularId, boldId],
+    designNormalization: [{ axisId, minimum: 100, default: 400, maximum: 900 }],
     basis: {
       deltas: [
         { region: [], values: new Float64Array([1, 0]) },
@@ -138,6 +139,10 @@ function twoAxisBasis(
   const weightSupport = { axisId: weightAxisId, lower: 0, peak: 1, upper: 1 };
   return {
     sourceIds: [...sourceIds],
+    designNormalization: [
+      { axisId: widthAxisId, minimum: 0, default: 0, maximum: 1000 },
+      { axisId: weightAxisId, minimum: 0, default: 0, maximum: 1000 },
+    ],
     basis: {
       deltas: [
         { region: [], values: new Float64Array([1, 0, 0, 0]) },

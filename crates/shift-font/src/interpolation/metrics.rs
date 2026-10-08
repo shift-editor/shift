@@ -217,7 +217,11 @@ impl Font {
             });
         }
 
-        let basis = InterpolationBasis::from_source_locations(&source_locations, self.axes())?;
+        let basis = InterpolationBasis::from_source_locations(
+            &source_locations,
+            self.axes(),
+            self.design_normalization().ok()?,
+        )?;
         Some(SourceMetricInterpolation {
             metric_ids,
             technical_fields,

@@ -1,0 +1,64 @@
+{
+.appVersion = "3532";
+.formatVersion = 3;
+familyName = "Mapped Weight";
+unitsPerEm = 1000;
+axes = ({ name = Weight; tag = wght; });
+metrics = ({ type = ascender; });
+fontMaster = (
+{
+id = light;
+name = Light;
+axesValues = (30);
+metricValues = ({ pos = 700; });
+customParameters = ({ name = "Axis Location"; value = ({ Axis = Weight; Location = 100; }); });
+},
+{
+id = regular;
+name = Regular;
+axesValues = (86);
+metricValues = ({ pos = 800; });
+customParameters = ({ name = "Axis Location"; value = ({ Axis = Weight; Location = 400; }); });
+},
+{
+id = bold;
+name = ExtraBold;
+axesValues = (160);
+metricValues = ({ pos = 900; });
+customParameters = ({ name = "Axis Location"; value = ({ Axis = Weight; Location = 800; }); });
+}
+);
+instances = (
+{ name = Thin; axesValues = (30); weightClass = 100; },
+{ name = ExtraLight; axesValues = (50); weightClass = 200; customParameters = ({ name = "Axis Location"; value = ({ Axis = Weight; Location = 200; }); }); },
+{ name = Light; axesValues = (66); weightClass = 300; customParameters = ({ name = "Axis Location"; value = ({ Axis = Weight; Location = 300; }); }); },
+{ name = Regular; axesValues = (86); weightClass = 400; },
+{ name = Medium; axesValues = (94); weightClass = 500; customParameters = ({ name = "Axis Location"; value = ({ Axis = Weight; Location = 500; }); }); },
+{ name = SemiBold; axesValues = (110); weightClass = 600; customParameters = ({ name = "Axis Location"; value = ({ Axis = Weight; Location = 600; }); }); },
+{ name = Bold; axesValues = (126); weightClass = 700; customParameters = ({ name = "Axis Location"; value = ({ Axis = Weight; Location = 700; }); }); },
+{ name = ExtraBold; axesValues = (160); weightClass = 800; }
+);
+glyphs = (
+{
+glyphname = A;
+unicode = 65;
+layers = (
+{
+layerId = light;
+width = 300;
+shapes = ({ closed = 1; nodes = ((0,0,l), (30,0,l), (30,100,l), (0,100,l)); });
+},
+{
+layerId = regular;
+width = 600;
+shapes = ({ closed = 1; nodes = ((0,0,l), (86,0,l), (86,100,l), (0,100,l)); });
+},
+{
+layerId = bold;
+width = 900;
+shapes = ({ closed = 1; nodes = ((0,0,l), (160,0,l), (160,100,l), (0,100,l)); });
+}
+);
+}
+);
+}

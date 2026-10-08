@@ -472,6 +472,13 @@ export interface NapiDeleteSourceIntent {
   sourceId: SourceId
 }
 
+export interface NapiDesignNormalization {
+  axisId: AxisId
+  minimum: number
+  default: number
+  maximum: number
+}
+
 /**
  * CS0 walking-skeleton intent. A stringly union covering exactly the two
  * skeleton kinds; CS1 replaces this with per-variant intent structs.
@@ -714,6 +721,7 @@ export interface NapiGlyphVariation {
 export interface NapiInterpolationBasis {
   sourceIds: Array<SourceId>
   basis: NapiVariationBasis
+  designNormalization: Array<NapiDesignNormalization>
 }
 
 export interface NapiInterpolationSupport {

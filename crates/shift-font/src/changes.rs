@@ -106,7 +106,9 @@ impl FontChange {
                     | FontChangeImpact::SOURCE_METRICS
             }
             Self::AxisMappings(_) => {
-                FontChangeImpact::AXIS_MAPPINGS | FontChangeImpact::AXIS_MAPPING_BASES
+                FontChangeImpact::AXIS_MAPPINGS
+                    | FontChangeImpact::AXIS_MAPPING_BASES
+                    | FontChangeImpact::SOURCE_METRICS
             }
             Self::MetricDefinitions(_) => {
                 FontChangeImpact::METRIC_DEFINITIONS | FontChangeImpact::SOURCE_METRICS

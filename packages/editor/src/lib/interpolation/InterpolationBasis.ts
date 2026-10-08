@@ -8,7 +8,7 @@ export function interpolationWeights(
   location: DesignAxisLocation,
   axes: readonly Axis[],
 ): Float64Array {
-  return evaluateVariationBasis(basis.basis, location, axes);
+  return evaluateVariationBasis(basis.basis, location, axes, basis.designNormalization);
 }
 
 /** Combines source value vectors using a location's evaluated source weights. */

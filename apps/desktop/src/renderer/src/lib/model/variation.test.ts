@@ -1,4 +1,7 @@
 import { describe, expect, it, beforeEach } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import type { Axis, AxisId, GlyphId, GlyphName, LayerId, Source, Unicode } from "@shift/types";
 import {
   mintAxisId,
@@ -261,6 +264,128 @@ it("maps external locations once across source creation, instances, and exact la
   expect(editor.activeSourceId).toBe(blackSourceId);
   expect(editor.externalLocation.get(axisId)).toBeCloseTo(900);
   expect(editor.sceneGlyphRenderModel?.xAdvance).toBe(500);
+});
+
+describe("mapped weights retain design-space interpolation", () => {
+  const fixture = resolve(process.cwd(), "../../fixtures/fonts/MappedWeight.glyphs");
+  let editor: TestEditor;
+
+  beforeEach(async () => {
+    editor = new TestEditor();
+    await editor.openSession(fixture, "A");
+  });
+
+  it.each([
+    [100, 30, 300, 700],
+    [250, 58, 450, 750],
+    [400, 86, 600, 800],
+    [681.25, 123, 750, 850],
+    [800, 160, 900, 900],
+  ])(
+    "renders weight %s with the mapped outline, advance, and metrics",
+    (weight, x, advance, ascender) => {
+      const axisId = editor.font.getAxes()[0]!.id;
+      const model = editor.sceneGlyphRenderModel!;
+      editor.setExternalLocation(externalAxisLocationFromRecord({ [axisId]: weight }));
+
+      expect(Math.max(...model.allPoints.map((point) => point.x))).toBeCloseTo(x);
+      expect(model.xAdvance).toBeCloseTo(advance);
+      expect(editor.font.metricsAtLocation(editor.externalLocation).ascender).toBeCloseTo(ascender);
+    },
+  );
+
+  it("preserves mapped interpolation after Save As and a fresh reopen", async () => {
+    const root = mkdtempSync(join(tmpdir(), "shift-mapped-weight-"));
+    const saved = join(root, "Mapped.shift");
+    try {
+      await editor.saveAs(saved);
+      await editor.closeSession();
+      const reopened = new TestEditor();
+      await reopened.openSession(saved, "A");
+      const axisId = reopened.font.getAxes()[0]!.id;
+      reopened.setExternalLocation(externalAxisLocationFromRecord({ [axisId]: 250 }));
+      expect(reopened.sceneGlyphRenderModel!.xAdvance).toBeCloseTo(450);
+      expect(
+        Math.max(...reopened.sceneGlyphRenderModel!.allPoints.map((point) => point.x)),
+      ).toBeCloseTo(58);
+      expect(reopened.font.metricsAtLocation(reopened.externalLocation).ascender).toBeCloseTo(750);
+      await reopened.closeSession();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("replaces cached glyph and metric normalization after mapping edits and undo", async () => {
+    const stack = createWorkspaceStack();
+    await stack.openWorkspace(fixture);
+    const glyph = await stack.font.loadGlyph(stack.font.recordForName("A" as GlyphName)!.id);
+    const axisId = stack.font.getAxes()[0]!.id;
+    const mapping = stack.font.getAxisMappings()[0]!;
+    await stack.font.setAxisMappings([
+      {
+        ...mapping,
+        points: mapping.points.map((point) => ({
+          ...point,
+          output: {
+            values: {
+              [axisId]: Math.max(
+                point.output.values[axisId]!,
+                86 + (point.output.values[axisId]! - 86) * 2,
+              ),
+            },
+          },
+        })),
+      },
+    ]);
+
+    expect(
+      stack.store.projection(glyph.id)!.interpolation!.basis.designNormalization[0]!.maximum,
+    ).toBeCloseTo(234);
+    expect(
+      stack.client.workspaceCell.peek()!.sourceMetricsInterpolation!.basis.designNormalization[0]!
+        .maximum,
+    ).toBeCloseTo(234);
+    await stack.editCoordinator.undo();
+    expect(
+      stack.store.projection(glyph.id)!.interpolation!.basis.designNormalization[0]!.maximum,
+    ).toBe(160);
+    expect(
+      stack.client.workspaceCell.peek()!.sourceMetricsInterpolation!.basis.designNormalization[0]!
+        .maximum,
+    ).toBe(160);
+  });
+
+  it("refreshes an existing render model and metrics when mappings change", async () => {
+    const axisId = editor.font.getAxes()[0]!.id;
+    const model = editor.sceneGlyphRenderModel!;
+    editor.setExternalLocation(externalAxisLocationFromRecord({ [axisId]: 681.25 }));
+    expect(model.xAdvance).toBeCloseTo(750);
+    const mapping = editor.font.getAxisMappings()[0]!;
+
+    await editor.font.setAxisMappings([
+      {
+        ...mapping,
+        points: mapping.points.map((point) => ({
+          ...point,
+          output: {
+            values: {
+              [axisId]:
+                point.output.values[axisId]! <= 86
+                  ? point.output.values[axisId]!
+                  : 86 + (point.output.values[axisId]! - 86) * 2,
+            },
+          },
+        })),
+      },
+    ]);
+
+    expect(model.xAdvance).toBeCloseTo(900);
+    expect(Math.max(...model.allPoints.map((point) => point.x))).toBeCloseTo(160);
+    expect(editor.font.metricsAtLocation(editor.externalLocation).ascender).toBeCloseTo(900);
+    await editor.undo();
+    expect(model.xAdvance).toBeCloseTo(750);
+    expect(editor.font.metricsAtLocation(editor.externalLocation).ascender).toBeCloseTo(850);
+  });
 });
 
 describe("variable editing across sources", () => {

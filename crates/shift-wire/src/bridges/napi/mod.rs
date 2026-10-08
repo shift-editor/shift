@@ -7,14 +7,14 @@ use shift_font::{GlyphId, PointType as IrPointType};
 use crate::{
     AnchorData, AnchorMatch, Axis, AxisLabel, AxisMapping, AxisMappingBasis, AxisMappingPoint,
     ComponentData, ComponentGlyph, ComponentMatch, ComponentTransformKind, ContourData,
-    ContourMatch, FontMetadata, FontMetrics, FontSnapshot, GlyphChangedEntities, GlyphComponents,
-    GlyphEntry, GlyphInterpolation, GlyphLayerRecord, GlyphLayerShape, GlyphLayerSnapshot,
-    GlyphProjection, GlyphRecord, GlyphSnapshot, GlyphSnapshotRequest, GlyphSourceComponents,
-    GlyphSourceShape, GlyphSourceValues, GlyphState, GlyphStructure, GlyphVariation,
-    InterpolationBasis, InterpolationSupport, LayerDifference, LayerDifferenceKind, LayerMatch,
-    Location, MetricDefinition, MetricKind, NamedInstance, PointData, PointMatch, PointType,
-    Source, SourceMetricField, SourceMetricValue, SourceMetricValues,
-    SourceMetricsInterpolationSnapshot, VariationBasis, VariationDelta,
+    ContourMatch, DesignNormalization, FontMetadata, FontMetrics, FontSnapshot,
+    GlyphChangedEntities, GlyphComponents, GlyphEntry, GlyphInterpolation, GlyphLayerRecord,
+    GlyphLayerShape, GlyphLayerSnapshot, GlyphProjection, GlyphRecord, GlyphSnapshot,
+    GlyphSnapshotRequest, GlyphSourceComponents, GlyphSourceShape, GlyphSourceValues, GlyphState,
+    GlyphStructure, GlyphVariation, InterpolationBasis, InterpolationSupport, LayerDifference,
+    LayerDifferenceKind, LayerMatch, Location, MetricDefinition, MetricKind, NamedInstance,
+    PointData, PointMatch, PointType, Source, SourceMetricField, SourceMetricValue,
+    SourceMetricValues, SourceMetricsInterpolationSnapshot, VariationBasis, VariationDelta,
 };
 
 #[napi(object)]
@@ -905,10 +905,31 @@ impl From<VariationBasis> for NapiVariationBasis {
 }
 
 #[napi(object)]
+pub struct NapiDesignNormalization {
+    #[napi(ts_type = "AxisId")]
+    pub axis_id: String,
+    pub minimum: f64,
+    pub default: f64,
+    pub maximum: f64,
+}
+
+impl From<DesignNormalization> for NapiDesignNormalization {
+    fn from(normalization: DesignNormalization) -> Self {
+        Self {
+            axis_id: normalization.axis_id.to_string(),
+            minimum: normalization.minimum,
+            default: normalization.default,
+            maximum: normalization.maximum,
+        }
+    }
+}
+
+#[napi(object)]
 pub struct NapiInterpolationBasis {
     #[napi(ts_type = "Array<SourceId>")]
     pub source_ids: Vec<String>,
     pub basis: NapiVariationBasis,
+    pub design_normalization: Vec<NapiDesignNormalization>,
 }
 
 impl From<InterpolationBasis> for NapiInterpolationBasis {
@@ -920,6 +941,11 @@ impl From<InterpolationBasis> for NapiInterpolationBasis {
                 .map(|source_id| source_id.to_string())
                 .collect(),
             basis: basis.basis.into(),
+            design_normalization: basis
+                .design_normalization
+                .into_iter()
+                .map(Into::into)
+                .collect(),
         }
     }
 }

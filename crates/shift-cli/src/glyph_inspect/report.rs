@@ -418,7 +418,11 @@ fn inspect_variation(
                             maximum: support.maximum(),
                         })
                         .collect(),
-                    scalar: interpolation_region_scalar(delta.region(), location, font.axes()),
+                    scalar: interpolation_region_scalar(
+                        delta.region(),
+                        location,
+                        interpolation.basis().design_normalization(),
+                    ),
                     value_count: delta.values().len(),
                     non_zero_value_count: delta
                         .values()
@@ -462,15 +466,20 @@ fn inspect_variation(
 fn interpolation_region_scalar(
     region: &shift_font::InterpolationRegion,
     location: &DesignLocation,
-    axes: &[Axis],
+    design_normalization: &[shift_font::DesignNormalization],
 ) -> f64 {
     let mut scalar = 1.0;
     for support in region.supports() {
-        let Some(axis) = axes.iter().find(|axis| axis.id() == support.axis_id()) else {
+        let Some(normalization) = design_normalization
+            .iter()
+            .find(|normalization| normalization.axis_id == support.axis_id())
+        else {
             return 0.0;
         };
-        let value = location.get(&axis.id()).unwrap_or(axis.default());
-        let normalized = axis.normalize(value);
+        let value = location
+            .get(&normalization.axis_id)
+            .unwrap_or(normalization.default);
+        let normalized = normalization.normalize(value);
         if normalized == support.peak()
             || (support.minimum() == 0.0 && support.peak() == 0.0 && support.maximum() == 0.0)
         {
