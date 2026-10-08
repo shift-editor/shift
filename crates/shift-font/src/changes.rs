@@ -88,7 +88,7 @@ pub enum FontChange {
     MetricDefinitions(Replacement<Vec<MetricDefinition>>),
     NamedInstances(Replacement<Vec<NamedInstance>>),
     Sources(Replacement<SourceCollection>),
-    Glyph(Replacement<Option<Glyph>>),
+    Glyph(Box<Replacement<Option<Glyph>>>),
     Layer {
         glyph_id: GlyphId,
         layer: Replacement<Option<Arc<GlyphLayer>>>,
@@ -170,9 +170,10 @@ impl FontChange {
             Self::Sources(value) => {
                 Self::Sources(Replacement::new(value.after.clone(), value.before.clone()))
             }
-            Self::Glyph(value) => {
-                Self::Glyph(Replacement::new(value.after.clone(), value.before.clone()))
-            }
+            Self::Glyph(value) => Self::Glyph(Box::new(Replacement::new(
+                value.after.clone(),
+                value.before.clone(),
+            ))),
             Self::Layer {
                 glyph_id,
                 layer,

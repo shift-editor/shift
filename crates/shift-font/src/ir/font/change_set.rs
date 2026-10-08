@@ -404,8 +404,14 @@ mod tests {
         renamed_first.set_layer(moved_layer.clone());
 
         let changes = FontChangeSet::new(vec![
-            FontChange::Glyph(Replacement::new(Some(second.clone()), Some(renamed_second))),
-            FontChange::Glyph(Replacement::new(Some(first.clone()), Some(renamed_first))),
+            FontChange::Glyph(Box::new(Replacement::new(
+                Some(second.clone()),
+                Some(renamed_second),
+            ))),
+            FontChange::Glyph(Box::new(Replacement::new(
+                Some(first.clone()),
+                Some(renamed_first),
+            ))),
             FontChange::Layer {
                 glyph_id: first.id(),
                 layer: Replacement::new(Some(layer), Some(Arc::new(moved_layer))),

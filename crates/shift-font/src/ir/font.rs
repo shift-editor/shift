@@ -8,6 +8,7 @@ use crate::entity::{
 use crate::error::{CoreError, CoreResult};
 use crate::features::FeatureData;
 use crate::glyph::{Glyph, GlyphLayer};
+use crate::glyph_category::{GlyphCategory, GlyphSubcategory};
 use crate::guideline::Guideline;
 use crate::interpolation::GlyphInterpolationValues;
 use crate::kerning::Kerning;
@@ -1290,6 +1291,22 @@ impl Font {
         let glyph = state.data.glyphs.get_mut(&glyph_id).require(&glyph_id)?;
         Arc::make_mut(glyph).set_unicodes(unicodes);
         state.rebuild_index()?;
+        self.state = Arc::new(state);
+        Ok(())
+    }
+
+    /// Sets or clears the glyph's category overrides; `None` falls back to
+    /// glyph data.
+    pub fn set_glyph_category(
+        &mut self,
+        glyph_id: GlyphId,
+        category: Option<GlyphCategory>,
+        sub_category: Option<GlyphSubcategory>,
+    ) -> CoreResult<()> {
+        let mut state = (*self.state).clone();
+        let glyph = Arc::make_mut(state.data.glyphs.get_mut(&glyph_id).require(&glyph_id)?);
+        glyph.set_category(category);
+        glyph.set_sub_category(sub_category);
         self.state = Arc::new(state);
         Ok(())
     }
