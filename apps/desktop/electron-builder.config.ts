@@ -72,8 +72,7 @@ const linuxPackageFiles = [
 ];
 const packageJson = JSON.parse(readFileSync(path.join(__dirname, "package.json"), "utf8"));
 const productVersion = packageJson.version as string;
-const updateBaseUrl =
-  process.env.SHIFT_UPDATE_BASE_URL ?? "https://shift-editor.github.io/shift/updates";
+const updateBaseUrl = process.env.SHIFT_UPDATE_BASE_URL ?? "https://feeds.shift.graphics/updates";
 const channelUrl = `${updateBaseUrl.replace(/\/$/, "")}/${distribution}/${process.platform}/${buildArchitecture}`;
 const signMacos = process.env.SIGN_MACOS === "1";
 const installedAppScreenshots = process.env.SHIFT_INSTALLED_APP_SCREENSHOTS === "1";

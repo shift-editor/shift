@@ -419,6 +419,7 @@ jobs:
             git -C site rm -rf --ignore-unmatch .
           fi
           touch site/.nojekyll
+          echo feeds.shift.graphics > site/CNAME
 
       - name: Stage native Nightly feed
         shell: bash
