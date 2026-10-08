@@ -91,6 +91,7 @@ authoredTest(
 
 authoredTest(
   "named instances between sources draw interpolated handles",
+  { tag: "@golden" },
   async ({ page, editor }) => {
     await navigateToEditor(page, "53");
     const instance = await page.evaluate(() => {

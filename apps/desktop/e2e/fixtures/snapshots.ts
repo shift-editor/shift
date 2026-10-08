@@ -72,6 +72,28 @@ async function attachLocalCapture(name: string, target: Locator | Page): Promise
   await test.info().attach(`local-${name}`, { body, contentType: "image/png" });
 }
 
+/** Tag that marks a test as owning a golden; the snapshot update workflow runs only these. */
+export const GOLDEN_TAG = "@golden";
+
+/**
+ * Requires the running test to carry {@link GOLDEN_TAG}.
+ *
+ * @remarks
+ * The `ci: update visual snapshots` workflow regenerates baselines with `--grep @golden`
+ * instead of running the whole visual suite. An untagged golden would never be regenerated
+ * there, so capturing one fails the test on its first run instead.
+ *
+ * @param name - golden about to be compared.
+ * @throws {Error} when the test is not tagged.
+ */
+function requireGoldenTag(name: string): void {
+  if (test.info().tags.includes(GOLDEN_TAG)) return;
+
+  throw new Error(
+    `Golden ${name} needs its test tagged: test(title, { tag: "${GOLDEN_TAG}" }, …).`,
+  );
+}
+
 /**
  * Refuses to compare a golden on a retry attempt.
  *
@@ -104,6 +126,7 @@ function refuseRetriedGolden(name: string): void {
  * @param name - golden file name under the spec's snapshot directory.
  */
 export async function expectCanvasSnapshot(editor: EditorDriver, name: string): Promise<void> {
+  requireGoldenTag(name);
   refuseRetriedGolden(name);
   await editor.waitForCanvasRender();
   await expect(editorCanvasStack(editor.page)).toHaveScreenshot(name, CANVAS_SNAPSHOT_OPTIONS);
@@ -117,6 +140,7 @@ export async function expectCanvasSnapshot(editor: EditorDriver, name: string): 
  * @param name - golden file name under the spec's snapshot directory.
  */
 export async function expectPanelSnapshot(target: Locator, name: string): Promise<void> {
+  requireGoldenTag(name);
   refuseRetriedGolden(name);
   if (!(await comparesInterfaceGoldens(name, target))) return;
 
@@ -128,14 +152,22 @@ export async function expectPanelSnapshot(target: Locator, name: string): Promis
  *
  * @remarks
  * Prefer {@link expectPanelSnapshot} or {@link expectCanvasSnapshot}; a full-window golden
- * breaks on any chrome change and should protect overall composition only.
+ * breaks on any chrome change and should protect overall composition only. Mask regions
+ * that have their own goldens, such as the editor toolbar, so a change there updates one
+ * focused golden instead of every window that shows it.
  *
  * @param page - window whose viewport is captured.
  * @param name - golden file name under the spec's snapshot directory.
+ * @param mask - regions painted over before comparing.
  */
-export async function expectPageSnapshot(page: Page, name: string): Promise<void> {
+export async function expectPageSnapshot(
+  page: Page,
+  name: string,
+  mask: readonly Locator[] = [],
+): Promise<void> {
+  requireGoldenTag(name);
   refuseRetriedGolden(name);
   if (!(await comparesInterfaceGoldens(name, page))) return;
 
-  await expect(page).toHaveScreenshot(name, INTERFACE_SNAPSHOT_OPTIONS);
+  await expect(page).toHaveScreenshot(name, { ...INTERFACE_SNAPSHOT_OPTIONS, mask: [...mask] });
 }

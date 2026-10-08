@@ -2,7 +2,7 @@ import type { LocalPoint } from "@shift/editor/spaces";
 import type { Locator } from "@playwright/test";
 import { workspaceTest as test, expect } from "./fixtures/electronApp";
 import type { EditorDriver } from "./fixtures/EditorDriver";
-import { editorSidebar, glyphProperties } from "./fixtures/appLocators";
+import { editorSidebar, editorToolbar, glyphProperties } from "./fixtures/appLocators";
 import {
   expectCanvasSnapshot,
   expectPanelSnapshot,
@@ -22,62 +22,63 @@ async function alignmentFixture(editor: EditorDriver) {
   return editor.pointTargets([first.id, second.id, third.id]);
 }
 
-test("enables alignment for two selected points while distribution still requires three", async ({
-  page,
-  editor,
-}) => {
-  const points = await alignmentFixture(editor);
-  const properties = glyphProperties(page);
-  const canvas = editor.canvas;
-  const alignLeft = properties.getByRole("button", { name: "Align left", exact: true });
-  const distribute = properties.getByRole("button", {
-    name: "Distribute horizontally",
-    exact: true,
-  });
-
-  await expect(alignLeft).toHaveCount(0);
-  await canvas.click({ position: points[0].canvasPosition });
-  await expect(alignLeft).toBeDisabled();
-  await expect(distribute).toBeDisabled();
-  await properties
-    .getByRole("button", { name: "Flip vertically", exact: true })
-    .scrollIntoViewIfNeeded();
-  await expectPanelSnapshot(properties, "one-point-alignment-disabled.png");
-
-  await canvas.click({ position: points[1].canvasPosition, modifiers: ["Shift"] });
-  await expect
-    .poll(() => editor.selectionIds())
-    .toEqual(points.slice(0, 2).map((point) => point.id));
-  for (const name of [
-    "Align left",
-    "Align horizontal centers",
-    "Align right",
-    "Align top",
-    "Align vertical centers",
-    "Align bottom",
-  ]) {
-    await expect(properties.getByRole("button", { name, exact: true })).toBeEnabled();
-    await expect(properties.getByRole("button", { name, exact: true })).toBeInViewport({
-      ratio: 1,
+test(
+  "enables alignment for two selected points while distribution still requires three",
+  { tag: "@golden" },
+  async ({ page, editor }) => {
+    const points = await alignmentFixture(editor);
+    const properties = glyphProperties(page);
+    const canvas = editor.canvas;
+    const alignLeft = properties.getByRole("button", { name: "Align left", exact: true });
+    const distribute = properties.getByRole("button", {
+      name: "Distribute horizontally",
+      exact: true,
     });
-  }
-  for (const name of ["Rotate 90 degrees clockwise", "Flip horizontally", "Flip vertically"]) {
-    await expect(properties.getByRole("button", { name, exact: true })).toBeInViewport({
-      ratio: 1,
-    });
-  }
-  await expect(distribute).toBeDisabled();
-  await expect(
-    properties.getByRole("button", { name: "Distribute vertically", exact: true }),
-  ).toBeDisabled();
-  await expectPanelSnapshot(properties, "two-point-transform-controls.png");
 
-  await canvas.click({ position: points[2].canvasPosition, modifiers: ["Shift"] });
-  await expect(distribute).toBeEnabled();
-  await expect(
-    properties.getByRole("button", { name: "Distribute vertically", exact: true }),
-  ).toBeEnabled();
-});
+    await expect(alignLeft).toHaveCount(0);
+    await canvas.click({ position: points[0].canvasPosition });
+    await expect(alignLeft).toBeDisabled();
+    await expect(distribute).toBeDisabled();
+    await properties
+      .getByRole("button", { name: "Flip vertically", exact: true })
+      .scrollIntoViewIfNeeded();
+    await expectPanelSnapshot(properties, "one-point-alignment-disabled.png");
+
+    await canvas.click({ position: points[1].canvasPosition, modifiers: ["Shift"] });
+    await expect
+      .poll(() => editor.selectionIds())
+      .toEqual(points.slice(0, 2).map((point) => point.id));
+    for (const name of [
+      "Align left",
+      "Align horizontal centers",
+      "Align right",
+      "Align top",
+      "Align vertical centers",
+      "Align bottom",
+    ]) {
+      await expect(properties.getByRole("button", { name, exact: true })).toBeEnabled();
+      await expect(properties.getByRole("button", { name, exact: true })).toBeInViewport({
+        ratio: 1,
+      });
+    }
+    for (const name of ["Rotate 90 degrees clockwise", "Flip horizontally", "Flip vertically"]) {
+      await expect(properties.getByRole("button", { name, exact: true })).toBeInViewport({
+        ratio: 1,
+      });
+    }
+    await expect(distribute).toBeDisabled();
+    await expect(
+      properties.getByRole("button", { name: "Distribute vertically", exact: true }),
+    ).toBeDisabled();
+    await expectPanelSnapshot(properties, "two-point-transform-controls.png");
+
+    await canvas.click({ position: points[2].canvasPosition, modifiers: ["Shift"] });
+    await expect(distribute).toBeEnabled();
+    await expect(
+      properties.getByRole("button", { name: "Distribute vertically", exact: true }),
+    ).toBeEnabled();
+  },
+);
 
 test("aligns two selected points left as one undoable edit", async ({ page, editor }) => {
   const points = await alignmentFixture(editor);
@@ -209,50 +210,54 @@ test.describe("Editor view", () => {
     await editor.openGlyphByUnicode("41");
   });
 
-  test("selects displayed glyph objects from the Objects tab", async ({ page, editor }) => {
-    const sidebar = editorSidebar(page);
-    const contour = (await editor.outline())[0];
-    const firstPoint = contour?.points[0];
-    const secondPoint = contour?.points[1];
-    const thirdPoint = contour?.points[2];
-    const fourthPoint = contour?.points[3];
-    if (!contour || !firstPoint || !secondPoint || !thirdPoint || !fourthPoint) {
-      throw new Error("Expected contour fixture points");
-    }
+  test(
+    "selects displayed glyph objects from the Objects tab",
+    { tag: "@golden" },
+    async ({ page, editor }) => {
+      const sidebar = editorSidebar(page);
+      const contour = (await editor.outline())[0];
+      const firstPoint = contour?.points[0];
+      const secondPoint = contour?.points[1];
+      const thirdPoint = contour?.points[2];
+      const fourthPoint = contour?.points[3];
+      if (!contour || !firstPoint || !secondPoint || !thirdPoint || !fourthPoint) {
+        throw new Error("Expected contour fixture points");
+      }
 
-    await expect(sidebar.getByRole("tab", { name: "Objects" })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
-    await expectPanelSnapshot(sidebar, "objects-sidebar.png");
-    await sidebar.getByTestId(`object-${firstPoint.id}`).click();
-    await expect.poll(() => editor.selectionIds()).toEqual([firstPoint.id]);
+      await expect(sidebar.getByRole("tab", { name: "Objects" })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+      await expectPanelSnapshot(sidebar, "objects-sidebar.png");
+      await sidebar.getByTestId(`object-${firstPoint.id}`).click();
+      await expect.poll(() => editor.selectionIds()).toEqual([firstPoint.id]);
 
-    await sidebar.getByTestId(`object-${thirdPoint.id}`).click({ modifiers: ["Meta"] });
-    await expect.poll(() => editor.selectionIds()).toEqual([firstPoint.id, thirdPoint.id]);
+      await sidebar.getByTestId(`object-${thirdPoint.id}`).click({ modifiers: ["Meta"] });
+      await expect.poll(() => editor.selectionIds()).toEqual([firstPoint.id, thirdPoint.id]);
 
-    await sidebar.getByTestId(`object-${firstPoint.id}`).click();
-    await sidebar.getByTestId(`object-${fourthPoint.id}`).click({ modifiers: ["Shift"] });
-    await expect
-      .poll(() => editor.selectionIds())
-      .toEqual([firstPoint.id, secondPoint.id, thirdPoint.id, fourthPoint.id]);
-    await expectPanelSnapshot(sidebar, "objects-sidebar-selection.png");
+      await sidebar.getByTestId(`object-${firstPoint.id}`).click();
+      await sidebar.getByTestId(`object-${fourthPoint.id}`).click({ modifiers: ["Shift"] });
+      await expect
+        .poll(() => editor.selectionIds())
+        .toEqual([firstPoint.id, secondPoint.id, thirdPoint.id, fourthPoint.id]);
+      await expectPanelSnapshot(sidebar, "objects-sidebar-selection.png");
 
-    await sidebar.getByTestId(`object-${contour.id}`).click();
-    await expect.poll(() => editor.selectionIds()).toEqual([contour.id]);
-    await expect(sidebar.getByTestId(`object-${contour.id}`)).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+      await sidebar.getByTestId(`object-${contour.id}`).click();
+      await expect.poll(() => editor.selectionIds()).toEqual([contour.id]);
+      await expect(sidebar.getByTestId(`object-${contour.id}`)).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
 
-    await editor.undo();
-    await expect
-      .poll(() => editor.selectionIds())
-      .toEqual([firstPoint.id, secondPoint.id, thirdPoint.id, fourthPoint.id]);
+      await editor.undo();
+      await expect
+        .poll(() => editor.selectionIds())
+        .toEqual([firstPoint.id, secondPoint.id, thirdPoint.id, fourthPoint.id]);
 
-    await editor.redo();
-    await expect.poll(() => editor.selectionIds()).toEqual([contour.id]);
-  });
+      await editor.redo();
+      await expect.poll(() => editor.selectionIds()).toEqual([contour.id]);
+    },
+  );
 
   test("keeps the object tree usable without mounting offscreen points", async ({
     page,
@@ -385,10 +390,10 @@ test.describe("Editor view", () => {
     await expect.poll(anchorPosition).toEqual(initialPosition);
   });
 
-  test("full editor matches snapshot", async ({ page, editor }) => {
+  test("full editor matches snapshot", { tag: "@golden" }, async ({ page, editor }) => {
     await editor.waitForCanvasRender();
     await page.mouse.move(0, 0);
-    await expectPageSnapshot(page, "editor-glyph-A.png");
+    await expectPageSnapshot(page, "editor-glyph-A.png", [editorToolbar(page)]);
   });
 
   test("resets sidebars to their default width on divider double-click", async ({ page }) => {
@@ -502,76 +507,77 @@ test.describe("Editor view", () => {
     await expect(canvas).toHaveCSS("cursor", /cursor@32\.svg/);
   });
 
-  test("previews upgrade handles on Cmd-hover and commits those positions on Cmd-click", async ({
-    page,
-    editor,
-  }) => {
-    const canvas = editor.canvas;
-    const preview = await page.evaluate(() => {
-      const editor = window.shift!.editor;
-      const node = editor.scene.nodesOfKind("glyph")[0];
-      const layer = editor.glyphForId(node.glyphId)!.layerForSource(node.sourceId)!;
-      const segment = layer.contours[0].segments().find((segment) => segment.type === "line");
-      if (!segment) throw new Error("Expected line segment");
-      const middle = segment.pointAt(1 / 2);
-      return {
-        id: segment.id,
-        controls: [1 / 3, 2 / 3].map((t) => segment.pointAt(t)),
-        sceneControls: [1 / 3, 2 / 3].map((t) => {
-          return editor.toScene(node, segment.pointAt(t) as LocalPoint);
-        }),
-        hover: editor.sceneToScreen(
-          editor.toScene(node, { x: middle.x, y: middle.y } as LocalPoint),
-        ),
-      };
-    });
-    // The Select tool's upgrade preview item publishes the scene positions it draws;
-    // null means no preview is rendered.
-    const previewHandles = () =>
-      page.evaluate(() => {
-        const tool = window.shift?.editor.toolManager.activeTool;
-        if (tool?.id !== "select" || !("upgradePreview" in tool)) return null;
-
-        const preview = tool.upgradePreview as { propsSnapshot(): unknown };
-        return preview.propsSnapshot() ?? null;
+  test(
+    "previews upgrade handles on Cmd-hover and commits those positions on Cmd-click",
+    { tag: "@golden" },
+    async ({ page, editor }) => {
+      const canvas = editor.canvas;
+      const preview = await page.evaluate(() => {
+        const editor = window.shift!.editor;
+        const node = editor.scene.nodesOfKind("glyph")[0];
+        const layer = editor.glyphForId(node.glyphId)!.layerForSource(node.sourceId)!;
+        const segment = layer.contours[0].segments().find((segment) => segment.type === "line");
+        if (!segment) throw new Error("Expected line segment");
+        const middle = segment.pointAt(1 / 2);
+        return {
+          id: segment.id,
+          controls: [1 / 3, 2 / 3].map((t) => segment.pointAt(t)),
+          sceneControls: [1 / 3, 2 / 3].map((t) => {
+            return editor.toScene(node, segment.pointAt(t) as LocalPoint);
+          }),
+          hover: editor.sceneToScreen(
+            editor.toScene(node, { x: middle.x, y: middle.y } as LocalPoint),
+          ),
+        };
       });
+      // The Select tool's upgrade preview item publishes the scene positions it draws;
+      // null means no preview is rendered.
+      const previewHandles = () =>
+        page.evaluate(() => {
+          const tool = window.shift?.editor.toolManager.activeTool;
+          if (tool?.id !== "select" || !("upgradePreview" in tool)) return null;
 
-    await canvas.hover({ position: preview.hover });
-    await expect.poll(previewHandles).toBeNull();
-    await page.keyboard.down("Meta");
-    try {
-      await expect(canvas).toHaveCSS("cursor", /cursor@32-bend\.svg/);
-      await expect.poll(previewHandles).toEqual(preview.sceneControls);
-      await expectCanvasSnapshot(editor, "segment-upgrade-preview.png");
+          const preview = tool.upgradePreview as { propsSnapshot(): unknown };
+          return preview.propsSnapshot() ?? null;
+        });
 
-      await page.keyboard.up("Meta");
+      await canvas.hover({ position: preview.hover });
       await expect.poll(previewHandles).toBeNull();
       await page.keyboard.down("Meta");
-      await expect.poll(previewHandles).toEqual(preview.sceneControls);
-      await glyphProperties(page).hover({ position: { x: 10, y: 10 } });
-      await expect.poll(previewHandles).toBeNull();
-      await canvas.hover({ position: preview.hover });
-      await expect.poll(previewHandles).toEqual(preview.sceneControls);
+      try {
+        await expect(canvas).toHaveCSS("cursor", /cursor@32-bend\.svg/);
+        await expect.poll(previewHandles).toEqual(preview.sceneControls);
+        await expectCanvasSnapshot(editor, "segment-upgrade-preview.png");
 
-      await canvas.click({ position: preview.hover });
-      await editor.waitForIdle();
-      const controls = await page.evaluate((id) => {
-        const object = window.shift!.editor.object(id);
-        if (object?.kind !== "segment") throw new Error("Expected upgraded segment");
-        const cubic = object.layer?.segment(id)?.asCubic();
-        if (!cubic) throw new Error("Expected cubic segment");
-        return [cubic.controlStart, cubic.controlEnd].map(({ x, y }) => ({ x, y }));
-      }, preview.id);
-      controls.forEach((point, index) => {
-        expect(point.x).toBeCloseTo(preview.controls[index].x, 6);
-        expect(point.y).toBeCloseTo(preview.controls[index].y, 6);
-      });
-      await expect.poll(previewHandles).toBeNull();
-      await expect(canvas).toHaveCSS("cursor", /cursor@32\.svg/);
-    } finally {
-      await page.keyboard.up("Meta");
-    }
-  });
+        await page.keyboard.up("Meta");
+        await expect.poll(previewHandles).toBeNull();
+        await page.keyboard.down("Meta");
+        await expect.poll(previewHandles).toEqual(preview.sceneControls);
+        await glyphProperties(page).hover({ position: { x: 10, y: 10 } });
+        await expect.poll(previewHandles).toBeNull();
+        await canvas.hover({ position: preview.hover });
+        await expect.poll(previewHandles).toEqual(preview.sceneControls);
+
+        await canvas.click({ position: preview.hover });
+        await editor.waitForIdle();
+        const controls = await page.evaluate((id) => {
+          const object = window.shift!.editor.object(id);
+          if (object?.kind !== "segment") throw new Error("Expected upgraded segment");
+          const cubic = object.layer?.segment(id)?.asCubic();
+          if (!cubic) throw new Error("Expected cubic segment");
+          return [cubic.controlStart, cubic.controlEnd].map(({ x, y }) => ({ x, y }));
+        }, preview.id);
+        controls.forEach((point, index) => {
+          expect(point.x).toBeCloseTo(preview.controls[index].x, 6);
+          expect(point.y).toBeCloseTo(preview.controls[index].y, 6);
+        });
+        await expect.poll(previewHandles).toBeNull();
+        await expect(canvas).toHaveCSS("cursor", /cursor@32\.svg/);
+      } finally {
+        await page.keyboard.up("Meta");
+      }
+    },
+  );
 
   test("shows the add cursor for Shift-hover and adds the point to the selection", async ({
     page,
@@ -614,7 +620,7 @@ test.describe("Editor view", () => {
     await expect.poll(async () => (await editor.selectionIds()).length).toBeGreaterThan(0);
   });
 
-  test("composited canvas matches snapshot", async ({ editor }) => {
+  test("composited canvas matches snapshot", { tag: "@golden" }, async ({ editor }) => {
     await expectCanvasSnapshot(editor, "editor-canvas-A.png");
   });
 
@@ -625,7 +631,7 @@ test.describe("Editor view", () => {
   });
 
   test("explains icon-only editor actions on hover", async ({ page }) => {
-    const toolbar = page.getByRole("toolbar", { name: "Editor tools" });
+    const toolbar = editorToolbar(page);
     const selectTool = toolbar.getByRole("button", { name: "Select Tool (V)" });
     await selectTool.hover();
     await expect(page.getByRole("tooltip")).toHaveText("Select Tool (V)");

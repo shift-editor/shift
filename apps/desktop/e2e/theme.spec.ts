@@ -5,6 +5,7 @@ import { workspaceTest as test, expect, waitForWorkspaceReady } from "./fixtures
 import type { EditorDriver } from "./fixtures/EditorDriver";
 import {
   clickFirstCatalogGlyph,
+  editorToolbar,
   glyphCatalogSurface,
   waitForEditorReady,
 } from "./fixtures/appLocators";
@@ -31,23 +32,24 @@ test.describe("Theme", () => {
   // Shift Light uses stylesheet defaults; every other theme maps its palette to canvas tokens
   // through a light or a dark branch, so one theme of each branch covers the mapping.
   for (const themeId of ["shift-dark", "solarized-light"] as const) {
-    test(`${themeId} paints glyph, handles, and selection from theme tokens`, async ({
-      page,
-      editor,
-    }) => {
-      await useTheme(page, themeId);
-      await openSelectedS(editor);
+    test(
+      `${themeId} paints glyph, handles, and selection from theme tokens`,
+      { tag: "@golden" },
+      async ({ page, editor }) => {
+        await useTheme(page, themeId);
+        await openSelectedS(editor);
 
-      await expectCanvasSnapshot(editor, `canvas-S-all-selected-${themeId}.png`);
-    });
+        await expectCanvasSnapshot(editor, `canvas-S-all-selected-${themeId}.png`);
+      },
+    );
   }
 
-  test("dark editor chrome matches snapshot", async ({ page, editor }) => {
+  test("dark editor chrome matches snapshot", { tag: "@golden" }, async ({ page, editor }) => {
     await useTheme(page, "shift-dark");
     await editor.openGlyphByUnicode("53");
     await page.mouse.move(1, 1);
 
-    await expectPageSnapshot(page, "editor-shift-dark.png");
+    await expectPageSnapshot(page, "editor-shift-dark.png", [editorToolbar(page)]);
   });
 
   test("selects and persists a classic color theme", async ({ page }) => {
