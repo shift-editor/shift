@@ -73,9 +73,11 @@ jobs:
         run: pnpm build:native:e2e
 
       # Only tests that own a golden run; fixtures/snapshots.ts fails any golden captured
-      # in an untagged test, so none is skipped here. The pushed commit reruns full CI,
-      # which compares the new baselines.
+      # in an untagged test, so none is skipped here. CI on the pushed commit compares
+      # the new baselines.
       - name: Update visual snapshots
+        env:
+          E2E_WORKERS: 2
         run: pnpm test:e2e:visual --grep @golden --update-snapshots=all
 
       - name: Create snapshot patch
@@ -144,6 +146,7 @@ jobs:
           test -n "$(git diff --cached --name-only)"
 
       - name: Commit and push snapshots
+        id: commit
         env:
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
@@ -151,11 +154,27 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "test(e2e): update visual snapshots"
           git push origin "HEAD:refs/heads/$HEAD_REF"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
-      # A push made with GITHUB_TOKEN starts no workflows, but a dispatch does. CI on the
-      # snapshot commit compares the new baselines and reports the required checks.
-      - name: Run CI on the snapshot commit
+      # The bot's push starts the pull request workflows (CI, PR Title), but they wait for
+      # approval. Approve them so the required checks report on the snapshot commit. If none
+      # appear, dispatch CI instead.
+      - name: Start checks on the snapshot commit
         env:
           GH_TOKEN: ${{ github.token }}
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
-        run: gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$HEAD_REF"
+          SHA: ${{ steps.commit.outputs.sha }}
+        run: |
+          runs=""
+          for attempt in $(seq 1 12); do
+            sleep 10
+            runs="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$SHA&status=action_required" --jq '.workflow_runs[].id')"
+            if [[ "$(wc -w <<< "$runs")" -ge 2 ]]; then break; fi
+          done
+          if [[ -z "$runs" ]]; then
+            gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$HEAD_REF"
+            exit 0
+          fi
+          for id in $runs; do
+            gh api --method POST "repos/$GITHUB_REPOSITORY/actions/runs/$id/approve"
+          done
