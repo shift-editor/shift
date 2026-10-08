@@ -46,7 +46,7 @@ Captures one explicitly addressed Shift window as PNG. `target: "window"` captur
 
 Accepts an async zero-argument JavaScript function and returns its JSON result. For a targeted live session:
 
-```ts
+```js
 async () => {
   const session = (await shift.sessions.list()).find(({ sessionId }) => sessionId === "...");
   if (!session) throw new Error("Target session closed");
