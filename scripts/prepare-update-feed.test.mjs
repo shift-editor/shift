@@ -14,7 +14,10 @@ const repository = "shift-editor/shift";
 const nightlyAssetBaseUrl =
   "https://downloads.shift.graphics/nightly/0123456789abcdef0123456789abcdef01234567";
 
-async function writeArtifacts(root, { version = "0.1.1", distribution = "release" } = {}) {
+async function writeArtifacts(
+  root,
+  { version = "0.1.1", distribution = "release", linuxPackages = ["deb", "rpm", "AppImage"] } = {},
+) {
   const prefix = distribution === "nightly" ? "Shift-Nightly" : "Shift";
   for (const architecture of ["arm64", "x64"]) {
     const assetName = `${prefix}-${version}-macOS-${architecture}.zip`;
@@ -33,6 +36,26 @@ async function writeArtifacts(root, { version = "0.1.1", distribution = "release
       }),
     );
   }
+
+  const linuxDirectory = path.join(root, `desktop-${distribution}-linux-x64`);
+  await mkdir(linuxDirectory, { recursive: true });
+  const linuxFiles = linuxPackages.map((extension) => {
+    const assetName = `${prefix}-${version}-Linux-x64.${extension}`;
+    return { assetName, file: { url: assetName, sha512: `linux-${extension}`, size: 5 } };
+  });
+  for (const { assetName } of linuxFiles) {
+    await writeFile(path.join(linuxDirectory, assetName), "linux");
+  }
+  await writeFile(
+    path.join(linuxDirectory, "latest-linux.yml"),
+    dump({
+      version,
+      files: linuxFiles.map(({ file }) => file),
+      path: linuxFiles[0].assetName,
+      sha512: linuxFiles[0].file.sha512,
+      releaseDate: "2026-08-16T12:00:00.000Z",
+    }),
+  );
 
   if (distribution === "nightly") {
     const assetName = `${prefix}-${version}-Windows-x64-Setup.exe`;
@@ -113,7 +136,53 @@ test("stages generated Release metadata without a Windows channel", async (conte
   );
 });
 
-test("stages Nightly macOS and Windows metadata", async (context) => {
+test("offers only the AppImage on the Linux channel", async (context) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "shift-update-feed-"));
+  context.after(() => rm(root, { recursive: true, force: true }));
+  const artifactsRoot = path.join(root, "artifacts");
+  const siteRoot = path.join(root, "site");
+  await writeArtifacts(artifactsRoot);
+
+  await prepareUpdateFeed({
+    artifactsRoot,
+    siteRoot,
+    distribution: "release",
+    version: "0.1.1",
+    repository,
+  });
+
+  const linux = load(
+    await readFile(path.join(siteRoot, "updates/release/linux/x64/latest-linux.yml"), "utf8"),
+  );
+  const appImageUrl =
+    "https://github.com/shift-editor/shift/releases/download/v0.1.1/Shift-0.1.1-Linux-x64.AppImage";
+  assert.deepEqual(
+    linux.files.map((file) => file.url),
+    [appImageUrl],
+  );
+  assert.equal(linux.path, appImageUrl);
+  assert.equal(linux.sha512, "linux-AppImage");
+});
+
+test("rejects Linux metadata without an AppImage", async (context) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "shift-update-feed-"));
+  context.after(() => rm(root, { recursive: true, force: true }));
+  const artifactsRoot = path.join(root, "artifacts");
+  await writeArtifacts(artifactsRoot, { linuxPackages: ["deb", "rpm"] });
+
+  await assert.rejects(
+    prepareUpdateFeed({
+      artifactsRoot,
+      siteRoot: path.join(root, "site"),
+      distribution: "release",
+      version: "0.1.1",
+      repository,
+    }),
+    /must reference one AppImage, found 0/,
+  );
+});
+
+test("stages Nightly macOS, Windows, and Linux metadata", async (context) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "shift-update-feed-"));
   context.after(() => rm(root, { recursive: true, force: true }));
   const artifactsRoot = path.join(root, "artifacts");
@@ -136,6 +205,13 @@ test("stages Nightly macOS and Windows metadata", async (context) => {
   assert.equal(
     windows.files[0].url,
     `${nightlyAssetBaseUrl}/Shift-Nightly-0.321.1-Windows-x64-Setup.exe`,
+  );
+  const linux = load(
+    await readFile(path.join(siteRoot, "updates/nightly/linux/x64/latest-linux.yml"), "utf8"),
+  );
+  assert.deepEqual(
+    linux.files.map((file) => file.url),
+    [`${nightlyAssetBaseUrl}/Shift-Nightly-0.321.1-Linux-x64.AppImage`],
   );
 });
 
