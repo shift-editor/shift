@@ -10,6 +10,7 @@ import {
   type ShiftObservation,
 } from "@shift/runtime";
 import { SHIFT_CODE_TYPES } from "./declarations";
+import { SHIFT_GUIDE_TOPICS, SHIFT_MCP_INSTRUCTIONS, shiftGuide } from "./guide";
 import type { ShiftMcpActivity, ShiftMcpConnection } from "./types";
 
 const LOOPBACK_HOST = "127.0.0.1";
@@ -143,7 +144,26 @@ export class ShiftMcpServer {
   }
 
   #createProtocolServer(): McpServer {
-    const server = new McpServer({ name: "shift", version: "0.1.0" });
+    const server = new McpServer(
+      { name: "shift", version: "0.1.0" },
+      { instructions: SHIFT_MCP_INSTRUCTIONS },
+    );
+    server.registerTool(
+      "shift.guide",
+      {
+        description:
+          "Read the Shift skill for this build: when to use the live MCP or shift-cli, and how to interpret fonts. Start with the overview.",
+        inputSchema: z.object({
+          topic: z
+            .enum(SHIFT_GUIDE_TOPICS)
+            .default("overview")
+            .describe("Skill section to read; the overview lists the others."),
+        }),
+      },
+      async ({ topic }) => ({
+        content: [{ type: "text", text: shiftGuide(topic) }],
+      }),
+    );
     server.registerTool(
       "shift.describe",
       {

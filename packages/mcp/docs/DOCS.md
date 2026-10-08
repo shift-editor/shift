@@ -7,7 +7,7 @@ Local code-mode access to the live Shift desktop application.
 ## Architecture Invariants
 
 - **Architecture Invariant:** `@shift/mcp` is an adapter over `ShiftCapabilities` from `@shift/runtime`. It does not own font, document, editor, window, persistence state, or the reusable plugin contract.
-- **Architecture Invariant:** The Fastify MCP adapter binds only to `127.0.0.1`, validates localhost Host and Origin headers, and requires a persistent, private bearer token. Release, Nightly, Dev, and Nightly Dev use distinct fixed ports; a collision leaves MCP unavailable rather than selecting another port. Explicit test instances use port `0`.
+- **Architecture Invariant:** The Fastify MCP adapter binds only to `127.0.0.1`, and validates localhost Host and Origin headers (DNS-rebinding and browser defence, pinned by tests). There is no token; the host runs the server only while the user allows agent connections. Release, Nightly, Dev, and Nightly Dev use distinct fixed ports; a collision leaves MCP unavailable rather than selecting another port. Explicit test instances use port `0`.
 - **Architecture Invariant:** `@shift/mcp` owns only the protocol adapter. `@shift/sandbox` owns bounded QuickJS execution against `ShiftCapabilities`; the desktop app owns the utility-process supervisor independently of whether the MCP listener starts.
 - **Architecture Invariant:** Every editor request names a window explicitly. Focus changes never retarget an in-flight or subsequent call.
 - **Architecture Invariant:** Every targeted call preserves `ShiftObservation<T>` and its `fontRevision`; MCP never invents a transport-specific snapshot identity or strips revision preconditions from scripting.
@@ -18,8 +18,9 @@ Local code-mode access to the live Shift desktop application.
 ```text
 src/
   declarations.ts -- loads @shift/runtime's generated declaration for shift.describe
-  types.ts        -- MCP connection contract
-  server.ts       -- MCP tools, Fastify loopback HTTP, persistent token, connection descriptor
+  guide.ts        -- bundles skills/shift for shift.guide and the initialize instructions
+  types.ts        -- MCP connection and activity contracts
+  server.ts       -- MCP tools, Fastify loopback HTTP, activity tracking
   index.ts        -- main-process-safe public package surface
 ```
 
@@ -29,8 +30,9 @@ src/
 - `ShiftSession` -- explicit window and font-session identity, mode, focus, and editor connection status.
 - `ShiftObservation` and `FontRevision` -- authored-revision correlation shared by code mode and native capture metadata.
 - `EditorInspection` -- point-in-time renderer observation for one explicitly targeted session.
-- `ShiftMcpServer` -- loopback MCP lifecycle, authentication, connection descriptor, and tool registration.
-- `ShiftMcpConnection` -- local URL and persistent bearer token written to the private descriptor.
+- `ShiftMcpServer` -- loopback MCP lifecycle, tool registration, and recent-activity tracking.
+- `ShiftMcpConnection` -- the local URL a started server answers on.
+- `ShiftMcpActivity` -- the last request time and the clients that recently sent `initialize`; the request path is stateless, so activity stands in for "connected".
 
 ## How it works
 
@@ -66,7 +68,7 @@ async () => {
 
 ## Desktop ownership
 
-Electron main starts an app-owned `SandboxRuntimeProcess` and then one `ShiftMcpServer` after `app.whenReady()`. MCP startup failure leaves the sandbox available for other execution hosts. The MCP server writes `mcp.json` under the distribution-specific user-data directory with mode `0600` on POSIX. The descriptor contains the loopback URL and persistent token; an existing valid, private token is reused on restart, while an invalid or insecure descriptor prevents MCP startup. Shutdown leaves the credential in place. The token is local connection material, not a user login. MCP delegates code execution to the app-owned sandbox utility process. First-class capture and sandbox capture calls share the same main-process capability: main resolves the target, asks the renderer for editor bounds when needed, and captures with Electron without exposing host objects. A hard host deadline terminates the process if its internal QuickJS deadline cannot settle; a later execution restarts it.
+Electron main starts an app-owned `SandboxRuntimeProcess` after `app.whenReady()`. Its `AgentConnections` owns the persisted "Allow agent connections" setting (off by default) and starts a `ShiftMcpServer` only while it is on; Settings → Agents toggles it and shows the URL, per-client setup, and recent activity. MCP startup failure leaves the sandbox available for other execution hosts. Clients receive `instructions` on `initialize` pointing them to `shift.guide`, which serves the `skills/shift` skill bundled into this build, and to `shift.describe`. MCP delegates code execution to the app-owned sandbox utility process. First-class capture and sandbox capture calls share the same main-process capability: main resolves the target, asks the renderer for editor bounds when needed, and captures with Electron without exposing host objects. A hard host deadline terminates the process if its internal QuickJS deadline cannot settle; a later execution restarts it.
 
 Each renderer serves an agent request lane over a transferred `MessagePort`. Main pairs renderer observations with the explicit window and font-session identities before returning them. Launcher windows are excluded from session discovery.
 
@@ -85,7 +87,7 @@ Do not expose internal `Editor`, `FontStore`, `WorkspaceHost`, NAPI, SQLite rows
 
 ## Gotchas
 
-- The connection descriptor survives shutdown. A client must treat connection failure as authoritative when Shift is not running. The descriptor is checked for file type and, on POSIX, private mode before the token is reused; Windows relies on user-data directory ACLs.
+- A client must treat connection failure as authoritative when Shift is not running or agent connections are off. Without a token, any local process can connect while the setting is on; the read-only tool surface and the explicit, persisted opt-in are the protection.
 - Focus is descriptive only. Always pass a `windowId` from the same `sessions.list()` result used to choose a target.
 - A renderer can exist before its agent lane connects. Check `editorConnected` or retry session discovery rather than substituting another window.
 - Code-mode results must be JSON-serializable and remain under the configured output bound. Prefer the first-class MCP `shift.capture` tool when the client needs an image content block rather than base64 inside JSON.

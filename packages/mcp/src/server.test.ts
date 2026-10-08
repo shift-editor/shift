@@ -155,7 +155,27 @@ describe("Shift MCP local connection", () => {
       arguments: { windowId: 7, target: "editor" },
     });
 
-    expect(initialized).toMatchObject({ result: { serverInfo: { name: "shift" } } });
+    const guide = await mcpRequest(connection, "tools/call", {
+      name: "shift.guide",
+      arguments: {},
+    });
+    const cliGuide = await mcpRequest(connection, "tools/call", {
+      name: "shift.guide",
+      arguments: { topic: "cli" },
+    });
+
+    expect(initialized).toMatchObject({
+      result: {
+        serverInfo: { name: "shift" },
+        instructions: expect.stringContaining("shift.guide"),
+      },
+    });
+    expect(guide).toMatchObject({
+      result: { content: [{ text: expect.stringContaining("name: shift") }] },
+    });
+    expect(cliGuide).toMatchObject({
+      result: { content: [{ text: expect.stringContaining("# shift-cli") }] },
+    });
     expect(described).toMatchObject({
       result: { content: [{ text: expect.stringContaining("declare global") }] },
     });
