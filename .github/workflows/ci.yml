@@ -699,14 +699,17 @@ jobs:
 
       # macOS has no platform job. Platform tests need the OS focus and clipboard to
       # themselves, so they run one at a time after the parallel visual tests.
+      # A Playwright run empties its blob and output directories first, so this second run
+      # writes elsewhere and its blob joins the visual one afterwards.
       - name: Run macOS platform tests
         if: (success() || failure()) && matrix.target == 'visual'
         env:
-          PLAYWRIGHT_BLOB_OUTPUT_DIR: ${{ github.workspace }}/apps/desktop/blob-report
+          PLAYWRIGHT_BLOB_OUTPUT_DIR: ${{ github.workspace }}/apps/desktop/blob-report-platform
           PLAYWRIGHT_BLOB_OUTPUT_NAME: report-${{ matrix.target }}-platform-${{ matrix.shard }}.zip
         run: >-
           pnpm --dir apps/desktop exec playwright test
           --project=platform
+          --output=e2e/test-results/platform
           --fully-parallel
           --shard=${{ matrix.shard }}/${{ matrix.shard-total }}
 
@@ -721,6 +724,13 @@ jobs:
           --project=${{ matrix.project }}
           --fully-parallel
           --shard=${{ matrix.shard }}/${{ matrix.shard-total }}
+
+      - name: Collect macOS platform blob report
+        if: always() && matrix.target == 'visual'
+        shell: bash
+        run: |
+          mkdir -p apps/desktop/blob-report
+          cp apps/desktop/blob-report-platform/*.zip apps/desktop/blob-report/ 2>/dev/null || true
 
       - name: Upload blob report
         if: always()
