@@ -375,21 +375,29 @@ async function interpolatedInstance(page: Page): Promise<{ id: string; name: str
   return instance;
 }
 
-test("a comparison source outline matches snapshot", async ({ page, editor }) => {
-  const fixture = await openOutlineFixture(page);
+test(
+  "a comparison source outline matches snapshot",
+  { tag: "@golden" },
+  async ({ page, editor }) => {
+    const fixture = await openOutlineFixture(page);
 
-  await outlineToggle(page, "Show", "source", fixture.source.name).click();
-  await expect.poll(() => drawnOutlines(page)).toEqual([`source:${fixture.source.id}`]);
+    await outlineToggle(page, "Show", "source", fixture.source.name).click();
+    await expect.poll(() => drawnOutlines(page)).toEqual([`source:${fixture.source.id}`]);
 
-  await expectCanvasSnapshot(editor, "outline-source.png");
-});
+    await expectCanvasSnapshot(editor, "outline-source.png");
+  },
+);
 
-test("an interpolated instance outline matches snapshot", async ({ page, editor }) => {
-  await openOutlineFixture(page);
-  const instance = await interpolatedInstance(page);
+test(
+  "an interpolated instance outline matches snapshot",
+  { tag: "@golden" },
+  async ({ page, editor }) => {
+    await openOutlineFixture(page);
+    const instance = await interpolatedInstance(page);
 
-  await outlineToggle(page, "Show", "instance", instance.name).click();
-  await expect.poll(() => drawnOutlines(page)).toEqual([`instance:${instance.id}`]);
+    await outlineToggle(page, "Show", "instance", instance.name).click();
+    await expect.poll(() => drawnOutlines(page)).toEqual([`instance:${instance.id}`]);
 
-  await expectCanvasSnapshot(editor, "outline-interpolated-instance.png");
-});
+    await expectCanvasSnapshot(editor, "outline-interpolated-instance.png");
+  },
+);

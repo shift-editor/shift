@@ -28,6 +28,11 @@ export function editorShell(page: Page) {
   return page.getByTestId("editor-shell");
 }
 
+/** Toolbar holding the editor's tool buttons. */
+export function editorToolbar(page: Page) {
+  return page.getByRole("toolbar", { name: "Editor tools" });
+}
+
 /** Element compositing the background, scene, marker, and interactive editor canvases. */
 export function editorCanvasStack(page: Page) {
   return page.getByTestId("editor-canvas-stack");

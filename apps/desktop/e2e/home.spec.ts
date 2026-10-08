@@ -12,7 +12,7 @@ import {
 import { expectPageSnapshot, expectPanelSnapshot } from "./fixtures/snapshots";
 
 test.describe("Home view", () => {
-  test("glyph grid matches snapshot", async ({ page }) => {
+  test("glyph grid matches snapshot", { tag: "@golden" }, async ({ page }) => {
     await expect(glyphCatalogRenderer(page)).toHaveAttribute("data-grid-readiness", "Complete", {
       timeout: 30_000,
     });
@@ -20,7 +20,7 @@ test.describe("Home view", () => {
     await expectPageSnapshot(page, "home-glyph-grid.png");
   });
 
-  test("language coverage filters the glyph grid", async ({ page }) => {
+  test("language coverage filters the glyph grid", { tag: "@golden" }, async ({ page }) => {
     await page.getByRole("button", { name: "Latin", exact: true }).click();
     const english = page
       .getByRole("button")
@@ -81,14 +81,16 @@ test.describe("Home view", () => {
     await expect(editorGrid).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
   });
 
-  test("selected category uses one background across its heading and children", async ({
-    page,
-  }) => {
-    await page.getByText("Punctuation", { exact: true }).click();
-    await expect(page.getByRole("button", { name: "General", exact: true })).toBeVisible();
-    await page.mouse.move(0, 0);
-    await expectPanelSnapshot(fontNavigation(page), "home-category-active.png");
-  });
+  test(
+    "selected category uses one background across its heading and children",
+    { tag: "@golden" },
+    async ({ page }) => {
+      await page.getByText("Punctuation", { exact: true }).click();
+      await expect(page.getByRole("button", { name: "General", exact: true })).toBeVisible();
+      await page.mouse.move(0, 0);
+      await expectPanelSnapshot(fontNavigation(page), "home-category-active.png");
+    },
+  );
 
   test("shift-selects glyph categories as a visible range", async ({ page }) => {
     const sidebar = page.getByRole("complementary", { name: "Font navigation" });
