@@ -42,6 +42,7 @@ import {
   computed,
   effect,
   track,
+  untracked,
   type ComputedSignal,
   type Effect,
   type Signal,
@@ -1249,7 +1250,7 @@ export class Font {
    * @returns The exact source, or `null` when the id is not part of this font.
    */
   source(sourceId: SourceId): Source | null {
-    return this.#designspace.source(sourceId);
+    return this.#peekDesignspace((designspace) => designspace.source(sourceId));
   }
 
   /**
@@ -1267,7 +1268,9 @@ export class Font {
     const source = this.source(sourceId);
     if (!source) return null;
 
-    return this.#designspace.toExternal(designAxisLocationFromLocation(source.location));
+    return this.#peekDesignspace((designspace) =>
+      designspace.toExternal(designAxisLocationFromLocation(source.location)),
+    );
   }
 
   /**
@@ -1280,7 +1283,7 @@ export class Font {
    * @returns The exact matching source, or `null` when the location is interpolated.
    */
   sourceAt(location: ExternalAxisLocation): Source | null {
-    return this.#designspace.sourceAt(location);
+    return this.#peekDesignspace((designspace) => designspace.sourceAt(location));
   }
 
   /**
@@ -1307,7 +1310,7 @@ export class Font {
   }
 
   nearestSource(location: ExternalAxisLocation): Source | null {
-    return this.#designspace.nearestSource(location);
+    return this.#peekDesignspace((designspace) => designspace.nearestSource(location));
   }
 
   /** @knipclassignore — used by VariationPanel component */
@@ -1347,7 +1350,7 @@ export class Font {
     const sourceId = mintSourceId();
     const metrics = this.metricsAtLocation(externalLocation);
     const designLocation = locationFromDesignAxisLocation(
-      this.#designspace.toDesign(externalLocation),
+      this.#peekDesignspace((designspace) => designspace.toDesign(externalLocation)),
     );
     this.editCoordinator.push({
       kind: "createSource",
@@ -1601,13 +1604,18 @@ export class Font {
    * @returns Resolved standard and technical metrics in font units.
    */
   metricsAtLocation(location: ExternalAxisLocation): SourceMetrics {
-    const designspace = this.#designspace;
-    const designLocation = designspace.toDesign(location);
-    const exactSource = designspace.sourceAtDesign(designLocation);
+    const { designLocation, exactSource, axes } = this.#peekDesignspace((designspace) => {
+      const designLocation = designspace.toDesign(location);
+      return {
+        designLocation,
+        exactSource: designspace.sourceAtDesign(designLocation),
+        axes: designspace.axes,
+      };
+    });
     if (exactSource) return this.#metricsForSource(exactSource);
 
     return (
-      this.#sourceMetricsInterpolationCell.peek()?.resolve(designLocation, designspace.axes) ??
+      this.#sourceMetricsInterpolationCell.peek()?.resolve(designLocation, axes) ??
       this.defaultSourceMetrics
     );
   }
@@ -1643,6 +1651,20 @@ export class Font {
   }
 
   defaultLocation(): ExternalAxisLocation {
-    return this.#designspace.defaultLocation();
+    return this.#peekDesignspace((designspace) => designspace.defaultLocation());
+  }
+
+  /**
+   * Reads the designspace without subscribing the current reactive reader.
+   *
+   * @remarks
+   * These Font lookups have always read with `peek()`, and reactive callers
+   * depend on that: the catalog's metrics read `metricsForSource(activeSourceId)`
+   * and would throw on a just-deleted source if a source-list change re-ran
+   * them before the editor moves off it. Readers that must follow the
+   * designspace use `designspace` (or `sourceAtCell`) directly.
+   */
+  #peekDesignspace<T>(read: (designspace: Designspace) => T): T {
+    return untracked(() => read(this.#designspace));
   }
 }
