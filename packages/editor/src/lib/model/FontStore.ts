@@ -6,6 +6,7 @@ import type {
   FontSnapshot,
   GlyphEntry,
   GlyphId,
+  GlyphName,
   GlyphProjection,
   GlyphRecord,
   GlyphSnapshot,
@@ -17,6 +18,7 @@ import type {
   PointId,
   SegmentId,
   SourceId,
+  Unicode,
   WorkspaceGlyphLayerSnapshot,
   WorkspaceSnapshot,
 } from "@shift/types";
@@ -397,7 +399,12 @@ export class FontStore {
 
   records(): readonly GlyphRecord[] {
     track(this.#indexCell);
-    return [...this.#indexCell.peek().recordsById.values()];
+    return this.#indexCell.peek().records;
+  }
+
+  /** Every committed glyph relation, replaced whole with each snapshot. */
+  get recordIndexCell(): Signal<FontRecordIndex> {
+    return this.#indexCell;
   }
 
   projection(glyphId: GlyphId): GlyphProjection | null {
@@ -615,53 +622,73 @@ export class FontStore {
   }
 }
 
-const EMPTY_RECORD_INDEX: FontRecordIndex = {
-  layerByGlyphSource: new Map(),
-  glyphByLayer: new Map(),
-  glyphById: new Map(),
-  recordsById: new Map(),
-};
+const EMPTY_RECORD_INDEX: FontRecordIndex = recordIndex([], []);
 
 function workspaceRecordIndex(snapshot: WorkspaceSnapshot | null): FontRecordIndex {
-  if (!snapshot) return EMPTY_RECORD_INDEX;
-
-  const layerByGlyphSource = new Map<GlyphSourceKey, LayerId>();
-  const glyphByLayer = new Map<LayerId, GlyphId>();
-  const glyphById = new Map<GlyphId, GlyphEntry>();
-  const recordsById = new Map<GlyphId, GlyphRecord>();
-  for (const glyph of snapshot.glyphs) {
-    glyphById.set(glyph.id, glyphEntry(glyph));
-    recordsById.set(glyph.id, glyph);
-    for (const layer of glyph.layers) {
-      layerByGlyphSource.set(glyphSourceKey(glyph.id, layer.sourceId), layer.id);
-      glyphByLayer.set(layer.id, glyph.id);
-    }
-  }
-
-  return { layerByGlyphSource, glyphByLayer, glyphById, recordsById };
+  return snapshot
+    ? recordIndex(snapshot.glyphs.map(glyphEntry), snapshot.glyphs)
+    : EMPTY_RECORD_INDEX;
 }
 
 function fontRecordIndex(
   snapshot: FontSnapshot,
   records: readonly GlyphRecord[] = [],
 ): FontRecordIndex {
+  return recordIndex(snapshot.glyphs, records);
+}
+
+/** Indexes directory entries and the records of those glyphs; records of unknown glyphs are dropped. */
+function recordIndex(
+  entries: readonly GlyphEntry[],
+  records: readonly GlyphRecord[],
+): FontRecordIndex {
+  const glyphById = new Map<GlyphId, GlyphEntry>();
+  const entryByName = new Map<GlyphName, GlyphEntry>();
+  const nameByUnicode = new Map<Unicode, GlyphName>();
+  for (const entry of entries) {
+    glyphById.set(entry.id, entry);
+    entryByName.set(entry.name, entry);
+    for (const unicode of entry.unicodes) {
+      if (!nameByUnicode.has(unicode)) nameByUnicode.set(unicode, entry.name);
+    }
+  }
+
+  const knownRecords = records.filter((record) => glyphById.has(record.id));
+  const recordsById = new Map<GlyphId, GlyphRecord>();
+  const recordByName = new Map<GlyphName, GlyphRecord>();
+  const dependentsById = new Map<GlyphId, Set<GlyphId>>();
   const layerByGlyphSource = new Map<GlyphSourceKey, LayerId>();
   const glyphByLayer = new Map<LayerId, GlyphId>();
-  const glyphById = new Map<GlyphId, GlyphEntry>();
-  const recordsById = new Map<GlyphId, GlyphRecord>();
-  for (const glyph of snapshot.glyphs) glyphById.set(glyph.id, glyph);
-
-  for (const record of records) {
-    if (!glyphById.has(record.id)) continue;
-
+  for (const record of knownRecords) {
     recordsById.set(record.id, record);
+    recordByName.set(record.name, record);
+    for (const baseId of record.componentBaseGlyphIds) {
+      let dependents = dependentsById.get(baseId);
+      if (!dependents) {
+        dependents = new Set();
+        dependentsById.set(baseId, dependents);
+      }
+      dependents.add(record.id);
+    }
     for (const layer of record.layers) {
       layerByGlyphSource.set(glyphSourceKey(record.id, layer.sourceId), layer.id);
       glyphByLayer.set(layer.id, record.id);
     }
   }
 
-  return { layerByGlyphSource, glyphByLayer, glyphById, recordsById };
+  return {
+    entries: [...entries],
+    records: knownRecords,
+    unicodes: [...nameByUnicode.keys()].sort((a, b) => a - b),
+    glyphById,
+    recordsById,
+    entryByName,
+    recordByName,
+    nameByUnicode,
+    dependentsById,
+    layerByGlyphSource,
+    glyphByLayer,
+  };
 }
 
 function glyphSourceKey(glyphId: GlyphId, sourceId: SourceId): GlyphSourceKey {

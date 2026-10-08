@@ -67,6 +67,51 @@ describe("FontStore glyph snapshot application", () => {
   });
 });
 
+describe("FontStore record index", () => {
+  it("indexes every glyph relation once and follows workspace changes", () => {
+    const base = snapshot("document-a", LAYER_A_ID);
+    const acute = {
+      id: "glyph_acute" as GlyphId,
+      name: "acute" as GlyphName,
+      unicodes: [180 as Unicode, 65 as Unicode],
+      componentBaseGlyphIds: [],
+      layers: [],
+    };
+    const aacute = {
+      id: "glyph_aacute" as GlyphId,
+      name: "Aacute" as GlyphName,
+      unicodes: [193 as Unicode],
+      componentBaseGlyphIds: [GLYPH_ID, acute.id],
+      layers: [{ id: LAYER_B_ID, sourceId: SOURCE_ID }],
+    };
+    const store = new FontStore({
+      workspace: { ...base, glyphs: [...base.glyphs, acute, aacute] },
+    });
+    const font = new Font({ store });
+
+    const index = store.recordIndexCell.peek();
+    expect(index.entries.map(({ name }) => name)).toEqual(["A", "acute", "Aacute"]);
+    expect(index.unicodes).toEqual([65, 180, 193]);
+    expect(index.nameByUnicode.get(65 as Unicode)).toBe("A");
+    expect(index.layerByGlyphSource.size).toBe(2);
+    expect(font.recordForName("Aacute" as GlyphName)?.id).toBe(aacute.id);
+    expect(font.componentBaseNamesForName("Aacute" as GlyphName)).toEqual(["A", "acute"]);
+    expect(font.dependentNamesForName("acute" as GlyphName)).toEqual(["Aacute"]);
+    expect(font.nameForUnicode(193 as Unicode)).toBe("Aacute");
+
+    store.applyWorkspaceChange({
+      next: { glyphs: [base.glyphs[0]!, acute] },
+      layers: [],
+      dependents: [],
+    });
+
+    expect(font.hasGlyph(aacute.id)).toBe(false);
+    expect(font.entryForName("Aacute" as GlyphName)).toBeNull();
+    expect(font.dependentNamesForName("acute" as GlyphName)).toEqual([]);
+    expect(font.glyphEntries().map(({ name }) => name)).toEqual(["A", "acute"]);
+  });
+});
+
 describe("FontStore glyph object ownership", () => {
   it("indexes concrete layer structure ids by owner", () => {
     const store = new FontStore({ workspace: snapshot("document-a", LAYER_A_ID) });
