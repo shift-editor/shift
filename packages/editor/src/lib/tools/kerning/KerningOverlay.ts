@@ -9,9 +9,9 @@ type LabelTheme = Canvas["theme"]["spacing"];
 
 /** How a pair is drawn beyond its kern and pill. */
 export interface KerningDrawOptions {
-  /** Whether the pointer is on the pill, which lightens and shows the groups' reach. */
+  /** Whether the pointer is on the pill, which lightens, edges the strip, and shows the groups' reach. */
   readonly hovered?: boolean;
-  /** Whether the arrow keys change this pair, which outlines its strip. */
+  /** Whether the arrow keys change this pair, which edges its strip. */
   readonly selected?: boolean;
 }
 
@@ -37,7 +37,7 @@ export function drawKerningPair(
   canvas.withTransform(editor.sceneTransform(pair.gap.node), (local) => {
     if (options.hovered) drawGroupGlyphs(local, editor, pair, theme);
     local.withScreenSpace((screen, project) => {
-      drawKern(screen, project, pair, theme, options.selected ?? false);
+      drawKern(screen, project, pair, theme, Boolean(options.selected || options.hovered));
       drawPill(screen, editor, pair, theme, canvas.theme.spacing, options.hovered ?? false);
     });
   });
@@ -48,7 +48,7 @@ function drawKern(
   project: ScreenProjection,
   pair: KerningPair,
   theme: KerningTheme,
-  selected: boolean,
+  outlined: boolean,
 ): void {
   const { gap } = pair;
   const a = project.point({ x: gap.leftBoundary, y: gap.top });
@@ -59,16 +59,9 @@ function drawKern(
   const height = Math.abs(b.y - a.y);
 
   screen.fillRect(left, top, width, height, theme.fill);
-  // The selected pair, the one the arrow keys change, has a heavier edge.
-  const edge = selected ? 2 : 1;
-  screen.strokeRect(
-    left + edge / 2,
-    top + edge / 2,
-    Math.max(width - edge, 0),
-    height - edge,
-    theme.accent,
-    edge,
-  );
+  // Only the selected pair, or one whose pill is under the pointer, has an edge.
+  if (!outlined) return;
+  screen.strokeRect(left + 0.5, top + 0.5, Math.max(width - 1, 0), height - 1, theme.accent, 1);
 }
 
 /**
