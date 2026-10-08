@@ -12,6 +12,8 @@ export function cursorToCSS(cursor: CursorType): string {
       return `-webkit-image-set(url("../cursors/cursor@32-add.svg") 1x, url("../cursors/cursor@64-add.svg") 2x) 5 0, default`;
     case "bend":
       return `-webkit-image-set(url("../cursors/cursor@32-bend.svg") 1x, url("../cursors/cursor@64-bend.svg") 2x) 5 0, default`;
+    case "spacing":
+      return `-webkit-image-set(url("../cursors/cursor@32-vertical.svg") 1x, url("../cursors/cursor@64-vertical.svg") 2x) 5 0, ew-resize`;
     case "end":
       return `-webkit-image-set(url("../cursors/cursor@32-end.svg") 1x, url("../cursors/cursor@64-end.svg") 2x) 5 0, default`;
     case "crosshair":

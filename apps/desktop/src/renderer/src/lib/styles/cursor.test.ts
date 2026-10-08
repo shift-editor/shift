@@ -12,6 +12,7 @@ const CUSTOM_CURSORS: CursorType[] = [
   { type: "copy" },
   { type: "add" },
   { type: "bend" },
+  { type: "spacing" },
   { type: "end" },
   { type: "crosshair" },
   { type: "crosshair-circle" },

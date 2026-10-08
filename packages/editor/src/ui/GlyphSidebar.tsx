@@ -5,14 +5,20 @@ import { formatCodepointAsUPlus } from "../lib/utils/unicode";
 import { EditableSidebarInput } from "./EditableSidebarInput";
 import { ShiftIcon } from "./ShiftIcon";
 import type { EditorUISession } from "./types";
+import type { GlyphId } from "@shift/types";
 import { useGlyphMetrics } from "./useGlyphMetrics";
 
 /** Application content merged into the glyph sidebar. */
 export interface GlyphSidebarHost {
   /** Replaces the default header of family name and zoom control. */
   header?: ReactNode;
-  /** Label shown under the metrics; defaults to the glyph name. */
-  glyphLabel?: string;
+  /**
+   * Label shown under the metrics for the displayed glyph; defaults to its name.
+   *
+   * @remarks
+   * Called with the glyph the sidebar shows, which changes as the edited glyph does.
+   */
+  glyphLabel?: (glyphId: GlyphId) => string | undefined;
   /** Rendered below the glyph metrics, for panels about the current selection. */
   selection?: ReactNode;
 }
@@ -42,7 +48,7 @@ export function GlyphSidebar({ session, host = {} }: GlyphSidebarProps) {
   const rightSidebearing = sidebearings.rsb === null ? null : Math.round(sidebearings.rsb);
   const sidebearingsEditable = editable && leftSidebearing !== null && rightSidebearing !== null;
   const unicode = glyph?.unicode ?? null;
-  const glyphLabel = glyph === null ? null : (host.glyphLabel ?? glyph.name);
+  const glyphLabel = glyph === null ? null : (host.glyphLabel?.(glyph.id) ?? glyph.name);
 
   return (
     <aside

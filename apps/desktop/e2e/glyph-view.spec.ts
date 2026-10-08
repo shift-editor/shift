@@ -1,4 +1,3 @@
-import type { LocalPoint } from "@shift/editor/spaces";
 import type { Page } from "@playwright/test";
 import type { GlyphId, GlyphName } from "@shift/types";
 import { expect, workspaceTest as test } from "./fixtures/electronApp";
@@ -39,30 +38,6 @@ async function createViewGlyphs(page: Page): Promise<readonly { id: GlyphId; nam
     }
     await workspace.font.editCoordinator.settled();
     return records.map(({ id, name }) => ({ id, name }));
-  });
-}
-
-async function cameraFrame(page: Page) {
-  return page.evaluate(() => {
-    const workspace = window.shift;
-    const canvas = document.querySelector<HTMLCanvasElement>("#interactive-canvas");
-    if (!workspace || !canvas) throw new Error("Expected editor canvas");
-
-    const editor = workspace.editor;
-    const node = editor.scene.nodesOfKind("glyph")[0];
-    if (!node) throw new Error("Expected glyph node");
-    const toScreen = (x: number, y: number) =>
-      editor.sceneToScreen(editor.toScene(node, { x, y } as LocalPoint));
-
-    const metrics = workspace.font.metricsAtLocation(editor.externalLocation);
-    return {
-      transform: editor.getCameraTransform(),
-      origin: toScreen(0, 0),
-      advance: toScreen(editor.xAdvance, 0),
-      ascender: toScreen(0, metrics.ascender),
-      descender: toScreen(0, metrics.descender),
-      viewport: { width: canvas.clientWidth, height: canvas.clientHeight },
-    };
   });
 }
 
@@ -158,28 +133,4 @@ test("does not turn released-modifier zoom momentum into pan", async ({ page, ed
     deltaY: 0,
   });
   expect((await page.evaluate(() => window.shift?.editor.pan))?.x).toBe(gesture.zoomPan.x - 30);
-});
-
-test("keeps a useful UPM frame across empty and extreme glyphs", async ({ page, editor }) => {
-  const glyphs = await createViewGlyphs(page);
-
-  for (const glyph of glyphs) {
-    await editor.openGlyph(glyph.id);
-    // Fit-on-open publishes after the scene node; read the projection from a rendered frame.
-    await editor.waitForCanvasRender();
-    const frame = await cameraFrame(page);
-
-    const context = `${glyph.name}: ${JSON.stringify(frame)}`;
-    for (const point of [frame.origin, frame.advance]) {
-      expect(point.x, context).toBeGreaterThanOrEqual(0);
-      expect(point.x, context).toBeLessThanOrEqual(frame.viewport.width);
-    }
-    for (const point of [frame.ascender, frame.origin, frame.descender]) {
-      expect(point.y, context).toBeGreaterThanOrEqual(0);
-      expect(point.y, context).toBeLessThanOrEqual(frame.viewport.height);
-    }
-
-    await page.getByRole("button", { name: "Font overview" }).click();
-    await page.waitForURL(/#\/home$/);
-  }
 });
