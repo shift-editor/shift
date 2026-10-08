@@ -583,6 +583,7 @@ export class Font {
     get invalidGlyphsCell(): Signal<GlyphInvalidation>;
     isVariable(): boolean;
     get languageIdsCell(): Signal<readonly string[] | null>;
+    layerIdFor(glyphId: GlyphId, sourceId: SourceId): LayerId | null;
     layerIdForAnchor(anchorId: AnchorId): LayerId | null;
     layerIdForContour(contourId: ContourId): LayerId | null;
     layerIdForPoint(pointId: PointId): LayerId | null;
@@ -622,6 +623,7 @@ export class Font {
     pointIdsForSegment(segmentId: SegmentId): readonly PointId[] | null;
     primaryUnicodeForName(name: GlyphName): Unicode | null;
     readLayers(layerIds: readonly LayerId[]): Promise<readonly GlyphLayerSnapshot[]>;
+    readLayersInSource(glyphIds: readonly GlyphId[], sourceId: SourceId): Promise<(GlyphLayerSnapshot | null)[]>;
     // (undocumented)
     recordForId(glyphId: GlyphId): GlyphRecord | null;
     // (undocumented)
@@ -1328,7 +1330,7 @@ export function useSignalState<T>(signal: Signal<T>, options?: UseSignalOptions)
 
 // Warnings were encountered during analysis:
 //
-// dist/Editor-DP5V9mC1.d.ts:4412:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
+// dist/Editor-KD16VI4e.d.ts:4414:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

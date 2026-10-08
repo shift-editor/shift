@@ -129,6 +129,11 @@ export class FontStore {
     return this.#indexCell.peek().glyphByLayer.get(layerId) ?? null;
   }
 
+  /** The layer `glyphId` authors in `sourceId`, or `null` when it has none. */
+  layerIdForGlyphSource(glyphId: GlyphId, sourceId: SourceId): LayerId | null {
+    return this.#indexCell.peek().layerByGlyphSource.get(glyphSourceKey(glyphId, sourceId)) ?? null;
+  }
+
   layerIdForPoint(pointId: PointId): LayerId | null {
     return this.#glyphObjectIndexCell.peek().layerIdByPointId.get(pointId) ?? null;
   }

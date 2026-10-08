@@ -106,8 +106,14 @@ export class ShiftFontReader {
     const page = entries.slice(start, start + limit);
     const items = page.map((entry) => this.#glyphSummary(entry.id));
     if (sourceId) {
-      const layers = await this.#authoredLayersIn(items, sourceId);
-      for (const [index, item] of items.entries()) item.layer = layers[index] ?? null;
+      const layers = await this.#font.readLayersInSource(
+        page.map(({ id }) => id),
+        sourceId,
+      );
+      items.forEach((item, index) => {
+        const layer = layers[index];
+        item.layer = layer ? ShiftLayer.fromSnapshot(layer).authored() : null;
+      });
     }
 
     const last = page.at(-1);
@@ -179,33 +185,6 @@ export class ShiftFontReader {
       componentBaseGlyphIds: record?.componentBaseGlyphIds ?? [],
       layers: record?.layers.map(({ id, sourceId }) => ({ layerId: id, sourceId })) ?? [],
     };
-  }
-
-  /** Each glyph's authored layer in `sourceId`, or `null` where it has none. */
-  async #authoredLayersIn(
-    glyphs: readonly GlyphSummary[],
-    sourceId: SourceId,
-  ): Promise<(AuthoredLayer | null)[]> {
-    const font = this.#font;
-    const sourceIsKnown =
-      font.sources.some((source) => source.id === sourceId) ||
-      font
-        .glyphRecords()
-        .some((glyph) => glyph.layers.some((layer) => layer.sourceId === sourceId));
-    if (!sourceIsKnown) throw new Error(`Source ${sourceId} is not in this font`);
-
-    const layerIds = glyphs.map(
-      (glyph) => glyph.layers.find((layer) => layer.sourceId === sourceId)?.layerId ?? null,
-    );
-    const snapshots = await font.readLayers(
-      layerIds.filter((layerId): layerId is LayerId => layerId !== null),
-    );
-    const byLayer = new Map(snapshots.map((snapshot) => [snapshot.state.layerId, snapshot]));
-
-    return layerIds.map((layerId) => {
-      const snapshot = layerId ? byLayer.get(layerId) : undefined;
-      return snapshot ? ShiftLayer.fromSnapshot(snapshot).authored() : null;
-    });
   }
 
   #externalLocation(coordinates: AxisCoordinate[]): ExternalAxisLocation {
