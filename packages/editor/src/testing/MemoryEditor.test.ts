@@ -268,6 +268,7 @@ function fixture(): {
         interpolation: {
           basis: {
             sourceIds: [regularSourceId, boldSourceId],
+            designNormalization: [{ axisId, minimum: 0, default: 0, maximum: 1000 }],
             basis: {
               deltas: [
                 { region: [], values: new Float64Array([1, 0]) },

@@ -392,6 +392,10 @@ export class FontSessionClient {
       axes: next.axes ?? current.axes,
       axisMappings: next.axisMappings ?? current.axisMappings,
       axisMappingBases: next.axisMappingBases ?? current.axisMappingBases,
+      metricDefinitions: next.metricDefinitions ?? current.metricDefinitions,
+      sourceMetricsInterpolation: next.sourceMetricsInterpolation
+        ? (next.sourceMetricsInterpolation.snapshot ?? null)
+        : current.sourceMetricsInterpolation,
       namedInstances: next.namedInstances ?? current.namedInstances,
       languageIds: next.languages ? (next.languages.languageIds ?? null) : current.languageIds,
       sources: next.sources ?? current.sources,

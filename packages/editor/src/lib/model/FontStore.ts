@@ -314,7 +314,7 @@ export class FontStore {
           cell.set(null);
           this.#glyphCells.delete(glyphId);
         }
-        if (next?.axes || next?.sources) this.#interpolationBases.clear();
+        if (next?.axes || next?.sources || next?.axisMappingBases) this.#interpolationBases.clear();
 
         for (const [layerId, cell] of this.#layerStateCells) {
           if (index.glyphByLayer.has(layerId)) continue;
@@ -349,14 +349,14 @@ export class FontStore {
       }
     });
 
-    if (applied.next?.axes || applied.next?.sources) {
+    if (applied.next?.axes || applied.next?.sources || applied.next?.axisMappingBases) {
       this.#invalidGlyphs.set({ glyphIds: null });
     } else if (invalidGlyphIds.size > 0) {
       this.#invalidGlyphs.set({ glyphIds: [...invalidGlyphIds] });
     }
     this.#committedRevision.update((revision) => revision + 1);
 
-    if (applied.next?.axes || applied.next?.sources) {
+    if (applied.next?.axes || applied.next?.sources || applied.next?.axisMappingBases) {
       return this.#residentProjectionGlyphIds();
     }
 

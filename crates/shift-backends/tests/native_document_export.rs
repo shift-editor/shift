@@ -4,7 +4,9 @@ use std::{
 };
 
 use shift_backends::font_loader::FontLoader;
-use shift_font::{test_support::sample_font, Font, LibValue};
+use shift_font::{
+    test_support::sample_font, DesignLocation, ExternalLocation, Font, LibValue, MetricKind,
+};
 use shift_store::ShiftStore;
 
 fn native_round_trip(temp: &Path, font: &Font) -> Font {
@@ -49,6 +51,68 @@ fn tree_snapshot(root: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
     let mut snapshot = BTreeMap::new();
     collect(root, root, &mut snapshot);
     snapshot
+}
+
+#[test]
+fn mapped_weight_interpolation_survives_native_round_trip() {
+    let fixture =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/fonts/MappedWeight.glyphs");
+    let original = FontLoader::new()
+        .read_font(fixture.to_str().unwrap())
+        .unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    let native = native_round_trip(temp.path(), &original);
+
+    for font in [&original, &native] {
+        let axis_id = font.axes()[0].id();
+        let glyph = font.glyph_by_name("A").unwrap();
+        let interpolation = font.glyph_interpolation(&glyph.id()).unwrap().unwrap();
+        let metrics = font.source_metric_interpolation().unwrap();
+        let ascender_id = font
+            .metric_definition_for_kind(MetricKind::Ascender)
+            .unwrap()
+            .id();
+        let normalization = font.design_normalization().unwrap();
+        assert_eq!(normalization[0].minimum, 30.0);
+        assert_eq!(normalization[0].default, 86.0);
+        assert_eq!(normalization[0].maximum, 160.0);
+        assert_eq!(font.axes()[0].default(), 400.0);
+
+        for (external, x, advance, ascender) in [
+            (100.0, 30.0, 300.0, 700.0),
+            (250.0, 58.0, 450.0, 750.0),
+            (400.0, 86.0, 600.0, 800.0),
+            (681.25, 123.0, 750.0, 850.0),
+            (800.0, 160.0, 900.0, 900.0),
+        ] {
+            let mut external_location = ExternalLocation::new();
+            external_location.set(axis_id.clone(), external);
+            let design_location = font.mapped_location(&external_location).unwrap();
+            let layer = interpolation
+                .resolve(&design_location, font.axes())
+                .unwrap();
+            assert!((layer.contours_iter().next().unwrap().points()[1].x() - x).abs() < 1e-9);
+            assert!((layer.width() - advance).abs() < 1e-9);
+            let resolved_metrics = metrics.resolve(&design_location, font.axes()).unwrap();
+            assert!(
+                (resolved_metrics.metric_values()[&ascender_id].position - ascender).abs() < 1e-9
+            );
+            let weights = interpolation
+                .basis()
+                .weights_at(&design_location, font.axes())
+                .unwrap();
+            assert!((weights.iter().sum::<f64>() - 1.0).abs() < 1e-9);
+        }
+
+        let default = interpolation
+            .resolve(&DesignLocation::new(), font.axes())
+            .unwrap();
+        assert_eq!(default.width(), 600.0);
+        assert_eq!(
+            default.contours_iter().next().unwrap().points()[1].x(),
+            86.0
+        );
+    }
 }
 
 #[test]

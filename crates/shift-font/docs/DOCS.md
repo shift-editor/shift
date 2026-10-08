@@ -14,6 +14,7 @@ First-class Rust font object model for Shift.
 - **Architecture Invariant:** Named instances own complete external locations but no source or geometry. Sources own design-space locations.
 - **Architecture Invariant:** The default source is the required master origin at the axes' default location, not an arbitrary fallback. `DeleteSource` rejects both the default source and the last source; replacing the default requires a future explicit atomic operation that preserves a valid origin.
 - **Architecture Invariant:** Mapping edits never rewrite external named-instance intent.
+- **Architecture Invariant:** Authored source interpolation compiles and evaluates with the same Rust-derived `DesignNormalization`, never external axis bounds. Each `InterpolationBasis` transports its design extrema and mapped defaults; mapping edits invalidate glyph bases and source metrics. Independent mappings define numerical extrema from their compiled support boundaries; cross-axis mappings move locations within that design space.
 - **Architecture Invariant:** Ordinary axis replacement preserves identity and never relocates dependents implicitly. Unmapped masters must stay within bounds and the default master at the replacement origin; mapped kind/range changes require explicit mapping authoring.
 - **Architecture Invariant:** Fontdrasil exclusively constructs variation sample order, supports, and numeric deltas. `shift-font` exposes compiled `VariationBasis` and `AxisMappingBasis` values; TypeScript and transport layers only evaluate or translate them.
 - **Architecture Invariant:** Authored metadata and font metrics are independent. Metadata edits replace the complete metadata snapshot without rewriting metrics.
@@ -64,6 +65,7 @@ crates/shift-font/src/
 - `VariationBasis` is the source-neutral Fontdrasil output: normalized regions paired with numeric `VariationDelta` vectors.
 - `InterpolationBasis` combines real source identities with a `VariationBasis` whose vectors produce source weights; it never contains glyph coordinates or metrics.
 - `AxisMappingBasis` combines mapping input/output identities with a `VariationBasis` whose vectors produce normalized output adjustments.
+- `DesignNormalization` retains an axis's numerical design minimum, mapped default, and maximum. `Font::design_normalization()` derives it from compiled independent mapping bases, preserving unmapped/internal ranges and reversed or nonmonotonic design extrema.
 - `GlyphInterpolation` combines a reusable basis with one glyph's compatible authored source values. The glyph's default-source layer owns topology when present; otherwise a deterministic master-backed reference layer allows sparse glyph interpolation.
 - `LayerMatch` derives cross-layer contour, point, anchor, and component identity mappings for structurally compatible layers. `LayerDifference` retains ordered structural evidence for incompatible layers.
 - `GlyphProjection` is a compact location-independent glyph payload: shared fallback layers, optional compatible interpolation, exact-source topology exceptions, `GlyphComponents`, and transitive component identities.

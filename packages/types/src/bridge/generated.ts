@@ -478,6 +478,13 @@ export interface DeleteSourceIntent {
   sourceId: SourceId
 }
 
+export interface DesignNormalization {
+  axisId: AxisId
+  minimum: number
+  default: number
+  maximum: number
+}
+
 /**
  * CS0 walking-skeleton intent. A stringly union covering exactly the two
  * skeleton kinds; CS1 replaces this with per-variant intent structs.
@@ -720,6 +727,7 @@ export interface GlyphVariation {
 export interface InterpolationBasis {
   sourceIds: Array<SourceId>
   basis: VariationBasis
+  designNormalization: Array<DesignNormalization>
 }
 
 export interface InterpolationSupport {

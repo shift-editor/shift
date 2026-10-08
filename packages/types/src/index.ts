@@ -135,6 +135,7 @@ export type {
   DeleteAxisIntent,
   DeleteNamedInstanceIntent,
   DeleteSourceIntent,
+  DesignNormalization,
   CreateSourceIntent,
   DocumentIdentity,
   FontIntent,
