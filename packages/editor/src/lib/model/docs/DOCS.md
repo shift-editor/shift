@@ -188,6 +188,7 @@ contour.reverse();
 - `shift-wire` and the workspace bridge translate those values without inventing samples, source identities, support regions, or a UI location.
 - Raw `AxisMapping` values are available only to the `Font` authoring surface and mapping settings UI. Glyph/runtime contracts receive `AxisMappingBasis` values. A TypeScript helper that consumes mapping points to answer a renderer query is an architecture violation even when its output matches Rust fixtures.
 - `FontStore` owns renderer-local backing, reactive authored state, and canonical completely loaded Glyph objects; do not wrap it in another manager/store/cache.
+- `FontStore`'s `FontRecordIndex` is the only index of glyph identity and its relations: entries and records by ID and name, codepoints, component dependents, and each glyph's layer per source. `Font`'s `GlyphDirectory` is a query view over that index and builds no lookups of its own.
 - `GlyphRenderModel` owns no editable source identity and cannot commit edits.
 - `GlyphNodeDefinition` owns handle policy. It filters `GlyphRenderModel.contours` to root-owned occurrences and uses `GlyphRenderModel.anchors`; inherited component points never become editable root points.
 - React controls acquisition demand but does not own font truth or interpolation caches.
