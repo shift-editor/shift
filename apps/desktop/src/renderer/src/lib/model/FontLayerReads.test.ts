@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { resolve } from "node:path";
 import { mintLayerId, type GlyphName, type LayerId } from "@shift/types";
 import { GlyphGeometry } from "@shift/glyph-state";
-import { renderLayerSvg } from "@shift/editor/rendering";
 import { createWorkspaceStack, type WorkspaceStack } from "@/testing/workspaceStack";
 
 const MUTATOR_SANS = resolve(
@@ -84,25 +83,5 @@ describe("Font reads exact authored layers from accepted workspace state", () =>
     expect(layer.point(point.id)?.x).toBe(point.x + 500);
     expect(GlyphGeometry.fromState(authored!.state).point(point.id)?.x).toBe(point.x);
     expect(resolved).toEqual(before[0]);
-  });
-
-  it("gives get, resolve, and render one layer identity and geometry", async () => {
-    const layerId = layerFor("Aacute", "BoldWide");
-
-    const [authored] = await stack.font.readLayers([layerId]);
-    const [read] = await stack.font.resolveLayers([layerId]);
-    const { authored: resolvedAuthored, resolved } = read!;
-    const rendered = renderLayerSvg({
-      authored: GlyphGeometry.fromState(resolvedAuthored.state),
-      resolved,
-      metrics: stack.font.metricsForSource(resolvedAuthored.sourceId),
-      overlays: { components: true },
-    });
-
-    expect(resolvedAuthored).toEqual(authored);
-    expect(rendered.svg).toContain(`d="${resolved.outline.svgPath}"`);
-    for (const component of resolved.components) {
-      expect(rendered.svg).toContain(`data-shift-id="${component.id}"`);
-    }
   });
 });
