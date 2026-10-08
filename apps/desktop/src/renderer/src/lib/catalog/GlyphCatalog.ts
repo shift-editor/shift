@@ -10,7 +10,7 @@ import type {
 } from "@shift/types";
 import { computed, type ComputedSignal, type Signal } from "@shift/editor/signals";
 import type { Editor } from "@shift/editor";
-import { externalAxisLocationFromRecord, mapAxisLocation } from "@shift/editor/variation";
+import { externalAxisLocationFromRecord } from "@shift/editor/variation";
 import type { GlyphAtlasSource } from "@/types/glyphAtlas";
 import type { CatalogLocation, GlyphCatalogItem } from "@/types/glyphCatalog";
 import { RenderGlyph, type GlyphInvalidation } from "@shift/editor/model";
@@ -101,8 +101,7 @@ export class GlyphCatalog {
     const externalLocation = externalAxisLocationFromRecord(
       Object.fromEntries(axes.map((axis, index) => [axis.id, location[index] ?? axis.default])),
     );
-    const designLocation = mapAxisLocation(externalLocation, axes, font.getAxisMappingBases());
-    return font.glyphPreviews(glyphIds, designLocation);
+    return font.glyphPreviews(glyphIds, font.designspace.toDesign(externalLocation));
   }
 
   async openGlyph(glyphId: GlyphId): Promise<RenderGlyph> {
