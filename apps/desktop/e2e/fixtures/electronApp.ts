@@ -209,7 +209,7 @@ export const test = base.extend<ShiftFixtures & ShiftOptions>({
     });
   },
 
-  page: async ({ electronApp, allowRendererDialogs }, use) => {
+  page: async ({ electronApp, allowRendererDialogs }, use, testInfo) => {
     const dialogs: RecordedDialog[] = [];
     const recordDialogs = (observedPage: Page) => {
       observedPage.on("dialog", async (dialog) => {
@@ -220,7 +220,19 @@ export const test = base.extend<ShiftFixtures & ShiftOptions>({
     for (const observedPage of electronApp.windows()) recordDialogs(observedPage);
     electronApp.on("window", recordDialogs);
 
+    // Visual tests run several apps at once, so a window rarely holds the OS focus. Emulating
+    // page focus keeps focus styling and `document.hasFocus()` as they are in a focused window.
+    // Platform tests keep real focus, which they assert.
+    const visual = testInfo.project.name === "visual";
+    if (visual) {
+      // A window can close before its session opens; it then needs no emulation.
+      electronApp.on("window", (observedPage) => {
+        emulateFocus(observedPage).catch(() => undefined);
+      });
+    }
+
     const page = await electronApp.firstWindow();
+    if (visual) await emulateFocus(page);
     await page.waitForLoadState("domcontentloaded");
 
     await use(page);
@@ -312,6 +324,12 @@ export const documentWorkspaceTest = documentTest.extend<ShiftOptions>({
     await use(page);
   },
 });
+
+/** Makes `page` render and report focus as if its window held the OS focus. */
+async function emulateFocus(page: Page): Promise<void> {
+  const session = await page.context().newCDPSession(page);
+  await session.send("Emulation.setFocusEmulationEnabled", { enabled: true });
+}
 
 /**
  * Waits until an authored workspace has published its loaded font and catalog.

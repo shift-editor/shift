@@ -54,7 +54,7 @@ function parseArguments(arguments_) {
 function defaultProjects(platform) {
   switch (platform) {
     case "darwin":
-      return ["visual", "gpu"];
+      return ["visual", "platform", "gpu"];
     case "linux":
     case "win32":
       return ["platform"];
