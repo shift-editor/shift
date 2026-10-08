@@ -6,6 +6,7 @@ import {
   SHIFT_FEEDBACK_EMAIL,
   SHIFT_NEW_ISSUE_URL,
 } from "../../shared/links";
+import { dialogWindowChrome } from "../windows/dialogWindowChrome";
 
 /** Owns the singleton modeless window for composing and routing user feedback. */
 export class FeedbackWindow {
@@ -45,12 +46,7 @@ export class FeedbackWindow {
       maximizable: false,
       fullscreenable: false,
       backgroundColor: "#ffffff",
-      ...(process.platform === "darwin"
-        ? {
-            titleBarStyle: "hidden" as const,
-            trafficLightPosition: { x: -100, y: -100 },
-          }
-        : {}),
+      ...dialogWindowChrome(),
       webPreferences: {
         preload: this.#preloadPath,
         contextIsolation: true,
