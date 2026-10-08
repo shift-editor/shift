@@ -49,3 +49,23 @@ export async function openScratchGlyph(
 
   await editor.waitForCanvasRender();
 }
+
+/** An open four-segment cubic wave, wide enough to delete a middle point by fitting. */
+export const WAVE_CONTOUR: ScratchContour = {
+  closed: false,
+  points: [
+    { x: 100, y: 300, pointType: "onCurve", smooth: false },
+    { x: 150, y: 200, pointType: "offCurve", smooth: false },
+    { x: 200, y: 150, pointType: "offCurve", smooth: false },
+    { x: 300, y: 150, pointType: "onCurve", smooth: true },
+    { x: 400, y: 150, pointType: "offCurve", smooth: false },
+    { x: 450, y: 100, pointType: "offCurve", smooth: false },
+    { x: 550, y: 100, pointType: "onCurve", smooth: true },
+    { x: 650, y: 100, pointType: "offCurve", smooth: false },
+    { x: 700, y: 150, pointType: "offCurve", smooth: false },
+    { x: 800, y: 150, pointType: "onCurve", smooth: true },
+    { x: 900, y: 150, pointType: "offCurve", smooth: false },
+    { x: 950, y: 200, pointType: "offCurve", smooth: false },
+    { x: 1000, y: 300, pointType: "onCurve", smooth: false },
+  ],
+};
