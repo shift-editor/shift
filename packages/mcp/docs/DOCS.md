@@ -36,6 +36,10 @@ src/
 
 Returns the TypeScript declarations available inside code mode.
 
+### `shift.capture`
+
+Captures one explicitly addressed Shift window as PNG. `target: "window"` captures its visible web contents; `target: "editor"` returns only the editor canvas panel. The optional `scale` is a display-density-independent multiplier of logical UI pixels, bounded from `0.25` to `4`. The native MCP result includes an image content block followed by structured metadata; the reusable code API returns the same metadata plus base64 `data`.
+
 ### `shift.execute`
 
 Accepts an async zero-argument JavaScript function and returns its JSON result. For a targeted live session:
@@ -54,11 +58,11 @@ async () => {
 };
 ```
 
-`shift.sessions.list()` returns one entry per open font window. `shift.editor.inspect()` returns renderer-owned UI facts. `shift.font.get()` returns metadata, metrics, axes, sources, named instances, and glyph count even on Home. `shift.glyphs.list()` returns bounded directory pages with `nextCursor`; passing an explicit `sourceId` includes each glyph's authored structure for code-mode aggregation. `shift.glyphs.get()` returns one directory entry by exact `name` or stable `glyphId` (not both), and `shift.layers.get()` returns authored positions and structure for one glyph/source pair. Untrusted inputs are parsed using `@shift/runtime`'s shared Zod schemas; the code-mode sandbox remains bounded.
+`shift.sessions.list()` returns one entry per open font window. `shift.editor.inspect()` returns renderer-owned UI facts. `shift.font.get()` returns metadata, metrics, axes, sources, named instances, and glyph count even on Home. `shift.glyphs.list()` returns bounded directory pages with `nextCursor`; passing an explicit `sourceId` includes each glyph's authored structure for code-mode aggregation. `shift.glyphs.get()` returns one directory entry by exact `name` or stable `glyphId` (not both). `shift.layers.get()` returns authored positions and structure for one glyph/source pair, while `shift.layers.render()` returns point-in-time portable SVG with optional source-addressable overlays, presentation-only `appearance` overrides, and style-independent metric and advance `guides` for that same authored layer. Untrusted inputs are parsed using `@shift/runtime`'s shared Zod schemas; the code-mode sandbox remains bounded.
 
 ## Desktop ownership
 
-Electron main starts an app-owned `SandboxRuntimeProcess` and then one `ShiftMcpServer` after `app.whenReady()`. MCP startup failure leaves the sandbox available for other execution hosts. The MCP server writes `mcp.json` under the distribution-specific user-data directory with mode `0600` on POSIX. The descriptor contains the loopback URL and persistent token; an existing valid, private token is reused on restart, while an invalid or insecure descriptor prevents MCP startup. Shutdown leaves the credential in place. The token is local connection material, not a user login. MCP delegates execution to the app-owned sandbox utility process, and main serves only the typed capability requests that return from that process. A hard host deadline terminates the process if its internal QuickJS deadline cannot settle; a later execution restarts it.
+Electron main starts an app-owned `SandboxRuntimeProcess` and then one `ShiftMcpServer` after `app.whenReady()`. MCP startup failure leaves the sandbox available for other execution hosts. The MCP server writes `mcp.json` under the distribution-specific user-data directory with mode `0600` on POSIX. The descriptor contains the loopback URL and persistent token; an existing valid, private token is reused on restart, while an invalid or insecure descriptor prevents MCP startup. Shutdown leaves the credential in place. The token is local connection material, not a user login. MCP delegates code execution to the app-owned sandbox utility process. First-class capture and sandbox capture calls share the same main-process capability: main resolves the target, asks the renderer for editor bounds when needed, and captures with Electron without exposing host objects. A hard host deadline terminates the process if its internal QuickJS deadline cannot settle; a later execution restarts it.
 
 Each renderer serves an agent request lane over a transferred `MessagePort`. Main pairs renderer observations with the explicit window and font-session identities before returning them. Launcher windows are excluded from session discovery.
 
@@ -80,8 +84,8 @@ Do not expose internal `Editor`, `FontStore`, `WorkspaceHost`, NAPI, SQLite rows
 - The connection descriptor survives shutdown. A client must treat connection failure as authoritative when Shift is not running. The descriptor is checked for file type and, on POSIX, private mode before the token is reused; Windows relies on user-data directory ACLs.
 - Focus is descriptive only. Always pass a `windowId` from the same `sessions.list()` result used to choose a target.
 - A renderer can exist before its agent lane connects. Check `editorConnected` or retry session discovery rather than substituting another window.
-- Code-mode results must be JSON-serializable and remain under the configured output bound.
-- Preview fonts have no authored layers; source-scoped structure reads fail explicitly. Directory cursors do not freeze a changing font; scope counts to an explicit source and restart if the directory changes.
+- Code-mode results must be JSON-serializable and remain under the configured output bound. Prefer the first-class MCP `shift.capture` tool when the client needs an image content block rather than base64 inside JSON.
+- Preview fonts have no authored layers; source-scoped structure reads and renderings fail explicitly. Rendered SVG is refreshable output, not a live binding. Directory cursors do not freeze a changing font; scope counts to an explicit source and restart if the directory changes.
 
 ## Verification
 

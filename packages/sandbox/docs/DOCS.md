@@ -29,7 +29,7 @@ src/
 
 ### Desktop ownership
 
-`App` owns `SandboxRuntimeProcess` independently of MCP. The process starts when the app is ready; a timeout or crash stops it, and its next `execute()` starts a replacement. App quit stops it. An MCP listener failure leaves the app-owned sandbox available for another host. The utility process routes capability requests through typed main-process calls; main resolves the explicitly targeted renderer and workspace data.
+`App` owns `SandboxRuntimeProcess` independently of MCP. The process starts when the app is ready; a timeout or crash stops it, and its next `execute()` starts a replacement. App quit stops it. An MCP listener failure leaves the app-owned sandbox available for another host. The utility process routes capability requests through typed main-process calls; main resolves the explicitly targeted renderer, workspace data, and point-in-time window or editor capture.
 
 This is the first **one-shot** execution mode, not a full interactive plugin lifecycle. A future scripting host can use the same executor and capability contract. Long-lived tool contributions would need explicit registration, cancellation, preview, and disposal semantics rather than inheriting the lifetime of an MCP request.
 
@@ -46,6 +46,7 @@ This is the first **one-shot** execution mode, not a full interactive plugin lif
 - A fresh realm means scripts cannot keep globals, subscriptions, or tool instances across calls.
 - The runtime package owns capability contracts, not the QuickJS engine. Electron owns the supervised process, not this package.
 - Authored layers and preview geometry have different semantics; the sandbox does not decide which is authoritative.
+- Capture data enters the realm as base64. Return only the metadata needed when a code-mode result does not need to carry the image itself.
 
 ## Verification
 

@@ -8,12 +8,12 @@ Shift exposes the fonts **currently open in the desktop app** through a local, r
 2. Configure your MCP client at **user scope**, not inside a project. Add the HTTP URL and the header `Authorization: Bearer <token>`. You can add just the Shift builds you use.
 3. Restart or refresh the client, then call `shift.describe` to confirm the connection. Shift must be running for calls to succeed.
 
-| Build | MCP name | URL | User-data directory name |
-| --- | --- | --- | --- |
-| Shift | `shift` | `http://127.0.0.1:17461/mcp` | `Shift` |
-| Shift Nightly | `shift-nightly` | `http://127.0.0.1:17462/mcp` | `Shift Nightly` |
-| Shift Dev | `shift-dev` | `http://127.0.0.1:17463/mcp` | `Shift Dev` |
-| Shift Nightly Dev | `shift-nightly-dev` | `http://127.0.0.1:17464/mcp` | `Shift Nightly Dev` |
+| Build             | MCP name            | URL                          | User-data directory name |
+| ----------------- | ------------------- | ---------------------------- | ------------------------ |
+| Shift             | `shift`             | `http://127.0.0.1:17461/mcp` | `Shift`                  |
+| Shift Nightly     | `shift-nightly`     | `http://127.0.0.1:17462/mcp` | `Shift Nightly`          |
+| Shift Dev         | `shift-dev`         | `http://127.0.0.1:17463/mcp` | `Shift Dev`              |
+| Shift Nightly Dev | `shift-nightly-dev` | `http://127.0.0.1:17464/mcp` | `Shift Nightly Dev`      |
 
 The user-data directory is normally under `~/Library/Application Support/` on macOS, `%APPDATA%\` on Windows, and `${XDG_CONFIG_HOME:-~/.config}/` on Linux. If Shift was launched with `--user-data-dir`, its `mcp.json` is there instead. Each build has a **different token**. The file remains after Shift quits, and the token survives relaunches; its URL is only reachable while that build is running.
 
@@ -48,6 +48,6 @@ Add a **Streamable HTTP** server with the name and URL from the table, and set i
 
 ## What the connection can read
 
-`shift.describe` describes the typed API. `shift.execute` runs bounded, read-only code against explicit live Shift window IDs. Agents can list open sessions and read font metadata, glyph directories, authored source layers, and point-in-time editor observations. Preview geometry is not authored data. An offline file that is not open in Shift should be inspected with [`shift-cli`](../crates/shift-cli/README.md), not this live server.
+`shift.describe` describes the typed API. `shift.execute` runs bounded, read-only code against explicit live Shift window IDs. The first-class `shift.capture` tool returns a point-in-time PNG image plus structured capture metadata for either the visible window contents or its editor canvas panel. Agents can list open sessions; read font metadata, glyph directories, authored source layers, and point-in-time editor observations; and render one authored layer as portable SVG with optional points, control lines, anchors, component handles, labeled source metrics, and independent advance-width guides. Render calls can apply presentation-only `appearance` overrides and return style-independent structured `guides`. Rendered SVG is a refreshable point-in-time proof, not a live binding. Preview geometry is not authored data. An offline file that is not open in Shift should be inspected with [`shift-cli`](../crates/shift-cli/README.md), not this live server.
 
 If a connection fails, make sure that build is running and its URL matches the file. Shift does **not** switch to another port when the assigned one is occupied; close the conflicting process and restart Shift. An invalid or insecure `mcp.json` is not overwritten automatically. To deliberately rotate a token, quit Shift, move the private `mcp.json` out of its user-data directory, start Shift again, and update your MCP clients with the new token. Keep the old file private or delete it when you no longer need it.
