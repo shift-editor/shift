@@ -6,19 +6,23 @@ import { expect, workspaceTest as test, waitForWorkspaceReady } from "./fixtures
 test.setTimeout(90_000);
 test.use({ scriptedDialogs: true });
 
-test("reopens a crashed document renderer with completed edits", async ({ electronApp, page }) => {
-  const glyphName = "rendererCrashRecovery" as GlyphName;
-  await page.evaluate((name) => {
-    window.shift?.editor.createGlyph(name);
-  }, glyphName);
-  await waitForGlyph(page, glyphName);
+test(
+  "reopens a crashed document renderer with completed edits",
+  { tag: "@os" },
+  async ({ electronApp, page }) => {
+    const glyphName = "rendererCrashRecovery" as GlyphName;
+    await page.evaluate((name) => {
+      window.shift?.editor.createGlyph(name);
+    }, glyphName);
+    await waitForGlyph(page, glyphName);
 
-  const reopenedPage = await crashRendererAndWaitForWindow(electronApp, page);
-  await waitForWorkspaceReady(reopenedPage);
-  await waitForGlyph(reopenedPage, glyphName);
+    const reopenedPage = await crashRendererAndWaitForWindow(electronApp, page);
+    await waitForWorkspaceReady(reopenedPage);
+    await waitForGlyph(reopenedPage, glyphName);
 
-  await expect.poll(() => electronApp.windows().length).toBe(1);
-});
+    await expect.poll(() => electronApp.windows().length).toBe(1);
+  },
+);
 
 test("reopens a crashed document renderer on the glyph it was editing", async ({
   electronApp,

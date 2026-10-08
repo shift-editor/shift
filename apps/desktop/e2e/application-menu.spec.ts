@@ -54,85 +54,102 @@ async function openFirstAuthoredGlyph(editor: EditorDriver): Promise<void> {
   await editor.openGlyph(glyphId);
 }
 
-launcherTest("application menu exposes native shell actions", async ({ electronApp, page }) => {
-  await expect.poll(() => applicationMenuItemEnabled(page, electronApp, "window.close")).toBe(true);
+launcherTest(
+  "application menu exposes native shell actions",
+  { tag: "@os" },
+  async ({ electronApp, page }) => {
+    await expect
+      .poll(() => applicationMenuItemEnabled(page, electronApp, "window.close"))
+      .toBe(true);
 
-  // Item identities, labels, and accelerators are unit-tested in menuItems.test.ts; this
-  // test owns the platform-specific native roles and menu placement.
-  const menu = await electronApp.evaluate(({ app, Menu }) => {
-    const items = Menu.getApplicationMenu()?.items ?? [];
-    const submenuIds = (label: string) =>
-      items.find((item) => item.label === label)?.submenu?.items.map((item) => item.id) ?? [];
+    // Item identities, labels, and accelerators are unit-tested in menuItems.test.ts; this
+    // test owns the platform-specific native roles and menu placement.
+    const menu = await electronApp.evaluate(({ app, Menu }) => {
+      const items = Menu.getApplicationMenu()?.items ?? [];
+      const submenuIds = (label: string) =>
+        items.find((item) => item.label === label)?.submenu?.items.map((item) => item.id) ?? [];
 
-    return {
-      packaged: app.isPackaged,
-      platform: process.platform,
-      topLevelLabels: items.map((item) => item.label),
-      topLevelRoles: items.map((item) => item.role?.toLowerCase()),
-      roles: items.flatMap(
-        (item) =>
-          item.submenu?.items.map((child) => child.role?.toLowerCase()).filter(Boolean) ?? [],
-      ),
-      viewLabels:
-        items.find((item) => item.label === "View")?.submenu?.items.map((item) => item.label) ?? [],
-      fileIds: submenuIds("File"),
-      editIds: submenuIds("Edit"),
-      glyphIds: submenuIds("Glyph"),
-      settingsInstalled: Menu.getApplicationMenu()?.getMenuItemById("app.showSettings") !== null,
-      addComponentAccelerator:
-        Menu.getApplicationMenu()?.getMenuItemById("glyph.addComponent")?.accelerator,
-    };
-  });
+      return {
+        packaged: app.isPackaged,
+        platform: process.platform,
+        topLevelLabels: items.map((item) => item.label),
+        topLevelRoles: items.map((item) => item.role?.toLowerCase()),
+        roles: items.flatMap(
+          (item) =>
+            item.submenu?.items.map((child) => child.role?.toLowerCase()).filter(Boolean) ?? [],
+        ),
+        viewLabels:
+          items.find((item) => item.label === "View")?.submenu?.items.map((item) => item.label) ??
+          [],
+        fileIds: submenuIds("File"),
+        editIds: submenuIds("Edit"),
+        glyphIds: submenuIds("Glyph"),
+        settingsInstalled: Menu.getApplicationMenu()?.getMenuItemById("app.showSettings") !== null,
+        addComponentAccelerator:
+          Menu.getApplicationMenu()?.getMenuItemById("glyph.addComponent")?.accelerator,
+      };
+    });
 
-  if (menu.platform === "darwin") {
-    expect(menu.topLevelLabels).toContain("Window");
-    expect(menu.topLevelRoles).toContain("windowmenu");
-    expect(menu.roles).toEqual(
-      expect.arrayContaining([
-        "services",
-        "hide",
-        "hideothers",
-        "unhide",
-        "minimize",
-        "zoom",
-        "front",
-      ]),
+    if (menu.platform === "darwin") {
+      expect(menu.topLevelLabels).toContain("Window");
+      expect(menu.topLevelRoles).toContain("windowmenu");
+      expect(menu.roles).toEqual(
+        expect.arrayContaining([
+          "services",
+          "hide",
+          "hideothers",
+          "unhide",
+          "minimize",
+          "zoom",
+          "front",
+        ]),
+      );
+    } else {
+      expect(menu.roles).toContain("quit");
+    }
+
+    expect(menu.settingsInstalled).toBe(true);
+    expect(menu.fileIds).not.toContain("app.showSettings");
+    expect(menu.editIds.includes("app.showSettings")).toBe(menu.platform !== "darwin");
+    expect(menu.glyphIds).toContain("glyph.addComponent");
+    expect(menu.addComponentAccelerator).toBe("CmdOrCtrl+Shift+C");
+    expect(menu.viewLabels.includes("Developer")).toBe(
+      !menu.packaged && menu.platform === "darwin",
     );
-  } else {
-    expect(menu.roles).toContain("quit");
-  }
+  },
+);
 
-  expect(menu.settingsInstalled).toBe(true);
-  expect(menu.fileIds).not.toContain("app.showSettings");
-  expect(menu.editIds.includes("app.showSettings")).toBe(menu.platform !== "darwin");
-  expect(menu.glyphIds).toContain("glyph.addComponent");
-  expect(menu.addComponentAccelerator).toBe("CmdOrCtrl+Shift+C");
-  expect(menu.viewLabels.includes("Developer")).toBe(!menu.packaged && menu.platform === "darwin");
-});
+launcherTest(
+  "About uses platform-appropriate window controls",
+  { tag: "@os" },
+  async ({ electronApp, page }) => {
+    const aboutOpened = electronApp.waitForEvent("window");
 
-launcherTest("About uses platform-appropriate window controls", async ({ electronApp, page }) => {
-  const aboutOpened = electronApp.waitForEvent("window");
+    await clickApplicationMenuItem(page, electronApp, "app.showAbout");
+    const aboutPage = await aboutOpened;
+    await aboutPage.waitForURL(/#\/about\?/);
 
-  await clickApplicationMenuItem(page, electronApp, "app.showAbout");
-  const aboutPage = await aboutOpened;
-  await aboutPage.waitForURL(/#\/about\?/);
+    await expectCloseOnlyWindowControls(aboutPage);
 
-  await expectCloseOnlyWindowControls(aboutPage);
+    const aboutWindow = await electronApp.browserWindow(aboutPage);
+    expect(await aboutWindow.evaluate((window) => window.isModal())).toBe(false);
+    await aboutWindow.dispose();
+  },
+);
 
-  const aboutWindow = await electronApp.browserWindow(aboutPage);
-  expect(await aboutWindow.evaluate((window) => window.isModal())).toBe(false);
-  await aboutWindow.dispose();
-});
+launcherTest(
+  "Update uses platform-appropriate window controls",
+  { tag: "@os" },
+  async ({ page }) => {
+    await page.evaluate(() => {
+      window.location.hash = "/update?state=ready&version=1.2.3";
+    });
+    await page.waitForURL(/#\/update\?state=ready&version=1\.2\.3$/);
 
-launcherTest("Update uses platform-appropriate window controls", async ({ page }) => {
-  await page.evaluate(() => {
-    window.location.hash = "/update?state=ready&version=1.2.3";
-  });
-  await page.waitForURL(/#\/update\?state=ready&version=1\.2\.3$/);
-
-  await expectCloseOnlyWindowControls(page);
-  await expect(page.getByRole("button", { name: "Restart and install" })).toBeVisible();
-});
+    await expectCloseOnlyWindowControls(page);
+    await expect(page.getByRole("button", { name: "Restart and install" })).toBeVisible();
+  },
+);
 
 launcherTest("Feedback opens a modeless composer", async ({ electronApp, page }) => {
   const feedbackOpened = electronApp.waitForEvent("window");
@@ -723,23 +740,31 @@ convertiblePreviewTest(
   },
 );
 
-authoredTest("Home focuses one reusable launcher window", async ({ electronApp, page }) => {
-  authoredTest.skip(process.platform !== "darwin", "Home currently lives in the macOS Window menu");
-  const initialWindowCount = electronApp.windows().length;
-  const launcherOpened = electronApp.waitForEvent("window");
+authoredTest(
+  "Home focuses one reusable launcher window",
+  { tag: "@os" },
+  async ({ electronApp, page }) => {
+    authoredTest.skip(
+      process.platform !== "darwin",
+      "Home currently lives in the macOS Window menu",
+    );
+    const initialWindowCount = electronApp.windows().length;
+    const launcherOpened = electronApp.waitForEvent("window");
 
-  await clickApplicationMenuItem(page, electronApp, "window.showHome");
-  const launcher = await launcherOpened;
-  await launcher.waitForURL(/#\/launcher$/);
-  expect(electronApp.windows()).toHaveLength(initialWindowCount + 1);
+    await clickApplicationMenuItem(page, electronApp, "window.showHome");
+    const launcher = await launcherOpened;
+    await launcher.waitForURL(/#\/launcher$/);
+    expect(electronApp.windows()).toHaveLength(initialWindowCount + 1);
 
-  await clickApplicationMenuItem(page, electronApp, "window.showHome");
-  expect(electronApp.windows()).toHaveLength(initialWindowCount + 1);
-  await expect.poll(() => launcher.evaluate(() => document.hasFocus())).toBe(true);
-});
+    await clickApplicationMenuItem(page, electronApp, "window.showHome");
+    expect(electronApp.windows()).toHaveLength(initialWindowCount + 1);
+    await expect.poll(() => launcher.evaluate(() => document.hasFocus())).toBe(true);
+  },
+);
 
 launcherTest(
   "application menu disables document commands on the launcher",
+  { tag: "@os" },
   async ({ electronApp, page }) => {
     await expect
       .poll(() => applicationMenuItemEnabled(page, electronApp, "app.showSettings"))
@@ -815,6 +840,7 @@ convertiblePreviewTest(
 
 authoredTest(
   "native Edit menu targets text controls and canvas authoring",
+  { tag: "@os" },
   async ({ electronApp, page, editor }) => {
     await expect.poll(() => applicationMenuItemEnabled(page, electronApp, "file.save")).toBe(true);
     await expect
