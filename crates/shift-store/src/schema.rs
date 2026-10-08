@@ -94,7 +94,9 @@ CREATE TABLE IF NOT EXISTS sources (
 CREATE TABLE IF NOT EXISTS glyphs (
     id TEXT PRIMARY KEY,
     name TEXT,
-    order_index INTEGER NOT NULL DEFAULT 0
+    order_index INTEGER NOT NULL DEFAULT 0,
+    category TEXT,
+    sub_category TEXT
 );
 
 CREATE INDEX IF NOT EXISTS glyphs_name_idx
@@ -267,7 +269,7 @@ CREATE TABLE IF NOT EXISTS workspace_state (
 "#;
 
 pub const SHIFT_APPLICATION_ID: i64 = 0x5348_4654;
-pub const SHIFT_DOCUMENT_SCHEMA_VERSION: i64 = 2;
+pub const SHIFT_DOCUMENT_SCHEMA_VERSION: i64 = 3;
 
 /// The oldest schema version [`migrate`] can upgrade.
 pub(crate) const OLDEST_MIGRATABLE_SCHEMA_VERSION: i64 = 1;
@@ -386,6 +388,17 @@ DROP TABLE kerning_groups_v1;
 DROP TABLE kerning_pairs_v1;
 "#;
 
+/// Version 2 to 3: glyphs gain an optional category and subcategory, set
+/// only where they override glyph data. This SQL is frozen.
+const MIGRATE_V2_TO_V3: &str = r#"
+ALTER TABLE glyphs ADD COLUMN category TEXT;
+ALTER TABLE glyphs ADD COLUMN sub_category TEXT;
+"#;
+
+/// Steps that bring authored tables from one schema version to the next, as
+/// `(version reached, SQL)`, in ascending order.
+const MIGRATIONS: [(i64, &str); 2] = [(2, MIGRATE_V1_TO_V2), (3, MIGRATE_V2_TO_V3)];
+
 /// Upgrades the authored tables of a store at `version` to
 /// [`SHIFT_DOCUMENT_SCHEMA_VERSION`] in one transaction, stamping
 /// `upgraded_version` as its `user_version`.
@@ -415,7 +428,11 @@ pub(crate) fn migrate(
     }
 
     let tx = conn.unchecked_transaction()?;
-    tx.execute_batch(MIGRATE_V1_TO_V2)?;
+    for (reached, sql) in MIGRATIONS {
+        if reached > version {
+            tx.execute_batch(sql)?;
+        }
+    }
     tx.pragma_update(None, "user_version", upgraded_version)?;
     tx.commit()?;
     Ok(())

@@ -262,12 +262,17 @@ pub(crate) fn write_glyph_directory_in_tx(
 ) -> Result<(), StoreError> {
     match mode {
         WriteMode::Insert => {
-            tx.prepare_cached("INSERT INTO glyphs (id, name, order_index) VALUES (?1, ?2, ?3)")?
-                .execute(params![
-                    glyph.id().to_string(),
-                    glyph.glyph_name().as_str(),
-                    order_index
-                ])?;
+            tx.prepare_cached(
+                "INSERT INTO glyphs (id, name, order_index, category, sub_category)
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
+            )?
+            .execute(params![
+                glyph.id().to_string(),
+                glyph.glyph_name().as_str(),
+                order_index,
+                glyph.category().map(font::GlyphCategory::as_str),
+                glyph.sub_category().map(font::GlyphSubcategory::as_str),
+            ])?;
             for (unicode_order, unicode) in glyph.unicodes().iter().enumerate() {
                 tx.prepare_cached(
                     "INSERT INTO glyph_unicodes (glyph_id, unicode, order_index) VALUES (?1, ?2, ?3)",
@@ -291,7 +296,7 @@ pub(crate) fn write_glyph_directory_in_tx(
             Ok(())
         }
         WriteMode::Upsert => {
-            upsert_glyph(tx, &glyph.id(), glyph.glyph_name(), order_index)?;
+            upsert_glyph(tx, glyph, order_index)?;
             replace_glyph_unicodes(tx, &glyph.id(), glyph.unicodes())?;
             replace_lib_data(
                 tx,
@@ -864,20 +869,27 @@ pub(crate) fn write_source_snapshot_in_tx(
 
 fn upsert_glyph(
     tx: &Transaction<'_>,
-    glyph_id: &font::GlyphId,
-    name: &font::GlyphName,
+    glyph: &font::Glyph,
     order_index: i64,
 ) -> Result<(), StoreError> {
     tx.prepare_cached(
         "
-        INSERT INTO glyphs (id, name, order_index)
-        VALUES (?1, ?2, ?3)
+        INSERT INTO glyphs (id, name, order_index, category, sub_category)
+        VALUES (?1, ?2, ?3, ?4, ?5)
         ON CONFLICT(id) DO UPDATE SET
             name = excluded.name,
-            order_index = excluded.order_index
+            order_index = excluded.order_index,
+            category = excluded.category,
+            sub_category = excluded.sub_category
         ",
     )?
-    .execute(params![glyph_id.to_string(), name.as_str(), order_index])?;
+    .execute(params![
+        glyph.id().to_string(),
+        glyph.glyph_name().as_str(),
+        order_index,
+        glyph.category().map(font::GlyphCategory::as_str),
+        glyph.sub_category().map(font::GlyphSubcategory::as_str),
+    ])?;
     Ok(())
 }
 

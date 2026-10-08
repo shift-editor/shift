@@ -1,3 +1,4 @@
+use std::collections::{BTreeMap, HashSet};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -10,7 +11,9 @@ use shift_font::{
     Source as ShiftSource, SourceId,
 };
 
+use crate::glyph_category::{gdef_classes, GlyphCategories};
 use crate::traits::FontView;
+use write_fonts::tables::gdef::GlyphClassDef;
 
 use super::axes::to_ir_axes;
 use super::glyph::GlyphWork;
@@ -64,6 +67,10 @@ pub(super) struct ShiftSnapshot {
     pub glyphs: Vec<Glyph>,
     pub kerning: Kerning,
     pub features: FeatureData,
+    /// GDEF class for each glyph that has one, by name.
+    pub gdef_classes: BTreeMap<String, GlyphClassDef>,
+    /// Glyphs whose advance compiles to zero, as Glyphs does for nonspacing marks.
+    pub nonspacing_marks: HashSet<String>,
 }
 
 impl ShiftIrSource {
@@ -114,6 +121,15 @@ impl ShiftIrSource {
                 glyphs: font.glyphs().into_iter().cloned().collect(),
                 kerning: font.kerning().clone(),
                 features: font.features().clone(),
+                gdef_classes: gdef_classes(font.glyphs(), font.lib()),
+                nonspacing_marks: {
+                    let categories = GlyphCategories::new();
+                    font.glyphs()
+                        .into_iter()
+                        .filter(|glyph| categories.resolve(glyph).is_nonspacing_mark())
+                        .map(|glyph| glyph.name().to_string())
+                        .collect()
+                },
             }),
         })
     }

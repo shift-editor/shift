@@ -5,7 +5,7 @@ use rusqlite::{Connection, OpenFlags, params};
 use crate::{CommitId, DocumentId, StoreError, connection::configure_common, schema};
 
 const RECOVERY_APPLICATION_ID: i64 = 0x5348_4652;
-const RECOVERY_SCHEMA_VERSION: i64 = 2;
+const RECOVERY_SCHEMA_VERSION: i64 = 3;
 
 const RECOVERY_SCHEMA: &str = r#"
 CREATE TABLE IF NOT EXISTS recovery_metadata (

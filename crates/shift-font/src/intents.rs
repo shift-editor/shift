@@ -634,7 +634,10 @@ impl Font {
             let original = before.glyph(glyph_id).cloned();
             let replacement = after.glyph(glyph_id).cloned();
             if original != replacement {
-                changes.push(FontChange::Glyph(Replacement::new(original, replacement)));
+                changes.push(FontChange::Glyph(Box::new(Replacement::new(
+                    original,
+                    replacement,
+                ))));
             }
         }
 
