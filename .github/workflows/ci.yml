@@ -677,6 +677,14 @@ jobs:
           name: e2e-app-${{ github.run_id }}-${{ runner.os }}
           path: .
 
+      # Parallel workers start several apps at once. On a fresh runner the first concurrent
+      # launches can map a partly loaded Electron framework and abort in dyld, so load it once
+      # before the tests start.
+      - name: Load Electron
+        env:
+          ELECTRON_RUN_AS_NODE: "1"
+        run: pnpm --dir apps/desktop exec electron -e "0"
+
       - name: Run E2E tests
         if: runner.os != 'Linux'
         env:
