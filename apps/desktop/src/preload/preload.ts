@@ -16,10 +16,6 @@ const shiftHost: ShiftHost = {
     setAllowed: invoke(ipcRenderer, "agentConnections.setAllowed"),
     onChanged: listen(ipcRenderer, "agentConnections.changed"),
   },
-  commandLineTool: {
-    state: invoke(ipcRenderer, "commandLineTool.state"),
-    install: invoke(ipcRenderer, "commandLineTool.install"),
-  },
   commands: {
     run: invoke(ipcRenderer, "commands.run"),
     onRunRendererCommand: listen(ipcRenderer, "commands.runRenderer"),

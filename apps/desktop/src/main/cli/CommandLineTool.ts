@@ -2,10 +2,22 @@ import { execFile } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
-import type { CommandLineToolState } from "../../shared/agent/connections";
 import type { ShiftLogger } from "../logging";
 
 const run = promisify(execFile);
+
+/** Whether the `shift-cli` bundled with the app is on the user's PATH. */
+export interface CommandLineToolState {
+  /**
+   * `unavailable` when this build has no bundled binary; `conflict` when a different
+   * `shift-cli` is at the install location; `outdated` when an installed copy is older.
+   */
+  status: "unavailable" | "notInstalled" | "installed" | "outdated" | "conflict";
+  /** Where the installed command lives, or the bundled binary on Windows. */
+  commandPath: string | null;
+  /** A follow-up step for the user, such as adding a directory to PATH. */
+  note: string | null;
+}
 
 /** How the bundled `shift-cli` reaches the user's PATH on this platform. */
 export type CommandLineToolInstall =
@@ -49,6 +61,11 @@ export class CommandLineTool {
     this.#elevate = options.elevate;
     this.#userPath = options.userPath;
     this.#log = options.log;
+  }
+
+  /** Whether this build bundles a binary to install. */
+  get available(): boolean {
+    return this.#bundledPath !== null && fs.existsSync(this.#bundledPath);
   }
 
   async state(): Promise<CommandLineToolState> {

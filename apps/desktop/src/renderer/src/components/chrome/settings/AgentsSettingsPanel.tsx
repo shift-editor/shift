@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Button, Check, Copy, Switch, Tooltip, TooltipContent, TooltipTrigger } from "@shift/ui";
-import type { AgentConnectionsState, CommandLineToolState } from "@shared/agent/connections";
+import type { AgentConnectionsState } from "@shared/agent/connections";
 import { getShiftHost } from "@/host/shiftHost";
 import { useAgentConnections } from "@/hooks/useAgentConnections";
 
@@ -44,8 +44,6 @@ export const AgentsSettingsPanel = () => {
       </div>
 
       <ConnectionSteps state={state} />
-
-      <CommandLineToolSection />
     </section>
   );
 };
@@ -119,103 +117,6 @@ const CodeSnippet = ({ label, text }: { label: string; text: string }) => (
     <CopyButton text={text} label={`Copy ${label.toLowerCase()}`} />
   </div>
 );
-
-const CommandLineToolSection = () => {
-  const [tool, setTool] = useState<CommandLineToolState | null>(null);
-  const [installing, setInstalling] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    void getShiftHost()
-      .commandLineTool.state()
-      .then((state) => {
-        if (active) setTool(state);
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  if (!tool || tool.status === "unavailable") return null;
-
-  return (
-    <div
-      className="flex flex-col gap-2 border-t border-line-subtle pt-4"
-      aria-label="Command-line tool"
-    >
-      <h3 className="text-ui font-medium text-primary">Command-line tool</h3>
-      <p className="text-ui text-secondary">
-        <code className="font-mono">shift-cli</code> reads, edits, and compiles saved fonts from a
-        terminal or CI, matching this version of Shift.
-      </p>
-      <div className="flex items-center gap-3">
-        <Button
-          variant="default"
-          disabled={installing}
-          onClick={async () => {
-            setInstalling(true);
-            setError(null);
-            try {
-              setTool(await getShiftHost().commandLineTool.install());
-            } catch (installError) {
-              setError(installFailure(installError));
-            } finally {
-              setInstalling(false);
-            }
-          }}
-        >
-          {installLabel(tool.status)}
-        </Button>
-        <span className="text-ui text-secondary" aria-label="Command-line tool status">
-          {installStatus(tool)}
-        </span>
-      </div>
-      {tool.note && tool.status === "installed" ? (
-        <p className="text-ui text-muted">{tool.note}</p>
-      ) : null}
-      {error ? (
-        <p role="alert" className="text-ui text-error">
-          {error}
-        </p>
-      ) : null}
-    </div>
-  );
-};
-
-function installLabel(status: CommandLineToolState["status"]): string {
-  switch (status) {
-    case "installed":
-      return "Reinstall";
-    case "outdated":
-      return "Update";
-    case "conflict":
-      return "Replace";
-    default:
-      return "Install command-line tool";
-  }
-}
-
-function installStatus({ status, commandPath }: CommandLineToolState): string {
-  switch (status) {
-    case "installed":
-      return `Installed at ${commandPath}`;
-    case "outdated":
-      return `An older copy is at ${commandPath}`;
-    case "conflict":
-      return `A different shift-cli is at ${commandPath}`;
-    default:
-      return "Not installed";
-  }
-}
-
-function installFailure(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error);
-  if (/User canceled|cancelled|-128|dismissed/i.test(message)) {
-    return "Installation was cancelled.";
-  }
-  return `Could not install shift-cli: ${message}`;
-}
 
 const CopyButton = ({ text, label }: { text: string; label: string }) => {
   const [copied, setCopied] = useState(false);

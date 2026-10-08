@@ -16,16 +16,3 @@ export interface AgentConnectionsState {
     clients: { name: string; lastSeenAt: number }[];
   };
 }
-
-/** Whether the `shift-cli` bundled with the app is on the user's PATH. */
-export interface CommandLineToolState {
-  /**
-   * `unavailable` when this build has no bundled binary; `conflict` when a different
-   * `shift-cli` is at the install location; `outdated` when an installed copy is older.
-   */
-  status: "unavailable" | "notInstalled" | "installed" | "outdated" | "conflict";
-  /** Where the installed command lives, or the bundled binary on Windows. */
-  commandPath: string | null;
-  /** A follow-up step for the user, such as adding a directory to PATH. */
-  note: string | null;
-}

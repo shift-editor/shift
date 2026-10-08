@@ -2,10 +2,12 @@ import {
   app,
   BrowserWindow,
   clipboard,
+  dialog,
   ipcMain,
   MessageChannelMain,
   screen,
   shell,
+  type MessageBoxOptions,
   type Rectangle,
   type WebContents,
 } from "electron";
@@ -50,6 +52,7 @@ import { SandboxRuntimeProcess } from "../sandbox/SandboxRuntimeProcess";
 import { AgentConnections } from "../agent/AgentConnections";
 import {
   CommandLineTool,
+  type CommandLineToolState,
   commandName,
   elevateWithOsascript,
   elevateWithPkexec,
@@ -519,8 +522,6 @@ export class App {
   }
 
   #registerIpcHandlers(): void {
-    ipc.handle(ipcMain, "commandLineTool.state", () => this.#commandLineTool.state());
-    ipc.handle(ipcMain, "commandLineTool.install", () => this.#commandLineTool.install());
     ipc.handle(ipcMain, "agentConnections.state", () => this.#requireAgentConnections().state);
     ipc.handle(ipcMain, "agentConnections.setAllowed", async (_event, allowed) => {
       const connections = this.#requireAgentConnections();
@@ -672,12 +673,61 @@ export class App {
     });
   }
 
+  /** Installs the bundled shift-cli, confirming before replacing a different command. */
+  async #installCommandLineTool(window: Window | null): Promise<void> {
+    const parent = window && !window.window.isDestroyed() ? window.window : null;
+    const show = (options: MessageBoxOptions) =>
+      parent ? dialog.showMessageBox(parent, options) : dialog.showMessageBox(options);
+    const tool = this.#commandLineTool;
+
+    const before = await tool.state();
+    if (before.status === "conflict") {
+      const { response } = await show({
+        type: "question",
+        buttons: ["Replace", "Cancel"],
+        defaultId: 0,
+        cancelId: 1,
+        message: "Replace the existing shift-cli?",
+        detail: `A different shift-cli is installed at ${before.commandPath}. Replace it with the one bundled with ${app.name}?`,
+      });
+      if (response !== 0) return;
+    }
+
+    let installed: CommandLineToolState;
+    try {
+      installed = await tool.install();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (/User canceled|cancelled|-128|dismissed|Request dismissed/i.test(message)) return;
+      this.#log.error("failed to install shift-cli", error);
+      await show({
+        type: "error",
+        message: "Could not install the command line tool",
+        detail: message,
+      });
+      return;
+    }
+
+    await show({
+      type: "info",
+      message: "The command line tool is installed",
+      detail: [
+        `shift-cli is available at ${installed.commandPath}.`,
+        installed.note ?? "Run shift-cli --help in a terminal to get started.",
+      ].join("\n\n"),
+    });
+  }
+
   #commandContext(window?: Window): CommandContext {
     window ??= this.#windows.activeWindow() ?? undefined;
     const session = window ? this.#workspaces.getForBrowserWindow(window.window) : null;
     const document = session?.document ?? null;
 
     return {
+      commandLineTool: {
+        available: () => this.#commandLineTool.available,
+        install: () => this.#installCommandLineTool(window ?? null),
+      },
       update: {
         checkForUpdates: async () => {
           await this.#updater.checkForUpdates("manual");

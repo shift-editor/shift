@@ -3,7 +3,7 @@ import type { UpdateProgress } from "../update/types";
 import type { RendererErrorReport } from "../ipc/contract";
 import type { FontSessionMode } from "../workspace/protocol";
 import type { RecentDocument } from "../recents";
-import type { AgentConnectionsState, CommandLineToolState } from "../agent/connections";
+import type { AgentConnectionsState } from "../agent/connections";
 import type { MenuBar, TitleBarColors, WindowButtonLayout } from "../menu/types";
 
 /**
@@ -161,16 +161,6 @@ export interface ShiftHost {
      * @returns an unsubscribe function.
      */
     onChanged: (callback: (state: AgentConnectionsState) => void) => () => void;
-  };
-  /** The `shift-cli` bundled with this build, and whether it is on PATH. */
-  commandLineTool: {
-    state: () => Promise<CommandLineToolState>;
-    /**
-     * Installs the command, asking for admin rights when the platform needs them.
-     *
-     * @throws {Error} when installation fails or the user cancels the prompt.
-     */
-    install: () => Promise<CommandLineToolState>;
   };
   /** Main-owned list of files Shift has opened. */
   recents: {

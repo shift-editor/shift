@@ -6,7 +6,7 @@ The crate builds the `shift-cli` binary. `inspect` opens a document, summarizes 
 
 ## Install
 
-Shift bundles a release `shift-cli` with every desktop build, so the command always matches the app. In Shift, open **Settings → Agents → Install command-line tool**:
+Shift bundles a release `shift-cli` with every desktop build, so the command always matches the app. In Shift, choose **Shift → Install Command Line Tool…** on macOS, or **Help → Install Command Line Tool…** on Windows and Linux:
 
 - **macOS and Linux packages** link `/usr/local/bin/shift-cli` to the app's copy, asking for an administrator password when that directory is protected.
 - **Linux AppImage** copies it to `~/.local/bin/shift-cli` (add that directory to `PATH` if needed); Shift refreshes the copy after updates.

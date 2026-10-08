@@ -6,7 +6,7 @@ import type {
 } from "../workspace/protocol";
 import type { UpdateProgress } from "../update/types";
 import type { RecentDocument } from "../recents";
-import type { AgentConnectionsState, CommandLineToolState } from "../agent/connections";
+import type { AgentConnectionsState } from "../agent/connections";
 import type { MenuBar, TitleBarColors, WindowButtonLayout } from "../menu/types";
 
 export type DocumentCallMap = {
@@ -45,9 +45,6 @@ export type RendererToMain = {
   "agentConnections.state": () => AgentConnectionsState;
   /** Persists whether local agents may connect and starts or stops the MCP server. */
   "agentConnections.setAllowed": (allowed: boolean) => AgentConnectionsState;
-  "commandLineTool.state": () => CommandLineToolState;
-  /** Puts the bundled shift-cli on PATH, prompting for admin rights when needed. */
-  "commandLineTool.install": () => CommandLineToolState;
   "commands.run": (id: CommandId) => void;
   "clipboard.readText": () => string;
   "clipboard.writeText": (text: string) => void;
