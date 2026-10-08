@@ -109,4 +109,26 @@ describe("Designspace", () => {
     expect(exact.value).toBe("Black");
     exact.dispose();
   });
+
+  it("builds locations from explicit coordinates and lists them on every axis", () => {
+    const { axis, designspace, mappingBasesCell } = weightDesignspace([]);
+    mappingBasesCell.set([compressTop(axis)]);
+
+    const external = designspace.location([{ axisId: axis.id, value: 900 }]);
+
+    expect(designspace.coordinates(external)).toEqual([{ axisId: axis.id, value: 900 }]);
+    expect(designspace.coordinates(designspace.toDesign(external))[0]?.value).toBeCloseTo(800);
+    expect(designspace.coordinates(designspace.location([]))).toEqual([
+      { axisId: axis.id, value: 400 },
+    ]);
+    expect(() => designspace.location([{ axisId: mintAxisId(), value: 1 }])).toThrow(
+      "Unknown axis",
+    );
+    expect(() =>
+      designspace.location([
+        { axisId: axis.id, value: 300 },
+        { axisId: axis.id, value: 500 },
+      ]),
+    ).toThrow("Duplicate axis coordinate");
+  });
 });

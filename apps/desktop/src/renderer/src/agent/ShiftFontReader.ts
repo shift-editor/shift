@@ -13,14 +13,8 @@ import type {
   ResolvedLocation,
   ShiftSessionMode,
 } from "@shift/runtime";
-import type { AxisId, GlyphId, LayerId, SourceId } from "@shift/types";
+import type { GlyphId, LayerId, SourceId } from "@shift/types";
 import type { Font } from "@shift/editor/model";
-import {
-  axisValue,
-  externalAxisLocationFromRecord,
-  mapAxisLocation,
-  type ExternalAxisLocation,
-} from "@shift/editor/variation";
 import { ShiftLayer } from "./ShiftLayer";
 
 /**
@@ -54,19 +48,14 @@ export class ShiftFontReader {
   }
 
   resolveLocation(location: AxisCoordinate[]): ResolvedLocation {
-    const font = this.#font;
-    const external = this.#externalLocation(location);
-    const design = mapAxisLocation(external, font.getAxes(), font.getAxisMappingBases());
+    const designspace = this.#font.designspace;
+    const external = designspace.location(location);
 
     return {
-      externalLocation: font
-        .getAxes()
-        .map((axis) => ({ axisId: axis.id, value: axisValue(external, axis) })),
-      designLocation: font
-        .getAxes()
-        .map((axis) => ({ axisId: axis.id, value: axisValue(design, axis) })),
-      sourceId: font.sourceAt(external)?.id ?? null,
-      metrics: font.metricsAtLocation(external),
+      externalLocation: designspace.coordinates(external),
+      designLocation: designspace.coordinates(designspace.toDesign(external)),
+      sourceId: designspace.sourceAt(external)?.id ?? null,
+      metrics: this.#font.metricsAtLocation(external),
     };
   }
 
@@ -138,8 +127,8 @@ export class ShiftFontReader {
       if (!font.entryForId(glyphId)) throw new Error(`Glyph ${glyphId} is not in this font`);
     }
 
-    const external = this.#externalLocation(location);
-    const design = mapAxisLocation(external, font.getAxes(), font.getAxisMappingBases());
+    const designspace = font.designspace;
+    const design = designspace.toDesign(designspace.location(location));
     const previews = await font.glyphPreviews(glyphIds, design);
     const resolvedIds = new Set(previews.map(({ glyphId }) => glyphId));
 
@@ -185,16 +174,5 @@ export class ShiftFontReader {
       componentBaseGlyphIds: record?.componentBaseGlyphIds ?? [],
       layers: record?.layers.map(({ id, sourceId }) => ({ layerId: id, sourceId })) ?? [],
     };
-  }
-
-  #externalLocation(coordinates: AxisCoordinate[]): ExternalAxisLocation {
-    const axisIds = new Set<AxisId>(this.#font.getAxes().map(({ id }) => id));
-    const values: Record<string, number> = {};
-    for (const { axisId, value } of coordinates) {
-      if (!axisIds.has(axisId)) throw new Error(`Unknown axis: ${axisId}`);
-      if (axisId in values) throw new Error(`Duplicate axis coordinate: ${axisId}`);
-      values[axisId] = value;
-    }
-    return externalAxisLocationFromRecord(values);
   }
 }

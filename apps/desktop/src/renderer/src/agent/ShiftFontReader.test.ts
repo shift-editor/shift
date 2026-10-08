@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { resolve } from "node:path";
-import { mintLayerId, mintSourceId, type GlyphName } from "@shift/types";
+import { mintAxisId, mintLayerId, mintSourceId, type GlyphName } from "@shift/types";
 import { createWorkspaceStack, type WorkspaceStack } from "@/testing/workspaceStack";
 import { ShiftFontReader } from "./ShiftFontReader";
 
@@ -57,6 +57,25 @@ describe("ShiftFontReader serves public reads of accepted font state", () => {
     }
     await expect(reader.listGlyphs({ sourceId: mintSourceId() })).rejects.toThrow(
       "is not in this font",
+    );
+  });
+
+  it("resolves locations through the font's designspace", () => {
+    const font = stack.font;
+    const source = font.sources.find(({ id }) => id !== font.defaultSource.id)!;
+    const sourceLocation = font.externalLocationForSource(source.id)!;
+    const coordinates = font.designspace.coordinates(sourceLocation);
+
+    const resolved = reader.resolveLocation(coordinates);
+
+    expect(resolved.externalLocation).toEqual(coordinates);
+    expect(resolved.sourceId).toBe(source.id);
+    expect(resolved.metrics).toEqual(font.metricsAtLocation(sourceLocation));
+    expect(reader.resolveLocation([]).externalLocation).toEqual(
+      font.designspace.coordinates(font.defaultLocation()),
+    );
+    expect(() => reader.resolveLocation([{ axisId: mintAxisId(), value: 1 }])).toThrow(
+      "Unknown axis",
     );
   });
 });
