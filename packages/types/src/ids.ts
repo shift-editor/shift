@@ -18,6 +18,7 @@ declare const AxisMappingIdBrand: unique symbol;
 declare const ComponentIdBrand: unique symbol;
 declare const GuidelineIdBrand: unique symbol;
 declare const GlyphIdBrand: unique symbol;
+declare const KerningGroupIdBrand: unique symbol;
 declare const LayerIdBrand: unique symbol;
 declare const MetricIdBrand: unique symbol;
 declare const NamedInstanceIdBrand: unique symbol;
@@ -86,6 +87,14 @@ export type GuidelineId = string & {
  * Branded string type - can't be confused with names or other IDs.
  */
 export type GlyphId = string & { readonly [GlyphIdBrand]: typeof GlyphIdBrand };
+
+/**
+ * A kerning group identifier from Rust. Pairs reference a group by id, so a
+ * group keeps its kerning when renamed.
+ */
+export type KerningGroupId = string & {
+  readonly [KerningGroupIdBrand]: typeof KerningGroupIdBrand;
+};
 
 /**
  * A layer identifier from Rust.
@@ -209,6 +218,10 @@ export function asGuidelineId(id: string): GuidelineId {
  * Convert a string ID from Rust to a typed GlyphId.
  * Use this when receiving IDs from Rust snapshots.
  */
+export function asKerningGroupId(id: string): KerningGroupId {
+  return id as KerningGroupId;
+}
+
 export function asGlyphId(id: string): GlyphId {
   return id as GlyphId;
 }
@@ -305,6 +318,11 @@ export function isGuidelineId(id: unknown): id is GuidelineId {
   return hasIdPrefix(id, "guideline");
 }
 
+/** Returns whether a value is a runtime-discriminable kerning group id. */
+export function isKerningGroupId(id: unknown): id is KerningGroupId {
+  return hasIdPrefix(id, "kerningGroup");
+}
+
 /** Returns whether a value is a runtime-discriminable glyph id. */
 export function isGlyphId(id: unknown): id is GlyphId {
   return hasIdPrefix(id, "glyph");
@@ -358,6 +376,7 @@ type MintedIdByPrefix = {
   component: ComponentId;
   guideline: GuidelineId;
   glyph: GlyphId;
+  kerningGroup: KerningGroupId;
   layer: LayerId;
   metric: MetricId;
   namedInstance: NamedInstanceId;

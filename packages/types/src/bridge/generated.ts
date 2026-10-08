@@ -8,6 +8,7 @@ import type {
   ComponentId,
   GuidelineId,
   GlyphId,
+  KerningGroupId,
   LayerId,
   MetricId,
   NamedInstanceId,
@@ -195,6 +196,11 @@ export interface BridgeApi {
    * applies its own default; an empty array is an explicit empty list.
    */
   getLanguageIds(): Array<string> | null
+  /**
+   * Returns the font's kerning groups, per-source pairs, and the basis
+   * kerning interpolates over.
+   */
+  getKerning(): KerningSnapshot
   getNamedInstances(): Array<NamedInstance>
   /** Returns the precomputed source-metric interpolation model for this font. */
   getSourceMetricsInterpolation(): SourceMetricsInterpolationSnapshot | null
@@ -637,6 +643,8 @@ export interface FontReplacement {
    * reshapes locations, createSource adds one); absent otherwise.
    */
   sources?: Array<Source>
+  /** Complete kerning when its values or interpolation basis changed. */
+  kerning?: KerningSnapshot
 }
 
 export interface FontSnapshot {
@@ -652,6 +660,7 @@ export interface FontSnapshot {
   namedInstances: Array<NamedInstance>
   /** Tracked Hyperglot language ids; absent when the font stores no list. */
   languageIds?: Array<string>
+  kerning: KerningSnapshot
 }
 
 export interface GlyphChangedEntities {
@@ -777,6 +786,39 @@ export interface InterpolationSupport {
   lower: number
   peak: number
   upper: number
+}
+
+export interface KerningGroup {
+  id: KerningGroupId
+  position: KerningPosition
+  name: string
+  glyphIds: Array<GlyphId>
+}
+
+export interface KerningPairValue {
+  first: KerningSide
+  second: KerningSide
+  amount: number
+}
+
+export type KerningPosition = "first" | "second";
+
+/** One kerning pair side: `id` is a glyph id when `kind` is `glyph`, else a group id. */
+export interface KerningSide {
+  kind: KerningSideKind
+  id: string
+}
+
+export type KerningSideKind = "glyph" | "group";
+
+/**
+ * Font kerning: groups, per-source pairs, and the interpolation basis over
+ * the default source and every master with pairs (absent for static fonts).
+ */
+export interface KerningSnapshot {
+  groups: Array<KerningGroup>
+  sources: Array<SourceKerningPairs>
+  basis?: InterpolationBasis
 }
 
 /**
@@ -1065,6 +1107,11 @@ export interface Source {
   lineGap?: number
   underlinePosition?: number
   underlineThickness?: number
+}
+
+export interface SourceKerningPairs {
+  sourceId: SourceId
+  pairs: Array<KerningPairValue>
 }
 
 export type SourceMetricField = "italicAngle" | "lineGap" | "underlinePosition" | "underlineThickness";

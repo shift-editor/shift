@@ -51,6 +51,7 @@ const SNAPSHOT: WorkspaceSnapshot = {
   axisMappingBases: [],
   namedInstances: [],
   languageIds: null,
+  kerning: { groups: [], sources: [] },
 };
 
 describe("Font projects the workspace snapshot", () => {
@@ -81,10 +82,15 @@ describe("Font projects the workspace snapshot", () => {
   it("uses injected glyph metadata only when the host provides it", () => {
     const unicode = 0x00c0 as Unicode;
     const lightweight = new Font({ store: new FontStore() });
-    const informed = new Font({ store: new FontStore(), glyphInfo: getGlyphInfo() });
+    const informed = new Font({
+      store: new FontStore(),
+      glyphInfo: getGlyphInfo(),
+    });
 
     expect(lightweight.nameForUnicode(unicode)).toBe("uni00C0");
-    expect(lightweight.glyphHandleForName("Agrave" as GlyphName)).toEqual({ name: "Agrave" });
+    expect(lightweight.glyphHandleForName("Agrave" as GlyphName)).toEqual({
+      name: "Agrave",
+    });
     expect(informed.nameForUnicode(unicode)).toBe("Agrave");
     expect(informed.glyphHandleForName("Agrave" as GlyphName)).toEqual({
       name: "Agrave",
@@ -376,7 +382,10 @@ describe("font-level intents make the font variable", () => {
     await stack.editCoordinator.settled();
     const boldSourceId = stack.font.createSource(
       "Bold Wide",
-      externalAxisLocationFromRecord({ [weightAxisId]: 900, [widthAxisId]: 150 }),
+      externalAxisLocationFromRecord({
+        [weightAxisId]: 900,
+        [widthAxisId]: 150,
+      }),
     );
     const instanceId = stack.font.createNamedInstance({
       name: "Display",
@@ -396,9 +405,14 @@ describe("font-level intents make the font variable", () => {
     expect(stack.font.sources.every(({ location }) => !(widthAxisId in location.values))).toBe(
       true,
     );
-    expect(stack.font.source(boldSourceId)?.location.values).toEqual({ [weightAxisId]: 900 });
+    expect(stack.font.source(boldSourceId)?.location.values).toEqual({
+      [weightAxisId]: 900,
+    });
     expect(stack.font.namedInstances).toEqual([
-      expect.objectContaining({ id: instanceId, location: { values: { [weightAxisId]: 700 } } }),
+      expect.objectContaining({
+        id: instanceId,
+        location: { values: { [weightAxisId]: 700 } },
+      }),
     ]);
 
     await stack.editCoordinator.undo();
@@ -716,7 +730,10 @@ describe("font-level intents make the font variable", () => {
           location: { values: { [axisId]: 700 } as Record<AxisId, number> },
         },
       },
-      { kind: "createGlyphLayer", createGlyphLayer: { layerId, glyphId: glyph.id, sourceId } },
+      {
+        kind: "createGlyphLayer",
+        createGlyphLayer: { layerId, glyphId: glyph.id, sourceId },
+      },
     ]);
 
     expect(await stack.font.loadGlyph(glyph.id)).toBe(glyph);

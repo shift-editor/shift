@@ -106,7 +106,8 @@ export class TextLayout {
    *   1. Find the line whose vertical band [y+descent, y+ascent] contains p.y
    *      (with optional padding for edge tolerance).
    *   2. Walk that line's runs/glyphs, accumulating x from `origin.x`. Return
-   *      the glyph whose advance box [left, right) contains p.x.
+   *      the glyph whose box [left, left + advance + kern) contains p.x, so a
+   *      kerned pair leaves no hole and its first glyph owns any overlap.
    *   3. Within the hit glyph, "left" if p.x is in the left half of the
    *      advance box, "right" otherwise.
    *
@@ -120,9 +121,10 @@ export class TextLayout {
 
     for (const placed of this.placedGlyphs) {
       if (placed.lineIndex !== lineIndex) continue;
-      const right = placed.left + placed.glyph.xAdvance;
+      const width = placed.glyph.xAdvance + placed.glyph.xKern;
+      const right = placed.left + width;
       if (p.x < placed.left - padding || p.x >= right + padding) continue;
-      const mid = placed.left + placed.glyph.xAdvance / 2;
+      const mid = placed.left + width / 2;
       return {
         lineIndex,
         runIndex: placed.runIndex,

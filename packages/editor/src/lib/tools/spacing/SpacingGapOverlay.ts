@@ -1,6 +1,6 @@
 import type { Canvas, ScreenCanvas, ScreenProjection } from "../../editor/rendering/Canvas";
 import type { Editor } from "../../editor/Editor";
-import type { SpacingGap, SpacingSideName } from "../../../types/spacing";
+import { spacingBoundary, type SpacingGap, type SpacingSideName } from "../../../types/spacing";
 import { spacingLabelRect, spacingLabelText } from "./SpacingLabel";
 import type { SpacingHalf } from "./RunSpacing";
 
@@ -59,11 +59,12 @@ function drawHalf(
   selected: boolean,
 ): void {
   const half = gap[side];
-  if (!half || half.edge === gap.boundary) return;
+  const boundary = spacingBoundary(gap, side);
+  if (!half || half.edge === boundary) return;
 
   const theme = screen.theme.spacing;
   const a = project.point({ x: half.edge, y: gap.top });
-  const b = project.point({ x: gap.boundary, y: gap.bottom });
+  const b = project.point({ x: boundary, y: gap.bottom });
   const left = Math.min(a.x, b.x);
   const right = Math.max(a.x, b.x);
   const top = Math.min(a.y, b.y);
@@ -117,8 +118,16 @@ function halfColors(
   if (isNegative) {
     const outline = theme.negativeLabelFill;
     return isActive
-      ? { fill: theme.negativeActiveFill, hatch: theme.negativeActiveHatch, outline }
-      : { fill: theme.negativeIdleFill, hatch: theme.negativeIdleHatch, outline };
+      ? {
+          fill: theme.negativeActiveFill,
+          hatch: theme.negativeActiveHatch,
+          outline,
+        }
+      : {
+          fill: theme.negativeIdleFill,
+          hatch: theme.negativeIdleHatch,
+          outline,
+        };
   }
   const outline = theme.labelFill;
   return isActive
