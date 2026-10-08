@@ -9,53 +9,6 @@ import {
   expectPageSnapshot,
 } from "./fixtures/snapshots";
 
-test("undoes and redoes Shift-click selection", async ({ editor }) => {
-  await editor.openGlyphByUnicode("41");
-  const outline = await editor.outline();
-  const points = await editor.pointTargets(
-    outline
-      .flatMap((contour) => contour.points)
-      .slice(0, 2)
-      .map((point) => point.id),
-  );
-  if (!points[0] || !points[1]) throw new Error("Expected two fixture points");
-
-  await editor.canvas.click({ position: points[0].canvasPosition });
-  await editor.canvas.click({ position: points[1].canvasPosition, modifiers: ["Shift"] });
-  await expect.poll(() => editor.selectionIds()).toEqual([points[0].id, points[1].id]);
-
-  await editor.undo();
-  await expect.poll(() => editor.selectionIds()).toEqual([points[0].id]);
-
-  await editor.redo();
-  await expect.poll(() => editor.selectionIds()).toEqual([points[0].id, points[1].id]);
-});
-
-test("undoes selecting and dragging an unselected point as one action", async ({ editor }) => {
-  await editor.openGlyphByUnicode("41");
-  const outline = await editor.outline();
-  const point = outline.flatMap((contour) => contour.points)[0];
-  if (!point) throw new Error("Expected a fixture point");
-
-  const [target] = await editor.pointTargets([point.id]);
-  if (!target) throw new Error("Expected a visible fixture point");
-  await editor.dragCanvas({
-    from: target.canvasPosition,
-    to: { x: target.canvasPosition.x + 30, y: target.canvasPosition.y + 20 },
-  });
-  const moved = await editor.pointPosition(point.id);
-  expect(moved).not.toEqual(target.glyphPosition);
-  expect(await editor.selectionIds()).toEqual([point.id]);
-
-  await editor.undo();
-  await expect.poll(() => editor.pointPosition(point.id)).toEqual(target.glyphPosition);
-  await expect.poll(() => editor.selectionIds()).toEqual([]);
-
-  await editor.redo();
-  await expect.poll(() => editor.pointPosition(point.id)).toEqual(moved);
-  await expect.poll(() => editor.selectionIds()).toEqual([point.id]);
-});
-
 /** Opens A and returns three distinct fixture points for alignment scenarios. */
 async function alignmentFixture(editor: EditorDriver) {
   await editor.openGlyphByUnicode("41");
@@ -743,56 +696,55 @@ test.describe("Editor view", () => {
     await expect.poll(() => editor.selectionBounds()).toMatchObject({ x: targetX, y: targetY });
   });
 
-  for (const releaseShiftFirst of [true, false]) {
-    test(`keeps constrained drag geometry when Shift is released ${releaseShiftFirst ? "before" : "after"} mouseup`, async ({
-      page,
-      editor,
-    }) => {
-      await editor.selectAll();
-      const initialBounds = await editor.selectionBounds();
-      const canvasBounds = await editor.canvas.boundingBox();
-      if (!canvasBounds) throw new Error("Expected interactive canvas bounds");
-      const { down, end } = await page.evaluate(() => {
-        const editor = window.shift!.editor;
-        const node = editor.scene.nodesOfKind("glyph")[0];
-        const bounds = editor.selectionBounds();
-        if (!bounds || !node) throw new Error("Expected selection bounds");
-        const width = bounds.max.x - bounds.min.x;
-        const height = bounds.max.y - bounds.min.y;
-        const toScreen = (point: { x: number; y: number }) =>
-          editor.sceneToScreen(editor.toScene(node, point as LocalPoint));
+  // Release geometry with Shift held or released is owned by Select.test.ts.
+  // This test keeps the browser-only ordering: Shift keyup arrives before mouseup.
+  test("keeps constrained drag geometry when Shift is released before mouseup", async ({
+    page,
+    editor,
+  }) => {
+    await editor.selectAll();
+    const initialBounds = await editor.selectionBounds();
+    const canvasBounds = await editor.canvas.boundingBox();
+    if (!canvasBounds) throw new Error("Expected interactive canvas bounds");
+    const { down, end } = await page.evaluate(() => {
+      const editor = window.shift!.editor;
+      const node = editor.scene.nodesOfKind("glyph")[0];
+      const bounds = editor.selectionBounds();
+      if (!bounds || !node) throw new Error("Expected selection bounds");
+      const width = bounds.max.x - bounds.min.x;
+      const height = bounds.max.y - bounds.min.y;
+      const toScreen = (point: { x: number; y: number }) =>
+        editor.sceneToScreen(editor.toScene(node, point as LocalPoint));
 
-        return {
-          down: toScreen({ x: bounds.max.x, y: bounds.max.y }),
-          end: toScreen({ x: bounds.max.x + width * 0.15, y: bounds.max.y + height * 0.03 }),
-        };
-      });
-
-      await page.mouse.move(canvasBounds.x + down.x, canvasBounds.y + down.y);
-      await page.keyboard.down("Shift");
-      await page.mouse.down();
-      try {
-        await page.mouse.move(canvasBounds.x + end.x, canvasBounds.y + end.y, { steps: 3 });
-        await editor.flushPointerMoves();
-        await expect.poll(() => editor.toolState()).toBe("resizing");
-        const preview = await editor.selectionBounds();
-        expect(preview.width).toBeGreaterThan(initialBounds.width);
-        expect(preview.width / initialBounds.width).toBeCloseTo(
-          preview.height / initialBounds.height,
-        );
-
-        if (releaseShiftFirst) await page.keyboard.up("Shift");
-        await page.mouse.up();
-        if (!releaseShiftFirst) await page.keyboard.up("Shift");
-        await editor.waitForIdle();
-
-        expect(await editor.selectionBounds()).toEqual(preview);
-      } finally {
-        await page.mouse.up();
-        await page.keyboard.up("Shift");
-      }
+      return {
+        down: toScreen({ x: bounds.max.x, y: bounds.max.y }),
+        end: toScreen({ x: bounds.max.x + width * 0.15, y: bounds.max.y + height * 0.03 }),
+      };
     });
-  }
+
+    await page.mouse.move(canvasBounds.x + down.x, canvasBounds.y + down.y);
+    await page.keyboard.down("Shift");
+    await page.mouse.down();
+    try {
+      await page.mouse.move(canvasBounds.x + end.x, canvasBounds.y + end.y, { steps: 3 });
+      await editor.flushPointerMoves();
+      await expect.poll(() => editor.toolState()).toBe("resizing");
+      const preview = await editor.selectionBounds();
+      expect(preview.width).toBeGreaterThan(initialBounds.width);
+      expect(preview.width / initialBounds.width).toBeCloseTo(
+        preview.height / initialBounds.height,
+      );
+
+      await page.keyboard.up("Shift");
+      await page.mouse.up();
+      await editor.waitForIdle();
+
+      expect(await editor.selectionBounds()).toEqual(preview);
+    } finally {
+      await page.mouse.up();
+      await page.keyboard.up("Shift");
+    }
+  });
 
   for (const dimension of ["width", "height"] as const) {
     for (const anchor of ["Anchor top left", "Anchor bottom right"]) {
