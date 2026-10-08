@@ -558,6 +558,60 @@ describe("KeyboardRouter", () => {
         expect(editor.pointCount).toBe(2);
       },
     );
+
+    it("Shift+Backspace leaves two open fragments with exact undo and redo", async () => {
+      const ids = await editor.drawOpenContour([0, 100, 200, 300, 400].map((x) => ({ x, y: 100 })));
+      editor.selectTool("select");
+      editor.selection.select([ids[2]!]);
+      const layer = editor.requireGlyphLayer();
+      const before = layer.state;
+
+      await router.handleKeyDown(
+        createKeyboardEvent({ key: "Backspace", code: "Backspace", shiftKey: true }),
+      );
+      await editor.settle();
+      const after = layer.state;
+      expect(layer.contours.map((contour) => contour.points.map((point) => point.id))).toEqual([
+        ids.slice(0, 2),
+        ids.slice(3),
+      ]);
+      expect(layer.contours.map((contour) => contour.closed)).toEqual([false, false]);
+
+      await editor.undo();
+      expect(layer.state).toEqual(before);
+      await editor.redo();
+      expect(layer.state).toEqual(after);
+    });
+
+    it.each([
+      ["Backspace", false],
+      ["Delete", true],
+    ])(
+      "%s with Shift=%s on a cubic handle removes both controls without changing the next curve",
+      async (key, shiftKey) => {
+        editor.selectTool("pen");
+        await editor.clickLocal(0, 0);
+        for (const [x, y] of [
+          [200, -100],
+          [400, 100],
+        ] as const) {
+          await editor.dragLocal({ down: { x, y: 0 }, start: { x, y: y / 2 }, end: { x, y } });
+        }
+        editor.selectTool("select");
+        const layer = editor.requireGlyphLayer();
+        const [first, next] = layer.contours[0]!.segments();
+        editor.selection.select([first!.asCubic()!.controlStart.id]);
+
+        await router.handleKeyDown(createKeyboardEvent({ key, code: key, shiftKey }));
+        await editor.settle();
+
+        const segments = layer.contours[0]!.segments();
+        expect(segments.map((segment) => segment.type)).toEqual(["line", "cubic"]);
+        expect(segments[0]!.pointIds).toEqual([first!.startId, first!.endId]);
+        expect(segments[1]!.pointIds).toEqual(next!.pointIds);
+        expect(segments[1]!.toCurve()).toEqual(next!.toCurve());
+      },
+    );
   });
 
   describe("temporary hand tool (space)", () => {

@@ -57,3 +57,49 @@ describe("viewport zoom actions", () => {
     expect(editor.sceneToScreen(sceneCentre)).toEqual(editor.camera.centre);
   });
 });
+
+describe("opening a glyph frames its UPM box in the viewport", () => {
+  const viewport = { width: 800, height: 560 };
+  let editor: TestEditor;
+
+  beforeEach(async () => {
+    editor = new TestEditor();
+    await editor.startSession();
+    editor.setCameraRect(viewport as Rect2D);
+  });
+
+  it.each([null, 20, 1200, 5000])(
+    "keeps origin, advance, and vertical metrics visible for outline width %s",
+    async (width) => {
+      const layer = editor.requireGlyphLayer();
+      layer.setXAdvance(width ?? 500);
+      if (width !== null) {
+        const contourId = layer.addContour();
+        for (const [x, y] of [
+          [0, -100],
+          [width, -100],
+          [width, 900],
+          [0, 900],
+        ] as const) {
+          layer.addPoint(contourId, { x, y, pointType: "onCurve", smooth: false });
+        }
+        layer.closeContour(contourId);
+      }
+      await editor.settle();
+
+      editor.fitGlyphFrame(editor.glyphNode!);
+
+      const { ascender, descender } = editor.font.metricsAtLocation(editor.externalLocation);
+      const corners = [
+        { x: 0, y: ascender },
+        { x: editor.xAdvance, y: descender },
+      ].map((point) => editor.localToScreen(point));
+      for (const corner of corners) {
+        expect(corner.x).toBeGreaterThanOrEqual(0);
+        expect(corner.x).toBeLessThanOrEqual(viewport.width);
+        expect(corner.y).toBeGreaterThanOrEqual(0);
+        expect(corner.y).toBeLessThanOrEqual(viewport.height);
+      }
+    },
+  );
+});
