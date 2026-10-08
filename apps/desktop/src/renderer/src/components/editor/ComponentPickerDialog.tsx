@@ -28,7 +28,25 @@ interface ComponentPickerDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
+interface OpenComponentPickerDialogProps {
+  onOpenChange: (open: boolean) => void;
+}
+
+/**
+ * Add Component: picks a glyph to place as a component of the current glyph.
+ *
+ * @remarks
+ * Mounts its contents only while open. Ranking candidates reads every glyph
+ * record, and a closed picker that stayed subscribed re-ranked the whole font
+ * on every edit, including each frame of a weight scrub.
+ */
 export function ComponentPickerDialog({ open, onOpenChange }: ComponentPickerDialogProps) {
+  if (!open) return null;
+
+  return <OpenComponentPickerDialog onOpenChange={onOpenChange} />;
+}
+
+function OpenComponentPickerDialog({ onOpenChange }: OpenComponentPickerDialogProps) {
   const editor = useEditor();
   const font = useFont();
 
@@ -112,7 +130,7 @@ export function ComponentPickerDialog({ open, onOpenChange }: ComponentPickerDia
 
   return (
     <>
-      <Dialog open={open} onOpenChange={handleOpenChange}>
+      <Dialog open onOpenChange={handleOpenChange}>
         <DialogPortal>
           <DialogBackdrop />
           <DialogPopup className="fixed left-1/2 top-1/2 flex h-100 w-87.5 -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden border border-line-subtle">
