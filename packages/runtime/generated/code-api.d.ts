@@ -35,6 +35,8 @@ interface Bounds {
 declare const Bounds: {
   /** Create a bounds from explicit min and max corners. */
   readonly create: (min: Point2D, max: Point2D) => Bounds;
+  /** Whether two bounds (or two empty results) have identical corners. */
+  readonly equals: (a: Bounds | null, b: Bounds | null) => boolean;
   /** Create a zero-area bounds located at a single point. */
   readonly fromPoint: (p: Point2D) => Bounds;
   /**
@@ -88,6 +90,7 @@ declare const MetricIdBrand: unique symbol;
 declare const NamedInstanceIdBrand: unique symbol;
 declare const NodeIdBrand: unique symbol;
 declare const SegmentIdBrand: unique symbol;
+declare const TextItemIdBrand: unique symbol;
 declare const SourceIdBrand: unique symbol;
 /**
  * A point identifier from Rust.
@@ -164,6 +167,10 @@ type NodeId = string & {
 type SegmentId = string & {
   readonly [SegmentIdBrand]: typeof SegmentIdBrand;
 };
+/** Identity of a glyph or linebreak within a proof text run. */
+type TextItemId = string & {
+  readonly [TextItemIdBrand]: typeof TextItemIdBrand;
+};
 /**
  * A source identifier from Rust.
  * Branded string type - can't be confused with other IDs or plain strings.
@@ -172,7 +179,7 @@ type SourceId = string & {
   readonly [SourceIdBrand]: typeof SourceIdBrand;
 };
 /** Identifies an editor-addressable scene node or glyph object. */
-type ShiftId = NodeId | PointId | AnchorId | ContourId | SegmentId | ComponentId;
+type ShiftId = NodeId | PointId | AnchorId | ContourId | SegmentId | ComponentId | TextItemId;
 /** Identifies objects that can be selected by the editor. */
 type SelectableId = ShiftId;
 //#endregion

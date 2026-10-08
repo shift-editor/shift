@@ -140,7 +140,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(glyph_id) = first_glyph_id {
         let layer_ids = workspace
             .font()
-            .glyph(glyph_id.clone())
+            .glyph(&glyph_id.clone())
             .unwrap()
             .layers()
             .keys()

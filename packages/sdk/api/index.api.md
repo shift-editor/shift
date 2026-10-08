@@ -118,7 +118,7 @@ export interface AxisCoordinate {
 // Warning: (ae-forgotten-export) The symbol "ComputedSignal" needs to be exported by the entry point index.d.ts
 //
 // @public
-export function computed<T>(fn: () => T, options?: ComputedOptions): ComputedSignal<T>;
+export function computed<T>(fn: () => T, options?: ComputedOptions<T>): ComputedSignal<T>;
 
 // @public
 export function createMemoryFontSession(input: MemoryFontSessionOptions): MemoryFontSession;
@@ -193,6 +193,8 @@ export class Editor {
     destroy(): void;
     // (undocumented)
     detachRenderSurfaces(): void;
+    // Warning: (ae-forgotten-export) The symbol "PointerTarget" needs to be exported by the entry point index.d.ts
+    doubleClickNode(target: PointerTarget): boolean;
     get draggingCell(): Signal<boolean>;
     // (undocumented)
     duplicateSelection(): PointId[];
@@ -206,10 +208,14 @@ export class Editor {
     get editingSourceIds(): ReadonlySet<SourceId>;
     // (undocumented)
     get editingSourceIdsCell(): Signal<ReadonlySet<SourceId>>;
+    // Warning: (ae-forgotten-export) The symbol "NodeId" needs to be exported by the entry point index.d.ts
+    enterNode(nodeId: NodeId): void;
     get externalLocation(): ExternalAxisLocation;
     // (undocumented)
     get externalLocationCell(): Signal<ExternalAxisLocation>;
     fitBounds(bounds: SceneBounds): void;
+    // Warning: (ae-forgotten-export) The symbol "GlyphNode" needs to be exported by the entry point index.d.ts
+    fitGlyphFrame(node: GlyphNode): void;
     fitInitialBounds(bounds: SceneBounds): void;
     // (undocumented)
     flushMousePosition(): void;
@@ -227,8 +233,6 @@ export class Editor {
     getCameraTransform(): CameraTransform;
     // (undocumented)
     getMousePosition(): ScenePoint;
-    // Warning: (ae-forgotten-export) The symbol "PointerTarget" needs to be exported by the entry point index.d.ts
-    //
     // (undocumented)
     getPointerTarget(point: ScenePoint): PointerTarget;
     // (undocumented)
@@ -260,7 +264,6 @@ export class Editor {
     readonly input: EditorInput;
     // Warning: (ae-forgotten-export) The symbol "PasteOptions" needs to be exported by the entry point index.d.ts
     insertContent(content: ShiftContent, options?: PasteOptions): readonly SelectableId[] | null;
-    insertTextCodepoint(codepoint: number): void;
     get isDragging(): boolean;
     // (undocumented)
     get isEditing(): boolean;
@@ -269,6 +272,7 @@ export class Editor {
     // Warning: (ae-forgotten-export) The symbol "GlyphGeometrySelection" needs to be exported by the entry point index.d.ts
     // Warning: (ae-forgotten-export) The symbol "GlyphLayer" needs to be exported by the entry point index.d.ts
     layerForGeometry(ids: GlyphGeometrySelection): GlyphLayer | null;
+    layerForGlyph(glyphId: GlyphId, sourceId: SourceId): GlyphLayer | null;
     nodeBounds(node: ShiftNode): SceneBounds | null;
     // Warning: (ae-forgotten-export) The symbol "GlyphNodeDefinition" needs to be exported by the entry point index.d.ts
     //
@@ -367,6 +371,8 @@ export class Editor {
     setToolState(scope: ToolStateScope, toolId: string, key: string, value: unknown): void;
     setXAdvance(width: number): void;
     setZoom(zoom: number): void;
+    // Warning: (ae-forgotten-export) The symbol "Snapping" needs to be exported by the entry point index.d.ts
+    readonly snapping: Snapping;
     // (undocumented)
     startFpsMonitor(): void;
     // (undocumented)
@@ -375,12 +381,10 @@ export class Editor {
     //
     // (undocumented)
     readonly text: Text_2;
-    // Warning: (ae-forgotten-export) The symbol "TextRun" needs to be exported by the entry point index.d.ts
-    get textRun(): TextRun;
-    // Warning: (ae-forgotten-export) The symbol "TextRuns" needs to be exported by the entry point index.d.ts
+    // Warning: (ae-forgotten-export) The symbol "TextEditing" needs to be exported by the entry point index.d.ts
     //
     // (undocumented)
-    get textRuns(): TextRuns;
+    readonly textEditing: TextEditing;
     toggleAllSourcesForEditing(): boolean;
     toLocal(node: ShiftNode, point: ScenePoint): LocalPoint;
     toLocalBounds(node: ShiftNode, bounds: SceneBounds): LocalBounds;
@@ -411,6 +415,7 @@ export class Editor {
     undo(): Promise<void>;
     // (undocumented)
     updateMousePosition(clientX: number, clientY: number): void;
+    visibleLocalBounds(node: ShiftNode): LocalBounds | null;
     // (undocumented)
     get xAdvance(): number;
     // (undocumented)
@@ -433,8 +438,6 @@ export interface EditorGlyph {
     glyphId: GlyphId;
     // (undocumented)
     name: string;
-    // Warning: (ae-forgotten-export) The symbol "NodeId" needs to be exported by the entry point index.d.ts
-    //
     // (undocumented)
     nodeId: NodeId;
     // (undocumented)
@@ -504,7 +507,7 @@ export class Font {
     // Warning: (ae-forgotten-export) The symbol "AxisMapping" needs to be exported by the entry point index.d.ts
     get axisMappingsCell(): Signal<AxisMapping[]>;
     cloneGlyphLayer(glyphId: GlyphId, sourceId: SourceId, fromLayerId: LayerId): LayerId;
-    get committedFontCell(): Signal<Font>;
+    get committedRevisionCell(): Signal<number>;
     componentBaseNamesForName(name: GlyphName): readonly GlyphName[];
     contourIdForPoint(pointId: PointId): ContourId | null;
     contourIdForSegment(segmentId: SegmentId): ContourId | null;
@@ -547,12 +550,13 @@ export class Font {
     // Warning: (ae-forgotten-export) The symbol "GlyphHandle" needs to be exported by the entry point index.d.ts
     glyphHandleForName(name: GlyphName): GlyphHandle;
     glyphHandleForUnicode(unicode: Unicode): GlyphHandle;
+    glyphIdForLayer(layerId: LayerId): GlyphId | null;
     glyphPreviews(glyphIds: readonly GlyphId[], location: DesignAxisLocation): Promise<readonly GlyphPreview[]>;
     // (undocumented)
     glyphRecords(): readonly GlyphRecord[];
     get glyphRecordsCell(): Signal<readonly GlyphRecord[]>;
     hasGlyph(glyphId: GlyphId): boolean;
-    get invalidGlyphIdsCell(): Signal<readonly GlyphId[] | null>;
+    get invalidGlyphsCell(): Signal<GlyphInvalidation>;
     isVariable(): boolean;
     get languageIdsCell(): Signal<readonly string[] | null>;
     layerIdForAnchor(anchorId: AnchorId): LayerId | null;
@@ -749,6 +753,11 @@ export type GlyphGetInput = ShiftTarget & GlyphSelector;
 export type GlyphId = string & {
     readonly [GlyphIdBrand]: typeof GlyphIdBrand;
 };
+
+// @public
+export interface GlyphInvalidation {
+    readonly glyphIds: readonly GlyphId[] | null;
+}
 
 // @public
 export interface GlyphLayerReference {
@@ -1117,8 +1126,10 @@ export interface ShiftCaptureInput extends ShiftTarget {
 // @public (undocumented)
 export type ShiftCaptureTarget = "window" | "editor";
 
+// Warning: (ae-forgotten-export) The symbol "TextItemId" needs to be exported by the entry point index.d.ts
+//
 // @public
-export type ShiftId = NodeId | PointId | AnchorId | ContourId | SegmentId | ComponentId;
+export type ShiftId = NodeId | PointId | AnchorId | ContourId | SegmentId | ComponentId | TextItemId;
 
 // @public
 export interface ShiftObservation<Value> {
@@ -1177,7 +1188,7 @@ export function useSignalState<T>(signal: Signal<T>, options?: UseSignalOptions)
 
 // Warnings were encountered during analysis:
 //
-// dist/Editor-CNK6YHxx.d.ts:4063:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
+// dist/Editor-DvPBy2QP.d.ts:4369:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

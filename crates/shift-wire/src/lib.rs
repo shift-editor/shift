@@ -835,12 +835,34 @@ impl From<&IrVariationBasis> for VariationBasis {
     }
 }
 
+/// Design-space normalization transported without authoring-axis metadata.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesignNormalization {
+    pub axis_id: AxisId,
+    pub minimum: f64,
+    pub default: f64,
+    pub maximum: f64,
+}
+
+impl From<&shift_font::DesignNormalization> for DesignNormalization {
+    fn from(normalization: &shift_font::DesignNormalization) -> Self {
+        Self {
+            axis_id: normalization.axis_id.clone(),
+            minimum: normalization.minimum,
+            default: normalization.default,
+            maximum: normalization.maximum,
+        }
+    }
+}
+
 /// Coordinate-independent interpolation weights for an ordered source set.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InterpolationBasis {
     pub source_ids: Vec<SourceId>,
     pub basis: VariationBasis,
+    pub design_normalization: Vec<DesignNormalization>,
 }
 
 impl From<&IrInterpolationBasis> for InterpolationBasis {
@@ -848,6 +870,11 @@ impl From<&IrInterpolationBasis> for InterpolationBasis {
         Self {
             source_ids: basis.source_ids().to_vec(),
             basis: basis.variation_basis().into(),
+            design_normalization: basis
+                .design_normalization()
+                .iter()
+                .map(Into::into)
+                .collect(),
         }
     }
 }

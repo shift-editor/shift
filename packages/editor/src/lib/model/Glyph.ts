@@ -91,11 +91,13 @@ import { PositionList } from "./positions/PositionList";
 import { GlyphLayerPositionPatch } from "./GlyphLayerPositionPatch";
 import { GlyphLayerEdit } from "./GlyphLayerEdit";
 import { ComponentTransformEdit } from "./ComponentTransformEdit";
+import { SidebearingEdit } from "./SidebearingEdit";
+import type { Sidebearing } from "../../types/spacing";
 import { DeletePoints } from "./DeletePoints";
 import { JoinContours, type ContourEnd } from "./JoinContours";
 import { GlyphLayerState } from "./GlyphLayerState";
 import type { ContourBuffer } from "./ContourBuffer";
-import type { LayerBuffers } from "./LayerBuffers";
+import type { LayerBuffers, LayerChangeToken } from "./LayerBuffers";
 import { LayerIntents } from "../workspace/LayerIntents";
 import type {
   ComponentTransformSelection,
@@ -215,13 +217,15 @@ class GlyphLayerWriter {
     commit();
   }
 
-  translateLayer(dx: number, dy: number): void {
-    // Affine over every current point: O(ids) wire, Rust does the authoritative math.
-    const pointIds = this.geometry.allPoints.map((point) => point.id);
-    if (pointIds.length === 0) return;
+  transformLayer(matrix: MatModel): void {
+    // Six numbers on the wire whatever the layer's size; Rust does the authoritative math.
+    const { a, b, c, d, e, f } = matrix;
+    const editId = this.#workspaceIntents.transformLayer({ matrix: [a, b, c, d, e, f] });
+    this.#state.state.transformLayer(editId, matrix);
+  }
 
-    const editId = this.#workspaceIntents.translatePoints({ pointIds, dx, dy });
-    this.#state.state.translatePoints(editId, pointIds, dx, dy);
+  translateLayer(dx: number, dy: number): void {
+    this.transformLayer(Mat.Translate(dx, dy));
   }
 
   addContour(): ContourId {
@@ -502,7 +506,7 @@ export class GlyphLayer {
   }
 
   /** @internal Tracks any numeric layer change without materializing full geometry. */
-  get buffersChangedCell(): Signal<LayerBuffers> {
+  get buffersChangedCell(): Signal<LayerChangeToken> {
     return this.#writer.layerState.buffersChangedCell;
   }
 
@@ -647,7 +651,7 @@ export class GlyphLayer {
    *
    * @remarks
    * The advance width changes by the same delta as the outline translation so
-   * the right sidebearing remains unchanged. Anchors are not translated.
+   * the right sidebearing remains unchanged. Anchors and components move with the outline.
    *
    * @param value - Desired outline left edge position.
    */
@@ -678,7 +682,7 @@ export class GlyphLayer {
   }
 
   /**
-   * Translates every coordinate in this source layer.
+   * Translates every contour point, anchor, and component placement in this source layer.
    *
    * @param dx - Horizontal movement in UPM units.
    * @param dy - Vertical movement in UPM units.
@@ -687,9 +691,30 @@ export class GlyphLayer {
     this.#writer.translateLayer(dx, dy);
   }
 
+  /**
+   * Transforms every contour point, anchor, and component placement in this source layer.
+   *
+   * @remarks
+   * One undo step and one small intent whatever the layer's size. The advance width is unchanged.
+   *
+   * @param matrix - Affine transform in this layer's UPM units.
+   */
+  transformLayer(matrix: MatModel): void {
+    this.#writer.transformLayer(matrix);
+  }
+
   /** Begins a reversible edit that mutates this layer's reactive topology directly. */
   beginEdit(): GlyphLayerEdit {
     return new GlyphLayerEdit(this, this.#writer.layerState);
+  }
+
+  /**
+   * Begins one reversible preview cycle that changes one sidebearing of this layer.
+   *
+   * @param sidebearing - `"lsb"` moves the whole outline with the advance; `"rsb"` moves only the advance.
+   */
+  beginSidebearingEdit(sidebearing: Sidebearing): SidebearingEdit {
+    return new SidebearingEdit(this, this.#writer.layerState, sidebearing);
   }
 
   /** Begins one reversible preview cycle across matched component source layers. */

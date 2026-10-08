@@ -6,56 +6,17 @@
 //! validation and all-or-nothing behavior as interactive authoring.
 
 use std::collections::HashSet;
-use std::io::{self, Read};
 use std::path::Path;
 
 use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
-use serde::Deserialize;
-use shift_font::{
-    AnchorId, AnchorSeed, ContourId, Font, FontIntent, FontIntentSet, GlyphId, LayerId, PointId,
-    PointSeed, PointType, SourceId,
-};
+use shift_font::{Font, FontIntent, FontIntentSet, GlyphId, LayerId, SourceId};
 use shift_store::ShiftStore;
 
-use crate::cli::{AddGlyphArgs, AddLayerArgs, CopyLayerArgs};
+use crate::cli::{AddGlyphArgs, CopyLayerArgs, LayerPayloadArgs};
 
+use super::input::LayerInput;
+use super::layer_payload::read_json_input;
 use super::{AuthoringReport, apply_mutation};
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct LayerInput {
-    advance: f64,
-    #[serde(default)]
-    contours: Vec<ContourInput>,
-    #[serde(default)]
-    anchors: Vec<AnchorInput>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct ContourInput {
-    closed: bool,
-    points: Vec<PointInput>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct PointInput {
-    x: f64,
-    y: f64,
-    #[serde(default)]
-    point_type: PointType,
-    #[serde(default)]
-    smooth: bool,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct AnchorInput {
-    name: Option<String>,
-    x: f64,
-    y: f64,
-}
 
 /// Adds glyph identity and Unicode assignments without implicitly creating geometry.
 ///
@@ -90,15 +51,52 @@ pub fn add_glyph(args: AddGlyphArgs) -> Result<AuthoringReport> {
 /// Returns an error for unreadable or invalid JSON, unsupported payload
 /// fields, non-finite values, unresolved selectors, invalid authoring, or
 /// persistence failures.
-pub fn add_layer(args: AddLayerArgs) -> Result<AuthoringReport> {
+pub fn add_layer(args: LayerPayloadArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
     let glyph_id = resolve_glyph_id(&font, &args.glyph)?;
     let source_id = resolve_source_id(&font, &args.source)?;
     let layer_id = LayerId::new();
-    let input = read_layer_input(&args.input)?;
-    let set = layer_intents(layer_id, glyph_id, source_id, input)?;
+    let input = read_json_input::<LayerInput>(&args.input, "layer payload")?;
+    let set = FontIntentSet {
+        intents: vec![
+            FontIntent::CreateGlyphLayer {
+                layer_id: layer_id.clone(),
+                glyph_id,
+                source_id,
+            },
+            input.into_intent(layer_id)?,
+        ],
+    };
 
     apply_mutation(&args.path, &args.mutation, set)
+}
+
+/// Creates or replaces one layer's drawing, preserving an existing layer's identity.
+///
+/// Source binding, height, guidelines, and lib data survive replacement. Components
+/// are removed because the JSON payload only expresses outlines and anchors.
+///
+/// # Errors
+///
+/// Rejects invalid payloads or selectors without writing; persistence failures are reported.
+pub fn set_layer(args: LayerPayloadArgs) -> Result<AuthoringReport> {
+    let font = load_font(&args.path)?;
+    let glyph_id = resolve_glyph_id(&font, &args.glyph)?;
+    let source_id = resolve_source_id(&font, &args.source)?;
+    let input = read_json_input::<LayerInput>(&args.input, "layer payload")?;
+    let existing = font.layer_id_for_glyph_source(glyph_id.clone(), source_id.clone());
+    let layer_id = existing.clone().unwrap_or_default();
+    let mut intents = Vec::new();
+    if existing.is_none() {
+        intents.push(FontIntent::CreateGlyphLayer {
+            layer_id: layer_id.clone(),
+            glyph_id,
+            source_id,
+        });
+    }
+    intents.push(input.into_intent(layer_id)?);
+
+    apply_mutation(&args.path, &args.mutation, FontIntentSet { intents })
 }
 
 /// Copies one glyph layer to another source with fresh internal identities.
@@ -138,14 +136,14 @@ pub fn copy_layer(args: CopyLayerArgs) -> Result<AuthoringReport> {
     apply_mutation(&args.path, &args.mutation, set)
 }
 
-fn load_font(path: &Path) -> Result<Font> {
+pub(super) fn load_font(path: &Path) -> Result<Font> {
     ShiftStore::open_document(path)
-        .and_then(|store| store.load_font_state())
+        .and_then(|store| store.load_font_directory())
         .into_diagnostic()
         .wrap_err("failed to load Shift font")
 }
 
-fn parse_unicodes(values: &[String]) -> Result<Vec<u32>> {
+pub(super) fn parse_unicodes(values: &[String]) -> Result<Vec<u32>> {
     let mut seen = HashSet::new();
     let mut unicodes = Vec::with_capacity(values.len());
 
@@ -173,94 +171,9 @@ fn parse_unicodes(values: &[String]) -> Result<Vec<u32>> {
     Ok(unicodes)
 }
 
-fn read_layer_input(path: &Path) -> Result<LayerInput> {
-    let mut json = String::new();
-    if path == Path::new("-") {
-        io::stdin()
-            .read_to_string(&mut json)
-            .into_diagnostic()
-            .wrap_err("failed to read layer payload from stdin")?;
-    } else {
-        json = std::fs::read_to_string(path)
-            .into_diagnostic()
-            .wrap_err_with(|| format!("failed to read layer payload from {}", path.display()))?;
-    }
-
-    serde_json::from_str(&json)
-        .into_diagnostic()
-        .wrap_err_with(|| format!("invalid layer payload from {}", path.display()))
-}
-
-fn layer_intents(
-    layer_id: LayerId,
-    glyph_id: GlyphId,
-    source_id: SourceId,
-    input: LayerInput,
-) -> Result<FontIntentSet> {
-    require_finite(input.advance, "layer advance")?;
-    let mut intents = vec![
-        FontIntent::CreateGlyphLayer {
-            layer_id: layer_id.clone(),
-            glyph_id,
-            source_id,
-        },
-        FontIntent::SetXAdvance {
-            layer_id: layer_id.clone(),
-            width: input.advance,
-        },
-    ];
-    for contour in input.contours {
-        let contour_id = ContourId::new();
-        let mut points = Vec::with_capacity(contour.points.len());
-
-        for point in contour.points {
-            require_finite(point.x, "point x")?;
-            require_finite(point.y, "point y")?;
-            points.push(PointSeed {
-                id: PointId::new(),
-                x: point.x,
-                y: point.y,
-                point_type: point.point_type,
-                smooth: point.smooth,
-            });
-        }
-
-        intents.push(FontIntent::AddContour {
-            layer_id: layer_id.clone(),
-            contour_id: contour_id.clone(),
-            closed: contour.closed,
-        });
-        if !points.is_empty() {
-            intents.push(FontIntent::AddPoints {
-                layer_id: layer_id.clone(),
-                contour_id: Some(contour_id),
-                before: None,
-                points,
-            });
-        }
-    }
-
-    let mut anchors = Vec::with_capacity(input.anchors.len());
-    for anchor in input.anchors {
-        require_finite(anchor.x, "anchor x")?;
-        require_finite(anchor.y, "anchor y")?;
-        anchors.push(AnchorSeed {
-            id: AnchorId::new(),
-            name: anchor.name,
-            x: anchor.x,
-            y: anchor.y,
-        });
-    }
-    if !anchors.is_empty() {
-        intents.push(FontIntent::AddAnchors { layer_id, anchors });
-    }
-
-    Ok(FontIntentSet { intents })
-}
-
 fn resolve_glyph_id(font: &Font, selector: &str) -> Result<GlyphId> {
     if let Ok(glyph_id) = selector.parse::<GlyphId>()
-        && font.glyph(glyph_id.clone()).is_some()
+        && font.glyph(&glyph_id).is_some()
     {
         return Ok(glyph_id);
     }
@@ -273,9 +186,9 @@ fn resolve_glyph_id(font: &Font, selector: &str) -> Result<GlyphId> {
     ))
 }
 
-fn resolve_source_id(font: &Font, selector: &str) -> Result<SourceId> {
+pub(super) fn resolve_source_id(font: &Font, selector: &str) -> Result<SourceId> {
     if let Ok(source_id) = selector.parse::<SourceId>()
-        && font.sources().iter().any(|source| source.id() == source_id)
+        && font.source(&source_id).is_some()
     {
         return Ok(source_id);
     }
@@ -290,11 +203,4 @@ fn resolve_source_id(font: &Font, selector: &str) -> Result<SourceId> {
     Err(miette!(
         "source {selector:?} does not exist; use its name or full source_ id"
     ))
-}
-
-fn require_finite(value: f64, label: &str) -> Result<()> {
-    if !value.is_finite() {
-        bail!("{label} must be finite");
-    }
-    Ok(())
 }

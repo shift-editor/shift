@@ -1,6 +1,6 @@
 # shift-font
 
-<!-- reviewed: 2026-09-20 review-every: 90d -->
+<!-- reviewed: 2026-10-06 review-every: 90d -->
 
 First-class Rust font object model for Shift.
 
@@ -14,11 +14,16 @@ First-class Rust font object model for Shift.
 - **Architecture Invariant:** Named instances own complete external locations but no source or geometry. Sources own design-space locations.
 - **Architecture Invariant:** The default source is the required master origin at the axes' default location, not an arbitrary fallback. `DeleteSource` rejects both the default source and the last source; replacing the default requires a future explicit atomic operation that preserves a valid origin.
 - **Architecture Invariant:** Mapping edits never rewrite external named-instance intent.
+- **Architecture Invariant:** Authored source interpolation compiles and evaluates with the same Rust-derived `DesignNormalization`, never external axis bounds. Each `InterpolationBasis` transports its design extrema and mapped defaults; mapping edits invalidate glyph bases and source metrics. Independent mappings define numerical extrema from their compiled support boundaries; cross-axis mappings move locations within that design space.
+- **Architecture Invariant:** Ordinary axis replacement preserves identity and never relocates dependents implicitly. Unmapped masters must stay within bounds and the default master at the replacement origin; mapped kind/range changes require explicit mapping authoring.
 - **Architecture Invariant:** Fontdrasil exclusively constructs variation sample order, supports, and numeric deltas. `shift-font` exposes compiled `VariationBasis` and `AxisMappingBasis` values; TypeScript and transport layers only evaluate or translate them.
 - **Architecture Invariant:** Authored metadata and font metrics are independent. Metadata edits replace the complete metadata snapshot without rewriting metrics.
 - **Architecture Invariant:** UPM is font-global. Metric identities and semantic roles are font-owned; positions, overshoots, and optional technical metrics are authored on master sources.
 - **Architecture Invariant:** Point removal never leaves empty contour records. Removing a contour's final point prunes the contour and its stable identity from the font-wide structure index.
-- **Architecture Invariant:** Component add, removal, decomposition, undo, and redo publish component-specific layer replacements so persisted dependency edges and derived projections remain synchronized with authored layer structure.
+- **Architecture Invariant:** `Font::apply_intents` stages the complete edit on a copy and emits one reversible `FontChangeSet`. Repeated writes to one scope coalesce to its first `before` and final `after` value; failure mutates neither the font nor its indexes.
+- **Architecture Invariant:** `Font::apply_change_set` requires every current value to match its expected `before`, installs all `after` values on a copy, rebuilds indexes, and validates the complete target's persisted-state invariants before swapping it into place. Replay does not rerun intent-specific creation or update guards; undo is the same operation with an inverted changeset, not a separate inverse-intent path.
+- **Architecture Invariant:** Changesets use domain-sized replacements. Collection order and the default source identity are part of their owning replacement; `impact()` and `entity_changes()` are derived consumer views, not alternate change representations.
+- **Architecture Invariant:** Component add, removal, decomposition, undo, and redo publish complete layer replacements so persisted dependency edges and derived projections remain synchronized with authored layer structure.
 
 ## Codemap
 
@@ -26,9 +31,10 @@ First-class Rust font object model for Shift.
 crates/shift-font/src/
   ir/              -- font entities, IDs, axes, mappings, instances, glyph data
     collection.rs  -- semantic ordered identity collections
+    font/change_set.rs -- atomic reversible changeset application and target validation
     variation.rs   -- external-to-design mapping evaluation
-  intents.rs       -- atomic authoring intents and semantic application
-  changes.rs       -- replace-grade semantic change records
+  intents.rs       -- atomic authoring intents and changeset derivation
+  changes.rs       -- reversible replacements, impacts, and entity lifecycle views
   layer_edit.rs    -- glyph-layer geometry mutations
   interpolation.rs -- source compatibility, reusable bases, source values
   projection.rs    -- location-independent glyph payloads and resolved views
@@ -40,7 +46,10 @@ crates/shift-font/src/
 - `Font` owns glyphs, sources, axes, axis mappings, named instances, metadata, and font-level data.
 - `EntityList` owns stable-ID lookup and authoring order for glyphs, contours, components, and future ordered entity collections.
 - `FontMetadata` is the complete authored naming and attribution snapshot replaced by `UpdateFontMetadata`.
-- `SetLanguages` writes the tracked Hyperglot language ids to the font lib under `LANGUAGES_LIB_KEY` (`com.shift.languages`) and records a single-key `FontLibValueUpdated` change; `Font::language_ids` returns `None` when the key is absent.
+- `Replacement<T>` retains the expected original and replacement values for one authored scope. `FontChangeSet` groups those replacements into one atomic, invertible edit.
+- `FontChangeImpact` identifies invalidated domain projections, including transitive coupling such as axes invalidating sources, mapping bases, and source metrics. `FontEntityChange` derives typed create/update/delete lifecycle events without treating collection reordering as entity updates.
+- `SourceCollection` keeps ordered source snapshots and the authored default-source identity atomic.
+- `SetLanguages` writes the tracked Hyperglot language ids to the font lib under `LANGUAGES_LIB_KEY` (`com.shift.languages`) and records a reversible single-key lib replacement; `Font::language_ids` returns `None` when the key is absent.
 - `Axis` has stable identity, an external/internal role, a continuous or discrete kind, and optional external/user-space value labels.
 - `AxisLabel` has font-wide stable identity so UI rows and later instance recipes survive renames and reordering.
 - `AxisMapping` owns an ordered set of mapping points. Independent mappings transform one external axis; the optional cross-axis group maps one design-space location to another.
@@ -56,6 +65,7 @@ crates/shift-font/src/
 - `VariationBasis` is the source-neutral Fontdrasil output: normalized regions paired with numeric `VariationDelta` vectors.
 - `InterpolationBasis` combines real source identities with a `VariationBasis` whose vectors produce source weights; it never contains glyph coordinates or metrics.
 - `AxisMappingBasis` combines mapping input/output identities with a `VariationBasis` whose vectors produce normalized output adjustments.
+- `DesignNormalization` retains an axis's numerical design minimum, mapped default, and maximum. `Font::design_normalization()` derives it from compiled independent mapping bases, preserving unmapped/internal ranges and reversed or nonmonotonic design extrema.
 - `GlyphInterpolation` combines a reusable basis with one glyph's compatible authored source values. The glyph's default-source layer owns topology when present; otherwise a deterministic master-backed reference layer allows sparse glyph interpolation.
 - `LayerMatch` derives cross-layer contour, point, anchor, and component identity mappings for structurally compatible layers. `LayerDifference` retains ordered structural evidence for incompatible layers.
 - `GlyphProjection` is a compact location-independent glyph payload: shared fallback layers, optional compatible interpolation, exact-source topology exceptions, `GlyphComponents`, and transitive component identities.
@@ -71,6 +81,7 @@ Stable IDs are identity. Names and Unicode values are editable metadata.
 
 - `GlyphId` identifies a glyph.
 - `SourceId` identifies a source.
+- `AxisId` identifies an axis independently of its editable tag and name; locations address axes by this ID.
 - `LayerId` identifies a glyph layer: the authored data for one glyph at one source.
 - `ContourId`, `PointId`, `ComponentId`, `AnchorId`, and glyph-layer `GuidelineId` identify one authored node anywhere in the font; authoring operations mint them rather than accepting user-chosen values.
 - `AxisMappingId` identifies a font-owned mapping independently of its editable name.
@@ -132,11 +143,11 @@ Transport and workspace layers should pass stable identity to find the model obj
 ### Adding a new authoring intent
 
 1. Add the variant to `FontIntent` in `crates/shift-font/src/intents.rs`. Layer-scoped intents carry a `LayerId`; extend `FontIntent::layer_id()` and `required_layer_ids()` so `shift-workspace` can acquire the complete layer read set before applying.
-2. Implement the branch in `Font::apply_intents`, delegating the actual edit to a method on the owning model object (`GlyphLayer`, `Font`, `Source`).
-3. Emit a replace-grade `FontChange` record via a constructor in `changes.rs` (e.g. `FontChange::layer_geometry_replaced`). Records carry post-mutation snapshots, not deltas — the workspace persists and replays them.
+2. Implement the staged mutation branch in `Font::apply_intents`, delegating the actual edit to the owning model object (`GlyphLayer`, `Font`, or `Source`). Existing metadata, collection, glyph, and layer scopes are compared and coalesced automatically.
+3. If the intent introduces a new authored scope, add one coarse reversible `FontChange` variant, include it in `Font::apply_change_set`, and teach `shift-store` to persist that replacement. Do not add workspace-specific inverse state or replay logic.
 4. If the renderer needs identity synchronously, accept caller-minted IDs through a seed struct such as `PointSeed` rather than returning Rust-minted IDs after the fact.
-5. Wire the downstream layers separately: ledger mapping in `shift-workspace`, then in `shift-bridge` a new `NapiFontIntent` payload field plus a `map_intent` branch — intents do not get per-intent `#[napi]` methods; they all flow through the single `apply` entry point.
-6. Verify: `cargo test -p shift-font`, and `cargo test -p shift-workspace` when ledger semantics are affected.
+5. Add the transport payload and `map_intent` branch in `shift-bridge`; intents all flow through the single `apply` entry point.
+6. Verify apply/invert round trips and stale-origin atomicity in `shift-font`, persistence in `shift-store`, and undo/redo in `shift-workspace`.
 
 ### Adding a glyph-layer geometry mutation
 
@@ -144,6 +155,8 @@ Transport and workspace layers should pass stable identity to find the model obj
 2. Never leave an empty contour record behind: follow `remove_points`, which prunes emptied contours and returns the pruned `ContourId` values so the font-wide structure index stays consistent.
 3. Bulk position paths take `BulkNodePositionUpdates` flat ID/coordinate slices; validate coordinate length against the ID count before mutating anything so a malformed batch never half-applies.
 4. Verify: `cargo test -p shift-font`.
+
+`ReplaceGlyphLayerContent` replaces advance, contours, anchors, and components in one structural edit. `GlyphLayer::replace_content` validates local identity uniqueness and finite values before mutation; the intent validates font-wide identity and component references before installing the replacement. Layer identity, source binding, height, guidelines, and library data survive. The workspace acquires the target layer and any supplied component bases before validation and records exact pre/post snapshots for undo/redo. Replacement emits a component-specific change even when the new component list is empty, so removing drawing content also removes durable dependency edges.
 
 Component authoring uses `AddComponent`, `SetComponentTransforms`, `RemoveComponents`, and `DecomposeComponents`. Add creates a direct reference with caller-minted identity, translated so its first `_name` anchor meets the most recently placed matching `name` anchor among earlier siblings at the same source (`composite::anchor_aligned_offset`); without a match the transform is identity. Transform replacement validates all direct component identities before mutating and records one values-only layer replacement. Decomposition replaces selected direct references with fresh local contours, recursively flattening each selected subtree at the target layer's source location after component transforms are resolved.
 

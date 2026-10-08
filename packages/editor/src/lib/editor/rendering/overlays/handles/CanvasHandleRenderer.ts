@@ -1,4 +1,5 @@
-import type { Canvas } from "../../Canvas";
+import type { Canvas, ScreenCanvas } from "../../Canvas";
+import type { ScreenPoint } from "../../../../../types/coordinates";
 import { drawHandle, drawHandleDirection, drawHandleFirst, drawHandleLast } from "../handleDrawing";
 import type { PointHandleItem } from "./PointHandleItem";
 
@@ -13,6 +14,8 @@ export class CanvasHandleRenderer {
     canvas.withScreenSpace((screen, project) => {
       for (const item of items) {
         const point = project.point(item.point);
+        if (item.showsMetricMarker) drawMetricHalo(screen, point);
+
         switch (item.shape) {
           case "direction":
             drawHandleDirection(screen, point, project.angle(item.rotation), item.state);
@@ -32,4 +35,13 @@ export class CanvasHandleRenderer {
       }
     });
   }
+}
+
+function drawMetricHalo(screen: ScreenCanvas, point: ScreenPoint): void {
+  const { haloFill, haloRadiusPx } = screen.theme.metricMarker;
+
+  screen.ctx.beginPath();
+  screen.ctx.arc(point.x, point.y, haloRadiusPx, 0, Math.PI * 2);
+  screen.ctx.fillStyle = haloFill;
+  screen.ctx.fill();
 }

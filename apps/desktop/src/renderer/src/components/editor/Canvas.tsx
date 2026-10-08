@@ -11,6 +11,7 @@ import { InteractiveScene } from "./InteractiveScene";
 import { StaticScene } from "./StaticScene";
 import { DebugPanel } from "../debug/DebugPanel";
 import { TextInput } from "../text/HiddenTextInput";
+import { SpacingValuePopover } from "../spacing/SpacingValuePopover";
 import { Vec2 } from "@shift/geo";
 
 export const Canvas: FC = () => {
@@ -40,7 +41,11 @@ export const Canvas: FC = () => {
       editor.flushMousePosition();
 
       switch (
-        wheelGesture.classify({ timeStamp: e.timeStamp, zoomModifier: e.metaKey || e.ctrlKey })
+        wheelGesture.classify({
+          timeStamp: e.timeStamp,
+          zoomModifier: e.metaKey || e.ctrlKey,
+          magnitude: Math.hypot(e.deltaX, e.deltaY),
+        })
       ) {
         case "zoom": {
           e.preventDefault();
@@ -90,6 +95,7 @@ export const Canvas: FC = () => {
         <InteractiveScene />
       </CanvasContextProvider>
       <TextInput />
+      <SpacingValuePopover container={containerRef} />
       {debug?.debugPanelOpen && <DebugPanel />}
     </div>
   );

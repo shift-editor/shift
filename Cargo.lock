@@ -2363,12 +2363,15 @@ dependencies = [
  "clap",
  "comfy-table",
  "miette",
+ "rusqlite",
  "serde",
  "serde_json",
  "shift-backends",
  "shift-font",
  "shift-store",
  "shift-workspace",
+ "skrifa",
+ "svgtypes",
  "tempfile",
  "thiserror",
 ]
@@ -2377,6 +2380,7 @@ dependencies = [
 name = "shift-font"
 version = "0.1.0"
 dependencies = [
+ "bitflags 2.9.1",
  "fontdrasil",
  "getrandom 0.3.3",
  "indexmap",
@@ -2460,6 +2464,12 @@ name = "simd-adler32"
 version = "0.3.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a219298ac11a56ea9a6d2120044824d6f01aeb034955e7af7bc16858527deea"
+
+[[package]]
+name = "siphasher"
+version = "1.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "33f4fe9184a62d842c9ef383018f3306d8ba224fd9d836f56d7288308847c256"
 
 [[package]]
 name = "skrifa"
@@ -2549,6 +2559,16 @@ name = "supports-unicode"
 version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b7401a30af6cb5818bb64852270bb722533397edcfc7344954a38f420819ece2"
+
+[[package]]
+name = "svgtypes"
+version = "0.16.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "695b5790b3131dafa99b3bbfd25a216edb3d216dad9ca208d4657bfb8f2abc3d"
+dependencies = [
+ "kurbo 0.13.0",
+ "siphasher",
+]
 
 [[package]]
 name = "syn"

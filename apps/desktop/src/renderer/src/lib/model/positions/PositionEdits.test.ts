@@ -6,6 +6,8 @@ import { TestEditor } from "@/testing/TestEditor";
 import { AngleSnap } from "@shift/editor/model";
 import { DirectionSnap } from "@shift/editor/model";
 import { MetricSnap } from "@shift/editor/model";
+import { PointAlignmentSnap } from "@shift/editor/model";
+import { SnapSet } from "@shift/editor/model";
 import { PointRuleConstraint } from "@shift/editor/model";
 import { PositionReference } from "@shift/editor/model";
 
@@ -105,7 +107,61 @@ describe("fluent position edits preserve one frozen interaction base", () => {
 
     expect(feedback.delta).toEqual({ x: 20, y: 400 });
     expect(editor.pointPosition(pointId)).toEqual({ x: 120, y: 500 });
-    expect(feedback.guides).toEqual([{ kind: "metric", metric: "xHeight", y: 500 }]);
+    expect(feedback.guides).toEqual([{ kind: "metric", metric: "xHeight", x: 120, y: 500 }]);
+    edit.discard();
+  });
+
+  it("snaps the nearest of several candidates and reports every corner that lands", () => {
+    const layer = editor.requireGlyphLayer();
+    const layerEdit = layer.beginEdit();
+    const contourId = layerEdit.addContour(true);
+    const corners = layerEdit.addPoints(contourId, [
+      Point.onCurve({ x: 0, y: 0 }),
+      Point.onCurve({ x: 0, y: 698 }),
+      Point.onCurve({ x: 300, y: 698 }),
+      Point.onCurve({ x: 300, y: 0 }),
+    ]);
+    const [, topLeft, topRight] = corners;
+    if (!topLeft || !topRight) throw new Error("Expected rectangle corners");
+    const metrics = { ...editor.font.metricsForSource(layer.sourceId), capHeight: 700 };
+    const edit = layer.positions
+      .within(layerEdit)
+      .move({ points: [topLeft, topRight] })
+      .snappedBy(MetricSnap.standard(metrics, 8), [
+        PositionReference.point(topLeft),
+        PositionReference.point(topRight),
+      ]);
+
+    const feedback = edit.preview({ x: 10, y: -1 });
+
+    expect(feedback.delta).toEqual({ x: 10, y: 2 });
+    expect(feedback.guides).toEqual([
+      { kind: "metric", metric: "capHeight", x: 10, y: 700 },
+      { kind: "metric", metric: "capHeight", x: 310, y: 700 },
+    ]);
+    edit.discard();
+  });
+
+  it("draws each axis's guides at the position after both axes snap", () => {
+    const layer = editor.requireGlyphLayer();
+    const metrics = { ...editor.font.metricsForSource(layer.sourceId), xHeight: 500 };
+    const edit = layer.positions
+      .move({ points: [pointId] })
+      .from(PositionReference.point(pointId))
+      .snappedBy(
+        SnapSet.nearest([
+          MetricSnap.standard(metrics, 8),
+          PointAlignmentSnap.to([{ x: 300, y: 0 }], 8),
+        ]),
+      );
+
+    const feedback = edit.preview({ x: 197, y: 396 });
+
+    expect(editor.pointPosition(pointId)).toEqual({ x: 300, y: 500 });
+    expect(feedback.guides).toEqual([
+      { kind: "alignment", target: { x: 300, y: 0 }, point: { x: 300, y: 500 } },
+      { kind: "metric", metric: "xHeight", x: 300, y: 500 },
+    ]);
     edit.discard();
   });
 

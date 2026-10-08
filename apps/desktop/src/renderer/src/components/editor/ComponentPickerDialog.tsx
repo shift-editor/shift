@@ -229,7 +229,7 @@ export function ComponentPickerDialog({ open, onOpenChange }: ComponentPickerDia
             <DialogTitle className="text-base font-medium text-primary">
               Create {pendingCreation?.displayName}?
             </DialogTitle>
-            <p className="mt-2 text-sm text-muted">
+            <p className="mt-2 text-sm text-primary">
               Create the empty glyph and add it as a component.
             </p>
             <div className="mt-4 flex justify-end gap-2">

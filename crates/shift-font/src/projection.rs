@@ -1,5 +1,6 @@
 //! Location-independent glyph backing and location-bound read-only resolution.
 
+use crate::Require;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
@@ -220,7 +221,7 @@ impl Font {
         glyph_id: &GlyphId,
         interpolation_bases: &mut HashMap<Vec<SourceId>, Arc<InterpolationBasis>>,
     ) -> CoreResult<Option<Arc<GlyphLayerProjection>>> {
-        let Some(glyph) = self.glyph(glyph_id.clone()) else {
+        let Some(glyph) = self.glyph(glyph_id) else {
             return Ok(None);
         };
         let interpolation = self.glyph_interpolation_with_bases(glyph_id, interpolation_bases)?;
@@ -410,7 +411,7 @@ impl Font {
     /// compilation so projections cannot outlive authored edits.
     pub fn glyph_projection_set(&self, glyph_ids: &[GlyphId]) -> CoreResult<GlyphProjectionSet> {
         for glyph_id in glyph_ids {
-            if self.glyph(glyph_id.clone()).is_none() {
+            if self.glyph(glyph_id).is_none() {
                 return Err(CoreError::GlyphNotFound(glyph_id.clone()));
             }
         }
@@ -528,10 +529,7 @@ impl GlyphProjectionSet {
             return Ok(true);
         }
 
-        let projection = self
-            .projections
-            .get(glyph_id)
-            .ok_or_else(|| CoreError::GlyphNotFound(glyph_id.clone()))?;
+        let projection = self.projections.get(glyph_id).require(&glyph_id)?;
         let Some(projection) = projection else {
             return Ok(false);
         };
@@ -1005,10 +1003,10 @@ mod tests {
             ));
             font.insert_glyph(component_glyph).unwrap();
         }
-        let reference_layer = font.layer_mut(reference_layer_id).unwrap();
+        let reference_layer = font.layer_mut(&reference_layer_id).unwrap();
         reference_layer.add_component(Component::new(c_id.clone(), "C"));
         reference_layer.add_component(Component::new(caron_id.clone(), "caron.cap"));
-        let bold_layer = font.layer_mut(bold_layer_id).unwrap();
+        let bold_layer = font.layer_mut(&bold_layer_id).unwrap();
         bold_layer.add_component(Component::new(caron_id.clone(), "caron.cap"));
         bold_layer.add_component(Component::new(c_id.clone(), "C"));
 

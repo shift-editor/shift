@@ -29,7 +29,7 @@ impl GlyphInspection {
             .wrap_err_with(|| format!("failed to load font {}", path.display()))?;
         let glyph_id = resolve_glyph_id(&font, selector)?;
         let glyph = font
-            .glyph(glyph_id.clone())
+            .glyph(&glyph_id)
             .ok_or_else(|| miette!("glyph {selector:?} disappeared while inspecting the font"))?;
         let external = parse_location(&font, coordinates)?;
         let design = map_location(&external, font.axes(), font.axis_mappings())
@@ -112,7 +112,7 @@ impl GlyphInspection {
 
 fn resolve_glyph_id(font: &Font, selector: &str) -> Result<GlyphId> {
     if let Ok(glyph_id) = selector.parse::<GlyphId>()
-        && font.glyph(glyph_id.clone()).is_some()
+        && font.glyph(&glyph_id).is_some()
     {
         return Ok(glyph_id);
     }
@@ -250,11 +250,11 @@ fn inspect_components(
                 })?;
             let base_id = occurrence.base_glyph_id();
             let parent_name = font
-                .glyph(parent_id.clone())
+                .glyph(&parent_id)
                 .map(|glyph| glyph.name().to_string())
                 .unwrap_or_else(|| parent_id.to_string());
             let base_name = font
-                .glyph(base_id.clone())
+                .glyph(&base_id)
                 .map(|glyph| glyph.name().to_string())
                 .unwrap_or_else(|| component.base_glyph_name().to_string());
 
@@ -418,7 +418,11 @@ fn inspect_variation(
                             maximum: support.maximum(),
                         })
                         .collect(),
-                    scalar: interpolation_region_scalar(delta.region(), location, font.axes()),
+                    scalar: interpolation_region_scalar(
+                        delta.region(),
+                        location,
+                        interpolation.basis().design_normalization(),
+                    ),
                     value_count: delta.values().len(),
                     non_zero_value_count: delta
                         .values()
@@ -462,15 +466,20 @@ fn inspect_variation(
 fn interpolation_region_scalar(
     region: &shift_font::InterpolationRegion,
     location: &DesignLocation,
-    axes: &[Axis],
+    design_normalization: &[shift_font::DesignNormalization],
 ) -> f64 {
     let mut scalar = 1.0;
     for support in region.supports() {
-        let Some(axis) = axes.iter().find(|axis| axis.id() == support.axis_id()) else {
+        let Some(normalization) = design_normalization
+            .iter()
+            .find(|normalization| normalization.axis_id == support.axis_id())
+        else {
             return 0.0;
         };
-        let value = location.get(&axis.id()).unwrap_or(axis.default());
-        let normalized = axis.normalize(value);
+        let value = location
+            .get(&normalization.axis_id)
+            .unwrap_or(normalization.default);
+        let normalized = normalization.normalize(value);
         if normalized == support.peak()
             || (support.minimum() == 0.0 && support.peak() == 0.0 && support.maximum() == 0.0)
         {

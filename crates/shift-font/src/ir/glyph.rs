@@ -8,9 +8,9 @@ use crate::entity::{
 use crate::guideline::Guideline;
 use crate::lib_data::LibData;
 use crate::point::Point;
-use crate::GlyphName;
+use crate::{CoreError, CoreResult, GlyphName};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -134,6 +134,80 @@ impl GlyphLayer {
         layer
     }
 
+    /// Replaces drawing content in font units, preserving layer identity and auxiliary data.
+    ///
+    /// Contours, anchors, and components retain the supplied order and identities.
+    /// Height, source binding, guidelines, and library data are unchanged.
+    /// Font-wide identity and component-reference validation belongs to the font intent path.
+    ///
+    /// # Errors
+    ///
+    /// Rejects duplicate drawing identities and non-finite numeric values before mutation.
+    pub fn replace_content(
+        &mut self,
+        width: f64,
+        contours: Vec<Contour>,
+        anchors: Vec<Anchor>,
+        components: Vec<Component>,
+    ) -> CoreResult<()> {
+        let mut point_ids = HashSet::new();
+        let mut anchor_ids = HashSet::new();
+        let mut new_contours = EntityList::new();
+        let mut new_components = EntityList::new();
+        let mut finite = width.is_finite();
+
+        for contour in contours {
+            for point in contour.points() {
+                if !point_ids.insert(point.id()) {
+                    return Err(CoreError::DuplicatePointId(point.id()));
+                }
+                finite &= point.x().is_finite() && point.y().is_finite();
+            }
+            let contour_id = contour.id();
+            if new_contours.insert(contour).is_some() {
+                return Err(CoreError::DuplicateContourId(contour_id));
+            }
+        }
+        for anchor in &anchors {
+            if !anchor_ids.insert(anchor.id()) {
+                return Err(CoreError::DuplicateAnchorId(anchor.id()));
+            }
+            finite &= anchor.x().is_finite() && anchor.y().is_finite();
+        }
+        for component in components {
+            let transform = component.transform();
+            finite &= [
+                transform.translate_x,
+                transform.translate_y,
+                transform.rotation,
+                transform.scale_x,
+                transform.scale_y,
+                transform.skew_x,
+                transform.skew_y,
+                transform.t_center_x,
+                transform.t_center_y,
+            ]
+            .iter()
+            .all(|value| value.is_finite());
+            let component_id = component.id();
+            if new_components.insert(component).is_some() {
+                return Err(CoreError::DuplicateComponentId(component_id));
+            }
+        }
+        if !finite {
+            return Err(CoreError::InvalidPositionUpdateInput {
+                kind: "layer content",
+                message: "all numeric values must be finite".to_string(),
+            });
+        }
+
+        self.width = width;
+        self.contours = new_contours;
+        self.anchors = anchors;
+        self.components = new_components;
+        Ok(())
+    }
+
     pub fn width(&self) -> f64 {
         self.width
     }
@@ -162,12 +236,12 @@ impl GlyphLayer {
         self.contours.values_mut()
     }
 
-    pub fn contour(&self, id: ContourId) -> Option<&Contour> {
-        self.contours.get(&id)
+    pub fn contour(&self, id: &ContourId) -> Option<&Contour> {
+        self.contours.get(id)
     }
 
-    pub fn contour_mut(&mut self, id: ContourId) -> Option<&mut Contour> {
-        self.contours.get_mut(&id)
+    pub fn contour_mut(&mut self, id: &ContourId) -> Option<&mut Contour> {
+        self.contours.get_mut(id)
     }
 
     pub fn add_contour(&mut self, contour: Contour) -> ContourId {
@@ -196,8 +270,8 @@ impl GlyphLayer {
         self.components.values_mut()
     }
 
-    pub fn component(&self, id: ComponentId) -> Option<&Component> {
-        self.components.get(&id)
+    pub fn component(&self, id: &ComponentId) -> Option<&Component> {
+        self.components.get(id)
     }
 
     pub fn add_component(&mut self, component: Component) -> ComponentId {
@@ -226,12 +300,12 @@ impl GlyphLayer {
         self.anchors.iter_mut()
     }
 
-    pub fn anchor(&self, id: AnchorId) -> Option<&Anchor> {
-        self.anchors.iter().find(|anchor| anchor.id() == id)
+    pub fn anchor(&self, id: &AnchorId) -> Option<&Anchor> {
+        self.anchors.iter().find(|anchor| anchor.id() == *id)
     }
 
-    pub fn anchor_mut(&mut self, id: AnchorId) -> Option<&mut Anchor> {
-        self.anchors.iter_mut().find(|anchor| anchor.id() == id)
+    pub fn anchor_mut(&mut self, id: &AnchorId) -> Option<&mut Anchor> {
+        self.anchors.iter_mut().find(|anchor| anchor.id() == *id)
     }
 
     pub fn anchor_index(&self, id: AnchorId) -> Option<usize> {
@@ -254,7 +328,7 @@ impl GlyphLayer {
     }
 
     pub fn set_anchor_position(&mut self, id: AnchorId, x: f64, y: f64) -> bool {
-        let Some(anchor) = self.anchor_mut(id) else {
+        let Some(anchor) = self.anchor_mut(&id) else {
             return false;
         };
         anchor.set_position(x, y);
@@ -264,7 +338,7 @@ impl GlyphLayer {
     pub fn move_anchors(&mut self, ids: &[AnchorId], dx: f64, dy: f64) -> Vec<AnchorId> {
         let mut moved = Vec::new();
         for id in ids {
-            if let Some(anchor) = self.anchor_mut(id.clone()) {
+            if let Some(anchor) = self.anchor_mut(id) {
                 anchor.translate(dx, dy);
                 moved.push(id.clone());
             }
@@ -362,12 +436,12 @@ impl Glyph {
         &self.layers
     }
 
-    pub fn layer(&self, id: LayerId) -> Option<&GlyphLayer> {
-        self.layers.get(&id).map(Arc::as_ref)
+    pub fn layer(&self, id: &LayerId) -> Option<&GlyphLayer> {
+        self.layers.get(id).map(Arc::as_ref)
     }
 
-    pub fn layer_mut(&mut self, id: LayerId) -> Option<&mut GlyphLayer> {
-        self.layers.get_mut(&id).map(Arc::make_mut)
+    pub fn layer_mut(&mut self, id: &LayerId) -> Option<&mut GlyphLayer> {
+        self.layers.get_mut(id).map(Arc::make_mut)
     }
 
     pub fn ensure_layer_for_source(&mut self, source_id: SourceId) -> &mut GlyphLayer {
@@ -377,13 +451,13 @@ impl Glyph {
             .find(|layer| layer.source_id() == source_id)
             .map(|layer| layer.id())
         {
-            return self.layer_mut(layer_id).expect("layer id came from glyph");
+            return self.layer_mut(&layer_id).expect("layer id came from glyph");
         }
 
         let layer = GlyphLayer::new(LayerId::new(), source_id);
         let layer_id = layer.id();
         self.layers.insert(layer_id.clone(), Arc::new(layer));
-        self.layer_mut(layer_id).expect("layer was just inserted")
+        self.layer_mut(&layer_id).expect("layer was just inserted")
     }
 
     pub fn set_layer<L>(&mut self, layer: L)
@@ -443,7 +517,7 @@ mod tests {
         let layer_id = layer.id();
         layer.set_width(600.0);
 
-        assert_eq!(g.layer(layer_id.clone()).unwrap().width(), 600.0);
+        assert_eq!(g.layer(&layer_id).unwrap().width(), 600.0);
         assert_eq!(
             g.layer_for_source(source_id.clone()).unwrap().id(),
             layer_id.clone()
@@ -470,15 +544,12 @@ mod tests {
         let snapshot = glyph.clone();
 
         glyph
-            .layer_mut(first_layer_id.clone())
+            .layer_mut(&first_layer_id)
             .expect("first layer should exist")
             .set_width(700.0);
 
-        assert_eq!(glyph.layer(first_layer_id.clone()).unwrap().width(), 700.0);
-        assert_eq!(
-            snapshot.layer(first_layer_id.clone()).unwrap().width(),
-            500.0
-        );
+        assert_eq!(glyph.layer(&first_layer_id).unwrap().width(), 700.0);
+        assert_eq!(snapshot.layer(&first_layer_id).unwrap().width(), 500.0);
         assert!(!Arc::ptr_eq(
             glyph.layers.get(&first_layer_id).unwrap(),
             snapshot.layers.get(&first_layer_id).unwrap()
@@ -498,7 +569,7 @@ mod tests {
         let id = layer.add_contour(contour);
 
         assert!(!layer.is_empty());
-        assert!(layer.contour(id).is_some());
+        assert!(layer.contour(&id).is_some());
     }
 
     #[test]

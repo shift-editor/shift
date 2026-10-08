@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+import { resolve } from "node:path";
 import {
   workspaceTest,
   expect,
@@ -12,6 +13,48 @@ import { expectCanvasSnapshot } from "./fixtures/snapshots";
 const test = workspaceTest.extend({ startupFontPath: DESIGNSPACE_FONT_PATH });
 
 const toggleModifier = process.platform === "darwin" ? "Meta" : "Control";
+
+workspaceTest.describe("mapped weight interpolation", () => {
+  workspaceTest.use({
+    startupFontPath: resolve(process.cwd(), "../../fixtures/fonts/MappedWeight.glyphs"),
+  });
+
+  workspaceTest(
+    "named instances display mapped user weights between masters",
+    async ({ page, editor }) => {
+      await editor.openGlyphByName("A");
+      const controls = await openVariationControls(page);
+      const instances = await page.evaluate(() =>
+        window.shiftSession!.font.namedInstances.map(({ id, name }) => ({ id, name })),
+      );
+
+      for (const [name, x, advance] of [
+        ["ExtraLight", 50, 407.14285714285717],
+        ["SemiBold", 110, 697.2972972972973],
+      ] as const) {
+        const instance = instances.find((candidate) => candidate.name === name);
+        if (!instance) throw new Error(`Expected ${name} instance`);
+        await controls.getByTestId(`instance-${instance.id}`).click();
+        await editor.waitForCanvasRender();
+        await expect
+          .poll(() =>
+            page.evaluate(() => {
+              const editor = window.shiftSession!.editor;
+              const node = editor.scene.nodesOfKind("glyph")[0]!;
+              const model = editor
+                .glyphForId(node.glyphId)!
+                .renderModelAt(editor.externalLocationCell, editor.activeSourceIdCell);
+              return {
+                x: Math.max(...model.allPoints.map((point) => point.x)),
+                advance: model.xAdvance,
+              };
+            }),
+          )
+          .toEqual({ x: expect.closeTo(x, 8), advance: expect.closeTo(advance, 8) });
+      }
+    },
+  );
+});
 
 interface OutlineFixture {
   readonly activeSource: { readonly id: string; readonly name: string };

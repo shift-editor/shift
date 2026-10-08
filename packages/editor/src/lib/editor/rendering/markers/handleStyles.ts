@@ -14,6 +14,20 @@ export const SHAPE_IDS: Record<MarkerShape, number> = {
   last: 5,
 };
 
+/**
+ * Whether a handle in this state shows the on-metric marker.
+ *
+ * @remarks
+ * Selected handles keep their own look so selection always reads first;
+ * interpolated handles are not editable and stay neutral.
+ */
+export function showsMetricMarker(state: HandleState): boolean {
+  return state === "idle" || state === "hovered";
+}
+
+/** Shader shape id for the translucent on-metric halo disc; not a handle shape. */
+export const METRIC_HALO_SHAPE_ID = 6;
+
 export interface CachedInstanceStyle {
   shapeId: number;
   size: number;

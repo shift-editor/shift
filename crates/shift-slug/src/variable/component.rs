@@ -1,8 +1,9 @@
+use crate::length::{ensure_total, to_u32, OrOverflow};
 use crate::{Bounds, Curve, Point, SlugError};
 
 use super::{
-    as_u32, component_glyph_index, ensure_total, PackedChunkWriter, PackedVariableChunk,
-    VariableAtlas, VariableAtlasBuilder, VariableGlyph, COMPONENT_GLYPH_FLAG, GLYPH_OFFSET_MASK,
+    component_glyph_index, PackedChunkWriter, PackedVariableChunk, VariableAtlas,
+    VariableAtlasBuilder, VariableGlyph, COMPONENT_GLYPH_FLAG, GLYPH_OFFSET_MASK,
 };
 
 pub(super) const VARIABLE_COMPONENT_GLYPH_BYTES: usize = 24;
@@ -121,14 +122,14 @@ impl VariableAtlasBuilder {
             return Err(SlugError::LengthOverflow);
         }
 
-        let glyph_index = as_u32(self.atlas.glyphs.len())?;
-        let descriptor_index = as_u32(self.atlas.component_glyphs.len())?;
+        let glyph_index = to_u32(self.atlas.glyphs.len())?;
+        let descriptor_index = to_u32(self.atlas.component_glyphs.len())?;
         if descriptor_index > GLYPH_OFFSET_MASK {
             return Err(SlugError::LengthOverflow);
         }
-        let part_start = as_u32(self.atlas.component_parts.len())?;
-        let component_start = as_u32(self.atlas.components.len())?;
-        let component_source_start = as_u32(self.atlas.component_sources.len())?;
+        let part_start = to_u32(self.atlas.component_parts.len())?;
+        let component_start = to_u32(self.atlas.components.len())?;
+        let component_source_start = to_u32(self.atlas.component_sources.len())?;
 
         let mut curve_count = 0_u32;
         for part in &parts {
@@ -142,7 +143,7 @@ impl VariableAtlasBuilder {
             }
             curve_count = curve_count
                 .checked_add(direct_glyph.curve_count)
-                .ok_or(SlugError::LengthOverflow)?;
+                .or_overflow()?;
         }
 
         let component_count = components.len();
@@ -155,7 +156,7 @@ impl VariableAtlasBuilder {
             component.source_start = component
                 .source_start
                 .checked_add(component_source_start)
-                .ok_or(SlugError::LengthOverflow)?;
+                .or_overflow()?;
         }
 
         ensure_total(self.atlas.glyphs.len(), 1)?;
@@ -166,9 +167,9 @@ impl VariableAtlasBuilder {
 
         self.atlas.component_glyphs.push(VariableComponentGlyph {
             part_start,
-            part_count: as_u32(parts.len())?,
+            part_count: to_u32(parts.len())?,
             component_start,
-            component_count: as_u32(components.len())?,
+            component_count: to_u32(components.len())?,
             root_glyph_index,
             _padding: 0,
         });
@@ -194,26 +195,26 @@ pub(super) fn resolve_component_glyph(
 ) -> Result<Vec<Curve>, SlugError> {
     let descriptor = atlas
         .component_glyphs
-        .get(component_glyph_index(glyph).ok_or(SlugError::LengthOverflow)?)
-        .ok_or(SlugError::LengthOverflow)?;
+        .get(component_glyph_index(glyph).or_overflow()?)
+        .or_overflow()?;
     let component_start = descriptor.component_start as usize;
     let component_end = component_start
         .checked_add(descriptor.component_count as usize)
-        .ok_or(SlugError::LengthOverflow)?;
+        .or_overflow()?;
     let components = atlas
         .components
         .get(component_start..component_end)
-        .ok_or(SlugError::LengthOverflow)?;
+        .or_overflow()?;
     let resolved_transforms = resolve_transforms(atlas, components, weights)?;
 
     let part_start = descriptor.part_start as usize;
     let part_end = part_start
         .checked_add(descriptor.part_count as usize)
-        .ok_or(SlugError::LengthOverflow)?;
+        .or_overflow()?;
     let parts = atlas
         .component_parts
         .get(part_start..part_end)
-        .ok_or(SlugError::LengthOverflow)?;
+        .or_overflow()?;
     let mut output = vec![Curve::default(); glyph.curve_count as usize];
     for part in parts {
         let direct_glyph = *atlas
@@ -225,16 +226,12 @@ pub(super) fn resolve_component_glyph(
         } else {
             *resolved_transforms
                 .get(part.component_index as usize)
-                .ok_or(SlugError::LengthOverflow)?
+                .or_overflow()?
         };
         let curves = atlas.resolve_glyph_with_weights(part.glyph_index, weights)?;
         let output_start = part.output_curve_start as usize;
-        let output_end = output_start
-            .checked_add(curves.len())
-            .ok_or(SlugError::LengthOverflow)?;
-        let destination = output
-            .get_mut(output_start..output_end)
-            .ok_or(SlugError::LengthOverflow)?;
+        let output_end = output_start.checked_add(curves.len()).or_overflow()?;
+        let destination = output.get_mut(output_start..output_end).or_overflow()?;
         for (local_curve, (destination, curve)) in destination.iter_mut().zip(curves).enumerate() {
             let transformed = transform.curve(curve);
             *destination = if atlas.curve_is_line(direct_glyph.curve_start as usize + local_curve) {
@@ -260,7 +257,7 @@ fn resolve_transforms(
         } else {
             *resolved_transforms
                 .get(component.parent_component as usize)
-                .ok_or(SlugError::LengthOverflow)?
+                .or_overflow()?
         };
         resolved_transforms.push(parent.compose(local));
     }
@@ -275,11 +272,8 @@ fn component_affine(
     let start = component.source_start as usize;
     let end = start
         .checked_add(component.source_count as usize)
-        .ok_or(SlugError::LengthOverflow)?;
-    let sources = atlas
-        .component_sources
-        .get(start..end)
-        .ok_or(SlugError::LengthOverflow)?;
+        .or_overflow()?;
+    let sources = atlas.component_sources.get(start..end).or_overflow()?;
     if sources.is_empty() {
         return Err(SlugError::LengthOverflow);
     }

@@ -17,7 +17,7 @@ import {
   type GlyphPositions,
   type GlyphSidebearings,
 } from "@shift/glyph-state";
-import type { Bounds, DecomposedTransform } from "@shift/geo";
+import type { Bounds, DecomposedTransform, MatModel } from "@shift/geo";
 import type { PendingEditId } from "../../types/editing";
 import {
   batch,
@@ -27,7 +27,7 @@ import {
   type Signal,
   type WritableSignal,
 } from "../signals/signal";
-import { LayerBuffers } from "./LayerBuffers";
+import { LayerBuffers, type LayerChangeToken } from "./LayerBuffers";
 
 /**
  * Reactive state and pending-confirmation lifecycle for one authored layer.
@@ -42,7 +42,7 @@ export class GlyphLayerState {
   readonly #structure: ComputedSignal<GlyphStructure>;
   readonly #xAdvance: ComputedSignal<number>;
   readonly #sidebearings: ComputedSignal<GlyphSidebearings>;
-  readonly #buffersChanged: ComputedSignal<LayerBuffers>;
+  readonly #buffersChanged: ComputedSignal<LayerChangeToken>;
   readonly #geometry: ComputedSignal<GlyphGeometry>;
 
   #confirmedState: GlyphState | null = null;
@@ -68,14 +68,9 @@ export class GlyphLayerState {
     this.#sidebearings = computed(() => this.#buffers.value.sidebearingsCell.value, {
       name: "glyphLayer.sidebearings",
     });
-    this.#buffersChanged = computed(
-      () => {
-        const buffers = this.#buffers.value;
-        buffers.changedCell.value;
-        return buffers;
-      },
-      { name: "glyphLayer.buffers.changed" },
-    );
+    this.#buffersChanged = computed(() => this.#buffers.value.changedCell.value, {
+      name: "glyphLayer.buffers.changed",
+    });
     this.#geometry = computed(
       () => new GlyphGeometry(this.#structure.value, this.#buffers.value.snapshotCell.value),
       { name: "glyphLayer.geometry" },
@@ -115,7 +110,7 @@ export class GlyphLayerState {
   }
 
   /** Invalidates on numeric buffer changes without packing a full glyph snapshot. */
-  get buffersChangedCell(): Signal<LayerBuffers> {
+  get buffersChangedCell(): Signal<LayerChangeToken> {
     return this.#buffersChanged;
   }
 
@@ -210,13 +205,8 @@ export class GlyphLayerState {
     return this.#applyEdit(editId, () => this.#buffers.peek().setContourStart(contourId, pointId));
   }
 
-  translatePoints(
-    editId: PendingEditId,
-    pointIds: readonly PointId[],
-    dx: number,
-    dy: number,
-  ): boolean {
-    return this.#applyEdit(editId, () => this.#buffers.peek().translatePoints(pointIds, dx, dy));
+  transformLayer(editId: PendingEditId, matrix: MatModel): boolean {
+    return this.#applyEdit(editId, () => this.#buffers.peek().transformLayer(matrix));
   }
 
   setXAdvance(editId: PendingEditId, width: number): void {

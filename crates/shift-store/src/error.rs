@@ -110,3 +110,24 @@ pub enum StoreError {
     )]
     UnsupportedDocumentSchemaVersion { found: i64, supported: i64 },
 }
+
+/// Turns the `Option` of a store lookup into [`StoreError::MissingEntity`].
+pub(crate) trait OrMissing<T> {
+    /// Returns the found value, or a missing-entity error naming `kind` and `id`.
+    ///
+    /// `id` is formatted only when the lookup found nothing.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::MissingEntity`] when the lookup found nothing.
+    fn or_missing(self, kind: &'static str, id: &impl ToString) -> Result<T, StoreError>;
+}
+
+impl<T> OrMissing<T> for Option<T> {
+    fn or_missing(self, kind: &'static str, id: &impl ToString) -> Result<T, StoreError> {
+        self.ok_or_else(|| StoreError::MissingEntity {
+            kind,
+            id: id.to_string(),
+        })
+    }
+}

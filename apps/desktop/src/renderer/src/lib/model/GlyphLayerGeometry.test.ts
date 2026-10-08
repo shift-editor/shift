@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import { Point } from "@shift/glyph-state";
 import type { PointId } from "@shift/types";
+import type { GlyphName } from "@shift/types";
 import { TestEditor } from "@/testing/TestEditor";
 
 describe("GlyphLayer point movement", () => {
@@ -346,6 +347,23 @@ describe("GlyphLayer metrics", () => {
       expect(layer().xAdvance).toBe(initialAdvance + 20);
       expect(layer().point(pointId)).toMatchObject({ x: point.x + 20, y: point.y });
       expect(layer().sidebearings.rsb).toBe(initialRightSidebearing);
+    });
+
+    it("moves anchors and components with the outline", async () => {
+      await editor.addGlyph("B", 66);
+      const base = editor.font.recordForName("B" as GlyphName)!;
+      const anchorId = layer().addAnchor("top", { x: 40, y: 500 });
+      layer().addComponent(base.id);
+      await editor.settle();
+
+      layer().setLeftSidebearing(layer().sidebearings.lsb! + 20);
+      await editor.settle();
+
+      expect(layer().anchors.find((anchor) => anchor.id === anchorId)).toMatchObject({
+        x: 60,
+        y: 500,
+      });
+      expect(layer().components[0]?.matrix).toMatchObject({ e: 20, f: 0 });
     });
 
     it("does not reapply a displayed tight-bounds value", async () => {

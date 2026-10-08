@@ -28,6 +28,11 @@ export class Selection implements SelectBehavior {
         break;
       }
 
+      case "text": {
+        ids = [target.itemId];
+        break;
+      }
+
       case "canvas":
       case "node":
         break;

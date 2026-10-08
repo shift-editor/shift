@@ -1,21 +1,13 @@
 import type { Bounds, Point2D } from "@shift/geo";
-import type { GlyphId, SourceMetrics } from "@shift/types";
+import {
+  type GlyphName,
+  mintTextItemId,
+  type GlyphId,
+  type SourceMetrics,
+  type TextItemId,
+} from "@shift/types";
 
-export type TextItemId = string;
-export type TextRunId = string;
-
-export interface GlyphAnchor {
-  runId: TextRunId;
-  itemId: TextItemId;
-}
-
-let nextItemId = 1;
-
-export function createTextItemId(): TextItemId {
-  const id = `item_${nextItemId}`;
-  nextItemId += 1;
-  return id;
-}
+export type { TextItemId };
 
 /**
  * A single item in a text buffer. Either a glyph (typed character or picked
@@ -27,7 +19,7 @@ export type TextItem = GlyphTextItem | LineBreakTextItem;
 export interface GlyphTextItem {
   id: TextItemId;
   kind: "glyph";
-  glyphName: string;
+  glyphName: GlyphName;
   /** Source codepoint when typed via keyboard; null when picked from a glyph UI. */
   codepoint: number | null;
 }
@@ -39,22 +31,22 @@ export interface LineBreakTextItem {
 
 /** Build a glyph text item. `codepoint` is null when the source isn't a typed character. */
 export function glyphTextItem(
-  glyphName: string,
+  glyphName: GlyphName,
   codepoint: number | null = null,
-  id: TextItemId = createTextItemId(),
+  id: TextItemId = mintTextItemId(),
 ): GlyphTextItem {
   return { id, kind: "glyph", glyphName, codepoint };
 }
 
 /** Build a line break text item — structural paragraph separator. */
-export function lineBreakTextItem(id: TextItemId = createTextItemId()): LineBreakTextItem {
+export function lineBreakTextItem(id: TextItemId = mintTextItemId()): LineBreakTextItem {
   return { id, kind: "linebreak" };
 }
 
 export interface PositionedGlyph {
   /** Stable document glyph identity resolved during layout; null when unresolved. */
   glyphId: GlyphId | null;
-  glyphName: string;
+  glyphName: GlyphName;
   sourceItemIds: readonly TextItemId[];
   origin: Point2D;
   xAdvance: number;

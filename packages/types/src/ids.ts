@@ -24,6 +24,7 @@ declare const NamedInstanceIdBrand: unique symbol;
 declare const NodeIdBrand: unique symbol;
 declare const RunIdBrand: unique symbol;
 declare const SegmentIdBrand: unique symbol;
+declare const TextItemIdBrand: unique symbol;
 declare const SourceIdBrand: unique symbol;
 
 /**
@@ -122,6 +123,9 @@ export type SegmentId = string & {
   readonly [SegmentIdBrand]: typeof SegmentIdBrand;
 };
 
+/** Identity of a glyph or linebreak within a proof text run. */
+export type TextItemId = string & { readonly [TextItemIdBrand]: typeof TextItemIdBrand };
+
 /**
  * A source identifier from Rust.
  * Branded string type - can't be confused with other IDs or plain strings.
@@ -131,7 +135,14 @@ export type SourceId = string & {
 };
 
 /** Identifies an editor-addressable scene node or glyph object. */
-export type ShiftId = NodeId | PointId | AnchorId | ContourId | SegmentId | ComponentId;
+export type ShiftId =
+  | NodeId
+  | PointId
+  | AnchorId
+  | ContourId
+  | SegmentId
+  | ComponentId
+  | TextItemId;
 
 /** Identifies objects that can be selected by the editor. */
 export type SelectableId = ShiftId;
@@ -324,6 +335,10 @@ export function isRunId(id: unknown): id is RunId {
   return hasIdPrefix(id, "run");
 }
 
+export function isTextItemId(id: unknown): id is TextItemId {
+  return hasIdPrefix(id, "textItem");
+}
+
 /** Returns whether a value is a runtime-discriminable source id. */
 export function isSourceId(id: unknown): id is SourceId {
   return hasIdPrefix(id, "source");
@@ -348,6 +363,7 @@ type MintedIdByPrefix = {
   namedInstance: NamedInstanceId;
   node: NodeId;
   run: RunId;
+  textItem: TextItemId;
   source: SourceId;
 };
 
@@ -443,6 +459,11 @@ export function mintNodeId(): NodeId {
 /** Mints a new text run id. See {@link RunId}. */
 export function mintRunId(): RunId {
   return mintPrefixedId("run");
+}
+
+/** Mints an item identity that does not reset when the editor reloads. */
+export function mintTextItemId(): TextItemId {
+  return mintPrefixedId("textItem");
 }
 
 /** Mints a new source id. See {@link mintPointId}. */

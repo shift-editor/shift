@@ -83,6 +83,12 @@ export type PenState =
 
 export type PenBehavior = Behavior<PenState, Pen>;
 
+/** Where a pen click places its new on-curve point, with the snap feedback that put it there. */
+export interface PenAnchor {
+  readonly position: Point2D;
+  readonly guides: readonly PositionGuide[];
+}
+
 export interface PenOverlayProps {
   readonly state: PenState;
   readonly pointer: Coordinates | null;

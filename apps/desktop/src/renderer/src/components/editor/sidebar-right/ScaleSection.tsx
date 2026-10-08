@@ -12,7 +12,7 @@ import { useSelectionBounds } from "@/hooks/useSelectionBounds";
 
 export const ScaleSection = () => {
   const editor = useEditor();
-  const selection = useSignalState(editor.selection.stateCell);
+  const selection = useSignalState(editor.selection.stateCell, { schedule: "frame" });
   const { anchor, setAnchor } = useTransformOrigin();
   const selectionBounds = useSelectionBounds();
 

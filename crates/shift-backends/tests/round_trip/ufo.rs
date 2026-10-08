@@ -470,7 +470,7 @@ fn preserves_components_anchors_layers_and_kerning() {
         .map(|(layer_id, _)| layer_id.clone())
         .expect("E should have a main layer");
     original
-        .layer_mut(e_layer_id)
+        .layer_mut(&e_layer_id)
         .expect("E should have a main layer")
         .add_anchor(Anchor::new(None::<String>, 123.0, 456.0));
 

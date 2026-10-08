@@ -1,4 +1,5 @@
 import { CanvasItem } from "./CanvasItem";
+import { track } from "../../signals";
 import type { Canvas } from "./Canvas";
 import type { ShiftNode } from "../../../types/node";
 import type { RenderContext, RenderPass } from "../../../types/rendering";
@@ -46,7 +47,11 @@ export class BackgroundLayer extends CanvasItem<BackgroundLayerProps> {
     this.#editor.camera.trackViewportTransform();
     this.#editor.toolCell.value;
     this.#editor.editing.stateCell.value;
+    track(this.#editor.textEditing.stateCell);
     this.#editor.scene.cell.value;
+    for (const node of this.#editor.scene.nodesOfKind("textRun")) {
+      track(this.#editor.text.layoutCell(node.runId));
+    }
 
     return { nodes: this.#editor.scene.nodes() };
   }
@@ -113,7 +118,11 @@ export class SceneLayer extends CanvasItem<SceneLayerProps> {
     this.#editor.editing.stateCell.value;
     this.#editor.selection.stateCell.value;
     this.#editor.hover.entryCell.value;
+    track(this.#editor.textEditing.stateCell);
     this.#editor.scene.cell.value;
+    for (const node of this.#editor.scene.nodesOfKind("textRun")) {
+      track(this.#editor.text.layoutCell(node.runId));
+    }
     this.#editor.debugOverlaysCell.value;
 
     return {

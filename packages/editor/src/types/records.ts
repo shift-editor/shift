@@ -1,10 +1,13 @@
-import type { NodeId, RunId, SelectableId, ShiftId } from "@shift/types";
+import type { GlyphId, NodeId, RunId, SelectableId, ShiftId } from "@shift/types";
 import type { EditingId } from "./editing";
 import type { GlyphNode, TextRunNode } from "./node";
 import type { SelectionId } from "./object";
-import type { TextRunRecord } from "./text";
+import type { TextEditingId, TextEditingRecord, TextRunRecord } from "./text";
 
-export type ShiftRecordId = ShiftId | SelectionId | EditingId | RunId;
+export type ShiftRecordId = ShiftId | SelectionId | EditingId | TextEditingId | RunId;
+
+/** Something a scene node depends on: a store record, or a glyph in the font. */
+export type NodeReference = ShiftRecordId | GlyphId;
 
 export interface ShiftRecord<
   Type extends string = string,
@@ -30,4 +33,9 @@ export type EditingRecord = ShiftRecord<"editing", EditingId> & {
   readonly nodeIds: readonly NodeId[];
 };
 
-export type ShiftEditorRecord = ShiftNodeRecord | SelectionRecord | EditingRecord | TextRunRecord;
+export type ShiftEditorRecord =
+  | ShiftNodeRecord
+  | SelectionRecord
+  | EditingRecord
+  | TextEditingRecord
+  | TextRunRecord;

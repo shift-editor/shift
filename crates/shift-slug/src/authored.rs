@@ -5,6 +5,7 @@
 //! one topology from the interpolation reference layer, then evaluates every
 //! compatible source through the same contour, point, and segment indexes.
 
+use shift_font::Require;
 use std::{collections::HashMap, error::Error, fmt};
 
 use shift_font::{
@@ -119,9 +120,7 @@ impl AuthoredAtlasBuilder {
     ) -> Result<AuthoredGlyph, AuthoredSlugError> {
         let glyph_id = projection.glyph_id();
         let projection_set = font.glyph_projection_set(std::slice::from_ref(&glyph_id))?;
-        let projection = projection_set
-            .projection(&glyph_id)
-            .ok_or_else(|| CoreError::GlyphNotFound(glyph_id.clone()))?;
+        let projection = projection_set.projection(&glyph_id).require(&glyph_id)?;
         self.add_glyph_from_projection_set(
             font,
             &projection_set,
@@ -784,9 +783,7 @@ pub fn add_authored_component_projection_glyph(
     )?;
     let glyph_id = projection.glyph_id();
     let projection_set = font.glyph_projection_set(std::slice::from_ref(&glyph_id))?;
-    let projection = projection_set
-        .projection(&glyph_id)
-        .ok_or_else(|| CoreError::GlyphNotFound(glyph_id.clone()))?;
+    let projection = projection_set.projection(&glyph_id).require(&glyph_id)?;
     let checkpoint = builder.checkpoint();
     let weight_sets = [weight_set];
     let mut profile = AuthoredAtlasProfile::default();

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { Bounds, type Rect2D } from "@shift/geo";
+import { scenePoint } from "@shift/editor/spaces";
 import { TestEditor } from "@/testing";
 
 describe("viewport zoom actions", () => {
@@ -22,13 +23,17 @@ describe("viewport zoom actions", () => {
   });
 
   it("centres all scene content when zooming to fit", () => {
-    const bounds = editor.sceneGlyphRenderModel?.bounds;
-    if (!bounds) throw new Error("Expected glyph bounds");
+    const nodeBounds = editor.scene.nodes().flatMap((node) => editor.nodeBounds(node) ?? []);
+    const bounds = nodeBounds.reduce<Bounds>(
+      (union, next) => Bounds.union(union, next),
+      nodeBounds[0]!,
+    );
+    const centre = Bounds.center(bounds);
 
     editor.setZoom(0.25);
     editor.zoomToFit();
 
-    expect(editor.localToScreen(Bounds.center(bounds))).toEqual(editor.camera.centre);
+    expect(editor.sceneToScreen(scenePoint(centre.x, centre.y))).toEqual(editor.camera.centre);
     expect(editor.zoom).toBeGreaterThan(0.25);
   });
 
@@ -51,4 +56,50 @@ describe("viewport zoom actions", () => {
     expect(editor.zoom).toBe(2);
     expect(editor.sceneToScreen(sceneCentre)).toEqual(editor.camera.centre);
   });
+});
+
+describe("opening a glyph frames its UPM box in the viewport", () => {
+  const viewport = { width: 800, height: 560 };
+  let editor: TestEditor;
+
+  beforeEach(async () => {
+    editor = new TestEditor();
+    await editor.startSession();
+    editor.setCameraRect(viewport as Rect2D);
+  });
+
+  it.each([null, 20, 1200, 5000])(
+    "keeps origin, advance, and vertical metrics visible for outline width %s",
+    async (width) => {
+      const layer = editor.requireGlyphLayer();
+      layer.setXAdvance(width ?? 500);
+      if (width !== null) {
+        const contourId = layer.addContour();
+        for (const [x, y] of [
+          [0, -100],
+          [width, -100],
+          [width, 900],
+          [0, 900],
+        ] as const) {
+          layer.addPoint(contourId, { x, y, pointType: "onCurve", smooth: false });
+        }
+        layer.closeContour(contourId);
+      }
+      await editor.settle();
+
+      editor.fitGlyphFrame(editor.glyphNode!);
+
+      const { ascender, descender } = editor.font.metricsAtLocation(editor.externalLocation);
+      const corners = [
+        { x: 0, y: ascender },
+        { x: editor.xAdvance, y: descender },
+      ].map((point) => editor.localToScreen(point));
+      for (const corner of corners) {
+        expect(corner.x).toBeGreaterThanOrEqual(0);
+        expect(corner.x).toBeLessThanOrEqual(viewport.width);
+        expect(corner.y).toBeGreaterThanOrEqual(0);
+        expect(corner.y).toBeLessThanOrEqual(viewport.height);
+      }
+    },
+  );
 });

@@ -325,6 +325,7 @@ function colorThemeVariables(theme: ColorTheme): Record<string, string> {
     "--color-canvas-cyan": palette.base0C,
     "--editor-cursor-color": palette.base0D,
     "--editor-guides-color": withAlpha(palette.base0D, 0.5),
+    "--editor-metric-marker-fill": withAlpha(palette.base05, dark ? 0.22 : 0.1),
     "--editor-selection-fill": withAlpha(palette.base0D, 0.12),
     "--editor-selection-stroke": withAlpha(palette.base0D, 0.55),
     "--editor-glyph-fill": glyphForeground,
@@ -358,6 +359,12 @@ function colorThemeVariables(theme: ColorTheme): Record<string, string> {
     "--editor-text-cursor-color": palette.base0D,
     "--editor-text-selection-fill": withAlpha(palette.base0D, 0.22),
     "--editor-text-hover-outline": palette.base0D,
+    // Spacing keeps one pink identity and amber for negatives; the faint half needs more
+    // weight on light backgrounds to stay visible.
+    "--editor-spacing": dark ? "#F472B6" : "#DB2E91",
+    "--editor-spacing-faint": withAlpha(dark ? "#F472B6" : "#DB2E91", dark ? 0.3 : 0.45),
+    "--editor-spacing-negative": dark ? "#FBBF24" : "#D97706",
+    "--editor-spacing-negative-faint": withAlpha(dark ? "#FBBF24" : "#D97706", dark ? 0.35 : 0.5),
     "--editor-text-composite-arm-fill": withAlpha(palette.base04, 0.22),
     "--editor-text-component-overlay-a": withAlpha(palette.base0B, 0.26),
     "--editor-text-component-overlay-b": withAlpha(palette.base0F, 0.26),

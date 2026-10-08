@@ -11,6 +11,12 @@ export type PenTarget =
       readonly side: "start" | "end";
     }
   | {
+      /** An on-curve point that is not an open end; new points land exactly on it. */
+      readonly type: "point";
+      readonly pointId: PointId;
+      readonly position: Point2D;
+    }
+  | {
       readonly type: "segment";
       readonly segmentId: SegmentId;
       readonly t: number;
@@ -31,6 +37,9 @@ export class PenTargets {
   at(pos: Point2D, radius: number): PenTarget {
     const terminal = this.#hitOpenTerminal(pos, radius);
     if (terminal) return terminal;
+
+    const point = this.#hitOnCurvePoint(pos, radius);
+    if (point) return point;
 
     const segment = this.#geometry.hitSegment(pos, radius);
     if (segment) {
@@ -82,5 +91,20 @@ export class PenTargets {
     if (!best) return null;
     const { distance: _distance, ...target } = best;
     return target;
+  }
+
+  #hitOnCurvePoint(pos: Point2D, radius: number): PenTarget | null {
+    let best: { readonly point: Point; readonly distance: number } | null = null;
+
+    for (const point of this.#geometry.allPoints) {
+      if (!Point.isOnCurve(point)) continue;
+
+      const hit = Point.hit(point, pos, radius);
+      if (hit && (!best || hit.distance < best.distance)) best = { point, distance: hit.distance };
+    }
+
+    if (!best) return null;
+    const { id, x, y } = best.point;
+    return { type: "point", pointId: id, position: { x, y } };
   }
 }

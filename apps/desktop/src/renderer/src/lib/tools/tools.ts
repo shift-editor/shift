@@ -3,6 +3,7 @@ import HandIcon from "@/assets/toolbar/hand.svg";
 import PenIcon from "@/assets/toolbar/pen.svg";
 import SelectIcon from "@/assets/toolbar/select.svg";
 import ShapeIcon from "@/assets/toolbar/shape.svg";
+import SpacingIcon from "@/assets/toolbar/spacing.svg";
 import TextIcon from "@/assets/toolbar/text.svg";
 
 import type { Editor } from "@shift/editor";
@@ -14,6 +15,7 @@ import { Pen } from "@shift/editor/tools";
 import { Select } from "@shift/editor/tools";
 import { ShapeTool, type ShapeKind } from "@shift/editor/tools";
 import { TextTool } from "@shift/editor/tools";
+import { SpacingTool } from "@shift/editor/tools";
 
 function builtInToolManifests(): readonly ToolManifest[] {
   const shapeKindCell = signal<ShapeKind>("rectangle", { name: "tool.Shape.kind" });
@@ -38,6 +40,20 @@ function builtInToolManifests(): readonly ToolManifest[] {
       icon: PenIcon,
       tooltip: "Pen Tool (P)",
       shortcut: "p",
+    },
+    {
+      id: "text",
+      create: (api) => new TextTool(api),
+      icon: TextIcon,
+      tooltip: "Text Tool (T)",
+      shortcut: "t",
+    },
+    {
+      id: "spacing",
+      create: (api) => new SpacingTool(api),
+      icon: SpacingIcon,
+      tooltip: "Spacing Tool (M)",
+      shortcut: "m",
     },
     {
       id: "hand",
@@ -81,20 +97,12 @@ function builtInToolManifests(): readonly ToolManifest[] {
         },
       ],
     },
-    {
-      id: "text",
-      create: (api) => new TextTool(api),
-      icon: TextIcon,
-      tooltip: "Text Tool (T)",
-      shortcut: "t",
-      hidden: true,
-      disabled: true,
-    },
   ];
 }
 
 export function registerBuiltInTools(editor: Editor): void {
   for (const manifest of builtInToolManifests()) {
+    // Preview sessions cannot author outlines, but proof text is not font data, so Text stays.
     manifest.disabled =
       manifest.disabled ||
       (editor.sessionMode === "preview" && (manifest.id === "pen" || manifest.id === "shape"));

@@ -20,33 +20,39 @@ async function dragWithSyntheticPointerEnd(
     );
   });
 
-  await page.mouse.move(point.startPagePosition.x, point.startPagePosition.y);
-  await page.mouse.down();
-  await page.mouse.move(point.endPagePosition.x, point.endPagePosition.y, { steps: 5 });
-  const pointerId = Number(await canvas.getAttribute("data-e2e-pointer-id"));
-  await canvas.evaluate(
-    (element, event) => {
-      element.dispatchEvent(
-        new PointerEvent(event.type, {
-          bubbles: true,
-          pointerId: event.pointerId,
-          pointerType: "mouse",
-          isPrimary: true,
-          button: -1,
-          buttons: 0,
-          clientX: event.x,
-          clientY: event.y,
-        }),
-      );
-    },
-    {
-      type,
-      pointerId,
-      x: point.endPagePosition.x,
-      y: point.endPagePosition.y,
-    },
-  );
-  await page.mouse.up();
+  const suspendSnappingKey = process.platform === "darwin" ? "Meta" : "Control";
+  await page.keyboard.down(suspendSnappingKey);
+  try {
+    await page.mouse.move(point.startPagePosition.x, point.startPagePosition.y);
+    await page.mouse.down();
+    await page.mouse.move(point.endPagePosition.x, point.endPagePosition.y, { steps: 5 });
+    const pointerId = Number(await canvas.getAttribute("data-e2e-pointer-id"));
+    await canvas.evaluate(
+      (element, event) => {
+        element.dispatchEvent(
+          new PointerEvent(event.type, {
+            bubbles: true,
+            pointerId: event.pointerId,
+            pointerType: "mouse",
+            isPrimary: true,
+            button: -1,
+            buttons: 0,
+            clientX: event.x,
+            clientY: event.y,
+          }),
+        );
+      },
+      {
+        type,
+        pointerId,
+        x: point.endPagePosition.x,
+        y: point.endPagePosition.y,
+      },
+    );
+    await page.mouse.up();
+  } finally {
+    await page.keyboard.up(suspendSnappingKey);
+  }
 }
 
 /** Selects a shape kind and leaves a live draft pressed between two canvas positions. */
@@ -83,7 +89,7 @@ async function liveShapeDraft(editor: EditorDriver) {
   });
 }
 
-const TOOLBAR_TOOLS = ["select", "pen", "hand", "rectangle"] as const;
+const TOOLBAR_TOOLS = ["select", "pen", "hand", "rectangle", "text"] as const;
 
 test.describe("Canvas pointer lifecycle", () => {
   test.beforeEach(async ({ editor }) => {
@@ -320,7 +326,109 @@ test.describe("Toolbar tools", () => {
     expect(await page.evaluate((id) => window.shift!.editor.object(id), draft.ids[0])).toBeNull();
   });
 
-  test("hides unavailable tools", async ({ page }) => {
-    await expect(page.getByRole("button", { name: "Text Tool (T)" })).toHaveCount(0);
+  test("Text mode draws the run filled with the caret after the typed text", async ({
+    page,
+    editor,
+  }) => {
+    await editor.selectTool("text");
+    await expect(page.getByRole("textbox", { name: "Text input" })).toBeFocused();
+    await page.keyboard.type("AB");
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const editor = window.shift!.editor;
+          const run = editor.scene.nodesOfKind("textRun")[0];
+          const items = run ? editor.text.run(run.runId)?.items : null;
+          const layout = run ? editor.text.layoutCell(run.runId).peek() : null;
+          return items && layout
+            ? {
+                codepoints: items.map((item) => (item.kind === "glyph" ? item.codepoint : 10)),
+                editingNodes: editor.editing.nodeIds.length,
+                caretAtEnd: editor.textEditing.state?.focus === items[items.length - 1]?.id,
+                glyphsLoaded: layout.lines.every((line) =>
+                  line.runs.every((part) =>
+                    part.glyphs.every((glyph) => glyph.glyphId && editor.glyphForId(glyph.glyphId)),
+                  ),
+                ),
+              }
+            : null;
+        }),
+      )
+      .toEqual({ codepoints: [65, 65, 66], editingNodes: 0, caretAtEnd: true, glyphsLoaded: true });
+    await page.mouse.move(0, 0);
+    await expectCanvasSnapshot(editor, "canvas-text-mode-AAB.png");
+  });
+
+  test("native text input edits the page run with arrows and undo", async ({ page, editor }) => {
+    await editor.selectTool("text");
+    await expect(page.getByRole("textbox", { name: "Text input" })).toBeFocused();
+    await page.keyboard.type("Hi");
+    await editor.press("ArrowLeft");
+    await page.keyboard.type("X");
+    const codepoints = () =>
+      page.evaluate(() => {
+        const editor = window.shift!.editor;
+        const run = editor.scene.nodesOfKind("textRun")[0]!;
+        return editor.text
+          .run(run.runId)!
+          .items.map((item) => (item.kind === "glyph" ? item.codepoint : 10));
+      });
+    await expect.poll(codepoints).toEqual([65, 72, 88, 105]);
+    await editor.undo();
+    await expect.poll(codepoints).toEqual([65, 72, 105]);
+    await editor.redo();
+    await expect.poll(codepoints).toEqual([65, 72, 88, 105]);
+  });
+
+  test("opening another glyph from the grid replaces the canvas run's text", async ({
+    page,
+    editor,
+  }) => {
+    const runState = () =>
+      page.evaluate(() => {
+        const editor = window.shift!.editor;
+        const run = editor.scene.nodesOfKind("textRun")[0];
+        const child = editor.scene.nodesOfKind("glyph")[0];
+        return {
+          codepoints: run
+            ? editor.text
+                .run(run.runId)!
+                .items.map((item) => (item.kind === "glyph" ? item.codepoint : 10))
+            : null,
+          edited: child ? editor.glyphForId(child.glyphId)?.name : null,
+        };
+      });
+    await editor.selectTool("text");
+    await expect(page.getByRole("textbox", { name: "Text input" })).toBeFocused();
+    await page.keyboard.type("BB");
+    await editor.press("Escape");
+    await expect.poll(runState).toEqual({ codepoints: [65, 66, 66], edited: "A" });
+
+    await editor.openGlyphByUnicode("42");
+    await expect.poll(runState).toEqual({ codepoints: [66], edited: "B" });
+  });
+
+  test("Text shortcut enters Text mode and Escape returns to editing the glyph", async ({
+    page,
+    editor,
+  }) => {
+    const editedGlyph = () =>
+      page.evaluate(() => {
+        const editor = window.shift!.editor;
+        return {
+          child: editor.scene.nodesOfKind("glyph")[0]?.id ?? null,
+          editing: editor.editing.nodeIds,
+        };
+      });
+    const before = await editedGlyph();
+
+    await editor.press("t");
+    await expect(editor.toolButton("text")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("textbox", { name: "Text input" })).toBeFocused();
+    await expect.poll(async () => (await editedGlyph()).editing).toEqual([]);
+
+    await editor.press("Escape");
+    await expect(editor.toolButton("select")).toHaveAttribute("aria-pressed", "true");
+    await expect.poll(editedGlyph).toEqual({ child: before.child, editing: [before.child] });
   });
 });

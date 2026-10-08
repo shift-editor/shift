@@ -439,8 +439,9 @@ describe("Select tool", () => {
       "shows the normal bounding box for a nearly %s segment",
       async (_name, start, end, hit) => {
         editor.selectTool("pen");
-        await editor.clickLocal(start.x, start.y);
-        await editor.clickLocal(end.x, end.y);
+        // Cmd places points exactly, so the pen does not snap the segment straight.
+        await editor.clickLocal(start.x, start.y, { metaKey: true });
+        await editor.clickLocal(end.x, end.y, { metaKey: true });
         editor.selectTool("select");
         await editor.clickLocal(hit.x, hit.y);
 
@@ -1123,10 +1124,21 @@ describe("Select tool in preview sessions", () => {
     editor.selectTool("select");
   });
 
-  it("disables authoring tools while keeping Select available", () => {
+  it("disables authoring tools while keeping Select and Text available", () => {
     expect(editor.toolRegistry.get("select")?.disabled).toBeFalsy();
+    expect(editor.toolRegistry.get("text")?.disabled).toBeFalsy();
     expect(editor.toolRegistry.get("pen")?.disabled).toBe(true);
     expect(editor.toolRegistry.get("shape")?.disabled).toBe(true);
+  });
+
+  it("types proof text in Text mode", async () => {
+    const run = editor.textRun!;
+    editor.selectTool("text");
+    editor.textEditing.insertText("AA");
+    await editor.settle();
+
+    expect(editor.toolIf("text")?.state.type).toBe("editing");
+    expect(editor.text.run(run.runId)!.items).toHaveLength(3);
   });
 
   it("draws a marquee without hover or selection state", async () => {

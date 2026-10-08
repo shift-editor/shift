@@ -68,25 +68,29 @@ test("removing a recent file can be undone from the toast", async ({
   await expect(recentFile(launcher)).toHaveCount(1);
 });
 
-test("File › Open Recent lists opened fonts and clears them", async ({ electronApp, page }) => {
-  await openFontFromLauncher(page, electronApp);
+test(
+  "File › Open Recent lists opened fonts and clears them",
+  { tag: "@os" },
+  async ({ electronApp, page }) => {
+    await openFontFromLauncher(page, electronApp);
 
-  const openRecentLabels = () =>
-    electronApp.evaluate(({ Menu }) => {
+    const openRecentLabels = () =>
+      electronApp.evaluate(({ Menu }) => {
+        const file = Menu.getApplicationMenu()?.items.find((item) => item.label === "File");
+        const openRecent = file?.submenu?.items.find((item) => item.label === "Open Recent");
+        return openRecent?.submenu?.items.map((item) => item.label) ?? null;
+      });
+
+    await expect.poll(openRecentLabels).toEqual([FONT_NAME, "", "Clear Menu"]);
+
+    await electronApp.evaluate(({ Menu }) => {
       const file = Menu.getApplicationMenu()?.items.find((item) => item.label === "File");
       const openRecent = file?.submenu?.items.find((item) => item.label === "Open Recent");
-      return openRecent?.submenu?.items.map((item) => item.label) ?? null;
+      const clear = openRecent?.submenu?.items.find((item) => item.label === "Clear Menu");
+      if (!clear) throw new Error("Missing Clear Menu item");
+      clear.click();
     });
 
-  await expect.poll(openRecentLabels).toEqual([FONT_NAME, "", "Clear Menu"]);
-
-  await electronApp.evaluate(({ Menu }) => {
-    const file = Menu.getApplicationMenu()?.items.find((item) => item.label === "File");
-    const openRecent = file?.submenu?.items.find((item) => item.label === "Open Recent");
-    const clear = openRecent?.submenu?.items.find((item) => item.label === "Clear Menu");
-    if (!clear) throw new Error("Missing Clear Menu item");
-    clear.click();
-  });
-
-  await expect.poll(openRecentLabels).toEqual(["Clear Menu"]);
-});
+    await expect.poll(openRecentLabels).toEqual(["Clear Menu"]);
+  },
+);

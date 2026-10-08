@@ -187,14 +187,39 @@ describe("KeyboardRouter", () => {
       expect(editor.toolIf("select")?.state).toEqual({ type: "ready" });
     });
 
-    it("does not intercept plain typing while the text tool is active", async () => {
+    it("keeps Tab on the canvas from moving focus, before any binding runs", () => {
+      let prevented = false;
+      const e = {
+        ...createKeyboardEvent({ key: "Tab" }),
+        preventDefault: () => (prevented = true),
+      };
+
+      void router.handleKeyDown(e as KeyboardEvent);
+
+      expect(prevented).toBe(true);
+    });
+
+    it("leaves Tab to move focus outside the canvas", () => {
+      canvasActive = false;
+      let prevented = false;
+      const e = {
+        ...createKeyboardEvent({ key: "Tab" }),
+        preventDefault: () => (prevented = true),
+      };
+
+      void router.handleKeyDown(e as KeyboardEvent);
+
+      expect(prevented).toBe(false);
+    });
+
+    it("does not intercept plain typing in Text mode", async () => {
       editor.selectTool("text");
-      const e = createKeyboardEvent({ key: "s" });
+      const e = createKeyboardEvent({ key: "r" });
 
       const handled = await router.handleKeyDown(e);
 
       expect(handled).toBe(false);
-      expect(editor.toolIf("text")?.state).toEqual({ type: "typing" });
+      expect(editor.toolIf("text")?.state).toEqual({ type: "editing" });
     });
   });
 
@@ -471,7 +496,7 @@ describe("KeyboardRouter", () => {
       expect(editor.pointCount).toBeGreaterThan(pointsBefore);
     });
 
-    it("does not intercept paste while the text tool is active", async () => {
+    it("does not intercept paste in Text mode", async () => {
       await editor.copy();
       editor.selectTool("text");
       const pointsBefore = editor.pointCount;
@@ -482,7 +507,7 @@ describe("KeyboardRouter", () => {
       expect(editor.pointCount).toBe(pointsBefore);
     });
 
-    it("does not intercept copy while the text tool is active", async () => {
+    it("does not intercept copy in Text mode", async () => {
       editor.selectTool("text");
       const bufferBefore = editor.clipboardBuffer;
       const e = createKeyboardEvent({ key: "c", metaKey: true });
@@ -558,6 +583,60 @@ describe("KeyboardRouter", () => {
         expect(editor.pointCount).toBe(2);
       },
     );
+
+    it("Shift+Backspace leaves two open fragments with exact undo and redo", async () => {
+      const ids = await editor.drawOpenContour([0, 100, 200, 300, 400].map((x) => ({ x, y: 100 })));
+      editor.selectTool("select");
+      editor.selection.select([ids[2]!]);
+      const layer = editor.requireGlyphLayer();
+      const before = layer.state;
+
+      await router.handleKeyDown(
+        createKeyboardEvent({ key: "Backspace", code: "Backspace", shiftKey: true }),
+      );
+      await editor.settle();
+      const after = layer.state;
+      expect(layer.contours.map((contour) => contour.points.map((point) => point.id))).toEqual([
+        ids.slice(0, 2),
+        ids.slice(3),
+      ]);
+      expect(layer.contours.map((contour) => contour.closed)).toEqual([false, false]);
+
+      await editor.undo();
+      expect(layer.state).toEqual(before);
+      await editor.redo();
+      expect(layer.state).toEqual(after);
+    });
+
+    it.each([
+      ["Backspace", false],
+      ["Delete", true],
+    ])(
+      "%s with Shift=%s on a cubic handle removes both controls without changing the next curve",
+      async (key, shiftKey) => {
+        editor.selectTool("pen");
+        await editor.clickLocal(0, 0);
+        for (const [x, y] of [
+          [200, -100],
+          [400, 100],
+        ] as const) {
+          await editor.dragLocal({ down: { x, y: 0 }, start: { x, y: y / 2 }, end: { x, y } });
+        }
+        editor.selectTool("select");
+        const layer = editor.requireGlyphLayer();
+        const [first, next] = layer.contours[0]!.segments();
+        editor.selection.select([first!.asCubic()!.controlStart.id]);
+
+        await router.handleKeyDown(createKeyboardEvent({ key, code: key, shiftKey }));
+        await editor.settle();
+
+        const segments = layer.contours[0]!.segments();
+        expect(segments.map((segment) => segment.type)).toEqual(["line", "cubic"]);
+        expect(segments[0]!.pointIds).toEqual([first!.startId, first!.endId]);
+        expect(segments[1]!.pointIds).toEqual(next!.pointIds);
+        expect(segments[1]!.toCurve()).toEqual(next!.toCurve());
+      },
+    );
   });
 
   describe("temporary hand tool (space)", () => {
@@ -572,13 +651,13 @@ describe("KeyboardRouter", () => {
       expect(editor.toolIf("select")?.state).toEqual({ type: "ready" });
     });
 
-    it("does not activate the hand tool on space while the text tool is active", async () => {
+    it("does not activate the hand tool on space in Text mode", async () => {
       editor.selectTool("text");
       const e = createKeyboardEvent({ key: " ", code: "Space" });
 
       await router.handleKeyDown(e);
 
-      expect(editor.toolIf("text")?.state).toEqual({ type: "typing" });
+      expect(editor.toolIf("text")?.state).toEqual({ type: "editing" });
     });
   });
 

@@ -5,7 +5,7 @@ import type { Hover } from "../../Hover";
 import type { Selection } from "../../Selection";
 import type { HandleState } from "../../../../types/graphics";
 import type { RenderContext } from "../../../../types/rendering";
-import { HandleItems } from "./handles/HandleItems";
+import { HandleItems, type MetricLineExtent } from "./handles/HandleItems";
 import { MarkerHandleRenderer } from "./handles/MarkerHandleRenderer";
 import { CanvasHandleRenderer } from "./handles/CanvasHandleRenderer";
 
@@ -32,6 +32,7 @@ export class Handles {
     selection: Selection,
     hover: Hover,
     interpolated: boolean,
+    metricLines: MetricLineExtent | undefined,
     isVisible?: (pointId: PointId, contourId: ContourId) => boolean,
   ): void {
     const list = this.#items.fromContours(
@@ -40,6 +41,7 @@ export class Handles {
         selection,
         hover,
         interpolated,
+        metricLines,
       },
       isVisible,
       ctx.canvas.visibleBounds(handleCullPaddingPx(ctx.canvas.theme)),

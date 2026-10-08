@@ -4,6 +4,7 @@ export const BUILT_IN_TOOL_IDS = {
   hand: "hand",
   shape: "shape",
   text: "text",
+  spacing: "spacing",
   disabled: "disabled",
 } as const;
 

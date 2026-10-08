@@ -19,16 +19,35 @@ const debugNodeFinalizer = new FinalizationRegistry<number>((debugId) => {
 });
 let traceSignalWrites = false;
 
-// Batch state
-let batchDepth = 0;
-const pendingEffects = new Set<EffectImpl>();
+// A write marks downstream nodes stale without running user code; queued effects run afterwards,
+// in a flush that only executes effects whose dependencies actually changed value.
+const CLEAN = 0;
+const CHECK = 1;
+const DIRTY = 2;
+type NodeState = typeof CLEAN | typeof CHECK | typeof DIRTY;
 
-// Flag to prevent notification during notification
-let isNotifying = false;
-const pendingNotifications = new Set<SignalImpl<unknown>>();
+let batchDepth = 0;
+let flushing = false;
+const queuedEffects = new Set<EffectImpl>();
+
+function flushEffects(): void {
+  if (batchDepth > 0 || flushing) return;
+  flushing = true;
+  try {
+    for (const fx of queuedEffects) {
+      queuedEffects.delete(fx);
+      fx._update();
+    }
+  } finally {
+    flushing = false;
+  }
+}
 
 interface Computation {
-  execute(): void;
+  /** Marks this computation stale: DIRTY when a direct dependency changed, CHECK when one may have. */
+  _stale(state: NodeState): void;
+  /** Whether a change reaching this computation would be lost unless it is marked again. */
+  readonly _clean: boolean;
   dependencies: Set<SignalNode>;
   readonly debugId: number;
   readonly name: string;
@@ -43,6 +62,8 @@ interface Computation {
 
 interface SignalNode {
   _unsubscribe(computation: Computation): void;
+  /** Brings a computed up to date before a reader compares it; signals are always current. */
+  _refresh(): void;
   readonly debugId: number;
   readonly name: string;
   readonly kind: SignalDebugKind;
@@ -357,14 +378,7 @@ class SignalImpl<T> implements WritableSignal<T>, SignalNode {
     this.#value = newValue;
     this.#lastChangedEpoch = ++currentEpoch;
     this.#lastWrite = captureWriteDebugInfo("set");
-
-    // If we're already notifying, queue this signal for later
-    if (isNotifying) {
-      pendingNotifications.add(this as SignalImpl<unknown>);
-      return;
-    }
-
-    this._notify();
+    this.#notify();
   }
 
   update(fn: (prev: T) => T): void {
@@ -374,47 +388,19 @@ class SignalImpl<T> implements WritableSignal<T>, SignalNode {
     this.#value = nextValue;
     this.#lastChangedEpoch = ++currentEpoch;
     this.#lastWrite = captureWriteDebugInfo("update");
-
-    if (isNotifying) {
-      pendingNotifications.add(this as SignalImpl<unknown>);
-      return;
-    }
-
-    this._notify();
+    this.#notify();
   }
 
-  _notify(): void {
-    isNotifying = true;
-
-    try {
-      // Copy subscribers to avoid issues if they modify during iteration
-      const subscribers = Array.from(this.#subscribers);
-
-      for (const subscriber of subscribers) {
-        if (batchDepth > 0 && subscriber instanceof EffectImpl) {
-          // In batch mode, queue effects for later
-          pendingEffects.add(subscriber);
-        } else {
-          subscriber.execute();
-        }
-      }
-    } finally {
-      isNotifying = false;
-
-      // Process any pending notifications
-      if (pendingNotifications.size > 0) {
-        const pending = Array.from(pendingNotifications);
-        pendingNotifications.clear();
-        for (const sig of pending) {
-          sig._notify();
-        }
-      }
-    }
+  #notify(): void {
+    for (const subscriber of this.#subscribers) subscriber._stale(DIRTY);
+    flushEffects();
   }
 
   _unsubscribe(computation: Computation): void {
     this.#subscribers.delete(computation);
   }
+
+  _refresh(): void {}
 
   get lastChangedEpoch(): number {
     return this.#lastChangedEpoch;
@@ -463,17 +449,24 @@ export interface ComputedSignal<T> extends Signal<T> {
   dispose(): void;
 }
 
-export interface ComputedOptions {
+export interface ComputedOptions<T = unknown> {
   /** Human-readable name used in debug graph output. */
   name?: string;
+  /**
+   * Equality check between a recomputed value and the previous one. Returning `true` keeps
+   * subscribers from rerunning. Default: `Object.is`.
+   */
+  equals?: (prev: T, next: T) => boolean;
 }
 
 class ComputedImpl<T> implements ComputedSignal<T>, Computation, SignalNode {
   readonly debugId = nextNodeId();
   readonly kind = "computed" as const;
   #fn: () => T;
+  #equals: (prev: T, next: T) => boolean;
   #value: T | undefined;
-  #dirty = true;
+  #hasValue = false;
+  #state: NodeState = DIRTY;
   #computing = false;
   #disposed = false;
   #subscribers = new Set<Computation>();
@@ -483,8 +476,9 @@ class ComputedImpl<T> implements ComputedSignal<T>, Computation, SignalNode {
   debugWhySnapshot: Map<SignalNode, number> | null = null;
   debugTraceReport: ((message: string) => void) | null = null;
 
-  constructor(fn: () => T, options?: ComputedOptions) {
+  constructor(fn: () => T, options?: ComputedOptions<T>) {
     this.#fn = fn;
+    this.#equals = options?.equals ?? Object.is;
     this.name = options?.name ?? fallbackName(this.kind, this.debugId);
     registerDebugNode(this);
   }
@@ -494,69 +488,92 @@ class ComputedImpl<T> implements ComputedSignal<T>, Computation, SignalNode {
       return this.#value!;
     }
 
-    // Track this computed as a dependency
+    // Refresh before subscribing, so a recompute here does not mark the reader that is
+    // currently running as stale.
+    this._refresh();
+
     if (currentComputation) {
       this.#subscribers.add(currentComputation);
       currentComputation.dependencies.add(this);
-    }
-
-    if (this.#dirty && !this.#computing) {
-      this.#recompute();
     }
 
     return this.#value!;
   }
 
   peek(): T {
-    if (this.#dirty && !this.#computing) {
-      this.#recompute();
-    }
+    if (!this.#disposed) this._refresh();
     return this.#value!;
   }
 
   invalidate(): void {
-    this.#dirty = true;
+    this.#state = DIRTY;
   }
 
-  execute(): void {
-    // Called when a dependency changes - mark dirty and notify subscribers
-    if (!this.#dirty) {
-      this.#dirty = true;
-      this.#lastChangedEpoch = currentEpoch;
-      // Copy subscribers to avoid issues during iteration
-      const subscribers = Array.from(this.#subscribers);
-      for (const subscriber of subscribers) {
-        if (batchDepth > 0 && subscriber instanceof EffectImpl) {
-          pendingEffects.add(subscriber);
-        } else {
-          subscriber.execute();
-        }
+  _stale(state: NodeState): void {
+    if (this.#state >= state) {
+      // A subscriber can be clean while this computed is still stale, e.g. an effect that ignored
+      // a change it caused during its own run. Reach those, or they would never hear of it again.
+      for (const subscriber of this.#subscribers) {
+        if (subscriber._clean) subscriber._stale(CHECK);
       }
+      return;
+    }
+
+    const wasClean = this.#state === CLEAN;
+    this.#state = state;
+    if (!wasClean) return;
+
+    for (const subscriber of this.#subscribers) subscriber._stale(CHECK);
+  }
+
+  get _clean(): boolean {
+    return this.#state === CLEAN;
+  }
+
+  _refresh(): void {
+    if (this.#disposed || this.#computing || this.#state === CLEAN) return;
+
+    if (this.#state === CHECK) {
+      for (const dependency of this.dependencies) {
+        dependency._refresh();
+        // A dependency that recomputed to a new value marks this computed dirty.
+        if (this.#currentState() === DIRTY) break;
+      }
+    }
+
+    if (this.#currentState() === DIRTY) {
+      this.#recompute();
+    } else {
+      this.#state = CLEAN;
     }
   }
 
+  /** Reads the state without the narrowing TypeScript keeps across `_refresh()` calls. */
+  #currentState(): NodeState {
+    return this.#state;
+  }
+
   #recompute(): void {
-    // Prevent re-entrant computation
-    if (this.#computing) return;
     this.#computing = true;
+    const previous = this.#value;
+    const hadValue = this.#hasValue;
 
     try {
       maybeLogWhy(this);
 
-      // Clean up old dependencies
       for (const dep of this.dependencies) {
         dep._unsubscribe(this);
       }
       this.dependencies.clear();
 
-      // Track new dependencies (intentional this-alias for reactive tracking)
       const prevComputation = currentComputation;
       // oxlint-disable-next-line typescript-eslint/no-this-alias
       currentComputation = this;
 
       try {
         this.#value = this.#fn();
-        this.#dirty = false;
+        this.#hasValue = true;
+        this.#state = CLEAN;
         maybeCaptureWhy(this);
       } finally {
         currentComputation = prevComputation;
@@ -564,6 +581,15 @@ class ComputedImpl<T> implements ComputedSignal<T>, Computation, SignalNode {
     } finally {
       this.#computing = false;
     }
+
+    if (hadValue && this.#equals(previous as T, this.#value as T)) {
+      // Keep the previous value so readers that compare by identity also see no change.
+      this.#value = previous;
+      return;
+    }
+
+    this.#lastChangedEpoch = currentEpoch;
+    for (const subscriber of this.#subscribers) subscriber._stale(DIRTY);
   }
 
   _unsubscribe(computation: Computation): void {
@@ -606,7 +632,7 @@ class ComputedImpl<T> implements ComputedSignal<T>, Computation, SignalNode {
  * Create a computed signal that derives from other signals.
  * Dependencies are automatically tracked.
  */
-export function computed<T>(fn: () => T, options?: ComputedOptions): ComputedSignal<T> {
+export function computed<T>(fn: () => T, options?: ComputedOptions<T>): ComputedSignal<T> {
   return new ComputedImpl(fn, options);
 }
 
@@ -617,7 +643,7 @@ export function computed<T>(fn: () => T, options?: ComputedOptions): ComputedSig
 export interface Effect {
   /** Debug name used in dependency graph dumps. */
   readonly name: string;
-  /** Request effect execution. Scheduled effects may defer and coalesce this. */
+  /** Force a run even when no dependency changed. Scheduled effects defer and coalesce this. */
   execute(): void;
   /** Stop the effect and clean up subscriptions. */
   dispose(): void;
@@ -645,8 +671,10 @@ class EffectImpl implements Effect, Computation {
   #fn: () => void | (() => void);
   #schedule: ((execute: () => void) => void) | null;
   #cleanup: (() => void) | void = undefined;
+  #state: NodeState = DIRTY;
   #disposed = false;
   #running = false;
+  #refreshing = false;
   #scheduled = false;
   #scheduleToken = 0;
   readonly name: string;
@@ -659,14 +687,60 @@ class EffectImpl implements Effect, Computation {
     this.#schedule = options?.schedule ?? null;
     this.name = options?.name ?? fallbackName(this.kind, this.debugId);
     registerDebugNode(this);
-    this.#requestExecute();
+    this.#requestRun();
   }
 
+  /** Forces a run even when no dependency changed. */
   execute(): void {
-    this.#requestExecute();
+    this.#state = DIRTY;
+    this.#requestRun();
   }
 
-  #requestExecute(): void {
+  _stale(state: NodeState): void {
+    if (this.#disposed) return;
+    // An unscheduled effect ignores changes it causes while running, as it always has.
+    if (this.#running && !this.#schedule) return;
+
+    if (state > this.#state) this.#state = state;
+    if (this.#refreshing) return;
+
+    if (this.#schedule) {
+      this.#requestRun();
+    } else {
+      queuedEffects.add(this);
+    }
+  }
+
+  get _clean(): boolean {
+    return this.#state === CLEAN && !this.#scheduled && !queuedEffects.has(this);
+  }
+
+  /** Runs the effect if a dependency changed value since its last run. */
+  _update(): void {
+    if (this.#disposed || this.#state === CLEAN) return;
+
+    if (this.#state === CHECK) this.#refreshDependencies();
+
+    if (this.#state === DIRTY) {
+      this.#executeNow();
+    } else {
+      this.#state = CLEAN;
+    }
+  }
+
+  #refreshDependencies(): void {
+    this.#refreshing = true;
+    try {
+      for (const dependency of this.dependencies) {
+        dependency._refresh();
+        if (this.#state === DIRTY) break;
+      }
+    } finally {
+      this.#refreshing = false;
+    }
+  }
+
+  #requestRun(): void {
     if (!this.#schedule) {
       this.#executeNow();
       return;
@@ -678,7 +752,7 @@ class EffectImpl implements Effect, Computation {
     this.#schedule(() => {
       if (token !== this.#scheduleToken) return;
       this.#scheduled = false;
-      this.#executeNow();
+      this._update();
     });
   }
 
@@ -686,6 +760,9 @@ class EffectImpl implements Effect, Computation {
     // Prevent re-entrant execution and execution after disposal
     if (this.#disposed || this.#running) return;
     this.#running = true;
+    queuedEffects.delete(this);
+    // Cleared before running, so a scheduled effect that is marked stale mid-run runs again.
+    this.#state = CLEAN;
 
     try {
       maybeLogWhy(this);
@@ -723,6 +800,7 @@ class EffectImpl implements Effect, Computation {
     this.#disposed = true;
     this.#scheduled = false;
     this.#scheduleToken++;
+    queuedEffects.delete(this);
 
     // Run final cleanup
     if (this.#cleanup) {
@@ -740,6 +818,9 @@ class EffectImpl implements Effect, Computation {
   cancel(): void {
     this.#scheduled = false;
     this.#scheduleToken++;
+    // Settle dependencies so later changes propagate here again, then drop this run.
+    this.#refreshDependencies();
+    this.#state = CLEAN;
   }
 
   get lastChangedEpoch(): number {
@@ -804,14 +885,7 @@ export function batch<T>(fn: () => T): T {
     return fn();
   } finally {
     batchDepth--;
-    if (batchDepth === 0 && pendingEffects.size > 0) {
-      // Flush all pending effects
-      const effects = Array.from(pendingEffects);
-      pendingEffects.clear();
-      for (const fx of effects) {
-        fx.execute();
-      }
-    }
+    flushEffects();
   }
 }
 

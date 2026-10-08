@@ -1,3 +1,4 @@
+use crate::Require;
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 
@@ -9,8 +10,99 @@ use fontdrasil::{
 
 use crate::{
     Axis, AxisId, AxisMapping, AxisMappingId, AxisRole, CoreError, CoreResult, DesignLocation,
-    ExternalLocation, Location, VariationBasis,
+    ExternalLocation, Font, Location, VariationBasis,
 };
+
+/// One axis's design-space bounds used to normalize authored source locations.
+///
+/// These bounds are derived from compiled independent mappings, not from the
+/// user-facing axis range or from the subset of masters belonging to a glyph.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DesignNormalization {
+    pub axis_id: AxisId,
+    pub minimum: f64,
+    pub default: f64,
+    pub maximum: f64,
+}
+
+impl DesignNormalization {
+    /// Normalizes a design coordinate around the mapped default without clamping.
+    pub fn normalize(&self, value: f64) -> f64 {
+        let range = if value < self.default {
+            self.default - self.minimum
+        } else {
+            self.maximum - self.default
+        };
+        if range.abs() < f64::EPSILON {
+            return 0.0;
+        }
+
+        (value - self.default) / range
+    }
+}
+
+impl Font {
+    /// Derives design-space normalization in authoring-axis order.
+    ///
+    /// Independent mappings define the numerical design extrema over each axis's
+    /// authored range and its mapped default. Compiled support boundaries include
+    /// reversed mappings and interior extrema. Unmapped and internal axes retain
+    /// their authored bounds. Cross-axis
+    /// mappings move locations within this design space; they do not redefine
+    /// its normalization. The returned values are derived, never persisted.
+    ///
+    /// # Errors
+    ///
+    /// Returns an axis-mapping error when an authored mapping cannot compile.
+    pub fn design_normalization(&self) -> CoreResult<Vec<DesignNormalization>> {
+        let bases = self.axis_mapping_bases()?;
+        self.axes()
+            .iter()
+            .map(|axis| {
+                let mut values = vec![axis.minimum(), axis.default(), axis.maximum()];
+                let mut default = axis.default();
+                if let Some(basis) = bases
+                    .iter()
+                    .find(|basis| basis.is_independent() && basis.output_axis_ids[0] == axis.id())
+                {
+                    let location = Location::from_map(HashMap::from([(axis.id(), default)]));
+                    default = basis
+                        .evaluate(&location, self.axes())?
+                        .get(&axis.id())
+                        .unwrap_or(default);
+                    for delta in basis.basis().deltas() {
+                        for support in delta.region().supports() {
+                            if support.axis_id() != axis.id() {
+                                continue;
+                            }
+                            for boundary in [support.minimum(), support.peak(), support.maximum()] {
+                                if (-1.0..=1.0).contains(&boundary) {
+                                    values.push(axis.denormalize(boundary));
+                                }
+                            }
+                        }
+                    }
+                    values.sort_by(f64::total_cmp);
+                    values.dedup();
+                    for value in &mut values {
+                        let location = Location::from_map(HashMap::from([(axis.id(), *value)]));
+                        *value = basis
+                            .evaluate(&location, self.axes())?
+                            .get(&axis.id())
+                            .unwrap_or(*value);
+                    }
+                }
+
+                Ok(DesignNormalization {
+                    axis_id: axis.id(),
+                    minimum: values.iter().copied().fold(default, f64::min),
+                    default,
+                    maximum: values.iter().copied().fold(default, f64::max),
+                })
+            })
+            .collect()
+    }
+}
 
 pub fn to_fd_location(loc: &Location, axes: &[Axis]) -> NormalizedLocation {
     let mut result = NormalizedLocation::new();
@@ -63,14 +155,14 @@ impl AxisMappingBasis {
     }
 
     fn evaluate(&self, location: &Location, axes: &[Axis]) -> CoreResult<Location> {
-        let adjustments = self.basis.evaluate(location, axes)?;
+        let adjustments = self.basis.evaluate(location, axes, None)?;
         let mut result = Location::new();
 
         for (axis_id, adjustment) in self.output_axis_ids.iter().zip(adjustments) {
             let axis = axes
                 .iter()
                 .find(|axis| axis.id() == *axis_id)
-                .ok_or_else(|| CoreError::AxisNotFound(axis_id.clone()))?;
+                .require(&axis_id)?;
             let base = location.get(axis_id).unwrap_or(axis.default());
             result.set(
                 axis_id.clone(),
@@ -279,6 +371,62 @@ mod tests {
         assert!((mapped.get(&weight.id()).unwrap() - 800.0).abs() < 0.001);
         assert!((mapped.get(&width.id()).unwrap() - 125.0).abs() < 0.001);
         assert!((mapped.get(&optical.id()).unwrap() - 72.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn design_normalization_uses_compiled_extrema_for_reversed_and_nonmonotonic_mappings() {
+        for (points, minimum, default, maximum) in [
+            (
+                vec![(100.0, 900.0), (400.0, 400.0), (900.0, 100.0)],
+                100.0,
+                400.0,
+                900.0,
+            ),
+            (
+                vec![(100.0, 30.0), (400.0, 86.0), (700.0, 180.0), (900.0, 160.0)],
+                30.0,
+                86.0,
+                180.0,
+            ),
+        ] {
+            let mut font = Font::empty();
+            let axis = Axis::weight();
+            font.add_axis(axis.clone()).unwrap();
+            font.set_axis_mappings(vec![AxisMapping::new(
+                "Weight mapping".to_string(),
+                vec![axis.id()],
+                vec![axis.id()],
+                points
+                    .into_iter()
+                    .map(|(input, output)| point(&[(axis.id(), input)], &[(axis.id(), output)]))
+                    .collect(),
+            )])
+            .unwrap();
+            let normalization = font.design_normalization().unwrap();
+            assert!((normalization[0].minimum - minimum).abs() < 1e-9);
+            assert!((normalization[0].default - default).abs() < 1e-9);
+            assert!((normalization[0].maximum - maximum).abs() < 1e-9);
+            assert!((normalization[0].normalize(minimum) + 1.0).abs() < 1e-9);
+            assert!(normalization[0].normalize(default).abs() < 1e-9);
+            assert!((normalization[0].normalize(maximum) - 1.0).abs() < 1e-9);
+        }
+    }
+
+    #[test]
+    fn design_normalization_keeps_unmapped_and_internal_axis_bounds() {
+        let mut font = Font::empty();
+        let weight = Axis::weight();
+        let mut width = Axis::width();
+        width.set_role(AxisRole::Internal);
+        font.add_axis(weight.clone()).unwrap();
+        font.add_axis(width.clone()).unwrap();
+        let normalization = font.design_normalization().unwrap();
+        for (axis, normalization) in [weight, width].iter().zip(normalization) {
+            assert_eq!(normalization.axis_id, axis.id());
+            assert_eq!(normalization.minimum, axis.minimum());
+            assert_eq!(normalization.default, axis.default());
+            assert_eq!(normalization.maximum, axis.maximum());
+        }
     }
 
     #[test]

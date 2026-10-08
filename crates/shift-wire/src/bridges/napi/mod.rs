@@ -7,14 +7,14 @@ use shift_font::{GlyphId, PointType as IrPointType};
 use crate::{
     AnchorData, AnchorMatch, Axis, AxisLabel, AxisMapping, AxisMappingBasis, AxisMappingPoint,
     ComponentData, ComponentGlyph, ComponentMatch, ComponentTransformKind, ContourData,
-    ContourMatch, FontMetadata, FontMetrics, FontSnapshot, GlyphChangedEntities, GlyphComponents,
-    GlyphEntry, GlyphInterpolation, GlyphLayerRecord, GlyphLayerShape, GlyphLayerSnapshot,
-    GlyphProjection, GlyphRecord, GlyphSnapshot, GlyphSnapshotRequest, GlyphSourceComponents,
-    GlyphSourceShape, GlyphSourceValues, GlyphState, GlyphStructure, GlyphVariation,
-    InterpolationBasis, InterpolationSupport, LayerDifference, LayerDifferenceKind, LayerMatch,
-    Location, MetricDefinition, MetricKind, NamedInstance, PointData, PointMatch, PointType,
-    Source, SourceMetricField, SourceMetricValue, SourceMetricValues,
-    SourceMetricsInterpolationSnapshot, VariationBasis, VariationDelta,
+    ContourMatch, DesignNormalization, FontMetadata, FontMetrics, FontSnapshot,
+    GlyphChangedEntities, GlyphComponents, GlyphEntry, GlyphInterpolation, GlyphLayerRecord,
+    GlyphLayerShape, GlyphLayerSnapshot, GlyphProjection, GlyphRecord, GlyphSnapshot,
+    GlyphSnapshotRequest, GlyphSourceComponents, GlyphSourceShape, GlyphSourceValues, GlyphState,
+    GlyphStructure, GlyphVariation, InterpolationBasis, InterpolationSupport, LayerDifference,
+    LayerDifferenceKind, LayerMatch, Location, MetricDefinition, MetricKind, NamedInstance,
+    PointData, PointMatch, PointType, Source, SourceMetricField, SourceMetricValue,
+    SourceMetricValues, SourceMetricsInterpolationSnapshot, VariationBasis, VariationDelta,
 };
 
 #[napi(object)]
@@ -905,10 +905,31 @@ impl From<VariationBasis> for NapiVariationBasis {
 }
 
 #[napi(object)]
+pub struct NapiDesignNormalization {
+    #[napi(ts_type = "AxisId")]
+    pub axis_id: String,
+    pub minimum: f64,
+    pub default: f64,
+    pub maximum: f64,
+}
+
+impl From<DesignNormalization> for NapiDesignNormalization {
+    fn from(normalization: DesignNormalization) -> Self {
+        Self {
+            axis_id: normalization.axis_id.to_string(),
+            minimum: normalization.minimum,
+            default: normalization.default,
+            maximum: normalization.maximum,
+        }
+    }
+}
+
+#[napi(object)]
 pub struct NapiInterpolationBasis {
     #[napi(ts_type = "Array<SourceId>")]
     pub source_ids: Vec<String>,
     pub basis: NapiVariationBasis,
+    pub design_normalization: Vec<NapiDesignNormalization>,
 }
 
 impl From<InterpolationBasis> for NapiInterpolationBasis {
@@ -920,6 +941,11 @@ impl From<InterpolationBasis> for NapiInterpolationBasis {
                 .map(|source_id| source_id.to_string())
                 .collect(),
             basis: basis.basis.into(),
+            design_normalization: basis
+                .design_normalization
+                .into_iter()
+                .map(Into::into)
+                .collect(),
         }
     }
 }
@@ -1395,7 +1421,7 @@ pub struct NapiFontIntent {
     /// "removeAnchors" | "addComponent" | "setComponentTransforms" |
     /// "removeComponents" | "decomposeComponents" |
     /// "reverseContour" | "setContourStart" | "translatePoints" |
-    /// "setXAdvance" | "applyBooleanOp".
+    /// "transformLayer" | "setXAdvance" | "applyBooleanOp".
     /// Font-level kinds additionally include metadata replacement, tracked
     /// language replacement, axis create/update/delete, mapping replacement,
     /// named-instance create/update/delete, source create/delete, and glyph
@@ -1418,6 +1444,7 @@ pub struct NapiFontIntent {
     pub reverse_contour: Option<NapiReverseContourIntent>,
     pub set_contour_start: Option<NapiSetContourStartIntent>,
     pub translate_points: Option<NapiTranslatePointsIntent>,
+    pub transform_layer: Option<NapiTransformLayerIntent>,
     pub set_x_advance: Option<NapiSetXAdvanceIntent>,
     pub apply_boolean_op: Option<NapiBooleanOpIntent>,
     pub create_glyph: Option<NapiCreateGlyphIntent>,
@@ -1809,6 +1836,15 @@ pub struct NapiSetContourStartIntent {
     pub contour_id: String,
     #[napi(ts_type = "PointId")]
     pub point_id: String,
+}
+
+/// Affine transform of a whole layer: points, anchors, and component placements.
+#[napi(object)]
+pub struct NapiTransformLayerIntent {
+    #[napi(ts_type = "LayerId")]
+    pub layer_id: String,
+    /// Six affine values `[a, b, c, d, e, f]`: `x' = a·x + c·y + e`, `y' = b·x + d·y + f`.
+    pub matrix: Vec<f64>,
 }
 
 /// Affine move: O(selection-ids) wire instead of O(N) coords.

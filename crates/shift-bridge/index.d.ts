@@ -61,13 +61,13 @@ export declare class Bridge {
    */
   apply(intents: Array<NapiFontIntent>, label?: string | undefined | null): NapiAppliedChange
   /**
-   * Replays the most recent ledger entry's pre states; `null` when the
-   * undo stack is empty.
+   * Applies the most recent ledger entry's inverse changeset; `null` when
+   * the undo stack is empty.
    */
   undo(): NapiAppliedChange | null
   /**
-   * Replays the most recent undone entry's post states; `null` when the
-   * redo stack is empty.
+   * Reapplies the most recently undone changeset; `null` when the redo
+   * stack is empty.
    */
   redo(): NapiAppliedChange | null
   /** Permanently removes every redo entry without changing font or dirty state. */
@@ -472,6 +472,13 @@ export interface NapiDeleteSourceIntent {
   sourceId: SourceId
 }
 
+export interface NapiDesignNormalization {
+  axisId: AxisId
+  minimum: number
+  default: number
+  maximum: number
+}
+
 /**
  * CS0 walking-skeleton intent. A stringly union covering exactly the two
  * skeleton kinds; CS1 replaces this with per-variant intent structs.
@@ -484,7 +491,7 @@ export interface NapiFontIntent {
    * "removeAnchors" | "addComponent" | "setComponentTransforms" |
    * "removeComponents" | "decomposeComponents" |
    * "reverseContour" | "setContourStart" | "translatePoints" |
-   * "setXAdvance" | "applyBooleanOp".
+   * "transformLayer" | "setXAdvance" | "applyBooleanOp".
    * Font-level kinds additionally include metadata replacement, tracked
    * language replacement, axis create/update/delete, mapping replacement,
    * named-instance create/update/delete, source create/delete, and glyph
@@ -508,6 +515,7 @@ export interface NapiFontIntent {
   reverseContour?: NapiReverseContourIntent
   setContourStart?: NapiSetContourStartIntent
   translatePoints?: NapiTranslatePointsIntent
+  transformLayer?: NapiTransformLayerIntent
   setXAdvance?: NapiSetXAdvanceIntent
   applyBooleanOp?: NapiBooleanOpIntent
   createGlyph?: NapiCreateGlyphIntent
@@ -713,6 +721,7 @@ export interface NapiGlyphVariation {
 export interface NapiInterpolationBasis {
   sourceIds: Array<SourceId>
   basis: NapiVariationBasis
+  designNormalization: Array<NapiDesignNormalization>
 }
 
 export interface NapiInterpolationSupport {
@@ -1028,6 +1037,13 @@ export interface NapiSourceMetricValue {
 export interface NapiSourceMetricValues {
   sourceId: SourceId
   values: Float64Array
+}
+
+/** Affine transform of a whole layer: points, anchors, and component placements. */
+export interface NapiTransformLayerIntent {
+  layerId: LayerId
+  /** Six affine values `[a, b, c, d, e, f]`: `x' = a·x + c·y + e`, `y' = b·x + d·y + f`. */
+  matrix: Array<number>
 }
 
 /** Affine move: O(selection-ids) wire instead of O(N) coords. */

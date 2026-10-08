@@ -21,6 +21,7 @@ export type {
   SegmentId,
   SelectableId,
   ShiftId,
+  TextItemId,
   SourceId,
 } from "./ids";
 export {
@@ -54,6 +55,7 @@ export {
   isNamedInstanceId,
   isNodeId,
   isRunId,
+  isTextItemId,
   isSourceId,
   mintContourId,
   mintAnchorId,
@@ -68,6 +70,7 @@ export {
   mintNamedInstanceId,
   mintNodeId,
   mintRunId,
+  mintTextItemId,
   mintSourceId,
 } from "./ids";
 
@@ -108,6 +111,7 @@ export type {
   SlugPreviewExtents,
   SlugSection,
   SlugWeightSet,
+  TransformLayerIntent,
   TranslatePointsIntent,
   Axis,
   AxisLabel,
@@ -135,6 +139,7 @@ export type {
   DeleteAxisIntent,
   DeleteNamedInstanceIntent,
   DeleteSourceIntent,
+  DesignNormalization,
   CreateSourceIntent,
   DocumentIdentity,
   FontIntent,

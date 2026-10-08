@@ -1,8 +1,9 @@
+use crate::Require;
 use crate::{
     boolean,
     error::{CoreError, CoreResult},
     Anchor, AnchorId, BooleanOp, ComponentId, Contour, ContourId, DecomposedTransform, GlyphLayer,
-    Point, PointId, PointType,
+    Point, PointId, PointType, Transform,
 };
 use std::collections::{HashMap, HashSet};
 
@@ -162,59 +163,51 @@ fn invalid_position_update_input(kind: &'static str, message: impl Into<String>)
 }
 
 impl GlyphLayer {
-    fn contour_mut_or_err(&mut self, id: ContourId) -> CoreResult<&mut Contour> {
-        let contour = self
-            .contour_mut(id.clone())
-            .ok_or(CoreError::ContourNotFound(id))?;
+    fn require_contour_mut(&mut self, id: ContourId) -> CoreResult<&mut Contour> {
+        let contour = self.contour_mut(&id).require(&id)?;
 
         Ok(contour)
     }
 
-    fn point_mut_or_err(
+    fn require_point_mut(
         &mut self,
         contour_id: ContourId,
         point_id: PointId,
     ) -> CoreResult<&mut Point> {
-        let contour = self.contour_mut_or_err(contour_id)?;
-        contour
-            .get_point_mut(point_id.clone())
-            .ok_or(CoreError::PointNotFound(point_id))
+        let contour = self.require_contour_mut(contour_id)?;
+        contour.get_point_mut(&point_id).require(&point_id)
     }
 
-    fn point_contour_or_err(&self, point_id: PointId) -> CoreResult<ContourId> {
-        self.find_point_contour(point_id.clone())
+    fn require_point_contour(&self, point_id: PointId) -> CoreResult<ContourId> {
+        self.find_point_contour(&point_id)
             .ok_or(CoreError::PointInContourNotFound(point_id))
     }
 
-    fn anchor_mut_or_err(&mut self, anchor_id: AnchorId) -> CoreResult<&mut Anchor> {
-        self.anchor_mut(anchor_id.clone())
-            .ok_or(CoreError::AnchorNotFound(anchor_id))
+    fn require_anchor_mut(&mut self, anchor_id: AnchorId) -> CoreResult<&mut Anchor> {
+        self.anchor_mut(&anchor_id).require(&anchor_id)
     }
 
-    fn point_contours_or_err(
+    fn require_point_contours(
         &self,
         point_ids: &[PointId],
     ) -> CoreResult<Vec<(PointId, ContourId)>> {
         point_ids
             .iter()
             .map(|point_id| {
-                self.point_contour_or_err(point_id.clone())
+                self.require_point_contour(point_id.clone())
                     .map(|contour_id| (point_id.clone(), contour_id))
             })
             .collect()
     }
 
-    fn points_exist_or_err(&self, point_ids: &[PointId]) -> CoreResult<()> {
+    fn require_points(&self, point_ids: &[PointId]) -> CoreResult<()> {
         for point_id in point_ids {
-            self.point_contour_or_err(point_id.clone())?;
+            self.require_point_contour(point_id.clone())?;
         }
         Ok(())
     }
 
-    fn point_positions_exist_or_err(
-        &self,
-        updates: &HashMap<PointId, NodePosition>,
-    ) -> CoreResult<()> {
+    fn require_point_positions(&self, updates: &HashMap<PointId, NodePosition>) -> CoreResult<()> {
         let mut remaining: HashSet<PointId> = updates.keys().cloned().collect();
         if remaining.is_empty() {
             return Ok(());
@@ -236,12 +229,12 @@ impl GlyphLayer {
         Err(CoreError::PointInContourNotFound(point_id))
     }
 
-    fn anchor_positions_exist_or_err(
+    fn require_anchor_positions(
         &self,
         updates: &HashMap<AnchorId, NodePosition>,
     ) -> CoreResult<()> {
         for anchor_id in updates.keys() {
-            if self.anchor(anchor_id.clone()).is_none() {
+            if self.anchor(anchor_id).is_none() {
                 return Err(CoreError::AnchorNotFound(anchor_id.clone()));
             }
         }
@@ -253,7 +246,7 @@ impl GlyphLayer {
         point_ids: &[PointId],
         mut update: impl FnMut(&mut Point),
     ) -> CoreResult<()> {
-        self.points_exist_or_err(point_ids)?;
+        self.require_points(point_ids)?;
 
         let mut remaining: HashSet<PointId> = point_ids.iter().cloned().collect();
         if remaining.is_empty() {
@@ -309,7 +302,7 @@ impl GlyphLayer {
         updates: &HashMap<AnchorId, NodePosition>,
     ) -> CoreResult<()> {
         for (anchor_id, position) in updates {
-            self.anchor_mut_or_err(anchor_id.clone())?
+            self.require_anchor_mut(anchor_id.clone())?
                 .set_position(position.x, position.y);
         }
         Ok(())
@@ -325,8 +318,8 @@ impl GlyphLayer {
     }
 
     fn apply_node_position_groups(&mut self, groups: &NodePositionGroups) -> CoreResult<()> {
-        self.point_positions_exist_or_err(&groups.points)?;
-        self.anchor_positions_exist_or_err(&groups.anchors)?;
+        self.require_point_positions(&groups.points)?;
+        self.require_anchor_positions(&groups.anchors)?;
 
         self.set_point_positions_validated(&groups.points)?;
         self.set_anchor_positions_validated(&groups.anchors)
@@ -357,27 +350,43 @@ impl GlyphLayer {
         Ok(())
     }
 
-    /// Translate all editable glyph geometry in the active layer.
+    /// Transform all editable glyph geometry in the layer by one affine matrix.
+    ///
+    /// Contour points and anchors map through `transform`, and each
+    /// component's placement composes with it, so the layer moves, scales, or
+    /// rotates as a whole. A pure translation is added to each component's
+    /// translation, leaving its other decomposed values exact. The advance
+    /// width is left unchanged.
+    pub fn transform_layer(&mut self, transform: &Transform) {
+        for contour in self.contours_iter_mut() {
+            for point in contour.points_mut() {
+                let (x, y) = transform.transform_point(point.x(), point.y());
+                point.set_position(x, y);
+            }
+        }
+
+        for anchor in self.anchors_iter_mut() {
+            let (x, y) = transform.transform_point(anchor.x(), anchor.y());
+            anchor.set_position(x, y);
+        }
+
+        let translation_only = *transform == Transform::translate(transform.dx, transform.dy);
+        for component in self.components_iter_mut() {
+            if translation_only {
+                component.translate(transform.dx, transform.dy);
+            } else {
+                let matrix = transform.compose(component.transform().to_matrix());
+                component.set_transform(DecomposedTransform::from_matrix(&matrix));
+            }
+        }
+    }
+
+    /// Translate all editable glyph geometry in the layer.
     ///
     /// This moves contour points, anchors, and component transforms.
     /// Glyph advance width is intentionally left unchanged.
     pub fn translate_layer(&mut self, dx: f64, dy: f64) {
-        for contour in self.contours_iter_mut() {
-            for point in contour.points_mut() {
-                point.translate(dx, dy);
-            }
-        }
-
-        let anchor_ids: Vec<_> = self.anchors_iter().map(|anchor| anchor.id()).collect();
-        self.move_anchors(&anchor_ids, dx, dy);
-
-        let component_ids: Vec<_> = self.components().keys().cloned().collect();
-        for component_id in component_ids {
-            if let Some(mut component) = self.remove_component(component_id) {
-                component.translate(dx, dy);
-                self.add_component(component);
-            }
-        }
+        self.transform_layer(&Transform::translate(dx, dy));
     }
 }
 
@@ -391,24 +400,23 @@ impl GlyphLayer {
     }
 
     pub fn remove_contour_checked(&mut self, contour_id: ContourId) -> CoreResult<Contour> {
-        self.remove_contour(contour_id.clone())
-            .ok_or(CoreError::ContourNotFound(contour_id))
+        self.remove_contour(contour_id.clone()).require(&contour_id)
     }
 
     pub fn close_contour(&mut self, contour_id: ContourId) -> CoreResult<()> {
-        let contour = self.contour_mut_or_err(contour_id)?;
+        let contour = self.require_contour_mut(contour_id)?;
         contour.close();
         Ok(())
     }
 
     pub fn open_contour(&mut self, contour_id: ContourId) -> CoreResult<()> {
-        let contour = self.contour_mut_or_err(contour_id)?;
+        let contour = self.require_contour_mut(contour_id)?;
         contour.open();
         Ok(())
     }
 
     pub fn reverse_contour(&mut self, contour_id: ContourId) -> CoreResult<()> {
-        let contour = self.contour_mut_or_err(contour_id)?;
+        let contour = self.require_contour_mut(contour_id)?;
         contour.reverse();
         Ok(())
     }
@@ -425,12 +433,12 @@ impl GlyphLayer {
         contour_id: ContourId,
         point_id: PointId,
     ) -> CoreResult<bool> {
-        let contour = self.contour_mut_or_err(contour_id)?;
+        let contour = self.require_contour_mut(contour_id)?;
         let index = contour
             .points()
             .iter()
             .position(|point| point.id() == point_id)
-            .ok_or(CoreError::PointNotFound(point_id))?;
+            .require(&point_id)?;
         if !contour.is_closed() || index == 0 || !contour.points()[index].is_on_curve() {
             return Ok(false);
         }
@@ -445,14 +453,8 @@ impl GlyphLayer {
         contour_id_b: ContourId,
         op: BooleanOp,
     ) -> CoreResult<Vec<ContourId>> {
-        let a = self
-            .contour(contour_id_a.clone())
-            .ok_or(CoreError::ContourNotFound(contour_id_a.clone()))?
-            .clone();
-        let b = self
-            .contour(contour_id_b.clone())
-            .ok_or(CoreError::ContourNotFound(contour_id_b.clone()))?
-            .clone();
+        let a = self.contour(&contour_id_a).require(&contour_id_a)?.clone();
+        let b = self.contour(&contour_id_b).require(&contour_id_b)?.clone();
 
         let result =
             boolean(op, &a, &b).map_err(|e| CoreError::BooleanOperationFailed(e.to_string()))?;
@@ -469,9 +471,9 @@ impl GlyphLayer {
         Ok(created_ids)
     }
 
-    pub fn find_point_contour(&self, point_id: PointId) -> Option<ContourId> {
+    pub fn find_point_contour(&self, point_id: &PointId) -> Option<ContourId> {
         for contour in self.contours_iter() {
-            if contour.get_point(point_id.clone()).is_some() {
+            if contour.get_point(point_id).is_some() {
                 return Some(contour.id());
             }
         }
@@ -488,7 +490,7 @@ impl GlyphLayer {
         point_type: PointType,
         is_smooth: bool,
     ) -> CoreResult<AddedPoint> {
-        let contour = self.contour_mut_or_err(contour_id.clone())?;
+        let contour = self.require_contour_mut(contour_id.clone())?;
         let point_id = contour.add_point(x, y, point_type, is_smooth);
 
         Ok(AddedPoint {
@@ -505,12 +507,12 @@ impl GlyphLayer {
         point_type: PointType,
         is_smooth: bool,
     ) -> CoreResult<AddedPoint> {
-        let contour_id = self.point_contour_or_err(before_id.clone())?;
-        let contour = self.contour_mut_or_err(contour_id)?;
+        let contour_id = self.require_point_contour(before_id.clone())?;
+        let contour = self.require_contour_mut(contour_id)?;
 
         let point_id = contour
             .insert_point_before(before_id.clone(), x, y, point_type, is_smooth)
-            .ok_or(CoreError::PointNotFound(before_id))?;
+            .require(&before_id)?;
 
         Ok(AddedPoint {
             point_id,
@@ -519,11 +521,9 @@ impl GlyphLayer {
     }
 
     pub fn remove_point(&mut self, point_id: PointId) -> CoreResult<()> {
-        let contour_id = self.point_contour_or_err(point_id.clone())?;
-        let contour = self.contour_mut_or_err(contour_id)?;
-        contour
-            .remove_point(point_id.clone())
-            .ok_or(CoreError::PointNotFound(point_id))?;
+        let contour_id = self.require_point_contour(point_id.clone())?;
+        let contour = self.require_contour_mut(contour_id)?;
+        contour.remove_point(point_id.clone()).require(&point_id)?;
         Ok(())
     }
 
@@ -532,23 +532,23 @@ impl GlyphLayer {
     }
 
     pub fn set_point_smooth(&mut self, point_id: PointId, smooth: bool) -> CoreResult<()> {
-        let contour_id = self.point_contour_or_err(point_id.clone())?;
-        self.point_mut_or_err(contour_id, point_id)?
+        let contour_id = self.require_point_contour(point_id.clone())?;
+        self.require_point_mut(contour_id, point_id)?
             .set_smooth(smooth);
         Ok(())
     }
 
     pub fn contour_of_point(&self, point_id: PointId) -> CoreResult<ContourId> {
-        self.point_contour_or_err(point_id)
+        self.require_point_contour(point_id)
     }
 
-    pub fn has_point(&self, point_id: PointId) -> bool {
-        self.point_contour_or_err(point_id).is_ok()
+    pub fn has_point(&self, point_id: &PointId) -> bool {
+        self.require_point_contour(point_id.clone()).is_ok()
     }
 
     pub fn toggle_smooth(&mut self, point_id: PointId) -> CoreResult<bool> {
-        let contour_id = self.point_contour_or_err(point_id.clone())?;
-        let point = self.point_mut_or_err(contour_id, point_id)?;
+        let contour_id = self.require_point_contour(point_id.clone())?;
+        let point = self.require_point_mut(contour_id, point_id)?;
 
         point.toggle_smooth();
 
@@ -556,14 +556,12 @@ impl GlyphLayer {
     }
 
     pub fn remove_points(&mut self, point_ids: &[PointId]) -> CoreResult<Vec<ContourId>> {
-        let point_contours = self.point_contours_or_err(point_ids)?;
+        let point_contours = self.require_point_contours(point_ids)?;
         let mut empty_contours = Vec::new();
 
         for (point_id, contour_id) in point_contours {
-            let contour = self.contour_mut_or_err(contour_id.clone())?;
-            contour
-                .remove_point(point_id.clone())
-                .ok_or(CoreError::PointNotFound(point_id))?;
+            let contour = self.require_contour_mut(contour_id.clone())?;
+            contour.remove_point(point_id.clone()).require(&point_id)?;
 
             if contour.is_empty() && !empty_contours.contains(&contour_id) {
                 empty_contours.push(contour_id);
@@ -577,20 +575,19 @@ impl GlyphLayer {
         Ok(empty_contours)
     }
 
-    pub fn has_anchor(&self, anchor_id: AnchorId) -> bool {
+    pub fn has_anchor(&self, anchor_id: &AnchorId) -> bool {
         self.anchor(anchor_id).is_some()
     }
 
     pub fn remove_anchors(&mut self, anchor_ids: &[AnchorId]) -> CoreResult<()> {
         for anchor_id in anchor_ids {
-            if !self.has_anchor(anchor_id.clone()) {
+            if !self.has_anchor(anchor_id) {
                 return Err(CoreError::AnchorNotFound(anchor_id.clone()));
             }
         }
 
         for anchor_id in anchor_ids {
-            self.remove_anchor(anchor_id.clone())
-                .ok_or(CoreError::AnchorNotFound(anchor_id.clone()))?;
+            self.remove_anchor(anchor_id.clone()).require(&anchor_id)?;
         }
 
         Ok(())
@@ -645,15 +642,15 @@ mod tests {
         point_id: PointId,
     ) -> (f64, f64) {
         let point = session
-            .contour(contour_id)
+            .contour(&contour_id)
             .unwrap()
-            .get_point(point_id)
+            .get_point(&point_id)
             .unwrap();
         (point.x(), point.y())
     }
 
     fn anchor_position(session: &GlyphLayer, anchor_id: AnchorId) -> (f64, f64) {
-        let anchor = session.anchor(anchor_id).unwrap();
+        let anchor = session.anchor(&anchor_id).unwrap();
         (anchor.x(), anchor.y())
     }
 
@@ -669,16 +666,12 @@ mod tests {
             .unwrap()
             .point_id;
         session.close_contour(contour_id.clone()).unwrap();
-        let before = session
-            .contour(contour_id.clone())
-            .unwrap()
-            .points()
-            .to_vec();
+        let before = session.contour(&contour_id).unwrap().points().to_vec();
 
         assert!(session
             .set_contour_start(contour_id.clone(), point_id.clone())
             .unwrap());
-        let after = session.contour(contour_id.clone()).unwrap();
+        let after = session.contour(&contour_id).unwrap();
         assert!(after.is_closed());
         assert_eq!(
             after.points(),
@@ -809,11 +802,11 @@ mod tests {
             .move_points(&[p1.clone(), p2.clone()], 5.0, 5.0)
             .unwrap();
 
-        let c1 = session.contour(c1_id.clone()).unwrap();
-        let c2 = session.contour(c2_id.clone()).unwrap();
+        let c1 = session.contour(&c1_id).unwrap();
+        let c2 = session.contour(&c2_id).unwrap();
 
-        assert_eq!(c1.get_point(p1.clone()).unwrap().x(), 5.0);
-        assert_eq!(c2.get_point(p2.clone()).unwrap().x(), 55.0);
+        assert_eq!(c1.get_point(&p1).unwrap().x(), 5.0);
+        assert_eq!(c2.get_point(&p2).unwrap().x(), 55.0);
     }
 
     #[test]
@@ -929,11 +922,11 @@ mod tests {
         session.translate_layer(5.0, -3.0);
 
         let point = session
-            .contour(contour_id.clone())
+            .contour(&contour_id)
             .unwrap()
-            .get_point(point_id.clone())
+            .get_point(&point_id)
             .unwrap();
-        let anchor = session.anchor(anchor_id.clone()).unwrap();
+        let anchor = session.anchor(&anchor_id).unwrap();
         assert_eq!(point.x(), 15.0);
         assert_eq!(point.y(), 17.0);
         assert_eq!(anchor.x(), 35.0);
@@ -948,10 +941,70 @@ mod tests {
 
         session.translate_layer(12.0, -7.0);
 
-        let component = session.component(component_id.clone()).unwrap();
+        let component = session.component(&component_id).unwrap();
         let matrix = component.matrix();
         assert_eq!(matrix.dx, 12.0);
         assert_eq!(matrix.dy, -7.0);
+    }
+
+    #[test]
+    fn transform_layer_scales_points_anchors_and_component_placements() {
+        let mut session = create_session();
+        let contour_id = session.add_empty_contour().id();
+        let point_id = session
+            .add_point_to_contour(contour_id.clone(), 10.0, 20.0, PointType::OnCurve, false)
+            .unwrap()
+            .point_id;
+        let anchor_id = session.add_anchor(Anchor::new(Some("top".to_string()), 30.0, 40.0));
+        let component_id = session.add_component(Component::new(GlyphId::from_raw("base"), "base"));
+        session
+            .set_component_transform(
+                &component_id,
+                DecomposedTransform {
+                    translate_x: 5.0,
+                    ..DecomposedTransform::identity()
+                },
+            )
+            .unwrap();
+        let original_width = session.width();
+
+        session.transform_layer(&Transform::scale(2.0, 3.0));
+
+        let point = session
+            .contour(&contour_id)
+            .unwrap()
+            .get_point(&point_id)
+            .unwrap();
+        let anchor = session.anchor(&anchor_id).unwrap();
+        let matrix = session.component(&component_id).unwrap().matrix();
+        assert_eq!((point.x(), point.y()), (20.0, 60.0));
+        assert_eq!((anchor.x(), anchor.y()), (60.0, 120.0));
+        assert!((matrix.xx - 2.0).abs() < 1e-9 && (matrix.yy - 3.0).abs() < 1e-9);
+        assert!((matrix.dx - 10.0).abs() < 1e-9);
+        assert_eq!(session.width(), original_width);
+    }
+
+    #[test]
+    fn translate_layer_keeps_component_rotation_exact_and_order() {
+        let mut session = create_session();
+        let first = session.add_component(Component::new(GlyphId::from_raw("a"), "a"));
+        let second = session.add_component(Component::new(GlyphId::from_raw("b"), "b"));
+        let rotated = DecomposedTransform {
+            rotation: 33.0,
+            ..DecomposedTransform::identity()
+        };
+        session.set_component_transform(&first, rotated).unwrap();
+
+        session.translate_layer(4.0, 0.0);
+
+        let order: Vec<_> = session
+            .components_iter()
+            .map(|component| component.id())
+            .collect();
+        assert_eq!(order, vec![first.clone(), second]);
+        let transform = session.component(&first).unwrap().transform();
+        assert_eq!(transform.rotation, 33.0);
+        assert_eq!(transform.translate_x, 4.0);
     }
 
     #[test]
@@ -964,10 +1017,10 @@ mod tests {
         let empty_contours = session.remove_points(&[p1.clone(), p3.clone()]).unwrap();
 
         assert!(empty_contours.is_empty());
-        assert!(session.contour(contour_id).is_some());
-        assert!(session.find_point_contour(p2.clone()).is_some());
-        assert!(session.find_point_contour(p1.clone()).is_none());
-        assert!(session.find_point_contour(p3.clone()).is_none());
+        assert!(session.contour(&contour_id).is_some());
+        assert!(session.find_point_contour(&p2).is_some());
+        assert!(session.find_point_contour(&p1).is_none());
+        assert!(session.find_point_contour(&p3).is_none());
     }
 
     #[test]
@@ -979,7 +1032,7 @@ mod tests {
         let empty_contours = session.remove_points(&[p1, p2]).unwrap();
 
         assert_eq!(empty_contours, vec![contour_id.clone()]);
-        assert!(session.contour(contour_id).is_none());
+        assert!(session.contour(&contour_id).is_none());
     }
 
     #[test]
@@ -994,7 +1047,7 @@ mod tests {
             result,
             Err(CoreError::PointInContourNotFound(id)) if id == missing_id
         ));
-        assert!(session.find_point_contour(point_id.clone()).is_some());
+        assert!(session.find_point_contour(&point_id).is_some());
     }
 
     #[test]
@@ -1008,7 +1061,7 @@ mod tests {
             .unwrap();
         let control = control.point_id;
 
-        let contour = session.contour(contour_id.clone()).unwrap();
+        let contour = session.contour(&contour_id).unwrap();
         let points: Vec<_> = contour.points().iter().collect();
 
         assert_eq!(points.len(), 3);

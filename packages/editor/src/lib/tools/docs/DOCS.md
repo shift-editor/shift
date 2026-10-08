@@ -1,6 +1,6 @@
 # Tools
 
-<!-- reviewed: 2026-09-26 -->
+<!-- reviewed: 2026-09-28 -->
 
 State machine-based tool system for the Shift font editor: translates pointer/keyboard input into tool-specific state transitions and rendering.
 
@@ -30,9 +30,17 @@ State machine-based tool system for the Shift font editor: translates pointer/ke
 
 - **Architecture Invariant:** `ToolEvent` pointer events carry a `coords: Coordinates` bundle (`screen`, `scene`). Use `event.coords.scene` for scene-space hit-testing and resolve node-local coordinates from the hit target when a tool needs them.
 
+- **Architecture Invariant:** The Spacing tool never stores gap geometry. A `SpacingGap` is measured on demand from the run layout and each glyph's live outline (`TextRunNodeDefinition.spacingGapAt`). After any edit, `RunSpacing.refresh` finds the gap again by its two text items (`spacingGapBetween`), never by the pointer: a sidebearing change moves the glyphs under a still pointer, and a negative sidebearing can leave the pointer outside the gap entirely.
+
+- **Architecture Invariant:** A gap has two halves, `left` and `right`; the left half is the left glyph's **right** sidebearing. `SpacingSideName` names halves and `Sidebearing` (`lsb`/`rsb`) names a glyph's sides; convert only through `sidebearingOfHalf`. Passing a half where a sidebearing is expected edits the wrong side.
+
+- **Architecture Invariant:** The value pill's rectangle has one source, `spacingLabelRect`, used for both drawing and click hit-testing. It sizes the pill from a fixed character width, not `measureText`, so hits agree with the drawing without a canvas.
+
+- **Architecture Invariant:** The Spacing tool's `editing` state is the single source of truth for the value popover. The desktop `SpacingValuePopover` only renders that state and calls `setEditedSidebearing` / `switchEditedSide` / `endEditing`. The canvas click that opens it reads to Base UI as an outside press, so the popover ignores outside presses on the canvas and the tool closes it on its own canvas clicks.
+
 Select gives editable root point, anchor, and segment proximity first priority, then tests component contours by proximity before filled occurrences. Component candidates follow front-to-back paint order; nested geometry selects the first component in its `componentPath`. Component-only selections expose occurrence bounds and route move, corner-scale, and rotation-zone drags through `ComponentTransformEdit` rather than point-position transforms. The bounding-box interior is a move target even where the component has no filled geometry.
 
-In preview sessions, Select consumes point, segment, anchor, and component clicks to emit `previewMutationAttempted` without publishing hover or selection. Every drag starts the existing `brushing` state; the marquee draws normally but selects nothing. Pen and Shape are disabled in the toolbar and keyboard shortcuts. Native Edit commands remain disabled rather than opening the preview notice.
+In preview sessions, Select consumes point, segment, anchor, and component clicks to emit `previewMutationAttempted` without publishing hover or selection. Every drag starts the existing `brushing` state; the marquee draws normally but selects nothing. Pen and Shape are disabled in the toolbar and keyboard shortcuts; Text stays available because proof text is not font data. Native Edit commands remain disabled rather than opening the preview notice.
 
 ## Codemap
 
@@ -52,8 +60,17 @@ tools/
   select/                — selection, translate/resize/rotate/bend; TranslateInteraction owns movement
   shape/                 — ShapeTool interaction; Shape interface with Rectangle/Ellipse authoring templates
   text/                  — text run editing
+  spacing/
+    Spacing.ts           — SpacingTool: hover, selection, value popover contract, overlay drawing
+    behaviors.ts         — hover, pill click, select click, drag with snapping, keyboard nudge and Tab
+    RunSpacing.ts        — SpacingHalf (one half of a gap) and RunSpacing (find, refresh, and walk halves)
+    SnapTargets.ts       — the values a dragged sidebearing snaps to
+    SpacingGapOverlay.ts — hatched halves, value pill, selection outline, snap feedback
+    SpacingLabel.ts      — value pill geometry shared by drawing and hit-testing
 apps/desktop/src/renderer/src/lib/tools/
   tools.ts               — registerBuiltInTools (wires all tools + desktop icons and shortcuts)
+apps/desktop/src/renderer/src/components/spacing/
+  SpacingValuePopover.tsx — typed sidebearing for the Spacing tool's open pill
 ```
 
 ## Key Types
@@ -306,7 +323,11 @@ onDragCancel(state, ctx) {
 
 - **`ToolContext.onCancel()` is drag-only.** Register while handling `dragStart` or `drag`; calling it from click, key, drag-end, or cancellation events throws. Call the returned function only after successful commit.
 
-- **`ToolName` is `string`, not a fixed union.** The `BUILT_IN_TOOL_IDS` constant lists known IDs (`select`, `pen`, `hand`, `shape`, `text`, `disabled`) but the type is open for plugin tools.
+- **`ToolName` is `string`, not a fixed union.** The `BUILT_IN_TOOL_IDS` constant lists known IDs (`select`, `pen`, `hand`, `shape`, `text`, `spacing`, `disabled`) but the type is open for plugin tools.
+
+- **An edit that changes nothing breaks the next undo** (#524). Spacing's `setSidebearing` ignores a value equal to the current one for that reason; do the same in any new sidebearing or advance writer until the history bug is fixed.
+
+- **Keys reach the active tool unless an earlier binding claims them**, and `KeyboardRouter` calls `preventDefault` for any key a tool handles. Tab is claimed synchronously on the canvas, before the router's first `await`, because a later `preventDefault` can lose to the native focus move.
 
 ## Verification
 
@@ -314,7 +335,7 @@ onDragCancel(state, ctx) {
 - `GestureDetector.test.ts` — drag threshold, double-click timing, event emission.
 - `ToolManager.test.ts` — tool activation, temporary override, rAF coalescing, modifier forwarding.
 - `EditorHistory.test.ts` — click, Shift-click, marquee, Shift-marquee, cancellation, compound selection/document replay, redo branching, and failed workspace apply rebasing through real tools and the real workspace.
-- Per-tool tests: `hand/Hand.test.ts`, `shape/Shape.test.ts`, `Pen.test.ts`, `Select.test.ts`, `Text.test.ts`.
+- Per-tool tests: `hand/Hand.test.ts`, `shape/Shape.test.ts`, `Pen.test.ts`, `Select.test.ts`, `Text.test.ts`, `spacing/Spacing.test.ts`.
 
 ## Related
 
@@ -323,5 +344,6 @@ onDragCancel(state, ctx) {
 - `PositionEdits` — creates standalone or scoped fluent move, rotate, and scale interactions over normalized position targets.
 - `GlyphLayerEdit` — active preview/finish/cancel owner used by fluent edits and arbitrary BendCurve patches.
 - `Coordinates` — `{ screen, scene }` coordinate bundle on pointer events.
-- `TextTool` — text input tool backed by the editor's active text run.
+- `TextTool` — Text mode: suspends glyph editing so every glyph draws filled, edits the page run through `editor.textEditing`, and places the caret with `TextRunNodeDefinition.caretAt`; it never creates runs. The hidden textarea handles native typing.
 - `KeyboardRouter` — binds tool shortcuts registered via `getToolShortcuts`.
+- `SpacingTool` — Spacing mode: suspends glyph editing, measures gaps through `TextRunNodeDefinition.spacingGapAt`, and changes sidebearings through `SidebearingEdit` (drags, previewed and committed as one whole-layer `transformLayer` plus an advance change) or `SpacingHalf.set` (typed values and nudges). Selecting a half makes its glyph the run's current glyph, so the glyph sidebar follows it.

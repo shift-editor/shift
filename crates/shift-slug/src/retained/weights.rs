@@ -1,3 +1,4 @@
+use crate::length::OrOverflow;
 use std::collections::HashMap;
 
 use crate::SlugError;
@@ -128,9 +129,9 @@ impl RegionRegistry {
             return Ok(*index);
         }
         let index = u32::try_from(self.regions.len())
-            .map_err(|_| SlugError::LengthOverflow)?
+            .or_overflow()?
             .checked_add(1)
-            .ok_or(SlugError::LengthOverflow)?;
+            .or_overflow()?;
         self.regions.push(region.clone());
         self.indices.insert(region, index);
         Ok(index)
@@ -162,9 +163,9 @@ pub struct ComplementRegistry {
 impl ComplementRegistry {
     pub fn new(region_count: usize) -> Result<Self, SlugError> {
         let start = u32::try_from(region_count)
-            .map_err(|_| SlugError::LengthOverflow)?
+            .or_overflow()?
             .checked_add(1)
-            .ok_or(SlugError::LengthOverflow)?;
+            .or_overflow()?;
         Ok(Self {
             start,
             indices: HashMap::new(),
@@ -181,10 +182,8 @@ impl ComplementRegistry {
         }
         let weight = self
             .start
-            .checked_add(
-                u32::try_from(self.complements.len()).map_err(|_| SlugError::LengthOverflow)?,
-            )
-            .ok_or(SlugError::LengthOverflow)?;
+            .checked_add(u32::try_from(self.complements.len()).or_overflow()?)
+            .or_overflow()?;
         self.complements
             .push(source_weights.to_vec().into_boxed_slice());
         self.indices.insert(source_weights.to_vec(), weight);
@@ -244,7 +243,7 @@ fn weights_with(
         1_usize
             .checked_add(regions.len())
             .and_then(|length| length.checked_add(complements.len()))
-            .ok_or(SlugError::LengthOverflow)?,
+            .or_overflow()?,
     );
     weights.push(1.0);
     for region in regions {

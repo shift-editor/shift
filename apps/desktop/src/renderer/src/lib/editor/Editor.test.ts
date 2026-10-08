@@ -1,4 +1,4 @@
-import { scenePoint } from "@shift/editor/spaces";
+import { localPoint, scenePoint } from "@shift/editor/spaces";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -17,17 +17,79 @@ describe("Editor scene bootstrap", () => {
     await editor.startSession();
   });
 
-  it("places the opened glyph as one glyph node at the origin", () => {
+  it("places the opened glyph as the page run's child at the origin", () => {
     const record = editor.font.recordForName("A")!;
-    const nodes = editor.scene.nodes();
+    const [run, child] = editor.scene.nodes();
+    if (run?.kind !== "textRun") throw new Error("Expected the page run first");
+    const item = editor.text.run(run.runId)?.items[0];
 
-    expect(nodes).toHaveLength(1);
-    expect(nodes[0]).toMatchObject({
+    expect(editor.scene.nodes()).toHaveLength(2);
+    expect(run.position).toEqual({ x: 0, y: 0 });
+    expect(child).toMatchObject({
       kind: "glyph",
+      parentId: run.id,
+      itemId: item?.id,
       glyphId: record.id,
       sourceId: editor.font.defaultSource.id,
-      position: { x: 0, y: 0 },
     });
+    expect(editor.toScene(child!, localPoint(0, 0))).toEqual({ x: 0, y: 0 });
+    expect(editor.editing.nodeIds).toEqual([child!.id]);
+  });
+
+  it("finds the nodes that depend on a run or a glyph, and follows their removal", () => {
+    const [run, child] = editor.scene.nodes();
+    if (run?.kind !== "textRun" || child?.kind !== "glyph")
+      throw new Error("Expected run and glyph");
+    const dependents: number[] = [];
+    const reader = effect(() => {
+      dependents.push(editor.scene.nodesReferencing(child.glyphId).length);
+    });
+
+    expect(editor.scene.nodesReferencing(run.runId)).toEqual([run]);
+    expect(editor.scene.nodesReferencing(child.glyphId)).toEqual([child]);
+
+    editor.scene.deleteNode(child.id);
+    reader.dispose();
+
+    expect(dependents).toEqual([1, 0]);
+  });
+
+  it("resolves authored points and contours to their layer and the node showing it", async () => {
+    const [pointId] = await editor.drawOpenContour([
+      { x: 100, y: 100 },
+      { x: 200, y: 100 },
+    ]);
+    const contourId = editor.font.contourIdForPoint(pointId!);
+
+    const point = editor.object(pointId!);
+    const contour = editor.object(contourId!);
+
+    expect(point).toMatchObject({
+      kind: "point",
+      layer: editor.glyphLayer,
+      node: editor.glyphNode,
+    });
+    expect(contour).toMatchObject({
+      kind: "contour",
+      layer: editor.glyphLayer,
+      node: editor.glyphNode,
+    });
+  });
+
+  it("keeps the scene value when only the selection changes, and updates it when a node moves", async () => {
+    const [pointId] = await editor.drawOpenContour([
+      { x: 100, y: 100 },
+      { x: 200, y: 100 },
+    ]);
+    const scene = editor.scene.cell.peek();
+
+    editor.selection.select([pointId!]);
+    expect(editor.scene.cell.peek()).toBe(scene);
+
+    const [node] = editor.scene.nodes();
+    editor.scene.updateNode({ id: node!.id, position: { x: 40, y: 0 } });
+    expect(editor.scene.cell.peek()).not.toBe(scene);
+    expect(editor.scene.nodes()[0]?.position).toEqual({ x: 40, y: 0 });
   });
 
   it("can place the same glyph id twice with distinct node ids", () => {

@@ -1,11 +1,13 @@
 export { AngleSnap } from "./AngleSnap";
 export { DirectionSnap } from "./DirectionSnap";
-export { MetricSnap } from "./MetricSnap";
+export { MetricSnap, standardMetricLines } from "./MetricSnap";
 export { MoveEdit } from "./MoveEdit";
 export { MovementAxis } from "./MovementAxis";
+export { PointAlignmentSnap } from "./PointAlignmentSnap";
 export { PointRuleConstraint } from "./PointRuleConstraint";
 export { PositionEdits } from "./PositionEdits";
 export { PositionList } from "./PositionList";
 export { PositionReference } from "./PositionReference";
 export { RotateEdit } from "./RotateEdit";
 export { ScaleEdit } from "./ScaleEdit";
+export { SnapSet, settleSnap } from "./SnapSet";

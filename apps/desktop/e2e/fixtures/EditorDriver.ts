@@ -19,6 +19,8 @@ const TOOL_LABELS = {
   hand: "Hand Tool (H)",
   rectangle: "Rectangle Tool (R)",
   ellipse: "Ellipse Tool (O)",
+  text: "Text Tool (T)",
+  spacing: "Spacing Tool (M)",
 } as const;
 
 /** Toolbar tool actions the driver can locate and activate. */
@@ -333,11 +335,12 @@ export class EditorDriver {
     await this.#waitForEdits();
   }
 
-  /** Returns the active glyph, or null until its authored layer is published. */
+  /** Returns the glyph being edited, or null when none is (or its authored layer is not published). */
   async activeGlyph(): Promise<ActiveGlyph | null> {
     return this.page.evaluate(() => {
       const editor = window.shiftSession?.editor;
-      const node = editor?.scene.nodesOfKind("glyph")[0];
+      const editingId = editor?.editing.nodeIds[0] ?? null;
+      const node = editor?.scene.nodeOfKind(editingId, "glyph");
       if (!editor || !node) return null;
 
       const glyph = editor.glyphForId(node.glyphId);

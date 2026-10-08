@@ -1,4 +1,4 @@
-import type { Bounds as BoundsType } from "@shift/geo";
+import { Bounds, type Bounds as BoundsType } from "@shift/geo";
 import type { ContourData, PointId, PointSeed, SegmentId } from "@shift/types";
 import { Contour, type GlyphPosition, Point, type Segment } from "@shift/glyph-state";
 import {
@@ -8,6 +8,7 @@ import {
   type ComputedSignal,
   type Signal,
   type WritableSignal,
+  track,
 } from "../signals/signal";
 import { PackedArray } from "./PackedArray";
 
@@ -21,7 +22,9 @@ import { PackedArray } from "./PackedArray";
  */
 export class ContourBuffer {
   readonly #dataCell: WritableSignal<ContourData>;
-  readonly #coordinatesCell: WritableSignal<PackedArray>;
+  readonly #coordinates: PackedArray;
+  /** Bumped after each in-place change to `#coordinates`; readers track this, not the array. */
+  readonly #revision: WritableSignal<number>;
 
   readonly valuesCell: ComputedSignal<Float64Array>;
   readonly contourCell: ComputedSignal<Contour>;
@@ -37,13 +40,18 @@ export class ContourBuffer {
     this.#dataCell = signal(data, {
       name: `glyphLayer.contour[${contourIndex}].data`,
     });
-    this.#coordinatesCell = signal(new PackedArray(2, values), {
-      equals: () => false,
-      name: `glyphLayer.contour[${contourIndex}].coordinates`,
-    });
-    this.valuesCell = computed(() => this.#coordinatesCell.value.view, {
-      name: `glyphLayer.contour[${contourIndex}].values`,
-    });
+    this.#coordinates = new PackedArray(2, values);
+    this.#revision = signal(0, { name: `glyphLayer.contour[${contourIndex}].coordinates` });
+    this.valuesCell = computed(
+      () => {
+        track(this.#revision);
+        // A fresh view over the same memory, so readers see a new value per revision.
+        return this.#coordinates.view;
+      },
+      {
+        name: `glyphLayer.contour[${contourIndex}].values`,
+      },
+    );
     this.contourCell = computed(() => new Contour(this.#dataCell.value, this.valuesCell.value, 0), {
       name: `glyphLayer.contour[${contourIndex}].geometry`,
     });
@@ -53,8 +61,10 @@ export class ContourBuffer {
     this.segmentsCell = computed(() => this.contourCell.value.segments(), {
       name: `glyphLayer.contour[${contourIndex}].segments`,
     });
+    // Most drags move points inside the contour's box; equal bounds keep readers from rerunning.
     this.boundsCell = computed(() => this.contourCell.value.bounds, {
       name: `glyphLayer.contour[${contourIndex}].bounds`,
+      equals: Bounds.equals,
     });
   }
 
@@ -82,11 +92,22 @@ export class ContourBuffer {
     return this.segmentsCell.peek().find((segment) => segment.id === segmentId) ?? null;
   }
 
+  /** Every point's current position, in contour order. */
+  get positions(): GlyphPosition[] {
+    const coordinates = this.#coordinates;
+    return this.data.points.map((point, index) => ({
+      kind: "point",
+      id: point.id,
+      x: coordinates.getComponent(index, 0),
+      y: coordinates.getComponent(index, 1),
+    }));
+  }
+
   position(pointId: PointId): GlyphPosition | null {
     const index = this.pointIndex(pointId);
     if (index < 0) return null;
 
-    const coordinates = this.#coordinatesCell.peek();
+    const coordinates = this.#coordinates;
     return {
       kind: "point",
       id: pointId,
@@ -113,14 +134,14 @@ export class ContourBuffer {
     };
 
     batch(() => {
-      const coordinates = this.#coordinatesCell.peek();
+      const coordinates = this.#coordinates;
       coordinates.splice(
         pointIndex,
         0,
         points.flatMap((point) => [point.x, point.y]),
       );
       this.#dataCell.set(next);
-      this.#coordinatesCell.set(coordinates);
+      this.#markChanged();
     });
     return true;
   }
@@ -135,12 +156,12 @@ export class ContourBuffer {
 
     const points = data.points.filter((point) => !pointIds.has(point.id));
     batch(() => {
-      const coordinates = this.#coordinatesCell.peek();
+      const coordinates = this.#coordinates;
       for (let index = indexes.length - 1; index >= 0; index--) {
         coordinates.splice(indexes[index], 1);
       }
       this.#dataCell.set({ ...data, points });
-      this.#coordinatesCell.set(coordinates);
+      this.#markChanged();
     });
   }
 
@@ -164,10 +185,10 @@ export class ContourBuffer {
     const data = this.#dataCell.peek();
 
     batch(() => {
-      const coordinates = this.#coordinatesCell.peek();
+      const coordinates = this.#coordinates;
       coordinates.reverse();
       this.#dataCell.set({ ...data, points: [...data.points].reverse() });
-      this.#coordinatesCell.set(coordinates);
+      this.#markChanged();
     });
   }
 
@@ -179,7 +200,7 @@ export class ContourBuffer {
     if (index <= 0 || !Point.isOnCurve(data.points[index])) return false;
 
     const points = [...data.points.slice(index), ...data.points.slice(0, index)];
-    const coordinates = this.#coordinatesCell.peek();
+    const coordinates = this.#coordinates;
     const values: number[] = [];
     for (let offset = 0; offset < points.length; offset++) {
       const next = (index + offset) % points.length;
@@ -189,13 +210,13 @@ export class ContourBuffer {
     batch(() => {
       coordinates.replace(new Float64Array(values));
       this.#dataCell.set({ ...data, points });
-      this.#coordinatesCell.set(coordinates);
+      this.#markChanged();
     });
     return true;
   }
 
   patchPositions(updates: readonly GlyphPosition[]): void {
-    const coordinates = this.#coordinatesCell.peek();
+    const coordinates = this.#coordinates;
     let changed = false;
     for (const update of updates) {
       if (update.kind !== "point") continue;
@@ -204,7 +225,7 @@ export class ContourBuffer {
       if (pointIndex < 0) continue;
       changed = coordinates.setItem(pointIndex, [update.x, update.y]) || changed;
     }
-    if (changed) this.#coordinatesCell.set(coordinates);
+    if (changed) this.#markChanged();
   }
 
   replaceValues(values: Float64Array): void {
@@ -212,7 +233,12 @@ export class ContourBuffer {
       throw new RangeError("ContourBuffer replacement must match its points");
     }
 
-    const coordinates = this.#coordinatesCell.peek();
-    if (coordinates.replace(values)) this.#coordinatesCell.set(coordinates);
+    const coordinates = this.#coordinates;
+    if (coordinates.replace(values)) this.#markChanged();
+  }
+
+  /** Publishes an in-place change to the packed values. */
+  #markChanged(): void {
+    this.#revision.update((revision) => revision + 1);
   }
 }

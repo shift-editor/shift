@@ -272,6 +272,15 @@ These are allowed to jump around when energy is high, but they should not silent
 - [x] JSON serialization for cross-language communication
 - [x] CommandResult pattern for operation responses
 
+#### CLI Authoring
+
+- [x] Create or replace glyph-layer drawings from identity-free JSON contours or Y-up SVG paths
+- [x] Atomic multi-glyph create/update with glyph-specific errors, dry-run validation, and independent output documents
+- [x] Inspect and set global naming/license metadata and source-specific vertical metrics through the CLI
+- [x] Edit axis naming/ranges without implicit dependent relocation
+- [x] Add, edit, and remove named instances with idempotent standard-weight presets
+- [x] Restore coupled variation authoring atomically through exact workspace undo/redo
+
 #### Node.js Native Bindings (shift-node)
 
 - [x] FontEngine NAPI class
@@ -652,7 +661,7 @@ These are allowed to jump around when energy is high, but they should not silent
 **Spacing View**
 
 - [x] Text layout view (multiple glyphs on same canvas)
-- [x] Double-click glyph in text view to edit
+- [ ] Double-click glyph in text view to edit (child glyph node; after text-mode slice 1)
 - [ ] Spacing string presets (HOHOHOnnnooo, etc.)
 - [ ] Custom spacing strings
 - [ ] Adjust spacing while viewing in context

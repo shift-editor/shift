@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
 import { useParams } from "react-router";
 
@@ -10,14 +10,14 @@ import { RightSidebar } from "@/components/editor/RightSidebar";
 import { Canvas } from "@/components/editor/Canvas";
 import { CanvasContextMenu } from "@/components/editor/CanvasContextMenu";
 import { useEditor } from "@/workspace/WorkspaceContext";
-import { localBounds } from "@shift/editor/spaces";
+import type { TextRunNode } from "@shift/editor/types";
 import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
 import { useFocusZone, ZoneContainer } from "@/context/FocusZoneContext";
 import { KeyboardRouter } from "@/lib/keyboard";
 import { getShiftHost } from "@/host/shiftHost";
 import { useSignalState } from "@shift/editor/signals";
-import { asGlyphId, mintNodeId } from "@shift/types";
-import { Bounds } from "@shift/geo";
+import { useSignalEffect } from "@/hooks/useSignalEffect";
+import { asGlyphId } from "@shift/types";
 
 export const Editor = () => {
   const { glyphId: glyphIdParam } = useParams();
@@ -26,8 +26,6 @@ export const Editor = () => {
   const glyphId = glyphIdParam ? asGlyphId(glyphIdParam) : null;
   // Route acquisition publishes openedGlyph after materializing the canonical Glyph.
   const glyph = openedGlyph && glyphId ? editor.glyphForId(glyphId) : null;
-  const cursorStyle = useSignalState(editor.cursorCell);
-  const gesture = useSignalState(editor.gesture.cell);
   const activeSourceId = useSignalState(editor.activeSourceIdCell);
 
   const { activeZone, claimZone } = useFocusZone();
@@ -38,62 +36,53 @@ export const Editor = () => {
     claimZone("canvas");
   }, [claimZone, glyph]);
 
-  // GlyphGrid acquires the complete Glyph before navigating. The route only
-  // publishes a scene node after synchronous acquisition is confirmed.
+  // GlyphGrid acquires the complete Glyph before navigating. Until pages exist,
+  // the canvas has one text run at the scene origin that outlives the route, and
+  // opening a glyph replaces the run's text with that glyph and edits it in place.
   useEffect(() => {
     if (!glyph) return undefined;
 
-    const nodeId = mintNodeId();
-    const sourceId = editor.activeSourceId ?? editor.font.defaultSource.id;
-    editor.scene.setNodes([
-      {
-        id: nodeId,
-        type: "node",
-        kind: "glyph",
-        parentId: null,
-        index: "a0",
-        glyphId: glyph.id,
-        sourceId,
+    const runs = editor.nodeDefinition("textRun");
+    const run =
+      editor.scene.nodesOfKind("textRun")[0] ??
+      editor.scene.createNode<TextRunNode>({
+        kind: "textRun",
+        runId: editor.text.createRun([]).id,
+        size: editor.font.metricsCell.peek().unitsPerEm,
         position: { x: 0, y: 0 },
-      },
-    ]);
-
-    const metrics = editor.font.metricsAtLocation(editor.externalLocation);
-    const view = glyph.renderModelAt(editor.externalLocationCell, editor.activeSourceIdCell);
-    const outlineBounds = view.bounds;
-    const advance = view.xAdvanceCell.peek();
-
-    const glyphFrameBounds = Bounds.create(
-      {
-        x: Math.min(0, outlineBounds?.min.x ?? 0),
-        y: Math.min(metrics.descender, outlineBounds?.min.y ?? metrics.descender),
-      },
-      {
-        x: Math.max(advance, outlineBounds?.max.x ?? advance),
-        y: Math.max(metrics.ascender, outlineBounds?.max.y ?? metrics.ascender),
-      },
-    );
-
-    const node = editor.scene.node(nodeId);
-    if (node) editor.fitInitialBounds(editor.toSceneBounds(node, localBounds(glyphFrameBounds)));
-    editor.editing.enter(nodeId);
+      });
+    const previous = runs.childGlyph(run);
+    const open = () => {
+      if (previous?.glyphId === glyph.id) {
+        editor.enterNode(previous.id);
+        return previous;
+      }
+      const item = editor.text.glyphItem(glyph.id);
+      if (!item) return null;
+      editor.text.setItems(run.runId, [item]);
+      const child = runs.editItem(run, item.id);
+      if (child) editor.enterNode(child.id);
+      return child;
+    };
+    // Route hydration is navigation, never a history entry.
+    const node = editor.history.withoutRecording(open);
+    // Tools activate against the glyph node they find, so reset after it is placed.
     editor.toolManager.reset();
+    if (node) editor.fitGlyphFrame(node);
 
     return () => {
       editor.toolManager.reset();
       editor.selection.clear();
       editor.hover.clear();
-      if (editor.editing.has(nodeId)) editor.editing.clear();
-      editor.scene.deleteNode(nodeId);
+      editor.editing.clear();
     };
   }, [editor, glyph]);
 
   useEffect(() => {
     if (!glyph) return;
 
-    const node = editor.scene
-      .nodesOfKind("glyph")
-      .find((candidate) => candidate.glyphId === glyph.id);
+    const run = editor.scene.nodesOfKind("textRun")[0];
+    const node = run ? editor.nodeDefinition("textRun").childGlyph(run) : null;
     if (!node) return;
 
     const sourceId = activeSourceId ?? editor.font.defaultSource.id;
@@ -144,7 +133,7 @@ export const Editor = () => {
   if (!glyph) return null;
 
   return (
-    <EditorLayout cursorStyle={cursorStyle} gesture={gesture.phase}>
+    <EditorLayout>
       <CanvasContextMenu>
         <Canvas />
       </CanvasContextMenu>
@@ -155,15 +144,9 @@ export const Editor = () => {
 const LEFT_SIDEBAR_DEFAULT_SIZE = 15;
 const RIGHT_SIDEBAR_DEFAULT_SIZE = 15;
 
-const EditorLayout = ({
-  cursorStyle,
-  gesture,
-  children,
-}: {
-  cursorStyle: string;
-  gesture: string;
-  children: ReactNode;
-}) => {
+const EditorLayout = ({ children }: { children: ReactNode }) => {
+  const editor = useEditor();
+  const shellRef = useRef<HTMLDivElement>(null);
   const {
     leftSidebarPanelRef,
     rightSidebarPanelRef,
@@ -173,12 +156,23 @@ const EditorLayout = ({
     toggleRightSidebar,
   } = useSidebarLayout();
 
+  // Cursor and gesture change on every pointer event. Writing them to the shell directly keeps
+  // those events from re-rendering the toolbar, sidebars, and canvas beneath it.
+  useSignalEffect(() => {
+    const cursor = editor.cursorCell.value;
+    const phase = editor.gesture.cell.value.phase;
+    const shell = shellRef.current;
+    if (!shell) return;
+
+    shell.style.setProperty("--shift-cursor", cursor);
+    shell.dataset.gesture = phase;
+  });
+
   return (
     <div
+      ref={shellRef}
       data-testid="editor-shell"
       className="shift-editor-shell flex h-screen w-screen min-w-150 flex-col bg-background"
-      data-gesture={gesture}
-      style={{ "--shift-cursor": cursorStyle } as React.CSSProperties}
     >
       <Toolbar toggleLeftSidebar={toggleLeftSidebar} toggleRightSidebar={toggleRightSidebar} />
       <ResizablePanelGroup

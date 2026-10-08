@@ -74,6 +74,21 @@ export class Editing {
     this.#write(uniqueInOrder(nodeIds));
   }
 
+  /**
+   * Clears editing scope until the returned function restores it.
+   *
+   * @remarks
+   * For modes that show glyphs as plain content (Hand, Text). The restore
+   * skips nodes deleted in the meantime.
+   *
+   * @returns a function that re-enters the suspended nodes.
+   */
+  suspend(): () => void {
+    const nodeIds = this.nodeIds;
+    this.clear();
+    return () => this.set(nodeIds.filter((id) => this.#store.get(id)?.type === "node"));
+  }
+
   clear(): void {
     if (!this.hasScope()) return;
 

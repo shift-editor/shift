@@ -97,10 +97,11 @@ function mappedWeightFixture(): GlyphAtlasPage {
       {
         basis: {
           sourceIds: [mintSourceId()],
+          designNormalization: [{ axisId, minimum: 100, default: 400, maximum: 800 }],
           basis: {
             deltas: [
               {
-                region: [{ axisId, lower: 0, peak: 0.8, upper: 0.8 }],
+                region: [{ axisId, lower: 0, peak: 1, upper: 1 }],
                 values: Float64Array.of(1),
               },
             ],

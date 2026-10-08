@@ -1,3 +1,5 @@
+use crate::length::OrOverflow;
+use shift_font::Require;
 use std::collections::HashSet;
 use std::time::{Duration, Instant};
 
@@ -167,7 +169,7 @@ fn unique_glyph_ids(font: &Font, glyph_ids: &[GlyphId]) -> Result<Vec<GlyphId>, 
     let mut unique = Vec::with_capacity(glyph_ids.len());
 
     for glyph_id in glyph_ids {
-        if font.glyph(glyph_id.clone()).is_none() {
+        if font.glyph(glyph_id).is_none() {
             return Err(CoreError::GlyphNotFound(glyph_id.clone()).into());
         }
         if seen.insert(glyph_id.clone()) {
@@ -205,11 +207,8 @@ fn collect_weight_sets(
             continue;
         }
 
-        let count = u32::try_from(interpolation.basis().source_ids().len())
-            .map_err(|_| SlugError::LengthOverflow)?;
-        let end = next_weight_index
-            .checked_add(count)
-            .ok_or(SlugError::LengthOverflow)?;
+        let count = u32::try_from(interpolation.basis().source_ids().len()).or_overflow()?;
+        let end = next_weight_index.checked_add(count).or_overflow()?;
         sets.push(AuthoredWeightSet::new(
             interpolation.basis().clone(),
             (next_weight_index..end).collect(),
@@ -232,9 +231,7 @@ fn collect_projection<'a>(
 
     projections.push(root);
     for glyph_id in root.component_glyph_ids() {
-        let projection = projection_set
-            .projection(glyph_id)
-            .ok_or_else(|| CoreError::GlyphNotFound(glyph_id.clone()))?;
+        let projection = projection_set.projection(glyph_id).require(&glyph_id)?;
         collect_projection(projection_set, projection, seen, projections)?;
     }
 

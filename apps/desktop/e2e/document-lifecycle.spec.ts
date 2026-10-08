@@ -141,6 +141,7 @@ function sourceTreeSnapshot(rootPath: string): [string, string][] {
 
 workspaceTest(
   "opens a document sent to the running application",
+  { tag: "@os" },
   async ({ electronApp, testRoot }) => {
     const secondPath = createSecondDocument(testRoot);
 
@@ -159,30 +160,34 @@ for (const sourcePath of [FONT_PATH, GLYPHSPACKAGE_FONT_PATH]) {
     test.describe("cold launch", () => {
       test.use({ electronArgs: [sourcePath] });
 
-      test("opens the source preview instead of the launcher", async ({ electronApp, page }) => {
-        await expect(page.getByLabel("Glyph catalog", { exact: true })).toBeVisible();
-        await expect.poll(() => page.evaluate(() => window.shiftSession?.mode)).toBe("preview");
-        await expect(page).toHaveURL(/#\/home$/);
+      test(
+        "opens the source preview instead of the launcher",
+        { tag: "@os" },
+        async ({ electronApp, page }) => {
+          await expect(page.getByLabel("Glyph catalog", { exact: true })).toBeVisible();
+          await expect.poll(() => page.evaluate(() => window.shiftSession?.mode)).toBe("preview");
+          await expect(page).toHaveURL(/#\/home$/);
+          expect(electronApp.windows()).toHaveLength(1);
+        },
+      );
+    });
+
+    test(
+      "replaces a running launcher with the source preview",
+      { tag: "@os" },
+      async ({ electronApp, page, testRoot }) => {
+        const workspaceWindow = electronApp.waitForEvent("window");
+        await launchSecondInstance(electronApp, testRoot, sourcePath);
+        const workspacePage = await workspaceWindow;
+
+        await expect(workspacePage.getByLabel("Glyph catalog", { exact: true })).toBeVisible();
+        await expect
+          .poll(() => workspacePage.evaluate(() => window.shiftSession?.mode))
+          .toBe("preview");
+        await expect.poll(() => page.isClosed()).toBe(true);
         expect(electronApp.windows()).toHaveLength(1);
-      });
-    });
-
-    test("replaces a running launcher with the source preview", async ({
-      electronApp,
-      page,
-      testRoot,
-    }) => {
-      const workspaceWindow = electronApp.waitForEvent("window");
-      await launchSecondInstance(electronApp, testRoot, sourcePath);
-      const workspacePage = await workspaceWindow;
-
-      await expect(workspacePage.getByLabel("Glyph catalog", { exact: true })).toBeVisible();
-      await expect
-        .poll(() => workspacePage.evaluate(() => window.shiftSession?.mode))
-        .toBe("preview");
-      await expect.poll(() => page.isClosed()).toBe(true);
-      expect(electronApp.windows()).toHaveLength(1);
-    });
+      },
+    );
   });
 }
 
@@ -211,7 +216,7 @@ test.describe("case-insensitive source activation", () => {
     },
   });
 
-  test("opens an uppercase source extension with spaces", async ({ page }) => {
+  test("opens an uppercase source extension with spaces", { tag: "@os" }, async ({ page }) => {
     await expect(page.getByLabel("Glyph catalog", { exact: true })).toBeVisible();
     await expect.poll(() => page.evaluate(() => window.shiftSession?.mode)).toBe("preview");
   });
@@ -548,50 +553,49 @@ function findShiftDocuments(rootPath: string): string[] {
 }
 
 test.describe("document lifecycle through the application shell", () => {
-  test("first Save writes an independent shift document that reopens", async ({
-    relaunch,
-    electronApp,
-    page,
-    saveShiftPath,
-  }) => {
-    const workspacePage = await createNewFont(page, electronApp);
-    await workspacePage.getByRole("button", { name: "Create glyph", exact: true }).click();
-    await expect.poll(() => windowTitle(workspacePage, electronApp)).toContain("Untitled *");
+  test(
+    "first Save writes an independent shift document that reopens",
+    { tag: "@os" },
+    async ({ relaunch, electronApp, page, saveShiftPath }) => {
+      const workspacePage = await createNewFont(page, electronApp);
+      await workspacePage.getByRole("button", { name: "Create glyph", exact: true }).click();
+      await expect.poll(() => windowTitle(workspacePage, electronApp)).toContain("Untitled *");
 
-    await runCommand(workspacePage, electronApp, "file.save");
+      await runCommand(workspacePage, electronApp, "file.save");
 
-    await expect.poll(() => fs.existsSync(saveShiftPath)).toBe(true);
-    await expect.poll(() => windowTitle(workspacePage, electronApp)).toContain("saved.shift -");
-    expect(await windowTitle(workspacePage, electronApp)).not.toContain(" *");
+      await expect.poll(() => fs.existsSync(saveShiftPath)).toBe(true);
+      await expect.poll(() => windowTitle(workspacePage, electronApp)).toContain("saved.shift -");
+      expect(await windowTitle(workspacePage, electronApp)).not.toContain(" *");
 
-    await workspacePage.getByRole("button", { name: "Create glyph", exact: true }).click();
-    await expect.poll(() => windowTitle(workspacePage, electronApp)).toContain("saved.shift *");
-    await runCommand(workspacePage, electronApp, "file.save");
-    await expect.poll(() => windowTitle(workspacePage, electronApp)).toContain("saved.shift -");
+      await workspacePage.getByRole("button", { name: "Create glyph", exact: true }).click();
+      await expect.poll(() => windowTitle(workspacePage, electronApp)).toContain("saved.shift *");
+      await runCommand(workspacePage, electronApp, "file.save");
+      await expect.poll(() => windowTitle(workspacePage, electronApp)).toContain("saved.shift -");
 
-    await quitApp(electronApp);
+      await quitApp(electronApp);
 
-    const relaunchedApp = await relaunch();
-    const launcherPage = await relaunchedApp.firstWindow();
-    await launcherPage.waitForURL(/#\/launcher$/);
+      const relaunchedApp = await relaunch();
+      const launcherPage = await relaunchedApp.firstWindow();
+      await launcherPage.waitForURL(/#\/launcher$/);
 
-    const reopenedWindow = relaunchedApp.waitForEvent("window");
-    await launcherPage.getByRole("button", { name: "Open Font…", exact: true }).click();
-    const reopenedPage = await reopenedWindow;
-    await reopenedPage.waitForURL(/#\/home$/);
-    await expect(reopenedPage.getByLabel("Glyph catalog", { exact: true })).toBeVisible();
-    await expect
-      .poll(() =>
-        reopenedPage.evaluate(() =>
-          window.shift?.font.glyphRecords().some((glyph) => glyph.name === "newGlyph.1"),
-        ),
-      )
-      .toBe(true);
-    await reopenedPage.getByPlaceholder("Search glyphs...").fill("newGlyph.1");
-    await expect(
-      reopenedPage.getByRole("region", { name: "Glyph catalog surface", exact: true }),
-    ).toHaveAttribute("data-filtered-glyph-count", "1");
-  });
+      const reopenedWindow = relaunchedApp.waitForEvent("window");
+      await launcherPage.getByRole("button", { name: "Open Font…", exact: true }).click();
+      const reopenedPage = await reopenedWindow;
+      await reopenedPage.waitForURL(/#\/home$/);
+      await expect(reopenedPage.getByLabel("Glyph catalog", { exact: true })).toBeVisible();
+      await expect
+        .poll(() =>
+          reopenedPage.evaluate(() =>
+            window.shift?.font.glyphRecords().some((glyph) => glyph.name === "newGlyph.1"),
+          ),
+        )
+        .toBe(true);
+      await reopenedPage.getByPlaceholder("Search glyphs...").fill("newGlyph.1");
+      await expect(
+        reopenedPage.getByRole("region", { name: "Glyph catalog surface", exact: true }),
+      ).toHaveAttribute("data-filtered-glyph-count", "1");
+    },
+  );
 
   test("canceling dirty close keeps the document open and dirty", async ({ electronApp, page }) => {
     const workspacePage = await createNewFont(page, electronApp);
@@ -824,6 +828,7 @@ failedExportTest(
 
 workspaceTest(
   "Export writes TTF without changing document state",
+  { tag: "@os" },
   async ({ electronApp, page, exportTtfPath }) => {
     const before = await page.evaluate(async () => window.shift?.font.editCoordinator.state());
     await expect.poll(() => windowTitle(page, electronApp)).toContain("font.shift -");

@@ -7,6 +7,7 @@ import {
   glyphCatalogRenderer,
   glyphCatalogSurface,
   glyphProperties,
+  openFirstCatalogGlyph,
 } from "./fixtures/appLocators";
 import { expectPageSnapshot, expectPanelSnapshot } from "./fixtures/snapshots";
 
@@ -300,8 +301,9 @@ test.describe("Home view", () => {
       return { width: bounds.width, height: bounds.height };
     });
 
-    await clickFirstCatalogGlyph(page);
-    await page.waitForURL(/#\/editor\//);
+    // Waits for the editor to render, not just the URL: until then the hidden catalog's own
+    // Font overview button is still the one a role query finds.
+    await openFirstCatalogGlyph(page);
     await afterNextPaint(page);
 
     await expect(renderer).toBeAttached();

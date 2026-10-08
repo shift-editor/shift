@@ -166,7 +166,7 @@ describe("FontStore glyph object ownership", () => {
     store.applyGlyphSnapshots([glyphSnapshot(LAYER_A_ID, structure())]);
     let runs = 0;
     const subscription = effect(() => {
-      track(font.committedFontCell);
+      track(font.committedRevisionCell);
       runs += 1;
     });
 
@@ -184,7 +184,7 @@ describe("FontStore glyph object ownership", () => {
     store.applyGlyphSnapshots([glyphSnapshot(LAYER_A_ID, structure())]);
     let invalidGlyphIds: readonly GlyphId[] | null = null;
     const subscription = effect(() => {
-      invalidGlyphIds = font.invalidGlyphIdsCell.value;
+      invalidGlyphIds = font.invalidGlyphsCell.value.glyphIds;
     });
 
     store.applyWorkspaceChange({

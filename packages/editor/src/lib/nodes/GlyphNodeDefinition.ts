@@ -1,5 +1,6 @@
-import { Mat } from "@shift/geo";
-import type { ComponentId, NodeId, PointId, SegmentId } from "@shift/types";
+import type { NodeReference } from "../../types/records";
+import { Bounds, Mat } from "@shift/geo";
+import type { ComponentId, NodeId, PointId, SegmentId, SourceMetrics } from "@shift/types";
 import type { LocalBounds, LocalPoint } from "../../types/coordinates";
 import { localBounds } from "../editor/spaces";
 import { SCREEN_HIT_RADIUS } from "../editor/rendering/constants";
@@ -15,6 +16,7 @@ import {
 import { displayAdvance } from "../utils/unicode";
 import { computed, keyedCache, track } from "../signals/index";
 import type { GlyphRenderModel } from "../model/Glyph";
+import { standardMetricLines } from "../model/positions";
 import type { GlyphContour } from "../model/ComponentGlyph";
 import type { HandleState } from "../../types/graphics";
 import type { GlyphRenderContour } from "../../types/glyphRender";
@@ -32,6 +34,11 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
   readonly kind: GlyphNode["kind"] = "glyph";
 
   readonly #outline = new OutlineRenderer();
+
+  /** A glyph node depends on the glyph it shows. */
+  override references(node: GlyphNode): readonly NodeReference[] {
+    return [node.glyphId];
+  }
   readonly #debugOverlays = new DebugOverlays();
   readonly #controlLines = new ControlLines();
   readonly #anchors = new Anchors();
@@ -80,7 +87,31 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     return localBounds(bounds);
   }
 
+  /**
+   * Returns the glyph's editing frame in its own units.
+   *
+   * @remarks
+   * The advance box from descender to ascender, grown to include any outline
+   * that reaches past it. Unlike {@link bounds}, an empty glyph still has a
+   * frame. Metrics follow the active source, as the metric guides do.
+   */
+  frameBounds(node: GlyphNode): LocalBounds | null {
+    const view = this.#view(node);
+    if (!view) return null;
+
+    const metrics = this.#metrics();
+    const advanceBox = Bounds.create(
+      { x: 0, y: metrics.descender },
+      { x: view.xAdvanceCell.peek(), y: metrics.ascender },
+    );
+    const outline = view.bounds;
+    return localBounds(outline ? Bounds.union(advanceBox, outline) : advanceBox);
+  }
+
   hit(node: GlyphNode, point: LocalPoint): PointerTarget | null {
+    // A run child you are not editing is plain text; its parent run answers the hit.
+    if (node.parentId !== null && !this.#isEditing(node)) return null;
+
     const geometry = this.#view(node);
     if (!geometry) return null;
 
@@ -201,27 +232,41 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
   }
 
   #drawBackground(node: GlyphNode, ctx: RenderContext): void {
-    const glyph = this.editor.glyphForId(node.glyphId);
-    if (!glyph) return;
-
     const view = this.#view(node);
     if (!view) return;
 
-    const unicode = glyph.entry.unicodes[0] ?? null;
+    const advance = this.#displayAdvance(node, view);
+    if (advance === null) return;
+
+    const metrics = this.#trackedMetrics();
+    this.#guides.draw(ctx.canvas, metrics, advance, this.editor.sessionMode === "preview");
+  }
+
+  /** Advance the metric lines are drawn across, subscribed for redraw; null for an unknown glyph. */
+  #displayAdvance(node: GlyphNode, view: GlyphRenderModel): number | null {
+    const glyph = this.editor.glyphForId(node.glyphId);
+    if (!glyph) return null;
+
     track(view.xAdvanceCell);
+    const unicode = glyph.entry.unicodes[0] ?? null;
+    return displayAdvance(view.xAdvanceCell.peek(), glyph.name, unicode);
+  }
 
-    const advance = displayAdvance(view.xAdvanceCell.peek(), glyph.name, unicode);
-
+  /** Metrics of the active source, or interpolated at the current location, subscribed for redraw. */
+  #trackedMetrics(): SourceMetrics {
     track(this.editor.externalLocationCell);
     track(this.editor.activeSourceIdCell);
     track(this.editor.font.sourceMetricsInterpolationCell);
 
+    return this.#metrics();
+  }
+
+  /** Vertical metrics for the active source, or interpolated at the design location. */
+  #metrics(): SourceMetrics {
     const activeSourceId = this.editor.activeSourceId;
-    const metrics = activeSourceId
+    return activeSourceId
       ? this.editor.font.metricsForSource(activeSourceId)
       : this.editor.font.metricsAtLocation(this.editor.externalLocation);
-
-    this.#guides.draw(ctx.canvas, metrics, advance, this.editor.sessionMode === "preview");
   }
 
   #drawContent(node: GlyphNode, ctx: RenderContext, editing: boolean): void {
@@ -280,7 +325,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     switch (target.kind) {
       case "source": {
         track(this.editor.font.sourcesCell);
-        track(this.editor.font.committedFontCell);
+        track(this.editor.font.committedRevisionCell);
         const externalLocation = this.editor.font.externalLocationForSource(target.sourceId);
         if (!externalLocation) return null;
 
@@ -358,7 +403,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     const sourceId = this.editor.activeSourceIdCell.peek();
     if (!sourceId) return;
 
-    const layer = this.editor.glyphForId(node.glyphId)?.layerForSource(sourceId);
+    const layer = this.editor.layerForGlyph(node.glyphId, sourceId);
     if (!layer) return;
 
     track(layer.editBaseOutlineCell);
@@ -410,7 +455,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
   } {
     track(this.editor.font.axesCell);
     track(this.editor.font.sourcesCell);
-    track(this.editor.font.committedFontCell);
+    track(this.editor.font.committedRevisionCell);
     track(this.editor.activeSourceIdCell);
     track(this.editor.externalLocationCell);
     const interpolated =
@@ -438,16 +483,23 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
       this.#selectedSegmentIds(node),
       this.#hoveredSegmentId(node),
     );
-    this.#drawControlLines(
-      ctx,
-      rootContours.map((contour) => contour.contour),
-    );
+    const controlContours = rootContours.map((contour) => contour.contour);
+    this.#drawControlLines(ctx, controlContours);
+    const advance = this.#displayAdvance(node, view);
+    const metricLines =
+      advance === null
+        ? undefined
+        : {
+            heights: new Set(standardMetricLines(this.#trackedMetrics()).map(({ y }) => y)),
+            advance,
+          };
     this.#handles.draw(
       ctx,
       rootContours,
       this.editor.selection,
       this.editor.hover,
       interpolated,
+      metricLines,
       (pointId, contourId) => this.editor.handlesVisible(pointId, contourId),
     );
     this.#anchors.draw(ctx.canvas, view.anchors, {

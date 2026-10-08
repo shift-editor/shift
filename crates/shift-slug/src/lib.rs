@@ -9,6 +9,7 @@ mod atlas;
 mod authored;
 mod curve;
 mod error;
+pub mod length;
 mod outline;
 mod pack;
 mod render;

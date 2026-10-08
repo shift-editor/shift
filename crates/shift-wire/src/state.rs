@@ -166,25 +166,25 @@ mod tests {
         assert_eq!(restored.source_id(), layer.source_id());
         assert_eq!(restored.width(), 500.0);
 
-        let contour = restored.contour(ContourId::from_raw(10)).unwrap();
+        let contour = restored.contour(&ContourId::from_raw(10)).unwrap();
         assert!(contour.is_closed());
         assert_eq!(contour.points().len(), 2);
 
-        let first = contour.get_point(PointId::from_raw(20)).unwrap();
+        let first = contour.get_point(&PointId::from_raw(20)).unwrap();
         assert_eq!((first.x(), first.y()), (1.0, 2.0));
         assert_eq!(first.point_type(), IrPointType::OnCurve);
         assert!(!first.is_smooth());
 
-        let second = contour.get_point(PointId::from_raw(21)).unwrap();
+        let second = contour.get_point(&PointId::from_raw(21)).unwrap();
         assert_eq!((second.x(), second.y()), (3.0, 4.0));
         assert_eq!(second.point_type(), IrPointType::OffCurve);
         assert!(second.is_smooth());
 
-        let anchor = restored.anchor(AnchorId::from_raw(30)).unwrap();
+        let anchor = restored.anchor(&AnchorId::from_raw(30)).unwrap();
         assert_eq!(anchor.name(), Some("top"));
         assert_eq!(anchor.position(), (5.0, 6.0));
 
-        let component = restored.component(ComponentId::from_raw(40)).unwrap();
+        let component = restored.component(&ComponentId::from_raw(40)).unwrap();
         assert_eq!(component.base_glyph_id(), GlyphId::from_raw("base"));
         assert_eq!(component.base_glyph_name().as_str(), "base");
         assert_eq!(component.transform().translate_x, 7.0);

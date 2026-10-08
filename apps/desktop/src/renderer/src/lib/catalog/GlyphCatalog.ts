@@ -13,7 +13,7 @@ import type { Editor } from "@shift/editor";
 import { externalAxisLocationFromRecord, mapAxisLocation } from "@shift/editor/variation";
 import type { GlyphAtlasSource } from "@/types/glyphAtlas";
 import type { CatalogLocation, GlyphCatalogItem } from "@/types/glyphCatalog";
-import { RenderGlyph } from "@shift/editor/model";
+import { RenderGlyph, type GlyphInvalidation } from "@shift/editor/model";
 
 /** Projects the editor model into the source-independent catalog boundary. */
 export class GlyphCatalog {
@@ -27,7 +27,7 @@ export class GlyphCatalog {
   readonly familyNameCell: ComputedSignal<string | null>;
   readonly styleNameCell: ComputedSignal<string | null>;
   readonly sourceIdCell: ComputedSignal<SourceId | null>;
-  readonly invalidGlyphIdsCell: Signal<readonly GlyphId[] | null>;
+  readonly invalidGlyphsCell: Signal<GlyphInvalidation>;
   readonly atlas: GlyphAtlasSource;
 
   constructor(editor: Editor, glyphInfo: GlyphInfo, atlas: GlyphAtlasSource) {
@@ -75,7 +75,7 @@ export class GlyphCatalog {
     this.sourceIdCell = computed(() => editor.activeSourceIdCell.value, {
       name: "catalog.sourceId",
     });
-    this.invalidGlyphIdsCell = font.invalidGlyphIdsCell;
+    this.invalidGlyphsCell = font.invalidGlyphsCell;
     this.atlas = atlas;
     this.#derived = [
       this.glyphsCell,

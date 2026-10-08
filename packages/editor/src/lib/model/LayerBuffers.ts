@@ -1,4 +1,10 @@
-import { Bounds, type Bounds as BoundsType, type DecomposedTransform } from "@shift/geo";
+import {
+  Bounds,
+  Mat,
+  type Bounds as BoundsType,
+  type DecomposedTransform,
+  type MatModel,
+} from "@shift/geo";
 import type {
   AnchorId,
   AnchorSeed,
@@ -34,6 +40,9 @@ import { ContourBuffer } from "./ContourBuffer";
  * also owns the metadata that interprets it. Wire structure and values are
  * derived lazily from these records.
  */
+/** A fresh value after every change to a layer's packed values. Its contents are not meaningful. */
+export type LayerChangeToken = readonly unknown[];
+
 export class LayerBuffers {
   readonly xAdvanceCell: WritableSignal<number>;
   readonly contoursCell: WritableSignal<readonly ContourBuffer[]>;
@@ -45,7 +54,8 @@ export class LayerBuffers {
 
   readonly structureCell: ComputedSignal<GlyphStructure>;
   readonly snapshotCell: ComputedSignal<Float64Array>;
-  readonly changedCell: ComputedSignal<LayerBuffers>;
+  /** Changes identity whenever any packed value changes; compare it by identity only. */
+  readonly changedCell: ComputedSignal<LayerChangeToken>;
   readonly boundsCell: ComputedSignal<BoundsType | null>;
   readonly sidebearingsCell: ComputedSignal<GlyphSidebearings>;
 
@@ -96,19 +106,18 @@ export class LayerBuffers {
       { name: "glyphLayer.buffers.snapshot" },
     );
     this.changedCell = computed(
-      () => {
-        this.xAdvanceCell.value;
-        for (const contour of this.contoursCell.value) contour.valuesCell.value;
-        this.anchors.valuesCell.value;
-        for (const component of this.components) component.valuesCell.value;
-        return this;
-      },
+      () => [
+        this.xAdvanceCell.value,
+        ...this.contoursCell.value.map((contour) => contour.valuesCell.value),
+        this.anchors.valuesCell.value,
+        ...this.components.map((component) => component.valuesCell.value),
+      ],
       { name: "glyphLayer.buffers.changed" },
     );
     this.boundsCell = computed(
       () =>
         LayerBuffers.#bounds(this.contoursCell.value.map((contour) => contour.boundsCell.value)),
-      { name: "glyphLayer.buffers.bounds" },
+      { name: "glyphLayer.buffers.bounds", equals: Bounds.equals },
     );
     this.sidebearingsCell = computed(
       () => {
@@ -116,7 +125,10 @@ export class LayerBuffers {
         if (!bounds) return { lsb: null, rsb: null };
         return { lsb: bounds.min.x, rsb: this.xAdvanceCell.value - bounds.max.x };
       },
-      { name: "glyphLayer.buffers.sidebearings" },
+      {
+        name: "glyphLayer.buffers.sidebearings",
+        equals: (prev, next) => prev.lsb === next.lsb && prev.rsb === next.rsb,
+      },
     );
   }
 
@@ -176,6 +188,11 @@ export class LayerBuffers {
 
   contourIdOfPoint(pointId: PointId): ContourId | null {
     return this.#contourForPoint(pointId)?.data.id ?? null;
+  }
+
+  /** Every contour point's and anchor's current position. */
+  get positions(): GlyphPosition[] {
+    return [...this.contours.flatMap((contour) => contour.positions), ...this.anchors.positions];
   }
 
   positionsFor(targets: readonly GlyphPositionTarget[]): GlyphPosition[] {
@@ -325,15 +342,22 @@ export class LayerBuffers {
     return this.contour(contourId)?.setContourStart(pointId) ?? false;
   }
 
-  translatePoints(pointIds: readonly PointId[], dx: number, dy: number): boolean {
-    const ids = [...new Set(pointIds)];
-    const positions = this.positionsFor(ids.map((id) => ({ kind: "point", id })));
-    if (positions.length !== ids.length) return false;
-
+  /**
+   * Maps every contour point and anchor through `matrix` and composes it onto each component.
+   *
+   * @remarks
+   * Mirrors Rust's `GlyphLayer::transform_layer`, so a local preview matches
+   * the authoritative result. The advance width is unchanged.
+   */
+  transformLayer(matrix: MatModel): boolean {
     this.patchPositions(
-      positions.map((position) => ({ ...position, x: position.x + dx, y: position.y + dy })),
+      this.positions.map((position) => ({ ...position, ...Mat.applyToPoint(matrix, position) })),
     );
-    return true;
+
+    return this.setComponentTransforms(
+      this.components.map((component) => component.data.id),
+      this.components.map(({ transform }) => composeOnto(transform, matrix)),
+    );
   }
 
   setXAdvance(width: number): boolean {
@@ -467,4 +491,22 @@ export class LayerBuffers {
     }
     return result;
   }
+}
+
+/**
+ * A component placement after `matrix`, matching Rust's `GlyphLayer::transform_layer`.
+ *
+ * @remarks
+ * A pure translation is added to the placement's translation so its other
+ * decomposed values stay exact; anything else composes and re-decomposes.
+ */
+function composeOnto(transform: DecomposedTransform, matrix: MatModel): DecomposedTransform {
+  const translationOnly = matrix.a === 1 && matrix.b === 0 && matrix.c === 0 && matrix.d === 1;
+  if (!translationOnly) return Mat.toDecomposed(Mat.Compose(matrix, Mat.fromDecomposed(transform)));
+
+  return {
+    ...transform,
+    translateX: transform.translateX + matrix.e,
+    translateY: transform.translateY + matrix.f,
+  };
 }

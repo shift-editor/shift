@@ -50,7 +50,7 @@ import {
 import type { FontOptions, WorkspaceEditCoordinator } from "../../types/font";
 import type { GlyphReader } from "../../types/glyph";
 import { Glyph, GlyphLayer } from "./Glyph";
-import type { FontStore } from "./FontStore";
+import type { FontStore, GlyphInvalidation } from "./FontStore";
 import type { GlyphLayerState } from "./GlyphLayerState";
 import { SourceMetricsInterpolation } from "./SourceMetricsInterpolation";
 import {
@@ -344,7 +344,6 @@ export class Font {
   readonly #glyphEntriesCell: Signal<readonly GlyphEntry[]>;
   readonly #glyphRecordsCell: Signal<readonly GlyphRecord[]>;
   readonly #directoryCell: Signal<GlyphDirectory>;
-  readonly #committedFontCell: ComputedSignal<Font>;
 
   readonly #glyphRequests = createBatchRequest<GlyphId>((glyphIds) =>
     this.#readGlyphsIntoStore(glyphIds),
@@ -371,13 +370,6 @@ export class Font {
 
     const fontCell = store.fontCell;
 
-    this.#committedFontCell = computed(
-      () => {
-        track(store.committedFontCell);
-        return this;
-      },
-      { name: "font.committed" },
-    );
     this.#loadedCell = computed(() => fontCell.value !== null);
 
     this.#metricsCell = computed(() => fontCell.value?.metrics ?? DEFAULT_FONT_METRICS);
@@ -535,19 +527,24 @@ export class Font {
     return this.#glyphRecordsCell;
   }
 
-  /** Stable font value that invalidates after every committed native change. */
-  get committedFontCell(): Signal<Font> {
-    return this.#committedFontCell;
+  /** Increments after every committed native change; track it to follow committed outlines. */
+  get committedRevisionCell(): Signal<number> {
+    return this.#store.committedRevisionCell;
   }
 
   /** Glyph roots whose resident atlas entries no longer match the committed font. */
-  get invalidGlyphIdsCell(): Signal<readonly GlyphId[] | null> {
-    return this.#store.invalidGlyphIdsCell;
+  get invalidGlyphsCell(): Signal<GlyphInvalidation> {
+    return this.#store.invalidGlyphsCell;
   }
 
   /** Returns the layer owning a point id, or null when unknown. */
   layerIdForPoint(pointId: PointId): LayerId | null {
     return this.#store.layerIdForPoint(pointId);
+  }
+
+  /** Returns the glyph that owns a layer, or null when unknown. The glyph need not be loaded. */
+  glyphIdForLayer(layerId: LayerId): GlyphId | null {
+    return this.#store.glyphIdForLayer(layerId);
   }
 
   /** Returns the contour owning a point id, or null when unknown. */
@@ -1728,7 +1725,6 @@ export class Font {
 
   dispose(): void {
     this.#glyphsEffect.dispose();
-    this.#committedFontCell.dispose();
   }
 
   defaultLocation(): ExternalAxisLocation {

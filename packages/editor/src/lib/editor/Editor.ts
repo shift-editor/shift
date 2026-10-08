@@ -4,6 +4,7 @@ import {
   isContourId,
   isComponentId,
   isNodeId,
+  isTextItemId,
   isPointId,
   type AnchorId,
   type ComponentId,
@@ -77,6 +78,7 @@ import {
 } from "../clipboard";
 import { cursorToCSS } from "../styles/cursor";
 import { Hover } from "./Hover";
+import { Snapping } from "./Snapping";
 import { Renderer } from "./rendering/Renderer";
 import { Scene } from "./Scene";
 import type { Canvas2DSurface, MarkerCanvasSurface } from "./rendering/CanvasSurface";
@@ -93,9 +95,7 @@ import type { Glyph, GlyphLayer } from "../model/Glyph";
 import type { DeleteMode, GlyphGeometrySelection } from "../../types/glyph";
 import type { Modifiers } from "../tools/core/GestureDetector";
 import { Text } from "../text/Text";
-import { TextRuns } from "../text/TextRuns";
-import { TextRun } from "../text/TextRun";
-import { glyphTextItem, Positioner } from "../text/layout";
+import { TextEditing } from "../text/TextEditing";
 
 import type { ToolManifest, ToolShortcutEntry } from "../../types/tools";
 import type { ToolStateScope } from "../../types/editor";
@@ -108,7 +108,7 @@ import type { ComponentTransformSelection } from "../../types/componentTransform
 import type { ComponentTargets } from "../../types/componentTargets";
 import type { PositionSelection } from "../../types/positionEdit";
 import type { ShiftObject } from "../../types/object";
-import type { ShiftEditorRecord } from "../../types/records";
+import type { ShiftEditorRecord, ShiftRecordId } from "../../types/records";
 import type { GlyphNode, NodeKind, ShiftNode } from "../../types/node";
 import {
   AnchorObject,
@@ -116,6 +116,7 @@ import {
   ContourObject,
   NodeObject,
   PointObject,
+  TextItemObject,
   SegmentObject,
 } from "../objects";
 import type { NodeDefinition } from "../nodes/NodeDefinition";
@@ -178,11 +179,14 @@ export class Editor {
   readonly editing: Editing;
   readonly history: EditorHistory;
   readonly hover: Hover;
+  /** Builds the snap targets tools use while moving or placing glyph points. */
+  readonly snapping: Snapping;
   readonly font: Font;
   /** Immutable persistence and editing capability; glyph edits still require an authored layer. */
   readonly sessionMode: FontSessionMode;
   readonly scene: Scene;
   readonly text: Text;
+  readonly textEditing: TextEditing;
   readonly #nodeDefinitions: NodeDefinitionByKind;
   readonly #store: ShiftStore<ShiftEditorRecord>;
   readonly #fontStore: FontStore;
@@ -227,8 +231,6 @@ export class Editor {
 
   #events: EventEmitter;
 
-  #textRuns: TextRuns;
-
   readonly gesture: EditorGesture;
   readonly input: EditorInput;
   #toolState: {
@@ -249,7 +251,10 @@ export class Editor {
     this.sessionMode = options.sessionMode;
     this.#store = new ShiftStore();
     this.#fontStore = options.fontStore;
-    this.scene = new Scene(this.#store);
+    this.scene = new Scene(
+      this.#store,
+      (node) => this.nodeDefinition(node.kind).references?.(node) ?? [],
+    );
 
     const initialExternalLocation = emptyExternalAxisLocation();
 
@@ -272,6 +277,7 @@ export class Editor {
       this.#editingSourceIdsCell,
     );
     this.text = new Text(this.#store, this);
+    this.textEditing = new TextEditing(this.#store, this);
 
     const GlyphDefinition = options.nodeDefinitions?.glyph ?? GlyphNodeDefinition;
     const TextRunDefinition = options.nodeDefinitions?.textRun ?? TextRunNodeDefinition;
@@ -296,7 +302,9 @@ export class Editor {
       this.#store,
       this.sessionMode === "workspace" ? this.font.editCoordinator : null,
     );
+    this.history.onCaptureFinishing((changed) => this.#runContentHooks(changed));
     this.hover = new Hover();
+    this.snapping = new Snapping(this);
     this.#selectionBounds = computed(
       () => {
         track(this.selection.stateCell);
@@ -369,8 +377,6 @@ export class Editor {
     );
 
     this.#clipboard = new Clipboard(options.clipboard);
-
-    this.#textRuns = new TextRuns(this, new Positioner());
 
     this.#renderer = new Renderer(this);
 
@@ -821,6 +827,17 @@ export class Editor {
       return null;
     }
 
+    if (isTextItemId(id)) {
+      const location = this.text.itemLocation(id);
+      const node = location ? this.scene.nodesReferencing(location.run.id)[0] : null;
+      if (!location || node?.kind !== "textRun") return null;
+
+      const { item } = location;
+      const glyphId =
+        item.kind === "glyph" ? (this.font.entryForName(item.glyphName)?.id ?? null) : null;
+      return new TextItemObject(node, id, glyphId);
+    }
+
     return null;
   }
 
@@ -968,55 +985,65 @@ export class Editor {
   }
 
   #layerForPoint(pointId: PointId): GlyphLayer | null {
-    const layerId = this.font.layerIdForPoint(pointId);
-    if (!layerId) return null;
-
-    const layer = this.#layerForId(layerId);
-    return layer?.point(pointId) ? layer : null;
+    return this.#authoredLayer(
+      this.font.layerIdForPoint(pointId),
+      (layer) => !!layer.point(pointId),
+    );
   }
 
   #layerForAnchor(anchorId: AnchorId): GlyphLayer | null {
-    const layerId = this.font.layerIdForAnchor(anchorId);
-    if (!layerId) return null;
-
-    const layer = this.#layerForId(layerId);
-    return layer?.anchor(anchorId) ? layer : null;
+    return this.#authoredLayer(
+      this.font.layerIdForAnchor(anchorId),
+      (layer) => !!layer.anchor(anchorId),
+    );
   }
 
   #layerForSegment(segmentId: SegmentId): GlyphLayer | null {
-    const layerId = this.font.layerIdForSegment(segmentId);
-    if (!layerId) return null;
-
-    const layer = this.#layerForId(layerId);
-    return layer?.segment(segmentId) ? layer : null;
+    return this.#authoredLayer(
+      this.font.layerIdForSegment(segmentId),
+      (layer) => !!layer.segment(segmentId),
+    );
   }
 
   #layerForContour(contourId: ContourId): GlyphLayer | null {
-    const layerId = this.font.layerIdForContour(contourId);
-    if (!layerId) return null;
+    return this.#authoredLayer(
+      this.font.layerIdForContour(contourId),
+      (layer) => !!layer.contour(contourId),
+    );
+  }
 
-    const layer = this.#layerForId(layerId);
-    return layer?.contour(contourId) ? layer : null;
+  /** Returns a loaded layer by id when it still holds the object the font indexed it for. */
+  #authoredLayer(
+    layerId: LayerId | null,
+    holds: (layer: GlyphLayer) => boolean,
+  ): GlyphLayer | null {
+    const layer = layerId ? this.#layerForId(layerId) : null;
+    return layer && holds(layer) ? layer : null;
   }
 
   #layerForId(layerId: LayerId): GlyphLayer | null {
-    for (const node of this.scene.nodesOfKind("glyph")) {
-      const layer = this.glyphForId(node.glyphId)?.layerForId(layerId);
-      if (layer) return layer;
-    }
+    const glyphId = this.font.glyphIdForLayer(layerId);
+    return glyphId ? (this.glyphForId(glyphId)?.layerForId(layerId) ?? null) : null;
+  }
 
+  /** Returns the glyph node showing a layer: one placing the layer's glyph at the layer's source. */
+  #placedGlyphNodeForLayer(layer: GlyphLayer): GlyphNode | null {
+    const glyphId = this.font.glyphIdForLayer(layer.id);
+    if (!glyphId) return null;
+
+    for (const node of this.scene.nodesReferencing(glyphId)) {
+      if (node.kind === "glyph" && node.sourceId === layer.sourceId) return node;
+    }
     return null;
   }
 
-  #placedGlyphNodeForLayer(layer: GlyphLayer): GlyphNode | null {
-    for (const node of this.scene.nodesOfKind("glyph")) {
-      if (node.sourceId !== layer.sourceId) continue;
-
-      const nodeLayer = this.#fontStore.glyphForId(node.glyphId)?.layerForSource(node.sourceId);
-      if (nodeLayer?.id === layer.id) return node;
-    }
-
-    return null;
+  /**
+   * Returns a loaded glyph's layer at a source.
+   *
+   * @returns null when the glyph is not loaded or has no layer at that source.
+   */
+  layerForGlyph(glyphId: GlyphId, sourceId: SourceId): GlyphLayer | null {
+    return this.glyphForId(glyphId)?.layerForSource(sourceId) ?? null;
   }
 
   /**
@@ -1207,7 +1234,7 @@ export class Editor {
     const [node] = glyphNodes;
     if (!node) return;
 
-    const layer = this.#fontStore.glyphForId(node.glyphId)?.layerForSource(sourceId);
+    const layer = this.layerForGlyph(node.glyphId, sourceId);
     if (!layer) return;
 
     this.history.capture("Select all", () => {
@@ -1400,28 +1427,6 @@ export class Editor {
     this.setExternalLocation(this.font.defaultLocation());
   }
 
-  public get textRuns(): TextRuns {
-    return this.#textRuns;
-  }
-
-  /** The currently-active text run. Convenience for `editor.textRuns.active`. */
-  public get textRun(): TextRun {
-    return this.#textRuns.active;
-  }
-
-  /** Resolve a unicode codepoint to a glyph item and insert into the active text run. */
-  public insertTextCodepoint(codepoint: number): void {
-    const handle = this.font.glyphHandleForUnicode(codepoint);
-    if (!handle) return;
-    const record = this.font.recordForName(handle.name);
-    if (record) {
-      this.font.loadGlyph(record.id).catch((error) => {
-        console.error("failed to load inserted text glyph", error);
-      });
-    }
-    this.textRun.insert(glyphTextItem(handle.name, codepoint));
-  }
-
   public getToolState(scope: ToolStateScope, toolId: string, key: string): unknown {
     return this.#getToolScopeMap(scope).get(this.#toolStateKey(toolId, key));
   }
@@ -1440,12 +1445,13 @@ export class Editor {
   }
 
   /**
-   * Returns the transform from a node's own units to scene space, read without tracking.
+   * Returns the transform from a node's own units to scene space.
    *
    * @remarks
    * Places the node's frame through its ancestors' frames, then applies the
    * node's own units. Callers that need to redraw on placement changes track
-   * `scene.cell`.
+   * `scene.cell`; a parent that lays out its children (a text run) tracks its
+   * own layout when read inside a reactive boundary.
    *
    * @param node - a node in the scene; its ancestors are resolved by `parentId`.
    */
@@ -1495,6 +1501,23 @@ export class Editor {
   }
 
   /**
+   * Returns the canvas rectangle currently on screen in a node's own units, read without tracking.
+   *
+   * @param node - the node whose units the result is measured in.
+   * @returns null before the canvas has a size, when nothing is known to be on screen.
+   */
+  visibleLocalBounds(node: ShiftNode): LocalBounds | null {
+    if (this.#camera.logicalWidth <= 0 || this.#camera.logicalHeight <= 0) return null;
+
+    const visible = this.#camera.visibleSceneBounds(0);
+    const bounds = Bounds.create(
+      { x: visible.minX, y: visible.minY },
+      { x: visible.maxX, y: visible.maxY },
+    );
+    return this.toLocalBounds(node, sceneBounds(bounds));
+  }
+
+  /**
    * Returns a scene-space displacement in a node's own units.
    *
    * @param node - the node whose units the result is measured in.
@@ -1529,14 +1552,62 @@ export class Editor {
    *
    * @remarks
    * Frames carry placement only. Each node's units apply to its own content and
-   * never to its children's frames.
+   * never to its children's frames. A parent that lays out its children
+   * supplies their positions through `NodeDefinition.childPosition`.
    */
   #frameToScene(node: ShiftNode): Mat {
-    const position = Mat.Translate(node.position.x, node.position.y);
     const parent = this.scene.node(node.parentId);
-    if (!parent) return position;
+    if (!parent) return Mat.Translate(node.position.x, node.position.y);
 
-    return Mat.Compose(this.#frameToScene(parent), position);
+    const position = this.nodeDefinition(parent.kind).childPosition(parent, node) ?? node.position;
+    return Mat.Compose(this.#frameToScene(parent), Mat.Translate(position.x, position.y));
+  }
+
+  /**
+   * Makes a node the one being edited, clearing selection and hover.
+   *
+   * @remarks
+   * The selection belonged to whatever was edited before. All three are
+   * session records, so inside a capture undo restores the previous node and
+   * its selection together.
+   */
+  enterNode(nodeId: NodeId): void {
+    this.selection.clear();
+    this.hover.clear();
+    this.editing.enter(nodeId);
+  }
+
+  /**
+   * Offers a double-click to the hit node's definition, then to each ancestor's.
+   *
+   * @returns true when a definition handled it.
+   */
+  doubleClickNode(target: PointerTarget): boolean {
+    const hit = targetNode(this.scene, target);
+    if (!hit) return false;
+
+    return this.history.captureOrJoin("Double-click", () => {
+      for (const node of [hit, ...this.scene.ancestors(hit.id)]) {
+        if (this.nodeDefinition(node.kind).onDoubleClick?.(node, target)) return true;
+      }
+      return false;
+    });
+  }
+
+  #runContentHooks(changed: ReadonlySet<ShiftRecordId>): void {
+    const touched = new Set<ShiftNode>();
+    for (const id of changed) {
+      const node = isNodeId(id) ? this.scene.node(id) : null;
+      if (node) touched.add(node);
+      for (const dependent of this.scene.nodesReferencing(id)) touched.add(dependent);
+    }
+
+    for (const node of touched) {
+      if (!this.scene.node(node.id)) continue;
+
+      const definition = this.nodeDefinition(node.kind);
+      if (definition.onContentChange) definition.onContentChange(node);
+    }
   }
 
   getPointerTarget(point: ScenePoint): PointerTarget {
@@ -1602,7 +1673,7 @@ export class Editor {
     const [node] = glyphNodes;
     if (!node) return 0;
 
-    return this.#fontStore.glyphForId(node.glyphId)?.layerForSource(sourceId)?.xAdvance ?? 0;
+    return this.layerForGlyph(node.glyphId, sourceId)?.xAdvance ?? 0;
   }
 
   /**
@@ -1620,7 +1691,7 @@ export class Editor {
     const [node] = glyphNodes;
     if (!node) return;
 
-    this.#fontStore.glyphForId(node.glyphId)?.layerForSource(sourceId)?.setXAdvance(width);
+    this.layerForGlyph(node.glyphId, sourceId)?.setXAdvance(width);
   }
 
   /**
@@ -1638,7 +1709,7 @@ export class Editor {
     const [node] = glyphNodes;
     if (!node) return;
 
-    this.#fontStore.glyphForId(node.glyphId)?.layerForSource(sourceId)?.setLeftSidebearing(value);
+    this.layerForGlyph(node.glyphId, sourceId)?.setLeftSidebearing(value);
   }
 
   /**
@@ -1656,7 +1727,7 @@ export class Editor {
     const [node] = glyphNodes;
     if (!node) return;
 
-    this.#fontStore.glyphForId(node.glyphId)?.layerForSource(sourceId)?.setRightSidebearing(value);
+    this.layerForGlyph(node.glyphId, sourceId)?.setRightSidebearing(value);
   }
 
   public get screenMousePositionCell(): Signal<ScreenPoint> {
@@ -1734,6 +1805,12 @@ export class Editor {
    */
   public fitInitialBounds(bounds: SceneBounds): void {
     this.#camera.fitInitialBounds(bounds);
+  }
+
+  /** Frames a glyph node's editing frame (`GlyphNodeDefinition.frameBounds`) until the user moves the camera. */
+  public fitGlyphFrame(node: GlyphNode): void {
+    const frame = this.nodeDefinition("glyph").frameBounds(node);
+    if (frame) this.fitInitialBounds(this.toSceneBounds(node, frame));
   }
 
   /**
@@ -1883,7 +1960,7 @@ export class Editor {
     const [node] = glyphNodes;
     if (!node) return null;
 
-    const layer = this.#fontStore.glyphForId(node.glyphId)?.layerForSource(sourceId);
+    const layer = this.layerForGlyph(node.glyphId, sourceId);
     if (!layer) return null;
 
     const inserted: SelectableId[] = [];
@@ -2086,7 +2163,7 @@ export class Editor {
     const [node] = glyphNodes;
     if (!node) return;
 
-    const layer = this.#fontStore.glyphForId(node.glyphId)?.layerForSource(sourceId);
+    const layer = this.layerForGlyph(node.glyphId, sourceId);
     if (!layer || !layer.contour(contourIdA) || !layer.contour(contourIdB)) return;
 
     await this.history.captureAsync("Boolean operation", async () => {
@@ -2117,6 +2194,7 @@ export class Editor {
     this.#multiSourceEditing.dispose();
     this.#renderer.destroy();
     this.#toolManager.dispose();
+    this.text.dispose();
     this.history.dispose();
     this.#handlesCell.set(new Map());
     this.#events.dispose();
@@ -2128,5 +2206,21 @@ export class Editor {
 
   #getToolScopeMap(scope: ToolStateScope): Map<string, unknown> {
     return this.#toolState[scope];
+  }
+}
+
+/** The node a pointer target belongs to, or null for blank canvas. */
+function targetNode(scene: Scene, target: PointerTarget): ShiftNode | null {
+  switch (target.kind) {
+    case "canvas":
+      return null;
+    case "node":
+    case "text":
+      return target.node;
+    case "point":
+    case "anchor":
+    case "segment":
+    case "component":
+      return scene.node(target.nodeId);
   }
 }

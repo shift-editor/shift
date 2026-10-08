@@ -1,11 +1,15 @@
 import { mintNodeId, type NodeId } from "@shift/types";
+import { Tree } from "../utils/Tree";
 import { computed, type Signal } from "../signals/index";
 import type { ShiftStore } from "../store/ShiftStore";
-import type { ShiftEditorRecord, ShiftNodeRecord } from "../../types/records";
+import type { StoreIndex } from "../store/StoreIndex";
+import type { NodeReference, ShiftEditorRecord, ShiftNodeRecord } from "../../types/records";
 import type { CreateNode, ShiftNode, UpdateNode } from "../../types/node";
 
 export interface SceneValue {
+  /** Every node, parents before children, siblings by `index`. */
   readonly nodes: readonly ShiftNode[];
+  readonly tree: Tree<NodeId, ShiftNode>;
 }
 
 /**
@@ -19,18 +23,30 @@ export class Scene {
   readonly #cell: Signal<SceneValue>;
   readonly #nodesById: Signal<ReadonlyMap<NodeId, ShiftNode>>;
   readonly #nodesByKind: Signal<ReadonlyMap<ShiftNode["kind"], readonly ShiftNode[]>>;
+  readonly #byReference: StoreIndex<NodeReference, ShiftNodeRecord>;
 
-  constructor(store: ShiftStore<ShiftEditorRecord>) {
+  /**
+   * @param store - editor store holding node records.
+   * @param references - what a node depends on; usually its definition's `references`.
+   */
+  constructor(
+    store: ShiftStore<ShiftEditorRecord>,
+    references: (node: ShiftNode) => readonly NodeReference[] = () => [],
+  ) {
     this.#store = store;
+    this.#byReference = store.index("node", references);
     this.#cell = computed(
       () => {
-        const nodes: ShiftNodeRecord[] = [];
-        for (const record of this.#store.cell.value.values()) {
-          if (record.type === "node") nodes.push(record);
-        }
-
-        return { nodes };
+        const nodes = this.#store.recordsOfType("node");
+        const tree = Tree.from<NodeId, ShiftNode>(nodes, {
+          id: (node) => node.id,
+          parentId: (node) => node.parentId,
+          order: (a, b) => compareIndex(a.index, b.index),
+        });
+        return { nodes: tree.walk(), tree };
       },
+      // Reads only node records, so selection, editing, and run writes to the shared store
+      // never rebuild the scene.
       { name: "editor.scene" },
     );
     this.#nodesById = computed(
@@ -68,6 +84,14 @@ export class Scene {
     return this.#cell.peek();
   }
 
+  /**
+   * Returns every node with each parent before its children.
+   *
+   * @remarks
+   * Drawing in this order paints children over their parent; hit testing in
+   * reverse tries children first. A node whose parent is missing is treated as
+   * a root.
+   */
   nodes(): readonly ShiftNode[] {
     return this.#cell.peek().nodes;
   }
@@ -76,6 +100,34 @@ export class Scene {
     if (!nodeId) return null;
 
     return this.#nodesById.peek().get(nodeId) ?? null;
+  }
+
+  /**
+   * Returns the nodes that depend on a record or glyph.
+   *
+   * @remarks
+   * A node depends on whatever its definition's `references` names: a text
+   * run node on its run record, a glyph node on its glyph. Reactive: inside a
+   * computed or effect, the reader reruns only when the nodes filed under `id`
+   * change.
+   */
+  nodesReferencing(id: NodeReference): readonly ShiftNode[] {
+    return this.#byReference.get(id);
+  }
+
+  /** Returns a node's children, ordered by `index`. */
+  children(nodeId: NodeId): readonly ShiftNode[] {
+    return this.#cell.peek().tree.children(nodeId);
+  }
+
+  /** Yields a node's ancestors, nearest first. */
+  ancestors(nodeId: NodeId): Iterable<ShiftNode> {
+    return this.#cell.peek().tree.ancestors(nodeId);
+  }
+
+  /** Returns a node's parent, or null for root nodes. */
+  parent(nodeId: NodeId): ShiftNode | null {
+    return this.#cell.peek().tree.parent(nodeId);
   }
 
   nodeOfKind<K extends ShiftNode["kind"]>(
@@ -154,6 +206,11 @@ export class Scene {
 
     return `a${siblingCount}`;
   }
+}
+
+function compareIndex(a: string, b: string): number {
+  if (a === b) return 0;
+  return a < b ? -1 : 1;
 }
 
 function copyNode<T extends ShiftNode>(node: T): T {

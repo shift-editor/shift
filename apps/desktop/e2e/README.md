@@ -15,7 +15,7 @@ Run commands from the repository root:
 | `pnpm test:e2e:platform`      | Run cross-platform desktop integration tests             |
 | `pnpm test:e2e:perf`          | Run Playwright performance measurements                  |
 
-The default command runs `visual` and `gpu` on macOS, and `platform` on Linux and Windows. Performance measurements are always opt-in.
+The default command runs `visual`, `platform`, and `gpu` on macOS, and `platform` on Linux and Windows. Performance measurements are always opt-in.
 
 `pnpm typecheck` checks every E2E spec and fixture plus `playwright.config.ts` through the desktop TypeScript configuration. Playwright transpiles tests without typechecking, so run this check before E2E execution to catch stale runtime API calls.
 
@@ -56,14 +56,14 @@ Do not update snapshots merely to make a failure pass. Inspect the diff and conf
 
 ## Projects and fixtures
 
-| Project    | Fixture                   | Rendering                                         | CI policy                                    |
-| ---------- | ------------------------- | ------------------------------------------------- | -------------------------------------------- |
-| `visual`   | `fixtures/electronApp.ts` | Software rendering, DPR 1, `1200×600` page window | Required on macOS in the merge queue         |
-| `platform` | `fixtures/electronApp.ts` | Software rendering, DPR 1, native window geometry | Required on Windows/Linux in the merge queue |
-| `gpu`      | `fixtures/perfApp.ts`     | Hardware GPU, host scale, stable content size     | Required on macOS in the merge queue         |
-| `perf`     | `fixtures/perfApp.ts`     | Hardware GPU, host scale, stable content size     | Nightly and manual only                      |
+| Project    | Fixture                   | Rendering                                         | CI policy                                                                                |
+| ---------- | ------------------------- | ------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `visual`   | `fixtures/electronApp.ts` | Software rendering, DPR 1, `1200×600` page window | Every pull request, macOS                                                                |
+| `platform` | `fixtures/electronApp.ts` | Software rendering, DPR 1, native window geometry | Linux on every pull request; `@os` tests on macOS too, and on Windows in the merge queue |
+| `gpu`      | `fixtures/perfApp.ts`     | Hardware GPU, host scale, stable content size     | Merge queue, macOS                                                                       |
+| `perf`     | `fixtures/perfApp.ts`     | Hardware GPU, host scale, stable content size     | Nightly and manual only                                                                  |
 
-Project membership is an explicit list of spec files in `apps/desktop/playwright.config.ts` (`VISUAL_SPECS`, `PLATFORM_SPECS`, `GPU_SPECS`, `PERF_SPECS`). Add a new spec to the list for the environment it needs: `visual` for renderer, interaction, and golden behavior; `platform` for native desktop boundaries; `gpu` only for hardware rendering and residency. Platform specs also run in `visual`, because macOS has no separate platform job. `node scripts/check-e2e-projects.mjs` runs in the Linux E2E build job and fails when a spec belongs to no project or a golden bypasses `fixtures/snapshots.ts`.
+Project membership is an explicit list of spec files in `apps/desktop/playwright.config.ts` (`VISUAL_SPECS`, `PLATFORM_SPECS`, `GPU_SPECS`, `PERF_SPECS`). Add a new spec to the list for the environment it needs: `visual` for renderer, interaction, and golden behavior; `platform` for native desktop boundaries; `gpu` only for hardware rendering and residency. CI runs `visual` tests two at a time (`E2E_WORKERS=2`); every test launches its own app with its own user-data directory, so a visual test must not depend on OS focus, the clipboard, or another app's state. `platform` tests need the focus and clipboard, so that project always runs one at a time. Linux runs the whole `platform` project. Tag a platform test `@os` (`test(title, { tag: "@os" }, …)`) only when its behavior differs by OS — window controls and geometry, quit and termination signals, native menus, file activation and paths, crash recovery — because macOS (after its visual tests) and Windows run only `@os` tests. Pull requests skip Windows and `gpu`; the merge queue runs every target, and Markdown or `docs/` changes skip E2E. `node scripts/check-e2e-projects.mjs` runs in the Linux E2E build job and fails when a spec belongs to no project or a golden bypasses `fixtures/snapshots.ts`.
 
 The shared fixture option `windowSizing` defaults to `"visual"` in the visual project and `"native"` elsewhere. `prepareWindow` waits for visibility and DOM readiness in both modes, but only visual mode unmaximizes and normalizes the renderer viewport. Platform workflows wait for their relevant controls or workspace readiness without depending on exact snapshot dimensions. Recovery launches use the same policy on every restart. GPU and performance fixture sizing is unchanged.
 

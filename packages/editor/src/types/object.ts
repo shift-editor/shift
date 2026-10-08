@@ -3,15 +3,17 @@ import type {
   AnchorId,
   ComponentId,
   ContourId,
+  GlyphId,
   NodeId,
   PointId,
   SegmentId,
   ShiftId,
+  TextItemId,
 } from "@shift/types";
 import type { LocalBounds } from "./coordinates";
 import type { GlyphLayer } from "../lib/model/Glyph";
 import type { ComponentGlyph } from "../lib/model/ComponentGlyph";
-import type { GlyphNode, ShiftNode } from "./node";
+import type { GlyphNode, ShiftNode, TextRunNode } from "./node";
 
 declare const SelectionIdBrand: unique symbol;
 
@@ -141,6 +143,13 @@ export interface ShiftObjectKindMap {
     readonly component: ComponentGlyph;
     readonly componentId: ComponentId;
     readonly componentPath: readonly ComponentId[];
+  };
+
+  readonly textItem: ShiftObjectBase<"textItem", TextItemId> & {
+    readonly node: TextRunNode;
+    readonly itemId: TextItemId;
+    /** Glyph shown by the item; null for line breaks and unresolved names. */
+    readonly glyphId: GlyphId | null;
   };
 }
 

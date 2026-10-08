@@ -1,5 +1,5 @@
 export { Font } from "./lib/model/Font";
-export { FontStore } from "./lib/model/FontStore";
+export { FontStore, type GlyphInvalidation } from "./lib/model/FontStore";
 export { Glyph, GlyphLayer, GlyphRenderModel } from "./lib/model/Glyph";
 export { GlyphLayerState } from "./lib/model/GlyphLayerState";
 export { RenderGlyph } from "./lib/model/RenderGlyph";
@@ -7,7 +7,9 @@ export {
   AngleSnap,
   DirectionSnap,
   MetricSnap,
+  PointAlignmentSnap,
   PointRuleConstraint,
   PositionEdits,
   PositionReference,
+  SnapSet,
 } from "./lib/model/positions";

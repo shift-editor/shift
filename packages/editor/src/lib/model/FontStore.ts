@@ -43,11 +43,20 @@ import type { Glyph } from "./Glyph";
  * `WorkspaceEditCoordinator`. This store materializes returned glyph snapshots
  * into layer state and indexes objects from that concrete state.
  */
+/**
+ * Glyphs whose committed outlines changed, published once per commit. A new object each time,
+ * so an unchanged list (including `null`) still notifies.
+ */
+export interface GlyphInvalidation {
+  /** Changed glyph roots and their dependents, or `null` when every glyph may have changed. */
+  readonly glyphIds: readonly GlyphId[] | null;
+}
+
 export class FontStore {
   readonly #font: WritableSignal<FontSnapshot | null>;
   readonly #workspace: WritableSignal<WorkspaceSnapshot | null>;
-  readonly #committedFont: WritableSignal<FontStore>;
-  readonly #invalidGlyphIds: WritableSignal<readonly GlyphId[] | null>;
+  readonly #committedRevision: WritableSignal<number>;
+  readonly #invalidGlyphs: WritableSignal<GlyphInvalidation>;
 
   /**
    * Object ownership lookups over concrete layer structure.
@@ -85,15 +94,11 @@ export class FontStore {
       name: "fontStore.font",
     });
     this.#workspace = signal(workspace, { name: "fontStore.workspace" });
-    this.#committedFont = signal(this, {
-      name: "fontStore.committedFont",
-      // The store is a stable mutable font owner; every committed write invalidates dependents.
-      equals: () => false,
-    });
-    this.#invalidGlyphIds = signal<readonly GlyphId[] | null>(null, {
-      name: "fontStore.invalidGlyphIds",
-      equals: () => false,
-    });
+    this.#committedRevision = signal(0, { name: "fontStore.committedRevision" });
+    this.#invalidGlyphs = signal<GlyphInvalidation>(
+      { glyphIds: null },
+      { name: "fontStore.invalidGlyphs" },
+    );
     if (workspace) {
       this.#indexCell.set(workspaceRecordIndex(workspace));
     } else if (font) {
@@ -110,13 +115,18 @@ export class FontStore {
   }
 
   /** Lightweight dependency for every committed native font change. */
-  get committedFontCell(): Signal<FontStore> {
-    return this.#committedFont;
+  get committedRevisionCell(): Signal<number> {
+    return this.#committedRevision;
   }
 
   /** Glyph roots whose resident atlas entries no longer match the committed font. */
-  get invalidGlyphIdsCell(): Signal<readonly GlyphId[] | null> {
-    return this.#invalidGlyphIds;
+  get invalidGlyphsCell(): Signal<GlyphInvalidation> {
+    return this.#invalidGlyphs;
+  }
+
+  /** Returns the glyph that owns a layer, from the glyph directory; the glyph need not be loaded. */
+  glyphIdForLayer(layerId: LayerId): GlyphId | null {
+    return this.#indexCell.peek().glyphByLayer.get(layerId) ?? null;
   }
 
   layerIdForPoint(pointId: PointId): LayerId | null {
@@ -157,8 +167,8 @@ export class FontStore {
       this.#interpolationBases.clear();
       this.#clearGlyphs();
     });
-    this.#invalidGlyphIds.set(null);
-    this.#committedFont.set(this);
+    this.#invalidGlyphs.set({ glyphIds: null });
+    this.#committedRevision.update((revision) => revision + 1);
   }
 
   replaceFont(snapshot: FontSnapshot): void {
@@ -171,8 +181,8 @@ export class FontStore {
       this.#interpolationBases.clear();
       this.#clearGlyphs();
     });
-    this.#invalidGlyphIds.set(null);
-    this.#committedFont.set(this);
+    this.#invalidGlyphs.set({ glyphIds: null });
+    this.#committedRevision.update((revision) => revision + 1);
   }
 
   applyGlyphSnapshots(snapshots: readonly GlyphSnapshot[]): void {
@@ -305,7 +315,7 @@ export class FontStore {
           cell.set(null);
           this.#glyphCells.delete(glyphId);
         }
-        if (next?.axes || next?.sources) this.#interpolationBases.clear();
+        if (next?.axes || next?.sources || next?.axisMappingBases) this.#interpolationBases.clear();
 
         for (const [layerId, cell] of this.#layerStateCells) {
           if (index.glyphByLayer.has(layerId)) continue;
@@ -340,14 +350,14 @@ export class FontStore {
       }
     });
 
-    if (applied.next?.axes || applied.next?.sources) {
-      this.#invalidGlyphIds.set(null);
+    if (applied.next?.axes || applied.next?.sources || applied.next?.axisMappingBases) {
+      this.#invalidGlyphs.set({ glyphIds: null });
     } else if (invalidGlyphIds.size > 0) {
-      this.#invalidGlyphIds.set([...invalidGlyphIds]);
+      this.#invalidGlyphs.set({ glyphIds: [...invalidGlyphIds] });
     }
-    this.#committedFont.set(this);
+    this.#committedRevision.update((revision) => revision + 1);
 
-    if (applied.next?.axes || applied.next?.sources) {
+    if (applied.next?.axes || applied.next?.sources || applied.next?.axisMappingBases) {
       return this.#residentProjectionGlyphIds();
     }
 
