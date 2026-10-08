@@ -463,12 +463,15 @@ export class Font {
     nearestSource(location: ExternalAxisLocation): Source | null;
     nextAvailableGlyphName(name: GlyphName): GlyphName;
     pointIdsForSegment(segmentId: SegmentId): readonly PointId[] | null;
+    // Warning: (ae-forgotten-export) The symbol "KerningValueEdit" needs to be exported by the entry point index.d.ts
+    previewKerning(edits: readonly KerningValueEdit[]): void;
     primaryUnicodeForName(name: GlyphName): Unicode | null;
     // (undocumented)
     recordForId(glyphId: GlyphId): GlyphRecord | null;
     // (undocumented)
     recordForName(name: GlyphName): GlyphRecord | null;
     setAxisMappings(mappings: readonly AxisMapping[]): Promise<void>;
+    setKerningValues(edits: readonly KerningValueEdit[], label: string): Promise<void>;
     setLanguageIds(languageIds: readonly string[]): void;
     setMetricDefinitions(definitions: readonly MetricDefinition[]): Promise<void>;
     source(sourceId: SourceId): Source | null;
@@ -736,10 +739,10 @@ export function useSignalState<T>(signal: Signal<T>, options?: UseSignalOptions)
 
 // Warnings were encountered during analysis:
 //
-// dist/Editor-Bj4u1bMR.d.ts:2680:5 - (ae-forgotten-export) The symbol "Axis" needs to be exported by the entry point index.d.ts
-// dist/Editor-Bj4u1bMR.d.ts:2681:5 - (ae-forgotten-export) The symbol "AxisMappingBasis" needs to be exported by the entry point index.d.ts
-// dist/Editor-Bj4u1bMR.d.ts:2682:5 - (ae-forgotten-export) The symbol "Source" needs to be exported by the entry point index.d.ts
-// dist/Editor-Bj4u1bMR.d.ts:4445:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
+// dist/Editor-CH8VAr_t.d.ts:2693:5 - (ae-forgotten-export) The symbol "Axis" needs to be exported by the entry point index.d.ts
+// dist/Editor-CH8VAr_t.d.ts:2694:5 - (ae-forgotten-export) The symbol "AxisMappingBasis" needs to be exported by the entry point index.d.ts
+// dist/Editor-CH8VAr_t.d.ts:2695:5 - (ae-forgotten-export) The symbol "Source" needs to be exported by the entry point index.d.ts
+// dist/Editor-CH8VAr_t.d.ts:4458:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

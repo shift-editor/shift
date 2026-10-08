@@ -62,7 +62,7 @@ impl ShiftStore {
 
         let tracks_workspace = self.tracks_workspace();
         let tx = self.conn.transaction()?;
-        for priority in 0..8 {
+        for priority in 0..=8 {
             for change in &change_set.changes {
                 if change_priority(change) == priority {
                     apply_change(&tx, change)?;
@@ -306,6 +306,7 @@ fn change_priority(change: &font::FontChange) -> usize {
         font::FontChange::Sources(_) => 5,
         font::FontChange::Glyph(_) => 6,
         font::FontChange::Layer { .. } => 7,
+        font::FontChange::KerningValue { .. } => 8,
     }
 }
 
@@ -324,7 +325,82 @@ fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), S
         font::FontChange::Layer {
             glyph_id, layer, ..
         } => replace_layer(tx, glyph_id, layer),
+        font::FontChange::KerningValue {
+            source_id,
+            pair,
+            value,
+        } => write_kerning_value(tx, source_id, pair, value.after),
     }
+}
+
+/// Upserts or deletes one source's value for one kerning pair.
+fn write_kerning_value(
+    tx: &Transaction<'_>,
+    source_id: &font::SourceId,
+    pair: &font::KerningPair,
+    value: Option<f64>,
+) -> Result<(), StoreError> {
+    let (first_kind, first_value) = kerning_side_parts(&pair.first);
+    let (second_kind, second_value) = kerning_side_parts(&pair.second);
+    match value {
+        Some(value) => {
+            tx.execute(
+                "
+                INSERT INTO kerning_pairs (
+                    source_id, first_kind, first_value, second_kind, second_value, value
+                )
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                ON CONFLICT (source_id, first_kind, first_value, second_kind, second_value)
+                DO UPDATE SET value = excluded.value
+                ",
+                params![
+                    source_id.as_str(),
+                    first_kind,
+                    first_value,
+                    second_kind,
+                    second_value,
+                    value
+                ],
+            )?;
+        }
+        None => {
+            tx.execute(
+                "
+                DELETE FROM kerning_pairs
+                WHERE source_id = ?1
+                  AND first_kind = ?2 AND first_value = ?3
+                  AND second_kind = ?4 AND second_value = ?5
+                ",
+                params![
+                    source_id.as_str(),
+                    first_kind,
+                    first_value,
+                    second_kind,
+                    second_value
+                ],
+            )?;
+        }
+    }
+    Ok(())
+}
+
+/// Replaces every stored pair of `source_id` with its values in `kerning`.
+pub(crate) fn replace_source_kerning(
+    tx: &Transaction<'_>,
+    kerning: &font::Kerning,
+    source_id: &font::SourceId,
+) -> Result<(), StoreError> {
+    tx.execute(
+        "DELETE FROM kerning_pairs WHERE source_id = ?1",
+        [source_id.as_str()],
+    )?;
+    let Some(pairs) = kerning.source(source_id) else {
+        return Ok(());
+    };
+    for (pair, value) in pairs.pairs() {
+        write_kerning_value(tx, source_id, pair, Some(value))?;
+    }
+    Ok(())
 }
 
 fn replace_axes(tx: &Transaction<'_>, axes: &[font::Axis]) -> Result<(), StoreError> {

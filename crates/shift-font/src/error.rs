@@ -213,6 +213,15 @@ pub enum CoreError {
 
     #[error("cannot delete the last source")]
     CannotDeleteLastSource,
+
+    #[error("kerning group {name:?} does not exist for the {position:?} pair position")]
+    KerningGroupNotFound {
+        position: crate::KerningPosition,
+        name: String,
+    },
+
+    #[error("kerning value {0} is not finite")]
+    InvalidKerningValue(f64),
 }
 
 pub type CoreResult<T> = Result<T, CoreError>;
