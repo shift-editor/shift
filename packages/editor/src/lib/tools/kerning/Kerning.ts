@@ -13,6 +13,7 @@ import {
 import { kerningLabelLayout } from "./KerningLabel";
 import { drawKerningPair } from "./KerningOverlay";
 import { RunKerning, type KerningPair } from "./RunKerning";
+import { trackRunLayouts } from "../spacing/RunSpacing";
 import type { KerningBehavior, KerningState } from "./types";
 
 /**
@@ -120,6 +121,9 @@ export class KerningTool extends BaseTool<KerningState, KerningTool> {
   }
 
   override drawOverlay(canvas: Canvas): void {
+    // Runs inside the overlay's render effect: redraw when a run lays out
+    // again, which follows source, location, kerning, and outline changes.
+    trackRunLayouts(this.editor);
     const state = this.getState();
     switch (state.type) {
       case "idle":

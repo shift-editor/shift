@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { resolve } from "node:path";
 import type { GlyphName } from "@shift/types";
 import { glyphTextItem } from "@shift/editor/text";
-import type { KerningTool } from "@shift/editor/tools";
+import { trackRunLayouts, type KerningTool } from "@shift/editor/tools";
+import { effect } from "@shift/editor/signals";
 import { TestEditor } from "@/testing/TestEditor";
 
 const MUTATOR_SANS = resolve(
@@ -122,6 +123,20 @@ describe("Kerning tool", () => {
     await editor.click(screen.x, screen.y);
 
     expect(tool().currentPair?.amount).toBe(-75);
+  });
+
+  it("redraws its overlay when the active source changes", () => {
+    const drawn: number[] = [];
+    const overlay = effect(() => {
+      trackRunLayouts(editor);
+      drawn.push(placed()[1]!.left);
+    });
+
+    editor.selectSource(editor.font.sources.find((source) => source.name === "BoldWide")!.id);
+    overlay.dispose();
+
+    expect(drawn).toHaveLength(2);
+    expect(drawn[1]).not.toBe(drawn[0]);
   });
 
   it("shares the Spacing slot and answers to K", () => {

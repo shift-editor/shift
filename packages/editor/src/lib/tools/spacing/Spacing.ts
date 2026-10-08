@@ -10,7 +10,7 @@ import {
   SpacingNudge,
   SpacingSelectClick,
 } from "./behaviors";
-import { RunSpacing, type SpacingHalf } from "./RunSpacing";
+import { RunSpacing, trackRunLayouts, type SpacingHalf } from "./RunSpacing";
 import { spacingLabelRect } from "./SpacingLabel";
 import { drawSpacingGap } from "./SpacingGapOverlay";
 import type { SpacingBehavior, SpacingState } from "./types";
@@ -106,6 +106,9 @@ export class SpacingTool extends BaseTool<SpacingState, SpacingTool> {
   }
 
   override drawOverlay(canvas: Canvas): void {
+    // Runs inside the overlay's render effect: redraw when a run lays out
+    // again, which follows source, location, and outline changes.
+    trackRunLayouts(this.editor);
     const state = this.getState();
     switch (state.type) {
       case "idle":
