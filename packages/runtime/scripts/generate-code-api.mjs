@@ -13,7 +13,7 @@ try {
   run("pnpm", ["exec", "tsdown", "--config", "tsdown.config.ts"]);
   const declarations = await readFile(bundledPath, "utf8");
   const withoutSourceMap = declarations.replace(/^\/\/# sourceMappingURL=.*$/m, "").trim();
-  const generated = `${withoutSourceMap}\n\ndeclare global {\n  const shift: ShiftCapabilities;\n}\n`;
+  const generated = `${withoutSourceMap}\n\ndeclare global {\n  const shift: ShiftScript;\n}\n`;
 
   await writeFile(formattedPath, generated);
   run("pnpm", ["exec", "oxfmt", ".code-api/code-api.d.ts"]);

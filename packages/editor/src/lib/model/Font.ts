@@ -23,6 +23,7 @@ import type {
   ContourId,
   LayerId,
   LayerMatch,
+  LayerRead,
   Location,
   PointId,
   SegmentId,
@@ -618,47 +619,36 @@ export class Font {
    *
    * @remarks
    * Workspace reads follow pending writes; gesture previews are not included.
-   * The returned snapshots do not publish glyph models or mutate the font.
+   * Components are not resolved, so a layer whose component reference is
+   * broken stays readable. Nothing is published to the store.
    *
-   * @param input - Glyph IDs to read in order and an authored source identity.
-   * @returns One snapshot per glyph ID, or `null` when that glyph lacks a layer in a known source.
-   * @throws {Error} when workspace authorship is unavailable, an identity is unknown, or an advertised layer cannot be read.
+   * @param layerIds - Layer identities in the order results should follow.
+   * @returns One snapshot per requested layer.
+   * @throws {Error} when workspace authorship is unavailable or a layer identity is unknown.
    */
-  async readAuthoredLayers({
-    glyphIds,
-    sourceId,
-  }: {
-    glyphIds: readonly GlyphId[];
-    sourceId: SourceId;
-  }): Promise<readonly (GlyphLayerSnapshot | null)[]> {
+  async readLayers(layerIds: readonly LayerId[]): Promise<readonly GlyphLayerSnapshot[]> {
     if (!this.#editCoordinator) throw new Error("Authored layers are unavailable in this font");
 
-    const sourceIsKnown =
-      this.sources.some((source) => source.id === sourceId) ||
-      this.glyphRecords().some((glyph) =>
-        glyph.layers.some((layer) => layer.sourceId === sourceId),
-      );
-    if (!sourceIsKnown) throw new Error(`Source ${sourceId} is not in this font`);
+    return this.#editCoordinator.readLayers(layerIds);
+  }
 
-    const records = glyphIds.map((glyphId) => {
-      if (!this.entryForId(glyphId)) throw new Error(`Glyph ${glyphId} is not in this font`);
-      return this.recordForId(glyphId);
-    });
-    const requests = glyphIds
-      .filter((glyphId) =>
-        this.recordForId(glyphId)?.layers.some((layer) => layer.sourceId === sourceId),
-      )
-      .map((glyphId) => ({ glyphId }));
-    const snapshots = await this.#editCoordinator.readGlyphSnapshots(requests);
-    const byId = new Map(snapshots.map((snapshot) => [snapshot.glyphId, snapshot]));
+  /**
+   * Reads accepted authored layers together with their composited geometry.
+   *
+   * @remarks
+   * Each root keeps its exact authored geometry; components resolve at that
+   * layer's source and cyclic branches are skipped. Both halves come from
+   * one workspace read behind pending writes, never from gesture previews or
+   * published render models.
+   *
+   * @param layerIds - Layer identities in the order results should follow.
+   * @returns One authored snapshot and resolved geometry per requested layer.
+   * @throws {Error} when workspace authorship is unavailable, a layer identity is unknown, or a component cannot resolve.
+   */
+  async resolveLayers(layerIds: readonly LayerId[]): Promise<readonly LayerRead[]> {
+    if (!this.#editCoordinator) throw new Error("Authored layers are unavailable in this font");
 
-    return records.map((record) => {
-      if (!record?.layers.some((layer) => layer.sourceId === sourceId)) return null;
-
-      const layer = byId.get(record.id)?.layers.find((layer) => layer.sourceId === sourceId);
-      if (!layer) throw new Error(`Authored layer for glyph ${record.id} was not returned`);
-      return layer;
-    });
+    return this.#editCoordinator.resolveLayers(layerIds);
   }
 
   /**

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { GlyphGeometry } from "@shift/glyph-state";
-import { asAnchorId, asComponentId, asContourId, asPointId } from "@shift/types";
+import { asAnchorId, asComponentId, asContourId, asGlyphId, asPointId } from "@shift/types";
 import { renderLayerSvg } from "./renderLayerSvg";
 
 const metrics = {
@@ -33,21 +33,29 @@ const geometry = new GlyphGeometry(
   new Float64Array([500, 0, 0, 0, 100, 100, 100, 100, 0, 50, 120]),
 );
 
+const resolved = {
+  outline: {
+    svgPath: "M 0 0 C 0 100 100 100 100 0 L 0 0 Z",
+    bounds: { min: { x: 0, y: 0 }, max: { x: 100, y: 75 } },
+  },
+  components: [],
+};
+
 describe("authored layer SVG output", () => {
   it("includes paths and source-addressable proof overlays", () => {
-    const result = renderLayerSvg(
-      geometry,
+    const result = renderLayerSvg({
+      authored: geometry,
+      resolved,
       metrics,
-      {
+      overlays: {
         points: true,
         controlLines: true,
         anchors: true,
         fontMetrics: true,
         advanceWidth: true,
       },
-      [],
-      { outlineFill: "#123456", metricStroke: "#654321" },
-    );
+      appearance: { outlineFill: "#123456", metricStroke: "#654321" },
+    });
 
     expect(result.svg).toContain('data-shift-role="outline"');
     expect(result.svg).toContain('d="M 0 0 C 0 100 100 100 100 0 L 0 0 Z"');
@@ -65,26 +73,44 @@ describe("authored layer SVG output", () => {
     expect(result.viewBox[2]).toBeGreaterThan(500);
   });
 
-  it("renders resolved component outlines and direct component handles", () => {
+  it("fills the resolved outline and outlines each direct component subtree", () => {
     const componentId = asComponentId("component-1");
-    const result = renderLayerSvg(geometry, metrics, { components: true }, [
-      {
-        componentId,
-        parentPath: [],
-        contours: [{ svgPath: "M 600 0 L 700 0 L 700 100 Z" }],
-        bounds: { min: { x: 600, y: 0 }, max: { x: 700, y: 100 } },
-        resolvedTransform: { a: 1, b: 0, c: 0, d: 1, e: 600, f: 0 },
+    const result = renderLayerSvg({
+      authored: geometry,
+      resolved: {
+        outline: {
+          svgPath: "M 0 0 L 100 0 Z M 600 0 L 700 0 L 700 100 Z M 650 150 L 660 150 Z",
+          bounds: { min: { x: 0, y: 0 }, max: { x: 700, y: 150 } },
+        },
+        components: [
+          {
+            id: componentId,
+            baseGlyphId: asGlyphId("glyph-b"),
+            transformation: { xx: 1, xy: 0, yx: 0, yy: 1, dx: 600, dy: 0 },
+            outline: {
+              svgPath: "M 600 0 L 700 0 L 700 100 Z M 650 150 L 660 150 Z",
+              bounds: { min: { x: 600, y: 0 }, max: { x: 700, y: 150 } },
+            },
+          },
+        ],
       },
-    ]);
+      metrics,
+      overlays: { components: true },
+    });
 
-    expect(result.svg).toContain("M 600 0 L 700 0 L 700 100 Z");
+    expect(result.svg).toContain(
+      'd="M 0 0 L 100 0 Z M 600 0 L 700 0 L 700 100 Z M 650 150 L 660 150 Z"',
+    );
     expect(result.svg).toContain('data-shift-role="components"');
-    expect(result.svg).toContain('data-shift-id="component-1"');
+    expect(result.svg).toContain(
+      '<g data-shift-role="component" data-shift-id="component-1"><rect x="600" y="-150" width="100" height="150"',
+    );
+    expect(result.svg).toContain('<circle cx="600" cy="0"');
     expect(result.viewBox[0] + result.viewBox[2]).toBeGreaterThan(700);
   });
 
   it("keeps annotations opt-in", () => {
-    const result = renderLayerSvg(geometry, metrics);
+    const result = renderLayerSvg({ authored: geometry, resolved, metrics });
 
     expect(result.svg).toContain('data-shift-role="outline"');
     expect(result.svg).not.toContain('data-shift-role="points"');

@@ -59,6 +59,7 @@ export class SandboxRuntimeProcess {
       "shift.glyphs.get": (input) => this.#capabilities.glyphs.get(input),
       "shift.glyphs.resolve": (input) => this.#capabilities.glyphs.resolve(input),
       "shift.layers.get": (input) => this.#capabilities.layers.get(input),
+      "shift.layers.resolve": (input) => this.#capabilities.layers.resolve(input),
       "shift.layers.render": (input) => this.#capabilities.layers.render(input),
     });
 

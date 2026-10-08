@@ -932,12 +932,13 @@ export class App {
           ),
       },
       layers: {
-        get: ({ windowId, glyphId, sourceId, ifFontRevision }) =>
-          this.#windowForAgentRequest(windowId).agent.getLayer(glyphId, sourceId, ifFontRevision),
-        render: ({ windowId, glyphId, sourceId, overlays, appearance, ifFontRevision }) =>
+        get: ({ windowId, layerId, ifFontRevision }) =>
+          this.#windowForAgentRequest(windowId).agent.getLayer(layerId, ifFontRevision),
+        resolve: ({ windowId, layerId, ifFontRevision }) =>
+          this.#windowForAgentRequest(windowId).agent.resolveLayer(layerId, ifFontRevision),
+        render: ({ windowId, layerId, overlays, appearance, ifFontRevision }) =>
           this.#windowForAgentRequest(windowId).agent.renderLayer(
-            glyphId,
-            sourceId,
+            layerId,
             overlays,
             appearance,
             ifFontRevision,

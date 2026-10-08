@@ -31,6 +31,7 @@ const capabilities: ShiftCapabilities = {
   },
   layers: {
     get: (input) => host.call("shift.layers.get", input),
+    resolve: (input) => host.call("shift.layers.resolve", input),
     render: (input) => host.call("shift.layers.render", input),
   },
 };

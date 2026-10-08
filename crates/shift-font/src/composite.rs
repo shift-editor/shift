@@ -301,13 +301,14 @@ fn explicit_transform_for_component(
     Ok(component.matrix())
 }
 
-fn resolve_component_contours(
-    layers: &HashMap<GlyphId, &GlyphLayer>,
-    components: &GlyphComponents,
-    selected_root_components: Option<&HashSet<ComponentId>>,
-) -> CoreResult<Vec<ResolvedContour>> {
+/// Walks resolved component occurrences in parent-before-child order with
+/// each occurrence's base layer and transform into root-glyph coordinates.
+fn resolved_occurrences<'a>(
+    layers: &HashMap<GlyphId, &'a GlyphLayer>,
+    components: &'a GlyphComponents,
+) -> CoreResult<Vec<(&'a ComponentGlyph, Transform, &'a GlyphLayer)>> {
     let mut resolved_transforms = HashMap::<ComponentPath, Transform>::new();
-    let mut contours = Vec::new();
+    let mut occurrences = Vec::with_capacity(components.components().len());
 
     for component_glyph in components.components() {
         let local_transform = explicit_transform_for_component(layers, component_glyph)?;
@@ -326,6 +327,20 @@ fn resolve_component_contours(
             &component_glyph.component_id(),
             &component_glyph.base_glyph_id(),
         )?;
+        occurrences.push((component_glyph, resolved_transform, layer));
+    }
+
+    Ok(occurrences)
+}
+
+fn resolve_component_contours(
+    layers: &HashMap<GlyphId, &GlyphLayer>,
+    components: &GlyphComponents,
+    selected_root_components: Option<&HashSet<ComponentId>>,
+) -> CoreResult<Vec<ResolvedContour>> {
+    let mut contours = Vec::new();
+
+    for (component_glyph, transform, layer) in resolved_occurrences(layers, components)? {
         let selected = selected_root_components.is_none_or(|selected| {
             component_glyph
                 .component_path()
@@ -337,12 +352,112 @@ fn resolve_component_contours(
             contours.extend(
                 layer
                     .contours_iter()
-                    .map(|contour| transform_contour_points(contour, resolved_transform)),
+                    .map(|contour| transform_contour_points(contour, transform)),
             );
         }
     }
 
     Ok(contours)
+}
+
+/// Composited geometry of one exact authored layer.
+///
+/// `outline` holds the root's own contours followed by every retained
+/// component descendant, all in root-glyph coordinates. Cyclic branches are
+/// skipped, matching every other composite read.
+#[derive(Clone, Debug)]
+pub struct ResolvedLayerGeometry {
+    outline: Vec<ResolvedContour>,
+    components: Vec<ResolvedComponentGeometry>,
+}
+
+impl ResolvedLayerGeometry {
+    /// Returns root and component contours in root-glyph coordinates.
+    pub fn outline(&self) -> &[ResolvedContour] {
+        &self.outline
+    }
+
+    /// Returns the root layer's retained direct components in authored order.
+    pub fn components(&self) -> &[ResolvedComponentGeometry] {
+        &self.components
+    }
+}
+
+/// One direct component of a resolved layer and its complete subtree outline.
+#[derive(Clone, Debug)]
+pub struct ResolvedComponentGeometry {
+    component_id: ComponentId,
+    base_glyph_id: GlyphId,
+    transformation: Transform,
+    outline: Vec<ResolvedContour>,
+}
+
+impl ResolvedComponentGeometry {
+    /// Returns the component's identity within the root layer.
+    pub fn component_id(&self) -> ComponentId {
+        self.component_id.clone()
+    }
+
+    /// Returns the glyph this component instantiates.
+    pub fn base_glyph_id(&self) -> GlyphId {
+        self.base_glyph_id.clone()
+    }
+
+    /// Returns the authored placement of the base glyph in the root layer.
+    pub fn transformation(&self) -> Transform {
+        self.transformation
+    }
+
+    /// Returns this component's contours and those of its retained
+    /// descendants, in root-glyph coordinates.
+    pub fn outline(&self) -> &[ResolvedContour] {
+        &self.outline
+    }
+}
+
+/// Resolves a root layer's composited outline and direct component subtrees.
+///
+/// # Errors
+///
+/// Returns an error when `layers` does not contain the root or its complete
+/// component closure, or when component identities are inconsistent.
+pub(crate) fn resolved_layer_geometry_from_layers(
+    root_glyph_id: &GlyphId,
+    layers: &HashMap<GlyphId, GlyphLayer>,
+) -> CoreResult<ResolvedLayerGeometry> {
+    let view = layer_view(layers);
+    let root_layer = layer_for_glyph(&view, root_glyph_id)?;
+    let relationships = GlyphComponents::from_layers(root_glyph_id, &view)?;
+    let mut outline = root_layer
+        .contours_iter()
+        .map(|contour| transform_contour_points(contour, Transform::identity()))
+        .collect::<Vec<_>>();
+    let mut components = Vec::<ResolvedComponentGeometry>::new();
+
+    // Occurrences are depth-first, so each descendant follows its direct root.
+    for (occurrence, transform, layer) in resolved_occurrences(&view, &relationships)? {
+        if occurrence.parent_path().is_root() {
+            components.push(ResolvedComponentGeometry {
+                component_id: occurrence.component_id(),
+                base_glyph_id: occurrence.base_glyph_id(),
+                transformation: transform,
+                outline: Vec::new(),
+            });
+        }
+        let direct = components
+            .last_mut()
+            .ok_or_else(|| invalid_component(occurrence))?;
+        for contour in layer.contours_iter() {
+            let contour = transform_contour_points(contour, transform);
+            direct.outline.push(contour.clone());
+            outline.push(contour);
+        }
+    }
+
+    Ok(ResolvedLayerGeometry {
+        outline,
+        components,
+    })
 }
 
 /// Flattens all component contours rooted at `root_glyph_id`.
@@ -507,6 +622,31 @@ pub fn layer_bbox(
     } else {
         None
     }
+}
+
+/// Computes a tight axis-aligned bounding box across resolved contours.
+///
+/// Returns `(min_x, min_y, max_x, max_y)` or `None` if no segments exist.
+pub fn resolved_contours_bbox(contours: &[ResolvedContour]) -> Option<(f64, f64, f64, f64)> {
+    let mut min_x = f64::MAX;
+    let mut min_y = f64::MAX;
+    let mut max_x = f64::MIN;
+    let mut max_y = f64::MIN;
+    let mut any = false;
+
+    for contour in contours {
+        accumulate_contour_bbox(
+            &contour.points,
+            contour.closed,
+            &mut min_x,
+            &mut min_y,
+            &mut max_x,
+            &mut max_y,
+            &mut any,
+        );
+    }
+
+    any.then_some((min_x, min_y, max_x, max_y))
 }
 
 fn contour_to_svg_d(points: &[Point], closed: bool) -> String {

@@ -5,7 +5,7 @@ import {
   type QuickJSContext,
   type QuickJSWASMModule,
 } from "quickjs-emscripten-core";
-import { shiftInputSchemas, type ShiftCapabilities } from "@shift/runtime";
+import { ShiftReadScope, shiftInputSchemas, type ShiftCapabilities } from "@shift/runtime";
 
 const EXECUTION_TIMEOUT_MS = 3_000;
 const MEMORY_LIMIT_BYTES = 16 * 1024 * 1024;
@@ -37,34 +37,53 @@ export async function executeShiftCode(
   runtime.setInterruptHandler(shouldInterruptAfterDeadline(deadline));
 
   const vm = runtime.newContext();
+  const validated = validatedCapabilities(capabilities);
+  const scopes = new Map<number, ShiftReadScope>();
   installAsyncJsonFunction(vm, "__shiftCapture", deadline, (input) =>
-    capabilities.capture(shiftInputSchemas.capture.parse(input)),
+    validated.capture(input as never),
   );
-  installAsyncJsonFunction(vm, "__shiftListSessions", deadline, () => capabilities.sessions.list());
+  installAsyncJsonFunction(vm, "__shiftListSessions", deadline, () => validated.sessions.list());
   installAsyncJsonFunction(vm, "__shiftInspectEditor", deadline, (input) =>
-    capabilities.editor.inspect(shiftInputSchemas["editor.inspect"].parse(input)),
+    validated.editor.inspect(input as never),
   );
   installAsyncJsonFunction(vm, "__shiftGetFont", deadline, (input) =>
-    capabilities.font.get(shiftInputSchemas["font.get"].parse(input)),
+    validated.font.get(input as never),
   );
   installAsyncJsonFunction(vm, "__shiftResolveLocation", deadline, (input) =>
-    capabilities.locations.resolve(shiftInputSchemas["locations.resolve"].parse(input)),
+    validated.locations.resolve(input as never),
   );
   installAsyncJsonFunction(vm, "__shiftListGlyphs", deadline, (input) =>
-    capabilities.glyphs.list(shiftInputSchemas["glyphs.list"].parse(input)),
+    validated.glyphs.list(input as never),
   );
   installAsyncJsonFunction(vm, "__shiftGetGlyph", deadline, (input) =>
-    capabilities.glyphs.get(shiftInputSchemas["glyphs.get"].parse(input)),
+    validated.glyphs.get(input as never),
   );
   installAsyncJsonFunction(vm, "__shiftResolveGlyphs", deadline, (input) =>
-    capabilities.glyphs.resolve(shiftInputSchemas["glyphs.resolve"].parse(input)),
+    validated.glyphs.resolve(input as never),
   );
   installAsyncJsonFunction(vm, "__shiftGetLayer", deadline, (input) =>
-    capabilities.layers.get(shiftInputSchemas["layers.get"].parse(input)),
+    validated.layers.get(input as never),
+  );
+  installAsyncJsonFunction(vm, "__shiftResolveLayer", deadline, (input) =>
+    validated.layers.resolve(input as never),
   );
   installAsyncJsonFunction(vm, "__shiftRenderLayer", deadline, (input) =>
-    capabilities.layers.render(shiftInputSchemas["layers.render"].parse(input)),
+    validated.layers.render(input as never),
   );
+  installAsyncJsonFunction(vm, "__shiftReadOpen", deadline, async (target) => {
+    const scope = await ShiftReadScope.open(validated, shiftInputSchemas.read.parse(target));
+    const scopeId = scopes.size + 1;
+    scopes.set(scopeId, scope);
+    return { scopeId, fontRevision: scope.fontRevision };
+  });
+  installAsyncJsonFunction(vm, "__shiftReadCall", deadline, (scopeId, method, input) =>
+    callReadScope(requireScope(scopes, scopeId), method, input),
+  );
+  installSyncFunction(vm, "__shiftReadState", (scopeId) => requireScope(scopes, scopeId).state);
+  installSyncFunction(vm, "__shiftReadClose", (scopeId) => {
+    requireScope(scopes, scopeId).close();
+    return "closed";
+  });
 
   const bootstrap = `
     "use strict";
@@ -89,8 +108,38 @@ export async function executeShiftCode(
       }),
       layers: Object.freeze({
         get: async (input) => JSON.parse(await __shiftGetLayer(input)),
+        resolve: async (input) => JSON.parse(await __shiftResolveLayer(input)),
         render: async (input) => JSON.parse(await __shiftRenderLayer(input)),
       }),
+      read: async (target, callback) => {
+        if (typeof callback !== "function") throw new TypeError("shift.read requires a callback");
+        const { scopeId, fontRevision } = JSON.parse(await __shiftReadOpen(target));
+        const call = (method) => async (input) =>
+          JSON.parse(await __shiftReadCall(scopeId, method, input));
+        const read = Object.freeze({
+          get state() {
+            return __shiftReadState(scopeId);
+          },
+          fontRevision,
+          font: Object.freeze({ get: call("font.get") }),
+          locations: Object.freeze({ resolve: call("locations.resolve") }),
+          glyphs: Object.freeze({
+            list: call("glyphs.list"),
+            get: call("glyphs.get"),
+            resolve: call("glyphs.resolve"),
+          }),
+          layers: Object.freeze({
+            get: call("layers.get"),
+            resolve: call("layers.resolve"),
+            render: call("layers.render"),
+          }),
+        });
+        try {
+          return await callback(read);
+        } finally {
+          __shiftReadClose(scopeId);
+        }
+      },
     });
     (async () => {
       const entry = (${code});
@@ -125,9 +174,89 @@ export async function executeShiftCode(
 
     return JSON.parse(json) as unknown;
   } finally {
+    for (const scope of scopes.values()) scope.close();
     vm.dispose();
     runtime.dispose();
   }
+}
+
+/** Parses every untrusted input before it reaches a host capability. */
+function validatedCapabilities(capabilities: ShiftCapabilities): ShiftCapabilities {
+  return {
+    capture: (input) => capabilities.capture(shiftInputSchemas.capture.parse(input)),
+    sessions: { list: () => capabilities.sessions.list() },
+    editor: {
+      inspect: (input) =>
+        capabilities.editor.inspect(shiftInputSchemas["editor.inspect"].parse(input)),
+    },
+    font: { get: (input) => capabilities.font.get(shiftInputSchemas["font.get"].parse(input)) },
+    locations: {
+      resolve: (input) =>
+        capabilities.locations.resolve(shiftInputSchemas["locations.resolve"].parse(input)),
+    },
+    glyphs: {
+      list: (input) => capabilities.glyphs.list(shiftInputSchemas["glyphs.list"].parse(input)),
+      get: (input) => capabilities.glyphs.get(shiftInputSchemas["glyphs.get"].parse(input)),
+      resolve: (input) =>
+        capabilities.glyphs.resolve(shiftInputSchemas["glyphs.resolve"].parse(input)),
+    },
+    layers: {
+      get: (input) => capabilities.layers.get(shiftInputSchemas["layers.get"].parse(input)),
+      resolve: (input) =>
+        capabilities.layers.resolve(shiftInputSchemas["layers.resolve"].parse(input)),
+      render: (input) =>
+        capabilities.layers.render(shiftInputSchemas["layers.render"].parse(input)),
+    },
+  };
+}
+
+function requireScope(
+  scopes: ReadonlyMap<number, ShiftReadScope>,
+  scopeId: unknown,
+): ShiftReadScope {
+  const scope = typeof scopeId === "number" ? scopes.get(scopeId) : undefined;
+  if (!scope) throw new Error("Unknown shift.read scope");
+  return scope;
+}
+
+function callReadScope(scope: ShiftReadScope, method: unknown, input: unknown): Promise<unknown> {
+  const args = input as never;
+  switch (method) {
+    case "font.get":
+      return scope.font.get();
+    case "locations.resolve":
+      return scope.locations.resolve(args);
+    case "glyphs.list":
+      return scope.glyphs.list(args);
+    case "glyphs.get":
+      return scope.glyphs.get(args);
+    case "glyphs.resolve":
+      return scope.glyphs.resolve(args);
+    case "layers.get":
+      return scope.layers.get(args);
+    case "layers.resolve":
+      return scope.layers.resolve(args);
+    case "layers.render":
+      return scope.layers.render(args);
+    default:
+      throw new Error(`Unknown shift.read method: ${String(method)}`);
+  }
+}
+
+function installSyncFunction(
+  vm: QuickJSContext,
+  name: string,
+  call: (...args: unknown[]) => string,
+): void {
+  const functionHandle = vm.newFunction(name, (...argumentHandles) => {
+    try {
+      return vm.newString(call(...argumentHandles.map((handle) => vm.dump(handle))));
+    } catch (error) {
+      return { error: newVmError(vm, error) };
+    }
+  });
+
+  functionHandle.consume((handle) => vm.setProp(vm.global, name, handle));
 }
 
 function loadQuickJS(): Promise<QuickJSWASMModule> {
@@ -154,13 +283,13 @@ function installAsyncJsonFunction(
           resultHandle.dispose();
         },
         (error) => {
-          const errorHandle = vm.newError(errorMessage(error));
+          const errorHandle = newVmError(vm, error);
           promise.reject(errorHandle);
           errorHandle.dispose();
         },
       );
     } catch (error) {
-      const errorHandle = vm.newError(errorMessage(error));
+      const errorHandle = newVmError(vm, error);
       promise.reject(errorHandle);
       errorHandle.dispose();
     }
@@ -186,6 +315,9 @@ async function withDeadline<T>(promise: Promise<T>, deadline: number): Promise<T
   }
 }
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+/** Preserves the error name so scripts can recognize `FontChangedError`. */
+function newVmError(vm: QuickJSContext, error: unknown) {
+  return error instanceof Error
+    ? vm.newError({ name: error.name, message: error.message })
+    : vm.newError(String(error));
 }

@@ -2,11 +2,13 @@ import type {
   AppliedChange,
   FontIntent,
   GlyphId,
+  GlyphLayerSnapshot,
   GlyphPreview,
   GlyphProjection,
   GlyphSnapshot,
   LayerId,
   LayerMatch,
+  LayerRead,
   Location,
   SlugAtlas,
 } from "@shift/types";
@@ -215,6 +217,20 @@ export class WorkspaceEditCoordinator {
     if (glyphIds.length === 0) return [];
 
     return this.#withFlush(() => this.#session.glyphProjections(glyphIds));
+  }
+
+  /** Reads exact authored layers behind pending authored edits. */
+  async readLayers(layerIds: readonly LayerId[]): Promise<GlyphLayerSnapshot[]> {
+    if (layerIds.length === 0) return [];
+
+    return this.#withFlush(() => this.#session.readLayers(layerIds));
+  }
+
+  /** Reads exact authored layers with composited geometry behind pending authored edits. */
+  async resolveLayers(layerIds: readonly LayerId[]): Promise<LayerRead[]> {
+    if (layerIds.length === 0) return [];
+
+    return this.#withFlush(() => this.#session.resolveLayers(layerIds));
   }
 
   /** Derives cross-layer entity matches behind pending authored edits. */

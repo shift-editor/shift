@@ -11,10 +11,11 @@ import type {
   LayerOverlays,
   LayerSvg,
   ResolvedGlyphs,
+  ResolvedLayer,
   ResolvedLocation,
   ShiftObservation,
 } from "@shift/runtime";
-import type { GlyphId, SourceId } from "@shift/types";
+import type { GlyphId, LayerId, SourceId } from "@shift/types";
 
 /** Main-to-renderer calls for live agent inspection of one explicit window. */
 export interface EditorCaptureBounds {
@@ -67,18 +68,21 @@ export type AgentCallMap = {
     response: ShiftObservation<ResolvedGlyphs>;
   };
   "layers.get": {
-    request: { glyphId: GlyphId; sourceId: SourceId; ifFontRevision?: FontRevision };
-    response: ShiftObservation<AuthoredLayer | null>;
+    request: { layerId: LayerId; ifFontRevision?: FontRevision };
+    response: ShiftObservation<AuthoredLayer>;
+  };
+  "layers.resolve": {
+    request: { layerId: LayerId; ifFontRevision?: FontRevision };
+    response: ShiftObservation<ResolvedLayer>;
   };
   "layers.render": {
     request: {
-      glyphId: GlyphId;
-      sourceId: SourceId;
+      layerId: LayerId;
       overlays?: LayerOverlays;
       appearance?: LayerAppearance;
       ifFontRevision?: FontRevision;
     };
-    response: ShiftObservation<LayerSvg | null>;
+    response: ShiftObservation<LayerSvg>;
   };
 };
 

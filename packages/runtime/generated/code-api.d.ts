@@ -448,6 +448,35 @@ export interface AuthoredLayer {
   components: AuthoredComponent[];
   anchors: AuthoredAnchor[];
 }
+/** One direct component of a resolved layer; its outline includes every resolved descendant. */
+export interface ResolvedComponent {
+  id: ComponentId;
+  baseGlyphId: GlyphId;
+  transformation: AffineTransformation;
+  /** One SVG path in font units, y-up, with tight bounds. */
+  outline: {
+    svgPath: string;
+    bounds: Bounds | null;
+  };
+}
+/**
+ * One exact authored layer with components resolved at its own source.
+ *
+ * The outline is the root's contours plus every component descendant; cyclic
+ * component branches are skipped.
+ */
+export interface ResolvedLayer {
+  glyphId: GlyphId;
+  sourceId: SourceId;
+  layerId: LayerId;
+  advanceWidth: number;
+  /** One SVG path in font units, y-up, with tight bounds. */
+  outline: {
+    svgPath: string;
+    bounds: Bounds | null;
+  };
+  components: ResolvedComponent[];
+}
 /** Optional authored-layer annotations included in portable SVG output. */
 export interface LayerOverlays {
   points?: boolean;
@@ -520,10 +549,11 @@ export interface GlyphResolveInput extends ShiftTarget {
   glyphIds: GlyphId[];
   location: AxisCoordinate[];
 }
+/** Addresses one authored layer by its stable identity. */
 export interface LayerGetInput extends ShiftTarget {
-  glyphId: GlyphId;
-  sourceId: SourceId;
+  layerId: LayerId;
 }
+export type LayerResolveInput = LayerGetInput;
 export interface LayerRenderInput extends LayerGetInput {
   overlays?: LayerOverlays;
   appearance?: LayerAppearance;
@@ -552,12 +582,63 @@ export interface ShiftCapabilities {
     resolve(input: GlyphResolveInput): Promise<ShiftObservation<ResolvedGlyphs>>;
   };
   layers: {
-    get(input: LayerGetInput): Promise<ShiftObservation<AuthoredLayer | null>>;
-    render(input: LayerRenderInput): Promise<ShiftObservation<LayerSvg | null>>;
+    get(input: LayerGetInput): Promise<ShiftObservation<AuthoredLayer>>;
+    resolve(input: LayerResolveInput): Promise<ShiftObservation<ResolvedLayer>>;
+    render(input: LayerRenderInput): Promise<ShiftObservation<LayerSvg>>;
   };
+}
+/** A capability input without the window and revision a read scope binds. */
+export type ShiftReadInput<Input> = Input extends unknown ? Omit<Input, keyof ShiftTarget> : never;
+/**
+ * `active` while the bound revision is current; `stale` once a call saw the
+ * font change; `closed` once the scope's callback settled. Both are terminal.
+ */
+export type ShiftReadState = "active" | "stale" | "closed";
+/**
+ * Revision-bound reads of one window's font, valid only inside `shift.read`.
+ *
+ * Calls return plain values. The first call that sees a newer font revision
+ * moves the scope to `stale` and throws an error named `FontChangedError`;
+ * every later call fails the same way. Nothing is retried, and other errors
+ * leave the scope `active`.
+ */
+export interface ShiftRead {
+  readonly state: ShiftReadState;
+  /** The revision every call in this scope requires. */
+  readonly fontRevision: FontRevision;
+  font: {
+    get(): Promise<FontOverview>;
+  };
+  locations: {
+    resolve(input: ShiftReadInput<LocationResolveInput>): Promise<ResolvedLocation>;
+  };
+  glyphs: {
+    list(input?: ShiftReadInput<GlyphListInput>): Promise<GlyphPage>;
+    get(input: ShiftReadInput<GlyphGetInput>): Promise<GlyphSummary>;
+    resolve(input: ShiftReadInput<GlyphResolveInput>): Promise<ResolvedGlyphs>;
+  };
+  layers: {
+    get(input: ShiftReadInput<LayerGetInput>): Promise<AuthoredLayer>;
+    resolve(input: ShiftReadInput<LayerResolveInput>): Promise<ResolvedLayer>;
+    render(input: ShiftReadInput<LayerRenderInput>): Promise<LayerSvg>;
+  };
+}
+/** The `shift` global in scripts: raw capabilities plus revision-bound reads. */
+export interface ShiftScript extends ShiftCapabilities {
+  /**
+   * Runs `callback` against one revision of a window's font.
+   *
+   * @returns The callback's result; the callback is never retried.
+   */
+  read<Result>(
+    target: {
+      windowId: number;
+    },
+    callback: (read: ShiftRead) => Result | Promise<Result>,
+  ): Promise<Result>;
 }
 //#endregion
 
 declare global {
-  const shift: ShiftCapabilities;
+  const shift: ShiftScript;
 }

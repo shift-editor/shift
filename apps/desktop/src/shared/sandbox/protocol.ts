@@ -9,9 +9,11 @@ import type {
   GlyphSummary,
   LayerGetInput,
   LayerRenderInput,
+  LayerResolveInput,
   LayerSvg,
   LocationResolveInput,
   ResolvedGlyphs,
+  ResolvedLayer,
   ResolvedLocation,
   ShiftCapture,
   ShiftCaptureInput,
@@ -66,11 +68,15 @@ export type SandboxHostCallMap = {
   };
   "shift.layers.get": {
     request: LayerGetInput;
-    response: ShiftObservation<AuthoredLayer | null>;
+    response: ShiftObservation<AuthoredLayer>;
+  };
+  "shift.layers.resolve": {
+    request: LayerResolveInput;
+    response: ShiftObservation<ResolvedLayer>;
   };
   "shift.layers.render": {
     request: LayerRenderInput;
-    response: ShiftObservation<LayerSvg | null>;
+    response: ShiftObservation<LayerSvg>;
   };
 };
 

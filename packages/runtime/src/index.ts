@@ -1,4 +1,5 @@
 export { shiftInputSchemas } from "./inputs";
+export { FontChangedError, ShiftReadScope } from "./read";
 
 export type {
   AffineTransformation,
@@ -26,16 +27,23 @@ export type {
   LayerGuides,
   LayerOverlays,
   LayerRenderInput,
+  LayerResolveInput,
   LayerSvg,
   LocationResolveInput,
+  ResolvedComponent,
   ResolvedGlyph,
   ResolvedGlyphs,
+  ResolvedLayer,
   ResolvedLocation,
   ShiftCapabilities,
   ShiftCapture,
   ShiftCaptureInput,
   ShiftCaptureTarget,
   ShiftObservation,
+  ShiftRead,
+  ShiftReadInput,
+  ShiftReadState,
+  ShiftScript,
   ShiftSession,
   ShiftSessionMode,
   ShiftTarget,

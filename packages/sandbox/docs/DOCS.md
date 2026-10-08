@@ -9,7 +9,8 @@ Bounded Shift code execution over host-supplied typed capabilities, independent 
 - **Architecture Invariant:** `@shift/sandbox` executes against `ShiftCapabilities` from `@shift/runtime`. It owns no MCP endpoint, Electron app state, renderer, document, or font persistence. Hosts decide how to supply capabilities and when execution is allowed.
 - **Architecture Invariant:** Each `executeShiftCode()` call gets a fresh QuickJS realm with only the explicitly installed `shift` read API. Code has no Node.js, filesystem, environment, Electron, or network globals; output must be JSON-compatible.
 - **Architecture Invariant:** Source, memory, stack, result, and execution time are bounded. The Electron host additionally supervises execution in a utility process and stops that process on its hard deadline. Neither this one-shot API nor the current read-only capability contract promises persistent plugin state or mutation authority.
-- **Architecture Invariant:** The sandbox preserves `ShiftObservation<T>` unchanged. Scripts explicitly carry `fontRevision` into later `ifFontRevision` inputs; the executor does not pin, cache, or silently refresh authored state.
+- **Architecture Invariant:** Raw capabilities preserve `ShiftObservation<T>` unchanged. Revision binding happens only inside an explicit `shift.read` callback, through `@shift/runtime`'s `ShiftReadScope`; the executor never pins, retries, or silently refreshes authored state outside it.
+- **Architecture Invariant:** Every untrusted input, including each `shift.read` call, is parsed by `@shift/runtime`'s schemas before reaching a host capability. Host errors cross into the realm with their `name`, so scripts can recognize `FontChangedError`.
 
 ## Codemap
 
@@ -24,6 +25,7 @@ src/
 
 - `ShiftCapabilities` -- host-supplied, explicitly targeted observation operations; defined by `@shift/runtime`.
 - `ShiftObservation` -- one value correlated with an opaque authored `fontRevision` for guarded multi-call scripts.
+- `ShiftReadScope` -- host-side `shift.read` scope; the realm holds only its numeric handle and closes it when the callback settles.
 - `executeShiftCode()` -- one-shot execution of an async function against those capabilities.
 - `SandboxRuntimeProcess` -- Electron host supervisor, not part of this package.
 
@@ -35,7 +37,7 @@ src/
 
 This is the first **one-shot** execution mode, not a full interactive plugin lifecycle. A future scripting host can use the same executor and capability contract. Long-lived tool contributions would need explicit registration, cancellation, preview, and disposal semantics rather than inheriting the lifetime of an MCP request.
 
-Within one execution, a script starts a composed read with any targeted capability, keeps its returned `fontRevision`, and supplies that token as `ifFontRevision` to subsequent font, location, glyph, layer, editor, or capture calls. A mismatch rejects the script call rather than returning mixed authored state. The token is scoped to the targeted live renderer and does not version editor-only selection or viewport state.
+Within one execution, a script composes reads with `shift.read({ windowId }, async (read) => ...)`. The host opens a `ShiftReadScope`, which binds one revision and injects it into each font, location, glyph, and layer call; the realm-side `read` object forwards calls by scope handle and unwraps the results. A revision mismatch throws `FontChangedError` and leaves the scope `stale`; nothing retries the callback. Scripts can still carry `fontRevision` into `ifFontRevision` by hand for editor or capture calls. The token is scoped to the targeted live renderer and does not version editor-only selection or viewport state.
 
 ## Workflow recipes
 

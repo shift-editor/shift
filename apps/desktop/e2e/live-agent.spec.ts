@@ -52,11 +52,12 @@ test.describe("authored font reads from Home", () => {
         if (!e) throw new Error("Fixture glyph E is missing");
         const eByName = (await shift.glyphs.get({ ...target, name: "E" })).value;
         const sourceId = font.sources[0].id;
-        const layer = (await shift.layers.get({ ...target, glyphId: e.id, sourceId })).value;
+        const layerIn = (glyph, source) => glyph.layers.find((layer) => layer.sourceId === source)?.layerId;
+        const eLayerId = layerIn(e, sourceId);
+        const layer = (await shift.layers.get({ ...target, layerId: eLayerId })).value;
         const rendered = (await shift.layers.render({
           ...target,
-          glyphId: e.id,
-          sourceId,
+          layerId: eLayerId,
           overlays: {
             points: true,
             controlLines: true,
@@ -72,8 +73,10 @@ test.describe("authored font reads from Home", () => {
         if (!a || !supportId) throw new Error("Missing support-layer fixture");
         const sparse = directory.items.find(({ layers }) => !layers.some((layer) => layer.sourceId === supportId));
         if (!sparse) throw new Error("Missing sparse-layer fixture");
-        const support = (await shift.layers.get({ ...target, glyphId: a.id, sourceId: supportId })).value;
-        const absent = (await shift.layers.get({ ...target, glyphId: sparse.id, sourceId: supportId })).value;
+        const support = (await shift.layers.get({ ...target, layerId: layerIn(a, supportId) })).value;
+        const absent = await shift.layers
+          .get({ ...target, layerId: "missing-layer" })
+          .then(() => "found", () => "rejected");
         const supportPage = (await shift.glyphs.list({ ...target, limit: 100, sourceId: supportId })).value;
         const location = (await shift.locations.resolve({ ...target, location: [] })).value;
         const resolved = (await shift.glyphs.resolve({
@@ -83,11 +86,13 @@ test.describe("authored font reads from Home", () => {
         })).value;
         const composite = directory.items.find(({ name }) => name === "Aacute");
         if (!composite) throw new Error("Fixture glyph Aacute is missing");
-        const compositeLayer = (await shift.layers.get({
-          ...target,
-          glyphId: composite.id,
-          sourceId,
-        })).value;
+        const compositeLayerId = layerIn(composite, sourceId);
+        const compositeLayer = (await shift.layers.get({ ...target, layerId: compositeLayerId })).value;
+        const compositeResolved = (await shift.layers.resolve({ ...target, layerId: compositeLayerId })).value;
+        const scoped = await shift.read({ windowId }, async (read) => {
+          const scopedLayer = await read.layers.get({ layerId: eLayerId });
+          return { revision: read.fontRevision, layerId: scopedLayer.layerId };
+        });
         return {
           fontRevision,
           supportLayerId: support?.layerId,
@@ -108,6 +113,11 @@ test.describe("authored font reads from Home", () => {
           anchors: layer?.anchors.map(({ name }) => name),
           advanceWidth: layer?.advanceWidth,
           component: compositeLayer?.components[1],
+          resolvedComponentIds: compositeResolved.components.map(({ id }) => id),
+          authoredComponentIds: compositeLayer.components.map(({ id }) => id),
+          hasResolvedOutline: compositeResolved.outline.svgPath.length > 0,
+          scoped,
+          eLayerId,
           resolvedAdvanceWidth: resolved.items[0]?.advanceWidth,
           resolvedSourceId: location.sourceId,
           rendered: rendered && {
@@ -135,7 +145,7 @@ test.describe("authored font reads from Home", () => {
       mode: "workspace",
       fontRevision: expect.any(String),
       anchors: ["top"],
-      absent: null,
+      absent: "rejected",
       sparseLayer: null,
       supportLayerId: expect.any(String),
       advanceWidth: expect.any(Number),
@@ -165,6 +175,7 @@ test.describe("authored font reads from Home", () => {
       },
     });
     const page = result as {
+      fontRevision: string;
       first: { id: string };
       nextCursor: string;
       second: { id: string };
@@ -173,7 +184,17 @@ test.describe("authored font reads from Home", () => {
       supportLayer: unknown;
       eId: string;
       eByNameId: string;
+      eLayerId: string;
+      rendered: { layerId: string };
+      resolvedComponentIds: string[];
+      authoredComponentIds: string[];
+      hasResolvedOutline: boolean;
+      scoped: { revision: string; layerId: string };
     };
+    expect(page.rendered.layerId).toBe(page.eLayerId);
+    expect(page.resolvedComponentIds).toEqual(page.authoredComponentIds);
+    expect(page.hasResolvedOutline).toBe(true);
+    expect(page.scoped).toEqual({ revision: page.fontRevision, layerId: page.eLayerId });
     expect(page.nextCursor).toEqual(expect.any(String));
     expect(page.second.id).not.toBe(page.first.id);
     expect(page.glyph.id).toBe(page.first.id);

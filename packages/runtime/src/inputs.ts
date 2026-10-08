@@ -1,4 +1,4 @@
-import { asAxisId, asGlyphId, asSourceId } from "@shift/types";
+import { asAxisId, asGlyphId, asLayerId, asSourceId } from "@shift/types";
 import * as z from "zod/v4";
 
 const windowId = z.number().int().positive();
@@ -6,6 +6,7 @@ const fontRevision = z.string().min(1).max(256);
 const ifFontRevision = fontRevision.optional();
 const glyphId = z.string().min(1).transform(asGlyphId);
 const sourceId = z.string().min(1).transform(asSourceId);
+const layerId = z.string().min(1).transform(asLayerId);
 const axisId = z.string().min(1).transform(asAxisId);
 const axisCoordinate = z.strictObject({ axisId, value: z.number() });
 const location = z.array(axisCoordinate).max(64);
@@ -20,6 +21,7 @@ export const shiftInputSchemas = {
   }),
   "editor.inspect": z.strictObject({ windowId, ifFontRevision }),
   "font.get": z.strictObject({ windowId, ifFontRevision }),
+  read: z.strictObject({ windowId }),
   "locations.resolve": z.strictObject({ windowId, ifFontRevision, location }),
   "glyphs.list": z.strictObject({
     windowId,
@@ -38,12 +40,12 @@ export const shiftInputSchemas = {
     glyphIds: z.array(glyphId).min(1).max(100),
     location,
   }),
-  "layers.get": z.strictObject({ windowId, ifFontRevision, glyphId, sourceId }),
+  "layers.get": z.strictObject({ windowId, ifFontRevision, layerId }),
+  "layers.resolve": z.strictObject({ windowId, ifFontRevision, layerId }),
   "layers.render": z.strictObject({
     windowId,
     ifFontRevision,
-    glyphId,
-    sourceId,
+    layerId,
     overlays: z
       .strictObject({
         points: z.boolean().optional(),

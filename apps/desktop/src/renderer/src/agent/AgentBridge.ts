@@ -11,16 +11,23 @@ import type {
   LayerOverlays,
   LayerSvg,
   ResolvedGlyphs,
+  ResolvedLayer,
   ResolvedLocation,
   ShiftObservation,
 } from "@shift/runtime";
-import type { AxisId, GlyphId, GlyphState, SourceId } from "@shift/types";
+import type {
+  AxisId,
+  GlyphId,
+  GlyphLayerSnapshot,
+  LayerId,
+  LayerRead,
+  ResolvedOutline,
+  SourceId,
+} from "@shift/types";
 import { GlyphGeometry } from "@shift/glyph-state";
 import { renderLayerSvg } from "@shift/editor/rendering";
-import { signal } from "@shift/editor/signals";
 import {
   axisValue,
-  emptyExternalAxisLocation,
   externalAxisLocationFromRecord,
   mapAxisLocation,
 } from "@shift/editor/variation";
@@ -70,12 +77,12 @@ export class AgentBridge {
           this.#observe(ifFontRevision, () => this.#getGlyph(selector)),
         "glyphs.resolve": ({ glyphIds, location, ifFontRevision }) =>
           this.#observe(ifFontRevision, () => this.#resolveGlyphs(glyphIds, location)),
-        "layers.get": ({ glyphId, sourceId, ifFontRevision }) =>
-          this.#observe(ifFontRevision, () => this.#getLayer(glyphId, sourceId)),
-        "layers.render": ({ glyphId, sourceId, overlays, appearance, ifFontRevision }) =>
-          this.#observe(ifFontRevision, () =>
-            this.#renderLayer(glyphId, sourceId, overlays, appearance),
-          ),
+        "layers.get": ({ layerId, ifFontRevision }) =>
+          this.#observe(ifFontRevision, () => this.#getLayer(layerId)),
+        "layers.resolve": ({ layerId, ifFontRevision }) =>
+          this.#observe(ifFontRevision, () => this.#resolveLayer(layerId)),
+        "layers.render": ({ layerId, overlays, appearance, ifFontRevision }) =>
+          this.#observe(ifFontRevision, () => this.#renderLayer(layerId, overlays, appearance)),
       });
     } catch (error) {
       port.cancel();
@@ -187,13 +194,23 @@ export class AgentBridge {
     const page = entries.slice(start, start + limit);
     const items = page.map((entry) => glyphSummary(this.#session, entry.id));
     if (sourceId) {
-      const layers = await font.readAuthoredLayers({
-        glyphIds: page.map(({ id }) => id),
-        sourceId,
-      });
+      const sourceIsKnown =
+        font.sources.some((source) => source.id === sourceId) ||
+        font
+          .glyphRecords()
+          .some((glyph) => glyph.layers.some((layer) => layer.sourceId === sourceId));
+      if (!sourceIsKnown) throw new Error(`Source ${sourceId} is not in this font`);
+
+      const layerIds = items.map(
+        (item) => item.layers.find((layer) => layer.sourceId === sourceId)?.layerId ?? null,
+      );
+      const snapshots = await font.readLayers(
+        layerIds.filter((layerId): layerId is LayerId => layerId !== null),
+      );
+      const byLayer = new Map(snapshots.map((snapshot) => [snapshot.state.layerId, snapshot]));
       for (const [index, item] of items.entries()) {
-        const layer = layers[index];
-        item.layer = layer ? authoredLayer(item.id, sourceId, layer.state) : null;
+        const snapshot = byLayer.get(layerIds[index] as LayerId);
+        item.layer = snapshot ? authoredLayer(snapshot) : null;
       }
     }
 
@@ -235,54 +252,36 @@ export class AgentBridge {
     };
   }
 
-  async #getLayer(glyphId: GlyphId, sourceId: SourceId): Promise<AuthoredLayer | null> {
-    const [layer] = await this.#session.font.readAuthoredLayers({ glyphIds: [glyphId], sourceId });
-    return layer ? authoredLayer(glyphId, sourceId, layer.state) : null;
+  async #getLayer(layerId: LayerId): Promise<AuthoredLayer> {
+    const [snapshot] = await this.#session.font.readLayers([layerId]);
+    return authoredLayer(requireRead(snapshot, layerId));
+  }
+
+  async #resolveLayer(layerId: LayerId): Promise<ResolvedLayer> {
+    const [read] = await this.#session.font.resolveLayers([layerId]);
+    return resolvedLayer(requireRead(read, layerId));
   }
 
   async #renderLayer(
-    glyphId: GlyphId,
-    sourceId: SourceId,
+    layerId: LayerId,
     overlays: LayerOverlays | undefined,
     appearance: LayerAppearance | undefined,
-  ): Promise<LayerSvg | null> {
-    const [layer] = await this.#session.font.readAuthoredLayers({ glyphIds: [glyphId], sourceId });
-    if (!layer) return null;
-
-    const geometry = GlyphGeometry.fromState(layer.state);
-    const glyph = await this.#session.font.loadGlyph(glyphId);
-    const location =
-      this.#session.font.externalLocationForSource(sourceId) ?? emptyExternalAxisLocation();
-    const renderModel = glyph.renderModelAt(signal(location), signal<SourceId | null>(sourceId));
-    const directComponents = renderModel.components.filter(
-      (component) => component.parentPath.length === 0,
-    );
-    if (directComponents.length !== geometry.components.length) {
-      throw new Error(`Layer ${layer.state.layerId} has an unresolved or cyclic component`);
-    }
-    for (const component of renderModel.components) {
-      const componentGeometry = renderModel.geometryAt(component.glyphId, renderModel.location);
-      if (component.children.length !== componentGeometry.components.length) {
-        throw new Error(`Layer ${layer.state.layerId} has an unresolved or cyclic component`);
-      }
-    }
-
-    const metrics = this.#session.font.source(sourceId)
-      ? this.#session.font.metricsForSource(sourceId)
-      : this.#session.font.defaultSourceMetrics;
-    const rendered = renderLayerSvg(
-      geometry,
+  ): Promise<LayerSvg> {
+    const [read] = await this.#session.font.resolveLayers([layerId]);
+    const { authored, resolved } = requireRead(read, layerId);
+    const font = this.#session.font;
+    const metrics = font.source(authored.sourceId)
+      ? font.metricsForSource(authored.sourceId)
+      : font.defaultSourceMetrics;
+    const rendered = renderLayerSvg({
+      authored: GlyphGeometry.fromState(authored.state),
+      resolved,
       metrics,
       overlays,
-      renderModel.components,
       appearance,
-    );
-    return {
-      glyphId,
-      sourceId,
-      layerId: layer.state.layerId,
-      ...rendered,
-    };
+    });
+
+    return { ...layerIdentity(authored), ...rendered };
   }
 
   #editorCaptureBounds() {
@@ -338,12 +337,37 @@ function glyphSummary(session: FontSession, glyphId: GlyphId): GlyphSummary {
   };
 }
 
-function authoredLayer(glyphId: GlyphId, sourceId: SourceId, state: GlyphState): AuthoredLayer {
-  const geometry = GlyphGeometry.fromState(state);
+function requireRead<Read>(read: Read | undefined, layerId: LayerId): Read {
+  if (!read) throw new Error(`Layer ${layerId} was not returned`);
+  return read;
+}
+
+function layerIdentity({ glyphId, sourceId, state }: GlyphLayerSnapshot) {
+  return { glyphId, sourceId, layerId: state.layerId };
+}
+
+function resolvedLayer({ authored, resolved }: LayerRead): ResolvedLayer {
   return {
-    glyphId,
-    sourceId,
-    layerId: state.layerId,
+    ...layerIdentity(authored),
+    advanceWidth: GlyphGeometry.fromState(authored.state).xAdvance,
+    outline: resolvedOutline(resolved.outline),
+    components: resolved.components.map(({ id, baseGlyphId, transformation, outline }) => ({
+      id,
+      baseGlyphId,
+      transformation,
+      outline: resolvedOutline(outline),
+    })),
+  };
+}
+
+function resolvedOutline({ svgPath, bounds }: ResolvedOutline) {
+  return { svgPath, bounds: bounds ?? null };
+}
+
+function authoredLayer(snapshot: GlyphLayerSnapshot): AuthoredLayer {
+  const geometry = GlyphGeometry.fromState(snapshot.state);
+  return {
+    ...layerIdentity(snapshot),
     advanceWidth: geometry.xAdvance,
     bounds: geometry.bounds,
     contours: geometry.contours.map((contour) => ({

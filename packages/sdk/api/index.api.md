@@ -114,6 +114,30 @@ export interface AxisCoordinate {
     value: number;
 }
 
+// @public
+export interface BoundsCorner {
+    // (undocumented)
+    x: number;
+    // (undocumented)
+    y: number;
+}
+
+// @public
+export interface ComponentTransform {
+    // (undocumented)
+    dx: number;
+    // (undocumented)
+    dy: number;
+    // (undocumented)
+    xx: number;
+    // (undocumented)
+    xy: number;
+    // (undocumented)
+    yx: number;
+    // (undocumented)
+    yy: number;
+}
+
 // Warning: (ae-forgotten-export) The symbol "ComputedOptions" needs to be exported by the entry point index.d.ts
 // Warning: (ae-forgotten-export) The symbol "ComputedSignal" needs to be exported by the entry point index.d.ts
 //
@@ -597,14 +621,12 @@ export class Font {
     nextAvailableGlyphName(name: GlyphName): GlyphName;
     pointIdsForSegment(segmentId: SegmentId): readonly PointId[] | null;
     primaryUnicodeForName(name: GlyphName): Unicode | null;
-    readAuthoredLayers(input: {
-        glyphIds: readonly GlyphId[];
-        sourceId: SourceId;
-    }): Promise<readonly (GlyphLayerSnapshot | null)[]>;
+    readLayers(layerIds: readonly LayerId[]): Promise<readonly GlyphLayerSnapshot[]>;
     // (undocumented)
     recordForId(glyphId: GlyphId): GlyphRecord | null;
     // (undocumented)
     recordForName(name: GlyphName): GlyphRecord | null;
+    resolveLayers(layerIds: readonly LayerId[]): Promise<readonly LayerRead[]>;
     setAxisMappings(mappings: readonly AxisMapping[]): Promise<void>;
     setLanguageIds(languageIds: readonly string[]): void;
     setMetricDefinitions(definitions: readonly MetricDefinition[]): Promise<void>;
@@ -896,12 +918,10 @@ export interface LayerAppearance {
     outlineFill?: string;
 }
 
-// @public (undocumented)
+// @public
 export interface LayerGetInput extends ShiftTarget {
     // (undocumented)
-    glyphId: GlyphId;
-    // (undocumented)
-    sourceId: SourceId;
+    layerId: LayerId;
 }
 
 // @public
@@ -937,6 +957,14 @@ export interface LayerOverlays {
     points?: boolean;
 }
 
+// @public
+export interface LayerRead {
+    // (undocumented)
+    authored: GlyphLayerSnapshot;
+    // (undocumented)
+    resolved: ResolvedLayerGeometry;
+}
+
 // @public (undocumented)
 export interface LayerRenderInput extends LayerGetInput {
     // (undocumented)
@@ -944,6 +972,9 @@ export interface LayerRenderInput extends LayerGetInput {
     // (undocumented)
     overlays?: LayerOverlays;
 }
+
+// @public (undocumented)
+export type LayerResolveInput = LayerGetInput;
 
 // @public
 export interface LayerSvg {
@@ -1012,6 +1043,40 @@ export interface MemoryFontSource extends GlyphReader {
 export type MemoryToolName = "select" | "hand";
 
 // @public
+export interface OutlineBounds {
+    // (undocumented)
+    max: BoundsCorner;
+    // (undocumented)
+    min: BoundsCorner;
+}
+
+// @public
+export interface ResolvedComponent {
+    // (undocumented)
+    baseGlyphId: GlyphId;
+    // (undocumented)
+    id: ComponentId;
+    outline: {
+        svgPath: string;
+        bounds: Bounds | null;
+    };
+    // (undocumented)
+    transformation: AffineTransformation;
+}
+
+// @public
+export interface ResolvedComponentGeometry {
+    // (undocumented)
+    baseGlyphId: GlyphId;
+    // (undocumented)
+    id: ComponentId;
+    // (undocumented)
+    outline: ResolvedOutline;
+    // (undocumented)
+    transformation: ComponentTransform;
+}
+
+// @public
 export interface ResolvedGlyph {
     // (undocumented)
     advanceWidth: number;
@@ -1030,6 +1095,32 @@ export interface ResolvedGlyphs {
 }
 
 // @public
+export interface ResolvedLayer {
+    // (undocumented)
+    advanceWidth: number;
+    // (undocumented)
+    components: ResolvedComponent[];
+    // (undocumented)
+    glyphId: GlyphId;
+    // (undocumented)
+    layerId: LayerId;
+    outline: {
+        svgPath: string;
+        bounds: Bounds | null;
+    };
+    // (undocumented)
+    sourceId: SourceId;
+}
+
+// @public
+export interface ResolvedLayerGeometry {
+    // (undocumented)
+    components: Array<ResolvedComponentGeometry>;
+    // (undocumented)
+    outline: ResolvedOutline;
+}
+
+// @public
 export interface ResolvedLocation {
     // (undocumented)
     designLocation: AxisCoordinate[];
@@ -1039,6 +1130,14 @@ export interface ResolvedLocation {
     metrics: SourceMetrics;
     // (undocumented)
     sourceId: SourceId | null;
+}
+
+// @public
+export interface ResolvedOutline {
+    // (undocumented)
+    bounds?: OutlineBounds;
+    // (undocumented)
+    svgPath: string;
 }
 
 // @public
@@ -1081,8 +1180,9 @@ export interface ShiftCapabilities {
     };
     // (undocumented)
     layers: {
-        get(input: LayerGetInput): Promise<ShiftObservation<AuthoredLayer | null>>;
-        render(input: LayerRenderInput): Promise<ShiftObservation<LayerSvg | null>>;
+        get(input: LayerGetInput): Promise<ShiftObservation<AuthoredLayer>>;
+        resolve(input: LayerResolveInput): Promise<ShiftObservation<ResolvedLayer>>;
+        render(input: LayerRenderInput): Promise<ShiftObservation<LayerSvg>>;
     };
     // (undocumented)
     locations: {
@@ -1140,6 +1240,46 @@ export interface ShiftObservation<Value> {
 }
 
 // @public
+export interface ShiftRead {
+    // (undocumented)
+    font: {
+        get(): Promise<FontOverview>;
+    };
+    readonly fontRevision: FontRevision;
+    // (undocumented)
+    glyphs: {
+        list(input?: ShiftReadInput<GlyphListInput>): Promise<GlyphPage>;
+        get(input: ShiftReadInput<GlyphGetInput>): Promise<GlyphSummary>;
+        resolve(input: ShiftReadInput<GlyphResolveInput>): Promise<ResolvedGlyphs>;
+    };
+    // (undocumented)
+    layers: {
+        get(input: ShiftReadInput<LayerGetInput>): Promise<AuthoredLayer>;
+        resolve(input: ShiftReadInput<LayerResolveInput>): Promise<ResolvedLayer>;
+        render(input: ShiftReadInput<LayerRenderInput>): Promise<LayerSvg>;
+    };
+    // (undocumented)
+    locations: {
+        resolve(input: ShiftReadInput<LocationResolveInput>): Promise<ResolvedLocation>;
+    };
+    // (undocumented)
+    readonly state: ShiftReadState;
+}
+
+// @public
+export type ShiftReadInput<Input> = Input extends unknown ? Omit<Input, keyof ShiftTarget> : never;
+
+// @public
+export type ShiftReadState = "active" | "stale" | "closed";
+
+// @public
+export interface ShiftScript extends ShiftCapabilities {
+    read<Result>(target: {
+        windowId: number;
+    }, callback: (read: ShiftRead) => Result | Promise<Result>): Promise<Result>;
+}
+
+// @public
 export interface ShiftSession {
     // (undocumented)
     editorConnected: boolean;
@@ -1188,7 +1328,7 @@ export function useSignalState<T>(signal: Signal<T>, options?: UseSignalOptions)
 
 // Warnings were encountered during analysis:
 //
-// dist/Editor-DvPBy2QP.d.ts:4369:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
+// dist/Editor-DP5V9mC1.d.ts:4412:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

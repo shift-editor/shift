@@ -13,7 +13,7 @@ Configure your agent's native MCP client once with the running app's URL and pri
 
 ## Discover the API
 
-Call the native `shift.describe` MCP tool. The typed API exposes `shift.capture`, `shift.sessions.list`, `shift.editor.inspect`, `shift.font.get`, `shift.locations.resolve`, `shift.glyphs.list`, `shift.glyphs.get`, `shift.glyphs.resolve`, `shift.layers.get`, and `shift.layers.render` inside `shift.execute`. Every operation targeting a font window accepts optional `ifFontRevision` and returns `{ fontRevision, value }`.
+Call the native `shift.describe` MCP tool. The typed API exposes `shift.capture`, `shift.sessions.list`, `shift.editor.inspect`, `shift.font.get`, `shift.locations.resolve`, `shift.glyphs.list`, `shift.glyphs.get`, `shift.glyphs.resolve`, `shift.layers.get`, `shift.layers.resolve`, `shift.layers.render`, and `shift.read` inside `shift.execute`. Every operation targeting a font window accepts optional `ifFontRevision` and returns `{ fontRevision, value }`; `shift.read` binds that revision for you.
 
 ## Execute code
 
@@ -28,11 +28,11 @@ async () => {
 };
 ```
 
-Always target the explicit `windowId` returned by `sessions.list()`. Do not assume focus is stable. Start a composed read with any targeted operation, keep its opaque `fontRevision`, and pass it as `ifFontRevision` to every later related call. A mismatch means authored state changed: restart the read. The token is scoped to one live renderer, retrieves no historical data, and does not version selection or viewport state. `captureId` separately identifies one image inside the surrounding observation.
+Always target the explicit `windowId` returned by `sessions.list()`. Do not assume focus is stable. Compose font reads inside `shift.read({ windowId }, async (read) => ...)`: `read.font.get()`, `read.glyphs.*`, `read.locations.resolve()`, and `read.layers.*` omit `windowId` and `ifFontRevision` and return plain values from one bound revision. If authored state changes mid-read, the call throws an error named `FontChangedError`, `read.state` becomes `"stale"`, and every later call fails; nothing retries, so start a new `shift.read`. Outside a scope, carry an observation's opaque `fontRevision` into `ifFontRevision` by hand. The token is scoped to one live renderer, retrieves no historical data, and does not version selection or viewport state. `captureId` separately identifies one image inside the surrounding observation.
 
-`font.get().value` returns Home-safe `info`, metrics, metric definitions, axes, global designspace sources, instances, and glyph count. Glyphs advertise stable `layers` as `{ layerId, sourceId }`, including glyph-specific support layers. `glyphs.get()` resolves one glyph by exact name or stable ID; provide exactly one of `name` or `glyphId`. `glyphs.list()` returns bounded directory pages with an opaque `nextCursor`. Supply `sourceId` to include each entry's nested authored `layer`; `null` means sparse absence. `layers.get().value` returns `advanceWidth`, `contours[].points`, components with conventional affine `transformation`, and anchors for one authored glyph/source layer. `locations.resolve()` maps arbitrary external axis coordinates and resolves source metrics. `glyphs.resolve()` returns drawable paths and advances at such a location.
+`font.get().value` returns Home-safe `info`, metrics, metric definitions, axes, global designspace sources, instances, and glyph count. Glyphs advertise stable `layers` as `{ layerId, sourceId }`, including glyph-specific support layers. `glyphs.get()` resolves one glyph by exact name or stable ID; provide exactly one of `name` or `glyphId`. `glyphs.list()` returns bounded directory pages with an opaque `nextCursor`. Supply `sourceId` to include each entry's nested authored `layer`; `null` means sparse absence. Layer operations take one `layerId` from a glyph's `layers`; unknown IDs fail. `layers.get()` returns `advanceWidth`, `contours[].points`, components with conventional affine `transformation`, and anchors for that authored layer. `layers.resolve()` returns its composited `outline` (`svgPath` and `bounds`) and one entry per direct component whose `outline` covers that component's whole subtree, resolved at the layer's own source. `locations.resolve()` maps arbitrary external axis coordinates and resolves source metrics. `glyphs.resolve()` returns drawable paths and advances at such a location.
 
-`layers.render().value` returns portable SVG for one authored layer; request any combination of `points`, `controlLines`, `anchors`, `components`, `fontMetrics`, and `advanceWidth` under `overlays`. `fontMetrics` draws labeled horizontal source metrics; `advanceWidth` independently draws vertical origin and advance guides. Component outlines resolve recursively with the canvas's source-fallback rules; `components` adds handles for components authored directly in the requested layer. `appearance` accepts presentation-only color overrides, while structured `guides` remain style-independent. Point, anchor, and component elements retain Shift IDs in `data-shift-id`. Rendered SVG is a point-in-time, read-only proof. Preview sessions expose font and glyph directory facts but have no authored layers; all capabilities remain read-only.
+`layers.render().value` returns portable SVG for one authored layer; request any combination of `points`, `controlLines`, `anchors`, `components`, `fontMetrics`, and `advanceWidth` under `overlays`. `fontMetrics` draws labeled horizontal source metrics; `advanceWidth` independently draws vertical origin and advance guides. It draws the same composited outline `layers.resolve()` returns; `components` adds a box and origin handle for each direct component. `appearance` accepts presentation-only color overrides, while structured `guides` remain style-independent. Point, anchor, and component elements retain Shift IDs in `data-shift-id`. Rendered SVG is a point-in-time, read-only proof. Preview sessions expose font and glyph directory facts but have no authored layers; all capabilities remain read-only.
 
 ## Capture the UI
 
@@ -44,23 +44,19 @@ For example, count authored anchors in one explicitly chosen source, paging with
 async () => {
   const session = (await shift.sessions.list()).find((session) => session.sessionId === "...");
   if (!session) throw new Error("Target Shift session is not open");
-  const observedFont = await shift.font.get({ windowId: session.windowId });
-  const source = observedFont.value.sources.find((source) => source.name === "Regular");
-  if (!source) throw new Error("Target source is not open");
-  const target = { windowId: session.windowId, ifFontRevision: observedFont.fontRevision };
-  let cursor;
-  let anchors = 0;
-  do {
-    const observedPage = await shift.glyphs.list({
-      ...target,
-      sourceId: source.id,
-      cursor,
-      limit: 20,
-    });
-    for (const glyph of observedPage.value.items) anchors += glyph.layer?.anchors.length ?? 0;
-    cursor = observedPage.value.nextCursor ?? undefined;
-  } while (cursor);
-  return { sourceId: source.id, anchors, fontRevision: observedFont.fontRevision };
+  return shift.read({ windowId: session.windowId }, async (read) => {
+    const font = await read.font.get();
+    const source = font.sources.find((source) => source.name === "Regular");
+    if (!source) throw new Error("Target source is not open");
+    let cursor;
+    let anchors = 0;
+    do {
+      const page = await read.glyphs.list({ sourceId: source.id, cursor, limit: 20 });
+      for (const glyph of page.items) anchors += glyph.layer?.anchors.length ?? 0;
+      cursor = page.nextCursor ?? undefined;
+    } while (cursor);
+    return { sourceId: source.id, anchors, fontRevision: read.fontRevision };
+  });
 };
 ```
 
@@ -70,28 +66,28 @@ To produce an annotated proof of one authored layer:
 async () => {
   const session = (await shift.sessions.list()).find(({ sessionId }) => sessionId === "...");
   if (!session) throw new Error("Target Shift session is not open");
-  const font = await shift.font.get({ windowId: session.windowId });
-  const target = { windowId: session.windowId, ifFontRevision: font.fontRevision };
-  const glyph = await shift.glyphs.get({ ...target, name: "A" });
-  const source = font.value.sources.find(({ name }) => name === "Regular");
-  if (!source) throw new Error("Target source is not open");
-  return shift.layers.render({
-    ...target,
-    glyphId: glyph.value.id,
-    sourceId: source.id,
-    overlays: {
-      points: true,
-      controlLines: true,
-      anchors: true,
-      components: true,
-      fontMetrics: true,
-    },
-    appearance: { outlineFill: "#111111", metricStroke: "#999999" },
+  return shift.read({ windowId: session.windowId }, async (read) => {
+    const font = await read.font.get();
+    const glyph = await read.glyphs.get({ name: "A" });
+    const source = font.sources.find(({ name }) => name === "Regular");
+    const layer = glyph.layers.find(({ sourceId }) => sourceId === source?.id);
+    if (!layer) throw new Error("A has no Regular layer");
+    return read.layers.render({
+      layerId: layer.layerId,
+      overlays: {
+        points: true,
+        controlLines: true,
+        anchors: true,
+        components: true,
+        fontMetrics: true,
+      },
+      appearance: { outlineFill: "#111111", metricStroke: "#999999" },
+    });
   });
 };
 ```
 
-A cursor is not a frozen snapshot; guard every page with the same `fontRevision`. Large scans may exceed the sandbox deadline: return a partial result, `nextCursor`, and `fontRevision` to continue, then restart if that revision is stale.
+A cursor is not a frozen snapshot; read every page inside one `shift.read`. Large scans may exceed the sandbox deadline: return a partial result, `nextCursor`, and `fontRevision` to continue, then restart if that revision is stale.
 
 Keep returned values focused. Filter and map inside code mode instead of returning complete intermediate responses. Generated code has no filesystem, network, environment, Node.js, or Electron access.
 

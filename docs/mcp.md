@@ -48,28 +48,24 @@ Add a **Streamable HTTP** server with the name and URL from the table, and set i
 
 ## What the connection can read
 
-`shift.describe` describes the typed API. `shift.execute` runs bounded, read-only code against explicit live Shift window IDs. The first-class `shift.capture` tool returns a point-in-time PNG image plus structured capture metadata for either the visible window contents or its editor canvas panel. Agents can list open sessions; read font info, metric definitions, glyph directories, nested authored source layers, conventional component transformations, and point-in-time editor observations; resolve mapped locations, source metrics, and drawable glyphs at arbitrary axis coordinates; and render one authored layer as portable SVG with optional points, control lines, anchors, component handles, labeled source metrics, and independent advance-width guides. Render calls can apply presentation-only `appearance` overrides and return style-independent structured `guides`. Rendered SVG is a refreshable point-in-time proof, not a live binding. Preview geometry is not authored data. An offline file that is not open in Shift should be inspected with [`shift-cli`](../crates/shift-cli/README.md), not this live server.
+`shift.describe` describes the typed API. `shift.execute` runs bounded, read-only code against explicit live Shift window IDs. The first-class `shift.capture` tool returns a point-in-time PNG image plus structured capture metadata for either the visible window contents or its editor canvas panel. Agents can list open sessions; read font info, metric definitions, glyph directories, nested authored source layers, conventional component transformations, and point-in-time editor observations; resolve mapped locations, source metrics, and drawable glyphs at arbitrary axis coordinates; resolve one authored layer's composited outline and component subtrees; and render that layer as portable SVG with optional points, control lines, anchors, component handles, labeled source metrics, and independent advance-width guides. Render calls can apply presentation-only `appearance` overrides and return style-independent structured `guides`. Rendered SVG is a refreshable point-in-time proof, not a live binding. Preview geometry is not authored data. An offline file that is not open in Shift should be inspected with [`shift-cli`](../crates/shift-cli/README.md), not this live server.
 
-Every operation targeting one font window returns `{ fontRevision, value }`. For a composed read, take the first result's opaque `fontRevision` and pass it as `ifFontRevision` to every later call. Shift rejects the sequence if authored state changed; the token does not retrieve historical data and is not valid for another window or renderer lifetime. `captureId` still identifies one image and is distinct from the surrounding font revision. Font revisions do not version selection, viewport, focus, or other editor-only state.
+Every operation targeting one font window returns `{ fontRevision, value }`. For a composed read inside `shift.execute`, use `shift.read({ windowId }, async (read) => ...)`: it binds one revision, passes it as `ifFontRevision` to every call, and returns plain values. If authored state changes mid-read, the call throws `FontChangedError`, the scope stays stale, and nothing retries; start a new read. Separate MCP requests can carry `fontRevision` into `ifFontRevision` by hand. The token does not retrieve historical data and is not valid for another window or renderer lifetime. `captureId` still identifies one image and is distinct from the surrounding font revision. Font revisions do not version selection, viewport, focus, or other editor-only state.
 
 ```js
 async () => {
   const session = (await shift.sessions.list()).find(({ editorConnected }) => editorConnected);
   if (!session) throw new Error("No connected Shift font");
 
-  const observedFont = await shift.font.get({ windowId: session.windowId });
-  const ifFontRevision = observedFont.fontRevision;
-  const page = await shift.glyphs.list({
-    windowId: session.windowId,
-    ifFontRevision,
-    limit: 20,
+  return shift.read({ windowId: session.windowId }, async (read) => {
+    const font = await read.font.get();
+    const page = await read.glyphs.list({ limit: 20 });
+    return {
+      familyName: font.info.familyName,
+      glyphNames: page.items.map(({ name }) => name),
+      fontRevision: read.fontRevision,
+    };
   });
-
-  return {
-    familyName: observedFont.value.info.familyName,
-    glyphNames: page.value.items.map(({ name }) => name),
-    fontRevision: ifFontRevision,
-  };
 };
 ```
 

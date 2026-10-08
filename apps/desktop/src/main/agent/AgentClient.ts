@@ -11,10 +11,11 @@ import type {
   LayerOverlays,
   LayerSvg,
   ResolvedGlyphs,
+  ResolvedLayer,
   ResolvedLocation,
   ShiftObservation,
 } from "@shift/runtime";
-import type { GlyphId, SourceId } from "@shift/types";
+import type { GlyphId, LayerId, SourceId } from "@shift/types";
 import type { MessagePortMain } from "electron";
 import type { AgentCallMap, AgentEventMap, EditorCaptureBounds } from "../../shared/agent/protocol";
 import { Channel, electronPortTransport } from "../../shared/workspace/channel";
@@ -91,27 +92,26 @@ export class AgentClient {
   }
 
   getLayer(
-    glyphId: GlyphId,
-    sourceId: SourceId,
+    layerId: LayerId,
     ifFontRevision?: FontRevision,
-  ): Promise<ShiftObservation<AuthoredLayer | null>> {
-    return this.#call("layers.get", { glyphId, sourceId, ifFontRevision });
+  ): Promise<ShiftObservation<AuthoredLayer>> {
+    return this.#call("layers.get", { layerId, ifFontRevision });
+  }
+
+  resolveLayer(
+    layerId: LayerId,
+    ifFontRevision?: FontRevision,
+  ): Promise<ShiftObservation<ResolvedLayer>> {
+    return this.#call("layers.resolve", { layerId, ifFontRevision });
   }
 
   renderLayer(
-    glyphId: GlyphId,
-    sourceId: SourceId,
+    layerId: LayerId,
     overlays?: LayerOverlays,
     appearance?: LayerAppearance,
     ifFontRevision?: FontRevision,
-  ): Promise<ShiftObservation<LayerSvg | null>> {
-    return this.#call("layers.render", {
-      glyphId,
-      sourceId,
-      overlays,
-      appearance,
-      ifFontRevision,
-    });
+  ): Promise<ShiftObservation<LayerSvg>> {
+    return this.#call("layers.render", { layerId, overlays, appearance, ifFontRevision });
   }
 
   #call<K extends keyof AgentCallMap>(

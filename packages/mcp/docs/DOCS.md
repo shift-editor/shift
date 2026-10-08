@@ -11,7 +11,7 @@ Local code-mode access to the live Shift desktop application.
 - **Architecture Invariant:** `@shift/mcp` owns only the protocol adapter. `@shift/sandbox` owns bounded QuickJS execution against `ShiftCapabilities`; the desktop app owns the utility-process supervisor independently of whether the MCP listener starts.
 - **Architecture Invariant:** Every editor request names a window explicitly. Focus changes never retarget an in-flight or subsequent call.
 - **Architecture Invariant:** Every targeted call preserves `ShiftObservation<T>` and its `fontRevision`; MCP never invents a transport-specific snapshot identity or strips revision preconditions from scripting.
-- **Architecture Invariant:** MCP is not Shift's canonical font API. Shared document and editor capabilities remain usable by future plugin and protocol hosts without MCP. The desktop host asks `Font.readAuthoredLayers()` for accepted authored snapshots; agent clients connect through native MCP support rather than a Shift-specific client CLI.
+- **Architecture Invariant:** MCP is not Shift's canonical font API. Shared document and editor capabilities remain usable by future plugin and protocol hosts without MCP. The desktop host asks `Font.readLayers()` and `Font.resolveLayers()` for accepted authored layers; agent clients connect through native MCP support rather than a Shift-specific client CLI.
 
 ## Codemap
 
@@ -50,21 +50,19 @@ Accepts an async zero-argument JavaScript function and returns its JSON result. 
 async () => {
   const session = (await shift.sessions.list()).find(({ sessionId }) => sessionId === "...");
   if (!session) throw new Error("Target session closed");
-  const observedFont = await shift.font.get({ windowId: session.windowId });
-  const page = await shift.glyphs.list({
-    windowId: session.windowId,
-    ifFontRevision: observedFont.fontRevision,
-    limit: 20,
+  return shift.read({ windowId: session.windowId }, async (read) => {
+    const font = await read.font.get();
+    const page = await read.glyphs.list({ limit: 20 });
+    return {
+      family: font.info.familyName,
+      count: font.glyphCount,
+      names: page.items.map((g) => g.name),
+    };
   });
-  return {
-    family: observedFont.value.info.familyName,
-    count: observedFont.value.glyphCount,
-    names: page.value.items.map((g) => g.name),
-  };
 };
 ```
 
-`shift.sessions.list()` returns one entry per open font window. Every targeted operation returns `{ fontRevision, value }`; pass the first token as `ifFontRevision` to later related calls so stale composition fails explicitly. `shift.editor.inspect()` returns renderer-owned UI facts. `shift.font.get()` returns `info`, metrics, metric definitions, axes, sources, instances, and glyph count even on Home. `shift.locations.resolve()` maps arbitrary external coordinates and resolves source metrics. `shift.glyphs.list()` returns bounded directory pages with `nextCursor` and stable layer references; passing an explicit `sourceId` includes each glyph's nested authored `layer` for code-mode aggregation. `shift.glyphs.get()` returns one directory entry by exact `name` or stable `glyphId` (not both). `shift.glyphs.resolve()` returns drawable paths and advance widths at an arbitrary location. `shift.layers.get()` returns nested contours, points, components, transformations, and anchors for one authored glyph/source pair, while `shift.layers.render()` returns point-in-time portable SVG with optional source-addressable overlays, presentation-only `appearance` overrides, and style-independent metric and advance `guides` for that same authored layer. Untrusted inputs are parsed using `@shift/runtime`'s shared Zod schemas; the code-mode sandbox remains bounded.
+`shift.sessions.list()` returns one entry per open font window. Every targeted operation returns `{ fontRevision, value }`; pass the first token as `ifFontRevision` to later related calls so stale composition fails explicitly. `shift.editor.inspect()` returns renderer-owned UI facts. `shift.font.get()` returns `info`, metrics, metric definitions, axes, sources, instances, and glyph count even on Home. `shift.locations.resolve()` maps arbitrary external coordinates and resolves source metrics. `shift.glyphs.list()` returns bounded directory pages with `nextCursor` and stable layer references; passing an explicit `sourceId` includes each glyph's nested authored `layer` for code-mode aggregation. `shift.glyphs.get()` returns one directory entry by exact `name` or stable `glyphId` (not both). `shift.glyphs.resolve()` returns drawable paths and advance widths at an arbitrary location. Layer operations take one stable `layerId` from a glyph's advertised `layers`. `shift.layers.get()` returns nested contours, points, components, transformations, and anchors for that authored layer; `shift.layers.resolve()` returns its composited outline and each direct component's subtree outline and bounds; and `shift.layers.render()` returns point-in-time portable SVG with optional source-addressable overlays, presentation-only `appearance` overrides, and style-independent metric and advance `guides` for that same layer. `shift.read({ windowId }, async (read) => ...)` binds one font revision for a composed read and returns plain values; a change mid-read throws `FontChangedError` and is never retried. Untrusted inputs are parsed using `@shift/runtime`'s shared Zod schemas; the code-mode sandbox remains bounded.
 
 ## Desktop ownership
 
