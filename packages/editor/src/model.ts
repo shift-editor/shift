@@ -1,4 +1,5 @@
 export { Font } from "./lib/model/Font";
+export type { Kerning, KerningPairPosition } from "./lib/model/Kerning";
 export { FontStore, type GlyphInvalidation } from "./lib/model/FontStore";
 export { Glyph, GlyphLayer, GlyphRenderModel } from "./lib/model/Glyph";
 export { GlyphLayerState } from "./lib/model/GlyphLayerState";
