@@ -14,6 +14,10 @@ export const scriptedNativeDialogs: NativeDialogs = {
     return process.env.SHIFT_E2E_OPEN_FONT_PATH || process.env.SHIFT_E2E_SAVE_SHIFT_PATH || null;
   },
 
+  async openFontFolder() {
+    return process.env.SHIFT_E2E_OPEN_FONT_PATH || null;
+  },
+
   async showCreateFailure() {},
 
   async showOpenFailure() {},

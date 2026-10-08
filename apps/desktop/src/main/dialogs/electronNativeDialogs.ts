@@ -6,9 +6,9 @@ import {
 } from "electron";
 import path from "node:path";
 import { message } from "../../shared/messages";
-import { OPEN_FONT_EXTENSIONS } from "../../shared/openFontExtensions";
 import type { Window } from "../windows/Window";
 import type { NativeDialogs } from "./NativeDialogs";
+import { openFontDialogOptions, openFontFolderDialogOptions } from "./openFontDialogOptions";
 
 async function showFailure(
   window: Window | null,
@@ -33,27 +33,27 @@ async function showFailure(
   await dialog.showMessageBox(options);
 }
 
+async function showOpenPath(
+  window: Window | null,
+  options: OpenDialogOptions,
+): Promise<string | null> {
+  const result = window
+    ? await dialog.showOpenDialog(window.window, options)
+    : await dialog.showOpenDialog(options);
+
+  if (result.canceled || result.filePaths.length !== 1) return null;
+
+  return result.filePaths[0];
+}
+
 /** Uses Electron's native dialogs for production file and document choices. */
 export const electronNativeDialogs: NativeDialogs = {
-  async openFont(window) {
-    const options: OpenDialogOptions = {
-      title: message("file.open.title"),
-      filters: [
-        { name: message("file.open.filter.supported"), extensions: OPEN_FONT_EXTENSIONS },
-        { name: message("file.open.filter.shift"), extensions: ["shift"] },
-        { name: message("file.open.filter.outline"), extensions: ["ttf", "otf"] },
-        { name: message("file.open.filter.glyphs"), extensions: ["glyphs", "glyphspackage"] },
-        { name: message("file.open.filter.sources"), extensions: ["ufo", "designspace"] },
-      ],
-      properties: ["openFile", "openDirectory"],
-    };
-    const result = window
-      ? await dialog.showOpenDialog(window.window, options)
-      : await dialog.showOpenDialog(options);
+  openFont(window) {
+    return showOpenPath(window, openFontDialogOptions(process.platform));
+  },
 
-    if (result.canceled || result.filePaths.length !== 1) return null;
-
-    return result.filePaths[0];
+  openFontFolder(window) {
+    return showOpenPath(window, openFontFolderDialogOptions());
   },
 
   async showCreateFailure(window, applicationName) {

@@ -29,7 +29,7 @@ import { electronNativeDialogs } from "../dialogs/electronNativeDialogs";
 import { shiftProductName } from "../release";
 import { AppUpdater } from "../update/AppUpdater";
 import { isConvertiblePreviewPath } from "../../shared/workspace/previewConversion";
-import { OPEN_FONT_EXTENSIONS } from "../../shared/openFontExtensions";
+import { FONT_FOLDER_EXTENSIONS, OPEN_FONT_EXTENSIONS } from "../../shared/openFontExtensions";
 import { RecentDocuments } from "../recents/RecentDocuments";
 import type { RecentDocumentVisit } from "../../shared/recents";
 
@@ -513,7 +513,9 @@ export class App {
     });
     ipc.handle(ipcMain, "recents.locate", async (event, missingPath) => {
       const window = this.#requireWindowForWebContents(event.sender);
-      const locatedPath = await this.#nativeDialogs.openFont(window);
+      const locatedPath = isFontFolderPath(missingPath)
+        ? await this.#nativeDialogs.openFontFolder(window)
+        : await this.#nativeDialogs.openFont(window);
       if (!locatedPath) return;
 
       const opened = await this.#openPathFromWindow(window, locatedPath);
@@ -598,7 +600,14 @@ export class App {
           await this.#createWorkspaceFromWindow(window ?? null);
         },
         open: async () => {
-          await this.#openWorkspaceFromWindow(window ?? null);
+          await this.#openWorkspaceFromWindow(window ?? null, (opener) =>
+            this.#nativeDialogs.openFont(opener),
+          );
+        },
+        openFolder: async () => {
+          await this.#openWorkspaceFromWindow(window ?? null, (opener) =>
+            this.#nativeDialogs.openFontFolder(opener),
+          );
         },
         canSave: () =>
           document !== null ||
@@ -757,10 +766,18 @@ export class App {
     }
   }
 
-  async #openWorkspaceFromWindow(opener: Window | null): Promise<void> {
+  /**
+   * Asks the user for a font and opens it on behalf of a window.
+   *
+   * @param choosePath - native picker for the kind of font being opened.
+   */
+  async #openWorkspaceFromWindow(
+    opener: Window | null,
+    choosePath: (opener: Window | null) => Promise<string | null>,
+  ): Promise<void> {
     let openPath: string | null;
     try {
-      openPath = await this.#nativeDialogs.openFont(opener);
+      openPath = await choosePath(opener);
     } catch (error) {
       this.#log.warn("open dialog failed", error);
       await this.#nativeDialogs.showOpenFailure(opener, this.applicationName);
@@ -899,6 +916,11 @@ export class App {
 }
 
 /** Centres the 4:3 launcher on the primary display, capped to 90% of smaller screens. */
+/** Whether a font path is a format stored as a folder, which needs the folder picker. */
+function isFontFolderPath(sourcePath: string): boolean {
+  return FONT_FOLDER_EXTENSIONS.includes(path.extname(sourcePath).slice(1).toLowerCase());
+}
+
 function launcherBounds(): Rectangle {
   const workArea = screen.getPrimaryDisplay().workArea;
   const width = Math.min(LAUNCHER_WIDTH, Math.round(workArea.width * LAUNCHER_MAX_SCREEN_SHARE));

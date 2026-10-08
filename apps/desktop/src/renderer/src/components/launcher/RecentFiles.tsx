@@ -17,8 +17,11 @@ import {
   useToastManager,
 } from "@shift/ui";
 import { recentFolderLabels, type RecentDocument } from "@shared/recents";
+import { OpenFontButton } from "./OpenFontButton";
 import { RecentFileCard, RecentFileRow } from "./RecentFileItem";
+import { commandShortcuts } from "@shared/commands";
 import { getShiftHost } from "@/host/shiftHost";
+import { commandShortcutLabel } from "@/lib/keyboard/commandShortcutLabel";
 import { useMinuteClock } from "./useRecentDocuments";
 import {
   useRecentFileActions,
@@ -58,6 +61,7 @@ const RecentFilesSection = ({ documents }: RecentFilesProps) => {
   const actions = useRecentFileActions();
   const now = useMinuteClock();
   const [expanded, setExpanded] = useState(false);
+  const isMac = getShiftHost().platform === "darwin";
   const [view, setView] = useStoredChoice<RecentView>(VIEW_STORAGE_KEY, ["grid", "list"], "grid");
 
   const folders = useMemo(
@@ -77,20 +81,10 @@ const RecentFilesSection = ({ documents }: RecentFilesProps) => {
           <Button variant="primary" size="sm" className="text-sm" onClick={createFont}>
             New Font
             <span aria-hidden="true" className="ml-2 opacity-70">
-              ⌘N
+              {commandShortcutLabel(commandShortcuts["file.new"], isMac)}
             </span>
           </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="rounded-md text-sm font-medium"
-            onClick={openFont}
-          >
-            Open Font…
-            <span aria-hidden="true" className="ml-2">
-              ⌘O
-            </span>
-          </Button>
+          <OpenFontButton />
           <Separator orientation="vertical" variant="strong" className="h-4" />
           <ViewToggle view={view} onChange={setView} />
         </div>
@@ -238,14 +232,6 @@ const RemovedRecentToasts = () => {
     );
   });
 };
-
-async function openFont(): Promise<void> {
-  try {
-    await getShiftHost().commands.run("file.open");
-  } catch (error) {
-    console.error("opening a font failed", error);
-  }
-}
 
 async function createFont(): Promise<void> {
   try {

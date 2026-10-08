@@ -29,14 +29,24 @@ export function commandMenuItem(
   };
 }
 
+/**
+ * Builds the File menu.
+ *
+ * @param includeOpenFolder - adds Open Font Folder… where the Open dialog cannot
+ * select folders (Windows and Linux).
+ */
 export function fileMenuItems(
   runCommand: (id: CommandId) => void,
   isCommandEnabled: (id: CommandId) => boolean,
   recent: RecentMenu,
+  includeOpenFolder: boolean,
 ): MenuItemConstructorOptions[] {
   return [
     commandMenuItem("file.new", runCommand, isCommandEnabled),
     commandMenuItem("file.open", runCommand, isCommandEnabled),
+    ...(includeOpenFolder
+      ? [commandMenuItem("file.openFolder", runCommand, isCommandEnabled)]
+      : []),
     openRecentMenuItem(recent),
     { type: "separator" },
     commandMenuItem("file.save", runCommand, isCommandEnabled),

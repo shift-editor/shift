@@ -95,6 +95,8 @@ export type CommandContext = {
     /** Creates a new untitled workspace through main's document workflow. */
     create: () => Promise<void>;
     open: () => Promise<void>;
+    /** Opens a UFO or Glyphs package through a folder picker. */
+    openFolder: () => Promise<void>;
     /** Returns whether the active authored document or convertible preview can be saved. */
     canSave: () => boolean;
     /** Returns whether the active window is attached to an authored workspace. */
