@@ -3,6 +3,7 @@ import type { UpdateProgress } from "../update/types";
 import type { RendererErrorReport } from "../ipc/contract";
 import type { FontSessionMode } from "../workspace/protocol";
 import type { RecentDocument } from "../recents";
+import type { AgentConnectionsState } from "../agent/connections";
 
 /**
  * Renderer-facing API for Electron app-shell behavior.
@@ -117,6 +118,18 @@ export interface ShiftHost {
      * @returns an unsubscribe function.
      */
     onZoomChanged: (callback: (percent: number) => void) => () => void;
+  };
+  /** Whether local agents may connect over MCP, and what they are doing. */
+  agentConnections: {
+    state: () => Promise<AgentConnectionsState>;
+    /** Allows or disallows agent connections; resolves with the resulting state. */
+    setAllowed: (allowed: boolean) => Promise<AgentConnectionsState>;
+    /**
+     * Subscribes to agent connection changes.
+     *
+     * @returns an unsubscribe function.
+     */
+    onChanged: (callback: (state: AgentConnectionsState) => void) => () => void;
   };
   /** Main-owned list of files Shift has opened. */
   recents: {

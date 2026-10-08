@@ -43,6 +43,7 @@ import type {
 import type { RecentDocumentVisit } from "../../shared/recents";
 import { RecentDocuments } from "../recents/RecentDocuments";
 import { SandboxRuntimeProcess } from "../sandbox/SandboxRuntimeProcess";
+import { AgentConnections } from "../agent/AgentConnections";
 
 const SLUG_ATLAS_PROFILING_ENABLED =
   process.env.SHIFT_PROFILE_SLUG_ATLAS !== undefined &&
@@ -73,7 +74,7 @@ export class App {
   readonly #updater: AppUpdater;
 
   #commands = new CommandRegistry();
-  #mcp: ShiftMcpServer | null = null;
+  #agentConnections: AgentConnections | null = null;
   #sandbox: SandboxRuntimeProcess | null = null;
   #windows = new WindowManager();
   #workspaces: WorkspaceManager;
@@ -235,7 +236,7 @@ export class App {
       );
       this.#recents.onChanged(() => this.#publishRecents());
       await this.#startSandbox();
-      await this.#startMcp();
+      await this.#startAgentConnections();
 
       // Taken before recovery, which marks the documents it restores open again.
       const openAtLastExit = this.#recents.takeOpen();
@@ -280,7 +281,7 @@ export class App {
     });
     app.on("will-quit", () => {
       this.#log.info("will quit: disposing app services");
-      void this.#stopMcp();
+      void this.#agentConnections?.shutdown();
       this.#stopSandbox();
       // Only an ordinary quit forgets open documents; an update restart reopens them.
       if (this.#lifecycle.quitReason === "quit") this.#recents?.clearOpen();
@@ -487,6 +488,12 @@ export class App {
   }
 
   #registerIpcHandlers(): void {
+    ipc.handle(ipcMain, "agentConnections.state", () => this.#requireAgentConnections().state);
+    ipc.handle(ipcMain, "agentConnections.setAllowed", async (_event, allowed) => {
+      const connections = this.#requireAgentConnections();
+      await connections.setAllowed(allowed === true);
+      return connections.state;
+    });
     ipc.handle(ipcMain, "agent.connect", (event) => {
       const window = this.#requireWindowForWebContents(event.sender);
       const { port1, port2 } = new MessageChannelMain();
@@ -954,61 +961,39 @@ export class App {
     }
   }
 
-  async #startMcp(): Promise<void> {
+  async #startAgentConnections(): Promise<void> {
     const sandbox = this.#sandbox;
     if (!sandbox) throw new Error("Sandbox runtime was not initialized");
 
-    let port: number;
-    switch (app.getName()) {
-      case "Shift":
-        port = 17461;
-        break;
-      case "Shift Nightly":
-        port = 17462;
-        break;
-      case "Shift Dev":
-        port = 17463;
-        break;
-      case "Shift Nightly Dev":
-        port = 17464;
-        break;
-      default:
-        throw new Error(`Unknown Shift distribution: ${app.getName()}`);
-    }
-
-    const mcp = new ShiftMcpServer({
-      execute: (code) => sandbox.execute(code),
-      capture: (input) => this.#capture(input),
-      descriptorPath: path.join(app.getPath("userData"), "mcp.json"),
-      port: process.env.NODE_ENV === "test" ? 0 : port,
-      logger: createShiftLogger("app.mcp"),
+    const { port, serverName } = agentEndpoint(app.getName());
+    const testing = process.env.NODE_ENV === "test";
+    const connections = new AgentConnections({
+      settingsPath: path.join(app.getPath("userData"), "agent-connections.json"),
+      serverName,
+      port: testing ? 0 : port,
+      createServer: (onActivity) =>
+        new ShiftMcpServer({
+          execute: (code) => sandbox.execute(code),
+          capture: (input) => this.#capture(input),
+          port: testing ? 0 : port,
+          logger: createShiftLogger("app.mcp"),
+          onActivity,
+        }),
+      log: createShiftLogger("app.agentConnections"),
     });
-
-    try {
-      await mcp.start();
-      this.#mcp = mcp;
-    } catch (error) {
-      try {
-        await mcp.stop();
-      } catch (stopError) {
-        this.#log.error("failed to clean up MCP server startup", stopError);
+    connections.onChanged((state) => {
+      for (const window of this.#windows.allWindows()) {
+        if (window.window.isDestroyed()) continue;
+        ipc.send(window.window.webContents, "agentConnections.changed", state);
       }
-      this.#log.error("failed to start MCP server", error);
-    }
+    });
+    this.#agentConnections = connections;
+    await connections.resume();
   }
 
-  async #stopMcp(): Promise<void> {
-    const mcp = this.#mcp;
-    this.#mcp = null;
-
-    const stoppingMcp = mcp?.stop();
-    if (!stoppingMcp) return;
-
-    try {
-      await stoppingMcp;
-    } catch (error) {
-      this.#log.error("failed to stop MCP server", error);
-    }
+  #requireAgentConnections(): AgentConnections {
+    if (!this.#agentConnections) throw new Error("Agent connections are not ready yet");
+    return this.#agentConnections;
   }
 
   #stopSandbox(): void {
@@ -1160,4 +1145,20 @@ function launcherBounds(): Rectangle {
     width,
     height,
   };
+}
+
+/** The fixed MCP port and server name for each Shift build. */
+function agentEndpoint(appName: string): { port: number; serverName: string } {
+  switch (appName) {
+    case "Shift":
+      return { port: 17461, serverName: "shift" };
+    case "Shift Nightly":
+      return { port: 17462, serverName: "shift-nightly" };
+    case "Shift Dev":
+      return { port: 17463, serverName: "shift-dev" };
+    case "Shift Nightly Dev":
+      return { port: 17464, serverName: "shift-nightly-dev" };
+    default:
+      throw new Error(`Unknown Shift distribution: ${appName}`);
+  }
 }

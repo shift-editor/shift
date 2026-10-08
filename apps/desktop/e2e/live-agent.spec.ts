@@ -1,16 +1,27 @@
-import { readFile } from "node:fs/promises";
-import path from "node:path";
+import type { Page } from "@playwright/test";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
-import type { ShiftMcpConnection } from "@shift/mcp";
 import { workspaceTest as test, expect, UFO_FONT_PATH } from "./fixtures/electronApp";
 
-async function runShiftCode(testRoot: string, code: string): Promise<unknown> {
-  const descriptor = path.join(testRoot, "user-data", "mcp.json");
-  const connection = JSON.parse(await readFile(descriptor, "utf8")) as ShiftMcpConnection;
+/** Turns on agent connections in Settings → Agents and returns the MCP URL it shows. */
+async function enableAgentConnections(page: Page): Promise<string> {
+  await page.getByRole("button", { name: "Settings" }).click();
+  const dialog = page.getByRole("dialog", { name: "Settings" });
+  await dialog.getByRole("button", { name: "Agents", exact: true }).click();
+  const agents = dialog.getByRole("region", { name: "Agents" });
+  await expect(agents.getByText("Agents cannot connect while this is off.")).toBeVisible();
+
+  await agents.getByRole("checkbox", { name: "Allow agent connections" }).click();
+  const url = agents.getByLabel("Other clients setup");
+  await expect(url).toHaveText(/^http:\/\/127\.0\.0\.1:\d+\/mcp$/);
+  const mcpUrl = (await url.textContent()) ?? "";
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  return mcpUrl;
+}
+
+async function runShiftCode(url: string, code: string): Promise<unknown> {
   const client = new Client({ name: "shift-e2e", version: "1.0.0" });
-  const transport = new StreamableHTTPClientTransport(new URL(connection.url), {
-    authProvider: { token: async () => connection.token },
-  });
+  const transport = new StreamableHTTPClientTransport(new URL(url));
 
   try {
     await client.connect(transport);
@@ -29,13 +40,11 @@ async function runShiftCode(testRoot: string, code: string): Promise<unknown> {
 test.describe("authored font reads from Home", () => {
   test.use({ startupFontPath: UFO_FONT_PATH });
 
-  test("paginates glyphs and reads named source anchors", async ({
-    page: workspacePage,
-    testRoot,
-  }) => {
+  test("paginates glyphs and reads named source anchors", async ({ page: workspacePage }) => {
     await expect(workspacePage).toHaveURL(/#\/home/);
+    const mcpUrl = await enableAgentConnections(workspacePage);
     const result = await runShiftCode(
-      testRoot,
+      mcpUrl,
       `async () => {
         const session = (await shift.sessions.list()).find(({ editorConnected }) => editorConnected);
         if (!session) throw new Error("Expected connected font");
@@ -204,12 +213,13 @@ test.describe("authored font reads from Home", () => {
   });
 });
 
-test("inspects the explicitly targeted live editor", async ({ editor, testRoot }) => {
+test("inspects the explicitly targeted live editor", async ({ editor }) => {
+  const mcpUrl = await enableAgentConnections(editor.page);
   await editor.openGlyphByName("A");
   const point = await editor.selectVisiblePoint();
 
   const observation = await runShiftCode(
-    testRoot,
+    mcpUrl,
     `async () => {
       const sessions = await shift.sessions.list();
       const target = sessions.find((session) => session.editorConnected);

@@ -11,6 +11,11 @@ const shiftHost: ShiftHost = {
   agent: {
     connect: invoke(ipcRenderer, "agent.connect"),
   },
+  agentConnections: {
+    state: invoke(ipcRenderer, "agentConnections.state"),
+    setAllowed: invoke(ipcRenderer, "agentConnections.setAllowed"),
+    onChanged: listen(ipcRenderer, "agentConnections.changed"),
+  },
   commands: {
     run: invoke(ipcRenderer, "commands.run"),
     onRunRendererCommand: listen(ipcRenderer, "commands.runRenderer"),

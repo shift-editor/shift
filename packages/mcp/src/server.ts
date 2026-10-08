@@ -1,6 +1,3 @@
-import { randomBytes, timingSafeEqual } from "node:crypto";
-import { lstat, mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import path from "node:path";
 import { createMcpFastifyApp } from "@modelcontextprotocol/fastify";
 import { toNodeHandler } from "@modelcontextprotocol/node";
 import { createMcpHandler, McpServer } from "@modelcontextprotocol/server";
@@ -13,10 +10,12 @@ import {
   type ShiftObservation,
 } from "@shift/runtime";
 import { SHIFT_CODE_TYPES } from "./declarations";
-import type { ShiftMcpConnection } from "./types";
+import type { ShiftMcpActivity, ShiftMcpConnection } from "./types";
 
 const LOOPBACK_HOST = "127.0.0.1";
 const MCP_PATH = "/mcp";
+/** How long a client that introduced itself still counts as active. */
+const CLIENT_ACTIVITY_WINDOW_MS = 10 * 60 * 1000;
 
 export interface ShiftMcpLogger {
   info(message: string, details?: unknown): void;
@@ -27,40 +26,65 @@ export interface ShiftMcpLogger {
 export interface ShiftMcpServerOptions {
   execute(code: string): Promise<unknown>;
   capture(input: ShiftCaptureInput): Promise<ShiftObservation<ShiftCapture>>;
-  descriptorPath: string;
   port: number;
   logger?: ShiftMcpLogger;
+  /** Called after each accepted request with the updated activity summary. */
+  onActivity?: (activity: ShiftMcpActivity) => void;
+  /** Injectable clock for activity timestamps. */
+  now?: () => number;
 }
 
-/** Serves code-mode access to one running Shift application over loopback HTTP. */
+/**
+ * Serves code-mode access to one running Shift application over loopback HTTP.
+ *
+ * @remarks
+ * There is no credential. The server listens on `127.0.0.1` only, and the MCP
+ * SDK's localhost guards reject a foreign `Host` (DNS rebinding) and any
+ * browser `Origin` that is not localhost. The host decides when the server
+ * runs; Shift starts it only while agent connections are allowed.
+ */
 export class ShiftMcpServer {
   readonly #execute: (code: string) => Promise<unknown>;
   readonly #capture: ShiftMcpServerOptions["capture"];
-  readonly #descriptorPath: string;
   readonly #port: number;
   readonly #logger: ShiftMcpLogger | undefined;
+  readonly #onActivity: ShiftMcpServerOptions["onActivity"];
+  readonly #now: () => number;
   #httpServer: FastifyInstance | null = null;
   #closeHandler: (() => Promise<void>) | null = null;
   #connection: ShiftMcpConnection | null = null;
+  #lastRequestAt: number | null = null;
+  // non-reactive: plain bookkeeping read only to build activity snapshots
+  readonly #clients = new Map<string, number>();
 
   /**
    * Creates an unstarted server bound to a host-owned isolated executor.
    *
-   * @param options - execution callback, private descriptor path, port, and optional diagnostics sink.
+   * @param options - execution and capture callbacks, port, and optional diagnostics and activity sinks.
    */
   constructor(options: ShiftMcpServerOptions) {
     this.#execute = options.execute;
     this.#capture = options.capture;
-    this.#descriptorPath = options.descriptorPath;
     this.#port = options.port;
     this.#logger = options.logger;
+    this.#onActivity = options.onActivity;
+    this.#now = options.now ?? Date.now;
   }
 
-  /** Starts the loopback server and publishes persistent same-user connection details. */
+  /** Recent agent activity: the last request time and clients seen in the activity window. */
+  get activity(): ShiftMcpActivity {
+    const cutoff = this.#now() - CLIENT_ACTIVITY_WINDOW_MS;
+    const clients = [...this.#clients]
+      .filter(([, lastSeenAt]) => lastSeenAt >= cutoff)
+      .map(([name, lastSeenAt]) => ({ name, lastSeenAt }))
+      .sort((a, b) => b.lastSeenAt - a.lastSeenAt);
+    return { lastRequestAt: this.#lastRequestAt, clients };
+  }
+
+  /** Starts the loopback server; resolves with its URL. */
   async start(): Promise<ShiftMcpConnection> {
     if (this.#connection) return this.#connection;
 
-    const token = await readOrCreateToken(this.#descriptorPath);
     const handler = createMcpHandler(() => this.#createProtocolServer());
     const nodeHandler = toNodeHandler(handler, {
       maxRequestBodySize: 128 * 1024,
@@ -68,10 +92,7 @@ export class ShiftMcpServer {
     });
     const httpServer = createMcpFastifyApp();
     httpServer.all(MCP_PATH, { bodyLimit: 128 * 1024 }, async (request, reply) => {
-      if (!hasBearerToken(request.headers.authorization, token)) {
-        return reply.code(401).send({ error: "invalid Shift MCP connection secret" });
-      }
-
+      this.#recordActivity(request.body);
       reply.hijack();
       await nodeHandler(request.raw, reply.raw, request.body);
     });
@@ -83,11 +104,8 @@ export class ShiftMcpServer {
         throw new Error("Shift MCP server has no TCP port");
       const connection = {
         url: `http://${LOOPBACK_HOST}:${address.port}${MCP_PATH}`,
-        token,
-        descriptorPath: this.#descriptorPath,
       } satisfies ShiftMcpConnection;
 
-      await publishConnection(connection);
       this.#httpServer = httpServer;
       this.#closeHandler = handler.close;
       this.#connection = connection;
@@ -100,7 +118,7 @@ export class ShiftMcpServer {
     }
   }
 
-  /** Stops accepting requests while retaining the user's connection credential. */
+  /** Stops accepting requests and forgets recent activity. */
   async stop(): Promise<void> {
     const httpServer = this.#httpServer;
     const closeHandler = this.#closeHandler;
@@ -108,10 +126,20 @@ export class ShiftMcpServer {
     this.#httpServer = null;
     this.#closeHandler = null;
     this.#connection = null;
+    this.#lastRequestAt = null;
+    this.#clients.clear();
 
     if (httpServer) await httpServer.close();
     if (closeHandler) await closeHandler();
     if (connection) this.#logger?.info("MCP server stopped");
+  }
+
+  #recordActivity(body: unknown): void {
+    const now = this.#now();
+    this.#lastRequestAt = now;
+    const clientName = initializeClientName(body);
+    if (clientName) this.#clients.set(clientName, now);
+    this.#onActivity?.(this.activity);
   }
 
   #createProtocolServer(): McpServer {
@@ -170,38 +198,14 @@ export class ShiftMcpServer {
   }
 }
 
-function hasBearerToken(header: string | undefined, token: string): boolean {
-  if (!header?.startsWith("Bearer ")) return false;
-
-  const supplied = Buffer.from(header.slice("Bearer ".length));
-  const expected = Buffer.from(token);
-  if (supplied.length !== expected.length) return false;
-
-  return timingSafeEqual(supplied, expected);
-}
-
-async function readOrCreateToken(descriptorPath: string): Promise<string> {
-  try {
-    const file = await lstat(descriptorPath);
-    if (!file.isFile() || (process.platform !== "win32" && (file.mode & 0o077) !== 0)) {
-      throw new Error(`insecure Shift MCP descriptor: ${descriptorPath}`);
-    }
-
-    const connection = JSON.parse(await readFile(descriptorPath, "utf8")) as ShiftMcpConnection;
-    if (typeof connection?.token !== "string" || !/^[\w-]{43}$/.test(connection.token)) {
-      throw new Error(`invalid Shift MCP descriptor: ${descriptorPath}`);
-    }
-    return connection.token;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    return randomBytes(32).toString("base64url");
-  }
-}
-
-async function publishConnection(connection: ShiftMcpConnection): Promise<void> {
-  const directory = path.dirname(connection.descriptorPath);
-  const temporaryPath = `${connection.descriptorPath}.${process.pid}.tmp`;
-  await mkdir(directory, { recursive: true, mode: 0o700 });
-  await writeFile(temporaryPath, `${JSON.stringify(connection)}\n`, { mode: 0o600, flag: "wx" });
-  await rename(temporaryPath, connection.descriptorPath);
+/** The `clientInfo.name` of an MCP `initialize` request, or `null` for any other body. */
+function initializeClientName(body: unknown): string | null {
+  if (typeof body !== "object" || body === null) return null;
+  const { method, params } = body as {
+    method?: unknown;
+    params?: { clientInfo?: { name?: unknown } };
+  };
+  if (method !== "initialize") return null;
+  const name = params?.clientInfo?.name;
+  return typeof name === "string" && name.length > 0 ? name.slice(0, 120) : null;
 }

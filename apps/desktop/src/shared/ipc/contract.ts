@@ -6,6 +6,7 @@ import type {
 } from "../workspace/protocol";
 import type { UpdateProgress } from "../update/types";
 import type { RecentDocument } from "../recents";
+import type { AgentConnectionsState } from "../agent/connections";
 
 export type DocumentCallMap = {
   "document.state": { request: void; response: WorkspaceDocumentState | null };
@@ -40,6 +41,9 @@ export type RendererErrorReport = {
  */
 export type RendererToMain = {
   "agent.connect": () => void;
+  "agentConnections.state": () => AgentConnectionsState;
+  /** Persists whether local agents may connect and starts or stops the MCP server. */
+  "agentConnections.setAllowed": (allowed: boolean) => AgentConnectionsState;
   "commands.run": (id: CommandId) => void;
   "clipboard.readText": () => string;
   "clipboard.writeText": (text: string) => void;
@@ -95,6 +99,8 @@ export type MainToRenderer = {
   "update.progress": (progress: UpdateProgress) => void;
   /** Reports that the downloaded application version can be installed. */
   "update.ready": (version: string) => void;
+  /** Agent connections were allowed or disallowed, failed to start, or saw a request. */
+  "agentConnections.changed": (state: AgentConnectionsState) => void;
   /** Recent files changed after an open, Save As, removal, or Clear Menu. */
   "recents.changed": (documents: RecentDocument[]) => void;
 };
