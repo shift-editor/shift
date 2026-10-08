@@ -161,7 +161,7 @@ async function launchInstalledApp(profileName, additionalArguments = []) {
 
 async function readyLauncher(app) {
   const page = await app.firstWindow();
-  await page.getByRole("button", { name: "New font", exact: true }).waitFor({
+  await page.getByRole("button", { name: "New Font", exact: true }).waitFor({
     state: "visible",
     timeout: 30_000,
   });
