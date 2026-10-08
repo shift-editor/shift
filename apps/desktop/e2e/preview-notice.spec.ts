@@ -1,4 +1,5 @@
 import { documentTest, expect, FONT_PATH } from "./fixtures/electronApp";
+import { glyphCatalogRenderer } from "./fixtures/appLocators";
 import { expectPanelSnapshot } from "./fixtures/snapshots";
 import { prepareWindow } from "./fixtures/window";
 
@@ -20,6 +21,14 @@ test(
     await expect
       .poll(() => workspacePage.evaluate(() => window.shiftSession?.mode))
       .toBe("preview");
+
+    // The notice's soft edge shows the catalog behind it, so capture only once the catalog
+    // has finished rendering.
+    await expect(glyphCatalogRenderer(workspacePage)).toHaveAttribute(
+      "data-grid-readiness",
+      "Complete",
+      { timeout: 30_000 },
+    );
 
     await workspacePage.getByRole("button", { name: "Read-only preview", exact: true }).click();
     const notice = workspacePage.getByRole("dialog", { name: "This font is view-only" });
