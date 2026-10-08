@@ -169,6 +169,8 @@ Renderer IPC in `App` is limited to shell capabilities: command execution, clipb
 
 ## Gotchas
 
+- **Linux WebGPU needs Vulkan.** Chromium ships its Vulkan backend disabled on Linux, so `navigator.gpu.requestAdapter()` returns null and the glyph grid falls back to SVG. `main.ts` enables the `Vulkan` feature on Linux before the app is ready. `--enable-unsafe-webgpu` alone only yields SwiftShader, a CPU renderer.
+
 - Electron/electron-updater orchestration is verified with installed N → N+1 builds; mocking Electron, native dialogs, or the updater does not provide a worthwhile unit test.
 - SHA-512 update metadata verifies package integrity, not publisher authenticity. Windows Release remains manual until Authenticode signing is configured.
 - IPC handlers are registered once, before any window exists, and resolve the font session from `event.sender` on every call. Never cache a window or session inside a handler closure — multiple windows can attach to one session, and windows outlive none of them.
