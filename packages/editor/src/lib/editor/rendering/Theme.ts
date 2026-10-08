@@ -88,6 +88,14 @@ export interface EditorRenderTheme {
     labelText: string;
     labelFont: string;
   };
+  /** The Kerning tool's kern between two glyphs. */
+  kerning: {
+    /** The translucent strip between the two advance edges. */
+    fill: string;
+    /** The value pill, the selected strip's edges, and glyphs a group edit reaches. */
+    accent: string;
+    accentHover: string;
+  };
 }
 
 const hover = (alpha: number) => `rgba(255, 255, 255, ${alpha})`;
@@ -270,6 +278,11 @@ const DEFAULT_EDITOR_RENDER_THEME: EditorRenderTheme = {
     labelText: "#ffffff",
     labelFont: "500 10px Inter, system-ui, sans-serif",
   },
+  kerning: {
+    fill: "rgba(124, 58, 237, 0.12)",
+    accent: "#7C3AED",
+    accentHover: "rgba(124, 58, 237, 0.8)",
+  },
 };
 
 /** Reads the active editor palette from CSS and combines it with renderer-owned geometry. */
@@ -440,6 +453,13 @@ export function readEditorRenderTheme(
     ),
     negativeLabelFill: negative,
     negativeLabelHoverFill: withAlpha(negative, 0.8),
+  };
+
+  const kerning = readColor("--editor-kerning", theme.kerning.accent);
+  theme.kerning = {
+    fill: withAlpha(kerning, 0.12),
+    accent: kerning,
+    accentHover: withAlpha(kerning, 0.8),
   };
 
   return theme;

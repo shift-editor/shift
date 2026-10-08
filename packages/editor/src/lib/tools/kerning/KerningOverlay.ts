@@ -4,13 +4,14 @@ import { LOCK_PATH_DATA, LOCK_VIEW_BOX_SIZE } from "../../editor/rendering/icons
 import { kerningLabelLayout, kerningLabelText } from "./KerningLabel";
 import type { KerningPair } from "./RunKerning";
 
-type SpacingTheme = Canvas["theme"]["spacing"];
+type KerningTheme = Canvas["theme"]["kerning"];
+type LabelTheme = Canvas["theme"]["spacing"];
 
 /** How a pair is drawn beyond its kern and pill. */
 export interface KerningDrawOptions {
   /** Whether the pointer is on the pill, which lightens and shows the groups' reach. */
   readonly hovered?: boolean;
-  /** Whether the arrow keys change this pair, which outlines its zone. */
+  /** Whether the arrow keys change this pair, which outlines its strip. */
   readonly selected?: boolean;
 }
 
@@ -18,10 +19,9 @@ export interface KerningDrawOptions {
  * Draws a pair's kern and its pill, leaving the glyphs themselves clear.
  *
  * @remarks
- * The kern is a hatched zone below the baseline between the two advance
- * edges, like a spacing half, in the negative colours when it tightens. The
- * pill in the zone shows the value, with a lock on a side that is a glyph
- * exception. While the pointer is on the pill, other
+ * The kern is a translucent strip between the two advance edges in the
+ * kerning colour, which no spacing overlay uses. The pill below the baseline
+ * shows the value, with a lock on a side that is a glyph exception. While the pointer is on the pill, other
  * glyphs of the run that kern through one of the pair's groups fill in the
  * kerning colour, showing the reach of a group edit.
  */
@@ -31,12 +31,12 @@ export function drawKerningPair(
   pair: KerningPair,
   options: KerningDrawOptions = {},
 ): void {
-  const theme = canvas.theme.spacing;
+  const theme = canvas.theme.kerning;
   canvas.withTransform(editor.sceneTransform(pair.gap.node), (local) => {
     if (options.hovered) drawGroupGlyphs(local, editor, pair, theme);
     local.withScreenSpace((screen, project) => {
       drawKern(screen, project, pair, theme, options.selected ?? false);
-      drawPill(screen, editor, pair, theme, options.hovered ?? false);
+      drawPill(screen, editor, pair, theme, canvas.theme.spacing, options.hovered ?? false);
     });
   });
 }
@@ -45,39 +45,19 @@ function drawKern(
   screen: ScreenCanvas,
   project: ScreenProjection,
   pair: KerningPair,
-  theme: SpacingTheme,
+  theme: KerningTheme,
   selected: boolean,
 ): void {
   const { gap } = pair;
-  const negative = pair.amount < 0;
-  const a = project.point({ x: gap.leftBoundary, y: gap.baseline });
+  const a = project.point({ x: gap.leftBoundary, y: gap.top });
   const b = project.point({ x: gap.rightBoundary, y: gap.bottom });
   const left = Math.min(a.x, b.x);
   const width = Math.max(Math.abs(b.x - a.x), 1);
   const top = Math.min(a.y, b.y);
   const height = Math.abs(b.y - a.y);
-  const fill = negative ? theme.negativeActiveFill : theme.activeFill;
-  const hatch = negative ? theme.negativeActiveHatch : theme.activeHatch;
-  const outline = negative ? theme.negativeLabelFill : theme.labelFill;
 
-  const ctx = screen.ctx;
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(left, top, width, height);
-  ctx.clip();
-  ctx.fillStyle = fill;
-  ctx.fillRect(left, top, width, height);
-  ctx.beginPath();
-  for (let x = left - height; x < left + width + height; x += theme.hatchGapPx) {
-    ctx.moveTo(x, top + height);
-    ctx.lineTo(x + height, top);
-  }
-  ctx.strokeStyle = hatch;
-  ctx.lineWidth = 1;
-  ctx.stroke();
-  ctx.restore();
-
-  if (selected) screen.strokeRect(left + 0.5, top + 0.5, width - 1, height - 1, outline, 1);
+  screen.fillRect(left, top, width, height, theme.fill);
+  if (selected) screen.strokeRect(left + 0.5, top + 0.5, width - 1, height - 1, theme.accent, 1);
 }
 
 /**
@@ -88,7 +68,7 @@ function drawGroupGlyphs(
   local: Canvas,
   editor: Editor,
   pair: KerningPair,
-  theme: SpacingTheme,
+  theme: KerningTheme,
 ): void {
   const edited = pair.editablePair(editor);
   const layout = editor.text.layoutCell(pair.gap.node.runId).peek();
@@ -115,7 +95,7 @@ function drawGroupGlyphs(
 
     local.save();
     local.translate(placed.origin.x, placed.origin.y);
-    local.fillPath(model.drawPath, theme.labelFill);
+    local.fillPath(model.drawPath, theme.accent);
     local.restore();
   }
 }
@@ -124,29 +104,27 @@ function drawPill(
   screen: ScreenCanvas,
   editor: Editor,
   pair: KerningPair,
-  theme: SpacingTheme,
+  theme: KerningTheme,
+  label: LabelTheme,
   hovered: boolean,
 ): void {
   const layout = kerningLabelLayout(editor, pair);
   const { pill, amount } = layout;
-  const negative = pair.amount < 0;
-  const fill = negative ? theme.negativeLabelFill : theme.labelFill;
-  const hoverFill = negative ? theme.negativeLabelHoverFill : theme.labelHoverFill;
 
   const ctx = screen.ctx;
   ctx.save();
   ctx.beginPath();
   ctx.roundRect(pill.x, pill.y, pill.width, pill.height, pill.height / 2);
-  ctx.fillStyle = hovered ? hoverFill : fill;
+  ctx.fillStyle = hovered ? theme.accentHover : theme.accent;
   ctx.fill();
 
-  ctx.font = theme.labelFont;
-  ctx.fillStyle = theme.labelText;
+  ctx.font = label.labelFont;
+  ctx.fillStyle = label.labelText;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillText(kerningLabelText(pair), amount.x + amount.width / 2, amount.y + amount.height / 2);
   for (const { rect } of layout.locks) {
-    drawLock(ctx, rect.x + rect.width / 2, rect.y + rect.height / 2, rect.width, theme.labelText);
+    drawLock(ctx, rect.x + rect.width / 2, rect.y + rect.height / 2, rect.width, label.labelText);
   }
   ctx.restore();
 }

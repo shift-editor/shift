@@ -30,7 +30,11 @@ export const KerningPairSection = () => {
   const name = (glyphId: GlyphId) => editor.font.entryForId(glyphId)?.name ?? glyphId;
   const pairKey = `${pair.gap.left.itemId}:${pair.gap.right.itemId}`;
 
-  const multipleSources = sources.length > 1;
+  // Sources that author kerning, plus the one being edited, which may not yet.
+  const kernedSources = sources.filter(
+    (source) => kerning.authors(source.id) || source.id === activeSourceId,
+  );
+  const multipleSources = kernedSources.length > 1;
 
   return (
     <div className="flex flex-col gap-4 px-3 py-3">
@@ -69,31 +73,30 @@ export const KerningPairSection = () => {
         </div>
         <div className="flex flex-col gap-2">
           <div className="text-ui text-secondary">{multipleSources ? "Masters" : "Value"}</div>
-          {sources.map((source) => {
-            const edited = pair.editablePair(editor, source.id);
+          {kernedSources.map((source) => {
             const active = source.id === activeSourceId;
-            const input = (
-              <EditableSidebarInput
-                key={`${pairKey}:${source.id}`}
-                ariaLabel={`Kerning at ${source.name}`}
-                className={multipleSources ? "w-16 text-right" : undefined}
-                value={kerning.valueAtSource(source.id, pair.first, pair.second)}
-                disabled={!edited}
-                onValueChange={(amount) => pair.set(editor, amount, source.id)}
-              />
-            );
-            if (!multipleSources) return input;
             return (
               <div key={source.id} className="flex items-center gap-2">
-                <span
-                  className={cn(
-                    "min-w-0 flex-1 truncate text-ui",
-                    active ? "font-medium text-primary" : "text-secondary",
-                  )}
-                >
-                  {source.name}
-                </span>
-                {input}
+                {multipleSources ? (
+                  <span
+                    className={cn(
+                      "min-w-0 flex-1 truncate text-ui",
+                      active ? "font-medium text-primary" : "text-secondary",
+                    )}
+                  >
+                    {source.name}
+                  </span>
+                ) : null}
+                <div className={multipleSources ? "w-16 shrink-0" : "flex-1"}>
+                  <EditableSidebarInput
+                    key={`${pairKey}:${source.id}`}
+                    ariaLabel={`Kerning at ${source.name}`}
+                    className="text-right"
+                    value={kerning.valueAtSource(source.id, pair.first, pair.second)}
+                    disabled={!pair.editablePair(editor, source.id)}
+                    onValueChange={(amount) => pair.set(editor, amount, source.id)}
+                  />
+                </div>
               </div>
             );
           })}

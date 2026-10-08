@@ -365,6 +365,8 @@ function colorThemeVariables(theme: ColorTheme): Record<string, string> {
     "--editor-spacing-faint": withAlpha(dark ? "#F472B6" : "#DB2E91", dark ? 0.3 : 0.45),
     "--editor-spacing-negative": dark ? "#FBBF24" : "#D97706",
     "--editor-spacing-negative-faint": withAlpha(dark ? "#FBBF24" : "#D97706", dark ? 0.35 : 0.5),
+    // Kerning has its own violet so it never reads as a spacing half.
+    "--editor-kerning": dark ? "#A78BFA" : "#7C3AED",
     "--editor-text-composite-arm-fill": withAlpha(palette.base04, 0.22),
     "--editor-text-component-overlay-a": withAlpha(palette.base0B, 0.26),
     "--editor-text-component-overlay-b": withAlpha(palette.base0F, 0.26),
