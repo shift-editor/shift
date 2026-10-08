@@ -30,7 +30,24 @@ export type ShiftFixtures = {
   exportTtfPath: string;
 };
 
+/** A workspace app launched once per worker and shared by the tests that opt in. */
+export interface SharedWorkspace {
+  readonly app: ElectronApplication;
+  readonly processes: ElectronProcesses;
+}
+
+export type ShiftWorkerFixtures = {
+  /** Launches the worker's shared workspace app on first call and returns it afterwards. */
+  sharedWorkspaceApp: () => Promise<SharedWorkspace>;
+};
+
 export type ShiftOptions = {
+  /**
+   * Reuses one MutatorSans workspace app per worker instead of launching one per test. Set it
+   * with `test.use({ sharedWorkspace: true })` on a describe whose tests never edit the
+   * document; a test that leaves the document dirty fails.
+   */
+  sharedWorkspace: boolean;
   startupFontPath: string | undefined;
   electronArgs: readonly string[];
   /** Preserves native geometry unless exact visual baseline dimensions are requested. */
