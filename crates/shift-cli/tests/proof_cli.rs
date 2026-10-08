@@ -142,6 +142,8 @@ fn renders_glyph_ink_where_the_outlines_are() {
         "HI",
         "--size",
         "100",
+        "--scale",
+        "1",
         "--output",
         image.to_str().unwrap(),
     ]);
@@ -387,14 +389,15 @@ fn guides_use_the_authored_ascender_rather_than_padded_line_height() {
     );
     let baseline = row(&report, 0, 0)["baseline"].as_f64().unwrap();
     let svg = std::fs::read_to_string(&image).unwrap();
-    let ascender_y = svg
+    let guides: Vec<f64> = svg
         .lines()
-        .find(|line| line.contains("guide-ascender"))
-        .and_then(|line| line.split("y1=\"").nth(1))
-        .and_then(|rest| rest.split('"').next())
-        .and_then(|value| value.parse::<f64>().ok())
-        .unwrap();
+        .filter(|line| line.contains(r#"class="guide""#))
+        .filter_map(|line| line.split("y1=\"").nth(1))
+        .filter_map(|rest| rest.split('"').next())
+        .filter_map(|value| value.parse::<f64>().ok())
+        .collect();
 
     // 800 units at 0.1 px per unit sits 80 px above the baseline.
-    assert!((baseline - ascender_y - 80.0).abs() <= 1.0);
+    assert!(svg.contains(r#"data-text="ascender 800""#));
+    assert!(guides.iter().any(|y| (baseline - y - 80.0).abs() <= 1.0));
 }

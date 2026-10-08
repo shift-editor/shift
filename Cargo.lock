@@ -2360,6 +2360,7 @@ name = "shift-cli"
 version = "0.1.0"
 dependencies = [
  "anstyle",
+ "chrono",
  "clap",
  "comfy-table",
  "miette",

@@ -108,7 +108,7 @@ fn default_size() -> f32 {
 }
 
 fn default_sizes() -> Vec<f32> {
-    vec![96.0, 48.0, 24.0, 12.0]
+    vec![72.0, 48.0, 36.0, 24.0, 18.0, 14.0, 12.0, 10.0]
 }
 
 fn default_glyph_size() -> f32 {

@@ -20,9 +20,13 @@ pub fn proof(args: ProofArgs) -> Result<(ProofReport, PathBuf)> {
     };
 
     let font = ProofFont::open(&args.path).map_err(|error| miette!("{error}"))?;
-    let page = layout(&definition, &font).map_err(|error| miette!("{error}"))?;
+    if !(0.5..=8.0).contains(&args.scale) {
+        bail!("--scale must be between 0.5 and 8");
+    }
+    let date = (!args.no_date).then(|| chrono::Local::now().format("%Y-%m-%d %H:%M").to_string());
+    let page = layout(&definition, &font, date.as_deref()).map_err(|error| miette!("{error}"))?;
     let bytes = match format {
-        OutputFormat::Png => render_png(&page).map_err(|error| miette!("{error}"))?,
+        OutputFormat::Png => render_png(&page, args.scale).map_err(|error| miette!("{error}"))?,
         OutputFormat::Svg => render_svg(&page).into_bytes(),
     };
     std::fs::write(&args.output, bytes)

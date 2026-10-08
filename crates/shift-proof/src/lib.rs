@@ -10,10 +10,10 @@
 
 pub mod definition;
 mod font;
-mod label;
 pub mod layout;
 mod render;
 pub mod report;
+mod ui;
 
 pub use definition::{
     Across, AcrossKeyword, GlyphKeyword, GlyphSelection, PageSettings, ProofDefinition,

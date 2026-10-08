@@ -108,7 +108,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 ### JetBrains Mono
 
 - Source: <https://github.com/JetBrains/JetBrainsMono>
-- Use: Numeric and code text
+- Use: Numeric and code text; an ASCII subset labels `shift-cli proof` pages
 - License: SIL Open Font License 1.1
 
 ```text

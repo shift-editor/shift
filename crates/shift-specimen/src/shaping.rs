@@ -15,6 +15,7 @@ use skrifa::instance::{Location, Size};
 use skrifa::outline::{DrawSettings, OutlinePen};
 use skrifa::raw::tables::os2::SelectionFlags;
 use skrifa::raw::TableProvider;
+use skrifa::string::StringId;
 use skrifa::{FontRef, GlyphId, MetadataProvider};
 
 /// Width of the placeholder drawn for a missing glyph with no ink, in ems.
@@ -339,6 +340,22 @@ impl<'a> ShapingFont<'a> {
             .filter(|character| charmap.map(*character).is_none())
             .filter(|character| seen.insert(*character))
             .collect()
+    }
+
+    /// The glyph's name from `post` or `CFF`, if the font has one.
+    pub fn glyph_name(&self, glyph_id: u32) -> Option<String> {
+        self.font
+            .glyph_names()
+            .get(GlyphId::new(glyph_id))
+            .map(|name| name.to_string())
+    }
+
+    /// The English (or first) entry for `name_id` in the `name` table.
+    pub fn name(&self, name_id: u16) -> Option<String> {
+        self.font
+            .localized_strings(StringId::new(name_id))
+            .english_or_first()
+            .map(|name| name.to_string())
     }
 
     /// The glyph with `name` in the font's `post` names, if any.

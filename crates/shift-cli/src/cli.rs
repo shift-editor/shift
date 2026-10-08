@@ -348,6 +348,14 @@ pub struct ProofArgs {
     #[arg(short, long, value_hint = ValueHint::FilePath)]
     pub output: PathBuf,
 
+    /// Device pixels per CSS pixel for PNG output.
+    #[arg(long, default_value_t = 2.0)]
+    pub scale: f32,
+
+    /// Leave the date out of the header, for reproducible output.
+    #[arg(long)]
+    pub no_date: bool,
+
     /// Print the proof report as JSON.
     #[arg(long)]
     pub json: bool,

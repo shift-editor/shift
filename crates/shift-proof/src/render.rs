@@ -1,27 +1,21 @@
-//! Draws a laid-out proof page as SVG or PNG.
+//! Paints a laid-out proof page as SVG or PNG.
 //!
-//! Both renderers paint the same page: one filled path per run of same-kind
-//! glyphs, metric guides, section dividers, and bitmap labels. Ported from
-//! Andrea Fomera's `shift proof` prototype.
+//! Both renderers paint the same display list in the same order:
+//! rectangles, then lines, then glyph runs. Text is drawn as outlines in
+//! both, so the two outputs match and need no fonts installed.
 
 use std::fmt::Write as _;
 
-use shift_specimen::shaping::{Segment, ShapedGlyph};
-use tiny_skia::{FillRule, Paint, PathBuilder, Pixmap, Rect, Transform};
+use shift_specimen::shaping::Segment;
+use tiny_skia::{FillRule, Paint, PathBuilder, Pixmap, Rect, Stroke, StrokeDash, Transform};
 
-use crate::label::{cells, LABEL_ADVANCE, LABEL_HEIGHT, LABEL_PIXEL};
-use crate::layout::{ProofPage, Row, MARGIN};
+use crate::layout::{Mark, ProofPage, Rgb, RunMark, BACKGROUND};
 use crate::ProofError;
 
-const BACKGROUND: [u8; 3] = [255, 255, 255];
-const INK: [u8; 3] = [17, 17, 17];
-/// Fill for missing glyphs, so they read as errors rather than ink.
-const MISSING: [u8; 3] = [220, 38, 38];
-const LABEL: [u8; 3] = [140, 140, 140];
-const DIVIDER: [u8; 3] = [225, 225, 225];
-const GUIDE_OPACITY: f32 = 0.6;
+/// Dash and gap lengths for empty cells, in pixels.
+const DASH: [f32; 2] = [3.0, 3.0];
 
-/// Renders `page` as standalone SVG in pixel coordinates.
+/// Renders `page` as standalone SVG in CSS pixels.
 pub fn render_svg(page: &ProofPage) -> String {
     let mut svg = String::new();
     let _ = writeln!(
@@ -34,68 +28,89 @@ pub fn render_svg(page: &ProofPage) -> String {
         r#"<rect class="background" width="100%" height="100%" fill="{}"/>"#,
         hex(BACKGROUND)
     );
-    for y in &page.dividers {
-        let y = y.round() + 0.5;
-        let _ = writeln!(
-            svg,
-            r#"<line class="divider" x1="{MARGIN}" y1="{y}" x2="{x2}" y2="{y}" stroke="{color}" stroke-width="1"/>"#,
-            x2 = page.width as f32 - MARGIN,
-            color = hex(DIVIDER),
-        );
-    }
-    for guide in &page.guides {
-        let y = guide.y.round() + 0.5;
-        let _ = writeln!(
-            svg,
-            r#"<line class="guide-{name}" x1="{x0}" y1="{y}" x2="{x1}" y2="{y}" stroke="{color}" stroke-opacity="{GUIDE_OPACITY}" stroke-width="1"/>"#,
-            name = guide.guide.name(),
-            x0 = round(guide.x0),
-            x1 = round(guide.x1),
-            color = hex(guide.guide.color()),
-        );
-    }
-    for row in &page.rows {
-        if !row.label.is_empty() {
-            let _ = writeln!(
-                svg,
-                r#"<text class="label" x="{MARGIN}" y="{y}" font-family="monospace" font-size="{LABEL_HEIGHT}" fill="{fill}">{text}</text>"#,
-                y = round(row.baseline),
-                fill = hex(LABEL),
-                text = row.label,
-            );
-        }
-        for (glyphs, missing) in runs_by_kind(row) {
-            let data = path_data(row, glyphs);
-            if data.is_empty() {
-                continue;
+    for mark in ordered(page) {
+        match mark {
+            Mark::Rect {
+                x,
+                y,
+                width,
+                height,
+                fill,
+                dashed,
+            } => {
+                let fill = fill.map_or_else(|| "none".to_string(), hex);
+                let stroke = dashed.map_or_else(String::new, |color| {
+                    format!(
+                        r#" stroke="{}" stroke-width="1" stroke-dasharray="{} {}""#,
+                        hex(color),
+                        DASH[0],
+                        DASH[1]
+                    )
+                });
+                let _ = writeln!(
+                    svg,
+                    r#"<rect class="cell" x="{}" y="{}" width="{}" height="{}" fill="{fill}"{stroke}/>"#,
+                    round(*x + 0.5),
+                    round(*y + 0.5),
+                    round(*width - 1.0),
+                    round(*height - 1.0),
+                );
             }
-            let (class, fill) = if missing {
-                ("missing", MISSING)
-            } else {
-                ("ink", INK)
-            };
-            let _ = writeln!(
-                svg,
-                r#"<path class="{class}" fill="{fill}" fill-rule="nonzero" d="{data}"/>"#,
-                fill = hex(fill),
-            );
+            Mark::Line {
+                class,
+                x0,
+                y0,
+                x1,
+                y1,
+                color,
+            } => {
+                let (y0, y1) = if y0 == y1 {
+                    let y = y0.round() + 0.5;
+                    (y, y)
+                } else {
+                    (*y0, *y1)
+                };
+                let _ = writeln!(
+                    svg,
+                    r#"<line class="{class}" x1="{}" y1="{}" x2="{}" y2="{}" stroke="{}" stroke-width="1"/>"#,
+                    round(*x0),
+                    round(y0),
+                    round(*x1),
+                    round(y1),
+                    hex(*color),
+                );
+            }
+            Mark::Run(run) => {
+                let data = path_data(run);
+                if data.is_empty() {
+                    continue;
+                }
+                let _ = writeln!(
+                    svg,
+                    r#"<path class="{}" data-text="{}" fill="{}" d="{data}"/>"#,
+                    run.class,
+                    escape(&run.text),
+                    hex(run.color),
+                );
+            }
         }
     }
     svg.push_str("</svg>\n");
     svg
 }
 
-/// Renders `page` and returns encoded PNG bytes.
+/// Renders `page` at `scale` device pixels per CSS pixel and returns PNG bytes.
 ///
 /// # Errors
 ///
 /// Returns [`ProofError::Render`] when the page is too large to allocate or
 /// cannot be encoded.
-pub fn render_png(page: &ProofPage) -> Result<Vec<u8>, ProofError> {
-    let mut pixmap = Pixmap::new(page.width, page.height).ok_or_else(|| {
+pub fn render_png(page: &ProofPage, scale: f32) -> Result<Vec<u8>, ProofError> {
+    let width = (page.width as f32 * scale).ceil() as u32;
+    let height = (page.height as f32 * scale).ceil() as u32;
+    let mut pixmap = Pixmap::new(width, height).ok_or_else(|| {
         ProofError::Render(format!(
-            "a {}x{} proof is too large to render; use fewer rows, smaller sizes, or a page width",
-            page.width, page.height
+            "a {width}x{height} proof is too large to render; use fewer rows, smaller sizes, or a lower scale"
         ))
     })?;
     pixmap.fill(tiny_skia::Color::from_rgba8(
@@ -104,39 +119,70 @@ pub fn render_png(page: &ProofPage) -> Result<Vec<u8>, ProofError> {
         BACKGROUND[2],
         255,
     ));
+    let transform = Transform::from_scale(scale, scale);
 
-    for y in &page.dividers {
-        fill_rect(
-            &mut pixmap,
-            MARGIN,
-            y.round(),
-            page.width as f32 - 2.0 * MARGIN,
-            1.0,
-            DIVIDER,
-            255,
-        );
-    }
-    let guide_alpha = (GUIDE_OPACITY * 255.0).round() as u8;
-    for guide in &page.guides {
-        fill_rect(
-            &mut pixmap,
-            guide.x0,
-            guide.y.round(),
-            guide.x1 - guide.x0,
-            1.0,
-            guide.guide.color(),
-            guide_alpha,
-        );
-    }
-    for row in &page.rows {
-        draw_label(&mut pixmap, row);
-        for (glyphs, missing) in runs_by_kind(row) {
-            fill_glyphs(
-                &mut pixmap,
-                row,
-                glyphs,
-                if missing { MISSING } else { INK },
-            );
+    for mark in ordered(page) {
+        match mark {
+            Mark::Rect {
+                x,
+                y,
+                width,
+                height,
+                fill,
+                dashed,
+            } => {
+                if let (Some(color), Some(rect)) = (fill, Rect::from_xywh(*x, *y, *width, *height))
+                {
+                    pixmap.fill_rect(rect, &paint(*color), transform, None);
+                }
+                if let Some(color) = dashed {
+                    let inset = 0.5 / scale;
+                    if let Some(rect) = Rect::from_xywh(
+                        x + inset,
+                        y + inset,
+                        width - 2.0 * inset,
+                        height - 2.0 * inset,
+                    ) {
+                        let stroke = Stroke {
+                            width: 1.0,
+                            dash: StrokeDash::new(DASH.to_vec(), 0.0),
+                            ..Stroke::default()
+                        };
+                        let path = PathBuilder::from_rect(rect);
+                        pixmap.stroke_path(&path, &paint(*color), &stroke, transform, None);
+                    }
+                }
+            }
+            Mark::Line {
+                x0,
+                y0,
+                x1,
+                y1,
+                color,
+                ..
+            } => {
+                if y0 == y1 {
+                    // Snap hairlines to whole device pixels so they stay crisp.
+                    let thickness = scale.round().max(1.0);
+                    let y = (y0 * scale - thickness / 2.0).round();
+                    if let Some(rect) = Rect::from_xywh(x0 * scale, y, (x1 - x0) * scale, thickness)
+                    {
+                        pixmap.fill_rect(rect, &paint(*color), Transform::identity(), None);
+                    }
+                } else {
+                    let mut builder = PathBuilder::new();
+                    builder.move_to(*x0, *y0);
+                    builder.line_to(*x1, *y1);
+                    if let Some(path) = builder.finish() {
+                        let stroke = Stroke {
+                            width: 1.0,
+                            ..Stroke::default()
+                        };
+                        pixmap.stroke_path(&path, &paint(*color), &stroke, transform, None);
+                    }
+                }
+            }
+            Mark::Run(run) => fill_run(&mut pixmap, run, transform),
         }
     }
 
@@ -145,31 +191,27 @@ pub fn render_png(page: &ProofPage) -> Result<Vec<u8>, ProofError> {
         .map_err(|error| ProofError::Render(format!("failed to encode the proof PNG: {error}")))
 }
 
-/// Splits a row into consecutive glyphs that are all missing or all present.
-fn runs_by_kind(row: &Row) -> Vec<(&[ShapedGlyph], bool)> {
-    let glyphs = &row.run.glyphs;
-    let mut runs = Vec::new();
-    let mut start = 0;
-    for index in 1..=glyphs.len() {
-        if index == glyphs.len() || glyphs[index].missing != glyphs[start].missing {
-            runs.push((&glyphs[start..index], glyphs[start].missing));
-            start = index;
-        }
-    }
-    runs
+/// Marks in paint order: rectangles, then lines, then runs.
+fn ordered(page: &ProofPage) -> impl Iterator<Item = &Mark> {
+    let rank = |mark: &Mark| match mark {
+        Mark::Rect { .. } => 0,
+        Mark::Line { .. } => 1,
+        Mark::Run(_) => 2,
+    };
+    (0..3).flat_map(move |pass| page.marks.iter().filter(move |mark| rank(mark) == pass))
 }
 
-fn point(row: &Row, x: f32, y: f32) -> (f32, f32) {
-    (row.origin_x + x * row.scale, row.baseline - y * row.scale)
+fn point(run: &RunMark, x: f32, y: f32) -> (f32, f32) {
+    (run.x + x * run.scale, run.baseline - y * run.scale)
 }
 
-fn path_data(row: &Row, glyphs: &[ShapedGlyph]) -> String {
+fn path_data(run: &RunMark) -> String {
     let mut data = String::new();
     let push = |data: &mut String, x: f32, y: f32| {
-        let (x, y) = point(row, x, y);
+        let (x, y) = point(run, x, y);
         let _ = write!(data, "{} {} ", round(x), round(y));
     };
-    for segment in glyphs.iter().flat_map(|glyph| &glyph.segments) {
+    for segment in &run.segments {
         match *segment {
             Segment::Move(x, y) => {
                 data.push('M');
@@ -196,84 +238,53 @@ fn path_data(row: &Row, glyphs: &[ShapedGlyph]) -> String {
     data.trim_end().to_string()
 }
 
-fn fill_glyphs(pixmap: &mut Pixmap, row: &Row, glyphs: &[ShapedGlyph], color: [u8; 3]) {
+fn fill_run(pixmap: &mut Pixmap, run: &RunMark, transform: Transform) {
     let mut builder = PathBuilder::new();
-    for segment in glyphs.iter().flat_map(|glyph| &glyph.segments) {
+    for segment in &run.segments {
         match *segment {
             Segment::Move(x, y) => {
-                let (x, y) = point(row, x, y);
+                let (x, y) = point(run, x, y);
                 builder.move_to(x, y);
             }
             Segment::Line(x, y) => {
-                let (x, y) = point(row, x, y);
+                let (x, y) = point(run, x, y);
                 builder.line_to(x, y);
             }
             Segment::Quad(cx, cy, x, y) => {
-                let (cx, cy) = point(row, cx, cy);
-                let (x, y) = point(row, x, y);
+                let (cx, cy) = point(run, cx, cy);
+                let (x, y) = point(run, x, y);
                 builder.quad_to(cx, cy, x, y);
             }
             Segment::Cubic(cx0, cy0, cx1, cy1, x, y) => {
-                let (cx0, cy0) = point(row, cx0, cy0);
-                let (cx1, cy1) = point(row, cx1, cy1);
-                let (x, y) = point(row, x, y);
+                let (cx0, cy0) = point(run, cx0, cy0);
+                let (cx1, cy1) = point(run, cx1, cy1);
+                let (x, y) = point(run, x, y);
                 builder.cubic_to(cx0, cy0, cx1, cy1, x, y);
             }
             Segment::Close => builder.close(),
         }
     }
     if let Some(path) = builder.finish() {
-        pixmap.fill_path(
-            &path,
-            &paint(color, 255),
-            FillRule::Winding,
-            Transform::identity(),
-            None,
-        );
+        pixmap.fill_path(&path, &paint(run.color), FillRule::Winding, transform, None);
     }
 }
 
-fn draw_label(pixmap: &mut Pixmap, row: &Row) {
-    let top = (row.baseline - LABEL_HEIGHT).round();
-    for (index, character) in row.label.chars().enumerate() {
-        let left = MARGIN + index as f32 * LABEL_ADVANCE;
-        for (column, cell_row) in cells(character) {
-            fill_rect(
-                pixmap,
-                left + f32::from(column) * LABEL_PIXEL,
-                top + f32::from(cell_row) * LABEL_PIXEL,
-                LABEL_PIXEL,
-                LABEL_PIXEL,
-                LABEL,
-                255,
-            );
-        }
-    }
-}
-
-fn fill_rect(
-    pixmap: &mut Pixmap,
-    x: f32,
-    y: f32,
-    width: f32,
-    height: f32,
-    color: [u8; 3],
-    alpha: u8,
-) {
-    if let Some(rect) = Rect::from_xywh(x, y, width, height) {
-        pixmap.fill_rect(rect, &paint(color, alpha), Transform::identity(), None);
-    }
-}
-
-fn paint(color: [u8; 3], alpha: u8) -> Paint<'static> {
+fn paint(color: Rgb) -> Paint<'static> {
     let mut paint = Paint::default();
-    paint.set_color_rgba8(color[0], color[1], color[2], alpha);
+    paint.set_color_rgba8(color[0], color[1], color[2], 255);
     paint.anti_alias = true;
     paint
 }
 
-fn hex([red, green, blue]: [u8; 3]) -> String {
+fn hex([red, green, blue]: Rgb) -> String {
     format!("#{red:02x}{green:02x}{blue:02x}")
+}
+
+fn escape(text: &str) -> String {
+    text.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
 }
 
 fn round(value: f32) -> f32 {

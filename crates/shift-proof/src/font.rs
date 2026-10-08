@@ -14,6 +14,8 @@ use crate::ProofError;
 pub struct ProofFont {
     data: Vec<u8>,
     sources: SourceLocations,
+    /// The file the font came from, for the proof header.
+    source_name: Option<String>,
 }
 
 /// Where the font's sources sit in user space, for `"across": "sources"`.
@@ -40,7 +42,7 @@ impl ProofFont {
         if matches!(extension.as_str(), "ttf" | "otf") {
             let data = std::fs::read(path)
                 .map_err(|error| ProofError::Load(format!("{}: {error}", path.display())))?;
-            return Ok(Self::from_compiled(data));
+            return Ok(Self::from_compiled(data).named(path));
         }
 
         let path_text = path
@@ -49,7 +51,14 @@ impl ProofFont {
         let font = FontLoader::new()
             .read_font(path_text)
             .map_err(|error| ProofError::Load(format!("{}: {error}", path.display())))?;
-        Self::compile(&font)
+        Ok(Self::compile(&font)?.named(path))
+    }
+
+    fn named(mut self, path: &Path) -> Self {
+        self.source_name = path
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned());
+        self
     }
 
     /// Proofs already compiled TrueType or OpenType bytes.
@@ -59,6 +68,7 @@ impl ProofFont {
             sources: SourceLocations::Unavailable(
                 "a compiled font has no sources; proof the source document instead",
             ),
+            source_name: None,
         }
     }
 
@@ -77,7 +87,12 @@ impl ProofFont {
         Ok(Self {
             data,
             sources: source_locations(font),
+            source_name: None,
         })
+    }
+
+    pub(crate) fn source_name(&self) -> Option<&str> {
+        self.source_name.as_deref()
     }
 
     pub(crate) fn data(&self) -> &[u8] {
