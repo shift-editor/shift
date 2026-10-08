@@ -18,18 +18,36 @@ export function createMemoryFontSession(input: MemoryFontSessionOptions): Memory
 // @public
 export type DesignAxisLocation = AxisLocation<"design">;
 
+// @public
+export class Designspace {
+    constructor(cells: {
+        axesCell: Signal<Axis[]>;
+        mappingBasesCell: Signal<AxisMappingBasis[]>;
+        sourcesCell: Signal<Source[]>;
+    });
+    // (undocumented)
+    get axes(): readonly Axis[];
+    defaultLocation(): ExternalAxisLocation;
+    nearestSource(location: ExternalAxisLocation): Source | null;
+    // (undocumented)
+    source(sourceId: SourceId): Source | null;
+    sourceAt(location: ExternalAxisLocation): Source | null;
+    sourceAtDesign(location: DesignAxisLocation): Source | null;
+    // (undocumented)
+    get sources(): readonly Source[];
+    toDesign(location: ExternalAxisLocation): DesignAxisLocation;
+    toExternal(location: DesignAxisLocation): ExternalAxisLocation;
+    track(): void;
+}
+
 // @beta
 export class Editor {
     // Warning: (ae-forgotten-export) The symbol "EditorOptions" needs to be exported by the entry point index.d.ts
     constructor(options: EditorOptions);
-    // Warning: (ae-forgotten-export) The symbol "Source" needs to be exported by the entry point index.d.ts
-    //
     // (undocumented)
     get activeSource(): Source | null;
     // (undocumented)
     get activeSourceId(): SourceId | null;
-    // Warning: (ae-forgotten-export) The symbol "SourceId" needs to be exported by the entry point index.d.ts
-    //
     // (undocumented)
     get activeSourceIdCell(): Signal<SourceId | null>;
     addComponent(baseGlyphId: GlyphId): Promise<ComponentId | null>;
@@ -346,7 +364,6 @@ export function externalAxisLocationFromRecord(values: Readonly<Record<string, n
 export class Font {
     // Warning: (ae-forgotten-export) The symbol "FontOptions" needs to be exported by the entry point index.d.ts
     constructor(input: FontOptions);
-    // Warning: (ae-forgotten-export) The symbol "Axis" needs to be exported by the entry point index.d.ts
     get axesCell(): Signal<Axis[]>;
     // Warning: (ae-forgotten-export) The symbol "AxisMapping" needs to be exported by the entry point index.d.ts
     get axisMappingsCell(): Signal<AxisMapping[]>;
@@ -378,6 +395,7 @@ export class Font {
     // (undocumented)
     deleteSource(sourceId: SourceId): void;
     dependentNamesForName(name: GlyphName): readonly GlyphName[];
+    get designspace(): Designspace;
     // (undocumented)
     dispose(): void;
     // Warning: (ae-forgotten-export) The symbol "WorkspaceEditCoordinator" needs to be exported by the entry point index.d.ts
@@ -386,7 +404,6 @@ export class Font {
     entryForName(name: GlyphName): GlyphEntry | null;
     externalLocationForSource(sourceId: SourceId): ExternalAxisLocation | null;
     getAxes(): Axis[];
-    // Warning: (ae-forgotten-export) The symbol "AxisMappingBasis" needs to be exported by the entry point index.d.ts
     getAxisMappingBases(): AxisMappingBasis[];
     getAxisMappings(): AxisMapping[];
     glyphEntries(): readonly GlyphEntry[];
@@ -693,6 +710,11 @@ export interface Signal<T> {
 }
 
 // @public
+export type SourceId = string & {
+    readonly [SourceIdBrand]: typeof SourceIdBrand;
+};
+
+// @public
 export interface SystemClipboard {
     // (undocumented)
     readText(): Promise<string>;
@@ -707,7 +729,10 @@ export function useSignalState<T>(signal: Signal<T>, options?: UseSignalOptions)
 
 // Warnings were encountered during analysis:
 //
-// dist/Editor-CtkIKP1D.d.ts:4368:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
+// dist/Editor-CAK8Uqfq.d.ts:2646:5 - (ae-forgotten-export) The symbol "Axis" needs to be exported by the entry point index.d.ts
+// dist/Editor-CAK8Uqfq.d.ts:2647:5 - (ae-forgotten-export) The symbol "AxisMappingBasis" needs to be exported by the entry point index.d.ts
+// dist/Editor-CAK8Uqfq.d.ts:2648:5 - (ae-forgotten-export) The symbol "Source" needs to be exported by the entry point index.d.ts
+// dist/Editor-CAK8Uqfq.d.ts:4401:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

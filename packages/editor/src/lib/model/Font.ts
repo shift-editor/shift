@@ -53,15 +53,10 @@ import type { FontStore, GlyphInvalidation } from "./FontStore";
 import type { GlyphLayerState } from "./GlyphLayerState";
 import { SourceMetricsInterpolation } from "./SourceMetricsInterpolation";
 import {
-  designAxisLocationDistanceSquared,
   designAxisLocationFromLocation,
-  designAxisLocationsEqual,
   locationFromDesignAxisLocation,
-  defaultExternalAxisLocation,
-  emptyExternalAxisLocation,
-  externalAxisLocationForDesignLocation,
-  mapAxisLocation,
 } from "../variation/location";
+import { Designspace } from "../variation/Designspace";
 import type { DesignAxisLocation, ExternalAxisLocation } from "../../types/variation";
 import { uniqueInOrder } from "../utils/utils";
 import { fallbackGlyphNameForUnicode } from "../utils/unicode";
@@ -335,6 +330,7 @@ export class Font {
   readonly #axesCell: Signal<Axis[]>;
   readonly #axisMappingsCell: Signal<AxisMapping[]>;
   readonly #axisMappingBasesCell: Signal<AxisMappingBasis[]>;
+  readonly #designspace: Designspace;
 
   readonly #namedInstancesCell: Signal<NamedInstance[]>;
   readonly #languageIdsCell: Signal<readonly string[] | null>;
@@ -388,19 +384,18 @@ export class Font {
     this.#axesCell = computed(() => fontCell.value?.axes ?? []);
     this.#axisMappingsCell = computed(() => fontCell.value?.axisMappings ?? []);
     this.#axisMappingBasesCell = computed(() => fontCell.value?.axisMappingBases ?? []);
+    this.#designspace = new Designspace({
+      axesCell: this.#axesCell,
+      mappingBasesCell: this.#axisMappingBasesCell,
+      sourcesCell: this.#sourcesCell,
+    });
     this.#defaultSourceMetricsCell = computed(() => {
-      const sources = this.#sourcesCell.value;
-      const axes = this.#axesCell.value;
-      const location = mapAxisLocation(
-        defaultExternalAxisLocation(axes),
-        axes,
-        this.#axisMappingBasesCell.value,
-      );
-
+      const designspace = this.#designspace;
       track(this.#metricsCell);
       track(this.#metricDefinitionsCell);
 
-      const source = sourceAtLocation(sources, axes, location) ?? sources[0] ?? null;
+      const source =
+        designspace.sourceAt(designspace.defaultLocation()) ?? designspace.sources[0] ?? null;
       return this.#metricsForSource(source);
     });
     this.#namedInstancesCell = computed(() => fontCell.value?.namedInstances ?? []);
@@ -482,6 +477,11 @@ export class Font {
   /** Reactive committed Unicode assignments. */
   get unicodesCell(): Signal<Unicode[]> {
     return this.#unicodesCell;
+  }
+
+  /** Axes, mappings, and sources, with location operations over them. */
+  get designspace(): Designspace {
+    return this.#designspace;
   }
 
   /** Reactive committed variation axes for sidebar controls. */
@@ -935,9 +935,7 @@ export class Font {
       entry,
       layers,
       componentGlyphs: new Map(),
-      axesCell: this.#axesCell,
-      axisMappingBasesCell: this.#axisMappingBasesCell,
-      sourcesCell: this.#sourcesCell,
+      designspace: this.#designspace,
       projectionCell: this.#store.projectionCell(entry.id),
       defaultSourceId: this.defaultSource.id,
     });
@@ -1251,9 +1249,7 @@ export class Font {
    * @returns The exact source, or `null` when the id is not part of this font.
    */
   source(sourceId: SourceId): Source | null {
-    const sources = this.sources;
-
-    return sourceById(sources, sourceId);
+    return this.#designspace.source(sourceId);
   }
 
   /**
@@ -1271,11 +1267,7 @@ export class Font {
     const source = this.source(sourceId);
     if (!source) return null;
 
-    return externalAxisLocationForDesignLocation(
-      designAxisLocationFromLocation(source.location),
-      this.#axesCell.peek(),
-      this.#axisMappingBasesCell.peek(),
-    );
+    return this.#designspace.toExternal(designAxisLocationFromLocation(source.location));
   }
 
   /**
@@ -1288,9 +1280,7 @@ export class Font {
    * @returns The exact matching source, or `null` when the location is interpolated.
    */
   sourceAt(location: ExternalAxisLocation): Source | null {
-    const axes = this.getAxes();
-    const mappedLocation = mapAxisLocation(location, axes, this.#axisMappingBasesCell.peek());
-    return sourceAtLocation(this.sources, axes, mappedLocation);
+    return this.#designspace.sourceAt(location);
   }
 
   /**
@@ -1300,18 +1290,7 @@ export class Font {
    * @returns A cell whose value is the exact source, or `null` when interpolated.
    */
   sourceAtCell(location: Signal<ExternalAxisLocation>): ComputedSignal<Source | null> {
-    return computed(
-      () => {
-        const axes = this.#axesCell.value;
-        const mappedLocation = mapAxisLocation(
-          location.value,
-          axes,
-          this.#axisMappingBasesCell.value,
-        );
-        return sourceAtLocation(this.#sourcesCell.value, axes, mappedLocation);
-      },
-      { name: "font.sourceAt" },
-    );
+    return computed(() => this.#designspace.sourceAt(location.value), { name: "font.sourceAt" });
   }
 
   /**
@@ -1328,22 +1307,7 @@ export class Font {
   }
 
   nearestSource(location: ExternalAxisLocation): Source | null {
-    const axes = this.getAxes();
-    const mappedLocation = mapAxisLocation(location, axes, this.#axisMappingBasesCell.peek());
-    let nearest: { source: Source; distance: number } | null = null;
-
-    for (const source of this.sources) {
-      const sourceLocation = designAxisLocationFromLocation(source.location);
-      const distance = designAxisLocationDistanceSquared(sourceLocation, mappedLocation, axes);
-
-      if (!nearest || distance < nearest.distance) {
-        nearest = { source, distance };
-      }
-    }
-
-    if (!nearest) return null;
-
-    return nearest.source;
+    return this.#designspace.nearestSource(location);
   }
 
   /** @knipclassignore — used by VariationPanel component */
@@ -1383,7 +1347,7 @@ export class Font {
     const sourceId = mintSourceId();
     const metrics = this.metricsAtLocation(externalLocation);
     const designLocation = locationFromDesignAxisLocation(
-      mapAxisLocation(externalLocation, this.#axesCell.peek(), this.#axisMappingBasesCell.peek()),
+      this.#designspace.toDesign(externalLocation),
     );
     this.editCoordinator.push({
       kind: "createSource",
@@ -1637,13 +1601,13 @@ export class Font {
    * @returns Resolved standard and technical metrics in font units.
    */
   metricsAtLocation(location: ExternalAxisLocation): SourceMetrics {
-    const axes = this.#axesCell.peek();
-    const mappedLocation = mapAxisLocation(location, axes, this.#axisMappingBasesCell.peek());
-    const exactSource = sourceAtLocation(this.#sourcesCell.peek(), axes, mappedLocation);
+    const designspace = this.#designspace;
+    const designLocation = designspace.toDesign(location);
+    const exactSource = designspace.sourceAtDesign(designLocation);
     if (exactSource) return this.#metricsForSource(exactSource);
 
     return (
-      this.#sourceMetricsInterpolationCell.peek()?.resolve(mappedLocation, axes) ??
+      this.#sourceMetricsInterpolationCell.peek()?.resolve(designLocation, designspace.axes) ??
       this.defaultSourceMetrics
     );
   }
@@ -1679,29 +1643,6 @@ export class Font {
   }
 
   defaultLocation(): ExternalAxisLocation {
-    return this.isVariable()
-      ? defaultExternalAxisLocation(this.getAxes())
-      : emptyExternalAxisLocation();
+    return this.#designspace.defaultLocation();
   }
-}
-
-function sourceById(sources: readonly Source[], sourceId: SourceId): Source | null {
-  for (const source of sources) {
-    if (source.id === sourceId) return source;
-  }
-
-  return null;
-}
-
-function sourceAtLocation(
-  sources: readonly Source[],
-  axes: readonly Axis[],
-  location: DesignAxisLocation,
-): Source | null {
-  for (const source of sources) {
-    const sourceLocation = designAxisLocationFromLocation(source.location);
-    if (designAxisLocationsEqual(sourceLocation, location, axes)) return source;
-  }
-
-  return null;
 }

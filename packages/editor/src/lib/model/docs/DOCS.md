@@ -95,6 +95,7 @@ ui/
 - `InterpolationBasis` -- real source identities plus a `VariationBasis` producing source contribution weights.
 - `AxisMappingBasis` -- mapping input/output identities plus a `VariationBasis` producing normalized output adjustments.
 - `ExternalAxisLocation` / `DesignAxisLocation` -- nominally distinct renderer maps. `mapAxisLocation` is the one-way external-to-design boundary; source matching and interpolation receive only the appropriate space.
+- `Designspace` -- the font's axes, axis mappings, and sources with the location operations over them: `toDesign`, `toExternal`, exact and nearest `sourceAt`, and `defaultLocation`. `Font` owns one and passes it to every `Glyph`; code that maps a font location goes through `font.designspace` rather than assembling axes and mapping bases itself. Each method tracks the cells it reads, so reactive callers stay current without manual `track()` calls.
 - `GlyphVariation` -- imported fallback-relative numeric variation with no fabricated authored source identities.
 - `GlyphRenderModel` -- internal reactive render cache bound to a location signal. Its contours, bounds, paths, advance, and sidebearings describe the complete displayed Glyph; root point/segment lookup remains root-owned.
 - `ComponentGlyph` -- one ordered component occurrence with a full `ComponentId[]` ancestry, a parent-local correspondence index, current local/resolved transforms, direct contours, children, and bounds.

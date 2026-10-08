@@ -1,11 +1,11 @@
-import type { Axis, AxisMappingBasis, Source } from "@shift/types";
+import type { Axis, Source } from "@shift/types";
 import type { ExternalAxisLocation, SourceCreationIssue } from "@shift/editor/types";
 import {
   axisValue,
   designAxisLocationFromLocation,
   designAxisLocationsEqual,
   externalAxisLocationFromRecord,
-  mapAxisLocation,
+  type Designspace,
 } from "@shift/editor/variation";
 
 const LOCATION_TOLERANCE = 1e-6;
@@ -36,17 +36,16 @@ export function sourceLocation(
  *
  * @param name - proposed source name before whitespace is trimmed.
  * @param values - editable external coordinates keyed by axis identity.
- * @param axes - axes that define a complete source location.
- * @param sources - existing authored sources checked for name and location conflicts.
+ * @param designspace - axes that define a complete source location, and the existing sources
+ *   checked for name and location conflicts.
  * @returns an issue targeted at the responsible control or constraint; null when creation is valid.
  */
 export function sourceCreationIssue(
   name: string,
   values: Readonly<Record<string, string>>,
-  axes: readonly Axis[],
-  sources: readonly Source[],
-  mappingBases: readonly AxisMappingBasis[],
+  designspace: Designspace,
 ): SourceCreationIssue | null {
+  const { axes, sources } = designspace;
   const trimmedName = name.trim();
   if (!trimmedName) return { kind: "name", message: "Enter a source name" };
   if (sources.some((source) => source.name === trimmedName)) {
@@ -68,7 +67,7 @@ export function sourceCreationIssue(
   const external = externalAxisLocationFromRecord(
     Object.fromEntries(axes.map((axis) => [axis.id, Number(values[axis.id])])),
   );
-  const target = mapAxisLocation(external, axes, mappingBases);
+  const target = designspace.toDesign(external);
   const existing = sources.find((source) =>
     designAxisLocationsEqual(
       designAxisLocationFromLocation(source.location),
