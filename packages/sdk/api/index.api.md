@@ -742,6 +742,77 @@ export interface GlyphSummary {
 }
 
 // @public
+export interface LayerAppearance {
+    // (undocumented)
+    advanceStroke?: string;
+    // (undocumented)
+    anchorStroke?: string;
+    // (undocumented)
+    componentStroke?: string;
+    // (undocumented)
+    controlStroke?: string;
+    // (undocumented)
+    handleFill?: string;
+    // (undocumented)
+    metricStroke?: string;
+    // (undocumented)
+    offCurveStroke?: string;
+    // (undocumented)
+    onCurveStroke?: string;
+    // (undocumented)
+    outlineFill?: string;
+}
+
+// @public
+export interface LayerGuides {
+    // (undocumented)
+    advanceWidth: {
+        origin: number;
+        advance: number;
+    };
+    // (undocumented)
+    fontMetrics: {
+        ascender: number;
+        capHeight?: number;
+        xHeight?: number;
+        baseline: number;
+        descender: number;
+    };
+}
+
+// @public
+export interface LayerOverlays {
+    // (undocumented)
+    advanceWidth?: boolean;
+    // (undocumented)
+    anchors?: boolean;
+    // (undocumented)
+    components?: boolean;
+    // (undocumented)
+    controlLines?: boolean;
+    // (undocumented)
+    fontMetrics?: boolean;
+    // (undocumented)
+    points?: boolean;
+}
+
+// @public
+export interface LayerSvg {
+    // (undocumented)
+    glyphId: GlyphId;
+    // (undocumented)
+    guides: LayerGuides;
+    // (undocumented)
+    layerId: LayerId;
+    // (undocumented)
+    sourceId: SourceId;
+    // (undocumented)
+    svg: string;
+    // (undocumented)
+    viewBox: [number, number, number, number];
+}
+
+// @public
 export interface LayerView {
     // (undocumented)
     anchors: {
@@ -839,6 +910,12 @@ export type SelectableId = ShiftId;
 // @public
 export interface ShiftCapabilities {
     // (undocumented)
+    capture(input: {
+        windowId: number;
+        target: ShiftCaptureTarget;
+        scale?: number;
+    }): Promise<ShiftCapture>;
+    // (undocumented)
     editor: {
         inspect(input: {
             windowId: number;
@@ -869,12 +946,44 @@ export interface ShiftCapabilities {
             glyphId: GlyphId;
             sourceId: SourceId;
         }): Promise<LayerView | null>;
+        render(input: {
+            windowId: number;
+            glyphId: GlyphId;
+            sourceId: SourceId;
+            overlays?: LayerOverlays;
+            appearance?: LayerAppearance;
+        }): Promise<LayerSvg | null>;
     };
     // (undocumented)
     sessions: {
         list(): Promise<ShiftSession[]>;
     };
 }
+
+// @public
+export interface ShiftCapture {
+    // (undocumented)
+    capturedAt: string;
+    // (undocumented)
+    captureId: string;
+    // (undocumented)
+    data: string;
+    // (undocumented)
+    height: number;
+    // (undocumented)
+    mimeType: "image/png";
+    // (undocumented)
+    scale: number;
+    // (undocumented)
+    target: ShiftCaptureTarget;
+    // (undocumented)
+    width: number;
+    // (undocumented)
+    windowId: number;
+}
+
+// @public (undocumented)
+export type ShiftCaptureTarget = "window" | "editor";
 
 // @public
 export type ShiftId = NodeId | PointId | AnchorId | ContourId | SegmentId | ComponentId;
@@ -921,7 +1030,7 @@ export function useSignalState<T>(signal: Signal<T>, options?: UseSignalOptions)
 // Warnings were encountered during analysis:
 //
 // dist/Editor-C5I4hn8G.d.ts:4063:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:181:5 - (ae-forgotten-export) The symbol "PointType" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:194:5 - (ae-forgotten-export) The symbol "PointType" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

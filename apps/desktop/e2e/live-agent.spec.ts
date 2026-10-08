@@ -50,6 +50,19 @@ test.describe("authored font reads from Home", () => {
         const eByName = await shift.glyphs.get({ windowId, name: "E" });
         const sourceId = font.sources[0].id;
         const layer = await shift.layers.get({ windowId, glyphId: e.id, sourceId });
+        const rendered = await shift.layers.render({
+          windowId,
+          glyphId: e.id,
+          sourceId,
+          overlays: {
+            points: true,
+            controlLines: true,
+            anchors: true,
+            components: true,
+            fontMetrics: true,
+          },
+          appearance: { outlineFill: "#123456" },
+        });
         const sourcePage = await shift.glyphs.list({ windowId, limit: 1, sourceId });
         const a = directory.items.find(({ name }) => name === "A");
         const supportId = a?.sourceIds.find((id) => id !== sourceId);
@@ -73,6 +86,17 @@ test.describe("authored font reads from Home", () => {
           second: second.items[0],
           glyph,
           anchors: layer?.anchors.map(({ name }) => name),
+          rendered: rendered && {
+            layerId: rendered.layerId,
+            viewBox: rendered.viewBox,
+            hasOutline: rendered.svg.includes('data-shift-role="outline"'),
+            hasPoints: rendered.svg.includes('data-shift-role="points"'),
+            hasAnchors: rendered.svg.includes('data-shift-role="anchors"'),
+            hasFontMetrics: rendered.svg.includes('data-shift-role="font-metrics"'),
+            hasAdvanceWidth: rendered.svg.includes('data-shift-role="advance-width"'),
+            hasAppearance: rendered.svg.includes('fill="#123456"'),
+            guides: rendered.guides,
+          },
           eId: e.id,
           eByNameId: eByName.id,
           structure: sourcePage.items[0].structure,
@@ -89,6 +113,24 @@ test.describe("authored font reads from Home", () => {
       absent: null,
       sparseStructure: null,
       supportLayerId: expect.any(String),
+      rendered: {
+        layerId: expect.any(String),
+        viewBox: [expect.any(Number), expect.any(Number), expect.any(Number), expect.any(Number)],
+        hasOutline: true,
+        hasPoints: true,
+        hasAnchors: true,
+        hasFontMetrics: true,
+        hasAdvanceWidth: false,
+        hasAppearance: true,
+        guides: {
+          fontMetrics: {
+            ascender: expect.any(Number),
+            baseline: expect.any(Number),
+            descender: expect.any(Number),
+          },
+          advanceWidth: { origin: 0, advance: expect.any(Number) },
+        },
+      },
     });
     const page = result as {
       first: { id: string };
@@ -127,9 +169,17 @@ test("inspects the explicitly targeted live editor", async ({ editor, testRoot }
         missingWindowError = error.message;
       }
 
+      const capture = await shift.capture({
+        windowId: target.windowId,
+        target: "editor",
+        scale: 0.25,
+      });
+      const { data, ...captureMetadata } = capture;
+
       return {
         sessions,
         editor: await shift.editor.inspect({ windowId: target.windowId }),
+        capture: { ...captureMetadata, dataLength: data.length },
         missingWindowError,
       };
     }`,
@@ -142,6 +192,16 @@ test("inspects the explicitly targeted live editor", async ({ editor, testRoot }
       selectionIds: [point.id],
       tool: { id: "select" },
       applyStatus: "idle",
+    },
+    capture: {
+      captureId: expect.any(String),
+      target: "editor",
+      mimeType: "image/png",
+      width: expect.any(Number),
+      height: expect.any(Number),
+      scale: 0.25,
+      capturedAt: expect.any(String),
+      dataLength: expect.any(Number),
     },
     missingWindowError: "Shift window 2147483647 is not open",
   });

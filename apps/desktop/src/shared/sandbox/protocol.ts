@@ -4,7 +4,12 @@ import type {
   GlyphPage,
   GlyphSelector,
   GlyphSummary,
+  LayerAppearance,
+  LayerOverlays,
+  LayerSvg,
   LayerView,
+  ShiftCapture,
+  ShiftCaptureTarget,
   ShiftSession,
 } from "@shift/runtime";
 import type { GlyphId, SourceId } from "@shift/types";
@@ -21,6 +26,10 @@ export type SandboxEventMap = {
 };
 
 export type SandboxHostCallMap = {
+  "shift.capture": {
+    request: { windowId: number; target: ShiftCaptureTarget; scale?: number };
+    response: ShiftCapture;
+  };
   "shift.sessions.list": {
     request: undefined;
     response: ShiftSession[];
@@ -41,6 +50,16 @@ export type SandboxHostCallMap = {
   "shift.layers.get": {
     request: { windowId: number; glyphId: GlyphId; sourceId: SourceId };
     response: LayerView | null;
+  };
+  "shift.layers.render": {
+    request: {
+      windowId: number;
+      glyphId: GlyphId;
+      sourceId: SourceId;
+      overlays?: LayerOverlays;
+      appearance?: LayerAppearance;
+    };
+    response: LayerSvg | null;
   };
 };
 

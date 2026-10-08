@@ -37,6 +37,9 @@ export async function executeShiftCode(
   runtime.setInterruptHandler(shouldInterruptAfterDeadline(deadline));
 
   const vm = runtime.newContext();
+  installAsyncJsonFunction(vm, "__shiftCapture", deadline, (input) =>
+    capabilities.capture(shiftInputSchemas.capture.parse(input)),
+  );
   installAsyncJsonFunction(vm, "__shiftListSessions", deadline, () => capabilities.sessions.list());
   installAsyncJsonFunction(vm, "__shiftInspectEditor", deadline, (windowId) => {
     if (typeof windowId !== "number" || !Number.isInteger(windowId)) {
@@ -57,10 +60,14 @@ export async function executeShiftCode(
   installAsyncJsonFunction(vm, "__shiftGetLayer", deadline, (input) =>
     capabilities.layers.get(shiftInputSchemas["layers.get"].parse(input)),
   );
+  installAsyncJsonFunction(vm, "__shiftRenderLayer", deadline, (input) =>
+    capabilities.layers.render(shiftInputSchemas["layers.render"].parse(input)),
+  );
 
   const bootstrap = `
     "use strict";
     const shift = Object.freeze({
+      capture: async (input) => JSON.parse(await __shiftCapture(input)),
       sessions: Object.freeze({
         list: async () => JSON.parse(await __shiftListSessions()),
       }),
@@ -76,6 +83,7 @@ export async function executeShiftCode(
       }),
       layers: Object.freeze({
         get: async (input) => JSON.parse(await __shiftGetLayer(input)),
+        render: async (input) => JSON.parse(await __shiftRenderLayer(input)),
       }),
     });
     (async () => {

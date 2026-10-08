@@ -210,7 +210,7 @@ const EditorLayout = ({
           inset="start"
           onDoubleClick={() => leftSidebarPanelRef.current?.resize(LEFT_SIDEBAR_DEFAULT_SIZE)}
         />
-        <ResizablePanel id="canvas" order={2} minSize={30}>
+        <ResizablePanel id="canvas" order={2} minSize={30} data-shift-capture-target="editor">
           <ZoneContainer zone="canvas" className="h-full">
             {children}
           </ZoneContainer>

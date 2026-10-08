@@ -6,6 +6,7 @@ import { toNodeHandler } from "@modelcontextprotocol/node";
 import { createMcpHandler, McpServer } from "@modelcontextprotocol/server";
 import type { FastifyInstance } from "fastify";
 import * as z from "zod/v4";
+import { shiftInputSchemas, type ShiftCapture, type ShiftCaptureTarget } from "@shift/runtime";
 import { SHIFT_CODE_TYPES } from "./declarations";
 import type { ShiftMcpConnection } from "./types";
 
@@ -20,6 +21,11 @@ export interface ShiftMcpLogger {
 
 export interface ShiftMcpServerOptions {
   execute(code: string): Promise<unknown>;
+  capture(input: {
+    windowId: number;
+    target: ShiftCaptureTarget;
+    scale?: number;
+  }): Promise<ShiftCapture>;
   descriptorPath: string;
   port: number;
   logger?: ShiftMcpLogger;
@@ -28,6 +34,7 @@ export interface ShiftMcpServerOptions {
 /** Serves code-mode access to one running Shift application over loopback HTTP. */
 export class ShiftMcpServer {
   readonly #execute: (code: string) => Promise<unknown>;
+  readonly #capture: ShiftMcpServerOptions["capture"];
   readonly #descriptorPath: string;
   readonly #port: number;
   readonly #logger: ShiftMcpLogger | undefined;
@@ -42,6 +49,7 @@ export class ShiftMcpServer {
    */
   constructor(options: ShiftMcpServerOptions) {
     this.#execute = options.execute;
+    this.#capture = options.capture;
     this.#descriptorPath = options.descriptorPath;
     this.#port = options.port;
     this.#logger = options.logger;
@@ -116,6 +124,24 @@ export class ShiftMcpServer {
       async () => ({
         content: [{ type: "text", text: SHIFT_CODE_TYPES }],
       }),
+    );
+    server.registerTool(
+      "shift.capture",
+      {
+        description:
+          "Capture a point-in-time PNG of one explicit Shift window or its editor canvas.",
+        inputSchema: shiftInputSchemas.capture,
+      },
+      async (input) => {
+        const capture = await this.#capture(input);
+        const { data, ...metadata } = capture;
+        return {
+          content: [
+            { type: "image", data, mimeType: capture.mimeType },
+            { type: "text", text: JSON.stringify(metadata, null, 2) },
+          ],
+        };
+      },
     );
     server.registerTool(
       "shift.execute",

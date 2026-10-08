@@ -9,6 +9,19 @@ import type { ShiftCapabilities } from "@shift/runtime";
 import type { ShiftMcpConnection } from "./types";
 
 const capabilities: ShiftCapabilities = {
+  async capture({ windowId, target, scale = 1 }) {
+    return {
+      captureId: "capture-a",
+      windowId,
+      target,
+      mimeType: "image/png",
+      data: "cG5n",
+      width: 800,
+      height: 600,
+      scale,
+      capturedAt: "2026-10-08T10:00:00.000Z",
+    };
+  },
   sessions: {
     async list() {
       return [];
@@ -36,10 +49,14 @@ const capabilities: ShiftCapabilities = {
     async get() {
       throw new Error("No open Shift window");
     },
+    async render() {
+      throw new Error("No open Shift window");
+    },
   },
 };
 
 const execute = (code: string) => executeShiftCode(capabilities, code);
+const capture = capabilities.capture;
 const startedServers: ShiftMcpServer[] = [];
 const temporaryDirectories: string[] = [];
 
@@ -77,7 +94,7 @@ describe("Shift MCP local connection", () => {
     const directory = await mkdtemp(path.join(tmpdir(), "shift-mcp-"));
     temporaryDirectories.push(directory);
     const descriptorPath = path.join(directory, "connection.json");
-    const server = new ShiftMcpServer({ execute, descriptorPath, port: 0 });
+    const server = new ShiftMcpServer({ execute, capture, descriptorPath, port: 0 });
     startedServers.push(server);
 
     const connection = await server.start();
@@ -109,6 +126,7 @@ describe("Shift MCP local connection", () => {
     temporaryDirectories.push(directory);
     const server = new ShiftMcpServer({
       execute,
+      capture,
       descriptorPath: path.join(directory, "connection.json"),
       port: 0,
     });
@@ -128,12 +146,24 @@ describe("Shift MCP local connection", () => {
       name: "shift.execute",
       arguments: { code: "async () => await shift.sessions.list()" },
     });
+    const captured = await mcpRequest(connection, "tools/call", {
+      name: "shift.capture",
+      arguments: { windowId: 7, target: "editor" },
+    });
 
     expect(initialized).toMatchObject({ result: { serverInfo: { name: "shift" } } });
     expect(described).toMatchObject({
       result: { content: [{ text: expect.stringContaining("declare global") }] },
     });
     expect(executed).toMatchObject({ result: { content: [{ text: "[]" }] } });
+    expect(captured).toMatchObject({
+      result: {
+        content: [
+          { type: "image", mimeType: "image/png", data: "cG5n" },
+          { type: "text", text: expect.stringContaining('"captureId": "capture-a"') },
+        ],
+      },
+    });
   });
 
   it("connects with a native MCP client", async () => {
@@ -141,6 +171,7 @@ describe("Shift MCP local connection", () => {
     temporaryDirectories.push(directory);
     const server = new ShiftMcpServer({
       execute,
+      capture,
       descriptorPath: path.join(directory, "connection.json"),
       port: 0,
     });
@@ -167,7 +198,7 @@ describe("Shift MCP local connection", () => {
     const directory = await mkdtemp(path.join(tmpdir(), "shift-mcp-"));
     temporaryDirectories.push(directory);
     const descriptorPath = path.join(directory, "connection.json");
-    const server = new ShiftMcpServer({ execute, descriptorPath, port: 0 });
+    const server = new ShiftMcpServer({ execute, capture, descriptorPath, port: 0 });
     startedServers.push(server);
     await writeFile(descriptorPath, "invalid JSON", { mode: 0o600 });
     await expect(server.start()).rejects.toThrow();
@@ -183,6 +214,7 @@ describe("Shift MCP local connection", () => {
     temporaryDirectories.push(directory);
     const first = new ShiftMcpServer({
       execute,
+      capture,
       descriptorPath: path.join(directory, "first.json"),
       port: 0,
     });
@@ -191,6 +223,7 @@ describe("Shift MCP local connection", () => {
     const secondPath = path.join(directory, "second.json");
     const second = new ShiftMcpServer({
       execute,
+      capture,
       descriptorPath: secondPath,
       port: Number(new URL(connection.url).port),
     });

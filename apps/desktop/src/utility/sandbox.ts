@@ -11,6 +11,7 @@ import type {
 const transport = parentPortTransport();
 const host = new Channel<SandboxHostCallMap, SandboxHostEventMap>(transport);
 const capabilities: ShiftCapabilities = {
+  capture: (input) => host.call("shift.capture", input),
   sessions: {
     list: () => host.call("shift.sessions.list", undefined),
   },
@@ -26,6 +27,7 @@ const capabilities: ShiftCapabilities = {
   },
   layers: {
     get: (input) => host.call("shift.layers.get", input),
+    render: (input) => host.call("shift.layers.render", input),
   },
 };
 const runtime = serveChannel<SandboxCallMap, SandboxEventMap>(transport, {

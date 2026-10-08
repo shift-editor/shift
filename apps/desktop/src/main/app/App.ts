@@ -9,6 +9,7 @@ import {
   type Rectangle,
   type WebContents,
 } from "electron";
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { Window } from "../windows/Window";
 import { getRendererSource } from "../utils";
@@ -31,7 +32,12 @@ import { AppUpdater } from "../update/AppUpdater";
 import { isConvertiblePreviewPath } from "../../shared/workspace/previewConversion";
 import { OPEN_FONT_EXTENSIONS } from "../../shared/openFontExtensions";
 import { ShiftMcpServer } from "@shift/mcp";
-import type { EditorInspection, ShiftSession } from "@shift/runtime";
+import type {
+  EditorInspection,
+  ShiftCapture,
+  ShiftCaptureTarget,
+  ShiftSession,
+} from "@shift/runtime";
 import type { RecentDocumentVisit } from "../../shared/recents";
 import { RecentDocuments } from "../recents/RecentDocuments";
 import { SandboxRuntimeProcess } from "../sandbox/SandboxRuntimeProcess";
@@ -891,6 +897,7 @@ export class App {
   /** Starts the app-owned execution process independently of MCP availability. */
   async #startSandbox(): Promise<void> {
     const sandbox = new SandboxRuntimeProcess({
+      capture: (input) => this.#capture(input),
       sessions: {
         list: () => Promise.resolve(this.#agentSessions()),
       },
@@ -909,6 +916,13 @@ export class App {
       layers: {
         get: ({ windowId, glyphId, sourceId }) =>
           this.#windowForAgentRequest(windowId).agent.getLayer(glyphId, sourceId),
+        render: ({ windowId, glyphId, sourceId, overlays, appearance }) =>
+          this.#windowForAgentRequest(windowId).agent.renderLayer(
+            glyphId,
+            sourceId,
+            overlays,
+            appearance,
+          ),
       },
     });
     this.#sandbox = sandbox;
@@ -944,6 +958,7 @@ export class App {
 
     const mcp = new ShiftMcpServer({
       execute: (code) => sandbox.execute(code),
+      capture: (input) => this.#capture(input),
       descriptorPath: path.join(app.getPath("userData"), "mcp.json"),
       port: process.env.NODE_ENV === "test" ? 0 : port,
       logger: createShiftLogger("app.mcp"),
@@ -1014,6 +1029,60 @@ export class App {
       windowId,
       sessionId: session.sessionId,
       mode: session.mode,
+    };
+  }
+
+  async #capture({
+    windowId,
+    target,
+    scale = 1,
+  }: {
+    windowId: number;
+    target: ShiftCaptureTarget;
+    scale?: number;
+  }): Promise<ShiftCapture> {
+    const owner = this.#windowForAgentRequest(windowId);
+    const browserWindow = owner.window;
+    const webContents = browserWindow.webContents;
+    let rectangle: Rectangle | undefined;
+    const content = browserWindow.getContentBounds();
+    let logicalSize = { width: content.width, height: content.height };
+
+    if (target === "editor") {
+      const bounds = await owner.agent.editorCaptureBounds();
+      const zoom = webContents.getZoomFactor();
+      const x = Math.max(0, Math.floor(bounds.x * zoom));
+      const y = Math.max(0, Math.floor(bounds.y * zoom));
+      const width = Math.min(content.width - x, Math.ceil(bounds.width * zoom));
+      const height = Math.min(content.height - y, Math.ceil(bounds.height * zoom));
+      if (width <= 0 || height <= 0) throw new Error("The Shift editor capture area is empty");
+      rectangle = { x, y, width, height };
+      logicalSize = { width, height };
+    }
+
+    const captured = await webContents.capturePage(rectangle);
+    if (captured.isEmpty()) throw new Error(`Shift window ${windowId} produced an empty capture`);
+    const outputSize = {
+      width: Math.max(1, Math.round(logicalSize.width * scale)),
+      height: Math.max(1, Math.round(logicalSize.height * scale)),
+    };
+    const capturedSize = captured.getSize();
+    const image =
+      capturedSize.width === outputSize.width && capturedSize.height === outputSize.height
+        ? captured
+        : captured.resize({ ...outputSize, quality: "best" });
+    const size = image.getSize();
+
+    return {
+      captureId: randomUUID(),
+      windowId,
+      target,
+      mimeType: "image/png",
+      data: image.toPNG().toString("base64"),
+      width: size.width,
+      height: size.height,
+      scale,
+      capturedAt: new Date().toISOString(),
     };
   }
 

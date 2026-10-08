@@ -279,6 +279,19 @@ type FontSessionMode = "preview" | "memory" | "workspace";
 //#endregion
 //#region src/capabilities.d.ts
 export type ShiftSessionMode = FontSessionMode;
+export type ShiftCaptureTarget = "window" | "editor";
+/** Point-in-time PNG captured from one explicitly addressed Shift window. */
+export interface ShiftCapture {
+  captureId: string;
+  windowId: number;
+  target: ShiftCaptureTarget;
+  mimeType: "image/png";
+  data: string;
+  width: number;
+  height: number;
+  scale: number;
+  capturedAt: string;
+}
 /** One open Shift window that can be addressed through runtime capabilities. */
 export interface ShiftSession {
   windowId: number;
@@ -381,8 +394,58 @@ export interface LayerView {
     smooth: boolean;
   }[];
 }
+/** Optional authored-layer annotations included in portable SVG output. */
+export interface LayerOverlays {
+  points?: boolean;
+  controlLines?: boolean;
+  anchors?: boolean;
+  components?: boolean;
+  fontMetrics?: boolean;
+  advanceWidth?: boolean;
+}
+/** Presentation overrides for semantic elements in an authored-layer rendering. */
+export interface LayerAppearance {
+  outlineFill?: string;
+  onCurveStroke?: string;
+  offCurveStroke?: string;
+  handleFill?: string;
+  controlStroke?: string;
+  anchorStroke?: string;
+  metricStroke?: string;
+  advanceStroke?: string;
+  componentStroke?: string;
+}
+/** Structured guide positions accompanying an authored-layer rendering. */
+export interface LayerGuides {
+  fontMetrics: {
+    ascender: number;
+    capHeight?: number;
+    xHeight?: number;
+    baseline: number;
+    descender: number;
+  };
+  advanceWidth: {
+    origin: number;
+    advance: number;
+  };
+}
+/** Portable SVG rendering of one authored glyph layer. */
+export interface LayerSvg {
+  glyphId: GlyphId;
+  sourceId: SourceId;
+  layerId: LayerId;
+  viewBox: [number, number, number, number];
+  guides: LayerGuides;
+  svg: string;
+}
 /** Live application capabilities shared by protocol and plugin hosts. */
 export interface ShiftCapabilities {
+  capture(input: {
+    windowId: number;
+    target: ShiftCaptureTarget;
+    /** Output multiplier relative to logical UI pixels. Defaults to 1. */
+    scale?: number;
+  }): Promise<ShiftCapture>;
   sessions: {
     list(): Promise<ShiftSession[]>;
   };
@@ -411,6 +474,13 @@ export interface ShiftCapabilities {
       glyphId: GlyphId;
       sourceId: SourceId;
     }): Promise<LayerView | null>;
+    render(input: {
+      windowId: number;
+      glyphId: GlyphId;
+      sourceId: SourceId;
+      overlays?: LayerOverlays;
+      appearance?: LayerAppearance;
+    }): Promise<LayerSvg | null>;
   };
 }
 //#endregion

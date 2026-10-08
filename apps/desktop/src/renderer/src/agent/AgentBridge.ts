@@ -4,10 +4,16 @@ import type {
   GlyphPage,
   GlyphSelector,
   GlyphSummary,
+  LayerAppearance,
+  LayerOverlays,
+  LayerSvg,
   LayerView,
 } from "@shift/runtime";
 import type { GlyphId, SourceId } from "@shift/types";
 import { GlyphGeometry } from "@shift/glyph-state";
+import { renderLayerSvg } from "@shift/editor/rendering";
+import { signal } from "@shift/editor/signals";
+import { emptyExternalAxisLocation } from "@shift/editor/variation";
 import type { ShiftHost } from "@shared/host/ShiftHost";
 import type { AgentCallMap, AgentEventMap } from "@shared/agent/protocol";
 import { domPortTransport, serveChannel, type ChannelServer } from "@shared/workspace/channel";
@@ -39,11 +45,14 @@ export class AgentBridge {
 
       this.#requests?.dispose();
       this.#requests = serveChannel<AgentCallMap, AgentEventMap>(domPortTransport(received), {
+        "capture.editorBounds": () => this.#editorCaptureBounds(),
         "editor.inspect": () => this.#inspectEditor(),
         "font.get": () => this.#getFont(),
         "glyphs.list": (input) => this.#listGlyphs(input),
         "glyphs.get": (selector) => this.#getGlyph(selector),
         "layers.get": ({ glyphId, sourceId }) => this.#getLayer(glyphId, sourceId),
+        "layers.render": ({ glyphId, sourceId, overlays, appearance }) =>
+          this.#renderLayer(glyphId, sourceId, overlays, appearance),
       });
     } catch (error) {
       port.cancel();
@@ -152,6 +161,60 @@ export class AgentBridge {
         smooth,
       })),
     };
+  }
+
+  async #renderLayer(
+    glyphId: GlyphId,
+    sourceId: SourceId,
+    overlays: LayerOverlays | undefined,
+    appearance: LayerAppearance | undefined,
+  ): Promise<LayerSvg | null> {
+    const [layer] = await this.#session.font.readAuthoredLayers({ glyphIds: [glyphId], sourceId });
+    if (!layer) return null;
+
+    const geometry = GlyphGeometry.fromState(layer.state);
+    const glyph = await this.#session.font.loadGlyph(glyphId);
+    const location =
+      this.#session.font.externalLocationForSource(sourceId) ?? emptyExternalAxisLocation();
+    const renderModel = glyph.renderModelAt(signal(location), signal<SourceId | null>(sourceId));
+    const directComponents = renderModel.components.filter(
+      (component) => component.parentPath.length === 0,
+    );
+    if (directComponents.length !== geometry.components.length) {
+      throw new Error(`Layer ${layer.state.layerId} has an unresolved or cyclic component`);
+    }
+    for (const component of renderModel.components) {
+      const componentGeometry = renderModel.geometryAt(component.glyphId, renderModel.location);
+      if (component.children.length !== componentGeometry.components.length) {
+        throw new Error(`Layer ${layer.state.layerId} has an unresolved or cyclic component`);
+      }
+    }
+
+    const metrics = this.#session.font.source(sourceId)
+      ? this.#session.font.metricsForSource(sourceId)
+      : this.#session.font.defaultSourceMetrics;
+    const rendered = renderLayerSvg(
+      geometry,
+      metrics,
+      overlays,
+      renderModel.components,
+      appearance,
+    );
+    return {
+      glyphId,
+      sourceId,
+      layerId: layer.state.layerId,
+      ...rendered,
+    };
+  }
+
+  #editorCaptureBounds() {
+    const element = document.querySelector<HTMLElement>("[data-shift-capture-target='editor']");
+    if (!element) throw new Error("This Shift window has no visible editor");
+
+    const { x, y, width, height } = element.getBoundingClientRect();
+    if (width <= 0 || height <= 0) throw new Error("The Shift editor is not visible");
+    return { x, y, width, height };
   }
 
   #inspectEditor(): EditorView {

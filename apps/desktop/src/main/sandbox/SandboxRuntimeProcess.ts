@@ -50,12 +50,14 @@ export class SandboxRuntimeProcess {
     const transport = utilityProcessTransport(proc);
     const channel = new Channel<SandboxCallMap, SandboxEventMap>(transport);
     serveChannel<SandboxHostCallMap, SandboxHostEventMap>(transport, {
+      "shift.capture": (input) => this.#capabilities.capture(input),
       "shift.sessions.list": () => this.#capabilities.sessions.list(),
       "shift.editor.inspect": (input) => this.#capabilities.editor.inspect(input),
       "shift.font.get": (input) => this.#capabilities.font.get(input),
       "shift.glyphs.list": (input) => this.#capabilities.glyphs.list(input),
       "shift.glyphs.get": (input) => this.#capabilities.glyphs.get(input),
       "shift.layers.get": (input) => this.#capabilities.layers.get(input),
+      "shift.layers.render": (input) => this.#capabilities.layers.render(input),
     });
 
     this.#process = proc;
