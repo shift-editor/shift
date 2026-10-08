@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { updateFeed } from "./updateFeed";
 
-const feedBaseUrl = "https://shift-editor.github.io/shift/updates";
+const feedBaseUrl = "https://feeds.shift.graphics/updates";
 
 describe("electron-updater channels", () => {
   it("selects the architecture-specific macOS Release channel", () => {
@@ -13,7 +13,7 @@ describe("electron-updater channels", () => {
       }),
     ).toEqual({
       provider: "generic",
-      url: "https://shift-editor.github.io/shift/updates/release/darwin/arm64",
+      url: "https://feeds.shift.graphics/updates/release/darwin/arm64",
     });
   });
 
@@ -26,7 +26,7 @@ describe("electron-updater channels", () => {
       }),
     ).toEqual({
       provider: "generic",
-      url: "https://shift-editor.github.io/shift/updates/nightly/win32/x64",
+      url: "https://feeds.shift.graphics/updates/nightly/win32/x64",
     });
   });
 
