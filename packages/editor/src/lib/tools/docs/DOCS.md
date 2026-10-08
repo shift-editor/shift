@@ -73,7 +73,7 @@ tools/
     Kerning.ts           — KerningTool: hover, selection, value popover contract, overlay drawing
     behaviors.ts         — hover, pill value and lock clicks, select click, drag, keyboard nudge and Tab
     RunKerning.ts        — KerningPair (the kern between two run items: edit, preview, lock) and RunKerning
-    KerningOverlay.ts    — kern zone, same-group marks, pill with side locks and pair names
+    KerningOverlay.ts    — kern zone, pill with side locks and pair names
     KerningLabel.ts      — pill geometry (value and both locks) shared by drawing and hit-testing
 apps/desktop/src/renderer/src/lib/tools/
   tools.ts               — registerBuiltInTools (wires all tools + desktop icons and shortcuts)

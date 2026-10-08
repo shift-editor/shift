@@ -1,7 +1,6 @@
 import { asGlyphId, type KerningSide } from "@shift/types";
 import type { Canvas, ScreenCanvas, ScreenProjection } from "../../editor/rendering/Canvas";
 import type { Editor } from "../../editor/Editor";
-import type { KerningPairPosition } from "../../model/Kerning";
 import type { Rect2D } from "@shift/geo";
 import {
   kerningLabelLayout,
@@ -22,13 +21,11 @@ export interface KerningDrawOptions {
 }
 
 /**
- * Draws a pair's kern, the glyphs its groups reach, and its pill.
+ * Draws a pair's kern and its pill.
  *
  * @remarks
  * The kern spans the two advance boundaries, filled in the spacing colours,
- * or the negative ones when it tightens. Glyphs in the run that share a
- * group the pair kerns with are marked under the line, so the reach of a
- * group edit shows before it is made. The pill holds a lock for each side
+ * or the negative ones when it tightens. The pill holds a lock for each side
  * (closed: the glyph itself is kerned; open: its group is) and the value.
  */
 export function drawKerningPair(
@@ -41,7 +38,6 @@ export function drawKerningPair(
   const theme = canvas.theme.spacing;
   canvas.withTransform(editor.sceneTransform(gap.node), (local) => {
     local.withScreenSpace((screen, project) => {
-      drawGroupMarks(screen, project, editor, pair, theme);
       drawKern(screen, project, pair, theme, options.selected ?? false);
       drawPill(screen, editor, pair, theme, options.hovered ?? null);
     });
@@ -80,47 +76,6 @@ function drawKern(
   if (selected) {
     const outline = negative ? theme.negativeLabelFill : theme.labelFill;
     screen.strokeRect(left - 1.5, top + 0.5, right - left + 3, height - 1, outline, 1);
-  }
-  ctx.restore();
-}
-
-/** Marks every glyph of the run that kerns with the same group as one of the pair's sides. */
-function drawGroupMarks(
-  screen: ScreenCanvas,
-  project: ScreenProjection,
-  editor: Editor,
-  pair: KerningPair,
-  theme: SpacingTheme,
-): void {
-  const edited = pair.editablePair(editor);
-  const layout = editor.text.layoutCell(pair.gap.node.runId).peek();
-  if (!edited || !layout) return;
-
-  const kerning = editor.font.kerningCell.peek();
-  const groups: Array<[KerningPairPosition, string]> = [];
-  if (edited.first.kind === "group") groups.push(["first", edited.first.id]);
-  if (edited.second.kind === "group") groups.push(["second", edited.second.id]);
-  if (groups.length === 0) return;
-
-  const ctx = screen.ctx;
-  ctx.save();
-  ctx.lineWidth = 2;
-  ctx.lineCap = "round";
-  for (const placed of layout.placedGlyphs) {
-    const glyphId = placed.glyph.glyphId;
-    if (!glyphId) continue;
-    for (const [index, [position, group]] of groups.entries()) {
-      if (kerning.groupOf(position, glyphId) !== group) continue;
-      const y = pair.gap.bottom;
-      const start = project.point({ x: placed.left, y });
-      const end = project.point({ x: placed.left + placed.glyph.xAdvance, y });
-      const offset = 4 + index * 4;
-      ctx.strokeStyle = position === "first" ? theme.activeHatch : theme.idleHatch;
-      ctx.beginPath();
-      ctx.moveTo(start.x + 2, start.y + offset);
-      ctx.lineTo(end.x - 2, end.y + offset);
-      ctx.stroke();
-    }
   }
   ctx.restore();
 }
