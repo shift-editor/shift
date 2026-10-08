@@ -48,8 +48,6 @@ export const VISUAL_SPECS = [
   "variable-font-authoring.spec.ts",
   "variable-navigation.spec.ts",
   "variation-outlines.spec.ts",
-  // macOS has no platform job, so the visual project also carries native lifecycle coverage.
-  ...PLATFORM_SPECS,
 ];
 
 /** Hardware-GPU Grid residency and preview presentation. */
@@ -80,7 +78,11 @@ export default defineConfig({
   // One CI retry collects a second trace for diagnosis. Retry passes are reported as flaky
   // in the job summary, and goldens refuse to compare on retry (fixtures/snapshots.ts).
   retries: process.env.CI ? 1 : 0,
-  workers: 1, // Electron can only run one instance at a time
+  // Every test launches its own Electron app with its own user-data directory, so CI runs
+  // `E2E_WORKERS` apps at once. Platform specs need the OS focus and clipboard to themselves,
+  // so their project stays at one worker. Local runs default to one so a test run does not
+  // keep stealing focus from the developer.
+  workers: Number(process.env.E2E_WORKERS ?? 1),
   reportSlowTests: { max: 10, threshold: 20_000 },
   // Shards write blob reports that CI merges into one HTML report and a flaky/slow summary.
   reporter: process.env.CI ? [["blob"], ["line"]] : [["list"]],
@@ -94,7 +96,7 @@ export default defineConfig({
 
   projects: [
     { name: "visual", testMatch: VISUAL_SPECS },
-    { name: "platform", testMatch: PLATFORM_SPECS },
+    { name: "platform", testMatch: PLATFORM_SPECS, workers: 1 },
     { name: "gpu", testMatch: GPU_SPECS },
     { name: "perf", testMatch: PERF_SPECS, timeout: 120_000 },
   ],

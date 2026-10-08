@@ -595,6 +595,7 @@ jobs:
             name: Visual
             project: visual
             runner: macos-latest
+            workers: 2
           - target: platform-windows
             name: Platform Windows
             project: platform
@@ -623,9 +624,38 @@ jobs:
         with:
           node-version: 24
 
+      # apt mirrors stalled this step for up to 30 minutes. The packages are cached per
+      # runner image, so most runs install them from the cache without touching a mirror.
+      - name: Read runner image
+        if: runner.os == 'Linux'
+        id: runner-image
+        run: echo "image=$ImageOS-$ImageVersion" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Linux display packages
+        if: runner.os == 'Linux'
+        id: display-packages
+        uses: actions/cache@v6
+        with:
+          path: ~/display-packages
+          key: display-packages-v1-${{ steps.runner-image.outputs.image }}
+
       - name: Install Linux display environment
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install --yes fluxbox xvfb
+        timeout-minutes: 5
+        env:
+          CACHE_HIT: ${{ steps.display-packages.outputs.cache-hit }}
+        run: |
+          packages="$HOME/display-packages"
+          if [[ "$CACHE_HIT" != "true" ]]; then
+            mkdir -p "$packages/partial"
+            sudo apt-get update
+            sudo apt-get install --yes --download-only -o Dir::Cache::archives="$packages" fluxbox xvfb
+            sudo chown -R "$USER" "$packages"
+          fi
+          shopt -s nullglob
+          debs=("$packages"/*.deb)
+          if (( ${#debs[@]} > 0 )); then sudo dpkg -i "${debs[@]}"; fi
+          command -v fluxbox Xvfb
 
       - name: Cache node_modules
         uses: actions/cache@v6
@@ -650,11 +680,25 @@ jobs:
       - name: Run E2E tests
         if: runner.os != 'Linux'
         env:
+          E2E_WORKERS: ${{ matrix.workers || 1 }}
           PLAYWRIGHT_BLOB_OUTPUT_DIR: ${{ github.workspace }}/apps/desktop/blob-report
           PLAYWRIGHT_BLOB_OUTPUT_NAME: report-${{ matrix.target }}-${{ matrix.shard }}.zip
         run: >-
           pnpm --dir apps/desktop exec playwright test
           --project=${{ matrix.project }}
+          --fully-parallel
+          --shard=${{ matrix.shard }}/${{ matrix.shard-total }}
+
+      # macOS has no platform job. Platform tests need the OS focus and clipboard to
+      # themselves, so they run one at a time after the parallel visual tests.
+      - name: Run macOS platform tests
+        if: (success() || failure()) && matrix.target == 'visual'
+        env:
+          PLAYWRIGHT_BLOB_OUTPUT_DIR: ${{ github.workspace }}/apps/desktop/blob-report
+          PLAYWRIGHT_BLOB_OUTPUT_NAME: report-${{ matrix.target }}-platform-${{ matrix.shard }}.zip
+        run: >-
+          pnpm --dir apps/desktop exec playwright test
+          --project=platform
           --fully-parallel
           --shard=${{ matrix.shard }}/${{ matrix.shard-total }}
 
