@@ -79,7 +79,16 @@ impl Work<Context, WorkId, Error> for StaticMetadataWork {
             global_locations,
             None,
             self.default_source()?.italic_angle().unwrap_or_default(),
-            GdefCategories::default(),
+            GdefCategories {
+                categories: self
+                    .snapshot
+                    .gdef_classes
+                    .iter()
+                    .map(|(name, class)| (name.as_str().into(), *class))
+                    .collect(),
+                // Authored `table GDEF` statements stay more specific than categories.
+                prefer_gdef_categories_in_fea: true,
+            },
             None,
             false,
         )?;

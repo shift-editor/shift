@@ -161,8 +161,9 @@ impl ShiftStore {
 
         Self::verify_document(path)?;
 
-        let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE)?;
-        schema::validate_document_header(&conn)?;
+        let mut conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE)?;
+        let version = schema::validate_document_header(&conn)?;
+        schema::upgrade_document(&mut conn, version)?;
         validate_document_shape(&conn)?;
         configure_document_connection(&conn)?;
 

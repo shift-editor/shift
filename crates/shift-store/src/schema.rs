@@ -16,7 +16,9 @@ CREATE INDEX glyph_layers_source_id_idx ON glyph_layers(source_id);
 CREATE INDEX glyph_components_base_glyph_id_idx ON glyph_components(base_glyph_id);
 "#;
 
-pub(crate) const DOCUMENT_SCHEMA_V1: &str = r#"
+/// The current document tables. New stores are created from this batch;
+/// older ones reach the same shape through [`DOCUMENT_MIGRATIONS`].
+pub(crate) const DOCUMENT_SCHEMA: &str = r#"
 CREATE TABLE IF NOT EXISTS font_info (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     family_name TEXT,
@@ -94,7 +96,9 @@ CREATE TABLE IF NOT EXISTS sources (
 CREATE TABLE IF NOT EXISTS glyphs (
     id TEXT PRIMARY KEY,
     name TEXT,
-    order_index INTEGER NOT NULL DEFAULT 0
+    order_index INTEGER NOT NULL DEFAULT 0,
+    category TEXT,
+    sub_category TEXT
 );
 
 CREATE INDEX IF NOT EXISTS glyphs_name_idx
@@ -263,7 +267,29 @@ CREATE TABLE IF NOT EXISTS workspace_state (
 "#;
 
 pub const SHIFT_APPLICATION_ID: i64 = 0x5348_4654;
-pub const SHIFT_DOCUMENT_SCHEMA_VERSION: i64 = 1;
+pub const SHIFT_DOCUMENT_SCHEMA_VERSION: i64 = 2;
+
+/// Steps that bring document tables from one schema version to the next,
+/// as `(version reached, SQL)`. Version 1 shipped in Shift 0.1.
+const DOCUMENT_MIGRATIONS: &[(i64, &str)] = &[(
+    2,
+    "ALTER TABLE glyphs ADD COLUMN category TEXT;
+     ALTER TABLE glyphs ADD COLUMN sub_category TEXT;",
+)];
+
+/// Brings document tables at `version` up to the current schema. The caller
+/// owns the transaction and stamps the new `user_version`.
+pub(crate) fn migrate_document_tables(
+    conn: &rusqlite::Connection,
+    version: i64,
+) -> Result<(), StoreError> {
+    for (reached, sql) in DOCUMENT_MIGRATIONS {
+        if *reached > version {
+            conn.execute_batch(sql)?;
+        }
+    }
+    Ok(())
+}
 
 pub(crate) fn defer_import_indexes(tx: &Transaction<'_>) -> Result<(), StoreError> {
     tx.execute_batch(DEFER_IMPORT_INDEXES)?;
@@ -275,11 +301,9 @@ pub(crate) fn restore_import_indexes(tx: &Transaction<'_>) -> Result<(), StoreEr
     Ok(())
 }
 
-/// Creates the baseline schema and stamps `user_version`.
-///
-/// Pre-release policy: the app has not shipped, so schema changes edit the
-/// baseline batch in place instead of adding migration steps. A database
-/// from a NEWER app version is refused rather than silently mangled.
+/// Creates the current schema, or migrates an older one, and stamps
+/// `user_version`. A database from a NEWER app version is refused rather
+/// than silently mangled.
 pub(crate) fn ensure_current(conn: &rusqlite::Connection) -> Result<(), StoreError> {
     let application_id = application_id(conn)?;
     if application_id == SHIFT_APPLICATION_ID {
@@ -301,9 +325,22 @@ pub(crate) fn ensure_current(conn: &rusqlite::Connection) -> Result<(), StoreErr
     }
 
     if version < 1 {
-        conn.execute_batch(DOCUMENT_SCHEMA_V1)?;
+        conn.execute_batch(DOCUMENT_SCHEMA)?;
         conn.execute_batch(WORKSPACE_SCHEMA_V1)?;
         conn.pragma_update(None, "user_version", SHIFT_DOCUMENT_SCHEMA_VERSION)?;
+    } else if version < SHIFT_DOCUMENT_SCHEMA_VERSION {
+        conn.execute_batch("BEGIN IMMEDIATE")?;
+        let migrated = migrate_document_tables(conn, version).and_then(|()| {
+            conn.pragma_update(None, "user_version", SHIFT_DOCUMENT_SCHEMA_VERSION)
+                .map_err(StoreError::from)
+        });
+        match migrated {
+            Ok(()) => conn.execute_batch("COMMIT")?,
+            Err(error) => {
+                let _ = conn.execute_batch("ROLLBACK");
+                return Err(error);
+            }
+        }
     }
 
     Ok(())
@@ -326,13 +363,15 @@ pub(crate) fn initialize_document(conn: &rusqlite::Connection) -> Result<(), Sto
         });
     }
 
-    conn.execute_batch(DOCUMENT_SCHEMA_V1)?;
+    conn.execute_batch(DOCUMENT_SCHEMA)?;
     conn.pragma_update(None, "application_id", SHIFT_APPLICATION_ID)?;
     conn.pragma_update(None, "user_version", SHIFT_DOCUMENT_SCHEMA_VERSION)?;
     Ok(())
 }
 
-pub(crate) fn validate_document_header(conn: &rusqlite::Connection) -> Result<(), StoreError> {
+/// Checks a document's identity and returns its schema version, which may
+/// be older than [`SHIFT_DOCUMENT_SCHEMA_VERSION`] but never newer.
+pub(crate) fn validate_document_header(conn: &rusqlite::Connection) -> Result<i64, StoreError> {
     let application_id = application_id(conn)?;
     if application_id != SHIFT_APPLICATION_ID {
         return Err(StoreError::InvalidApplicationId {
@@ -342,13 +381,29 @@ pub(crate) fn validate_document_header(conn: &rusqlite::Connection) -> Result<()
     }
 
     let version = schema_version(conn)?;
-    if version != SHIFT_DOCUMENT_SCHEMA_VERSION {
+    if !(1..=SHIFT_DOCUMENT_SCHEMA_VERSION).contains(&version) {
         return Err(StoreError::UnsupportedDocumentSchemaVersion {
             found: version,
             supported: SHIFT_DOCUMENT_SCHEMA_VERSION,
         });
     }
 
+    Ok(version)
+}
+
+/// Upgrades a document opened for writing to the current schema in one
+/// transaction, so a failed upgrade leaves the file as it was.
+pub(crate) fn upgrade_document(
+    conn: &mut rusqlite::Connection,
+    version: i64,
+) -> Result<(), StoreError> {
+    if version >= SHIFT_DOCUMENT_SCHEMA_VERSION {
+        return Ok(());
+    }
+    let tx = conn.transaction()?;
+    migrate_document_tables(&tx, version)?;
+    tx.pragma_update(None, "user_version", SHIFT_DOCUMENT_SCHEMA_VERSION)?;
+    tx.commit()?;
     Ok(())
 }
 

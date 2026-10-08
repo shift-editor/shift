@@ -434,8 +434,7 @@ mod tests {
     #[test]
     fn recovery_catalog_classifies_every_document_table() {
         let conn = Connection::open_in_memory().unwrap();
-        conn.execute_batch(crate::schema::DOCUMENT_SCHEMA_V1)
-            .unwrap();
+        conn.execute_batch(crate::schema::DOCUMENT_SCHEMA).unwrap();
         let mut statement = conn
             .prepare(
                 "SELECT name FROM sqlite_schema
@@ -463,13 +462,12 @@ mod tests {
         let recovery_path = temp.path().join("recovery.sqlite");
         let recovery = Connection::open(&recovery_path).unwrap();
         recovery
-            .execute_batch(crate::schema::DOCUMENT_SCHEMA_V1)
+            .execute_batch(crate::schema::DOCUMENT_SCHEMA)
             .unwrap();
         drop(recovery);
 
         let conn = Connection::open_in_memory().unwrap();
-        conn.execute_batch(crate::schema::DOCUMENT_SCHEMA_V1)
-            .unwrap();
+        conn.execute_batch(crate::schema::DOCUMENT_SCHEMA).unwrap();
         conn.execute(
             "ATTACH DATABASE ?1 AS recovery",
             [recovery_path.to_str().unwrap()],

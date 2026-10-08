@@ -12,8 +12,10 @@ use shift_font::{
 };
 
 use crate::{
-    font_source::piecewise_map, metrics::set_metric_position, FormatBackendError,
-    FormatBackendResult,
+    font_source::piecewise_map,
+    glyph_category::{GlyphCategories, ResolvedCategory},
+    metrics::set_metric_position,
+    FormatBackendError, FormatBackendResult,
 };
 
 const GLYPHS_SIDE1_PREFIX: &str = "@MMK_L_";
@@ -389,6 +391,22 @@ pub(super) fn convert_glyph(
         .clone();
     let mut result = Glyph::with_id(glyph_id, glyph.name.to_string());
     result.set_unicodes(glyph.unicode.iter().copied().collect());
+    // glyphs-reader fills unset categories from glyph data; keep only the
+    // ones the file sets differently, so renaming a glyph still updates them.
+    let overrides = GlyphCategories::new().overrides(
+        glyph.name.as_str(),
+        result.unicodes(),
+        ResolvedCategory {
+            category: glyph
+                .category
+                .and_then(|category| category.to_string().parse().ok()),
+            sub_category: glyph
+                .sub_category
+                .and_then(|sub_category| sub_category.to_string().parse().ok()),
+        },
+    );
+    result.set_category(overrides.category);
+    result.set_sub_category(overrides.sub_category);
 
     for layer in &glyph.layers {
         let Some(source_id) = sources.source_id(layer) else {

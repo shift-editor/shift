@@ -5,7 +5,9 @@ use rusqlite::{Connection, OpenFlags, params};
 use crate::{CommitId, DocumentId, StoreError, connection::configure_common, schema};
 
 const RECOVERY_APPLICATION_ID: i64 = 0x5348_4652;
-const RECOVERY_SCHEMA_VERSION: i64 = 1;
+/// Tracks the document schema the overlay mirrors; version 1 overlays
+/// predate glyph categories and are upgraded when opened.
+const RECOVERY_SCHEMA_VERSION: i64 = 2;
 
 const RECOVERY_SCHEMA: &str = r#"
 CREATE TABLE IF NOT EXISTS recovery_metadata (
@@ -105,7 +107,7 @@ impl RecoveryOverlay {
             return Err(StoreError::RecoveryAlreadyExists(path.to_path_buf()));
         }
 
-        conn.execute_batch(schema::DOCUMENT_SCHEMA_V1)?;
+        conn.execute_batch(schema::DOCUMENT_SCHEMA)?;
         conn.execute_batch(RECOVERY_SCHEMA)?;
         conn.pragma_update(None, "application_id", RECOVERY_APPLICATION_ID)?;
         conn.pragma_update(None, "user_version", RECOVERY_SCHEMA_VERSION)?;
@@ -125,9 +127,16 @@ impl RecoveryOverlay {
 
     pub fn open(path: impl AsRef<Path>) -> Result<Self, StoreError> {
         let path = path.as_ref();
-        let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE)?;
+        let mut conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE)?;
         configure_recovery_connection(&conn)?;
-        validate_recovery_header(&conn)?;
+        let version = validate_recovery_header(&conn)?;
+        if version < RECOVERY_SCHEMA_VERSION {
+            // Overlay versions track the document schema they mirror.
+            let tx = conn.transaction()?;
+            schema::migrate_document_tables(&tx, version)?;
+            tx.pragma_update(None, "user_version", RECOVERY_SCHEMA_VERSION)?;
+            tx.commit()?;
+        }
         let overlay = Self {
             conn,
             path: path.to_path_buf(),
@@ -299,7 +308,9 @@ fn configure_recovery_connection(conn: &Connection) -> Result<(), StoreError> {
     Ok(())
 }
 
-fn validate_recovery_header(conn: &Connection) -> Result<(), StoreError> {
+/// Checks an overlay's identity and returns its schema version, which may be
+/// older than [`RECOVERY_SCHEMA_VERSION`] but never newer.
+fn validate_recovery_header(conn: &Connection) -> Result<i64, StoreError> {
     let application_id: i64 = conn.query_row("PRAGMA application_id", [], |row| row.get(0))?;
     if application_id != RECOVERY_APPLICATION_ID {
         return Err(StoreError::InvalidApplicationId {
@@ -308,13 +319,13 @@ fn validate_recovery_header(conn: &Connection) -> Result<(), StoreError> {
         });
     }
     let version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    if version != RECOVERY_SCHEMA_VERSION {
+    if !(1..=RECOVERY_SCHEMA_VERSION).contains(&version) {
         return Err(StoreError::UnsupportedSchemaVersion {
             found: version,
             supported: RECOVERY_SCHEMA_VERSION,
         });
     }
-    Ok(())
+    Ok(version)
 }
 
 fn sync_path(path: &Path) -> Result<(), StoreError> {

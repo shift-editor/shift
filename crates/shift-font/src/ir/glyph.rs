@@ -5,6 +5,7 @@ use crate::contour::Contour;
 use crate::entity::{
     AnchorId, ComponentId, ContourId, GlyphId, GuidelineId, LayerId, PointId, SourceId,
 };
+use crate::glyph_category::{GlyphCategory, GlyphSubcategory};
 use crate::guideline::Guideline;
 use crate::lib_data::LibData;
 use crate::point::Point;
@@ -18,6 +19,11 @@ pub struct Glyph {
     id: GlyphId,
     name: GlyphName,
     unicodes: Vec<u32>,
+    /// Set only when it overrides the glyph data category for the name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    category: Option<GlyphCategory>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    sub_category: Option<GlyphSubcategory>,
     layers: HashMap<LayerId, Arc<GlyphLayer>>,
     lib: LibData,
 }
@@ -379,6 +385,8 @@ impl Glyph {
             id,
             name: name.into(),
             unicodes: Vec::new(),
+            category: None,
+            sub_category: None,
             layers: HashMap::new(),
             lib: LibData::new(),
         }
@@ -389,6 +397,8 @@ impl Glyph {
             id: GlyphId::new(),
             name: name.into(),
             unicodes: vec![unicode],
+            category: None,
+            sub_category: None,
             layers: HashMap::new(),
             lib: LibData::new(),
         }
@@ -430,6 +440,26 @@ impl Glyph {
 
     pub fn set_unicodes(&mut self, unicodes: Vec<u32>) {
         self.unicodes = unicodes;
+    }
+
+    /// The category set explicitly on this glyph, if any.
+    pub fn category(&self) -> Option<GlyphCategory> {
+        self.category
+    }
+
+    /// The subcategory set explicitly on this glyph, if any.
+    pub fn sub_category(&self) -> Option<GlyphSubcategory> {
+        self.sub_category
+    }
+
+    /// Overrides the glyph data category; `None` falls back to it.
+    pub fn set_category(&mut self, category: Option<GlyphCategory>) {
+        self.category = category;
+    }
+
+    /// Overrides the glyph data subcategory; `None` falls back to it.
+    pub fn set_sub_category(&mut self, sub_category: Option<GlyphSubcategory>) {
+        self.sub_category = sub_category;
     }
 
     pub fn layers(&self) -> &HashMap<LayerId, Arc<GlyphLayer>> {

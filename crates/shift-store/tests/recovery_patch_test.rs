@@ -11,11 +11,17 @@ fn source_collection(font: &shift_font::Font) -> shift_font::SourceCollection {
 }
 
 fn glyph_created(glyph: &shift_font::Glyph) -> shift_font::FontChange {
-    shift_font::FontChange::Glyph(shift_font::Replacement::new(None, Some(glyph.clone())))
+    shift_font::FontChange::Glyph(Box::new(shift_font::Replacement::new(
+        None,
+        Some(glyph.clone()),
+    )))
 }
 
 fn glyph_deleted(glyph: &shift_font::Glyph) -> shift_font::FontChange {
-    shift_font::FontChange::Glyph(shift_font::Replacement::new(Some(glyph.clone()), None))
+    shift_font::FontChange::Glyph(Box::new(shift_font::Replacement::new(
+        Some(glyph.clone()),
+        None,
+    )))
 }
 
 fn layer_deleted(
