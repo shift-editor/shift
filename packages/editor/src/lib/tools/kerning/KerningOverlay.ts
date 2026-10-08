@@ -73,8 +73,8 @@ function drawKern(
 }
 
 /** Distance between neighbouring dots in a row, in screen pixels. */
-const DOT_SPACING_PX = 8;
-const DOT_RADIUS_PX = 1.5;
+const DOT_SPACING_PX = 6;
+const DOT_RADIUS_PX = 0.85;
 /** One tile of the dot grid per colour and pixel ratio; tiles are tiny and colours few. */
 const dotTiles = new Map<string, HTMLCanvasElement>();
 
