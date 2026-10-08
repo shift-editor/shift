@@ -38,6 +38,9 @@ jobs:
       release: ${{ steps.filter.outputs.release }}
       skills: ${{ steps.filter.outputs.skills }}
       docs: ${{ steps.filter.outputs.docs }}
+      e2e: ${{ steps.e2e-filter.outputs.e2e }}
+      e2e-builds: ${{ steps.e2e-plan.outputs.builds }}
+      e2e-runs: ${{ steps.e2e-plan.outputs.runs }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -96,6 +99,47 @@ jobs:
               - '.claude/skills/**'
               - '.codex/skills/**'
               - 'scripts/sync-agent-skills.mjs'
+
+      # A file reaches E2E when it matches the first pattern and neither exclusion, so a
+      # Markdown or docs-only change skips the E2E matrix.
+      - uses: dorny/paths-filter@v4
+        id: e2e-filter
+        with:
+          predicate-quantifier: every
+          filters: |
+            e2e:
+              - '{apps/**,packages/**,crates/**,Cargo.toml,Cargo.lock,rust-toolchain.toml,pnpm-lock.yaml,scripts/run-e2e.mjs,scripts/run-with-virtual-desktop.mjs,tsconfig*.json,turbo.json}'
+              - '!**/*.md'
+              - '!**/docs/**'
+
+      # Pull requests run macOS visual and the full platform suite on Linux. The merge
+      # queue and manual runs add Windows, limited to @os tests whose behaviour differs by
+      # OS, and the hardware GPU project.
+      - name: Plan E2E
+        id: e2e-plan
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          full=false
+          if [[ "$EVENT" == "merge_group" || "$EVENT" == "workflow_dispatch" || "$EVENT" == "push" ]]; then
+            full=true
+          fi
+          jq -nc --argjson full "$full" '
+            [{name: "macOS", runner: "macos-latest"}, {name: "Linux", runner: "ubuntu-latest"}]
+            + (if $full then [{name: "Windows", runner: "windows-latest"}] else [] end)
+            | {include: .}' > builds.json
+          jq -nc --argjson full "$full" '
+            def shards($n; $job): [range(1; $n + 1) | $job + {shard: ., "shard-total": $n}];
+            shards(3; {target: "visual", name: "Visual", project: "visual", runner: "macos-latest", workers: 2})
+            + shards(2; {target: "platform-linux", name: "Platform Linux", project: "platform", runner: "ubuntu-latest"})
+            + (if $full then
+                shards(1; {target: "platform-windows", name: "Platform Windows", project: "platform", runner: "windows-latest", grep: "@os"})
+                + shards(1; {target: "gpu", name: "GPU", project: "gpu", runner: "macos-latest"})
+              else [] end)
+            | {include: .}' > runs.json
+          echo "builds=$(cat builds.json)" >> "$GITHUB_OUTPUT"
+          echo "runs=$(cat runs.json)" >> "$GITHUB_OUTPUT"
+          cat builds.json runs.json
 
   agent-skills:
     name: Agent Skills
@@ -495,20 +539,12 @@ jobs:
     needs: detect-changes
     if: >-
       ((github.event_name == 'pull_request' || github.event_name == 'merge_group') &&
-        (needs.detect-changes.outputs.typescript == 'true' ||
-          needs.detect-changes.outputs.rust == 'true')) ||
+        needs.detect-changes.outputs.e2e == 'true') ||
       (github.event_name == 'push' && needs.detect-changes.outputs.rust == 'true') ||
       github.event_name == 'workflow_dispatch'
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - name: macOS
-            runner: macos-latest
-          - name: Windows
-            runner: windows-latest
-          - name: Linux
-            runner: ubuntu-latest
+      matrix: ${{ fromJSON(needs.detect-changes.outputs.e2e-builds) }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     permissions:
@@ -582,34 +618,11 @@ jobs:
 
   e2e:
     name: E2E ${{ matrix.name }} ${{ matrix.shard }}/${{ matrix.shard-total }}
-    needs: e2e-build
+    needs: [detect-changes, e2e-build]
     if: github.event_name != 'push'
     strategy:
       fail-fast: false
-      matrix:
-        target: [visual, platform-windows, platform-linux]
-        shard: [1, 2, 3]
-        include:
-          - shard-total: 3
-          - target: visual
-            name: Visual
-            project: visual
-            runner: macos-latest
-            workers: 2
-          - target: platform-windows
-            name: Platform Windows
-            project: platform
-            runner: windows-latest
-          - target: platform-linux
-            name: Platform Linux
-            project: platform
-            runner: ubuntu-latest
-          - target: gpu
-            name: GPU
-            project: gpu
-            runner: macos-latest
-            shard: 1
-            shard-total: 1
+      matrix: ${{ fromJSON(needs.detect-changes.outputs.e2e-runs) }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     permissions:
@@ -696,11 +709,12 @@ jobs:
           --project=${{ matrix.project }}
           --fully-parallel
           --shard=${{ matrix.shard }}/${{ matrix.shard-total }}
+          ${{ matrix.grep && format('--grep={0}', matrix.grep) || '' }}
 
-      # macOS has no platform job. Platform tests need the OS focus and clipboard to
-      # themselves, so they run one at a time after the parallel visual tests.
-      # A Playwright run empties its blob and output directories first, so this second run
-      # writes elsewhere and its blob joins the visual one afterwards.
+      # macOS has no platform job, so its shards also run the @os platform tests. They need
+      # the OS focus and clipboard to themselves, so they run one at a time after the
+      # parallel visual tests. A Playwright run empties its blob and output directories
+      # first, so this second run writes elsewhere and its blob joins the visual one after.
       - name: Run macOS platform tests
         if: (success() || failure()) && matrix.target == 'visual'
         env:
@@ -709,6 +723,7 @@ jobs:
         run: >-
           pnpm --dir apps/desktop exec playwright test
           --project=platform
+          --grep=@os
           --output=e2e/test-results/platform
           --fully-parallel
           --shard=${{ matrix.shard }}/${{ matrix.shard-total }}
@@ -724,6 +739,7 @@ jobs:
           --project=${{ matrix.project }}
           --fully-parallel
           --shard=${{ matrix.shard }}/${{ matrix.shard-total }}
+          ${{ matrix.grep && format('--grep={0}', matrix.grep) || '' }}
 
       - name: Collect macOS platform blob report
         if: always() && matrix.target == 'visual'

@@ -103,7 +103,7 @@ Updating baselines: only for an intentional appearance change. Run the focused s
 
 ## Projects
 
-Membership is explicit in `apps/desktop/playwright.config.ts`. Add a new spec to the right list — `visual`, `platform`, `gpu`, or `perf` — and run `node scripts/check-e2e-projects.mjs`. A spec that needs native lifecycle behavior on Windows and Linux belongs in `platform`. A spec whose only GPU dependency is incidental belongs in `visual`.
+Membership is explicit in `apps/desktop/playwright.config.ts`. Add a new spec to the right list — `visual`, `platform`, `gpu`, or `perf` — and run `node scripts/check-e2e-projects.mjs`. A spec that needs native lifecycle behavior belongs in `platform`, which runs fully on Linux. Tag a platform test `@os` only when its behavior differs by OS (window controls, signals, native menus, file activation and paths); only `@os` tests run on macOS and Windows. A spec whose only GPU dependency is incidental belongs in `visual`.
 
 ## Large-data performance regressions
 

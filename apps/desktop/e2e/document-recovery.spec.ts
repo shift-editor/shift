@@ -6,26 +6,28 @@ import { expect, recoveryTest as test } from "./fixtures/electronApp";
 
 test.setTimeout(90_000);
 
-test("recovers completed edits after forced termination and saves explicitly", async ({
-  recoveryApp,
-}) => {
-  const glyphName = "recoveredE2E" as GlyphName;
-  await recoveryApp.page.evaluate((name) => {
-    window.shift?.editor.createGlyph(name);
-  }, glyphName);
-  await waitForGlyphsAndState(recoveryApp.page, [glyphName], true, true);
-  expect(recoveryApp.canonicalGlyphNames()).not.toContain(glyphName);
+test(
+  "recovers completed edits after forced termination and saves explicitly",
+  { tag: "@os" },
+  async ({ recoveryApp }) => {
+    const glyphName = "recoveredE2E" as GlyphName;
+    await recoveryApp.page.evaluate((name) => {
+      window.shift?.editor.createGlyph(name);
+    }, glyphName);
+    await waitForGlyphsAndState(recoveryApp.page, [glyphName], true, true);
+    expect(recoveryApp.canonicalGlyphNames()).not.toContain(glyphName);
 
-  const restarted = await recoveryApp.crashAndRecover();
+    const restarted = await recoveryApp.crashAndRecover();
 
-  await waitForGlyphsAndState(restarted, [glyphName], true, true);
-  expect(recoveryApp.canonicalGlyphNames()).not.toContain(glyphName);
-  await restarted.evaluate(async () => {
-    await window.shiftHost?.commands.run("file.save");
-  });
-  await waitForGlyphsAndState(restarted, [glyphName], true, false);
-  expect(recoveryApp.canonicalGlyphNames()).toContain(glyphName);
-});
+    await waitForGlyphsAndState(restarted, [glyphName], true, true);
+    expect(recoveryApp.canonicalGlyphNames()).not.toContain(glyphName);
+    await restarted.evaluate(async () => {
+      await window.shiftHost?.commands.run("file.save");
+    });
+    await waitForGlyphsAndState(restarted, [glyphName], true, false);
+    expect(recoveryApp.canonicalGlyphNames()).toContain(glyphName);
+  },
+);
 
 test("recovers undo past the last save as a dirty document that saves explicitly", async ({
   recoveryApp,
