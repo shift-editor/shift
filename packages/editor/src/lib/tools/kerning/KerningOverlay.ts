@@ -21,11 +21,13 @@ export interface KerningDrawOptions {
 }
 
 /**
- * Draws a pair's kern and its pill.
+ * Draws a pair's kern, the glyphs its groups reach, and its pill.
  *
  * @remarks
  * The kern spans the two advance boundaries, filled in the spacing colours,
- * or the negative ones when it tightens. The pill holds a lock for each side
+ * or the negative ones when it tightens. Other glyphs in the run that kern
+ * through one of the pair's groups are filled in the kerning colour, so the
+ * reach of a group edit shows before it is made. The pill holds a lock for each side
  * (closed: the glyph itself is kerned; open: its group is) and the value.
  */
 export function drawKerningPair(
@@ -37,6 +39,7 @@ export function drawKerningPair(
   const { gap } = pair;
   const theme = canvas.theme.spacing;
   canvas.withTransform(editor.sceneTransform(gap.node), (local) => {
+    drawGroupGlyphs(local, editor, pair, theme);
     local.withScreenSpace((screen, project) => {
       drawKern(screen, project, pair, theme, options.selected ?? false);
       drawPill(screen, editor, pair, theme, options.hovered ?? null);
@@ -60,24 +63,62 @@ function drawKern(
   const top = Math.min(a.y, b.y);
   const height = Math.max(a.y, b.y) - top;
   const edge = negative ? theme.negativeActiveHatch : theme.activeHatch;
+  const selectedEdge = negative ? theme.negativeLabelFill : theme.labelFill;
 
   const ctx = screen.ctx;
   ctx.save();
   ctx.fillStyle = negative ? theme.negativeActiveFill : theme.activeFill;
   ctx.fillRect(left, top, right - left, height);
-  ctx.strokeStyle = edge;
-  ctx.lineWidth = 1;
+  // A selected pair, the one the arrow keys change, has heavier edges.
+  ctx.strokeStyle = selected ? selectedEdge : edge;
+  ctx.lineWidth = selected ? 2 : 1;
   ctx.beginPath();
   for (const x of right - left < 1 ? [left] : [left, right]) {
     ctx.moveTo(Math.round(x) + 0.5, top);
     ctx.lineTo(Math.round(x) + 0.5, top + height);
   }
   ctx.stroke();
-  if (selected) {
-    const outline = negative ? theme.negativeLabelFill : theme.labelFill;
-    screen.strokeRect(left - 1.5, top + 0.5, right - left + 3, height - 1, outline, 1);
-  }
   ctx.restore();
+}
+
+/**
+ * Fills, over their glyph fill, the other glyphs of the run that kern
+ * through a group of the edited pair at the active source.
+ */
+function drawGroupGlyphs(
+  local: Canvas,
+  editor: Editor,
+  pair: KerningPair,
+  theme: SpacingTheme,
+): void {
+  const edited = pair.editablePair(editor);
+  const layout = editor.text.layoutCell(pair.gap.node.runId).peek();
+  if (!edited || !layout) return;
+
+  const kerning = editor.font.kerningCell.peek();
+  const groups: Array<readonly ["first" | "second", string]> = [];
+  if (edited.first.kind === "group") groups.push(["first", edited.first.id]);
+  if (edited.second.kind === "group") groups.push(["second", edited.second.id]);
+  if (groups.length === 0) return;
+
+  const pairItems = new Set([pair.gap.left.itemId, pair.gap.right.itemId]);
+  for (const placed of layout.placedGlyphs) {
+    const glyphId = placed.glyph.glyphId;
+    const itemId = placed.glyph.sourceItemIds[0];
+    if (!glyphId || (itemId && pairItems.has(itemId))) continue;
+    if (!groups.some(([position, group]) => kerning.groupOf(position, glyphId) === group)) {
+      continue;
+    }
+    const model = editor
+      .glyphForId(glyphId)
+      ?.renderModelAt(editor.externalLocationCell, editor.activeSourceIdCell);
+    if (!model) continue;
+
+    local.save();
+    local.translate(placed.origin.x, placed.origin.y);
+    local.fillPath(model.drawPath, theme.labelFill);
+    local.restore();
+  }
 }
 
 function drawPill(
