@@ -9,4 +9,4 @@ export { Select } from "./lib/tools/select";
 export { Ellipse, Rectangle, ShapeTool, type ShapeKind } from "./lib/tools/shape";
 export { TextTool } from "./lib/tools/text/Text";
 export { SpacingTool } from "./lib/tools/spacing";
-export { KerningTool } from "./lib/tools/kerning";
+export { KerningTool, type KerningPair } from "./lib/tools/kerning";

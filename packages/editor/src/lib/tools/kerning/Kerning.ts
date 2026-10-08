@@ -20,11 +20,11 @@ import type { KerningBehavior, KerningState } from "./types";
  *
  * @remarks
  * Activating suspends glyph editing, so every glyph draws filled, and shows
- * the kern under the pointer with a pill: a lock for each side and the
- * value. Dragging the pair changes its kern; clicking the value opens it for
- * typing ({@link editing}); clicking a lock makes that side a glyph exception
- * or returns it to its group; arrow keys nudge the selected pair. Edits apply
- * at the active source. Deactivating restores glyph editing.
+ * the kern under the pointer with its value in a pill under the baseline.
+ * Dragging the pair changes its kern; clicking the value opens it for typing
+ * ({@link editing}); arrow keys nudge the selected pair ({@link currentPair},
+ * which the sidebar's pair section edits too). Edits apply at the active
+ * source. Deactivating restores glyph editing.
  */
 export class KerningTool extends BaseTool<KerningState, KerningTool> {
   readonly id: ToolName = "kerning";
@@ -62,6 +62,23 @@ export class KerningTool extends BaseTool<KerningState, KerningTool> {
     if (this.#restoreEditing) this.#restoreEditing();
     this.#restoreEditing = null;
     this.setState({ type: "idle" });
+  }
+
+  /**
+   * The pair the sidebar shows: the one open for typing or dragged, else the
+   * selected one; measured now.
+   */
+  get currentPair(): KerningPair | null {
+    const state = this.getState();
+    switch (state.type) {
+      case "editing":
+      case "dragging":
+        return this.runs.refresh(state.hit);
+      case "ready":
+        return state.selected ? this.runs.refresh(state.selected) : null;
+      case "idle":
+        return null;
+    }
   }
 
   /** The pair whose value is open for typing, or null. */
@@ -127,7 +144,7 @@ export class KerningTool extends BaseTool<KerningState, KerningTool> {
     }
     if (hit) {
       drawKerningPair(canvas, this.editor, hit, {
-        hovered: state.overLabel ?? null,
+        hovered: state.overLabel ?? false,
         selected: selected?.sameAs(hit) ?? false,
       });
     }

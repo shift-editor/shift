@@ -10,7 +10,7 @@ import type {
 import { NUDGES_VALUES, nudgeMagnitude } from "../../../types/nudge";
 import { scenePoint, vectorBetween } from "../../editor/spaces";
 import type { ScenePoint } from "../../../types/coordinates";
-import { kerningLabelTarget } from "./KerningLabel";
+import { onKerningLabel } from "./KerningLabel";
 import type { KerningTool } from "./Kerning";
 import type { KerningState } from "./types";
 
@@ -21,31 +21,22 @@ export const KerningHover = createBehavior<KerningState, KerningTool>({
   onPointerMove(state: KerningState, ctx: KerningContext, event: PointerMoveEvent): boolean {
     if (state.type !== "ready") return false;
     const hit = ctx.tool.runs.pairAt(event.coords.scene);
-    const overLabel = hit ? kerningLabelTarget(ctx.editor, hit, event.coords.screen) : null;
+    const overLabel = hit !== null && onKerningLabel(ctx.editor, hit, event.coords.screen);
     const samePair = hit ? hit.equals(state.hit) : state.hit === null;
-    if (!samePair || overLabel !== (state.overLabel ?? null) || state.quiet) {
+    if (!samePair || overLabel !== Boolean(state.overLabel) || state.quiet) {
       ctx.setState({ type: "ready", hit, selected: state.selected, overLabel });
     }
     return true;
   },
 });
 
-/**
- * Clicking the hovered pair's pill opens its value for typing, or toggles a
- * side's lock between the glyph itself and its group.
- */
+/** Clicking the hovered pair's pill opens its value for typing at the active source. */
 export const KerningLabelClick = createBehavior<KerningState, KerningTool>({
   onClick(state: KerningState, ctx: KerningContext, event: ClickEvent): boolean {
     if (state.type !== "ready" || !state.hit) return false;
-    const target = kerningLabelTarget(ctx.editor, state.hit, event.coords.screen);
-    if (!target) return false;
+    if (!onKerningLabel(ctx.editor, state.hit, event.coords.screen)) return false;
 
-    if (target === "amount") {
-      if (state.hit.source(ctx.editor)) ctx.setState({ type: "editing", hit: state.hit });
-      return true;
-    }
-    state.hit.toggleLock(ctx.editor, target);
-    ctx.setState({ ...state, hit: ctx.tool.runs.refresh(state.hit), selected: state.hit });
+    if (state.hit.source(ctx.editor)) ctx.setState({ type: "editing", hit: state.hit });
     return true;
   },
 });
@@ -54,7 +45,7 @@ export const KerningLabelClick = createBehavior<KerningState, KerningTool>({
 export const KerningEditingClose = createBehavior<KerningState, KerningTool>({
   onClick(state: KerningState, ctx: KerningContext, event: ClickEvent): boolean {
     if (state.type !== "editing") return false;
-    if (kerningLabelTarget(ctx.editor, state.hit, event.coords.screen)) return true;
+    if (onKerningLabel(ctx.editor, state.hit, event.coords.screen)) return true;
 
     const hit = ctx.tool.runs.pairAt(event.coords.scene);
     ctx.setState({ type: "ready", hit, selected: hit });

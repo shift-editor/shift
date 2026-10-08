@@ -263,7 +263,9 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
         const rightBoundary = after ? after.left : leftBoundary;
         const left = before ? this.#spacingSide(before, leftBoundary, "right") : null;
         const right = after ? this.#spacingSide(after, rightBoundary, "left") : null;
-        if (left || right) yield { node, left, right, leftBoundary, rightBoundary, top, bottom };
+        if (left || right) {
+          yield { node, left, right, leftBoundary, rightBoundary, baseline, top, bottom };
+        }
       }
     }
   }

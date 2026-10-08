@@ -1,6 +1,5 @@
 import type { Behavior } from "../core/Behavior";
 import type { ScenePoint } from "../../../types/coordinates";
-import type { KerningLabelTarget } from "./KerningLabel";
 import type { KerningPair } from "./RunKerning";
 import type { KerningTool } from "./Kerning";
 
@@ -12,8 +11,8 @@ export type KerningState =
       hit: KerningPair | null;
       /** The pair arrow keys change, chosen by clicking, dragging, or typing it. */
       selected: KerningPair | null;
-      /** The part of the hovered pair's pill under the pointer. */
-      overLabel?: KerningLabelTarget | null;
+      /** Whether the pointer is on the hovered pair's pill. */
+      overLabel?: boolean;
       /** Set by a key press to hide every overlay until the pointer moves. */
       quiet?: boolean;
     }

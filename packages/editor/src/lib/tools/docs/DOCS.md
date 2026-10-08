@@ -36,7 +36,7 @@ State machine-based tool system for the Shift font editor: translates pointer/ke
 
 - **Architecture Invariant:** The value pill's rectangle has one source, `spacingLabelRect`, used for both drawing and click hit-testing. It sizes the pill from a fixed character width, not `measureText`, so hits agree with the drawing without a canvas.
 
-- **Architecture Invariant:** The Kerning tool measures pairs through the same spacing gaps; the kern is the distance between a gap's `leftBoundary` and `rightBoundary`. Edits go to the active source only: dragging previews through `Font.previewKerning` and commits one `setKerningValues` edit on release; nudges, typed values, and lock clicks commit immediately. Each edit changes `Kerning.editablePair` — the pair that applies at that source, or the most general one the glyphs' groups allow. A lock makes one side a glyph exception at that source (starting at its current value, so the kern does not move) or removes it; locks are per source, like values.
+- **Architecture Invariant:** The Kerning tool measures pairs through the same spacing gaps; the kern is the distance between a gap's `leftBoundary` and `rightBoundary`. Edits go to the active source only: dragging previews through `Font.previewKerning` and commits one `setKerningValues` edit on release; nudges, typed values, and the sidebar's exception toggles commit immediately. The canvas stays minimal (advance edges, a baseline bar, and a value pill marking exception sides with a lock); group names, exception toggles, and per-source values live in the desktop sidebar's Pair section, which reads `KerningTool.currentPair`. Each edit changes `Kerning.editablePair` — the pair that applies at that source, or the most general one the glyphs' groups allow. A lock makes one side a glyph exception at that source (starting at its current value, so the kern does not move) or removes it; locks are per source, like values.
 - **Architecture Invariant:** One toolbar slot can hold several tools. A `ToolMenuItem.toolId` names the tool the item activates; the slot activates the selected item's tool, highlights while any of its tools is active, and the item's shortcut targets that tool. Kerning is registered `hidden` and reached through the Spacing slot (`M`/`K`).
 - **Architecture Invariant:** The Spacing tool's `editing` state is the single source of truth for the value popover. The desktop `SpacingValuePopover` only renders that state and calls `setEditedSidebearing` / `switchEditedSide` / `endEditing`. The canvas click that opens it reads to Base UI as an outside press, so the popover ignores outside presses on the canvas and the tool closes it on its own canvas clicks.
 
@@ -73,8 +73,8 @@ tools/
     Kerning.ts           — KerningTool: hover, selection, value popover contract, overlay drawing
     behaviors.ts         — hover, pill value and lock clicks, select click, drag, keyboard nudge and Tab
     RunKerning.ts        — KerningPair (the kern between two run items: edit, preview, lock) and RunKerning
-    KerningOverlay.ts    — kern zone, pill with side locks and pair names
-    KerningLabel.ts      — pill geometry (value and both locks) shared by drawing and hit-testing
+    KerningOverlay.ts    — advance edges, baseline kern bar, value pill, group glyphs while the pill is hovered
+    KerningLabel.ts      — pill geometry (value and exception locks) shared by drawing and hit-testing
 apps/desktop/src/renderer/src/lib/tools/
   tools.ts               — registerBuiltInTools (wires all tools + desktop icons and shortcuts)
 apps/desktop/src/renderer/src/components/spacing/

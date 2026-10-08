@@ -102,11 +102,11 @@ describe("Kerning tool", () => {
     expect(kern()).toBe(-75);
   });
 
-  it("clicking the value opens it for typing, which sets the kern", async () => {
+  it("clicking the value under the baseline opens it for typing, which sets the kern", async () => {
     hoverKern();
-    const gap = hovered()!.gap;
-    const pill = editor.localToScreen({ x: kernCenter().x, y: (gap.top + gap.bottom) / 2 });
-    await editor.click(pill.x, pill.y);
+    const baseline = editor.localToScreen({ x: kernCenter().x, y: hovered()!.gap.baseline });
+    // The pill sits 10 px below the baseline and is 16 px tall.
+    await editor.click(baseline.x, baseline.y + 18);
     expect(tool().editing?.amount).toBe(-75);
 
     tool().setEditedKerning(-100);
@@ -114,6 +114,14 @@ describe("Kerning tool", () => {
 
     expect(kern()).toBe(-100);
     expect(tool().editing?.amount).toBe(-100);
+  });
+
+  it("the selected pair is the one the sidebar shows", async () => {
+    expect(tool().currentPair).toBeNull();
+    const screen = editor.localToScreen({ x: kernCenter().x, y: 120 });
+    await editor.click(screen.x, screen.y);
+
+    expect(tool().currentPair?.amount).toBe(-75);
   });
 
   it("shares the Spacing slot and answers to K", () => {

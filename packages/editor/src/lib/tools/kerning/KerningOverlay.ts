@@ -1,34 +1,32 @@
-import { asGlyphId, type KerningSide } from "@shift/types";
 import type { Canvas, ScreenCanvas, ScreenProjection } from "../../editor/rendering/Canvas";
 import type { Editor } from "../../editor/Editor";
-import type { Rect2D } from "@shift/geo";
-import {
-  kerningLabelLayout,
-  kerningLabelText,
-  type KerningLabelLayout,
-  type KerningLabelTarget,
-} from "./KerningLabel";
+import { LOCK_PATH_DATA, LOCK_VIEW_BOX_SIZE } from "../../editor/rendering/icons/lock";
+import { kerningLabelLayout, kerningLabelText } from "./KerningLabel";
 import type { KerningPair } from "./RunKerning";
 
 type SpacingTheme = Canvas["theme"]["spacing"];
 
+/** Half the height of the kern bar drawn on the baseline, in screen pixels. */
+const BAR_HALF_PX = 2;
+
 /** How a pair is drawn beyond its kern and pill. */
 export interface KerningDrawOptions {
-  /** The part of the pill under the pointer, which lightens to show it responds. */
-  readonly hovered?: KerningLabelTarget | null;
-  /** Whether the arrow keys change this pair, which outlines its kern. */
+  /** Whether the pointer is on the pill, which lightens and shows the groups' reach. */
+  readonly hovered?: boolean;
+  /** Whether the arrow keys change this pair, which strengthens its edges. */
   readonly selected?: boolean;
 }
 
 /**
- * Draws a pair's kern, the glyphs its groups reach, and its pill.
+ * Draws a pair's kern and its pill, leaving the glyphs themselves clear.
  *
  * @remarks
- * The kern spans the two advance boundaries, filled in the spacing colours,
- * or the negative ones when it tightens. Other glyphs in the run that kern
- * through one of the pair's groups are filled in the kerning colour, so the
- * reach of a group edit shows before it is made. The pill holds a lock for each side
- * (closed: the glyph itself is kerned; open: its group is) and the value.
+ * Faint lines mark the two advance edges, and a bar on the baseline spans
+ * the kern between them, in the spacing colours or the negative ones when
+ * it tightens. The pill under the baseline shows the value, with a lock on
+ * a side that is a glyph exception. While the pointer is on the pill, other
+ * glyphs of the run that kern through one of the pair's groups fill in the
+ * kerning colour, showing the reach of a group edit.
  */
 export function drawKerningPair(
   canvas: Canvas,
@@ -36,13 +34,12 @@ export function drawKerningPair(
   pair: KerningPair,
   options: KerningDrawOptions = {},
 ): void {
-  const { gap } = pair;
   const theme = canvas.theme.spacing;
-  canvas.withTransform(editor.sceneTransform(gap.node), (local) => {
-    drawGroupGlyphs(local, editor, pair, theme);
+  canvas.withTransform(editor.sceneTransform(pair.gap.node), (local) => {
+    if (options.hovered) drawGroupGlyphs(local, editor, pair, theme);
     local.withScreenSpace((screen, project) => {
       drawKern(screen, project, pair, theme, options.selected ?? false);
-      drawPill(screen, editor, pair, theme, options.hovered ?? null);
+      drawPill(screen, editor, pair, theme, options.hovered ?? false);
     });
   });
 }
@@ -56,28 +53,28 @@ function drawKern(
 ): void {
   const { gap } = pair;
   const negative = pair.amount < 0;
-  const a = project.point({ x: gap.leftBoundary, y: gap.top });
-  const b = project.point({ x: gap.rightBoundary, y: gap.bottom });
-  const left = Math.min(a.x, b.x);
-  const right = Math.max(a.x, b.x);
-  const top = Math.min(a.y, b.y);
-  const height = Math.max(a.y, b.y) - top;
-  const edge = negative ? theme.negativeActiveHatch : theme.activeHatch;
-  const selectedEdge = negative ? theme.negativeLabelFill : theme.labelFill;
+  const strong = negative ? theme.negativeLabelFill : theme.labelFill;
+  const faint = negative ? theme.negativeIdleHatch : theme.idleHatch;
+  const top = project.point({ x: gap.leftBoundary, y: gap.top });
+  const bottom = project.point({ x: gap.leftBoundary, y: gap.bottom });
+  const left = project.point({ x: gap.leftBoundary, y: gap.baseline });
+  const right = project.point({ x: gap.rightBoundary, y: gap.baseline });
 
   const ctx = screen.ctx;
   ctx.save();
-  ctx.fillStyle = negative ? theme.negativeActiveFill : theme.activeFill;
-  ctx.fillRect(left, top, right - left, height);
-  // A selected pair, the one the arrow keys change, has heavier edges.
-  ctx.strokeStyle = selected ? selectedEdge : edge;
-  ctx.lineWidth = selected ? 2 : 1;
+  ctx.strokeStyle = selected ? strong : faint;
+  ctx.lineWidth = 1;
   ctx.beginPath();
-  for (const x of right - left < 1 ? [left] : [left, right]) {
-    ctx.moveTo(Math.round(x) + 0.5, top);
-    ctx.lineTo(Math.round(x) + 0.5, top + height);
+  for (const x of [left.x, right.x]) {
+    ctx.moveTo(Math.round(x) + 0.5, Math.min(top.y, bottom.y));
+    ctx.lineTo(Math.round(x) + 0.5, Math.max(top.y, bottom.y));
   }
   ctx.stroke();
+
+  const barLeft = Math.min(left.x, right.x);
+  const barWidth = Math.max(Math.abs(right.x - left.x), 2);
+  ctx.fillStyle = strong;
+  ctx.fillRect(barLeft, left.y - BAR_HALF_PX, barWidth, BAR_HALF_PX * 2);
   ctx.restore();
 }
 
@@ -126,7 +123,7 @@ function drawPill(
   editor: Editor,
   pair: KerningPair,
   theme: SpacingTheme,
-  hovered: KerningLabelTarget | null,
+  hovered: boolean,
 ): void {
   const layout = kerningLabelLayout(editor, pair);
   const { pill, amount } = layout;
@@ -138,96 +135,36 @@ function drawPill(
   ctx.save();
   ctx.beginPath();
   ctx.roundRect(pill.x, pill.y, pill.width, pill.height, pill.height / 2);
-  ctx.fillStyle = fill;
+  ctx.fillStyle = hovered ? hoverFill : fill;
   ctx.fill();
-  if (hovered) {
-    const rect = labelPart(layout, hovered);
-    ctx.fillStyle = hoverFill;
-    ctx.beginPath();
-    ctx.roundRect(rect.x - 1, pill.y + 1, rect.width + 2, pill.height - 2, (pill.height - 2) / 2);
-    ctx.fill();
-  }
 
   ctx.font = theme.labelFont;
   ctx.fillStyle = theme.labelText;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillText(kerningLabelText(pair), amount.x + amount.width / 2, amount.y + amount.height / 2);
-
-  for (const position of ["first", "second"] as const) {
-    const lock = pair.lock(editor, position);
-    const rect = position === "first" ? layout.firstLock : layout.secondLock;
-    ctx.globalAlpha = lock.toggleable ? 1 : 0.45;
-    drawLock(
-      ctx,
-      rect.x + rect.width / 2,
-      rect.y + rect.height / 2,
-      rect.width,
-      lock.locked,
-      theme.labelText,
-    );
-    ctx.globalAlpha = 1;
-  }
-
-  const edited = pair.editablePair(editor);
-  if (edited) {
-    ctx.fillStyle = fill;
-    ctx.textBaseline = "top";
-    ctx.fillText(
-      `${sideLabel(editor, edited.first)}  ${sideLabel(editor, edited.second)}`,
-      pill.x + pill.width / 2,
-      pill.y + pill.height + 4,
-    );
+  for (const { rect } of layout.locks) {
+    drawLock(ctx, rect.x + rect.width / 2, rect.y + rect.height / 2, rect.width, theme.labelText);
   }
   ctx.restore();
 }
 
-/** The rectangle of one part of a pair's pill. */
-function labelPart(layout: KerningLabelLayout, target: KerningLabelTarget): Rect2D {
-  switch (target) {
-    case "amount":
-      return layout.amount;
-    case "first":
-      return layout.firstLock;
-    case "second":
-      return layout.secondLock;
-  }
-}
+let lockPath: Path2D | null = null;
 
-/** A side as the pill names it: a glyph's name, or a group's with `@`. */
-function sideLabel(editor: Editor, side: KerningSide): string {
-  if (side.kind === "group") return `@${side.id}`;
-  return editor.font.entryForId(asGlyphId(side.id))?.name ?? side.id;
-}
-
-/** Lucide's `lock` and `lock-open` icons on their 24-unit grid. */
-const LOCK_BODY = { x: 3, y: 11, width: 18, height: 11, radius: 2 };
-const LOCK_SHACKLE = "M7 11V7a5 5 0 0 1 10 0v4";
-const OPEN_LOCK_SHACKLE = "M7 11V7a5 5 0 0 1 9.9-1";
-const LOCK_GRID = 24;
-/** Stroke width on the icon's grid, about 1.1 px at the pill's 12 px. */
-const LOCK_STROKE = 2.25;
-
-/** Draws Lucide's lock, closed or open, filling `size` px centred at (x, y). */
+/** Draws the editor's lock icon, the one locked guides use, filling `size` px centred at (x, y). */
 function drawLock(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
   size: number,
-  locked: boolean,
   color: string,
 ): void {
-  const scale = size / LOCK_GRID;
+  lockPath ??= new Path2D(LOCK_PATH_DATA);
+  const scale = size / LOCK_VIEW_BOX_SIZE;
   ctx.save();
   ctx.translate(x - size / 2, y - size / 2);
   ctx.scale(scale, scale);
-  ctx.strokeStyle = color;
-  ctx.lineWidth = LOCK_STROKE;
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-  ctx.beginPath();
-  ctx.roundRect(LOCK_BODY.x, LOCK_BODY.y, LOCK_BODY.width, LOCK_BODY.height, LOCK_BODY.radius);
-  ctx.stroke();
-  ctx.stroke(new Path2D(locked ? LOCK_SHACKLE : OPEN_LOCK_SHACKLE));
+  ctx.fillStyle = color;
+  ctx.fill(lockPath);
   ctx.restore();
 }
