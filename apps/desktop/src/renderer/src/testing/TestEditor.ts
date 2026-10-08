@@ -110,6 +110,11 @@ export class TestEditor extends Editor {
     return this;
   }
 
+  /** The real renderer edit coordinator, for desktop components built around this editor. */
+  get workspaceEditCoordinator(): WorkspaceStack["editCoordinator"] {
+    return this.#stack.editCoordinator;
+  }
+
   /** Flushes pending edits, saves to a new target, and adopts it. */
   saveAs(sourcePath: string): Promise<WorkspaceDocumentState> {
     return this.#stack.editCoordinator.save(sourcePath);

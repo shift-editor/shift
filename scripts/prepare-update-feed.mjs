@@ -103,6 +103,18 @@ export async function prepareUpdateFeed({
     metadata.set("win32-x64", windowsMetadata);
   }
 
+  metadata.set(
+    "linux-x64",
+    appImageMetadata(
+      rewriteUpdateMetadata(
+        await readFile(findMetadata(files, artifacts, "linux-x64", "latest-linux.yml"), "utf8"),
+        version,
+        assetBaseUrl,
+        assetNames,
+      ),
+    ),
+  );
+
   const channelRoot = path.join(site, "updates", distribution);
   const currentMetadataPath = path.join(channelRoot, "darwin", "arm64", "latest-mac.yml");
   try {
@@ -125,6 +137,7 @@ export async function prepareUpdateFeed({
       metadata.get("darwin-arm64"),
     ),
     write(path.join(channelRoot, "darwin", "x64", "latest-mac.yml"), metadata.get("darwin-x64")),
+    write(path.join(channelRoot, "linux", "x64", "latest-linux.yml"), metadata.get("linux-x64")),
     distribution === "nightly"
       ? write(path.join(channelRoot, "win32", "x64", "latest.yml"), metadata.get("win32-x64"))
       : rm(path.join(channelRoot, "win32"), { recursive: true, force: true }),
@@ -132,6 +145,27 @@ export async function prepareUpdateFeed({
     rm(path.join(channelRoot, "darwin", "x64", "RELEASES.json"), { force: true }),
     rm(path.join(channelRoot, "win32", "x64", "RELEASES"), { force: true }),
   ]);
+}
+
+/**
+ * Restricts Linux metadata to the AppImage. electron-builder also lists DEB and
+ * RPM packages, which update through their package manager and must never be
+ * offered to the in-app updater.
+ */
+function appImageMetadata(source) {
+  const metadata = parseUpdateMetadata(source, "Linux x64 metadata");
+  const appImages = metadata.files.filter((file) =>
+    metadataAssetName(file.url).endsWith(".AppImage"),
+  );
+  if (appImages.length !== 1) {
+    throw new Error(`Linux update metadata must reference one AppImage, found ${appImages.length}`);
+  }
+
+  const [appImage] = appImages;
+  metadata.files = appImages;
+  metadata.path = appImage.url;
+  metadata.sha512 = appImage.sha512;
+  return dump(metadata, { lineWidth: -1, noRefs: true, sortKeys: false });
 }
 
 function resolveAssetBaseUrl({ distribution, version, repository, nightlyAssetBaseUrl }) {

@@ -2,7 +2,7 @@ import { test, expect } from "./fixtures/electronApp";
 import { expectPageSnapshot } from "./fixtures/snapshots";
 
 test.describe("Landing view", () => {
-  test("matches default snapshot", async ({ page }) => {
+  test("matches default snapshot", { tag: "@golden" }, async ({ page }) => {
     // Wait for React to mount the landing view.
     await page.waitForSelector("text=Shift", { timeout: 10_000 });
 

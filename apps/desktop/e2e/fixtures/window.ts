@@ -27,19 +27,25 @@ export async function prepareWindow(
 
     if (windowSizing === "native") return;
 
-    await browserWindow.evaluate((window) => window.unmaximize());
-    await expect.poll(() => browserWindow.evaluate((window) => window.isMaximized())).toBe(false);
-    await browserWindow.evaluate(
-      (win, { w, h }) => {
-        // Hosted displays can be narrower than the deterministic snapshot size.
-        win.setMinimumSize(w, h);
-        win.setContentSize(w, h);
-        win.center();
-      },
-      { w: WINDOW_WIDTH, h: WINDOW_HEIGHT },
-    );
+    // A window opened while the app runs can still be settling into a maximized, screen-sized
+    // frame and override a size applied once, so reapply it until the renderer reports it.
     await expect
-      .poll(() => page.evaluate(() => [window.innerWidth, window.innerHeight]), { timeout: 30_000 })
+      .poll(
+        async () => {
+          await browserWindow.evaluate(
+            (win, { w, h }) => {
+              if (win.isMaximized()) win.unmaximize();
+              // Hosted displays can be narrower than the deterministic snapshot size.
+              win.setMinimumSize(w, h);
+              win.setContentSize(w, h);
+              win.center();
+            },
+            { w: WINDOW_WIDTH, h: WINDOW_HEIGHT },
+          );
+          return page.evaluate(() => [window.innerWidth, window.innerHeight]);
+        },
+        { timeout: 30_000 },
+      )
       .toEqual([WINDOW_WIDTH, WINDOW_HEIGHT]);
   } finally {
     await browserWindow.dispose();

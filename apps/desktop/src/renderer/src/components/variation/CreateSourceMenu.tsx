@@ -90,13 +90,7 @@ export const CreateSourceMenu = ({ onSourceCreated, onOpenChange }: CreateSource
 
   const trimmedName = values.name.trim();
   const location = sourceLocation(axes, values.location);
-  const issue = sourceCreationIssue(
-    values.name,
-    values.location,
-    axes,
-    sources,
-    editor.font.getAxisMappingBases(),
-  );
+  const issue = sourceCreationIssue(values.name, values.location, editor.font.designspace);
   const visibleIssue = validationVisible ? issue : null;
   const nameIssue = visibleIssue && visibleIssue.kind === "name" ? visibleIssue : null;
   const locationIssue = visibleIssue && visibleIssue.kind === "location" ? visibleIssue : null;

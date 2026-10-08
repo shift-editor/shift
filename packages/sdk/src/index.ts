@@ -16,7 +16,11 @@ export type { Signal } from "@shift/editor/signals";
 export { localPoint, scenePoint, screenPoint } from "@shift/editor/spaces";
 export type { LocalPoint, ScenePoint, ScreenPoint } from "@shift/editor/spaces";
 export { externalAxisLocationFromRecord } from "@shift/editor/variation";
-export type { DesignAxisLocation, ExternalAxisLocation } from "@shift/editor/variation";
+export type {
+  Designspace,
+  DesignAxisLocation,
+  ExternalAxisLocation,
+} from "@shift/editor/variation";
 export type {
   AffineTransformation,
   AuthoredAnchor,
@@ -81,4 +85,5 @@ export type {
   SegmentId,
   SelectableId,
   ShiftId,
+  SourceId,
 } from "@shift/types";

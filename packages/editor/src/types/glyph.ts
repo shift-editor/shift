@@ -1,7 +1,5 @@
 import type {
   AnchorId,
-  Axis,
-  AxisMappingBasis,
   ComponentId,
   ContourId,
   GlyphEntry,
@@ -12,9 +10,9 @@ import type {
   LayerId,
   PointId,
   SegmentId,
-  Source,
   SourceId,
 } from "@shift/types";
+import type { Designspace } from "../lib/variation/Designspace";
 import type { Glyph, GlyphLayer } from "../lib/model/Glyph";
 import type { Signal } from "../lib/signals/signal";
 import type { DesignAxisLocation } from "./variation";
@@ -62,9 +60,7 @@ export interface GlyphOptions {
   readonly entry: GlyphEntry;
   readonly layers: readonly GlyphLayer[];
   readonly componentGlyphs: ReadonlyMap<GlyphId, Glyph>;
-  readonly axesCell: Signal<Axis[]>;
-  readonly axisMappingBasesCell: Signal<AxisMappingBasis[]>;
-  readonly sourcesCell: Signal<Source[]>;
+  readonly designspace: Designspace;
   readonly projectionCell: Signal<GlyphProjection | null>;
   readonly defaultSourceId: SourceId;
 }

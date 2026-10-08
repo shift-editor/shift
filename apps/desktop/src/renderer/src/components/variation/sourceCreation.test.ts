@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { Axis, AxisId, AxisMappingBasis, Source } from "@shift/types";
 import { mintAxisId, mintAxisLabelId, mintAxisMappingId, mintSourceId } from "@shift/types";
-import { externalAxisLocationFromLocation } from "@shift/editor/variation";
+import { Designspace, externalAxisLocationFromLocation } from "@shift/editor/variation";
+import { signal } from "@shift/editor/signals";
 import { sourceCreationIssue, sourceLocation, suggestedSourceName } from "./sourceCreation";
 
 function weightAxis(): Axis {
@@ -35,6 +36,18 @@ function source(name: string, values: Record<AxisId, number>): Source {
   };
 }
 
+function designspace(
+  axes: Axis[],
+  sources: Source[],
+  mappingBases: AxisMappingBasis[] = [],
+): Designspace {
+  return new Designspace({
+    axesCell: signal(axes),
+    mappingBasesCell: signal(mappingBases),
+    sourcesCell: signal(sources),
+  });
+}
+
 describe("source creation", () => {
   it("parses finite axis fields and rejects incomplete numeric input", () => {
     const axis = weightAxis();
@@ -48,7 +61,9 @@ describe("source creation", () => {
     const axis = weightAxis();
     const regular = source("Regular", {} as Record<AxisId, number>);
 
-    expect(sourceCreationIssue("Book", { [axis.id]: "400" }, [axis], [regular], [])).toEqual({
+    expect(
+      sourceCreationIssue("Book", { [axis.id]: "400" }, designspace([axis], [regular])),
+    ).toEqual({
       kind: "location",
       sourceId: regular.id,
       message: "Regular already exists at this location",
@@ -73,14 +88,14 @@ describe("source creation", () => {
     };
 
     expect(
-      sourceCreationIssue("Book", { [axis.id]: "900" }, [axis], [black], [mapping]),
+      sourceCreationIssue("Book", { [axis.id]: "900" }, designspace([axis], [black], [mapping])),
     ).toMatchObject({ kind: "location", sourceId: black.id });
   });
 
   it("targets the axis whose coordinate is invalid", () => {
     const axis = weightAxis();
 
-    expect(sourceCreationIssue("Book", { [axis.id]: "" }, [axis], [], [])).toEqual({
+    expect(sourceCreationIssue("Book", { [axis.id]: "" }, designspace([axis], []))).toEqual({
       kind: "axis",
       axisId: axis.id,
       message: "Enter a number for Weight",
@@ -90,7 +105,7 @@ describe("source creation", () => {
   it("targets invalid source names independently of location", () => {
     const axis = weightAxis();
 
-    expect(sourceCreationIssue("", { [axis.id]: "400" }, [axis], [], [])).toEqual({
+    expect(sourceCreationIssue("", { [axis.id]: "400" }, designspace([axis], []))).toEqual({
       kind: "name",
       message: "Enter a source name",
     });

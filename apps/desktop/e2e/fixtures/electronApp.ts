@@ -11,6 +11,8 @@ import type {
   RecoveryApp,
   ShiftFixtures,
   ShiftOptions,
+  ShiftWorkerFixtures,
+  SharedWorkspace,
 } from "./types";
 import { EditorDriver } from "./EditorDriver";
 import { ElectronProcesses, killApp } from "./electronProcesses";
@@ -70,7 +72,38 @@ export function shiftTestEnvironment(
 }
 
 /** Base fixture for launcher tests; workspace tests override `startupFontPath`. */
-export const test = base.extend<ShiftFixtures & ShiftOptions>({
+export const test = base.extend<ShiftFixtures & ShiftOptions, ShiftWorkerFixtures>({
+  sharedWorkspaceApp: [
+    async ({}, use, workerInfo) => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), "shift-e2e-shared-"));
+      const processes = new ElectronProcesses();
+      let shared: Promise<SharedWorkspace> | undefined;
+      const launch = async (): Promise<SharedWorkspace> => {
+        const workspacePath = createAuthoredDocument(FONT_PATH, path.join(root, "workspace"));
+        const app = await processes.launch({
+          label: "shared",
+          userDataDir: path.join(root, "user-data"),
+          args: [workspacePath],
+          env: shiftTestEnvironment(),
+          windowSizing: workerInfo.project.name === "visual" ? "visual" : "native",
+        });
+        return { app, processes };
+      };
+      try {
+        await use(() => (shared ??= launch()));
+      } finally {
+        await processes.terminateAll();
+        await fs.promises.rm(root, {
+          recursive: true,
+          force: true,
+          maxRetries: 10,
+          retryDelay: 100,
+        });
+      }
+    },
+    { scope: "worker" },
+  ],
+  sharedWorkspace: [false, { option: true }],
   startupFontPath: [undefined, { option: true }],
   windowSizing: [
     async ({}, use, testInfo) => {
@@ -149,9 +182,28 @@ export const test = base.extend<ShiftFixtures & ShiftOptions>({
       testRoot,
       saveShiftPath,
       exportTtfPath,
+      sharedWorkspace,
+      sharedWorkspaceApp,
     },
     use,
+    testInfo,
   ) => {
+    if (sharedWorkspace) {
+      if (startupFontPath !== FONT_PATH || scriptedDialogs || electronArgs.length > 0) {
+        throw new Error("sharedWorkspace needs the default MutatorSans workspace fixture.");
+      }
+      const { app, processes } = await sharedWorkspaceApp();
+      await resetSharedWorkspace(app);
+      try {
+        await use(app);
+      } finally {
+        if (testInfo.status !== testInfo.expectedStatus)
+          await processes.attachDiagnostics(testInfo);
+      }
+      await expectSharedWorkspaceClean(app);
+      return;
+    }
+
     const workspacePath = startupFontPath
       ? createAuthoredDocument(startupFontPath, path.join(testRoot, "workspace"))
       : undefined;
@@ -329,6 +381,42 @@ export const documentWorkspaceTest = documentTest.extend<ShiftOptions>({
 async function emulateFocus(page: Page): Promise<void> {
   const session = await page.context().newCDPSession(page);
   await session.send("Emulation.setFocusEmulationEnabled", { enabled: true });
+}
+
+/**
+ * Returns a shared workspace app to a freshly opened state.
+ *
+ * @remarks
+ * The document stays open in the workspace process; reloading the renderer on the home route
+ * with cleared storage drops the previous test's tool, selection, camera, and layout state.
+ * The `page` fixture then waits for the workspace to be ready again.
+ */
+async function resetSharedWorkspace(app: ElectronApplication): Promise<void> {
+  const windows = app.windows();
+  if (windows.length !== 1) {
+    throw new Error(`A shared workspace must have one window; it has ${windows.length}.`);
+  }
+  const page = windows[0]!;
+  await page.evaluate(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+    window.location.hash = "#/home";
+  });
+  await page.reload();
+}
+
+/**
+ * Fails a test that edited the shared document, since every later test would inherit the edit.
+ */
+async function expectSharedWorkspaceClean(app: ElectronApplication): Promise<void> {
+  const titles = await app.evaluate(({ BrowserWindow }) =>
+    BrowserWindow.getAllWindows().map((window) => window.getTitle()),
+  );
+  if (titles.some((title) => title.includes(" *"))) {
+    throw new Error(
+      "This test edited the shared workspace document. Remove `sharedWorkspace` from its describe.",
+    );
+  }
 }
 
 /**

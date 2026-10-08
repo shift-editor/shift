@@ -152,20 +152,21 @@ test.describe("Toolbar tools", () => {
   });
 
   for (const tool of TOOLBAR_TOOLS) {
-    test(`${tool} tool active state matches snapshot`, async ({ page, editor }) => {
-      await editor.selectTool(tool);
-      await expect(editor.toolButton(tool)).toHaveAttribute("aria-pressed", "true");
-      for (const other of TOOLBAR_TOOLS.filter((candidate) => candidate !== tool)) {
-        await expect(editor.toolButton(other)).toHaveAttribute("aria-pressed", "false");
-      }
-      // Park the pointer so hover styling and the button tooltip are not captured.
-      await page.mouse.move(0, 0);
+    test(
+      `${tool} tool active state matches snapshot`,
+      { tag: "@golden" },
+      async ({ page, editor }) => {
+        await editor.selectTool(tool);
+        await expect(editor.toolButton(tool)).toHaveAttribute("aria-pressed", "true");
+        for (const other of TOOLBAR_TOOLS.filter((candidate) => candidate !== tool)) {
+          await expect(editor.toolButton(other)).toHaveAttribute("aria-pressed", "false");
+        }
+        // Park the pointer so hover styling and the button tooltip are not captured.
+        await page.mouse.move(0, 0);
 
-      await expectPanelSnapshot(
-        page.getByRole("toolbar", { name: "Editor tools" }),
-        `tool-${tool}.png`,
-      );
-    });
+        await expectPanelSnapshot(editor.toolButton(tool), `tool-${tool}.png`);
+      },
+    );
   }
 
   test("loads crosshair images before the first keyboard shape switch", async ({
@@ -200,29 +201,37 @@ test.describe("Toolbar tools", () => {
     }
   });
 
-  test("selects shape kinds from the menu and keyboard", async ({ page, editor }) => {
-    await page.getByRole("button", { name: "Rectangle Tool (R) options" }).click();
-    const rectangleItem = page.getByRole("menuitemcheckbox", { name: "Rectangle R" });
-    const ellipseItem = page.getByRole("menuitemcheckbox", { name: "Ellipse O" });
-    await expect(rectangleItem).toHaveAttribute("aria-checked", "true");
-    await expect(ellipseItem).toHaveAttribute("aria-checked", "false");
-    await expectPanelSnapshot(page.getByRole("menu"), "shape-menu.png");
-    await ellipseItem.click();
-    await expect(page.getByRole("button", { name: "Ellipse Tool (O)", exact: true })).toBeVisible();
-    const canvas = editor.canvas;
-    await canvas.hover();
-    await expect(canvas).toHaveCSS("cursor", /crosshair@32-circle\.svg.*12 9, crosshair/);
+  test(
+    "selects shape kinds from the menu and keyboard",
+    { tag: "@golden" },
+    async ({ page, editor }) => {
+      await page.getByRole("button", { name: "Rectangle Tool (R) options" }).click();
+      const rectangleItem = page.getByRole("menuitemcheckbox", { name: "Rectangle R" });
+      const ellipseItem = page.getByRole("menuitemcheckbox", { name: "Ellipse O" });
+      await expect(rectangleItem).toHaveAttribute("aria-checked", "true");
+      await expect(ellipseItem).toHaveAttribute("aria-checked", "false");
+      await expectPanelSnapshot(page.getByRole("menu"), "shape-menu.png");
+      await ellipseItem.click();
+      await expect(
+        page.getByRole("button", { name: "Ellipse Tool (O)", exact: true }),
+      ).toBeVisible();
+      const canvas = editor.canvas;
+      await canvas.hover();
+      await expect(canvas).toHaveCSS("cursor", /crosshair@32-circle\.svg.*12 9, crosshair/);
 
-    await page.keyboard.press("r");
-    await expect(
-      page.getByRole("button", { name: "Rectangle Tool (R)", exact: true }),
-    ).toBeVisible();
-    await expect(canvas).toHaveCSS("cursor", /crosshair@32-square\.svg.*12 9, crosshair/);
+      await page.keyboard.press("r");
+      await expect(
+        page.getByRole("button", { name: "Rectangle Tool (R)", exact: true }),
+      ).toBeVisible();
+      await expect(canvas).toHaveCSS("cursor", /crosshair@32-square\.svg.*12 9, crosshair/);
 
-    await page.keyboard.press("o");
-    await expect(page.getByRole("button", { name: "Ellipse Tool (O)", exact: true })).toBeVisible();
-    await expect(canvas).toHaveCSS("cursor", /crosshair@32-circle\.svg.*12 9, crosshair/);
-  });
+      await page.keyboard.press("o");
+      await expect(
+        page.getByRole("button", { name: "Ellipse Tool (O)", exact: true }),
+      ).toBeVisible();
+      await expect(canvas).toHaveCSS("cursor", /crosshair@32-circle\.svg.*12 9, crosshair/);
+    },
+  );
 
   for (const label of ["Ellipse Tool (O)", "Select Tool (V)", "Pen Tool (P)", "Hand Tool (H)"]) {
     test(`preserves the selected shape after clicking ${label}`, async ({ page, editor }) => {
@@ -275,14 +284,18 @@ test.describe("Toolbar tools", () => {
       );
     });
 
-    test(`renders a live ${kind} draft and its committed selection`, async ({ editor }) => {
-      await startShapeDraft(editor, kind);
-      await expectCanvasSnapshot(editor, `${kind}-draft.png`);
+    test(
+      `renders a live ${kind} draft and its committed selection`,
+      { tag: "@golden" },
+      async ({ editor }) => {
+        await startShapeDraft(editor, kind);
+        await expectCanvasSnapshot(editor, `${kind}-draft.png`);
 
-      await editor.pointerUp();
-      await expect.poll(() => editor.selectionIds()).toHaveLength(1);
-      await expectCanvasSnapshot(editor, `${kind}-committed.png`);
-    });
+        await editor.pointerUp();
+        await expect.poll(() => editor.selectionIds()).toHaveLength(1);
+        await expectCanvasSnapshot(editor, `${kind}-committed.png`);
+      },
+    );
   }
 
   test("updates an ellipse draft with Shift and restores the previous selection on Escape", async ({
@@ -326,38 +339,46 @@ test.describe("Toolbar tools", () => {
     expect(await page.evaluate((id) => window.shift!.editor.object(id), draft.ids[0])).toBeNull();
   });
 
-  test("Text mode draws the run filled with the caret after the typed text", async ({
-    page,
-    editor,
-  }) => {
-    await editor.selectTool("text");
-    await expect(page.getByRole("textbox", { name: "Text input" })).toBeFocused();
-    await page.keyboard.type("AB");
-    await expect
-      .poll(() =>
-        page.evaluate(() => {
-          const editor = window.shift!.editor;
-          const run = editor.scene.nodesOfKind("textRun")[0];
-          const items = run ? editor.text.run(run.runId)?.items : null;
-          const layout = run ? editor.text.layoutCell(run.runId).peek() : null;
-          return items && layout
-            ? {
-                codepoints: items.map((item) => (item.kind === "glyph" ? item.codepoint : 10)),
-                editingNodes: editor.editing.nodeIds.length,
-                caretAtEnd: editor.textEditing.state?.focus === items[items.length - 1]?.id,
-                glyphsLoaded: layout.lines.every((line) =>
-                  line.runs.every((part) =>
-                    part.glyphs.every((glyph) => glyph.glyphId && editor.glyphForId(glyph.glyphId)),
+  test(
+    "Text mode draws the run filled with the caret after the typed text",
+    { tag: "@golden" },
+    async ({ page, editor }) => {
+      await editor.selectTool("text");
+      await expect(page.getByRole("textbox", { name: "Text input" })).toBeFocused();
+      await page.keyboard.type("AB");
+      await expect
+        .poll(() =>
+          page.evaluate(() => {
+            const editor = window.shift!.editor;
+            const run = editor.scene.nodesOfKind("textRun")[0];
+            const items = run ? editor.text.run(run.runId)?.items : null;
+            const layout = run ? editor.text.layoutCell(run.runId).peek() : null;
+            return items && layout
+              ? {
+                  codepoints: items.map((item) => (item.kind === "glyph" ? item.codepoint : 10)),
+                  editingNodes: editor.editing.nodeIds.length,
+                  caretAtEnd: editor.textEditing.state?.focus === items[items.length - 1]?.id,
+                  glyphsLoaded: layout.lines.every((line) =>
+                    line.runs.every((part) =>
+                      part.glyphs.every(
+                        (glyph) => glyph.glyphId && editor.glyphForId(glyph.glyphId),
+                      ),
+                    ),
                   ),
-                ),
-              }
-            : null;
-        }),
-      )
-      .toEqual({ codepoints: [65, 65, 66], editingNodes: 0, caretAtEnd: true, glyphsLoaded: true });
-    await page.mouse.move(0, 0);
-    await expectCanvasSnapshot(editor, "canvas-text-mode-AAB.png");
-  });
+                }
+              : null;
+          }),
+        )
+        .toEqual({
+          codepoints: [65, 65, 66],
+          editingNodes: 0,
+          caretAtEnd: true,
+          glyphsLoaded: true,
+        });
+      await page.mouse.move(0, 0);
+      await expectCanvasSnapshot(editor, "canvas-text-mode-AAB.png");
+    },
+  );
 
   test("native text input edits the page run with arrows and undo", async ({ page, editor }) => {
     await editor.selectTool("text");

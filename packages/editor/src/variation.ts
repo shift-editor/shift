@@ -15,4 +15,5 @@ export {
   mapAxisLocation,
   withExternalAxisValue,
 } from "./lib/variation/location";
+export { Designspace } from "./lib/variation/Designspace";
 export type { DesignAxisLocation, ExternalAxisLocation } from "./types/variation";

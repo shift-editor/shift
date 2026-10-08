@@ -10,6 +10,16 @@ import type { EditorDriver } from "./EditorDriver";
 export const SCREENSHOT_STYLE_PATH = path.join(__dirname, "..", "editor.screenshot.css");
 
 /**
+ * How long a capture may take to settle into two identical frames before comparing.
+ *
+ * @remarks
+ * CI runs several apps at once, and a large 2× canvas can take longer than Playwright's
+ * default 5 s to produce two matching captures. Only the wait is longer; the comparison is
+ * unchanged.
+ */
+const SNAPSHOT_SETTLE_TIMEOUT_MS = 15_000;
+
+/**
  * Interface goldens compare exactly, but only on CI.
  *
  * @remarks
@@ -24,6 +34,7 @@ const INTERFACE_SNAPSHOT_OPTIONS = {
   caret: "hide",
   maxDiffPixels: 0,
   threshold: 0,
+  timeout: SNAPSHOT_SETTLE_TIMEOUT_MS,
 } as const;
 
 /**
@@ -43,6 +54,7 @@ const CANVAS_SNAPSHOT_OPTIONS = {
   maxDiffPixels: 0,
   threshold: 0.02,
   scale: "device",
+  timeout: SNAPSHOT_SETTLE_TIMEOUT_MS,
 } as const;
 
 /**
@@ -70,6 +82,28 @@ async function comparesInterfaceGoldens(name: string, target: Locator | Page): P
 async function attachLocalCapture(name: string, target: Locator | Page): Promise<void> {
   const body = await target.screenshot({ animations: "disabled", caret: "hide" });
   await test.info().attach(`local-${name}`, { body, contentType: "image/png" });
+}
+
+/** Tag that marks a test as owning a golden; the snapshot update workflow runs only these. */
+export const GOLDEN_TAG = "@golden";
+
+/**
+ * Requires the running test to carry {@link GOLDEN_TAG}.
+ *
+ * @remarks
+ * The `ci: update visual snapshots` workflow regenerates baselines with `--grep @golden`
+ * instead of running the whole visual suite. An untagged golden would never be regenerated
+ * there, so capturing one fails the test on its first run instead.
+ *
+ * @param name - golden about to be compared.
+ * @throws {Error} when the test is not tagged.
+ */
+function requireGoldenTag(name: string): void {
+  if (test.info().tags.includes(GOLDEN_TAG)) return;
+
+  throw new Error(
+    `Golden ${name} needs its test tagged: test(title, { tag: "${GOLDEN_TAG}" }, …).`,
+  );
 }
 
 /**
@@ -104,6 +138,7 @@ function refuseRetriedGolden(name: string): void {
  * @param name - golden file name under the spec's snapshot directory.
  */
 export async function expectCanvasSnapshot(editor: EditorDriver, name: string): Promise<void> {
+  requireGoldenTag(name);
   refuseRetriedGolden(name);
   await editor.waitForCanvasRender();
   await expect(editorCanvasStack(editor.page)).toHaveScreenshot(name, CANVAS_SNAPSHOT_OPTIONS);
@@ -117,6 +152,7 @@ export async function expectCanvasSnapshot(editor: EditorDriver, name: string): 
  * @param name - golden file name under the spec's snapshot directory.
  */
 export async function expectPanelSnapshot(target: Locator, name: string): Promise<void> {
+  requireGoldenTag(name);
   refuseRetriedGolden(name);
   if (!(await comparesInterfaceGoldens(name, target))) return;
 
@@ -128,14 +164,22 @@ export async function expectPanelSnapshot(target: Locator, name: string): Promis
  *
  * @remarks
  * Prefer {@link expectPanelSnapshot} or {@link expectCanvasSnapshot}; a full-window golden
- * breaks on any chrome change and should protect overall composition only.
+ * breaks on any chrome change and should protect overall composition only. Mask regions
+ * that have their own goldens, such as the editor toolbar, so a change there updates one
+ * focused golden instead of every window that shows it.
  *
  * @param page - window whose viewport is captured.
  * @param name - golden file name under the spec's snapshot directory.
+ * @param mask - regions painted over before comparing.
  */
-export async function expectPageSnapshot(page: Page, name: string): Promise<void> {
+export async function expectPageSnapshot(
+  page: Page,
+  name: string,
+  mask: readonly Locator[] = [],
+): Promise<void> {
+  requireGoldenTag(name);
   refuseRetriedGolden(name);
   if (!(await comparesInterfaceGoldens(name, page))) return;
 
-  await expect(page).toHaveScreenshot(name, INTERFACE_SNAPSHOT_OPTIONS);
+  await expect(page).toHaveScreenshot(name, { ...INTERFACE_SNAPSHOT_OPTIONS, mask: [...mask] });
 }

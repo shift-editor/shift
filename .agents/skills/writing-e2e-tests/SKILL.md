@@ -79,6 +79,7 @@ Rules:
 - One golden per distinct visual contract. Do not add near-duplicate images; if two captures are byte-identical, one of them is redundant.
 - Canvas goldens use `maxDiffPixels: 0` with `threshold: 0.02` on every host: enough for antialiasing differences between hosts (≤ 0.009), far below a real colour-token change (~0.07). Never raise either to make a mismatch pass; the default threshold of 0.2 silently accepts token changes.
 - Interface goldens (`expectPanelSnapshot`, `expectPageSnapshot`) are exact but compared on CI only, with baselines generated on the runner via the `ci: update visual snapshots` label. Never commit a locally generated interface baseline. Prefer semantic assertions and keep interface goldens few.
+- Tag every test that captures a golden: `test(title, { tag: "@golden" }, …)`. The snapshot label regenerates only `@golden` tests, and the helpers fail an untagged golden.
 - Goldens never pass on retry. The helpers throw on a retry attempt, so explain the first failure.
 - Use canvas-local positions (`dragCanvas()`, `canvasPagePoint()`) so layout changes cannot redraw geometry.
 - Theme goldens select the theme through the product and assert `data-color-theme` first. HiDPI goldens use `test.use({ deviceScaleFactor: 2 })` and assert `devicePixelRatio` first. Add one golden per palette branch or rendering path, not one per theme.

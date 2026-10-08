@@ -9,8 +9,7 @@ if (distribution !== "release" && distribution !== "nightly") {
 }
 
 const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, "package.json"), "utf8"));
-const updateBaseUrl =
-  process.env.SHIFT_UPDATE_BASE_URL ?? "https://shift-editor.github.io/shift/updates";
+const updateBaseUrl = process.env.SHIFT_UPDATE_BASE_URL ?? "https://feeds.shift.graphics/updates";
 let shiftBuildCommit = process.env.SHIFT_BUILD_COMMIT ?? process.env.GITHUB_SHA;
 if (!shiftBuildCommit) {
   try {

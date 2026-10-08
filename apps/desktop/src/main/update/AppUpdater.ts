@@ -5,8 +5,9 @@ import { message } from "../../shared/messages";
 import type { UpdateProgress } from "../../shared/update/types";
 import { shiftDistribution, shiftProductVersion, shiftUpdateBaseUrl } from "../release";
 import { UpdateWindow } from "./UpdateWindow";
+import { detectLinuxInstallation } from "./linuxInstallation";
 import { updateFeed } from "./updateFeed";
-import type { AppUpdaterOptions, UpdateStatus, UpdateTrigger } from "./types";
+import type { AppUpdaterOptions, LinuxInstallation, UpdateStatus, UpdateTrigger } from "./types";
 
 const INITIAL_CHECK_DELAY_MS = 30_000;
 const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000;
@@ -18,6 +19,10 @@ const { autoUpdater, CancellationToken } = electronUpdater;
 export class AppUpdater {
   readonly #options: AppUpdaterOptions;
   readonly #updateWindow: UpdateWindow;
+  readonly #linuxInstallation: LinuxInstallation | null =
+    process.platform === "linux"
+      ? detectLinuxInstallation(process.env.APPIMAGE, process.resourcesPath)
+      : null;
 
   #status: UpdateStatus = { type: "idle" };
   #started = false;
@@ -203,6 +208,7 @@ export class AppUpdater {
       distribution: shiftDistribution,
       platform: process.platform,
       architecture: process.arch,
+      linuxInstallation: this.#linuxInstallation,
     });
   }
 
@@ -328,6 +334,18 @@ export class AppUpdater {
       return;
     }
 
+    if (this.#linuxInstallation === "systemPackage") {
+      await this.#showMessage({
+        type: "info",
+        buttons: [message("action.ok")],
+        title: app.name,
+        message: message("update.packageManager.message", { applicationName: app.name }),
+        detail: message("update.packageManager.detail"),
+      });
+      return;
+    }
+
+    const readOnlyAppImage = this.#linuxInstallation === "readOnlyAppImage";
     const result = await this.#showMessage({
       type: "info",
       buttons: [message("action.viewDownloads"), message("action.cancel")],
@@ -336,7 +354,9 @@ export class AppUpdater {
       noLink: true,
       title: app.name,
       message: message("update.manualOnly.message"),
-      detail: message("update.manualOnly.detail"),
+      detail: readOnlyAppImage
+        ? message("update.readOnlyAppImage.detail", { applicationName: app.name })
+        : message("update.manualOnly.detail"),
     });
     if (result.response === 0) await shell.openExternal(this.#downloadsUrl());
   }
