@@ -15,7 +15,8 @@ import type { GlyphEntry, Source } from "@shift/types";
  * glyph display without joining/contextual substitution (e.g. Arabic
  * side-by-side editing).
  *
- *
+ * Neighbouring spacing glyphs are kerned with the font's pair kerning at the
+ * displayed location; a mark between them interrupts the pair.
  */
 export class Positioner {
   position(
@@ -26,6 +27,9 @@ export class Positioner {
     let totalAdvance = 0;
     const glyphs: PositionedRun["glyphs"] = [];
     const source = editor.activeSource ?? editor.font.sourceAtOrDefault(externalLocation.peek());
+    // Called from the run's layout computed, which tracks location and active source.
+    track(editor.font.kerningCell);
+    let kernable: PositionedRun["glyphs"][number] | null = null;
 
     for (const [idx, g] of run.glyphs.entries()) {
       const entry = editor.font.entryForName(g.glyphName);
@@ -42,22 +46,35 @@ export class Positioner {
       }
 
       const xAdvance = resolveAdvance(g, renderModel);
+      const spacing = !isNonSpacingGlyph(g.glyphName, g.codepoint);
+      if (kernable?.glyphId && entry && spacing) {
+        kernable.xKern = editor.font.kerningBetween(
+          kernable.glyphId,
+          entry.id,
+          externalLocation.peek(),
+          editor.activeSourceIdCell.peek(),
+        );
+        totalAdvance += kernable.xKern;
+      }
       const origin = { x: totalAdvance, y: 0 };
       const offset = resolveGlyphOffset(g, editor, source);
       totalAdvance += xAdvance;
 
-      glyphs.push({
+      const positioned = {
         glyphId: entry?.id ?? null,
         glyphName,
         sourceItemIds: [g.id],
         origin,
         xAdvance,
+        xKern: 0,
         yAdvance: 0,
         xOffset: offset.x,
         yOffset: offset.y,
         cluster: run.clusterStart + idx,
         bounds,
-      });
+      };
+      glyphs.push(positioned);
+      kernable = spacing ? positioned : null;
     }
 
     return { ...run, glyphs, advance: totalAdvance };

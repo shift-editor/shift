@@ -21,6 +21,9 @@ bitflags! {
         const SOURCE_METRICS = 1 << 7;
         const NAMED_INSTANCES = 1 << 8;
         const SOURCES = 1 << 9;
+        /// Kerning values or the sources, axes, and mappings its
+        /// interpolation basis is built from.
+        const KERNING = 1 << 10;
     }
 }
 
@@ -104,17 +107,23 @@ impl FontChange {
                     | FontChangeImpact::SOURCES
                     | FontChangeImpact::AXIS_MAPPING_BASES
                     | FontChangeImpact::SOURCE_METRICS
+                    | FontChangeImpact::KERNING
             }
             Self::AxisMappings(_) => {
                 FontChangeImpact::AXIS_MAPPINGS
                     | FontChangeImpact::AXIS_MAPPING_BASES
                     | FontChangeImpact::SOURCE_METRICS
+                    | FontChangeImpact::KERNING
             }
             Self::MetricDefinitions(_) => {
                 FontChangeImpact::METRIC_DEFINITIONS | FontChangeImpact::SOURCE_METRICS
             }
             Self::NamedInstances(_) => FontChangeImpact::NAMED_INSTANCES,
-            Self::Sources(_) => FontChangeImpact::SOURCES | FontChangeImpact::SOURCE_METRICS,
+            Self::Sources(_) => {
+                FontChangeImpact::SOURCES
+                    | FontChangeImpact::SOURCE_METRICS
+                    | FontChangeImpact::KERNING
+            }
             Self::Glyph(_) => FontChangeImpact::GLYPHS,
             Self::Layer {
                 structural: true, ..

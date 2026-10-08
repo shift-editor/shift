@@ -50,6 +50,12 @@ export interface PositionedGlyph {
   sourceItemIds: readonly TextItemId[];
   origin: Point2D;
   xAdvance: number;
+  /**
+   * Kerning with the next glyph, in font units, added after `xAdvance`. The
+   * next glyph's origin includes it; the advance box `[left, left + xAdvance)`
+   * does not.
+   */
+  xKern: number;
   yAdvance: number;
   xOffset: number;
   yOffset: number;

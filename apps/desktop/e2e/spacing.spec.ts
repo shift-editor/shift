@@ -28,7 +28,7 @@ async function halfPagePoint(
         const gap = editor.nodeDefinition("textRun").spacingGaps(run)[gapIndex]!;
         const half = gap[side]!;
         const point = {
-          x: (half.edge + gap.boundary) / 2,
+          x: (half.edge + (side === "left" ? gap.leftBoundary : gap.rightBoundary)) / 2,
           y: gap.top + (gap.bottom - gap.top) * height,
         };
         return editor.sceneToScreen(editor.toScene(run, point as never));

@@ -16,6 +16,7 @@ use crate::{
     Location, SourceId,
 };
 
+mod kerning;
 mod layer_match;
 mod metrics;
 mod values;
