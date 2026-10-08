@@ -4,7 +4,7 @@ import { LOCK_PATH_DATA, LOCK_VIEW_BOX_SIZE } from "../../editor/rendering/icons
 import { kerningLabelLayout, kerningLabelText } from "./KerningLabel";
 import type { KerningPair } from "./RunKerning";
 
-type KerningTheme = Canvas["theme"]["kerning"];
+type KerningTheme = Canvas["theme"]["kerning"]["negative"];
 type LabelTheme = Canvas["theme"]["spacing"];
 
 /** How a pair is drawn beyond its kern and pill. */
@@ -20,7 +20,8 @@ export interface KerningDrawOptions {
  *
  * @remarks
  * The kern is a translucent strip between the two advance edges in the
- * kerning colour, which no spacing overlay uses. The pill below the baseline
+ * kerning colours, which no spacing overlay uses: violet when it tightens or
+ * is zero, teal when it loosens. The pill below the baseline
  * shows the value, with a lock on a side that is a glyph exception. While the pointer is on the pill, other
  * glyphs of the run that kern through one of the pair's groups fill in the
  * kerning colour, showing the reach of a group edit.
@@ -31,7 +32,8 @@ export function drawKerningPair(
   pair: KerningPair,
   options: KerningDrawOptions = {},
 ): void {
-  const theme = canvas.theme.kerning;
+  // A loosening kern takes its own colour; zero and tightening share violet.
+  const theme = pair.amount > 0 ? canvas.theme.kerning.positive : canvas.theme.kerning.negative;
   canvas.withTransform(editor.sceneTransform(pair.gap.node), (local) => {
     if (options.hovered) drawGroupGlyphs(local, editor, pair, theme);
     local.withScreenSpace((screen, project) => {

@@ -15,6 +15,15 @@ export interface FirstHandleStyle extends HandleStyle {
 
 export type HandleStateStyles<T extends HandleStyle = HandleStyle> = Record<HandleState, T>;
 
+/** The colours of one sign of kern in the Kerning tool. */
+export interface KerningPalette {
+  /** The translucent strip between the two advance edges. */
+  fill: string;
+  /** The value pill, the selected strip's edges, and glyphs a group edit reaches. */
+  accent: string;
+  accentHover: string;
+}
+
 export interface EditorRenderTheme {
   cursor: { color: string; widthPx: number };
   guides: { color: string; widthPx: number };
@@ -88,13 +97,10 @@ export interface EditorRenderTheme {
     labelText: string;
     labelFont: string;
   };
-  /** The Kerning tool's kern between two glyphs. */
+  /** The Kerning tool's kern between two glyphs: one palette for a tightening kern, one for a loosening one. */
   kerning: {
-    /** The translucent strip between the two advance edges. */
-    fill: string;
-    /** The value pill, the selected strip's edges, and glyphs a group edit reaches. */
-    accent: string;
-    accentHover: string;
+    negative: KerningPalette;
+    positive: KerningPalette;
   };
 }
 
@@ -279,9 +285,16 @@ const DEFAULT_EDITOR_RENDER_THEME: EditorRenderTheme = {
     labelFont: "500 10px Inter, system-ui, sans-serif",
   },
   kerning: {
-    fill: "rgba(124, 58, 237, 0.12)",
-    accent: "#7C3AED",
-    accentHover: "rgba(124, 58, 237, 0.8)",
+    negative: {
+      fill: "rgba(124, 58, 237, 0.12)",
+      accent: "#7C3AED",
+      accentHover: "rgba(124, 58, 237, 0.8)",
+    },
+    positive: {
+      fill: "rgba(13, 148, 136, 0.12)",
+      accent: "#0D9488",
+      accentHover: "rgba(13, 148, 136, 0.8)",
+    },
   },
 };
 
@@ -455,11 +468,14 @@ export function readEditorRenderTheme(
     negativeLabelHoverFill: withAlpha(negative, 0.8),
   };
 
-  const kerning = readColor("--editor-kerning", theme.kerning.accent);
+  const kerningPalette = (accent: string): KerningPalette => ({
+    fill: withAlpha(accent, 0.12),
+    accent,
+    accentHover: withAlpha(accent, 0.8),
+  });
   theme.kerning = {
-    fill: withAlpha(kerning, 0.12),
-    accent: kerning,
-    accentHover: withAlpha(kerning, 0.8),
+    negative: kerningPalette(readColor("--editor-kerning", theme.kerning.negative.accent)),
+    positive: kerningPalette(readColor("--editor-kerning-positive", theme.kerning.positive.accent)),
   };
 
   return theme;

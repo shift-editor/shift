@@ -119,6 +119,7 @@
   --editor-spacing-negative: #d97706;
   --editor-spacing-negative-faint: rgba(217, 119, 6, 0.5);
   --editor-kerning: #7c3aed;
+  --editor-kerning-positive: #0d9488;
 }
 
 /* Only Shift Light shows the brand-coloured lid; other themes colour it with their accent. */
