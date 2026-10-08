@@ -1,6 +1,23 @@
 /**
- * Global test setup — provides browser API polyfills for Node.js test environment.
+ * Global test setup — provides browser API polyfills for Node.js test environment
+ * and a per-file temporary directory.
  */
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterAll } from "vitest";
+
+// Tests write workspaces, documents, and exports under `os.tmpdir()`, and the
+// native bridge does the same through TMPDIR. Point both at one root per test
+// file and remove it when the file finishes, so fixtures a test forgets to
+// dispose cannot accumulate across runs.
+const systemTmpdir = tmpdir();
+const fileTmpdir = mkdtempSync(join(systemTmpdir, "shift-test-"));
+process.env.TMPDIR = fileTmpdir;
+afterAll(() => {
+  process.env.TMPDIR = systemTmpdir;
+  rmSync(fileTmpdir, { recursive: true, force: true });
+});
 
 // window + requestAnimationFrame — used by FrameHandler for render scheduling.
 if (typeof globalThis.window === "undefined") {
