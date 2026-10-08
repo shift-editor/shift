@@ -182,7 +182,7 @@ export class ApplicationMenu {
 
   #fileItems(includeQuit: boolean): MenuItemConstructorOptions[] {
     const items: MenuItemConstructorOptions[] = [
-      ...fileMenuItems(this.#runCommand, this.#isCommandEnabled, this.#recent()),
+      ...fileMenuItems(this.#runCommand, this.#isCommandEnabled, this.#recent(), !isMac),
       { type: "separator" },
       this.#commandItem("window.close"),
     ];

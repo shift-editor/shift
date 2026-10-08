@@ -54,15 +54,22 @@ describe("application command menu items", () => {
         return id === "file.open";
       },
       noRecents,
+      true,
     );
 
     expect(checked).toEqual([
       "file.new",
       "file.open",
+      "file.openFolder",
       "file.save",
       "file.saveAs",
       "file.exportTtf",
     ]);
+  });
+
+  it("offers Open Font Folder only where Open cannot select folders", () => {
+    expect(ids(fileMenuItems(run, enabled, noRecents, true))).toContain("file.openFolder");
+    expect(ids(fileMenuItems(run, enabled, noRecents, false))).not.toContain("file.openFolder");
   });
 
   it("opens recent files by path and disables the ones that went missing", () => {

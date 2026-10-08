@@ -29,6 +29,9 @@ function nativeDialogs(confirmDirtyDocument: NativeDialogs["confirmDirtyDocument
     async openFont() {
       return null;
     },
+    async openFontFolder() {
+      return null;
+    },
     async showCreateFailure() {},
     async showOpenFailure() {},
     async saveShiftDocument() {
