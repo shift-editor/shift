@@ -14,6 +14,7 @@ Proof text is document-scoped item content projected through one implicit page r
 - `TextEditingRecord` owns the current node, anchor, and focus for one session. A `TextCaret` is the ID of the preceding item or null for the run start. Its cluster is `indexOf(itemId) + 1`; linebreaks count. Vertical goal-x is transient.
 - Text mode suspends glyph editing (`Editing.suspend`), so every glyph draws filled, and restores it on exit. Leaving Text mode keeps the `TextEditingRecord` with `active: false`, so the next visit resumes the caret and selection; `TextEditing.stateCell` only exposes an active record. Undo outside Text mode restores the record inactive.
 - Two hit paths, never mixed: `TextRunNodeDefinition.hit` returns a text target only on a glyph's outline (fill or contour within hit radius), used by Select hover, click-select, and double-click. `TextRunNodeDefinition.caretAt` returns the nearest caret cluster in the line boxes and is called by the Text tool directly. Node definitions never branch on the active tool.
+- Spacing gaps are run queries, like caret lookup: `spacingGapAt`, `spacingGapBetween`, and `spacingGaps` measure from the layout and each glyph's live outline on every call and store nothing, so they follow edits without invalidation. A gap spans both outline edges and the advance boundary, so negative sidebearings stay inside it.
 - `TextItemId` is a selectable `ShiftId`: `Editor.object` resolves it to a `textItem` object, and hover/selection go through `editor.hover` / `editor.selection`. Text items report no bounds, so they never get the transform box.
 - `EditorHistory` captures complete text-run, node, and session-record replacements, never a second text undo stack. Entering or switching the edited glyph is its own undo step; plain selection is not.
 
@@ -33,7 +34,7 @@ Proof text is document-scoped item content projected through one implicit page r
 - `edit.ts`: pure splice, deletion, selection, word, and selection-rectangle operations.
 - `layout/`: TextLayout, Positioner (literal LTR advances), and Caret.
 - `apps/desktop/src/renderer/src/views/Editor.tsx`: the interim one-run open policy.
-- `lib/nodes/TextRunNodeDefinition.ts`: scaled presentation, child placement, outline hits, caret lookup.
+- `lib/nodes/TextRunNodeDefinition.ts`: scaled presentation, child placement, outline hits, caret lookup, spacing gaps.
 - `lib/objects/TextItemObject.ts`: resolved object for a selected or hovered item.
 - `lib/tools/text/`: Text mode and caret gestures.
 - `lib/tools/select/behaviors/NodeDoubleClick.ts`: Select offers double-clicks to the hit node's definition and its ancestors'.

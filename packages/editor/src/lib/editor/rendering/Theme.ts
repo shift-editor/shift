@@ -66,6 +66,28 @@ export interface EditorRenderTheme {
     componentOverlay: readonly [string, string];
     componentOverlayHover: readonly [string, string];
   };
+  /** The Spacing tool's gap between two glyphs. */
+  spacing: {
+    /** The half under the pointer: the sidebearing a drag would change. */
+    activeFill: string;
+    activeHatch: string;
+    /** The other half of the gap. */
+    idleFill: string;
+    idleHatch: string;
+    /** The same roles for a negative sidebearing, whose outline overlaps past the boundary. */
+    negativeActiveFill: string;
+    negativeActiveHatch: string;
+    negativeIdleFill: string;
+    negativeIdleHatch: string;
+    negativeLabelFill: string;
+    negativeLabelHoverFill: string;
+    hatchGapPx: number;
+    /** The active sidebearing's value, in a pill centred in its half. */
+    labelFill: string;
+    labelHoverFill: string;
+    labelText: string;
+    labelFont: string;
+  };
 }
 
 const hover = (alpha: number) => `rgba(255, 255, 255, ${alpha})`;
@@ -231,6 +253,23 @@ const DEFAULT_EDITOR_RENDER_THEME: EditorRenderTheme = {
     componentOverlay: ["rgba(169, 236, 183, 0.26)", "rgba(255, 182, 207, 0.26)"],
     componentOverlayHover: ["rgba(124, 220, 150, 0.4)", "rgba(255, 151, 186, 0.4)"],
   },
+  spacing: {
+    activeFill: "rgba(219, 46, 145, 0.14)",
+    activeHatch: "rgba(219, 46, 145, 0.75)",
+    idleFill: "rgba(219, 46, 145, 0.05)",
+    idleHatch: "rgba(219, 46, 145, 0.45)",
+    negativeActiveFill: "rgba(217, 119, 6, 0.16)",
+    negativeActiveHatch: "rgba(217, 119, 6, 0.85)",
+    negativeIdleFill: "rgba(217, 119, 6, 0.05)",
+    negativeIdleHatch: "rgba(217, 119, 6, 0.5)",
+    negativeLabelFill: "#D97706",
+    negativeLabelHoverFill: "rgba(217, 119, 6, 0.8)",
+    hatchGapPx: 6,
+    labelFill: "#DB2E91",
+    labelHoverFill: "rgba(219, 46, 145, 0.8)",
+    labelText: "#ffffff",
+    labelFont: "500 10px Inter, system-ui, sans-serif",
+  },
 };
 
 /** Reads the active editor palette from CSS and combines it with renderer-owned geometry. */
@@ -382,5 +421,34 @@ export function readEditorRenderTheme(
     readColor("--editor-text-component-overlay-hover-b", theme.textRun.componentOverlayHover[1]),
   ];
 
+  const spacing = readColor("--editor-spacing", theme.spacing.labelFill);
+  const negative = readColor("--editor-spacing-negative", theme.spacing.negativeLabelFill);
+  theme.spacing = {
+    ...theme.spacing,
+    activeFill: withAlpha(spacing, 0.14),
+    activeHatch: withAlpha(spacing, 0.75),
+    idleFill: withAlpha(spacing, 0.05),
+    idleHatch: readColor("--editor-spacing-faint", theme.spacing.idleHatch),
+    labelFill: spacing,
+    labelHoverFill: withAlpha(spacing, 0.8),
+    negativeActiveFill: withAlpha(negative, 0.16),
+    negativeActiveHatch: withAlpha(negative, 0.85),
+    negativeIdleFill: withAlpha(negative, 0.05),
+    negativeIdleHatch: readColor(
+      "--editor-spacing-negative-faint",
+      theme.spacing.negativeIdleHatch,
+    ),
+    negativeLabelFill: negative,
+    negativeLabelHoverFill: withAlpha(negative, 0.8),
+  };
+
   return theme;
+}
+
+/** Returns a `#rrggbb` colour at `alpha`; other colour syntaxes are returned unchanged. */
+function withAlpha(color: string, alpha: number): string {
+  const match = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(color);
+  if (!match) return color;
+  const [r, g, b] = match.slice(1).map((channel) => Number.parseInt(channel, 16));
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }

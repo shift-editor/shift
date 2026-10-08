@@ -187,6 +187,31 @@ describe("KeyboardRouter", () => {
       expect(editor.toolIf("select")?.state).toEqual({ type: "ready" });
     });
 
+    it("keeps Tab on the canvas from moving focus, before any binding runs", () => {
+      let prevented = false;
+      const e = {
+        ...createKeyboardEvent({ key: "Tab" }),
+        preventDefault: () => (prevented = true),
+      };
+
+      void router.handleKeyDown(e as KeyboardEvent);
+
+      expect(prevented).toBe(true);
+    });
+
+    it("leaves Tab to move focus outside the canvas", () => {
+      canvasActive = false;
+      let prevented = false;
+      const e = {
+        ...createKeyboardEvent({ key: "Tab" }),
+        preventDefault: () => (prevented = true),
+      };
+
+      void router.handleKeyDown(e as KeyboardEvent);
+
+      expect(prevented).toBe(false);
+    });
+
     it("does not intercept plain typing in Text mode", async () => {
       editor.selectTool("text");
       const e = createKeyboardEvent({ key: "r" });

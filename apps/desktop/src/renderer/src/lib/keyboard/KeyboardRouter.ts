@@ -51,6 +51,10 @@ export class KeyboardRouter {
 
     const ctx = this.#getContext();
 
+    // Claimed before the first await: a later preventDefault can miss the
+    // native focus move, and on the canvas Tab belongs to the tools.
+    if (e.key === "Tab" && ctx.canvasActive) e.preventDefault();
+
     if (await this.#runBindings(this.#globalKeyDown, ctx, e)) {
       return true;
     }
@@ -68,6 +72,8 @@ export class KeyboardRouter {
     }
 
     if (ctx.toolManager.handleKeyDown(e)) {
+      // A key the tool used must not also act natively, such as Tab moving focus.
+      e.preventDefault();
       return true;
     }
 
