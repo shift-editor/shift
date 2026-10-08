@@ -44,6 +44,9 @@ pub enum Command {
     /// Compile a SQLite .shift document to a TrueType font.
     Compile(CompileArgs),
 
+    /// Render a proof image of a font as built: text, waterfalls, glyph grids, or locations.
+    Proof(ProofArgs),
+
     /// Inspect or author font metadata and source metrics.
     Font {
         #[command(subcommand)]
@@ -316,6 +319,38 @@ pub struct CompileArgs {
     /// Path for the compiled .ttf output.
     #[arg(short, long, value_hint = ValueHint::FilePath)]
     pub output: PathBuf,
+}
+
+#[derive(Debug, Parser)]
+#[command(group(clap::ArgGroup::new("content").required(true).args(["spec", "text"])))]
+pub struct ProofArgs {
+    /// Font to proof: .shift, UFO, Designspace, Glyphs, TTF, or OTF.
+    #[arg(value_hint = ValueHint::FilePath)]
+    pub path: PathBuf,
+
+    /// Proof definition JSON, or - to read it from stdin.
+    #[arg(long, value_hint = ValueHint::FilePath)]
+    pub spec: Option<PathBuf>,
+
+    /// Text for a quick one-section proof instead of a definition.
+    #[arg(long)]
+    pub text: Option<String>,
+
+    /// Size in pixels per em for --text.
+    #[arg(long, default_value_t = 72.0, requires = "text")]
+    pub size: f32,
+
+    /// Location for --text: external TAG=VALUE pairs separated by commas.
+    #[arg(long, requires = "text")]
+    pub location: Option<String>,
+
+    /// Output image; the extension chooses PNG or SVG.
+    #[arg(short, long, value_hint = ValueHint::FilePath)]
+    pub output: PathBuf,
+
+    /// Print the proof report as JSON.
+    #[arg(long)]
+    pub json: bool,
 }
 
 #[derive(Debug, Parser)]

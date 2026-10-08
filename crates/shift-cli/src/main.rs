@@ -2,6 +2,7 @@ mod authoring;
 mod cli;
 mod glyph_inspect;
 mod inspect;
+mod proof;
 
 use std::io::{self, IsTerminal, Write};
 
@@ -24,6 +25,16 @@ use shift_store::ShiftStore;
 fn main() -> miette::Result<()> {
     match Cli::parse().command {
         Command::Inspect(args) => inspect(args),
+        Command::Proof(args) => {
+            let json = args.json;
+            let (report, output) = proof::proof(args)?;
+            let text = if json {
+                serde_json::to_string_pretty(&report).into_diagnostic()?
+            } else {
+                proof::summary(&report, &output)
+            };
+            write_stdout(&text)
+        }
         Command::Compile(args) => {
             let result = compile(args)?;
             write_stdout(&result.path.display().to_string())

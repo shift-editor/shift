@@ -18,13 +18,14 @@
 use std::collections::HashMap;
 use std::fmt::Write as _;
 
-use harfrust::{ShapeOptions, ShaperData, UnicodeBuffer};
 use skrifa::instance::{LocationRef, Size};
 use skrifa::outline::{DrawSettings, OutlinePen};
 use skrifa::raw::types::Tag;
 use skrifa::raw::TableProvider;
 use skrifa::{FontRef, GlyphId, MetadataProvider};
 use unicode_script::{Script, UnicodeScript};
+
+pub mod shaping;
 
 /// Letters of a non-Latin script a font must cover before that script is
 /// treated as its main script.
@@ -425,36 +426,29 @@ impl<'a> SpecimenFont<'a> {
             return None;
         }
 
-        let font = harfrust::FontRef::new(self.data).ok()?;
-        let data = ShaperData::new(&font);
-        let shaper = data.shaper(&font).build();
-        let mut buffer = UnicodeBuffer::new();
-        buffer.push_str(text);
-        buffer.guess_segment_properties();
-        let shaped = shaper.shape(buffer, ShapeOptions::new());
+        let positions = shaping::shape_positions(self.data, text, &[])?;
 
         let mut placed = Vec::new();
         let mut inked_clusters = Vec::new();
         let mut pen_x = 0.0;
-        for (info, position) in shaped.glyph_infos().iter().zip(shaped.glyph_positions()) {
-            if info.glyph_id == 0 {
+        for position in &positions {
+            if position.glyph_id == 0 {
                 return None;
             }
-            if self.has_ink(info.glyph_id) {
-                inked_clusters.push(info.cluster);
+            if self.has_ink(position.glyph_id) {
+                inked_clusters.push(position.cluster);
             }
             placed.push(PlacedGlyph {
-                glyph_id: info.glyph_id,
+                glyph_id: position.glyph_id,
                 x: pen_x + f64::from(position.x_offset),
                 y: f64::from(position.y_offset),
             });
             pen_x += f64::from(position.x_advance);
         }
 
-        let every_cluster_inked = shaped
-            .glyph_infos()
+        let every_cluster_inked = positions
             .iter()
-            .all(|info| inked_clusters.contains(&info.cluster));
+            .all(|position| inked_clusters.contains(&position.cluster));
         if !every_cluster_inked {
             return None;
         }

@@ -1,0 +1,18 @@
+[package]
+name = "shift-proof"
+version = "0.1.0"
+edition = "2021"
+description = "Renders proof definitions from Shift fonts to images and reports"
+license.workspace = true
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+shift-backends = { workspace = true }
+shift-font = { workspace = true }
+shift-specimen = { workspace = true }
+thiserror = "2"
+tiny-skia = "0.11.4"

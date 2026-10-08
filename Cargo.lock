@@ -2368,12 +2368,14 @@ dependencies = [
  "serde_json",
  "shift-backends",
  "shift-font",
+ "shift-proof",
  "shift-store",
  "shift-workspace",
  "skrifa",
  "svgtypes",
  "tempfile",
  "thiserror",
+ "tiny-skia",
 ]
 
 [[package]]
@@ -2389,6 +2391,19 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror",
+]
+
+[[package]]
+name = "shift-proof"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "shift-backends",
+ "shift-font",
+ "shift-specimen",
+ "thiserror",
+ "tiny-skia",
 ]
 
 [[package]]
