@@ -14,7 +14,7 @@ use quick_xml::Writer;
 use serde::Serialize;
 use shift_font::{
     Axis, AxisKind, AxisMapping, BinaryData, DesignLocation, ExternalLocation, FeatureData, Font,
-    FontMetadata, FontMetrics, Glyph, Guideline, KerningData, LibData, Location, MetricDefinition,
+    FontMetadata, FontMetrics, Glyph, Guideline, Kerning, LibData, Location, MetricDefinition,
     NamedInstance, Source, SourceId,
 };
 use std::collections::HashSet;
@@ -106,7 +106,7 @@ impl FontView for UfoFileView<'_> {
         self.font.glyph_by_name(name)
     }
 
-    fn kerning(&self) -> &KerningData {
+    fn kerning(&self) -> &Kerning {
         self.font.kerning()
     }
 

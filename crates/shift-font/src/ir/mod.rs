@@ -38,7 +38,9 @@ pub use font::{Font, FontMetadata, LANGUAGES_LIB_KEY};
 pub use glyph::{Glyph, GlyphLayer};
 pub use glyph_name::{GlyphName, GlyphNameError};
 pub use guideline::{Guideline, GuidelineOrientation};
-pub use kerning::{KerningData, KerningPair, KerningSide};
+pub use kerning::{
+    Kerning, KerningPair, KerningPosition, KerningSide, ResolvedKerning, SourceKerning,
+};
 pub use lib_data::{LibData, LibValue};
 pub use metrics::{FontMetrics, MetricDefinition, MetricKind, MetricValue};
 pub use named_instance::NamedInstance;

@@ -12,7 +12,7 @@ use crate::font_source::{
 use crate::formats::ufo::glif::{
     glyph_directory, project_glif_glyph, retained_layer, RetainedUfoLayer,
 };
-use crate::{BackendError, BackendResult, FontFormat, FontImport, ImportReport};
+use crate::{BackendError, BackendResult, FontFormat, FontImport};
 
 use super::{derive_axis_range, find_default_source_index, map_axis_value, stream_retained};
 
@@ -65,7 +65,7 @@ impl DesignspaceFont {
             })
             .collect::<Result<Vec<_>, _>>()?;
         let import_paths: Arc<[BTreeMap<String, PathBuf>]> = Arc::from(source_paths.clone());
-        let (header, _) = stream_retained(path, import_paths.clone())
+        let (header, _, _) = stream_retained(path, import_paths.clone())
             .map_err(|error| malformed(path, error.to_string()))?;
         let source_order = std::iter::once(default_source)
             .chain((0..document.sources.len()).filter(|index| *index != default_source))
@@ -149,14 +149,14 @@ impl FontSource for DesignspaceFont {
 
 impl FontImporter for DesignspaceFont {
     fn begin_import(&self) -> BackendResult<FontImport> {
-        let (header, stream) =
-            stream_retained(&self.path, self.import_paths.clone()).map_err(|source| {
+        let (header, stream, report) = stream_retained(&self.path, self.import_paths.clone())
+            .map_err(|source| {
                 BackendError::load(FontFormat::Designspace, self.path.clone(), source)
             })?;
         Ok(FontImport::new(
             header,
             Box::new(stream),
-            ImportReport::default(),
+            report,
             FontFormat::Designspace,
             self.path.clone(),
         ))

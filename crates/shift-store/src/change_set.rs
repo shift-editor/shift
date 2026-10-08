@@ -941,74 +941,84 @@ fn replace_font_guidelines(
     }
     Ok(())
 }
-fn replace_kerning(tx: &Transaction<'_>, kerning: &font::KerningData) -> Result<(), StoreError> {
+fn replace_kerning(tx: &Transaction<'_>, kerning: &font::Kerning) -> Result<(), StoreError> {
     tx.execute("DELETE FROM kerning_pairs", [])?;
     tx.execute("DELETE FROM kerning_group_members", [])?;
     tx.execute("DELETE FROM kerning_groups", [])?;
 
-    for (name, members) in kerning.groups1() {
-        insert_kerning_group(tx, 1, name, members)?;
+    for position in [font::KerningPosition::First, font::KerningPosition::Second] {
+        for (name, members) in kerning.groups(position) {
+            insert_kerning_group(tx, position, name, members)?;
+        }
     }
-    for (name, members) in kerning.groups2() {
-        insert_kerning_group(tx, 2, name, members)?;
-    }
-    for (order_index, pair) in kerning.pairs().iter().enumerate() {
-        let (first_kind, first_value) = kerning_side_parts(&pair.first);
-        let (second_kind, second_value) = kerning_side_parts(&pair.second);
-        tx.execute(
-            "
-            INSERT INTO kerning_pairs (
-                order_index,
+    let mut insert_pair = tx.prepare(
+        "
+        INSERT INTO kerning_pairs (
+            source_id,
+            first_kind,
+            first_value,
+            second_kind,
+            second_value,
+            value
+        )
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+        ",
+    )?;
+    for (source_id, source) in kerning.sources() {
+        for (pair, value) in source.pairs() {
+            let (first_kind, first_value) = kerning_side_parts(&pair.first);
+            let (second_kind, second_value) = kerning_side_parts(&pair.second);
+            insert_pair.execute(params![
+                source_id.as_str(),
                 first_kind,
                 first_value,
                 second_kind,
                 second_value,
-                value
-            )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-            ",
-            params![
-                order_index as i64,
-                first_kind,
-                first_value,
-                second_kind,
-                second_value,
-                pair.value,
-            ],
-        )?;
+                value,
+            ])?;
+        }
     }
     Ok(())
 }
 
 fn insert_kerning_group(
     tx: &Transaction<'_>,
-    side: i64,
+    position: font::KerningPosition,
     name: &str,
-    members: &[font::GlyphName],
+    members: &[font::GlyphId],
 ) -> Result<(), StoreError> {
+    let position = kerning_position_column(position);
     tx.execute(
         "
-        INSERT INTO kerning_groups (side, name)
+        INSERT INTO kerning_groups (position, name)
         VALUES (?1, ?2)
         ",
-        params![side, name],
+        params![position, name],
     )?;
     for (order_index, member) in members.iter().enumerate() {
         tx.execute(
             "
-            INSERT INTO kerning_group_members (side, group_name, glyph_name, order_index)
+            INSERT INTO kerning_group_members (position, group_name, glyph_id, order_index)
             VALUES (?1, ?2, ?3, ?4)
             ",
-            params![side, name, member.as_str(), order_index as i64],
+            params![position, name, member.as_str(), order_index as i64],
         )?;
     }
     Ok(())
 }
 
+/// Returns the `position` column value stored for a kerning pair position.
+pub(crate) fn kerning_position_column(position: font::KerningPosition) -> i64 {
+    match position {
+        font::KerningPosition::First => 1,
+        font::KerningPosition::Second => 2,
+    }
+}
+
 fn kerning_side_parts(side: &font::KerningSide) -> (&'static str, &str) {
     match side {
-        font::KerningSide::Glyph(name) => ("glyph", name.as_str()),
-        font::KerningSide::Group(group_id) => ("group", group_id.as_str()),
+        font::KerningSide::Glyph(glyph_id) => ("glyph", glyph_id.as_str()),
+        font::KerningSide::Group(name) => ("group", name.as_str()),
     }
 }
 

@@ -7,19 +7,19 @@ use glyphs_reader::{
 use ordered_float::OrderedFloat;
 use shift_font::{
     Anchor, Axis, AxisMapping, AxisMappingPoint, Component, Contour, DesignLocation,
-    ExternalLocation, FeatureData, Font, Glyph, GlyphId, GlyphLayer, KerningData, KerningPair,
-    KerningSide, LayerId, Location, MetricKind, NamedInstance, Source, SourceId, Transform,
+    ExternalLocation, FeatureData, Font, Glyph, GlyphId, GlyphLayer, Kerning, KerningPosition,
+    LayerId, Location, MetricKind, NamedInstance, Source, SourceId, Transform,
 };
 
 use crate::{
-    font_source::piecewise_map, metrics::set_metric_position, FormatBackendError,
-    FormatBackendResult,
+    font_source::piecewise_map,
+    kerning_import::{KerningImport, NamedKerningSide},
+    metrics::set_metric_position,
+    FormatBackendError, FormatBackendResult, ImportReport,
 };
 
 const GLYPHS_SIDE1_PREFIX: &str = "@MMK_L_";
 const GLYPHS_SIDE2_PREFIX: &str = "@MMK_R_";
-const UFO_SIDE1_PREFIX: &str = "public.kern1.";
-const UFO_SIDE2_PREFIX: &str = "public.kern2.";
 
 /// Whether a Glyphs instance names a design-space location.
 ///
@@ -281,7 +281,6 @@ pub(crate) fn font_header(
             .collect(),
     )?;
     *font.features_mut() = convert_features(glyphs_font);
-    *font.kerning_mut() = convert_kerning(glyphs_font);
     Ok((font, source_ids_by_master_id))
 }
 
@@ -472,69 +471,55 @@ fn convert_features(font: &GlyphsFont) -> FeatureData {
     }
 }
 
-fn convert_kerning(font: &GlyphsFont) -> KerningData {
-    let mut kerning = KerningData::new();
-
+/// Converts every master's left-to-right kerning and the glyphs' kerning
+/// groups, recording dropped references in `report`.
+///
+/// A glyph's right kerning group is its group for the first position of a
+/// pair, and its left group the one for the second position.
+pub(super) fn convert_kerning(
+    font: &GlyphsFont,
+    glyph_ids: &HashMap<String, GlyphId>,
+    source_ids_by_master_id: &HashMap<String, SourceId>,
+    report: &mut ImportReport,
+) -> Kerning {
+    let mut import = KerningImport::new(glyph_ids);
     for glyph in font.glyphs.values() {
         if let Some(group) = glyph.right_kern.as_deref() {
-            let group_name = format!("{UFO_SIDE1_PREFIX}{group}");
-            let mut members = kerning
-                .groups1()
-                .get(&group_name)
-                .cloned()
-                .unwrap_or_default();
-            members.push(glyph.name.to_string().into());
-            members.sort();
-            members.dedup();
-            kerning.set_group1(group_name, members);
+            import.add_group(KerningPosition::First, group, [glyph.name.as_str()]);
         }
-
         if let Some(group) = glyph.left_kern.as_deref() {
-            let group_name = format!("{UFO_SIDE2_PREFIX}{group}");
-            let mut members = kerning
-                .groups2()
-                .get(&group_name)
-                .cloned()
-                .unwrap_or_default();
-            members.push(glyph.name.to_string().into());
-            members.sort();
-            members.dedup();
-            kerning.set_group2(group_name, members);
+            import.add_group(KerningPosition::Second, group, [glyph.name.as_str()]);
         }
     }
 
-    let Some(default_master) = font.masters.get(font.default_master_idx) else {
-        return kerning;
-    };
-    let Some(pairs) = font.kerning_ltr.get(&default_master.id) else {
-        return kerning;
-    };
-
-    for ((first, second), value) in pairs {
-        let first_side = if let Some(group) = first
-            .strip_prefix(GLYPHS_SIDE1_PREFIX)
-            .or_else(|| first.strip_prefix(GLYPHS_SIDE2_PREFIX))
-        {
-            KerningSide::Group(format!("{UFO_SIDE1_PREFIX}{group}"))
-        } else {
-            KerningSide::Glyph(first.to_string().into())
+    for master in &font.masters {
+        let (Some(source_id), Some(pairs)) = (
+            source_ids_by_master_id.get(&master.id),
+            font.kerning_ltr.get(&master.id),
+        ) else {
+            continue;
         };
-        let second_side = if let Some(group) = second
-            .strip_prefix(GLYPHS_SIDE2_PREFIX)
-            .or_else(|| second.strip_prefix(GLYPHS_SIDE1_PREFIX))
-        {
-            KerningSide::Group(format!("{UFO_SIDE2_PREFIX}{group}"))
-        } else {
-            KerningSide::Glyph(second.to_string().into())
-        };
-        kerning.add_pair(KerningPair::new(
-            first_side,
-            second_side,
-            value.into_inner(),
-        ));
+        for ((first, second), value) in pairs {
+            import.add_pair(
+                source_id,
+                named_kerning_side(first),
+                named_kerning_side(second),
+                value.into_inner(),
+            );
+        }
     }
 
-    kerning
+    import.finish(report)
+}
+
+fn named_kerning_side(name: &str) -> NamedKerningSide<'_> {
+    match name
+        .strip_prefix(GLYPHS_SIDE1_PREFIX)
+        .or_else(|| name.strip_prefix(GLYPHS_SIDE2_PREFIX))
+    {
+        Some(group) => NamedKerningSide::Group(group),
+        None => NamedKerningSide::Glyph(name),
+    }
 }
 
 #[cfg(test)]

@@ -6,7 +6,7 @@ use crate::font_source::projection::resolve_projection_closure;
 use crate::font_source::{
     malformed, FontDirectory, FontImporter, FontReadError, FontSource, GlyphIndex, ProjectedGlyph,
 };
-use crate::{BackendError, BackendResult, FontFormat, FontImport, ImportReport};
+use crate::{BackendError, BackendResult, FontFormat, FontImport};
 
 use super::glif::{glyph_directory, project_glif_glyph, retained_layer, RetainedUfoLayer};
 use super::{load_header, read_ufo_layer_directories, stream_retained, UfoLayerDirectory};
@@ -34,7 +34,7 @@ impl UfoFont {
             });
         }
 
-        let header = load_header(path).map_err(|error| malformed(path, error.to_string()))?;
+        let (header, _) = load_header(path).map_err(|error| malformed(path, error.to_string()))?;
         let layers: Arc<[UfoLayerDirectory]> = Arc::from(
             read_ufo_layer_directories(path).map_err(|error| malformed(path, error.to_string()))?,
         );
@@ -86,12 +86,12 @@ impl FontSource for UfoFont {
 
 impl FontImporter for UfoFont {
     fn begin_import(&self) -> BackendResult<FontImport> {
-        let (header, stream) = stream_retained(&self.path, self.layers.clone())
+        let (header, stream, report) = stream_retained(&self.path, self.layers.clone())
             .map_err(|source| BackendError::load(FontFormat::Ufo, self.path.clone(), source))?;
         Ok(FontImport::new(
             header,
             Box::new(stream),
-            ImportReport::default(),
+            report,
             FontFormat::Ufo,
             self.path.clone(),
         ))

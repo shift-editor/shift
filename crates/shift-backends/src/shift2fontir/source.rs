@@ -6,8 +6,8 @@ use fontir::error::Error;
 use fontir::orchestration::{Flags, IrWork};
 use fontir::source::Source;
 use shift_font::{
-    Axis, FeatureData, FontMetadata, FontMetrics, Glyph, KerningData, MetricDefinition,
-    NamedInstance, Source as ShiftSource, SourceId,
+    Axis, FeatureData, FontMetadata, FontMetrics, Glyph, Kerning, MetricDefinition, NamedInstance,
+    Source as ShiftSource, SourceId,
 };
 
 use crate::traits::FontView;
@@ -62,7 +62,7 @@ pub(super) struct ShiftSnapshot {
     pub sources: Vec<ShiftSource>,
     pub default_source_id: SourceId,
     pub glyphs: Vec<Glyph>,
-    pub kerning: KerningData,
+    pub kerning: Kerning,
     pub features: FeatureData,
 }
 

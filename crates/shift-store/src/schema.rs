@@ -16,7 +16,7 @@ CREATE INDEX glyph_layers_source_id_idx ON glyph_layers(source_id);
 CREATE INDEX glyph_components_base_glyph_id_idx ON glyph_components(base_glyph_id);
 "#;
 
-pub(crate) const DOCUMENT_SCHEMA_V1: &str = r#"
+pub(crate) const DOCUMENT_SCHEMA: &str = r#"
 CREATE TABLE IF NOT EXISTS font_info (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     family_name TEXT,
@@ -186,27 +186,29 @@ CREATE TABLE IF NOT EXISTS feature_text (
 );
 
 CREATE TABLE IF NOT EXISTS kerning_groups (
-    side INTEGER NOT NULL CHECK (side IN (1, 2)),
+    position INTEGER NOT NULL CHECK (position IN (1, 2)),
     name TEXT NOT NULL,
-    PRIMARY KEY (side, name)
+    PRIMARY KEY (position, name)
 );
 
 CREATE TABLE IF NOT EXISTS kerning_group_members (
-    side INTEGER NOT NULL CHECK (side IN (1, 2)),
+    position INTEGER NOT NULL CHECK (position IN (1, 2)),
     group_name TEXT NOT NULL,
-    glyph_name TEXT NOT NULL,
+    glyph_id TEXT NOT NULL,
     order_index INTEGER NOT NULL,
-    PRIMARY KEY (side, group_name, order_index),
-    FOREIGN KEY (side, group_name) REFERENCES kerning_groups(side, name) ON DELETE CASCADE
+    PRIMARY KEY (position, group_name, order_index),
+    UNIQUE (position, glyph_id),
+    FOREIGN KEY (position, group_name) REFERENCES kerning_groups(position, name) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS kerning_pairs (
-    order_index INTEGER PRIMARY KEY,
+    source_id TEXT NOT NULL,
     first_kind TEXT NOT NULL CHECK (first_kind IN ('glyph', 'group')),
     first_value TEXT NOT NULL,
     second_kind TEXT NOT NULL CHECK (second_kind IN ('glyph', 'group')),
     second_value TEXT NOT NULL,
-    value REAL NOT NULL
+    value REAL NOT NULL,
+    PRIMARY KEY (source_id, first_kind, first_value, second_kind, second_value)
 );
 
 CREATE TABLE IF NOT EXISTS font_lib (
@@ -263,7 +265,137 @@ CREATE TABLE IF NOT EXISTS workspace_state (
 "#;
 
 pub const SHIFT_APPLICATION_ID: i64 = 0x5348_4654;
-pub const SHIFT_DOCUMENT_SCHEMA_VERSION: i64 = 1;
+pub const SHIFT_DOCUMENT_SCHEMA_VERSION: i64 = 2;
+
+/// The oldest schema version [`migrate`] can upgrade.
+pub(crate) const OLDEST_MIGRATABLE_SCHEMA_VERSION: i64 = 1;
+
+/// Version 1 to 2: kerning pairs gain a source and reference glyphs by id.
+///
+/// Existing pairs become values of the font's default source. Group names
+/// lose their `public.kern1.`/`public.kern2.` prefix, and glyph names resolve
+/// through `glyphs.name`. Members and pairs naming a glyph that is not in the
+/// store are dropped, and a glyph listed in two groups for one position keeps
+/// its first group. This SQL is frozen: later schema changes add new steps.
+const MIGRATE_V1_TO_V2: &str = r#"
+ALTER TABLE kerning_pairs RENAME TO kerning_pairs_v1;
+ALTER TABLE kerning_group_members RENAME TO kerning_group_members_v1;
+ALTER TABLE kerning_groups RENAME TO kerning_groups_v1;
+
+CREATE TABLE kerning_groups (
+    position INTEGER NOT NULL CHECK (position IN (1, 2)),
+    name TEXT NOT NULL,
+    PRIMARY KEY (position, name)
+);
+
+CREATE TABLE kerning_group_members (
+    position INTEGER NOT NULL CHECK (position IN (1, 2)),
+    group_name TEXT NOT NULL,
+    glyph_id TEXT NOT NULL,
+    order_index INTEGER NOT NULL,
+    PRIMARY KEY (position, group_name, order_index),
+    UNIQUE (position, glyph_id),
+    FOREIGN KEY (position, group_name) REFERENCES kerning_groups(position, name) ON DELETE CASCADE
+);
+
+CREATE TABLE kerning_pairs (
+    source_id TEXT NOT NULL,
+    first_kind TEXT NOT NULL CHECK (first_kind IN ('glyph', 'group')),
+    first_value TEXT NOT NULL,
+    second_kind TEXT NOT NULL CHECK (second_kind IN ('glyph', 'group')),
+    second_value TEXT NOT NULL,
+    value REAL NOT NULL,
+    PRIMARY KEY (source_id, first_kind, first_value, second_kind, second_value)
+);
+
+INSERT OR IGNORE INTO kerning_groups (position, name)
+SELECT
+    side,
+    CASE WHEN name LIKE 'public.kern_.%' THEN substr(name, 14) ELSE name END
+FROM kerning_groups_v1
+ORDER BY side, name;
+
+INSERT OR IGNORE INTO kerning_group_members (position, group_name, glyph_id, order_index)
+SELECT
+    member.side,
+    CASE
+        WHEN member.group_name LIKE 'public.kern_.%' THEN substr(member.group_name, 14)
+        ELSE member.group_name
+    END,
+    glyph.id,
+    member.order_index
+FROM kerning_group_members_v1 AS member
+JOIN glyphs AS glyph ON glyph.name = member.glyph_name
+ORDER BY member.side, member.group_name, member.order_index;
+
+WITH resolved AS (
+    SELECT
+        pair.order_index,
+        (SELECT default_source_id FROM font_info WHERE id = 1) AS source_id,
+        pair.first_kind,
+        CASE
+            WHEN pair.first_kind = 'glyph'
+                THEN (SELECT id FROM glyphs WHERE name = pair.first_value)
+            WHEN pair.first_value LIKE 'public.kern_.%' THEN substr(pair.first_value, 14)
+            ELSE pair.first_value
+        END AS first_value,
+        pair.second_kind,
+        CASE
+            WHEN pair.second_kind = 'glyph'
+                THEN (SELECT id FROM glyphs WHERE name = pair.second_value)
+            WHEN pair.second_value LIKE 'public.kern_.%' THEN substr(pair.second_value, 14)
+            ELSE pair.second_value
+        END AS second_value,
+        pair.value
+    FROM kerning_pairs_v1 AS pair
+)
+INSERT OR IGNORE INTO kerning_pairs (
+    source_id, first_kind, first_value, second_kind, second_value, value
+)
+SELECT source_id, first_kind, first_value, second_kind, second_value, value
+FROM resolved
+WHERE source_id IS NOT NULL AND first_value IS NOT NULL AND second_value IS NOT NULL
+ORDER BY order_index;
+
+DROP TABLE kerning_group_members_v1;
+DROP TABLE kerning_groups_v1;
+DROP TABLE kerning_pairs_v1;
+"#;
+
+/// Upgrades the authored tables of a store at `version` to
+/// [`SHIFT_DOCUMENT_SCHEMA_VERSION`] in one transaction, stamping
+/// `upgraded_version` as its `user_version`.
+///
+/// Stores already at the current version are left unchanged. Documents,
+/// working stores, and recovery overlays share the authored tables, so each
+/// runs the same steps with its own version stamp.
+///
+/// # Errors
+///
+/// Returns an error when `version` is older than
+/// [`OLDEST_MIGRATABLE_SCHEMA_VERSION`] or a step fails; a failed migration
+/// leaves the store at its original version.
+pub(crate) fn migrate(
+    conn: &rusqlite::Connection,
+    version: i64,
+    upgraded_version: i64,
+) -> Result<(), StoreError> {
+    if version >= SHIFT_DOCUMENT_SCHEMA_VERSION {
+        return Ok(());
+    }
+    if version < OLDEST_MIGRATABLE_SCHEMA_VERSION {
+        return Err(StoreError::UnsupportedDocumentSchemaVersion {
+            found: version,
+            supported: SHIFT_DOCUMENT_SCHEMA_VERSION,
+        });
+    }
+
+    let tx = conn.unchecked_transaction()?;
+    tx.execute_batch(MIGRATE_V1_TO_V2)?;
+    tx.pragma_update(None, "user_version", upgraded_version)?;
+    tx.commit()?;
+    Ok(())
+}
 
 pub(crate) fn defer_import_indexes(tx: &Transaction<'_>) -> Result<(), StoreError> {
     tx.execute_batch(DEFER_IMPORT_INDEXES)?;
@@ -275,11 +407,11 @@ pub(crate) fn restore_import_indexes(tx: &Transaction<'_>) -> Result<(), StoreEr
     Ok(())
 }
 
-/// Creates the baseline schema and stamps `user_version`.
+/// Creates the current schema in an empty working store, or migrates an
+/// older one, and stamps `user_version`.
 ///
-/// Pre-release policy: the app has not shipped, so schema changes edit the
-/// baseline batch in place instead of adding migration steps. A database
-/// from a NEWER app version is refused rather than silently mangled.
+/// A database from a newer app version is refused rather than silently
+/// mangled.
 pub(crate) fn ensure_current(conn: &rusqlite::Connection) -> Result<(), StoreError> {
     let application_id = application_id(conn)?;
     if application_id == SHIFT_APPLICATION_ID {
@@ -300,10 +432,12 @@ pub(crate) fn ensure_current(conn: &rusqlite::Connection) -> Result<(), StoreErr
         });
     }
 
-    if version < 1 {
-        conn.execute_batch(DOCUMENT_SCHEMA_V1)?;
+    if version < OLDEST_MIGRATABLE_SCHEMA_VERSION {
+        conn.execute_batch(DOCUMENT_SCHEMA)?;
         conn.execute_batch(WORKSPACE_SCHEMA_V1)?;
         conn.pragma_update(None, "user_version", SHIFT_DOCUMENT_SCHEMA_VERSION)?;
+    } else {
+        migrate(conn, version, SHIFT_DOCUMENT_SCHEMA_VERSION)?;
     }
 
     Ok(())
@@ -326,13 +460,20 @@ pub(crate) fn initialize_document(conn: &rusqlite::Connection) -> Result<(), Sto
         });
     }
 
-    conn.execute_batch(DOCUMENT_SCHEMA_V1)?;
+    conn.execute_batch(DOCUMENT_SCHEMA)?;
     conn.pragma_update(None, "application_id", SHIFT_APPLICATION_ID)?;
     conn.pragma_update(None, "user_version", SHIFT_DOCUMENT_SCHEMA_VERSION)?;
     Ok(())
 }
 
-pub(crate) fn validate_document_header(conn: &rusqlite::Connection) -> Result<(), StoreError> {
+/// Checks that `conn` is a Shift document this app can open and returns its
+/// schema version, which may be older than current and need [`migrate`].
+///
+/// # Errors
+///
+/// Returns an error for a non-document file or a schema version outside
+/// [`OLDEST_MIGRATABLE_SCHEMA_VERSION`]..=[`SHIFT_DOCUMENT_SCHEMA_VERSION`].
+pub(crate) fn validate_document_header(conn: &rusqlite::Connection) -> Result<i64, StoreError> {
     let application_id = application_id(conn)?;
     if application_id != SHIFT_APPLICATION_ID {
         return Err(StoreError::InvalidApplicationId {
@@ -342,14 +483,14 @@ pub(crate) fn validate_document_header(conn: &rusqlite::Connection) -> Result<()
     }
 
     let version = schema_version(conn)?;
-    if version != SHIFT_DOCUMENT_SCHEMA_VERSION {
+    if !(OLDEST_MIGRATABLE_SCHEMA_VERSION..=SHIFT_DOCUMENT_SCHEMA_VERSION).contains(&version) {
         return Err(StoreError::UnsupportedDocumentSchemaVersion {
             found: version,
             supported: SHIFT_DOCUMENT_SCHEMA_VERSION,
         });
     }
 
-    Ok(())
+    Ok(version)
 }
 
 fn application_id(conn: &rusqlite::Connection) -> Result<i64, StoreError> {

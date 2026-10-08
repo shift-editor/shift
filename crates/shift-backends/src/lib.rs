@@ -8,6 +8,7 @@ pub mod formats;
 mod glyph_subset;
 pub mod import;
 mod import_report;
+mod kerning_import;
 mod metrics;
 mod shift2fontir;
 mod source_glyph_ids;

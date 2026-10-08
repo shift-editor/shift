@@ -4,14 +4,13 @@ use crate::metrics::metric_position;
 use crate::traits::{FontView, FontWriter};
 use norad::{Font as NoradFont, Glyph as NoradGlyph, Line, Name};
 use shift_font::{
-    Contour, Font, Glyph, GlyphLayer, Guideline, KerningSide, LibData, LibValue, MetricKind, Point,
-    PointType,
+    Contour, Font, Glyph, GlyphLayer, Guideline, LibData, LibValue, MetricKind, Point, PointType,
 };
 use std::path::{Path, PathBuf};
 
 pub struct UfoWriter;
 
-fn ufo_name(kind: &'static str, name: &str) -> FormatBackendResult<Name> {
+pub(super) fn ufo_name(kind: &'static str, name: &str) -> FormatBackendResult<Name> {
     Name::new(name).map_err(|_| FormatBackendError::UfoName {
         kind,
         name: name.to_string(),
@@ -396,37 +395,14 @@ impl UfoWriter {
         let mut norad_font = NoradFont::new();
         norad_font.font_info = Self::build_font_info(font)?;
 
-        let groups = font
-            .kerning()
-            .groups1()
+        let glyphs = font.glyphs();
+        let glyph_names = glyphs
             .iter()
-            .chain(font.kerning().groups2());
-        for (group_name, members) in groups {
-            norad_font.groups.insert(
-                ufo_name("kerning group", group_name)?,
-                members
-                    .iter()
-                    .map(|n| ufo_name("kerning group member", n))
-                    .collect::<FormatBackendResult<_>>()?,
-            );
-        }
-
-        for pair in font.kerning().pairs() {
-            let first = match &pair.first {
-                KerningSide::Glyph(g) => ufo_name("kerning glyph", g)?,
-                KerningSide::Group(g) => ufo_name("kerning group", g)?,
-            };
-            let second = match &pair.second {
-                KerningSide::Glyph(g) => ufo_name("kerning glyph", g)?,
-                KerningSide::Group(g) => ufo_name("kerning group", g)?,
-            };
-
-            norad_font
-                .kerning
-                .entry(first)
-                .or_default()
-                .insert(second, pair.value);
-        }
+            .map(|glyph| (glyph.id(), glyph.name()))
+            .collect();
+        let default_source_id = font.default_source_id();
+        (norad_font.groups, norad_font.kerning) =
+            super::kerning::ufo_kerning(font.kerning(), default_source_id.as_ref(), &glyph_names)?;
 
         for guideline in font.guidelines() {
             norad_font

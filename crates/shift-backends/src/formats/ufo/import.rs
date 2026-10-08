@@ -11,9 +11,11 @@ use shift_font::{Font, GlyphId, LayerId, Source, SourceId};
 use crate::{
     errors::{FormatBackendError, FormatBackendResult},
     import::{GlifGlyph, GlifGlyphStream, GlifLayer},
+    kerning_import::KerningImport,
+    ImportReport,
 };
 
-use super::UfoReader;
+use super::{UfoKerning, UfoReader};
 
 #[derive(Clone)]
 pub(crate) struct UfoLayerDirectory {
@@ -27,7 +29,9 @@ struct LayerDirectory {
     glyphs: BTreeMap<String, PathBuf>,
 }
 
-pub(crate) fn stream_font(path: &str) -> FormatBackendResult<(Font, GlifGlyphStream)> {
+pub(crate) fn stream_font(
+    path: &str,
+) -> FormatBackendResult<(Font, GlifGlyphStream, ImportReport)> {
     let ufo_path = Path::new(path);
     let layers = Arc::from(read_ufo_layer_directories(ufo_path)?);
     stream_retained(ufo_path, layers)
@@ -36,15 +40,21 @@ pub(crate) fn stream_font(path: &str) -> FormatBackendResult<(Font, GlifGlyphStr
 pub(crate) fn stream_retained(
     ufo_path: &Path,
     retained: Arc<[UfoLayerDirectory]>,
-) -> FormatBackendResult<(Font, GlifGlyphStream)> {
-    let mut header = load_header(ufo_path)?;
+) -> FormatBackendResult<(Font, GlifGlyphStream, ImportReport)> {
+    let (mut header, kerning) = load_header(ufo_path)?;
     let default_source_id = header.default_source_id().ok_or_else(|| {
         FormatBackendError::Ufo("UFO header is missing its default source".into())
     })?;
-    let layers = load_layer_directories(&retained, &mut header, default_source_id)?;
+    let layers = load_layer_directories(&retained, &mut header, default_source_id.clone())?;
     let (glyph_ids, glyphs) = build_glyph_directory(&SourceGlyphIds::for_path(ufo_path), layers);
 
-    Ok((header, GlifGlyphStream::new(glyph_ids, glyphs)))
+    let mut report = ImportReport::default();
+    let mut import = KerningImport::new(&glyph_ids);
+    kerning.add_groups(&mut import);
+    kerning.add_pairs(&mut import, &default_source_id);
+    *header.kerning_mut() = import.finish(&mut report);
+
+    Ok((header, GlifGlyphStream::new(glyph_ids, glyphs), report))
 }
 
 pub(crate) fn read_ufo_layer_directories(
@@ -99,11 +109,21 @@ fn load_layer_directories(
     Ok(layers)
 }
 
-pub(crate) fn load_header(ufo_path: &Path) -> FormatBackendResult<Font> {
+/// Reads a UFO's top-level data without glyphs.
+///
+/// Kerning is returned separately, keyed by glyph name, because glyph ids are
+/// assigned only once the glyph directory is known. The returned font has no
+/// kerning.
+///
+/// # Errors
+///
+/// Returns an error when the UFO's top-level files cannot be read or converted.
+pub(crate) fn load_header(ufo_path: &Path) -> FormatBackendResult<(Font, UfoKerning)> {
     let request = DataRequest::all().layers(false);
     let norad_font = NoradFont::load_requested_data(ufo_path, request)
         .map_err(|error| FormatBackendError::Ufo(error.to_string()))?;
-    UfoReader::convert_header(&norad_font, ufo_path)
+    let header = UfoReader::convert_header(&norad_font, ufo_path)?;
+    Ok((header, UfoKerning::from_norad(&norad_font)))
 }
 
 pub(crate) fn read_glyph_paths(

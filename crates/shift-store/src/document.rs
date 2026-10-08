@@ -156,15 +156,19 @@ impl ShiftStore {
     }
 
     /// Opens a canonical Shift document after validating it read-only first.
+    ///
+    /// A document written by an older supported schema is upgraded in place
+    /// before it is returned, so older app versions can no longer open it.
     pub fn open_document(path: impl AsRef<Path>) -> Result<Self, StoreError> {
         let path = path.as_ref();
 
         Self::verify_document(path)?;
 
         let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE)?;
-        schema::validate_document_header(&conn)?;
+        let version = schema::validate_document_header(&conn)?;
         validate_document_shape(&conn)?;
         configure_document_connection(&conn)?;
+        schema::migrate(&conn, version, schema::SHIFT_DOCUMENT_SCHEMA_VERSION)?;
 
         Ok(Self {
             conn,
