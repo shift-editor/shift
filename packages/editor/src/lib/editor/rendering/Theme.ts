@@ -19,7 +19,7 @@ export type HandleStateStyles<T extends HandleStyle = HandleStyle> = Record<Hand
 export interface KerningPalette {
   /** The translucent strip between the two advance edges. */
   fill: string;
-  /** The strip's light edge while hovered. */
+  /** The selected strip's light edge. */
   edge: string;
   /** The value pill, the selected strip's edges, and glyphs a group edit reaches. */
   accent: string;
