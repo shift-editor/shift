@@ -3,13 +3,15 @@ import type {
   AnchorId,
   Axis,
   AxisId,
+  ComponentId,
+  ContourId,
   FontMetadata,
   FontMetrics,
   FontSessionMode,
   GlyphId,
   GlyphName,
-  GlyphStructure,
   LayerId,
+  MetricDefinition,
   NamedInstance,
   NodeId,
   PointId,
@@ -17,10 +19,32 @@ import type {
   SelectableId,
   Source,
   SourceId,
+  SourceMetrics,
 } from "@shift/types";
 
 export type ShiftSessionMode = FontSessionMode;
 export type ShiftCaptureTarget = "window" | "editor";
+
+/** Opaque identity of one live session's authored font state. */
+export type FontRevision = string;
+
+/** Result read entirely from one authored font revision. */
+export interface ShiftObservation<Value> {
+  fontRevision: FontRevision;
+  value: Value;
+}
+
+/** Explicit live-window target with an optional authored-state precondition. */
+export interface ShiftTarget {
+  windowId: number;
+  ifFontRevision?: FontRevision;
+}
+
+export interface ShiftCaptureInput extends ShiftTarget {
+  target: ShiftCaptureTarget;
+  /** Output multiplier relative to logical UI pixels. Defaults to 1. */
+  scale?: number;
+}
 
 /** Point-in-time PNG captured from one explicitly addressed Shift window. */
 export interface ShiftCapture {
@@ -44,7 +68,7 @@ export interface ShiftSession {
   editorConnected: boolean;
 }
 
-/** One external/user-space axis coordinate displayed by the editor. */
+/** One axis coordinate keyed by stable font-owned identity. */
 export interface AxisCoordinate {
   axisId: AxisId;
   value: number;
@@ -88,24 +112,30 @@ export interface EditorInspection extends EditorView {
 /** Current font facts from one explicitly targeted live session, including Home. */
 export interface FontOverview {
   mode: ShiftSessionMode;
-  metadata: FontMetadata;
+  info: FontMetadata;
   metrics: FontMetrics;
+  metricDefinitions: MetricDefinition[];
   glyphCount: number;
   axes: Axis[];
-  /** Global font masters; glyph-specific supplementary sources are advertised on glyphs. */
+  /** Global designspace sources; glyph-specific layers are advertised on glyphs. */
   sources: Source[];
-  namedInstances: NamedInstance[];
+  instances: NamedInstance[];
 }
 
-/** Directory identity; optional structure is for one requested authored source. */
+/** Stable reference to one authored glyph layer. */
+export interface GlyphLayerReference {
+  layerId: LayerId;
+  sourceId: SourceId;
+}
+
+/** Directory identity with optional geometry for one requested authored source. */
 export interface GlyphSummary {
   id: GlyphId;
   name: string;
   unicodes: number[];
   componentBaseGlyphIds: GlyphId[];
-  /** Authored layer sources, including glyph-specific non-master sources. */
-  sourceIds: SourceId[];
-  structure?: GlyphStructure | null;
+  layers: GlyphLayerReference[];
+  layer?: AuthoredLayer | null;
 }
 
 /** Select one glyph by stable ID or exact name, never by both. */
@@ -119,16 +149,58 @@ export interface GlyphPage {
   nextCursor: string | null;
 }
 
+/** One point nested in its authored contour. */
+export interface AuthoredPoint {
+  id: PointId;
+  x: number;
+  y: number;
+  pointType: PointType;
+  smooth: boolean;
+}
+
+/** One directly authored contour and its ordered points. */
+export interface AuthoredContour {
+  id: ContourId;
+  closed: boolean;
+  points: AuthoredPoint[];
+}
+
+/** One directly authored anchor. */
+export interface AuthoredAnchor {
+  id: AnchorId;
+  name: string | null;
+  x: number;
+  y: number;
+}
+
+/** Conventional six-value affine component transformation. */
+export interface AffineTransformation {
+  xx: number;
+  xy: number;
+  yx: number;
+  yy: number;
+  dx: number;
+  dy: number;
+}
+
+/** One direct component reference owned by an authored layer. */
+export interface AuthoredComponent {
+  id: ComponentId;
+  baseGlyphId: GlyphId;
+  baseGlyphName: string;
+  transformation: AffineTransformation;
+}
+
 /** Authored geometry of one glyph in one source, never an interpolated preview. */
-export interface LayerView {
+export interface AuthoredLayer {
   glyphId: GlyphId;
   sourceId: SourceId;
   layerId: LayerId;
-  structure: GlyphStructure;
-  xAdvance: number;
+  advanceWidth: number;
   bounds: Bounds | null;
-  anchors: { id: AnchorId; name: string | null; x: number; y: number }[];
-  points: { id: PointId; x: number; y: number; pointType: PointType; smooth: boolean }[];
+  contours: AuthoredContour[];
+  components: AuthoredComponent[];
+  anchors: AuthoredAnchor[];
 }
 
 /** Optional authored-layer annotations included in portable SVG output. */
@@ -179,44 +251,76 @@ export interface LayerSvg {
   svg: string;
 }
 
+/** External and mapped coordinates with metrics resolved at that location. */
+export interface ResolvedLocation {
+  externalLocation: AxisCoordinate[];
+  designLocation: AxisCoordinate[];
+  sourceId: SourceId | null;
+  metrics: SourceMetrics;
+}
+
+/** Drawable glyph output resolved at one designspace location. */
+export interface ResolvedGlyph {
+  glyphId: GlyphId;
+  svgPath: string;
+  advanceWidth: number;
+}
+
+/** Batch resolution result; unresolved identities have no drawable preview. */
+export interface ResolvedGlyphs {
+  items: ResolvedGlyph[];
+  unresolvedGlyphIds: GlyphId[];
+}
+
+export interface GlyphListInput extends ShiftTarget {
+  limit?: number;
+  cursor?: string;
+  sourceId?: SourceId;
+}
+
+export type GlyphGetInput = ShiftTarget & GlyphSelector;
+
+export interface GlyphResolveInput extends ShiftTarget {
+  glyphIds: GlyphId[];
+  location: AxisCoordinate[];
+}
+
+export interface LayerGetInput extends ShiftTarget {
+  glyphId: GlyphId;
+  sourceId: SourceId;
+}
+
+export interface LayerRenderInput extends LayerGetInput {
+  overlays?: LayerOverlays;
+  appearance?: LayerAppearance;
+}
+
+export interface LocationResolveInput extends ShiftTarget {
+  location: AxisCoordinate[];
+}
+
 /** Live application capabilities shared by protocol and plugin hosts. */
 export interface ShiftCapabilities {
-  capture(input: {
-    windowId: number;
-    target: ShiftCaptureTarget;
-    /** Output multiplier relative to logical UI pixels. Defaults to 1. */
-    scale?: number;
-  }): Promise<ShiftCapture>;
+  capture(input: ShiftCaptureInput): Promise<ShiftObservation<ShiftCapture>>;
   sessions: {
     list(): Promise<ShiftSession[]>;
   };
   editor: {
-    inspect(input: { windowId: number }): Promise<EditorInspection>;
+    inspect(input: ShiftTarget): Promise<ShiftObservation<EditorInspection>>;
   };
   font: {
-    get(input: { windowId: number }): Promise<FontOverview>;
+    get(input: ShiftTarget): Promise<ShiftObservation<FontOverview>>;
+  };
+  locations: {
+    resolve(input: LocationResolveInput): Promise<ShiftObservation<ResolvedLocation>>;
   };
   glyphs: {
-    list(input: {
-      windowId: number;
-      limit?: number;
-      cursor?: string;
-      sourceId?: SourceId;
-    }): Promise<GlyphPage>;
-    get(input: { windowId: number } & GlyphSelector): Promise<GlyphSummary>;
+    list(input: GlyphListInput): Promise<ShiftObservation<GlyphPage>>;
+    get(input: GlyphGetInput): Promise<ShiftObservation<GlyphSummary>>;
+    resolve(input: GlyphResolveInput): Promise<ShiftObservation<ResolvedGlyphs>>;
   };
   layers: {
-    get(input: {
-      windowId: number;
-      glyphId: GlyphId;
-      sourceId: SourceId;
-    }): Promise<LayerView | null>;
-    render(input: {
-      windowId: number;
-      glyphId: GlyphId;
-      sourceId: SourceId;
-      overlays?: LayerOverlays;
-      appearance?: LayerAppearance;
-    }): Promise<LayerSvg | null>;
+    get(input: LayerGetInput): Promise<ShiftObservation<AuthoredLayer | null>>;
+    render(input: LayerRenderInput): Promise<ShiftObservation<LayerSvg | null>>;
   };
 }

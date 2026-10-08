@@ -10,6 +10,7 @@ Local code-mode access to the live Shift desktop application.
 - **Architecture Invariant:** The Fastify MCP adapter binds only to `127.0.0.1`, validates localhost Host and Origin headers, and requires a persistent, private bearer token. Release, Nightly, Dev, and Nightly Dev use distinct fixed ports; a collision leaves MCP unavailable rather than selecting another port. Explicit test instances use port `0`.
 - **Architecture Invariant:** `@shift/mcp` owns only the protocol adapter. `@shift/sandbox` owns bounded QuickJS execution against `ShiftCapabilities`; the desktop app owns the utility-process supervisor independently of whether the MCP listener starts.
 - **Architecture Invariant:** Every editor request names a window explicitly. Focus changes never retarget an in-flight or subsequent call.
+- **Architecture Invariant:** Every targeted call preserves `ShiftObservation<T>` and its `fontRevision`; MCP never invents a transport-specific snapshot identity or strips revision preconditions from scripting.
 - **Architecture Invariant:** MCP is not Shift's canonical font API. Shared document and editor capabilities remain usable by future plugin and protocol hosts without MCP. The desktop host asks `Font.readAuthoredLayers()` for accepted authored snapshots; agent clients connect through native MCP support rather than a Shift-specific client CLI.
 
 ## Codemap
@@ -26,6 +27,7 @@ src/
 
 - `ShiftCapabilities` -- host-neutral live operations owned by `@shift/runtime` and supplied by the desktop application.
 - `ShiftSession` -- explicit window and font-session identity, mode, focus, and editor connection status.
+- `ShiftObservation` and `FontRevision` -- authored-revision correlation shared by code mode and native capture metadata.
 - `EditorInspection` -- point-in-time renderer observation for one explicitly targeted session.
 - `ShiftMcpServer` -- loopback MCP lifecycle, authentication, connection descriptor, and tool registration.
 - `ShiftMcpConnection` -- local URL and persistent bearer token written to the private descriptor.
@@ -38,7 +40,7 @@ Returns the TypeScript declarations available inside code mode.
 
 ### `shift.capture`
 
-Captures one explicitly addressed Shift window as PNG. `target: "window"` captures its visible web contents; `target: "editor"` returns only the editor canvas panel. The optional `scale` is a display-density-independent multiplier of logical UI pixels, bounded from `0.25` to `4`. The native MCP result includes an image content block followed by structured metadata; the reusable code API returns the same metadata plus base64 `data`.
+Captures one explicitly addressed Shift window as PNG. `target: "window"` captures its visible web contents; `target: "editor"` returns only the editor canvas panel. The optional `scale` is a display-density-independent multiplier of logical UI pixels, bounded from `0.25` to `4`. The native MCP result includes an image content block followed by `{ fontRevision, value }` metadata; the reusable code API returns the same observation with base64 `value.data`.
 
 ### `shift.execute`
 
@@ -48,17 +50,21 @@ Accepts an async zero-argument JavaScript function and returns its JSON result. 
 async () => {
   const session = (await shift.sessions.list()).find(({ sessionId }) => sessionId === "...");
   if (!session) throw new Error("Target session closed");
-  const font = await shift.font.get({ windowId: session.windowId });
-  const page = await shift.glyphs.list({ windowId: session.windowId, limit: 20 });
+  const observedFont = await shift.font.get({ windowId: session.windowId });
+  const page = await shift.glyphs.list({
+    windowId: session.windowId,
+    ifFontRevision: observedFont.fontRevision,
+    limit: 20,
+  });
   return {
-    family: font.metadata.familyName,
-    count: font.glyphCount,
-    names: page.items.map((g) => g.name),
+    family: observedFont.value.info.familyName,
+    count: observedFont.value.glyphCount,
+    names: page.value.items.map((g) => g.name),
   };
 };
 ```
 
-`shift.sessions.list()` returns one entry per open font window. `shift.editor.inspect()` returns renderer-owned UI facts. `shift.font.get()` returns metadata, metrics, axes, sources, named instances, and glyph count even on Home. `shift.glyphs.list()` returns bounded directory pages with `nextCursor`; passing an explicit `sourceId` includes each glyph's authored structure for code-mode aggregation. `shift.glyphs.get()` returns one directory entry by exact `name` or stable `glyphId` (not both). `shift.layers.get()` returns authored positions and structure for one glyph/source pair, while `shift.layers.render()` returns point-in-time portable SVG with optional source-addressable overlays, presentation-only `appearance` overrides, and style-independent metric and advance `guides` for that same authored layer. Untrusted inputs are parsed using `@shift/runtime`'s shared Zod schemas; the code-mode sandbox remains bounded.
+`shift.sessions.list()` returns one entry per open font window. Every targeted operation returns `{ fontRevision, value }`; pass the first token as `ifFontRevision` to later related calls so stale composition fails explicitly. `shift.editor.inspect()` returns renderer-owned UI facts. `shift.font.get()` returns `info`, metrics, metric definitions, axes, sources, instances, and glyph count even on Home. `shift.locations.resolve()` maps arbitrary external coordinates and resolves source metrics. `shift.glyphs.list()` returns bounded directory pages with `nextCursor` and stable layer references; passing an explicit `sourceId` includes each glyph's nested authored `layer` for code-mode aggregation. `shift.glyphs.get()` returns one directory entry by exact `name` or stable `glyphId` (not both). `shift.glyphs.resolve()` returns drawable paths and advance widths at an arbitrary location. `shift.layers.get()` returns nested contours, points, components, transformations, and anchors for one authored glyph/source pair, while `shift.layers.render()` returns point-in-time portable SVG with optional source-addressable overlays, presentation-only `appearance` overrides, and style-independent metric and advance `guides` for that same authored layer. Untrusted inputs are parsed using `@shift/runtime`'s shared Zod schemas; the code-mode sandbox remains bounded.
 
 ## Desktop ownership
 
@@ -85,7 +91,8 @@ Do not expose internal `Editor`, `FontStore`, `WorkspaceHost`, NAPI, SQLite rows
 - Focus is descriptive only. Always pass a `windowId` from the same `sessions.list()` result used to choose a target.
 - A renderer can exist before its agent lane connects. Check `editorConnected` or retry session discovery rather than substituting another window.
 - Code-mode results must be JSON-serializable and remain under the configured output bound. Prefer the first-class MCP `shift.capture` tool when the client needs an image content block rather than base64 inside JSON.
-- Preview fonts have no authored layers; source-scoped structure reads and renderings fail explicitly. Rendered SVG is refreshable output, not a live binding. Directory cursors do not freeze a changing font; scope counts to an explicit source and restart if the directory changes.
+- Preview fonts have no authored layers; source-scoped layer reads and renderings fail explicitly. Rendered SVG is refreshable output, not a live binding. Directory cursors do not freeze a changing font; guard pagination with one `fontRevision` and restart after a mismatch.
+- `fontRevision` is renderer-session-local, opaque, and non-orderable. It versions authored font truth, not selection, viewport, focus, or other editor-only state. `captureId` remains a distinct identity for one image.
 
 ## Verification
 

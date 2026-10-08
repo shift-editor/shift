@@ -1,18 +1,24 @@
 import type {
+  AuthoredLayer,
   EditorInspection,
   FontOverview,
+  GlyphGetInput,
+  GlyphListInput,
   GlyphPage,
-  GlyphSelector,
+  GlyphResolveInput,
   GlyphSummary,
-  LayerAppearance,
-  LayerOverlays,
+  LayerGetInput,
+  LayerRenderInput,
   LayerSvg,
-  LayerView,
+  LocationResolveInput,
+  ResolvedGlyphs,
+  ResolvedLocation,
   ShiftCapture,
-  ShiftCaptureTarget,
+  ShiftCaptureInput,
+  ShiftObservation,
   ShiftSession,
+  ShiftTarget,
 } from "@shift/runtime";
-import type { GlyphId, SourceId } from "@shift/types";
 
 export type SandboxCallMap = {
   "sandbox.execute": {
@@ -27,39 +33,44 @@ export type SandboxEventMap = {
 
 export type SandboxHostCallMap = {
   "shift.capture": {
-    request: { windowId: number; target: ShiftCaptureTarget; scale?: number };
-    response: ShiftCapture;
+    request: ShiftCaptureInput;
+    response: ShiftObservation<ShiftCapture>;
   };
   "shift.sessions.list": {
     request: undefined;
     response: ShiftSession[];
   };
   "shift.editor.inspect": {
-    request: { windowId: number };
-    response: EditorInspection;
+    request: ShiftTarget;
+    response: ShiftObservation<EditorInspection>;
   };
-  "shift.font.get": { request: { windowId: number }; response: FontOverview };
+  "shift.font.get": {
+    request: ShiftTarget;
+    response: ShiftObservation<FontOverview>;
+  };
+  "shift.locations.resolve": {
+    request: LocationResolveInput;
+    response: ShiftObservation<ResolvedLocation>;
+  };
   "shift.glyphs.list": {
-    request: { windowId: number; limit?: number; cursor?: string; sourceId?: SourceId };
-    response: GlyphPage;
+    request: GlyphListInput;
+    response: ShiftObservation<GlyphPage>;
   };
   "shift.glyphs.get": {
-    request: { windowId: number } & GlyphSelector;
-    response: GlyphSummary;
+    request: GlyphGetInput;
+    response: ShiftObservation<GlyphSummary>;
+  };
+  "shift.glyphs.resolve": {
+    request: GlyphResolveInput;
+    response: ShiftObservation<ResolvedGlyphs>;
   };
   "shift.layers.get": {
-    request: { windowId: number; glyphId: GlyphId; sourceId: SourceId };
-    response: LayerView | null;
+    request: LayerGetInput;
+    response: ShiftObservation<AuthoredLayer | null>;
   };
   "shift.layers.render": {
-    request: {
-      windowId: number;
-      glyphId: GlyphId;
-      sourceId: SourceId;
-      overlays?: LayerOverlays;
-      appearance?: LayerAppearance;
-    };
-    response: LayerSvg | null;
+    request: LayerRenderInput;
+    response: ShiftObservation<LayerSvg | null>;
   };
 };
 

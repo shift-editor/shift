@@ -54,8 +54,10 @@ export class SandboxRuntimeProcess {
       "shift.sessions.list": () => this.#capabilities.sessions.list(),
       "shift.editor.inspect": (input) => this.#capabilities.editor.inspect(input),
       "shift.font.get": (input) => this.#capabilities.font.get(input),
+      "shift.locations.resolve": (input) => this.#capabilities.locations.resolve(input),
       "shift.glyphs.list": (input) => this.#capabilities.glyphs.list(input),
       "shift.glyphs.get": (input) => this.#capabilities.glyphs.get(input),
+      "shift.glyphs.resolve": (input) => this.#capabilities.glyphs.resolve(input),
       "shift.layers.get": (input) => this.#capabilities.layers.get(input),
       "shift.layers.render": (input) => this.#capabilities.layers.render(input),
     });

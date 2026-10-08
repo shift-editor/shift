@@ -41,21 +41,23 @@ export async function executeShiftCode(
     capabilities.capture(shiftInputSchemas.capture.parse(input)),
   );
   installAsyncJsonFunction(vm, "__shiftListSessions", deadline, () => capabilities.sessions.list());
-  installAsyncJsonFunction(vm, "__shiftInspectEditor", deadline, (windowId) => {
-    if (typeof windowId !== "number" || !Number.isInteger(windowId)) {
-      throw new Error("editor.inspect requires an integer windowId");
-    }
-
-    return capabilities.editor.inspect({ windowId });
-  });
+  installAsyncJsonFunction(vm, "__shiftInspectEditor", deadline, (input) =>
+    capabilities.editor.inspect(shiftInputSchemas["editor.inspect"].parse(input)),
+  );
   installAsyncJsonFunction(vm, "__shiftGetFont", deadline, (input) =>
     capabilities.font.get(shiftInputSchemas["font.get"].parse(input)),
+  );
+  installAsyncJsonFunction(vm, "__shiftResolveLocation", deadline, (input) =>
+    capabilities.locations.resolve(shiftInputSchemas["locations.resolve"].parse(input)),
   );
   installAsyncJsonFunction(vm, "__shiftListGlyphs", deadline, (input) =>
     capabilities.glyphs.list(shiftInputSchemas["glyphs.list"].parse(input)),
   );
   installAsyncJsonFunction(vm, "__shiftGetGlyph", deadline, (input) =>
     capabilities.glyphs.get(shiftInputSchemas["glyphs.get"].parse(input)),
+  );
+  installAsyncJsonFunction(vm, "__shiftResolveGlyphs", deadline, (input) =>
+    capabilities.glyphs.resolve(shiftInputSchemas["glyphs.resolve"].parse(input)),
   );
   installAsyncJsonFunction(vm, "__shiftGetLayer", deadline, (input) =>
     capabilities.layers.get(shiftInputSchemas["layers.get"].parse(input)),
@@ -72,14 +74,18 @@ export async function executeShiftCode(
         list: async () => JSON.parse(await __shiftListSessions()),
       }),
       editor: Object.freeze({
-        inspect: async ({ windowId }) => JSON.parse(await __shiftInspectEditor(windowId)),
+        inspect: async (input) => JSON.parse(await __shiftInspectEditor(input)),
       }),
       font: Object.freeze({
         get: async (input) => JSON.parse(await __shiftGetFont(input)),
       }),
+      locations: Object.freeze({
+        resolve: async (input) => JSON.parse(await __shiftResolveLocation(input)),
+      }),
       glyphs: Object.freeze({
         list: async (input) => JSON.parse(await __shiftListGlyphs(input)),
         get: async (input) => JSON.parse(await __shiftGetGlyph(input)),
+        resolve: async (input) => JSON.parse(await __shiftResolveGlyphs(input)),
       }),
       layers: Object.freeze({
         get: async (input) => JSON.parse(await __shiftGetLayer(input)),

@@ -13,7 +13,7 @@ Configure your agent's native MCP client once with the running app's URL and pri
 
 ## Discover the API
 
-Call the native `shift.describe` MCP tool. The typed API exposes `shift.capture({ windowId, target, scale? })`, `shift.sessions.list()`, `shift.editor.inspect({ windowId })`, `shift.font.get({ windowId })`, `shift.glyphs.list({ windowId, limit?, cursor?, sourceId? })`, `shift.glyphs.get({ windowId, glyphId })` or `shift.glyphs.get({ windowId, name })`, `shift.layers.get({ windowId, glyphId, sourceId })`, and `shift.layers.render({ windowId, glyphId, sourceId, overlays? })` inside `shift.execute`.
+Call the native `shift.describe` MCP tool. The typed API exposes `shift.capture`, `shift.sessions.list`, `shift.editor.inspect`, `shift.font.get`, `shift.locations.resolve`, `shift.glyphs.list`, `shift.glyphs.get`, `shift.glyphs.resolve`, `shift.layers.get`, and `shift.layers.render` inside `shift.execute`. Every operation targeting a font window accepts optional `ifFontRevision` and returns `{ fontRevision, value }`.
 
 ## Execute code
 
@@ -28,11 +28,15 @@ async () => {
 };
 ```
 
-Always target the explicit `windowId` returned by `sessions.list()`. Do not assume focus is stable. `capture()` returns an immutable PNG observation with a unique `captureId`; it is not a font revision. `editor.inspect()` reports a point-in-time renderer observation; `font.get()` returns Home-safe metadata, metrics, axes, global master sources, named instances, and glyph count. Individual glyphs may advertise additional authored `sourceIds` for non-master support layers; those IDs are also valid for layer reads. `glyphs.get()` resolves one glyph by exact name or stable ID, without scanning the directory; provide exactly one of `name` or `glyphId`. `glyphs.list()` returns directory entries with an opaque `nextCursor` (pass it back as `cursor` until null). Supply a specific `sourceId` to include authored `structure` for each glyph in a bounded page; `null` means no layer in that source. `layers.get()` returns positions and structure for one authored glyph/source layer, or `null` if the layer is absent. `layers.render()` returns portable SVG for that authored layer; request any combination of `points`, `controlLines`, `anchors`, `components`, `fontMetrics`, and `advanceWidth` under `overlays`. `fontMetrics` draws labeled horizontal source metrics; `advanceWidth` independently draws the vertical origin and advance guides. Component outlines resolve recursively with the canvas's source-fallback rules; `components` adds handles for components authored directly in the requested layer. `appearance` accepts presentation-only color overrides, while the response's structured `guides` remain style-independent. Point, anchor, and component elements retain their Shift IDs in `data-shift-id`. The SVG is a point-in-time, read-only proof, not a live binding: call `layers.render()` again to refresh it after edits. Preview sessions expose font and glyph directory facts but have no authored layers; these operations are read-only.
+Always target the explicit `windowId` returned by `sessions.list()`. Do not assume focus is stable. Start a composed read with any targeted operation, keep its opaque `fontRevision`, and pass it as `ifFontRevision` to every later related call. A mismatch means authored state changed: restart the read. The token is scoped to one live renderer, retrieves no historical data, and does not version selection or viewport state. `captureId` separately identifies one image inside the surrounding observation.
+
+`font.get().value` returns Home-safe `info`, metrics, metric definitions, axes, global designspace sources, instances, and glyph count. Glyphs advertise stable `layers` as `{ layerId, sourceId }`, including glyph-specific support layers. `glyphs.get()` resolves one glyph by exact name or stable ID; provide exactly one of `name` or `glyphId`. `glyphs.list()` returns bounded directory pages with an opaque `nextCursor`. Supply `sourceId` to include each entry's nested authored `layer`; `null` means sparse absence. `layers.get().value` returns `advanceWidth`, `contours[].points`, components with conventional affine `transformation`, and anchors for one authored glyph/source layer. `locations.resolve()` maps arbitrary external axis coordinates and resolves source metrics. `glyphs.resolve()` returns drawable paths and advances at such a location.
+
+`layers.render().value` returns portable SVG for one authored layer; request any combination of `points`, `controlLines`, `anchors`, `components`, `fontMetrics`, and `advanceWidth` under `overlays`. `fontMetrics` draws labeled horizontal source metrics; `advanceWidth` independently draws vertical origin and advance guides. Component outlines resolve recursively with the canvas's source-fallback rules; `components` adds handles for components authored directly in the requested layer. `appearance` accepts presentation-only color overrides, while structured `guides` remain style-independent. Point, anchor, and component elements retain Shift IDs in `data-shift-id`. Rendered SVG is a point-in-time, read-only proof. Preview sessions expose font and glyph directory facts but have no authored layers; all capabilities remain read-only.
 
 ## Capture the UI
 
-Call the native `shift.capture` MCP tool with `{ windowId, target: "window" | "editor", scale? }` when the client should receive an image content block. `window` captures the visible Shift web contents; `editor` crops to the visible editor canvas panel and fails if that window has no editor. `scale` defaults to `1`, accepts `0.25` through `4`, and multiplies logical UI pixels independently of display density. The result also includes `captureId`, dimensions, scale, and `capturedAt` metadata. The same `shift.capture()` function is available inside `shift.execute` for scripts that need to combine capture metadata with other reads, but its PNG is base64 `data`; omit that data from the script result unless needed.
+Call the native `shift.capture` MCP tool with `{ windowId, target: "window" | "editor", scale?, ifFontRevision? }` when the client should receive an image content block. `window` captures visible Shift web contents; `editor` crops to the visible editor canvas panel and fails if that window has no editor. `scale` defaults to `1`, accepts `0.25` through `4`, and multiplies logical UI pixels independently of display density. Structured metadata is `{ fontRevision, value }`, where `value` includes `captureId`, dimensions, scale, and `capturedAt`. The same function is available inside `shift.execute`; its PNG is base64 `observation.value.data`, which scripts should omit from results unless needed.
 
 For example, count authored anchors in one explicitly chosen source, paging without returning every glyph:
 
@@ -40,22 +44,23 @@ For example, count authored anchors in one explicitly chosen source, paging with
 async () => {
   const session = (await shift.sessions.list()).find((session) => session.sessionId === "...");
   if (!session) throw new Error("Target Shift session is not open");
-  const font = await shift.font.get({ windowId: session.windowId });
-  const source = font.sources.find((source) => source.name === "Regular");
+  const observedFont = await shift.font.get({ windowId: session.windowId });
+  const source = observedFont.value.sources.find((source) => source.name === "Regular");
   if (!source) throw new Error("Target source is not open");
+  const target = { windowId: session.windowId, ifFontRevision: observedFont.fontRevision };
   let cursor;
   let anchors = 0;
   do {
-    const page = await shift.glyphs.list({
-      windowId: session.windowId,
+    const observedPage = await shift.glyphs.list({
+      ...target,
       sourceId: source.id,
       cursor,
       limit: 20,
     });
-    for (const glyph of page.items) anchors += glyph.structure?.anchors.length ?? 0;
-    cursor = page.nextCursor ?? undefined;
+    for (const glyph of observedPage.value.items) anchors += glyph.layer?.anchors.length ?? 0;
+    cursor = observedPage.value.nextCursor ?? undefined;
   } while (cursor);
-  return { sourceId: source.id, anchors };
+  return { sourceId: source.id, anchors, fontRevision: observedFont.fontRevision };
 };
 ```
 
@@ -65,13 +70,14 @@ To produce an annotated proof of one authored layer:
 async () => {
   const session = (await shift.sessions.list()).find(({ sessionId }) => sessionId === "...");
   if (!session) throw new Error("Target Shift session is not open");
-  const glyph = await shift.glyphs.get({ windowId: session.windowId, name: "A" });
   const font = await shift.font.get({ windowId: session.windowId });
-  const source = font.sources.find(({ name }) => name === "Regular");
+  const target = { windowId: session.windowId, ifFontRevision: font.fontRevision };
+  const glyph = await shift.glyphs.get({ ...target, name: "A" });
+  const source = font.value.sources.find(({ name }) => name === "Regular");
   if (!source) throw new Error("Target source is not open");
   return shift.layers.render({
-    windowId: session.windowId,
-    glyphId: glyph.id,
+    ...target,
+    glyphId: glyph.value.id,
     sourceId: source.id,
     overlays: {
       points: true,
@@ -85,7 +91,7 @@ async () => {
 };
 ```
 
-A live directory may change between pages; a cursor is not a frozen snapshot. Large scans may exceed the sandbox deadline: return a partial result and `nextCursor` to continue in another call rather than assuming the entire font fits one execution.
+A cursor is not a frozen snapshot; guard every page with the same `fontRevision`. Large scans may exceed the sandbox deadline: return a partial result, `nextCursor`, and `fontRevision` to continue, then restart if that revision is stale.
 
 Keep returned values focused. Filter and map inside code mode instead of returning complete intermediate responses. Generated code has no filesystem, network, environment, Node.js, or Electron access.
 
@@ -104,6 +110,6 @@ shift-cli glyph inspect /absolute/path/Family.ufo A --json
 
 - The connection secret is transport material, not a user login. Never print or include it in conversation output.
 - A preview session is read-only; do not imply that it can be edited.
-- `dragging: true` or `applyStatus !== "idle"` means the observation may include transient or unsettled editor state. Say so when it affects the answer.
+- `observation.value.dragging: true` or `observation.value.applyStatus !== "idle"` means editor-only state may be transient or unsettled. Say so when it affects the answer.
 - A missing or closed window is an error. Re-list sessions instead of silently switching targets.
 - Do not use this interface as a replacement for regression tests. Reproduce and prove fixes through the repository's normal unit or Electron E2E boundary.

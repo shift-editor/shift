@@ -1,19 +1,30 @@
 import type {
+  AuthoredLayer,
+  AxisCoordinate,
   EditorView,
   FontOverview,
+  FontRevision,
   GlyphPage,
   GlyphSelector,
   GlyphSummary,
   LayerAppearance,
   LayerOverlays,
   LayerSvg,
-  LayerView,
+  ResolvedGlyphs,
+  ResolvedLocation,
+  ShiftObservation,
 } from "@shift/runtime";
-import type { GlyphId, SourceId } from "@shift/types";
+import type { AxisId, GlyphId, GlyphState, SourceId } from "@shift/types";
 import { GlyphGeometry } from "@shift/glyph-state";
 import { renderLayerSvg } from "@shift/editor/rendering";
 import { signal } from "@shift/editor/signals";
-import { emptyExternalAxisLocation } from "@shift/editor/variation";
+import {
+  axisValue,
+  emptyExternalAxisLocation,
+  externalAxisLocationFromRecord,
+  mapAxisLocation,
+} from "@shift/editor/variation";
+import type { ExternalAxisLocation } from "@shift/editor/variation";
 import type { ShiftHost } from "@shared/host/ShiftHost";
 import type { AgentCallMap, AgentEventMap } from "@shared/agent/protocol";
 import { domPortTransport, serveChannel, type ChannelServer } from "@shared/workspace/channel";
@@ -23,6 +34,7 @@ import type { FontSession } from "@/types/fontSession";
 export class AgentBridge {
   readonly #host: ShiftHost;
   readonly #session: FontSession;
+  readonly #revisionNamespace = crypto.randomUUID();
   #requests: ChannelServer<AgentEventMap> | null = null;
   #disposed = false;
 
@@ -46,13 +58,24 @@ export class AgentBridge {
       this.#requests?.dispose();
       this.#requests = serveChannel<AgentCallMap, AgentEventMap>(domPortTransport(received), {
         "capture.editorBounds": () => this.#editorCaptureBounds(),
-        "editor.inspect": () => this.#inspectEditor(),
-        "font.get": () => this.#getFont(),
-        "glyphs.list": (input) => this.#listGlyphs(input),
-        "glyphs.get": (selector) => this.#getGlyph(selector),
-        "layers.get": ({ glyphId, sourceId }) => this.#getLayer(glyphId, sourceId),
-        "layers.render": ({ glyphId, sourceId, overlays, appearance }) =>
-          this.#renderLayer(glyphId, sourceId, overlays, appearance),
+        "font.revision": ({ ifFontRevision }) => this.#readRevision(ifFontRevision),
+        "editor.inspect": ({ ifFontRevision }) =>
+          this.#observe(ifFontRevision, () => this.#inspectEditor()),
+        "font.get": ({ ifFontRevision }) => this.#observe(ifFontRevision, () => this.#getFont()),
+        "locations.resolve": ({ location, ifFontRevision }) =>
+          this.#observe(ifFontRevision, () => this.#resolveLocation(location)),
+        "glyphs.list": ({ limit, cursor, sourceId, ifFontRevision }) =>
+          this.#observe(ifFontRevision, () => this.#listGlyphs({ limit, cursor, sourceId })),
+        "glyphs.get": ({ selector, ifFontRevision }) =>
+          this.#observe(ifFontRevision, () => this.#getGlyph(selector)),
+        "glyphs.resolve": ({ glyphIds, location, ifFontRevision }) =>
+          this.#observe(ifFontRevision, () => this.#resolveGlyphs(glyphIds, location)),
+        "layers.get": ({ glyphId, sourceId, ifFontRevision }) =>
+          this.#observe(ifFontRevision, () => this.#getLayer(glyphId, sourceId)),
+        "layers.render": ({ glyphId, sourceId, overlays, appearance, ifFontRevision }) =>
+          this.#observe(ifFontRevision, () =>
+            this.#renderLayer(glyphId, sourceId, overlays, appearance),
+          ),
       });
     } catch (error) {
       port.cancel();
@@ -67,16 +90,68 @@ export class AgentBridge {
     this.#requests = null;
   }
 
+  async #readRevision(ifFontRevision: FontRevision | undefined): Promise<FontRevision> {
+    const observation = await this.#observe(ifFontRevision, () => null);
+    return observation.fontRevision;
+  }
+
+  async #observe<Value>(
+    ifFontRevision: FontRevision | undefined,
+    read: () => Value | Promise<Value>,
+  ): Promise<ShiftObservation<Value>> {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await this.#session.workspace?.editCoordinator.settled();
+      const before = this.#fontRevision();
+      this.#assertRevision(ifFontRevision, before);
+
+      const value = await read();
+      await this.#session.workspace?.editCoordinator.settled();
+      const after = this.#fontRevision();
+      if (before === after) return { fontRevision: before, value };
+      if (ifFontRevision) this.#assertRevision(ifFontRevision, after);
+    }
+
+    throw new Error("The font changed while Shift was reading it; retry the observation");
+  }
+
+  #fontRevision(): FontRevision {
+    const sequence = this.#session.workspace?.editCoordinator.authoredRevisionCell.peek() ?? 0;
+    return `${this.#revisionNamespace}:${sequence}`;
+  }
+
+  #assertRevision(expected: FontRevision | undefined, current: FontRevision): void {
+    if (!expected || expected === current) return;
+    throw new Error(`Font revision mismatch: expected ${expected}, current ${current}`);
+  }
+
   #getFont(): FontOverview {
     const font = this.#session.font;
     return {
       mode: this.#session.mode,
-      metadata: font.metadata,
+      info: font.metadata,
       metrics: font.metrics,
+      metricDefinitions: font.metricDefinitions,
       glyphCount: font.glyphEntries().length,
       axes: font.getAxes(),
       sources: font.sources,
-      namedInstances: font.namedInstances,
+      instances: font.namedInstances,
+    };
+  }
+
+  #resolveLocation(location: AxisCoordinate[]): ResolvedLocation {
+    const font = this.#session.font;
+    const external = externalLocation(font.getAxes(), location);
+    const design = mapAxisLocation(external, font.getAxes(), font.getAxisMappingBases());
+
+    return {
+      externalLocation: font
+        .getAxes()
+        .map((axis) => ({ axisId: axis.id, value: axisValue(external, axis) })),
+      designLocation: font
+        .getAxes()
+        .map((axis) => ({ axisId: axis.id, value: axisValue(design, axis) })),
+      sourceId: font.sourceAt(external)?.id ?? null,
+      metrics: font.metricsAtLocation(external),
     };
   }
 
@@ -117,7 +192,8 @@ export class AgentBridge {
         sourceId,
       });
       for (const [index, item] of items.entries()) {
-        item.structure = layers[index]?.state.structure ?? null;
+        const layer = layers[index];
+        item.layer = layer ? authoredLayer(item.id, sourceId, layer.state) : null;
       }
     }
 
@@ -138,29 +214,30 @@ export class AgentBridge {
     return glyphSummary(this.#session, entry.id);
   }
 
-  async #getLayer(glyphId: GlyphId, sourceId: SourceId): Promise<LayerView | null> {
-    const [layer] = await this.#session.font.readAuthoredLayers({ glyphIds: [glyphId], sourceId });
-    if (!layer) return null;
+  async #resolveGlyphs(glyphIds: GlyphId[], location: AxisCoordinate[]): Promise<ResolvedGlyphs> {
+    const font = this.#session.font;
+    for (const glyphId of glyphIds) {
+      if (!font.entryForId(glyphId)) throw new Error(`Glyph ${glyphId} is not in this font`);
+    }
 
-    const state = layer.state;
-    const geometry = GlyphGeometry.fromState(state);
+    const external = externalLocation(font.getAxes(), location);
+    const design = mapAxisLocation(external, font.getAxes(), font.getAxisMappingBases());
+    const previews = await font.glyphPreviews(glyphIds, design);
+    const resolvedIds = new Set(previews.map(({ glyphId }) => glyphId));
 
     return {
-      glyphId,
-      sourceId,
-      layerId: state.layerId,
-      structure: state.structure,
-      xAdvance: geometry.xAdvance,
-      bounds: geometry.bounds,
-      anchors: geometry.anchors.map(({ id, name, x, y }) => ({ id, name: name ?? null, x, y })),
-      points: geometry.allPoints.map(({ id, x, y, pointType, smooth }) => ({
-        id,
-        x,
-        y,
-        pointType,
-        smooth,
+      items: previews.map(({ glyphId, svgPath, xAdvance }) => ({
+        glyphId,
+        svgPath,
+        advanceWidth: xAdvance,
       })),
+      unresolvedGlyphIds: glyphIds.filter((glyphId) => !resolvedIds.has(glyphId)),
     };
+  }
+
+  async #getLayer(glyphId: GlyphId, sourceId: SourceId): Promise<AuthoredLayer | null> {
+    const [layer] = await this.#session.font.readAuthoredLayers({ glyphIds: [glyphId], sourceId });
+    return layer ? authoredLayer(glyphId, sourceId, layer.state) : null;
   }
 
   async #renderLayer(
@@ -251,13 +328,72 @@ function glyphSummary(session: FontSession, glyphId: GlyphId): GlyphSummary {
   const entry = session.font.entryForId(glyphId);
   if (!entry) throw new Error(`Glyph ${glyphId} is not in this font`);
 
+  const record = session.font.recordForId(glyphId);
   return {
     id: entry.id,
     name: entry.name,
     unicodes: [...entry.unicodes],
-    componentBaseGlyphIds: session.font.recordForId(glyphId)?.componentBaseGlyphIds ?? [],
-    sourceIds: session.font.recordForId(glyphId)?.layers.map(({ sourceId }) => sourceId) ?? [],
+    componentBaseGlyphIds: record?.componentBaseGlyphIds ?? [],
+    layers: record?.layers.map(({ id, sourceId }) => ({ layerId: id, sourceId })) ?? [],
   };
+}
+
+function authoredLayer(glyphId: GlyphId, sourceId: SourceId, state: GlyphState): AuthoredLayer {
+  const geometry = GlyphGeometry.fromState(state);
+  return {
+    glyphId,
+    sourceId,
+    layerId: state.layerId,
+    advanceWidth: geometry.xAdvance,
+    bounds: geometry.bounds,
+    contours: geometry.contours.map((contour) => ({
+      id: contour.id,
+      closed: contour.closed,
+      points: contour.points.map(({ id, x, y, pointType, smooth }) => ({
+        id,
+        x,
+        y,
+        pointType,
+        smooth,
+      })),
+    })),
+    components: geometry.components.map((component) => {
+      const matrix = component.matrix;
+      return {
+        id: component.id,
+        baseGlyphId: component.baseGlyphId,
+        baseGlyphName: component.baseGlyphName,
+        transformation: {
+          xx: matrix.a,
+          xy: matrix.b,
+          yx: matrix.c,
+          yy: matrix.d,
+          dx: matrix.e,
+          dy: matrix.f,
+        },
+      };
+    }),
+    anchors: geometry.anchors.map(({ id, name, x, y }) => ({
+      id,
+      name: name ?? null,
+      x,
+      y,
+    })),
+  };
+}
+
+function externalLocation(
+  axes: readonly { id: AxisId }[],
+  coordinates: AxisCoordinate[],
+): ExternalAxisLocation {
+  const axisIds = new Set(axes.map(({ id }) => id));
+  const values: Record<string, number> = {};
+  for (const { axisId, value } of coordinates) {
+    if (!axisIds.has(axisId)) throw new Error(`Unknown axis: ${axisId}`);
+    if (axisId in values) throw new Error(`Duplicate axis coordinate: ${axisId}`);
+    values[axisId] = value;
+  }
+  return externalAxisLocationFromRecord(values);
 }
 
 function nextAgentPort(): { received: Promise<MessagePort>; cancel: () => void } {

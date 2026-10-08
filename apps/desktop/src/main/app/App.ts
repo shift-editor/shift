@@ -34,8 +34,10 @@ import { OPEN_FONT_EXTENSIONS } from "../../shared/openFontExtensions";
 import { ShiftMcpServer } from "@shift/mcp";
 import type {
   EditorInspection,
+  FontRevision,
   ShiftCapture,
-  ShiftCaptureTarget,
+  ShiftCaptureInput,
+  ShiftObservation,
   ShiftSession,
 } from "@shift/runtime";
 import type { RecentDocumentVisit } from "../../shared/recents";
@@ -902,26 +904,43 @@ export class App {
         list: () => Promise.resolve(this.#agentSessions()),
       },
       editor: {
-        inspect: ({ windowId }) => this.#inspectEditor(windowId),
+        inspect: ({ windowId, ifFontRevision }) => this.#inspectEditor(windowId, ifFontRevision),
       },
       font: {
-        get: ({ windowId }) => this.#windowForAgentRequest(windowId).agent.getFont(),
+        get: ({ windowId, ifFontRevision }) =>
+          this.#windowForAgentRequest(windowId).agent.getFont(ifFontRevision),
+      },
+      locations: {
+        resolve: ({ windowId, location, ifFontRevision }) =>
+          this.#windowForAgentRequest(windowId).agent.resolveLocation(location, ifFontRevision),
       },
       glyphs: {
-        list: ({ windowId, limit, cursor, sourceId }) =>
-          this.#windowForAgentRequest(windowId).agent.listGlyphs({ limit, cursor, sourceId }),
-        get: ({ windowId, ...selector }) =>
-          this.#windowForAgentRequest(windowId).agent.getGlyph(selector),
+        list: ({ windowId, limit, cursor, sourceId, ifFontRevision }) =>
+          this.#windowForAgentRequest(windowId).agent.listGlyphs({
+            limit,
+            cursor,
+            sourceId,
+            ifFontRevision,
+          }),
+        get: ({ windowId, ifFontRevision, ...selector }) =>
+          this.#windowForAgentRequest(windowId).agent.getGlyph(selector, ifFontRevision),
+        resolve: ({ windowId, glyphIds, location, ifFontRevision }) =>
+          this.#windowForAgentRequest(windowId).agent.resolveGlyphs(
+            glyphIds,
+            location,
+            ifFontRevision,
+          ),
       },
       layers: {
-        get: ({ windowId, glyphId, sourceId }) =>
-          this.#windowForAgentRequest(windowId).agent.getLayer(glyphId, sourceId),
-        render: ({ windowId, glyphId, sourceId, overlays, appearance }) =>
+        get: ({ windowId, glyphId, sourceId, ifFontRevision }) =>
+          this.#windowForAgentRequest(windowId).agent.getLayer(glyphId, sourceId, ifFontRevision),
+        render: ({ windowId, glyphId, sourceId, overlays, appearance, ifFontRevision }) =>
           this.#windowForAgentRequest(windowId).agent.renderLayer(
             glyphId,
             sourceId,
             overlays,
             appearance,
+            ifFontRevision,
           ),
       },
     });
@@ -1016,19 +1035,25 @@ export class App {
     return sessions;
   }
 
-  async #inspectEditor(windowId: number): Promise<EditorInspection> {
+  async #inspectEditor(
+    windowId: number,
+    ifFontRevision?: FontRevision,
+  ): Promise<ShiftObservation<EditorInspection>> {
     const window = this.#windows.windowForId(windowId);
     if (!window) throw new Error(`Shift window ${windowId} is not open`);
 
     const session = this.#workspaces.getForBrowserWindow(window.window);
     if (!session) throw new Error(`Shift window ${windowId} has no font session`);
 
-    const view = await window.agent.inspectEditor();
+    const { fontRevision, value: editor } = await window.agent.inspectEditor(ifFontRevision);
     return {
-      ...view,
-      windowId,
-      sessionId: session.sessionId,
-      mode: session.mode,
+      fontRevision,
+      value: {
+        ...editor,
+        windowId,
+        sessionId: session.sessionId,
+        mode: session.mode,
+      },
     };
   }
 
@@ -1036,12 +1061,10 @@ export class App {
     windowId,
     target,
     scale = 1,
-  }: {
-    windowId: number;
-    target: ShiftCaptureTarget;
-    scale?: number;
-  }): Promise<ShiftCapture> {
+    ifFontRevision,
+  }: ShiftCaptureInput): Promise<ShiftObservation<ShiftCapture>> {
     const owner = this.#windowForAgentRequest(windowId);
+    const fontRevision = await owner.agent.fontRevision(ifFontRevision);
     const browserWindow = owner.window;
     const webContents = browserWindow.webContents;
     let rectangle: Rectangle | undefined;
@@ -1073,16 +1096,20 @@ export class App {
         : captured.resize({ ...outputSize, quality: "best" });
     const size = image.getSize();
 
+    await owner.agent.fontRevision(fontRevision);
     return {
-      captureId: randomUUID(),
-      windowId,
-      target,
-      mimeType: "image/png",
-      data: image.toPNG().toString("base64"),
-      width: size.width,
-      height: size.height,
-      scale,
-      capturedAt: new Date().toISOString(),
+      fontRevision,
+      value: {
+        captureId: randomUUID(),
+        windowId,
+        target,
+        mimeType: "image/png",
+        data: image.toPNG().toString("base64"),
+        width: size.width,
+        height: size.height,
+        scale,
+        capturedAt: new Date().toISOString(),
+      },
     };
   }
 

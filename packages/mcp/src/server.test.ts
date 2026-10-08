@@ -11,15 +11,18 @@ import type { ShiftMcpConnection } from "./types";
 const capabilities: ShiftCapabilities = {
   async capture({ windowId, target, scale = 1 }) {
     return {
-      captureId: "capture-a",
-      windowId,
-      target,
-      mimeType: "image/png",
-      data: "cG5n",
-      width: 800,
-      height: 600,
-      scale,
-      capturedAt: "2026-10-08T10:00:00.000Z",
+      fontRevision: "revision-a",
+      value: {
+        captureId: "capture-a",
+        windowId,
+        target,
+        mimeType: "image/png",
+        data: "cG5n",
+        width: 800,
+        height: 600,
+        scale,
+        capturedAt: "2026-10-08T10:00:00.000Z",
+      },
     };
   },
   sessions: {
@@ -37,11 +40,19 @@ const capabilities: ShiftCapabilities = {
       throw new Error("No open Shift window");
     },
   },
+  locations: {
+    async resolve() {
+      throw new Error("No open Shift window");
+    },
+  },
   glyphs: {
     async list() {
       throw new Error("No open Shift window");
     },
     async get() {
+      throw new Error("No open Shift window");
+    },
+    async resolve() {
       throw new Error("No open Shift window");
     },
   },
@@ -160,7 +171,7 @@ describe("Shift MCP local connection", () => {
       result: {
         content: [
           { type: "image", mimeType: "image/png", data: "cG5n" },
-          { type: "text", text: expect.stringContaining('"captureId": "capture-a"') },
+          { type: "text", text: expect.stringContaining('"fontRevision": "revision-a"') },
         ],
       },
     });

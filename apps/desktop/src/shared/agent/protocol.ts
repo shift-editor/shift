@@ -1,13 +1,18 @@
 import type {
+  AuthoredLayer,
+  AxisCoordinate,
   EditorView,
   FontOverview,
+  FontRevision,
   GlyphPage,
   GlyphSelector,
   GlyphSummary,
   LayerAppearance,
   LayerOverlays,
   LayerSvg,
-  LayerView,
+  ResolvedGlyphs,
+  ResolvedLocation,
+  ShiftObservation,
 } from "@shift/runtime";
 import type { GlyphId, SourceId } from "@shift/types";
 
@@ -24,16 +29,46 @@ export type AgentCallMap = {
     request: undefined;
     response: EditorCaptureBounds;
   };
-  "editor.inspect": { request: void; response: EditorView };
-  "font.get": { request: void; response: FontOverview };
-  "glyphs.list": {
-    request: { limit?: number; cursor?: string; sourceId?: SourceId };
-    response: GlyphPage;
+  "font.revision": {
+    request: { ifFontRevision?: FontRevision };
+    response: FontRevision;
   };
-  "glyphs.get": { request: GlyphSelector; response: GlyphSummary };
+  "editor.inspect": {
+    request: { ifFontRevision?: FontRevision };
+    response: ShiftObservation<EditorView>;
+  };
+  "font.get": {
+    request: { ifFontRevision?: FontRevision };
+    response: ShiftObservation<FontOverview>;
+  };
+  "locations.resolve": {
+    request: { location: AxisCoordinate[]; ifFontRevision?: FontRevision };
+    response: ShiftObservation<ResolvedLocation>;
+  };
+  "glyphs.list": {
+    request: {
+      limit?: number;
+      cursor?: string;
+      sourceId?: SourceId;
+      ifFontRevision?: FontRevision;
+    };
+    response: ShiftObservation<GlyphPage>;
+  };
+  "glyphs.get": {
+    request: { selector: GlyphSelector; ifFontRevision?: FontRevision };
+    response: ShiftObservation<GlyphSummary>;
+  };
+  "glyphs.resolve": {
+    request: {
+      glyphIds: GlyphId[];
+      location: AxisCoordinate[];
+      ifFontRevision?: FontRevision;
+    };
+    response: ShiftObservation<ResolvedGlyphs>;
+  };
   "layers.get": {
-    request: { glyphId: GlyphId; sourceId: SourceId };
-    response: LayerView | null;
+    request: { glyphId: GlyphId; sourceId: SourceId; ifFontRevision?: FontRevision };
+    response: ShiftObservation<AuthoredLayer | null>;
   };
   "layers.render": {
     request: {
@@ -41,8 +76,9 @@ export type AgentCallMap = {
       sourceId: SourceId;
       overlays?: LayerOverlays;
       appearance?: LayerAppearance;
+      ifFontRevision?: FontRevision;
     };
-    response: LayerSvg | null;
+    response: ShiftObservation<LayerSvg | null>;
   };
 };
 

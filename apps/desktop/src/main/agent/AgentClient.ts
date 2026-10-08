@@ -1,13 +1,18 @@
 import type {
+  AuthoredLayer,
+  AxisCoordinate,
   EditorView,
   FontOverview,
+  FontRevision,
   GlyphPage,
   GlyphSelector,
   GlyphSummary,
   LayerAppearance,
   LayerOverlays,
   LayerSvg,
-  LayerView,
+  ResolvedGlyphs,
+  ResolvedLocation,
+  ShiftObservation,
 } from "@shift/runtime";
 import type { GlyphId, SourceId } from "@shift/types";
 import type { MessagePortMain } from "electron";
@@ -40,26 +45,57 @@ export class AgentClient {
     return this.#call("capture.editorBounds", undefined);
   }
 
+  /** Returns the current authored revision after pending edits settle. */
+  fontRevision(ifFontRevision?: FontRevision): Promise<FontRevision> {
+    return this.#call("font.revision", { ifFontRevision });
+  }
+
   /** Returns a point-in-time view of the editor owned by this renderer. */
-  inspectEditor(): Promise<EditorView> {
-    if (!this.#channel) return Promise.reject(new Error("agent renderer is not connected"));
-    return this.#channel.call("editor.inspect", undefined);
+  inspectEditor(ifFontRevision?: FontRevision): Promise<ShiftObservation<EditorView>> {
+    return this.#call("editor.inspect", { ifFontRevision });
   }
 
-  getFont(): Promise<FontOverview> {
-    return this.#call("font.get", undefined);
+  getFont(ifFontRevision?: FontRevision): Promise<ShiftObservation<FontOverview>> {
+    return this.#call("font.get", { ifFontRevision });
   }
 
-  listGlyphs(input: { limit?: number; cursor?: string; sourceId?: SourceId }): Promise<GlyphPage> {
+  resolveLocation(
+    location: AxisCoordinate[],
+    ifFontRevision?: FontRevision,
+  ): Promise<ShiftObservation<ResolvedLocation>> {
+    return this.#call("locations.resolve", { location, ifFontRevision });
+  }
+
+  listGlyphs(input: {
+    limit?: number;
+    cursor?: string;
+    sourceId?: SourceId;
+    ifFontRevision?: FontRevision;
+  }): Promise<ShiftObservation<GlyphPage>> {
     return this.#call("glyphs.list", input);
   }
 
-  getGlyph(selector: GlyphSelector): Promise<GlyphSummary> {
-    return this.#call("glyphs.get", selector);
+  getGlyph(
+    selector: GlyphSelector,
+    ifFontRevision?: FontRevision,
+  ): Promise<ShiftObservation<GlyphSummary>> {
+    return this.#call("glyphs.get", { selector, ifFontRevision });
   }
 
-  getLayer(glyphId: GlyphId, sourceId: SourceId): Promise<LayerView | null> {
-    return this.#call("layers.get", { glyphId, sourceId });
+  resolveGlyphs(
+    glyphIds: GlyphId[],
+    location: AxisCoordinate[],
+    ifFontRevision?: FontRevision,
+  ): Promise<ShiftObservation<ResolvedGlyphs>> {
+    return this.#call("glyphs.resolve", { glyphIds, location, ifFontRevision });
+  }
+
+  getLayer(
+    glyphId: GlyphId,
+    sourceId: SourceId,
+    ifFontRevision?: FontRevision,
+  ): Promise<ShiftObservation<AuthoredLayer | null>> {
+    return this.#call("layers.get", { glyphId, sourceId, ifFontRevision });
   }
 
   renderLayer(
@@ -67,8 +103,15 @@ export class AgentClient {
     sourceId: SourceId,
     overlays?: LayerOverlays,
     appearance?: LayerAppearance,
-  ): Promise<LayerSvg | null> {
-    return this.#call("layers.render", { glyphId, sourceId, overlays, appearance });
+    ifFontRevision?: FontRevision,
+  ): Promise<ShiftObservation<LayerSvg | null>> {
+    return this.#call("layers.render", {
+      glyphId,
+      sourceId,
+      overlays,
+      appearance,
+      ifFontRevision,
+    });
   }
 
   #call<K extends keyof AgentCallMap>(

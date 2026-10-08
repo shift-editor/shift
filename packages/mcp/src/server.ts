@@ -6,7 +6,12 @@ import { toNodeHandler } from "@modelcontextprotocol/node";
 import { createMcpHandler, McpServer } from "@modelcontextprotocol/server";
 import type { FastifyInstance } from "fastify";
 import * as z from "zod/v4";
-import { shiftInputSchemas, type ShiftCapture, type ShiftCaptureTarget } from "@shift/runtime";
+import {
+  shiftInputSchemas,
+  type ShiftCapture,
+  type ShiftCaptureInput,
+  type ShiftObservation,
+} from "@shift/runtime";
 import { SHIFT_CODE_TYPES } from "./declarations";
 import type { ShiftMcpConnection } from "./types";
 
@@ -21,11 +26,7 @@ export interface ShiftMcpLogger {
 
 export interface ShiftMcpServerOptions {
   execute(code: string): Promise<unknown>;
-  capture(input: {
-    windowId: number;
-    target: ShiftCaptureTarget;
-    scale?: number;
-  }): Promise<ShiftCapture>;
+  capture(input: ShiftCaptureInput): Promise<ShiftObservation<ShiftCapture>>;
   descriptorPath: string;
   port: number;
   logger?: ShiftMcpLogger;
@@ -133,11 +134,12 @@ export class ShiftMcpServer {
         inputSchema: shiftInputSchemas.capture,
       },
       async (input) => {
-        const capture = await this.#capture(input);
-        const { data, ...metadata } = capture;
+        const observation = await this.#capture(input);
+        const { data, ...capture } = observation.value;
+        const metadata = { fontRevision: observation.fontRevision, value: capture };
         return {
           content: [
-            { type: "image", data, mimeType: capture.mimeType },
+            { type: "image", data, mimeType: observation.value.mimeType },
             { type: "text", text: JSON.stringify(metadata, null, 2) },
           ],
         };
