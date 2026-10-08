@@ -3,6 +3,7 @@ import { workspaceTest as test, expect } from "./fixtures/electronApp";
 import {
   clickFirstCatalogGlyph,
   clickFirstCatalogGlyphName,
+  editorToolbar,
   fontNavigation,
   glyphCatalogRenderer,
   glyphCatalogSurface,
@@ -17,7 +18,7 @@ test.describe("Home view", () => {
       timeout: 30_000,
     });
     await page.mouse.move(0, 0);
-    await expectPageSnapshot(page, "home-glyph-grid.png");
+    await expectPageSnapshot(page, "home-glyph-grid.png", [editorToolbar(page)]);
   });
 
   test("language coverage filters the glyph grid", { tag: "@golden" }, async ({ page }) => {
