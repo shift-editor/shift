@@ -10,6 +10,8 @@ import {
   type WebContents,
 } from "electron";
 import { randomUUID } from "node:crypto";
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { Window } from "../windows/Window";
 import { getRendererSource } from "../utils";
@@ -46,6 +48,13 @@ import type { RecentDocumentVisit } from "../../shared/recents";
 import { RecentDocuments } from "../recents/RecentDocuments";
 import { SandboxRuntimeProcess } from "../sandbox/SandboxRuntimeProcess";
 import { AgentConnections } from "../agent/AgentConnections";
+import {
+  CommandLineTool,
+  commandName,
+  elevateWithOsascript,
+  elevateWithPkexec,
+  windowsUserPath,
+} from "../cli/CommandLineTool";
 
 const SLUG_ATLAS_PROFILING_ENABLED =
   process.env.SHIFT_PROFILE_SLUG_ATLAS !== undefined &&
@@ -79,6 +88,7 @@ export class App {
 
   #commands = new CommandRegistry();
   #agentConnections: AgentConnections | null = null;
+  #commandLineTool = createCommandLineTool();
   #sandbox: SandboxRuntimeProcess | null = null;
   #windows = new WindowManager();
   #workspaces: WorkspaceManager;
@@ -242,6 +252,9 @@ export class App {
       this.#recents.onChanged(() => this.#publishRecents());
       await this.#startSandbox();
       await this.#startAgentConnections();
+      void this.#commandLineTool.refresh().catch((error) => {
+        this.#log.error("failed to refresh shift-cli", error);
+      });
 
       // Taken before recovery, which marks the documents it restores open again.
       const openAtLastExit = this.#recents.takeOpen();
@@ -506,6 +519,8 @@ export class App {
   }
 
   #registerIpcHandlers(): void {
+    ipc.handle(ipcMain, "commandLineTool.state", () => this.#commandLineTool.state());
+    ipc.handle(ipcMain, "commandLineTool.install", () => this.#commandLineTool.install());
     ipc.handle(ipcMain, "agentConnections.state", () => this.#requireAgentConnections().state);
     ipc.handle(ipcMain, "agentConnections.setAllowed", async (_event, allowed) => {
       const connections = this.#requireAgentConnections();
@@ -1234,4 +1249,45 @@ function agentEndpoint(appName: string): { port: number; serverName: string } {
     default:
       throw new Error(`Unknown Shift distribution: ${appName}`);
   }
+}
+
+/** The `shift-cli` shipped with this build and how this platform puts it on PATH. */
+function createCommandLineTool(): CommandLineTool {
+  const log = createShiftLogger("app.commandLineTool");
+  const bundledPath = app.isPackaged
+    ? path.join(process.resourcesPath, "bin", commandName())
+    : developmentCommandLineTool();
+
+  if (process.platform === "win32") {
+    return new CommandLineTool({
+      bundledPath,
+      install: { kind: "userPath" },
+      userPath: windowsUserPath,
+      log,
+    });
+  }
+  if (process.platform === "linux" && process.env.APPIMAGE) {
+    return new CommandLineTool({
+      bundledPath,
+      install: { kind: "copy", directory: path.join(os.homedir(), ".local", "bin") },
+      log,
+    });
+  }
+  return new CommandLineTool({
+    bundledPath,
+    install: { kind: "link", directory: "/usr/local/bin" },
+    elevate: process.platform === "darwin" ? elevateWithOsascript : elevateWithPkexec,
+    log,
+  });
+}
+
+/** In development, the most recently built `shift-cli` in the Cargo target directory. */
+function developmentCommandLineTool(): string | null {
+  const targetRoot =
+    process.env.CARGO_TARGET_DIR ?? path.resolve(app.getAppPath(), "..", "..", "target");
+  const candidates = ["release", "debug"]
+    .map((profile) => path.join(targetRoot, profile, commandName()))
+    .filter((candidate) => fs.existsSync(candidate))
+    .sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
+  return candidates[0] ?? null;
 }

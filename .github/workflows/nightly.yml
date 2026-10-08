@@ -167,6 +167,9 @@ jobs:
       - name: Build native bridge
         run: pnpm build:native
 
+      - name: Build command-line tool
+        run: pnpm build:cli
+
       - name: Build desktop application
         env:
           SHIFT_DISTRIBUTION: nightly
