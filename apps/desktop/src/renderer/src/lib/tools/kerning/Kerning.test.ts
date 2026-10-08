@@ -102,11 +102,11 @@ describe("Kerning tool", () => {
     expect(kern()).toBe(-75);
   });
 
-  it("clicking the value under the baseline opens it for typing, which sets the kern", async () => {
+  it("clicking the value in the zone below the baseline opens it for typing, which sets the kern", async () => {
     hoverKern();
-    const baseline = editor.localToScreen({ x: kernCenter().x, y: hovered()!.gap.baseline });
-    // The pill sits 10 px below the baseline and is 16 px tall.
-    await editor.click(baseline.x, baseline.y + 18);
+    const { baseline, bottom } = hovered()!.gap;
+    const pill = editor.localToScreen({ x: kernCenter().x, y: (baseline + bottom) / 2 });
+    await editor.click(pill.x, pill.y);
     expect(tool().editing?.amount).toBe(-75);
 
     tool().setEditedKerning(-100);

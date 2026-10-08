@@ -59,9 +59,7 @@ export const RightSidebar = () => {
           </>
         ),
         selection: kerningActive ? (
-          <div className="flex flex-col gap-4 px-3 py-3">
-            <KerningPairSection />
-          </div>
+          <KerningPairSection />
         ) : (
           <TransformOriginProvider>
             {hasTransformSelection || hasBooleanSelection ? (

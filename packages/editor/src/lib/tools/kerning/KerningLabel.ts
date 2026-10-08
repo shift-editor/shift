@@ -11,8 +11,6 @@ const PADDING_PX = 4;
 const CHARACTER_WIDTH_PX = 6;
 /** Width of an exception's lock, inside the pill's padding. */
 const LOCK_PX = 10;
-/** Gap between the baseline and the top of the pill. */
-const BELOW_BASELINE_PX = 10;
 
 /** A pair's pill and its parts, in screen pixels. */
 export interface KerningLabelLayout {
@@ -37,20 +35,19 @@ export function exceptionSides(editor: Editor, pair: KerningPair): KerningPairPo
 }
 
 /**
- * Lays out a pair's pill centred under the kern, just below the baseline:
- * the value, with a lock before or after it for an exception side.
+ * Lays out a pair's pill centred in the kern's zone below the baseline: the
+ * value, with a lock before or after it for an exception side.
  */
 export function kerningLabelLayout(editor: Editor, pair: KerningPair): KerningLabelLayout {
   const { gap } = pair;
-  const baseline = editor.sceneToScreen(
-    editor.toScene(gap.node, localPoint(pair.center, gap.baseline)),
-  );
+  const middle = localPoint(pair.center, (gap.baseline + gap.bottom) / 2);
+  const center = editor.sceneToScreen(editor.toScene(gap.node, middle));
   const exceptions = exceptionSides(editor, pair);
 
   const amountWidth = kerningLabelText(pair).length * CHARACTER_WIDTH_PX + PADDING_PX * 2;
   const width = amountWidth + exceptions.length * LOCK_PX;
-  const x = Math.round(baseline.x - width / 2);
-  const y = Math.round(baseline.y + BELOW_BASELINE_PX);
+  const x = Math.round(center.x - width / 2);
+  const y = Math.round(center.y - HEIGHT_PX / 2);
   const lockY = y + (HEIGHT_PX - LOCK_PX) / 2;
   const firstLock = exceptions.includes("first");
   const amountX = x + (firstLock ? LOCK_PX : 0);

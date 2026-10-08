@@ -6,14 +6,11 @@ import type { KerningPair } from "./RunKerning";
 
 type SpacingTheme = Canvas["theme"]["spacing"];
 
-/** Half the height of the kern bar drawn on the baseline, in screen pixels. */
-const BAR_HALF_PX = 2;
-
 /** How a pair is drawn beyond its kern and pill. */
 export interface KerningDrawOptions {
   /** Whether the pointer is on the pill, which lightens and shows the groups' reach. */
   readonly hovered?: boolean;
-  /** Whether the arrow keys change this pair, which strengthens its edges. */
+  /** Whether the arrow keys change this pair, which outlines its zone. */
   readonly selected?: boolean;
 }
 
@@ -21,10 +18,10 @@ export interface KerningDrawOptions {
  * Draws a pair's kern and its pill, leaving the glyphs themselves clear.
  *
  * @remarks
- * Faint lines mark the two advance edges, and a bar on the baseline spans
- * the kern between them, in the spacing colours or the negative ones when
- * it tightens. The pill under the baseline shows the value, with a lock on
- * a side that is a glyph exception. While the pointer is on the pill, other
+ * The kern is a hatched zone below the baseline between the two advance
+ * edges, like a spacing half, in the negative colours when it tightens. The
+ * pill in the zone shows the value, with a lock on a side that is a glyph
+ * exception. While the pointer is on the pill, other
  * glyphs of the run that kern through one of the pair's groups fill in the
  * kerning colour, showing the reach of a group edit.
  */
@@ -53,29 +50,34 @@ function drawKern(
 ): void {
   const { gap } = pair;
   const negative = pair.amount < 0;
-  const strong = negative ? theme.negativeLabelFill : theme.labelFill;
-  const faint = negative ? theme.negativeIdleHatch : theme.idleHatch;
-  const top = project.point({ x: gap.leftBoundary, y: gap.top });
-  const bottom = project.point({ x: gap.leftBoundary, y: gap.bottom });
-  const left = project.point({ x: gap.leftBoundary, y: gap.baseline });
-  const right = project.point({ x: gap.rightBoundary, y: gap.baseline });
+  const a = project.point({ x: gap.leftBoundary, y: gap.baseline });
+  const b = project.point({ x: gap.rightBoundary, y: gap.bottom });
+  const left = Math.min(a.x, b.x);
+  const width = Math.max(Math.abs(b.x - a.x), 1);
+  const top = Math.min(a.y, b.y);
+  const height = Math.abs(b.y - a.y);
+  const fill = negative ? theme.negativeActiveFill : theme.activeFill;
+  const hatch = negative ? theme.negativeActiveHatch : theme.activeHatch;
+  const outline = negative ? theme.negativeLabelFill : theme.labelFill;
 
   const ctx = screen.ctx;
   ctx.save();
-  ctx.strokeStyle = selected ? strong : faint;
-  ctx.lineWidth = 1;
   ctx.beginPath();
-  for (const x of [left.x, right.x]) {
-    ctx.moveTo(Math.round(x) + 0.5, Math.min(top.y, bottom.y));
-    ctx.lineTo(Math.round(x) + 0.5, Math.max(top.y, bottom.y));
+  ctx.rect(left, top, width, height);
+  ctx.clip();
+  ctx.fillStyle = fill;
+  ctx.fillRect(left, top, width, height);
+  ctx.beginPath();
+  for (let x = left - height; x < left + width + height; x += theme.hatchGapPx) {
+    ctx.moveTo(x, top + height);
+    ctx.lineTo(x + height, top);
   }
+  ctx.strokeStyle = hatch;
+  ctx.lineWidth = 1;
   ctx.stroke();
-
-  const barLeft = Math.min(left.x, right.x);
-  const barWidth = Math.max(Math.abs(right.x - left.x), 2);
-  ctx.fillStyle = strong;
-  ctx.fillRect(barLeft, left.y - BAR_HALF_PX, barWidth, BAR_HALF_PX * 2);
   ctx.restore();
+
+  if (selected) screen.strokeRect(left + 0.5, top + 0.5, width - 1, height - 1, outline, 1);
 }
 
 /**

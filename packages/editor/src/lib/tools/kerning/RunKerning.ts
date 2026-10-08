@@ -56,22 +56,26 @@ export class KerningPair {
     return editor.sessionMode === "workspace" ? editor.activeSourceId : null;
   }
 
-  /** The authored pair an edit at the active source changes, with its value there. */
-  editablePair(editor: Editor): ResolvedKerning | null {
-    const sourceId = this.source(editor);
-    if (!sourceId) return null;
+  /**
+   * The authored pair an edit changes at a source, with its value there.
+   *
+   * @param sourceId - The source to edit; the active source when omitted.
+   * @returns null where kerning cannot be edited.
+   */
+  editablePair(editor: Editor, sourceId = this.source(editor)): ResolvedKerning | null {
+    if (!sourceId || editor.sessionMode !== "workspace") return null;
     return editor.font.kerningCell.peek().editablePair(sourceId, this.first, this.second);
   }
 
   /**
-   * Sets the pair's value at the active source, as one undo step.
+   * Sets the pair's value at a source, as one undo step.
    *
    * @param amount - The new kern in units; rounded, and ignored when unchanged.
-   * @returns false when nothing changed or kerning cannot be edited here.
+   * @param sourceId - The source to edit; the active source when omitted.
+   * @returns false when nothing changed or kerning cannot be edited there.
    */
-  set(editor: Editor, amount: number): boolean {
-    const sourceId = this.source(editor);
-    const pair = this.editablePair(editor);
+  set(editor: Editor, amount: number, sourceId = this.source(editor)): boolean {
+    const pair = this.editablePair(editor, sourceId);
     const rounded = Math.round(amount);
     if (!sourceId || !pair || rounded === pair.amount) return false;
 
