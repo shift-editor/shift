@@ -57,6 +57,7 @@ A `.shift` document opens with a recovery overlay: every table is read through a
 
 - **Never join two store tables on a key.** Express the second table as `col IN (SELECT …)`. `referenced_glyph_ids_for_glyphs` took 117 ms as a join and 14 ms as an `IN` subquery on Inter; `dependent_glyph_ids_for_layers`, which runs after every edit, undo, and redo, took 172 ms and 8 ms.
 - Compare a query against `main.<table>` to see what the overlay costs. A large gap means the view is being scanned rather than searched; `EXPLAIN QUERY PLAN` shows it as `CO-ROUTINE <view>` followed by `AUTOMATIC COVERING INDEX`.
+- `nix develop --command sqlite3 -readonly <file>.shift` runs queries and `EXPLAIN QUERY PLAN` against a real document; the recovery views only exist inside the app's connection, so compare the canonical query there and the merged one through a store test.
 - Store tests use canonical tables, so they will not catch this. Measure on a real document opened with recovery.
 
 ## 4. Prove it
