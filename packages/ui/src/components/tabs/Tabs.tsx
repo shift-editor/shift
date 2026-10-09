@@ -2,29 +2,24 @@ import * as React from "react";
 import { Tabs as BaseTabs } from "@base-ui/react/tabs";
 import { cn } from "../../lib/utils";
 
-export interface TabsProps extends React.ComponentPropsWithoutRef<typeof BaseTabs.Root> {}
+export interface TabsProps extends React.ComponentProps<typeof BaseTabs.Root> {}
 
-export const Tabs = React.forwardRef<React.ElementRef<typeof BaseTabs.Root>, TabsProps>(
-  ({ className, ...props }, ref) => (
-    <BaseTabs.Root ref={ref} className={cn("min-w-0", className)} {...props} />
-  ),
-);
-Tabs.displayName = "Tabs";
+export function Tabs({ className, ...props }: TabsProps) {
+  return <BaseTabs.Root className={cn("min-w-0", className)} {...props} />;
+}
 
-export interface TabsListProps extends React.ComponentPropsWithoutRef<typeof BaseTabs.List> {}
+export interface TabsListProps extends React.ComponentProps<typeof BaseTabs.List> {}
 
-export const TabsList = React.forwardRef<React.ElementRef<typeof BaseTabs.List>, TabsListProps>(
-  ({ className, ...props }, ref) => (
+export function TabsList({ className, ...props }: TabsListProps) {
+  return (
     <BaseTabs.List
-      ref={ref}
       className={cn("relative flex items-center border-b border-line-subtle", className)}
       {...props}
     />
-  ),
-);
-TabsList.displayName = "TabsList";
+  );
+}
 
-export interface TabsTabProps extends React.ComponentPropsWithoutRef<typeof BaseTabs.Tab> {
+export interface TabsTabProps extends React.ComponentProps<typeof BaseTabs.Tab> {
   size?: "sm" | "md";
 }
 
@@ -33,10 +28,9 @@ const tabSizeStyles = {
   md: "px-2.5 text-sm",
 };
 
-export const TabsTab = React.forwardRef<React.ElementRef<typeof BaseTabs.Tab>, TabsTabProps>(
-  ({ className, size = "sm", ...props }, ref) => (
+export function TabsTab({ className, size = "sm", ...props }: TabsTabProps) {
+  return (
     <BaseTabs.Tab
-      ref={ref}
       className={cn(
         "relative h-8 cursor-pointer text-secondary outline-none",
         "data-[active]:text-primary data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
@@ -46,35 +40,26 @@ export const TabsTab = React.forwardRef<React.ElementRef<typeof BaseTabs.Tab>, T
       )}
       {...props}
     />
-  ),
-);
-TabsTab.displayName = "TabsTab";
+  );
+}
 
-export interface TabsIndicatorProps extends React.ComponentPropsWithoutRef<
-  typeof BaseTabs.Indicator
-> {}
+export interface TabsIndicatorProps extends React.ComponentProps<typeof BaseTabs.Indicator> {}
 
-export const TabsIndicator = React.forwardRef<
-  React.ElementRef<typeof BaseTabs.Indicator>,
-  TabsIndicatorProps
->(({ className, ...props }, ref) => (
-  <BaseTabs.Indicator
-    ref={ref}
-    className={cn(
-      "absolute bottom-0 left-(--active-tab-left) h-0.5",
-      "w-(--active-tab-width) bg-accent transition-[left,width]",
-      className,
-    )}
-    {...props}
-  />
-));
-TabsIndicator.displayName = "TabsIndicator";
+export function TabsIndicator({ className, ...props }: TabsIndicatorProps) {
+  return (
+    <BaseTabs.Indicator
+      className={cn(
+        "absolute bottom-0 left-(--active-tab-left) h-0.5",
+        "w-(--active-tab-width) bg-accent transition-[left,width]",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
 
-export interface TabsPanelProps extends React.ComponentPropsWithoutRef<typeof BaseTabs.Panel> {}
+export interface TabsPanelProps extends React.ComponentProps<typeof BaseTabs.Panel> {}
 
-export const TabsPanel = React.forwardRef<React.ElementRef<typeof BaseTabs.Panel>, TabsPanelProps>(
-  ({ className, ...props }, ref) => (
-    <BaseTabs.Panel ref={ref} className={cn("min-w-0 outline-none", className)} {...props} />
-  ),
-);
-TabsPanel.displayName = "TabsPanel";
+export function TabsPanel({ className, ...props }: TabsPanelProps) {
+  return <BaseTabs.Panel className={cn("min-w-0 outline-none", className)} {...props} />;
+}

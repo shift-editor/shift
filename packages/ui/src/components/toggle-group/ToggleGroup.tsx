@@ -3,24 +3,19 @@ import { Toggle as BaseToggle } from "@base-ui/react/toggle";
 import { ToggleGroup as BaseToggleGroup } from "@base-ui/react/toggle-group";
 import { cn } from "../../lib/utils";
 
-export interface ToggleGroupProps extends React.ComponentPropsWithoutRef<typeof BaseToggleGroup> {}
+export interface ToggleGroupProps extends React.ComponentProps<typeof BaseToggleGroup> {}
 
 /** Row of toggles where, unless `multiple` is set, pressing one releases the others. */
-export const ToggleGroup = React.forwardRef<
-  React.ElementRef<typeof BaseToggleGroup>,
-  ToggleGroupProps
->(({ className, ...props }, ref) => (
-  <BaseToggleGroup ref={ref} className={cn("flex items-center gap-0.5", className)} {...props} />
-));
-ToggleGroup.displayName = "ToggleGroup";
+export function ToggleGroup({ className, ...props }: ToggleGroupProps) {
+  return <BaseToggleGroup className={cn("flex items-center gap-0.5", className)} {...props} />;
+}
 
-export interface ToggleProps extends React.ComponentPropsWithoutRef<typeof BaseToggle> {}
+export interface ToggleProps extends React.ComponentProps<typeof BaseToggle> {}
 
 /** Icon-sized toggle button: muted until hovered; pressed toggles sit on a filled background. */
-export const Toggle = React.forwardRef<React.ElementRef<typeof BaseToggle>, ToggleProps>(
-  ({ className, ...props }, ref) => (
+export function Toggle({ className, ...props }: ToggleProps) {
+  return (
     <BaseToggle
-      ref={ref}
       className={cn(
         "inline-flex size-6 cursor-pointer items-center justify-center rounded text-secondary transition-colors",
         "hover:bg-hover/50 hover:text-primary data-[pressed]:bg-hover data-[pressed]:text-primary",
@@ -30,6 +25,5 @@ export const Toggle = React.forwardRef<React.ElementRef<typeof BaseToggle>, Togg
       )}
       {...props}
     />
-  ),
-);
-Toggle.displayName = "Toggle";
+  );
+}

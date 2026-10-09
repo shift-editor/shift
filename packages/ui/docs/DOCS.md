@@ -66,7 +66,7 @@ packages/ui/
 
 ## How it works
 
-Each component follows the same pattern: import the Base UI primitive, wrap it in a `React.forwardRef` (or plain function for root/provider components), apply Shift design tokens via Tailwind classes using `cn`, and forward all remaining props. Consumers never interact with Base UI directly.
+Each component follows the same pattern: import the Base UI primitive, wrap it in a plain function, apply Shift design tokens via Tailwind classes using `cn`, and forward all remaining props. Props extend `React.ComponentProps` of the primitive, so `ref` is one of them (React 19) and reaches the primitive through the spread; there is no `forwardRef`. Consumers never interact with Base UI directly.
 
 **Button** is the most opinionated component, defining seven visual variants (`default`, `ghost`, `primary`, `toolbar`, `row`, `muted`, `transparent`) and five size presets. `toolbar` owns application-toolbar icon treatment, `row` owns selectable full-width rows, `muted` owns low-emphasis actions, and `transparent` suppresses backgrounds in every interaction state. It also supports an `isActive` data attribute for toggled buttons and an `icon` slot.
 
@@ -77,6 +77,8 @@ Each component follows the same pattern: import the Base UI primitive, wrap it i
 **Field**, **Checkbox**, **Switch**, **NumberField**, **Select**, **Tabs**, and **Textarea** are composable primitive families for settings and inspector forms. Validation and application state remain in the consumer; these wrappers only provide accessible structure, behavior, and Shift styling. `FieldLabel` uses `tone` for primary or secondary emphasis. `FieldControl`, `Textarea`, `SelectTrigger`, and `NumberFieldGroup` use `filled` for standard control backgrounds and `plain` for controls that match the application background. `Textarea` renders a native textarea through Base UI Field's `Control` slot so it participates in the same label, validation, and disabled-state contract. `Slider` forwards its `aria-label` to Base UI's interactive thumb rather than leaving the accessible name on the non-interactive root. `Progress` composes Base UI's root, track, and indicator while allowing a consumer to override each visual layer.
 
 **Autocomplete** wraps Base UI's autocomplete. `AutocompleteInput` renders the shared `Input`; with `inline open` the list sits in place, such as inside a dialog, and `autoHighlight="always"` makes Enter pick the first item. Consumers that rank results themselves pass `filter={null}`.
+
+**Tooltip** takes `content` for the common case: `<Tooltip content="Close"><Button … /></Tooltip>` makes the child the trigger and renders the popup (with optional `side` and `sideOffset`). Compose `TooltipTrigger` and `TooltipContent` directly only when the parts need to be separate.
 
 **Menubar** wraps Base UI's menubar: place one `Menu` per top-level menu inside it, and give each `MenuTrigger` the `menubar` variant. `MenuSubmenuRoot` and `MenuSubmenuTrigger` nest menus inside a popup.
 
@@ -97,11 +99,10 @@ The package also re-exports shared icons from `lucide-react` so app code does no
 1. Create `src/components/<name>/<Name>.tsx`.
 2. Import the Base UI primitive: `import { X as BaseX } from "@base-ui/react/x"`.
 3. Define a props interface extending the Base UI props, adding any Shift-specific props.
-4. Wrap the Base UI primitive with `React.forwardRef`, apply Tailwind classes via `cn`.
-5. Set `displayName` on the forwarded ref component.
-6. Create `src/components/<name>/index.ts` barrel file exporting the component and its types.
-7. Add the export to `src/index.ts`.
-8. Run `pnpm typecheck` from the package root.
+4. Wrap the Base UI primitive in a plain function whose props extend `React.ComponentProps<typeof BaseX>`, apply Tailwind classes via `cn`, and spread the remaining props (including `ref`) onto the primitive.
+5. Create `src/components/<name>/index.ts` barrel file exporting the component and its types.
+6. Add the export to `src/index.ts`.
+7. Run `pnpm typecheck` from the package root.
 
 ### Override styles from a consumer
 

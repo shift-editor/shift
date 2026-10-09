@@ -9,8 +9,6 @@ import {
   PopoverPositioner,
   PopoverTitle,
   Tooltip,
-  TooltipContent,
-  TooltipTrigger,
   X,
 } from "@shift/ui";
 import { useCheckboxRange } from "@/hooks/useCheckboxRange";
@@ -93,13 +91,10 @@ export const MissingGlyphsPopover = ({
               <div className="min-w-0 truncate">
                 <PopoverTitle>Missing Glyphs</PopoverTitle>
               </div>
-              <Tooltip>
-                <TooltipTrigger>
-                  <PopoverClose variant="icon" aria-label="Close">
-                    <X className="h-4 w-4" />
-                  </PopoverClose>
-                </TooltipTrigger>
-                <TooltipContent>Close</TooltipContent>
+              <Tooltip content="Close">
+                <PopoverClose variant="icon" aria-label="Close">
+                  <X className="h-4 w-4" />
+                </PopoverClose>
               </Tooltip>
             </div>
 

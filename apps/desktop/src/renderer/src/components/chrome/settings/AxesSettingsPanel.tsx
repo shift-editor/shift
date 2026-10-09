@@ -1,15 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Axis, AxisId } from "@shift/types";
-import {
-  Tabs,
-  TabsIndicator,
-  TabsList,
-  TabsPanel,
-  TabsTab,
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@shift/ui";
+import { Tabs, TabsIndicator, TabsList, TabsPanel, TabsTab, Tooltip } from "@shift/ui";
 import MinusIcon from "@/assets/general/minus.svg";
 import PlusIcon from "@/assets/general/plus.svg";
 import { SidebarActionButton, SidebarActionRow } from "@/components/sidebar";
@@ -56,13 +47,10 @@ export const AxesSettingsPanel = ({ initialAxisId, canAuthor }: AxesSettingsPane
           {canAuthor ? (
             <CreateAxisMenu onAxisCreated={setCreatedAxisId} />
           ) : (
-            <Tooltip>
-              <TooltipTrigger>
-                <SidebarActionButton label="Create axis" aria-disabled="true">
-                  <PlusIcon className="h-3 w-3" />
-                </SidebarActionButton>
-              </TooltipTrigger>
-              <TooltipContent>Create axis</TooltipContent>
+            <Tooltip content="Create axis">
+              <SidebarActionButton label="Create axis" aria-disabled="true">
+                <PlusIcon className="h-3 w-3" />
+              </SidebarActionButton>
             </Tooltip>
           )}
         </div>
@@ -75,23 +63,20 @@ export const AxesSettingsPanel = ({ initialAxisId, canAuthor }: AxesSettingsPane
               isActive={axis.id === selectedAxisId}
               onClick={() => setSelectedAxisId(axis.id)}
               actions={
-                <Tooltip>
-                  <TooltipTrigger>
-                    <SidebarActionButton
-                      label={`Delete ${axis.name}`}
-                      className="hover:bg-icon-button-hover"
-                      aria-disabled={!canAuthor || undefined}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        if (!canAuthor) return;
+                <Tooltip content={`Delete ${axis.name}`}>
+                  <SidebarActionButton
+                    label={`Delete ${axis.name}`}
+                    className="hover:bg-icon-button-hover"
+                    aria-disabled={!canAuthor || undefined}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      if (!canAuthor) return;
 
-                        font.deleteAxis(axis.id);
-                      }}
-                    >
-                      <MinusIcon className="h-3 w-3" />
-                    </SidebarActionButton>
-                  </TooltipTrigger>
-                  <TooltipContent>{`Delete ${axis.name}`}</TooltipContent>
+                      font.deleteAxis(axis.id);
+                    }}
+                  >
+                    <MinusIcon className="h-3 w-3" />
+                  </SidebarActionButton>
                 </Tooltip>
               }
             >

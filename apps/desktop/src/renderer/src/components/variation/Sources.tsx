@@ -8,8 +8,6 @@ import {
   MenuSeparator,
   MenuTrigger,
   Tooltip,
-  TooltipContent,
-  TooltipTrigger,
 } from "@shift/ui";
 import type { SourceId } from "@shift/types";
 import { useSources } from "@/hooks/useSources";
@@ -127,30 +125,24 @@ const SourceActionsMenu = ({
 }) => {
   if (disabled) {
     return (
-      <Tooltip>
-        <TooltipTrigger>
-          <SidebarActionButton label={`Actions for ${sourceName}`} aria-disabled>
-            <VerticalElipsis className="h-5 w-5 text-icon-subtle" />
-          </SidebarActionButton>
-        </TooltipTrigger>
-        <TooltipContent>Source actions unavailable in preview mode</TooltipContent>
+      <Tooltip content="Source actions unavailable in preview mode">
+        <SidebarActionButton label={`Actions for ${sourceName}`} aria-disabled>
+          <VerticalElipsis className="h-5 w-5 text-icon-subtle" />
+        </SidebarActionButton>
       </Tooltip>
     );
   }
 
   return (
     <Menu modal={false}>
-      <Tooltip>
-        <TooltipTrigger>
-          <MenuTrigger
-            render={
-              <Button variant="ghost" size="icon-sm" aria-label={`Actions for ${sourceName}`} />
-            }
-          >
-            <VerticalElipsis className="h-5 w-5 text-icon-subtle" />
-          </MenuTrigger>
-        </TooltipTrigger>
-        <TooltipContent>{`Edit source`}</TooltipContent>
+      <Tooltip content="Edit source">
+        <MenuTrigger
+          render={
+            <Button variant="ghost" size="icon-sm" aria-label={`Actions for ${sourceName}`} />
+          }
+        >
+          <VerticalElipsis className="h-5 w-5 text-icon-subtle" />
+        </MenuTrigger>
       </Tooltip>
       <MenuPortal>
         <MenuPositioner sideOffset={4} align="start">

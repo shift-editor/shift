@@ -11,8 +11,6 @@ import {
   MenuSeparator,
   MenuTrigger,
   Tooltip,
-  TooltipContent,
-  TooltipTrigger,
 } from "@shift/ui";
 import VerticalElipsis from "@/assets/general/vertical-ellipsis.svg";
 import { useSettingsNavigation } from "@/context/SettingsNavigationContext";
@@ -52,15 +50,12 @@ interface AxisActionsMenuProps {
 
 const AxisActionsMenu = ({ axis, onEdit, onReset, onDelete }: AxisActionsMenuProps) => (
   <Menu modal={false}>
-    <Tooltip>
-      <TooltipTrigger>
-        <MenuTrigger
-          render={<Button variant="ghost" size="icon-sm" aria-label={`Actions for ${axis.name}`} />}
-        >
-          <VerticalElipsis className="h-5 w-5 text-icon-subtle" />
-        </MenuTrigger>
-      </TooltipTrigger>
-      <TooltipContent>{`Actions for ${axis.name}`}</TooltipContent>
+    <Tooltip content={`Actions for ${axis.name}`}>
+      <MenuTrigger
+        render={<Button variant="ghost" size="icon-sm" aria-label={`Actions for ${axis.name}`} />}
+      >
+        <VerticalElipsis className="h-5 w-5 text-icon-subtle" />
+      </MenuTrigger>
     </Tooltip>
     <MenuPortal>
       <MenuPositioner sideOffset={4} align="end">

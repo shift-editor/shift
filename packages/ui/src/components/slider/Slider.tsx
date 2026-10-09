@@ -2,7 +2,7 @@ import * as React from "react";
 import { Slider as BaseSlider } from "@base-ui/react/slider";
 import { cn } from "../../lib/utils";
 
-type SliderRootProps = React.ComponentPropsWithoutRef<typeof BaseSlider.Root<number>>;
+type SliderRootProps = React.ComponentProps<typeof BaseSlider.Root<number>>;
 
 export interface SliderProps extends Omit<
   SliderRootProps,
@@ -16,47 +16,39 @@ export interface SliderProps extends Omit<
   thumbClassName?: string;
 }
 
-export const Slider = React.forwardRef<HTMLDivElement, SliderProps>(
-  (
-    {
-      "aria-label": ariaLabel,
-      className,
-      trackClassName,
-      indicatorClassName,
-      thumbClassName,
-      onValueChange,
-      ...props
-    },
-    ref,
-  ) => {
-    return (
-      <BaseSlider.Root
-        ref={ref}
-        className={cn("relative flex items-center w-full select-none touch-none", className)}
-        thumbAlignment="center"
-        onValueChange={onValueChange ? (value) => onValueChange(value as number) : undefined}
-        {...props}
-      >
-        <BaseSlider.Control className="flex h-3.5 w-full cursor-pointer items-center px-1.75">
-          <BaseSlider.Track
-            className={cn("relative h-1.5 w-full rounded-full bg-control-muted", trackClassName)}
-          >
-            <BaseSlider.Indicator
-              className={cn("absolute h-full bg-accent rounded-full", indicatorClassName)}
-            />
-            <BaseSlider.Thumb
-              aria-label={ariaLabel}
-              className={cn(
-                "h-3.5 w-3.5 rounded-full border-2 border-primary bg-surface shadow-sm",
-                "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent",
-                thumbClassName,
-              )}
-            />
-          </BaseSlider.Track>
-        </BaseSlider.Control>
-      </BaseSlider.Root>
-    );
-  },
-);
-
-Slider.displayName = "Slider";
+export function Slider({
+  "aria-label": ariaLabel,
+  className,
+  trackClassName,
+  indicatorClassName,
+  thumbClassName,
+  onValueChange,
+  ...props
+}: SliderProps) {
+  return (
+    <BaseSlider.Root
+      className={cn("relative flex items-center w-full select-none touch-none", className)}
+      thumbAlignment="center"
+      onValueChange={onValueChange ? (value) => onValueChange(value as number) : undefined}
+      {...props}
+    >
+      <BaseSlider.Control className="flex h-3.5 w-full cursor-pointer items-center px-1.75">
+        <BaseSlider.Track
+          className={cn("relative h-1.5 w-full rounded-full bg-control-muted", trackClassName)}
+        >
+          <BaseSlider.Indicator
+            className={cn("absolute h-full bg-accent rounded-full", indicatorClassName)}
+          />
+          <BaseSlider.Thumb
+            aria-label={ariaLabel}
+            className={cn(
+              "h-3.5 w-3.5 rounded-full border-2 border-primary bg-surface shadow-sm",
+              "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent",
+              thumbClassName,
+            )}
+          />
+        </BaseSlider.Track>
+      </BaseSlider.Control>
+    </BaseSlider.Root>
+  );
+}

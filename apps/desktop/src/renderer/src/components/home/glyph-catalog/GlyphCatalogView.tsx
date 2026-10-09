@@ -9,8 +9,6 @@ import {
   Search,
   Separator,
   Tooltip,
-  TooltipContent,
-  TooltipTrigger,
 } from "@shift/ui";
 
 import AllIcon from "@/assets/sidebar-left/all.svg";
@@ -85,19 +83,16 @@ export const GlyphCatalogView = () => {
       <div>
         <div className="flex items-center justify-between font-sans mb-2">
           <span className="text-ui font-medium text-primary">Glyphs</span>
-          <Tooltip>
-            <TooltipTrigger>
-              <Button
-                variant="ghost"
-                size="sm"
-                aria-label="Create glyph"
-                aria-disabled={!canAuthor || undefined}
-                onClick={canAuthor ? createQuickGlyph : undefined}
-              >
-                <PlusIcon className="w-3 h-3 text-muted" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Create glyph</TooltipContent>
+          <Tooltip content="Create glyph">
+            <Button
+              variant="ghost"
+              size="sm"
+              aria-label="Create glyph"
+              aria-disabled={!canAuthor || undefined}
+              onClick={canAuthor ? createQuickGlyph : undefined}
+            >
+              <PlusIcon className="w-3 h-3 text-muted" />
+            </Button>
           </Tooltip>
         </div>
 

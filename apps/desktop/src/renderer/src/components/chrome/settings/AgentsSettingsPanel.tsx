@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Button, Check, Copy, Switch, Tooltip, TooltipContent, TooltipTrigger } from "@shift/ui";
+import { Button, Check, Copy, Switch, Tooltip } from "@shift/ui";
 import type { AgentConnectionsState } from "@shared/agent/connections";
 import { getShiftHost } from "@/host/shiftHost";
 import { useAgentConnections } from "@/hooks/useAgentConnections";
@@ -128,22 +128,19 @@ const CopyButton = ({ text, label }: { text: string; label: string }) => {
   }, [copied]);
 
   return (
-    <Tooltip>
-      <TooltipTrigger>
-        <Button
-          variant="muted"
-          size="icon-sm"
-          aria-label={label}
-          className="absolute right-1.5 top-1.5"
-          onClick={async () => {
-            await getShiftHost().clipboard.writeText(text);
-            setCopied(true);
-          }}
-        >
-          {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>{copied ? "Copied" : label}</TooltipContent>
+    <Tooltip content={copied ? "Copied" : label}>
+      <Button
+        variant="muted"
+        size="icon-sm"
+        aria-label={label}
+        className="absolute right-1.5 top-1.5"
+        onClick={async () => {
+          await getShiftHost().clipboard.writeText(text);
+          setCopied(true);
+        }}
+      >
+        {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+      </Button>
     </Tooltip>
   );
 };

@@ -28,28 +28,31 @@ const sizeStyles = {
   "icon-sm": "h-6 w-6 p-0.5",
 };
 
-export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant = "default", size = "md", isActive, icon, children, ...props }, ref) => {
-    return (
-      <BaseButton
-        ref={ref}
-        className={cn(
-          "inline-flex cursor-pointer items-center justify-center gap-2 rounded transition-colors duration-200",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
-          "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
-          "aria-disabled:cursor-default aria-disabled:opacity-50",
-          variantStyles[variant],
-          sizeStyles[size],
-          className,
-        )}
-        data-active={isActive ? true : undefined}
-        {...props}
-      >
-        {icon}
-        {children}
-      </BaseButton>
-    );
-  },
-);
-
-Button.displayName = "Button";
+export function Button({
+  className,
+  variant = "default",
+  size = "md",
+  isActive,
+  icon,
+  children,
+  ...props
+}: ButtonProps) {
+  return (
+    <BaseButton
+      className={cn(
+        "inline-flex cursor-pointer items-center justify-center gap-2 rounded transition-colors duration-200",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
+        "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+        "aria-disabled:cursor-default aria-disabled:opacity-50",
+        variantStyles[variant],
+        sizeStyles[size],
+        className,
+      )}
+      data-active={isActive ? true : undefined}
+      {...props}
+    >
+      {icon}
+      {children}
+    </BaseButton>
+  );
+}
