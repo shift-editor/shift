@@ -42,19 +42,29 @@ export const NumberFieldGroup = React.forwardRef<
 ));
 NumberFieldGroup.displayName = "NumberFieldGroup";
 
-export interface NumberFieldInputProps extends React.ComponentPropsWithoutRef<
-  typeof BaseNumberField.Input
-> {}
+export interface NumberFieldInputProps extends Omit<
+  React.ComponentPropsWithoutRef<typeof BaseNumberField.Input>,
+  "size"
+> {
+  /** Replaces the native numeric `size` attribute. `compact` matches the dense `Input` used in sidebars. */
+  size?: "compact" | "md";
+}
+
+const inputSizeStyles = {
+  compact: "text-ui",
+  md: "text-sm",
+};
 
 export const NumberFieldInput = React.forwardRef<
   React.ElementRef<typeof BaseNumberField.Input>,
   NumberFieldInputProps
->(({ className, ...props }, ref) => (
+>(({ className, size = "md", ...props }, ref) => (
   <BaseNumberField.Input
     ref={ref}
     className={cn(
-      "h-full min-w-0 flex-1 bg-transparent px-2 text-sm text-primary outline-none",
+      "h-full min-w-0 flex-1 bg-transparent px-2 text-primary outline-none",
       "data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50",
+      inputSizeStyles[size],
       className,
     )}
     {...props}
