@@ -186,19 +186,21 @@ CREATE TABLE IF NOT EXISTS feature_text (
 );
 
 CREATE TABLE IF NOT EXISTS kerning_groups (
+    id TEXT PRIMARY KEY,
     position INTEGER NOT NULL CHECK (position IN (1, 2)),
     name TEXT NOT NULL,
-    PRIMARY KEY (position, name)
+    UNIQUE (position, name),
+    UNIQUE (id, position)
 );
 
 CREATE TABLE IF NOT EXISTS kerning_group_members (
+    group_id TEXT NOT NULL,
     position INTEGER NOT NULL CHECK (position IN (1, 2)),
-    group_name TEXT NOT NULL,
     glyph_id TEXT NOT NULL,
     order_index INTEGER NOT NULL,
-    PRIMARY KEY (position, group_name, order_index),
+    PRIMARY KEY (group_id, order_index),
     UNIQUE (position, glyph_id),
-    FOREIGN KEY (position, group_name) REFERENCES kerning_groups(position, name) ON DELETE CASCADE
+    FOREIGN KEY (group_id, position) REFERENCES kerning_groups(id, position) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS kerning_pairs (
@@ -270,32 +272,36 @@ pub const SHIFT_DOCUMENT_SCHEMA_VERSION: i64 = 2;
 /// The oldest schema version [`migrate`] can upgrade.
 pub(crate) const OLDEST_MIGRATABLE_SCHEMA_VERSION: i64 = 1;
 
-/// Version 1 to 2: kerning pairs gain a source and reference glyphs by id.
+/// Version 1 to 2: kerning pairs gain a source and reference glyphs and
+/// groups by id.
 ///
-/// Existing pairs become values of the font's default source. Group names
-/// lose their `public.kern1.`/`public.kern2.` prefix, and glyph names resolve
-/// through `glyphs.name`. Members and pairs naming a glyph that is not in the
-/// store are dropped, and a glyph listed in two groups for one position keeps
-/// its first group. This SQL is frozen: later schema changes add new steps.
+/// Existing pairs become values of the font's default source. Each group gets
+/// a new id, group names lose their `public.kern1.`/`public.kern2.` prefix,
+/// and glyph names resolve through `glyphs.name`. Members and pairs naming a
+/// glyph or group that is not in the store are dropped, and a glyph listed in
+/// two groups for one position keeps its first group. This SQL is frozen:
+/// later schema changes add new steps.
 const MIGRATE_V1_TO_V2: &str = r#"
 ALTER TABLE kerning_pairs RENAME TO kerning_pairs_v1;
 ALTER TABLE kerning_group_members RENAME TO kerning_group_members_v1;
 ALTER TABLE kerning_groups RENAME TO kerning_groups_v1;
 
 CREATE TABLE kerning_groups (
+    id TEXT PRIMARY KEY,
     position INTEGER NOT NULL CHECK (position IN (1, 2)),
     name TEXT NOT NULL,
-    PRIMARY KEY (position, name)
+    UNIQUE (position, name),
+    UNIQUE (id, position)
 );
 
 CREATE TABLE kerning_group_members (
+    group_id TEXT NOT NULL,
     position INTEGER NOT NULL CHECK (position IN (1, 2)),
-    group_name TEXT NOT NULL,
     glyph_id TEXT NOT NULL,
     order_index INTEGER NOT NULL,
-    PRIMARY KEY (position, group_name, order_index),
+    PRIMARY KEY (group_id, order_index),
     UNIQUE (position, glyph_id),
-    FOREIGN KEY (position, group_name) REFERENCES kerning_groups(position, name) ON DELETE CASCADE
+    FOREIGN KEY (group_id, position) REFERENCES kerning_groups(id, position) ON DELETE CASCADE
 );
 
 CREATE TABLE kerning_pairs (
@@ -308,23 +314,27 @@ CREATE TABLE kerning_pairs (
     PRIMARY KEY (source_id, first_kind, first_value, second_kind, second_value)
 );
 
-INSERT OR IGNORE INTO kerning_groups (position, name)
+INSERT OR IGNORE INTO kerning_groups (id, position, name)
 SELECT
+    'kerningGroup_' || lower(hex(randomblob(8))),
     side,
     CASE WHEN name LIKE 'public.kern_.%' THEN substr(name, 14) ELSE name END
 FROM kerning_groups_v1
 ORDER BY side, name;
 
-INSERT OR IGNORE INTO kerning_group_members (position, group_name, glyph_id, order_index)
+INSERT OR IGNORE INTO kerning_group_members (group_id, position, glyph_id, order_index)
 SELECT
+    kerning_group.id,
     member.side,
-    CASE
-        WHEN member.group_name LIKE 'public.kern_.%' THEN substr(member.group_name, 14)
-        ELSE member.group_name
-    END,
     glyph.id,
     member.order_index
 FROM kerning_group_members_v1 AS member
+JOIN kerning_groups AS kerning_group
+    ON kerning_group.position = member.side
+    AND kerning_group.name = CASE
+        WHEN member.group_name LIKE 'public.kern_.%' THEN substr(member.group_name, 14)
+        ELSE member.group_name
+    END
 JOIN glyphs AS glyph ON glyph.name = member.glyph_name
 ORDER BY member.side, member.group_name, member.order_index;
 
@@ -336,15 +346,29 @@ WITH resolved AS (
         CASE
             WHEN pair.first_kind = 'glyph'
                 THEN (SELECT id FROM glyphs WHERE name = pair.first_value)
-            WHEN pair.first_value LIKE 'public.kern_.%' THEN substr(pair.first_value, 14)
-            ELSE pair.first_value
+            ELSE (
+                SELECT id FROM kerning_groups
+                WHERE position = 1
+                    AND name = CASE
+                        WHEN pair.first_value LIKE 'public.kern_.%'
+                            THEN substr(pair.first_value, 14)
+                        ELSE pair.first_value
+                    END
+            )
         END AS first_value,
         pair.second_kind,
         CASE
             WHEN pair.second_kind = 'glyph'
                 THEN (SELECT id FROM glyphs WHERE name = pair.second_value)
-            WHEN pair.second_value LIKE 'public.kern_.%' THEN substr(pair.second_value, 14)
-            ELSE pair.second_value
+            ELSE (
+                SELECT id FROM kerning_groups
+                WHERE position = 2
+                    AND name = CASE
+                        WHEN pair.second_value LIKE 'public.kern_.%'
+                            THEN substr(pair.second_value, 14)
+                        ELSE pair.second_value
+                    END
+            )
         END AS second_value,
         pair.value
     FROM kerning_pairs_v1 AS pair

@@ -24,7 +24,7 @@ Font format backends that convert between on-disk font files and the `Font` IR u
 
 **Architecture Invariant:** Exporting a `Font` materialized from canonical SQLite must produce byte-identical UFO and Designspace artifacts to exporting the same supported in-memory `Font` directly. WHY: native persistence must preserve authored export inputs rather than narrowing them to a storage-specific projection.
 
-**Architecture Invariant:** Importers strip format group prefixes (`public.kern1.`/`public.kern2.`, `@MMK_L_`/`@MMK_R_`) and resolve glyph names to `GlyphId` through `KerningImport` once the glyph directory is known. WHY: The IR names groups without prefixes (the `KerningPosition` carries the side) and references glyphs by id, so renames keep their kerning. Members and pairs naming a glyph outside the import, and glyphs listed in two groups for one position, are dropped and reported in `ImportReport`.
+**Architecture Invariant:** Importers strip format group prefixes (`public.kern1.`/`public.kern2.`, `@MMK_L_`/`@MMK_R_`) resolve glyph names to `GlyphId` through `KerningImport` once the glyph directory is known; each group gets a new `KerningGroupId` there, so groups must be added before the pairs that name them. WHY: The IR stores group names without prefixes (the group's `KerningPosition` carries the side) and pairs reference glyphs and groups by id, so renaming either keeps its kerning. Members and pairs naming a glyph or group outside the import, and glyphs listed in two groups for one position, are dropped and reported in `ImportReport`.
 
 **Architecture Invariant:** Kerning groups are font-wide and pair values are per source. Glyphs imports every master's LTR kerning; Designspace imports each master UFO's `kerning.plist` as that source's values and takes groups from the default UFO; sources bound to a UFO layer carry no kerning. Glyphs RTL kerning is reported as omitted. WHY: Variable kerning interpolates between masters, so each master's values must survive.
 
@@ -159,7 +159,7 @@ src/
 - **Cross-platform UFO replacement:** macOS and Linux use an atomic directory exchange when supported. The fallback moves the old tree aside first and restores it if installing the staged tree fails.
 - **OnCurve ambiguity on write:** The IR's `OnCurve` type is context-dependent when writing. The first point of an open contour becomes `Move`, a point after `OffCurve` becomes `Curve`, everything else becomes `Line`. If contour structure is malformed, this heuristic may produce wrong results.
 - **Glyphs source parsing is eager:** `glyphs-reader` materializes one normalized source model before `GlyphsGlyphStream` starts. Shift geometry conversion, packing, compression, and SQLite writes remain bounded.
-- **Kerning references dangle by design:** Pairs and group members keep `GlyphId`s and `SourceId`s that may not exist (a deleted glyph or source). They never resolve, writers skip them, and they come back to life when the glyph or source is restored by undo.
+- **Kerning references dangle by design:** Pairs and group members keep `GlyphId`s, `KerningGroupId`s, and `SourceId`s that may not exist (a deleted glyph, group, or source). They never resolve, writers skip them, and they come back to life when the glyph, group, or source is restored by undo. A new group that reuses a deleted group's name gets a new id and does not inherit its pairs.
 - **Cross-axis mappings:** Direct TTF compilation rejects cross-axis mappings until the compiler stack supports `avar` version 2. It never flattens the mapping or falls back to temporary UFO compilation.
 - **Binary atlas capabilities:** Direct Grid compilation supports quadratic glyf/gvar plus HVAR or phantom advances and static CFF. CFF2, cubic glyf extensions, avar version 2, and VARC fail explicitly rather than falling back to another renderer or authored conversion.
 - **Authored STAT tables:** When Shift axis labels exist, export appends a generated `STAT` feature block. If authored feature text also declares `STAT`, the feature compiler reports the conflict.
@@ -205,7 +205,7 @@ cargo run -p shift-backends --release --example profile_binary_atlas -- <font.tt
 
 - `Font`, `Glyph`, `GlyphLayer`, `Contour`, `PointType` -- IR types this crate converts to/from (shift-font)
 - `FontLoader`, `FontAdaptor` -- shift-core dispatcher that selects backends by file extension
-- `Kerning`, `KerningPosition`, `KerningSide`, `KerningPair` -- IR kerning types that backends populate
+- `Kerning`, `KerningGroup`, `KerningGroupId`, `KerningPosition`, `KerningSide`, `KerningPair` -- IR kerning types that backends populate
 - `FeatureData` -- IR feature storage, populated from `features.fea` or Glyphs feature snippets
 - `LibData`, `LibValue` -- arbitrary plist data preserved through round-trips
 - `Axis`, `Source`, `Location` -- designspace types populated by `GlyphsReader` for multi-master fonts

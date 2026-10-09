@@ -69,16 +69,24 @@ fn assert_migrated_kerning(font: &shift_font::Font) {
     let a = GlyphId::from_raw("A");
     let acute = GlyphId::from_raw("acute");
     let kerning = font.kerning();
+    let members = |position, name| {
+        let group_id = kerning.group_id(position, name).expect("group migrated");
+        kerning
+            .group(group_id)
+            .expect("group exists")
+            .members
+            .clone()
+    };
+    assert_eq!(members(KerningPosition::First, "A"), vec![a.clone()]);
+    assert!(members(KerningPosition::First, "Ghost").is_empty());
+    let first_a = kerning.group_id(KerningPosition::First, "A").unwrap();
+    let second_a = kerning.group_id(KerningPosition::Second, "A").unwrap();
+    assert_ne!(first_a, second_a);
     assert_eq!(
-        kerning.group(KerningPosition::First, "A"),
-        Some([a.clone()].as_slice())
-    );
-    assert_eq!(
-        kerning.group(KerningPosition::First, "Ghost"),
-        Some([].as_slice())
-    );
-    assert_eq!(
-        kerning.value(&regular, &KerningPair::groups("A", "A")),
+        kerning.value(
+            &regular,
+            &KerningPair::groups(first_a.clone(), second_a.clone())
+        ),
         Some(-80.0)
     );
     assert_eq!(

@@ -16,7 +16,7 @@ use fontir::source::Source;
 use kurbo::BezPath;
 use ordered_float::OrderedFloat;
 use shift_font::test_support::sample_variable_font;
-use shift_font::{GlyphId, KerningPair, KerningSide};
+use shift_font::{GlyphId, KerningGroupId, KerningPair, KerningSide};
 
 use super::source::ShiftIrSource;
 
@@ -55,14 +55,28 @@ fn kerning_pairs_with_missing_sides_are_skipped() {
     let mut font = sample_variable_font();
     let source_id = font.default_source_id().unwrap();
     let kerning = font.kerning_mut();
-    kerning.set_value(source_id.clone(), KerningPair::groups("A", "J"), -30.0);
+    let first_a = KerningGroupId::from_raw("first_A");
+    let second_a = KerningGroupId::from_raw("second_A");
+    kerning.set_value(
+        source_id.clone(),
+        KerningPair::groups(first_a.clone(), KerningGroupId::from_raw("missing")),
+        -30.0,
+    );
+    kerning.set_value(
+        source_id.clone(),
+        KerningPair::new(
+            KerningSide::Glyph(GlyphId::from_raw("missing")),
+            KerningSide::Group(second_a),
+        ),
+        -20.0,
+    );
     kerning.set_value(
         source_id,
         KerningPair::new(
-            KerningSide::Glyph(GlyphId::from_raw("missing")),
-            KerningSide::Group("A".to_string()),
+            KerningSide::Glyph(GlyphId::from_raw("A")),
+            KerningSide::Group(first_a),
         ),
-        -20.0,
+        -10.0,
     );
 
     let actual = compile_ir(ShiftIrSource::from_font_view(&font).unwrap());

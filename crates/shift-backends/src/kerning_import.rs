@@ -2,7 +2,10 @@
 
 use std::collections::HashMap;
 
-use shift_font::{GlyphId, Kerning, KerningPair, KerningPosition, KerningSide, SourceId};
+use shift_font::{
+    GlyphId, Kerning, KerningGroup, KerningGroupId, KerningPair, KerningPosition, KerningSide,
+    SourceId,
+};
 
 use crate::{ImportLoss, ImportLossKind, ImportReport};
 
@@ -12,11 +15,13 @@ pub(crate) enum NamedKerningSide<'a> {
     Group(&'a str),
 }
 
-/// Resolves glyph names in imported kerning to the ids the import assigned.
+/// Resolves glyph and group names in imported kerning to ids.
 ///
-/// Group members and pairs that name a glyph outside the import are dropped
-/// and counted, as are members listed in more than one group for the same
-/// position. [`Self::finish`] reports both counts.
+/// Glyph names resolve to the ids the import assigned, and each group gets a
+/// new [`KerningGroupId`] the first time its name is added. Group members and
+/// pairs that name a glyph outside the import, pairs that name a group never
+/// added, and members listed in more than one group for the same position are
+/// dropped and counted. [`Self::finish`] reports the counts.
 pub(crate) struct KerningImport<'a> {
     kerning: Kerning,
     glyph_ids: &'a HashMap<String, GlyphId>,
@@ -36,20 +41,26 @@ impl<'a> KerningImport<'a> {
         }
     }
 
-    /// Adds a group whose name has no format prefix.
+    /// Adds a group whose name has no format prefix, or extends the group
+    /// already added with that name at `position`.
     ///
     /// A member already claimed by another group at `position` stays in that
-    /// group.
+    /// group. Add every group before the pairs that name it.
     pub(crate) fn add_group<'m>(
         &mut self,
         position: KerningPosition,
         name: &str,
         members: impl IntoIterator<Item = &'m str>,
     ) {
+        let group_id = self
+            .kerning
+            .group_id(position, name)
+            .cloned()
+            .unwrap_or_else(KerningGroupId::new);
         let mut resolved = self
             .kerning
-            .group(position, name)
-            .map(<[GlyphId]>::to_vec)
+            .group(&group_id)
+            .map(|group| group.members.clone())
             .unwrap_or_default();
         for member in members {
             let Some(glyph_id) = self.glyph_ids.get(member) else {
@@ -59,14 +70,16 @@ impl<'a> KerningImport<'a> {
             let claimed_elsewhere = self
                 .kerning
                 .group_of(position, glyph_id)
-                .is_some_and(|group| group != name);
+                .is_some_and(|owner| *owner != group_id);
             if claimed_elsewhere {
                 self.duplicate_members += 1;
             } else if !resolved.contains(glyph_id) {
                 resolved.push(glyph_id.clone());
             }
         }
-        self.kerning.set_group(position, name, resolved);
+        self.kerning
+            .set_group(group_id, KerningGroup::new(position, name, resolved))
+            .expect("the group keeps the id already holding its name");
     }
 
     /// Sets the value of a pair at `source_id`.
@@ -77,7 +90,10 @@ impl<'a> KerningImport<'a> {
         second: NamedKerningSide<'_>,
         value: f64,
     ) {
-        let (Some(first), Some(second)) = (self.side(first), self.side(second)) else {
+        let (Some(first), Some(second)) = (
+            self.side(KerningPosition::First, first),
+            self.side(KerningPosition::Second, second),
+        ) else {
             self.unresolved_pairs += 1;
             return;
         };
@@ -91,7 +107,7 @@ impl<'a> KerningImport<'a> {
             report.losses.push(ImportLoss {
                 kind: ImportLossKind::Omitted,
                 message: format!(
-                    "{} kerning pairs name a glyph that is not in the font and were omitted.",
+                    "{} kerning pairs name a glyph or group that is not in the font and were omitted.",
                     self.unresolved_pairs
                 ),
             });
@@ -117,12 +133,16 @@ impl<'a> KerningImport<'a> {
         self.kerning
     }
 
-    fn side(&self, side: NamedKerningSide<'_>) -> Option<KerningSide> {
+    fn side(&self, position: KerningPosition, side: NamedKerningSide<'_>) -> Option<KerningSide> {
         match side {
             NamedKerningSide::Glyph(name) => {
                 self.glyph_ids.get(name).cloned().map(KerningSide::Glyph)
             }
-            NamedKerningSide::Group(name) => Some(KerningSide::Group(name.to_string())),
+            NamedKerningSide::Group(name) => self
+                .kerning
+                .group_id(position, name)
+                .cloned()
+                .map(KerningSide::Group),
         }
     }
 }
@@ -138,8 +158,13 @@ mod tests {
             .collect()
     }
 
+    fn members(kerning: &Kerning, position: KerningPosition, name: &str) -> Vec<GlyphId> {
+        let group_id = kerning.group_id(position, name).unwrap();
+        kerning.group(group_id).unwrap().members.clone()
+    }
+
     #[test]
-    fn references_to_missing_glyphs_are_dropped_and_reported() {
+    fn references_to_missing_glyphs_and_groups_are_dropped_and_reported() {
         let glyph_ids = ids(&["A", "V"]);
         let source_id = SourceId::from_raw("regular");
         let mut import = KerningImport::new(&glyph_ids);
@@ -156,13 +181,26 @@ mod tests {
             NamedKerningSide::Glyph("Y"),
             -60.0,
         );
+        import.add_pair(
+            &source_id,
+            NamedKerningSide::Glyph("A"),
+            NamedKerningSide::Group("undefined"),
+            -20.0,
+        );
 
         let mut report = ImportReport::default();
         let kerning = import.finish(&mut report);
 
         assert_eq!(
-            kerning.group(KerningPosition::First, "A"),
-            Some([GlyphId::from_raw("A")].as_slice())
+            members(&kerning, KerningPosition::First, "A"),
+            vec![GlyphId::from_raw("A")]
+        );
+        let group_id = kerning.group_id(KerningPosition::First, "A").unwrap();
+        assert_eq!(
+            kerning
+                .resolve(&source_id, &GlyphId::from_raw("A"), &GlyphId::from_raw("V"))
+                .map(|resolved| resolved.pair.first),
+            Some(KerningSide::Group(group_id.clone()))
         );
         assert_eq!(kerning.source(&source_id).unwrap().len(), 1);
         assert_eq!(report.losses.len(), 2);
@@ -180,12 +218,19 @@ mod tests {
         let kerning = import.finish(&mut report);
 
         let a = GlyphId::from_raw("A");
-        assert_eq!(kerning.group_of(KerningPosition::First, &a), Some("A"));
         assert_eq!(
-            kerning.group(KerningPosition::First, "B"),
-            Some([].as_slice())
+            kerning.group_of(KerningPosition::First, &a),
+            kerning.group_id(KerningPosition::First, "A")
         );
-        assert_eq!(kerning.group_of(KerningPosition::Second, &a), Some("A"));
+        assert!(members(&kerning, KerningPosition::First, "B").is_empty());
+        assert_eq!(
+            kerning.group_of(KerningPosition::Second, &a),
+            kerning.group_id(KerningPosition::Second, "A")
+        );
+        assert_ne!(
+            kerning.group_id(KerningPosition::First, "A"),
+            kerning.group_id(KerningPosition::Second, "A")
+        );
         assert_eq!(report.losses.len(), 1);
     }
 }

@@ -947,8 +947,8 @@ fn replace_kerning(tx: &Transaction<'_>, kerning: &font::Kerning) -> Result<(), 
     tx.execute("DELETE FROM kerning_groups", [])?;
 
     for position in [font::KerningPosition::First, font::KerningPosition::Second] {
-        for (name, members) in kerning.groups(position) {
-            insert_kerning_group(tx, position, name, members)?;
+        for (group_id, group) in kerning.groups(position) {
+            insert_kerning_group(tx, group_id, group)?;
         }
     }
     let mut insert_pair = tx.prepare(
@@ -983,25 +983,29 @@ fn replace_kerning(tx: &Transaction<'_>, kerning: &font::Kerning) -> Result<(), 
 
 fn insert_kerning_group(
     tx: &Transaction<'_>,
-    position: font::KerningPosition,
-    name: &str,
-    members: &[font::GlyphId],
+    group_id: &font::KerningGroupId,
+    group: &font::KerningGroup,
 ) -> Result<(), StoreError> {
-    let position = kerning_position_column(position);
+    let position = kerning_position_column(group.position);
     tx.execute(
         "
-        INSERT INTO kerning_groups (position, name)
-        VALUES (?1, ?2)
+        INSERT INTO kerning_groups (id, position, name)
+        VALUES (?1, ?2, ?3)
         ",
-        params![position, name],
+        params![group_id.as_str(), position, group.name],
     )?;
-    for (order_index, member) in members.iter().enumerate() {
+    for (order_index, member) in group.members.iter().enumerate() {
         tx.execute(
             "
-            INSERT INTO kerning_group_members (position, group_name, glyph_id, order_index)
+            INSERT INTO kerning_group_members (group_id, position, glyph_id, order_index)
             VALUES (?1, ?2, ?3, ?4)
             ",
-            params![position, name, member.as_str(), order_index as i64],
+            params![
+                group_id.as_str(),
+                position,
+                member.as_str(),
+                order_index as i64
+            ],
         )?;
     }
     Ok(())
@@ -1018,7 +1022,7 @@ pub(crate) fn kerning_position_column(position: font::KerningPosition) -> i64 {
 fn kerning_side_parts(side: &font::KerningSide) -> (&'static str, &str) {
     match side {
         font::KerningSide::Glyph(glyph_id) => ("glyph", glyph_id.as_str()),
-        font::KerningSide::Group(name) => ("group", name.as_str()),
+        font::KerningSide::Group(group_id) => ("group", group_id.as_str()),
     }
 }
 

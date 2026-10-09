@@ -4,8 +4,9 @@ use crate::{
     Anchor, AnchorId, Axis, AxisId, AxisLabel, AxisLabelId, AxisLabelRange, AxisMapping,
     AxisMappingPoint, AxisRole, Component, ComponentId, Contour, ContourId, DecomposedTransform,
     DesignLocation, ExternalLocation, Font, Glyph, GlyphId, GlyphLayer, Guideline, GuidelineId,
-    KerningPair, KerningPosition, KerningSide, LayerId, LibValue, Location, MetricKind,
-    MetricValue, NamedInstance, NamedInstanceId, Point, PointId, PointType, Source, SourceId,
+    KerningGroup, KerningGroupId, KerningPair, KerningPosition, KerningSide, LayerId, LibValue,
+    Location, MetricKind, MetricValue, NamedInstance, NamedInstanceId, Point, PointId, PointType,
+    Source, SourceId,
 };
 use std::collections::BTreeMap;
 
@@ -193,16 +194,16 @@ pub fn sample_font() -> Font {
     font.add_source(bold_source);
     font.set_default_source_id(regular_id.clone());
     let kerned_id = GlyphId::from_raw("A");
+    let (first_group, second_group) = add_a_groups(font.kerning_mut(), &kerned_id);
     let kerning = font.kerning_mut();
-    kerning.set_group(KerningPosition::First, "A", vec![kerned_id.clone()]);
-    kerning.set_group(KerningPosition::Second, "A", vec![kerned_id.clone()]);
-    kerning.set_value(regular_id.clone(), KerningPair::groups("A", "A"), -80.0);
-    kerning.set_value(bold_id.clone(), KerningPair::groups("A", "A"), -120.0);
+    let group_pair = KerningPair::groups(first_group, second_group.clone());
+    kerning.set_value(regular_id.clone(), group_pair.clone(), -80.0);
+    kerning.set_value(bold_id.clone(), group_pair, -120.0);
     kerning.set_value(
         bold_id.clone(),
         KerningPair::new(
             KerningSide::Glyph(kerned_id),
-            KerningSide::Group("A".to_string()),
+            KerningSide::Group(second_group),
         ),
         -100.0,
     );
@@ -421,12 +422,34 @@ pub fn sample_variable_font() -> Font {
     glyph.set_layer(triangle_layer(bold_source_id.clone(), 800.0, 380.0));
     let glyph_id = font.insert_glyph(glyph).unwrap();
 
+    let (first_group, second_group) = add_a_groups(font.kerning_mut(), &glyph_id);
+    let group_pair = KerningPair::groups(first_group, second_group);
     let kerning = font.kerning_mut();
-    kerning.set_group(KerningPosition::First, "A", vec![glyph_id.clone()]);
-    kerning.set_group(KerningPosition::Second, "A", vec![glyph_id]);
-    kerning.set_value(default_source_id, KerningPair::groups("A", "A"), -50.0);
-    kerning.set_value(bold_source_id, KerningPair::groups("A", "A"), -90.0);
+    kerning.set_value(default_source_id, group_pair.clone(), -50.0);
+    kerning.set_value(bold_source_id, group_pair, -90.0);
     font
+}
+
+/// Adds a first and a second kerning group named `A` holding `glyph_id`, and
+/// returns their ids.
+fn add_a_groups(
+    kerning: &mut crate::Kerning,
+    glyph_id: &GlyphId,
+) -> (KerningGroupId, KerningGroupId) {
+    let first = KerningGroupId::from_raw("first_A");
+    let second = KerningGroupId::from_raw("second_A");
+    for (group_id, position) in [
+        (&first, KerningPosition::First),
+        (&second, KerningPosition::Second),
+    ] {
+        kerning
+            .set_group(
+                group_id.clone(),
+                KerningGroup::new(position, "A", vec![glyph_id.clone()]),
+            )
+            .expect("group names are unique per position");
+    }
+    (first, second)
 }
 
 fn set_source_metrics(

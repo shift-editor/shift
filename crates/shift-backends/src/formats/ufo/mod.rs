@@ -349,11 +349,16 @@ mod tests {
     #[test]
     fn save_fails_loudly_on_invalid_kerning_group_name() {
         let mut font = Font::new();
-        font.kerning_mut().set_group(
-            shift_font::KerningPosition::First,
-            "bad\u{0000}group",
-            Vec::new(),
-        );
+        font.kerning_mut()
+            .set_group(
+                shift_font::KerningGroupId::new(),
+                shift_font::KerningGroup::new(
+                    shift_font::KerningPosition::First,
+                    "bad\u{0000}group",
+                    Vec::new(),
+                ),
+            )
+            .unwrap();
 
         let temp_dir = tempfile::tempdir().unwrap();
         let ufo_path = temp_dir.path().join("invalid_group.ufo");

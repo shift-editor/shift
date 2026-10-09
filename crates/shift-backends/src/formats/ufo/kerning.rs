@@ -90,14 +90,15 @@ pub(crate) fn ufo_kerning(
         (KerningPosition::First, FIRST_GROUP_PREFIX),
         (KerningPosition::Second, SECOND_GROUP_PREFIX),
     ] {
-        for (name, members) in kerning.groups(position) {
-            let members = members
+        for (_, group) in kerning.groups(position) {
+            let members = group
+                .members
                 .iter()
                 .filter_map(|member| glyph_names.get(member))
                 .map(|member| super::writer::ufo_name("kerning group member", member))
                 .collect::<FormatBackendResult<_>>()?;
             groups.insert(
-                super::writer::ufo_name("kerning group", &format!("{prefix}{name}"))?,
+                super::writer::ufo_name("kerning group", &format!("{prefix}{}", group.name))?,
                 members,
             );
         }
@@ -109,8 +110,8 @@ pub(crate) fn ufo_kerning(
     };
     for (pair, value) in source.pairs() {
         let (Some(first), Some(second)) = (
-            ufo_side(&pair.first, FIRST_GROUP_PREFIX, glyph_names),
-            ufo_side(&pair.second, SECOND_GROUP_PREFIX, glyph_names),
+            ufo_side(kerning, &pair.first, FIRST_GROUP_PREFIX, glyph_names),
+            ufo_side(kerning, &pair.second, SECOND_GROUP_PREFIX, glyph_names),
         ) else {
             continue;
         };
@@ -122,13 +123,18 @@ pub(crate) fn ufo_kerning(
     Ok((groups, pairs))
 }
 
+/// Returns the UFO name of `side`, or `None` when it references a glyph or
+/// group that is not in the font.
 fn ufo_side(
+    kerning: &Kerning,
     side: &KerningSide,
     group_prefix: &str,
     glyph_names: &HashMap<GlyphId, &str>,
 ) -> Option<String> {
     match side {
         KerningSide::Glyph(glyph_id) => glyph_names.get(glyph_id).map(|name| name.to_string()),
-        KerningSide::Group(name) => Some(format!("{group_prefix}{name}")),
+        KerningSide::Group(group_id) => kerning
+            .group(group_id)
+            .map(|group| format!("{group_prefix}{}", group.name)),
     }
 }

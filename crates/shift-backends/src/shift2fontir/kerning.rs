@@ -8,7 +8,7 @@ use fontir::error::Error;
 use fontir::ir::{GlyphOrder, KernGroup, KernSide, KerningGroups, KerningInstance};
 use fontir::orchestration::{Context, WorkId};
 use ordered_float::OrderedFloat;
-use shift_font::{GlyphId, KerningPosition, KerningSide, SourceKerning};
+use shift_font::{GlyphId, Kerning, KerningPosition, KerningSide, SourceKerning};
 
 use super::axes::normalized_source_location;
 use super::source::ShiftSnapshot;
@@ -48,13 +48,14 @@ impl Work<Context, WorkId, Error> for KerningGroupWork {
         let mut groups = BTreeMap::new();
 
         for position in [KerningPosition::First, KerningPosition::Second] {
-            for (name, members) in self.snapshot.kerning.groups(position) {
-                let members = members
+            for (_, group) in self.snapshot.kerning.groups(position) {
+                let members = group
+                    .members
                     .iter()
                     .filter_map(|member| glyph_names.get(member).cloned())
                     .collect::<BTreeSet<_>>();
                 if !members.is_empty() {
-                    groups.insert(kern_group(position, name), members);
+                    groups.insert(kern_group(position, &group.name), members);
                 }
             }
         }
@@ -114,11 +115,24 @@ impl Work<Context, WorkId, Error> for KerningInstanceWork {
             .find(|(location, _)| *location == self.location)
             .map(|(_, pairs)| pairs);
 
+        let kerning = &self.snapshot.kerning;
         let mut kerns = BTreeMap::new();
         for (pair, value) in pairs.iter().flat_map(|pairs| pairs.pairs()) {
             let (Some(first), Some(second)) = (
-                resolve_side(&pair.first, KerningPosition::First, &glyph_names, &groups),
-                resolve_side(&pair.second, KerningPosition::Second, &glyph_names, &groups),
+                resolve_side(
+                    kerning,
+                    &pair.first,
+                    KerningPosition::First,
+                    &glyph_names,
+                    &groups,
+                ),
+                resolve_side(
+                    kerning,
+                    &pair.second,
+                    KerningPosition::Second,
+                    &glyph_names,
+                    &groups,
+                ),
             ) else {
                 continue;
             };
@@ -174,11 +188,12 @@ fn kern_group(position: KerningPosition, name: &str) -> KernGroup {
 
 /// Resolves one kerning side against the compiled glyphs and groups.
 ///
-/// Returns `None` for a side naming a glyph outside the compiled order or a
-/// group that was not emitted, so the pair is skipped as fontc does for
-/// Glyphs and UFO sources. Groups disappear when none of their members are
-/// compiled.
+/// Returns `None` for a side naming a glyph outside the compiled order, a
+/// group not in the font or at the other position, or a group that was not
+/// emitted, so the pair is skipped as fontc does for Glyphs and UFO sources.
+/// Groups disappear when none of their members are compiled.
 fn resolve_side(
+    kerning: &Kerning,
     side: &KerningSide,
     position: KerningPosition,
     glyph_names: &HashMap<GlyphId, GlyphName>,
@@ -186,8 +201,11 @@ fn resolve_side(
 ) -> Option<KernSide> {
     match side {
         KerningSide::Glyph(glyph_id) => glyph_names.get(glyph_id).cloned().map(KernSide::Glyph),
-        KerningSide::Group(name) => {
-            let group = kern_group(position, name);
+        KerningSide::Group(group_id) => {
+            let group = kerning
+                .group(group_id)
+                .filter(|group| group.position == position)?;
+            let group = kern_group(position, &group.name);
             groups
                 .groups
                 .contains_key(&group)
