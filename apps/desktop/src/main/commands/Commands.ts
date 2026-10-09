@@ -144,6 +144,13 @@ const fileCommands: Command[] = [
     run: (ctx) => ctx.document.open(),
   },
   {
+    id: "file.openFolder",
+    label: "Open Font Folder…",
+    // macOS opens packages from Open…, which selects files and folders together.
+    enabled: () => process.platform !== "darwin",
+    run: (ctx) => ctx.document.openFolder(),
+  },
+  {
     id: "file.save",
     label: "Save",
     enabled: (ctx) => ctx.document.canSave(),

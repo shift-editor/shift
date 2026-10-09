@@ -31,6 +31,14 @@ export interface NativeDialogs {
   openFont(window: Window | null): Promise<string | null>;
 
   /**
+   * Selects one font stored as a folder, such as a UFO or Glyphs package.
+   *
+   * @param window - native window that should own the choice.
+   * @returns the selected folder, or null when the user cancels.
+   */
+  openFontFolder(window: Window | null): Promise<string | null>;
+
+  /**
    * Shows a blocking, nontechnical failure after document creation fails.
    *
    * @param window - native window that should own the message.

@@ -1,6 +1,7 @@
 mod atomic;
 pub mod errors;
 pub mod export;
+mod feature_includes;
 pub mod font_loader;
 pub mod font_source;
 pub mod format;

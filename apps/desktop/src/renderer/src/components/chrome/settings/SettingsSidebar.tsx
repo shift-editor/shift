@@ -1,4 +1,5 @@
 import { SidebarRowButton } from "@/components/sidebar";
+import AgentsIcon from "@assets/settings/agents.svg";
 import AxesIcon from "@assets/settings/axes.svg";
 import FontIcon from "@assets/settings/font.svg";
 import InstancesIcon from "@assets/settings/instances.svg";
@@ -14,6 +15,7 @@ interface SettingsSidebarProps {
 
 const categories: { id: SettingsCategory; label: string; icon: SVG }[] = [
   { id: "appearance", label: "Appearance", icon: AppearanceIcon },
+  { id: "agents", label: "Agents", icon: AgentsIcon },
   { id: "font", label: "Font", icon: FontIcon },
   { id: "sources", label: "Sources", icon: SourcesIcon },
   { id: "instances", label: "Instances", icon: InstancesIcon },

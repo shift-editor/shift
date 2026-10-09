@@ -2,19 +2,26 @@ import * as React from "react";
 import { Menu as BaseMenu } from "@base-ui-components/react/menu";
 import { cn } from "../../lib/utils";
 import { usePortalContainer } from "../portal";
-import { menuItemStyles, menuPopupStyles } from "./styles";
+import { menubarTriggerStyles, menuItemStyles, menuPopupStyles } from "./styles";
 
 export interface MenuProps extends React.ComponentProps<typeof BaseMenu.Root> {}
 
 export const Menu = (props: MenuProps) => <BaseMenu.Root {...props} />;
 
-export interface MenuTriggerProps extends React.ComponentPropsWithoutRef<typeof BaseMenu.Trigger> {}
+export interface MenuTriggerProps extends React.ComponentPropsWithoutRef<typeof BaseMenu.Trigger> {
+  /** `menubar` styles the trigger as a top-level entry in a `Menubar`. */
+  variant?: "default" | "menubar";
+}
 
 export const MenuTrigger = React.forwardRef<
   React.ElementRef<typeof BaseMenu.Trigger>,
   MenuTriggerProps
->(({ className, ...props }, ref) => (
-  <BaseMenu.Trigger ref={ref} className={cn(className)} {...props} />
+>(({ className, variant = "default", ...props }, ref) => (
+  <BaseMenu.Trigger
+    ref={ref}
+    className={cn(variant === "menubar" && menubarTriggerStyles, className)}
+    {...props}
+  />
 ));
 MenuTrigger.displayName = "MenuTrigger";
 
@@ -108,3 +115,23 @@ export const MenuSeparator = React.forwardRef<
   />
 ));
 MenuSeparator.displayName = "MenuSeparator";
+
+export interface MenuSubmenuRootProps extends React.ComponentProps<typeof BaseMenu.SubmenuRoot> {}
+
+export const MenuSubmenuRoot = (props: MenuSubmenuRootProps) => <BaseMenu.SubmenuRoot {...props} />;
+
+export interface MenuSubmenuTriggerProps extends React.ComponentPropsWithoutRef<
+  typeof BaseMenu.SubmenuTrigger
+> {}
+
+export const MenuSubmenuTrigger = React.forwardRef<
+  React.ElementRef<typeof BaseMenu.SubmenuTrigger>,
+  MenuSubmenuTriggerProps
+>(({ className, ...props }, ref) => (
+  <BaseMenu.SubmenuTrigger
+    ref={ref}
+    className={cn(menuItemStyles, "justify-between gap-6 data-[popup-open]:bg-hover/50", className)}
+    {...props}
+  />
+));
+MenuSubmenuTrigger.displayName = "MenuSubmenuTrigger";

@@ -42,6 +42,8 @@
     "deadcode:fix": "knip -c knip.fix.json --workspace apps/desktop --workspace \"packages/*\" --fix --allow-remove-files",
     "check-deps": "knip --include dependencies --exclude files,exports",
     "check:browser": "pnpm --filter @shift/desktop check:browser",
+    "profile:build": "pnpm build:native && pnpm --filter @shift/desktop build --profile && pnpm --filter @shift/desktop package",
+    "profile:desktop": "tsx scripts/profile-desktop.mjs",
     "agent-skills:sync": "node scripts/sync-agent-skills.mjs",
     "agent-skills:check": "node scripts/sync-agent-skills.mjs --check",
     "check": "pnpm lint:check && pnpm typecheck && pnpm check:browser && pnpm deadcode:strict && pnpm test",

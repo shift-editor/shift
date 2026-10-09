@@ -1,5 +1,4 @@
 import type { CursorType, ToolRegistryItem } from "../../types/editor";
-import type { FontSessionMode } from "@shift/types";
 import {
   isAnchorId,
   isContourId,
@@ -17,11 +16,15 @@ import {
   type GlyphName,
   type GlyphRecord,
   type Unicode,
+  type FontSessionMode,
   type LayerId,
   type LayerMatch,
   type NodeId,
+  type SegmentId,
+  type SelectableId,
+  type ShiftId,
 } from "@shift/types";
-import { isSegmentId, type SegmentId } from "@shift/glyph-state";
+import { isSegmentId } from "@shift/glyph-state";
 import type { ExternalAxisLocation } from "../../types/variation";
 import type { SourceSelectionMode } from "../../types/sourceSelection";
 import type {
@@ -104,7 +107,7 @@ import type { PointerTarget } from "../../types/target";
 import type { ComponentTransformSelection } from "../../types/componentTransform";
 import type { ComponentTargets } from "../../types/componentTargets";
 import type { PositionSelection } from "../../types/positionEdit";
-import type { SelectableId, ShiftId, ShiftObject } from "../../types/object";
+import type { ShiftObject } from "../../types/object";
 import type { ShiftEditorRecord, ShiftRecordId } from "../../types/records";
 import type { GlyphNode, NodeKind, ShiftNode } from "../../types/node";
 import {
@@ -200,6 +203,8 @@ export class Editor {
   #toolManager: ToolManager;
   #toolRegistry: Signal<ReadonlyMap<ToolName, ToolRegistryItem>>;
   #tool: Signal<ActiveTool | null>;
+  #toolId: Signal<ToolName | null>;
+  readonly #toolCellsById = new Map<ToolName, Signal<ActiveTool | null>>();
   #dragging: Signal<boolean>;
   #isEditing: Signal<boolean>;
   #selectionBounds: Signal<LocalBounds | null>;
@@ -264,7 +269,9 @@ export class Editor {
     });
     this.#editingSourceIdsCell = signal<ReadonlySet<SourceId>>(
       initialSourceId ? new Set([initialSourceId]) : new Set(),
-      { name: "editor.sources.editing" },
+      // Location changes rewrite this set on every scrub step; only a different
+      // set of sources should re-render the source lists that read it.
+      { name: "editor.sources.editing", equals: sameSourceIds },
     );
     this.#multiSourceEditing = new MultiSourceEditing(
       this.font,
@@ -365,6 +372,9 @@ export class Editor {
       },
       { name: "editor.tool" },
     );
+    this.#toolId = computed(() => this.#toolManager.activeToolCell.value?.id ?? null, {
+      name: "editor.toolId",
+    });
     this.#dragging = computed(() => this.gesture.cell.value.phase === "dragging", {
       name: "editor.dragging",
     });
@@ -437,6 +447,46 @@ export class Editor {
   /** Exposes the live active tool identity and state as one reactive value. */
   public get toolCell(): Signal<ActiveTool | null> {
     return this.#tool;
+  }
+
+  /**
+   * Exposes the active tool's identity without its state.
+   *
+   * @remarks
+   * Notifies only when the user switches tools. Readers that branch on which
+   * tool is active subscribe here instead of {@link toolCell}, whose state
+   * changes on every pointer move during a marquee or drag.
+   */
+  public get toolIdCell(): Signal<ToolName | null> {
+    return this.#toolId;
+  }
+
+  /**
+   * Exposes one tool's live state while that tool is active.
+   *
+   * @remarks
+   * Holds null while another tool is active, so readers that follow one tool
+   * ignore every other tool's state changes. The cell is created on first
+   * request and reused for the editor's lifetime.
+   *
+   * @param id - Tool identity whose state the reader follows.
+   * @returns A cell holding the active tool snapshot when its identity matches; otherwise null.
+   */
+  public toolCellIf<Id extends ToolName>(id: Id): Signal<ActiveTool<Id> | null> {
+    let cell = this.#toolCellsById.get(id);
+    if (!cell) {
+      cell = computed(
+        () => {
+          if (this.#toolId.value !== id) return null;
+
+          return this.#tool.value;
+        },
+        { name: `editor.tool.${id}` },
+      );
+      this.#toolCellsById.set(id, cell);
+    }
+
+    return cell as Signal<ActiveTool<Id> | null>;
   }
 
   /**
@@ -2220,4 +2270,10 @@ function targetNode(scene: Scene, target: PointerTarget): ShiftNode | null {
     case "component":
       return scene.node(target.nodeId);
   }
+}
+
+function sameSourceIds(a: ReadonlySet<SourceId>, b: ReadonlySet<SourceId>): boolean {
+  if (a.size !== b.size) return false;
+  for (const id of a) if (!b.has(id)) return false;
+  return true;
 }

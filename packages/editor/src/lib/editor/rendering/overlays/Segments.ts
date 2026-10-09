@@ -1,5 +1,6 @@
 import type { Canvas } from "../Canvas";
-import type { Segment, SegmentId } from "@shift/glyph-state";
+import type { Segment } from "@shift/glyph-state";
+import type { SegmentId } from "@shift/types";
 import type { GlyphRenderModel } from "../../../model/Glyph";
 
 export class Segments {

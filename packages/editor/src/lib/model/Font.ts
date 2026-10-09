@@ -11,6 +11,7 @@ import type {
   GlyphEntry,
   GlyphHandle,
   GlyphId,
+  GlyphLayerSnapshot,
   GlyphPreview,
   GlyphRecord,
   GlyphSnapshotRequest,
@@ -22,8 +23,10 @@ import type {
   ContourId,
   LayerId,
   LayerMatch,
+  LayerRead,
   Location,
   PointId,
+  SegmentId,
   NamedInstance,
   NamedInstanceDefinition,
   NamedInstanceId,
@@ -36,7 +39,6 @@ import {
   mintNamedInstanceId,
   mintSourceId,
 } from "@shift/types";
-import type { SegmentId } from "@shift/glyph-state";
 import {
   batch,
   computed,
@@ -47,7 +49,7 @@ import {
   type Effect,
   type Signal,
 } from "../signals/signal";
-import type { FontOptions, WorkspaceEditCoordinator } from "../../types/font";
+import type { FontOptions, FontRecordIndex, WorkspaceEditCoordinator } from "../../types/font";
 import type { GlyphReader } from "../../types/glyph";
 import { Glyph, GlyphLayer } from "./Glyph";
 import type { FontStore, GlyphInvalidation } from "./FontStore";
@@ -64,96 +66,34 @@ import { fallbackGlyphNameForUnicode } from "../utils/unicode";
 import { createBatchRequest } from "../utils/batchRequest";
 
 /**
- * Immutable lookup index for committed glyph records.
+ * Directory queries over the store's committed glyph index.
  *
  * @remarks
- * `GlyphDirectory` is rebuilt whenever the bridge glyph list changes. It keeps
- * source-of-truth font records separate from fallback glyph database knowledge:
- * methods named `record*`, `has*`, and dependency lookups only describe glyphs
- * committed in the font, while handle/name resolution methods may use injected
- * glyph metadata so UI flows can address glyphs before they are created.
+ * Holds no lookups of its own: every relation comes from `FontRecordIndex`,
+ * which `FontStore` builds once per snapshot. Methods named `record*`, `has*`,
+ * and dependency lookups only describe glyphs committed in the font, while
+ * handle/name resolution methods may use injected glyph metadata so UI flows
+ * can address glyphs before they are created.
  */
 class GlyphDirectory {
+  readonly #index: FontRecordIndex;
   readonly #glyphInfo: NonNullable<FontOptions["glyphInfo"]> | null;
 
-  readonly entries: readonly GlyphEntry[];
-  readonly records: readonly GlyphRecord[];
-  readonly unicodes: readonly Unicode[];
-
-  readonly entriesByName: ReadonlyMap<GlyphName, GlyphEntry> = new Map();
-  readonly entriesById: ReadonlyMap<GlyphId, GlyphEntry> = new Map();
-  readonly recordsByName: ReadonlyMap<GlyphName, GlyphRecord> = new Map();
-  readonly recordsById: ReadonlyMap<GlyphId, GlyphRecord> = new Map();
-  readonly nameById: ReadonlyMap<GlyphId, GlyphName> = new Map();
-  readonly nameByUnicode: ReadonlyMap<Unicode, GlyphName> = new Map();
-  readonly componentBasesById: ReadonlyMap<GlyphId, readonly GlyphId[]> = new Map();
-  readonly dependentsById: ReadonlyMap<GlyphId, ReadonlySet<GlyphId>> = new Map();
-
-  private constructor(
-    entries: readonly GlyphEntry[],
-    records: readonly GlyphRecord[],
-    glyphInfo: NonNullable<FontOptions["glyphInfo"]> | null,
-  ) {
+  constructor(index: FontRecordIndex, glyphInfo: NonNullable<FontOptions["glyphInfo"]> | null) {
+    this.#index = index;
     this.#glyphInfo = glyphInfo;
-
-    const entriesByName = new Map<GlyphName, GlyphEntry>();
-    const entriesById = new Map<GlyphId, GlyphEntry>();
-    const recordsByName = new Map<GlyphName, GlyphRecord>();
-    const recordsById = new Map<GlyphId, GlyphRecord>();
-    const nameById = new Map<GlyphId, GlyphName>();
-    const nameByUnicode = new Map<Unicode, GlyphName>();
-    const componentBasesById = new Map<GlyphId, readonly GlyphId[]>();
-    const dependentsById = new Map<GlyphId, Set<GlyphId>>();
-
-    for (const entry of entries) {
-      entriesByName.set(entry.name, entry);
-      entriesById.set(entry.id, entry);
-      nameById.set(entry.id, entry.name);
-
-      for (const unicode of entry.unicodes) {
-        if (!nameByUnicode.has(unicode)) nameByUnicode.set(unicode, entry.name);
-      }
-    }
-
-    for (const record of records) {
-      recordsByName.set(record.name, record);
-      recordsById.set(record.id, record);
-      componentBasesById.set(record.id, record.componentBaseGlyphIds);
-      for (const baseId of record.componentBaseGlyphIds) {
-        let dependents = dependentsById.get(baseId);
-        if (!dependents) {
-          dependents = new Set<GlyphId>();
-          dependentsById.set(baseId, dependents);
-        }
-        dependents.add(record.id);
-      }
-    }
-
-    this.entries = [...entries];
-    this.records = [...records];
-    this.unicodes = [...nameByUnicode.keys()].sort((a, b) => a - b);
-    this.entriesByName = entriesByName;
-    this.entriesById = entriesById;
-    this.recordsByName = recordsByName;
-    this.recordsById = recordsById;
-    this.nameById = nameById;
-    this.nameByUnicode = nameByUnicode;
-    this.componentBasesById = componentBasesById;
-    this.dependentsById = dependentsById;
   }
 
-  /**
-   * Builds a directory snapshot from bridge glyph records.
-   *
-   * @param records - Committed glyph records from the current font snapshot.
-   * @returns A new immutable lookup index; later record changes are not observed.
-   */
-  static fromEntries(
-    entries: readonly GlyphEntry[],
-    records: readonly GlyphRecord[],
-    glyphInfo: NonNullable<FontOptions["glyphInfo"]> | null,
-  ): GlyphDirectory {
-    return new GlyphDirectory(entries, records, glyphInfo);
+  get entries(): readonly GlyphEntry[] {
+    return this.#index.entries;
+  }
+
+  get records(): readonly GlyphRecord[] {
+    return this.#index.records;
+  }
+
+  get unicodes(): readonly Unicode[] {
+    return this.#index.unicodes;
   }
 
   /**
@@ -167,7 +107,7 @@ class GlyphDirectory {
    * @returns A production glyph name suitable for opening or creating a glyph.
    */
   nameForUnicode(unicode: Unicode): GlyphName {
-    const nameFromFont = this.nameByUnicode.get(unicode);
+    const nameFromFont = this.#index.nameByUnicode.get(unicode);
     if (nameFromFont) return nameFromFont;
 
     const nameFromDatabase = this.#glyphInfo?.getGlyphName(unicode);
@@ -177,90 +117,44 @@ class GlyphDirectory {
     return fallbackName as GlyphName;
   }
 
-  /**
-   * Reports whether the current font has a committed glyph with this id.
-   *
-   * @param glyphId - Stable glyph identity to test against committed font records.
-   * @returns `true` only for glyphs present in the loaded font.
-   * @knipclassignore
-   */
   hasGlyph(glyphId: GlyphId): boolean {
-    return this.entriesById.has(glyphId);
+    return this.#index.glyphById.has(glyphId);
   }
 
-  /**
-   * Returns the committed glyph record for a name.
-   *
-   * @param name - Glyph name to look up in the font directory.
-   * @returns The committed record, or `null` when the font does not contain the glyph.
-   * @knipclassignore
-   */
   entryForName(name: GlyphName): GlyphEntry | null {
-    return this.entriesByName.get(name) ?? null;
+    return this.#index.entryByName.get(name) ?? null;
   }
 
   recordForName(name: GlyphName): GlyphRecord | null {
-    return this.recordsByName.get(name) ?? null;
+    return this.#index.recordByName.get(name) ?? null;
   }
 
   entryForId(glyphId: GlyphId): GlyphEntry | null {
-    return this.entriesById.get(glyphId) ?? null;
+    return this.#index.glyphById.get(glyphId) ?? null;
   }
 
-  /** Returns the committed authored glyph record for a stable glyph id. */
   recordForId(glyphId: GlyphId): GlyphRecord | null {
-    return this.recordsById.get(glyphId) ?? null;
+    return this.#index.recordsById.get(glyphId) ?? null;
   }
 
-  /**
-   * Returns the committed Unicode assignments for a glyph name.
-   *
-   * @param name - Glyph name to look up in the font directory.
-   * @returns A read-only assignment list; empty when the glyph is missing or unencoded.
-   * @knipclassignore
-   */
   unicodesForName(name: GlyphName): readonly Unicode[] {
-    return this.entriesByName.get(name)?.unicodes ?? [];
+    return this.entryForName(name)?.unicodes ?? [];
   }
 
-  /**
-   * Returns the first committed Unicode assignment for a glyph name.
-   *
-   * @param name - Glyph name to look up in the font directory.
-   * @returns The primary codepoint, or `null` when the glyph is missing or unencoded.
-   * @knipclassignore
-   */
   primaryUnicodeForName(name: GlyphName): Unicode | null {
     return this.unicodesForName(name)[0] ?? null;
   }
 
-  /**
-   * Returns committed component bases used by a glyph.
-   *
-   * @param name - Glyph name whose component references should be inspected.
-   * @returns Base glyph names from the committed record; empty when absent.
-   */
+  /** Base glyph names from the committed record; empty when absent. */
   componentBaseNamesForName(name: GlyphName): readonly GlyphName[] {
-    const record = this.recordForName(name);
-    if (!record) return [];
-    return (this.componentBasesById.get(record.id) ?? [])
-      .map((glyphId) => this.nameById.get(glyphId))
-      .filter((baseName): baseName is GlyphName => baseName !== undefined);
+    return this.#namesFor(this.recordForName(name)?.componentBaseGlyphIds ?? []);
   }
 
-  /**
-   * Returns committed glyphs that reference a base glyph as a component.
-   *
-   * @param name - Base glyph name to reverse-resolve.
-   * @returns Sorted dependent glyph names; empty when no committed glyph references it.
-   */
+  /** Sorted names of committed glyphs that reference this glyph as a component. */
   dependentNamesForName(name: GlyphName): readonly GlyphName[] {
     const record = this.recordForName(name);
     if (!record) return [];
-    return [...(this.dependentsById.get(record.id) ?? [])]
-      .map((glyphId) => this.nameById.get(glyphId))
-      .filter((dependentName): dependentName is GlyphName => dependentName !== undefined)
-      .sort();
+    return this.#namesFor(this.#index.dependentsById.get(record.id) ?? []).sort();
   }
 
   /**
@@ -280,6 +174,10 @@ class GlyphDirectory {
       ? this.primaryUnicodeForName(name)
       : (this.#glyphInfo?.getGlyphByName(name)?.codepoint ?? null);
     return unicode === null ? { name } : { name, unicode };
+  }
+
+  #namesFor(glyphIds: Iterable<GlyphId>): GlyphName[] {
+    return [...glyphIds].flatMap((glyphId) => this.#index.glyphById.get(glyphId)?.name ?? []);
   }
 
   /**
@@ -401,12 +299,8 @@ export class Font {
     });
     this.#namedInstancesCell = computed(() => fontCell.value?.namedInstances ?? []);
     this.#languageIdsCell = computed(() => fontCell.value?.languageIds ?? null);
-    this.#directoryCell = computed(() =>
-      GlyphDirectory.fromEntries(
-        fontCell.value?.glyphs ?? [],
-        this.#store.records(),
-        this.#glyphInfo,
-      ),
+    this.#directoryCell = computed(
+      () => new GlyphDirectory(this.#store.recordIndexCell.value, this.#glyphInfo),
     );
     this.#unicodesCell = computed(() => [...this.#directoryCell.value.unicodes]);
     this.#glyphEntriesCell = computed(() => this.#directoryCell.value.entries);
@@ -611,6 +505,48 @@ export class Font {
 
   glyphRecords(): readonly GlyphRecord[] {
     return this.#directoryCell.peek().records;
+  }
+
+  /**
+   * Reads accepted authored layers without loading glyphs into the editor.
+   *
+   * @remarks
+   * Workspace reads follow pending writes; gesture previews are not included.
+   * Components are not resolved, so a layer whose component reference is
+   * broken stays readable. Nothing is published to the store.
+   *
+   * @param layerIds - Layer identities in the order results should follow.
+   * @returns One snapshot per requested layer.
+   * @throws {Error} when workspace authorship is unavailable or a layer identity is unknown.
+   */
+  async readLayers(layerIds: readonly LayerId[]): Promise<readonly GlyphLayerSnapshot[]> {
+    if (!this.#editCoordinator) throw new Error("Authored layers are unavailable in this font");
+
+    return this.#editCoordinator.readLayers(layerIds);
+  }
+
+  /** The layer `glyphId` authors in `sourceId`, or `null` when it has none. */
+  layerIdFor(glyphId: GlyphId, sourceId: SourceId): LayerId | null {
+    return this.#store.layerIdForGlyphSource(glyphId, sourceId);
+  }
+
+  /**
+   * Reads accepted authored layers together with their composited geometry.
+   *
+   * @remarks
+   * Each root keeps its exact authored geometry; components resolve at that
+   * layer's source and cyclic branches are skipped. Both halves come from
+   * one workspace read behind pending writes, never from gesture previews or
+   * published render models.
+   *
+   * @param layerIds - Layer identities in the order results should follow.
+   * @returns One authored snapshot and resolved geometry per requested layer.
+   * @throws {Error} when workspace authorship is unavailable, a layer identity is unknown, or a component cannot resolve.
+   */
+  async resolveLayers(layerIds: readonly LayerId[]): Promise<readonly LayerRead[]> {
+    if (!this.#editCoordinator) throw new Error("Authored layers are unavailable in this font");
+
+    return this.#editCoordinator.resolveLayers(layerIds);
   }
 
   /**

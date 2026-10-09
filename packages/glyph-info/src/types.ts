@@ -139,10 +139,22 @@ export interface Decomposition {
   usedBy: Record<string, number[]>;
 }
 
-export interface GlyphInfoResources {
+export interface GlyphInfoResources extends GlyphInfoCoreResources, GlyphInfoComponentResources {}
+
+/** Names, categories, charsets, and languages: what glyph lists and catalogs need. */
+export interface GlyphInfoCoreResources {
   glyphData: Glyph[];
-  decomposition: Decomposition;
   charsets: CharsetDefinition[];
   languages: Language[];
+}
+
+/**
+ * Decomposition and full-text search data, used to suggest and find components.
+ *
+ * About 10 MB of the 17 MB dataset; apps that start with the core resources
+ * load these when they first need them and pass them to `GlyphInfo.addResources`.
+ */
+export interface GlyphInfoComponentResources {
+  decomposition: Decomposition;
   searchData: Record<string, unknown>[];
 }

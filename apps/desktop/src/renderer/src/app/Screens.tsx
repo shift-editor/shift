@@ -9,7 +9,7 @@ import { useEditor, useFont, useFontSession } from "@/workspace/WorkspaceContext
 import { FontSessionProvider } from "@/workspace/FontSessionProvider";
 import { DebugProvider } from "@/context/DebugProvider";
 import { SettingsNavigationProvider } from "@/context/SettingsNavigationProvider";
-import { GlyphCatalogProvider } from "@/context/GlyphCatalogProvider";
+import { GlyphCatalogProvider, HeldGlyphCatalog } from "@/context/GlyphCatalogProvider";
 import { PreviewNoticeProvider } from "@/context/PreviewNoticeProvider";
 import { useDocumentViewMemory } from "@/hooks/useDocumentViewMemory";
 import { AboutScreen } from "@/views/AboutScreen";
@@ -73,7 +73,9 @@ const FontSessionScreens = () => {
             className={catalogActive ? undefined : "pointer-events-none fixed inset-0 z-0"}
             inert={!catalogActive}
           >
-            <Home />
+            <HeldGlyphCatalog held={!catalogActive}>
+              <Home />
+            </HeldGlyphCatalog>
           </div>
           <div className={catalogActive ? undefined : "relative z-10"}>
             <Outlet />

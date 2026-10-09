@@ -161,7 +161,7 @@ function ToolSplitButton({ menuItems, onMenuItemSelect, ...buttonProps }: ToolSp
 }
 
 export function ToolsPane({ editor }: ToolsPaneProps) {
-  const activeTool = useSignalState(editor.toolCell)?.id ?? null;
+  const activeTool = useSignalState(editor.toolIdCell);
   const toolRegistry = useSignalState(editor.toolRegistryCell);
 
   return (

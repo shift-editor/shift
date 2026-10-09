@@ -1,4 +1,5 @@
 use std::collections::{BTreeSet, HashMap};
+use std::path::Path;
 
 use glyphs_reader::{
     Anchor as GlyphsAnchor, Component as GlyphsComponent, FeatureSnippet, Font as GlyphsFont,
@@ -12,6 +13,7 @@ use shift_font::{
 };
 
 use crate::{
+    feature_includes::inline_feature_includes,
     font_source::piecewise_map,
     kerning_import::{KerningImport, NamedKerningSide},
     metrics::set_metric_position,
@@ -131,6 +133,7 @@ pub(crate) fn anchor_parts(anchor: &GlyphsAnchor) -> (Option<String>, f64, f64) 
 
 pub(crate) fn font_header(
     glyphs_font: &GlyphsFont,
+    path: &Path,
 ) -> FormatBackendResult<(Font, HashMap<String, SourceId>)> {
     let mut font = Font::empty();
 
@@ -280,7 +283,7 @@ pub(crate) fn font_header(
             })
             .collect(),
     )?;
-    *font.features_mut() = convert_features(glyphs_font);
+    *font.features_mut() = convert_features(glyphs_font, path);
     Ok((font, source_ids_by_master_id))
 }
 
@@ -457,7 +460,9 @@ fn convert_node_type(node_type: NodeType) -> (shift_font::PointType, bool) {
     }
 }
 
-fn convert_features(font: &GlyphsFont) -> FeatureData {
+/// Joins the enabled feature snippets, inlining includes against the folder
+/// holding the `.glyphs` file or package, as fontc does.
+fn convert_features(font: &GlyphsFont, path: &Path) -> FeatureData {
     let source = font
         .features
         .iter()
@@ -467,7 +472,10 @@ fn convert_features(font: &GlyphsFont) -> FeatureData {
     if source.trim().is_empty() {
         FeatureData::new()
     } else {
-        FeatureData::from_fea(source)
+        FeatureData::from_fea(inline_feature_includes(
+            &source,
+            path.parent().unwrap_or(path),
+        ))
     }
 }
 

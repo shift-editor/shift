@@ -21,7 +21,6 @@ import PlusIcon from "@/assets/general/plus.svg";
 import WarningIcon from "@/assets/general/warning.svg";
 import { SidebarActionButton } from "@/components/sidebar";
 import { useAxes } from "@/hooks/useAxes";
-import { useExternalLocation } from "@/hooks/useExternalLocation";
 import { useSources } from "@/hooks/useSources";
 import { axisValue } from "@shift/editor/variation";
 import type { ExternalAxisLocation } from "@shift/editor/types";
@@ -61,7 +60,6 @@ export const CreateSourceMenu = ({ onSourceCreated, onOpenChange }: CreateSource
   const editor = useEditor();
   const axes = useAxes();
   const sources = useSources();
-  const [externalLocation] = useExternalLocation();
   const [open, setOpen] = useState(false);
   const [values, setValues] = useState<CreateSourceFormValues>(emptyValues);
   const [validationVisible, setValidationVisible] = useState(false);
@@ -69,7 +67,9 @@ export const CreateSourceMenu = ({ onSourceCreated, onOpenChange }: CreateSource
   const axisInputRefs = useRef(new Map<AxisId, HTMLInputElement>());
 
   const handleOpenChange = (nextOpen: boolean) => {
-    if (nextOpen) setValues(defaultValues(axes, sources, externalLocation));
+    // Read the location only when opening: subscribing would re-render this menu
+    // on every step of a weight scrub just to prefill a form that is closed.
+    if (nextOpen) setValues(defaultValues(axes, sources, editor.externalLocationCell.peek()));
     setValidationVisible(false);
     setOpen(nextOpen);
     if (onOpenChange) onOpenChange(nextOpen);

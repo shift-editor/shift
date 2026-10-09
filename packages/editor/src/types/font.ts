@@ -4,15 +4,19 @@ import type {
   FontSnapshot,
   GlyphEntry,
   GlyphId,
+  GlyphLayerSnapshot,
   GlyphPreview,
   GlyphRecord,
   GlyphSnapshot,
   GlyphSnapshotRequest,
   LayerId,
   LayerMatch,
+  LayerRead,
   Location,
   WorkspaceDocumentState,
   WorkspaceSnapshot,
+  GlyphName,
+  Unicode,
 } from "@shift/types";
 import type { FontStore } from "../lib/model/FontStore";
 import type { PendingEditId } from "./editing";
@@ -23,17 +27,31 @@ import type { GlyphReader } from "./glyph";
 export type GlyphSourceKey = string & { readonly __glyphSourceKey: unique symbol };
 
 /**
- * Committed glyph lookups `FontStore` derives from one workspace or font snapshot.
+ * Every committed glyph relation, derived once by `FontStore` from one workspace or font snapshot.
  *
  * @remarks
- * Immutable: a new snapshot replaces the whole index so readers can track it
- * as a single signal value.
+ * The single index of glyph identity: `Font`'s directory queries read it rather
+ * than re-indexing. Immutable: a new snapshot replaces the whole index so
+ * readers can track it as a single signal value.
  */
 export interface FontRecordIndex {
-  readonly layerByGlyphSource: ReadonlyMap<GlyphSourceKey, LayerId>;
-  readonly glyphByLayer: ReadonlyMap<LayerId, GlyphId>;
+  /** Directory entries in font order. */
+  readonly entries: readonly GlyphEntry[];
+  /** Records of directory glyphs, in font order. */
+  readonly records: readonly GlyphRecord[];
+  /** Every assigned codepoint, ascending. */
+  readonly unicodes: readonly Unicode[];
   readonly glyphById: ReadonlyMap<GlyphId, GlyphEntry>;
   readonly recordsById: ReadonlyMap<GlyphId, GlyphRecord>;
+  readonly entryByName: ReadonlyMap<GlyphName, GlyphEntry>;
+  readonly recordByName: ReadonlyMap<GlyphName, GlyphRecord>;
+  /** The first glyph, in font order, that claims each codepoint. */
+  readonly nameByUnicode: ReadonlyMap<Unicode, GlyphName>;
+  /** Glyphs that reference each base glyph as a component. */
+  readonly dependentsById: ReadonlyMap<GlyphId, ReadonlySet<GlyphId>>;
+  /** At most one layer per glyph and source, as Rust enforces. */
+  readonly layerByGlyphSource: ReadonlyMap<GlyphSourceKey, LayerId>;
+  readonly glyphByLayer: ReadonlyMap<LayerId, GlyphId>;
 }
 
 export interface FontStoreOptions {
@@ -48,6 +66,8 @@ export interface WorkspaceEditCoordinator {
   apply(intents: FontIntent[], label?: string): Promise<AppliedChange>;
   readGlyphSnapshots(requests: readonly GlyphSnapshotRequest[]): Promise<GlyphSnapshot[]>;
   readGlyphPreviews(glyphIds: readonly GlyphId[], location: Location): Promise<GlyphPreview[]>;
+  readLayers(layerIds: readonly LayerId[]): Promise<GlyphLayerSnapshot[]>;
+  resolveLayers(layerIds: readonly LayerId[]): Promise<LayerRead[]>;
   matchLayers(referenceLayerId: LayerId, targetLayerId: LayerId): Promise<LayerMatch>;
   mapLocation(location: Location): Promise<Location>;
   settled(): Promise<void>;

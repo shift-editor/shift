@@ -17,6 +17,7 @@ export type CommandId =
   | "help.emailFeedback"
   | "file.new"
   | "file.open"
+  | "file.openFolder"
   | "file.save"
   | "file.saveAs"
   | "file.exportTtf"
@@ -63,6 +64,7 @@ export const commandShortcuts = {
   "ui.resetSize": shortcut("0", false, true),
   "file.new": shortcut("n"),
   "file.open": shortcut("o"),
+  "file.openFolder": shortcut("o", true),
   "file.save": shortcut("s"),
   "file.saveAs": shortcut("s", true),
   "edit.undo": shortcut("z"),

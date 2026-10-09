@@ -19,6 +19,7 @@
   "file.open.filter.outline": "TrueType/OpenType",
   "file.open.filter.glyphs": "Glyphs",
   "file.open.filter.sources": "UFO/Designspace",
+  "file.openFolder.title": "Open a Font Folder",
   "file.saveShift.title": "Save as Shift",
   "file.saveShift.filter": "Shift Document",
   "file.exportTrueType.title": "Export TrueType Font",

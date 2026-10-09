@@ -2,11 +2,13 @@ import type {
   AppliedChange,
   FontIntent,
   GlyphId,
+  GlyphLayerSnapshot,
   GlyphPreview,
   GlyphProjection,
   GlyphSnapshot,
   LayerId,
   LayerMatch,
+  LayerRead,
   Location,
   SlugAtlas,
 } from "@shift/types";
@@ -47,6 +49,7 @@ export class WorkspaceEditCoordinator {
   readonly #store: FontStore;
   readonly #settledCell: WritableSignal<boolean>;
   readonly #applyStatus: WritableSignal<WorkspaceApplyStatus>;
+  readonly #authoredRevisionCell: WritableSignal<number>;
   // non-reactive: subscriber registry; listeners are invoked imperatively, never read in computeds
   readonly #editListeners = new Set<WorkspaceEditListener>();
 
@@ -66,6 +69,7 @@ export class WorkspaceEditCoordinator {
     this.#applyStatus = signal<WorkspaceApplyStatus>("idle", {
       name: "workspace.applyStatus",
     });
+    this.#authoredRevisionCell = signal(0, { name: "workspace.authoredRevision" });
   }
 
   /**
@@ -86,6 +90,11 @@ export class WorkspaceEditCoordinator {
    */
   get applyStatusCell(): Signal<WorkspaceApplyStatus> {
     return this.#applyStatus;
+  }
+
+  /** Returns the session-local sequence of authored font state transitions. */
+  get authoredRevisionCell(): Signal<number> {
+    return this.#authoredRevisionCell;
   }
 
   /** Accepts one intent and returns its renderer-local pending identity. */
@@ -187,7 +196,10 @@ export class WorkspaceEditCoordinator {
   undo(): Promise<AppliedChange | null> {
     return this.#withFlush(async () => {
       const applied = await this.#session.undo();
-      if (applied) await this.#applyChange(applied, null);
+      if (applied) {
+        await this.#applyChange(applied, null);
+        this.#advanceAuthoredRevision();
+      }
       return applied;
     });
   }
@@ -205,6 +217,20 @@ export class WorkspaceEditCoordinator {
     if (glyphIds.length === 0) return [];
 
     return this.#withFlush(() => this.#session.glyphProjections(glyphIds));
+  }
+
+  /** Reads exact authored layers behind pending authored edits. */
+  async readLayers(layerIds: readonly LayerId[]): Promise<GlyphLayerSnapshot[]> {
+    if (layerIds.length === 0) return [];
+
+    return this.#withFlush(() => this.#session.readLayers(layerIds));
+  }
+
+  /** Reads exact authored layers with composited geometry behind pending authored edits. */
+  async resolveLayers(layerIds: readonly LayerId[]): Promise<LayerRead[]> {
+    if (layerIds.length === 0) return [];
+
+    return this.#withFlush(() => this.#session.resolveLayers(layerIds));
   }
 
   /** Derives cross-layer entity matches behind pending authored edits. */
@@ -277,7 +303,10 @@ export class WorkspaceEditCoordinator {
   redo(): Promise<AppliedChange | null> {
     return this.#withFlush(async () => {
       const applied = await this.#session.redo();
-      if (applied) await this.#applyChange(applied, null);
+      if (applied) {
+        await this.#applyChange(applied, null);
+        this.#advanceAuthoredRevision();
+      }
       return applied;
     });
   }
@@ -345,6 +374,7 @@ export class WorkspaceEditCoordinator {
 
     batch(() => {
       this.#settledCell.set(false);
+      this.#advanceAuthoredRevision();
       if (this.#applyStatus.peek() === "idle") {
         this.#applyStatus.set("queued");
       }
@@ -374,6 +404,7 @@ export class WorkspaceEditCoordinator {
     } catch (error) {
       try {
         await this.#resync();
+        this.#advanceAuthoredRevision();
       } finally {
         this.#notifyEdit({ kind: "failed", id: edit.id, error });
       }
@@ -430,6 +461,12 @@ export class WorkspaceEditCoordinator {
       this.#settledCell.set(true);
       this.#applyStatus.set("idle");
     }
+  }
+
+  #advanceAuthoredRevision(): void {
+    const revision = this.#authoredRevisionCell.peek() + 1;
+    if (!Number.isSafeInteger(revision)) throw new Error("authored revision overflow");
+    this.#authoredRevisionCell.set(revision);
   }
 
   #assertNoTransaction(action: string): void {

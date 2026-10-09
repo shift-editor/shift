@@ -1,7 +1,7 @@
-import type { GlyphId, NodeId, RunId } from "@shift/types";
+import type { GlyphId, NodeId, RunId, SelectableId, ShiftId } from "@shift/types";
 import type { EditingId } from "./editing";
 import type { GlyphNode, TextRunNode } from "./node";
-import type { SelectableId, SelectionId, ShiftId } from "./object";
+import type { SelectionId } from "./object";
 import type { TextEditingId, TextEditingRecord, TextRunRecord } from "./text";
 
 export type ShiftRecordId = ShiftId | SelectionId | EditingId | TextEditingId | RunId;

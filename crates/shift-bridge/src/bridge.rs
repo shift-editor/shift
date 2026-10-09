@@ -15,7 +15,7 @@ use shift_font::{
   AnchorId, AnchorSeed, Axis as FontAxis, AxisId, AxisLabel, AxisLabelId, AxisLabelRange,
   AxisMapping as FontAxisMapping, AxisMappingId, AxisMappingPoint as FontAxisMappingPoint,
   AxisRole, BooleanOp, ComponentId, ContourId, Font, FontChangeImpact, FontIntent, FontIntentSet,
-  FontMetadata as FontMetadataModel, Glyph, GlyphId, LayerId, Location as FontLocation,
+  FontMetadata as FontMetadataModel, Glyph, GlyphId, GlyphLayer, LayerId, Location as FontLocation,
   MetricDefinition as FontMetricDefinition, MetricId, MetricKind, MetricValue,
   NamedInstance as FontNamedInstance, NamedInstanceId, PointId, PointSeed, SourceId, Transform,
 };
@@ -30,11 +30,12 @@ use shift_wire::{
     NapiAnchorSeed, NapiAppliedChange, NapiAxis, NapiAxisMapping, NapiAxisMappingBasis,
     NapiAxisRole, NapiAxisType, NapiCatalogAtlasGlyph, NapiCatalogAtlasPage,
     NapiCatalogAtlasWeights, NapiFontIntent, NapiFontMetadata, NapiFontMetrics,
-    NapiFontReplacement, NapiFontSnapshot, NapiGlyphPreview, NapiGlyphProjection, NapiGlyphRecord,
-    NapiGlyphSnapshot, NapiGlyphSnapshotRequest, NapiInterpolationBasis, NapiLanguagesReplacement,
-    NapiLayerMatch, NapiLayerReplaced, NapiLocation, NapiMetricDefinition, NapiMetricKind,
-    NapiNamedInstance, NapiPointSeed, NapiSlugAtlas, NapiSlugExactSource, NapiSlugGlyph,
-    NapiSlugLayout, NapiSlugPreviewExtents, NapiSlugSection, NapiSlugWeightSet, NapiSource,
+    NapiFontReplacement, NapiFontSnapshot, NapiGlyphLayerSnapshot, NapiGlyphPreview,
+    NapiGlyphProjection, NapiGlyphRecord, NapiGlyphSnapshot, NapiGlyphSnapshotRequest,
+    NapiInterpolationBasis, NapiLanguagesReplacement, NapiLayerMatch, NapiLayerRead,
+    NapiLayerReplaced, NapiLocation, NapiMetricDefinition, NapiMetricKind, NapiNamedInstance,
+    NapiPointSeed, NapiSlugAtlas, NapiSlugExactSource, NapiSlugGlyph, NapiSlugLayout,
+    NapiSlugPreviewExtents, NapiSlugSection, NapiSlugWeightSet, NapiSource,
     NapiSourceMetricsInterpolationReplacement, NapiSourceMetricsInterpolationSnapshot,
   },
   AnchorData, Axis, AxisMapping, AxisMappingBasis, ComponentData, ComponentGlyph,
@@ -1179,7 +1180,7 @@ impl Bridge {
     Ok(AsyncTask::new(crate::specimen::SpecimenTask {
       input: crate::specimen::SpecimenInput::Snapshot(
         self
-          .save_snapshot()
+          .specimen_snapshot()
           .map_err(|e| Error::new(Status::GenericFailure, e.to_string()))?,
       ),
     }))
@@ -1508,6 +1509,74 @@ impl Bridge {
     }
 
     Ok(snapshots.into_iter().map(Into::into).collect())
+  }
+
+  /// Reads exact authored layers by stable layer identity.
+  ///
+  /// Results preserve request order and contain accepted workspace state
+  /// only. Components are not resolved, so a layer with a broken component
+  /// reference remains readable.
+  ///
+  /// # Errors
+  ///
+  /// Returns an error when any identity is malformed or absent from the font.
+  #[napi(ts_args_type = "layerIds: Array<LayerId>")]
+  pub fn read_layers(
+    &mut self,
+    layer_ids: Vec<String>,
+  ) -> errors::Result<Vec<NapiGlyphLayerSnapshot>> {
+    let (layer_ids, glyph_ids) = self.layer_owners(&layer_ids)?;
+    let font = self.acquire_and_font(&glyph_ids, AcquireScope::Glyphs)?;
+
+    layer_ids
+      .iter()
+      .zip(glyph_ids)
+      .map(|(layer_id, glyph_id)| {
+        Ok(layer_snapshot(glyph_id, font.require_layer(layer_id)?).into())
+      })
+      .collect()
+  }
+
+  /// Reads exact authored layers with their composited geometry.
+  ///
+  /// Each root keeps its requested authored geometry; components resolve at
+  /// that layer's source through normal interpolation and fallback, and
+  /// cyclic branches are skipped. Results preserve request order and do not
+  /// publish renderer models.
+  ///
+  /// # Errors
+  ///
+  /// Returns an error when any identity is malformed or absent, a component
+  /// cannot resolve, or referenced interpolation is incompatible.
+  #[napi(ts_args_type = "layerIds: Array<LayerId>")]
+  pub fn resolve_layers(&mut self, layer_ids: Vec<String>) -> errors::Result<Vec<NapiLayerRead>> {
+    let (layer_ids, glyph_ids) = self.layer_owners(&layer_ids)?;
+    let font = self.acquire_and_font(&glyph_ids, AcquireScope::ComponentClosure)?;
+
+    layer_ids
+      .iter()
+      .zip(glyph_ids)
+      .map(|(layer_id, glyph_id)| {
+        Ok(NapiLayerRead {
+          authored: layer_snapshot(glyph_id, font.require_layer(layer_id)?).into(),
+          resolved: (&font.resolve_layer(layer_id)?).into(),
+        })
+      })
+      .collect()
+  }
+
+  /// Parses layer identities and finds each owning glyph, in request order.
+  fn layer_owners(&self, layer_ids: &[String]) -> errors::Result<(Vec<LayerId>, Vec<GlyphId>)> {
+    let font = self.font()?;
+    let layer_ids = layer_ids
+      .iter()
+      .map(|layer_id| parse::<LayerId>(layer_id))
+      .collect::<errors::Result<Vec<_>>>()?;
+    let glyph_ids = layer_ids
+      .iter()
+      .map(|layer_id| Ok(font.require_layer_owner(layer_id)?))
+      .collect::<errors::Result<Vec<_>>>()?;
+    Ok((layer_ids, glyph_ids))
   }
 
   /// Derives entity mappings and structural diagnostics between two layers.
@@ -2029,6 +2098,12 @@ impl Bridge {
       });
     }
     Ok(sources)
+  }
+
+  /// Snapshots the font with only the glyphs its thumbnail specimen compiles loaded.
+  fn specimen_snapshot(&mut self) -> BridgeResult<FontSaveSnapshot> {
+    crate::specimen::acquire_specimen_glyphs(self.workspace_mut()?)?;
+    Ok(FontSaveSnapshot::new(self.font()?.clone(), None))
   }
 
   fn save_snapshot(&mut self) -> BridgeResult<FontSaveSnapshot> {
@@ -2699,6 +2774,14 @@ fn map_axis_mapping(mapping: NapiAxisMapping) -> errors::Result<FontAxisMapping>
   );
   mapped.set_description(mapping.description);
   Ok(mapped)
+}
+
+fn layer_snapshot(glyph_id: GlyphId, layer: &GlyphLayer) -> GlyphLayerSnapshot {
+  GlyphLayerSnapshot {
+    glyph_id,
+    source_id: layer.source_id(),
+    state: GlyphState::from_layer(layer),
+  }
 }
 
 #[cfg(test)]
@@ -4433,6 +4516,78 @@ mod tests {
     assert_eq!(state.structure.contours.len(), 1);
     assert_eq!(state.structure.contours[0].points.len(), 1);
     assert_eq!(&state.values[..], &[500.0, 10.0, 20.0]);
+  }
+
+  fn mutator_sans_bridge(name: &str) -> Bridge {
+    let source_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+      .join("../../fixtures/fonts/mutatorsans-variable/MutatorSans.designspace");
+    let (_, store_path) = test_paths(name);
+    let mut bridge = Bridge::new();
+    bridge
+      .open_workspace(source_path.to_string_lossy().into_owned(), store_path)
+      .unwrap();
+    bridge
+  }
+
+  #[test]
+  fn layer_reads_preserve_request_order_with_resolved_components() {
+    let mut bridge = mutator_sans_bridge("layer-reads");
+    let records = bridge.get_glyphs().unwrap();
+    let composite = records
+      .iter()
+      .find(|glyph| !glyph.component_base_glyph_ids.is_empty())
+      .unwrap();
+    let plain = records
+      .iter()
+      .find(|glyph| glyph.component_base_glyph_ids.is_empty() && glyph.layers.len() > 1)
+      .unwrap();
+    let layer_ids = vec![
+      composite.layers[1].id.clone(),
+      plain.layers[0].id.clone(),
+      composite.layers[0].id.clone(),
+    ];
+
+    let authored = bridge.read_layers(layer_ids.clone()).unwrap();
+    let resolved = bridge.resolve_layers(layer_ids.clone()).unwrap();
+
+    let authored_ids = authored
+      .iter()
+      .map(|layer| layer.state.layer_id.clone())
+      .collect::<Vec<_>>();
+    let resolved_ids = resolved
+      .iter()
+      .map(|layer| layer.authored.state.layer_id.clone())
+      .collect::<Vec<_>>();
+    assert_eq!(authored_ids, layer_ids);
+    assert_eq!(resolved_ids, layer_ids);
+    assert_eq!(
+      resolved[0].authored.source_id,
+      composite.layers[1].source_id
+    );
+    assert_eq!(
+      resolved[0].resolved.components.len(),
+      resolved[0].authored.state.structure.components.len(),
+    );
+    assert!(!resolved[0].resolved.components.is_empty());
+    assert!(resolved[0]
+      .resolved
+      .components
+      .iter()
+      .all(|component| component.outline.bounds.is_some()));
+    assert!(!resolved[0].resolved.outline.svg_path.is_empty());
+    assert!(resolved[1].resolved.components.is_empty());
+  }
+
+  #[test]
+  fn layer_reads_reject_unknown_layers() {
+    let mut bridge = bridge_with_workspace();
+    let layer_id = create_default_glyph_layer(&mut bridge, "A", Some(65));
+    let missing = LayerId::new().to_string();
+
+    assert!(bridge
+      .read_layers(vec![layer_id.clone(), missing.clone()])
+      .is_err());
+    assert!(bridge.resolve_layers(vec![layer_id, missing]).is_err());
   }
 
   #[test]

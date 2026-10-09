@@ -4,6 +4,7 @@ import { build } from "vite";
 
 const appRoot = __dirname;
 const isE2E = process.argv.includes("--e2e");
+const isProfile = process.argv.includes("--profile") || process.env.SHIFT_PROFILE_BUILD === "1";
 const nodeExternals = [
   "electron",
   "shift-bridge",
@@ -28,6 +29,23 @@ async function buildMain(): Promise<void> {
     define: {
       MAIN_WINDOW_VITE_DEV_SERVER_URL: JSON.stringify(""),
       MAIN_WINDOW_VITE_NAME: JSON.stringify("main_window"),
+    },
+  });
+}
+
+async function buildSandbox(): Promise<void> {
+  await build({
+    configFile: path.join(appRoot, "vite.main.config.ts"),
+    build: {
+      lib: {
+        entry: path.join(appRoot, "src/utility/sandbox.ts"),
+        formats: ["cjs"],
+        fileName: () => "sandbox.js",
+      },
+      outDir: path.join(appRoot, ".vite/build"),
+      emptyOutDir: false,
+      minify: !isE2E,
+      rollupOptions: { external: nodeExternals },
     },
   });
 }
@@ -74,7 +92,23 @@ async function buildRenderer(): Promise<void> {
       outDir: path.join(appRoot, ".vite/renderer/main_window"),
       emptyOutDir: true,
       minify: !isE2E,
+      // Profiling builds stay minified, like production, but keep source maps so
+      // CPU profiles can be mapped back to component and function names.
+      sourcemap: isProfile,
+      rollupOptions: {
+        output: {
+          // build.ts runs under tsx, which compiles Vite with esbuild's keepNames.
+          // Vite embeds its dynamic-import preload helper as `preload.toString()`,
+          // so the helper calls `__name`, which no browser chunk defines, and every
+          // lazy `import()` threw. Profiling builds' own keepNames needs it too.
+          intro:
+            'var __name = (target, value) => Object.defineProperty(target, "name", { value, configurable: true });',
+        },
+      },
     },
+    // Profiling builds also keep function names, so React fibers name their
+    // components when render counts are read from the running app.
+    ...(isProfile ? { esbuild: { keepNames: true } } : {}),
     define: {
       __PLAYWRIGHT__: JSON.stringify(isE2E),
     },
@@ -82,12 +116,13 @@ async function buildRenderer(): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  console.log(`Building Electron app${isE2E ? " for E2E tests" : ""}...`);
+  process.stdout.write(`Building Electron app${isE2E ? " for E2E tests" : ""}...\n`);
   await buildMain();
+  await buildSandbox();
   await buildWorkspace();
   await buildPreload();
   await buildRenderer();
-  console.log("Electron build complete.");
+  process.stdout.write("Electron build complete.\n");
 }
 
 main().catch((error) => {

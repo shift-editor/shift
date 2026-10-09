@@ -75,6 +75,32 @@ export declare class Bridge {
   /** Glyph-addressed snapshots for renderer-local synchronous font state. */
   getGlyphSnapshots(requests: Array<NapiGlyphSnapshotRequest>): Array<NapiGlyphSnapshot>
   /**
+   * Reads exact authored layers by stable layer identity.
+   *
+   * Results preserve request order and contain accepted workspace state
+   * only. Components are not resolved, so a layer with a broken component
+   * reference remains readable.
+   *
+   * # Errors
+   *
+   * Returns an error when any identity is malformed or absent from the font.
+   */
+  readLayers(layerIds: Array<LayerId>): Array<NapiGlyphLayerSnapshot>
+  /**
+   * Reads exact authored layers with their composited geometry.
+   *
+   * Each root keeps its requested authored geometry; components resolve at
+   * that layer's source through normal interpolation and fallback, and
+   * cyclic branches are skipped. Results preserve request order and do not
+   * publish renderer models.
+   *
+   * # Errors
+   *
+   * Returns an error when any identity is malformed or absent, a component
+   * cannot resolve, or referenced interpolation is incompatible.
+   */
+  resolveLayers(layerIds: Array<LayerId>): Array<NapiLayerRead>
+  /**
    * Derives entity mappings and structural diagnostics between two layers.
    *
    * Both layers must belong to the same glyph. The read acquires that glyph's
@@ -322,6 +348,12 @@ export interface NapiBooleanOpIntent {
   operation: string
 }
 
+/** One corner of outline bounds in font units. */
+export interface NapiBoundsCorner {
+  x: number
+  y: number
+}
+
 export interface NapiCatalogAtlasGlyph {
   glyphId: GlyphId
   defaultGlyph: number
@@ -392,6 +424,16 @@ export interface NapiComponentGlyph {
 export interface NapiComponentMatch {
   referenceId: ComponentId
   targetId: ComponentId
+}
+
+/** Six-value affine placement of a component in its parent layer. */
+export interface NapiComponentTransform {
+  xx: number
+  xy: number
+  yx: number
+  yy: number
+  dx: number
+  dy: number
 }
 
 export declare const enum NapiComponentTransformKind {
@@ -780,6 +822,12 @@ export interface NapiLayerMatch {
   differences: Array<NapiLayerDifference>
 }
 
+/** One accepted-state layer: authored state and its resolved geometry, read together. */
+export interface NapiLayerRead {
+  authored: NapiGlyphLayerSnapshot
+  resolved: NapiResolvedLayerGeometry
+}
+
 /**
  * Replace-grade state for one touched layer; the renderer folds by
  * substitution, never by interpreting changes.
@@ -843,6 +891,12 @@ export interface NapiNamedInstance {
   postscriptName?: string
 }
 
+/** Tight axis-aligned outline bounds in font units, y-up. */
+export interface NapiOutlineBounds {
+  min: NapiBoundsCorner
+  max: NapiBoundsCorner
+}
+
 export interface NapiPointData {
   id: PointId
   pointType: NapiPointType
@@ -885,6 +939,26 @@ export interface NapiRemoveComponentsIntent {
 export interface NapiRemovePointsIntent {
   layerId: LayerId
   pointIds: Array<PointId>
+}
+
+/** One direct component whose outline includes its resolved descendants. */
+export interface NapiResolvedComponentGeometry {
+  id: ComponentId
+  baseGlyphId: GlyphId
+  transformation: NapiComponentTransform
+  outline: NapiResolvedOutline
+}
+
+/** Composited geometry of one exact authored layer at its own source. */
+export interface NapiResolvedLayerGeometry {
+  outline: NapiResolvedOutline
+  components: Array<NapiResolvedComponentGeometry>
+}
+
+/** Composited outline as one SVG path in font units with its tight bounds. */
+export interface NapiResolvedOutline {
+  svgPath: string
+  bounds?: NapiOutlineBounds
 }
 
 export interface NapiReverseContourIntent {

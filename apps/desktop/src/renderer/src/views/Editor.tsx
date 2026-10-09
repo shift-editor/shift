@@ -11,7 +11,7 @@ import { Canvas } from "@/components/editor/Canvas";
 import { CanvasContextMenu } from "@/components/editor/CanvasContextMenu";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import type { TextRunNode } from "@shift/editor/types";
-import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
+import { useOpenedGlyph } from "@/context/GlyphCatalogContext";
 import { useFocusZone, ZoneContainer } from "@/context/FocusZoneContext";
 import { KeyboardRouter } from "@/lib/keyboard";
 import { getShiftHost } from "@/host/shiftHost";
@@ -22,7 +22,7 @@ import { asGlyphId } from "@shift/types";
 export const Editor = () => {
   const { glyphId: glyphIdParam } = useParams();
   const editor = useEditor();
-  const { openedGlyph } = useGlyphCatalog();
+  const openedGlyph = useOpenedGlyph();
   const glyphId = glyphIdParam ? asGlyphId(glyphIdParam) : null;
   // Route acquisition publishes openedGlyph after materializing the canonical Glyph.
   const glyph = openedGlyph && glyphId ? editor.glyphForId(glyphId) : null;
@@ -204,7 +204,7 @@ const EditorLayout = ({ children }: { children: ReactNode }) => {
           inset="start"
           onDoubleClick={() => leftSidebarPanelRef.current?.resize(LEFT_SIDEBAR_DEFAULT_SIZE)}
         />
-        <ResizablePanel id="canvas" order={2} minSize={30}>
+        <ResizablePanel id="canvas" order={2} minSize={30} data-shift-capture-target="editor">
           <ZoneContainer zone="canvas" className="h-full">
             {children}
           </ZoneContainer>

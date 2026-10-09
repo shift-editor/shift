@@ -90,6 +90,32 @@ export interface BridgeApi {
   /** Glyph-addressed snapshots for renderer-local synchronous font state. */
   getGlyphSnapshots(requests: Array<GlyphSnapshotRequest>): Array<GlyphSnapshot>
   /**
+   * Reads exact authored layers by stable layer identity.
+   *
+   * Results preserve request order and contain accepted workspace state
+   * only. Components are not resolved, so a layer with a broken component
+   * reference remains readable.
+   *
+   * # Errors
+   *
+   * Returns an error when any identity is malformed or absent from the font.
+   */
+  readLayers(layerIds: Array<LayerId>): Array<GlyphLayerSnapshot>
+  /**
+   * Reads exact authored layers with their composited geometry.
+   *
+   * Each root keeps its requested authored geometry; components resolve at
+   * that layer's source through normal interpolation and fallback, and
+   * cyclic branches are skipped. Results preserve request order and do not
+   * publish renderer models.
+   *
+   * # Errors
+   *
+   * Returns an error when any identity is malformed or absent, a component
+   * cannot resolve, or referenced interpolation is incompatible.
+   */
+  resolveLayers(layerIds: Array<LayerId>): Array<LayerRead>
+  /**
    * Derives entity mappings and structural diagnostics between two layers.
    *
    * Both layers must belong to the same glyph. The read acquires that glyph's
@@ -331,6 +357,12 @@ export interface BooleanOpIntent {
   operation: string
 }
 
+/** One corner of outline bounds in font units. */
+export interface BoundsCorner {
+  x: number
+  y: number
+}
+
 export interface CatalogAtlasGlyph {
   glyphId: GlyphId
   defaultGlyph: number
@@ -401,6 +433,16 @@ export interface ComponentGlyph {
 export interface ComponentMatch {
   referenceId: ComponentId
   targetId: ComponentId
+}
+
+/** Six-value affine placement of a component in its parent layer. */
+export interface ComponentTransform {
+  xx: number
+  xy: number
+  yx: number
+  yy: number
+  dx: number
+  dy: number
 }
 
 export type ComponentTransformKind = "decomposed" | "affine";
@@ -778,6 +820,12 @@ export interface LayerMatch {
   differences: Array<LayerDifference>
 }
 
+/** One accepted-state layer: authored state and its resolved geometry, read together. */
+export interface LayerRead {
+  authored: GlyphLayerSnapshot
+  resolved: ResolvedLayerGeometry
+}
+
 /**
  * Replace-grade state for one touched layer; the renderer folds by
  * substitution, never by interpreting changes.
@@ -834,6 +882,12 @@ export interface NamedInstance {
   postscriptName?: string
 }
 
+/** Tight axis-aligned outline bounds in font units, y-up. */
+export interface OutlineBounds {
+  min: BoundsCorner
+  max: BoundsCorner
+}
+
 export interface PointData {
   id: PointId
   pointType: PointType
@@ -872,6 +926,26 @@ export interface RemoveComponentsIntent {
 export interface RemovePointsIntent {
   layerId: LayerId
   pointIds: Array<PointId>
+}
+
+/** One direct component whose outline includes its resolved descendants. */
+export interface ResolvedComponentGeometry {
+  id: ComponentId
+  baseGlyphId: GlyphId
+  transformation: ComponentTransform
+  outline: ResolvedOutline
+}
+
+/** Composited geometry of one exact authored layer at its own source. */
+export interface ResolvedLayerGeometry {
+  outline: ResolvedOutline
+  components: Array<ResolvedComponentGeometry>
+}
+
+/** Composited outline as one SVG path in font units with its tight bounds. */
+export interface ResolvedOutline {
+  svgPath: string
+  bounds?: OutlineBounds
 }
 
 export interface ReverseContourIntent {

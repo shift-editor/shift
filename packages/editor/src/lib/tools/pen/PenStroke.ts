@@ -1,6 +1,6 @@
 import type { Point2D } from "@shift/geo";
-import type { ContourId, PointId } from "@shift/types";
-import { Point, type Contour, type SegmentId } from "@shift/glyph-state";
+import type { ContourId, PointId, SegmentId } from "@shift/types";
+import { Point, type Contour } from "@shift/glyph-state";
 import type { GlyphLayer } from "../../model/Glyph";
 import type { GlyphLayerEdit } from "../../model/GlyphLayerEdit";
 import type { MoveEdit } from "../../model/positions/index";
