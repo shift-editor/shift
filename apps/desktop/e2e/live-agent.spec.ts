@@ -1,6 +1,11 @@
 import type { Page } from "@playwright/test";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
-import { workspaceTest as test, expect, UFO_FONT_PATH } from "./fixtures/electronApp";
+import {
+  workspaceTest as test,
+  expect,
+  DESIGNSPACE_FONT_PATH,
+  UFO_FONT_PATH,
+} from "./fixtures/electronApp";
 
 /** Turns on agent connections in Settings → Agents and returns the MCP URL it shows. */
 async function enableAgentConnections(page: Page): Promise<string> {
@@ -83,16 +88,9 @@ test.describe("authored font reads from Home", () => {
           appearance: { outlineFill: "#123456" },
         })).value;
         const sourcePage = (await shift.glyphs.list({ ...target, limit: 1, sourceId })).value;
-        const a = directory.items.find(({ name }) => name === "A");
-        const supportId = a?.layers.find((layer) => layer.sourceId !== sourceId)?.sourceId;
-        if (!a || !supportId) throw new Error("Missing support-layer fixture");
-        const sparse = directory.items.find(({ layers }) => !layers.some((layer) => layer.sourceId === supportId));
-        if (!sparse) throw new Error("Missing sparse-layer fixture");
-        const support = (await shift.layers.get({ ...target, layerId: layerIn(a, supportId) })).value;
         const absent = await shift.layers
           .get({ ...target, layerId: "missing-layer" })
           .then(() => "found", () => "rejected");
-        const supportPage = (await shift.glyphs.list({ ...target, limit: 100, sourceId: supportId })).value;
         const location = (await shift.locations.resolve({ ...target, location: [] })).value;
         const resolved = (await shift.glyphs.resolve({
           ...target,
@@ -110,10 +108,7 @@ test.describe("authored font reads from Home", () => {
         });
         return {
           fontRevision,
-          supportLayerId: support?.layerId,
           absent,
-          sparseLayer: supportPage.items.find(({ id }) => id === sparse.id)?.layer,
-          supportLayer: supportPage.items.find(({ id }) => id === a.id)?.layer,
           familyName: font.info.familyName,
           metricDefinitions: font.metricDefinitions,
           unitsPerEm: font.metrics.unitsPerEm,
@@ -161,8 +156,6 @@ test.describe("authored font reads from Home", () => {
       fontRevision: expect.any(String),
       anchors: ["top"],
       absent: "rejected",
-      sparseLayer: null,
-      supportLayerId: expect.any(String),
       advanceWidth: expect.any(Number),
       resolvedAdvanceWidth: expect.any(Number),
       resolvedSourceId: expect.any(String),
@@ -196,7 +189,6 @@ test.describe("authored font reads from Home", () => {
       second: { id: string };
       glyph: { id: string };
       sourceLayer: unknown;
-      supportLayer: unknown;
       eId: string;
       eByNameId: string;
       eLayerId: string;
@@ -215,7 +207,50 @@ test.describe("authored font reads from Home", () => {
     expect(page.glyph.id).toBe(page.first.id);
     expect(page.eByNameId).toBe(page.eId);
     expect(page.sourceLayer).not.toBeNull();
-    expect(page.supportLayer).not.toBeNull();
+  });
+});
+
+test.describe("sparse source reads", () => {
+  test.use({ startupFontPath: DESIGNSPACE_FONT_PATH });
+
+  test("reads layers in a sparse source and reports glyphs without one", async ({ page }) => {
+    const mcpUrl = await enableAgentConnections(page);
+    const result = await runShiftCode(
+      mcpUrl,
+      `async () => {
+        const session = (await shift.sessions.list()).find(({ editorConnected }) => editorConnected);
+        if (!session) throw new Error("Expected connected font");
+        return shift.read({ windowId: session.windowId }, async (read) => {
+          const font = await read.font.get();
+          for (const source of font.sources) {
+            const page = await read.glyphs.list({ limit: 100, sourceId: source.id });
+            const authored = page.items.find(({ layer }) => layer);
+            const missing = page.items.find(({ layer }) => layer === null);
+            if (!authored || !missing) continue;
+
+            const layer = await read.layers.get({ layerId: authored.layer.layerId });
+            return {
+              layerSourceId: layer.sourceId,
+              sourceId: source.id,
+              advertised: authored.layers.some(({ sourceId }) => sourceId === source.id),
+              missingAdvertised: missing.layers.some(({ sourceId }) => sourceId === source.id),
+            };
+          }
+          return null;
+        });
+      }`,
+    );
+
+    const sparse = result as {
+      layerSourceId: string;
+      sourceId: string;
+      advertised: boolean;
+      missingAdvertised: boolean;
+    } | null;
+    expect(sparse).not.toBeNull();
+    expect(sparse?.layerSourceId).toBe(sparse?.sourceId);
+    expect(sparse?.advertised).toBe(true);
+    expect(sparse?.missingAdvertised).toBe(false);
   });
 });
 
