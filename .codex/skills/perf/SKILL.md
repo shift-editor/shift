@@ -12,7 +12,7 @@ Measure the build users run, find what started the work, fix that, and measure a
 Never draw conclusions from `pnpm dev`. React's development build adds `jsxDEV`, prop validation, and render logging that made up about half of every dev profile and pointed at the wrong code.
 
 ```sh
-pnpm profile:build      # minified like a release, plus source maps and component names (~10 min: the Rust bridge builds in release)
+pnpm profile:build      # native bridge (release) + renderer minified like a release, with source maps and component names (~1 min warm)
 pnpm profile:desktop --font <path> [--glyph A] [--scenario scrub] [--axis Weight] [--seconds 8] [--cpu out.cpuprofile]
 ```
 
@@ -49,7 +49,17 @@ Patterns that caused real regressions (rules in `/signals`):
 
 A healthy weight scrub on Inter Italic (Ryzen 5 5500U, Linux): p99 frame ≈ 16.8 ms, about 60 component renders per commit, main thread about 25% busy. Use that as a reference for "fixed".
 
-## 3. Prove it
+## 3. Backend: the workspace process and the store
+
+Edits, undo, glyph loads, and atlas preparation run in the workspace utility process through the Rust bridge. `pnpm profile:desktop --scenario open` prints main's per-phase atlas timings (`SHIFT_PROFILE_SLUG_ATLAS`); `--scenario undo` times edit-coordinator round trips. `pnpm build` does not rebuild the native bridge — `profile:build` does, and a Rust change measured without it is measuring the old code.
+
+A `.shift` document opens with a recovery overlay: every table is read through a temp view that `UNION ALL`s the recovery rows with the canonical rows, filtered by tombstones, replacement markers, and parent visibility (`crates/shift-store/src/recovery/views.rs`). SQLite pushes `WHERE` terms into those views, so a key lookup searches each arm by index; it does **not** push join terms. So in store queries:
+
+- **Never join two store tables on a key.** Express the second table as `col IN (SELECT …)`. `referenced_glyph_ids_for_glyphs` took 117 ms as a join and 14 ms as an `IN` subquery on Inter; `dependent_glyph_ids_for_layers`, which runs after every edit, undo, and redo, took 172 ms and 8 ms.
+- Compare a query against `main.<table>` to see what the overlay costs. A large gap means the view is being scanned rather than searched; `EXPLAIN QUERY PLAN` shows it as `CO-ROUTINE <view>` followed by `AUTOMATIC COVERING INDEX`.
+- Store tests use canonical tables, so they will not catch this. Measure on a real document opened with recovery.
+
+## 4. Prove it
 
 - Rerun the exact same `profile:desktop` command and report before/after numbers in the commit message.
 - If the problem can regress silently, add or extend a spec in `apps/desktop/e2e/perf.spec.ts` (`pnpm --filter @shift/desktop test:e2e:perf`, run through the `shift-remote-e2e` skill rather than on a user's desktop). It records p50/p95 against `perf-baseline.json`.

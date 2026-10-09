@@ -32,7 +32,12 @@ const { values: options } = parseArgs({
   },
 });
 
-const SCENARIOS = { scrub };
+// `editor` scenarios run on an open glyph with the render counter installed.
+const SCENARIOS = {
+  scrub: { run: scrub, editor: true },
+  undo: { run: undoRedo, editor: true },
+  open: { run: openFont, editor: false },
+};
 if (!options.font) usage("--font is required");
 if (!SCENARIOS[options.scenario]) usage(`unknown scenario ${options.scenario}`);
 
@@ -46,29 +51,39 @@ const userDataDir = mkdtempSync(path.join(os.tmpdir(), "shift-profile-"));
 // Packaged builds disable Node's inspector fuse, so Playwright's Electron launcher
 // cannot attach. Chromium's remote debugging port still works.
 const port = String(9300 + Math.floor(Math.random() * 500));
+const launchedAt = Date.now();
+const appOutput = [];
 const app = spawn(
   executablePath,
   [`--remote-debugging-port=${port}`, `--user-data-dir=${userDataDir}`, fontPath],
   {
-    stdio: "ignore",
+    // Main logs per-page atlas acquisition timings when this is set.
+    env: { ...process.env, SHIFT_PROFILE_SLUG_ATLAS: "1" },
+    stdio: ["ignore", "pipe", "pipe"],
   },
 );
+for (const stream of [app.stdout, app.stderr]) {
+  stream.on("data", (chunk) => appOutput.push(...String(chunk).split("\n").filter(Boolean)));
+}
 const browser = await connect(port);
 
 try {
   const page = await documentWindow(browser);
-  await page.waitForFunction(() => window.shift?.font, null, { timeout: 120_000 });
-  await openGlyphByName(page, options.glyph);
+  const scenario = SCENARIOS[options.scenario];
+  if (scenario.editor) {
+    await page.waitForFunction(() => window.shift?.font, null, { timeout: 120_000 });
+    await openGlyphByName(page, options.glyph);
 
-  // React reads the DevTools hook once, at startup, so install it and reload.
-  await page.context().addInitScript({ content: `(${installRenderCounter.toString()})()` });
-  await page.reload();
-  await page.waitForFunction(() => window.shift?.font && window.__shiftRenders, null, {
-    timeout: 120_000,
-  });
-  await waitForEditor(page);
+    // React reads the DevTools hook once, at startup, so install it and reload.
+    await page.context().addInitScript({ content: `(${installRenderCounter.toString()})()` });
+    await page.reload();
+    await page.waitForFunction(() => window.shift?.font && window.__shiftRenders, null, {
+      timeout: 120_000,
+    });
+    await waitForEditor(page);
+  }
 
-  const report = await SCENARIOS[options.scenario](page);
+  const report = await scenario.run(page);
   printReport(report);
   if (report.cpuProfile) {
     const profilePath = options.cpu ?? path.join(userDataDir, `${options.scenario}.cpuprofile`);
@@ -161,21 +176,96 @@ async function measure(page, drive) {
     requestAnimationFrame(tick);
   });
   await cdp.send("Profiler.start");
-  await drive();
+  const result = await drive();
   const { profile } = await cdp.send("Profiler.stop");
   const { frames, renders } = await page.evaluate(() => {
     const frames = window.__shiftFrames.slice(5);
     window.__shiftFrames = null;
     return { frames, renders: window.__shiftRenders.stop() };
   });
-  return { frames, renders, cpuProfile: profile };
+  return { ...result, frames, renders, cpuProfile: profile };
 }
 
-function printReport({ frames, renders }) {
+/** Times launch to font loaded, first grid frame, and every glyph resident. */
+async function openFont(page) {
+  const milestones = {};
+  const deadline = Date.now() + 180_000;
+  while (Date.now() < deadline && !milestones["all glyphs resident"]) {
+    const state = await page
+      .evaluate(() => {
+        const canvas = document.querySelector("[data-grid-readiness]");
+        return {
+          loaded: window.shift?.font.loadedCell.peek() ?? false,
+          readiness: canvas?.dataset.gridReadiness ?? null,
+          resident: canvas?.dataset.fullyResident === "true",
+          glyphs: canvas?.dataset.residentGlyphCount ?? null,
+        };
+      })
+      .catch(() => ({}));
+    const elapsed = Date.now() - launchedAt;
+    if (state.loaded) milestones["font loaded"] ??= elapsed;
+    if (state.readiness && state.readiness !== "Initial")
+      milestones["first grid frame"] ??= elapsed;
+    if (state.resident) milestones["all glyphs resident"] ??= `${elapsed} (${state.glyphs} glyphs)`;
+    await page.waitForTimeout(50);
+  }
+  return { milestones };
+}
+
+/** Edits every point of the glyph, then times repeated undo and redo round trips. */
+async function undoRedo(page) {
+  const samples = Number(options.seconds);
+  return measure(page, async () => {
+    const times = await page.evaluate(async (count) => {
+      const editor = window.shift.editor;
+      editor.selectAll();
+      const pointIds = editor.selection.ids.filter((id) => id.startsWith("point"));
+      const layer = editor.layerForGeometry({ points: pointIds });
+      if (!layer) throw new Error("the glyph has no editable layer");
+      const coordinator = editor.font.editCoordinator;
+      const undo = [];
+      const redo = [];
+      for (let index = 0; index < count; index++) {
+        const selected = new Set(pointIds);
+        const updates = layer.geometry.allPoints
+          .filter((point) => selected.has(point.id))
+          .map((point) => ({ kind: "point", id: point.id, x: point.x + 1, y: point.y }));
+        layer.previewPositionPatch(updates);
+        layer.applyPositionPatch(updates);
+        await coordinator.settled();
+
+        let start = performance.now();
+        await coordinator.undo();
+        undo.push(performance.now() - start);
+        start = performance.now();
+        await coordinator.redo();
+        redo.push(performance.now() - start);
+      }
+      return { undo, redo, points: pointIds.length };
+    }, samples);
+    return { timings: { [`undo (${times.points} points)`]: times.undo, redo: times.redo } };
+  });
+}
+
+function printReport({ frames, renders, milestones, timings }) {
+  console.log(`\n${options.scenario} · ${path.basename(fontPath)} · ${options.glyph}`);
+  if (milestones) {
+    for (const [name, at] of Object.entries(milestones))
+      console.log(`${String(at).padStart(8)}ms  ${name}`);
+    const atlas = appOutput.filter((line) => line.includes("slug-atlas"));
+    if (atlas.length) console.log(`\nAtlas acquisition (main process):\n${atlas.join("\n")}`);
+    return;
+  }
+  for (const [name, values] of Object.entries(timings ?? {})) {
+    const sorted = [...values].sort((a, b) => a - b);
+    const median = sorted[Math.floor(sorted.length / 2)];
+    console.log(
+      `${name}: median ${median.toFixed(0)}ms, max ${sorted.at(-1).toFixed(0)}ms over ${values.length}`,
+    );
+  }
   const sorted = [...frames].sort((a, b) => a - b);
   const at = (q) => sorted[Math.floor(q * (sorted.length - 1))]?.toFixed(1);
   const slow = frames.filter((frame) => frame > 33.4).length;
-  console.log(`\n${options.scenario} · ${path.basename(fontPath)} · ${options.glyph}`);
   console.log(
     `frames ${frames.length}: p50 ${at(0.5)}ms  p90 ${at(0.9)}ms  p99 ${at(0.99)}ms  over 33ms: ${slow}`,
   );
