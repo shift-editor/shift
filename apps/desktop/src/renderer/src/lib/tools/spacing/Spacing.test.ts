@@ -50,6 +50,20 @@ describe("Spacing tool", () => {
     expect(editor.editing.nodeIds).toEqual([child.id]);
   });
 
+  it("drops the selected half when an undo takes one of its glyphs away", async () => {
+    hoverLocal(450, 200);
+    const screen = editor.localToScreen({ x: 450, y: 200 });
+    editor.click(screen.x, screen.y);
+    const tool = () => editor.toolManager.activeTool as SpacingTool;
+    expect(tool().currentHalf).not.toBeNull();
+
+    // Undo the typing removes the second A, so the gap between the two is gone.
+    await editor.undo();
+    await editor.settle();
+
+    expect(tool().currentHalf).toBeNull();
+  });
+
   it("hovering between two glyphs shows the left glyph's RSB and the right glyph's LSB", () => {
     hoverLocal(450, 200);
 

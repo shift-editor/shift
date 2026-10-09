@@ -81,6 +81,10 @@ impl Font {
                         .cloned();
                     require_original(&current, &layer.before, "glyph layer")?;
                 }
+                FontChange::KerningGroup { group_id, group } => {
+                    let current = self.kerning().group(group_id).cloned();
+                    require_original(&current, &group.before, "kerning group")?;
+                }
                 FontChange::KerningValue {
                     source_id,
                     pair,
@@ -134,6 +138,9 @@ impl Font {
                     let data = self.data_mut();
                     data.sources = value.after.sources.clone();
                     data.default_source_id = value.after.default_source_id.clone();
+                }
+                FontChange::KerningGroup { group_id, group } => {
+                    self.kerning_mut().put_group(group_id, group.after.clone());
                 }
                 FontChange::KerningValue {
                     source_id,

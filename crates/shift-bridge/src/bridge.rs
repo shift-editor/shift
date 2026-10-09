@@ -16,7 +16,7 @@ use shift_font::{
   AxisMapping as FontAxisMapping, AxisMappingId, AxisMappingPoint as FontAxisMappingPoint,
   AxisRole, BooleanOp, ComponentId, ContourId, Font, FontChangeImpact, FontIntent, FontIntentSet,
   FontMetadata as FontMetadataModel, Glyph, GlyphId, GlyphLayer, KerningGroupId, KerningPair,
-  KerningSide, KerningValueEdit, LayerId, Location as FontLocation,
+  KerningPosition, KerningSide, KerningValueEdit, LayerId, Location as FontLocation,
   MetricDefinition as FontMetricDefinition, MetricId, MetricKind, MetricValue,
   NamedInstance as FontNamedInstance, NamedInstanceId, PointId, PointSeed, SourceId, Transform,
 };
@@ -33,11 +33,11 @@ use shift_wire::{
     NapiCatalogAtlasWeights, NapiFontIntent, NapiFontMetadata, NapiFontMetrics,
     NapiFontReplacement, NapiFontSnapshot, NapiGlyphLayerSnapshot, NapiGlyphPreview,
     NapiGlyphProjection, NapiGlyphRecord, NapiGlyphSnapshot, NapiGlyphSnapshotRequest,
-    NapiInterpolationBasis, NapiKerningSide, NapiKerningSideKind, NapiKerningSnapshot,
-    NapiKerningValueEdit, NapiLanguagesReplacement, NapiLayerMatch, NapiLayerRead,
-    NapiLayerReplaced, NapiLocation, NapiMetricDefinition, NapiMetricKind, NapiNamedInstance,
-    NapiPointSeed, NapiSlugAtlas, NapiSlugExactSource, NapiSlugGlyph, NapiSlugLayout,
-    NapiSlugPreviewExtents, NapiSlugSection, NapiSlugWeightSet, NapiSource,
+    NapiInterpolationBasis, NapiKerningPosition, NapiKerningSide, NapiKerningSideKind,
+    NapiKerningSnapshot, NapiKerningValueEdit, NapiLanguagesReplacement, NapiLayerMatch,
+    NapiLayerRead, NapiLayerReplaced, NapiLocation, NapiMetricDefinition, NapiMetricKind,
+    NapiNamedInstance, NapiPointSeed, NapiSlugAtlas, NapiSlugExactSource, NapiSlugGlyph,
+    NapiSlugLayout, NapiSlugPreviewExtents, NapiSlugSection, NapiSlugWeightSet, NapiSource,
     NapiSourceMetricsInterpolationReplacement, NapiSourceMetricsInterpolationSnapshot,
   },
   AnchorData, Axis, AxisMapping, AxisMappingBasis, ComponentData, ComponentGlyph,
@@ -2242,6 +2242,13 @@ fn map_kerning_value_edit(edit: NapiKerningValueEdit) -> errors::Result<KerningV
   })
 }
 
+fn map_kerning_position(position: NapiKerningPosition) -> KerningPosition {
+  match position {
+    NapiKerningPosition::First => KerningPosition::First,
+    NapiKerningPosition::Second => KerningPosition::Second,
+  }
+}
+
 fn map_kerning_side(side: NapiKerningSide) -> errors::Result<KerningSide> {
   Ok(match side.kind {
     NapiKerningSideKind::Glyph => KerningSide::Glyph(parse::<GlyphId>(&side.id)?),
@@ -2486,6 +2493,47 @@ fn map_intent(intent: NapiFontIntent) -> errors::Result<FontIntent> {
           .into_iter()
           .map(map_kerning_value_edit)
           .collect::<errors::Result<Vec<_>>>()?,
+      })
+    }
+    "createKerningGroup" => {
+      let payload = intent
+        .create_kerning_group
+        .ok_or_else(|| missing("createKerningGroup"))?;
+      Ok(FontIntent::CreateKerningGroup {
+        group_id: parse::<KerningGroupId>(&payload.group_id)?,
+        position: map_kerning_position(payload.position),
+        name: payload.name,
+      })
+    }
+    "setKerningGroupMember" => {
+      let payload = intent
+        .set_kerning_group_member
+        .ok_or_else(|| missing("setKerningGroupMember"))?;
+      Ok(FontIntent::SetKerningGroupMember {
+        position: map_kerning_position(payload.position),
+        glyph_id: parse::<GlyphId>(&payload.glyph_id)?,
+        group_id: payload
+          .group_id
+          .as_deref()
+          .map(parse::<KerningGroupId>)
+          .transpose()?,
+      })
+    }
+    "renameKerningGroup" => {
+      let payload = intent
+        .rename_kerning_group
+        .ok_or_else(|| missing("renameKerningGroup"))?;
+      Ok(FontIntent::RenameKerningGroup {
+        group_id: parse::<KerningGroupId>(&payload.group_id)?,
+        name: payload.name,
+      })
+    }
+    "deleteKerningGroup" => {
+      let payload = intent
+        .delete_kerning_group
+        .ok_or_else(|| missing("deleteKerningGroup"))?;
+      Ok(FontIntent::DeleteKerningGroup {
+        group_id: parse::<KerningGroupId>(&payload.group_id)?,
       })
     }
     "setLanguages" => {
@@ -2887,6 +2935,10 @@ mod tests {
       clone_glyph_layer: None,
       materialize_glyph_layer: None,
       set_kerning_values: None,
+      create_kerning_group: None,
+      set_kerning_group_member: None,
+      rename_kerning_group: None,
+      delete_kerning_group: None,
     }
   }
 

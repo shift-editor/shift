@@ -62,10 +62,18 @@ impl ShiftStore {
 
         let tracks_workspace = self.tracks_workspace();
         let tx = self.conn.transaction()?;
-        for priority in 0..=8 {
+        for priority in 0..=10 {
             for change in &change_set.changes {
                 if change_priority(change) == priority {
                     apply_change(&tx, change)?;
+                }
+            }
+            // A glyph is in one group per position, so every changed group's
+            // old rows go before any new ones: a glyph moving between groups
+            // never sits in both.
+            if priority == KERNING_GROUP_PRIORITY {
+                for (group_id, group) in kerning_groups_after(change_set) {
+                    insert_kerning_group(&tx, group_id, group)?;
                 }
             }
         }
@@ -306,9 +314,25 @@ fn change_priority(change: &font::FontChange) -> usize {
         font::FontChange::Sources(_) => 5,
         font::FontChange::Glyph(_) => 6,
         font::FontChange::Layer { .. } => 7,
-        font::FontChange::KerningValue { .. } => 8,
+        font::FontChange::KerningGroup { .. } => KERNING_GROUP_PRIORITY,
+        font::FontChange::KerningValue { .. } => 10,
     }
 }
+
+/// The groups a change set leaves in place, by id.
+fn kerning_groups_after(
+    change_set: &font::FontChangeSet,
+) -> impl Iterator<Item = (&font::KerningGroupId, &font::KerningGroup)> {
+    change_set.changes.iter().filter_map(|change| match change {
+        font::FontChange::KerningGroup { group_id, group } => {
+            group.after.as_ref().map(|group| (group_id, group))
+        }
+        _ => None,
+    })
+}
+
+/// When kerning group changes apply: after glyphs, before pair values.
+const KERNING_GROUP_PRIORITY: usize = 9;
 
 fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), StoreError> {
     match change {
@@ -325,12 +349,43 @@ fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), S
         font::FontChange::Layer {
             glyph_id, layer, ..
         } => replace_layer(tx, glyph_id, layer),
+        font::FontChange::KerningGroup { group_id, .. } => delete_kerning_group(tx, group_id),
         font::FontChange::KerningValue {
             source_id,
             pair,
             value,
         } => write_kerning_value(tx, source_id, pair, value.after),
     }
+}
+
+/// Deletes one kerning group and its members; a changed group's new state is
+/// inserted once every changed group is deleted.
+fn delete_kerning_group(
+    tx: &Transaction<'_>,
+    group_id: &font::KerningGroupId,
+) -> Result<(), StoreError> {
+    tx.execute(
+        "DELETE FROM kerning_group_members WHERE group_id = ?1",
+        params![group_id.as_str()],
+    )?;
+    tx.execute(
+        "DELETE FROM kerning_groups WHERE id = ?1",
+        params![group_id.as_str()],
+    )?;
+    Ok(())
+}
+
+/// Replaces every stored kerning group with the groups of `kerning`.
+pub(crate) fn replace_kerning_groups(
+    tx: &Transaction<'_>,
+    kerning: &font::Kerning,
+) -> Result<(), StoreError> {
+    tx.execute("DELETE FROM kerning_group_members", [])?;
+    tx.execute("DELETE FROM kerning_groups", [])?;
+    for (group_id, group) in kerning.all_groups() {
+        insert_kerning_group(tx, group_id, group)?;
+    }
+    Ok(())
 }
 
 /// Upserts or deletes one source's value for one kerning pair.

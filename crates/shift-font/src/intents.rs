@@ -18,7 +18,7 @@ use crate::ir::{
 use crate::layer_edit::BulkNodePositionUpdates;
 use crate::source::source_locations_equal;
 use crate::Require;
-use crate::{KerningPair, KerningPosition, KerningSide};
+use crate::{KerningGroup, KerningGroupId, KerningPair, KerningPosition, KerningSide};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::sync::Arc;
 
@@ -261,6 +261,31 @@ pub enum FontIntent {
     SetKerningValues {
         edits: Vec<KerningValueEdit>,
     },
+    /// Creates an empty kerning group at a pair position, under an id the
+    /// caller mints. The name is trimmed, and must be non-blank, free of
+    /// control characters, and unique at its position.
+    CreateKerningGroup {
+        group_id: KerningGroupId,
+        position: KerningPosition,
+        name: String,
+    },
+    /// Moves a glyph into a group at the group's pair position, out of any
+    /// other group there, or out of its group at `position` with `None`.
+    SetKerningGroupMember {
+        position: KerningPosition,
+        glyph_id: GlyphId,
+        group_id: Option<KerningGroupId>,
+    },
+    /// Renames a group. Pairs reference it by id, so its kerning is unchanged.
+    RenameKerningGroup {
+        group_id: KerningGroupId,
+        name: String,
+    },
+    /// Deletes a group. Pairs that reference it are kept and never resolve,
+    /// so undoing the delete restores its kerning.
+    DeleteKerningGroup {
+        group_id: KerningGroupId,
+    },
     /// Creates one editable layer from compatible resolved numeric values.
     ///
     /// The source layer supplies authored structure and non-varying data. The
@@ -319,7 +344,11 @@ impl FontIntent {
             | Self::CreateGlyphLayer { .. }
             | Self::CloneGlyphLayer { .. }
             | Self::MaterializeGlyphLayer { .. }
-            | Self::SetKerningValues { .. } => None,
+            | Self::SetKerningValues { .. }
+            | Self::CreateKerningGroup { .. }
+            | Self::SetKerningGroupMember { .. }
+            | Self::RenameKerningGroup { .. }
+            | Self::DeleteKerningGroup { .. } => None,
         }
     }
 
@@ -378,8 +407,23 @@ impl FontIntent {
             | Self::CreateSource { .. }
             | Self::UpdateSource { .. }
             | Self::CreateGlyphLayer { .. }
-            | Self::SetKerningValues { .. } => Vec::new(),
+            | Self::SetKerningValues { .. }
+            | Self::CreateKerningGroup { .. }
+            | Self::SetKerningGroupMember { .. }
+            | Self::RenameKerningGroup { .. }
+            | Self::DeleteKerningGroup { .. } => Vec::new(),
         }
+    }
+
+    /// Whether this intent creates, renames, deletes, or fills kerning groups.
+    fn edits_kerning_groups(&self) -> bool {
+        matches!(
+            self,
+            Self::CreateKerningGroup { .. }
+                | Self::SetKerningGroupMember { .. }
+                | Self::RenameKerningGroup { .. }
+                | Self::DeleteKerningGroup { .. }
+        )
     }
 
     /// Whether applying this intent changes layer structure (vs values only).
@@ -575,6 +619,25 @@ impl Font {
             }
         }
 
+        if set.intents.iter().any(FontIntent::edits_kerning_groups) {
+            let group_ids = before
+                .kerning()
+                .all_groups()
+                .chain(after.kerning().all_groups())
+                .map(|(group_id, _)| group_id.clone())
+                .collect::<BTreeSet<_>>();
+            for group_id in group_ids {
+                let original = before.kerning().group(&group_id).cloned();
+                let replacement = after.kerning().group(&group_id).cloned();
+                if original != replacement {
+                    changes.push(FontChange::KerningGroup {
+                        group_id,
+                        group: Replacement::new(original, replacement),
+                    });
+                }
+            }
+        }
+
         for glyph_id in &glyph_ids {
             let original = before.glyph(glyph_id).cloned();
             let replacement = after.glyph(glyph_id).cloned();
@@ -659,6 +722,39 @@ impl Font {
             }
             FontIntent::SetKerningValues { edits } => {
                 self.apply_set_kerning_values(edits)?;
+                Ok((Vec::new(), None))
+            }
+            FontIntent::CreateKerningGroup {
+                group_id,
+                position,
+                name,
+            } => {
+                if self.kerning().group(group_id).is_some() {
+                    return Err(CoreError::DuplicateKerningGroup(group_id.clone()));
+                }
+                let name = kerning_group_name(name)?;
+                self.kerning_mut().set_group(
+                    group_id.clone(),
+                    KerningGroup::new(*position, name, Vec::new()),
+                )?;
+                Ok((Vec::new(), None))
+            }
+            FontIntent::SetKerningGroupMember {
+                position,
+                glyph_id,
+                group_id,
+            } => {
+                self.apply_set_kerning_group_member(*position, glyph_id, group_id.as_ref())?;
+                Ok((Vec::new(), None))
+            }
+            FontIntent::RenameKerningGroup { group_id, name } => {
+                let name = kerning_group_name(name)?;
+                self.kerning_mut().rename_group(group_id, name)?;
+                Ok((Vec::new(), None))
+            }
+            FontIntent::DeleteKerningGroup { group_id } => {
+                self.kerning().group(group_id).require(group_id)?;
+                self.kerning_mut().remove_group(group_id);
                 Ok((Vec::new(), None))
             }
             FontIntent::CreateAxis { axis } => {
@@ -792,6 +888,41 @@ impl Font {
 
         self.insert_glyph(glyph)?;
         Ok(glyph_id)
+    }
+
+    fn apply_set_kerning_group_member(
+        &mut self,
+        position: KerningPosition,
+        glyph_id: &GlyphId,
+        group_id: Option<&KerningGroupId>,
+    ) -> CoreResult<()> {
+        self.require_glyph(glyph_id)?;
+        let Some(group_id) = group_id else {
+            let Some(current_id) = self.kerning().group_of(position, glyph_id).cloned() else {
+                return Ok(());
+            };
+            let mut group = self
+                .kerning()
+                .group(&current_id)
+                .require(&current_id)?
+                .clone();
+            group.members.retain(|member| member != glyph_id);
+            self.kerning_mut().set_group(current_id, group)?;
+            return Ok(());
+        };
+
+        let mut group = self.kerning().group(group_id).require(group_id)?.clone();
+        if group.position != position {
+            return Err(CoreError::KerningGroupPosition {
+                group_id: group_id.clone(),
+                position,
+            });
+        }
+        if !group.members.contains(glyph_id) {
+            group.members.push(glyph_id.clone());
+        }
+        self.kerning_mut().set_group(group_id.clone(), group)?;
+        Ok(())
     }
 
     fn apply_set_kerning_values(&mut self, edits: &[KerningValueEdit]) -> CoreResult<()> {
@@ -1543,7 +1674,11 @@ impl Font {
             | FontIntent::CreateGlyphLayer { .. }
             | FontIntent::CloneGlyphLayer { .. }
             | FontIntent::MaterializeGlyphLayer { .. }
-            | FontIntent::SetKerningValues { .. } => {
+            | FontIntent::SetKerningValues { .. }
+            | FontIntent::CreateKerningGroup { .. }
+            | FontIntent::SetKerningGroupMember { .. }
+            | FontIntent::RenameKerningGroup { .. }
+            | FontIntent::DeleteKerningGroup { .. } => {
                 unreachable!("font-level intents take the apply_font_intent path")
             }
         }
@@ -1592,6 +1727,20 @@ mod replacement_tests;
 
 #[cfg(test)]
 mod kerning_tests;
+
+/// A kerning group name trimmed of surrounding space.
+///
+/// # Errors
+///
+/// Returns [`CoreError::InvalidKerningGroupName`] when the name is blank or
+/// holds a control character.
+fn kerning_group_name(name: &str) -> CoreResult<String> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() || trimmed.chars().any(char::is_control) {
+        return Err(CoreError::InvalidKerningGroupName(name.to_string()));
+    }
+    Ok(trimmed.to_string())
+}
 
 #[cfg(test)]
 mod tests {

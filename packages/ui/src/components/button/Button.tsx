@@ -6,8 +6,8 @@ import {
 import { cn } from "../../lib/utils";
 
 export type ButtonProps = BaseButtonProps & {
-  variant?: "default" | "ghost" | "primary" | "toolbar" | "row" | "muted" | "transparent";
-  size?: "sm" | "md" | "lg" | "icon" | "icon-sm";
+  variant?: "default" | "ghost" | "primary" | "toolbar" | "row" | "muted" | "transparent" | "field";
+  size?: "sm" | "md" | "lg" | "icon" | "icon-sm" | "field";
   isActive?: boolean;
   icon?: React.ReactNode;
 };
@@ -21,6 +21,12 @@ const variantStyles = {
   row: "w-full justify-start rounded-sm px-2 text-sm font-normal hover:bg-hover/50 data-[active]:bg-hover data-[active]:hover:bg-hover",
   muted: "text-muted hover:bg-hover/50 hover:text-primary",
   transparent: "bg-transparent hover:bg-transparent data-[active]:bg-transparent",
+  /**
+   * A field that opens something, such as a list beside it: a shade lighter
+   * than a text input's fill, with a hairline border, so it reads apart.
+   */
+  field:
+    "rounded border border-line-subtle bg-surface-muted font-normal text-primary hover:bg-input data-[active]:border-accent",
 };
 
 const sizeStyles = {
@@ -29,6 +35,7 @@ const sizeStyles = {
   lg: "h-11 px-6 text-base",
   icon: "h-8 w-8 p-1",
   "icon-sm": "h-6 w-6 p-0.5",
+  field: "h-7 w-full justify-between px-2 text-ui",
 };
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(

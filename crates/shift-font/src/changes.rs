@@ -3,8 +3,9 @@ use std::sync::Arc;
 use bitflags::bitflags;
 
 use crate::{
-    Axis, AxisMapping, FontMetadata, Glyph, GlyphId, GlyphLayer, KerningPair, LayerId, LibValue,
-    MetricDefinition, NamedInstance, Source, SourceId, LANGUAGES_LIB_KEY,
+    Axis, AxisMapping, FontMetadata, Glyph, GlyphId, GlyphLayer, KerningGroup, KerningGroupId,
+    KerningPair, LayerId, LibValue, MetricDefinition, NamedInstance, Source, SourceId,
+    LANGUAGES_LIB_KEY,
 };
 
 bitflags! {
@@ -93,6 +94,11 @@ pub enum FontChange {
         layer: Replacement<Option<Arc<GlyphLayer>>>,
         structural: bool,
     },
+    /// One kerning group's whole state; `None` is no group with that id.
+    KerningGroup {
+        group_id: KerningGroupId,
+        group: Replacement<Option<KerningGroup>>,
+    },
     /// One pair's value at one source; `None` is no value.
     KerningValue {
         source_id: SourceId,
@@ -135,7 +141,7 @@ impl FontChange {
                 structural: true, ..
             } => FontChangeImpact::GLYPHS,
             Self::Layer { .. } => FontChangeImpact::empty(),
-            Self::KerningValue { .. } => FontChangeImpact::KERNING,
+            Self::KerningGroup { .. } | Self::KerningValue { .. } => FontChangeImpact::KERNING,
         }
     }
 
@@ -175,6 +181,10 @@ impl FontChange {
                 glyph_id: glyph_id.clone(),
                 layer: Replacement::new(layer.after.clone(), layer.before.clone()),
                 structural: *structural,
+            },
+            Self::KerningGroup { group_id, group } => Self::KerningGroup {
+                group_id: group_id.clone(),
+                group: Replacement::new(group.after.clone(), group.before.clone()),
             },
             Self::KerningValue {
                 source_id,
@@ -313,6 +323,7 @@ impl FontChangeSet {
                 ),
                 FontChange::Metadata(_)
                 | FontChange::LibValue { .. }
+                | FontChange::KerningGroup { .. }
                 | FontChange::KerningValue { .. } => {}
             }
         }

@@ -101,6 +101,20 @@ export class KerningGroups {
   groupOf(position: KerningPairPosition, glyphId: GlyphId): KerningGroupId | null {
     return this.#membership[position].get(glyphId) ?? null;
   }
+  /** The groups at a pair position, in name order. */
+  atPosition(position: KerningPairPosition): KerningGroup[] {
+    return [...this.#byId.values()]
+      .filter((group) => group.position === position)
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  /** The group named `name` at a pair position; names are unique per position. */
+  named(position: KerningPairPosition, name: string): KerningGroup | null {
+    for (const group of this.#byId.values()) {
+      if (group.position === position && group.name === name) return group;
+    }
+    return null;
+  }
 }
 
 /** One source's pair values: first side → second side → `T`. */

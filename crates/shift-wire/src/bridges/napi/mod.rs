@@ -1539,7 +1539,9 @@ pub struct NapiFontIntent {
     /// Font-level kinds additionally include metadata replacement, tracked
     /// language replacement, axis create/update/delete, mapping replacement,
     /// named-instance create/update/delete, source create/delete, glyph
-    /// or layer creation, and "setKerningValues".
+    /// or layer creation, "setKerningValues", and the kerning group kinds
+    /// "createKerningGroup" | "setKerningGroupMember" | "renameKerningGroup"
+    /// | "deleteKerningGroup".
     /// Every kind shares the same apply path; one set is one undo step.
     pub kind: String,
     pub add_points: Option<NapiAddPointsIntent>,
@@ -1580,6 +1582,10 @@ pub struct NapiFontIntent {
     pub clone_glyph_layer: Option<NapiCloneGlyphLayerIntent>,
     pub materialize_glyph_layer: Option<NapiMaterializeGlyphLayerIntent>,
     pub set_kerning_values: Option<NapiSetKerningValuesIntent>,
+    pub create_kerning_group: Option<NapiCreateKerningGroupIntent>,
+    pub set_kerning_group_member: Option<NapiSetKerningGroupMemberIntent>,
+    pub rename_kerning_group: Option<NapiRenameKerningGroupIntent>,
+    pub delete_kerning_group: Option<NapiDeleteKerningGroupIntent>,
 }
 
 /// One kerning pair value to set or remove at one source.
@@ -1597,6 +1603,40 @@ pub struct NapiKerningValueEdit {
 #[napi(object)]
 pub struct NapiSetKerningValuesIntent {
     pub edits: Vec<NapiKerningValueEdit>,
+}
+
+/// Creates an empty kerning group under an id the client mints.
+#[napi(object)]
+pub struct NapiCreateKerningGroupIntent {
+    #[napi(ts_type = "KerningGroupId")]
+    pub group_id: String,
+    pub position: NapiKerningPosition,
+    pub name: String,
+}
+
+/// Moves a glyph into a group, or out of its group at `position` without one.
+#[napi(object)]
+pub struct NapiSetKerningGroupMemberIntent {
+    pub position: NapiKerningPosition,
+    #[napi(ts_type = "GlyphId")]
+    pub glyph_id: String,
+    #[napi(ts_type = "KerningGroupId")]
+    pub group_id: Option<String>,
+}
+
+/// Renames a kerning group; its pairs keep referencing it by id.
+#[napi(object)]
+pub struct NapiRenameKerningGroupIntent {
+    #[napi(ts_type = "KerningGroupId")]
+    pub group_id: String,
+    pub name: String,
+}
+
+/// Deletes a kerning group; its pairs stay and resolve again on undo.
+#[napi(object)]
+pub struct NapiDeleteKerningGroupIntent {
+    #[napi(ts_type = "KerningGroupId")]
+    pub group_id: String,
 }
 
 /// Replaces the complete authored metadata snapshot without changing metrics.

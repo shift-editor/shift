@@ -2318,6 +2318,7 @@ dependencies = [
  "fontdrasil",
  "fontir",
  "glyphs-reader",
+ "harfrust",
  "kurbo 0.12.0",
  "libc",
  "norad 0.18.4 (registry+https://github.com/rust-lang/crates.io-index)",

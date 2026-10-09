@@ -29,6 +29,7 @@ thiserror = "2.0.18"
 write-fonts = "0.44"
 
 [dev-dependencies]
+harfrust = "0.13.3"
 shift-font = { workspace = true, features = ["test-support"] }
 shift-store = { workspace = true }
 

@@ -148,13 +148,18 @@ export class RunSpacing {
     return null;
   }
 
-  /** Measures a half again after an edit, by its gap's two glyphs; unchanged if they are no longer neighbours. */
-  refresh(half: SpacingHalf): SpacingHalf {
+  /**
+   * Measures a half again after an edit, by its gap's two glyphs.
+   *
+   * @returns null once they are no longer neighbours, as after an undo that
+   * removes one, so no stale half stays selected.
+   */
+  refresh(half: SpacingHalf): SpacingHalf | null {
     const { node, left, right } = half.gap;
     const gap = this.#editor
       .nodeDefinition("textRun")
       .spacingGapBetween(node, left?.itemId ?? null, right?.itemId ?? null);
-    return gap ? new SpacingHalf(gap, half.side) : half;
+    return gap ? new SpacingHalf(gap, half.side) : null;
   }
 
   /**

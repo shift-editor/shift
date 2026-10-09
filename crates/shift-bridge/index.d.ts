@@ -484,6 +484,13 @@ export interface NapiCreateGlyphLayerIntent {
   sourceId: SourceId
 }
 
+/** Creates an empty kerning group under an id the client mints. */
+export interface NapiCreateKerningGroupIntent {
+  groupId: KerningGroupId
+  position: NapiKerningPosition
+  name: string
+}
+
 /** Creates an authored named instance with client-minted stable identity. */
 export interface NapiCreateNamedInstanceIntent {
   instance: NapiNamedInstance
@@ -508,6 +515,11 @@ export interface NapiDecomposeComponentsIntent {
 /** Font-level axis deletion. Removing an axis also reshapes source locations. */
 export interface NapiDeleteAxisIntent {
   axisId: AxisId
+}
+
+/** Deletes a kerning group; its pairs stay and resolve again on undo. */
+export interface NapiDeleteKerningGroupIntent {
+  groupId: KerningGroupId
 }
 
 /** Deletes an authored named instance without changing sources or geometry. */
@@ -543,7 +555,9 @@ export interface NapiFontIntent {
    * Font-level kinds additionally include metadata replacement, tracked
    * language replacement, axis create/update/delete, mapping replacement,
    * named-instance create/update/delete, source create/delete, glyph
-   * or layer creation, and "setKerningValues".
+   * or layer creation, "setKerningValues", and the kerning group kinds
+   * "createKerningGroup" | "setKerningGroupMember" | "renameKerningGroup"
+   * | "deleteKerningGroup".
    * Every kind shares the same apply path; one set is one undo step.
    */
   kind: string
@@ -585,6 +599,10 @@ export interface NapiFontIntent {
   cloneGlyphLayer?: NapiCloneGlyphLayerIntent
   materializeGlyphLayer?: NapiMaterializeGlyphLayerIntent
   setKerningValues?: NapiSetKerningValuesIntent
+  createKerningGroup?: NapiCreateKerningGroupIntent
+  setKerningGroupMember?: NapiSetKerningGroupMemberIntent
+  renameKerningGroup?: NapiRenameKerningGroupIntent
+  deleteKerningGroup?: NapiDeleteKerningGroupIntent
 }
 
 export interface NapiFontMetadata {
@@ -999,6 +1017,12 @@ export interface NapiRemovePointsIntent {
   pointIds: Array<PointId>
 }
 
+/** Renames a kerning group; its pairs keep referencing it by id. */
+export interface NapiRenameKerningGroupIntent {
+  groupId: KerningGroupId
+  name: string
+}
+
 /** One direct component whose outline includes its resolved descendants. */
 export interface NapiResolvedComponentGeometry {
   id: ComponentId
@@ -1045,6 +1069,13 @@ export interface NapiSetContourStartIntent {
   layerId: LayerId
   contourId: ContourId
   pointId: PointId
+}
+
+/** Moves a glyph into a group, or out of its group at `position` without one. */
+export interface NapiSetKerningGroupMemberIntent {
+  position: NapiKerningPosition
+  glyphId: GlyphId
+  groupId?: KerningGroupId
 }
 
 /** Sets or removes kerning pair values at sources as one undoable edit. */

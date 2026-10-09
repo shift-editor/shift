@@ -62,6 +62,20 @@ describe("Kerning tool", () => {
     expect(hovered()!.lock(editor, "second")).toEqual({ locked: false, toggleable: true });
   });
 
+  it("drops the selected pair when an undo takes one of its glyphs away", async () => {
+    hoverKern();
+    const screen = editor.localToScreen(kernCenter());
+    editor.click(screen.x, screen.y);
+    expect(tool().currentPair).not.toBeNull();
+
+    // Undo past the typing removes the A, so T has no neighbour to kern with.
+    await editor.undo();
+    await editor.settle();
+
+    expect(placed()).toHaveLength(1);
+    expect(tool().currentPair).toBeNull();
+  });
+
   it("dragging right opens the pair up as one undo step", async () => {
     const center = kernCenter();
     await editor.dragLocal({

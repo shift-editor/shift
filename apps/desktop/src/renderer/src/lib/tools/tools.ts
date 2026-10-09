@@ -67,9 +67,9 @@ function builtInToolManifests(): readonly ToolManifest[] {
         return spacingSlotCell.peek() === "kerning" ? KerningIcon : SpacingIcon;
       },
       get tooltip() {
-        return spacingSlotCell.peek() === "kerning" ? "Kerning Tool (K)" : "Spacing Tool (M)";
+        return spacingSlotCell.peek() === "kerning" ? "Kerning Tool (K)" : "Spacing Tool (S)";
       },
-      shortcut: "m",
+      shortcut: "s",
       onSelect: selectSpacing,
       menuSelectionCell: spacingSlotCell,
       menuItems: [
@@ -78,7 +78,7 @@ function builtInToolManifests(): readonly ToolManifest[] {
           toolId: "spacing",
           icon: SpacingIcon,
           label: "Spacing",
-          shortcut: "m",
+          shortcut: "s",
           get selected() {
             return spacingSlotCell.peek() === "spacing";
           },

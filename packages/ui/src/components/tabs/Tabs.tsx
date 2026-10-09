@@ -11,13 +11,21 @@ export const Tabs = React.forwardRef<React.ElementRef<typeof BaseTabs.Root>, Tab
 );
 Tabs.displayName = "Tabs";
 
-export interface TabsListProps extends React.ComponentPropsWithoutRef<typeof BaseTabs.List> {}
+export interface TabsListProps extends React.ComponentPropsWithoutRef<typeof BaseTabs.List> {
+  /** `underline` sits on a rule with a {@link TabsIndicator}; `pill` fills the active tab instead. */
+  variant?: "underline" | "pill";
+}
+
+const listVariantStyles = {
+  underline: "border-b border-line-subtle",
+  pill: "gap-1",
+};
 
 export const TabsList = React.forwardRef<React.ElementRef<typeof BaseTabs.List>, TabsListProps>(
-  ({ className, ...props }, ref) => (
+  ({ className, variant = "underline", ...props }, ref) => (
     <BaseTabs.List
       ref={ref}
-      className={cn("relative flex items-center border-b border-line-subtle", className)}
+      className={cn("relative flex items-center", listVariantStyles[variant], className)}
       {...props}
     />
   ),
@@ -26,6 +34,8 @@ TabsList.displayName = "TabsList";
 
 export interface TabsTabProps extends React.ComponentPropsWithoutRef<typeof BaseTabs.Tab> {
   size?: "sm" | "md";
+  /** Match the list's variant; `pill` sets its own text size. */
+  variant?: "underline" | "pill";
 }
 
 const tabSizeStyles = {
@@ -33,15 +43,21 @@ const tabSizeStyles = {
   md: "px-2.5 text-sm",
 };
 
+const tabVariantStyles = {
+  underline: "h-8",
+  pill: "h-6 rounded px-2 text-ui hover:text-primary data-[active]:bg-hover",
+};
+
 export const TabsTab = React.forwardRef<React.ElementRef<typeof BaseTabs.Tab>, TabsTabProps>(
-  ({ className, size = "sm", ...props }, ref) => (
+  ({ className, size = "sm", variant = "underline", ...props }, ref) => (
     <BaseTabs.Tab
       ref={ref}
       className={cn(
-        "relative h-8 cursor-pointer text-secondary outline-none",
+        "relative cursor-pointer text-secondary outline-none",
         "data-[active]:text-primary data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
         "focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent",
         tabSizeStyles[size],
+        tabVariantStyles[variant],
         className,
       )}
       {...props}

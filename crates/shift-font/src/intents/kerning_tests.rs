@@ -175,3 +175,139 @@ fn a_group_on_the_wrong_side_of_a_pair_is_rejected() {
     ));
     assert_eq!(font, original);
 }
+
+fn one(intent: FontIntent) -> FontIntentSet {
+    FontIntentSet {
+        intents: vec![intent],
+    }
+}
+
+fn create(group_id: &KerningGroupId, position: KerningPosition, name: &str) -> FontIntent {
+    FontIntent::CreateKerningGroup {
+        group_id: group_id.clone(),
+        position,
+        name: name.to_string(),
+    }
+}
+
+#[test]
+fn moving_a_glyph_into_a_new_group_is_one_reversible_step() {
+    let mut font = sample_font();
+    let original = font.clone();
+    let a = GlyphId::from_raw("A");
+    let round = KerningGroupId::from_raw("round");
+
+    let outcome = font
+        .apply_intents(FontIntentSet {
+            intents: vec![
+                create(&round, KerningPosition::First, " Round "),
+                FontIntent::SetKerningGroupMember {
+                    position: KerningPosition::First,
+                    glyph_id: a.clone(),
+                    group_id: Some(round.clone()),
+                },
+            ],
+        })
+        .unwrap();
+
+    assert_eq!(
+        font.kerning().group_of(KerningPosition::First, &a),
+        Some(&round)
+    );
+    assert_eq!(font.kerning().group(&round).unwrap().name, "Round");
+    assert!(font.kerning().group(&first_a()).unwrap().members.is_empty());
+    // The new group and the group A left.
+    assert_eq!(outcome.changes.changes.len(), 2);
+    font.apply_change_set(&outcome.changes.inverted()).unwrap();
+    assert_eq!(font, original);
+}
+
+#[test]
+fn taking_a_glyph_out_of_its_group_keeps_the_group() {
+    let mut font = sample_font();
+    let a = GlyphId::from_raw("A");
+
+    font.apply_intents(one(FontIntent::SetKerningGroupMember {
+        position: KerningPosition::Second,
+        glyph_id: a.clone(),
+        group_id: None,
+    }))
+    .unwrap();
+
+    assert_eq!(font.kerning().group_of(KerningPosition::Second, &a), None);
+    assert!(font.kerning().group(&second_a()).is_some());
+}
+
+#[test]
+fn renaming_a_group_keeps_its_pairs() {
+    let mut font = sample_font();
+    let original = font.clone();
+
+    let outcome = font
+        .apply_intents(one(FontIntent::RenameKerningGroup {
+            group_id: first_a(),
+            name: "Round".to_string(),
+        }))
+        .unwrap();
+
+    assert_eq!(font.kerning().group(&first_a()).unwrap().name, "Round");
+    assert_eq!(font.kerning().value(&regular(), &a_groups()), Some(-80.0));
+    assert_eq!(outcome.changes.changes.len(), 1);
+    font.apply_change_set(&outcome.changes.inverted()).unwrap();
+    assert_eq!(font, original);
+}
+
+#[test]
+fn deleting_a_group_keeps_its_pairs_for_undo() {
+    let mut font = sample_font();
+    let original = font.clone();
+    let a = GlyphId::from_raw("A");
+
+    let outcome = font
+        .apply_intents(one(FontIntent::DeleteKerningGroup {
+            group_id: second_a(),
+        }))
+        .unwrap();
+
+    assert!(font.kerning().group(&second_a()).is_none());
+    assert_eq!(font.kerning().resolve(&regular(), &a, &a), None);
+    assert_eq!(font.kerning().value(&regular(), &a_groups()), Some(-80.0));
+    font.apply_change_set(&outcome.changes.inverted()).unwrap();
+    assert_eq!(font, original);
+}
+
+#[test]
+fn group_edits_reject_bad_names_ids_and_positions_without_changing_anything() {
+    let mut font = sample_font();
+    let original = font.clone();
+    let rejected = [
+        create(
+            &KerningGroupId::from_raw("blank"),
+            KerningPosition::First,
+            "  ",
+        ),
+        create(&first_a(), KerningPosition::First, "Again"),
+        create(
+            &KerningGroupId::from_raw("twin"),
+            KerningPosition::First,
+            "A",
+        ),
+        FontIntent::RenameKerningGroup {
+            group_id: first_a(),
+            name: "bad\nname".to_string(),
+        },
+        FontIntent::SetKerningGroupMember {
+            position: KerningPosition::First,
+            glyph_id: GlyphId::from_raw("A"),
+            group_id: Some(second_a()),
+        },
+        FontIntent::DeleteKerningGroup {
+            group_id: KerningGroupId::from_raw("missing"),
+        },
+    ];
+
+    for intent in rejected {
+        assert!(font.apply_intents(one(intent)).is_err());
+        assert_eq!(font, original);
+    }
+}

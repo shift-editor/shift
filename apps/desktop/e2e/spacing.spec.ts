@@ -87,7 +87,7 @@ test.describe("Spacing tool", () => {
     await expect(page.getByRole("textbox", { name: "Text input" })).toBeFocused();
     await page.keyboard.type("A");
     await editor.press("Escape");
-    await editor.press("m");
+    await editor.press("s");
     await expect(editor.toolButton("spacing")).toHaveAttribute("aria-pressed", "true");
     await editor.waitForCanvasRender();
   });

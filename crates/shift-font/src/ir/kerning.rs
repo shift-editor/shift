@@ -234,6 +234,27 @@ impl Kerning {
         Ok(())
     }
 
+    /// Returns every group at either position, ordered by id.
+    pub fn all_groups(&self) -> impl Iterator<Item = (&KerningGroupId, &KerningGroup)> {
+        self.groups.iter()
+    }
+
+    /// Installs `group` as `group_id` exactly as given, or removes it with
+    /// `None`, without moving members out of other groups.
+    ///
+    /// For replaying a recorded change, whose other changed groups are
+    /// installed alongside it.
+    pub(crate) fn put_group(&mut self, group_id: &KerningGroupId, group: Option<KerningGroup>) {
+        match group {
+            Some(group) => {
+                self.groups.insert(group_id.clone(), group);
+            }
+            None => {
+                self.groups.remove(group_id);
+            }
+        }
+    }
+
     /// Removes the group `group_id` and returns it.
     ///
     /// Pairs that reference the group are kept and resolve again if the group
