@@ -1,12 +1,5 @@
 import { useRef, useState, type ReactNode } from "react";
-import {
-  NumberField,
-  NumberFieldGroup,
-  NumberFieldInput,
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@shift/ui";
+import { NumberField, NumberFieldGroup, NumberFieldInput, Tooltip } from "@shift/ui";
 import { NUDGES_VALUES } from "@shift/editor/types";
 import { useFocusZone } from "@/context/FocusZoneContext";
 
@@ -50,67 +43,64 @@ export function SidebarNumberField({
   const [revision, setRevision] = useState(0);
 
   return (
-    <Tooltip>
-      <TooltipTrigger>
-        <NumberField
-          key={revision}
-          className="w-full"
-          value={value}
-          step={NUDGES_VALUES.small}
-          smallStep={NUDGES_VALUES.small}
-          largeStep={NUDGES_VALUES.medium}
-          format={{
-            maximumFractionDigits: 2,
-            useGrouping: false,
-            ...(unit && { style: "unit", unit, unitDisplay: "narrow" }),
-          }}
-          disabled={disabled}
-          onValueCommitted={(next, details) => {
-            if (cancelled.current || next === null) return;
-            onValueCommit(next);
-            if (details.reason !== "keyboard") setRevision((current) => current + 1);
-          }}
-        >
-          <NumberFieldGroup className="h-6">
-            {label && <span className="shrink-0 pl-2 text-ui font-medium text-muted">{label}</span>}
-            <NumberFieldInput
-              aria-label={ariaLabel}
-              size="compact"
-              onFocus={(event) => {
-                cancelled.current = false;
-                lockToZone("sidebar");
-                event.currentTarget.select();
-              }}
-              onBlur={(event) => {
-                unlock();
-                if (!cancelled.current) return;
-                // Skip Base UI's commit on blur and show the value again.
-                event.preventDefault();
-                setRevision((current) => current + 1);
-              }}
-              onKeyDown={(event) => {
-                event.nativeEvent.stopImmediatePropagation();
-                switch (event.key) {
-                  case "Enter":
-                    event.currentTarget.blur();
-                    return;
-                  case "Escape":
-                    cancelled.current = true;
-                    event.currentTarget.blur();
-                    return;
-                  case "ArrowUp":
-                  case "ArrowDown":
-                    if (!event.metaKey) return;
-                    event.preventDefault();
-                    onValueCommit(value + (event.key === "ArrowUp" ? 1 : -1) * NUDGES_VALUES.large);
-                }
-              }}
-            />
-            {suffix && <span className="shrink-0 pr-2 text-ui text-muted">{suffix}</span>}
-          </NumberFieldGroup>
-        </NumberField>
-      </TooltipTrigger>
-      <TooltipContent>{ariaLabel}</TooltipContent>
+    <Tooltip content={ariaLabel}>
+      <NumberField
+        key={revision}
+        className="w-full"
+        value={value}
+        step={NUDGES_VALUES.small}
+        smallStep={NUDGES_VALUES.small}
+        largeStep={NUDGES_VALUES.medium}
+        format={{
+          maximumFractionDigits: 2,
+          useGrouping: false,
+          ...(unit && { style: "unit", unit, unitDisplay: "narrow" }),
+        }}
+        disabled={disabled}
+        onValueCommitted={(next, details) => {
+          if (cancelled.current || next === null) return;
+          onValueCommit(next);
+          if (details.reason !== "keyboard") setRevision((current) => current + 1);
+        }}
+      >
+        <NumberFieldGroup className="h-6">
+          {label && <span className="shrink-0 pl-2 text-ui font-medium text-muted">{label}</span>}
+          <NumberFieldInput
+            aria-label={ariaLabel}
+            size="compact"
+            onFocus={(event) => {
+              cancelled.current = false;
+              lockToZone("sidebar");
+              event.currentTarget.select();
+            }}
+            onBlur={(event) => {
+              unlock();
+              if (!cancelled.current) return;
+              // Skip Base UI's commit on blur and show the value again.
+              event.preventDefault();
+              setRevision((current) => current + 1);
+            }}
+            onKeyDown={(event) => {
+              event.nativeEvent.stopImmediatePropagation();
+              switch (event.key) {
+                case "Enter":
+                  event.currentTarget.blur();
+                  return;
+                case "Escape":
+                  cancelled.current = true;
+                  event.currentTarget.blur();
+                  return;
+                case "ArrowUp":
+                case "ArrowDown":
+                  if (!event.metaKey) return;
+                  event.preventDefault();
+                  onValueCommit(value + (event.key === "ArrowUp" ? 1 : -1) * NUDGES_VALUES.large);
+              }
+            }}
+          />
+          {suffix && <span className="shrink-0 pr-2 text-ui text-muted">{suffix}</span>}
+        </NumberFieldGroup>
+      </NumberField>
     </Tooltip>
   );
 }

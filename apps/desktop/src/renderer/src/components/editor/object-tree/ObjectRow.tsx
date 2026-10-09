@@ -5,8 +5,6 @@ import {
   RotateCcw,
   RotateCw,
   Tooltip,
-  TooltipContent,
-  TooltipTrigger,
 } from "@shift/ui";
 import { SidebarActionButton, SidebarActionRow } from "@/components/sidebar";
 import { isContourId } from "@shift/types";
@@ -79,18 +77,15 @@ export const ObjectRow = ({
           actions={
             item.direction &&
             reversibleContourId && (
-              <Tooltip>
-                <TooltipTrigger>
-                  <SidebarActionButton
-                    label={`Reverse ${item.label}`}
-                    tabIndex={-1}
-                    className={isSelected ? "!opacity-100" : undefined}
-                    onClick={() => reverseContours(editor, [reversibleContourId])}
-                  >
-                    <DirectionIcon direction={item.direction} />
-                  </SidebarActionButton>
-                </TooltipTrigger>
-                <TooltipContent>Reverse contour</TooltipContent>
+              <Tooltip content="Reverse contour">
+                <SidebarActionButton
+                  label={`Reverse ${item.label}`}
+                  tabIndex={-1}
+                  className={isSelected ? "!opacity-100" : undefined}
+                  onClick={() => reverseContours(editor, [reversibleContourId])}
+                >
+                  <DirectionIcon direction={item.direction} />
+                </SidebarActionButton>
               </Tooltip>
             )
           }

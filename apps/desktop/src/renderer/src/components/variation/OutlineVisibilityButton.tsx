@@ -1,4 +1,4 @@
-import { Tooltip, TooltipContent, TooltipTrigger } from "@shift/ui";
+import { Tooltip } from "@shift/ui";
 import { useEffect, useState } from "react";
 import { SidebarActionButton } from "@/components/sidebar";
 import EyeClosedIcon from "@/assets/general/eye-closed.svg";
@@ -53,28 +53,25 @@ export const OutlineVisibilityButton = ({
   }
 
   return (
-    <Tooltip>
-      <TooltipTrigger>
-        <SidebarActionButton
-          label={subject ? `${action} for ${subject}` : action}
-          onClick={() => {
-            if (inherited) setShowInheritedIndicator(false);
-            if (visible) setShowVisibleIndicator(false);
-            onClick();
-          }}
-          onTransitionEnd={(event) => {
-            if (event.propertyName !== "opacity" || visible || alwaysOpen) return;
-            if (getComputedStyle(event.currentTarget).opacity !== "0") return;
+    <Tooltip content={action}>
+      <SidebarActionButton
+        label={subject ? `${action} for ${subject}` : action}
+        onClick={() => {
+          if (inherited) setShowInheritedIndicator(false);
+          if (visible) setShowVisibleIndicator(false);
+          onClick();
+        }}
+        onTransitionEnd={(event) => {
+          if (event.propertyName !== "opacity" || visible || alwaysOpen) return;
+          if (getComputedStyle(event.currentTarget).opacity !== "0") return;
 
-            setShowInheritedIndicator(false);
-            setShowVisibleIndicator(false);
-          }}
-          className={visible ? "!opacity-100" : undefined}
-        >
-          {indicator}
-        </SidebarActionButton>
-      </TooltipTrigger>
-      <TooltipContent>{action}</TooltipContent>
+          setShowInheritedIndicator(false);
+          setShowVisibleIndicator(false);
+        }}
+        className={visible ? "!opacity-100" : undefined}
+      >
+        {indicator}
+      </SidebarActionButton>
     </Tooltip>
   );
 };

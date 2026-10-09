@@ -1,6 +1,6 @@
 import { getShiftHost } from "@/host/shiftHost";
 import { useState } from "react";
-import { Button, Tooltip, TooltipContent, TooltipTrigger, X } from "@shift/ui";
+import { Button, Tooltip, X } from "@shift/ui";
 import { useWindowButtonLayout } from "./WindowControls";
 import { useTitleBarColors } from "./useTitleBarColors";
 
@@ -140,17 +140,14 @@ const DialogTitlebar = ({ onClose }: { onClose: () => void }) => {
 
   const closeAtStart = layout?.start.includes("close") ?? false;
   const close = isWindows ? null : (
-    <Tooltip>
-      <TooltipTrigger>
-        <Button
-          icon={<X width={14} height={14} />}
-          aria-label="Close"
-          variant="toolbar"
-          size="icon-sm"
-          onClick={onClose}
-        />
-      </TooltipTrigger>
-      <TooltipContent side="bottom">Close</TooltipContent>
+    <Tooltip content="Close" side="bottom">
+      <Button
+        icon={<X width={14} height={14} />}
+        aria-label="Close"
+        variant="toolbar"
+        size="icon-sm"
+        onClick={onClose}
+      />
     </Tooltip>
   );
 

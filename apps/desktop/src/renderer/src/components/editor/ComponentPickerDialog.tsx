@@ -15,8 +15,6 @@ import {
   DialogTitle,
   Search,
   Tooltip,
-  TooltipContent,
-  TooltipTrigger,
   X,
 } from "@shift/ui";
 import { useSignalState } from "@shift/editor/signals";
@@ -131,13 +129,10 @@ export function ComponentPickerDialog({ open, onOpenChange }: ComponentPickerDia
           <DialogPopup className="fixed left-1/2 top-1/2 flex h-100 w-87.5 -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden border border-line-subtle">
             <header className="flex h-10 shrink-0 items-center justify-between border-b border-line-subtle px-3">
               <DialogTitle>Add Component</DialogTitle>
-              <Tooltip>
-                <TooltipTrigger>
-                  <DialogClose variant="icon" aria-label="Close Add Component">
-                    <X className="h-4 w-4" />
-                  </DialogClose>
-                </TooltipTrigger>
-                <TooltipContent>Close</TooltipContent>
+              <Tooltip content="Close">
+                <DialogClose variant="icon" aria-label="Close Add Component">
+                  <X className="h-4 w-4" />
+                </DialogClose>
               </Tooltip>
             </header>
             <Autocomplete

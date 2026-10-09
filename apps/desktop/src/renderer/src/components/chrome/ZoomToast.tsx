@@ -7,8 +7,6 @@ import {
   useToastManager,
   Button,
   Tooltip,
-  TooltipContent,
-  TooltipTrigger,
 } from "@shift/ui";
 import MinusIcon from "@/assets/general/minus.svg";
 import PlusIcon from "@/assets/general/plus.svg";
@@ -105,21 +103,15 @@ function ZoomToastList({ scheduleClose }: { scheduleClose: () => void }) {
       >
         <ToastTitle>{String(toast.title)}</ToastTitle>
         <div className="flex items-center gap-1">
-          <Tooltip>
-            <TooltipTrigger>
-              <Button variant="ghost" size="icon" aria-label="Zoom in">
-                <PlusIcon className="w-3 h-3" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Zoom in</TooltipContent>
+          <Tooltip content="Zoom in">
+            <Button variant="ghost" size="icon" aria-label="Zoom in">
+              <PlusIcon className="w-3 h-3" />
+            </Button>
           </Tooltip>
-          <Tooltip>
-            <TooltipTrigger>
-              <Button variant="ghost" size="icon" aria-label="Zoom out">
-                <MinusIcon className="w-3 h-3" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Zoom out</TooltipContent>
+          <Tooltip content="Zoom out">
+            <Button variant="ghost" size="icon" aria-label="Zoom out">
+              <MinusIcon className="w-3 h-3" />
+            </Button>
           </Tooltip>
           <div className="ml-4">
             <Button variant="primary">Reset</Button>

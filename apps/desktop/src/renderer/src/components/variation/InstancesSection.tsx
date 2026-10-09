@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@shift/ui";
+import { Tooltip } from "@shift/ui";
 import { CollapsibleSection, SidebarActionButton } from "@/components/sidebar";
 import { CreateInstanceMenu } from "./CreateInstanceMenu";
 import { Instances } from "./Instances";
@@ -47,13 +47,10 @@ export const InstancesSection = ({
           {canAuthor ? (
             <CreateInstanceMenu onOpenChange={setInstanceMenuOpen} />
           ) : (
-            <Tooltip>
-              <TooltipTrigger>
-                <SidebarActionButton label="Create instance" aria-disabled>
-                  <PlusIcon className="h-3 w-3" />
-                </SidebarActionButton>
-              </TooltipTrigger>
-              <TooltipContent>Create instance</TooltipContent>
+            <Tooltip content="Create instance">
+              <SidebarActionButton label="Create instance" aria-disabled>
+                <PlusIcon className="h-3 w-3" />
+              </SidebarActionButton>
             </Tooltip>
           )}
         </>

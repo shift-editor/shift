@@ -78,6 +78,8 @@ Each component follows the same pattern: import the Base UI primitive, wrap it i
 
 **Autocomplete** wraps Base UI's autocomplete. `AutocompleteInput` renders the shared `Input`; with `inline open` the list sits in place, such as inside a dialog, and `autoHighlight="always"` makes Enter pick the first item. Consumers that rank results themselves pass `filter={null}`.
 
+**Tooltip** takes `content` for the common case: `<Tooltip content="Close"><Button … /></Tooltip>` makes the child the trigger and renders the popup (with optional `side` and `sideOffset`). Compose `TooltipTrigger` and `TooltipContent` directly only when the parts need to be separate.
+
 **Menubar** wraps Base UI's menubar: place one `Menu` per top-level menu inside it, and give each `MenuTrigger` the `menubar` variant. `MenuSubmenuRoot` and `MenuSubmenuTrigger` nest menus inside a popup.
 
 **Toolbar** exposes Base UI's root, group, button, and separator. Consumers can render the shared `Button` through `ToolbarButton` to retain Shift styling while participating in toolbar focus navigation, or render another Base UI trigger through it for menu composition.

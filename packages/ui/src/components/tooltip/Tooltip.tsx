@@ -12,20 +12,52 @@ function TooltipProvider({ children, delayDuration = 0 }: TooltipProviderProps) 
   return <BaseTooltip.Provider delay={delayDuration}>{children}</BaseTooltip.Provider>;
 }
 
-interface TooltipProps {
-  children: React.ReactNode;
+type TooltipProps = {
   delayDuration?: number;
-}
+} & (
+  | {
+      /** `TooltipTrigger` and `TooltipContent` parts. */
+      children: React.ReactNode;
+      content?: undefined;
+    }
+  | ({
+      /** The element the tooltip describes; it becomes the trigger. */
+      children: React.ReactElement<Record<string, unknown>>;
+      /** What the tooltip says, usually the action's name. */
+      content: React.ReactNode;
+    } & Pick<TooltipContentProps, "side" | "sideOffset">)
+);
 
-function Tooltip({ children, delayDuration }: TooltipProps) {
+/**
+ * A hover and focus tooltip.
+ *
+ * @remarks
+ * With `content`, the child is the trigger and the tooltip renders its own
+ * parts: `<Tooltip content="Close"><Button … /></Tooltip>`. Without it, compose
+ * `TooltipTrigger` and `TooltipContent` as children.
+ */
+function Tooltip(props: TooltipProps) {
+  const { delayDuration } = props;
+  const parts =
+    props.content === undefined ? (
+      props.children
+    ) : (
+      <>
+        <TooltipTrigger>{props.children}</TooltipTrigger>
+        <TooltipContent side={props.side} sideOffset={props.sideOffset}>
+          {props.content}
+        </TooltipContent>
+      </>
+    );
+
   if (delayDuration !== undefined) {
     return (
       <BaseTooltip.Provider delay={delayDuration}>
-        <BaseTooltip.Root>{children}</BaseTooltip.Root>
+        <BaseTooltip.Root>{parts}</BaseTooltip.Root>
       </BaseTooltip.Provider>
     );
   }
-  return <BaseTooltip.Root>{children}</BaseTooltip.Root>;
+  return <BaseTooltip.Root>{parts}</BaseTooltip.Root>;
 }
 
 interface TooltipTriggerProps {

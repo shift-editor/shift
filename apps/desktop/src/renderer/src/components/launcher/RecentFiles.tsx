@@ -12,8 +12,6 @@ import {
   Toggle,
   ToggleGroup,
   Tooltip,
-  TooltipContent,
-  TooltipTrigger,
   useToastManager,
 } from "@shift/ui";
 import { recentFolderLabels, type RecentDocument } from "@shared/recents";
@@ -196,13 +194,10 @@ const ViewToggleItem = ({
   label: string;
   children: React.ReactNode;
 }) => (
-  <Tooltip>
-    <TooltipTrigger>
-      <Toggle value={value} aria-label={label}>
-        {children}
-      </Toggle>
-    </TooltipTrigger>
-    <TooltipContent>{label}</TooltipContent>
+  <Tooltip content={label}>
+    <Toggle value={value} aria-label={label}>
+      {children}
+    </Toggle>
   </Tooltip>
 );
 
