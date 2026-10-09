@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
-import { Button, Checkbox } from "@shift/ui";
+import { Button, Check, Copy, Switch, Tooltip, TooltipContent, TooltipTrigger } from "@shift/ui";
 import type { AgentConnectionsState } from "@shared/agent/connections";
 import { getShiftHost } from "@/host/shiftHost";
 import { useAgentConnections } from "@/hooks/useAgentConnections";
+
+const EXAMPLE_PROMPT = "Look at the glyph I have open in Shift and describe its contours.";
 
 /** Settings → Agents: allow local agents to connect, and how to connect them. */
 export const AgentsSettingsPanel = () => {
@@ -12,7 +14,7 @@ export const AgentsSettingsPanel = () => {
   if (!state) return null;
 
   return (
-    <section className="flex flex-col gap-5 p-6" aria-label="Agents">
+    <section className="flex h-full flex-col gap-5 overflow-y-auto p-6" aria-label="Agents">
       <header className="flex flex-col gap-1 pr-8">
         <h2 className="text-sm font-medium text-primary">Agents</h2>
         <p className="text-ui text-secondary">
@@ -21,26 +23,26 @@ export const AgentsSettingsPanel = () => {
         </p>
       </header>
 
-      <label className="flex items-center gap-2 text-sm text-primary">
-        <Checkbox
-          checked={state.allowed}
-          disabled={pending}
-          aria-label="Allow agent connections"
-          onCheckedChange={async (allowed) => {
-            setPending(true);
-            try {
-              await getShiftHost().agentConnections.setAllowed(allowed);
-            } finally {
-              setPending(false);
-            }
-          }}
-        />
-        Allow agent connections
-      </label>
+      <div className="flex flex-col gap-2">
+        <label className="flex items-center justify-between gap-4 text-sm text-primary">
+          Allow agent connections
+          <Switch
+            checked={state.allowed}
+            disabled={pending}
+            onCheckedChange={async (allowed) => {
+              setPending(true);
+              try {
+                await getShiftHost().agentConnections.setAllowed(allowed);
+              } finally {
+                setPending(false);
+              }
+            }}
+          />
+        </label>
+        <ConnectionStatus state={state} />
+      </div>
 
-      <ConnectionStatus state={state} />
-
-      {state.allowed && state.status === "listening" ? <ConnectionCommands state={state} /> : null}
+      <ConnectionSteps state={state} />
     </section>
   );
 };
@@ -48,15 +50,13 @@ export const AgentsSettingsPanel = () => {
 const ConnectionStatus = ({ state }: { state: AgentConnectionsState }) => {
   const now = useNow(5_000);
 
+  if (state.status === "off") return null;
   if (state.status === "failed") {
     return (
       <p role="alert" className="text-ui text-error">
         {state.error}
       </p>
     );
-  }
-  if (state.status === "off") {
-    return <p className="text-ui text-muted">Agents cannot connect while this is off.</p>;
   }
 
   const { lastRequestAt, clients } = state.activity;
@@ -73,38 +73,49 @@ const ConnectionStatus = ({ state }: { state: AgentConnectionsState }) => {
   );
 };
 
-const ConnectionCommands = ({ state }: { state: AgentConnectionsState }) => {
+const ConnectionSteps = ({ state }: { state: AgentConnectionsState }) => {
   const { serverName, url } = state;
-  const clients = [
-    {
-      name: "Claude Code",
-      command: `claude mcp add --transport http --scope user ${serverName} ${url}`,
-    },
-    { name: "Codex", command: `[mcp_servers.${serverName}]\nurl = "${url}"` },
-    { name: "Other clients", command: url, note: "Add a Streamable HTTP server with this URL." },
-  ];
+  const claudeCommand = `claude mcp add --transport http --scope user ${serverName} ${url}`;
+  const config = JSON.stringify({ mcpServers: { [serverName]: { type: "http", url } } }, null, 2);
 
   return (
     <div className="flex flex-col gap-3">
       <h3 className="text-ui font-medium text-primary">Connect an agent</h3>
-      {clients.map((client) => (
-        <div key={client.name} className="flex flex-col gap-1">
-          <span className="text-ui text-secondary">{client.name}</span>
-          <div className="flex items-start gap-2">
-            <pre
-              aria-label={`${client.name} setup`}
-              className="min-w-0 flex-1 overflow-x-auto rounded border border-line-subtle bg-surface px-2 py-1.5 font-mono text-ui text-primary"
-            >
-              {client.command}
-            </pre>
-            <CopyButton text={client.command} label={`Copy ${client.name} setup`} />
+      <ol className="flex list-decimal flex-col gap-4 pl-4 text-ui text-secondary marker:text-muted">
+        <li>
+          <div className="flex flex-col gap-2">
+            For Claude Code, run this in your terminal:
+            <CodeSnippet label="Claude Code command" text={claudeCommand} />
+            For other agents, add Shift to the agent's MCP config:
+            <CodeSnippet label="MCP config" text={config} />
+            <span className="text-muted">
+              Shift runs a Streamable HTTP MCP server on this computer. Your agent may use a
+              different config format, so check its documentation and adapt the snippet as needed.
+            </span>
           </div>
-          {client.note ? <span className="text-ui text-muted">{client.note}</span> : null}
-        </div>
-      ))}
+        </li>
+        <li>
+          <div className="flex flex-col gap-2">
+            Ask your agent something about your font to test the connection:
+            <CodeSnippet label="Example prompt" text={EXAMPLE_PROMPT} />
+          </div>
+        </li>
+      </ol>
     </div>
   );
 };
+
+const CodeSnippet = ({ label, text }: { label: string; text: string }) => (
+  <div className="relative">
+    <pre
+      aria-label={label}
+      className="overflow-x-auto whitespace-pre-wrap rounded border border-line-subtle bg-surface py-2 pl-3 pr-10 font-mono text-ui text-primary"
+    >
+      {text}
+    </pre>
+    <CopyButton text={text} label={`Copy ${label.toLowerCase()}`} />
+  </div>
+);
 
 const CopyButton = ({ text, label }: { text: string; label: string }) => {
   const [copied, setCopied] = useState(false);
@@ -116,16 +127,23 @@ const CopyButton = ({ text, label }: { text: string; label: string }) => {
   }, [copied]);
 
   return (
-    <Button
-      variant="default"
-      aria-label={label}
-      onClick={async () => {
-        await getShiftHost().clipboard.writeText(text);
-        setCopied(true);
-      }}
-    >
-      {copied ? "Copied" : "Copy"}
-    </Button>
+    <Tooltip>
+      <TooltipTrigger>
+        <Button
+          variant="muted"
+          size="icon-sm"
+          aria-label={label}
+          className="absolute right-1.5 top-1.5"
+          onClick={async () => {
+            await getShiftHost().clipboard.writeText(text);
+            setCopied(true);
+          }}
+        >
+          {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{copied ? "Copied" : label}</TooltipContent>
+    </Tooltip>
   );
 };
 

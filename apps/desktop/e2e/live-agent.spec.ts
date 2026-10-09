@@ -8,12 +8,18 @@ async function enableAgentConnections(page: Page): Promise<string> {
   const dialog = page.getByRole("dialog", { name: "Settings" });
   await dialog.getByRole("button", { name: "Agents", exact: true }).click();
   const agents = dialog.getByRole("region", { name: "Agents" });
-  await expect(agents.getByText("Agents cannot connect while this is off.")).toBeVisible();
+  const allow = agents.getByRole("switch", { name: "Allow agent connections" });
+  await expect(allow).not.toBeChecked();
 
-  await agents.getByRole("checkbox", { name: "Allow agent connections" }).click();
-  const url = agents.getByLabel("Other clients setup");
-  await expect(url).toHaveText(/^http:\/\/127\.0\.0\.1:\d+\/mcp$/);
-  const mcpUrl = (await url.textContent()) ?? "";
+  await allow.click();
+  await expect(agents.getByText("Listening. No agent has connected yet.")).toBeVisible();
+  const config = JSON.parse(
+    (await agents.getByLabel("MCP config", { exact: true }).textContent()) ?? "{}",
+  );
+  const [mcpUrl] = Object.values(config.mcpServers).map(
+    (server) => (server as { url: string }).url,
+  );
+  expect(mcpUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/mcp$/);
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
   return mcpUrl;
