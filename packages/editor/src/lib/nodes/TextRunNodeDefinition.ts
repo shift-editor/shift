@@ -240,7 +240,7 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
   }
 
   /** Items whose outline box touches `rect`; none while a glyph is edited, as with clicks. */
-  override idsInRect(node: TextRunNode, rect: LocalBounds): SelectableId[] {
+  override selectableInRect(node: TextRunNode, rect: LocalBounds): SelectableId[] {
     if (this.editor.editing.hasScope()) return [];
 
     const ids: SelectableId[] = [];

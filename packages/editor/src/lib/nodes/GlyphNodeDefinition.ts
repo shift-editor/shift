@@ -128,7 +128,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
    * @remarks
    * A run child gives up its points only while edited, as with clicks.
    */
-  override idsInRect(node: GlyphNode, rect: LocalBounds): SelectableId[] {
+  override selectableInRect(node: GlyphNode, rect: LocalBounds): SelectableId[] {
     if (node.parentId !== null && !this.#isEditing(node)) return [];
     const glyph = this.editor.glyphForId(node.glyphId);
     if (!glyph) return [];
