@@ -32,10 +32,10 @@ use shift_wire::{
     NapiCatalogAtlasWeights, NapiFontIntent, NapiFontMetadata, NapiFontMetrics,
     NapiFontReplacement, NapiFontSnapshot, NapiGlyphLayerSnapshot, NapiGlyphPreview,
     NapiGlyphProjection, NapiGlyphRecord, NapiGlyphSnapshot, NapiGlyphSnapshotRequest,
-    NapiInterpolationBasis, NapiLanguagesReplacement, NapiLayerMatch, NapiLayerRead,
-    NapiLayerReplaced, NapiLocation, NapiMetricDefinition, NapiMetricKind, NapiNamedInstance,
-    NapiPointSeed, NapiSlugAtlas, NapiSlugExactSource, NapiSlugGlyph, NapiSlugLayout,
-    NapiSlugPreviewExtents, NapiSlugSection, NapiSlugWeightSet, NapiSource,
+    NapiInterpolationBasis, NapiKerningSnapshot, NapiLanguagesReplacement, NapiLayerMatch,
+    NapiLayerRead, NapiLayerReplaced, NapiLocation, NapiMetricDefinition, NapiMetricKind,
+    NapiNamedInstance, NapiPointSeed, NapiSlugAtlas, NapiSlugExactSource, NapiSlugGlyph,
+    NapiSlugLayout, NapiSlugPreviewExtents, NapiSlugSection, NapiSlugWeightSet, NapiSource,
     NapiSourceMetricsInterpolationReplacement, NapiSourceMetricsInterpolationSnapshot,
   },
   AnchorData, Axis, AxisMapping, AxisMappingBasis, ComponentData, ComponentGlyph,
@@ -43,10 +43,10 @@ use shift_wire::{
   GlyphChangedEntities, GlyphComponents, GlyphEntry, GlyphLayerRecord, GlyphLayerShape,
   GlyphLayerSnapshot, GlyphProjection, GlyphRecord, GlyphSnapshot, GlyphSnapshotRequest,
   GlyphSourceComponents, GlyphSourceShape, GlyphState, GlyphStructure, GlyphVariation,
-  InterpolationBasis as WireInterpolationBasis, InterpolationSupport, LayerMatch as WireLayerMatch,
-  Location as WireLocation, MetricDefinition, MetricKind as WireMetricKind, NamedInstance,
-  PointData, PointType, Source, SourceMetricValue, SourceMetricsInterpolationSnapshot,
-  VariationBasis, VariationDelta,
+  InterpolationBasis as WireInterpolationBasis, InterpolationSupport, KerningSnapshot,
+  LayerMatch as WireLayerMatch, Location as WireLocation, MetricDefinition,
+  MetricKind as WireMetricKind, NamedInstance, PointData, PointType, Source, SourceMetricValue,
+  SourceMetricsInterpolationSnapshot, VariationBasis, VariationDelta,
 };
 use shift_workspace::{
   AcquireScope, DocumentIdentity, FontWorkspace, NewWorkspace, WorkspaceError, WorkspaceSource,
@@ -338,8 +338,10 @@ fn wire_font_snapshot(
     axis_mappings,
     axis_mapping_bases,
     named_instances,
-    // Preview sources expose only the directory, which carries no font lib.
+    // Preview sources expose only the directory, which carries no font lib
+    // or kerning.
     language_ids: None,
+    kerning: KerningSnapshot::default(),
   })
 }
 
@@ -1365,6 +1367,7 @@ impl Bridge {
     let source_metrics_changed = impact.contains(FontChangeImpact::SOURCE_METRICS);
     let named_instances_changed = impact.contains(FontChangeImpact::NAMED_INSTANCES);
     let sources_changed = impact.contains(FontChangeImpact::SOURCES);
+    let kerning_changed = impact.contains(FontChangeImpact::KERNING);
 
     let touched_layer_ids: Vec<LayerId> = outcome
       .layers
@@ -1426,6 +1429,7 @@ impl Bridge {
             })
             .transpose()?,
           sources: sources_changed.then(|| self.get_sources()).transpose()?,
+          kerning: kerning_changed.then(|| self.get_kerning()).transpose()?,
         })
       })
       .transpose()?;
@@ -2032,6 +2036,13 @@ impl Bridge {
   #[napi]
   pub fn get_language_ids(&self) -> errors::Result<Option<Vec<String>>> {
     Ok(self.font()?.language_ids())
+  }
+
+  /// Returns the font's kerning groups, per-source pairs, and the basis
+  /// kerning interpolates over.
+  #[napi]
+  pub fn get_kerning(&self) -> errors::Result<NapiKerningSnapshot> {
+    Ok(KerningSnapshot::from(self.font()?).into())
   }
 
   #[napi]

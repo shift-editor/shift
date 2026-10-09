@@ -609,6 +609,9 @@ export class Font {
     hasGlyph(glyphId: GlyphId): boolean;
     get invalidGlyphsCell(): Signal<GlyphInvalidation>;
     isVariable(): boolean;
+    kerningBetween(first: GlyphId, second: GlyphId, location: ExternalAxisLocation, sourceId: SourceId | null): number;
+    // Warning: (ae-forgotten-export) The symbol "Kerning" needs to be exported by the entry point index.d.ts
+    get kerningCell(): Signal<Kerning>;
     get languageIdsCell(): Signal<readonly string[] | null>;
     layerIdFor(glyphId: GlyphId, sourceId: SourceId): LayerId | null;
     layerIdForAnchor(anchorId: AnchorId): LayerId | null;
@@ -709,6 +712,10 @@ export interface FontSnapshot {
     axisMappings: Array<AxisMapping>;
     // (undocumented)
     glyphs: Array<GlyphEntry>;
+    // Warning: (ae-forgotten-export) The symbol "KerningSnapshot" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    kerning: KerningSnapshot;
     languageIds?: Array<string>;
     // (undocumented)
     metadata: FontMetadata;
@@ -1361,10 +1368,10 @@ export function useSignalState<T>(signal: Signal<T>, options?: UseSignalOptions)
 
 // Warnings were encountered during analysis:
 //
-// dist/Editor-BZMmNhIb.d.ts:2692:5 - (ae-forgotten-export) The symbol "Axis" needs to be exported by the entry point index.d.ts
-// dist/Editor-BZMmNhIb.d.ts:2693:5 - (ae-forgotten-export) The symbol "AxisMappingBasis" needs to be exported by the entry point index.d.ts
-// dist/Editor-BZMmNhIb.d.ts:2694:5 - (ae-forgotten-export) The symbol "Source" needs to be exported by the entry point index.d.ts
-// dist/Editor-BZMmNhIb.d.ts:4495:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
+// dist/Editor-PgiyIf50.d.ts:2735:5 - (ae-forgotten-export) The symbol "Axis" needs to be exported by the entry point index.d.ts
+// dist/Editor-PgiyIf50.d.ts:2736:5 - (ae-forgotten-export) The symbol "AxisMappingBasis" needs to be exported by the entry point index.d.ts
+// dist/Editor-PgiyIf50.d.ts:2737:5 - (ae-forgotten-export) The symbol "Source" needs to be exported by the entry point index.d.ts
+// dist/Editor-PgiyIf50.d.ts:4548:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

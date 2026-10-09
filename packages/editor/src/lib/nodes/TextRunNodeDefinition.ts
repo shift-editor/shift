@@ -8,7 +8,7 @@ import type { GlyphNode, ShiftNode, TextRunNode } from "../../types/node";
 import type { NodeReference } from "../../types/records";
 import type { RenderContext, RenderPass } from "../../types/rendering";
 import type { PointerTarget } from "../../types/target";
-import type { SpacingGap, SpacingSide } from "../../types/spacing";
+import { spacingGapCenter, type SpacingGap, type SpacingSide } from "../../types/spacing";
 import type { GlyphRenderModel } from "../model/Glyph";
 import { Mat, type Point2D } from "@shift/geo";
 import { isTextItemId, type ComponentId, type GlyphId, type TextItemId } from "@shift/types";
@@ -174,7 +174,10 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     const radius = this.editor.hitRadius / this.#scale(node);
     let target: PointerTarget | null = null;
     for (const { placed, itemId, model } of this.#runGlyphs(node, layout)) {
-      const local = { x: point.x - placed.origin.x, y: point.y - placed.origin.y };
+      const local = {
+        x: point.x - placed.origin.x,
+        y: point.y - placed.origin.y,
+      };
       if (hitsOutline(model, local, radius)) target = { kind: "text", node, point, itemId };
     }
     return target;
@@ -202,12 +205,17 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     for (const gap of this.#gaps(node, layout)) {
       if (point.y < gap.bottom - padding || point.y > gap.top + padding) continue;
 
-      // Negative sidebearings put an outline edge past the boundary, so span all three.
-      const xs = [gap.boundary, gap.left?.edge ?? gap.boundary, gap.right?.edge ?? gap.boundary];
+      // Negative sidebearings put an outline edge past a boundary, so span every edge.
+      const xs = [
+        gap.leftBoundary,
+        gap.rightBoundary,
+        gap.left?.edge ?? gap.leftBoundary,
+        gap.right?.edge ?? gap.rightBoundary,
+      ];
       if (point.x < Math.min(...xs) - padding || point.x > Math.max(...xs) + padding) continue;
 
-      const distance = Math.abs(point.x - gap.boundary);
-      if (!nearest || distance < Math.abs(point.x - nearest.boundary)) nearest = gap;
+      const distance = Math.abs(point.x - spacingGapCenter(gap));
+      if (!nearest || distance < Math.abs(point.x - spacingGapCenter(nearest))) nearest = gap;
     }
     return nearest;
   }
@@ -251,10 +259,11 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
       for (let index = 0; index <= line.length; index++) {
         const before = line[index - 1];
         const after = line[index];
-        const boundary = after ? after.left : before!.left + before!.glyph.xAdvance;
-        const left = before ? this.#spacingSide(before, boundary, "right") : null;
-        const right = after ? this.#spacingSide(after, boundary, "left") : null;
-        if (left || right) yield { node, left, right, boundary, top, bottom };
+        const leftBoundary = before ? before.left + before.glyph.xAdvance : after!.left;
+        const rightBoundary = after ? after.left : leftBoundary;
+        const left = before ? this.#spacingSide(before, leftBoundary, "right") : null;
+        const right = after ? this.#spacingSide(after, rightBoundary, "left") : null;
+        if (left || right) yield { node, left, right, leftBoundary, rightBoundary, top, bottom };
       }
     }
   }
@@ -391,7 +400,11 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
   *#runGlyphs(
     node: TextRunNode,
     layout: TextLayout,
-  ): Iterable<{ placed: PlacedGlyph; itemId: TextItemId; model: GlyphRenderModel }> {
+  ): Iterable<{
+    placed: PlacedGlyph;
+    itemId: TextItemId;
+    model: GlyphRenderModel;
+  }> {
     const childItemId = this.childGlyph(node)?.itemId;
     for (const placed of layout.placedGlyphs) {
       const itemId = placed.glyph.sourceItemIds[0];

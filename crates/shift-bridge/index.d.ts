@@ -8,6 +8,7 @@ import type {
   ComponentId,
   GuidelineId,
   GlyphId,
+  KerningGroupId,
   GlyphName,
   LayerId,
   MetricId,
@@ -180,6 +181,11 @@ export declare class Bridge {
    * applies its own default; an empty array is an explicit empty list.
    */
   getLanguageIds(): Array<string> | null
+  /**
+   * Returns the font's kerning groups, per-source pairs, and the basis
+   * kerning interpolates over.
+   */
+  getKerning(): NapiKerningSnapshot
   getNamedInstances(): Array<NapiNamedInstance>
   /** Returns the precomputed source-metric interpolation model for this font. */
   getSourceMetricsInterpolation(): NapiSourceMetricsInterpolationSnapshot | null
@@ -631,6 +637,8 @@ export interface NapiFontReplacement {
    * reshapes locations, createSource adds one); absent otherwise.
    */
   sources?: Array<NapiSource>
+  /** Complete kerning when its values or interpolation basis changed. */
+  kerning?: NapiKerningSnapshot
 }
 
 export interface NapiFontSnapshot {
@@ -646,6 +654,7 @@ export interface NapiFontSnapshot {
   namedInstances: Array<NapiNamedInstance>
   /** Tracked Hyperglot language ids; absent when the font stores no list. */
   languageIds?: Array<string>
+  kerning: NapiKerningSnapshot
 }
 
 export interface NapiGlyphChangedEntities {
@@ -771,6 +780,45 @@ export interface NapiInterpolationSupport {
   lower: number
   peak: number
   upper: number
+}
+
+export interface NapiKerningGroup {
+  id: KerningGroupId
+  position: NapiKerningPosition
+  name: string
+  glyphIds: Array<GlyphId>
+}
+
+export interface NapiKerningPairValue {
+  first: NapiKerningSide
+  second: NapiKerningSide
+  amount: number
+}
+
+export declare const enum NapiKerningPosition {
+  First = 'first',
+  Second = 'second'
+}
+
+/** One kerning pair side: `id` is a glyph id when `kind` is `glyph`, else a group id. */
+export interface NapiKerningSide {
+  kind: NapiKerningSideKind
+  id: string
+}
+
+export declare const enum NapiKerningSideKind {
+  Glyph = 'glyph',
+  Group = 'group'
+}
+
+/**
+ * Font kerning: groups, per-source pairs, and the interpolation basis over
+ * the default source and every master with pairs (absent for static fonts).
+ */
+export interface NapiKerningSnapshot {
+  groups: Array<NapiKerningGroup>
+  sources: Array<NapiSourceKerningPairs>
+  basis?: NapiInterpolationBasis
 }
 
 /**
@@ -1078,6 +1126,11 @@ export interface NapiSource {
   lineGap?: number
   underlinePosition?: number
   underlineThickness?: number
+}
+
+export interface NapiSourceKerningPairs {
+  sourceId: SourceId
+  pairs: Array<NapiKerningPairValue>
 }
 
 export declare const enum NapiSourceMetricField {

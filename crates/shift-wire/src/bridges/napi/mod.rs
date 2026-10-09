@@ -17,10 +17,12 @@ use crate::{
     GlyphChangedEntities, GlyphComponents, GlyphEntry, GlyphInterpolation, GlyphLayerRecord,
     GlyphLayerShape, GlyphLayerSnapshot, GlyphProjection, GlyphRecord, GlyphSnapshot,
     GlyphSnapshotRequest, GlyphSourceComponents, GlyphSourceShape, GlyphSourceValues, GlyphState,
-    GlyphStructure, GlyphVariation, InterpolationBasis, InterpolationSupport, LayerDifference,
-    LayerDifferenceKind, LayerMatch, Location, MetricDefinition, MetricKind, NamedInstance,
-    PointData, PointMatch, PointType, Source, SourceMetricField, SourceMetricValue,
-    SourceMetricValues, SourceMetricsInterpolationSnapshot, VariationBasis, VariationDelta,
+    GlyphStructure, GlyphVariation, InterpolationBasis, InterpolationSupport, KerningGroup,
+    KerningPairValue, KerningPosition, KerningSide, KerningSideKind, KerningSnapshot,
+    LayerDifference, LayerDifferenceKind, LayerMatch, Location, MetricDefinition, MetricKind,
+    NamedInstance, PointData, PointMatch, PointType, Source, SourceKerningPairs, SourceMetricField,
+    SourceMetricValue, SourceMetricValues, SourceMetricsInterpolationSnapshot, VariationBasis,
+    VariationDelta,
 };
 
 #[napi(object)]
@@ -804,6 +806,7 @@ pub struct NapiFontSnapshot {
     pub named_instances: Vec<NapiNamedInstance>,
     /// Tracked Hyperglot language ids; absent when the font stores no list.
     pub language_ids: Option<Vec<String>>,
+    pub kerning: NapiKerningSnapshot,
 }
 
 impl From<FontSnapshot> for NapiFontSnapshot {
@@ -832,6 +835,7 @@ impl From<FontSnapshot> for NapiFontSnapshot {
                 .map(Into::into)
                 .collect(),
             language_ids: snapshot.language_ids,
+            kerning: snapshot.kerning.into(),
         }
     }
 }
@@ -1775,6 +1779,8 @@ pub struct NapiFontReplacement {
     /// Full sources list when font-level source structure changed (createAxis
     /// reshapes locations, createSource adds one); absent otherwise.
     pub sources: Option<Vec<NapiSource>>,
+    /// Complete kerning when its values or interpolation basis changed.
+    pub kerning: Option<NapiKerningSnapshot>,
 }
 
 /// Pure-state response to `apply`: no change records cross to the renderer.
@@ -1985,4 +1991,115 @@ pub struct NapiBooleanOpIntent {
     pub contour_id_b: String,
     /// "union" | "subtract" | "intersect" | "difference"
     pub operation: String,
+}
+
+#[napi(string_enum = "camelCase")]
+pub enum NapiKerningPosition {
+    First,
+    Second,
+}
+
+impl From<KerningPosition> for NapiKerningPosition {
+    fn from(position: KerningPosition) -> Self {
+        match position {
+            KerningPosition::First => Self::First,
+            KerningPosition::Second => Self::Second,
+        }
+    }
+}
+
+#[napi(string_enum = "camelCase")]
+pub enum NapiKerningSideKind {
+    Glyph,
+    Group,
+}
+
+#[napi(object)]
+/// One kerning pair side: `id` is a glyph id when `kind` is `glyph`, else a group id.
+pub struct NapiKerningSide {
+    pub kind: NapiKerningSideKind,
+    pub id: String,
+}
+
+impl From<KerningSide> for NapiKerningSide {
+    fn from(side: KerningSide) -> Self {
+        Self {
+            kind: match side.kind {
+                KerningSideKind::Glyph => NapiKerningSideKind::Glyph,
+                KerningSideKind::Group => NapiKerningSideKind::Group,
+            },
+            id: side.id,
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NapiKerningGroup {
+    #[napi(ts_type = "KerningGroupId")]
+    pub id: String,
+    pub position: NapiKerningPosition,
+    pub name: String,
+    #[napi(ts_type = "Array<GlyphId>")]
+    pub glyph_ids: Vec<String>,
+}
+
+impl From<KerningGroup> for NapiKerningGroup {
+    fn from(group: KerningGroup) -> Self {
+        Self {
+            id: group.id,
+            position: group.position.into(),
+            name: group.name,
+            glyph_ids: group.glyph_ids.iter().map(ToString::to_string).collect(),
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NapiKerningPairValue {
+    pub first: NapiKerningSide,
+    pub second: NapiKerningSide,
+    pub amount: f64,
+}
+
+#[napi(object)]
+pub struct NapiSourceKerningPairs {
+    #[napi(ts_type = "SourceId")]
+    pub source_id: String,
+    pub pairs: Vec<NapiKerningPairValue>,
+}
+
+impl From<SourceKerningPairs> for NapiSourceKerningPairs {
+    fn from(source: SourceKerningPairs) -> Self {
+        Self {
+            source_id: source.source_id.to_string(),
+            pairs: source
+                .pairs
+                .into_iter()
+                .map(|pair: KerningPairValue| NapiKerningPairValue {
+                    first: pair.first.into(),
+                    second: pair.second.into(),
+                    amount: pair.amount,
+                })
+                .collect(),
+        }
+    }
+}
+
+#[napi(object)]
+/// Font kerning: groups, per-source pairs, and the interpolation basis over
+/// the default source and every master with pairs (absent for static fonts).
+pub struct NapiKerningSnapshot {
+    pub groups: Vec<NapiKerningGroup>,
+    pub sources: Vec<NapiSourceKerningPairs>,
+    pub basis: Option<NapiInterpolationBasis>,
+}
+
+impl From<KerningSnapshot> for NapiKerningSnapshot {
+    fn from(kerning: KerningSnapshot) -> Self {
+        Self {
+            groups: kerning.groups.into_iter().map(Into::into).collect(),
+            sources: kerning.sources.into_iter().map(Into::into).collect(),
+            basis: kerning.basis.map(Into::into),
+        }
+    }
 }

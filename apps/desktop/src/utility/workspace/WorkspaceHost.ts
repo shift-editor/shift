@@ -662,6 +662,7 @@ export class WorkspaceHost {
       axisMappingBases: this.#bridge.getAxisMappingBases(),
       namedInstances: this.#bridge.getNamedInstances(),
       languageIds: this.#bridge.getLanguageIds(),
+      kerning: this.#bridge.getKerning(),
     };
   }
 

@@ -46,7 +46,10 @@ describe("memory font editing", () => {
   it("loads snapshots and retains a Select-tool point drag in memory", async () => {
     const { font: fontSnapshot, glyph, records } = fixture();
     const source = memorySource({ font: fontSnapshot, glyph, records });
-    const session = createMemoryFontSession({ source, clipboard: new MemoryClipboard() });
+    const session = createMemoryFontSession({
+      source,
+      clipboard: new MemoryClipboard(),
+    });
     const { editor, font } = session;
 
     expect(editor.scene.nodes()).toEqual([]);
@@ -101,8 +104,14 @@ describe("memory font editing", () => {
 
   it("keeps axis state isolated between independent editor sessions", () => {
     const source = memorySource(fixture());
-    const first = createMemoryFontSession({ source, clipboard: new MemoryClipboard() });
-    const second = createMemoryFontSession({ source, clipboard: new MemoryClipboard() });
+    const first = createMemoryFontSession({
+      source,
+      clipboard: new MemoryClipboard(),
+    });
+    const second = createMemoryFontSession({
+      source,
+      clipboard: new MemoryClipboard(),
+    });
     const secondLocation = second.editor.externalLocation;
 
     first.editor.setExternalLocation(externalAxisLocationFromRecord({ [axisId]: 625 }));
@@ -117,7 +126,10 @@ describe("memory font editing", () => {
 
   it("offers only the requested tools and activates the first", () => {
     const source = memorySource(fixture());
-    const defaults = createMemoryFontSession({ source, clipboard: new MemoryClipboard() });
+    const defaults = createMemoryFontSession({
+      source,
+      clipboard: new MemoryClipboard(),
+    });
     const handOnly = createMemoryFontSession({
       source,
       clipboard: new MemoryClipboard(),
@@ -215,7 +227,11 @@ function fixture(): {
         closed: false,
         points: [
           { id: regularPointId, pointType: "onCurve" as const, smooth: false },
-          { id: regularEndPointId, pointType: "onCurve" as const, smooth: false },
+          {
+            id: regularEndPointId,
+            pointType: "onCurve" as const,
+            smooth: false,
+          },
         ],
       },
     ],
@@ -244,6 +260,7 @@ function fixture(): {
       metadata: { familyName: "Memory Test" },
       metrics: { unitsPerEm: 1000 },
       metricDefinitions: [],
+      kerning: { groups: [], sources: [] },
       glyphs: [{ id: glyphId, name: "S", unicodes: [83] }],
       sources: [
         {
@@ -326,12 +343,20 @@ function fixture(): {
         {
           glyphId,
           sourceId: regularSourceId,
-          state: { layerId: regularLayerId, structure: regularStructure, values: regularValues },
+          state: {
+            layerId: regularLayerId,
+            structure: regularStructure,
+            values: regularValues,
+          },
         },
         {
           glyphId,
           sourceId: boldSourceId,
-          state: { layerId: boldLayerId, structure: boldStructure, values: boldValues },
+          state: {
+            layerId: boldLayerId,
+            structure: boldStructure,
+            values: boldValues,
+          },
         },
       ],
     },

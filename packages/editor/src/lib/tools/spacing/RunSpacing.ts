@@ -3,6 +3,7 @@ import type { GlyphLayer } from "../../model/Glyph";
 import type { ScenePoint } from "../../../types/coordinates";
 import {
   sidebearingOfHalf,
+  spacingGapCenter,
   type Sidebearing,
   type SpacingGap,
   type SpacingSide,
@@ -54,7 +55,8 @@ export class SpacingHalf {
     return (
       this.side === other.side &&
       this.sameGapAs(other) &&
-      this.gap.boundary === other.gap.boundary &&
+      this.gap.leftBoundary === other.gap.leftBoundary &&
+      this.gap.rightBoundary === other.gap.rightBoundary &&
       this.gap.left?.sidebearing === other.gap.left?.sidebearing &&
       this.gap.right?.sidebearing === other.gap.right?.sidebearing
     );
@@ -186,13 +188,13 @@ export class RunSpacing {
 }
 
 function sideAt(gap: SpacingGap, x: number): SpacingSideName {
-  const inLeft = gap.left !== null && between(x, gap.left.edge, gap.boundary);
-  const inRight = gap.right !== null && between(x, gap.boundary, gap.right.edge);
+  const inLeft = gap.left !== null && between(x, gap.left.edge, gap.leftBoundary);
+  const inRight = gap.right !== null && between(x, gap.rightBoundary, gap.right.edge);
   if (inLeft !== inRight) return inLeft ? "left" : "right";
   if (inLeft && gap.left!.sidebearing < 0) return "left";
   if (inRight && gap.right!.sidebearing < 0) return "right";
 
-  const pointerSide = x < gap.boundary ? "left" : "right";
+  const pointerSide = x < spacingGapCenter(gap) ? "left" : "right";
   if (gap[pointerSide]) return pointerSide;
   return gap.left ? "left" : "right";
 }

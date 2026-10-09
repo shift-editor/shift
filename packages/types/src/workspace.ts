@@ -5,6 +5,7 @@ import type {
   FontMetadata,
   FontMetrics,
   GlyphRecord,
+  KerningSnapshot,
   GlyphState,
   MetricDefinition,
   NamedInstance,
@@ -28,6 +29,7 @@ export interface WorkspaceSnapshot {
   namedInstances: NamedInstance[];
   /** Tracked Hyperglot language ids; `null` when the font stores no list. */
   languageIds: string[] | null;
+  kerning: KerningSnapshot;
 }
 
 export interface WorkspaceGlyphLayerSnapshot {

@@ -54,6 +54,7 @@ import type { GlyphReader } from "../../types/glyph";
 import { Glyph, GlyphLayer } from "./Glyph";
 import type { FontStore, GlyphInvalidation } from "./FontStore";
 import type { GlyphLayerState } from "./GlyphLayerState";
+import { Kerning } from "./Kerning";
 import { SourceMetricsInterpolation } from "./SourceMetricsInterpolation";
 import {
   designAxisLocationFromLocation,
@@ -221,6 +222,7 @@ export class Font {
   readonly #metricDefinitionsCell: Signal<MetricDefinition[]>;
 
   readonly #sourceMetricsInterpolationCell: Signal<SourceMetricsInterpolation | null>;
+  readonly #kerningCell: Signal<Kerning>;
   readonly #defaultSourceMetricsCell: Signal<SourceMetrics>;
 
   readonly #metadataCell: Signal<FontMetadata>;
@@ -277,6 +279,11 @@ export class Font {
         font?.metrics ?? DEFAULT_FONT_METRICS,
       );
     });
+
+    // Workspace echoes rebuild the font snapshot but keep its kerning reference
+    // unless kerning changed, so the lookup is indexed again only then.
+    const kerningSnapshotCell = computed(() => fontCell.value?.kerning ?? null);
+    this.#kerningCell = computed(() => Kerning.from(kerningSnapshotCell.value));
 
     this.#metadataCell = computed(() => fontCell.value?.metadata ?? {});
     this.#sourcesCell = computed(() => fontCell.value?.sources ?? []);
@@ -362,6 +369,11 @@ export class Font {
   /** Reactive decoder for the Rust-built source-metric interpolation model. */
   get sourceMetricsInterpolationCell(): Signal<SourceMetricsInterpolation | null> {
     return this.#sourceMetricsInterpolationCell;
+  }
+
+  /** Reactive kerning groups and per-source pair values. */
+  get kerningCell(): Signal<Kerning> {
+    return this.#kerningCell;
   }
 
   /** Reactive committed authored font metadata. */
@@ -1229,7 +1241,9 @@ export class Font {
    * @returns A cell whose value is the exact source, or `null` when interpolated.
    */
   sourceAtCell(location: Signal<ExternalAxisLocation>): ComputedSignal<Source | null> {
-    return computed(() => this.#designspace.sourceAt(location.value), { name: "font.sourceAt" });
+    return computed(() => this.#designspace.sourceAt(location.value), {
+      name: "font.sourceAt",
+    });
   }
 
   /**
@@ -1554,6 +1568,45 @@ export class Font {
       this.#sourceMetricsInterpolationCell.peek()?.resolve(designLocation, axes) ??
       this.defaultSourceMetrics
     );
+  }
+
+  /**
+   * Resolves the kerning between `first` followed by `second`.
+   *
+   * @remarks
+   * A variable font blends the sources kerning is authored at, evaluated at
+   * the active source's location when one is being edited and at `location`
+   * otherwise, so every location shows what the compiled font kerns there.
+   * A source without pairs of its own, such as a sparse intermediate master,
+   * therefore shows the blended value. A static font reads the active or
+   * default source.
+   *
+   * @param location - External location displayed by editor controls.
+   * @param sourceId - Source being edited, which takes precedence over `location`.
+   * @returns Font units added after `first`'s advance; zero when no pair applies.
+   */
+  kerningBetween(
+    first: GlyphId,
+    second: GlyphId,
+    location: ExternalAxisLocation,
+    sourceId: SourceId | null,
+  ): number {
+    const kerning = this.#kerningCell.peek();
+    const { designLocation, staticSourceId, axes } = this.#peekDesignspace((designspace) => {
+      const source = sourceId ? designspace.source(sourceId) : null;
+      const staticSource = source ?? designspace.sourceAt(designspace.defaultLocation());
+      return {
+        designLocation: source
+          ? designAxisLocationFromLocation(source.location)
+          : designspace.toDesign(location),
+        staticSourceId: staticSource?.id ?? null,
+        axes: designspace.axes,
+      };
+    });
+
+    const interpolated = kerning.valueAtLocation(designLocation, axes, first, second);
+    if (interpolated !== null) return interpolated;
+    return staticSourceId ? kerning.valueAtSource(staticSourceId, first, second) : 0;
   }
 
   #metricsForSource(source: Source | null): SourceMetrics {

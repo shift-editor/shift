@@ -17,6 +17,7 @@ const headerImports = idImportMatch
 
 const idTypeNames = new Set([
   "GlyphId",
+  "KerningGroupId",
   "LayerId",
   "MetricId",
   "PointId",
