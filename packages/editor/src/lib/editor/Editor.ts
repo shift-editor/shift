@@ -1287,7 +1287,6 @@ export class Editor {
     return this.#selectionBounds;
   }
 
-  /** Reactive scene-space bounds of the current selection; see {@link selectionSceneBounds}. */
   /** Selects every glyph item of every run; the run level's select-all. */
   #selectAllGlyphItems(): void {
     const ids = this.scene
@@ -1300,6 +1299,7 @@ export class Editor {
     this.history.capture("Select all", () => this.selection.select(ids));
   }
 
+  /** Reactive scene-space bounds of the current selection; see {@link selectionSceneBounds}. */
   public get selectionSceneBoundsCell(): Signal<SceneBounds | null> {
     return this.#selectionSceneBounds;
   }

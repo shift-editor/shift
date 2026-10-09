@@ -1,6 +1,6 @@
 import { Bounds, Mat, type Point2D } from "@shift/geo";
 import { Point, type Contour, type Segment } from "@shift/glyph-state";
-import type { PointId, ShiftId } from "@shift/types";
+import type { PointId, SelectableId } from "@shift/types";
 
 import type { ToolContext } from "../../core/Behavior";
 import type { Editor } from "../../../editor/Editor";
@@ -448,7 +448,7 @@ function translatingState(
 
 /** Whether an unselected target sits inside the selection's bounding box, which then moves instead. */
 /** The selectable identity of an object target. */
-function targetId(target: Exclude<PointerTarget, { kind: "canvas" | "node" }>): ShiftId {
+function targetId(target: Exclude<PointerTarget, { kind: "canvas" | "node" }>): SelectableId {
   return target.kind === "text" ? target.itemId : target.id;
 }
 

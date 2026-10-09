@@ -176,7 +176,7 @@ On drag end, Shape commits a valid rectangle as one transaction, selects its new
 
 ### Marquee selection history
 
-Marquee captures the ordered selection present at `dragStart`. A plain marquee clears and replaces it; a Shift-marquee preserves those IDs and appends points inside the current rectangle. Intermediate selection writes remain preview state inside one open history capture. `dragEnd` seals one selection action, while Escape, tool replacement, or pointer cancellation restores the exact starting selection and records nothing. The bounding box continues to display the preserved selection during a Shift-marquee but is never itself a hit target while brushing.
+Marquee asks each scene node's definition what the rectangle catches (`NodeDefinition.idsInRect`), so it never branches on node kind. Marquee captures the ordered selection present at `dragStart`. A plain marquee clears and replaces it; a Shift-marquee preserves those IDs and appends points inside the current rectangle. Intermediate selection writes remain preview state inside one open history capture. `dragEnd` seals one selection action, while Escape, tool replacement, or pointer cancellation restores the exact starting selection and records nothing. The bounding box continues to display the preserved selection during a Shift-marquee but is never itself a hit target while brushing.
 
 ### Selection direction snapping
 

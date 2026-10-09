@@ -1,4 +1,4 @@
-import { Bounds, Curve, Rect, type Rect2D } from "@shift/geo";
+import { Bounds, Rect, type Rect2D } from "@shift/geo";
 import type { SelectableId } from "@shift/types";
 import { sceneBounds } from "../../../editor/spaces";
 import type { ToolContext } from "../../core/Behavior";
@@ -57,49 +57,15 @@ export class Marquee implements SelectBehavior {
     return true;
   }
 
-  /**
-   * Points inside the rect, plus segments it touches without catching just one end point.
-   *
-   * @remarks
-   * A run's glyph gives up its points only while edited, as with clicks. With
-   * nothing edited, the rect selects the run glyphs whose outline box it touches.
-   */
+  /** Asks each scene node's definition what the rect catches inside it. */
   private getIdsInRect(rect: Rect2D, ctx: ToolContext<SelectState>): Set<SelectableId> {
-    const ids = new Set<SelectableId>();
     const editor = ctx.editor;
     const sceneRect = sceneBounds(Bounds.fromXYWH(rect.x, rect.y, rect.width, rect.height));
-
-    if (!editor.editing.hasScope()) {
-      const definition = editor.nodeDefinition("textRun");
-      for (const node of editor.scene.nodesOfKind("textRun")) {
-        const localRect = editor.toLocalBounds(node, sceneRect);
-        for (const item of editor.text.run(node.runId)?.items ?? []) {
-          const bounds = definition.itemBounds(node, item.id);
-          if (bounds && Bounds.overlaps(bounds, localRect)) ids.add(item.id);
-        }
-      }
+    const ids = new Set<SelectableId>();
+    for (const node of editor.scene.nodes()) {
+      const localRect = editor.toLocalBounds(node, sceneRect);
+      for (const id of editor.nodeDefinition(node.kind).idsInRect(node, localRect)) ids.add(id);
     }
-
-    for (const node of editor.scene.nodesOfKind("glyph")) {
-      if (node.parentId !== null && !editor.editing.has(node.id)) continue;
-      const glyph = editor.glyphForId(node.glyphId);
-      if (!glyph) continue;
-
-      const geometry = glyph.geometryAt(editor.externalLocation);
-      const localRect = Bounds.toRect(editor.toLocalBounds(node, sceneRect));
-
-      for (const point of geometry.allPoints) {
-        if (Rect.containsPoint(localRect, point)) ids.add(point.id);
-      }
-      for (const segment of geometry.segments) {
-        const startInside = Rect.containsPoint(localRect, segment.start);
-        const endInside = Rect.containsPoint(localRect, segment.end);
-        // Brushing one end point selects that point alone, not the segments leaving it.
-        if (startInside !== endInside) continue;
-        if (Curve.intersectsRect(segment.toCurve(), localRect)) ids.add(segment.id);
-      }
-    }
-
     return ids;
   }
 
