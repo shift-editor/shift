@@ -4,6 +4,7 @@ import { build } from "vite";
 
 const appRoot = __dirname;
 const isE2E = process.argv.includes("--e2e");
+const isProfile = process.env.SHIFT_PROFILE_BUILD === "1";
 const nodeExternals = [
   "electron",
   "shift-bridge",
@@ -91,6 +92,9 @@ async function buildRenderer(): Promise<void> {
       outDir: path.join(appRoot, ".vite/renderer/main_window"),
       emptyOutDir: true,
       minify: !isE2E,
+      // Profiling builds stay minified, like production, but keep source maps so
+      // CPU profiles can be mapped back to component and function names.
+      sourcemap: isProfile,
     },
     define: {
       __PLAYWRIGHT__: JSON.stringify(isE2E),
