@@ -1180,7 +1180,7 @@ impl Bridge {
     Ok(AsyncTask::new(crate::specimen::SpecimenTask {
       input: crate::specimen::SpecimenInput::Snapshot(
         self
-          .save_snapshot()
+          .specimen_snapshot()
           .map_err(|e| Error::new(Status::GenericFailure, e.to_string()))?,
       ),
     }))
@@ -2098,6 +2098,12 @@ impl Bridge {
       });
     }
     Ok(sources)
+  }
+
+  /// Snapshots the font with only the glyphs its thumbnail specimen compiles loaded.
+  fn specimen_snapshot(&mut self) -> BridgeResult<FontSaveSnapshot> {
+    crate::specimen::acquire_specimen_glyphs(self.workspace_mut()?)?;
+    Ok(FontSaveSnapshot::new(self.font()?.clone(), None))
   }
 
   fn save_snapshot(&mut self) -> BridgeResult<FontSaveSnapshot> {
