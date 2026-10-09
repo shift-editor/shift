@@ -28,6 +28,15 @@ export interface ResolvedKerning {
   readonly amount: number;
 }
 
+/** Each glyph's group at one pair position. */
+type GroupMembership = ReadonlyMap<GlyphId, KerningGroupId>;
+
+/** Each glyph's group at both pair positions. */
+type MembershipByPosition = Readonly<Record<KerningPairPosition, GroupMembership>>;
+
+/** One source's pair values: first side → second side → amount. */
+type PairIndex = ReadonlyMap<KerningSideId, ReadonlyMap<KerningSideId, number>>;
+
 /**
  * Font-wide kerning groups by id, with each glyph's group at each pair
  * position.
@@ -36,27 +45,27 @@ export class KerningGroups {
   static readonly EMPTY = new KerningGroups(new Map(), { first: new Map(), second: new Map() });
 
   readonly #byId: ReadonlyMap<KerningGroupId, KerningGroup>;
-  readonly #groupOf: Readonly<Record<KerningPairPosition, ReadonlyMap<GlyphId, KerningGroupId>>>;
+  readonly #membership: MembershipByPosition;
 
   private constructor(
     byId: ReadonlyMap<KerningGroupId, KerningGroup>,
-    groupOf: Readonly<Record<KerningPairPosition, ReadonlyMap<GlyphId, KerningGroupId>>>,
+    membership: MembershipByPosition,
   ) {
     this.#byId = byId;
-    this.#groupOf = groupOf;
+    this.#membership = membership;
   }
 
   static from(groups: readonly KerningGroup[]): KerningGroups {
     const byId = new Map<KerningGroupId, KerningGroup>();
-    const groupOf = {
+    const membership = {
       first: new Map<GlyphId, KerningGroupId>(),
       second: new Map<GlyphId, KerningGroupId>(),
     };
     for (const group of groups) {
       byId.set(group.id, group);
-      for (const glyphId of group.glyphIds) groupOf[group.position].set(glyphId, group.id);
+      for (const glyphId of group.glyphIds) membership[group.position].set(glyphId, group.id);
     }
-    return new KerningGroups(byId, groupOf);
+    return new KerningGroups(byId, membership);
   }
 
   /** The group with this id, or null when the font has none. */
@@ -66,28 +75,22 @@ export class KerningGroups {
 
   /** The group `glyphId` kerns through at a pair position. */
   groupOf(position: KerningPairPosition, glyphId: GlyphId): KerningGroupId | null {
-    return this.#groupOf[position].get(glyphId) ?? null;
+    return this.#membership[position].get(glyphId) ?? null;
   }
 }
 
 /** One source's authored pair values, indexed first side → second side. */
 export class SourceKerning {
-  readonly #values: ReadonlyMap<KerningSideId, ReadonlyMap<KerningSideId, number>>;
+  readonly #values: PairIndex;
 
-  private constructor(values: ReadonlyMap<KerningSideId, ReadonlyMap<KerningSideId, number>>) {
+  private constructor(values: PairIndex) {
     this.#values = values;
   }
 
   static from(pairs: readonly KerningPairValue[]): SourceKerning {
     const values = new Map<KerningSideId, Map<KerningSideId, number>>();
-    for (const pair of pairs) {
-      const first = pair.first.id as KerningSideId;
-      let row = values.get(first);
-      if (!row) {
-        row = new Map();
-        values.set(first, row);
-      }
-      row.set(pair.second.id as KerningSideId, pair.amount);
+    for (const { first, second, amount } of pairs) {
+      rowOf(values, first.id as KerningSideId).set(second.id as KerningSideId, amount);
     }
     return new SourceKerning(values);
   }
@@ -196,4 +199,17 @@ export class Kerning {
     if (firstGroup && secondGroup) candidates.push([firstGroup, secondGroup]);
     return candidates;
   }
+}
+
+/** The row for `first` in a nested pair index, created when missing. */
+function rowOf<T>(
+  rows: Map<KerningSideId, Map<KerningSideId, T>>,
+  first: KerningSideId,
+): Map<KerningSideId, T> {
+  let row = rows.get(first);
+  if (!row) {
+    row = new Map();
+    rows.set(first, row);
+  }
+  return row;
 }
