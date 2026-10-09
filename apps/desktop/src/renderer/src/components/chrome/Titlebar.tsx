@@ -1,5 +1,8 @@
 import { getShiftHost } from "@/host/shiftHost";
 import { useState } from "react";
+import { Button, Tooltip, TooltipContent, TooltipTrigger, X } from "@shift/ui";
+import { useWindowButtonLayout } from "./WindowControls";
+import { useTitleBarColors } from "./useTitleBarColors";
 
 interface TrafficLightButtonProps {
   color: "close" | "minimize" | "maximize";
@@ -82,8 +85,6 @@ export const Titlebar = ({ closeOnly = false, onClose }: TitlebarProps) => {
   const [isHovered, setIsHovered] = useState(false);
   const host = getShiftHost();
 
-  if (host.platform !== "darwin") return null;
-
   const handleClose = () => {
     if (onClose) {
       onClose();
@@ -92,6 +93,11 @@ export const Titlebar = ({ closeOnly = false, onClose }: TitlebarProps) => {
 
     host.commands.run("window.close");
   };
+
+  if (host.platform !== "darwin") {
+    // The main window and launcher draw their own row; only small windows use this.
+    return closeOnly ? <DialogTitlebar onClose={handleClose} /> : null;
+  }
 
   const handleMinimize = () => {
     host.commands.run("window.minimise");
@@ -116,6 +122,45 @@ export const Titlebar = ({ closeOnly = false, onClose }: TitlebarProps) => {
           <TrafficLightButton color="maximize" onClick={handleMaximize} isHovered={isHovered} />
         </>
       )}
+    </div>
+  );
+};
+
+/**
+ * The close-only title-bar row of About, Feedback, and Update on Windows and Linux.
+ *
+ * @remarks
+ * Windows draws its own close button over the row; Linux windows are frameless,
+ * so the row draws a close button on the side the desktop's layout puts it.
+ */
+const DialogTitlebar = ({ onClose }: { onClose: () => void }) => {
+  const isWindows = getShiftHost().platform === "win32";
+  const layout = useWindowButtonLayout();
+  useTitleBarColors(isWindows, "--color-background");
+
+  const closeAtStart = layout?.start.includes("close") ?? false;
+  const close = isWindows ? null : (
+    <Tooltip>
+      <TooltipTrigger>
+        <Button
+          icon={<X width={14} height={14} />}
+          aria-label="Close"
+          variant="toolbar"
+          size="icon-sm"
+          onClick={onClose}
+        />
+      </TooltipTrigger>
+      <TooltipContent side="bottom">Close</TooltipContent>
+    </Tooltip>
+  );
+
+  return (
+    <div className="title-bar-area shrink-0">
+      <div className="flex h-10 items-center px-2">
+        {closeAtStart ? close : null}
+        <div className="flex-1" />
+        {closeAtStart ? null : close}
+      </div>
     </div>
   );
 };

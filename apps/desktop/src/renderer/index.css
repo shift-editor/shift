@@ -178,6 +178,23 @@ body {
 }
 
 /* Custom titlebar styles */
+/*
+ * Keeps a title-bar row clear of the native window controls Electron draws over
+ * it on Windows and Linux. Chromium reports the free area through the Window
+ * Controls Overlay variables, whichever side the controls are on; without an
+ * overlay (macOS) both paddings are zero.
+ */
+.title-bar-area {
+  -webkit-app-region: drag;
+  padding-left: env(titlebar-area-x, 0px);
+  padding-right: calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw));
+}
+
+/* Controls in a title-bar row must take clicks and hover, not drag the window. */
+.title-bar-area :is(button, a, input, [role="menubar"]) {
+  -webkit-app-region: no-drag;
+}
+
 .titlebar-drag {
   -webkit-app-region: drag;
 }

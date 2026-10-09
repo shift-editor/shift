@@ -19,6 +19,8 @@ import { CommandRegistry, type CommandContext } from "../commands/Command";
 import { FeedbackWindow } from "../feedback/FeedbackWindow";
 import { registerCommands } from "../commands/Commands";
 import { ApplicationMenu } from "../menu/ApplicationMenu";
+import { readButtonLayout } from "../windows/windowButtonLayout";
+import { DIALOG_TITLE_BAR_HEIGHT } from "../windows/dialogWindowChrome";
 import { createShiftLogger, type ShiftLogger } from "../logging";
 import { AppLifecycle } from "./AppLifecycle";
 import { WindowManager } from "../windows/WindowManager";
@@ -39,6 +41,8 @@ const SLUG_ATLAS_PROFILING_ENABLED =
 /** Loads a reopened document on Home and has the renderer return it to its last glyph. */
 const RESUME_ROUTE = "/home?resume";
 const LAUNCHER_MIN_WIDTH = 880;
+/** The launcher's title-bar row has no tools, so it is shorter than the editor's. */
+const LAUNCHER_TITLE_BAR_HEIGHT = 40;
 const LAUNCHER_WIDTH = 960;
 const LAUNCHER_HEIGHT = 720;
 /** Largest share of the screen the launcher takes on displays smaller than its size. */
@@ -106,6 +110,7 @@ export class App {
       open: (sourcePath) => this.#openRecentFromMenu(sourcePath),
       clear: () => this.#recents?.clear(),
     }),
+    () => this.#publishMenuBar(),
   );
 
   /**
@@ -273,12 +278,19 @@ export class App {
     });
   }
 
-  #createWindow(autoShow = true, bounds?: Rectangle, maximised = false, minWidth?: number): Window {
+  #createWindow(
+    autoShow = true,
+    bounds?: Rectangle,
+    maximised = false,
+    minWidth?: number,
+    titleBarHeight?: number,
+  ): Window {
     const window = new Window({
       preloadPath: path.join(__dirname, "preload.js"),
       autoShow,
       maximised,
       ...(minWidth === undefined ? {} : { minWidth }),
+      ...(titleBarHeight === undefined ? {} : { titleBarHeight }),
       ...(bounds
         ? {
             width: bounds.width,
@@ -319,7 +331,13 @@ export class App {
    * that signal never arrives, so a renderer failure cannot leave it invisible.
    */
   #openLauncher(): Window {
-    const window = this.#createWindow(false, launcherBounds(), false, LAUNCHER_MIN_WIDTH);
+    const window = this.#createWindow(
+      false,
+      launcherBounds(),
+      false,
+      LAUNCHER_MIN_WIDTH,
+      LAUNCHER_TITLE_BAR_HEIGHT,
+    );
     this.#loadLauncher(window);
     setTimeout(() => this.#presentIfHidden(window), LAUNCHER_SHOW_FALLBACK_MS);
     return window;
@@ -497,6 +515,30 @@ export class App {
     });
     ipc.handle(ipcMain, "recents.list", () => {
       return this.#recents?.list() ?? [];
+    });
+    ipc.handle(ipcMain, "menu.bar", () => this.#applicationMenu.menuBar());
+    ipc.handle(ipcMain, "menu.activate", (event, itemId) => {
+      const window = this.#requireWindowForWebContents(event.sender);
+      this.#applicationMenu.activate(itemId, window.window);
+    });
+    ipc.handle(ipcMain, "window.buttonLayout", () =>
+      process.platform === "linux" ? readButtonLayout() : null,
+    );
+    ipc.handle(ipcMain, "window.setTitleBarColors", (event, colors) => {
+      const browserWindow = BrowserWindow.fromWebContents(event.sender);
+      const window = browserWindow ? this.#windows.windowForBrowserWindow(browserWindow) : null;
+      if (window) {
+        window.setTitleBarColors(colors);
+        return;
+      }
+
+      // About, Feedback, and Update windows are plain BrowserWindows.
+      if (process.platform !== "win32" || !browserWindow) return;
+      browserWindow.setTitleBarOverlay({
+        color: colors.background,
+        symbolColor: colors.symbol,
+        height: DIALOG_TITLE_BAR_HEIGHT,
+      });
     });
     ipc.handle(ipcMain, "recents.open", async (event, sourcePath) => {
       const window = this.#requireWindowForWebContents(event.sender);
@@ -844,6 +886,14 @@ export class App {
       this.#recents?.setSpecimen(visit, specimen);
     } catch (error) {
       this.#log.warn("building recent file specimen failed", visit.path, error);
+    }
+  }
+
+  #publishMenuBar(): void {
+    const bar = this.#applicationMenu.menuBar();
+    for (const window of this.#windows.allWindows()) {
+      if (window.window.isDestroyed()) continue;
+      ipc.send(window.window.webContents, "menu.barChanged", bar);
     }
   }
 

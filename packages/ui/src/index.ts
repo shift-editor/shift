@@ -110,6 +110,8 @@ export {
   MenuCheckboxItem,
   MenuCheckboxItemIndicator,
   MenuSeparator,
+  MenuSubmenuRoot,
+  MenuSubmenuTrigger,
   type MenuProps,
   type MenuTriggerProps,
   type MenuPositionerProps,
@@ -118,7 +120,10 @@ export {
   type MenuCheckboxItemProps,
   type MenuCheckboxItemIndicatorProps,
   type MenuSeparatorProps,
+  type MenuSubmenuRootProps,
+  type MenuSubmenuTriggerProps,
 } from "./components/menu";
+export { Menubar, type MenubarProps } from "./components/menubar";
 export {
   Popover,
   PopoverTrigger,
@@ -191,10 +196,14 @@ export {
   ArrowRight,
   Check,
   ChevronDown,
+  ChevronRight,
   LayoutGrid,
   List,
+  MenuIcon,
+  Minus,
   RotateCcw,
   RotateCw,
   Search,
+  Square,
   X,
 } from "lucide-react";

@@ -1,5 +1,7 @@
 import { app, Menu, type BrowserWindow, type MenuItemConstructorOptions } from "electron";
 import type { CommandId } from "../../shared/commands";
+import type { MenuBar } from "../../shared/menu/types";
+import { menuBarFromTemplate, withMenuItemIds } from "./menuBar";
 import {
   commandMenuItem,
   editMenuItems,
@@ -24,7 +26,9 @@ export class ApplicationMenu {
   readonly #runCommand: (id: CommandId, window?: BrowserWindow) => void;
   readonly #isCommandEnabled: (id: CommandId, window?: BrowserWindow) => boolean;
   readonly #recent: () => RecentMenu;
+  readonly #onMenuBarChanged: () => void;
   #menu: Menu | null = null;
+  #template: MenuItemConstructorOptions[] = [];
 
   /**
    * Creates the platform menu builder.
@@ -32,21 +36,53 @@ export class ApplicationMenu {
    * @param runCommand - executes Shift-owned menu actions against the current window.
    * @param isCommandEnabled - resolves each command's current native enabled state.
    * @param recent - resolves File → Open Recent's current files and actions.
+   * @param onMenuBarChanged - called on Windows and Linux whenever {@link menuBar} would change.
    */
   constructor(
     runCommand: (id: CommandId, window?: BrowserWindow) => void,
     isCommandEnabled: (id: CommandId, window?: BrowserWindow) => boolean,
     recent: () => RecentMenu,
+    onMenuBarChanged: () => void,
   ) {
     this.#runCommand = runCommand;
     this.#isCommandEnabled = isCommandEnabled;
     this.#recent = recent;
+    this.#onMenuBarChanged = onMenuBarChanged;
   }
 
   /** Installs the current menu template as Electron's application menu. */
   install(): void {
-    this.#menu = this.build();
+    // Windows and Linux draw these menus in the renderer, which activates items by id.
+    this.#template = isMac ? this.template() : withMenuItemIds(this.template());
+    this.#menu = Menu.buildFromTemplate(this.#template);
     Menu.setApplicationMenu(this.#menu);
+    if (!isMac) this.#onMenuBarChanged();
+  }
+
+  /**
+   * Describes the installed Windows or Linux menus for the renderer's menu bar.
+   *
+   * @returns an empty menu bar on macOS, which keeps its native menu bar.
+   */
+  menuBar(): MenuBar {
+    const menu = this.#menu;
+    if (isMac || !menu) return [];
+
+    return menuBarFromTemplate(this.#template, (id) => menu.getMenuItemById(id)?.enabled ?? false);
+  }
+
+  /**
+   * Runs one installed menu item, as if it were clicked in the native menu.
+   *
+   * @param itemId - id from {@link menuBar}.
+   * @param window - the window whose menu bar was used.
+   */
+  activate(itemId: string, window: BrowserWindow): void {
+    const item = this.#menu?.getMenuItemById(itemId);
+    if (!item?.enabled) return;
+
+    // MenuItem.click runs custom handlers and Electron roles alike.
+    item.click(undefined, window, window.webContents);
   }
 
   /** Rebuilds the installed menu so dynamic submenus such as Open Recent stay current. */
@@ -64,15 +100,7 @@ export class ApplicationMenu {
       const item = this.#menu.getMenuItemById(command.id);
       if (item) item.enabled = this.#isCommandEnabled(command.id);
     }
-  }
-
-  /**
-   * Builds a fresh Electron menu from the current app state.
-   *
-   * @returns a new menu instance ready to install.
-   */
-  build(): Menu {
-    return Menu.buildFromTemplate(this.template());
+    if (!isMac) this.#onMenuBarChanged();
   }
 
   /** Builds the platform-appropriate top-level menu template. */
