@@ -35,6 +35,7 @@ const { values: options } = parseArgs({
 // `editor` scenarios run on an open glyph with the render counter installed.
 const SCENARIOS = {
   scrub: { run: scrub, editor: true },
+  marquee: { run: marquee, editor: true },
   undo: { run: undoRedo, editor: true },
   open: { run: openFont, editor: false },
 };
@@ -153,6 +154,28 @@ async function scrub(page) {
         x = Math.min(right, Math.max(left, x));
       }
       await page.mouse.move(x, y);
+      await page.waitForTimeout(16);
+    }
+    await page.mouse.up();
+  });
+}
+
+/** Sweeps a selection rectangle over the glyph for `seconds` with the pointer held down. */
+async function marquee(page) {
+  const canvas = await page.locator('[data-shift-capture-target="editor"]').boundingBox();
+  if (!canvas) throw new Error("the editor canvas is not visible");
+
+  return measure(page, async () => {
+    const start = { x: canvas.x + 24, y: canvas.y + 24 };
+    const end = Date.now() + seconds * 1000;
+    let step = 0;
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    while (Date.now() < end) {
+      // Grow and shrink the rectangle across the glyph so selection keeps changing.
+      const t = (Math.sin(step / 20) + 1) / 2;
+      step++;
+      await page.mouse.move(start.x + t * (canvas.width - 48), start.y + t * (canvas.height - 48));
       await page.waitForTimeout(16);
     }
     await page.mouse.up();
@@ -490,7 +513,7 @@ function readdirSafe(directory) {
 function usage(problem) {
   console.error(`${problem}
 
-Usage: pnpm profile:desktop --font <path> [--glyph A] [--scenario scrub] [--axis Weight]
+Usage: pnpm profile:desktop --font <path> [--glyph A] [--scenario scrub|marquee|undo|open] [--axis Weight]
                             [--seconds 8] [--cpu out.cpuprofile] [--app <executable>] [--keep-open]`);
   process.exit(1);
 }

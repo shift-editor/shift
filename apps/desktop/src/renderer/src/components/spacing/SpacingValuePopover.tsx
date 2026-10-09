@@ -1,4 +1,4 @@
-import { useRef, type RefObject } from "react";
+import { useMemo, useRef, type RefObject } from "react";
 import {
   NumberField,
   NumberFieldGroup,
@@ -8,7 +8,7 @@ import {
   PopoverPortal,
   PopoverPositioner,
 } from "@shift/ui";
-import { useSignalState } from "@shift/editor/signals";
+import { computed, useSignalState } from "@shift/editor/signals";
 import LeftSidebearingIcon from "@/assets/spacing/lsb.svg";
 import RightSidebearingIcon from "@/assets/spacing/rsb.svg";
 import { SpacingTool } from "@shift/editor/tools";
@@ -30,7 +30,16 @@ interface SpacingValuePopoverProps {
  */
 export function SpacingValuePopover({ container }: SpacingValuePopoverProps) {
   const editor = useEditor();
-  const tool = useSignalState(editor.toolCell);
+  // Other tools' state changes on every pointer move; follow only the spacing tool's.
+  const spacingStateCell = useMemo(
+    () =>
+      computed(() => {
+        const tool = editor.toolCell.value;
+        return tool?.id === "spacing" ? tool : null;
+      }),
+    [editor],
+  );
+  const tool = useSignalState(spacingStateCell);
   useSignalState(editor.camera.viewCell);
   const cancelled = useRef(false);
 
