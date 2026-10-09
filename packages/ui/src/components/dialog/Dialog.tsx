@@ -9,16 +9,11 @@ export const Dialog = (props: DialogProps) => <BaseDialog.Root {...props} />;
 
 export interface DialogBackdropProps extends React.ComponentProps<typeof BaseDialog.Backdrop> {}
 
-export const DialogBackdrop = React.forwardRef<HTMLDivElement, DialogBackdropProps>(
-  ({ className, ...props }, ref) => (
-    <BaseDialog.Backdrop
-      ref={ref}
-      className={cn("fixed inset-0 z-50 bg-black/50", className)}
-      {...props}
-    />
-  ),
-);
-DialogBackdrop.displayName = "DialogBackdrop";
+export function DialogBackdrop({ className, ...props }: DialogBackdropProps) {
+  return (
+    <BaseDialog.Backdrop className={cn("fixed inset-0 z-50 bg-black/50", className)} {...props} />
+  );
+}
 
 export function DialogPortal(props: React.ComponentProps<typeof BaseDialog.Portal>) {
   const container = usePortalContainer();
@@ -27,45 +22,39 @@ export function DialogPortal(props: React.ComponentProps<typeof BaseDialog.Porta
 
 export interface DialogPopupProps extends React.ComponentProps<typeof BaseDialog.Popup> {}
 
-export const DialogPopup = React.forwardRef<HTMLDivElement, DialogPopupProps>(
-  ({ className, ...props }, ref) => (
+export function DialogPopup({ className, ...props }: DialogPopupProps) {
+  return (
     <BaseDialog.Popup
-      ref={ref}
       className={cn(
         "fixed left-1/2 top-1/5 z-50 w-full max-w-lg -translate-x-1/2 rounded-lg bg-surface shadow-lg",
         className,
       )}
       {...props}
     />
-  ),
-);
-DialogPopup.displayName = "DialogPopup";
+  );
+}
 
 export interface DialogTitleProps extends React.ComponentProps<typeof BaseDialog.Title> {}
 
-export const DialogTitle = React.forwardRef<HTMLHeadingElement, DialogTitleProps>(
-  ({ className, ...props }, ref) => (
-    <BaseDialog.Title
-      ref={ref}
-      className={cn("text-sm font-medium text-primary", className)}
+export function DialogTitle({ className, ...props }: DialogTitleProps) {
+  return (
+    <BaseDialog.Title className={cn("text-sm font-medium text-primary", className)} {...props} />
+  );
+}
+
+export function DialogClose({
+  className,
+  variant,
+  ...props
+}: React.ComponentProps<typeof BaseDialog.Close> & { variant?: "icon" }) {
+  return (
+    <BaseDialog.Close
+      className={cn(
+        variant === "icon" &&
+          "inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded text-primary/70 transition-colors hover:bg-hover hover:text-primary",
+        className,
+      )}
       {...props}
     />
-  ),
-);
-DialogTitle.displayName = "DialogTitle";
-
-export const DialogClose = React.forwardRef<
-  React.ElementRef<typeof BaseDialog.Close>,
-  React.ComponentPropsWithoutRef<typeof BaseDialog.Close> & { variant?: "icon" }
->(({ className, variant, ...props }, ref) => (
-  <BaseDialog.Close
-    ref={ref}
-    className={cn(
-      variant === "icon" &&
-        "inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded text-primary/70 transition-colors hover:bg-hover hover:text-primary",
-      className,
-    )}
-    {...props}
-  />
-));
-DialogClose.displayName = "DialogClose";
+  );
+}

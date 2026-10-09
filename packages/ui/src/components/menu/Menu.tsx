@@ -8,56 +8,44 @@ export interface MenuProps extends React.ComponentProps<typeof BaseMenu.Root> {}
 
 export const Menu = (props: MenuProps) => <BaseMenu.Root {...props} />;
 
-export interface MenuTriggerProps extends React.ComponentPropsWithoutRef<typeof BaseMenu.Trigger> {
+export interface MenuTriggerProps extends React.ComponentProps<typeof BaseMenu.Trigger> {
   /** `menubar` styles the trigger as a top-level entry in a `Menubar`. */
   variant?: "default" | "menubar";
 }
 
-export const MenuTrigger = React.forwardRef<HTMLButtonElement, MenuTriggerProps>(
-  ({ className, variant = "default", ...props }, ref) => (
+export function MenuTrigger({ className, variant = "default", ...props }: MenuTriggerProps) {
+  return (
     <BaseMenu.Trigger
-      ref={ref}
       className={cn(variant === "menubar" && menubarTriggerStyles, className)}
       {...props}
     />
-  ),
-);
-MenuTrigger.displayName = "MenuTrigger";
+  );
+}
 
 export function MenuPortal(props: React.ComponentProps<typeof BaseMenu.Portal>) {
   const container = usePortalContainer();
   return <BaseMenu.Portal container={container} {...props} />;
 }
 
-export interface MenuPositionerProps extends React.ComponentPropsWithoutRef<
-  typeof BaseMenu.Positioner
-> {}
+export interface MenuPositionerProps extends React.ComponentProps<typeof BaseMenu.Positioner> {}
 
-export const MenuPositioner = React.forwardRef<
-  React.ElementRef<typeof BaseMenu.Positioner>,
-  MenuPositionerProps
->(({ className, ...props }, ref) => (
-  <BaseMenu.Positioner ref={ref} className={cn("z-50", className)} {...props} />
-));
-MenuPositioner.displayName = "MenuPositioner";
+export function MenuPositioner({ className, ...props }: MenuPositionerProps) {
+  return <BaseMenu.Positioner className={cn("z-50", className)} {...props} />;
+}
 
-export interface MenuPopupProps extends React.ComponentPropsWithoutRef<typeof BaseMenu.Popup> {}
+export interface MenuPopupProps extends React.ComponentProps<typeof BaseMenu.Popup> {}
 
-export const MenuPopup = React.forwardRef<React.ElementRef<typeof BaseMenu.Popup>, MenuPopupProps>(
-  ({ className, ...props }, ref) => (
-    <BaseMenu.Popup ref={ref} className={cn(menuPopupStyles, className)} {...props} />
-  ),
-);
-MenuPopup.displayName = "MenuPopup";
+export function MenuPopup({ className, ...props }: MenuPopupProps) {
+  return <BaseMenu.Popup className={cn(menuPopupStyles, className)} {...props} />;
+}
 
-export interface MenuItemProps extends React.ComponentPropsWithoutRef<typeof BaseMenu.Item> {
+export interface MenuItemProps extends React.ComponentProps<typeof BaseMenu.Item> {
   variant?: "default" | "danger" | "outlined";
 }
 
-export const MenuItem = React.forwardRef<React.ElementRef<typeof BaseMenu.Item>, MenuItemProps>(
-  ({ className, variant = "default", ...props }, ref) => (
+export function MenuItem({ className, variant = "default", ...props }: MenuItemProps) {
+  return (
     <BaseMenu.Item
-      ref={ref}
       className={cn(
         menuItemStyles,
         variant === "danger" && "text-destructive data-[highlighted]:bg-destructive-hover",
@@ -67,70 +55,53 @@ export const MenuItem = React.forwardRef<React.ElementRef<typeof BaseMenu.Item>,
       )}
       {...props}
     />
-  ),
-);
-MenuItem.displayName = "MenuItem";
+  );
+}
 
-export interface MenuCheckboxItemProps extends React.ComponentPropsWithoutRef<
-  typeof BaseMenu.CheckboxItem
-> {}
+export interface MenuCheckboxItemProps extends React.ComponentProps<typeof BaseMenu.CheckboxItem> {}
 
-export const MenuCheckboxItem = React.forwardRef<
-  React.ElementRef<typeof BaseMenu.CheckboxItem>,
-  MenuCheckboxItemProps
->(({ className, ...props }, ref) => (
-  <BaseMenu.CheckboxItem ref={ref} className={cn(menuItemStyles, className)} {...props} />
-));
-MenuCheckboxItem.displayName = "MenuCheckboxItem";
+export function MenuCheckboxItem({ className, ...props }: MenuCheckboxItemProps) {
+  return <BaseMenu.CheckboxItem className={cn(menuItemStyles, className)} {...props} />;
+}
 
-export interface MenuCheckboxItemIndicatorProps extends React.ComponentPropsWithoutRef<
+export interface MenuCheckboxItemIndicatorProps extends React.ComponentProps<
   typeof BaseMenu.CheckboxItemIndicator
 > {}
 
-export const MenuCheckboxItemIndicator = React.forwardRef<
-  React.ElementRef<typeof BaseMenu.CheckboxItemIndicator>,
-  MenuCheckboxItemIndicatorProps
->(({ className, ...props }, ref) => (
-  <BaseMenu.CheckboxItemIndicator
-    ref={ref}
-    className={cn("flex items-center justify-center", className)}
-    {...props}
-  />
-));
-MenuCheckboxItemIndicator.displayName = "MenuCheckboxItemIndicator";
+export function MenuCheckboxItemIndicator({ className, ...props }: MenuCheckboxItemIndicatorProps) {
+  return (
+    <BaseMenu.CheckboxItemIndicator
+      className={cn("flex items-center justify-center", className)}
+      {...props}
+    />
+  );
+}
 
-export interface MenuSeparatorProps extends React.ComponentPropsWithoutRef<
-  typeof BaseMenu.Separator
-> {}
+export interface MenuSeparatorProps extends React.ComponentProps<typeof BaseMenu.Separator> {}
 
-export const MenuSeparator = React.forwardRef<
-  React.ElementRef<typeof BaseMenu.Separator>,
-  MenuSeparatorProps
->(({ className, ...props }, ref) => (
-  <BaseMenu.Separator
-    ref={ref}
-    className={cn("-mx-1 my-1 h-px bg-line-subtle", className)}
-    {...props}
-  />
-));
-MenuSeparator.displayName = "MenuSeparator";
+export function MenuSeparator({ className, ...props }: MenuSeparatorProps) {
+  return (
+    <BaseMenu.Separator className={cn("-mx-1 my-1 h-px bg-line-subtle", className)} {...props} />
+  );
+}
 
 export interface MenuSubmenuRootProps extends React.ComponentProps<typeof BaseMenu.SubmenuRoot> {}
 
 export const MenuSubmenuRoot = (props: MenuSubmenuRootProps) => <BaseMenu.SubmenuRoot {...props} />;
 
-export interface MenuSubmenuTriggerProps extends React.ComponentPropsWithoutRef<
+export interface MenuSubmenuTriggerProps extends React.ComponentProps<
   typeof BaseMenu.SubmenuTrigger
 > {}
 
-export const MenuSubmenuTrigger = React.forwardRef<
-  React.ElementRef<typeof BaseMenu.SubmenuTrigger>,
-  MenuSubmenuTriggerProps
->(({ className, ...props }, ref) => (
-  <BaseMenu.SubmenuTrigger
-    ref={ref}
-    className={cn(menuItemStyles, "justify-between gap-6 data-[popup-open]:bg-hover/50", className)}
-    {...props}
-  />
-));
-MenuSubmenuTrigger.displayName = "MenuSubmenuTrigger";
+export function MenuSubmenuTrigger({ className, ...props }: MenuSubmenuTriggerProps) {
+  return (
+    <BaseMenu.SubmenuTrigger
+      className={cn(
+        menuItemStyles,
+        "justify-between gap-6 data-[popup-open]:bg-hover/50",
+        className,
+      )}
+      {...props}
+    />
+  );
+}

@@ -8,83 +8,65 @@ export interface ContextMenuProps extends React.ComponentProps<typeof BaseContex
 
 export const ContextMenu = (props: ContextMenuProps) => <BaseContextMenu.Root {...props} />;
 
-export interface ContextMenuTriggerProps extends React.ComponentPropsWithoutRef<
+export interface ContextMenuTriggerProps extends React.ComponentProps<
   typeof BaseContextMenu.Trigger
 > {}
 
-export const ContextMenuTrigger = React.forwardRef<
-  React.ElementRef<typeof BaseContextMenu.Trigger>,
-  ContextMenuTriggerProps
->(({ className, ...props }, ref) => (
-  <BaseContextMenu.Trigger ref={ref} className={cn(className)} {...props} />
-));
-ContextMenuTrigger.displayName = "ContextMenuTrigger";
+export function ContextMenuTrigger({ className, ...props }: ContextMenuTriggerProps) {
+  return <BaseContextMenu.Trigger className={cn(className)} {...props} />;
+}
 
 export function ContextMenuPortal(props: React.ComponentProps<typeof BaseContextMenu.Portal>) {
   const container = usePortalContainer();
   return <BaseContextMenu.Portal container={container} {...props} />;
 }
 
-export interface ContextMenuPositionerProps extends React.ComponentPropsWithoutRef<
+export interface ContextMenuPositionerProps extends React.ComponentProps<
   typeof BaseContextMenu.Positioner
 > {}
 
-export const ContextMenuPositioner = React.forwardRef<
-  React.ElementRef<typeof BaseContextMenu.Positioner>,
-  ContextMenuPositionerProps
->(({ className, ...props }, ref) => (
-  <BaseContextMenu.Positioner ref={ref} className={cn("z-50", className)} {...props} />
-));
-ContextMenuPositioner.displayName = "ContextMenuPositioner";
+export function ContextMenuPositioner({ className, ...props }: ContextMenuPositionerProps) {
+  return <BaseContextMenu.Positioner className={cn("z-50", className)} {...props} />;
+}
 
-export interface ContextMenuPopupProps extends React.ComponentPropsWithoutRef<
-  typeof BaseContextMenu.Popup
-> {}
+export interface ContextMenuPopupProps extends React.ComponentProps<typeof BaseContextMenu.Popup> {}
 
-export const ContextMenuPopup = React.forwardRef<
-  React.ElementRef<typeof BaseContextMenu.Popup>,
-  ContextMenuPopupProps
->(({ className, ...props }, ref) => (
-  <BaseContextMenu.Popup ref={ref} className={cn(menuPopupStyles, "w-50", className)} {...props} />
-));
-ContextMenuPopup.displayName = "ContextMenuPopup";
+export function ContextMenuPopup({ className, ...props }: ContextMenuPopupProps) {
+  return <BaseContextMenu.Popup className={cn(menuPopupStyles, "w-50", className)} {...props} />;
+}
 
-export interface ContextMenuItemProps extends React.ComponentPropsWithoutRef<
-  typeof BaseContextMenu.Item
-> {
+export interface ContextMenuItemProps extends React.ComponentProps<typeof BaseContextMenu.Item> {
   variant?: "default" | "danger" | "outlined";
 }
 
-export const ContextMenuItem = React.forwardRef<
-  React.ElementRef<typeof BaseContextMenu.Item>,
-  ContextMenuItemProps
->(({ className, variant = "default", ...props }, ref) => (
-  <BaseContextMenu.Item
-    ref={ref}
-    className={cn(
-      menuItemStyles,
-      variant === "danger" && "text-destructive data-[highlighted]:bg-destructive-hover",
-      variant === "outlined" &&
-        "h-8 justify-center gap-2 border border-line-subtle bg-surface-muted hover:bg-hover data-[highlighted]:bg-hover",
-      className,
-    )}
-    {...props}
-  />
-));
-ContextMenuItem.displayName = "ContextMenuItem";
+export function ContextMenuItem({
+  className,
+  variant = "default",
+  ...props
+}: ContextMenuItemProps) {
+  return (
+    <BaseContextMenu.Item
+      className={cn(
+        menuItemStyles,
+        variant === "danger" && "text-destructive data-[highlighted]:bg-destructive-hover",
+        variant === "outlined" &&
+          "h-8 justify-center gap-2 border border-line-subtle bg-surface-muted hover:bg-hover data-[highlighted]:bg-hover",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
 
-export interface ContextMenuSeparatorProps extends React.ComponentPropsWithoutRef<
+export interface ContextMenuSeparatorProps extends React.ComponentProps<
   typeof BaseContextMenu.Separator
 > {}
 
-export const ContextMenuSeparator = React.forwardRef<
-  React.ElementRef<typeof BaseContextMenu.Separator>,
-  ContextMenuSeparatorProps
->(({ className, ...props }, ref) => (
-  <BaseContextMenu.Separator
-    ref={ref}
-    className={cn("-mx-1 my-1 h-px bg-line-subtle", className)}
-    {...props}
-  />
-));
-ContextMenuSeparator.displayName = "ContextMenuSeparator";
+export function ContextMenuSeparator({ className, ...props }: ContextMenuSeparatorProps) {
+  return (
+    <BaseContextMenu.Separator
+      className={cn("-mx-1 my-1 h-px bg-line-subtle", className)}
+      {...props}
+    />
+  );
+}

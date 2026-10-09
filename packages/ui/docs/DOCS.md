@@ -66,7 +66,7 @@ packages/ui/
 
 ## How it works
 
-Each component follows the same pattern: import the Base UI primitive, wrap it in a `React.forwardRef` (or plain function for root/provider components), apply Shift design tokens via Tailwind classes using `cn`, and forward all remaining props. Consumers never interact with Base UI directly.
+Each component follows the same pattern: import the Base UI primitive, wrap it in a plain function, apply Shift design tokens via Tailwind classes using `cn`, and forward all remaining props. Props extend `React.ComponentProps` of the primitive, so `ref` is one of them (React 19) and reaches the primitive through the spread; there is no `forwardRef`. Consumers never interact with Base UI directly.
 
 **Button** is the most opinionated component, defining seven visual variants (`default`, `ghost`, `primary`, `toolbar`, `row`, `muted`, `transparent`) and five size presets. `toolbar` owns application-toolbar icon treatment, `row` owns selectable full-width rows, `muted` owns low-emphasis actions, and `transparent` suppresses backgrounds in every interaction state. It also supports an `isActive` data attribute for toggled buttons and an `icon` slot.
 
@@ -97,11 +97,10 @@ The package also re-exports shared icons from `lucide-react` so app code does no
 1. Create `src/components/<name>/<Name>.tsx`.
 2. Import the Base UI primitive: `import { X as BaseX } from "@base-ui/react/x"`.
 3. Define a props interface extending the Base UI props, adding any Shift-specific props.
-4. Wrap the Base UI primitive with `React.forwardRef`, apply Tailwind classes via `cn`.
-5. Set `displayName` on the forwarded ref component.
-6. Create `src/components/<name>/index.ts` barrel file exporting the component and its types.
-7. Add the export to `src/index.ts`.
-8. Run `pnpm typecheck` from the package root.
+4. Wrap the Base UI primitive in a plain function whose props extend `React.ComponentProps<typeof BaseX>`, apply Tailwind classes via `cn`, and spread the remaining props (including `ref`) onto the primitive.
+5. Create `src/components/<name>/index.ts` barrel file exporting the component and its types.
+6. Add the export to `src/index.ts`.
+7. Run `pnpm typecheck` from the package root.
 
 ### Override styles from a consumer
 

@@ -3,12 +3,11 @@ import { Checkbox as BaseCheckbox } from "@base-ui/react/checkbox";
 import { Check } from "lucide-react";
 import { cn } from "../../lib/utils";
 
-export interface CheckboxProps extends React.ComponentPropsWithoutRef<typeof BaseCheckbox.Root> {}
+export interface CheckboxProps extends React.ComponentProps<typeof BaseCheckbox.Root> {}
 
-export const Checkbox = React.forwardRef<React.ElementRef<typeof BaseCheckbox.Root>, CheckboxProps>(
-  ({ className, children, ...props }, ref) => (
+export function Checkbox({ className, children, ...props }: CheckboxProps) {
+  return (
     <BaseCheckbox.Root
-      ref={ref}
       className={cn(
         "inline-flex h-3.5 w-3.5 shrink-0 cursor-pointer items-center justify-center rounded-sm",
         "border border-line-subtle bg-input text-primary outline-none",
@@ -24,22 +23,18 @@ export const Checkbox = React.forwardRef<React.ElementRef<typeof BaseCheckbox.Ro
         </BaseCheckbox.Indicator>
       )}
     </BaseCheckbox.Root>
-  ),
-);
-Checkbox.displayName = "Checkbox";
+  );
+}
 
-export interface CheckboxIndicatorProps extends React.ComponentPropsWithoutRef<
+export interface CheckboxIndicatorProps extends React.ComponentProps<
   typeof BaseCheckbox.Indicator
 > {}
 
-export const CheckboxIndicator = React.forwardRef<
-  React.ElementRef<typeof BaseCheckbox.Indicator>,
-  CheckboxIndicatorProps
->(({ className, ...props }, ref) => (
-  <BaseCheckbox.Indicator
-    ref={ref}
-    className={cn("flex items-center justify-center", className)}
-    {...props}
-  />
-));
-CheckboxIndicator.displayName = "CheckboxIndicator";
+export function CheckboxIndicator({ className, ...props }: CheckboxIndicatorProps) {
+  return (
+    <BaseCheckbox.Indicator
+      className={cn("flex items-center justify-center", className)}
+      {...props}
+    />
+  );
+}
