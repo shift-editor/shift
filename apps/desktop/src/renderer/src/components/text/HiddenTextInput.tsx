@@ -1,6 +1,6 @@
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useRef } from "react";
 import { useEditor } from "@/workspace/WorkspaceContext";
-import { computed, useSignalState } from "@shift/editor/signals";
+import { useSignalState } from "@shift/editor/signals";
 import { glyphTextItem, lineBreakTextItem, type TextItem } from "@shift/editor/text";
 
 /** Receives native text, clipboard, and IME events while a text node is active. */
@@ -8,16 +8,7 @@ export function TextInput() {
   const editor = useEditor();
   const ref = useRef<HTMLTextAreaElement>(null);
   const composing = useRef(false);
-  // Other tools' state changes on every pointer move; follow only the text tool's.
-  const textToolCell = useMemo(
-    () =>
-      computed(() => {
-        const tool = editor.toolCell.value;
-        return tool?.id === "text" ? tool : null;
-      }),
-    [editor],
-  );
-  const tool = useSignalState(textToolCell);
+  const tool = useSignalState(editor.toolCellIf("text"));
   const editing = useSignalState(editor.textEditing.stateCell);
 
   const textareaRef = useCallback((node: HTMLTextAreaElement | null) => {
@@ -25,7 +16,7 @@ export function TextInput() {
     node?.focus();
   }, []);
 
-  if (tool?.id !== "text" || tool.state.type !== "editing" || !editing) return null;
+  if (tool?.state.type !== "editing" || !editing) return null;
 
   const insertLiteral = (text: string) => {
     const items = [...text.replaceAll("\r\n", "\n")].map((char) => {

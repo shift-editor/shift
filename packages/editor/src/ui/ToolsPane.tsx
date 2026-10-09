@@ -17,11 +17,11 @@ import {
   TooltipTrigger,
   cn,
 } from "@shift/ui";
-import { useMemo, type ComponentType, type SVGProps } from "react";
+import type { ComponentType, SVGProps } from "react";
 import type { Editor } from "../lib/editor/Editor";
 import type { ToolName } from "../lib/tools/core/createContext";
 import type { ToolMenuItem } from "../lib/tools/core/ToolManifest";
-import { computed, useSignalState } from "../lib/signals";
+import { useSignalState } from "../lib/signals";
 import { ShiftIcon, type ShiftIconName } from "./ShiftIcon";
 
 type SVGIcon = ComponentType<SVGProps<SVGSVGElement>>;
@@ -161,13 +161,7 @@ function ToolSplitButton({ menuItems, onMenuItemSelect, ...buttonProps }: ToolSp
 }
 
 export function ToolsPane({ editor }: ToolsPaneProps) {
-  // The active tool's state changes on every pointer move (a marquee, a drag);
-  // the toolbar only shows which tool is active.
-  const activeToolIdCell = useMemo(
-    () => computed(() => editor.toolCell.value?.id ?? null),
-    [editor],
-  );
-  const activeTool = useSignalState(activeToolIdCell);
+  const activeTool = useSignalState(editor.toolIdCell);
   const toolRegistry = useSignalState(editor.toolRegistryCell);
 
   return (

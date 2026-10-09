@@ -203,6 +203,8 @@ export class Editor {
   #toolManager: ToolManager;
   #toolRegistry: Signal<ReadonlyMap<ToolName, ToolRegistryItem>>;
   #tool: Signal<ActiveTool | null>;
+  #toolId: Signal<ToolName | null>;
+  readonly #toolCellsById = new Map<ToolName, Signal<ActiveTool | null>>();
   #dragging: Signal<boolean>;
   #isEditing: Signal<boolean>;
   #selectionBounds: Signal<LocalBounds | null>;
@@ -370,6 +372,9 @@ export class Editor {
       },
       { name: "editor.tool" },
     );
+    this.#toolId = computed(() => this.#toolManager.activeToolCell.value?.id ?? null, {
+      name: "editor.toolId",
+    });
     this.#dragging = computed(() => this.gesture.cell.value.phase === "dragging", {
       name: "editor.dragging",
     });
@@ -442,6 +447,46 @@ export class Editor {
   /** Exposes the live active tool identity and state as one reactive value. */
   public get toolCell(): Signal<ActiveTool | null> {
     return this.#tool;
+  }
+
+  /**
+   * Exposes the active tool's identity without its state.
+   *
+   * @remarks
+   * Notifies only when the user switches tools. Readers that branch on which
+   * tool is active subscribe here instead of {@link toolCell}, whose state
+   * changes on every pointer move during a marquee or drag.
+   */
+  public get toolIdCell(): Signal<ToolName | null> {
+    return this.#toolId;
+  }
+
+  /**
+   * Exposes one tool's live state while that tool is active.
+   *
+   * @remarks
+   * Holds null while another tool is active, so readers that follow one tool
+   * ignore every other tool's state changes. The cell is created on first
+   * request and reused for the editor's lifetime.
+   *
+   * @param id - Tool identity whose state the reader follows.
+   * @returns A cell holding the active tool snapshot when its identity matches; otherwise null.
+   */
+  public toolCellIf<Id extends ToolName>(id: Id): Signal<ActiveTool<Id> | null> {
+    let cell = this.#toolCellsById.get(id);
+    if (!cell) {
+      cell = computed(
+        () => {
+          if (this.#toolId.value !== id) return null;
+
+          return this.#tool.value;
+        },
+        { name: `editor.tool.${id}` },
+      );
+      this.#toolCellsById.set(id, cell);
+    }
+
+    return cell as Signal<ActiveTool<Id> | null>;
   }
 
   /**

@@ -141,6 +141,39 @@ describe("memory font editing", () => {
     viewOnly.dispose();
   });
 
+  it("narrows the active tool to its identity and to one tool's state", () => {
+    const session = createMemoryFontSession({
+      source: memorySource(fixture()),
+      clipboard: new MemoryClipboard(),
+    });
+    const { editor } = session;
+    const toolId = editor.toolIdCell;
+    const select = editor.toolCellIf("select");
+    const hand = editor.toolCellIf("hand");
+    const modifiers = { shiftKey: false, altKey: false, metaKey: false };
+
+    editor.toolManager.handlePointerDown(editor.sceneToScreen(scenePoint(-500, 500)), modifiers);
+    editor.toolManager.handlePointerMove(editor.sceneToScreen(scenePoint(-400, 400)), modifiers, {
+      force: true,
+    });
+    editor.toolManager.flushPointerMoves();
+
+    expect(select.peek()).toBe(editor.toolCell.peek());
+    expect(select.peek()?.state.type).not.toBe("idle");
+    expect(toolId.peek()).toBe("select");
+    expect(hand.peek()).toBeNull();
+
+    editor.toolManager.handlePointerUp(editor.sceneToScreen(scenePoint(-400, 400)), modifiers);
+    editor.setActiveTool("hand");
+
+    expect(toolId.peek()).toBe("hand");
+    expect(select.peek()).toBeNull();
+    expect(hand.peek()?.id).toBe("hand");
+    expect(editor.toolCellIf("hand")).toBe(hand);
+
+    session.dispose();
+  });
+
   it("disposes a session idempotently", () => {
     const session = createMemoryFontSession({
       source: memorySource(fixture()),

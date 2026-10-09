@@ -1,4 +1,4 @@
-import { useMemo, useRef, type RefObject } from "react";
+import { useRef, type RefObject } from "react";
 import {
   NumberField,
   NumberFieldGroup,
@@ -8,7 +8,7 @@ import {
   PopoverPortal,
   PopoverPositioner,
 } from "@shift/ui";
-import { computed, useSignalState } from "@shift/editor/signals";
+import { useSignalState } from "@shift/editor/signals";
 import LeftSidebearingIcon from "@/assets/spacing/lsb.svg";
 import RightSidebearingIcon from "@/assets/spacing/rsb.svg";
 import { SpacingTool } from "@shift/editor/tools";
@@ -30,23 +30,14 @@ interface SpacingValuePopoverProps {
  */
 export function SpacingValuePopover({ container }: SpacingValuePopoverProps) {
   const editor = useEditor();
-  // Other tools' state changes on every pointer move; follow only the spacing tool's.
-  const spacingStateCell = useMemo(
-    () =>
-      computed(() => {
-        const tool = editor.toolCell.value;
-        return tool?.id === "spacing" ? tool : null;
-      }),
-    [editor],
-  );
-  const tool = useSignalState(spacingStateCell);
+  const tool = useSignalState(editor.toolCellIf("spacing"));
   useSignalState(editor.camera.viewCell);
   const cancelled = useRef(false);
 
   const spacing = editor.toolManager.activeTool;
   const hit = spacing instanceof SpacingTool ? spacing.editing : null;
   const half = hit ? hit.gap[hit.side] : null;
-  if (tool?.id !== "spacing" || !(spacing instanceof SpacingTool) || !hit || !half) return null;
+  if (!tool || !(spacing instanceof SpacingTool) || !hit || !half) return null;
 
   const anchor = {
     getBoundingClientRect: () => {

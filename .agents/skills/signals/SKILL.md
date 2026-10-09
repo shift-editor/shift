@@ -40,6 +40,7 @@ _Origin:_ `Glyph` kept component glyphs in a plain `Map` mutated in place; rende
 - Walking every entry of a font (65k in large CJK fonts) inside an effect that fires on each load is a performance bug even when it is correct. Walk the changed or loaded subset.
 
 - In React the same rule applies to context. A context whose value is built from a high-frequency signal (location, selection, metrics) re-renders **every** consumer on every change, whatever field each one reads. Read the specific cell with `useSignalState` instead, split the rarely changing field into its own context, or hold the value for subtrees that are hidden (`HeldGlyphCatalog`). A component that needs a value only on an event (opening a menu, submitting) reads `cell.peek()` in the handler instead of subscribing.
+- A reader that needs one part of a broad cell subscribes to a narrowed cell owned next to the source, not to the source with a check after it. `editor.toolCell` changes on every pointer move during a marquee or drag; readers that only branch on which tool is active use `editor.toolIdCell`, and readers that follow one tool use `editor.toolCellIf(id)`. Build such cells once on the owner rather than per component in `useMemo`, so non-React readers (`track(...)` in render passes) get them too.
 
 _Origin:_ the glyph catalog context changes with the axis location, so `Editor` and the hidden home grid re-rendered on every scrub step.
 

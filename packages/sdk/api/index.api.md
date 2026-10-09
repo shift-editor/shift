@@ -444,6 +444,8 @@ export class Editor {
     // Warning: (ae-forgotten-export) The symbol "ActiveTool" needs to be exported by the entry point index.d.ts
     get tool(): ActiveTool | null;
     get toolCell(): Signal<ActiveTool | null>;
+    toolCellIf<Id extends ToolName>(id: Id): Signal<ActiveTool<Id> | null>;
+    get toolIdCell(): Signal<ToolName | null>;
     toolIf<Id extends ToolName>(id: Id): ActiveTool<Id> | null;
     // Warning: (ae-forgotten-export) The symbol "ToolManager" needs to be exported by the entry point index.d.ts
     //
@@ -1359,10 +1361,10 @@ export function useSignalState<T>(signal: Signal<T>, options?: UseSignalOptions)
 
 // Warnings were encountered during analysis:
 //
-// dist/Editor-gt1RzXX3.d.ts:2692:5 - (ae-forgotten-export) The symbol "Axis" needs to be exported by the entry point index.d.ts
-// dist/Editor-gt1RzXX3.d.ts:2693:5 - (ae-forgotten-export) The symbol "AxisMappingBasis" needs to be exported by the entry point index.d.ts
-// dist/Editor-gt1RzXX3.d.ts:2694:5 - (ae-forgotten-export) The symbol "Source" needs to be exported by the entry point index.d.ts
-// dist/Editor-gt1RzXX3.d.ts:4495:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
+// dist/Editor-BZMmNhIb.d.ts:2692:5 - (ae-forgotten-export) The symbol "Axis" needs to be exported by the entry point index.d.ts
+// dist/Editor-BZMmNhIb.d.ts:2693:5 - (ae-forgotten-export) The symbol "AxisMappingBasis" needs to be exported by the entry point index.d.ts
+// dist/Editor-BZMmNhIb.d.ts:2694:5 - (ae-forgotten-export) The symbol "Source" needs to be exported by the entry point index.d.ts
+// dist/Editor-BZMmNhIb.d.ts:4495:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 
