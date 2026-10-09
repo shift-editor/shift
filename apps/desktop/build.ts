@@ -4,7 +4,7 @@ import { build } from "vite";
 
 const appRoot = __dirname;
 const isE2E = process.argv.includes("--e2e");
-const isProfile = process.env.SHIFT_PROFILE_BUILD === "1";
+const isProfile = process.argv.includes("--profile") || process.env.SHIFT_PROFILE_BUILD === "1";
 const nodeExternals = [
   "electron",
   "shift-bridge",

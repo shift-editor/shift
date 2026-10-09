@@ -39,6 +39,10 @@ _Origin:_ `Glyph` kept component glyphs in a plain `Map` mutated in place; rende
 - A computed that reads a coarse signal "just in case" reruns on every change to it. Read the specific cell.
 - Walking every entry of a font (65k in large CJK fonts) inside an effect that fires on each load is a performance bug even when it is correct. Walk the changed or loaded subset.
 
+- In React the same rule applies to context. A context whose value is built from a high-frequency signal (location, selection, metrics) re-renders **every** consumer on every change, whatever field each one reads. Read the specific cell with `useSignalState` instead, split the rarely changing field into its own context, or hold the value for subtrees that are hidden (`HeldGlyphCatalog`). A component that needs a value only on an event (opening a menu, submitting) reads `cell.peek()` in the handler instead of subscribing.
+
+_Origin:_ the glyph catalog context changes with the axis location, so `Editor` and the hidden home grid re-rendered on every scrub step.
+
 _Origin:_ `FontStore.glyphForId` once tracked the whole loaded-glyph map, so the scene and text layout reran on every glyph load (#454).
 
 ### 3. `.value`, `track`, and `peek`
@@ -66,6 +70,7 @@ _Origin:_ typing a character whose glyph wasn't loaded laid it out at advance 0 
 - Signals compare with `Object.is`. Mutating a value in place and re-setting the same reference notifies nobody. Build a new reference.
 - Setting a new-but-equal value notifies everyone. When a write runs on a broad trigger (every directory change, every workspace echo), compare first and skip the set — e.g. `Glyph.replaceComponentGlyphs` skips unchanged sets so directory updates don't invalidate every render model.
 - A computed that rebuilds an equal object on each run (a filtered list, a `{ nodes }` wrapper) still reads as changed under the default `Object.is`. When it sits under a broad source, give it a structural `equals` so readers don't rerun — e.g. `Scene` compares nodes by identity so selection writes to the shared store don't reach scene readers.
+- A signal written from a high-frequency path (every scrub step, pointer move, or edit) with a freshly built but equal value — `new Set([sourceId])`, a cloned array — needs an `equals` on the signal itself, so every writer is covered. _Origin:_ `setExternalLocation` rewrote `editingSourceIdsCell` on every weight-scrub step, re-rendering the variation panel and every source row.
 - Never publish an object mutated in place by re-setting it. Keep it in a plain field, bump a revision signal after each change, and hand readers a value with a new identity (a fresh view, a wrapper, or the revision itself) — see the coordinate buffers and `FontStore.committedRevisionCell`. A computed that returns the same object after a change looks unchanged and its readers will not rerun.
 
 ### 6. Effects are for side effects
