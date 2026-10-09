@@ -22,7 +22,7 @@ When library behavior or composition is unclear, inspect the installed Base UI t
 ## Architecture boundary
 
 - Check whether Base UI has a matching primitive before implementing an interactive control.
-- Shared primitives live in `packages/ui/src/components/{component}/` and wrap `@base-ui-components/react/{component}`.
+- Shared primitives live in `packages/ui/src/components/{component}/` and wrap `@base-ui/react/{component}`.
 - Application code imports shared controls from `@shift/ui`; never import Base UI directly in the desktop app.
 - Keep application state and domain behavior in the consuming app. Shared wrappers own primitive composition, reusable visual defaults, and widget-local behavior only.
 - Use the Base UI component name for its Shift wrapper: `Button`, `Menu`, `Popover`, `Tooltip`, and so on.

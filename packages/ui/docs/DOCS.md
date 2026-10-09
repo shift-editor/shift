@@ -6,7 +6,7 @@ Shared UI component library for Shift, wrapping Base UI primitives with Tailwind
 
 ## Architecture Invariants
 
-- **Architecture Invariant:** Interactive components delegate to a headless primitive library rather than reimplementing widget behavior -- `@base-ui-components/react` by default, with the Resizable family wrapping `react-resizable-panels`. This keeps accessibility, keyboard handling, and ARIA attributes with the primitive. Components may render structural wrapper elements (e.g. `Input`'s positioning `div`/`span`s) around the primitive.
+- **Architecture Invariant:** Interactive components delegate to a headless primitive library rather than reimplementing widget behavior -- `@base-ui/react` by default, with the Resizable family wrapping `react-resizable-panels`. This keeps accessibility, keyboard handling, and ARIA attributes with the primitive. Components may render structural wrapper elements (e.g. `Input`'s positioning `div`/`span`s) around the primitive.
 - **Architecture Invariant:** All application state and business logic live in the consuming app, not in this package. Components add Tailwind classes via `cn`; small self-contained interaction behavior that belongs to the widget itself is allowed (e.g. `Input`'s Cmd/Ctrl+A select-all).
 - **Architecture Invariant:** Each component lives in its own directory with a barrel `index.ts`. The package root `index.ts` re-exports everything -- consumers import from `@shift/ui`, never from deep paths.
 - **Architecture Invariant:** The `cn` utility (clsx + tailwind-merge) must be used for all className composition. This ensures Tailwind class conflicts are resolved correctly when consumers pass overrides.
@@ -92,7 +92,7 @@ The package also re-exports shared icons from `lucide-react` so app code does no
 ### Add a new component
 
 1. Create `src/components/<name>/<Name>.tsx`.
-2. Import the Base UI primitive: `import { X as BaseX } from "@base-ui-components/react/x"`.
+2. Import the Base UI primitive: `import { X as BaseX } from "@base-ui/react/x"`.
 3. Define a props interface extending the Base UI props, adding any Shift-specific props.
 4. Wrap the Base UI primitive with `React.forwardRef`, apply Tailwind classes via `cn`.
 5. Set `displayName` on the forwarded ref component.
@@ -119,7 +119,7 @@ Pass a `className` prop -- `cn` (tailwind-merge) will resolve conflicts with the
 
 ## Related
 
-- **`@base-ui-components/react`** -- the unstyled primitive library all components wrap.
+- **`@base-ui/react`** -- the unstyled primitive library all components wrap.
 - **`cn`** -- className merge utility used by every component and by consumer code (e.g., `SidebarSection`).
 - **`useToastManager`** -- Base UI hook re-exported for imperative toast creation (used in `ZoomToast`).
 - **`@shift/types`** -- domain types package (separate from UI types).

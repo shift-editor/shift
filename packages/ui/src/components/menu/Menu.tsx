@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Menu as BaseMenu } from "@base-ui-components/react/menu";
+import { Menu as BaseMenu } from "@base-ui/react/menu";
 import { cn } from "../../lib/utils";
 import { usePortalContainer } from "../portal";
 import { menubarTriggerStyles, menuItemStyles, menuPopupStyles } from "./styles";
@@ -13,16 +13,15 @@ export interface MenuTriggerProps extends React.ComponentPropsWithoutRef<typeof 
   variant?: "default" | "menubar";
 }
 
-export const MenuTrigger = React.forwardRef<
-  React.ElementRef<typeof BaseMenu.Trigger>,
-  MenuTriggerProps
->(({ className, variant = "default", ...props }, ref) => (
-  <BaseMenu.Trigger
-    ref={ref}
-    className={cn(variant === "menubar" && menubarTriggerStyles, className)}
-    {...props}
-  />
-));
+export const MenuTrigger = React.forwardRef<HTMLButtonElement, MenuTriggerProps>(
+  ({ className, variant = "default", ...props }, ref) => (
+    <BaseMenu.Trigger
+      ref={ref}
+      className={cn(variant === "menubar" && menubarTriggerStyles, className)}
+      {...props}
+    />
+  ),
+);
 MenuTrigger.displayName = "MenuTrigger";
 
 export function MenuPortal(props: React.ComponentProps<typeof BaseMenu.Portal>) {
