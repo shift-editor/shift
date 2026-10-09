@@ -1,6 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { SidebarSection } from "./SidebarSection";
-import { EditableSidebarInput, type EditableSidebarInputHandle } from "./EditableSidebarInput";
+import { SidebarNumberField } from "./SidebarNumberField";
 import { IconButton } from "./IconButton";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { useSignalState } from "@shift/editor/signals";
@@ -128,36 +128,10 @@ export const TransformSection = () => {
   const selectionBounds = useSelectionBounds();
   const [rotation, setRotation] = useState(0);
 
-  const widthRef = useRef<EditableSidebarInputHandle>(null);
-  const heightRef = useRef<EditableSidebarInputHandle>(null);
-  const xRef = useRef<EditableSidebarInputHandle>(null);
-  const yRef = useRef<EditableSidebarInputHandle>(null);
   const layer = isEditing ? null : (positionSelection?.layer ?? null);
   const editable = positionSelection !== null || componentSelection !== null;
 
-  useEffect(() => {
-    if (!editable) {
-      xRef.current?.setValue(0);
-      yRef.current?.setValue(0);
-      return;
-    }
-
-    if (!selectionBounds) return;
-
-    xRef.current?.setValue(Math.round(selectionBounds.min.x));
-    yRef.current?.setValue(Math.round(selectionBounds.min.y));
-  }, [editable, selectionBounds]);
-
-  useEffect(() => {
-    if (!widthRef.current || !heightRef.current) return;
-    if (!selectionBounds) return;
-
-    const width = Bounds.width(selectionBounds);
-    const height = Bounds.height(selectionBounds);
-
-    widthRef.current.setValue(Math.round(width));
-    heightRef.current.setValue(Math.round(height));
-  }, [selectionBounds]);
+  const shownBounds = editable ? selectionBounds : null;
 
   const handleDimensionsChange = useCallback(
     (dimension: "width" | "height", value: number) => {
@@ -303,19 +277,19 @@ export const TransformSection = () => {
       <div className="flex flex-col gap-2">
         <div className="text-ui text-secondary">Dimensions</div>
         <div className="flex gap-2">
-          <EditableSidebarInput
-            ref={widthRef}
+          <SidebarNumberField
             ariaLabel="Dimension width"
             label="W"
+            value={shownBounds ? Math.round(Bounds.width(shownBounds)) : 0}
             disabled={!editable}
-            onValueChange={(v) => handleDimensionsChange("width", v)}
+            onValueCommit={(v) => handleDimensionsChange("width", v)}
           />
-          <EditableSidebarInput
-            ref={heightRef}
+          <SidebarNumberField
             ariaLabel="Dimension height"
             label="H"
+            value={shownBounds ? Math.round(Bounds.height(shownBounds)) : 0}
             disabled={!editable}
-            onValueChange={(v) => handleDimensionsChange("height", v)}
+            onValueCommit={(v) => handleDimensionsChange("height", v)}
           />
         </div>
       </div>
@@ -323,19 +297,19 @@ export const TransformSection = () => {
       <div className="flex flex-col gap-2">
         <div className="text-ui text-secondary">Position</div>
         <div className="flex gap-2">
-          <EditableSidebarInput
-            ref={xRef}
+          <SidebarNumberField
             ariaLabel="X position"
             label="X"
+            value={shownBounds ? Math.round(shownBounds.min.x) : 0}
             disabled={!editable}
-            onValueChange={(v) => handlePositionChange("x", v)}
+            onValueCommit={(v) => handlePositionChange("x", v)}
           />
-          <EditableSidebarInput
-            ref={yRef}
+          <SidebarNumberField
             ariaLabel="Y position"
             label="Y"
+            value={shownBounds ? Math.round(shownBounds.min.y) : 0}
             disabled={!editable}
-            onValueChange={(v) => handlePositionChange("y", v)}
+            onValueCommit={(v) => handlePositionChange("y", v)}
           />
         </div>
       </div>
@@ -344,16 +318,13 @@ export const TransformSection = () => {
         <div className="text-ui text-secondary">Rotation</div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="w-24 shrink-0">
-            <EditableSidebarInput
+            <SidebarNumberField
               ariaLabel="Rotation"
-              className="bg-input pl-8"
+              label={<RotateIcon className="h-5 w-5 text-sidebar-icon" />}
               value={rotation}
-              suffix="°"
-              defaultValue={0}
+              unit="degree"
               disabled={!editable}
-              onValueChange={handleRotate}
-              iconPosition="left"
-              icon={<RotateIcon className="w-5 h-5 text-sidebar-icon" />}
+              onValueCommit={handleRotate}
             />
           </div>
           <div className="flex shrink-0 items-center gap-1">

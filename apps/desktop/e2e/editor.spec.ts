@@ -702,6 +702,28 @@ test.describe("Editor view", () => {
     await expect.poll(() => editor.selectionBounds()).toMatchObject({ x: targetX, y: targetY });
   });
 
+  test("steps a position with the arrow keys and drops typed text on Escape", async ({
+    page,
+    editor,
+  }) => {
+    await editor.selectAll();
+    const xInput = glyphProperties(page).getByLabel("X position", { exact: true });
+    const initialX = Math.round((await editor.selectionBounds()).x);
+
+    await xInput.click();
+    await xInput.press("ArrowUp");
+    await expect.poll(() => editor.selectionBounds()).toMatchObject({ x: initialX + 1 });
+    await xInput.press("Shift+ArrowUp");
+    await expect.poll(() => editor.selectionBounds()).toMatchObject({ x: initialX + 11 });
+
+    await xInput.fill(String(initialX + 500));
+    await xInput.press("Escape");
+
+    await expect(xInput).toHaveValue(String(initialX + 11));
+    await expect(xInput).not.toBeFocused();
+    expect(await editor.selectionBounds()).toMatchObject({ x: initialX + 11 });
+  });
+
   // Release geometry with Shift held or released is owned by Select.test.ts.
   // This test keeps the browser-only ordering: Shift keyup arrives before mouseup.
   test("keeps constrained drag geometry when Shift is released before mouseup", async ({

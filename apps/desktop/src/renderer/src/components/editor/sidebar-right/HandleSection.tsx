@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Vec2, type Point2D } from "@shift/geo";
 import { Point } from "@shift/glyph-state";
 import { isPointId } from "@shift/types";
-import { EditableSidebarInput } from "./EditableSidebarInput";
+import { SidebarNumberField } from "./SidebarNumberField";
 import { SidebarSection } from "./SidebarSection";
 import { useSignalEffect } from "@/hooks/useSignalEffect";
 import type { GlyphLayer } from "@shift/editor/model";
@@ -97,20 +97,18 @@ export const HandleSection = () => {
   return (
     <SidebarSection title="Handle">
       <div className="flex gap-2">
-        <EditableSidebarInput
+        <SidebarNumberField
           ariaLabel="Handle angle"
-          className="pl-8"
+          label={<RotateIcon className="h-5 w-5 text-sidebar-icon" />}
           value={roundDisplayValue(handle.angleDegrees)}
-          suffix="°"
-          iconPosition="left"
-          icon={<RotateIcon className="w-5 h-5 text-sidebar-icon" />}
-          onValueChange={handleAngleChange}
+          unit="degree"
+          onValueCommit={handleAngleChange}
         />
-        <EditableSidebarInput
+        <SidebarNumberField
           ariaLabel="Handle length"
           label="L"
           value={roundDisplayValue(handle.length)}
-          onValueChange={handleLengthChange}
+          onValueCommit={handleLengthChange}
         />
       </div>
     </SidebarSection>

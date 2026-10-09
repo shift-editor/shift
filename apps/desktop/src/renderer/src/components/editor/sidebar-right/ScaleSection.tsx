@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useMemo } from "react";
 import { SidebarSection } from "./SidebarSection";
 import { TransformGrid } from "./TransformGrid";
-import { EditableSidebarInput, type EditableSidebarInputHandle } from "./EditableSidebarInput";
+import { SidebarNumberField } from "./SidebarNumberField";
 import { useTransformOrigin } from "@/context/TransformOriginContext";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { anchorToPoint } from "@shift/editor/transform";
@@ -16,8 +16,6 @@ export const ScaleSection = () => {
   const { anchor, setAnchor } = useTransformOrigin();
   const selectionBounds = useSelectionBounds();
 
-  const widthRef = useRef<EditableSidebarInputHandle>(null);
-  const heightRef = useRef<EditableSidebarInputHandle>(null);
   const positionSelection = useMemo(
     () => editor.positionSelection(selection.ids),
     [editor, selection],
@@ -30,17 +28,6 @@ export const ScaleSection = () => {
   const isEditing = useSignalState(editor.isEditingCell);
   const layer = isEditing ? null : (positionSelection?.layer ?? null);
   const editable = positionSelection !== null || componentSelection !== null;
-
-  useEffect(() => {
-    if (!widthRef.current || !heightRef.current) return;
-    if (!selectionBounds) return;
-
-    const width = Bounds.width(selectionBounds);
-    const height = Bounds.height(selectionBounds);
-
-    widthRef.current.setValue(Math.round(width));
-    heightRef.current.setValue(Math.round(height));
-  }, [selectionBounds]);
 
   const handleSizeChange = useCallback(
     (dimension: "width" | "height", value: number) => {
@@ -108,19 +95,19 @@ export const ScaleSection = () => {
       <div className="flex flex-col gap-2">
         <div className="text-ui text-secondary">Size</div>
         <div className="flex gap-2">
-          <EditableSidebarInput
-            ref={widthRef}
+          <SidebarNumberField
             ariaLabel="Width"
-            label={<span className="text-ui text-secondary">W</span>}
+            label="W"
+            value={selectionBounds ? Math.round(Bounds.width(selectionBounds)) : 0}
             disabled={!editable}
-            onValueChange={(v) => handleSizeChange("width", v)}
+            onValueCommit={(v) => handleSizeChange("width", v)}
           />
-          <EditableSidebarInput
-            ref={heightRef}
+          <SidebarNumberField
             ariaLabel="Height"
             label="H"
+            value={selectionBounds ? Math.round(Bounds.height(selectionBounds)) : 0}
             disabled={!editable}
-            onValueChange={(v) => handleSizeChange("height", v)}
+            onValueCommit={(v) => handleSizeChange("height", v)}
           />
         </div>
       </div>
@@ -128,16 +115,16 @@ export const ScaleSection = () => {
       <div className="flex gap-4">
         <div className="flex flex-col gap-2">
           <div className="text-ui text-secondary">Scale</div>
-          <EditableSidebarInput
-            ariaLabel="Scale factor"
-            className="max-w-18 pl-7"
-            value={1}
-            suffix="x"
-            icon={<ScaleIcon className="w-3.5 h-3.5" />}
-            iconPosition="left"
-            disabled={!editable}
-            onValueChange={handleScaleChange}
-          />
+          <div className="max-w-18">
+            <SidebarNumberField
+              ariaLabel="Scale factor"
+              label={<ScaleIcon className="h-3.5 w-3.5" />}
+              value={1}
+              suffix="x"
+              disabled={!editable}
+              onValueCommit={handleScaleChange}
+            />
+          </div>
         </div>
 
         <div className="flex flex-col gap-2">
