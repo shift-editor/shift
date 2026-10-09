@@ -267,7 +267,9 @@ export class Editor {
     });
     this.#editingSourceIdsCell = signal<ReadonlySet<SourceId>>(
       initialSourceId ? new Set([initialSourceId]) : new Set(),
-      { name: "editor.sources.editing" },
+      // Location changes rewrite this set on every scrub step; only a different
+      // set of sources should re-render the source lists that read it.
+      { name: "editor.sources.editing", equals: sameSourceIds },
     );
     this.#multiSourceEditing = new MultiSourceEditing(
       this.font,
@@ -2223,4 +2225,10 @@ function targetNode(scene: Scene, target: PointerTarget): ShiftNode | null {
     case "component":
       return scene.node(target.nodeId);
   }
+}
+
+function sameSourceIds(a: ReadonlySet<SourceId>, b: ReadonlySet<SourceId>): boolean {
+  if (a.size !== b.size) return false;
+  for (const id of a) if (!b.has(id)) return false;
+  return true;
 }

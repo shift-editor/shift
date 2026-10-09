@@ -89,6 +89,8 @@ export class App {
   /** Launchers a font open is replacing; they stop receiving recents so no half-ready card flashes. */
   #replacedLaunchers = new WeakSet<Window>();
   #pendingOpenPaths: string[] = [];
+  /** The menu bar last sent to renderers, serialized, so unchanged refreshes are skipped. */
+  #publishedMenuBar: string | null = null;
   #previewConversions = new Map<string, Promise<void>>();
   #documentCrashDecisions = new Map<string, Promise<void>>();
 
@@ -922,6 +924,12 @@ export class App {
 
   #publishMenuBar(): void {
     const bar = this.#applicationMenu.menuBar();
+    // Command states refresh after every command, including each edit; only an
+    // actual change should re-render the drawn menus in every window.
+    const serialized = JSON.stringify(bar);
+    if (serialized === this.#publishedMenuBar) return;
+    this.#publishedMenuBar = serialized;
+
     for (const window of this.#windows.allWindows()) {
       if (window.window.isDestroyed()) continue;
       ipc.send(window.window.webContents, "menu.barChanged", bar);
