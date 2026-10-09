@@ -14,6 +14,8 @@ import { parseArgs } from "node:util";
 import { createRequire } from "node:module";
 import { spawn } from "node:child_process";
 import { chromium } from "@playwright/test";
+// Shared with the render-budget E2E spec; `pnpm profile:desktop` runs this under tsx.
+import { renderCounterInitScript } from "../apps/desktop/e2e/fixtures/renderCounter.mts";
 
 const require = createRequire(import.meta.url);
 const repoRoot = path.resolve(import.meta.dirname, "..");
@@ -76,7 +78,7 @@ try {
     await openGlyphByName(page, options.glyph);
 
     // React reads the DevTools hook once, at startup, so install it and reload.
-    await page.context().addInitScript({ content: `(${installRenderCounter.toString()})()` });
+    await page.context().addInitScript({ content: renderCounterInitScript() });
     await page.reload();
     await page.waitForFunction(() => window.shift?.font && window.__shiftRenders, null, {
       timeout: 120_000,
@@ -211,6 +213,10 @@ async function measure(page, drive) {
 
 /** Times launch to font loaded, first grid frame, and every glyph resident. */
 async function openFont(page) {
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Profiler.enable");
+  await cdp.send("Profiler.setSamplingInterval", { interval: 200 });
+  await cdp.send("Profiler.start");
   const milestones = {};
   const deadline = Date.now() + 180_000;
   while (Date.now() < deadline && !milestones["all glyphs resident"]) {
@@ -232,7 +238,8 @@ async function openFont(page) {
     if (state.resident) milestones["all glyphs resident"] ??= `${elapsed} (${state.glyphs} glyphs)`;
     await page.waitForTimeout(50);
   }
-  return { milestones };
+  const { profile } = await cdp.send("Profiler.stop");
+  return { milestones, cpuProfile: profile };
 }
 
 /** Edits every point of the glyph, then times repeated undo and redo round trips. */
@@ -275,6 +282,7 @@ function printReport({ frames, renders, milestones, timings }) {
   if (milestones) {
     for (const [name, at] of Object.entries(milestones))
       console.log(`${String(at).padStart(8)}ms  ${name}`);
+    if (process.env.PROFILE_LOG) console.log(`\nApp output:\n${appOutput.join("\n")}`);
     const atlas = appOutput.filter((line) => line.includes("slug-atlas"));
     if (atlas.length) console.log(`\nAtlas acquisition (main process):\n${atlas.join("\n")}`);
     return;
@@ -350,7 +358,7 @@ function sourceMapper(profile) {
   const assets = path.join(desktopRoot, ".vite/renderer/main_window/assets");
   const maps = new Map();
   const mapFor = (url) => {
-    const file = path.basename(new URL(url).pathname);
+    const file = path.basename(url.split(/[?#]/)[0]);
     if (!maps.has(file)) {
       const mapPath = path.join(assets, `${file}.map`);
       maps.set(file, existsSync(mapPath) ? new TraceMap(readFileSync(mapPath, "utf8")) : null);
@@ -372,104 +380,6 @@ function sourceMapper(profile) {
       .replace(/^.*node_modules\/(\.pnpm\/[^/]+\/node_modules\/)?/, "node_modules/")
       .replace(/^(\.\.\/)+/, "");
     return `${original.name ?? functionName ?? "(anonymous)"} ${source}:${original.line}`;
-  };
-}
-
-/**
- * Counts component renders per React commit, attributing each re-rendered
- * subtree to the hook state or context change that started it. Runs in the page.
- */
-function installRenderCounter() {
-  const COMPONENT_TAGS = new Set([0, 1, 11, 14, 15]);
-  const PERFORMED_WORK = 1;
-  const starts = new Map();
-  const state = { active: false, commits: 0, renders: 0 };
-  const nameOf = (fiber) => {
-    const type = fiber.type;
-    if (!type || typeof type === "string") return null;
-    const inner = type.render || type.type || type;
-    return type.displayName || inner.displayName || inner.name || null;
-  };
-  const contextName = (dependency) => {
-    if (dependency.context.displayName) return dependency.context.displayName;
-    const value = dependency.memoizedValue;
-    if (value && typeof value === "object") return `{${Object.keys(value).slice(0, 4).join(",")}}`;
-    return typeof value;
-  };
-  const reasons = (fiber) => {
-    const previous = fiber.alternate;
-    const found = [];
-    // Hook slots, in order. useSignalState (useSyncExternalStore) takes two slots.
-    if (fiber.tag !== 1) {
-      let a = previous.memoizedState;
-      let b = fiber.memoizedState;
-      for (let slot = 0; a && b && slot < 100; slot++) {
-        const value = b.memoizedState;
-        const isEffect = value && typeof value === "object" && "deps" in value && "create" in value;
-        if (!isEffect && b.queue && !Object.is(a.memoizedState, value)) found.push(`hook#${slot}`);
-        a = a.next;
-        b = b.next;
-      }
-    }
-    let a = previous.dependencies?.firstContext;
-    let b = fiber.dependencies?.firstContext;
-    for (; a && b; a = a.next, b = b.next) {
-      if (!Object.is(a.memoizedValue, b.memoizedValue)) found.push(`context ${contextName(b)}`);
-    }
-    return found.join(" ") || "?";
-  };
-  // React leaves PerformedWork set on fibers in subtrees it skipped, so only walk
-  // into children it reconciled this commit (their child pointer changed).
-  const visit = (first, parentRendered) => {
-    for (let fiber = first; fiber; fiber = fiber.sibling) {
-      const mounted = !fiber.alternate;
-      const isComponent = COMPONENT_TAGS.has(fiber.tag);
-      const rendered = isComponent && (mounted || (fiber.flags & PERFORMED_WORK) !== 0);
-      if (rendered) {
-        state.renders++;
-        if (!parentRendered) {
-          const key = `${nameOf(fiber) ?? "(anonymous)"}  ←  ${mounted ? "mount" : reasons(fiber)}`;
-          starts.set(key, (starts.get(key) ?? 0) + 1);
-        }
-      }
-      if (fiber.child && (mounted || fiber.child !== fiber.alternate.child)) {
-        visit(fiber.child, isComponent ? rendered : parentRendered);
-      }
-    }
-  };
-
-  const hook = (window.__REACT_DEVTOOLS_GLOBAL_HOOK__ ??= {
-    renderers: new Map(),
-    supportsFiber: true,
-    inject(renderer) {
-      const id = this.renderers.size + 1;
-      this.renderers.set(id, renderer);
-      return id;
-    },
-    onScheduleFiberRoot() {},
-    onCommitFiberUnmount() {},
-    onPostCommitFiberRoot() {},
-  });
-  hook.onCommitFiberRoot = (_id, root) => {
-    if (!state.active) return;
-    state.commits++;
-    const current = root.current;
-    if (current.alternate && current.child === current.alternate.child) return;
-    visit(current.child, false);
-  };
-  window.__shiftRenders = {
-    start() {
-      starts.clear();
-      Object.assign(state, { active: true, commits: 0, renders: 0 });
-    },
-    stop() {
-      state.active = false;
-      return {
-        commits: state.commits,
-        perCommit: Math.round(state.renders / Math.max(1, state.commits)),
-        starts: [...starts].sort((a, b) => b[1] - a[1]).slice(0, 25),
-      };
-    },
   };
 }
 

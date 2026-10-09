@@ -62,5 +62,6 @@ A `.shift` document opens with a recovery overlay: every table is read through a
 ## 4. Prove it
 
 - Rerun the exact same `profile:desktop` command and report before/after numbers in the commit message.
+- A React re-render regression gets a budget in `apps/desktop/e2e/render-budget.spec.ts` (visual project, so it runs in CI without a GPU). It counts mean component renders per commit during a weight scrub and a marquee with the same counter as `profile:desktop` (`e2e/fixtures/renderCounter.mts`); a failure lists what started the renders. Budgets sit about 15% over the measured value, so a new subscription on those paths must raise one on purpose.
 - If the problem can regress silently, add or extend a spec in `apps/desktop/e2e/perf.spec.ts` (`pnpm --filter @shift/desktop test:e2e:perf`, run through the `shift-remote-e2e` skill rather than on a user's desktop). It records p50/p95 against `perf-baseline.json`.
 - Note in the commit which platform you measured on; Linux and Windows can be several times slower than macOS for the same code, so "fast on my Mac" proves nothing.
