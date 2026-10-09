@@ -72,6 +72,14 @@ jobs:
         if: steps.native-cache.outputs.cache-hit != 'true'
         run: pnpm build:native:e2e
 
+      # Parallel workers start several apps at once. On a fresh runner the first concurrent
+      # launches can map a partly loaded Electron framework and abort in dyld, so load it once
+      # before the tests start.
+      - name: Load Electron
+        env:
+          ELECTRON_RUN_AS_NODE: "1"
+        run: pnpm --dir apps/desktop exec electron -e "0"
+
       # Only tests that own a golden run; fixtures/snapshots.ts fails any golden captured
       # in an untagged test, so none is skipped here. CI on the pushed commit compares
       # the new baselines.
