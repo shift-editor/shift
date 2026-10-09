@@ -8,6 +8,14 @@ import { invoke, listen } from "../shared/ipc/renderer";
 
 const shiftHost: ShiftHost = {
   platform: process.platform,
+  agent: {
+    connect: invoke(ipcRenderer, "agent.connect"),
+  },
+  agentConnections: {
+    state: invoke(ipcRenderer, "agentConnections.state"),
+    setAllowed: invoke(ipcRenderer, "agentConnections.setAllowed"),
+    onChanged: listen(ipcRenderer, "agentConnections.changed"),
+  },
   commands: {
     run: invoke(ipcRenderer, "commands.run"),
     onRunRendererCommand: listen(ipcRenderer, "commands.runRenderer"),
@@ -64,6 +72,10 @@ const shiftHost: ShiftHost = {
 contextBridge.exposeInMainWorld("shiftHost", shiftHost);
 
 // MessagePorts cannot cross the context bridge; relay them into the page.
+ipcRenderer.on("agent.port", (event: IpcRendererEvent) => {
+  window.postMessage({ type: "agent.port" }, "*", event.ports);
+});
+
 ipcRenderer.on("session.port", (event: IpcRendererEvent) => {
   window.postMessage({ type: "session.port" }, "*", event.ports);
 });

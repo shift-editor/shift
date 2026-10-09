@@ -9,6 +9,7 @@ import {
   type Rectangle,
   type WebContents,
 } from "electron";
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { Window } from "../windows/Window";
 import { getRendererSource } from "../utils";
@@ -32,8 +33,19 @@ import { shiftProductName } from "../release";
 import { AppUpdater } from "../update/AppUpdater";
 import { isConvertiblePreviewPath } from "../../shared/workspace/previewConversion";
 import { FONT_FOLDER_EXTENSIONS, OPEN_FONT_EXTENSIONS } from "../../shared/openFontExtensions";
-import { RecentDocuments } from "../recents/RecentDocuments";
+import { ShiftMcpServer } from "@shift/mcp";
+import type {
+  EditorInspection,
+  FontRevision,
+  ShiftCapture,
+  ShiftCaptureInput,
+  ShiftObservation,
+  ShiftSession,
+} from "@shift/runtime";
 import type { RecentDocumentVisit } from "../../shared/recents";
+import { RecentDocuments } from "../recents/RecentDocuments";
+import { SandboxRuntimeProcess } from "../sandbox/SandboxRuntimeProcess";
+import { AgentConnections } from "../agent/AgentConnections";
 
 const SLUG_ATLAS_PROFILING_ENABLED =
   process.env.SHIFT_PROFILE_SLUG_ATLAS !== undefined &&
@@ -66,6 +78,8 @@ export class App {
   readonly #updater: AppUpdater;
 
   #commands = new CommandRegistry();
+  #agentConnections: AgentConnections | null = null;
+  #sandbox: SandboxRuntimeProcess | null = null;
   #windows = new WindowManager();
   #workspaces: WorkspaceManager;
   #documentsRoot: string | null = null;
@@ -226,6 +240,8 @@ export class App {
         path.join(app.getPath("userData"), "recent-documents.json"),
       );
       this.#recents.onChanged(() => this.#publishRecents());
+      await this.#startSandbox();
+      await this.#startAgentConnections();
 
       // Taken before recovery, which marks the documents it restores open again.
       const openAtLastExit = this.#recents.takeOpen();
@@ -270,6 +286,8 @@ export class App {
     });
     app.on("will-quit", () => {
       this.#log.info("will quit: disposing app services");
+      void this.#agentConnections?.shutdown();
+      this.#stopSandbox();
       // Only an ordinary quit forgets open documents; an update restart reopens them.
       if (this.#lifecycle.quitReason === "quit") this.#recents?.clearOpen();
       for (const session of this.#workspaces.list()) {
@@ -314,6 +332,7 @@ export class App {
         this.#log.info("working window closed");
         const session = this.#workspaces.getForBrowserWindow(window.window);
         this.#workspaces.detachWindow(window);
+        window.agent.dispose();
         if (session?.windows.size === 0) this.#endSession(session);
         this.#windows.remove(window);
         this.#applicationMenu.updateCommandStates();
@@ -487,6 +506,18 @@ export class App {
   }
 
   #registerIpcHandlers(): void {
+    ipc.handle(ipcMain, "agentConnections.state", () => this.#requireAgentConnections().state);
+    ipc.handle(ipcMain, "agentConnections.setAllowed", async (_event, allowed) => {
+      const connections = this.#requireAgentConnections();
+      await connections.setAllowed(allowed === true);
+      return connections.state;
+    });
+    ipc.handle(ipcMain, "agent.connect", (event) => {
+      const window = this.#requireWindowForWebContents(event.sender);
+      const { port1, port2 } = new MessageChannelMain();
+      window.agent.connect(port1);
+      event.sender.postMessage("agent.port", null, [port2]);
+    });
     ipc.handle(ipcMain, "commands.run", async (event, id) => {
       const window = this.#requireWindowForWebContents(event.sender);
       try {
@@ -939,6 +970,212 @@ export class App {
     launcher.close();
   }
 
+  /** Starts the app-owned execution process independently of MCP availability. */
+  async #startSandbox(): Promise<void> {
+    const sandbox = new SandboxRuntimeProcess({
+      capture: (input) => this.#capture(input),
+      sessions: {
+        list: () => Promise.resolve(this.#agentSessions()),
+      },
+      editor: {
+        inspect: ({ windowId, ifFontRevision }) => this.#inspectEditor(windowId, ifFontRevision),
+      },
+      font: {
+        get: ({ windowId, ifFontRevision }) =>
+          this.#windowForAgentRequest(windowId).agent.getFont(ifFontRevision),
+      },
+      locations: {
+        resolve: ({ windowId, location, ifFontRevision }) =>
+          this.#windowForAgentRequest(windowId).agent.resolveLocation(location, ifFontRevision),
+      },
+      glyphs: {
+        list: ({ windowId, limit, cursor, sourceId, ifFontRevision }) =>
+          this.#windowForAgentRequest(windowId).agent.listGlyphs({
+            limit,
+            cursor,
+            sourceId,
+            ifFontRevision,
+          }),
+        get: ({ windowId, ifFontRevision, ...selector }) =>
+          this.#windowForAgentRequest(windowId).agent.getGlyph(selector, ifFontRevision),
+        resolve: ({ windowId, glyphIds, location, ifFontRevision }) =>
+          this.#windowForAgentRequest(windowId).agent.resolveGlyphs(
+            glyphIds,
+            location,
+            ifFontRevision,
+          ),
+      },
+      layers: {
+        get: ({ windowId, layerId, ifFontRevision }) =>
+          this.#windowForAgentRequest(windowId).agent.getLayer(layerId, ifFontRevision),
+        resolve: ({ windowId, layerId, ifFontRevision }) =>
+          this.#windowForAgentRequest(windowId).agent.resolveLayer(layerId, ifFontRevision),
+        render: ({ windowId, layerId, overlays, appearance, ifFontRevision }) =>
+          this.#windowForAgentRequest(windowId).agent.renderLayer(
+            layerId,
+            overlays,
+            appearance,
+            ifFontRevision,
+          ),
+      },
+    });
+    this.#sandbox = sandbox;
+    try {
+      await sandbox.start();
+    } catch (error) {
+      sandbox.stop();
+      this.#log.error("failed to start sandbox", error);
+    }
+  }
+
+  async #startAgentConnections(): Promise<void> {
+    const sandbox = this.#sandbox;
+    if (!sandbox) throw new Error("Sandbox runtime was not initialized");
+
+    const { port, serverName } = agentEndpoint(app.getName());
+    const testing = process.env.NODE_ENV === "test";
+    const connections = new AgentConnections({
+      settingsPath: path.join(app.getPath("userData"), "agent-connections.json"),
+      serverName,
+      port: testing ? 0 : port,
+      createServer: (onActivity) =>
+        new ShiftMcpServer({
+          execute: (code) => sandbox.execute(code),
+          capture: (input) => this.#capture(input),
+          port: testing ? 0 : port,
+          serverInfo: { name: serverName, version: app.getVersion() },
+          logger: createShiftLogger("app.mcp"),
+          onActivity,
+        }),
+      log: createShiftLogger("app.agentConnections"),
+    });
+    connections.onChanged((state) => {
+      for (const window of this.#windows.allWindows()) {
+        if (window.window.isDestroyed()) continue;
+        ipc.send(window.window.webContents, "agentConnections.changed", state);
+      }
+    });
+    this.#agentConnections = connections;
+    await connections.resume();
+  }
+
+  #requireAgentConnections(): AgentConnections {
+    if (!this.#agentConnections) throw new Error("Agent connections are not ready yet");
+    return this.#agentConnections;
+  }
+
+  #stopSandbox(): void {
+    this.#sandbox?.stop();
+    this.#sandbox = null;
+  }
+
+  #agentSessions(): ShiftSession[] {
+    const focusedWindowId = BrowserWindow.getFocusedWindow()?.id ?? null;
+    const sessions: ShiftSession[] = [];
+
+    for (const window of this.#windows.allWindows()) {
+      const session = this.#workspaces.getForBrowserWindow(window.window);
+      if (!session) continue;
+
+      sessions.push({
+        windowId: window.window.id,
+        sessionId: session.sessionId,
+        mode: session.mode,
+        focused: window.window.id === focusedWindowId,
+        editorConnected: window.agent.connected,
+      });
+    }
+
+    return sessions;
+  }
+
+  async #inspectEditor(
+    windowId: number,
+    ifFontRevision?: FontRevision,
+  ): Promise<ShiftObservation<EditorInspection>> {
+    const window = this.#windows.windowForId(windowId);
+    if (!window) throw new Error(`Shift window ${windowId} is not open`);
+
+    const session = this.#workspaces.getForBrowserWindow(window.window);
+    if (!session) throw new Error(`Shift window ${windowId} has no font session`);
+
+    const { fontRevision, value: editor } = await window.agent.inspectEditor(ifFontRevision);
+    return {
+      fontRevision,
+      value: {
+        ...editor,
+        windowId,
+        sessionId: session.sessionId,
+        mode: session.mode,
+      },
+    };
+  }
+
+  async #capture({
+    windowId,
+    target,
+    scale = 1,
+    ifFontRevision,
+  }: ShiftCaptureInput): Promise<ShiftObservation<ShiftCapture>> {
+    const owner = this.#windowForAgentRequest(windowId);
+    const fontRevision = await owner.agent.fontRevision(ifFontRevision);
+    const browserWindow = owner.window;
+    const webContents = browserWindow.webContents;
+    let rectangle: Rectangle | undefined;
+    const content = browserWindow.getContentBounds();
+    let logicalSize = { width: content.width, height: content.height };
+
+    if (target === "editor") {
+      const bounds = await owner.agent.editorCaptureBounds();
+      const zoom = webContents.getZoomFactor();
+      const x = Math.max(0, Math.floor(bounds.x * zoom));
+      const y = Math.max(0, Math.floor(bounds.y * zoom));
+      const width = Math.min(content.width - x, Math.ceil(bounds.width * zoom));
+      const height = Math.min(content.height - y, Math.ceil(bounds.height * zoom));
+      if (width <= 0 || height <= 0) throw new Error("The Shift editor capture area is empty");
+      rectangle = { x, y, width, height };
+      logicalSize = { width, height };
+    }
+
+    const captured = await webContents.capturePage(rectangle);
+    if (captured.isEmpty()) throw new Error(`Shift window ${windowId} produced an empty capture`);
+    const outputSize = {
+      width: Math.max(1, Math.round(logicalSize.width * scale)),
+      height: Math.max(1, Math.round(logicalSize.height * scale)),
+    };
+    const capturedSize = captured.getSize();
+    const image =
+      capturedSize.width === outputSize.width && capturedSize.height === outputSize.height
+        ? captured
+        : captured.resize({ ...outputSize, quality: "best" });
+    const size = image.getSize();
+
+    await owner.agent.fontRevision(fontRevision);
+    return {
+      fontRevision,
+      value: {
+        captureId: randomUUID(),
+        windowId,
+        target,
+        mimeType: "image/png",
+        data: image.toPNG().toString("base64"),
+        width: size.width,
+        height: size.height,
+        scale,
+        capturedAt: new Date().toISOString(),
+      },
+    };
+  }
+
+  #windowForAgentRequest(windowId: number): Window {
+    const window = this.#windows.windowForId(windowId);
+    if (!window) throw new Error(`Shift window ${windowId} is not open`);
+    if (!this.#workspaces.getForBrowserWindow(window.window)) {
+      throw new Error(`Shift window ${windowId} has no font session`);
+    }
+    return window;
+  }
+
   #fontSessionForSender(sender: WebContents, operation: string): FontSessionHost {
     const window = this.#requireWindowForWebContents(sender);
     const session = this.#workspaces.getForBrowserWindow(window.window);
@@ -981,4 +1218,20 @@ function launcherBounds(): Rectangle {
     width,
     height,
   };
+}
+
+/** The fixed MCP port and server name for each Shift build. */
+function agentEndpoint(appName: string): { port: number; serverName: string } {
+  switch (appName) {
+    case "Shift":
+      return { port: 17461, serverName: "shift" };
+    case "Shift Nightly":
+      return { port: 17462, serverName: "shift-nightly" };
+    case "Shift Dev":
+      return { port: 17463, serverName: "shift-dev" };
+    case "Shift Nightly Dev":
+      return { port: 17464, serverName: "shift-nightly-dev" };
+    default:
+      throw new Error(`Unknown Shift distribution: ${appName}`);
+  }
 }

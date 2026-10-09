@@ -1,5 +1,4 @@
 import type { CursorType, ToolRegistryItem } from "../../types/editor";
-import type { FontSessionMode } from "@shift/types";
 import {
   isAnchorId,
   isContourId,
@@ -17,11 +16,15 @@ import {
   type GlyphName,
   type GlyphRecord,
   type Unicode,
+  type FontSessionMode,
   type LayerId,
   type LayerMatch,
   type NodeId,
+  type SegmentId,
+  type SelectableId,
+  type ShiftId,
 } from "@shift/types";
-import { isSegmentId, type SegmentId } from "@shift/glyph-state";
+import { isSegmentId } from "@shift/glyph-state";
 import type { ExternalAxisLocation } from "../../types/variation";
 import type { SourceSelectionMode } from "../../types/sourceSelection";
 import type {
@@ -104,7 +107,7 @@ import type { PointerTarget } from "../../types/target";
 import type { ComponentTransformSelection } from "../../types/componentTransform";
 import type { ComponentTargets } from "../../types/componentTargets";
 import type { PositionSelection } from "../../types/positionEdit";
-import type { SelectableId, ShiftId, ShiftObject } from "../../types/object";
+import type { ShiftObject } from "../../types/object";
 import type { ShiftEditorRecord, ShiftRecordId } from "../../types/records";
 import type { GlyphNode, NodeKind, ShiftNode } from "../../types/node";
 import {

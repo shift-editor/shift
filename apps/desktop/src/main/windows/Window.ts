@@ -1,6 +1,7 @@
 import { BrowserWindow, type BrowserWindowConstructorOptions } from "electron";
 import * as ipc from "../../shared/ipc/main";
 import type { RendererCommandId } from "../../shared/commands";
+import { AgentClient } from "../agent/AgentClient";
 import type { TitleBarColors } from "../../shared/menu/types";
 
 export interface WindowOptions {
@@ -83,6 +84,8 @@ const BROWSER_WINDOW_DEFAULT_OPTIONS: BrowserWindowConstructorOptions = {
 };
 
 export class Window {
+  readonly agent = new AgentClient();
+
   #window: BrowserWindow;
   #maximiseOnPresent: boolean;
   readonly #titleBarHeight: number;

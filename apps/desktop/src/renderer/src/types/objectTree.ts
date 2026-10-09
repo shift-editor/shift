@@ -1,4 +1,5 @@
-import type { ListSelectionMode, SelectableId } from "@shift/editor/types";
+import type { ListSelectionMode } from "@shift/editor/types";
+import type { SelectableId } from "@shift/types";
 
 export type ObjectTreeIcon =
   | "anchor"

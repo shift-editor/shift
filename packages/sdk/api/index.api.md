@@ -4,6 +4,138 @@
 
 ```ts
 
+// @public
+export interface AffineTransformation {
+    // (undocumented)
+    dx: number;
+    // (undocumented)
+    dy: number;
+    // (undocumented)
+    xx: number;
+    // (undocumented)
+    xy: number;
+    // (undocumented)
+    yx: number;
+    // (undocumented)
+    yy: number;
+}
+
+// @public
+export interface AuthoredAnchor {
+    // Warning: (ae-forgotten-export) The symbol "AnchorId" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    id: AnchorId;
+    // (undocumented)
+    name: string | null;
+    // (undocumented)
+    x: number;
+    // (undocumented)
+    y: number;
+}
+
+// @public
+export interface AuthoredComponent {
+    // (undocumented)
+    baseGlyphId: GlyphId;
+    // (undocumented)
+    baseGlyphName: string;
+    // Warning: (ae-forgotten-export) The symbol "ComponentId" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    id: ComponentId;
+    // (undocumented)
+    transformation: AffineTransformation;
+}
+
+// @public
+export interface AuthoredContour {
+    // (undocumented)
+    closed: boolean;
+    // Warning: (ae-forgotten-export) The symbol "ContourId" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    id: ContourId;
+    // (undocumented)
+    points: AuthoredPoint[];
+}
+
+// @public
+export interface AuthoredLayer {
+    // (undocumented)
+    advanceWidth: number;
+    // (undocumented)
+    anchors: AuthoredAnchor[];
+    // Warning: (ae-forgotten-export) The symbol "Bounds" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    bounds: Bounds | null;
+    // (undocumented)
+    components: AuthoredComponent[];
+    // (undocumented)
+    contours: AuthoredContour[];
+    // (undocumented)
+    glyphId: GlyphId;
+    // Warning: (ae-forgotten-export) The symbol "LayerId" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    layerId: LayerId;
+    // (undocumented)
+    sourceId: SourceId;
+}
+
+// @public
+export interface AuthoredPoint {
+    // Warning: (ae-forgotten-export) The symbol "PointId" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    id: PointId;
+    // Warning: (ae-forgotten-export) The symbol "PointType" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    pointType: PointType;
+    // (undocumented)
+    smooth: boolean;
+    // (undocumented)
+    x: number;
+    // (undocumented)
+    y: number;
+}
+
+// @public
+export interface AxisCoordinate {
+    // Warning: (ae-forgotten-export) The symbol "AxisId" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    axisId: AxisId;
+    // (undocumented)
+    value: number;
+}
+
+// @public
+export interface BoundsCorner {
+    // (undocumented)
+    x: number;
+    // (undocumented)
+    y: number;
+}
+
+// @public
+export interface ComponentTransform {
+    // (undocumented)
+    dx: number;
+    // (undocumented)
+    dy: number;
+    // (undocumented)
+    xx: number;
+    // (undocumented)
+    xy: number;
+    // (undocumented)
+    yx: number;
+    // (undocumented)
+    yy: number;
+}
+
 // Warning: (ae-forgotten-export) The symbol "ComputedOptions" needs to be exported by the entry point index.d.ts
 // Warning: (ae-forgotten-export) The symbol "ComputedSignal" needs to be exported by the entry point index.d.ts
 //
@@ -27,7 +159,15 @@ export class Designspace {
     });
     // (undocumented)
     get axes(): readonly Axis[];
+    coordinates(location: ExternalAxisLocation | DesignAxisLocation): {
+        axisId: AxisId;
+        value: number;
+    }[];
     defaultLocation(): ExternalAxisLocation;
+    location(coordinates: readonly {
+        axisId: AxisId;
+        value: number;
+    }[]): ExternalAxisLocation;
     nearestSource(location: ExternalAxisLocation): Source | null;
     // (undocumented)
     source(sourceId: SourceId): Source | null;
@@ -63,7 +203,6 @@ export class Editor {
     get camera(): Camera;
     canDecomposeSelection(): boolean;
     collapseEditingSources(): boolean;
-    // Warning: (ae-forgotten-export) The symbol "SelectableId" needs to be exported by the entry point index.d.ts
     // Warning: (ae-forgotten-export) The symbol "ComponentTransformSelection" needs to be exported by the entry point index.d.ts
     componentTransformSelection(ids: readonly SelectableId[]): ComponentTransformSelection | null;
     // Warning: (ae-forgotten-export) The symbol "ShiftContent" needs to be exported by the entry point index.d.ts
@@ -71,7 +210,6 @@ export class Editor {
     copy(): Promise<boolean>;
     // Warning: (ae-forgotten-export) The symbol "GlyphName" needs to be exported by the entry point index.d.ts
     createGlyph(name: GlyphName): GlyphRecord;
-    // Warning: (ae-forgotten-export) The symbol "ComponentId" needs to be exported by the entry point index.d.ts
     createGlyphAndAddComponent(name: GlyphName): Promise<ComponentId | null>;
     // Warning: (ae-forgotten-export) The symbol "Unicode" needs to be exported by the entry point index.d.ts
     createGlyphsForUnicodes(unicodes: readonly Unicode[]): GlyphRecord[];
@@ -114,7 +252,6 @@ export class Editor {
     //
     // (undocumented)
     readonly editing: Editing;
-    // Warning: (ae-forgotten-export) The symbol "LayerId" needs to be exported by the entry point index.d.ts
     // Warning: (ae-forgotten-export) The symbol "LayerMatch" needs to be exported by the entry point index.d.ts
     get editingLayerMatchesCell(): Signal<ReadonlyMap<LayerId, LayerMatch>>;
     // (undocumented)
@@ -160,8 +297,6 @@ export class Editor {
     getToolState(scope: ToolStateScope, toolId: string, key: string): unknown;
     glyphForId(glyphId: GlyphId): Glyph | null;
     handlesVisible(id: PointId | ContourId, contourId?: ContourId): boolean;
-    // Warning: (ae-forgotten-export) The symbol "PointId" needs to be exported by the entry point index.d.ts
-    // Warning: (ae-forgotten-export) The symbol "ContourId" needs to be exported by the entry point index.d.ts
     hideHandles(id: PointId | ContourId): () => void;
     // Warning: (ae-forgotten-export) The symbol "EditorHistory" needs to be exported by the entry point index.d.ts
     //
@@ -203,7 +338,6 @@ export class Editor {
     // (undocumented)
     nodeDefinition(kind: NodeKind): NodeDefinition;
     notifyPreviewMutationAttempt(): void;
-    // Warning: (ae-forgotten-export) The symbol "ShiftId" needs to be exported by the entry point index.d.ts
     // Warning: (ae-forgotten-export) The symbol "ShiftObject" needs to be exported by the entry point index.d.ts
     object(id: ShiftId): ShiftObject | null;
     objects(ids: readonly ShiftId[]): readonly ShiftObject[];
@@ -348,6 +482,60 @@ export class Editor {
     zoomToSelection(): void;
 }
 
+// @public
+export interface EditorGlyph {
+    // (undocumented)
+    glyphId: GlyphId;
+    // (undocumented)
+    name: string;
+    // (undocumented)
+    nodeId: NodeId;
+    // (undocumented)
+    sourceId: SourceId;
+}
+
+// @public
+export interface EditorInspection extends EditorView {
+    // (undocumented)
+    mode: ShiftSessionMode;
+    // (undocumented)
+    sessionId: string;
+    // (undocumented)
+    windowId: number;
+}
+
+// @public
+export interface EditorTool {
+    // (undocumented)
+    id: string;
+    // (undocumented)
+    state: string;
+}
+
+// @public
+export interface EditorView {
+    // (undocumented)
+    activeSourceId: SourceId | null;
+    // (undocumented)
+    applyStatus: "idle" | "queued" | "applying" | null;
+    // (undocumented)
+    dragging: boolean;
+    // (undocumented)
+    editing: boolean;
+    // (undocumented)
+    editingSourceIds: SourceId[];
+    // (undocumented)
+    externalLocation: AxisCoordinate[];
+    // (undocumented)
+    glyph: EditorGlyph | null;
+    // (undocumented)
+    route: string;
+    // (undocumented)
+    selectionIds: SelectableId[];
+    // (undocumented)
+    tool: EditorTool | null;
+}
+
 // Warning: (ae-forgotten-export) The symbol "EffectOptions" needs to be exported by the entry point index.d.ts
 // Warning: (ae-forgotten-export) The symbol "Effect" needs to be exported by the entry point index.d.ts
 //
@@ -373,7 +561,6 @@ export class Font {
     contourIdForPoint(pointId: PointId): ContourId | null;
     contourIdForSegment(segmentId: SegmentId): ContourId | null;
     // Warning: (ae-forgotten-export) The symbol "AxisDefinition" needs to be exported by the entry point index.d.ts
-    // Warning: (ae-forgotten-export) The symbol "AxisId" needs to be exported by the entry point index.d.ts
     createAxis(axis: AxisDefinition): AxisId;
     createGlyph(name: GlyphName): GlyphRecord;
     createGlyphForUnicode(unicode: Unicode): GlyphRecord;
@@ -421,11 +608,10 @@ export class Font {
     get invalidGlyphsCell(): Signal<GlyphInvalidation>;
     isVariable(): boolean;
     get languageIdsCell(): Signal<readonly string[] | null>;
-    // Warning: (ae-forgotten-export) The symbol "AnchorId" needs to be exported by the entry point index.d.ts
+    layerIdFor(glyphId: GlyphId, sourceId: SourceId): LayerId | null;
     layerIdForAnchor(anchorId: AnchorId): LayerId | null;
     layerIdForContour(contourId: ContourId): LayerId | null;
     layerIdForPoint(pointId: PointId): LayerId | null;
-    // Warning: (ae-forgotten-export) The symbol "SegmentId" needs to be exported by the entry point index.d.ts
     layerIdForSegment(segmentId: SegmentId): LayerId | null;
     // Warning: (ae-forgotten-export) The symbol "GlyphLayerState" needs to be exported by the entry point index.d.ts
     layerState(layerId: LayerId): GlyphLayerState | null;
@@ -461,10 +647,12 @@ export class Font {
     nextAvailableGlyphName(name: GlyphName): GlyphName;
     pointIdsForSegment(segmentId: SegmentId): readonly PointId[] | null;
     primaryUnicodeForName(name: GlyphName): Unicode | null;
+    readLayers(layerIds: readonly LayerId[]): Promise<readonly GlyphLayerSnapshot[]>;
     // (undocumented)
     recordForId(glyphId: GlyphId): GlyphRecord | null;
     // (undocumented)
     recordForName(name: GlyphName): GlyphRecord | null;
+    resolveLayers(layerIds: readonly LayerId[]): Promise<readonly LayerRead[]>;
     setAxisMappings(mappings: readonly AxisMapping[]): Promise<void>;
     setLanguageIds(languageIds: readonly string[]): void;
     setMetricDefinitions(definitions: readonly MetricDefinition[]): Promise<void>;
@@ -486,6 +674,28 @@ export class Font {
     updateNamedInstance(instance: NamedInstance): Promise<void>;
     updateSource(source: Source): Promise<void>;
 }
+
+// @public
+export interface FontOverview {
+    // (undocumented)
+    axes: Axis[];
+    // (undocumented)
+    glyphCount: number;
+    // (undocumented)
+    info: FontMetadata;
+    // (undocumented)
+    instances: NamedInstance[];
+    // (undocumented)
+    metricDefinitions: MetricDefinition[];
+    // (undocumented)
+    metrics: FontMetrics;
+    // (undocumented)
+    mode: ShiftSessionMode;
+    sources: Source[];
+}
+
+// @public
+export type FontRevision = string;
 
 // @public (undocumented)
 export interface FontSnapshot {
@@ -526,8 +736,6 @@ export class Glyph {
     //
     // (undocumented)
     get anchors(): readonly Anchor[];
-    // Warning: (ae-forgotten-export) The symbol "Bounds" needs to be exported by the entry point index.d.ts
-    //
     // (undocumented)
     get bounds(): Bounds | null;
     // Warning: (ae-forgotten-export) The symbol "Component" needs to be exported by the entry point index.d.ts
@@ -586,6 +794,9 @@ export class Glyph {
     get xAdvance(): number;
 }
 
+// @public (undocumented)
+export type GlyphGetInput = ShiftTarget & GlyphSelector;
+
 // @public
 export type GlyphId = string & {
     readonly [GlyphIdBrand]: typeof GlyphIdBrand;
@@ -594,6 +805,42 @@ export type GlyphId = string & {
 // @public
 export interface GlyphInvalidation {
     readonly glyphIds: readonly GlyphId[] | null;
+}
+
+// @public
+export interface GlyphLayerReference {
+    // (undocumented)
+    layerId: LayerId;
+    // (undocumented)
+    sourceId: SourceId;
+}
+
+// @public (undocumented)
+export interface GlyphLayerSnapshot {
+    // (undocumented)
+    glyphId: GlyphId;
+    // (undocumented)
+    sourceId: SourceId;
+    // (undocumented)
+    state: GlyphState;
+}
+
+// @public (undocumented)
+export interface GlyphListInput extends ShiftTarget {
+    // (undocumented)
+    cursor?: string;
+    // (undocumented)
+    limit?: number;
+    // (undocumented)
+    sourceId?: SourceId;
+}
+
+// @public
+export interface GlyphPage {
+    // (undocumented)
+    items: GlyphSummary[];
+    // (undocumented)
+    nextCursor: string | null;
 }
 
 // @public
@@ -631,17 +878,144 @@ export interface GlyphRecord {
 }
 
 // @public (undocumented)
+export interface GlyphResolveInput extends ShiftTarget {
+    // (undocumented)
+    glyphIds: GlyphId[];
+    // (undocumented)
+    location: AxisCoordinate[];
+}
+
+// @public
+export type GlyphSelector = {
+    glyphId: GlyphId;
+    name?: never;
+} | {
+    name: GlyphName;
+    glyphId?: never;
+};
+
+// @public (undocumented)
 export interface GlyphSnapshot {
     // (undocumented)
     glyphId: GlyphId;
-    // Warning: (ae-forgotten-export) The symbol "GlyphLayerSnapshot" needs to be exported by the entry point index.d.ts
-    //
     // (undocumented)
     layers: Array<GlyphLayerSnapshot>;
     // Warning: (ae-forgotten-export) The symbol "GlyphProjection" needs to be exported by the entry point index.d.ts
     //
     // (undocumented)
     projection?: GlyphProjection;
+}
+
+// @public
+export interface GlyphSummary {
+    // (undocumented)
+    componentBaseGlyphIds: GlyphId[];
+    // (undocumented)
+    id: GlyphId;
+    // (undocumented)
+    layer?: AuthoredLayer | null;
+    // (undocumented)
+    layers: GlyphLayerReference[];
+    // (undocumented)
+    name: string;
+    // (undocumented)
+    unicodes: number[];
+}
+
+// @public
+export interface LayerAppearance {
+    // (undocumented)
+    advanceStroke?: string;
+    // (undocumented)
+    anchorStroke?: string;
+    // (undocumented)
+    componentStroke?: string;
+    // (undocumented)
+    controlStroke?: string;
+    // (undocumented)
+    handleFill?: string;
+    // (undocumented)
+    metricStroke?: string;
+    // (undocumented)
+    offCurveStroke?: string;
+    // (undocumented)
+    onCurveStroke?: string;
+    // (undocumented)
+    outlineFill?: string;
+}
+
+// @public
+export interface LayerGetInput extends ShiftTarget {
+    // (undocumented)
+    layerId: LayerId;
+}
+
+// @public
+export interface LayerGuides {
+    // (undocumented)
+    advanceWidth: {
+        origin: number;
+        advance: number;
+    };
+    // (undocumented)
+    fontMetrics: {
+        ascender: number;
+        capHeight?: number;
+        xHeight?: number;
+        baseline: number;
+        descender: number;
+    };
+}
+
+// @public
+export interface LayerOverlays {
+    // (undocumented)
+    advanceWidth?: boolean;
+    // (undocumented)
+    anchors?: boolean;
+    // (undocumented)
+    components?: boolean;
+    // (undocumented)
+    controlLines?: boolean;
+    // (undocumented)
+    fontMetrics?: boolean;
+    // (undocumented)
+    points?: boolean;
+}
+
+// @public
+export interface LayerRead {
+    // (undocumented)
+    authored: GlyphLayerSnapshot;
+    // (undocumented)
+    resolved: ResolvedLayerGeometry;
+}
+
+// @public (undocumented)
+export interface LayerRenderInput extends LayerGetInput {
+    // (undocumented)
+    appearance?: LayerAppearance;
+    // (undocumented)
+    overlays?: LayerOverlays;
+}
+
+// @public (undocumented)
+export type LayerResolveInput = LayerGetInput;
+
+// @public
+export interface LayerSvg {
+    // (undocumented)
+    glyphId: GlyphId;
+    // (undocumented)
+    guides: LayerGuides;
+    // (undocumented)
+    layerId: LayerId;
+    // (undocumented)
+    sourceId: SourceId;
+    // (undocumented)
+    svg: string;
+    // (undocumented)
+    viewBox: [number, number, number, number];
 }
 
 // Warning: (ae-forgotten-export) The symbol "PointIn" needs to be exported by the entry point index.d.ts
@@ -651,6 +1025,12 @@ export type LocalPoint = PointIn<"local">;
 
 // @public
 export function localPoint(x: number, y: number): LocalPoint;
+
+// @public (undocumented)
+export interface LocationResolveInput extends ShiftTarget {
+    // (undocumented)
+    location: AxisCoordinate[];
+}
 
 // @public
 export interface MemoryFontSession {
@@ -689,6 +1069,104 @@ export interface MemoryFontSource extends GlyphReader {
 export type MemoryToolName = "select" | "hand";
 
 // @public
+export interface OutlineBounds {
+    // (undocumented)
+    max: BoundsCorner;
+    // (undocumented)
+    min: BoundsCorner;
+}
+
+// @public
+export interface ResolvedComponent {
+    // (undocumented)
+    baseGlyphId: GlyphId;
+    // (undocumented)
+    id: ComponentId;
+    outline: {
+        svgPath: string;
+        bounds: Bounds | null;
+    };
+    // (undocumented)
+    transformation: AffineTransformation;
+}
+
+// @public
+export interface ResolvedComponentGeometry {
+    // (undocumented)
+    baseGlyphId: GlyphId;
+    // (undocumented)
+    id: ComponentId;
+    // (undocumented)
+    outline: ResolvedOutline;
+    // (undocumented)
+    transformation: ComponentTransform;
+}
+
+// @public
+export interface ResolvedGlyph {
+    // (undocumented)
+    advanceWidth: number;
+    // (undocumented)
+    glyphId: GlyphId;
+    // (undocumented)
+    svgPath: string;
+}
+
+// @public
+export interface ResolvedGlyphs {
+    // (undocumented)
+    items: ResolvedGlyph[];
+    // (undocumented)
+    unresolvedGlyphIds: GlyphId[];
+}
+
+// @public
+export interface ResolvedLayer {
+    // (undocumented)
+    advanceWidth: number;
+    // (undocumented)
+    components: ResolvedComponent[];
+    // (undocumented)
+    glyphId: GlyphId;
+    // (undocumented)
+    layerId: LayerId;
+    outline: {
+        svgPath: string;
+        bounds: Bounds | null;
+    };
+    // (undocumented)
+    sourceId: SourceId;
+}
+
+// @public
+export interface ResolvedLayerGeometry {
+    // (undocumented)
+    components: Array<ResolvedComponentGeometry>;
+    // (undocumented)
+    outline: ResolvedOutline;
+}
+
+// @public
+export interface ResolvedLocation {
+    // (undocumented)
+    designLocation: AxisCoordinate[];
+    // (undocumented)
+    externalLocation: AxisCoordinate[];
+    // (undocumented)
+    metrics: SourceMetrics;
+    // (undocumented)
+    sourceId: SourceId | null;
+}
+
+// @public
+export interface ResolvedOutline {
+    // (undocumented)
+    bounds?: OutlineBounds;
+    // (undocumented)
+    svgPath: string;
+}
+
+// @public
 export type ScenePoint = PointIn<"scene">;
 
 // @public
@@ -699,6 +1177,158 @@ export type ScreenPoint = PointIn<"screen">;
 
 // @public
 export function screenPoint(x: number, y: number): ScreenPoint;
+
+// @public
+export type SegmentId = string & {
+    readonly [SegmentIdBrand]: typeof SegmentIdBrand;
+};
+
+// @public
+export type SelectableId = ShiftId;
+
+// @public
+export interface ShiftCapabilities {
+    // (undocumented)
+    capture(input: ShiftCaptureInput): Promise<ShiftObservation<ShiftCapture>>;
+    // (undocumented)
+    editor: {
+        inspect(input: ShiftTarget): Promise<ShiftObservation<EditorInspection>>;
+    };
+    // (undocumented)
+    font: {
+        get(input: ShiftTarget): Promise<ShiftObservation<FontOverview>>;
+    };
+    // (undocumented)
+    glyphs: {
+        list(input: GlyphListInput): Promise<ShiftObservation<GlyphPage>>;
+        get(input: GlyphGetInput): Promise<ShiftObservation<GlyphSummary>>;
+        resolve(input: GlyphResolveInput): Promise<ShiftObservation<ResolvedGlyphs>>;
+    };
+    // (undocumented)
+    layers: {
+        get(input: LayerGetInput): Promise<ShiftObservation<AuthoredLayer>>;
+        resolve(input: LayerResolveInput): Promise<ShiftObservation<ResolvedLayer>>;
+        render(input: LayerRenderInput): Promise<ShiftObservation<LayerSvg>>;
+    };
+    // (undocumented)
+    locations: {
+        resolve(input: LocationResolveInput): Promise<ShiftObservation<ResolvedLocation>>;
+    };
+    // (undocumented)
+    sessions: {
+        list(): Promise<ShiftSession[]>;
+    };
+}
+
+// @public
+export interface ShiftCapture {
+    // (undocumented)
+    capturedAt: string;
+    // (undocumented)
+    captureId: string;
+    // (undocumented)
+    data: string;
+    // (undocumented)
+    height: number;
+    // (undocumented)
+    mimeType: "image/png";
+    // (undocumented)
+    scale: number;
+    // (undocumented)
+    target: ShiftCaptureTarget;
+    // (undocumented)
+    width: number;
+    // (undocumented)
+    windowId: number;
+}
+
+// @public (undocumented)
+export interface ShiftCaptureInput extends ShiftTarget {
+    scale?: number;
+    // (undocumented)
+    target: ShiftCaptureTarget;
+}
+
+// @public (undocumented)
+export type ShiftCaptureTarget = "window" | "editor";
+
+// Warning: (ae-forgotten-export) The symbol "TextItemId" needs to be exported by the entry point index.d.ts
+//
+// @public
+export type ShiftId = NodeId | PointId | AnchorId | ContourId | SegmentId | ComponentId | TextItemId;
+
+// @public
+export interface ShiftObservation<Value> {
+    // (undocumented)
+    fontRevision: FontRevision;
+    // (undocumented)
+    value: Value;
+}
+
+// @public
+export interface ShiftRead {
+    // (undocumented)
+    font: {
+        get(): Promise<FontOverview>;
+    };
+    readonly fontRevision: FontRevision;
+    // (undocumented)
+    glyphs: {
+        list(input?: ShiftReadInput<GlyphListInput>): Promise<GlyphPage>;
+        get(input: ShiftReadInput<GlyphGetInput>): Promise<GlyphSummary>;
+        resolve(input: ShiftReadInput<GlyphResolveInput>): Promise<ResolvedGlyphs>;
+    };
+    // (undocumented)
+    layers: {
+        get(input: ShiftReadInput<LayerGetInput>): Promise<AuthoredLayer>;
+        resolve(input: ShiftReadInput<LayerResolveInput>): Promise<ResolvedLayer>;
+        render(input: ShiftReadInput<LayerRenderInput>): Promise<LayerSvg>;
+    };
+    // (undocumented)
+    locations: {
+        resolve(input: ShiftReadInput<LocationResolveInput>): Promise<ResolvedLocation>;
+    };
+    // (undocumented)
+    readonly state: ShiftReadState;
+}
+
+// @public
+export type ShiftReadInput<Input> = Input extends unknown ? Omit<Input, keyof ShiftTarget> : never;
+
+// @public
+export type ShiftReadState = "active" | "stale" | "closed";
+
+// @public
+export interface ShiftScript extends ShiftCapabilities {
+    read<Result>(target: {
+        windowId: number;
+    }, callback: (read: ShiftRead) => Result | Promise<Result>): Promise<Result>;
+}
+
+// @public
+export interface ShiftSession {
+    // (undocumented)
+    editorConnected: boolean;
+    // (undocumented)
+    focused: boolean;
+    // (undocumented)
+    mode: ShiftSessionMode;
+    // (undocumented)
+    sessionId: string;
+    // (undocumented)
+    windowId: number;
+}
+
+// @public (undocumented)
+export type ShiftSessionMode = FontSessionMode;
+
+// @public
+export interface ShiftTarget {
+    // (undocumented)
+    ifFontRevision?: FontRevision;
+    // (undocumented)
+    windowId: number;
+}
 
 // @public
 export interface Signal<T> {
@@ -729,10 +1359,10 @@ export function useSignalState<T>(signal: Signal<T>, options?: UseSignalOptions)
 
 // Warnings were encountered during analysis:
 //
-// dist/Editor-Z8MsiZWa.d.ts:2646:5 - (ae-forgotten-export) The symbol "Axis" needs to be exported by the entry point index.d.ts
-// dist/Editor-Z8MsiZWa.d.ts:2647:5 - (ae-forgotten-export) The symbol "AxisMappingBasis" needs to be exported by the entry point index.d.ts
-// dist/Editor-Z8MsiZWa.d.ts:2648:5 - (ae-forgotten-export) The symbol "Source" needs to be exported by the entry point index.d.ts
-// dist/Editor-Z8MsiZWa.d.ts:4434:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
+// dist/Editor-gt1RzXX3.d.ts:2692:5 - (ae-forgotten-export) The symbol "Axis" needs to be exported by the entry point index.d.ts
+// dist/Editor-gt1RzXX3.d.ts:2693:5 - (ae-forgotten-export) The symbol "AxisMappingBasis" needs to be exported by the entry point index.d.ts
+// dist/Editor-gt1RzXX3.d.ts:2694:5 - (ae-forgotten-export) The symbol "Source" needs to be exported by the entry point index.d.ts
+// dist/Editor-gt1RzXX3.d.ts:4495:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

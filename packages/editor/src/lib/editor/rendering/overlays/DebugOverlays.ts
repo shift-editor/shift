@@ -1,6 +1,6 @@
 import type { Canvas } from "../Canvas";
 import type { GlyphRenderModel } from "../../../model/Glyph";
-import type { SegmentId } from "../../../../types/indicator";
+import type { SegmentId } from "@shift/types";
 
 export class DebugOverlays {
   draw(

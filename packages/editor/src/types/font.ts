@@ -4,12 +4,14 @@ import type {
   FontSnapshot,
   GlyphEntry,
   GlyphId,
+  GlyphLayerSnapshot,
   GlyphPreview,
   GlyphRecord,
   GlyphSnapshot,
   GlyphSnapshotRequest,
   LayerId,
   LayerMatch,
+  LayerRead,
   Location,
   WorkspaceDocumentState,
   WorkspaceSnapshot,
@@ -64,6 +66,8 @@ export interface WorkspaceEditCoordinator {
   apply(intents: FontIntent[], label?: string): Promise<AppliedChange>;
   readGlyphSnapshots(requests: readonly GlyphSnapshotRequest[]): Promise<GlyphSnapshot[]>;
   readGlyphPreviews(glyphIds: readonly GlyphId[], location: Location): Promise<GlyphPreview[]>;
+  readLayers(layerIds: readonly LayerId[]): Promise<GlyphLayerSnapshot[]>;
+  resolveLayers(layerIds: readonly LayerId[]): Promise<LayerRead[]>;
   matchLayers(referenceLayerId: LayerId, targetLayerId: LayerId): Promise<LayerMatch>;
   mapLocation(location: Location): Promise<Location>;
   settled(): Promise<void>;

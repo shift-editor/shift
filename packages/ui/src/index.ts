@@ -42,6 +42,7 @@ export {
   type CheckboxProps,
   type CheckboxIndicatorProps,
 } from "./components/checkbox";
+export { Switch, type SwitchProps } from "./components/switch";
 export {
   NumberField,
   NumberFieldGroup,
@@ -197,6 +198,7 @@ export {
   Check,
   ChevronDown,
   ChevronRight,
+  Copy,
   LayoutGrid,
   List,
   MenuIcon,

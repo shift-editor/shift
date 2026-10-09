@@ -16,12 +16,13 @@ import type {
   LayerId,
   PointData,
   PointId,
+  SegmentId,
   SourceId,
   Unicode,
   WorkspaceGlyphLayerSnapshot,
   WorkspaceSnapshot,
 } from "@shift/types";
-import { segmentIdFor, type SegmentId } from "@shift/glyph-state";
+import { segmentIdFor } from "@shift/glyph-state";
 import { Validate } from "@shift/validation";
 import {
   batch,
@@ -128,6 +129,11 @@ export class FontStore {
   /** Returns the glyph that owns a layer, from the glyph directory; the glyph need not be loaded. */
   glyphIdForLayer(layerId: LayerId): GlyphId | null {
     return this.#indexCell.peek().glyphByLayer.get(layerId) ?? null;
+  }
+
+  /** The layer `glyphId` authors in `sourceId`, or `null` when it has none. */
+  layerIdForGlyphSource(glyphId: GlyphId, sourceId: SourceId): LayerId | null {
+    return this.#indexCell.peek().layerByGlyphSource.get(glyphSourceKey(glyphId, sourceId)) ?? null;
   }
 
   layerIdForPoint(pointId: PointId): LayerId | null {

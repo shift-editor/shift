@@ -32,6 +32,23 @@ async function buildMain(): Promise<void> {
   });
 }
 
+async function buildSandbox(): Promise<void> {
+  await build({
+    configFile: path.join(appRoot, "vite.main.config.ts"),
+    build: {
+      lib: {
+        entry: path.join(appRoot, "src/utility/sandbox.ts"),
+        formats: ["cjs"],
+        fileName: () => "sandbox.js",
+      },
+      outDir: path.join(appRoot, ".vite/build"),
+      emptyOutDir: false,
+      minify: !isE2E,
+      rollupOptions: { external: nodeExternals },
+    },
+  });
+}
+
 async function buildWorkspace(): Promise<void> {
   await build({
     configFile: path.join(appRoot, "vite.main.config.ts"),
@@ -82,12 +99,13 @@ async function buildRenderer(): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  console.log(`Building Electron app${isE2E ? " for E2E tests" : ""}...`);
+  process.stdout.write(`Building Electron app${isE2E ? " for E2E tests" : ""}...\n`);
   await buildMain();
+  await buildSandbox();
   await buildWorkspace();
   await buildPreload();
   await buildRenderer();
-  console.log("Electron build complete.");
+  process.stdout.write("Electron build complete.\n");
 }
 
 main().catch((error) => {

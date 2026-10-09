@@ -2,7 +2,13 @@ use std::collections::HashMap;
 
 use napi::bindgen_prelude::Float64Array;
 use napi_derive::napi;
-use shift_font::{GlyphId, PointType as IrPointType};
+use shift_font::{
+    composite::{
+        resolved_contours_bbox, resolved_contours_to_svg_path, ResolvedComponentGeometry,
+        ResolvedContour, ResolvedLayerGeometry,
+    },
+    GlyphId, PointType as IrPointType, Transform,
+};
 
 use crate::{
     AnchorData, AnchorMatch, Axis, AxisLabel, AxisMapping, AxisMappingBasis, AxisMappingPoint,
@@ -1312,6 +1318,110 @@ pub struct NapiGlyphPreview {
     pub glyph_id: String,
     pub svg_path: String,
     pub x_advance: f64,
+}
+
+/// One corner of outline bounds in font units.
+#[napi(object)]
+pub struct NapiBoundsCorner {
+    pub x: f64,
+    pub y: f64,
+}
+
+/// Tight axis-aligned outline bounds in font units, y-up.
+#[napi(object)]
+pub struct NapiOutlineBounds {
+    pub min: NapiBoundsCorner,
+    pub max: NapiBoundsCorner,
+}
+
+/// Composited outline as one SVG path in font units with its tight bounds.
+#[napi(object)]
+pub struct NapiResolvedOutline {
+    pub svg_path: String,
+    pub bounds: Option<NapiOutlineBounds>,
+}
+
+impl From<&[ResolvedContour]> for NapiResolvedOutline {
+    fn from(contours: &[ResolvedContour]) -> Self {
+        Self {
+            svg_path: resolved_contours_to_svg_path(contours),
+            bounds: resolved_contours_bbox(contours).map(|(min_x, min_y, max_x, max_y)| {
+                NapiOutlineBounds {
+                    min: NapiBoundsCorner { x: min_x, y: min_y },
+                    max: NapiBoundsCorner { x: max_x, y: max_y },
+                }
+            }),
+        }
+    }
+}
+
+/// Six-value affine placement of a component in its parent layer.
+#[napi(object)]
+pub struct NapiComponentTransform {
+    pub xx: f64,
+    pub xy: f64,
+    pub yx: f64,
+    pub yy: f64,
+    pub dx: f64,
+    pub dy: f64,
+}
+
+impl From<Transform> for NapiComponentTransform {
+    fn from(transform: Transform) -> Self {
+        Self {
+            xx: transform.xx,
+            xy: transform.xy,
+            yx: transform.yx,
+            yy: transform.yy,
+            dx: transform.dx,
+            dy: transform.dy,
+        }
+    }
+}
+
+/// One direct component whose outline includes its resolved descendants.
+#[napi(object)]
+pub struct NapiResolvedComponentGeometry {
+    #[napi(ts_type = "ComponentId")]
+    pub id: String,
+    #[napi(ts_type = "GlyphId")]
+    pub base_glyph_id: String,
+    pub transformation: NapiComponentTransform,
+    pub outline: NapiResolvedOutline,
+}
+
+impl From<&ResolvedComponentGeometry> for NapiResolvedComponentGeometry {
+    fn from(component: &ResolvedComponentGeometry) -> Self {
+        Self {
+            id: component.component_id().to_string(),
+            base_glyph_id: component.base_glyph_id().to_string(),
+            transformation: component.transformation().into(),
+            outline: component.outline().into(),
+        }
+    }
+}
+
+/// Composited geometry of one exact authored layer at its own source.
+#[napi(object)]
+pub struct NapiResolvedLayerGeometry {
+    pub outline: NapiResolvedOutline,
+    pub components: Vec<NapiResolvedComponentGeometry>,
+}
+
+impl From<&ResolvedLayerGeometry> for NapiResolvedLayerGeometry {
+    fn from(geometry: &ResolvedLayerGeometry) -> Self {
+        Self {
+            outline: geometry.outline().into(),
+            components: geometry.components().iter().map(Into::into).collect(),
+        }
+    }
+}
+
+/// One accepted-state layer: authored state and its resolved geometry, read together.
+#[napi(object)]
+pub struct NapiLayerRead {
+    pub authored: NapiGlyphLayerSnapshot,
+    pub resolved: NapiResolvedLayerGeometry,
 }
 
 #[napi(object)]

@@ -11,6 +11,7 @@ import type {
   GlyphEntry,
   GlyphHandle,
   GlyphId,
+  GlyphLayerSnapshot,
   GlyphPreview,
   GlyphRecord,
   GlyphSnapshotRequest,
@@ -22,8 +23,10 @@ import type {
   ContourId,
   LayerId,
   LayerMatch,
+  LayerRead,
   Location,
   PointId,
+  SegmentId,
   NamedInstance,
   NamedInstanceDefinition,
   NamedInstanceId,
@@ -36,7 +39,6 @@ import {
   mintNamedInstanceId,
   mintSourceId,
 } from "@shift/types";
-import type { SegmentId } from "@shift/glyph-state";
 import {
   batch,
   computed,
@@ -503,6 +505,48 @@ export class Font {
 
   glyphRecords(): readonly GlyphRecord[] {
     return this.#directoryCell.peek().records;
+  }
+
+  /**
+   * Reads accepted authored layers without loading glyphs into the editor.
+   *
+   * @remarks
+   * Workspace reads follow pending writes; gesture previews are not included.
+   * Components are not resolved, so a layer whose component reference is
+   * broken stays readable. Nothing is published to the store.
+   *
+   * @param layerIds - Layer identities in the order results should follow.
+   * @returns One snapshot per requested layer.
+   * @throws {Error} when workspace authorship is unavailable or a layer identity is unknown.
+   */
+  async readLayers(layerIds: readonly LayerId[]): Promise<readonly GlyphLayerSnapshot[]> {
+    if (!this.#editCoordinator) throw new Error("Authored layers are unavailable in this font");
+
+    return this.#editCoordinator.readLayers(layerIds);
+  }
+
+  /** The layer `glyphId` authors in `sourceId`, or `null` when it has none. */
+  layerIdFor(glyphId: GlyphId, sourceId: SourceId): LayerId | null {
+    return this.#store.layerIdForGlyphSource(glyphId, sourceId);
+  }
+
+  /**
+   * Reads accepted authored layers together with their composited geometry.
+   *
+   * @remarks
+   * Each root keeps its exact authored geometry; components resolve at that
+   * layer's source and cyclic branches are skipped. Both halves come from
+   * one workspace read behind pending writes, never from gesture previews or
+   * published render models.
+   *
+   * @param layerIds - Layer identities in the order results should follow.
+   * @returns One authored snapshot and resolved geometry per requested layer.
+   * @throws {Error} when workspace authorship is unavailable, a layer identity is unknown, or a component cannot resolve.
+   */
+  async resolveLayers(layerIds: readonly LayerId[]): Promise<readonly LayerRead[]> {
+    if (!this.#editCoordinator) throw new Error("Authored layers are unavailable in this font");
+
+    return this.#editCoordinator.resolveLayers(layerIds);
   }
 
   /**

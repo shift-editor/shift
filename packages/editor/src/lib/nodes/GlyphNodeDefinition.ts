@@ -1,8 +1,6 @@
 import type { NodeReference } from "../../types/records";
 import { Bounds, Mat } from "@shift/geo";
-import type { SourceMetrics } from "@shift/types";
-import type { SegmentId } from "@shift/glyph-state";
-import type { ComponentId, NodeId, PointId } from "@shift/types";
+import type { ComponentId, NodeId, PointId, SegmentId, SourceMetrics } from "@shift/types";
 import type { LocalBounds, LocalPoint } from "../../types/coordinates";
 import { localBounds } from "../editor/spaces";
 import { SCREEN_HIT_RADIUS } from "../editor/rendering/constants";
