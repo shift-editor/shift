@@ -1,4 +1,4 @@
-import type { GlyphId, SourceId } from "@shift/types";
+import type { GlyphId, KerningValueEdit, SourceId } from "@shift/types";
 import type { Editor } from "../../editor/Editor";
 import {
   isGroupSide,
@@ -80,26 +80,28 @@ export class KerningPair {
    * @returns false when nothing changed or kerning cannot be edited there.
    */
   set(editor: Editor, amount: number, sourceId = this.source(editor)): boolean {
-    const pair = this.editablePair(editor, sourceId);
-    const rounded = Math.round(amount);
-    if (!sourceId || !pair || rounded === pair.amount) return false;
-
-    void editor.font.setKerningValues(
-      [kerningValueEdit(sourceId, pair, rounded)],
-      "Change kerning",
-    );
+    const edit = this.valueEdit(editor, amount, sourceId);
+    if (!edit) return false;
+    editor.font.setKerningValues([edit], "Change kerning");
     return true;
   }
 
-  /** Shows `amount` for the pair without committing it, or clears the preview with null. */
-  preview(editor: Editor, amount: number | null): void {
-    const sourceId = this.source(editor);
-    const pair = this.editablePair(editor);
-    if (amount === null || !sourceId || !pair) {
-      editor.font.previewKerning([]);
-      return;
-    }
-    editor.font.previewKerning([kerningValueEdit(sourceId, pair, Math.round(amount))]);
+  /**
+   * The value edit that sets the pair to `amount` at a source.
+   *
+   * @param amount - The new kern in units; rounded.
+   * @param sourceId - The source to edit; the active source when omitted.
+   * @returns null when the value is unchanged or kerning cannot be edited there.
+   */
+  valueEdit(
+    editor: Editor,
+    amount: number,
+    sourceId = this.source(editor),
+  ): KerningValueEdit | null {
+    const pair = this.editablePair(editor, sourceId);
+    const rounded = Math.round(amount);
+    if (!sourceId || !pair || rounded === pair.amount) return null;
+    return kerningValueEdit(sourceId, pair, rounded);
   }
 
   /**
@@ -133,7 +135,7 @@ export class KerningPair {
       .peek()
       .exceptionEdit(sourceId, this.first, this.second, pair, position, exception);
     if (!edit) return false;
-    void editor.font.setKerningValues(
+    editor.font.setKerningValues(
       [edit],
       exception ? "Make kerning exception" : "Remove kerning exception",
     );

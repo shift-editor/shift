@@ -33,10 +33,9 @@ describe("kerning edits", () => {
     expect(pair).toMatchObject({ first: t, amount: -75 });
     expect(isGroupSide(pair.second)).toBe(true);
 
-    const edit = kerningValueEdit(lightCondensed, pair, -90);
-    const committed = font.setKerningValues([edit], "Change kerning");
+    font.setKerningValues([kerningValueEdit(lightCondensed, pair, -90)], "Change kerning");
     expect(kernAt(font, "LightCondensed", "T", "A")).toBe(-90);
-    await committed;
+    await stack.editCoordinator.settled();
     expect(kernAt(font, "LightCondensed", "T", "A")).toBe(-90);
     expect(kernAt(font, "BoldWide", "T", "A")).toBe(-150);
 
@@ -44,14 +43,53 @@ describe("kerning edits", () => {
     expect(kernAt(font, "LightCondensed", "T", "A")).toBe(-75);
   });
 
-  it("previews a value without committing it", async () => {
+  it("previews an open edit and restores the value when it is discarded", async () => {
     const { font, t, a, lightCondensed } = await openMutatorSans();
     const pair = font.kerningCell.peek().editablePair(lightCondensed, t, a);
 
-    font.previewKerning([kerningValueEdit(lightCondensed, pair, -100)]);
+    const edit = font.beginKerningEdit();
+    edit.preview([kerningValueEdit(lightCondensed, pair, -100)]);
     expect(kernAt(font, "LightCondensed", "T", "A")).toBe(-100);
 
-    font.previewKerning([]);
+    edit.discard();
+    expect(kernAt(font, "LightCondensed", "T", "A")).toBe(-75);
+  });
+
+  it("never loses a step when edits are made faster than the workspace echoes them", async () => {
+    const { stack, font, t, a, lightCondensed } = await openMutatorSans();
+    const nudge = () => {
+      const pair = font.kerningCell.peek().editablePair(lightCondensed, t, a);
+      font.setKerningValues([kerningValueEdit(lightCondensed, pair, pair.amount - 10)], "Nudge");
+    };
+
+    nudge();
+    nudge();
+    nudge();
+    expect(kernAt(font, "LightCondensed", "T", "A")).toBe(-105);
+
+    await stack.editCoordinator.settled();
+    expect(kernAt(font, "LightCondensed", "T", "A")).toBe(-105);
+  });
+
+  it("shows an undo queued behind a pending edit once it lands", async () => {
+    const { stack, font, t, a, lightCondensed } = await openMutatorSans();
+    const pair = font.kerningCell.peek().editablePair(lightCondensed, t, a);
+
+    font.setKerningValues([kerningValueEdit(lightCondensed, pair, -90)], "Change kerning");
+    const undone = stack.editCoordinator.undo();
+    expect(kernAt(font, "LightCondensed", "T", "A")).toBe(-90);
+
+    await undone;
+    expect(kernAt(font, "LightCondensed", "T", "A")).toBe(-75);
+  });
+
+  it("drops an edit the workspace rejects", async () => {
+    const { stack, font, t, a, lightCondensed } = await openMutatorSans();
+    const pair = font.kerningCell.peek().editablePair(lightCondensed, t, a);
+
+    font.setKerningValues([kerningValueEdit(lightCondensed, pair, Number.NaN)], "Bad kerning");
+    await stack.editCoordinator.settled();
+
     expect(kernAt(font, "LightCondensed", "T", "A")).toBe(-75);
   });
 

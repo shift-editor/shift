@@ -13,6 +13,8 @@ import type { ScenePoint } from "../../../types/coordinates";
 import { onKerningLabel } from "./KerningLabel";
 import type { KerningTool } from "./Kerning";
 import type { KerningState } from "./types";
+import { kerningValueEdit } from "../../model/Kerning";
+import type { KerningEdit } from "../../model/KerningEdit";
 
 type KerningContext = ToolContext<KerningState, KerningTool>;
 
@@ -126,6 +128,7 @@ export const KerningNudge = createBehavior<KerningState, KerningTool>({
  * source, and commits as one undo step on release.
  */
 export class KerningDrag implements Behavior<KerningState, KerningTool> {
+  #edit: KerningEdit | null = null;
   #done: (() => void) | null = null;
 
   onDragStart(state: KerningState, ctx: KerningContext, event: DragStartEvent): boolean {
@@ -134,24 +137,32 @@ export class KerningDrag implements Behavior<KerningState, KerningTool> {
     const edited = hit?.editablePair(ctx.editor);
     if (!hit || !edited) return false;
 
-    this.#done = ctx.onCancel(() => hit.preview(ctx.editor, null));
+    const edit = ctx.editor.font.beginKerningEdit();
+    this.#edit = edit;
+    this.#done = ctx.onCancel(() => edit.discard());
     ctx.setState({ type: "dragging", hit, origin: event.origin.scene, start: edited.amount });
     return true;
   }
 
   onDrag(state: KerningState, ctx: KerningContext, event: DragEvent): boolean {
-    if (state.type !== "dragging") return false;
-    state.hit.preview(ctx.editor, draggedAmount(state, ctx, event.coords.scene));
-    ctx.setState({ ...state, hit: ctx.tool.runs.refresh(state.hit) });
+    if (state.type !== "dragging" || !this.#edit) return false;
+    const hit = ctx.tool.runs.refresh(state.hit);
+    if (!hit) {
+      // The pair stopped being neighbours mid-drag; drop it rather than kern a stale gap.
+      this.#edit.discard();
+      this.#finish();
+      ctx.setState({ type: "ready", hit: null, selected: null });
+      return true;
+    }
+    this.#preview(ctx, { ...state, hit }, event.coords.scene);
+    ctx.setState({ ...state, hit });
     return true;
   }
 
   onDragEnd(state: KerningState, ctx: KerningContext, event: DragEndEvent): boolean {
-    if (state.type !== "dragging") return false;
-    // The preview already shows the dragged value; clear it so the commit
-    // compares against the kern before the drag. Both land before a frame.
-    state.hit.preview(ctx.editor, null);
-    state.hit.set(ctx.editor, draggedAmount(state, ctx, event.coords.scene));
+    if (state.type !== "dragging" || !this.#edit) return false;
+    this.#preview(ctx, state, event.coords.scene);
+    this.#edit.commit("Change kerning");
     this.#finish();
     const hit = ctx.tool.runs.refresh(state.hit);
     ctx.setState({ type: "ready", hit, selected: hit });
@@ -160,15 +171,33 @@ export class KerningDrag implements Behavior<KerningState, KerningTool> {
 
   onDragCancel(state: KerningState, ctx: KerningContext): boolean {
     if (state.type !== "dragging") return false;
-    state.hit.preview(ctx.editor, null);
+    this.#edit?.discard();
     this.#finish();
     ctx.setState({ type: "ready", hit: null, selected: null });
     return true;
   }
 
+  /**
+   * Previews the dragged kern against the value the drag started from: the
+   * edit is measured from the committed pair, so a value equal to it
+   * previews nothing.
+   */
+  #preview(
+    ctx: KerningContext,
+    state: Extract<KerningState, { type: "dragging" }>,
+    point: ScenePoint,
+  ): void {
+    const pair = state.hit.editablePair(ctx.editor);
+    const sourceId = state.hit.source(ctx.editor);
+    if (!pair || !sourceId || !this.#edit) return;
+    const amount = Math.round(draggedAmount(state, ctx, point));
+    this.#edit.preview(amount === state.start ? [] : [kerningValueEdit(sourceId, pair, amount)]);
+  }
+
   #finish(): void {
     if (this.#done) this.#done();
     this.#done = null;
+    this.#edit = null;
   }
 }
 

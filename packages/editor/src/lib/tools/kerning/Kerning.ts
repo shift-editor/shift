@@ -59,7 +59,6 @@ export class KerningTool extends BaseTool<KerningState, KerningTool> {
   }
 
   override deactivate(): void {
-    this.editor.font.previewKerning([]);
     if (this.#restoreEditing) this.#restoreEditing();
     this.#restoreEditing = null;
     this.setState({ type: "idle" });

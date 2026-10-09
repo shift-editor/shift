@@ -44,7 +44,6 @@ import {
   batch,
   computed,
   effect,
-  signal,
   track,
   untracked,
   type ComputedSignal,
@@ -56,7 +55,8 @@ import type { GlyphReader } from "../../types/glyph";
 import { Glyph, GlyphLayer } from "./Glyph";
 import type { FontStore, GlyphInvalidation } from "./FontStore";
 import type { GlyphLayerState } from "./GlyphLayerState";
-import { Kerning } from "./Kerning";
+import type { Kerning } from "./Kerning";
+import { KerningEdit } from "./KerningEdit";
 import { SourceMetricsInterpolation } from "./SourceMetricsInterpolation";
 import {
   designAxisLocationFromLocation,
@@ -67,11 +67,6 @@ import type { DesignAxisLocation, ExternalAxisLocation } from "../../types/varia
 import { uniqueInOrder } from "../utils/utils";
 import { fallbackGlyphNameForUnicode } from "../utils/unicode";
 import { createBatchRequest } from "../utils/batchRequest";
-
-interface PendingKerning {
-  readonly id: number;
-  readonly edits: readonly KerningValueEdit[];
-}
 
 /**
  * Directory queries over the store's committed glyph index.
@@ -230,11 +225,6 @@ export class Font {
 
   readonly #sourceMetricsInterpolationCell: Signal<SourceMetricsInterpolation | null>;
   readonly #kerningCell: Signal<Kerning>;
-  /** Kerning edits submitted but not yet echoed by the workspace, in submit order. */
-  readonly #pendingKerningCell = signal<readonly PendingKerning[]>([]);
-  /** Uncommitted values shown while a kern is dragged. */
-  readonly #kerningPreviewCell = signal<readonly KerningValueEdit[]>([]);
-  #nextPendingKerning = 0;
   readonly #defaultSourceMetricsCell: Signal<SourceMetrics>;
 
   readonly #metadataCell: Signal<FontMetadata>;
@@ -292,16 +282,7 @@ export class Font {
       );
     });
 
-    // Workspace echoes rebuild the font snapshot but keep its kerning reference
-    // unless kerning changed, so the lookup is indexed again only then.
-    const kerningSnapshotCell = computed(() => fontCell.value?.kerning ?? null);
-    const committedKerningCell = computed(() => Kerning.from(kerningSnapshotCell.value));
-    this.#kerningCell = computed(() =>
-      committedKerningCell.value.withEdits([
-        ...this.#pendingKerningCell.value.flatMap((pending) => pending.edits),
-        ...this.#kerningPreviewCell.value,
-      ]),
-    );
+    this.#kerningCell = store.kerning.cell;
 
     this.#metadataCell = computed(() => fontCell.value?.metadata ?? {});
     this.#sourcesCell = computed(() => fontCell.value?.sources ?? []);
@@ -1633,44 +1614,25 @@ export class Font {
   }
 
   /**
-   * Shows `edits` over the committed kerning without submitting them, for a
-   * kern being dragged. An empty list clears the preview.
+   * Opens a kerning edit: previews show at once, and committing submits one
+   * undoable change whose values stay visible until the workspace confirms them.
+   *
+   * @throws {Error} When another kerning edit is open, or editing is not wired.
    */
-  previewKerning(edits: readonly KerningValueEdit[]): void {
-    this.#kerningPreviewCell.set(edits);
+  beginKerningEdit(): KerningEdit {
+    return new KerningEdit(this.#store.kerning, this.editCoordinator);
   }
 
   /**
-   * Sets or removes kerning values as one undo step and shows them at once.
-   *
-   * @remarks
-   * The edits apply over the committed kerning until the workspace echoes
-   * them, and are dropped if the workspace rejects them. Any drag preview is
-   * cleared in the same update.
+   * Sets or removes kerning values as one undo step, shown at once.
    *
    * @param edits - Values to set at sources; an absent `amount` removes the pair there.
    * @param label - Undo label.
    */
-  async setKerningValues(edits: readonly KerningValueEdit[], label: string): Promise<void> {
-    if (edits.length === 0) {
-      this.#kerningPreviewCell.set([]);
-      return;
-    }
-    const pending = { id: this.#nextPendingKerning++, edits: [...edits] };
-    batch(() => {
-      this.#pendingKerningCell.set([...this.#pendingKerningCell.peek(), pending]);
-      this.#kerningPreviewCell.set([]);
-    });
-    try {
-      await this.editCoordinator.apply(
-        [{ kind: "setKerningValues", setKerningValues: { edits: pending.edits } }],
-        label,
-      );
-    } finally {
-      this.#pendingKerningCell.set(
-        this.#pendingKerningCell.peek().filter((candidate) => candidate.id !== pending.id),
-      );
-    }
+  setKerningValues(edits: readonly KerningValueEdit[], label: string): void {
+    const edit = this.beginKerningEdit();
+    edit.preview(edits);
+    edit.commit(label);
   }
 
   #metricsForSource(source: Source | null): SourceMetrics {
