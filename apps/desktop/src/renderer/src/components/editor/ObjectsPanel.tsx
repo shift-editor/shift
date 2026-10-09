@@ -2,9 +2,9 @@ import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { computed, track, useSignalState } from "@shift/editor/signals";
 import type { SelectableId } from "@shift/types";
 import { useEditor } from "@/workspace/WorkspaceContext";
-import type { ObjectTreeSectionId } from "@/types/objectTree";
+import type { ObjectTree, ObjectTreeSectionId } from "@/types/objectTree";
 import { useListSelection } from "@/hooks/useListSelection";
-import { createObjectTree } from "./object-tree/createObjectTree";
+import { createObjectTree, ObjectTreeCache } from "./object-tree/createObjectTree";
 import { flattenVisibleObjectRows } from "./object-tree/flattenVisibleObjectRows";
 import { OBJECT_ROW_STEP, VirtualObjectRows } from "./object-tree/VirtualObjectRows";
 import { ObjectSectionRow } from "./object-tree/ObjectSectionRow";
@@ -18,26 +18,26 @@ export const ObjectsPanel = () => {
   const [focusedParentId, setFocusedParentId] = useState<SelectableId | null>(null);
   const [pendingFocusId, setPendingFocusId] = useState<SelectableId | null>(null);
   const lastFocusedIndexRef = useRef(0);
-  const objectTreeCell = useMemo(
-    () =>
-      computed(() => {
-        const node = editor.scene.cell.value.nodes.find((candidate) => candidate.kind === "glyph");
-        const externalLocation = editor.externalLocationCell.value;
-        const activeSourceId = editor.activeSourceIdCell.value;
-        if (!node) return [];
+  const objectTreeCell = useMemo(() => {
+    // Reuses unchanged contours' items, so an edit rebuilds only what it touched.
+    const cache = new ObjectTreeCache();
+    return computed(() => {
+      const node = editor.scene.cell.value.nodes.find((candidate) => candidate.kind === "glyph");
+      const externalLocation = editor.externalLocationCell.value;
+      const activeSourceId = editor.activeSourceIdCell.value;
+      if (!node) return [];
 
-        const glyph = editor.glyphForId(node.glyphId);
-        if (!glyph) return [];
+      const glyph = editor.glyphForId(node.glyphId);
+      if (!glyph) return [];
 
-        const layer = activeSourceId
-          ? glyph.layerForSource(activeSourceId)
-          : glyph.layerAt(externalLocation);
-        if (layer) track(layer.geometryCell);
+      const layer = activeSourceId
+        ? glyph.layerForSource(activeSourceId)
+        : glyph.layerAt(externalLocation);
+      if (layer) track(layer.geometryCell);
 
-        return createObjectTree(layer?.geometry ?? glyph.geometryAt(externalLocation));
-      }),
-    [editor],
-  );
+      return createObjectTree(layer?.geometry ?? glyph.geometryAt(externalLocation), cache);
+    });
+  }, [editor]);
   const objectTree = useSignalState(objectTreeCell, { schedule: "frame" });
   const selection = useSignalState(editor.selection.stateCell, { schedule: "frame" });
   const selectedIds = useMemo(() => new Set(selection.ids), [selection.ids]);
@@ -74,23 +74,18 @@ export const ObjectsPanel = () => {
     () => objectTree.flatMap((section) => visibleObjectIdsBySection.get(section.id) ?? []),
     [objectTree, visibleObjectIdsBySection],
   );
-  const parentByObjectId = useMemo(() => {
-    const result = new Map<SelectableId, SelectableId>();
+  // Walk only the selected parents: a map of every child would be rebuilt over all
+  // 50K points on each edit of a large glyph.
+  const coveredIds = useMemo(() => {
+    const result = new Set(selectedIds);
     for (const section of objectTree) {
       for (const parent of section.items) {
-        for (const child of parent.children) result.set(child.id, parent.id);
+        if (!selectedIds.has(parent.id)) continue;
+        for (const child of parent.children) result.add(child.id);
       }
     }
     return result;
-  }, [objectTree]);
-
-  const coveredIds = useMemo(() => {
-    const result = new Set(selectedIds);
-    for (const [childId, parentId] of parentByObjectId) {
-      if (selectedIds.has(parentId)) result.add(childId);
-    }
-    return result;
-  }, [parentByObjectId, selectedIds]);
+  }, [objectTree, selectedIds]);
 
   const { selectItem: selectObject } = useListSelection(visibleObjectIds, selection.ids, (ids) => {
     editor.history.capture("Select object", () => editor.selection.select(ids));
@@ -135,7 +130,7 @@ export const ObjectsPanel = () => {
   const onFocusObject = (id: SelectableId) => {
     lastFocusedIndexRef.current = visibleObjectIds.indexOf(id);
     setFocusedObjectId(id);
-    setFocusedParentId(parentByObjectId.get(id) ?? null);
+    setFocusedParentId(parentOf(objectTree, id));
     setPendingFocusId(null);
   };
 
@@ -224,3 +219,12 @@ export const ObjectsPanel = () => {
     </div>
   );
 };
+
+function parentOf(tree: ObjectTree, id: SelectableId): SelectableId | null {
+  for (const section of tree) {
+    for (const parent of section.items) {
+      if (parent.children.some((child) => child.id === id)) return parent.id;
+    }
+  }
+  return null;
+}
