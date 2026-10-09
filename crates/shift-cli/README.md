@@ -14,6 +14,21 @@ Shift bundles a release `shift-cli` with every desktop build, so the command alw
 
 Shift Nightly installs the same binary as `shift-cli-nightly`, and development builds as `shift-cli-dev` (macOS and Linux only), so release, Nightly, and development builds never replace each other's command. If your terminal finds a different `shift-cli` earlier on `PATH`, such as a `cargo install` build, Shift names it after installing.
 
+## Agent skill
+
+The binary embeds the Shift agent skill (`skills/shift`) and installs the copy that matches it, so agents learn this command's workflows without the app's MCP server:
+
+```sh
+shift-cli skill install            # .agents/skills/shift and .claude/skills/shift in this project
+shift-cli skill install --global   # the same under your home directory
+shift-cli skill status --global    # current, stale, missing, or foreign for each copy
+shift-cli skill show variable-fonts
+```
+
+Each build installs its own skill, named after its command: `shift`, `shift-nightly`, `shift-dev`. A non-release skill opens by naming its command. `SKILL.md` records the version and command in `metadata`, and `status` compares every file, so a stale reference is caught as well as a stale `SKILL.md`. A same-named skill that `shift-cli` did not install is replaced only with `--force`. Shift's **Install Command Line Tool…** offers the global install, and the app refreshes an installed copy at launch with `--refresh-only`.
+
+`shift-cli --version` prints the Shift product version from the root `package.json`, which the release and Nightly workflows set before building.
+
 To build it from a checkout instead, run `pnpm build:cli` (or `cargo build --release -p shift-cli`); packaging the desktop app requires that build.
 
 ## Usage

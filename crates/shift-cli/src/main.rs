@@ -2,6 +2,7 @@ mod authoring;
 mod cli;
 mod glyph_inspect;
 mod inspect;
+mod skill;
 
 use std::io::{self, IsTerminal, Write};
 
@@ -13,13 +14,14 @@ use authoring::{
 use clap::Parser;
 use cli::{
     AxisCommand, Cli, Command, CompileArgs, FontCommand, GlyphCommand, InstanceCommand,
-    LayerCommand, SourceCommand,
+    LayerCommand, SkillCommand, SourceCommand,
 };
 use glyph_inspect::GlyphInspection;
 use inspect::{InspectReport, RenderMode};
 use miette::IntoDiagnostic;
 use shift_backends::{ExportFormat, FontExportRequest, FontExportResult, FontExporter};
 use shift_store::ShiftStore;
+use skill::{SkillReport, install_skill, show_skill, skill_status};
 
 fn main() -> miette::Result<()> {
     match Cli::parse().command {
@@ -102,6 +104,11 @@ fn main() -> miette::Result<()> {
                 let json = args.mutation.json;
                 write_authoring_result(copy_layer(args), json)
             }
+        },
+        Command::Skill { command } => match command {
+            SkillCommand::Show(args) => write_stdout(show_skill(&args)?.trim_end()),
+            SkillCommand::Install(args) => write_skill_report(&install_skill(&args)?, args.json),
+            SkillCommand::Status(args) => write_skill_report(&skill_status(&args)?, args.json),
         },
     }
 }
@@ -187,6 +194,15 @@ fn render_mode() -> RenderMode {
     } else {
         RenderMode::Plain
     }
+}
+
+fn write_skill_report(report: &SkillReport, json: bool) -> miette::Result<()> {
+    let output = if json {
+        serde_json::to_string_pretty(report).into_diagnostic()?
+    } else {
+        report.render()
+    };
+    write_stdout(&output)
 }
 
 fn write_stdout(output: &str) -> miette::Result<()> {
