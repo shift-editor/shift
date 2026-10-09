@@ -28,6 +28,7 @@ export const AgentsSettingsPanel = () => {
           Allow agent connections
           <Switch
             checked={state.allowed}
+            aria-label="Allow agent connections"
             disabled={pending}
             onCheckedChange={async (allowed) => {
               setPending(true);
