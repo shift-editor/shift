@@ -1,4 +1,5 @@
 use crate::errors::{FormatBackendError, FormatBackendResult};
+use crate::feature_includes::inline_feature_includes;
 use crate::import::collect_streamed_font;
 use crate::metrics::set_metric_position;
 use crate::traits::FontReader;
@@ -288,7 +289,11 @@ impl UfoReader {
         let fea_path = ufo_path.join("features.fea");
         if fea_path.exists() {
             match std::fs::read_to_string(&fea_path) {
-                Ok(content) => FeatureData::from_fea(content),
+                // Includes resolve against the folder holding the UFO, as in ufo2ft.
+                Ok(content) => FeatureData::from_fea(inline_feature_includes(
+                    &content,
+                    ufo_path.parent().unwrap_or(ufo_path),
+                )),
                 Err(_) => FeatureData::new(),
             }
         } else {
