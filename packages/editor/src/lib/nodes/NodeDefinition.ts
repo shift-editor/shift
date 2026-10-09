@@ -5,7 +5,7 @@ import type { ShiftNode } from "../../types/node";
 import type { NodeReference } from "../../types/records";
 import type { PointerTarget } from "../../types/target";
 import type { RenderContext, RenderPass } from "../../types/rendering";
-import type { ShiftId } from "@shift/types";
+import type { SelectableId } from "@shift/types";
 import type { TransformTarget } from "../../types/transformTarget";
 
 /**
@@ -17,7 +17,7 @@ import type { TransformTarget } from "../../types/transformTarget";
  * still resolve through `ShiftObject` references.
  *
  * Two kinds of method, kept apart:
- * - Queries (`unitsTransform`, `bounds`, `hit`, `childPosition`,
+ * - Queries (`unitsTransform`, `bounds`, `hit`, `idsInRect`, `childPosition`,
  *   `transformTarget`, `draw`) run during rendering, hit testing, and gesture
  *   starts and must never write. A transform target writes only once begun.
  * - Hooks (`onDoubleClick`, `onContentChange`) may write. The editor calls
@@ -67,6 +67,17 @@ export abstract class NodeDefinition<N extends ShiftNode = ShiftNode> {
   abstract hit(node: N, point: LocalPoint): PointerTarget | null;
 
   /**
+   * Returns what a marquee over this node selects.
+   *
+   * @param node - scene node handled by this definition.
+   * @param rect - marquee already converted into the node's local coordinate space.
+   * @returns the selectable objects the rect catches; empty when it catches none.
+   */
+  idsInRect(_node: N, _rect: LocalBounds): readonly SelectableId[] {
+    return [];
+  }
+
+  /**
    * Returns where this node lays out one of its children.
    *
    * @remarks
@@ -102,7 +113,7 @@ export abstract class NodeDefinition<N extends ShiftNode = ShiftNode> {
    * @param ids - the selected objects.
    * @returns null when this kind cannot transform that selection as a whole.
    */
-  transformTarget?(node: N, ids: readonly ShiftId[]): TransformTarget | null;
+  transformTarget?(node: N, ids: readonly SelectableId[]): TransformTarget | null;
 
   /**
    * Responds to a double-click on this node or on one of its descendants.

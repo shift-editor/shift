@@ -1,6 +1,13 @@
 import type { NodeReference } from "../../types/records";
-import { Bounds, Mat } from "@shift/geo";
-import type { ComponentId, NodeId, PointId, SegmentId, ShiftId, SourceMetrics } from "@shift/types";
+import { Bounds, Curve, Mat, Rect } from "@shift/geo";
+import type {
+  ComponentId,
+  NodeId,
+  PointId,
+  SegmentId,
+  SelectableId,
+  SourceMetrics,
+} from "@shift/types";
 import type { LocalBounds, LocalPoint } from "../../types/coordinates";
 import { localBounds } from "../editor/spaces";
 import { SCREEN_HIT_RADIUS } from "../editor/rendering/constants";
@@ -115,6 +122,33 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     return localBounds(outline ? Bounds.union(advanceBox, outline) : advanceBox);
   }
 
+  /**
+   * Points inside the rect, plus segments it touches without catching just one end point.
+   *
+   * @remarks
+   * A run child gives up its points only while edited, as with clicks.
+   */
+  override idsInRect(node: GlyphNode, rect: LocalBounds): SelectableId[] {
+    if (node.parentId !== null && !this.#isEditing(node)) return [];
+    const glyph = this.editor.glyphForId(node.glyphId);
+    if (!glyph) return [];
+
+    const geometry = glyph.geometryAt(this.editor.externalLocation);
+    const localRect = Bounds.toRect(rect);
+    const ids: SelectableId[] = [];
+    for (const point of geometry.allPoints) {
+      if (Rect.containsPoint(localRect, point)) ids.push(point.id);
+    }
+    for (const segment of geometry.segments) {
+      const startInside = Rect.containsPoint(localRect, segment.start);
+      const endInside = Rect.containsPoint(localRect, segment.end);
+      // Brushing one end point selects that point alone, not the segments leaving it.
+      if (startInside !== endInside) continue;
+      if (Curve.intersectsRect(segment.toCurve(), localRect)) ids.push(segment.id);
+    }
+    return ids;
+  }
+
   hit(node: GlyphNode, point: LocalPoint): PointerTarget | null {
     // A run child you are not editing is plain text; its parent run answers the hit.
     if (node.parentId !== null && !this.#isEditing(node)) return null;
@@ -227,7 +261,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
   }
 
   /** Selected components transform their placement in every source being edited. */
-  override transformTarget(_node: GlyphNode, ids: readonly ShiftId[]): TransformTarget | null {
+  override transformTarget(_node: GlyphNode, ids: readonly SelectableId[]): TransformTarget | null {
     const selection = this.editor.componentTransformSelection(ids);
     if (!selection) return null;
 
