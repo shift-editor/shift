@@ -41,8 +41,13 @@ export const Toolbar = ({ toggleLeftSidebar, toggleRightSidebar }: ToolbarProps)
   );
 
   return (
-    <div className="title-bar-area flex bg-chrome">
-      <WindowControls side="start" />
+    // EditorToolbar paints its own chrome background. Painting the row as well
+    // doubled translucent theme colours (Dracula, Nord), so only the window
+    // control slots beside it get one.
+    <div className="title-bar-area flex">
+      <div className="flex bg-chrome">
+        <WindowControls side="start" />
+      </div>
       <div className="min-w-0 flex-1">
         <MemoizedEditorToolbar
           session={session}
@@ -51,7 +56,9 @@ export const Toolbar = ({ toggleLeftSidebar, toggleRightSidebar }: ToolbarProps)
           onToggleRightSidebar={toggleRightSidebar}
         />
       </div>
-      <WindowControls side="end" />
+      <div className="flex bg-chrome">
+        <WindowControls side="end" />
+      </div>
     </div>
   );
 };
