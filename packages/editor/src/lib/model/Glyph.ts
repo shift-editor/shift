@@ -88,6 +88,7 @@ import { GlyphLayerEdit } from "./GlyphLayerEdit";
 import { ComponentTransformEdit } from "./ComponentTransformEdit";
 import { SidebearingEdit } from "./SidebearingEdit";
 import type { Sidebearing } from "../../types/spacing";
+import { GlyphTransformEdit, type GlyphTransformOptions } from "./GlyphTransformEdit";
 import { DeletePoints } from "./DeletePoints";
 import { JoinContours, type ContourEnd } from "./JoinContours";
 import { GlyphLayerState } from "./GlyphLayerState";
@@ -194,12 +195,18 @@ class GlyphLayerWriter {
 
     const commit = () => {
       if (pointIds.length > 0) {
-        const editId = this.#workspaceIntents.movePoints({ pointIds, coords: pointCoords });
+        const editId = this.#workspaceIntents.movePoints({
+          pointIds,
+          coords: pointCoords,
+        });
         this.#state.state.movePoints(editId, pointIds, pointCoords);
       }
 
       if (anchorIds.length > 0) {
-        const editId = this.#workspaceIntents.moveAnchors({ anchorIds, coords: anchorCoords });
+        const editId = this.#workspaceIntents.moveAnchors({
+          anchorIds,
+          coords: anchorCoords,
+        });
         this.#state.state.moveAnchors(editId, anchorIds, anchorCoords);
       }
     };
@@ -215,7 +222,9 @@ class GlyphLayerWriter {
   transformLayer(matrix: MatModel): void {
     // Six numbers on the wire whatever the layer's size; Rust does the authoritative math.
     const { a, b, c, d, e, f } = matrix;
-    const editId = this.#workspaceIntents.transformLayer({ matrix: [a, b, c, d, e, f] });
+    const editId = this.#workspaceIntents.transformLayer({
+      matrix: [a, b, c, d, e, f],
+    });
     this.#state.state.transformLayer(editId, matrix);
   }
 
@@ -276,12 +285,18 @@ class GlyphLayerWriter {
   }
 
   openContour(contourId: ContourId): void {
-    const editId = this.#workspaceIntents.setContourClosed({ contourId, closed: false });
+    const editId = this.#workspaceIntents.setContourClosed({
+      contourId,
+      closed: false,
+    });
     this.#state.state.setContourClosed(editId, contourId, false);
   }
 
   closeContour(contourId: ContourId): void {
-    const editId = this.#workspaceIntents.setContourClosed({ contourId, closed: true });
+    const editId = this.#workspaceIntents.setContourClosed({
+      contourId,
+      closed: true,
+    });
     this.#state.state.setContourClosed(editId, contourId, true);
   }
 
@@ -291,7 +306,10 @@ class GlyphLayerWriter {
   }
 
   setContourStart(contourId: ContourId, pointId: PointId): void {
-    const editId = this.#workspaceIntents.setContourStart({ contourId, pointId });
+    const editId = this.#workspaceIntents.setContourStart({
+      contourId,
+      pointId,
+    });
     this.#state.state.setContourStart(editId, contourId, pointId);
   }
 
@@ -301,7 +319,11 @@ class GlyphLayerWriter {
     operation: "union" | "subtract" | "intersect" | "difference",
   ): void {
     // Rust-only computation; the echo folds like any other intent.
-    this.#workspaceIntents.applyBooleanOp({ contourIdA, contourIdB, operation });
+    this.#workspaceIntents.applyBooleanOp({
+      contourIdA,
+      contourIdB,
+      operation,
+    });
   }
 
   removePoints(pointIds: readonly PointId[]): void {
@@ -373,13 +395,17 @@ class GlyphLayerWriter {
   removeComponents(componentIds: readonly ComponentId[]): void {
     if (componentIds.length === 0) return;
 
-    this.#workspaceIntents.removeComponents({ componentIds: [...componentIds] });
+    this.#workspaceIntents.removeComponents({
+      componentIds: [...componentIds],
+    });
   }
 
   decomposeComponents(componentIds: readonly ComponentId[]): void {
     if (componentIds.length === 0) return;
 
-    this.#workspaceIntents.decomposeComponents({ componentIds: [...componentIds] });
+    this.#workspaceIntents.decomposeComponents({
+      componentIds: [...componentIds],
+    });
   }
 
   setPointSmooth(pointId: PointId, smooth: boolean): void {
@@ -710,6 +736,11 @@ export class GlyphLayer {
    */
   beginSidebearingEdit(sidebearing: Sidebearing): SidebearingEdit {
     return new SidebearingEdit(this, this.#writer.layerState, sidebearing);
+  }
+
+  /** Begins one reversible preview cycle that moves, scales, or rotates this whole layer. */
+  beginTransformEdit(options: GlyphTransformOptions): GlyphTransformEdit {
+    return new GlyphTransformEdit(this, this.#writer.layerState, options);
   }
 
   /** Begins one reversible preview cycle across matched component source layers. */

@@ -105,6 +105,7 @@ import { ShiftStore } from "../store/ShiftStore";
 import { EditorGesture, EditorInput, EditorViewState } from "./EditorState";
 import type { PointerTarget } from "../../types/target";
 import type { ComponentTransformSelection } from "../../types/componentTransform";
+import type { TransformTarget } from "../../types/transformTarget";
 import type { ComponentTargets } from "../../types/componentTargets";
 import type { PositionSelection } from "../../types/positionEdit";
 import type { ShiftObject } from "../../types/object";
@@ -425,7 +426,10 @@ export class Editor {
       if (manifest.hidden || manifest.disabled) continue;
 
       if (manifest.shortcut != null) {
-        const shortcut: ToolShortcutEntry = { toolId, shortcut: manifest.shortcut };
+        const shortcut: ToolShortcutEntry = {
+          toolId,
+          shortcut: manifest.shortcut,
+        };
         if (manifest.onSelect) shortcut.onSelect = manifest.onSelect;
         shortcuts.push(shortcut);
       }
@@ -433,7 +437,11 @@ export class Editor {
       for (const item of manifest.menuItems ?? []) {
         if (item.shortcut === manifest.shortcut) continue;
 
-        shortcuts.push({ toolId, shortcut: item.shortcut, onSelect: item.onSelect });
+        shortcuts.push({
+          toolId,
+          shortcut: item.shortcut,
+          onSelect: item.onSelect,
+        });
       }
     }
     return shortcuts;
@@ -882,7 +890,7 @@ export class Editor {
       const { item } = location;
       const glyphId =
         item.kind === "glyph" ? (this.font.entryForName(item.glyphName)?.id ?? null) : null;
-      return new TextItemObject(node, id, glyphId);
+      return new TextItemObject(node, id, glyphId, this.nodeDefinition("textRun"));
     }
 
     return null;
@@ -976,6 +984,25 @@ export class Editor {
   }
 
   /**
+   * Resolves a selection into something the transform box can move, scale, and rotate as a whole.
+   *
+   * @remarks
+   * Asks the definition of the node every selected object belongs to.
+   *
+   * @param ids - Selected object identities, defaulting to the current selection.
+   * @returns null for an empty selection, one spanning nodes, or one the node's kind cannot transform.
+   */
+  public transformTarget(
+    ids: readonly SelectableId[] = this.selection.ids,
+  ): TransformTarget | null {
+    if (ids.length === 0) return null;
+    const node = this.selectionNode(ids);
+    if (!node) return null;
+
+    return this.nodeDefinition(node.kind).transformTarget?.(node, ids) ?? null;
+  }
+
+  /**
    * Resolves selected objects into reference and matched-layer position targets.
    *
    * @remarks
@@ -1014,6 +1041,7 @@ export class Editor {
         }
         case "component":
         case "node":
+        case "textItem":
           return null;
       }
     }
@@ -1259,19 +1287,36 @@ export class Editor {
     return this.#selectionBounds;
   }
 
+  /** Selects every glyph item of every run; the run level's select-all. */
+  #selectAllGlyphItems(): void {
+    const ids = this.scene
+      .nodesOfKind("textRun")
+      .flatMap((node) => this.text.run(node.runId)?.items ?? [])
+      .filter((item) => item.kind === "glyph")
+      .map((item) => item.id);
+    if (ids.length === 0) return;
+
+    this.history.capture("Select all", () => this.selection.select(ids));
+  }
+
   /** Reactive scene-space bounds of the current selection; see {@link selectionSceneBounds}. */
   public get selectionSceneBoundsCell(): Signal<SceneBounds | null> {
     return this.#selectionSceneBounds;
   }
 
   /**
-   * Select every point in the active authored glyph layer.
+   * Select every point in the active authored glyph layer, or every run glyph when none is edited.
    *
    * This intentionally uses the authored glyph layer rather than interpolated
    * design-location geometry: selection mutates an authored layer, so it must
    * refer to point IDs that layer operations can mutate.
    */
   public selectAll(): void {
+    if (!this.editing.hasScope() && this.scene.nodesOfKind("textRun").length > 0) {
+      this.#selectAllGlyphItems();
+      return;
+    }
+
     const sourceId = this.activeSourceId;
     if (!sourceId) return;
 
@@ -1622,6 +1667,13 @@ export class Editor {
     this.selection.clear();
     this.hover.clear();
     this.editing.enter(nodeId);
+  }
+
+  /** Leaves every edited node, so glyphs draw and hit as plain content. */
+  exitNodes(): void {
+    this.selection.clear();
+    this.hover.clear();
+    this.editing.clear();
   }
 
   /**

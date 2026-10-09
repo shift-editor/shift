@@ -1,6 +1,13 @@
 import type { NodeReference } from "../../types/records";
-import { Bounds, Mat } from "@shift/geo";
-import type { ComponentId, NodeId, PointId, SegmentId, SourceMetrics } from "@shift/types";
+import { Bounds, Curve, Mat, Rect } from "@shift/geo";
+import type {
+  ComponentId,
+  NodeId,
+  PointId,
+  SegmentId,
+  SelectableId,
+  SourceMetrics,
+} from "@shift/types";
 import type { LocalBounds, LocalPoint } from "../../types/coordinates";
 import { localBounds } from "../editor/spaces";
 import { SCREEN_HIT_RADIUS } from "../editor/rendering/constants";
@@ -24,11 +31,18 @@ import { NodeDefinition } from "./NodeDefinition";
 import type { GlyphNode } from "../../types/node";
 import type { RenderContext, RenderPass } from "../../types/rendering";
 import type { PointerTarget } from "../../types/target";
+import type { TransformAction, TransformTarget } from "../../types/transformTarget";
 import type { GlyphOutlineTarget, ResolvedGlyphOutlineTarget } from "../../types/glyphOutline";
 import { emptyExternalAxisLocation, externalAxisLocationFromLocation } from "../variation/location";
 import { GlyphOutlines } from "./GlyphOutlines";
 
 const EMPTY_OUTLINE_LOCATION = emptyExternalAxisLocation();
+
+const COMPONENT_LABELS: Record<TransformAction, string> = {
+  move: "Move components",
+  scale: "Scale components",
+  rotate: "Rotate components",
+};
 
 export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
   readonly kind: GlyphNode["kind"] = "glyph";
@@ -106,6 +120,33 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     );
     const outline = view.bounds;
     return localBounds(outline ? Bounds.union(advanceBox, outline) : advanceBox);
+  }
+
+  /**
+   * Points inside the rect, plus segments it touches without catching just one end point.
+   *
+   * @remarks
+   * A run child gives up its points only while edited, as with clicks.
+   */
+  override selectableInRect(node: GlyphNode, rect: LocalBounds): SelectableId[] {
+    if (node.parentId !== null && !this.#isEditing(node)) return [];
+    const glyph = this.editor.glyphForId(node.glyphId);
+    if (!glyph) return [];
+
+    const geometry = glyph.geometryAt(this.editor.externalLocation);
+    const localRect = Bounds.toRect(rect);
+    const ids: SelectableId[] = [];
+    for (const point of geometry.allPoints) {
+      if (Rect.containsPoint(localRect, point)) ids.push(point.id);
+    }
+    for (const segment of geometry.segments) {
+      const startInside = Rect.containsPoint(localRect, segment.start);
+      const endInside = Rect.containsPoint(localRect, segment.end);
+      // Brushing one end point selects that point alone, not the segments leaving it.
+      if (startInside !== endInside) continue;
+      if (Curve.intersectsRect(segment.toCurve(), localRect)) ids.push(segment.id);
+    }
+    return ids;
   }
 
   hit(node: GlyphNode, point: LocalPoint): PointerTarget | null {
@@ -219,6 +260,24 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     }
   }
 
+  /** Selected components transform their placement in every source being edited. */
+  override transformTarget(_node: GlyphNode, ids: readonly SelectableId[]): TransformTarget | null {
+    const selection = this.editor.componentTransformSelection(ids);
+    if (!selection) return null;
+
+    return {
+      bounds: selection.bounds,
+      begin: (action) => {
+        const edit = selection.layer.beginComponentTransformEdit(selection);
+        return {
+          preview: (deltaFor) => edit.preview(deltaFor),
+          commit: () => edit.commit(COMPONENT_LABELS[action]),
+          discard: () => edit.discard(),
+        };
+      },
+    };
+  }
+
   #view(node: GlyphNode): GlyphRenderModel | null {
     return (
       this.editor
@@ -277,7 +336,8 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
 
     if (editing) {
       this.#drawEditableContent(node, ctx, view);
-    } else {
+    } else if (node.parentId === null) {
+      // A run child you are not editing is plain text; its parent run draws it.
       this.#drawDisplayContent(ctx, view);
     }
 

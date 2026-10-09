@@ -5,7 +5,7 @@ import type { SelectBehavior, SelectState } from "../types";
 import type { Select } from "../Select";
 import type { BoundingRectEdge as NullableBoundingRectEdge } from "../cursor";
 import { PositionEdits, PositionList, type ScaleEdit } from "../../../model/positions";
-import type { ComponentTransformEdit } from "../../../model/ComponentTransformEdit";
+import type { TransformEdit } from "../../../../types/transformTarget";
 import type { Editor } from "../../../editor/Editor";
 import { localBounds, scenePoint } from "../../../editor/spaces";
 import type { LocalBounds } from "../../../../types/coordinates";
@@ -17,7 +17,7 @@ export class Resize implements SelectBehavior {
   #editor: Editor | null = null;
   #node: ShiftNode | null = null;
   #edit: ScaleEdit | null = null;
-  #componentEdit: ComponentTransformEdit | null = null;
+  #transformEdit: TransformEdit | null = null;
   #done: (() => void) | null = null;
 
   onDragStart(
@@ -30,16 +30,18 @@ export class Resize implements SelectBehavior {
     const hit = ctx.tool.boundingBox.hit(event.origin);
     if (hit?.type !== "resize") return false;
 
-    const componentSelection = ctx.editor.componentTransformSelection(ctx.editor.selection.ids);
-    const positionSelection = ctx.editor.positionSelection(ctx.editor.selection.ids);
-    if (!componentSelection && !positionSelection) return false;
+    const transformTarget = ctx.editor.transformTarget();
+    const positionSelection = transformTarget
+      ? null
+      : ctx.editor.positionSelection(ctx.editor.selection.ids);
+    if (!transformTarget && !positionSelection) return false;
 
     const node = ctx.editor.selectionNode();
     if (!node) return false;
 
     let targetBounds: LocalBounds;
-    if (componentSelection) {
-      targetBounds = localBoundsOfRect(componentSelection.bounds);
+    if (transformTarget) {
+      targetBounds = localBoundsOfRect(transformTarget.bounds);
     } else if (positionSelection) {
       const positions = PositionList.fromTargetGroups(
         positionSelection.layer,
@@ -62,9 +64,8 @@ export class Resize implements SelectBehavior {
     const anchorPoint = this.getAnchorPointForEdge(edge, hit.rect, event.altKey);
     const localAnchorPoint = this.#localAnchor(edge, targetBounds, event.altKey);
 
-    if (componentSelection) {
-      this.#componentEdit =
-        componentSelection.layer.beginComponentTransformEdit(componentSelection);
+    if (transformTarget) {
+      this.#transformEdit = transformTarget.begin("scale");
     } else if (positionSelection) {
       this.#edit = PositionEdits.fromSelection(positionSelection).scale(
         positionSelection.targets,
@@ -72,10 +73,10 @@ export class Resize implements SelectBehavior {
       );
     }
     const edit = this.#edit;
-    const componentEdit = this.#componentEdit;
+    const transformEdit = this.#transformEdit;
     this.#done = ctx.onCancel(() => {
       edit?.discard();
-      componentEdit?.discard();
+      transformEdit?.discard();
     });
 
     ctx.setState({
@@ -98,7 +99,7 @@ export class Resize implements SelectBehavior {
 
   onDrag(state: SelectState, ctx: ToolContext<SelectState, Select>, event: DragEvent): boolean {
     if (state.type !== "resizing") return false;
-    if (!this.#edit && !this.#componentEdit) return false;
+    if (!this.#edit && !this.#transformEdit) return false;
 
     const next = this.nextResizingState(state, event);
     ctx.setState(next);
@@ -109,7 +110,7 @@ export class Resize implements SelectBehavior {
     if (state.type !== "resizing") return false;
 
     this.#edit?.commit();
-    this.#componentEdit?.commit("Scale components");
+    this.#transformEdit?.commit();
     if (this.#done) this.#done();
     this.#cleanup();
 
@@ -155,13 +156,13 @@ export class Resize implements SelectBehavior {
     this.#editor = null;
     this.#node = null;
     this.#edit = null;
-    this.#componentEdit = null;
+    this.#transformEdit = null;
     this.#done = null;
   }
 
   private nextResizingState(state: SelectState, event: DragEvent): SelectState {
     if (state.type !== "resizing") return state;
-    if (!this.#edit && !this.#componentEdit) return state;
+    if (!this.#edit && !this.#transformEdit) return state;
 
     const uniformScale = event.shiftKey;
     const currentPos = event.coords.scene;
@@ -184,11 +185,11 @@ export class Resize implements SelectBehavior {
       uniformScale,
     );
 
-    if (this.#componentEdit) {
-      this.#componentEdit.preview((layer) => {
+    if (this.#transformEdit) {
+      this.#transformEdit.preview((part) => {
         const origin = this.#localAnchor(
           state.resize.edge,
-          localBoundsOfRect(layer.bounds),
+          localBoundsOfRect(part.bounds),
           event.altKey,
         );
         const scale = Mat.Scale(sx, sy);
