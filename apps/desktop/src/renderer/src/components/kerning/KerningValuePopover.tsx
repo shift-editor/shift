@@ -29,13 +29,13 @@ interface KerningValuePopoverProps {
  */
 export function KerningValuePopover({ container }: KerningValuePopoverProps) {
   const editor = useEditor();
-  const tool = useSignalState(editor.toolCell);
+  const tool = useSignalState(editor.toolCellIf("kerning"));
   useSignalState(editor.camera.viewCell);
   const cancelled = useRef(false);
 
   const kerning = editor.toolManager.activeTool;
   const pair = kerning instanceof KerningTool ? kerning.editing : null;
-  if (tool?.id !== "kerning" || !(kerning instanceof KerningTool) || !pair) return null;
+  if (!tool || !(kerning instanceof KerningTool) || !pair) return null;
 
   const anchor = {
     getBoundingClientRect: () => {

@@ -20,7 +20,7 @@ import { SidebarSection } from "./SidebarSection";
  */
 export const KerningPairSection = () => {
   const editor = useEditor();
-  useSignalState(editor.toolCell);
+  useSignalState(editor.toolCellIf("kerning"));
   const kerning = useSignalState(editor.font.kerningCell);
   const activeSourceId = useSignalState(editor.activeSourceIdCell);
   const sources = useSignalState(editor.font.sourcesCell);
