@@ -81,6 +81,14 @@ impl Font {
                         .cloned();
                     require_original(&current, &layer.before, "glyph layer")?;
                 }
+                FontChange::KerningValue {
+                    source_id,
+                    pair,
+                    value,
+                } => {
+                    let current = self.kerning().value(source_id, pair);
+                    require_original(&current, &value.before, "kerning value")?;
+                }
             }
         }
 
@@ -127,6 +135,19 @@ impl Font {
                     data.sources = value.after.sources.clone();
                     data.default_source_id = value.after.default_source_id.clone();
                 }
+                FontChange::KerningValue {
+                    source_id,
+                    pair,
+                    value,
+                } => match value.after {
+                    Some(after) => {
+                        self.kerning_mut()
+                            .set_value(source_id.clone(), pair.clone(), after);
+                    }
+                    None => {
+                        self.kerning_mut().remove_value(source_id, pair);
+                    }
+                },
                 FontChange::Glyph(_) | FontChange::Layer { .. } => {}
             }
         }

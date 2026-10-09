@@ -548,8 +548,8 @@ export interface FontIntent {
    * "transformLayer" | "setXAdvance" | "applyBooleanOp".
    * Font-level kinds additionally include metadata replacement, tracked
    * language replacement, axis create/update/delete, mapping replacement,
-   * named-instance create/update/delete, source create/delete, and glyph
-   * or layer creation.
+   * named-instance create/update/delete, source create/delete, glyph
+   * or layer creation, and "setKerningValues".
    * Every kind shares the same apply path; one set is one undo step.
    */
   kind: string
@@ -590,6 +590,7 @@ export interface FontIntent {
   createGlyphLayer?: CreateGlyphLayerIntent
   cloneGlyphLayer?: CloneGlyphLayerIntent
   materializeGlyphLayer?: MaterializeGlyphLayerIntent
+  setKerningValues?: SetKerningValuesIntent
 }
 
 export interface FontMetadata {
@@ -821,6 +822,15 @@ export interface KerningSnapshot {
   basis?: InterpolationBasis
 }
 
+/** One kerning pair value to set or remove at one source. */
+export interface KerningValueEdit {
+  sourceId: SourceId
+  first: KerningSide
+  second: KerningSide
+  /** New value in font units; absent removes the pair at this source. */
+  amount?: number
+}
+
 /**
  * Replacement wrapper whose presence distinguishes "unchanged" from a
  * change that removed the tracked language list.
@@ -1016,6 +1026,11 @@ export interface SetContourStartIntent {
   layerId: LayerId
   contourId: ContourId
   pointId: PointId
+}
+
+/** Sets or removes kerning pair values at sources as one undoable edit. */
+export interface SetKerningValuesIntent {
+  edits: Array<KerningValueEdit>
 }
 
 /** Replaces the font's tracked language list as one undoable edit. */

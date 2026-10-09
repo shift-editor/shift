@@ -3,7 +3,7 @@ use std::sync::Arc;
 use bitflags::bitflags;
 
 use crate::{
-    Axis, AxisMapping, FontMetadata, Glyph, GlyphId, GlyphLayer, LayerId, LibValue,
+    Axis, AxisMapping, FontMetadata, Glyph, GlyphId, GlyphLayer, KerningPair, LayerId, LibValue,
     MetricDefinition, NamedInstance, Source, SourceId, LANGUAGES_LIB_KEY,
 };
 
@@ -93,6 +93,12 @@ pub enum FontChange {
         layer: Replacement<Option<Arc<GlyphLayer>>>,
         structural: bool,
     },
+    /// One pair's value at one source; `None` is no value.
+    KerningValue {
+        source_id: SourceId,
+        pair: KerningPair,
+        value: Replacement<Option<f64>>,
+    },
 }
 
 impl FontChange {
@@ -129,6 +135,7 @@ impl FontChange {
                 structural: true, ..
             } => FontChangeImpact::GLYPHS,
             Self::Layer { .. } => FontChangeImpact::empty(),
+            Self::KerningValue { .. } => FontChangeImpact::KERNING,
         }
     }
 
@@ -168,6 +175,15 @@ impl FontChange {
                 glyph_id: glyph_id.clone(),
                 layer: Replacement::new(layer.after.clone(), layer.before.clone()),
                 structural: *structural,
+            },
+            Self::KerningValue {
+                source_id,
+                pair,
+                value,
+            } => Self::KerningValue {
+                source_id: source_id.clone(),
+                pair: pair.clone(),
+                value: Replacement::new(value.after, value.before),
             },
         }
     }
@@ -295,7 +311,9 @@ impl FontChangeSet {
                         change,
                     }),
                 ),
-                FontChange::Metadata(_) | FontChange::LibValue { .. } => {}
+                FontChange::Metadata(_)
+                | FontChange::LibValue { .. }
+                | FontChange::KerningValue { .. } => {}
             }
         }
         entities

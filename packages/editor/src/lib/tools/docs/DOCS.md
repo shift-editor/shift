@@ -36,6 +36,8 @@ State machine-based tool system for the Shift font editor: translates pointer/ke
 
 - **Architecture Invariant:** The value pill's rectangle has one source, `spacingLabelRect`, used for both drawing and click hit-testing. It sizes the pill from a fixed character width, not `measureText`, so hits agree with the drawing without a canvas.
 
+- **Architecture Invariant:** The Kerning tool measures pairs through the same spacing gaps; the kern is the distance between a gap's `leftBoundary` and `rightBoundary`. Edits go to the active source only: dragging previews through `Font.previewKerning` and commits one `setKerningValues` edit on release; nudges, typed values, and the sidebar's exception toggles commit immediately. The canvas stays minimal (a translucent strip between the advance edges, violet when the kern tightens or is zero and teal when it loosens (`--editor-kerning`, `--editor-kerning-positive`), and grey between sources where it is interpolated and read-only (`--editor-interpolated`, which the Spacing overlay uses too), and a value pill below the baseline marking exception sides with a lock); group names, exception toggles, and an editable kern per source live in the desktop sidebar's Pair section, which reads `KerningTool.currentPair` and renders nothing until a pair is selected. Each edit changes `Kerning.editablePair` — the pair that applies at that source, or the most general one the glyphs' groups allow. A lock makes one side a glyph exception at that source (starting at its current value, so the kern does not move) or removes it; locks are per source, like values.
+- **Architecture Invariant:** One toolbar slot can hold several tools. A `ToolMenuItem.toolId` names the tool the item activates; the slot activates the selected item's tool, highlights while any of its tools is active, and the item's shortcut targets that tool. Kerning is registered `hidden` and reached through the Spacing slot (`M`/`K`).
 - **Architecture Invariant:** The Spacing tool's `editing` state is the single source of truth for the value popover. The desktop `SpacingValuePopover` only renders that state and calls `setEditedSidebearing` / `switchEditedSide` / `endEditing`. The canvas click that opens it reads to Base UI as an outside press, so the popover ignores outside presses on the canvas and the tool closes it on its own canvas clicks.
 
 Select gives editable root point, anchor, and segment proximity first priority, then tests component contours by proximity before filled occurrences. Component candidates follow front-to-back paint order; nested geometry selects the first component in its `componentPath`. Component-only selections expose occurrence bounds and route move, corner-scale, and rotation-zone drags through `ComponentTransformEdit` rather than point-position transforms. The bounding-box interior is a move target even where the component has no filled geometry.
@@ -67,10 +69,18 @@ tools/
     SnapTargets.ts       — the values a dragged sidebearing snaps to
     SpacingGapOverlay.ts — hatched halves, value pill, selection outline, snap feedback
     SpacingLabel.ts      — value pill geometry shared by drawing and hit-testing
+  kerning/
+    Kerning.ts           — KerningTool: hover, selection, value popover contract, overlay drawing
+    behaviors.ts         — hover, pill value and lock clicks, select click, drag, keyboard nudge and Tab
+    RunKerning.ts        — KerningPair (the kern between two run items: edit, preview, lock) and RunKerning
+    KerningOverlay.ts    — kern strip, value pill, group glyphs while the pill is hovered
+    KerningLabel.ts      — pill geometry (value and exception locks) shared by drawing and hit-testing
 apps/desktop/src/renderer/src/lib/tools/
   tools.ts               — registerBuiltInTools (wires all tools + desktop icons and shortcuts)
 apps/desktop/src/renderer/src/components/spacing/
   SpacingValuePopover.tsx — typed sidebearing for the Spacing tool's open pill
+apps/desktop/src/renderer/src/components/kerning/
+  KerningValuePopover.tsx — typed kern for the Kerning tool's open value
 ```
 
 ## Key Types
@@ -323,7 +333,7 @@ onDragCancel(state, ctx) {
 
 - **`ToolContext.onCancel()` is drag-only.** Register while handling `dragStart` or `drag`; calling it from click, key, drag-end, or cancellation events throws. Call the returned function only after successful commit.
 
-- **`ToolName` is `string`, not a fixed union.** The `BUILT_IN_TOOL_IDS` constant lists known IDs (`select`, `pen`, `hand`, `shape`, `text`, `spacing`, `disabled`) but the type is open for plugin tools.
+- **`ToolName` is `string`, not a fixed union.** The `BUILT_IN_TOOL_IDS` constant lists known IDs (`select`, `pen`, `hand`, `shape`, `text`, `spacing`, `kerning`, `disabled`) but the type is open for plugin tools.
 
 - **An edit that changes nothing breaks the next undo** (#524). Spacing's `setSidebearing` ignores a value equal to the current one for that reason; do the same in any new sidebearing or advance writer until the history bug is fixed.
 

@@ -523,3 +523,88 @@ fn parent_deletion_does_not_reinsert_an_earlier_layer_override() {
     let saved = ShiftStore::open_document(&document_path).expect("open saved document");
     assert_eq!(saved.load_font_state().unwrap(), post);
 }
+
+fn kerning_edit(
+    font: &mut shift_font::Font,
+    source_id: &str,
+    value: Option<f64>,
+) -> shift_font::FontChangeSet {
+    font.apply_intents(shift_font::FontIntentSet {
+        intents: vec![shift_font::FontIntent::SetKerningValues {
+            edits: vec![shift_font::KerningValueEdit {
+                source_id: shift_font::SourceId::from_raw(source_id),
+                pair: shift_font::KerningPair::groups(
+                    shift_font::KerningGroupId::from_raw("first_A"),
+                    shift_font::KerningGroupId::from_raw("second_A"),
+                ),
+                value,
+            }],
+        }],
+    })
+    .expect("kerning edit applies")
+    .changes
+}
+
+fn stored_kerning(store: &ShiftStore, source_id: &str) -> Option<f64> {
+    store.load_font_state().unwrap().kerning().value(
+        &shift_font::SourceId::from_raw(source_id),
+        &shift_font::KerningPair::groups(
+            shift_font::KerningGroupId::from_raw("first_A"),
+            shift_font::KerningGroupId::from_raw("second_A"),
+        ),
+    )
+}
+
+#[test]
+fn kerning_edits_persist_in_a_working_store() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let path = temp.path().join("working.sqlite");
+    let mut font = sample_font();
+    let mut store = ShiftStore::open(&path).expect("open working store");
+    store.replace_font_state(&font).expect("write font");
+
+    let set = kerning_edit(&mut font, "regular", Some(-40.0));
+    store.apply_change_set_with_font(&set, &font, true).unwrap();
+    let removed = kerning_edit(&mut font, "bold", None);
+    store
+        .apply_change_set_with_font(&removed, &font, true)
+        .unwrap();
+    drop(store);
+
+    let reopened = ShiftStore::open(&path).expect("reopen working store");
+    assert_eq!(stored_kerning(&reopened, "regular"), Some(-40.0));
+    assert_eq!(stored_kerning(&reopened, "bold"), None);
+    assert_eq!(reopened.load_font_state().unwrap(), font);
+}
+
+#[test]
+fn recovery_overlay_keeps_unsaved_kerning_until_saved() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let document_path = temp.path().join("Dogfood.shift");
+    let recovery_path = temp.path().join("Dogfood.recovery.sqlite");
+    let mut font = sample_font();
+    drop(ShiftStore::create_document(&document_path, &font).expect("create document"));
+
+    let mut document = ShiftStore::open_document_with_recovery(&document_path, &recovery_path)
+        .expect("open with recovery");
+    let changes = kerning_edit(&mut font, "regular", Some(-40.0));
+    document
+        .apply_change_set_with_font(&changes, &font, true)
+        .unwrap();
+    drop(document);
+
+    let canonical = ShiftStore::open_document(&document_path).expect("open canonical");
+    assert_eq!(stored_kerning(&canonical, "regular"), Some(-80.0));
+    assert_eq!(stored_kerning(&canonical, "bold"), Some(-120.0));
+    drop(canonical);
+
+    let mut recovered = ShiftStore::open_document_with_recovery(&document_path, &recovery_path)
+        .expect("reopen with recovery");
+    assert_eq!(stored_kerning(&recovered, "regular"), Some(-40.0));
+    assert_eq!(stored_kerning(&recovered, "bold"), Some(-120.0));
+    recovered.save_document().unwrap();
+    drop(recovered);
+
+    let saved = ShiftStore::open_document(&document_path).expect("open saved document");
+    assert_eq!(saved.load_font_state().unwrap(), font);
+}

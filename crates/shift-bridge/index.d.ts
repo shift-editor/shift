@@ -542,8 +542,8 @@ export interface NapiFontIntent {
    * "transformLayer" | "setXAdvance" | "applyBooleanOp".
    * Font-level kinds additionally include metadata replacement, tracked
    * language replacement, axis create/update/delete, mapping replacement,
-   * named-instance create/update/delete, source create/delete, and glyph
-   * or layer creation.
+   * named-instance create/update/delete, source create/delete, glyph
+   * or layer creation, and "setKerningValues".
    * Every kind shares the same apply path; one set is one undo step.
    */
   kind: string
@@ -584,6 +584,7 @@ export interface NapiFontIntent {
   createGlyphLayer?: NapiCreateGlyphLayerIntent
   cloneGlyphLayer?: NapiCloneGlyphLayerIntent
   materializeGlyphLayer?: NapiMaterializeGlyphLayerIntent
+  setKerningValues?: NapiSetKerningValuesIntent
 }
 
 export interface NapiFontMetadata {
@@ -821,6 +822,15 @@ export interface NapiKerningSnapshot {
   basis?: NapiInterpolationBasis
 }
 
+/** One kerning pair value to set or remove at one source. */
+export interface NapiKerningValueEdit {
+  sourceId: SourceId
+  first: NapiKerningSide
+  second: NapiKerningSide
+  /** New value in font units; absent removes the pair at this source. */
+  amount?: number
+}
+
 /**
  * Replacement wrapper whose presence distinguishes "unchanged" from a
  * change that removed the tracked language list.
@@ -1035,6 +1045,11 @@ export interface NapiSetContourStartIntent {
   layerId: LayerId
   contourId: ContourId
   pointId: PointId
+}
+
+/** Sets or removes kerning pair values at sources as one undoable edit. */
+export interface NapiSetKerningValuesIntent {
+  edits: Array<NapiKerningValueEdit>
 }
 
 /** Replaces the font's tracked language list as one undoable edit. */

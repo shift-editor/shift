@@ -15,6 +15,40 @@ export interface FirstHandleStyle extends HandleStyle {
 
 export type HandleStateStyles<T extends HandleStyle = HandleStyle> = Record<HandleState, T>;
 
+/** The colours of one sign of kern in the Kerning tool. */
+export interface KerningPalette {
+  /** The translucent strip between the two advance edges. */
+  fill: string;
+  /** The selected strip's light edge. */
+  edge: string;
+  /** The value pill, the selected strip's edges, and glyphs a group edit reaches. */
+  accent: string;
+  accentHover: string;
+}
+
+/** The colours of the Spacing tool's gap overlay. */
+export interface SpacingPalette {
+  /** The half under the pointer: the sidebearing a drag would change. */
+  activeFill: string;
+  activeHatch: string;
+  /** The other half of the gap. */
+  idleFill: string;
+  idleHatch: string;
+  /** The same roles for a negative sidebearing, whose outline overlaps past the boundary. */
+  negativeActiveFill: string;
+  negativeActiveHatch: string;
+  negativeIdleFill: string;
+  negativeIdleHatch: string;
+  negativeLabelFill: string;
+  negativeLabelHoverFill: string;
+  hatchGapPx: number;
+  /** The active sidebearing's value, in a pill centred in its half. */
+  labelFill: string;
+  labelHoverFill: string;
+  labelText: string;
+  labelFont: string;
+}
+
 export interface EditorRenderTheme {
   cursor: { color: string; widthPx: number };
   guides: { color: string; widthPx: number };
@@ -66,31 +100,22 @@ export interface EditorRenderTheme {
     componentOverlay: readonly [string, string];
     componentOverlayHover: readonly [string, string];
   };
-  /** The Spacing tool's gap between two glyphs. */
-  spacing: {
-    /** The half under the pointer: the sidebearing a drag would change. */
-    activeFill: string;
-    activeHatch: string;
-    /** The other half of the gap. */
-    idleFill: string;
-    idleHatch: string;
-    /** The same roles for a negative sidebearing, whose outline overlaps past the boundary. */
-    negativeActiveFill: string;
-    negativeActiveHatch: string;
-    negativeIdleFill: string;
-    negativeIdleHatch: string;
-    negativeLabelFill: string;
-    negativeLabelHoverFill: string;
-    hatchGapPx: number;
-    /** The active sidebearing's value, in a pill centred in its half. */
-    labelFill: string;
-    labelHoverFill: string;
-    labelText: string;
-    labelFont: string;
+  /** The Spacing tool's gap between two glyphs at an authored source. */
+  spacing: SpacingPalette;
+  /** The same gap at an interpolated location, where nothing is editable. */
+  spacingInterpolated: SpacingPalette;
+  /** The Kerning tool's kern between two glyphs: one palette for a tightening kern, one for a loosening one. */
+  kerning: {
+    negative: KerningPalette;
+    positive: KerningPalette;
+    /** Any kern at an interpolated location, where nothing is editable. */
+    interpolated: KerningPalette;
   };
 }
 
 const hover = (alpha: number) => `rgba(255, 255, 255, ${alpha})`;
+
+const INTERPOLATED_GREY = "#8A8A8A";
 
 const DEFAULT_EDITOR_RENDER_THEME: EditorRenderTheme = {
   cursor: { color: "#0C92F4", widthPx: 1.25 },
@@ -270,6 +295,25 @@ const DEFAULT_EDITOR_RENDER_THEME: EditorRenderTheme = {
     labelText: "#ffffff",
     labelFont: "500 10px Inter, system-ui, sans-serif",
   },
+  spacingInterpolated: spacingPalette(INTERPOLATED_GREY, INTERPOLATED_GREY, {
+    idleHatch: "rgba(138, 138, 138, 0.45)",
+    negativeIdleHatch: "rgba(138, 138, 138, 0.5)",
+  }),
+  kerning: {
+    interpolated: kerningPalette(INTERPOLATED_GREY),
+    negative: {
+      fill: "rgba(124, 58, 237, 0.12)",
+      edge: "rgba(124, 58, 237, 0.45)",
+      accent: "#7C3AED",
+      accentHover: "rgba(124, 58, 237, 0.8)",
+    },
+    positive: {
+      fill: "rgba(13, 148, 136, 0.12)",
+      edge: "rgba(13, 148, 136, 0.45)",
+      accent: "#0D9488",
+      accentHover: "rgba(13, 148, 136, 0.8)",
+    },
+  },
 };
 
 /** Reads the active editor palette from CSS and combines it with renderer-owned geometry. */
@@ -423,26 +467,61 @@ export function readEditorRenderTheme(
 
   const spacing = readColor("--editor-spacing", theme.spacing.labelFill);
   const negative = readColor("--editor-spacing-negative", theme.spacing.negativeLabelFill);
-  theme.spacing = {
-    ...theme.spacing,
-    activeFill: withAlpha(spacing, 0.14),
-    activeHatch: withAlpha(spacing, 0.75),
-    idleFill: withAlpha(spacing, 0.05),
+  theme.spacing = spacingPalette(spacing, negative, {
     idleHatch: readColor("--editor-spacing-faint", theme.spacing.idleHatch),
-    labelFill: spacing,
-    labelHoverFill: withAlpha(spacing, 0.8),
-    negativeActiveFill: withAlpha(negative, 0.16),
-    negativeActiveHatch: withAlpha(negative, 0.85),
-    negativeIdleFill: withAlpha(negative, 0.05),
     negativeIdleHatch: readColor(
       "--editor-spacing-negative-faint",
       theme.spacing.negativeIdleHatch,
     ),
-    negativeLabelFill: negative,
-    negativeLabelHoverFill: withAlpha(negative, 0.8),
+  });
+  const interpolated = readColor("--editor-interpolated", INTERPOLATED_GREY);
+  theme.spacingInterpolated = spacingPalette(interpolated, interpolated, {
+    idleHatch: withAlpha(interpolated, 0.45),
+    negativeIdleHatch: withAlpha(interpolated, 0.5),
+  });
+
+  theme.kerning = {
+    negative: kerningPalette(readColor("--editor-kerning", theme.kerning.negative.accent)),
+    positive: kerningPalette(readColor("--editor-kerning-positive", theme.kerning.positive.accent)),
+    interpolated: kerningPalette(interpolated),
   };
 
   return theme;
+}
+
+/** The kerning overlay's colours derived from one `#rrggbb` accent. */
+function kerningPalette(accent: string): KerningPalette {
+  return {
+    fill: withAlpha(accent, 0.12),
+    edge: withAlpha(accent, 0.45),
+    accent,
+    accentHover: withAlpha(accent, 0.8),
+  };
+}
+
+/** The spacing overlay's colours derived from a positive and a negative `#rrggbb` accent. */
+function spacingPalette(
+  positive: string,
+  negative: string,
+  faint: { readonly idleHatch: string; readonly negativeIdleHatch: string },
+): SpacingPalette {
+  return {
+    activeFill: withAlpha(positive, 0.14),
+    activeHatch: withAlpha(positive, 0.75),
+    idleFill: withAlpha(positive, 0.05),
+    idleHatch: faint.idleHatch,
+    labelFill: positive,
+    labelHoverFill: withAlpha(positive, 0.8),
+    negativeActiveFill: withAlpha(negative, 0.16),
+    negativeActiveHatch: withAlpha(negative, 0.85),
+    negativeIdleFill: withAlpha(negative, 0.05),
+    negativeIdleHatch: faint.negativeIdleHatch,
+    negativeLabelFill: negative,
+    negativeLabelHoverFill: withAlpha(negative, 0.8),
+    hatchGapPx: 6,
+    labelText: "#ffffff",
+    labelFont: "500 10px Inter, system-ui, sans-serif",
+  };
 }
 
 /** Returns a `#rrggbb` colour at `alpha`; other colour syntaxes are returned unchanged. */

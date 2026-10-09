@@ -223,6 +223,15 @@ pub enum CoreError {
         position: KerningPosition,
         name: String,
     },
+
+    #[error("kerning group {group_id} does not kern at the {position:?} pair position")]
+    KerningGroupPosition {
+        group_id: KerningGroupId,
+        position: KerningPosition,
+    },
+
+    #[error("kerning value {0} is not finite")]
+    InvalidKerningValue(f64),
 }
 
 pub type CoreResult<T> = Result<T, CoreError>;
