@@ -9,7 +9,7 @@ impl Font {
     /// Applies every replacement in `change_set` as one validated target.
     ///
     /// Current values must match every `before` value. Replacements are
-    /// installed on a copy, indexes are rebuilt, and the complete result is
+    /// installed on a copy, indexes are updated for the touched glyphs, and the complete result is
     /// checked against persisted-state invariants before this font changes.
     /// Intent-specific creation and update guards are not rerun during replay.
     ///
@@ -88,6 +88,19 @@ impl Font {
     }
 
     fn install_change_targets(&mut self, change_set: &FontChangeSet) -> CoreResult<()> {
+        // Re-index only the glyphs this change set touches. Rebuilding the whole
+        // index hashes every point, contour, and anchor id in the font, and made up
+        // most of each undo and redo on a large font. Every touched glyph leaves the
+        // index before any data changes and is validated against the rest when it
+        // returns, so duplicates are caught exactly as a full rebuild would.
+        let touched_glyph_ids = touched_glyph_ids(change_set);
+        let state = self.state_mut();
+        for glyph_id in &touched_glyph_ids {
+            if let Some(glyph) = state.data.glyphs.get(glyph_id) {
+                state.index.remove_glyph(glyph_id.clone(), glyph);
+            }
+        }
+
         for change in &change_set.changes {
             match change {
                 FontChange::Metadata(value) => {
@@ -177,7 +190,23 @@ impl Font {
             Arc::make_mut(glyph).set_layer(layer.clone());
         }
 
-        Arc::make_mut(&mut self.state).rebuild_index()
+        let state = self.state_mut();
+        let mut touched_unicodes = HashSet::new();
+        for glyph_id in &touched_glyph_ids {
+            let Some(glyph) = state.data.glyphs.get(glyph_id) else {
+                continue;
+            };
+            state.index.validate_glyph_insert(glyph_id.clone(), glyph)?;
+            state.index.insert_glyph(glyph_id.clone(), glyph);
+            touched_unicodes.extend(glyph.unicodes().iter().copied());
+        }
+        // A full rebuild lists glyphs sharing a code point in glyph order; keep that.
+        for unicode in touched_unicodes {
+            if let Some(glyph_ids) = state.index.glyphs_by_unicode.get_mut(&unicode) {
+                glyph_ids.sort_by_key(|glyph_id| state.data.glyphs.index_of(glyph_id));
+            }
+        }
+        Ok(())
     }
 
     fn validate_change_target(&self) -> CoreResult<()> {
@@ -291,11 +320,79 @@ where
     })
 }
 
+/// Glyphs whose own record or any layer `change_set` replaces, in first-touched order.
+fn touched_glyph_ids(change_set: &FontChangeSet) -> Vec<GlyphId> {
+    let mut seen = HashSet::new();
+    change_set
+        .changes
+        .iter()
+        .flat_map(|change| match change {
+            FontChange::Glyph(value) => [value.before.as_ref(), value.after.as_ref()]
+                .into_iter()
+                .flatten()
+                .map(Glyph::id)
+                .collect::<Vec<_>>(),
+            FontChange::Layer { glyph_id, .. } => vec![glyph_id.clone()],
+            _ => Vec::new(),
+        })
+        .filter(|glyph_id| seen.insert(glyph_id.clone()))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{EntityChange, FontEntityChange, FontIntent, FontIntentSet};
 
     use super::*;
+
+    fn assert_index_matches_rebuild(font: &Font) {
+        let rebuilt = FontIndex::from_glyphs(&font.state.data.glyphs).unwrap();
+        let index = &font.state.index;
+        assert_eq!(index.glyph_by_name, rebuilt.glyph_by_name);
+        assert_eq!(index.layer_owner, rebuilt.layer_owner);
+        assert_eq!(index.layer_by_glyph_source, rebuilt.layer_by_glyph_source);
+        assert_eq!(index.glyphs_by_unicode, rebuilt.glyphs_by_unicode);
+        assert_eq!(index.entity_ids, rebuilt.entity_ids);
+    }
+
+    #[test]
+    fn touched_glyphs_index_exactly_as_a_full_rebuild() {
+        let original = crate::test_support::sample_font();
+        let glyphs = original.glyphs().take(2).cloned().collect::<Vec<_>>();
+        let [first, second] = glyphs.as_slice() else {
+            panic!("sample font needs two glyphs");
+        };
+
+        // Swap the two glyphs' names and give both the first one's code points, so
+        // a step-by-step index would see a duplicate name and must keep glyph order.
+        let mut renamed_first = first.clone();
+        renamed_first.set_name(second.glyph_name().clone());
+        let mut renamed_second = second.clone();
+        renamed_second.set_name(first.glyph_name().clone());
+        renamed_second.set_unicodes(first.unicodes().to_vec());
+        let layer = first.layers().values().next().unwrap().clone();
+        let mut moved_layer = (*layer).clone();
+        moved_layer.set_width(moved_layer.width() + 10.0);
+        renamed_first.set_layer(moved_layer.clone());
+
+        let changes = FontChangeSet::new(vec![
+            FontChange::Glyph(Replacement::new(Some(second.clone()), Some(renamed_second))),
+            FontChange::Glyph(Replacement::new(Some(first.clone()), Some(renamed_first))),
+            FontChange::Layer {
+                glyph_id: first.id(),
+                layer: Replacement::new(Some(layer), Some(Arc::new(moved_layer))),
+                structural: false,
+            },
+        ]);
+
+        let mut font = original.clone();
+        font.apply_change_set(&changes).unwrap();
+        assert_index_matches_rebuild(&font);
+
+        font.apply_change_set(&changes.inverted()).unwrap();
+        assert_index_matches_rebuild(&font);
+        assert_eq!(font, original);
+    }
 
     #[test]
     fn applying_an_inverse_and_original_changeset_roundtrips_coupled_state() {

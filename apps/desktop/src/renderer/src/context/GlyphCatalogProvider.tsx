@@ -13,7 +13,7 @@ import { useFontSession } from "@/workspace/WorkspaceContext";
 import { getGlyphInfo } from "@/workspace/glyphInfo";
 import { useListSelection } from "@/hooks/useListSelection";
 import { LatestRequest } from "@shift/editor";
-import { GlyphCatalogContext } from "./GlyphCatalogContext";
+import { GlyphCatalogContext, OpenedGlyphContext, useGlyphCatalog } from "./GlyphCatalogContext";
 import type {
   GlyphCatalogItem,
   GlyphCatalogSource,
@@ -26,7 +26,37 @@ const NO_LANGUAGE_IDS = signal<readonly string[] | null>(null, {
 
 export const GlyphCatalogProvider = ({ children }: { children: ReactNode }) => {
   const value = useGlyphCatalogSource();
-  return <GlyphCatalogContext.Provider value={value}>{children}</GlyphCatalogContext.Provider>;
+  return (
+    <GlyphCatalogContext.Provider value={value}>
+      <OpenedGlyphContext.Provider value={value.openedGlyph}>
+        {children}
+      </OpenedGlyphContext.Provider>
+    </GlyphCatalogContext.Provider>
+  );
+};
+
+/**
+ * Holds the catalog its children see at the last value from while they were shown.
+ *
+ * @remarks
+ * Home stays mounted behind the editor so its resident atlas survives navigation.
+ * Its grid takes location, metrics, and glyphs from the catalog context, which
+ * changes on every step of an editor weight scrub. Holding the value while hidden
+ * keeps that grid from re-rendering and re-laying out its atlas for each step; it
+ * catches up in one update when it is shown again.
+ *
+ * @param held - true while the children are hidden and should keep their last catalog.
+ */
+export const HeldGlyphCatalog = ({ held, children }: { held: boolean; children: ReactNode }) => {
+  const value = useGlyphCatalog();
+  const shownValue = useRef(value);
+  if (!held) shownValue.current = value;
+
+  return (
+    <GlyphCatalogContext.Provider value={shownValue.current}>
+      {children}
+    </GlyphCatalogContext.Provider>
+  );
 };
 
 const useGlyphCatalogSource = (): GlyphCatalogSource => {
@@ -201,29 +231,6 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
       active = false;
     };
   }, [availableGlyphs, catalog, fontLoaded, routeLocation.pathname]);
-
-  useEffect(() => {
-    const openedGlyphId = openedGlyphKeyRef.current;
-    if (openedGlyphId === null) return;
-    const glyphId = openedGlyphId;
-    let active = true;
-
-    async function refreshOpenedGlyph(): Promise<void> {
-      try {
-        const result = await openRequestRef.current.run(() => catalog.openGlyph(glyphId));
-        if (!active || result.status === "stale") return;
-
-        setOpenedGlyph(result.result);
-      } catch (error) {
-        console.error("failed to refresh opened glyph", error);
-      }
-    }
-
-    void refreshOpenedGlyph();
-    return () => {
-      active = false;
-    };
-  }, [catalog, location]);
 
   const createQuickGlyph = useCallback<GlyphCatalogSource["createQuickGlyph"]>(() => {
     if (!workspace) throw new Error("preview catalog cannot create glyphs");

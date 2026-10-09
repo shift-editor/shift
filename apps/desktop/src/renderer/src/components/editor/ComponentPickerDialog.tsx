@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Button,
   cn,
@@ -20,7 +20,7 @@ import AddIcon from "@/assets/general/add.svg";
 import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
 import type { ComponentCandidate } from "@/types/componentPicker";
 import { useEditor, useFont } from "@/workspace/WorkspaceContext";
-import { getGlyphInfo } from "@/workspace/glyphInfo";
+import { getGlyphInfo, loadComponentGlyphInfo } from "@/workspace/glyphInfo";
 import { componentPickerCandidates } from "./componentPicker";
 
 interface ComponentPickerDialogProps {
@@ -34,6 +34,7 @@ export function ComponentPickerDialog({ open, onOpenChange }: ComponentPickerDia
 
   const catalog = useGlyphCatalog();
   const glyphInfo = getGlyphInfo();
+  const componentDataLoaded = useComponentGlyphInfo();
   const records = useSignalState(font.glyphRecordsCell);
 
   const [componentQuery, setComponentQuery] = useState("");
@@ -53,7 +54,15 @@ export function ComponentPickerDialog({ open, onOpenChange }: ComponentPickerDia
             glyphInfo,
           )
         : [],
-    [catalog.availableGlyphs, componentQuery, currentGlyphId, glyphInfo, records],
+    // Suggestions and search fill in once decomposition and search data load.
+    [
+      catalog.availableGlyphs,
+      componentDataLoaded,
+      componentQuery,
+      currentGlyphId,
+      glyphInfo,
+      records,
+    ],
   );
 
   const close = useCallback(() => {
@@ -252,4 +261,26 @@ export function ComponentPickerDialog({ open, onOpenChange }: ComponentPickerDia
       </Dialog>
     </>
   );
+}
+
+/** Loads component decomposition and search data; true once they are available. */
+function useComponentGlyphInfo(): boolean {
+  const [loaded, setLoaded] = useState(() => getGlyphInfo().hasComponentResources);
+
+  useEffect(() => {
+    if (loaded) return undefined;
+
+    let current = true;
+    loadComponentGlyphInfo().then(
+      () => {
+        if (current) setLoaded(true);
+      },
+      (error: unknown) => console.error("loading component glyph data failed", error),
+    );
+    return () => {
+      current = false;
+    };
+  }, [loaded]);
+
+  return loaded;
 }

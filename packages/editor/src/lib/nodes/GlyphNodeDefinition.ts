@@ -295,8 +295,8 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
    * @returns Drawn targets in published order.
    */
   visibleOutlines(nodeId: NodeId): readonly GlyphOutlineTarget[] {
-    track(this.editor.toolCell);
-    if (this.editor.toolCell.peek()?.id === "hand") return [];
+    track(this.editor.toolIdCell);
+    if (this.editor.toolIdCell.peek() === "hand") return [];
 
     return this.outlines.forNode(nodeId).filter((target) => {
       const outline = this.#outlineViews.get(target);
@@ -396,8 +396,8 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
    * Creation tools skip it: their base outline is the shape being extended, not a reference.
    */
   #drawEditGhost(node: GlyphNode, ctx: RenderContext): void {
-    track(this.editor.toolCell);
-    if (this.editor.toolCell.peek()?.id !== "select") return;
+    track(this.editor.toolIdCell);
+    if (this.editor.toolIdCell.peek() !== "select") return;
 
     track(this.editor.activeSourceIdCell);
     const sourceId = this.editor.activeSourceIdCell.peek();

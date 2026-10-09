@@ -21,6 +21,9 @@ export { GlyphInfo } from "./GlyphInfo.js";
 /** Load the default pre-built resource bundle. */
 export { defaultResources } from "./resources.js";
 
+/** The pre-built core resources alone, for apps that load component data later. */
+export { coreResources } from "./coreResources.js";
+
 export { DEFAULT_LANGUAGE_IDS, GLYPH_CATEGORIES } from "./types.js";
 export type {
   /** Full metadata record for a single Unicode codepoint. */
@@ -47,6 +50,10 @@ export type {
   Glyph,
   /** Bundle of all resources needed to construct a {@link GlyphInfo} instance. */
   GlyphInfoResources,
+  /** Names, categories, charsets, and languages. */
+  GlyphInfoCoreResources,
+  /** Decomposition and search data, loadable after construction. */
+  GlyphInfoComponentResources,
   /** Represents a primary language orthography and its required base-character repertoire. */
   Language,
   /** Provides reusable language coverage grouped by script. */

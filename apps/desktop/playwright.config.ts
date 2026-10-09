@@ -41,6 +41,7 @@ export const VISUAL_SPECS = [
   "landing.spec.ts",
   "pen-snapping.spec.ts",
   "preview-notice.spec.ts",
+  "render-budget.spec.ts",
   "selector-contracts.spec.ts",
   "spacing.spec.ts",
   "svg-catalog.spec.ts",

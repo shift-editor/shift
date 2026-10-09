@@ -10,7 +10,6 @@ import { ScaleSection } from "./sidebar-right/ScaleSection";
 import { TransformSection } from "./sidebar-right/TransformSection";
 import { ZoomMenu } from "./sidebar-right/ZoomMenu";
 import { LockIcon } from "@/components/icons/LockIcon";
-import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
 import { TransformOriginProvider } from "@/context/TransformOriginContext";
 import { usePreviewNotice } from "@/context/PreviewNoticeProvider";
 import { useEditor, useFontSession } from "@/workspace/WorkspaceContext";
@@ -20,7 +19,8 @@ export const RightSidebar = () => {
   const showPreviewNotice = usePreviewNotice();
   const readOnlyFont = session.mode === "preview";
   const editor = useEditor();
-  const { availableGlyphs } = useGlyphCatalog();
+  // Read the catalog's glyph list directly: the catalog context changes on every scrub step.
+  const availableGlyphs = useSignalState(session.catalog.glyphsCell);
   const glyphLabel = (glyphId: GlyphId) =>
     availableGlyphs.find((candidate) => candidate.id === glyphId)?.displayName;
   const familyName = useSignalState(session.catalog.familyNameCell) ?? "Untitled";

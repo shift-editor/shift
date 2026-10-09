@@ -8,7 +8,7 @@ export function TextInput() {
   const editor = useEditor();
   const ref = useRef<HTMLTextAreaElement>(null);
   const composing = useRef(false);
-  const tool = useSignalState(editor.toolCell);
+  const tool = useSignalState(editor.toolCellIf("text"));
   const editing = useSignalState(editor.textEditing.stateCell);
 
   const textareaRef = useCallback((node: HTMLTextAreaElement | null) => {
@@ -16,7 +16,7 @@ export function TextInput() {
     node?.focus();
   }, []);
 
-  if (tool?.id !== "text" || tool.state.type !== "editing" || !editing) return null;
+  if (tool?.state.type !== "editing" || !editing) return null;
 
   const insertLiteral = (text: string) => {
     const items = [...text.replaceAll("\r\n", "\n")].map((char) => {
