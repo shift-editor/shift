@@ -976,6 +976,7 @@ export class App {
           execute: (code) => sandbox.execute(code),
           capture: (input) => this.#capture(input),
           port: testing ? 0 : port,
+          serverInfo: { name: serverName, version: app.getVersion() },
           logger: createShiftLogger("app.mcp"),
           onActivity,
         }),

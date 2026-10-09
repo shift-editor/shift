@@ -24,6 +24,7 @@ function connections(port = 0): AgentConnections {
           throw new Error("no windows");
         },
         port,
+        serverInfo: { name: "shift-test", version: "0.0.0" },
         onActivity,
       }),
     log,

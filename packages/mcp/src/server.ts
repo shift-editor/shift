@@ -28,6 +28,8 @@ export interface ShiftMcpServerOptions {
   execute(code: string): Promise<unknown>;
   capture(input: ShiftCaptureInput): Promise<ShiftObservation<ShiftCapture>>;
   port: number;
+  /** Identity reported to agents on `initialize`: this build's server name and app version. */
+  serverInfo: { name: string; version: string };
   logger?: ShiftMcpLogger;
   /** Called after each accepted request with the updated activity summary. */
   onActivity?: (activity: ShiftMcpActivity) => void;
@@ -48,6 +50,7 @@ export class ShiftMcpServer {
   readonly #execute: (code: string) => Promise<unknown>;
   readonly #capture: ShiftMcpServerOptions["capture"];
   readonly #port: number;
+  readonly #serverInfo: ShiftMcpServerOptions["serverInfo"];
   readonly #logger: ShiftMcpLogger | undefined;
   readonly #onActivity: ShiftMcpServerOptions["onActivity"];
   readonly #now: () => number;
@@ -61,12 +64,13 @@ export class ShiftMcpServer {
   /**
    * Creates an unstarted server bound to a host-owned isolated executor.
    *
-   * @param options - execution and capture callbacks, port, and optional diagnostics and activity sinks.
+   * @param options - execution and capture callbacks, port, reported identity, and optional diagnostics and activity sinks.
    */
   constructor(options: ShiftMcpServerOptions) {
     this.#execute = options.execute;
     this.#capture = options.capture;
     this.#port = options.port;
+    this.#serverInfo = options.serverInfo;
     this.#logger = options.logger;
     this.#onActivity = options.onActivity;
     this.#now = options.now ?? Date.now;
@@ -144,10 +148,7 @@ export class ShiftMcpServer {
   }
 
   #createProtocolServer(): McpServer {
-    const server = new McpServer(
-      { name: "shift", version: "0.1.0" },
-      { instructions: SHIFT_MCP_INSTRUCTIONS },
-    );
+    const server = new McpServer({ ...this.#serverInfo }, { instructions: SHIFT_MCP_INSTRUCTIONS });
     server.registerTool(
       "shift.guide",
       {

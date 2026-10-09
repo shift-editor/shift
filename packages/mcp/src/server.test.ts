@@ -72,7 +72,13 @@ const capture = capabilities.capture;
 const startedServers: ShiftMcpServer[] = [];
 
 function startServer(options: Partial<ConstructorParameters<typeof ShiftMcpServer>[0]> = {}) {
-  const server = new ShiftMcpServer({ execute, capture, port: 0, ...options });
+  const server = new ShiftMcpServer({
+    execute,
+    capture,
+    port: 0,
+    serverInfo: { name: "shift-dev", version: "0.2.0" },
+    ...options,
+  });
   startedServers.push(server);
   return server;
 }
@@ -166,7 +172,7 @@ describe("Shift MCP local connection", () => {
 
     expect(initialized).toMatchObject({
       result: {
-        serverInfo: { name: "shift" },
+        serverInfo: { name: "shift-dev", version: "0.2.0" },
         instructions: expect.stringContaining("shift.guide"),
       },
     });
