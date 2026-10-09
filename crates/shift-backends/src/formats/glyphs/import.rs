@@ -89,7 +89,7 @@ pub(crate) fn stream_retained(
     source: Arc<GlyphsFont>,
 ) -> FormatBackendResult<(Font, GlyphsGlyphStream, ImportReport)> {
     let report = import_report(&source);
-    let (mut header, source_ids_by_master_id) = font_header(&source)?;
+    let (mut header, source_ids_by_master_id) = font_header(&source, path)?;
     let sources = add_intermediate_sources(&mut header, &source, source_ids_by_master_id);
     let glyph_names = source
         .glyphs

@@ -14,6 +14,7 @@ export function EditorToolbar(input: EditorToolbarProps): JSX.Element;
 export interface EditorToolbarHost {
     documentEdited: boolean;
     documentTitle: string;
+    menuBar?: ReactNode;
     navigation?: ReactNode;
     windowControls?: ReactNode;
 }

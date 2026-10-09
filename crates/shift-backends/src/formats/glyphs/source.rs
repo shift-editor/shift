@@ -70,7 +70,7 @@ impl GlyphsFont {
             })
             .collect::<Vec<_>>();
         let (header, _) =
-            font_header(&source).map_err(|error| malformed(path, error.to_string()))?;
+            font_header(&source, path).map_err(|error| malformed(path, error.to_string()))?;
         let (directory, glyphs_by_name) =
             FontDirectory::from_font(FontFormat::Glyphs, &header, glyphs)?;
         let master_locations = source

@@ -15,6 +15,8 @@ export interface EditorToolbarHost {
   navigation?: ReactNode;
   /** Replaces the decorative window buttons; pass the platform's own controls or nothing. */
   windowControls?: ReactNode;
+  /** Application menus drawn at the start of the row, for platforms without a system menu bar. */
+  menuBar?: ReactNode;
 }
 
 export interface EditorToolbarProps {
@@ -58,6 +60,7 @@ export function EditorToolbar({
     <header className="titlebar-drag grid h-12.5 w-full grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center bg-chrome">
       <div className="flex min-w-0 items-center">
         {host ? host.windowControls : <DecorativeWindowControls />}
+        {host ? host.menuBar : null}
         {onToggleLeftSidebar ? (
           <Tooltip>
             <TooltipTrigger>

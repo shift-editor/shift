@@ -31,6 +31,13 @@ const shiftHost: ShiftHost = {
   window: {
     reopenDocument: invoke(ipcRenderer, "window.reopenDocument"),
     ready: invoke(ipcRenderer, "window.ready"),
+    setTitleBarColors: invoke(ipcRenderer, "window.setTitleBarColors"),
+    buttonLayout: invoke(ipcRenderer, "window.buttonLayout"),
+  },
+  menu: {
+    bar: invoke(ipcRenderer, "menu.bar"),
+    activate: invoke(ipcRenderer, "menu.activate"),
+    onBarChanged: listen(ipcRenderer, "menu.barChanged"),
   },
   errors: {
     reportRenderer: invoke(ipcRenderer, "errors.reportRenderer"),

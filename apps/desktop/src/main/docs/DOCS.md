@@ -121,6 +121,15 @@ The macOS Window menu is registered through Electron's native `windowMenu` role 
 
 Eligible packaged macOS builds, Windows Nightly x64 builds, and replaceable Linux AppImages start `AppUpdater` after the first window is prepared. The updater waits 30 seconds before its first quiet check to avoid competing with application startup, then checks every four hours. Development builds explain that updates require packaging; Windows Release and read-only AppImages direct manual checks to matching GitHub downloads, and DEB/RPM installs to their package manager.
 
+### Window Chrome On Windows And Linux
+
+macOS keeps its native menu bar and the renderer's traffic lights. On Windows and Linux one Shift-coloured row replaces the system title bar and menu bar: File · Edit · View · Glyph · Help on the left, the tools in the centre, and window controls at the end.
+
+- **Menus.** `ApplicationMenu.install()` still installs the native template, hidden, so every accelerator keeps working, and gives each item an id (`withMenuItemIds`). `ApplicationMenu.menuBar()` describes that template as a `MenuBar` for the renderer, which reads it through `menu.bar`, follows `menu.barChanged`, and runs items with `menu.activate`; `MenuItem.click` executes custom handlers and Electron roles alike, so the drawn menus never diverge from the native ones. `WindowMenuBar` collapses into a single ☰ menu in narrow editor windows. Tapping Alt or pressing F10 enters menu mode, which underlines access keys; Alt+letter chords stay with the editor because align shortcuts use them.
+- **Windows** keeps the system caption buttons as a title-bar overlay so Windows 11 snap layouts work. The renderer reports its theme's chrome colours through `window.setTitleBarColors`, and `.title-bar-area` pads the row clear of the overlay with the Window Controls Overlay CSS variables.
+- **Linux** windows are frameless. `WindowControls` draws minimize, maximize, and close in Shift's style, placed by `window.buttonLayout`, which `readButtonLayout()` reads from the XDG desktop portal (falling back to GNOME's settings). Chromium's own overlay ignored the desktop's layout, which is why Shift draws these itself.
+- **About, Feedback, and Update** use `dialogWindowChrome()`: the same per-platform rule with a close-only row.
+
 ### Application Updates
 
 `AppUpdater.checkForUpdates(trigger)` derives a fixed HTTPS generic-provider URL from the compiled Release or Nightly distribution and exact platform/architecture. electron-updater reads architecture-specific `latest-mac.yml` on macOS, `latest.yml` for Windows Nightly, and `latest-linux.yml` for AppImages. `detectLinuxInstallation` gates Linux: only an AppImage whose folder is writable receives a feed, because electron-updater replaces the AppImage by deleting and recreating it, and DEB/RPM installs (marked by `resources/package-type`) must never select electron-updater's privileged package installers. It owns numeric version comparison, SHA-512 verification, download, macOS code-signature verification, Authenticode verification when configured, installation, and relaunch. Release and Nightly never share feed paths.
@@ -177,6 +186,8 @@ Renderer IPC in `App` is limited to shell capabilities: command execution, clipb
 3. Add native choices to `NativeDialogs` with Electron and scripted implementations in `dialogs/`; keep workspace ownership in `workspace/`.
 
 ## Gotchas
+
+- **Linux WebGPU needs Vulkan.** Chromium ships its Vulkan backend disabled on Linux, so `navigator.gpu.requestAdapter()` returns null and the glyph grid falls back to SVG. `main.ts` enables the `Vulkan` feature on Linux before the app is ready. `--enable-unsafe-webgpu` alone only yields SwiftShader, a CPU renderer.
 
 - Electron/electron-updater orchestration is verified with installed N → N+1 builds; mocking Electron, native dialogs, or the updater does not provide a worthwhile unit test.
 - SHA-512 update metadata verifies package integrity, not publisher authenticity. Windows Release remains manual until Authenticode signing is configured.

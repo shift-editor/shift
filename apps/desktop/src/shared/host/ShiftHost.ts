@@ -4,6 +4,7 @@ import type { RendererErrorReport } from "../ipc/contract";
 import type { FontSessionMode } from "../workspace/protocol";
 import type { RecentDocument } from "../recents";
 import type { AgentConnectionsState } from "../agent/connections";
+import type { MenuBar, TitleBarColors, WindowButtonLayout } from "../menu/types";
 
 /**
  * Renderer-facing API for Electron app-shell behavior.
@@ -105,6 +106,36 @@ export interface ShiftHost {
      * signal instead of on first paint; repeated calls are ignored.
      */
     ready: () => Promise<void>;
+    /**
+     * Recolours the native window controls drawn over this window's title bar.
+     *
+     * @remarks
+     * Windows and Linux only; macOS ignores it. Call whenever the theme resolves.
+     */
+    setTitleBarColors: (colors: TitleBarColors) => Promise<void>;
+    /**
+     * Returns where the window buttons Shift draws on Linux belong.
+     *
+     * @returns null on macOS and Windows, where Shift does not draw them.
+     */
+    buttonLayout: () => Promise<WindowButtonLayout | null>;
+  };
+  /** The Windows and Linux application menus, drawn by the renderer in the toolbar row. */
+  menu: {
+    /** Returns the current menus; empty on macOS, which keeps its native menu bar. */
+    bar: () => Promise<MenuBar>;
+    /**
+     * Runs a menu item for this window, as the native menu would.
+     *
+     * @param itemId - `id` of a `command` item from {@link bar}.
+     */
+    activate: (itemId: string) => Promise<void>;
+    /**
+     * Subscribes to menu changes: Open Recent updates and enabled-state changes.
+     *
+     * @returns an unsubscribe function.
+     */
+    onBarChanged: (callback: (bar: MenuBar) => void) => () => void;
   };
   /** Privacy-safe renderer diagnostics reported to the main log. */
   errors: {

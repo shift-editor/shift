@@ -7,6 +7,7 @@ import type {
 import type { UpdateProgress } from "../update/types";
 import type { RecentDocument } from "../recents";
 import type { AgentConnectionsState } from "../agent/connections";
+import type { MenuBar, TitleBarColors, WindowButtonLayout } from "../menu/types";
 
 export type DocumentCallMap = {
   "document.state": { request: void; response: WorkspaceDocumentState | null };
@@ -65,6 +66,14 @@ export type RendererToMain = {
   "window.reopenDocument": () => void;
   /** Reports that the sender's first meaningful content is rendered, so main can show it. */
   "window.ready": () => void;
+  /** Recolours the native window controls drawn over the sender's title bar (Windows and Linux). */
+  "window.setTitleBarColors": (colors: TitleBarColors) => void;
+  /** Returns the desktop's window-button layout on Linux, or null where the system draws them. */
+  "window.buttonLayout": () => WindowButtonLayout | null;
+  /** Returns the Windows and Linux menus for the sender's menu bar; empty on macOS. */
+  "menu.bar": () => MenuBar;
+  /** Runs a menu bar item for the sender window, as the native menu would. */
+  "menu.activate": (itemId: string) => void;
   "errors.reportRenderer": (report: RendererErrorReport) => void;
   "update.startDownload": () => void;
   "update.cancelDownload": () => void;
@@ -103,4 +112,6 @@ export type MainToRenderer = {
   "agentConnections.changed": (state: AgentConnectionsState) => void;
   /** Recent files changed after an open, Save As, removal, or Clear Menu. */
   "recents.changed": (documents: RecentDocument[]) => void;
+  /** The Windows and Linux menus changed: rebuilt, or command states re-evaluated. */
+  "menu.barChanged": (bar: MenuBar) => void;
 };

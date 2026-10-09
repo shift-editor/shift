@@ -20,6 +20,8 @@ import { CommandRegistry, type CommandContext } from "../commands/Command";
 import { FeedbackWindow } from "../feedback/FeedbackWindow";
 import { registerCommands } from "../commands/Commands";
 import { ApplicationMenu } from "../menu/ApplicationMenu";
+import { readButtonLayout } from "../windows/windowButtonLayout";
+import { DIALOG_TITLE_BAR_HEIGHT } from "../windows/dialogWindowChrome";
 import { createShiftLogger, type ShiftLogger } from "../logging";
 import { AppLifecycle } from "./AppLifecycle";
 import { WindowManager } from "../windows/WindowManager";
@@ -30,7 +32,7 @@ import { electronNativeDialogs } from "../dialogs/electronNativeDialogs";
 import { shiftProductName } from "../release";
 import { AppUpdater } from "../update/AppUpdater";
 import { isConvertiblePreviewPath } from "../../shared/workspace/previewConversion";
-import { OPEN_FONT_EXTENSIONS } from "../../shared/openFontExtensions";
+import { FONT_FOLDER_EXTENSIONS, OPEN_FONT_EXTENSIONS } from "../../shared/openFontExtensions";
 import { ShiftMcpServer } from "@shift/mcp";
 import type {
   EditorInspection,
@@ -51,6 +53,8 @@ const SLUG_ATLAS_PROFILING_ENABLED =
 /** Loads a reopened document on Home and has the renderer return it to its last glyph. */
 const RESUME_ROUTE = "/home?resume";
 const LAUNCHER_MIN_WIDTH = 880;
+/** The launcher's title-bar row has no tools, so it is shorter than the editor's. */
+const LAUNCHER_TITLE_BAR_HEIGHT = 40;
 const LAUNCHER_WIDTH = 960;
 const LAUNCHER_HEIGHT = 720;
 /** Largest share of the screen the launcher takes on displays smaller than its size. */
@@ -120,6 +124,7 @@ export class App {
       open: (sourcePath) => this.#openRecentFromMenu(sourcePath),
       clear: () => this.#recents?.clear(),
     }),
+    () => this.#publishMenuBar(),
   );
 
   /**
@@ -291,12 +296,19 @@ export class App {
     });
   }
 
-  #createWindow(autoShow = true, bounds?: Rectangle, maximised = false, minWidth?: number): Window {
+  #createWindow(
+    autoShow = true,
+    bounds?: Rectangle,
+    maximised = false,
+    minWidth?: number,
+    titleBarHeight?: number,
+  ): Window {
     const window = new Window({
       preloadPath: path.join(__dirname, "preload.js"),
       autoShow,
       maximised,
       ...(minWidth === undefined ? {} : { minWidth }),
+      ...(titleBarHeight === undefined ? {} : { titleBarHeight }),
       ...(bounds
         ? {
             width: bounds.width,
@@ -338,7 +350,13 @@ export class App {
    * that signal never arrives, so a renderer failure cannot leave it invisible.
    */
   #openLauncher(): Window {
-    const window = this.#createWindow(false, launcherBounds(), false, LAUNCHER_MIN_WIDTH);
+    const window = this.#createWindow(
+      false,
+      launcherBounds(),
+      false,
+      LAUNCHER_MIN_WIDTH,
+      LAUNCHER_TITLE_BAR_HEIGHT,
+    );
     this.#loadLauncher(window);
     setTimeout(() => this.#presentIfHidden(window), LAUNCHER_SHOW_FALLBACK_MS);
     return window;
@@ -529,6 +547,30 @@ export class App {
     ipc.handle(ipcMain, "recents.list", () => {
       return this.#recents?.list() ?? [];
     });
+    ipc.handle(ipcMain, "menu.bar", () => this.#applicationMenu.menuBar());
+    ipc.handle(ipcMain, "menu.activate", (event, itemId) => {
+      const window = this.#requireWindowForWebContents(event.sender);
+      this.#applicationMenu.activate(itemId, window.window);
+    });
+    ipc.handle(ipcMain, "window.buttonLayout", () =>
+      process.platform === "linux" ? readButtonLayout() : null,
+    );
+    ipc.handle(ipcMain, "window.setTitleBarColors", (event, colors) => {
+      const browserWindow = BrowserWindow.fromWebContents(event.sender);
+      const window = browserWindow ? this.#windows.windowForBrowserWindow(browserWindow) : null;
+      if (window) {
+        window.setTitleBarColors(colors);
+        return;
+      }
+
+      // About, Feedback, and Update windows are plain BrowserWindows.
+      if (process.platform !== "win32" || !browserWindow) return;
+      browserWindow.setTitleBarOverlay({
+        color: colors.background,
+        symbolColor: colors.symbol,
+        height: DIALOG_TITLE_BAR_HEIGHT,
+      });
+    });
     ipc.handle(ipcMain, "recents.open", async (event, sourcePath) => {
       const window = this.#requireWindowForWebContents(event.sender);
       await this.#openPathFromWindow(window, sourcePath);
@@ -544,7 +586,9 @@ export class App {
     });
     ipc.handle(ipcMain, "recents.locate", async (event, missingPath) => {
       const window = this.#requireWindowForWebContents(event.sender);
-      const locatedPath = await this.#nativeDialogs.openFont(window);
+      const locatedPath = isFontFolderPath(missingPath)
+        ? await this.#nativeDialogs.openFontFolder(window)
+        : await this.#nativeDialogs.openFont(window);
       if (!locatedPath) return;
 
       const opened = await this.#openPathFromWindow(window, locatedPath);
@@ -629,7 +673,14 @@ export class App {
           await this.#createWorkspaceFromWindow(window ?? null);
         },
         open: async () => {
-          await this.#openWorkspaceFromWindow(window ?? null);
+          await this.#openWorkspaceFromWindow(window ?? null, (opener) =>
+            this.#nativeDialogs.openFont(opener),
+          );
+        },
+        openFolder: async () => {
+          await this.#openWorkspaceFromWindow(window ?? null, (opener) =>
+            this.#nativeDialogs.openFontFolder(opener),
+          );
         },
         canSave: () =>
           document !== null ||
@@ -788,10 +839,18 @@ export class App {
     }
   }
 
-  async #openWorkspaceFromWindow(opener: Window | null): Promise<void> {
+  /**
+   * Asks the user for a font and opens it on behalf of a window.
+   *
+   * @param choosePath - native picker for the kind of font being opened.
+   */
+  async #openWorkspaceFromWindow(
+    opener: Window | null,
+    choosePath: (opener: Window | null) => Promise<string | null>,
+  ): Promise<void> {
     let openPath: string | null;
     try {
-      openPath = await this.#nativeDialogs.openFont(opener);
+      openPath = await choosePath(opener);
     } catch (error) {
       this.#log.warn("open dialog failed", error);
       await this.#nativeDialogs.showOpenFailure(opener, this.applicationName);
@@ -858,6 +917,14 @@ export class App {
       this.#recents?.setSpecimen(visit, specimen);
     } catch (error) {
       this.#log.warn("building recent file specimen failed", visit.path, error);
+    }
+  }
+
+  #publishMenuBar(): void {
+    const bar = this.#applicationMenu.menuBar();
+    for (const window of this.#windows.allWindows()) {
+      if (window.window.isDestroyed()) continue;
+      ipc.send(window.window.webContents, "menu.barChanged", bar);
     }
   }
 
@@ -1136,6 +1203,11 @@ export class App {
 }
 
 /** Centres the 4:3 launcher on the primary display, capped to 90% of smaller screens. */
+/** Whether a font path is a format stored as a folder, which needs the folder picker. */
+function isFontFolderPath(sourcePath: string): boolean {
+  return FONT_FOLDER_EXTENSIONS.includes(path.extname(sourcePath).slice(1).toLowerCase());
+}
+
 function launcherBounds(): Rectangle {
   const workArea = screen.getPrimaryDisplay().workArea;
   const width = Math.min(LAUNCHER_WIDTH, Math.round(workArea.width * LAUNCHER_MAX_SCREEN_SHARE));

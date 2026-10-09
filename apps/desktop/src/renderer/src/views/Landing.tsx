@@ -4,6 +4,8 @@ import { shiftProductName } from "@/app/release";
 import { RecentFiles } from "@/components/launcher/RecentFiles";
 import { useRecentDocuments } from "@/components/launcher/useRecentDocuments";
 import { Titlebar } from "@/components/chrome/Titlebar";
+import { WindowControls } from "@/components/chrome/WindowControls";
+import { WindowMenuBar } from "@/components/chrome/WindowMenuBar";
 import { getShiftHost } from "@/host/shiftHost";
 
 export const Landing = () => {
@@ -20,12 +22,25 @@ export const Landing = () => {
     return () => cancelAnimationFrame(frame);
   }, [recentsLoaded]);
 
+  const isMac = getShiftHost().platform === "darwin";
+
   return (
     <main className="relative flex h-screen flex-col bg-background text-primary">
-      {/* Overlaid so the launcher centres against the whole window, not the space below the bar. */}
-      <div className="absolute inset-x-0 top-0 z-10">
-        <Titlebar />
-      </div>
+      {isMac ? (
+        // Overlaid so the launcher centres against the whole window, not the space below the bar.
+        <div className="absolute inset-x-0 top-0 z-10">
+          <Titlebar />
+        </div>
+      ) : (
+        <div className="title-bar-area shrink-0 bg-chrome">
+          <div className="titlebar-drag flex h-10 items-center">
+            <WindowControls side="start" />
+            <WindowMenuBar />
+            <div className="flex-1" />
+            <WindowControls side="end" />
+          </div>
+        </div>
+      )}
       <div className="scrollbar-hidden flex min-h-0 flex-1 flex-col overflow-y-auto">
         <div className="mx-auto flex w-200 max-w-full flex-col gap-20 px-6 pt-20 pb-20">
           <header className="flex justify-center">
