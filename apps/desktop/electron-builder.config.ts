@@ -30,12 +30,18 @@ if (!nativeBridgeFile) {
 }
 
 /** The release `shift-cli` from `pnpm build:cli`, bundled so agents and CI match the app. */
-const commandLineToolName = process.platform === "win32" ? "shift-cli.exe" : "shift-cli";
+const executableSuffix = process.platform === "win32" ? ".exe" : "";
 const commandLineToolPath = path.join(
   process.env.CARGO_TARGET_DIR ?? path.resolve(__dirname, "../../target"),
   "release",
-  commandLineToolName,
+  `shift-cli${executableSuffix}`,
 );
+/**
+ * The bundled file is named after the command this build installs, so Nightly
+ * never takes the release `shift-cli` name, including on Windows, where the
+ * bundled directory itself goes on PATH. Must match `buildIdentity` in App.ts.
+ */
+const bundledCommandLineToolName = `${distribution === "nightly" ? "shift-cli-nightly" : "shift-cli"}${executableSuffix}`;
 
 function assertCommandLineToolBuilt() {
   if (!existsSync(commandLineToolPath)) {
@@ -193,7 +199,7 @@ const config: Configuration = {
     },
   ],
   extraResources: [
-    { from: commandLineToolPath, to: `bin/${commandLineToolName}` },
+    { from: commandLineToolPath, to: `bin/${bundledCommandLineToolName}` },
     { from: `../../icons/${iconName}.png`, to: `${iconName}.png` },
     { from: "../../LICENSE-MIT", to: "LICENSE-MIT" },
     { from: "../../LICENSE-APACHE", to: "LICENSE-APACHE" },

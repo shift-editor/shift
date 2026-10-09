@@ -2,7 +2,7 @@ import fs from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { appendPath, CommandLineTool, commandName } from "./CommandLineTool";
+import { appendPath, CommandLineTool, executableName } from "./CommandLineTool";
 
 const log = { debug() {}, info() {}, warn() {}, error() {} };
 let root: string;
@@ -10,7 +10,7 @@ let bundled: string;
 
 beforeEach(() => {
   root = fs.mkdtempSync(path.join(tmpdir(), "shift-cli-install-"));
-  bundled = path.join(root, "app", "bin", commandName());
+  bundled = path.join(root, "app", "bin", executableName("shift-cli"));
   fs.mkdirSync(path.dirname(bundled), { recursive: true });
   fs.writeFileSync(bundled, "#!/bin/sh\necho shift 1\n", { mode: 0o755 });
 });
@@ -23,7 +23,8 @@ afterEach(() => {
 describe("CommandLineTool", () => {
   it("is unavailable when the build has no bundled binary", async () => {
     const tool = new CommandLineTool({
-      bundledPath: path.join(root, "missing", commandName()),
+      bundledPath: path.join(root, "missing", executableName("shift-cli")),
+      command: "shift-cli",
       install: { kind: "link", directory: path.join(root, "bin") },
       log,
     });
@@ -36,9 +37,10 @@ describe("CommandLineTool", () => {
     "links the bundled binary and replaces a different shift-cli",
     async () => {
       const directory = path.join(root, "usr-local-bin");
-      const target = path.join(directory, commandName());
+      const target = path.join(directory, executableName("shift-cli"));
       const tool = new CommandLineTool({
         bundledPath: bundled,
+        command: "shift-cli",
         install: { kind: "link", directory },
         log,
       });
@@ -58,10 +60,11 @@ describe("CommandLineTool", () => {
     "notes when the terminal runs a different shift-cli earlier on PATH",
     async () => {
       const directory = path.join(root, "usr-local-bin");
-      const cargo = path.join(root, "cargo-bin", commandName());
-      let resolved = path.join(directory, commandName());
+      const cargo = path.join(root, "cargo-bin", executableName("shift-cli"));
+      let resolved = path.join(directory, executableName("shift-cli"));
       const tool = new CommandLineTool({
         bundledPath: bundled,
+        command: "shift-cli",
         install: { kind: "link", directory },
         resolveCommand: async () => resolved,
         log,
@@ -70,9 +73,39 @@ describe("CommandLineTool", () => {
       expect(await tool.install()).toMatchObject({ status: "installed", note: null });
 
       resolved = cargo;
-      const shadowed = await tool.state();
+      const shadowed = await tool.install();
       expect(shadowed.status).toBe("installed");
       expect(shadowed.note).toContain(cargo);
+    },
+  );
+
+  it.skipIf(process.platform === "win32")(
+    "installs release and Nightly side by side without either replacing the other",
+    async () => {
+      const directory = path.join(root, "usr-local-bin");
+      const nightlyBundled = path.join(root, "nightly", "bin", executableName("shift-cli-nightly"));
+      fs.mkdirSync(path.dirname(nightlyBundled), { recursive: true });
+      fs.writeFileSync(nightlyBundled, "#!/bin/sh\necho nightly\n", { mode: 0o755 });
+      const release = new CommandLineTool({
+        bundledPath: bundled,
+        command: "shift-cli",
+        install: { kind: "link", directory },
+        log,
+      });
+      const nightly = new CommandLineTool({
+        bundledPath: nightlyBundled,
+        command: "shift-cli-nightly",
+        install: { kind: "link", directory },
+        log,
+      });
+
+      await release.install();
+      expect(await nightly.install()).toMatchObject({
+        status: "installed",
+        commandPath: path.join(directory, "shift-cli-nightly"),
+      });
+      expect((await release.state()).status).toBe("installed");
+      expect(fs.realpathSync(path.join(directory, "shift-cli"))).toBe(fs.realpathSync(bundled));
     },
   );
 
@@ -85,6 +118,7 @@ describe("CommandLineTool", () => {
       const elevated: string[][] = [];
       const tool = new CommandLineTool({
         bundledPath: bundled,
+        command: "shift-cli",
         install: { kind: "link", directory },
         // Stands in for the admin prompt: it performs the same privileged step.
         elevate: async (dir, source, target) => {
@@ -96,15 +130,18 @@ describe("CommandLineTool", () => {
       });
 
       expect((await tool.install()).status).toBe("installed");
-      expect(elevated).toEqual([[directory, bundled, path.join(directory, commandName())]]);
+      expect(elevated).toEqual([
+        [directory, bundled, path.join(directory, executableName("shift-cli"))],
+      ]);
     },
   );
 
   it("copies the binary for AppImages and refreshes it after an update", async () => {
     const directory = path.join(root, "home", ".local", "bin");
-    const target = path.join(directory, commandName());
+    const target = path.join(directory, executableName("shift-cli"));
     const tool = new CommandLineTool({
       bundledPath: bundled,
+      command: "shift-cli",
       install: { kind: "copy", directory },
       log,
     });
@@ -124,6 +161,7 @@ describe("CommandLineTool", () => {
     let userPath = String.raw`C:\Tools;C:\Other`;
     const tool = new CommandLineTool({
       bundledPath: bundled,
+      command: "shift-cli",
       install: { kind: "userPath" },
       userPath: {
         read: async () => userPath,

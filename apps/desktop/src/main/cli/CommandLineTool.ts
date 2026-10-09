@@ -6,11 +6,11 @@ import type { ShiftLogger } from "../logging";
 
 const run = promisify(execFile);
 
-/** Whether the `shift-cli` bundled with the app is on the user's PATH. */
+/** Whether this build's command-line tool is on the user's PATH. */
 export interface CommandLineToolState {
   /**
    * `unavailable` when this build has no bundled binary; `conflict` when a different
-   * `shift-cli` is at the install location; `outdated` when an installed copy is older.
+   * file is at the install location; `outdated` when an installed copy is older.
    */
   status: "unavailable" | "notInstalled" | "installed" | "outdated" | "conflict";
   /** Where the installed command lives, or the bundled binary on Windows. */
@@ -31,12 +31,17 @@ export type CommandLineToolInstall =
 export interface CommandLineToolOptions {
   /** The `shift-cli` binary shipped with this build, or `null` when it is not bundled. */
   bundledPath: string | null;
+  /**
+   * The command this build installs, such as `shift-cli` or `shift-cli-nightly`.
+   * Each build installs its own name, so one never replaces another's command.
+   */
+  command: string;
   install: CommandLineToolInstall;
   /** Runs a privileged shell step after a permission error (macOS admin prompt, Linux pkexec). */
   elevate?: (directory: string, source: string, target: string) => Promise<void>;
   /** Reads and writes the Windows user PATH. */
   userPath?: { read(): Promise<string>; write(value: string): Promise<void> };
-  /** Where the user's terminal finds `shift-cli`, or `null` when it finds none. */
+  /** Where the user's terminal finds `command`, or `null` when it finds none. */
   resolveCommand?: () => Promise<string | null>;
   log: ShiftLogger;
 }
@@ -47,11 +52,14 @@ export interface CommandLineToolOptions {
  * @remarks
  * The installed command always runs the app's own binary (a link or the PATH
  * entry) or a copy refreshed on launch, so its version matches the app, the
- * MCP server, and the bundled skill. A different `shift-cli` already at the
- * target is reported as a conflict and replaced only when the user installs.
+ * MCP server, and the bundled skill. Each build installs its own command
+ * name (`shift-cli`, `shift-cli-nightly`, `shift-cli-dev`), so builds never
+ * replace each other's command. A different file already at the target is
+ * reported as a conflict and replaced only when the user installs.
  */
 export class CommandLineTool {
   readonly #bundledPath: string | null;
+  readonly #command: string;
   readonly #install: CommandLineToolInstall;
   readonly #elevate: CommandLineToolOptions["elevate"];
   readonly #userPath: CommandLineToolOptions["userPath"];
@@ -60,11 +68,17 @@ export class CommandLineTool {
 
   constructor(options: CommandLineToolOptions) {
     this.#bundledPath = options.bundledPath;
+    this.#command = options.command;
     this.#install = options.install;
     this.#elevate = options.elevate;
     this.#userPath = options.userPath;
     this.#resolveCommand = options.resolveCommand;
     this.#log = options.log;
+  }
+
+  /** The command name this build installs. */
+  get command(): string {
+    return this.#command;
   }
 
   /** Whether this build bundles a binary to install. */
@@ -81,11 +95,12 @@ export class CommandLineTool {
     switch (this.#install.kind) {
       case "link":
       case "copy": {
-        const target = path.join(this.#install.directory, commandName());
-        const status = await this.#fileStatus(target, bundled);
-        const pathHint = this.#install.kind === "copy" ? pathNote(this.#install.directory) : null;
-        const shadow = status === "installed" ? await this.#shadowNote(target) : null;
-        return { status, commandPath: target, note: shadow ?? pathHint };
+        const target = path.join(this.#install.directory, executableName(this.#command));
+        return {
+          status: await this.#fileStatus(target, bundled),
+          commandPath: target,
+          note: this.#install.kind === "copy" ? pathNote(this.#install.directory) : null,
+        };
       }
       case "userPath": {
         const directory = path.dirname(bundled);
@@ -95,13 +110,20 @@ export class CommandLineTool {
             ? "installed"
             : "notInstalled",
           commandPath: bundled,
-          note: "Open a new terminal window to use shift-cli.",
+          note: `Open a new terminal window to use ${this.#command}.`,
         };
       }
     }
   }
 
-  /** Installs or repairs the command; resolves with the resulting state. */
+  /**
+   * Installs or repairs the command; resolves with the resulting state.
+   *
+   * @remarks
+   * The state's note names a different copy the terminal would run instead,
+   * found through the login shell. The lookup takes about a second, so only
+   * the install result includes it, not {@link CommandLineTool.state}.
+   */
   async install(): Promise<CommandLineToolState> {
     const bundled = this.#bundledPath;
     if (!bundled || !fs.existsSync(bundled))
@@ -112,7 +134,7 @@ export class CommandLineTool {
         await this.#link(this.#install.directory, bundled);
         break;
       case "copy":
-        copyInto(this.#install.directory, bundled);
+        copyInto(this.#install.directory, bundled, this.#command);
         break;
       case "userPath": {
         const userPath = this.#requireUserPath();
@@ -120,8 +142,14 @@ export class CommandLineTool {
         break;
       }
     }
-    this.#log.info("installed shift-cli", { install: this.#install.kind });
-    return this.state();
+    this.#log.info("installed command-line tool", {
+      command: this.#command,
+      install: this.#install.kind,
+    });
+    const installed = await this.state();
+    if (installed.status !== "installed" || !installed.commandPath) return installed;
+    const shadow = await this.#shadowNote(installed.commandPath);
+    return shadow ? { ...installed, note: shadow } : installed;
   }
 
   /** Keeps an installed copy in step with the app after an update (AppImage). */
@@ -129,15 +157,15 @@ export class CommandLineTool {
     const bundled = this.#bundledPath;
     if (this.#install.kind !== "copy" || !bundled || !fs.existsSync(bundled)) return;
 
-    const target = path.join(this.#install.directory, commandName());
+    const target = path.join(this.#install.directory, executableName(this.#command));
     if ((await this.#fileStatus(target, bundled)) === "outdated") {
-      copyInto(this.#install.directory, bundled);
-      this.#log.info("refreshed shift-cli copy", { target });
+      copyInto(this.#install.directory, bundled, this.#command);
+      this.#log.info("refreshed command-line tool copy", { target });
     }
   }
 
   async #link(directory: string, source: string): Promise<void> {
-    const target = path.join(directory, commandName());
+    const target = path.join(directory, executableName(this.#command));
     try {
       fs.mkdirSync(directory, { recursive: true });
       fs.rmSync(target, { force: true });
@@ -166,7 +194,7 @@ export class CommandLineTool {
     return sameContents(target, bundled) ? "installed" : "outdated";
   }
 
-  /** Names the `shift-cli` the terminal runs instead of `target`, if any. */
+  /** Names the file the terminal runs for this command instead of `target`, if any. */
   async #shadowNote(target: string): Promise<string | null> {
     if (!this.#resolveCommand) return null;
 
@@ -174,12 +202,12 @@ export class CommandLineTool {
     try {
       resolved = await this.#resolveCommand();
     } catch (error) {
-      this.#log.warn("could not resolve shift-cli on the terminal PATH", error);
+      this.#log.warn("could not resolve the command on the terminal PATH", error);
       return null;
     }
     if (!resolved || sameFile(resolved, target)) return null;
 
-    return `Your terminal runs a different shift-cli at ${resolved}, which comes earlier on your PATH. Remove it, or move ${path.dirname(target)} ahead of ${path.dirname(resolved)} in your PATH.`;
+    return `Your terminal runs a different ${this.#command} at ${resolved}, which comes earlier on your PATH. Remove it, or move ${path.dirname(target)} ahead of ${path.dirname(resolved)} in your PATH.`;
   }
 
   #requireUserPath(): NonNullable<CommandLineToolOptions["userPath"]> {
@@ -195,15 +223,15 @@ export function appendPath(current: string, directory: string): string {
   return [...entries, directory].join(";");
 }
 
-/** The executable name for this platform. */
-export function commandName(platform: NodeJS.Platform = process.platform): string {
-  return platform === "win32" ? "shift-cli.exe" : "shift-cli";
+/** The file name of `command` on this platform. */
+export function executableName(command: string, platform: NodeJS.Platform = process.platform) {
+  return platform === "win32" ? `${command}.exe` : command;
 }
 
 /** macOS admin prompt for creating the link in a protected directory. */
 export async function elevateWithOsascript(directory: string, source: string, target: string) {
   const command = `mkdir -p ${shellQuote(directory)} && ln -sf ${shellQuote(source)} ${shellQuote(target)}`;
-  const script = `do shell script "${appleScriptString(command)}" with administrator privileges with prompt "Shift wants to install the shift-cli command."`;
+  const script = `do shell script "${appleScriptString(command)}" with administrator privileges with prompt "Shift wants to install its command-line tool."`;
   await run("osascript", ["-e", script]);
 }
 
@@ -221,17 +249,17 @@ export async function elevateWithPkexec(directory: string, source: string, targe
 }
 
 /**
- * Finds `shift-cli` the way the user's terminal does.
+ * Finds `command` the way the user's terminal does.
  *
  * @remarks
  * An app opened from the Dock or a launcher gets a minimal PATH, so the lookup
  * runs in the user's interactive login shell, which reads the same startup
  * files as a new terminal window.
  */
-export async function resolveCommandInLoginShell(): Promise<string | null> {
+export async function resolveCommandInLoginShell(command: string): Promise<string | null> {
   const shell = process.env.SHELL || "/bin/sh";
   try {
-    const { stdout } = await run(shell, ["-ilc", `command -v ${commandName()}`], {
+    const { stdout } = await run(shell, ["-ilc", `command -v ${shellQuote(command)}`], {
       timeout: 5_000,
     });
     const lines = stdout.split("\n").map((line) => line.trim());
@@ -291,9 +319,9 @@ function sameContents(a: string, b: string): boolean {
   return left.size === right.size && fs.readFileSync(a).equals(fs.readFileSync(b));
 }
 
-function copyInto(directory: string, source: string): void {
+function copyInto(directory: string, source: string, command: string): void {
   fs.mkdirSync(directory, { recursive: true });
-  const target = path.join(directory, commandName());
+  const target = path.join(directory, executableName(command));
   const temporary = `${target}.${process.pid}.tmp`;
   fs.copyFileSync(source, temporary);
   fs.chmodSync(temporary, 0o755);
@@ -304,7 +332,7 @@ function pathNote(directory: string): string | null {
   const entries = (process.env.PATH ?? "").split(path.delimiter);
   return entries.some((entry) => samePath(entry, directory))
     ? null
-    : `Add ${directory} to your PATH to use shift-cli.`;
+    : `Add ${directory} to your PATH.`;
 }
 
 function shellQuote(value: string): string {

@@ -12,6 +12,8 @@ Shift bundles a release `shift-cli` with every desktop build, so the command alw
 - **Linux AppImage** copies it to `~/.local/bin/shift-cli` (add that directory to `PATH` if needed); Shift refreshes the copy after updates.
 - **Windows** adds the app's `bin` directory to your user `PATH`; open a new terminal afterwards.
 
+Shift Nightly installs the same binary as `shift-cli-nightly`, and development builds as `shift-cli-dev` (macOS and Linux only), so release, Nightly, and development builds never replace each other's command. If your terminal finds a different `shift-cli` earlier on `PATH`, such as a `cargo install` build, Shift names it after installing.
+
 To build it from a checkout instead, run `pnpm build:cli` (or `cargo build --release -p shift-cli`); packaging the desktop app requires that build.
 
 ## Usage

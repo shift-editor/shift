@@ -196,6 +196,23 @@ describe("Shift MCP local connection", () => {
     });
   });
 
+  it("names a non-release build's command-line tool in the guide", async () => {
+    const release = await startServer().start();
+    const nightly = await startServer({ commandLineTool: "shift-cli-nightly" }).start();
+    const guideText = async (connection: ShiftMcpConnection) => {
+      const response = (await mcpRequest(connection, "tools/call", {
+        name: "shift.guide",
+        arguments: { topic: "cli" },
+      })) as { result: { content: [{ text: string }] } };
+      return response.result.content[0].text;
+    };
+
+    expect(await guideText(release)).toMatch(/^# shift-cli\n/);
+    expect(await guideText(nightly)).toMatch(
+      /^This build installs its command-line tool as `shift-cli-nightly`/,
+    );
+  });
+
   it("connects with a native MCP client", async () => {
     const connection = await startServer().start();
     const client = new Client({ name: "shift-test", version: "1.0.0" });
