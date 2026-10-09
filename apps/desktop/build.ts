@@ -96,6 +96,9 @@ async function buildRenderer(): Promise<void> {
       // CPU profiles can be mapped back to component and function names.
       sourcemap: isProfile,
     },
+    // Profiling builds also keep function names, so React fibers name their
+    // components when render counts are read from the running app.
+    ...(isProfile ? { esbuild: { keepNames: true } } : {}),
     define: {
       __PLAYWRIGHT__: JSON.stringify(isE2E),
     },
