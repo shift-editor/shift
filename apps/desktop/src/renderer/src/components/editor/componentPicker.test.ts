@@ -1,7 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import type { GlyphId, GlyphName, GlyphRecord } from "@shift/types";
 import type { GlyphCatalogItem } from "@/types/glyphCatalog";
-import { getGlyphInfo } from "@/workspace/glyphInfo";
+import { getGlyphInfo, loadComponentGlyphInfo } from "@/workspace/glyphInfo";
 import { componentPickerCandidates } from "./componentPicker";
 
 const rootId = "glyph-root" as GlyphId;
@@ -9,6 +9,9 @@ const baseId = "glyph-base" as GlyphId;
 const directDependentId = "glyph-direct" as GlyphId;
 const indirectDependentId = "glyph-indirect" as GlyphId;
 const glyphInfo = getGlyphInfo();
+
+// The picker loads decomposition and search data when it opens; so do these tests.
+beforeAll(() => loadComponentGlyphInfo());
 
 const glyphs: GlyphCatalogItem[] = [
   glyph(rootId, "root", 0x52),

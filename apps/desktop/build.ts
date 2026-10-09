@@ -95,6 +95,16 @@ async function buildRenderer(): Promise<void> {
       // Profiling builds stay minified, like production, but keep source maps so
       // CPU profiles can be mapped back to component and function names.
       sourcemap: isProfile,
+      rollupOptions: {
+        output: {
+          // build.ts runs under tsx, which compiles Vite with esbuild's keepNames.
+          // Vite embeds its dynamic-import preload helper as `preload.toString()`,
+          // so the helper calls `__name`, which no browser chunk defines, and every
+          // lazy `import()` threw. Profiling builds' own keepNames needs it too.
+          intro:
+            'var __name = (target, value) => Object.defineProperty(target, "name", { value, configurable: true });',
+        },
+      },
     },
     // Profiling builds also keep function names, so React fibers name their
     // components when render counts are read from the running app.
