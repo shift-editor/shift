@@ -56,6 +56,7 @@ import {
   commandName,
   elevateWithOsascript,
   elevateWithPkexec,
+  resolveCommandInLoginShell,
   windowsUserPath,
 } from "../cli/CommandLineTool";
 
@@ -1320,6 +1321,7 @@ function createCommandLineTool(): CommandLineTool {
     return new CommandLineTool({
       bundledPath,
       install: { kind: "copy", directory: path.join(os.homedir(), ".local", "bin") },
+      resolveCommand: resolveCommandInLoginShell,
       log,
     });
   }
@@ -1327,6 +1329,7 @@ function createCommandLineTool(): CommandLineTool {
     bundledPath,
     install: { kind: "link", directory: "/usr/local/bin" },
     elevate: process.platform === "darwin" ? elevateWithOsascript : elevateWithPkexec,
+    resolveCommand: resolveCommandInLoginShell,
     log,
   });
 }

@@ -36,6 +36,8 @@ export interface CommandLineToolOptions {
   elevate?: (directory: string, source: string, target: string) => Promise<void>;
   /** Reads and writes the Windows user PATH. */
   userPath?: { read(): Promise<string>; write(value: string): Promise<void> };
+  /** Where the user's terminal finds `shift-cli`, or `null` when it finds none. */
+  resolveCommand?: () => Promise<string | null>;
   log: ShiftLogger;
 }
 
@@ -53,6 +55,7 @@ export class CommandLineTool {
   readonly #install: CommandLineToolInstall;
   readonly #elevate: CommandLineToolOptions["elevate"];
   readonly #userPath: CommandLineToolOptions["userPath"];
+  readonly #resolveCommand: CommandLineToolOptions["resolveCommand"];
   readonly #log: ShiftLogger;
 
   constructor(options: CommandLineToolOptions) {
@@ -60,6 +63,7 @@ export class CommandLineTool {
     this.#install = options.install;
     this.#elevate = options.elevate;
     this.#userPath = options.userPath;
+    this.#resolveCommand = options.resolveCommand;
     this.#log = options.log;
   }
 
@@ -78,11 +82,10 @@ export class CommandLineTool {
       case "link":
       case "copy": {
         const target = path.join(this.#install.directory, commandName());
-        return {
-          status: await this.#fileStatus(target, bundled),
-          commandPath: target,
-          note: this.#install.kind === "copy" ? pathNote(this.#install.directory) : null,
-        };
+        const status = await this.#fileStatus(target, bundled);
+        const pathHint = this.#install.kind === "copy" ? pathNote(this.#install.directory) : null;
+        const shadow = status === "installed" ? await this.#shadowNote(target) : null;
+        return { status, commandPath: target, note: shadow ?? pathHint };
       }
       case "userPath": {
         const directory = path.dirname(bundled);
@@ -163,6 +166,22 @@ export class CommandLineTool {
     return sameContents(target, bundled) ? "installed" : "outdated";
   }
 
+  /** Names the `shift-cli` the terminal runs instead of `target`, if any. */
+  async #shadowNote(target: string): Promise<string | null> {
+    if (!this.#resolveCommand) return null;
+
+    let resolved: string | null;
+    try {
+      resolved = await this.#resolveCommand();
+    } catch (error) {
+      this.#log.warn("could not resolve shift-cli on the terminal PATH", error);
+      return null;
+    }
+    if (!resolved || sameFile(resolved, target)) return null;
+
+    return `Your terminal runs a different shift-cli at ${resolved}, which comes earlier on your PATH. Remove it, or move ${path.dirname(target)} ahead of ${path.dirname(resolved)} in your PATH.`;
+  }
+
   #requireUserPath(): NonNullable<CommandLineToolOptions["userPath"]> {
     if (!this.#userPath) throw new Error("No user PATH access configured");
     return this.#userPath;
@@ -201,6 +220,27 @@ export async function elevateWithPkexec(directory: string, source: string, targe
   ]);
 }
 
+/**
+ * Finds `shift-cli` the way the user's terminal does.
+ *
+ * @remarks
+ * An app opened from the Dock or a launcher gets a minimal PATH, so the lookup
+ * runs in the user's interactive login shell, which reads the same startup
+ * files as a new terminal window.
+ */
+export async function resolveCommandInLoginShell(): Promise<string | null> {
+  const shell = process.env.SHELL || "/bin/sh";
+  try {
+    const { stdout } = await run(shell, ["-ilc", `command -v ${commandName()}`], {
+      timeout: 5_000,
+    });
+    const lines = stdout.split("\n").map((line) => line.trim());
+    return lines.findLast((line) => path.isAbsolute(line)) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** Reads and writes the Windows user PATH through PowerShell, which broadcasts the change. */
 export const windowsUserPath = {
   async read(): Promise<string> {
@@ -235,6 +275,14 @@ function samePath(a: string, b: string): boolean {
   return process.platform === "win32"
     ? normalize(a).toLowerCase() === normalize(b).toLowerCase()
     : normalize(a) === normalize(b);
+}
+
+function sameFile(a: string, b: string): boolean {
+  try {
+    return samePath(fs.realpathSync(a), fs.realpathSync(b));
+  } catch {
+    return samePath(a, b);
+  }
 }
 
 function sameContents(a: string, b: string): boolean {

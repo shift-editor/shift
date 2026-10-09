@@ -54,6 +54,28 @@ describe("CommandLineTool", () => {
     },
   );
 
+  it.skipIf(process.platform === "win32")(
+    "notes when the terminal runs a different shift-cli earlier on PATH",
+    async () => {
+      const directory = path.join(root, "usr-local-bin");
+      const cargo = path.join(root, "cargo-bin", commandName());
+      let resolved = path.join(directory, commandName());
+      const tool = new CommandLineTool({
+        bundledPath: bundled,
+        install: { kind: "link", directory },
+        resolveCommand: async () => resolved,
+        log,
+      });
+
+      expect(await tool.install()).toMatchObject({ status: "installed", note: null });
+
+      resolved = cargo;
+      const shadowed = await tool.state();
+      expect(shadowed.status).toBe("installed");
+      expect(shadowed.note).toContain(cargo);
+    },
+  );
+
   it.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
     "asks for elevation when the link directory is protected",
     async () => {
