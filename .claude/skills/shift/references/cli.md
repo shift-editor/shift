@@ -6,6 +6,8 @@
 
 In Shift, choose **Shift → Install Command Line Tool…** (on Windows and Linux, **Help → Install Command Line Tool…**). That puts `shift-cli` on your `PATH`, built from the same version as the app. Shift Nightly installs `shift-cli-nightly` and development builds install `shift-cli-dev`, so each build keeps its own command. Check with `shift-cli --version`. Run `shift-cli --help` and `shift-cli <command> --help` for every command and flag; this page explains when to use them.
 
+To give agents this skill without the app's MCP server, run `shift-cli skill install` in a project, or `shift-cli skill install --global` for every project. It writes the skill matching this `shift-cli` to `.agents/skills/shift` (Codex, OpenCode, VS Code, Cursor) and `.claude/skills/shift` (Claude Code); Shift's install action offers the global install and refreshes it after updates. `shift-cli skill status` reports a copy that no longer matches, and `shift-cli skill show [topic]` prints a section.
+
 ## Read
 
 ```sh
