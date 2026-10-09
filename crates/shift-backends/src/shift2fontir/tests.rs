@@ -16,7 +16,7 @@ use fontir::source::Source;
 use kurbo::BezPath;
 use ordered_float::OrderedFloat;
 use shift_font::test_support::sample_variable_font;
-use shift_font::{KerningPair, KerningSide};
+use shift_font::{GlyphId, KerningGroupId, KerningPair, KerningSide};
 
 use super::source::ShiftIrSource;
 
@@ -29,7 +29,7 @@ struct Compilation {
     glyph: Glyph,
     metrics: Metrics,
     kerning_groups: KerningGroups,
-    kerning: KerningInstance,
+    kerning: BTreeMap<NormalizedLocation, KerningInstance>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -53,16 +53,31 @@ fn shift_source_produces_expected_fontir() {
 #[test]
 fn kerning_pairs_with_missing_sides_are_skipped() {
     let mut font = sample_variable_font();
-    font.kerning_mut().add_pair(KerningPair::new(
-        KerningSide::Group("public.kern1.A".to_string()),
-        KerningSide::Group("public.kern2.J".to_string()),
+    let source_id = font.default_source_id().unwrap();
+    let kerning = font.kerning_mut();
+    let first_a = KerningGroupId::from_raw("first_A");
+    let second_a = KerningGroupId::from_raw("second_A");
+    kerning.set_value(
+        source_id.clone(),
+        KerningPair::groups(first_a.clone(), KerningGroupId::from_raw("missing")),
         -30.0,
-    ));
-    font.kerning_mut().add_pair(KerningPair::new(
-        KerningSide::Glyph("missing".to_string().into()),
-        KerningSide::Group("public.kern2.A".to_string()),
+    );
+    kerning.set_value(
+        source_id.clone(),
+        KerningPair::new(
+            KerningSide::Glyph(GlyphId::from_raw("missing")),
+            KerningSide::Group(second_a),
+        ),
         -20.0,
-    ));
+    );
+    kerning.set_value(
+        source_id,
+        KerningPair::new(
+            KerningSide::Glyph(GlyphId::from_raw("A")),
+            KerningSide::Group(first_a),
+        ),
+        -10.0,
+    );
 
     let actual = compile_ir(ShiftIrSource::from_font_view(&font).unwrap());
 
@@ -82,12 +97,15 @@ fn compile_ir(source: ShiftIrSource) -> Compilation {
 
     let metadata = context.static_metadata.get();
     let default_location = metadata.default_location().clone();
-    run(
-        &context,
-        source
-            .create_kerning_instance_ir_work(default_location.clone())
-            .unwrap(),
-    );
+    let kerning_groups = context.kerning_groups.get();
+    for location in &kerning_groups.locations {
+        run(
+            &context,
+            source
+                .create_kerning_instance_ir_work(location.clone())
+                .unwrap(),
+        );
+    }
     let global_metrics = context.global_metrics.get();
 
     Compilation {
@@ -107,12 +125,17 @@ fn compile_ir(source: ShiftIrSource) -> Compilation {
             underline_thickness: global_metrics
                 .get(GlobalMetric::UnderlineThickness, &default_location),
         },
-        kerning_groups: context.kerning_groups.get().as_ref().clone(),
-        kerning: context
-            .kerning_at
-            .get(&WorkId::KernInstance(default_location))
-            .as_ref()
-            .clone(),
+        kerning: kerning_groups
+            .locations
+            .iter()
+            .map(|location| {
+                let instance = context
+                    .kerning_at
+                    .get(&WorkId::KernInstance(location.clone()));
+                (location.clone(), instance.as_ref().clone())
+            })
+            .collect(),
+        kerning_groups: kerning_groups.as_ref().clone(),
     }
 }
 
@@ -125,10 +148,11 @@ fn expected_ir() -> Compilation {
     let tag = Tag::new(b"wght");
     let default_location: NormalizedLocation =
         [(tag, NormalizedCoord::new(0.0))].into_iter().collect();
-    let bold_location = [(tag, NormalizedCoord::new(1.0))].into_iter().collect();
+    let bold_location: NormalizedLocation =
+        [(tag, NormalizedCoord::new(1.0))].into_iter().collect();
     let mut glyph_sources = HashMap::new();
     glyph_sources.insert(default_location.clone(), triangle_instance(600.0, 300.0));
-    glyph_sources.insert(bold_location, triangle_instance(800.0, 380.0));
+    glyph_sources.insert(bold_location.clone(), triangle_instance(800.0, 380.0));
 
     Compilation {
         units_per_em: 1000,
@@ -172,18 +196,29 @@ fn expected_ir() -> Compilation {
             underline_position: OrderedFloat(-100.0),
             underline_thickness: OrderedFloat(50.0),
         },
-        kerning_groups: expected_kerning_groups(default_location.clone()),
-        kerning: KerningInstance {
-            location: default_location,
-            kerns: BTreeMap::from([(
-                (
-                    KernSide::Group(KernGroup::Side1("A".into())),
-                    KernSide::Group(KernGroup::Side2("A".into())),
-                ),
-                OrderedFloat(-50.0),
-            )]),
-        },
+        kerning_groups: expected_kerning_groups([default_location.clone(), bold_location.clone()]),
+        kerning: BTreeMap::from([
+            expected_group_kerning(default_location, -50.0),
+            expected_group_kerning(bold_location, -90.0),
+        ]),
     }
+}
+
+fn expected_group_kerning(
+    location: NormalizedLocation,
+    value: f64,
+) -> (NormalizedLocation, KerningInstance) {
+    let instance = KerningInstance {
+        location: location.clone(),
+        kerns: BTreeMap::from([(
+            (
+                KernSide::Group(KernGroup::Side1("A".into())),
+                KernSide::Group(KernGroup::Side2("A".into())),
+            ),
+            OrderedFloat(value),
+        )]),
+    };
+    (location, instance)
 }
 
 fn triangle_instance(width: f64, apex_x: f64) -> GlyphInstance {
@@ -203,7 +238,7 @@ fn triangle_instance(width: f64, apex_x: f64) -> GlyphInstance {
     }
 }
 
-fn expected_kerning_groups(location: NormalizedLocation) -> KerningGroups {
+fn expected_kerning_groups(locations: [NormalizedLocation; 2]) -> KerningGroups {
     let side1 = KernGroup::Side1("A".into());
     let side2 = KernGroup::Side2("A".into());
     KerningGroups {
@@ -211,7 +246,7 @@ fn expected_kerning_groups(location: NormalizedLocation) -> KerningGroups {
             (side1.clone(), BTreeSet::from([GlyphName::new("A")])),
             (side2.clone(), BTreeSet::from([GlyphName::new("A")])),
         ]),
-        locations: BTreeSet::from([location]),
+        locations: BTreeSet::from(locations),
         old_to_new_group_names: BTreeMap::from([(side1.clone(), side1), (side2.clone(), side2)]),
     }
 }

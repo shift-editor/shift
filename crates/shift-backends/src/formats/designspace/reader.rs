@@ -35,7 +35,7 @@ impl FontReader for DesignspaceReader {
 
 impl DesignspaceReader {
     fn load_designspace(&self, path: &str) -> FormatBackendResult<Font> {
-        let (header, mut stream) = super::stream_font(path)?;
+        let (header, mut stream, _report) = super::stream_font(path)?;
         collect_streamed_font(header, &mut stream)
     }
 }

@@ -37,7 +37,10 @@ mod tests {
 
         assert_eq!(report.file_name, "Dogfood.shift");
         assert_eq!(report.document.application_id, "SHFT");
-        assert_eq!(report.document.schema_version, 1);
+        assert_eq!(
+            report.document.schema_version,
+            shift_store::SHIFT_DOCUMENT_SCHEMA_VERSION
+        );
         assert_eq!(report.metadata.display_name, "Dogfood Sans Regular");
         assert_eq!(report.axes.len(), 1);
         assert_eq!(report.sources.len(), 2);

@@ -5,9 +5,8 @@ use crate::metrics::set_metric_position;
 use crate::traits::FontReader;
 use norad::{Font as NoradFont, Line};
 use shift_font::{
-    Anchor, Component, Contour, FeatureData, Font, GlyphId, GlyphLayer, Guideline, KerningData,
-    KerningPair, KerningSide, LayerId, LibData, LibValue, MetricKind, PointType, SourceId,
-    Transform,
+    Anchor, Component, Contour, FeatureData, Font, GlyphId, GlyphLayer, Guideline, LayerId,
+    LibData, LibValue, MetricKind, PointType, SourceId, Transform,
 };
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
@@ -244,47 +243,6 @@ impl UfoReader {
         Ok(layer)
     }
 
-    fn convert_kerning(norad_font: &NoradFont) -> KerningData {
-        let mut kerning = KerningData::new();
-
-        for (key, members) in norad_font.groups.iter() {
-            let key_str = key.as_str();
-            if key_str.starts_with("public.kern1.") {
-                kerning.set_group1(
-                    key_str.to_string(),
-                    members.iter().map(|n| n.to_string().into()).collect(),
-                );
-            } else if key_str.starts_with("public.kern2.") {
-                kerning.set_group2(
-                    key_str.to_string(),
-                    members.iter().map(|n| n.to_string().into()).collect(),
-                );
-            }
-        }
-
-        for (first, seconds) in norad_font.kerning.iter() {
-            let first_str = first.as_str();
-            let first_side = if first_str.starts_with("public.kern1.") {
-                KerningSide::Group(first_str.to_string())
-            } else {
-                KerningSide::Glyph(first_str.into())
-            };
-
-            for (second, value) in seconds.iter() {
-                let second_str = second.as_str();
-                let second_side = if second_str.starts_with("public.kern2.") {
-                    KerningSide::Group(second_str.to_string())
-                } else {
-                    KerningSide::Glyph(second_str.into())
-                };
-
-                kerning.add_pair(KerningPair::new(first_side.clone(), second_side, *value));
-            }
-        }
-
-        kerning
-    }
-
     fn load_features(ufo_path: &Path) -> FeatureData {
         let fea_path = ufo_path.join("features.fea");
         if fea_path.exists() {
@@ -377,7 +335,6 @@ impl UfoReader {
         if let Some(remainder) = Self::convert_fontinfo_remainder(&norad_font.font_info)? {
             *font.fontinfo_remainder_mut() = remainder;
         }
-        *font.kerning_mut() = Self::convert_kerning(norad_font);
         *font.features_mut() = Self::load_features(ufo_path);
         for guideline in norad_font.guidelines() {
             font.add_guideline(Self::convert_guideline(guideline));
@@ -413,7 +370,7 @@ impl Default for UfoReader {
 
 impl FontReader for UfoReader {
     fn load(&self, path: &str) -> FormatBackendResult<Font> {
-        let (header, mut stream) = super::stream_font(path)?;
+        let (header, mut stream, _report) = super::stream_font(path)?;
         collect_streamed_font(header, &mut stream)
     }
 }

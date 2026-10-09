@@ -4,8 +4,9 @@ use crate::{
     Anchor, AnchorId, Axis, AxisId, AxisLabel, AxisLabelId, AxisLabelRange, AxisMapping,
     AxisMappingPoint, AxisRole, Component, ComponentId, Contour, ContourId, DecomposedTransform,
     DesignLocation, ExternalLocation, Font, Glyph, GlyphId, GlyphLayer, Guideline, GuidelineId,
-    KerningPair, KerningSide, LayerId, LibValue, Location, MetricKind, MetricValue, NamedInstance,
-    NamedInstanceId, Point, PointId, PointType, Source, SourceId,
+    KerningGroup, KerningGroupId, KerningPair, KerningPosition, KerningSide, LayerId, LibValue,
+    Location, MetricKind, MetricValue, NamedInstance, NamedInstanceId, Point, PointId, PointType,
+    Source, SourceId,
 };
 use std::collections::BTreeMap;
 
@@ -37,15 +38,6 @@ pub fn sample_font() -> Font {
 
     font.features_mut()
         .set_fea_source(Some("feature kern { pos A A -80; } kern;\n".to_string()));
-    font.kerning_mut()
-        .set_group1("public.kern1.A".to_string(), vec!["A".into()]);
-    font.kerning_mut()
-        .set_group2("public.kern2.A".to_string(), vec!["A".into()]);
-    font.kerning_mut().add_pair(KerningPair::new(
-        KerningSide::Group("public.kern1.A".to_string()),
-        KerningSide::Group("public.kern2.A".to_string()),
-        -80.0,
-    ));
 
     let mut font_guideline = Guideline::with_id(
         GuidelineId::from_raw("cap_height"),
@@ -201,6 +193,20 @@ pub fn sample_font() -> Font {
     );
     font.add_source(bold_source);
     font.set_default_source_id(regular_id.clone());
+    let kerned_id = GlyphId::from_raw("A");
+    let (first_group, second_group) = add_a_groups(font.kerning_mut(), &kerned_id);
+    let kerning = font.kerning_mut();
+    let group_pair = KerningPair::groups(first_group, second_group.clone());
+    kerning.set_value(regular_id.clone(), group_pair.clone(), -80.0);
+    kerning.set_value(bold_id.clone(), group_pair, -120.0);
+    kerning.set_value(
+        bold_id.clone(),
+        KerningPair::new(
+            KerningSide::Glyph(kerned_id),
+            KerningSide::Group(second_group),
+        ),
+        -100.0,
+    );
     set_source_metrics(
         &mut font,
         regular_id.clone(),
@@ -411,21 +417,39 @@ pub fn sample_variable_font() -> Font {
         510.0,
     );
 
-    font.kerning_mut()
-        .set_group1("public.kern1.A".to_string(), vec!["A".into()]);
-    font.kerning_mut()
-        .set_group2("public.kern2.A".to_string(), vec!["A".into()]);
-    font.kerning_mut().add_pair(KerningPair::new(
-        KerningSide::Group("public.kern1.A".to_string()),
-        KerningSide::Group("public.kern2.A".to_string()),
-        -50.0,
-    ));
-
     let mut glyph = Glyph::with_unicode("A".to_string(), 0x0041);
-    glyph.set_layer(triangle_layer(default_source_id, 600.0, 300.0));
-    glyph.set_layer(triangle_layer(bold_source_id, 800.0, 380.0));
-    font.insert_glyph(glyph).unwrap();
+    glyph.set_layer(triangle_layer(default_source_id.clone(), 600.0, 300.0));
+    glyph.set_layer(triangle_layer(bold_source_id.clone(), 800.0, 380.0));
+    let glyph_id = font.insert_glyph(glyph).unwrap();
+
+    let (first_group, second_group) = add_a_groups(font.kerning_mut(), &glyph_id);
+    let group_pair = KerningPair::groups(first_group, second_group);
+    let kerning = font.kerning_mut();
+    kerning.set_value(default_source_id, group_pair.clone(), -50.0);
+    kerning.set_value(bold_source_id, group_pair, -90.0);
     font
+}
+
+/// Adds a first and a second kerning group named `A` holding `glyph_id`, and
+/// returns their ids.
+fn add_a_groups(
+    kerning: &mut crate::Kerning,
+    glyph_id: &GlyphId,
+) -> (KerningGroupId, KerningGroupId) {
+    let first = KerningGroupId::from_raw("first_A");
+    let second = KerningGroupId::from_raw("second_A");
+    for (group_id, position) in [
+        (&first, KerningPosition::First),
+        (&second, KerningPosition::Second),
+    ] {
+        kerning
+            .set_group(
+                group_id.clone(),
+                KerningGroup::new(position, "A", vec![glyph_id.clone()]),
+            )
+            .expect("group names are unique per position");
+    }
+    (first, second)
 }
 
 fn set_source_metrics(
@@ -482,4 +506,24 @@ fn triangle_layer(source_id: SourceId, width: f64, apex_x: f64) -> GlyphLayer {
     contour.close();
     layer.add_contour(contour);
     layer
+}
+
+/// Returns the kerning between two glyphs named `first` and `second` at
+/// `source_id`, or `None` when either glyph is missing or no pair applies.
+pub fn kerning_between(
+    font: &Font,
+    source_id: &SourceId,
+    first: &str,
+    second: &str,
+) -> Option<f64> {
+    let first = font.glyph_id_by_name(first)?;
+    let second = font.glyph_id_by_name(second)?;
+    font.kerning()
+        .resolve(source_id, &first, &second)
+        .map(|resolved| resolved.value)
+}
+
+/// Returns [`kerning_between`] at the font's default source.
+pub fn default_kerning_between(font: &Font, first: &str, second: &str) -> Option<f64> {
+    kerning_between(font, &font.default_source_id()?, first, second)
 }

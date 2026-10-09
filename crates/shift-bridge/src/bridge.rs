@@ -937,7 +937,7 @@ impl FontView for FontSaveSnapshot {
     self.font.glyph_by_name(name)
   }
 
-  fn kerning(&self) -> &shift_font::KerningData {
+  fn kerning(&self) -> &shift_font::Kerning {
     self.font.kerning()
   }
 

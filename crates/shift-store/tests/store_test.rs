@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use shift_font::{FontMetadata, test_support::sample_font};
 use shift_store::{
-    AxisId, FontInfo, GlyphId, NewAxis, NewGlyph, NewSource, SHIFT_APPLICATION_ID, ShiftStore,
-    SourceId, SourceKind, WorkspaceState,
+    AxisId, FontInfo, GlyphId, NewAxis, NewGlyph, NewSource, SHIFT_APPLICATION_ID,
+    SHIFT_DOCUMENT_SCHEMA_VERSION, ShiftStore, SourceId, SourceKind, WorkspaceState,
 };
 
 fn source_collection(font: &shift_font::Font) -> shift_font::SourceCollection {
@@ -1156,7 +1156,7 @@ fn file_stores_run_wal_with_verified_pragmas() {
     let version: i64 = conn
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .expect("user_version");
-    assert_eq!(version, 1);
+    assert_eq!(version, SHIFT_DOCUMENT_SCHEMA_VERSION);
 
     std::fs::remove_dir_all(path.parent().unwrap()).ok();
 }
@@ -1190,7 +1190,7 @@ fn canonical_document_round_trip_preserves_kitchen_sink_font_for_export() {
     let version: i64 = conn
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .expect("user_version");
-    assert_eq!(version, 1);
+    assert_eq!(version, SHIFT_DOCUMENT_SCHEMA_VERSION);
     let journal: String = conn
         .query_row("PRAGMA journal_mode", [], |row| row.get(0))
         .expect("journal_mode");
@@ -1379,7 +1379,7 @@ fn document_open_rejects_plain_corrupt_and_future_sqlite_files() {
         future_error,
         shift_store::StoreError::UnsupportedDocumentSchemaVersion {
             found: 999,
-            supported: 1
+            supported: SHIFT_DOCUMENT_SCHEMA_VERSION
         }
     ));
 }
