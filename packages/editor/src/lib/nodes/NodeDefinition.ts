@@ -17,7 +17,7 @@ import type { TransformTarget } from "../../types/transformTarget";
  * still resolve through `ShiftObject` references.
  *
  * Two kinds of method, kept apart:
- * - Queries (`unitsTransform`, `bounds`, `hit`, `idsInRect`, `childPosition`,
+ * - Queries (`unitsTransform`, `bounds`, `hit`, `selectableInRect`, `childPosition`,
  *   `transformTarget`, `draw`) run during rendering, hit testing, and gesture
  *   starts and must never write. A transform target writes only once begun.
  * - Hooks (`onDoubleClick`, `onContentChange`) may write. The editor calls
@@ -73,7 +73,7 @@ export abstract class NodeDefinition<N extends ShiftNode = ShiftNode> {
    * @param rect - marquee already converted into the node's local coordinate space.
    * @returns the selectable objects the rect catches; empty when it catches none.
    */
-  idsInRect(_node: N, _rect: LocalBounds): readonly SelectableId[] {
+  selectableInRect(_node: N, _rect: LocalBounds): readonly SelectableId[] {
     return [];
   }
 

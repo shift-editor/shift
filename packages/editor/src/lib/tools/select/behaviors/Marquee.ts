@@ -64,7 +64,8 @@ export class Marquee implements SelectBehavior {
     const ids = new Set<SelectableId>();
     for (const node of editor.scene.nodes()) {
       const localRect = editor.toLocalBounds(node, sceneRect);
-      for (const id of editor.nodeDefinition(node.kind).idsInRect(node, localRect)) ids.add(id);
+      for (const id of editor.nodeDefinition(node.kind).selectableInRect(node, localRect))
+        ids.add(id);
     }
     return ids;
   }
