@@ -186,7 +186,7 @@ function ruleOf(pair: ResolvedKerning): KerningRule {
   const firstIsGroup = isGroupSide(pair.first);
   const secondIsGroup = isGroupSide(pair.second);
   if (firstIsGroup && secondIsGroup) return "group";
-  if (firstIsGroup || secondIsGroup) return "mixed";
+  if (firstIsGroup || secondIsGroup) return "exception";
   return "glyph";
 }
 

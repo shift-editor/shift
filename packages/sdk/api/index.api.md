@@ -1054,7 +1054,7 @@ export interface KerningResolveInput extends ShiftTarget {
 }
 
 // @public
-export type KerningRule = "glyph" | "mixed" | "group" | "none";
+export type KerningRule = "glyph" | "exception" | "group" | "none";
 
 // @public
 export interface LayerAppearance {

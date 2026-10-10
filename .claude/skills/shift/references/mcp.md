@@ -69,7 +69,7 @@ async () => {
 - `kerning.groups({ position? })` lists groups with their member glyphs. A `first` group kerns before the other glyph (UFO `public.kern1`), a `second` group after it (`public.kern2`).
 - `kerning.pairs({ sourceId, glyph?, limit?, cursor? })` pages through the pairs authored at one master. Each side is `{ kind: "glyph", glyphId, name }` or `{ kind: "group", groupId, name }`. `glyph` keeps pairs naming that glyph directly or through its group at that position.
 - `kerning.resolve({ pairs, sourceId? | location? })` answers what the compiled font kerns between two glyphs (by name, or a `glyph_…` id). Do not recompute this yourself: the specific pair beats the general one, and a master's value depends on whether it kerns anything.
-- Every resolution lists each master: `origin` is `authored` (a pair applies there), `unkerned` (the master kerns other pairs but not this one, so 0), or `interpolated` (the master authors no kerning and takes the blend of those that do). `rule` is `glyph` (glyph against glyph), `mixed` (a glyph exception against a group), `group` (group against group), or `none`.
+- Every resolution lists each master: `origin` is `authored` (a pair applies there), `unkerned` (the master kerns other pairs but not this one, so 0), or `interpolated` (the master authors no kerning and takes the blend of those that do). `rule` is `glyph` (glyph against glyph), `exception` (a glyph against a group, overriding the group pair), `group` (group against group), or `none`.
 - Useful audits: glyphs missing from the group their base glyph is in; pairs authored at some masters and not others; exceptions whose value equals their group pair; a sign that flips between masters.
 
 ## Interpret what you read

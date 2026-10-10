@@ -610,10 +610,10 @@ export interface KerningPairPage {
 }
 /**
  * Which kind of authored pair applies between two glyphs: `glyph` (both sides
- * glyphs), `mixed` (a glyph exception against a group), `group` (both sides
+ * glyphs), `exception` (a glyph against a group, overriding the group pair), `group` (both sides
  * groups), or `none`. A more specific pair always beats a more general one.
  */
-export type KerningRule = "glyph" | "mixed" | "group" | "none";
+export type KerningRule = "glyph" | "exception" | "group" | "none";
 /**
  * How a master arrives at its kerning for a pair: an `authored` pair applies;
  * the master kerns other pairs but not this one (`unkerned`, so 0); or it

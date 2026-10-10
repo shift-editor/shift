@@ -56,7 +56,7 @@ describe("ShiftKerningReader serves kerning as the compiled font applies it", ()
     expect(masterAt(font, resolved!, "LightCondensed")).toMatchObject({
       amount: -75,
       origin: "authored",
-      rule: "mixed",
+      rule: "exception",
       pair: { first: { kind: "glyph", name: "T" }, second: { kind: "group" } },
     });
     expect(masterAt(font, resolved!, "BoldCondensed")).toMatchObject({

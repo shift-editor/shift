@@ -288,7 +288,7 @@ test.describe("sparse source reads", () => {
       tPairs: [["T", "group", -75]],
       amount: -75,
       masters: true,
-      lightCondensed: { amount: -75, origin: "authored", rule: "mixed" },
+      lightCondensed: { amount: -75, origin: "authored", rule: "exception" },
     });
   });
 });

@@ -201,7 +201,7 @@ function kerningResolution({ first, second }: KerningPairQuery) {
         sourceId: asSourceId("source-a"),
         amount: -75,
         origin: "authored" as const,
-        rule: "mixed" as const,
+        rule: "exception" as const,
         pair: authoredKerningPair(),
       },
     ],
