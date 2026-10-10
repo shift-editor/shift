@@ -6,6 +6,7 @@ use harfrust::{
     FontRef, GlyphId, ShapeOptions, ShaperData, ShaperInstance, UnicodeBuffer, Variation,
 };
 use shift_font::test_support::sample_variable_font;
+use shift_font::{GlyphCategory, GlyphSubcategory};
 
 use super::*;
 
@@ -39,8 +40,8 @@ fn shape(font: &ShaperFont, text: &str, variations: &[&str]) -> Vec<(String, u32
         .collect()
 }
 
-/// Maps each single-character glyph name to its character, with zero
-/// advances.
+/// Maps each single-character or `uniXXXX` glyph name to its character, with
+/// zero advances.
 struct LiveFuncs {
     glyphs: HashMap<u32, GlyphId>,
 }
@@ -51,17 +52,20 @@ impl LiveFuncs {
             .glyph_names()
             .iter()
             .enumerate()
-            .filter_map(|(glyph_id, name)| {
-                let mut characters = name.chars();
-                let character = characters.next()?;
-                characters
-                    .next()
-                    .is_none()
-                    .then(|| (u32::from(character), GlyphId::new(glyph_id as u32)))
-            })
+            .filter_map(|(glyph_id, name)| Some((codepoint(name)?, GlyphId::new(glyph_id as u32))))
             .collect();
         Self { glyphs }
     }
+}
+
+fn codepoint(name: &str) -> Option<u32> {
+    if let Some(hex) = name.strip_prefix("uni") {
+        return u32::from_str_radix(hex, 16).ok();
+    }
+
+    let mut characters = name.chars();
+    let character = characters.next()?;
+    characters.next().is_none().then_some(u32::from(character))
 }
 
 impl FontFuncs for LiveFuncs {
@@ -80,6 +84,7 @@ fn request(glyph_names: &[&str], feature_source: &str) -> ShaperFontRequest {
         glyph_names: glyph_names.iter().map(|name| name.to_string()).collect(),
         feature_source: feature_source.to_string(),
         axes: Vec::new(),
+        gdef_classes: BTreeMap::new(),
     }
 }
 
@@ -221,4 +226,59 @@ fn state_skips_an_unchanged_request() {
 
     assert!(Arc::ptr_eq(state.font().unwrap(), &first));
     assert_eq!(state.revision(), 1);
+}
+
+const MARK_SKIPPING_LIGATURE: &str =
+    "feature liga { lookupflag IgnoreMarks; sub f i by f_i; } liga;";
+
+fn names(shaped: Vec<(String, u32, i32)>) -> Vec<String> {
+    shaped.into_iter().map(|(name, _, _)| name).collect()
+}
+
+/// Without `GDEF` classes a shaper falls back to Unicode general categories,
+/// so only a category can make a glyph encoded as a letter count as a mark.
+#[test]
+fn categorized_marks_are_skipped_by_lookups_that_ignore_marks() {
+    let glyphs = [".notdef", "f", "i", "f_i", "x"];
+    let mut classified = request(&glyphs, MARK_SKIPPING_LIGATURE);
+    classified
+        .gdef_classes
+        .insert("x".to_string(), GlyphClassDef::Mark);
+
+    let with_classes = compiled(&classified);
+    let without_classes = compiled(&request(&glyphs, MARK_SKIPPING_LIGATURE));
+
+    assert_eq!(names(shape(&with_classes, "fxi", &[])), ["f_i", "x"]);
+    assert_eq!(names(shape(&without_classes, "fxi", &[])), ["f", "x", "i"]);
+}
+
+#[test]
+fn authored_glyph_classes_win_over_categories() {
+    let glyphs = [".notdef", "f", "i", "f_i", "uni0301"];
+    let source =
+        format!("table GDEF {{ GlyphClassDef [uni0301], , , ; }} GDEF;\n{MARK_SKIPPING_LIGATURE}");
+    let mut classified = request(&glyphs, &source);
+    classified
+        .gdef_classes
+        .insert("uni0301".to_string(), GlyphClassDef::Mark);
+
+    let font = compiled(&classified);
+
+    assert_eq!(names(shape(&font, "f\u{301}i", &[])), ["f", "uni0301", "i"]);
+}
+
+#[test]
+fn request_classifies_glyphs_by_category() {
+    let mut font = sample_variable_font();
+    let glyph_id = font.glyph_by_name("A").unwrap().id();
+    font.set_glyph_category(
+        glyph_id,
+        Some(GlyphCategory::Mark),
+        Some(GlyphSubcategory::Nonspacing),
+    )
+    .unwrap();
+
+    let request = ShaperFontRequest::from_font(&font).unwrap();
+
+    assert_eq!(request.gdef_classes.get("A"), Some(&GlyphClassDef::Mark));
 }

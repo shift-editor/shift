@@ -44,7 +44,7 @@ Font format backends that convert between on-disk font files and the `Font` IR u
 
 **Architecture Invariant:** Retained handles represent immutable source generations. Binary and GLIF sources own bytes; Glyphs owns its parsed source model. Projection and atlas reads never inspect the filesystem after open. WHY: directory metadata, lazy geometry, and component dependencies must always come from one coherent generation.
 
-**Architecture Invariant:** A shaper font holds only authored feature code. Generated kerning, mark attachment, and `STAT` stay out of it, and shapers supply character mapping and advances from the live font. WHY: outline, advance, kerning, and anchor edits must reshape text without recompiling, so the shaper font only rebuilds when feature source, glyph order, or axes change.
+**Architecture Invariant:** A shaper font holds only authored feature code. Generated kerning, mark attachment, and `STAT` stay out of it, and shapers supply character mapping and advances from the live font. WHY: outline, advance, kerning, and anchor edits must reshape text without recompiling, so the shaper font only rebuilds when feature source, glyph order, glyph categories, or axes change.
 
 ## Codemap
 
@@ -109,7 +109,7 @@ src/
 - `GlyphsReader` -- eagerly drains the canonical `.glyphs` / `.glyphspackage` stream for compatibility callers; read-only (no writer)
 - `GlyphsGlyphStream` -- owns one upstream-parsed Glyphs model and converts bounded, layer-aware Shift glyph batches in directory order
 - `FontExporter` -- compiles a `FontView` directly to TTF via `ShiftIrSource` and fontc
-- `ShaperFontRequest` / `compile_shaper_font` -- compile a font's authored feature source with fea-rs into a shaper font: `GSUB`/`GPOS`/`GDEF`, `head`, and `fvar`, with no outlines, `cmap`, or `hmtx`. Glyph ids index the request's glyph order with `.notdef` first; diagnostics carry UTF-16 ranges
+- `ShaperFontRequest` / `compile_shaper_font` -- compile a font's authored feature source with fea-rs into a shaper font: `GSUB`/`GPOS`/`GDEF`, `head`, and `fvar`, with no outlines, `cmap`, or `hmtx`. Glyph ids index the request's glyph order with `.notdef` first; `GDEF` glyph classes come from glyph categories unless the source declares its own; diagnostics carry UTF-16 ranges
 - `ShaperFontState` -- keeps the last successfully compiled shaper font active while later feature source has errors, and skips recompiling an unchanged request
 
 ## How it works
