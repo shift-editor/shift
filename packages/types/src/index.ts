@@ -68,6 +68,7 @@ export {
   mintComponentId,
   mintPointId,
   mintGlyphId,
+  mintKerningGroupId,
   mintLayerId,
   mintMetricId,
   mintNamedInstanceId,

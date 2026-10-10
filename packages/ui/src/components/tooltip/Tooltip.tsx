@@ -15,17 +15,19 @@ function TooltipProvider({ children, delayDuration = 0 }: TooltipProviderProps) 
 interface TooltipProps {
   children: React.ReactNode;
   delayDuration?: number;
+  /** Keeps the tooltip from opening, such as when the text it repeats is shown in full. */
+  disabled?: boolean;
 }
 
-function Tooltip({ children, delayDuration }: TooltipProps) {
+function Tooltip({ children, delayDuration, disabled }: TooltipProps) {
   if (delayDuration !== undefined) {
     return (
       <BaseTooltip.Provider delay={delayDuration}>
-        <BaseTooltip.Root>{children}</BaseTooltip.Root>
+        <BaseTooltip.Root disabled={disabled}>{children}</BaseTooltip.Root>
       </BaseTooltip.Provider>
     );
   }
-  return <BaseTooltip.Root>{children}</BaseTooltip.Root>;
+  return <BaseTooltip.Root disabled={disabled}>{children}</BaseTooltip.Root>;
 }
 
 interface TooltipTriggerProps {

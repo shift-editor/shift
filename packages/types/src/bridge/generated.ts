@@ -490,6 +490,13 @@ export interface CreateGlyphLayerIntent {
   sourceId: SourceId
 }
 
+/** Creates an empty kerning group under an id the client mints. */
+export interface CreateKerningGroupIntent {
+  groupId: KerningGroupId
+  position: KerningPosition
+  name: string
+}
+
 /** Creates an authored named instance with client-minted stable identity. */
 export interface CreateNamedInstanceIntent {
   instance: NamedInstance
@@ -514,6 +521,11 @@ export interface DecomposeComponentsIntent {
 /** Font-level axis deletion. Removing an axis also reshapes source locations. */
 export interface DeleteAxisIntent {
   axisId: AxisId
+}
+
+/** Deletes a kerning group; its pairs stay and resolve again on undo. */
+export interface DeleteKerningGroupIntent {
+  groupId: KerningGroupId
 }
 
 /** Deletes an authored named instance without changing sources or geometry. */
@@ -549,7 +561,9 @@ export interface FontIntent {
    * Font-level kinds additionally include metadata replacement, tracked
    * language replacement, axis create/update/delete, mapping replacement,
    * named-instance create/update/delete, source create/delete, glyph
-   * or layer creation, and "setKerningValues".
+   * or layer creation, "setKerningValues", and the kerning group kinds
+   * "createKerningGroup" | "setKerningGroupMember" | "renameKerningGroup"
+   * | "deleteKerningGroup".
    * Every kind shares the same apply path; one set is one undo step.
    */
   kind: string
@@ -591,6 +605,10 @@ export interface FontIntent {
   cloneGlyphLayer?: CloneGlyphLayerIntent
   materializeGlyphLayer?: MaterializeGlyphLayerIntent
   setKerningValues?: SetKerningValuesIntent
+  createKerningGroup?: CreateKerningGroupIntent
+  setKerningGroupMember?: SetKerningGroupMemberIntent
+  renameKerningGroup?: RenameKerningGroupIntent
+  deleteKerningGroup?: DeleteKerningGroupIntent
 }
 
 export interface FontMetadata {
@@ -980,6 +998,12 @@ export interface RemovePointsIntent {
   pointIds: Array<PointId>
 }
 
+/** Renames a kerning group; its pairs keep referencing it by id. */
+export interface RenameKerningGroupIntent {
+  groupId: KerningGroupId
+  name: string
+}
+
 /** One direct component whose outline includes its resolved descendants. */
 export interface ResolvedComponentGeometry {
   id: ComponentId
@@ -1026,6 +1050,13 @@ export interface SetContourStartIntent {
   layerId: LayerId
   contourId: ContourId
   pointId: PointId
+}
+
+/** Moves a glyph into a group, or out of its group at `position` without one. */
+export interface SetKerningGroupMemberIntent {
+  position: KerningPosition
+  glyphId: GlyphId
+  groupId?: KerningGroupId
 }
 
 /** Sets or removes kerning pair values at sources as one undoable edit. */

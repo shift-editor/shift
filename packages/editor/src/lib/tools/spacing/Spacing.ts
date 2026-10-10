@@ -68,10 +68,27 @@ export class SpacingTool extends BaseTool<SpacingState, SpacingTool> {
     this.setState({ type: "idle" });
   }
 
-  /** The half whose value is open for typing, or null. */
+  /** The half whose value is open for typing, measured now, or null. */
   get editing(): SpacingHalf | null {
     const state = this.getState();
-    return state.type === "editing" ? state.hit : null;
+    return state.type === "editing" ? this.runs.refresh(state.hit) : null;
+  }
+
+  /**
+   * The half being worked on: the one open for typing or dragged, else the
+   * selected one; measured now, so null once its glyphs are gone.
+   */
+  get currentHalf(): SpacingHalf | null {
+    const state = this.getState();
+    switch (state.type) {
+      case "editing":
+      case "dragging":
+        return this.runs.refresh(state.hit);
+      case "ready":
+        return state.selected ? this.runs.refresh(state.selected) : null;
+      case "idle":
+        return null;
+    }
   }
 
   /** The open value's pill in screen pixels, for anchoring its editor. */
@@ -88,7 +105,8 @@ export class SpacingTool extends BaseTool<SpacingState, SpacingTool> {
   setEditedSidebearing(value: number): void {
     const half = this.editing;
     if (!half?.set(this.editor, value)) return;
-    this.setState({ type: "editing", hit: this.runs.refresh(half) });
+    const hit = this.runs.refresh(half);
+    this.setState(hit ? { type: "editing", hit } : { type: "ready", hit: null, selected: null });
   }
 
   /** Opens the other half of the same gap, when it has one. */
@@ -113,9 +131,11 @@ export class SpacingTool extends BaseTool<SpacingState, SpacingTool> {
     switch (state.type) {
       case "idle":
         return;
-      case "editing":
-        drawSpacingGap(canvas, this.editor, state.hit);
+      case "editing": {
+        const half = this.runs.refresh(state.hit);
+        if (half) drawSpacingGap(canvas, this.editor, half);
         return;
+      }
       case "dragging":
         this.#drawDrag(canvas, state);
         return;
@@ -127,20 +147,24 @@ export class SpacingTool extends BaseTool<SpacingState, SpacingTool> {
 
   /** The dragged gap, and the gap holding the matched value when the drag snapped to the glyph's other side. */
   #drawDrag(canvas: Canvas, state: Extract<SpacingState, { type: "dragging" }>): void {
-    drawSpacingGap(canvas, this.editor, state.hit, {
+    const hit = this.runs.refresh(state.hit);
+    if (!hit) return;
+    drawSpacingGap(canvas, this.editor, hit, {
       matched: state.snap === "otherHalf",
       snapped: state.snap !== null,
     });
     if (state.snap !== "otherSidebearing") return;
 
-    const opposite = this.runs.oppositeHalf(state.hit);
+    const opposite = this.runs.oppositeHalf(hit);
     if (opposite) drawSpacingGap(canvas, this.editor, opposite, { snapped: true });
   }
 
   /** The hovered gap and the selected half, unless a key press asked for a clear view. */
   #drawReady(canvas: Canvas, state: Extract<SpacingState, { type: "ready" }>): void {
     if (state.quiet) return;
-    const { hit, selected } = state;
+    // Measured now: an undo may have taken either half's glyphs away.
+    const hit = state.hit ? this.runs.refresh(state.hit) : null;
+    const selected = state.selected ? this.runs.refresh(state.selected) : null;
     const selectedHere = selected !== null && hit !== null && selected.sameGapAs(hit);
     if (selected && !selectedHere) {
       drawSpacingGap(canvas, this.editor, selected, { selected: selected.side });

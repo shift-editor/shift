@@ -118,9 +118,10 @@ pub(super) const SOURCE_LOCATIONS: RecoveryTable =
 pub(super) const SOURCE_METRIC_VALUES: RecoveryTable =
     RecoveryTable::replace_collection("source_metric_values", Some("source_id"), false);
 pub(super) const FEATURE_TEXT: RecoveryTable = RecoveryTable::canonical_only("feature_text");
-pub(super) const KERNING_GROUPS: RecoveryTable = RecoveryTable::canonical_only("kerning_groups");
+pub(super) const KERNING_GROUPS: RecoveryTable =
+    RecoveryTable::replace_collection("kerning_groups", None, true);
 pub(super) const KERNING_GROUP_MEMBERS: RecoveryTable =
-    RecoveryTable::canonical_only("kerning_group_members");
+    RecoveryTable::replace_collection("kerning_group_members", None, false);
 pub(super) const KERNING_PAIRS: RecoveryTable =
     RecoveryTable::replace_collection("kerning_pairs", Some("source_id"), false);
 pub(super) const FONT_LIB: RecoveryTable =

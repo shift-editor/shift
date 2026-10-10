@@ -101,7 +101,8 @@ export class KerningTool extends BaseTool<KerningState, KerningTool> {
   setEditedKerning(amount: number): void {
     const pair = this.editing;
     if (!pair?.set(this.editor, amount)) return;
-    this.setState({ type: "editing", hit: this.runs.refresh(pair) });
+    const hit = this.runs.refresh(pair);
+    this.setState(hit ? { type: "editing", hit } : { type: "ready", hit: null, selected: null });
   }
 
   /** Opens the next pair in the run, when there is one. */
@@ -128,9 +129,11 @@ export class KerningTool extends BaseTool<KerningState, KerningTool> {
       case "idle":
         return;
       case "editing":
-      case "dragging":
-        drawKerningPair(canvas, this.editor, this.runs.refresh(state.hit), { selected: true });
+      case "dragging": {
+        const pair = this.runs.refresh(state.hit);
+        if (pair) drawKerningPair(canvas, this.editor, pair, { selected: true });
         return;
+      }
       case "ready":
         this.#drawReady(canvas, state);
         return;

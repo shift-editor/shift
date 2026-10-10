@@ -54,6 +54,13 @@ function builtInToolManifests(): readonly ToolManifest[] {
       shortcut: "p",
     },
     {
+      id: "hand",
+      create: (api) => new Hand(api),
+      icon: HandIcon,
+      tooltip: "Hand Tool (H)",
+      shortcut: "h",
+    },
+    {
       id: "text",
       create: (api) => new TextTool(api),
       icon: TextIcon,
@@ -67,9 +74,9 @@ function builtInToolManifests(): readonly ToolManifest[] {
         return spacingSlotCell.peek() === "kerning" ? KerningIcon : SpacingIcon;
       },
       get tooltip() {
-        return spacingSlotCell.peek() === "kerning" ? "Kerning Tool (K)" : "Spacing Tool (M)";
+        return spacingSlotCell.peek() === "kerning" ? "Kerning Tool (K)" : "Spacing Tool (S)";
       },
-      shortcut: "m",
+      shortcut: "s",
       onSelect: selectSpacing,
       menuSelectionCell: spacingSlotCell,
       menuItems: [
@@ -78,7 +85,7 @@ function builtInToolManifests(): readonly ToolManifest[] {
           toolId: "spacing",
           icon: SpacingIcon,
           label: "Spacing",
-          shortcut: "m",
+          shortcut: "s",
           get selected() {
             return spacingSlotCell.peek() === "spacing";
           },
@@ -103,13 +110,6 @@ function builtInToolManifests(): readonly ToolManifest[] {
       icon: KerningIcon,
       tooltip: "Kerning Tool (K)",
       hidden: true,
-    },
-    {
-      id: "hand",
-      create: (api) => new Hand(api),
-      icon: HandIcon,
-      tooltip: "Hand Tool (H)",
-      shortcut: "h",
     },
     {
       id: "shape",

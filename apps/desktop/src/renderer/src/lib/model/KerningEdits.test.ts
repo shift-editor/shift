@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { resolve } from "node:path";
-import type { GlyphName } from "@shift/types";
+import type { GlyphId, GlyphName } from "@shift/types";
 import { isGroupSide, kerningValueEdit, type Font } from "@shift/editor/model";
 import { createWorkspaceStack } from "@/testing/workspaceStack";
 
@@ -41,6 +41,42 @@ describe("kerning edits", () => {
 
     await stack.editCoordinator.undo();
     expect(kernAt(font, "LightCondensed", "T", "A")).toBe(-75);
+  });
+
+  it("removes a pair at a master, which then kerns 0 there while other masters keep theirs", async () => {
+    const { stack, font, t, a, lightCondensed } = await openMutatorSans();
+    const applied = font.kerningCell.peek().resolve(lightCondensed, t, a)!;
+
+    font.setKerningValues([kerningValueEdit(lightCondensed, applied)], "Remove kerning");
+    await stack.editCoordinator.settled();
+
+    expect(font.kerningCell.peek().resolve(lightCondensed, t, a)).toBeNull();
+    expect(kernAt(font, "LightCondensed", "T", "A")).toBe(0);
+    expect(kernAt(font, "BoldWide", "T", "A")).toBe(-150);
+  });
+
+  it("interpolates a master whose last pair is removed, as the compiled font does", async () => {
+    const { stack, font, t, a } = await openMutatorSans();
+    const boldWide = font.sources.find((source) => source.name === "BoldWide")!.id;
+    const applied = font.kerningCell.peek().resolve(boldWide, t, a)!;
+
+    font.setKerningValues([kerningValueEdit(boldWide, applied)], "Remove kerning");
+    // The interpolation basis drops BoldWide only once Rust echoes the change.
+    await stack.editCoordinator.settled();
+
+    expect(kernAt(font, "BoldWide", "T", "A")).toBe(-205);
+  });
+
+  it("removes an exception at a master, falling back to its group pair there", async () => {
+    const { font, t, a } = await openMutatorSans();
+    const boldWide = font.sources.find((source) => source.name === "BoldWide")!.id;
+    const exception = { first: t, second: a };
+    font.setKerningValues([kerningValueEdit(boldWide, exception, -300)], "Kern");
+    expect(kernAt(font, "BoldWide", "T", "A")).toBe(-300);
+
+    font.setKerningValues([kerningValueEdit(boldWide, exception)], "Remove kerning");
+
+    expect(kernAt(font, "BoldWide", "T", "A")).toBe(-150);
   });
 
   it("previews an open edit and restores the value when it is discarded", async () => {
@@ -137,5 +173,61 @@ describe("kerning edits", () => {
       font.kerningCell.peek().exceptionEdit(lightCondensed, t, a, pair, "first", true),
     ).toBeNull();
     expect(font.kerningCell.peek().groupOf("first", t)).toBeNull();
+  });
+});
+
+describe("kerning group edits", () => {
+  const groupOf = (font: Font, position: "first" | "second", glyphId: GlyphId) => {
+    const groupId = font.kerningCell.peek().groupOf(position, glyphId);
+    return groupId ? font.kerningCell.peek().groups.group(groupId) : null;
+  };
+
+  it("creates a group holding a glyph as one undo step", async () => {
+    const { stack, font, t } = await openMutatorSans();
+
+    const groupId = await font.createKerningGroup("first", "Bars", [t]);
+
+    expect(font.kerningCell.peek().groupOf("first", t)).toBe(groupId);
+    expect(groupOf(font, "first", t)?.name).toBe("Bars");
+    await stack.editCoordinator.undo();
+    expect(font.kerningCell.peek().groupOf("first", t)).toBeNull();
+    expect(font.kerningCell.peek().groups.group(groupId)).toBeNull();
+  });
+
+  it("takes several glyphs out of their group as one undo step", async () => {
+    const { stack, font, a } = await openMutatorSans();
+    const group = groupOf(font, "second", a)!;
+    const removed = group.glyphIds.slice(0, 2);
+
+    await font.assignKerningGroup("second", removed, null);
+
+    expect(font.kerningCell.peek().groups.group(group.id)?.glyphIds).toEqual(
+      group.glyphIds.filter((member) => !removed.includes(member)),
+    );
+    await stack.editCoordinator.undo();
+    expect(font.kerningCell.peek().groups.group(group.id)?.glyphIds).toEqual(group.glyphIds);
+  });
+
+  it("renames a group without changing any kern", async () => {
+    const { font, a } = await openMutatorSans();
+    const before = kernAt(font, "BoldWide", "T", "A");
+    const group = groupOf(font, "second", a)!;
+
+    await font.renameKerningGroup(group.id, "Apex");
+
+    expect(groupOf(font, "second", a)).toMatchObject({ id: group.id, name: "Apex" });
+    expect(kernAt(font, "BoldWide", "T", "A")).toBe(before);
+  });
+
+  it("deletes a group, stopping its kerning until undo restores it", async () => {
+    const { stack, font, a } = await openMutatorSans();
+    const group = groupOf(font, "second", a)!;
+
+    await font.deleteKerningGroup(group.id);
+
+    expect(font.kerningCell.peek().groups.group(group.id)).toBeNull();
+    expect(kernAt(font, "LightCondensed", "T", "A")).toBe(0);
+    await stack.editCoordinator.undo();
+    expect(kernAt(font, "LightCondensed", "T", "A")).toBe(-75);
   });
 });

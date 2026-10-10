@@ -554,6 +554,9 @@ export function externalAxisLocationFromRecord(values: Readonly<Record<string, n
 export class Font {
     // Warning: (ae-forgotten-export) The symbol "FontOptions" needs to be exported by the entry point index.d.ts
     constructor(input: FontOptions);
+    // Warning: (ae-forgotten-export) The symbol "KerningPairPosition" needs to be exported by the entry point index.d.ts
+    // Warning: (ae-forgotten-export) The symbol "KerningGroupId" needs to be exported by the entry point index.d.ts
+    assignKerningGroup(position: KerningPairPosition, glyphIds: readonly GlyphId[], groupId: KerningGroupId | null): Promise<void>;
     get axesCell(): Signal<Axis[]>;
     // Warning: (ae-forgotten-export) The symbol "AxisMapping" needs to be exported by the entry point index.d.ts
     get axisMappingsCell(): Signal<AxisMapping[]>;
@@ -569,6 +572,7 @@ export class Font {
     createGlyph(name: GlyphName): GlyphRecord;
     createGlyphForUnicode(unicode: Unicode): GlyphRecord;
     createGlyphLayer(glyphId: GlyphId, sourceId: SourceId): LayerId;
+    createKerningGroup(position: KerningPairPosition, name: string, glyphIds?: readonly GlyphId[]): Promise<KerningGroupId>;
     // Warning: (ae-forgotten-export) The symbol "NamedInstanceDefinition" needs to be exported by the entry point index.d.ts
     // Warning: (ae-forgotten-export) The symbol "NamedInstanceId" needs to be exported by the entry point index.d.ts
     createNamedInstance(instance: NamedInstanceDefinition): NamedInstanceId;
@@ -582,6 +586,7 @@ export class Font {
     // (undocumented)
     get defaultXAdvance(): number;
     deleteAxis(axisId: AxisId): void;
+    deleteKerningGroup(groupId: KerningGroupId): Promise<void>;
     deleteNamedInstance(instanceId: NamedInstanceId): void;
     // (undocumented)
     deleteSource(sourceId: SourceId): void;
@@ -659,6 +664,7 @@ export class Font {
     recordForId(glyphId: GlyphId): GlyphRecord | null;
     // (undocumented)
     recordForName(name: GlyphName): GlyphRecord | null;
+    renameKerningGroup(groupId: KerningGroupId, name: string): Promise<void>;
     resolveLayers(layerIds: readonly LayerId[]): Promise<readonly LayerRead[]>;
     setAxisMappings(mappings: readonly AxisMapping[]): Promise<void>;
     // Warning: (ae-forgotten-export) The symbol "KerningValueEdit" needs to be exported by the entry point index.d.ts
@@ -1372,10 +1378,10 @@ export function useSignalState<T>(signal: Signal<T>, options?: UseSignalOptions)
 
 // Warnings were encountered during analysis:
 //
-// dist/Editor-DgZhfoDe.d.ts:2774:5 - (ae-forgotten-export) The symbol "Axis" needs to be exported by the entry point index.d.ts
-// dist/Editor-DgZhfoDe.d.ts:2775:5 - (ae-forgotten-export) The symbol "AxisMappingBasis" needs to be exported by the entry point index.d.ts
-// dist/Editor-DgZhfoDe.d.ts:2776:5 - (ae-forgotten-export) The symbol "Source" needs to be exported by the entry point index.d.ts
-// dist/Editor-DgZhfoDe.d.ts:4744:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
+// dist/Editor-_mNcKe5m.d.ts:2801:5 - (ae-forgotten-export) The symbol "Axis" needs to be exported by the entry point index.d.ts
+// dist/Editor-_mNcKe5m.d.ts:2802:5 - (ae-forgotten-export) The symbol "AxisMappingBasis" needs to be exported by the entry point index.d.ts
+// dist/Editor-_mNcKe5m.d.ts:2803:5 - (ae-forgotten-export) The symbol "Source" needs to be exported by the entry point index.d.ts
+// dist/Editor-_mNcKe5m.d.ts:4775:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

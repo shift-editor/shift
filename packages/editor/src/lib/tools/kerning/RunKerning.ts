@@ -170,13 +170,18 @@ export class RunKerning {
     return null;
   }
 
-  /** Measures a pair again after an edit; unchanged if its glyphs are no longer neighbours. */
-  refresh(pair: KerningPair): KerningPair {
+  /**
+   * Measures a pair again after an edit.
+   *
+   * @returns null once its glyphs are no longer neighbours, as after an undo
+   * that removes one, so no stale pair stays selected.
+   */
+  refresh(pair: KerningPair): KerningPair | null {
     const { node, left, right } = pair.gap;
     const gap = this.#editor
       .nodeDefinition("textRun")
       .spacingGapBetween(node, left.itemId, right.itemId);
-    return (gap && kernedPair(gap)) ?? pair;
+    return gap ? kernedPair(gap) : null;
   }
 
   /**

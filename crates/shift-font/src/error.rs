@@ -230,6 +230,12 @@ pub enum CoreError {
         position: KerningPosition,
     },
 
+    #[error("kerning group {0} already exists")]
+    DuplicateKerningGroup(KerningGroupId),
+
+    #[error("kerning group name {0:?} is blank or has control characters")]
+    InvalidKerningGroupName(String),
+
     #[error("kerning value {0} is not finite")]
     InvalidKerningValue(f64),
 }

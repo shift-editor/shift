@@ -14,7 +14,9 @@ import type {
   GlyphLayerSnapshot,
   GlyphPreview,
   GlyphRecord,
+  KerningGroupId,
   KerningValueEdit,
+  FontIntent,
   GlyphSnapshotRequest,
   GlyphName,
   SourceId,
@@ -36,6 +38,7 @@ import type {
 import {
   mintAxisId,
   mintGlyphId,
+  mintKerningGroupId,
   mintLayerId,
   mintNamedInstanceId,
   mintSourceId,
@@ -55,7 +58,7 @@ import type { GlyphReader } from "../../types/glyph";
 import { Glyph, GlyphLayer } from "./Glyph";
 import type { FontStore, GlyphInvalidation } from "./FontStore";
 import type { GlyphLayerState } from "./GlyphLayerState";
-import type { Kerning } from "./Kerning";
+import type { Kerning, KerningPairPosition } from "./Kerning";
 import { KerningEdit } from "./KerningEdit";
 import { SourceMetricsInterpolation } from "./SourceMetricsInterpolation";
 import {
@@ -1635,6 +1638,63 @@ export class Font {
     edit.commit(label);
   }
 
+  /**
+   * Moves glyphs into a kerning group, each leaving the group it was in at
+   * that position, or takes them out of their group there with null; as one
+   * undo step.
+   *
+   * @param position - The pair position the group kerns: `first` is the glyph's right edge.
+   */
+  async assignKerningGroup(
+    position: KerningPairPosition,
+    glyphIds: readonly GlyphId[],
+    groupId: KerningGroupId | null,
+  ): Promise<void> {
+    if (glyphIds.length === 0) return;
+    await this.editCoordinator.apply(
+      glyphIds.map((glyphId) => memberIntent(position, glyphId, groupId)),
+      groupId === null ? "Remove from kerning group" : "Set kerning group",
+    );
+  }
+
+  /**
+   * Creates a kerning group named `name` at a pair position and moves
+   * `glyphIds` into it, as one undo step.
+   *
+   * @returns The new group's id.
+   */
+  async createKerningGroup(
+    position: KerningPairPosition,
+    name: string,
+    glyphIds: readonly GlyphId[] = [],
+  ): Promise<KerningGroupId> {
+    const groupId = mintKerningGroupId();
+    await this.editCoordinator.apply(
+      [
+        { kind: "createKerningGroup", createKerningGroup: { groupId, position, name } },
+        ...glyphIds.map((glyphId) => memberIntent(position, glyphId, groupId)),
+      ],
+      "Create kerning group",
+    );
+    return groupId;
+  }
+
+  /** Renames a kerning group, as one undo step; its pairs reference it by id and keep their kerning. */
+  async renameKerningGroup(groupId: KerningGroupId, name: string): Promise<void> {
+    await this.editCoordinator.apply(
+      [{ kind: "renameKerningGroup", renameKerningGroup: { groupId, name } }],
+      "Rename kerning group",
+    );
+  }
+
+  /** Deletes a kerning group, as one undo step; undo restores it with its kerning. */
+  async deleteKerningGroup(groupId: KerningGroupId): Promise<void> {
+    await this.editCoordinator.apply(
+      [{ kind: "deleteKerningGroup", deleteKerningGroup: { groupId } }],
+      "Delete kerning group",
+    );
+  }
+
   #metricsForSource(source: Source | null): SourceMetrics {
     const unitsPerEm = this.#metricsCell.peek().unitsPerEm;
     const definitions = this.#metricDefinitionsCell.peek();
@@ -1682,4 +1742,16 @@ export class Font {
   #peekDesignspace<T>(read: (designspace: Designspace) => T): T {
     return untracked(() => read(this.#designspace));
   }
+}
+
+/** The intent that moves one glyph into a kerning group, or out of its group with null. */
+function memberIntent(
+  position: KerningPairPosition,
+  glyphId: GlyphId,
+  groupId: KerningGroupId | null,
+): FontIntent {
+  return {
+    kind: "setKerningGroupMember",
+    setKerningGroupMember: { position, glyphId, ...(groupId === null ? {} : { groupId }) },
+  };
 }

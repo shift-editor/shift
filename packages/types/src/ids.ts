@@ -455,6 +455,11 @@ export function mintGlyphId(): GlyphId {
   return mintPrefixedId("glyph");
 }
 
+/** Mints a new kerning group id. See {@link mintPointId}. */
+export function mintKerningGroupId(): KerningGroupId {
+  return mintPrefixedId("kerningGroup");
+}
+
 /** Mints a new layer id. See {@link mintPointId}. */
 export function mintLayerId(): LayerId {
   return mintPrefixedId("layer");

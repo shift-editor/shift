@@ -62,7 +62,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
         {label && (
           <span
             className={cn(
-              "absolute text-muted text-ui font-medium pointer-events-none",
+              "absolute text-secondary text-ui font-medium pointer-events-none",
               labelOnRight ? "right-2" : "left-2",
             )}
           >

@@ -608,3 +608,77 @@ fn recovery_overlay_keeps_unsaved_kerning_until_saved() {
     let saved = ShiftStore::open_document(&document_path).expect("open saved document");
     assert_eq!(saved.load_font_state().unwrap(), font);
 }
+
+/// Creates a group, moves A into it out of its old group, and renames
+/// another group, as one change set.
+fn edit_groups(font: &mut shift_font::Font) -> shift_font::FontChangeSet {
+    // Sorts before `first_A`, so its insert comes first unless the store
+    // deletes every changed group before inserting any.
+    let round = shift_font::KerningGroupId::from_raw("a_round");
+    font.apply_intents(shift_font::FontIntentSet {
+        intents: vec![
+            shift_font::FontIntent::CreateKerningGroup {
+                group_id: round.clone(),
+                position: shift_font::KerningPosition::First,
+                name: "Round".to_string(),
+            },
+            shift_font::FontIntent::SetKerningGroupMember {
+                position: shift_font::KerningPosition::First,
+                glyph_id: shift_font::GlyphId::from_raw("A"),
+                group_id: Some(round),
+            },
+            shift_font::FontIntent::RenameKerningGroup {
+                group_id: shift_font::KerningGroupId::from_raw("second_A"),
+                name: "Apex".to_string(),
+            },
+        ],
+    })
+    .expect("group edits apply")
+    .changes
+}
+
+#[test]
+fn kerning_group_edits_persist_in_a_working_store_and_a_recovery_overlay() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let working_path = temp.path().join("working.sqlite");
+    let mut font = sample_font();
+    let mut working = ShiftStore::open(&working_path).expect("open working store");
+    working.replace_font_state(&font).expect("write font");
+    let mut renamed = font.clone();
+    let changes = edit_groups(&mut renamed);
+    working
+        .apply_change_set_with_font(&changes, &renamed, true)
+        .unwrap();
+    drop(working);
+    assert_eq!(
+        ShiftStore::open(&working_path)
+            .unwrap()
+            .load_font_state()
+            .unwrap(),
+        renamed
+    );
+
+    let document_path = temp.path().join("Dogfood.shift");
+    let recovery_path = temp.path().join("Dogfood.recovery.sqlite");
+    drop(ShiftStore::create_document(&document_path, &font).expect("create document"));
+    let mut document = ShiftStore::open_document_with_recovery(&document_path, &recovery_path)
+        .expect("open with recovery");
+    let changes = edit_groups(&mut font);
+    document
+        .apply_change_set_with_font(&changes, &font, true)
+        .unwrap();
+    drop(document);
+
+    let mut recovered = ShiftStore::open_document_with_recovery(&document_path, &recovery_path)
+        .expect("reopen with recovery");
+    assert_eq!(recovered.load_font_state().unwrap(), font);
+    recovered.save_document().unwrap();
+    drop(recovered);
+    assert_eq!(
+        ShiftStore::open_document(&document_path)
+            .unwrap()
+            .load_font_state()
+            .unwrap(),
+        font
+    );
+}
