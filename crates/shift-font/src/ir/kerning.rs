@@ -239,6 +239,32 @@ impl Kerning {
         self.groups.iter()
     }
 
+    /// Returns each group that differs between `self` and `after`, by id,
+    /// with its value in each (`None` where it does not exist).
+    ///
+    /// Groups in `self` come first, then groups only `after` has, each in id
+    /// order.
+    pub fn changed_groups<'a>(
+        &'a self,
+        after: &'a Kerning,
+    ) -> impl Iterator<
+        Item = (
+            &'a KerningGroupId,
+            Option<&'a KerningGroup>,
+            Option<&'a KerningGroup>,
+        ),
+    > {
+        let added = after
+            .groups
+            .keys()
+            .filter(|group_id| !self.groups.contains_key(*group_id));
+        self.groups
+            .keys()
+            .chain(added)
+            .map(|group_id| (group_id, self.group(group_id), after.group(group_id)))
+            .filter(|(_, before, after)| before != after)
+    }
+
     /// Installs `group` as `group_id` exactly as given, or removes it with
     /// `None`, without moving members out of other groups.
     ///
@@ -487,6 +513,42 @@ mod tests {
         assert_eq!(
             kerning.group_of(KerningPosition::Second, &glyph("V")),
             Some(&group_id("V"))
+        );
+    }
+
+    #[test]
+    fn changed_groups_lists_each_added_edited_and_removed_group_once() {
+        let (before, _) = sample();
+        let mut after = before.clone();
+        after.remove_group(&group_id("V"));
+        after
+            .rename_group(&group_id("A"), "A_round")
+            .expect("name is free");
+        after
+            .set_group(
+                group_id("O"),
+                KerningGroup::new(KerningPosition::First, "O", Vec::new()),
+            )
+            .expect("name is free");
+
+        let changed = before
+            .changed_groups(&after)
+            .map(|(id, original, replacement)| {
+                (
+                    id.clone(),
+                    original.map(|group| group.name.clone()),
+                    replacement.map(|group| group.name.clone()),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            changed,
+            vec![
+                (group_id("A"), Some("A".into()), Some("A_round".into())),
+                (group_id("V"), Some("V".into()), None),
+                (group_id("O"), None, Some("O".into())),
+            ]
         );
     }
 

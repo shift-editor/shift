@@ -620,21 +620,13 @@ impl Font {
         }
 
         if set.intents.iter().any(FontIntent::edits_kerning_groups) {
-            let group_ids = before
-                .kerning()
-                .all_groups()
-                .chain(after.kerning().all_groups())
-                .map(|(group_id, _)| group_id.clone())
-                .collect::<BTreeSet<_>>();
-            for group_id in group_ids {
-                let original = before.kerning().group(&group_id).cloned();
-                let replacement = after.kerning().group(&group_id).cloned();
-                if original != replacement {
-                    changes.push(FontChange::KerningGroup {
-                        group_id,
-                        group: Replacement::new(original, replacement),
-                    });
-                }
+            for (group_id, original, replacement) in
+                before.kerning().changed_groups(after.kerning())
+            {
+                changes.push(FontChange::KerningGroup {
+                    group_id: group_id.clone(),
+                    group: Replacement::new(original.cloned(), replacement.cloned()),
+                });
             }
         }
 
