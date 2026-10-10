@@ -52,6 +52,7 @@ export const KerningPairSection = () => {
     <div ref={sectionRef} className="flex flex-col gap-4 px-3 py-3">
       <SidebarSection
         title="Kerning"
+        contentClassName="gap-3"
         actions={
           <KerningGroupsPanel
             target={{ kind: "pair", first: pair.first, second: pair.second }}

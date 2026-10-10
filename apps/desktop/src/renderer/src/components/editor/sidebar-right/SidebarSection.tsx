@@ -6,16 +6,24 @@ interface SidebarSectionProps {
   className?: string;
   /** Controls at the end of the title row, such as a button opening more settings. */
   actions?: React.ReactNode;
+  /** Classes for the body, such as a wider gap between subsections. */
+  contentClassName?: string;
 }
 
-export const SidebarSection = ({ title, children, className, actions }: SidebarSectionProps) => {
+export const SidebarSection = ({
+  title,
+  children,
+  className,
+  actions,
+  contentClassName,
+}: SidebarSectionProps) => {
   return (
     <section className={cn("flex flex-col gap-2", className)}>
       <div className={cn("flex items-center justify-between gap-2", actions && "h-6")}>
         <h3 className="text-ui font-medium text-primary">{title}</h3>
         {actions}
       </div>
-      <div className="flex flex-col gap-3">{children}</div>
+      <div className={cn("flex flex-col gap-2", contentClassName)}>{children}</div>
     </section>
   );
 };
