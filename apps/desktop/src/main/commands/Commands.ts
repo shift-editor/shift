@@ -21,6 +21,12 @@ const appCommands: Command[] = [
     run: (ctx) => ctx.update.checkForUpdates(),
   },
   {
+    id: "app.installCommandLineTool",
+    label: "Install Command Line Tool…",
+    enabled: (ctx) => ctx.commandLineTool.available(),
+    run: (ctx) => ctx.commandLineTool.install(),
+  },
+  {
     id: "app.showSettings",
     label: "Settings…",
     enabled: (ctx) => ctx.renderer.available(),

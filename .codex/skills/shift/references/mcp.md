@@ -4,11 +4,11 @@
 
 In Shift, open **Settings → Agents** and turn on **Allow agent connections** (off by default). The panel shows a ready-to-copy Claude Code command, an MCP config snippet with this build's server name and local URL for other agents, and an example prompt to test the connection. There is no token: the server answers only on `127.0.0.1`, and only while the setting is on and the app is running.
 
-| Build         | Server name     | URL                          |
-| ------------- | --------------- | ---------------------------- |
-| Shift         | `shift`         | `http://127.0.0.1:17461/mcp` |
-| Shift Nightly | `shift-nightly` | `http://127.0.0.1:17462/mcp` |
-| Shift Dev     | `shift-dev`     | `http://127.0.0.1:17463/mcp` |
+| Build         | Server name     | URL                          | Command-line tool   |
+| ------------- | --------------- | ---------------------------- | ------------------- |
+| Shift         | `shift`         | `http://127.0.0.1:17461/mcp` | `shift-cli`         |
+| Shift Nightly | `shift-nightly` | `http://127.0.0.1:17462/mcp` | `shift-cli-nightly` |
+| Shift Dev     | `shift-dev`     | `http://127.0.0.1:17463/mcp` | `shift-cli-dev`     |
 
 For example, Claude Code: `claude mcp add --transport http --scope user shift http://127.0.0.1:17461/mcp`. Register each build under its own name so a client never silently switches fonts between them.
 

@@ -30,6 +30,8 @@ export interface ShiftMcpServerOptions {
   port: number;
   /** Identity reported to agents on `initialize`: this build's server name and app version. */
   serverInfo: { name: string; version: string };
+  /** The command-line tool this build installs, named in `shift.guide`; defaults to `shift-cli`. */
+  commandLineTool?: string;
   logger?: ShiftMcpLogger;
   /** Called after each accepted request with the updated activity summary. */
   onActivity?: (activity: ShiftMcpActivity) => void;
@@ -51,6 +53,7 @@ export class ShiftMcpServer {
   readonly #capture: ShiftMcpServerOptions["capture"];
   readonly #port: number;
   readonly #serverInfo: ShiftMcpServerOptions["serverInfo"];
+  readonly #commandLineTool: string | undefined;
   readonly #logger: ShiftMcpLogger | undefined;
   readonly #onActivity: ShiftMcpServerOptions["onActivity"];
   readonly #now: () => number;
@@ -71,6 +74,7 @@ export class ShiftMcpServer {
     this.#capture = options.capture;
     this.#port = options.port;
     this.#serverInfo = options.serverInfo;
+    this.#commandLineTool = options.commandLineTool;
     this.#logger = options.logger;
     this.#onActivity = options.onActivity;
     this.#now = options.now ?? Date.now;
@@ -162,7 +166,7 @@ export class ShiftMcpServer {
         }),
       },
       async ({ topic }) => ({
-        content: [{ type: "text", text: shiftGuide(topic) }],
+        content: [{ type: "text", text: shiftGuide(topic, this.#commandLineTool) }],
       }),
     );
     server.registerTool(

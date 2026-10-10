@@ -2,14 +2,18 @@ import {
   app,
   BrowserWindow,
   clipboard,
+  dialog,
   ipcMain,
   MessageChannelMain,
   screen,
   shell,
+  type MessageBoxOptions,
   type Rectangle,
   type WebContents,
 } from "electron";
 import { randomUUID } from "node:crypto";
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { Window } from "../windows/Window";
 import { getRendererSource } from "../utils";
@@ -46,6 +50,15 @@ import type { RecentDocumentVisit } from "../../shared/recents";
 import { RecentDocuments } from "../recents/RecentDocuments";
 import { SandboxRuntimeProcess } from "../sandbox/SandboxRuntimeProcess";
 import { AgentConnections } from "../agent/AgentConnections";
+import {
+  CommandLineTool,
+  type CommandLineToolState,
+  executableName,
+  elevateWithOsascript,
+  elevateWithPkexec,
+  resolveCommandInLoginShell,
+  windowsUserPath,
+} from "../cli/CommandLineTool";
 
 const SLUG_ATLAS_PROFILING_ENABLED =
   process.env.SHIFT_PROFILE_SLUG_ATLAS !== undefined &&
@@ -79,6 +92,7 @@ export class App {
 
   #commands = new CommandRegistry();
   #agentConnections: AgentConnections | null = null;
+  #commandLineTool: CommandLineTool | null = null;
   #sandbox: SandboxRuntimeProcess | null = null;
   #windows = new WindowManager();
   #workspaces: WorkspaceManager;
@@ -201,6 +215,8 @@ export class App {
     if (!app.commandLine.hasSwitch("user-data-dir")) {
       app.setPath("userData", path.join(app.getPath("appData"), applicationName));
     }
+    // Created after `setName`: the build's name decides which command it installs.
+    this.#commandLineTool = createCommandLineTool();
 
     if (!app.requestSingleInstanceLock()) {
       app.quit();
@@ -244,6 +260,11 @@ export class App {
       this.#recents.onChanged(() => this.#publishRecents());
       await this.#startSandbox();
       await this.#startAgentConnections();
+      void this.#requireCommandLineTool()
+        .refresh()
+        .catch((error) => {
+          this.#log.error("failed to refresh shift-cli", error);
+        });
 
       // Taken before recovery, which marks the documents it restores open again.
       const openAtLastExit = this.#recents.takeOpen();
@@ -659,12 +680,67 @@ export class App {
     });
   }
 
+  #requireCommandLineTool(): CommandLineTool {
+    if (!this.#commandLineTool) throw new Error("Command-line tool was not initialized");
+    return this.#commandLineTool;
+  }
+
+  /** Installs this build's command-line tool, confirming before replacing a different file. */
+  async #installCommandLineTool(window: Window | null): Promise<void> {
+    const parent = window && !window.window.isDestroyed() ? window.window : null;
+    const show = (options: MessageBoxOptions) =>
+      parent ? dialog.showMessageBox(parent, options) : dialog.showMessageBox(options);
+    const tool = this.#requireCommandLineTool();
+    const command = tool.command;
+
+    const before = await tool.state();
+    if (before.status === "conflict") {
+      const { response } = await show({
+        type: "question",
+        buttons: ["Replace", "Cancel"],
+        defaultId: 0,
+        cancelId: 1,
+        message: `Replace the existing ${command}?`,
+        detail: `A different ${command} is installed at ${before.commandPath}. Replace it with the one bundled with ${app.name}?`,
+      });
+      if (response !== 0) return;
+    }
+
+    let installed: CommandLineToolState;
+    try {
+      installed = await tool.install();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (/User canceled|cancelled|-128|dismissed|Request dismissed/i.test(message)) return;
+      this.#log.error("failed to install shift-cli", error);
+      await show({
+        type: "error",
+        message: "Could not install the command line tool",
+        detail: message,
+      });
+      return;
+    }
+
+    await show({
+      type: "info",
+      message: "The command line tool is installed",
+      detail: [
+        `${command} is available at ${installed.commandPath}.`,
+        installed.note ?? `Run ${command} --help in a terminal to get started.`,
+      ].join("\n\n"),
+    });
+  }
+
   #commandContext(window?: Window): CommandContext {
     window ??= this.#windows.activeWindow() ?? undefined;
     const session = window ? this.#workspaces.getForBrowserWindow(window.window) : null;
     const document = session?.document ?? null;
 
     return {
+      commandLineTool: {
+        available: () => this.#commandLineTool?.available ?? false,
+        install: () => this.#installCommandLineTool(window ?? null),
+      },
       update: {
         checkForUpdates: async () => {
           await this.#updater.checkForUpdates("manual");
@@ -1040,7 +1116,7 @@ export class App {
     const sandbox = this.#sandbox;
     if (!sandbox) throw new Error("Sandbox runtime was not initialized");
 
-    const { port, serverName } = agentEndpoint(app.getName());
+    const { port, serverName, command } = buildIdentity(app.getName());
     const testing = process.env.NODE_ENV === "test";
     const connections = new AgentConnections({
       settingsPath: path.join(app.getPath("userData"), "agent-connections.json"),
@@ -1052,6 +1128,7 @@ export class App {
           capture: (input) => this.#capture(input),
           port: testing ? 0 : port,
           serverInfo: { name: serverName, version: app.getVersion() },
+          commandLineTool: command,
           logger: createShiftLogger("app.mcp"),
           onActivity,
         }),
@@ -1228,18 +1305,73 @@ function launcherBounds(): Rectangle {
   };
 }
 
-/** The fixed MCP port and server name for each Shift build. */
-function agentEndpoint(appName: string): { port: number; serverName: string } {
+/**
+ * The names that keep each Shift build apart on one machine: its fixed MCP
+ * port, MCP server name, and installed command-line tool.
+ */
+function buildIdentity(appName: string): { port: number; serverName: string; command: string } {
   switch (appName) {
     case "Shift":
-      return { port: 17461, serverName: "shift" };
+      return { port: 17461, serverName: "shift", command: "shift-cli" };
     case "Shift Nightly":
-      return { port: 17462, serverName: "shift-nightly" };
+      return { port: 17462, serverName: "shift-nightly", command: "shift-cli-nightly" };
     case "Shift Dev":
-      return { port: 17463, serverName: "shift-dev" };
+      return { port: 17463, serverName: "shift-dev", command: "shift-cli-dev" };
     case "Shift Nightly Dev":
-      return { port: 17464, serverName: "shift-nightly-dev" };
+      return { port: 17464, serverName: "shift-nightly-dev", command: "shift-cli-nightly-dev" };
     default:
       throw new Error(`Unknown Shift distribution: ${appName}`);
   }
+}
+
+/** The `shift-cli` shipped with this build and how this platform puts it on PATH. */
+function createCommandLineTool(): CommandLineTool {
+  const log = createShiftLogger("app.commandLineTool");
+  const { command } = buildIdentity(app.getName());
+  const resolveCommand = () => resolveCommandInLoginShell(command);
+  // Packaging names the bundled binary after the build's command, so Windows,
+  // which puts the bundled directory itself on PATH, keeps builds apart too.
+  const bundledPath = app.isPackaged
+    ? path.join(process.resourcesPath, "bin", executableName(command))
+    : developmentCommandLineTool();
+
+  if (process.platform === "win32") {
+    // A development binary is named `shift-cli`, not the build's command, so
+    // putting its directory on PATH would take the release command's name.
+    return new CommandLineTool({
+      bundledPath: app.isPackaged ? bundledPath : null,
+      command,
+      install: { kind: "userPath" },
+      userPath: windowsUserPath,
+      log,
+    });
+  }
+  if (process.platform === "linux" && process.env.APPIMAGE) {
+    return new CommandLineTool({
+      bundledPath,
+      command,
+      install: { kind: "copy", directory: path.join(os.homedir(), ".local", "bin") },
+      resolveCommand,
+      log,
+    });
+  }
+  return new CommandLineTool({
+    bundledPath,
+    command,
+    install: { kind: "link", directory: "/usr/local/bin" },
+    elevate: process.platform === "darwin" ? elevateWithOsascript : elevateWithPkexec,
+    resolveCommand,
+    log,
+  });
+}
+
+/** In development, the most recently built `shift-cli` in the Cargo target directory. */
+function developmentCommandLineTool(): string | null {
+  const targetRoot =
+    process.env.CARGO_TARGET_DIR ?? path.resolve(app.getAppPath(), "..", "..", "target");
+  const candidates = ["release", "debug"]
+    .map((profile) => path.join(targetRoot, profile, executableName("shift-cli")))
+    .filter((candidate) => fs.existsSync(candidate))
+    .sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
+  return candidates[0] ?? null;
 }

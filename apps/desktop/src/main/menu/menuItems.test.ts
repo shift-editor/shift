@@ -139,6 +139,7 @@ describe("application command menu items", () => {
     expect(ids(helpMenuItems(true, run, enabled))).toEqual([
       ...links,
       "app.checkForUpdates",
+      "app.installCommandLineTool",
       "app.showAbout",
     ]);
   });

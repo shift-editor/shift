@@ -4,6 +4,18 @@ Command-line inspection, authoring, and compilation for canonical SQLite `.shift
 
 The crate builds the `shift-cli` binary. `inspect` opens a document, summarizes the font model, and can emit stable JSON for scripts and CI. Resource commands apply semantic Shift intents through a temporary recovery overlay and save only after the complete change validates. `compile` sends the canonical Shift model directly through fontir/fontc to produce a TrueType font.
 
+## Install
+
+Shift bundles a release `shift-cli` with every desktop build, so the command always matches the app. In Shift, choose **Shift → Install Command Line Tool…** on macOS, or **Help → Install Command Line Tool…** on Windows and Linux:
+
+- **macOS and Linux packages** link `/usr/local/bin/shift-cli` to the app's copy, asking for an administrator password when that directory is protected.
+- **Linux AppImage** copies it to `~/.local/bin/shift-cli` (add that directory to `PATH` if needed); Shift refreshes the copy after updates.
+- **Windows** adds the app's `bin` directory to your user `PATH`; open a new terminal afterwards.
+
+Shift Nightly installs the same binary as `shift-cli-nightly`, and development builds as `shift-cli-dev` (macOS and Linux only), so release, Nightly, and development builds never replace each other's command. If your terminal finds a different `shift-cli` earlier on `PATH`, such as a `cargo install` build, Shift names it after installing.
+
+To build it from a checkout instead, run `pnpm build:cli` (or `cargo build --release -p shift-cli`); packaging the desktop app requires that build.
+
 ## Usage
 
 ```sh
