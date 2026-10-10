@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Autocomplete,
+  AutocompleteEmpty,
+  AutocompleteInput,
+  AutocompleteItem,
+  AutocompleteList,
   Button,
   cn,
   Dialog,
@@ -8,7 +13,6 @@ import {
   DialogPopup,
   DialogPortal,
   DialogTitle,
-  Input,
   Search,
   Tooltip,
   TooltipContent,
@@ -136,59 +140,48 @@ export function ComponentPickerDialog({ open, onOpenChange }: ComponentPickerDia
                 <TooltipContent>Close</TooltipContent>
               </Tooltip>
             </header>
-            <form
-              className="shrink-0 border-b border-line-subtle p-2"
-              onSubmit={(event) => {
-                event.preventDefault();
-                const normalizedQuery = componentQuery.trim().toLowerCase();
-                const exactCandidate = candidates.find(
-                  (candidate) =>
-                    candidate.name.toLowerCase() === normalizedQuery ||
-                    candidate.displayName.toLowerCase() === normalizedQuery,
-                );
-                const candidate = exactCandidate ?? candidates[0];
-                if (!candidate) return;
-
-                if (candidate.availability === "missing") {
-                  setPendingCreation(candidate);
-                  return;
-                }
-
-                void addComponent(candidate);
-              }}
+            <Autocomplete
+              inline
+              open
+              items={candidates.slice(0, 100)}
+              filter={null}
+              autoHighlight="always"
+              itemToStringValue={(candidate) => candidate.displayName}
+              value={componentQuery}
+              onValueChange={setComponentQuery}
             >
-              <Input
-                autoFocus
-                aria-label="Search components"
-                icon={<Search className="h-3 w-3 text-muted" />}
-                iconPosition="left"
-                placeholder="Search"
-                size="md"
-                value={componentQuery}
-                onChange={(event) => setComponentQuery(event.currentTarget.value)}
-              />
-            </form>
+              <div className="shrink-0 border-b border-line-subtle p-2">
+                <AutocompleteInput
+                  autoFocus
+                  aria-label="Search components"
+                  icon={<Search className="h-3 w-3 text-muted" />}
+                  iconPosition="left"
+                  placeholder="Search"
+                  size="md"
+                />
+              </div>
 
-            <div className="scrollbar-hidden min-h-0 flex-1 overflow-y-auto px-2 py-1.5">
-              {candidates.length > 0 ? (
-                candidates.slice(0, 100).map((candidate) => (
-                  <Button
+              <AutocompleteEmpty className="flex min-h-0 flex-1 items-center justify-center">
+                No matching glyphs
+              </AutocompleteEmpty>
+              <AutocompleteList className="flex-1">
+                {(candidate: ComponentCandidate) => (
+                  <AutocompleteItem
                     key={`${candidate.availability}-${candidate.glyphId ?? candidate.unicode}`}
-                    type="button"
+                    value={candidate}
                     aria-label={
                       candidate.availability === "missing"
                         ? `Create and add ${candidate.displayName} as a component`
                         : `Add ${candidate.displayName} as a component`
                     }
-                    variant="row"
-                    className="h-14 text-left"
-                    onClick={async () => {
+                    className="h-14"
+                    onClick={() => {
                       if (candidate.availability === "missing") {
                         setPendingCreation(candidate);
                         return;
                       }
 
-                      await addComponent(candidate);
+                      void addComponent(candidate);
                     }}
                   >
                     <span
@@ -214,14 +207,10 @@ export function ComponentPickerDialog({ open, onOpenChange }: ComponentPickerDia
                           : `U+${candidate.unicode.toString(16).toUpperCase().padStart(4, "0")}`}
                       </span>
                     </span>
-                  </Button>
-                ))
-              ) : (
-                <p className="flex h-full items-center justify-center px-4 text-center text-sm text-muted">
-                  No matching glyphs
-                </p>
-              )}
-            </div>
+                  </AutocompleteItem>
+                )}
+              </AutocompleteList>
+            </Autocomplete>
           </DialogPopup>
         </DialogPortal>
       </Dialog>
