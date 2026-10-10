@@ -120,6 +120,7 @@ fn to_glyph_instance(layer: &GlyphLayer) -> GlyphInstance {
                         transform.dx,
                         transform.dy,
                     ]),
+                    anchor: None,
                 }
             })
             .collect(),

@@ -1,5 +1,4 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-use std::path::Path;
 
 use fontdrasil::coords::{
     CoordConverter, DesignCoord, NormalizedCoord, NormalizedLocation, UserCoord, UserLocation,
@@ -7,11 +6,10 @@ use fontdrasil::coords::{
 use fontdrasil::types::{Axis, GlyphName, Tag};
 use fontir::glyph::create_glyph_order_work;
 use fontir::ir::{
-    FeaturesSource, GlobalMetric, Glyph, GlyphInstance, KernGroup, KernSide, KerningGroups,
-    KerningInstance, NamedInstance,
+    FeaturesSource, GlobalMetric, Glyph, GlyphInstance, KernGroup, KernSide, KerningInstance,
+    NamedInstance,
 };
 use fontir::orchestration::{Context, Flags, IrWork, WorkId};
-use fontir::paths::Paths;
 use fontir::source::Source;
 use kurbo::BezPath;
 use ordered_float::OrderedFloat;
@@ -28,7 +26,7 @@ struct Compilation {
     features: FeaturesSource,
     glyph: Glyph,
     metrics: Metrics,
-    kerning_groups: KerningGroups,
+    kerning_locations: BTreeSet<NormalizedLocation>,
     kerning: BTreeMap<NormalizedLocation, KerningInstance>,
 }
 
@@ -85,7 +83,7 @@ fn kerning_pairs_with_missing_sides_are_skipped() {
 }
 
 fn compile_ir(source: ShiftIrSource) -> Compilation {
-    let context = Context::new_root(Flags::empty(), Paths::new(Path::new("unused")));
+    let context = Context::new_root(Flags::empty());
     run(&context, source.create_static_metadata_work().unwrap());
     run(&context, source.create_global_metric_work().unwrap());
     run(&context, source.create_feature_ir_work().unwrap());
@@ -93,12 +91,12 @@ fn compile_ir(source: ShiftIrSource) -> Compilation {
         run(&context, work);
     }
     run(&context, create_glyph_order_work());
-    run(&context, source.create_kerning_group_ir_work().unwrap());
+    run(&context, source.create_kerning_locations_ir_work().unwrap());
 
     let metadata = context.static_metadata.get();
     let default_location = metadata.default_location().clone();
-    let kerning_groups = context.kerning_groups.get();
-    for location in &kerning_groups.locations {
+    let kerning_locations = context.kerning_locations.get();
+    for location in &kerning_locations.locations {
         run(
             &context,
             source
@@ -125,7 +123,7 @@ fn compile_ir(source: ShiftIrSource) -> Compilation {
             underline_thickness: global_metrics
                 .get(GlobalMetric::UnderlineThickness, &default_location),
         },
-        kerning: kerning_groups
+        kerning: kerning_locations
             .locations
             .iter()
             .map(|location| {
@@ -135,7 +133,7 @@ fn compile_ir(source: ShiftIrSource) -> Compilation {
                 (location.clone(), instance.as_ref().clone())
             })
             .collect(),
-        kerning_groups: kerning_groups.as_ref().clone(),
+        kerning_locations: kerning_locations.locations.clone(),
     }
 }
 
@@ -171,7 +169,8 @@ fn expected_ir() -> Compilation {
                     (UserCoord::new(900.0), DesignCoord::new(800.0)),
                 ],
                 1,
-            ),
+            )
+            .unwrap(),
             localized_names: HashMap::new(),
         }],
         named_instances: vec![NamedInstance {
@@ -196,7 +195,7 @@ fn expected_ir() -> Compilation {
             underline_position: OrderedFloat(-100.0),
             underline_thickness: OrderedFloat(50.0),
         },
-        kerning_groups: expected_kerning_groups([default_location.clone(), bold_location.clone()]),
+        kerning_locations: BTreeSet::from([default_location.clone(), bold_location.clone()]),
         kerning: BTreeMap::from([
             expected_group_kerning(default_location, -50.0),
             expected_group_kerning(bold_location, -90.0),
@@ -217,6 +216,7 @@ fn expected_group_kerning(
             ),
             OrderedFloat(value),
         )]),
+        groups: expected_kerning_groups(),
     };
     (location, instance)
 }
@@ -238,17 +238,17 @@ fn triangle_instance(width: f64, apex_x: f64) -> GlyphInstance {
     }
 }
 
-fn expected_kerning_groups(locations: [NormalizedLocation; 2]) -> KerningGroups {
-    let side1 = KernGroup::Side1("A".into());
-    let side2 = KernGroup::Side2("A".into());
-    KerningGroups {
-        groups: BTreeMap::from([
-            (side1.clone(), BTreeSet::from([GlyphName::new("A")])),
-            (side2.clone(), BTreeSet::from([GlyphName::new("A")])),
-        ]),
-        locations: BTreeSet::from(locations),
-        old_to_new_group_names: BTreeMap::from([(side1.clone(), side1), (side2.clone(), side2)]),
-    }
+fn expected_kerning_groups() -> BTreeMap<KernGroup, BTreeSet<GlyphName>> {
+    BTreeMap::from([
+        (
+            KernGroup::Side1("A".into()),
+            BTreeSet::from([GlyphName::new("A")]),
+        ),
+        (
+            KernGroup::Side2("A".into()),
+            BTreeSet::from([GlyphName::new("A")]),
+        ),
+    ])
 }
 
 const EXPECTED_STAT: &str = r#"table STAT {

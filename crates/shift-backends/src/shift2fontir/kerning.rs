@@ -5,7 +5,7 @@ use fontdrasil::coords::NormalizedLocation;
 use fontdrasil::orchestration::{Access, AccessBuilder, Work};
 use fontdrasil::types::{Axes, GlyphName};
 use fontir::error::Error;
-use fontir::ir::{GlyphOrder, KernGroup, KernSide, KerningGroups, KerningInstance};
+use fontir::ir::{GlyphOrder, KernGroup, KernSide, KerningInstance, KerningLocations};
 use fontir::orchestration::{Context, WorkId};
 use ordered_float::OrderedFloat;
 use shift_font::{GlyphId, Kerning, KerningPosition, KerningSide, SourceKerning};
@@ -13,68 +13,39 @@ use shift_font::{GlyphId, Kerning, KerningPosition, KerningSide, SourceKerning};
 use super::axes::normalized_source_location;
 use super::source::ShiftSnapshot;
 
-/// Emits kerning groups for glyphs in the compiled order, and the master
-/// locations that author kerning.
+/// Emits the master locations that author kerning.
 ///
-/// Missing glyph members are omitted, and groups left empty after filtering are
-/// not emitted. The default location always has kerning, so masters without
-/// pairs still resolve against it.
+/// The default location always participates, so masters without pairs still
+/// resolve against it.
 #[derive(Debug)]
-pub(super) struct KerningGroupWork {
+pub(super) struct KerningLocationsWork {
     snapshot: Arc<ShiftSnapshot>,
 }
 
-impl KerningGroupWork {
+impl KerningLocationsWork {
     pub fn new(snapshot: Arc<ShiftSnapshot>) -> Self {
         Self { snapshot }
     }
 }
 
-impl Work<Context, WorkId, Error> for KerningGroupWork {
+impl Work<Context, WorkId, Error> for KerningLocationsWork {
     fn id(&self) -> WorkId {
-        WorkId::KerningGroups
+        WorkId::KerningLocations
     }
 
     fn read_access(&self) -> Access<WorkId> {
-        AccessBuilder::new()
-            .variant(WorkId::GlyphOrder)
-            .variant(WorkId::StaticMetadata)
-            .build()
+        AccessBuilder::new().variant(WorkId::StaticMetadata).build()
     }
 
     fn exec(&self, context: &Context) -> Result<(), Error> {
-        let glyph_order = context.glyph_order.get();
-        let glyph_names = compiled_glyph_names(&self.snapshot, &glyph_order);
-        let mut groups = BTreeMap::new();
-
-        for position in [KerningPosition::First, KerningPosition::Second] {
-            for (_, group) in self.snapshot.kerning.groups(position) {
-                let members = group
-                    .members
-                    .iter()
-                    .filter_map(|member| glyph_names.get(member).cloned())
-                    .collect::<BTreeSet<_>>();
-                if !members.is_empty() {
-                    groups.insert(kern_group(position, &group.name), members);
-                }
-            }
-        }
-
-        let old_to_new_group_names = groups
-            .keys()
-            .cloned()
-            .map(|group| (group.clone(), group))
-            .collect();
         let metadata = context.static_metadata.get();
         let mut locations = BTreeSet::from([metadata.default_location().clone()]);
         for (source, _) in master_kerning(&self.snapshot, &metadata.all_source_axes)? {
             locations.insert(source);
         }
-        context.kerning_groups.set(KerningGroups {
-            groups,
-            locations,
-            old_to_new_group_names,
-        });
+        context
+            .kerning_locations
+            .set(KerningLocations { locations });
         Ok(())
     }
 }
@@ -100,7 +71,6 @@ impl Work<Context, WorkId, Error> for KerningInstanceWork {
     fn read_access(&self) -> Access<WorkId> {
         AccessBuilder::new()
             .variant(WorkId::GlyphOrder)
-            .variant(WorkId::KerningGroups)
             .variant(WorkId::StaticMetadata)
             .build()
     }
@@ -108,7 +78,7 @@ impl Work<Context, WorkId, Error> for KerningInstanceWork {
     fn exec(&self, context: &Context) -> Result<(), Error> {
         let glyph_order = context.glyph_order.get();
         let glyph_names = compiled_glyph_names(&self.snapshot, &glyph_order);
-        let groups = context.kerning_groups.get();
+        let groups = compiled_groups(&self.snapshot, &glyph_names);
         let metadata = context.static_metadata.get();
         let pairs = master_kerning(&self.snapshot, &metadata.all_source_axes)?
             .into_iter()
@@ -142,6 +112,7 @@ impl Work<Context, WorkId, Error> for KerningInstanceWork {
         context.kerning_at.set(KerningInstance {
             location: self.location.clone(),
             kerns,
+            groups,
         });
         Ok(())
     }
@@ -164,6 +135,31 @@ fn master_kerning<'a>(
             )
         })
         .collect()
+}
+
+/// Returns the font's kerning groups restricted to glyphs in the compiled order.
+///
+/// Missing glyph members are omitted, and groups left empty after filtering are
+/// not emitted. Shift's groups are font-wide, so every master location receives
+/// the same partition.
+fn compiled_groups(
+    snapshot: &ShiftSnapshot,
+    glyph_names: &HashMap<GlyphId, GlyphName>,
+) -> BTreeMap<KernGroup, BTreeSet<GlyphName>> {
+    let mut groups = BTreeMap::new();
+    for position in [KerningPosition::First, KerningPosition::Second] {
+        for (_, group) in snapshot.kerning.groups(position) {
+            let members = group
+                .members
+                .iter()
+                .filter_map(|member| glyph_names.get(member).cloned())
+                .collect::<BTreeSet<_>>();
+            if !members.is_empty() {
+                groups.insert(kern_group(position, &group.name), members);
+            }
+        }
+    }
+    groups
 }
 
 /// Maps each glyph id in the compiled order to its compiled name.
@@ -197,7 +193,7 @@ fn resolve_side(
     side: &KerningSide,
     position: KerningPosition,
     glyph_names: &HashMap<GlyphId, GlyphName>,
-    groups: &KerningGroups,
+    groups: &BTreeMap<KernGroup, BTreeSet<GlyphName>>,
 ) -> Option<KernSide> {
     match side {
         KerningSide::Glyph(glyph_id) => glyph_names.get(glyph_id).cloned().map(KernSide::Glyph),
@@ -207,7 +203,6 @@ fn resolve_side(
                 .filter(|group| group.position == position)?;
             let group = kern_group(position, &group.name);
             groups
-                .groups
                 .contains_key(&group)
                 .then_some(KernSide::Group(group))
         }

@@ -14,11 +14,11 @@ shift-slug = { workspace = true }
 
 norad = "0.18.4"
 skrifa = "0.32.0"
-fontc = "0.6"
-fontdrasil = "0.4"
-fontir = "0.5"
-glyphs-reader = "0.5"
-kurbo = "0.12"
+fontc = "1.0"
+fontdrasil = "1.0"
+fontir = "1.0"
+glyphs-reader = "1.0"
+kurbo = "0.13"
 ordered-float = "5"
 plist = "1"
 quick-xml = { version = "0.37.5", features = ["serialize"] }
@@ -26,7 +26,7 @@ rayon = "1.10"
 serde = "1"
 tempfile = "3"
 thiserror = "2.0.18"
-write-fonts = "0.44"
+write-fonts = "0.52"
 
 [dev-dependencies]
 harfrust = "0.13.3"

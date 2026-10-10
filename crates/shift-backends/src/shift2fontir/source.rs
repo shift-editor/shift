@@ -14,7 +14,7 @@ use crate::traits::FontView;
 
 use super::axes::to_ir_axes;
 use super::glyph::GlyphWork;
-use super::kerning::{KerningGroupWork, KerningInstanceWork};
+use super::kerning::{KerningInstanceWork, KerningLocationsWork};
 use super::metadata::{
     ColorGlyphsWork, ColorPaletteWork, FeatureWork, GlobalMetricsWork, StaticMetadataWork,
 };
@@ -151,8 +151,8 @@ impl Source for ShiftIrSource {
         Ok(Box::new(FeatureWork::new(self.snapshot.clone())))
     }
 
-    fn create_kerning_group_ir_work(&self) -> Result<Box<IrWork>, Error> {
-        Ok(Box::new(KerningGroupWork::new(self.snapshot.clone())))
+    fn create_kerning_locations_ir_work(&self) -> Result<Box<IrWork>, Error> {
+        Ok(Box::new(KerningLocationsWork::new(self.snapshot.clone())))
     }
 
     fn create_kerning_instance_ir_work(
