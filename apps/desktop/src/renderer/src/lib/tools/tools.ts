@@ -54,6 +54,13 @@ function builtInToolManifests(): readonly ToolManifest[] {
       shortcut: "p",
     },
     {
+      id: "hand",
+      create: (api) => new Hand(api),
+      icon: HandIcon,
+      tooltip: "Hand Tool (H)",
+      shortcut: "h",
+    },
+    {
       id: "text",
       create: (api) => new TextTool(api),
       icon: TextIcon,
@@ -103,13 +110,6 @@ function builtInToolManifests(): readonly ToolManifest[] {
       icon: KerningIcon,
       tooltip: "Kerning Tool (K)",
       hidden: true,
-    },
-    {
-      id: "hand",
-      create: (api) => new Hand(api),
-      icon: HandIcon,
-      tooltip: "Hand Tool (H)",
-      shortcut: "h",
     },
     {
       id: "shape",
