@@ -5,11 +5,14 @@ use std::path::PathBuf;
 
 use serde::Serialize;
 use shift_font::{
-    EntityChange, Font, FontChangeImpact, FontChangeSet, FontEntityChange, FontMetadata, GlyphLayer,
+    EntityChange, Font, FontChange, FontChangeImpact, FontChangeSet, FontEntityChange,
+    FontMetadata, GlyphLayer, KerningGroup, KerningGroupId, KerningPair, SourceId,
 };
 
 use super::font_info::report::{SourceMetrics, format_version};
 use super::instance::report::InstanceReport;
+use crate::kerning::selector::position_label;
+use crate::kerning::{GroupReport, PairReport, SideReport};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -82,6 +85,34 @@ pub enum AuthoringChange {
     NamedInstancesUpdated {
         count: usize,
         instances: Vec<InstanceReport>,
+    },
+    KerningGroupCreated {
+        #[serde(flatten)]
+        group: GroupReport,
+    },
+    KerningGroupUpdated {
+        #[serde(flatten)]
+        group: GroupReport,
+    },
+    KerningGroupDeleted {
+        group_id: String,
+        position: &'static str,
+        name: String,
+    },
+    KerningValueSet {
+        source_id: String,
+        source_name: Option<String>,
+        first: SideReport,
+        second: SideReport,
+        value: f64,
+        previous: Option<f64>,
+    },
+    KerningValueRemoved {
+        source_id: String,
+        source_name: Option<String>,
+        first: SideReport,
+        second: SideReport,
+        previous: f64,
     },
 }
 
@@ -214,6 +245,45 @@ impl AuthoringReport {
                     lines.push(format!("~ instances  {count} product presets"));
                     lines.extend(instances.iter().map(InstanceReport::render));
                 }
+                AuthoringChange::KerningGroupCreated { group } => {
+                    lines.push(format!("+ group   {}", group.render()));
+                }
+                AuthoringChange::KerningGroupUpdated { group } => {
+                    lines.push(format!("~ group   {}", group.render()));
+                }
+                AuthoringChange::KerningGroupDeleted { position, name, .. } => {
+                    lines.push(format!("- group   {position:<6} @{name}"));
+                }
+                AuthoringChange::KerningValueSet {
+                    source_id,
+                    source_name,
+                    first,
+                    second,
+                    value,
+                    previous,
+                } => {
+                    let marker = if previous.is_some() { '~' } else { '+' };
+                    let source = source_name.as_deref().unwrap_or(source_id);
+                    lines.push(format!(
+                        "{marker} kern    {} {}  {value} @ {source}",
+                        first.label(),
+                        second.label()
+                    ));
+                }
+                AuthoringChange::KerningValueRemoved {
+                    source_id,
+                    source_name,
+                    first,
+                    second,
+                    previous,
+                } => {
+                    let source = source_name.as_deref().unwrap_or(source_id);
+                    lines.push(format!(
+                        "- kern    {} {}  was {previous} @ {source}",
+                        first.label(),
+                        second.label()
+                    ));
+                }
             }
         }
         lines.push(String::new());
@@ -309,6 +379,22 @@ pub(super) fn report_changes(font: &Font, changes: &FontChangeSet) -> Vec<Author
         }
     }));
 
+    // Groups first, so a report reads in the order a batch applies.
+    report.extend(changes.changes.iter().filter_map(|change| match change {
+        FontChange::KerningGroup { group_id, group } => {
+            kerning_group_change(font, group_id, group.before.as_ref(), group.after.as_ref())
+        }
+        _ => None,
+    }));
+    report.extend(changes.changes.iter().filter_map(|change| match change {
+        FontChange::KerningValue {
+            source_id,
+            pair,
+            value,
+        } => kerning_value_change(font, source_id, pair, value.before, value.after),
+        _ => None,
+    }));
+
     if impact.contains(FontChangeImpact::NAMED_INSTANCES) {
         let instances = font
             .named_instances()
@@ -322,6 +408,59 @@ pub(super) fn report_changes(font: &Font, changes: &FontChangeSet) -> Vec<Author
     }
 
     report
+}
+
+fn kerning_group_change(
+    font: &Font,
+    group_id: &KerningGroupId,
+    before: Option<&KerningGroup>,
+    after: Option<&KerningGroup>,
+) -> Option<AuthoringChange> {
+    match (before, after) {
+        (None, Some(group)) => Some(AuthoringChange::KerningGroupCreated {
+            group: GroupReport::from_group(font, group_id, group),
+        }),
+        (Some(_), Some(group)) => Some(AuthoringChange::KerningGroupUpdated {
+            group: GroupReport::from_group(font, group_id, group),
+        }),
+        (Some(group), None) => Some(AuthoringChange::KerningGroupDeleted {
+            group_id: group_id.to_string(),
+            position: position_label(group.position),
+            name: group.name.clone(),
+        }),
+        (None, None) => None,
+    }
+}
+
+fn kerning_value_change(
+    font: &Font,
+    source_id: &SourceId,
+    pair: &KerningPair,
+    before: Option<f64>,
+    after: Option<f64>,
+) -> Option<AuthoringChange> {
+    let PairReport { first, second } = PairReport::from_pair(font, pair);
+    let source_name = font
+        .source(source_id)
+        .map(|source| source.name().to_string());
+    match (before, after) {
+        (previous, Some(value)) => Some(AuthoringChange::KerningValueSet {
+            source_id: source_id.to_string(),
+            source_name,
+            first,
+            second,
+            value,
+            previous,
+        }),
+        (Some(previous), None) => Some(AuthoringChange::KerningValueRemoved {
+            source_id: source_id.to_string(),
+            source_name,
+            first,
+            second,
+            previous,
+        }),
+        (None, None) => None,
+    }
 }
 
 fn format_unicodes(unicodes: &[u32]) -> Vec<String> {

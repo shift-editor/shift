@@ -123,7 +123,7 @@ fn resolve_glyph_id(font: &Font, selector: &str) -> Result<GlyphId> {
     bail!("glyph {selector:?} does not exist; use its name or full glyph_ id")
 }
 
-fn parse_location(font: &Font, coordinates: &[String]) -> Result<ExternalLocation> {
+pub(crate) fn parse_location(font: &Font, coordinates: &[String]) -> Result<ExternalLocation> {
     let mut location = ExternalLocation::new();
     for axis in font.axes() {
         location.set(axis.id(), axis.default());

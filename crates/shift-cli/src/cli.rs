@@ -9,6 +9,12 @@ use crate::inspect::InspectView;
 
 mod font;
 pub use font::{FontInfoArgs, SetFontArgs};
+mod kerning;
+pub use kerning::{
+    AssignKerningGroupArgs, CreateKerningGroupArgs, DeleteKerningGroupArgs, GetKerningArgs,
+    KerningCommand, KerningGroupCommand, KerningGroupsArgs, KerningPositionArg, ListKerningArgs,
+    RemoveKerningArgs, RenameKerningGroupArgs, SetKerningArgs, UnassignKerningGroupArgs,
+};
 mod variation;
 pub use variation::{
     AddInstanceArgs, InstanceCommand, RemoveInstanceArgs, SetAxisArgs, SetInstanceArgs,
@@ -78,6 +84,12 @@ pub enum Command {
     Layer {
         #[command(subcommand)]
         command: LayerCommand,
+    },
+
+    /// Inspect or author kerning groups and per-master pair values.
+    Kerning {
+        #[command(subcommand)]
+        command: KerningCommand,
     },
 }
 

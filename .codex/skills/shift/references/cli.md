@@ -15,11 +15,15 @@ shift-cli inspect --json Family.shift               # complete report for script
 shift-cli glyph inspect Family.ufo A --json         # one glyph from .shift, UFO, Designspace, Glyphs, TTF, or OTF
 shift-cli glyph inspect Family.designspace A --location wght=700 --view variation
 shift-cli font info Family.shift --source Bold --json
+shift-cli kerning list Family.designspace --glyph A    # authored pairs, one column per master
+shift-cli kerning groups Family.ufo --json
+shift-cli kerning get Family.shift A V --location wght=650
 ```
 
 - `--json` always emits the complete report; `--view` only changes the human-readable output.
 - Locations are external (user-facing) `TAG=VALUE` coordinates; Shift maps them into design space once.
 - `glyph inspect` reports structure, which sources have a layer, compatibility, the interpolation model, and resolved geometry at a location.
+- `kerning get` is the answer to "how much do these two glyphs kern?": per master it gives the value and the authored pair that supplied it (glyph pair, exception, or group pair), and at `--location` the value the compiled font applies. Use it rather than adding up pairs from `kerning list` yourself. Kerning reads take `.shift`, UFO, Designspace, or Glyphs sources, not compiled TTF/OTF.
 
 ## Author
 
@@ -34,6 +38,9 @@ shift-cli layer set Lab.shift --glyph A --source Regular --input A.json
 shift-cli glyph set Lab.shift --input glyphs.json --dry-run --json
 shift-cli font set Lab.shift --family-name "Packet Mono" --x-height 480 --cap-height 720
 shift-cli instance add Lab.shift --name Book --location wght=450
+shift-cli kerning set Lab.shift @A @V -60 --source Bold
+shift-cli kerning set Lab.shift --input kerning.json --dry-run --json
+shift-cli kerning group create Lab.shift O O Q --position first
 ```
 
 - **Shift assigns all identities.** Read the IDs a command returns and use them as selectors; never invent IDs.
@@ -41,6 +48,8 @@ shift-cli instance add Lab.shift --name Book --location wght=450
 - **`layer set` replaces a drawing** and removes existing components, because payloads describe outlines and anchors only. Use `layer copy` to duplicate a layer with its components into another source.
 - **`glyph set` applies a batch atomically** and supports `--dry-run`.
 - Instances are presets, not masters: instance commands never create sources or drawings.
+- **Kerning sides**: `first` is the left glyph, and its first-position group kerns its right edge; `second` is the right glyph. A side is a glyph name or `@GROUP` for a group at that position. Values are per master and default to the default source; set every master you mean to change.
+- **`kerning set --input`** applies `groups` (created if missing; `members` replaces membership) and then `pairs` (`value: null` removes) atomically, so pairs can name groups the batch creates.
 
 ## Compile
 

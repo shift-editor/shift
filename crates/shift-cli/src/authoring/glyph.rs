@@ -136,7 +136,7 @@ pub fn copy_layer(args: CopyLayerArgs) -> Result<AuthoringReport> {
     apply_mutation(&args.path, &args.mutation, set)
 }
 
-pub(super) fn load_font(path: &Path) -> Result<Font> {
+pub(crate) fn load_font(path: &Path) -> Result<Font> {
     ShiftStore::open_document(path)
         .and_then(|store| store.load_font_directory())
         .into_diagnostic()
@@ -171,7 +171,7 @@ pub(super) fn parse_unicodes(values: &[String]) -> Result<Vec<u32>> {
     Ok(unicodes)
 }
 
-fn resolve_glyph_id(font: &Font, selector: &str) -> Result<GlyphId> {
+pub(crate) fn resolve_glyph_id(font: &Font, selector: &str) -> Result<GlyphId> {
     if let Ok(glyph_id) = selector.parse::<GlyphId>()
         && font.glyph(&glyph_id).is_some()
     {
@@ -186,7 +186,7 @@ fn resolve_glyph_id(font: &Font, selector: &str) -> Result<GlyphId> {
     ))
 }
 
-pub(super) fn resolve_source_id(font: &Font, selector: &str) -> Result<SourceId> {
+pub(crate) fn resolve_source_id(font: &Font, selector: &str) -> Result<SourceId> {
     if let Ok(source_id) = selector.parse::<SourceId>()
         && font.source(&source_id).is_some()
     {
