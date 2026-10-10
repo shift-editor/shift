@@ -1121,6 +1121,14 @@ export class App {
             ifFontRevision,
           ),
       },
+      kerning: {
+        groups: ({ windowId, ...input }) =>
+          this.#windowForAgentRequest(windowId).agent.kerningGroups(input),
+        pairs: ({ windowId, ...input }) =>
+          this.#windowForAgentRequest(windowId).agent.kerningPairs(input),
+        resolve: ({ windowId, ...input }) =>
+          this.#windowForAgentRequest(windowId).agent.resolveKerning(input),
+      },
     });
     this.#sandbox = sandbox;
     try {

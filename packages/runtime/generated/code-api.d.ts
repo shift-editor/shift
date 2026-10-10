@@ -85,6 +85,7 @@ declare const AxisIdBrand: unique symbol;
 declare const AxisLabelIdBrand: unique symbol;
 declare const ComponentIdBrand: unique symbol;
 declare const GlyphIdBrand: unique symbol;
+declare const KerningGroupIdBrand: unique symbol;
 declare const LayerIdBrand: unique symbol;
 declare const MetricIdBrand: unique symbol;
 declare const NamedInstanceIdBrand: unique symbol;
@@ -137,6 +138,13 @@ type ComponentId = string & {
  */
 type GlyphId = string & {
   readonly [GlyphIdBrand]: typeof GlyphIdBrand;
+};
+/**
+ * A kerning group identifier from Rust. Pairs reference a group by id, so a
+ * group keeps its kerning when renamed.
+ */
+type KerningGroupId = string & {
+  readonly [KerningGroupIdBrand]: typeof KerningGroupIdBrand;
 };
 /**
  * A layer identifier from Rust.
@@ -228,6 +236,7 @@ interface FontMetadata {
 interface FontMetrics {
   unitsPerEm: number;
 }
+type KerningPosition = "first" | "second";
 interface Location {
   values: Record<AxisId, number>;
 }
@@ -561,6 +570,99 @@ export interface LayerRenderInput extends LayerGetInput {
 export interface LocationResolveInput extends ShiftTarget {
   location: AxisCoordinate[];
 }
+/** A glyph by stable identity, with its current name. */
+export interface KerningGlyph {
+  glyphId: GlyphId;
+  /** Null when the glyph is no longer in the font. */
+  name: string | null;
+}
+/** One font-wide kerning group and its members at one pair position. */
+export interface KerningGroupSummary {
+  groupId: KerningGroupId;
+  name: string;
+  /** `first` groups kern before the other glyph, `second` groups after it. */
+  position: KerningPosition;
+  members: KerningGlyph[];
+}
+/** One side of an authored kerning pair: a single glyph or a kerning group. */
+export type KerningPairSide =
+  | {
+      kind: "glyph";
+      glyphId: GlyphId;
+      name: string | null;
+    }
+  | {
+      kind: "group";
+      groupId: KerningGroupId;
+      name: string;
+    };
+/** One pair value authored at a source, in font units added after the first side. */
+export interface AuthoredKerningPair {
+  first: KerningPairSide;
+  second: KerningPairSide;
+  amount: number;
+}
+/** One bounded page of a source's authored pairs, ordered by side identities. */
+export interface KerningPairPage {
+  sourceId: SourceId;
+  items: AuthoredKerningPair[];
+  nextCursor: string | null;
+}
+/**
+ * Which kind of authored pair applies between two glyphs: `glyph` (both sides
+ * glyphs), `exception` (a glyph against a group, overriding the group pair), `group` (both sides
+ * groups), or `none`. A more specific pair always beats a more general one.
+ */
+export type KerningRule = "glyph" | "exception" | "group" | "none";
+/**
+ * How a master arrives at its kerning for a pair: an `authored` pair applies;
+ * the master kerns other pairs but not this one (`unkerned`, so 0); or it
+ * authors no kerning and takes the blend of the masters that do (`interpolated`).
+ */
+export type KerningOrigin = "authored" | "unkerned" | "interpolated";
+/** The kerning between two glyphs at one master. */
+export interface KerningMasterValue {
+  sourceId: SourceId;
+  amount: number;
+  origin: KerningOrigin;
+  rule: KerningRule;
+  /** The authored pair that applies; null unless `origin` is `authored`. */
+  pair: AuthoredKerningPair | null;
+}
+/** The kerning between two glyphs, as the compiled font applies it. */
+export interface KerningResolution {
+  first: KerningGlyph;
+  second: KerningGlyph;
+  /** Font units at the requested source or location. */
+  amount: number;
+  /** Every master's value for the pair, in font source order. */
+  masters: KerningMasterValue[];
+}
+/** Batch kerning resolution, in request order. */
+export interface ResolvedKerningPairs {
+  items: KerningResolution[];
+}
+export interface KerningGroupsInput extends ShiftTarget {
+  position?: KerningPosition;
+}
+export interface KerningPairsInput extends ShiftTarget {
+  sourceId: SourceId;
+  /** Only pairs that apply to this glyph (exact name or id), directly or through its groups. */
+  glyph?: string;
+  limit?: number;
+  cursor?: string;
+}
+/** Two glyphs, first then second, each by exact name or stable glyph id. */
+export interface KerningPairQuery {
+  first: string;
+  second: string;
+}
+/** Resolves at one master (`sourceId`), an external `location`, or else the default location. */
+export interface KerningResolveInput extends ShiftTarget {
+  pairs: KerningPairQuery[];
+  sourceId?: SourceId;
+  location?: AxisCoordinate[];
+}
 /** Live application capabilities shared by protocol and plugin hosts. */
 export interface ShiftCapabilities {
   capture(input: ShiftCaptureInput): Promise<ShiftObservation<ShiftCapture>>;
@@ -585,6 +687,11 @@ export interface ShiftCapabilities {
     get(input: LayerGetInput): Promise<ShiftObservation<AuthoredLayer>>;
     resolve(input: LayerResolveInput): Promise<ShiftObservation<ResolvedLayer>>;
     render(input: LayerRenderInput): Promise<ShiftObservation<LayerSvg>>;
+  };
+  kerning: {
+    groups(input: KerningGroupsInput): Promise<ShiftObservation<KerningGroupSummary[]>>;
+    pairs(input: KerningPairsInput): Promise<ShiftObservation<KerningPairPage>>;
+    resolve(input: KerningResolveInput): Promise<ShiftObservation<ResolvedKerningPairs>>;
   };
 }
 /** A capability input without the window and revision a read scope binds. */
@@ -621,6 +728,11 @@ export interface ShiftRead {
     get(input: ShiftReadInput<LayerGetInput>): Promise<AuthoredLayer>;
     resolve(input: ShiftReadInput<LayerResolveInput>): Promise<ResolvedLayer>;
     render(input: ShiftReadInput<LayerRenderInput>): Promise<LayerSvg>;
+  };
+  kerning: {
+    groups(input?: ShiftReadInput<KerningGroupsInput>): Promise<KerningGroupSummary[]>;
+    pairs(input: ShiftReadInput<KerningPairsInput>): Promise<KerningPairPage>;
+    resolve(input: ShiftReadInput<KerningResolveInput>): Promise<ResolvedKerningPairs>;
   };
 }
 /** The `shift` global in scripts: raw capabilities plus revision-bound reads. */

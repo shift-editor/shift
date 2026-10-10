@@ -34,6 +34,11 @@ const capabilities: ShiftCapabilities = {
     resolve: (input) => host.call("shift.layers.resolve", input),
     render: (input) => host.call("shift.layers.render", input),
   },
+  kerning: {
+    groups: (input) => host.call("shift.kerning.groups", input),
+    pairs: (input) => host.call("shift.kerning.pairs", input),
+    resolve: (input) => host.call("shift.kerning.resolve", input),
+  },
 };
 const runtime = serveChannel<SandboxCallMap, SandboxEventMap>(transport, {
   "sandbox.execute": ({ code }) => executeShiftCode(capabilities, code),

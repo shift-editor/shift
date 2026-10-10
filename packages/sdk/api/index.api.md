@@ -61,6 +61,16 @@ export interface AuthoredContour {
 }
 
 // @public
+export interface AuthoredKerningPair {
+    // (undocumented)
+    amount: number;
+    // (undocumented)
+    first: KerningPairSide;
+    // (undocumented)
+    second: KerningPairSide;
+}
+
+// @public
 export interface AuthoredLayer {
     // (undocumented)
     advanceWidth: number;
@@ -942,6 +952,111 @@ export interface GlyphSummary {
 }
 
 // @public
+export interface KerningGlyph {
+    // (undocumented)
+    glyphId: GlyphId;
+    name: string | null;
+}
+
+// @public (undocumented)
+export interface KerningGroupsInput extends ShiftTarget {
+    // Warning: (ae-forgotten-export) The symbol "KerningPosition" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    position?: KerningPosition;
+}
+
+// @public
+export interface KerningGroupSummary {
+    // (undocumented)
+    groupId: KerningGroupId;
+    // (undocumented)
+    members: KerningGlyph[];
+    // (undocumented)
+    name: string;
+    position: KerningPosition;
+}
+
+// @public
+export interface KerningMasterValue {
+    // (undocumented)
+    amount: number;
+    // (undocumented)
+    origin: KerningOrigin;
+    pair: AuthoredKerningPair | null;
+    // (undocumented)
+    rule: KerningRule;
+    // (undocumented)
+    sourceId: SourceId;
+}
+
+// @public
+export type KerningOrigin = "authored" | "unkerned" | "interpolated";
+
+// @public
+export interface KerningPairPage {
+    // (undocumented)
+    items: AuthoredKerningPair[];
+    // (undocumented)
+    nextCursor: string | null;
+    // (undocumented)
+    sourceId: SourceId;
+}
+
+// @public
+export interface KerningPairQuery {
+    // (undocumented)
+    first: string;
+    // (undocumented)
+    second: string;
+}
+
+// @public
+export type KerningPairSide = {
+    kind: "glyph";
+    glyphId: GlyphId;
+    name: string | null;
+} | {
+    kind: "group";
+    groupId: KerningGroupId;
+    name: string;
+};
+
+// @public (undocumented)
+export interface KerningPairsInput extends ShiftTarget {
+    // (undocumented)
+    cursor?: string;
+    glyph?: string;
+    // (undocumented)
+    limit?: number;
+    // (undocumented)
+    sourceId: SourceId;
+}
+
+// @public
+export interface KerningResolution {
+    amount: number;
+    // (undocumented)
+    first: KerningGlyph;
+    masters: KerningMasterValue[];
+    // (undocumented)
+    second: KerningGlyph;
+}
+
+// @public
+export interface KerningResolveInput extends ShiftTarget {
+    // (undocumented)
+    location?: AxisCoordinate[];
+    // (undocumented)
+    pairs: KerningPairQuery[];
+    // (undocumented)
+    sourceId?: SourceId;
+}
+
+// @public
+export type KerningRule = "glyph" | "exception" | "group" | "none";
+
+// @public
 export interface LayerAppearance {
     // (undocumented)
     advanceStroke?: string;
@@ -1140,6 +1255,12 @@ export interface ResolvedGlyphs {
 }
 
 // @public
+export interface ResolvedKerningPairs {
+    // (undocumented)
+    items: KerningResolution[];
+}
+
+// @public
 export interface ResolvedLayer {
     // (undocumented)
     advanceWidth: number;
@@ -1224,6 +1345,12 @@ export interface ShiftCapabilities {
         resolve(input: GlyphResolveInput): Promise<ShiftObservation<ResolvedGlyphs>>;
     };
     // (undocumented)
+    kerning: {
+        groups(input: KerningGroupsInput): Promise<ShiftObservation<KerningGroupSummary[]>>;
+        pairs(input: KerningPairsInput): Promise<ShiftObservation<KerningPairPage>>;
+        resolve(input: KerningResolveInput): Promise<ShiftObservation<ResolvedKerningPairs>>;
+    };
+    // (undocumented)
     layers: {
         get(input: LayerGetInput): Promise<ShiftObservation<AuthoredLayer>>;
         resolve(input: LayerResolveInput): Promise<ShiftObservation<ResolvedLayer>>;
@@ -1296,6 +1423,12 @@ export interface ShiftRead {
         list(input?: ShiftReadInput<GlyphListInput>): Promise<GlyphPage>;
         get(input: ShiftReadInput<GlyphGetInput>): Promise<GlyphSummary>;
         resolve(input: ShiftReadInput<GlyphResolveInput>): Promise<ResolvedGlyphs>;
+    };
+    // (undocumented)
+    kerning: {
+        groups(input?: ShiftReadInput<KerningGroupsInput>): Promise<KerningGroupSummary[]>;
+        pairs(input: ShiftReadInput<KerningPairsInput>): Promise<KerningPairPage>;
+        resolve(input: ShiftReadInput<KerningResolveInput>): Promise<ResolvedKerningPairs>;
     };
     // (undocumented)
     layers: {
@@ -1378,10 +1511,10 @@ export function useSignalState<T>(signal: Signal<T>, options?: UseSignalOptions)
 
 // Warnings were encountered during analysis:
 //
-// dist/Editor-_mNcKe5m.d.ts:2801:5 - (ae-forgotten-export) The symbol "Axis" needs to be exported by the entry point index.d.ts
-// dist/Editor-_mNcKe5m.d.ts:2802:5 - (ae-forgotten-export) The symbol "AxisMappingBasis" needs to be exported by the entry point index.d.ts
-// dist/Editor-_mNcKe5m.d.ts:2803:5 - (ae-forgotten-export) The symbol "Source" needs to be exported by the entry point index.d.ts
-// dist/Editor-_mNcKe5m.d.ts:4775:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
+// dist/Editor-G3S_oTWU.d.ts:2801:5 - (ae-forgotten-export) The symbol "Axis" needs to be exported by the entry point index.d.ts
+// dist/Editor-G3S_oTWU.d.ts:2802:5 - (ae-forgotten-export) The symbol "AxisMappingBasis" needs to be exported by the entry point index.d.ts
+// dist/Editor-G3S_oTWU.d.ts:2803:5 - (ae-forgotten-export) The symbol "Source" needs to be exported by the entry point index.d.ts
+// dist/Editor-G3S_oTWU.d.ts:4777:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 
