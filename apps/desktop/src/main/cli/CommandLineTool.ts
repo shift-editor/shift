@@ -19,6 +19,14 @@ export interface CommandLineToolState {
   note: string | null;
 }
 
+/** The result of `shift-cli skill install --json`: where this build's agent skill was written. */
+export interface AgentSkillReport {
+  skill: string;
+  command: string;
+  version: string;
+  targets: { path: string; state: string; installedVersion: string | null }[];
+}
+
 /** How the bundled `shift-cli` reaches the user's PATH on this platform. */
 export type CommandLineToolInstall =
   /** A symlink in a PATH directory, created with admin rights when needed (macOS, Linux packages). */
@@ -150,6 +158,40 @@ export class CommandLineTool {
     if (installed.status !== "installed" || !installed.commandPath) return installed;
     const shadow = await this.#shadowNote(installed.commandPath);
     return shadow ? { ...installed, note: shadow } : installed;
+  }
+
+  /**
+   * Installs this build's agent skill into `~/.agents/skills` and `~/.claude/skills`.
+   *
+   * @remarks
+   * The bundled binary writes the skill it embeds, named for this build's
+   * command, so the skill always matches the installed CLI.
+   */
+  async installSkill(): Promise<AgentSkillReport> {
+    const report = await this.#skill(["install", "--global"]);
+    this.#log.info("installed agent skill", {
+      skill: report.skill,
+      targets: report.targets.map(({ path, state }) => ({ path, state })),
+    });
+    return report;
+  }
+
+  /** Rewrites an installed agent skill that an app update left stale; never creates one. */
+  async refreshSkill(): Promise<void> {
+    if (!this.available) return;
+    const report = await this.#skill(["install", "--global", "--refresh-only"]);
+    const updated = report.targets.filter(({ state }) => state === "updated");
+    if (updated.length > 0) {
+      this.#log.info("refreshed agent skill", { paths: updated.map(({ path }) => path) });
+    }
+  }
+
+  async #skill(args: string[]): Promise<AgentSkillReport> {
+    const bundled = this.#bundledPath;
+    if (!bundled || !fs.existsSync(bundled))
+      throw new Error("shift-cli is not bundled with this build");
+    const { stdout } = await run(bundled, ["skill", ...args, "--command", this.#command, "--json"]);
+    return JSON.parse(stdout) as AgentSkillReport;
   }
 
   /** Keeps an installed copy in step with the app after an update (AppImage). */

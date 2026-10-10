@@ -265,6 +265,11 @@ export class App {
         .catch((error) => {
           this.#log.error("failed to refresh shift-cli", error);
         });
+      void this.#requireCommandLineTool()
+        .refreshSkill()
+        .catch((error) => {
+          this.#log.error("failed to refresh the agent skill", error);
+        });
 
       // Taken before recovery, which marks the documents it restores open again.
       const openAtLastExit = this.#recents.takeOpen();
@@ -721,14 +726,28 @@ export class App {
       return;
     }
 
-    await show({
+    const { checkboxChecked: installSkill } = await show({
       type: "info",
       message: "The command line tool is installed",
       detail: [
         `${command} is available at ${installed.commandPath}.`,
         installed.note ?? `Run ${command} --help in a terminal to get started.`,
       ].join("\n\n"),
+      checkboxLabel: `Also install the agent skill, so Claude Code, Codex, and other agents know how to use ${command}`,
+      checkboxChecked: true,
     });
+    if (!installSkill) return;
+
+    try {
+      await tool.installSkill();
+    } catch (error) {
+      this.#log.error("failed to install the agent skill", error);
+      await show({
+        type: "error",
+        message: "Could not install the agent skill",
+        detail: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   #commandContext(window?: Window): CommandContext {
