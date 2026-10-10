@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use shift_backends::font_loader::FontLoader;
-use shift_backends::shaper_font::{compile_shaper_font, ShaperFontRequest};
+use shift_backends::shaper_font::{ShaperFont, ShaperFontRequest};
 
 #[test]
 fn imported_glyphs_features_compile_into_a_shaper_font() {
@@ -11,7 +11,7 @@ fn imported_glyphs_features_compile_into_a_shaper_font() {
     assert!(font.features().has_features());
 
     let request = ShaperFontRequest::from_font(&font).unwrap();
-    let compilation = compile_shaper_font(&request).unwrap();
+    let compilation = ShaperFont::compile(&request).unwrap();
 
     let shaper_font = compilation.font.unwrap_or_else(|| {
         panic!(

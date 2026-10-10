@@ -109,7 +109,7 @@ src/
 - `GlyphsReader` -- eagerly drains the canonical `.glyphs` / `.glyphspackage` stream for compatibility callers; read-only (no writer)
 - `GlyphsGlyphStream` -- owns one upstream-parsed Glyphs model and converts bounded, layer-aware Shift glyph batches in directory order
 - `FontExporter` -- compiles a `FontView` directly to TTF via `ShiftIrSource` and fontc
-- `ShaperFontRequest` / `compile_shaper_font` -- compile a font's authored feature source with fea-rs into a shaper font: `GSUB`/`GPOS`/`GDEF`, `head`, and `fvar`, with no outlines, `cmap`, or `hmtx`. Glyph ids index the request's glyph order with `.notdef` first; `GDEF` glyph classes come from glyph categories unless the source declares its own; diagnostics carry UTF-16 ranges
+- `ShaperFontRequest` / `ShaperFont::compile` -- compile a font's authored feature source with fea-rs into a shaper font: `GSUB`/`GPOS`/`GDEF`, `head`, and `fvar`, with no outlines, `cmap`, or `hmtx`. Glyph ids index the request's glyph order with `.notdef` first; `GDEF` glyph classes come from glyph categories unless the source declares its own; diagnostics carry UTF-16 ranges
 - `ShaperFontState` -- keeps the last successfully compiled shaper font active while later feature source has errors, and skips recompiling an unchanged request
 
 ## How it works
