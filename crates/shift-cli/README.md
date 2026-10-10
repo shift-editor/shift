@@ -24,6 +24,7 @@ cargo run -p shift-cli -- inspect --view axes path/to/Family.shift
 cargo run -p shift-cli -- inspect --view mappings path/to/Family.shift
 cargo run -p shift-cli -- inspect --view sources path/to/Family.shift
 cargo run -p shift-cli -- inspect --view layers path/to/Family.shift
+cargo run -p shift-cli -- inspect --view kerning path/to/Family.shift
 cargo run -p shift-cli -- inspect --json path/to/Family.shift
 cargo run -p shift-cli -- glyph inspect path/to/Family.glyphs Aacute
 cargo run -p shift-cli -- glyph inspect path/to/Family.designspace Aacute \
@@ -53,6 +54,7 @@ Document inspection views:
 - `sources`: design sources and locations
 - `glyphs`: glyph names, Unicode values, and layer counts
 - `layers`: glyph layer source bindings and geometry counts
+- `kerning`: group counts and each master's pairs by kind (glyph, exception, group), counting pairs whose glyph or group no longer exists
 
 `glyph inspect` reads one glyph through Shift's semantic font model from `.shift`, UFO,
 Designspace, Glyphs, TTF, or OTF input. Locations use external/user-space `TAG=VALUE`

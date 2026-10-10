@@ -11,6 +11,8 @@ use shift_font::{
 use shift_store::{SHIFT_DOCUMENT_SCHEMA_VERSION, ShiftStore, StoreError};
 use thiserror::Error;
 
+use super::kerning::KerningSummary;
+
 #[derive(Debug, Error)]
 #[error("failed to inspect Shift document {path}")]
 pub struct InspectError {
@@ -190,6 +192,7 @@ pub struct InspectReport {
     pub sources: Vec<SourceSummary>,
     pub glyph_count: usize,
     pub glyphs: Vec<GlyphSummary>,
+    pub kerning: KerningSummary,
 }
 
 impl InspectReport {
@@ -265,6 +268,7 @@ impl InspectReport {
                 .collect(),
             glyph_count: glyphs.len(),
             glyphs,
+            kerning: KerningSummary::from_font(font),
         }
     }
 }

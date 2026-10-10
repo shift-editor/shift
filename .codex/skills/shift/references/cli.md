@@ -10,7 +10,7 @@ In Shift, choose **Shift → Install Command Line Tool…** (on Windows and Linu
 
 ```sh
 shift-cli inspect Family.shift                     # summary of a .shift document
-shift-cli inspect --view glyphs Family.shift        # also: axes, mappings, instances, sources, layers
+shift-cli inspect --view glyphs Family.shift        # also: axes, mappings, instances, sources, layers, kerning
 shift-cli inspect --json Family.shift               # complete report for scripts
 shift-cli glyph inspect Family.ufo A --json         # one glyph from .shift, UFO, Designspace, Glyphs, TTF, or OTF
 shift-cli glyph inspect Family.designspace A --location wght=700 --view variation
