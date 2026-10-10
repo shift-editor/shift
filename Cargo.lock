@@ -2250,6 +2250,8 @@ dependencies = [
 name = "shift-backends"
 version = "0.1.0"
 dependencies = [
+ "fea-rs",
+ "fontbe",
  "fontc",
  "fontdrasil",
  "fontir",
