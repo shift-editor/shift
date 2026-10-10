@@ -8,6 +8,8 @@ use harfrust::{
 use shift_font::test_support::sample_variable_font;
 use shift_font::{GlyphCategory, GlyphSubcategory};
 
+use write_fonts::types::Tag;
+
 use super::*;
 
 /// Shapes `text` the way Shift shapes live text: characters map through the
@@ -90,7 +92,11 @@ fn request(glyph_names: &[&str], feature_source: &str) -> ShaperFontRequest {
 
 fn compiled(request: &ShaperFontRequest) -> ShaperFont {
     let compilation = compile_shaper_font(request).unwrap();
-    assert!(compilation.diagnostics.is_empty(), "{}", compilation.report);
+    assert!(
+        compilation.diagnostics.is_empty(),
+        "{:?}",
+        compilation.diagnostics
+    );
     compilation.font.unwrap()
 }
 
@@ -134,7 +140,6 @@ fn source_errors_report_utf16_ranges_without_a_font() {
         String::from_utf16(&utf16[error.range.clone()]).unwrap(),
         "missing"
     );
-    assert!(!compilation.report.is_empty());
 }
 
 #[test]
@@ -159,15 +164,15 @@ fn generated_features_get_markers_unless_authored() {
         font.insert_markers(),
         [
             InsertMarker {
-                tag: "curs".to_string(),
+                tag: Tag::new(b"curs"),
                 lookup_index: None,
             },
             InsertMarker {
-                tag: "mark".to_string(),
+                tag: Tag::new(b"mark"),
                 lookup_index: None,
             },
             InsertMarker {
-                tag: "mkmk".to_string(),
+                tag: Tag::new(b"mkmk"),
                 lookup_index: None,
             },
         ]
@@ -281,4 +286,17 @@ fn request_classifies_glyphs_by_category() {
     let request = ShaperFontRequest::from_font(&font).unwrap();
 
     assert_eq!(request.gdef_classes.get("A"), Some(&GlyphClassDef::Mark));
+}
+
+#[test]
+fn request_rejects_fractional_or_out_of_range_units_per_em() {
+    for value in [1000.5, 8.0, 20_000.0] {
+        let mut font = sample_variable_font();
+        font.metrics_mut().units_per_em = value;
+
+        assert!(matches!(
+            ShaperFontRequest::from_font(&font),
+            Err(ShaperFontError::InvalidUnitsPerEm { value: rejected }) if rejected == value
+        ));
+    }
 }

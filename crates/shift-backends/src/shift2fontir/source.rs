@@ -25,6 +25,14 @@ use super::metadata::{
 const MIN_UNITS_PER_EM: f64 = 16.0;
 const MAX_UNITS_PER_EM: f64 = 16_384.0;
 
+/// Converts units per em to the `head` value, or `None` when it is not a
+/// whole number from 16 to 16384.
+pub(crate) fn units_per_em(value: f64) -> Option<u16> {
+    let valid = value.fract() == 0.0 && (MIN_UNITS_PER_EM..=MAX_UNITS_PER_EM).contains(&value);
+    // In range and whole, so the conversion is exact.
+    valid.then_some(value as u16)
+}
+
 /// Describes a Shift font that cannot become an in-memory fontir source.
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum ShiftIrSourceError {
@@ -97,9 +105,7 @@ impl ShiftIrSource {
             .default_source_id()
             .ok_or(ShiftIrSourceError::MissingDefaultSource)?;
         let units_per_em = font.metrics().units_per_em;
-        if !(MIN_UNITS_PER_EM..=MAX_UNITS_PER_EM).contains(&units_per_em)
-            || units_per_em.fract() != 0.0
-        {
+        if self::units_per_em(units_per_em).is_none() {
             return Err(ShiftIrSourceError::InvalidUnitsPerEm {
                 value: units_per_em,
             });
