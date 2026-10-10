@@ -15,6 +15,11 @@ pub use kerning::{
     KerningCommand, KerningGroupCommand, KerningGroupsArgs, KerningPositionArg, ListKerningArgs,
     RemoveKerningArgs, RenameKerningGroupArgs, SetKerningArgs, UnassignKerningGroupArgs,
 };
+mod skill;
+pub use skill::{
+    InstallSkillArgs, ShowSkillArgs, SkillAgent, SkillCommand, SkillIdentityArgs, SkillStatusArgs,
+    SkillTopic,
+};
 mod variation;
 pub use variation::{
     AddInstanceArgs, InstanceCommand, RemoveInstanceArgs, SetAxisArgs, SetInstanceArgs,
@@ -32,7 +37,7 @@ const CLAP_STYLES: Styles = Styles::styled()
 #[derive(Debug, Parser)]
 #[command(
     name = "shift",
-    version,
+    version = env!("SHIFT_PRODUCT_VERSION"),
     about = "Command-line tools for Shift documents",
     color = ColorChoice::Auto,
     styles = CLAP_STYLES
@@ -90,6 +95,12 @@ pub enum Command {
     Kerning {
         #[command(subcommand)]
         command: KerningCommand,
+    },
+
+    /// Install or print the agent skill that matches this command.
+    Skill {
+        #[command(subcommand)]
+        command: SkillCommand,
     },
 }
 

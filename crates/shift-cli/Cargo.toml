@@ -21,6 +21,9 @@ shift-workspace = { workspace = true }
 tempfile = "3"
 thiserror = "2"
 
+[build-dependencies]
+serde_json = "1.0"
+
 [dev-dependencies]
 shift-font = { workspace = true, features = ["test-support"] }
 skrifa = "0.32.0"
