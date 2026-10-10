@@ -1,5 +1,6 @@
 import CircleIcon from "@/assets/toolbar/circle.svg";
 import HandIcon from "@/assets/toolbar/hand.svg";
+import KerningIcon from "@/assets/toolbar/kerning.svg";
 import PenIcon from "@/assets/toolbar/pen.svg";
 import SelectIcon from "@/assets/toolbar/select.svg";
 import ShapeIcon from "@/assets/toolbar/shape.svg";
@@ -16,6 +17,7 @@ import { Select } from "@shift/editor/tools";
 import { ShapeTool, type ShapeKind } from "@shift/editor/tools";
 import { TextTool } from "@shift/editor/tools";
 import { SpacingTool } from "@shift/editor/tools";
+import { KerningTool } from "@shift/editor/tools";
 
 function builtInToolManifests(): readonly ToolManifest[] {
   const shapeKindCell = signal<ShapeKind>("rectangle", { name: "tool.Shape.kind" });
@@ -24,6 +26,16 @@ function builtInToolManifests(): readonly ToolManifest[] {
   };
   const selectEllipse = () => {
     shapeKindCell.set("ellipse");
+  };
+  // Spacing and Kerning share a toolbar slot that shows the one picked last.
+  const spacingSlotCell = signal<"spacing" | "kerning">("spacing", {
+    name: "tool.spacingSlot",
+  });
+  const selectSpacing = () => {
+    spacingSlotCell.set("spacing");
+  };
+  const selectKerning = () => {
+    spacingSlotCell.set("kerning");
   };
 
   return [
@@ -51,9 +63,46 @@ function builtInToolManifests(): readonly ToolManifest[] {
     {
       id: "spacing",
       create: (api) => new SpacingTool(api),
-      icon: SpacingIcon,
-      tooltip: "Spacing Tool (M)",
+      get icon() {
+        return spacingSlotCell.peek() === "kerning" ? KerningIcon : SpacingIcon;
+      },
+      get tooltip() {
+        return spacingSlotCell.peek() === "kerning" ? "Kerning Tool (K)" : "Spacing Tool (M)";
+      },
       shortcut: "m",
+      onSelect: selectSpacing,
+      menuSelectionCell: spacingSlotCell,
+      menuItems: [
+        {
+          id: "spacing",
+          toolId: "spacing",
+          icon: SpacingIcon,
+          label: "Spacing",
+          shortcut: "m",
+          get selected() {
+            return spacingSlotCell.peek() === "spacing";
+          },
+          onSelect: selectSpacing,
+        },
+        {
+          id: "kerning",
+          toolId: "kerning",
+          icon: KerningIcon,
+          label: "Kerning",
+          shortcut: "k",
+          get selected() {
+            return spacingSlotCell.peek() === "kerning";
+          },
+          onSelect: selectKerning,
+        },
+      ],
+    },
+    {
+      id: "kerning",
+      create: (api) => new KerningTool(api),
+      icon: KerningIcon,
+      tooltip: "Kerning Tool (K)",
+      hidden: true,
     },
     {
       id: "hand",

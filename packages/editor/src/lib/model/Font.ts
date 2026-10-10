@@ -14,6 +14,7 @@ import type {
   GlyphLayerSnapshot,
   GlyphPreview,
   GlyphRecord,
+  KerningValueEdit,
   GlyphSnapshotRequest,
   GlyphName,
   SourceId,
@@ -54,7 +55,8 @@ import type { GlyphReader } from "../../types/glyph";
 import { Glyph, GlyphLayer } from "./Glyph";
 import type { FontStore, GlyphInvalidation } from "./FontStore";
 import type { GlyphLayerState } from "./GlyphLayerState";
-import { Kerning } from "./Kerning";
+import type { Kerning } from "./Kerning";
+import { KerningEdit } from "./KerningEdit";
 import { SourceMetricsInterpolation } from "./SourceMetricsInterpolation";
 import {
   designAxisLocationFromLocation,
@@ -280,10 +282,7 @@ export class Font {
       );
     });
 
-    // Workspace echoes rebuild the font snapshot but keep its kerning reference
-    // unless kerning changed, so the lookup is indexed again only then.
-    const kerningSnapshotCell = computed(() => fontCell.value?.kerning ?? null);
-    this.#kerningCell = computed(() => Kerning.from(kerningSnapshotCell.value));
+    this.#kerningCell = store.kerning.cell;
 
     this.#metadataCell = computed(() => fontCell.value?.metadata ?? {});
     this.#sourcesCell = computed(() => fontCell.value?.sources ?? []);
@@ -1592,6 +1591,11 @@ export class Font {
     sourceId: SourceId | null,
   ): number {
     const kerning = this.#kerningCell.peek();
+    // An authoring source reads its own values, including ones not echoed yet,
+    // whose source the Rust-built basis may not cover until the echo arrives.
+    if (sourceId && kerning.authors(sourceId)) {
+      return kerning.valueAtSource(sourceId, first, second);
+    }
     const { designLocation, staticSourceId, axes } = this.#peekDesignspace((designspace) => {
       const source = sourceId ? designspace.source(sourceId) : null;
       const staticSource = source ?? designspace.sourceAt(designspace.defaultLocation());
@@ -1607,6 +1611,28 @@ export class Font {
     const interpolated = kerning.valueAtLocation(designLocation, axes, first, second);
     if (interpolated !== null) return interpolated;
     return staticSourceId ? kerning.valueAtSource(staticSourceId, first, second) : 0;
+  }
+
+  /**
+   * Opens a kerning edit: previews show at once, and committing submits one
+   * undoable change whose values stay visible until the workspace confirms them.
+   *
+   * @throws {Error} When another kerning edit is open, or editing is not wired.
+   */
+  beginKerningEdit(): KerningEdit {
+    return new KerningEdit(this.#store.kerning, this.editCoordinator);
+  }
+
+  /**
+   * Sets or removes kerning values as one undo step, shown at once.
+   *
+   * @param edits - Values to set at sources; an absent `amount` removes the pair there.
+   * @param label - Undo label.
+   */
+  setKerningValues(edits: readonly KerningValueEdit[], label: string): void {
+    const edit = this.beginKerningEdit();
+    edit.preview(edits);
+    edit.commit(label);
   }
 
   #metricsForSource(source: Source | null): SourceMetrics {

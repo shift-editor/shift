@@ -8,15 +8,15 @@ use super::{
     RecoveryOverlay, RecoveryState,
     catalog::{
         AXES, AXIS_MAPPINGS, FONT_LIB, GLYPH_COMPONENTS, GLYPH_LAYERS, GLYPH_LIB, GLYPH_UNICODES,
-        GLYPHS, METRIC_DEFINITIONS, NAMED_INSTANCES, RecoveryTable, SOURCE_LIB, SOURCE_LOCATIONS,
-        SOURCE_METRIC_VALUES, SOURCES,
+        GLYPHS, KERNING_PAIRS, METRIC_DEFINITIONS, NAMED_INSTANCES, RecoveryTable, SOURCE_LIB,
+        SOURCE_LOCATIONS, SOURCE_METRIC_VALUES, SOURCES,
     },
 };
 use crate::{
     FontInfo, StoreError,
     change_set::{
         replace_axis_mappings, replace_lib_data, replace_metric_definitions,
-        replace_named_instances, upsert_axis_with_order, upsert_font_info,
+        replace_named_instances, replace_source_kerning, upsert_axis_with_order, upsert_font_info,
         write_glyph_directory_in_tx, write_source_snapshot_in_tx,
     },
     layer::write_layer_in_tx,
@@ -57,6 +57,7 @@ impl RecoveryOverlay {
         let mut source_ids = HashSet::new();
         let mut glyph_ids = HashSet::new();
         let mut layer_ids = HashSet::new();
+        let mut kerning_source_ids = HashSet::new();
 
         // Entity lifecycle omits pure reordering by design. Ordered relational
         // collections must still rewrite every surviving row's order index.
@@ -67,6 +68,9 @@ impl RecoveryOverlay {
                 }
                 font::FontChange::Sources(value) => {
                     source_ids.extend(value.after.sources.iter().map(font::Source::id));
+                }
+                font::FontChange::KerningValue { source_id, .. } => {
+                    kerning_source_ids.insert(source_id.clone());
                 }
                 _ => {}
             }
@@ -195,6 +199,11 @@ impl RecoveryOverlay {
                 delete_layer_override(&tx, &layer_id)?;
                 mark_tombstone(&tx, GLYPH_LAYERS, layer_id.as_str())?;
             }
+        }
+
+        for source_id in kerning_source_ids {
+            replace_source_kerning(&tx, post_font.kerning(), &source_id)?;
+            mark_replaced(&tx, KERNING_PAIRS, source_id.as_str())?;
         }
 
         mark_dirty(&tx)?;

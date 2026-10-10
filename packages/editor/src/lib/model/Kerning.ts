@@ -1,12 +1,15 @@
-import type {
-  Axis,
-  GlyphId,
-  InterpolationBasis,
-  KerningGroup,
-  KerningGroupId,
-  KerningPairValue,
-  KerningSnapshot,
-  SourceId,
+import {
+  isKerningGroupId,
+  type Axis,
+  type GlyphId,
+  type InterpolationBasis,
+  type KerningGroup,
+  type KerningGroupId,
+  type KerningPairValue,
+  type KerningSide,
+  type KerningSnapshot,
+  type KerningValueEdit,
+  type SourceId,
 } from "@shift/types";
 import { interpolationWeights } from "../interpolation/InterpolationBasis";
 import type { DesignAxisLocation } from "../../types/variation";
@@ -20,12 +23,36 @@ export type KerningSideId = GlyphId | KerningGroupId;
 /** A pair position: the glyph before the kern or the glyph after it. */
 export type KerningPairPosition = "first" | "second";
 
-/** The authored pair that applies between two glyphs at one source, and its value. */
-export interface ResolvedKerning {
+/** An ordered kerning pair, independent of any source's value for it. */
+export interface KerningPairSides {
   readonly first: KerningSideId;
   readonly second: KerningSideId;
+}
+
+/** The authored pair that applies between two glyphs at one source, and its value. */
+export interface ResolvedKerning extends KerningPairSides {
   /** Font units added after the first glyph's advance. */
   readonly amount: number;
+}
+
+/** Whether a side names a group rather than a single glyph. */
+export function isGroupSide(side: KerningSideId): side is KerningGroupId {
+  return isKerningGroupId(side);
+}
+
+/** A side as the wire spells it, with its kind. */
+export function wireSide(side: KerningSideId): KerningSide {
+  return { kind: isGroupSide(side) ? "group" : "glyph", id: side };
+}
+
+/** A value edit at one source for a pair, as the wire takes it; no amount removes the pair. */
+export function kerningValueEdit(
+  sourceId: SourceId,
+  pair: KerningPairSides,
+  amount?: number,
+): KerningValueEdit {
+  const edit = { sourceId, first: wireSide(pair.first), second: wireSide(pair.second) };
+  return amount === undefined ? edit : { ...edit, amount };
 }
 
 /** Each glyph's group at one pair position. */
@@ -33,9 +60,6 @@ type GroupMembership = ReadonlyMap<GlyphId, KerningGroupId>;
 
 /** Each glyph's group at both pair positions. */
 type MembershipByPosition = Readonly<Record<KerningPairPosition, GroupMembership>>;
-
-/** One source's pair values: first side → second side → amount. */
-type PairIndex = ReadonlyMap<KerningSideId, ReadonlyMap<KerningSideId, number>>;
 
 /**
  * Font-wide kerning groups by id, with each glyph's group at each pair
@@ -79,12 +103,28 @@ export class KerningGroups {
   }
 }
 
-/** One source's authored pair values, indexed first side → second side. */
-export class SourceKerning {
-  readonly #values: PairIndex;
+/** One source's pair values: first side → second side → `T`. */
+type PairIndex<T> = ReadonlyMap<KerningSideId, ReadonlyMap<KerningSideId, T>>;
 
-  private constructor(values: PairIndex) {
+/** An edit to one pair at a source, as `SourceKerning` layers it: null removes the pair. */
+interface PairEdit extends KerningPairSides {
+  readonly amount: number | null;
+}
+
+/**
+ * One source's pair values, indexed first side → second side, with edits not
+ * committed yet (a drag preview, an edit waiting for its workspace echo)
+ * layered over them.
+ */
+export class SourceKerning {
+  static readonly EMPTY = new SourceKerning(new Map(), new Map());
+
+  readonly #values: PairIndex<number>;
+  readonly #edits: PairIndex<number | null>;
+
+  private constructor(values: PairIndex<number>, edits: PairIndex<number | null>) {
     this.#values = values;
+    this.#edits = edits;
   }
 
   static from(pairs: readonly KerningPairValue[]): SourceKerning {
@@ -92,12 +132,35 @@ export class SourceKerning {
     for (const { first, second, amount } of pairs) {
       rowOf(values, first.id as KerningSideId).set(second.id as KerningSideId, amount);
     }
-    return new SourceKerning(values);
+    return new SourceKerning(values, new Map());
   }
 
   /** The value authored for exactly this pair, or null when it has none. */
   amount(first: KerningSideId, second: KerningSideId): number | null {
+    const edited = this.#edits.get(first)?.get(second);
+    if (edited !== undefined) return edited;
     return this.#values.get(first)?.get(second) ?? null;
+  }
+
+  /** Whether the source authors at least one pair value. */
+  get authorsAny(): boolean {
+    for (const row of this.#edits.values()) {
+      for (const amount of row.values()) if (amount !== null) return true;
+    }
+    for (const [first, row] of this.#values) {
+      for (const second of row.keys()) {
+        if (this.#edits.get(first)?.get(second) !== null) return true;
+      }
+    }
+    return false;
+  }
+
+  /** These values with `edits` applied in order on top, sharing the committed index. */
+  withEdits(edits: readonly PairEdit[]): SourceKerning {
+    const layered = new Map<KerningSideId, Map<KerningSideId, number | null>>();
+    for (const [first, row] of this.#edits) layered.set(first, new Map(row));
+    for (const edit of edits) rowOf(layered, edit.first).set(edit.second, edit.amount);
+    return new SourceKerning(this.#values, layered);
   }
 }
 
@@ -110,6 +173,9 @@ export class SourceKerning {
  * sources, each basis source resolves the pair on its own (falling back
  * through its groups, then to zero) and the results are blended, which is
  * what the compiled font does.
+ *
+ * {@link withEdits} layers values that are not committed yet over the
+ * snapshot without copying it.
  */
 export class Kerning {
   static readonly EMPTY = new Kerning(KerningGroups.EMPTY, new Map(), null);
@@ -137,9 +203,54 @@ export class Kerning {
     return new Kerning(KerningGroups.from(snapshot.groups), sources, snapshot.basis ?? null);
   }
 
+  /** Returns this kerning with `edits` applied in order on top, sharing the snapshot's indexes. */
+  withEdits(edits: readonly KerningValueEdit[]): Kerning {
+    if (edits.length === 0) return this;
+
+    const bySource = new Map<SourceId, PairEdit[]>();
+    for (const edit of edits) {
+      let sourceEdits = bySource.get(edit.sourceId);
+      if (!sourceEdits) {
+        sourceEdits = [];
+        bySource.set(edit.sourceId, sourceEdits);
+      }
+      sourceEdits.push({
+        first: edit.first.id as KerningSideId,
+        second: edit.second.id as KerningSideId,
+        amount: edit.amount ?? null,
+      });
+    }
+
+    const sources = new Map(this.#sources);
+    for (const [sourceId, sourceEdits] of bySource) {
+      sources.set(sourceId, (sources.get(sourceId) ?? SourceKerning.EMPTY).withEdits(sourceEdits));
+    }
+    return new Kerning(this.#groups, sources, this.#basis);
+  }
+
   /** The font's kerning groups. */
   get groups(): KerningGroups {
     return this.#groups;
+  }
+
+  /** The group `glyphId` kerns through at a pair position. */
+  groupOf(position: KerningPairPosition, glyphId: GlyphId): KerningGroupId | null {
+    return this.#groups.groupOf(position, glyphId);
+  }
+
+  /** Sources with at least one authored value. */
+  get sourceIds(): SourceId[] {
+    return [...this.#sources.keys()].filter((sourceId) => this.authors(sourceId));
+  }
+
+  /** Whether `sourceId` authors at least one pair value. */
+  authors(sourceId: SourceId): boolean {
+    return this.#sources.get(sourceId)?.authorsAny ?? false;
+  }
+
+  /** The amount authored for exactly this pair at a source; null when it has none. */
+  authoredAmount(sourceId: SourceId, pair: KerningPairSides): number | null {
+    return this.#sources.get(sourceId)?.amount(pair.first, pair.second) ?? null;
   }
 
   /**
@@ -152,11 +263,25 @@ export class Kerning {
     const values = this.#sources.get(sourceId);
     if (!values) return null;
 
-    for (const [candidateFirst, candidateSecond] of this.#candidates(first, second)) {
-      const amount = values.amount(candidateFirst, candidateSecond);
-      if (amount !== null) return { first: candidateFirst, second: candidateSecond, amount };
+    for (const candidate of this.#candidates(first, second)) {
+      const amount = values.amount(candidate.first, candidate.second);
+      if (amount !== null) return { ...candidate, amount };
     }
     return null;
+  }
+
+  /**
+   * The pair an edit between two glyphs at a source changes: the one that
+   * applies there, or else the most general one their groups allow.
+   *
+   * @returns The pair with its current value, zero when it is not authored yet.
+   */
+  editablePair(sourceId: SourceId, first: GlyphId, second: GlyphId): ResolvedKerning {
+    const resolved = this.resolve(sourceId, first, second);
+    if (resolved) return resolved;
+
+    const candidates = this.#candidates(first, second);
+    return { ...candidates[candidates.length - 1]!, amount: 0 };
   }
 
   /** The kerning between two glyphs at one source; zero when no pair applies. */
@@ -188,15 +313,44 @@ export class Kerning {
     return amount;
   }
 
+  /**
+   * The edit at one source that makes a side of the pair between two glyphs a
+   * glyph exception (`exception` true) or returns it to its group (false).
+   *
+   * @remarks
+   * An exception starts at the value the pair has there now, so the kern does
+   * not move. Returning removes the exception, so the group pair applies
+   * again. Other sources are untouched: exceptions are per source, like values.
+   *
+   * @param pair - The pair currently edited between the two glyphs at `sourceId`.
+   * @returns null when the side is already as asked or the glyph has no group there.
+   */
+  exceptionEdit(
+    sourceId: SourceId,
+    first: GlyphId,
+    second: GlyphId,
+    pair: ResolvedKerning,
+    position: KerningPairPosition,
+    exception: boolean,
+  ): KerningValueEdit | null {
+    const glyphId = position === "first" ? first : second;
+    if (!this.groupOf(position, glyphId)) return null;
+    if (!isGroupSide(pair[position]) === exception) return null;
+
+    if (!exception) return kerningValueEdit(sourceId, pair);
+    const sides = position === "first" ? { ...pair, first: glyphId } : { ...pair, second: glyphId };
+    return kerningValueEdit(sourceId, sides, pair.amount);
+  }
+
   /** The pairs that could apply between two glyphs, most specific first. */
-  #candidates(first: GlyphId, second: GlyphId): Array<readonly [KerningSideId, KerningSideId]> {
+  #candidates(first: GlyphId, second: GlyphId): KerningPairSides[] {
     const firstGroup = this.#groups.groupOf("first", first);
     const secondGroup = this.#groups.groupOf("second", second);
 
-    const candidates: Array<readonly [KerningSideId, KerningSideId]> = [[first, second]];
-    if (secondGroup) candidates.push([first, secondGroup]);
-    if (firstGroup) candidates.push([firstGroup, second]);
-    if (firstGroup && secondGroup) candidates.push([firstGroup, secondGroup]);
+    const candidates: KerningPairSides[] = [{ first, second }];
+    if (secondGroup) candidates.push({ first, second: secondGroup });
+    if (firstGroup) candidates.push({ first: firstGroup, second });
+    if (firstGroup && secondGroup) candidates.push({ first: firstGroup, second: secondGroup });
     return candidates;
   }
 }

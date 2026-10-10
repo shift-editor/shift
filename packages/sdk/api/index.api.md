@@ -557,6 +557,8 @@ export class Font {
     get axesCell(): Signal<Axis[]>;
     // Warning: (ae-forgotten-export) The symbol "AxisMapping" needs to be exported by the entry point index.d.ts
     get axisMappingsCell(): Signal<AxisMapping[]>;
+    // Warning: (ae-forgotten-export) The symbol "KerningEdit" needs to be exported by the entry point index.d.ts
+    beginKerningEdit(): KerningEdit;
     cloneGlyphLayer(glyphId: GlyphId, sourceId: SourceId, fromLayerId: LayerId): LayerId;
     get committedRevisionCell(): Signal<number>;
     componentBaseNamesForName(name: GlyphName): readonly GlyphName[];
@@ -659,6 +661,8 @@ export class Font {
     recordForName(name: GlyphName): GlyphRecord | null;
     resolveLayers(layerIds: readonly LayerId[]): Promise<readonly LayerRead[]>;
     setAxisMappings(mappings: readonly AxisMapping[]): Promise<void>;
+    // Warning: (ae-forgotten-export) The symbol "KerningValueEdit" needs to be exported by the entry point index.d.ts
+    setKerningValues(edits: readonly KerningValueEdit[], label: string): void;
     setLanguageIds(languageIds: readonly string[]): void;
     setMetricDefinitions(definitions: readonly MetricDefinition[]): Promise<void>;
     source(sourceId: SourceId): Source | null;
@@ -1368,10 +1372,10 @@ export function useSignalState<T>(signal: Signal<T>, options?: UseSignalOptions)
 
 // Warnings were encountered during analysis:
 //
-// dist/Editor-PgiyIf50.d.ts:2735:5 - (ae-forgotten-export) The symbol "Axis" needs to be exported by the entry point index.d.ts
-// dist/Editor-PgiyIf50.d.ts:2736:5 - (ae-forgotten-export) The symbol "AxisMappingBasis" needs to be exported by the entry point index.d.ts
-// dist/Editor-PgiyIf50.d.ts:2737:5 - (ae-forgotten-export) The symbol "Source" needs to be exported by the entry point index.d.ts
-// dist/Editor-PgiyIf50.d.ts:4548:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
+// dist/Editor-DgZhfoDe.d.ts:2774:5 - (ae-forgotten-export) The symbol "Axis" needs to be exported by the entry point index.d.ts
+// dist/Editor-DgZhfoDe.d.ts:2775:5 - (ae-forgotten-export) The symbol "AxisMappingBasis" needs to be exported by the entry point index.d.ts
+// dist/Editor-DgZhfoDe.d.ts:2776:5 - (ae-forgotten-export) The symbol "Source" needs to be exported by the entry point index.d.ts
+// dist/Editor-DgZhfoDe.d.ts:4744:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

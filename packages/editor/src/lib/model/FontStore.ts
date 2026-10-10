@@ -1,4 +1,5 @@
 import type {
+  KerningValueEdit,
   AppliedChange,
   AnchorId,
   ContourData,
@@ -36,6 +37,8 @@ import type { PendingEditId } from "../../types/editing";
 import type { FontRecordIndex, FontStoreOptions, GlyphSourceKey } from "../../types/font";
 import type { GlyphObjectIndex, GlyphObjectSegment } from "../../types/glyph";
 import { GlyphLayerState } from "./GlyphLayerState";
+import { Kerning } from "./Kerning";
+import { PendingState } from "./PendingState";
 import type { Glyph } from "./Glyph";
 
 /**
@@ -57,6 +60,7 @@ export interface GlyphInvalidation {
 export class FontStore {
   readonly #font: WritableSignal<FontSnapshot | null>;
   readonly #workspace: WritableSignal<WorkspaceSnapshot | null>;
+  readonly #kerning: PendingState<Kerning, KerningValueEdit>;
   readonly #committedRevision: WritableSignal<number>;
   readonly #invalidGlyphs: WritableSignal<GlyphInvalidation>;
 
@@ -106,6 +110,26 @@ export class FontStore {
     } else if (font) {
       this.#indexCell.set(fontRecordIndex(font, records));
     }
+
+    // Echoes rebuild the font snapshot but keep its kerning reference unless
+    // kerning changed, so the lookup is indexed again only then.
+    const kerningSnapshot = computed(() => this.#font.value?.kerning ?? null, {
+      name: "fontStore.kerningSnapshot",
+    });
+    const confirmedKerning = computed(() => Kerning.from(kerningSnapshot.value), {
+      name: "fontStore.confirmedKerning",
+    });
+    this.#kerning = new PendingState(confirmedKerning, (kerning, edits) =>
+      kerning.withEdits(edits),
+    );
+  }
+
+  /**
+   * The font's kerning as the renderer shows it: the workspace's, with value
+   * edits not yet confirmed and an open kerning edit's preview over it.
+   */
+  get kerning(): PendingState<Kerning, KerningValueEdit> {
+    return this.#kerning;
   }
 
   get fontCell(): Signal<FontSnapshot | null> {
@@ -166,6 +190,7 @@ export class FontStore {
 
   replaceWorkspace(snapshot: WorkspaceSnapshot | null): void {
     batch(() => {
+      this.#kerning.reset();
       this.#indexCell.set(workspaceRecordIndex(snapshot));
       this.#font.set(snapshot ? fontSnapshotFromWorkspace(snapshot) : null);
       this.#workspace.set(snapshot);
@@ -180,6 +205,7 @@ export class FontStore {
 
   replaceFont(snapshot: FontSnapshot): void {
     batch(() => {
+      this.#kerning.reset();
       this.#indexCell.set(fontRecordIndex(snapshot));
       this.#font.set(snapshot);
       this.#workspace.set(null);
@@ -248,6 +274,7 @@ export class FontStore {
 
   /** Restores every loaded layer touched by a throwing renderer transaction. */
   rollbackEdit(editId: PendingEditId): void {
+    this.#kerning.rollback(editId);
     for (const cell of this.#layerStateCells.values()) {
       cell.peek()?.rollbackEdit(editId);
     }
@@ -314,6 +341,8 @@ export class FontStore {
         this.#font.set(fontSnapshotFromWorkspace(nextWorkspace));
         this.#workspace.set(nextWorkspace);
       }
+      // The echo now carries this edit's kerning values, if it had any.
+      if (editId !== null) this.#kerning.confirm(editId);
 
       const index = this.#indexCell.peek();
       if (nextWorkspace !== current) {

@@ -6,6 +6,7 @@ import { Button } from "@shift/ui";
 import { BooleanOps } from "./BooleanOps";
 import { AnchorSection } from "./sidebar-right/AnchorSection";
 import { HandleSection } from "./sidebar-right/HandleSection";
+import { KerningPairSection } from "./sidebar-right/KerningPairSection";
 import { ScaleSection } from "./sidebar-right/ScaleSection";
 import { TransformSection } from "./sidebar-right/TransformSection";
 import { ZoomMenu } from "./sidebar-right/ZoomMenu";
@@ -25,6 +26,7 @@ export const RightSidebar = () => {
     availableGlyphs.find((candidate) => candidate.id === glyphId)?.displayName;
   const familyName = useSignalState(session.catalog.familyNameCell) ?? "Untitled";
   const selection = useSignalState(editor.selection.stateCell, { schedule: "frame" });
+  const kerningActive = useSignalState(editor.toolIdCell) === "kerning";
 
   const hasTransformSelection = selection.ids.some(
     (id) => isPointId(id) || isContourId(id) || isSegmentId(id) || isComponentId(id),
@@ -56,7 +58,9 @@ export const RightSidebar = () => {
             <ZoomMenu />
           </>
         ),
-        selection: (
+        selection: kerningActive ? (
+          <KerningPairSection />
+        ) : (
           <TransformOriginProvider>
             {hasTransformSelection || hasBooleanSelection ? (
               <div className="flex flex-col gap-4 px-3 py-3">

@@ -5,6 +5,7 @@ export const BUILT_IN_TOOL_IDS = {
   shape: "shape",
   text: "text",
   spacing: "spacing",
+  kerning: "kerning",
   disabled: "disabled",
 } as const;
 

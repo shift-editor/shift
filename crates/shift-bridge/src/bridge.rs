@@ -15,7 +15,8 @@ use shift_font::{
   AnchorId, AnchorSeed, Axis as FontAxis, AxisId, AxisLabel, AxisLabelId, AxisLabelRange,
   AxisMapping as FontAxisMapping, AxisMappingId, AxisMappingPoint as FontAxisMappingPoint,
   AxisRole, BooleanOp, ComponentId, ContourId, Font, FontChangeImpact, FontIntent, FontIntentSet,
-  FontMetadata as FontMetadataModel, Glyph, GlyphId, GlyphLayer, LayerId, Location as FontLocation,
+  FontMetadata as FontMetadataModel, Glyph, GlyphId, GlyphLayer, KerningGroupId, KerningPair,
+  KerningSide, KerningValueEdit, LayerId, Location as FontLocation,
   MetricDefinition as FontMetricDefinition, MetricId, MetricKind, MetricValue,
   NamedInstance as FontNamedInstance, NamedInstanceId, PointId, PointSeed, SourceId, Transform,
 };
@@ -32,10 +33,11 @@ use shift_wire::{
     NapiCatalogAtlasWeights, NapiFontIntent, NapiFontMetadata, NapiFontMetrics,
     NapiFontReplacement, NapiFontSnapshot, NapiGlyphLayerSnapshot, NapiGlyphPreview,
     NapiGlyphProjection, NapiGlyphRecord, NapiGlyphSnapshot, NapiGlyphSnapshotRequest,
-    NapiInterpolationBasis, NapiKerningSnapshot, NapiLanguagesReplacement, NapiLayerMatch,
-    NapiLayerRead, NapiLayerReplaced, NapiLocation, NapiMetricDefinition, NapiMetricKind,
-    NapiNamedInstance, NapiPointSeed, NapiSlugAtlas, NapiSlugExactSource, NapiSlugGlyph,
-    NapiSlugLayout, NapiSlugPreviewExtents, NapiSlugSection, NapiSlugWeightSet, NapiSource,
+    NapiInterpolationBasis, NapiKerningSide, NapiKerningSideKind, NapiKerningSnapshot,
+    NapiKerningValueEdit, NapiLanguagesReplacement, NapiLayerMatch, NapiLayerRead,
+    NapiLayerReplaced, NapiLocation, NapiMetricDefinition, NapiMetricKind, NapiNamedInstance,
+    NapiPointSeed, NapiSlugAtlas, NapiSlugExactSource, NapiSlugGlyph, NapiSlugLayout,
+    NapiSlugPreviewExtents, NapiSlugSection, NapiSlugWeightSet, NapiSource,
     NapiSourceMetricsInterpolationReplacement, NapiSourceMetricsInterpolationSnapshot,
   },
   AnchorData, Axis, AxisMapping, AxisMappingBasis, ComponentData, ComponentGlyph,
@@ -2229,6 +2231,24 @@ fn parse_id_list<T: BridgeParse>(ids: &[String]) -> BridgeResult<Vec<T>> {
   ids.iter().map(|id| parse::<T>(id)).collect()
 }
 
+fn map_kerning_value_edit(edit: NapiKerningValueEdit) -> errors::Result<KerningValueEdit> {
+  Ok(KerningValueEdit {
+    source_id: parse::<SourceId>(&edit.source_id)?,
+    pair: KerningPair::new(
+      map_kerning_side(edit.first)?,
+      map_kerning_side(edit.second)?,
+    ),
+    value: edit.amount,
+  })
+}
+
+fn map_kerning_side(side: NapiKerningSide) -> errors::Result<KerningSide> {
+  Ok(match side.kind {
+    NapiKerningSideKind::Glyph => KerningSide::Glyph(parse::<GlyphId>(&side.id)?),
+    NapiKerningSideKind::Group => KerningSide::Group(parse::<KerningGroupId>(&side.id)?),
+  })
+}
+
 fn map_intent(intent: NapiFontIntent) -> errors::Result<FontIntent> {
   let missing = |kind: &str| BridgeError::InvalidInput {
     kind: "intent",
@@ -2454,6 +2474,18 @@ fn map_intent(intent: NapiFontIntent) -> errors::Result<FontIntent> {
         .ok_or_else(|| missing("updateFontMetadata"))?;
       Ok(FontIntent::UpdateFontMetadata {
         metadata: map_font_metadata(payload.metadata),
+      })
+    }
+    "setKerningValues" => {
+      let payload = intent
+        .set_kerning_values
+        .ok_or_else(|| missing("setKerningValues"))?;
+      Ok(FontIntent::SetKerningValues {
+        edits: payload
+          .edits
+          .into_iter()
+          .map(map_kerning_value_edit)
+          .collect::<errors::Result<Vec<_>>>()?,
       })
     }
     "setLanguages" => {
@@ -2806,8 +2838,9 @@ mod tests {
     NapiGlyphSnapshotRequest, NapiGlyphState, NapiLocation, NapiMoveAnchorsIntent,
     NapiMovePointsIntent, NapiNamedInstance, NapiPointSeed, NapiPointType, NapiRemoveAnchorsIntent,
     NapiRemovePointsIntent, NapiReverseContourIntent, NapiSetContourClosedIntent,
-    NapiSetLanguagesIntent, NapiSetPointSmoothIntent, NapiSetXAdvanceIntent,
-    NapiTransformLayerIntent, NapiTranslatePointsIntent, NapiUpdateNamedInstanceIntent,
+    NapiSetKerningValuesIntent, NapiSetLanguagesIntent, NapiSetPointSmoothIntent,
+    NapiSetXAdvanceIntent, NapiTransformLayerIntent, NapiTranslatePointsIntent,
+    NapiUpdateNamedInstanceIntent,
   };
   use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -2853,6 +2886,7 @@ mod tests {
       create_glyph_layer: None,
       clone_glyph_layer: None,
       materialize_glyph_layer: None,
+      set_kerning_values: None,
     }
   }
 
@@ -4096,6 +4130,53 @@ mod tests {
       .expect("undo must echo languages");
     assert_eq!(languages.language_ids, None);
     assert_eq!(bridge.get_language_ids().unwrap(), None);
+  }
+
+  #[test]
+  fn set_kerning_values_echoes_kerning_and_undo_restores_it() {
+    let mut bridge = bridge_with_workspace();
+    create_default_glyph_layer(&mut bridge, "A", Some(65));
+    let glyph_id = bridge.get_glyphs().unwrap()[0].id.clone();
+    let source_id = default_source_id(&bridge);
+    let side = || NapiKerningSide {
+      kind: NapiKerningSideKind::Glyph,
+      id: glyph_id.clone(),
+    };
+
+    let applied = bridge
+      .apply(
+        vec![NapiFontIntent {
+          set_kerning_values: Some(NapiSetKerningValuesIntent {
+            edits: vec![NapiKerningValueEdit {
+              source_id: source_id.clone(),
+              first: side(),
+              second: side(),
+              amount: Some(-30.0),
+            }],
+          }),
+          ..skeleton_intent("setKerningValues")
+        }],
+        None,
+      )
+      .unwrap();
+
+    let kerning = applied
+      .next
+      .and_then(|next| next.kerning)
+      .expect("setKerningValues must echo kerning");
+    assert_eq!(kerning.sources.len(), 1);
+    assert_eq!(kerning.sources[0].source_id, source_id);
+    assert_eq!(kerning.sources[0].pairs[0].amount, -30.0);
+
+    let undone = bridge
+      .undo()
+      .unwrap()
+      .expect("setKerningValues should undo");
+    let kerning = undone
+      .next
+      .and_then(|next| next.kerning)
+      .expect("undo must echo kerning");
+    assert!(kerning.sources.is_empty());
   }
 
   #[test]

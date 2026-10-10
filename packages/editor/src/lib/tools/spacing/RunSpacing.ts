@@ -1,4 +1,5 @@
 import type { Editor } from "../../editor/Editor";
+import { track } from "../../signals";
 import type { GlyphLayer } from "../../model/Glyph";
 import type { ScenePoint } from "../../../types/coordinates";
 import {
@@ -107,6 +108,14 @@ export class SpacingHalf {
     if (itemId) editor.nodeDefinition("textRun").editItem(this.gap.node, itemId);
     return this;
   }
+}
+
+/**
+ * Subscribes the caller's reactive scope to every text run's layout, so an
+ * overlay measured from the layout redraws when it changes.
+ */
+export function trackRunLayouts(editor: Editor): void {
+  for (const run of editor.scene.nodesOfKind("textRun")) track(editor.text.layoutCell(run.runId));
 }
 
 /** The spacing gaps of the editor's text runs, measured on demand. */

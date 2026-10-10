@@ -41,6 +41,8 @@ export interface SpacingGap {
   readonly leftBoundary: number;
   /** X where the right glyph's advance begins; equals `leftBoundary` at a line end. */
   readonly rightBoundary: number;
+  /** Y of the line's baseline. */
+  readonly baseline: number;
   readonly top: number;
   readonly bottom: number;
 }

@@ -18,6 +18,7 @@ use crate::ir::{
 use crate::layer_edit::BulkNodePositionUpdates;
 use crate::source::source_locations_equal;
 use crate::Require;
+use crate::{KerningPair, KerningPosition, KerningSide};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::sync::Arc;
 
@@ -29,6 +30,15 @@ pub struct PointSeed {
     pub y: f64,
     pub point_type: PointType,
     pub smooth: bool,
+}
+
+/// One kerning pair value to set or remove at one source.
+#[derive(Clone, Debug, PartialEq)]
+pub struct KerningValueEdit {
+    pub source_id: SourceId,
+    pub pair: KerningPair,
+    /// The new value in font units; `None` removes the pair at this source.
+    pub value: Option<f64>,
 }
 
 /// An anchor to create, with stable identity minted by a trusted caller.
@@ -244,6 +254,13 @@ pub enum FontIntent {
         source_id: SourceId,
         from_layer_id: LayerId,
     },
+    /// Sets or removes kerning pair values at sources, in order.
+    ///
+    /// Every source, glyph side, and group side must exist; groups are
+    /// created separately. Editing a value never changes group membership.
+    SetKerningValues {
+        edits: Vec<KerningValueEdit>,
+    },
     /// Creates one editable layer from compatible resolved numeric values.
     ///
     /// The source layer supplies authored structure and non-varying data. The
@@ -301,7 +318,8 @@ impl FontIntent {
             | Self::UpdateSource { .. }
             | Self::CreateGlyphLayer { .. }
             | Self::CloneGlyphLayer { .. }
-            | Self::MaterializeGlyphLayer { .. } => None,
+            | Self::MaterializeGlyphLayer { .. }
+            | Self::SetKerningValues { .. } => None,
         }
     }
 
@@ -359,7 +377,8 @@ impl FontIntent {
             | Self::DeleteNamedInstance { .. }
             | Self::CreateSource { .. }
             | Self::UpdateSource { .. }
-            | Self::CreateGlyphLayer { .. } => Vec::new(),
+            | Self::CreateGlyphLayer { .. }
+            | Self::SetKerningValues { .. } => Vec::new(),
         }
     }
 
@@ -534,6 +553,28 @@ impl Font {
             )));
         }
 
+        let kerning_keys = set
+            .intents
+            .iter()
+            .filter_map(|intent| match intent {
+                FontIntent::SetKerningValues { edits } => Some(edits),
+                _ => None,
+            })
+            .flatten()
+            .map(|edit| (edit.source_id.clone(), edit.pair.clone()))
+            .collect::<BTreeSet<_>>();
+        for (source_id, pair) in kerning_keys {
+            let original = before.kerning().value(&source_id, &pair);
+            let replacement = after.kerning().value(&source_id, &pair);
+            if original != replacement {
+                changes.push(FontChange::KerningValue {
+                    source_id,
+                    pair,
+                    value: Replacement::new(original, replacement),
+                });
+            }
+        }
+
         for glyph_id in &glyph_ids {
             let original = before.glyph(glyph_id).cloned();
             let replacement = after.glyph(glyph_id).cloned();
@@ -614,6 +655,10 @@ impl Font {
             }
             FontIntent::SetLanguages { language_ids } => {
                 self.apply_set_languages(language_ids);
+                Ok((Vec::new(), None))
+            }
+            FontIntent::SetKerningValues { edits } => {
+                self.apply_set_kerning_values(edits)?;
                 Ok((Vec::new(), None))
             }
             FontIntent::CreateAxis { axis } => {
@@ -747,6 +792,48 @@ impl Font {
 
         self.insert_glyph(glyph)?;
         Ok(glyph_id)
+    }
+
+    fn apply_set_kerning_values(&mut self, edits: &[KerningValueEdit]) -> CoreResult<()> {
+        for edit in edits {
+            self.require_source(&edit.source_id)?;
+            self.require_kerning_side(KerningPosition::First, &edit.pair.first)?;
+            self.require_kerning_side(KerningPosition::Second, &edit.pair.second)?;
+            match edit.value {
+                Some(value) if !value.is_finite() => {
+                    return Err(CoreError::InvalidKerningValue(value));
+                }
+                Some(value) => {
+                    self.kerning_mut()
+                        .set_value(edit.source_id.clone(), edit.pair.clone(), value);
+                }
+                None => {
+                    self.kerning_mut().remove_value(&edit.source_id, &edit.pair);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn require_kerning_side(
+        &self,
+        position: KerningPosition,
+        side: &KerningSide,
+    ) -> CoreResult<()> {
+        match side {
+            KerningSide::Glyph(glyph_id) => self.require_glyph(glyph_id).map(|_| ()),
+            KerningSide::Group(group_id) => {
+                let group = self.kerning().group(group_id).require(group_id)?;
+                if group.position == position {
+                    Ok(())
+                } else {
+                    Err(CoreError::KerningGroupPosition {
+                        group_id: group_id.clone(),
+                        position,
+                    })
+                }
+            }
+        }
     }
 
     fn apply_set_languages(&mut self, language_ids: &[String]) {
@@ -1455,7 +1542,8 @@ impl Font {
             | FontIntent::UpdateSource { .. }
             | FontIntent::CreateGlyphLayer { .. }
             | FontIntent::CloneGlyphLayer { .. }
-            | FontIntent::MaterializeGlyphLayer { .. } => {
+            | FontIntent::MaterializeGlyphLayer { .. }
+            | FontIntent::SetKerningValues { .. } => {
                 unreachable!("font-level intents take the apply_font_intent path")
             }
         }
@@ -1501,6 +1589,9 @@ impl Font {
 
 #[cfg(test)]
 mod replacement_tests;
+
+#[cfg(test)]
+mod kerning_tests;
 
 #[cfg(test)]
 mod tests {

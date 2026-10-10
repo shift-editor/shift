@@ -1538,8 +1538,8 @@ pub struct NapiFontIntent {
     /// "transformLayer" | "setXAdvance" | "applyBooleanOp".
     /// Font-level kinds additionally include metadata replacement, tracked
     /// language replacement, axis create/update/delete, mapping replacement,
-    /// named-instance create/update/delete, source create/delete, and glyph
-    /// or layer creation.
+    /// named-instance create/update/delete, source create/delete, glyph
+    /// or layer creation, and "setKerningValues".
     /// Every kind shares the same apply path; one set is one undo step.
     pub kind: String,
     pub add_points: Option<NapiAddPointsIntent>,
@@ -1579,6 +1579,24 @@ pub struct NapiFontIntent {
     pub create_glyph_layer: Option<NapiCreateGlyphLayerIntent>,
     pub clone_glyph_layer: Option<NapiCloneGlyphLayerIntent>,
     pub materialize_glyph_layer: Option<NapiMaterializeGlyphLayerIntent>,
+    pub set_kerning_values: Option<NapiSetKerningValuesIntent>,
+}
+
+/// One kerning pair value to set or remove at one source.
+#[napi(object)]
+pub struct NapiKerningValueEdit {
+    #[napi(ts_type = "SourceId")]
+    pub source_id: String,
+    pub first: NapiKerningSide,
+    pub second: NapiKerningSide,
+    /// New value in font units; absent removes the pair at this source.
+    pub amount: Option<f64>,
+}
+
+/// Sets or removes kerning pair values at sources as one undoable edit.
+#[napi(object)]
+pub struct NapiSetKerningValuesIntent {
+    pub edits: Vec<NapiKerningValueEdit>,
 }
 
 /// Replaces the complete authored metadata snapshot without changing metrics.

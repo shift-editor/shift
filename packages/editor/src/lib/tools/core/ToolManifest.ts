@@ -13,6 +13,11 @@ export interface ToolMenuItem {
   shortcut: string;
   selected: boolean;
   onSelect: () => void;
+  /**
+   * The tool the item activates; the slot's own tool when absent. Lets one
+   * toolbar slot hold several tools, such as Spacing and Kerning.
+   */
+  toolId?: ToolName;
 }
 
 export interface ToolManifest {
