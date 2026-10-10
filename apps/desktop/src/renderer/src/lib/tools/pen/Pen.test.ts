@@ -319,6 +319,22 @@ describe("Pen tool", () => {
     });
   });
 
+  describe("interpolated locations", () => {
+    it("does not draw into the last source shown", async () => {
+      await editor.clickLocal(100, 100);
+      await editor.clickLocal(300, 100);
+      const before = editor.requireGlyphLayer().state;
+      await editor.moveToInterpolatedLocation();
+
+      await editor.clickLocal(300, 300);
+      await editor.clickLocal(500, 100);
+      await editor.settle();
+
+      editor.selectSource(editor.font.defaultSource.id);
+      expect(editor.requireGlyphLayer().state).toEqual(before);
+    });
+  });
+
   describe("pulling a handle from an open end", () => {
     it("pulls a free handle from a line's end into the next dragged curve", async () => {
       await editor.clickLocal(100, 100);
