@@ -91,7 +91,7 @@ fn request(glyph_names: &[&str], feature_source: &str) -> ShaperFontRequest {
 }
 
 fn compiled(request: &ShaperFontRequest) -> ShaperFont {
-    let compilation = compile_shaper_font(request).unwrap();
+    let compilation = ShaperFont::compile(request).unwrap();
     assert!(
         compilation.diagnostics.is_empty(),
         "{:?}",
@@ -127,7 +127,7 @@ fn variable_kerning_resolves_at_the_shaped_location() {
 fn source_errors_report_utf16_ranges_without_a_font() {
     let source = "# café ☕\nfeature liga { sub f i by missing; } liga;";
 
-    let compilation = compile_shaper_font(&request(&[".notdef", "f", "i"], source)).unwrap();
+    let compilation = ShaperFont::compile(&request(&[".notdef", "f", "i"], source)).unwrap();
 
     assert!(compilation.font.is_none());
     let error = compilation
@@ -144,7 +144,7 @@ fn source_errors_report_utf16_ranges_without_a_font() {
 
 #[test]
 fn include_statements_are_reported_as_errors() {
-    let compilation = compile_shaper_font(&request(&[".notdef"], "include(other.fea);")).unwrap();
+    let compilation = ShaperFont::compile(&request(&[".notdef"], "include(other.fea);")).unwrap();
 
     assert!(compilation.font.is_none());
     assert!(compilation

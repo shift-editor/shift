@@ -110,6 +110,69 @@ pub struct ShaperFont {
 }
 
 impl ShaperFont {
+    /// Compiles the authored features of `request` into a shaper font.
+    ///
+    /// Feature source is parsed, validated against the glyph order and axes,
+    /// and compiled; the first stage that reports an error ends compilation
+    /// without a font. `include` statements are reported as errors because
+    /// the source is self-contained.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ShaperFontError`] when the glyph order has duplicate names,
+    /// or the axes or compiled tables cannot be assembled into a font.
+    pub fn compile(request: &ShaperFontRequest) -> Result<ShaperFontCompilation, ShaperFontError> {
+        let glyph_map = GlyphMap::new(request.glyph_names.iter().map(String::as_str))?;
+
+        let (tree, parse_diagnostics) = parse_feature_source(&request.feature_source, &glyph_map)?;
+        if parse_diagnostics.has_errors() {
+            return Ok(ShaperFontCompilation::failed(&parse_diagnostics, &tree));
+        }
+
+        let static_metadata = variation_metadata(request)?;
+        let variation_info = static_metadata.as_ref().map(FeaVariationInfo::new);
+        let validation = compile::validate(&tree, &glyph_map, variation_info.as_ref());
+        if validation.has_errors() {
+            return Ok(ShaperFontCompilation::failed(&validation, &tree));
+        }
+
+        let compiled = compile::compile(
+            &tree,
+            &glyph_map,
+            variation_info.as_ref(),
+            None::<&NopFeatureProvider>,
+            Opts::default(),
+        );
+        let (mut compilation, warnings) = match compiled {
+            Ok(compiled) => compiled,
+            Err(errors) => return Ok(ShaperFontCompilation::failed(&errors, &tree)),
+        };
+
+        tables::add_glyph_classes(&mut compilation, &glyph_map, &request.gdef_classes);
+        compilation
+            .head
+            .get_or_insert_with(Default::default)
+            .units_per_em = request.units_per_em;
+        let fvar = match static_metadata {
+            Some(_) => Some(tables::add_axis_names(&mut compilation, &request.axes)?),
+            None => None,
+        };
+
+        let mut builder = compilation.to_font_builder()?;
+        if let Some(fvar) = &fvar {
+            builder.add_table(fvar)?;
+        }
+
+        Ok(ShaperFontCompilation {
+            font: Some(Self {
+                bytes: builder.build(),
+                glyph_names: request.glyph_names.clone(),
+                insert_markers: tables::insert_markers(&compilation, &tree),
+            }),
+            diagnostics: feature_diagnostics(&warnings, &tree),
+        })
+    }
+
     /// Returns the font binary.
     pub fn bytes(&self) -> &[u8] {
         &self.bytes
@@ -183,71 +246,6 @@ pub enum ShaperFontError {
 
     #[error("cannot assemble the shaper font")]
     Assembly(#[from] BuilderError),
-}
-
-/// Compiles the authored features of `request` into a shaper font.
-///
-/// Feature source is parsed, validated against the glyph order and axes, and
-/// compiled; the first stage that reports an error ends compilation without a
-/// font. `include` statements are reported as errors because the source is
-/// self-contained.
-///
-/// # Errors
-///
-/// Returns [`ShaperFontError`] when the glyph order has duplicate names, or
-/// the axes or compiled tables cannot be assembled into a font.
-pub fn compile_shaper_font(
-    request: &ShaperFontRequest,
-) -> Result<ShaperFontCompilation, ShaperFontError> {
-    let glyph_map = GlyphMap::new(request.glyph_names.iter().map(String::as_str))?;
-
-    let (tree, parse_diagnostics) = parse_feature_source(&request.feature_source, &glyph_map)?;
-    if parse_diagnostics.has_errors() {
-        return Ok(ShaperFontCompilation::failed(&parse_diagnostics, &tree));
-    }
-
-    let static_metadata = variation_metadata(request)?;
-    let variation_info = static_metadata.as_ref().map(FeaVariationInfo::new);
-    let validation = compile::validate(&tree, &glyph_map, variation_info.as_ref());
-    if validation.has_errors() {
-        return Ok(ShaperFontCompilation::failed(&validation, &tree));
-    }
-
-    let compiled = compile::compile(
-        &tree,
-        &glyph_map,
-        variation_info.as_ref(),
-        None::<&NopFeatureProvider>,
-        Opts::default(),
-    );
-    let (mut compilation, warnings) = match compiled {
-        Ok(compiled) => compiled,
-        Err(errors) => return Ok(ShaperFontCompilation::failed(&errors, &tree)),
-    };
-
-    tables::add_glyph_classes(&mut compilation, &glyph_map, &request.gdef_classes);
-    compilation
-        .head
-        .get_or_insert_with(Default::default)
-        .units_per_em = request.units_per_em;
-    let fvar = match static_metadata {
-        Some(_) => Some(tables::add_axis_names(&mut compilation, &request.axes)?),
-        None => None,
-    };
-
-    let mut builder = compilation.to_font_builder()?;
-    if let Some(fvar) = &fvar {
-        builder.add_table(fvar)?;
-    }
-
-    Ok(ShaperFontCompilation {
-        font: Some(ShaperFont {
-            bytes: builder.build(),
-            glyph_names: request.glyph_names.clone(),
-            insert_markers: tables::insert_markers(&compilation, &tree),
-        }),
-        diagnostics: feature_diagnostics(&warnings, &tree),
-    })
 }
 
 /// Parses `source` as the only file of the feature source; any `include` is

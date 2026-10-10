@@ -1,8 +1,6 @@
 use std::sync::Arc;
 
-use super::{
-    compile_shaper_font, FeatureDiagnostic, ShaperFont, ShaperFontError, ShaperFontRequest,
-};
+use super::{FeatureDiagnostic, ShaperFont, ShaperFontError, ShaperFontRequest};
 
 /// The shaper font for a changing font: the most recent successful
 /// compilation, and the diagnostics of the most recent request.
@@ -24,7 +22,7 @@ impl ShaperFontState {
     ///
     /// # Errors
     ///
-    /// Returns [`ShaperFontError`] as [`compile_shaper_font`] does; the active
+    /// Returns [`ShaperFontError`] as [`ShaperFont::compile`] does; the active
     /// font and diagnostics are then unchanged and the request is retried on
     /// the next update.
     pub fn update(&mut self, request: ShaperFontRequest) -> Result<bool, ShaperFontError> {
@@ -32,7 +30,7 @@ impl ShaperFontState {
             return Ok(false);
         }
 
-        let compilation = compile_shaper_font(&request)?;
+        let compilation = ShaperFont::compile(&request)?;
         self.request = Some(request);
         self.diagnostics = compilation.diagnostics;
         let Some(font) = compilation.font else {
