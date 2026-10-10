@@ -2,9 +2,11 @@
 //!
 //! A shaper font is a minimal binary for shaping live text: `GSUB`, `GPOS`,
 //! and `GDEF` compiled from the authored feature source, `head`, and, for a
-//! variable font, `fvar` with its axis names. It has no outlines, `cmap`, or
-//! `hmtx`; a shaper supplies character mapping and advances from the live font
-//! instead, so outline and advance edits never require a rebuild. Glyph ids in
+//! variable font, `fvar` with its axis names. `GDEF` glyph classes come from
+//! glyph categories unless the feature source declares its own. It has no
+//! outlines, `cmap`, or
+//! `hmtx`; a shaper supplies character mapping and advances from the live
+//! font instead, so outline and advance edits never require a rebuild. Glyph ids in
 //! the binary index [`ShaperFont::glyph_names`].
 //!
 //! Only authored feature code is compiled. Kerning, mark attachment, and
@@ -13,7 +15,7 @@
 //!
 //! Adapted from Fontra's `build-shaper-font` (Apache-2.0).
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::ops::Range;
 use std::path::Path;
 use std::sync::Arc;
@@ -27,9 +29,12 @@ use fontdrasil::coords::{NormalizedCoord, NormalizedLocation};
 use fontdrasil::types::Axis as IrAxis;
 use fontir::ir::StaticMetadata;
 use write_fonts::tables::fvar::{AxisInstanceArrays, Fvar, VariationAxisRecord};
+use write_fonts::tables::gdef::GlyphClassDef;
+use write_fonts::tables::layout::ClassDef;
 use write_fonts::tables::name::NameRecord;
 use write_fonts::types::NameId;
 
+use crate::glyph_category::gdef_classes;
 use crate::shift2fontir::to_ir_axes;
 use crate::traits::FontView;
 
@@ -53,11 +58,13 @@ pub struct ShaperFontRequest {
     glyph_names: Vec<String>,
     feature_source: String,
     axes: Vec<IrAxis>,
+    gdef_classes: BTreeMap<String, GlyphClassDef>,
 }
 
 impl ShaperFontRequest {
     /// Collects the shaper-font inputs of a font: its glyph order, authored
-    /// feature source, units per em, and axes with their independent mappings.
+    /// feature source, units per em, axes with their independent mappings,
+    /// and the `GDEF` class each glyph's category resolves to.
     ///
     /// `.notdef` is moved, or added, to the front of the glyph order.
     ///
@@ -83,6 +90,7 @@ impl ShaperFontRequest {
             glyph_names,
             feature_source: font.features().fea_source().unwrap_or_default().to_string(),
             axes,
+            gdef_classes: gdef_classes(font.glyphs(), font.lib()),
         })
     }
 }
@@ -269,6 +277,7 @@ pub fn compile_shaper_font(
         Err(errors) => return Ok(ShaperFontCompilation::failed(&errors, &tree)),
     };
 
+    add_glyph_classes(&mut compilation, &glyph_map, &request.gdef_classes);
     let insert_markers = insert_markers(&compilation, &tree);
     let mut head = compilation.head.take().unwrap_or_default();
     head.units_per_em = request.units_per_em;
@@ -298,6 +307,29 @@ pub fn compile_shaper_font(
     };
     result.add_diagnostics(&warnings, &tree);
     Ok(result)
+}
+
+/// Classifies glyphs by category unless the feature source declared its own
+/// glyph classes, which are more specific, as in export.
+fn add_glyph_classes(
+    compilation: &mut compile::Compilation,
+    glyph_map: &GlyphMap,
+    classes: &BTreeMap<String, GlyphClassDef>,
+) {
+    if compilation.gdef_classes.is_some() {
+        return;
+    }
+
+    let class_def: ClassDef = classes
+        .iter()
+        .filter_map(|(name, class)| Some((glyph_map.get(name.as_str())?, *class as u16)))
+        .collect();
+    if class_def.iter().next().is_none() {
+        return;
+    }
+
+    let gdef = compilation.gdef.get_or_insert_with(Default::default);
+    gdef.glyph_class_def.set(class_def);
 }
 
 fn parse_feature_source(
