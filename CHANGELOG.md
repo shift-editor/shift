@@ -1,5 +1,50 @@
 # Changelog
 
+## [0.1.2](https://github.com/shift-editor/shift/compare/v0.1.1...v0.1.2) (2026-10-10)
+
+
+### Features
+
+* **agents:** bundle shift-cli and install it from the app menu ([#550](https://github.com/shift-editor/shift/issues/550)) ([5f88819](https://github.com/shift-editor/shift/commit/5f888190ba9347da17b3483d625e46715decdd9a))
+* **cli:** expand atomic font authoring ([#507](https://github.com/shift-editor/shift/issues/507)) ([ef19915](https://github.com/shift-editor/shift/commit/ef199153f63381a5dcf69ea0d79a7a57aa75a190))
+* **cli:** install the Shift agent skill with shift-cli ([#569](https://github.com/shift-editor/shift/issues/569)) ([981ac96](https://github.com/shift-editor/shift/commit/981ac96332765a142c2ce7b8841c93e083685f51))
+* **cli:** read and edit kerning with shift-cli ([#580](https://github.com/shift-editor/shift/issues/580)) ([e38be44](https://github.com/shift-editor/shift/commit/e38be4427b38fd93d07ab21c132ecb63c1b9a21a))
+* colour the launcher ghost lid with the theme accent ([#506](https://github.com/shift-editor/shift/issues/506)) ([8a1616a](https://github.com/shift-editor/shift/commit/8a1616a4355498c3584269b9f49d51b7de7bffe7))
+* **desktop:** reopen documents on their last glyph after interruptions ([#495](https://github.com/shift-editor/shift/issues/495)) ([1942499](https://github.com/shift-editor/shift/commit/19424990c1d9e86347ffd20bc72dc5334fafb555))
+* draw Shift's own title bar on Windows and Linux ([#557](https://github.com/shift-editor/shift/issues/557)) ([062d751](https://github.com/shift-editor/shift/commit/062d751f1a6d6700406cad9404413cff57db1c85))
+* **editor:** add a Kerning tool for proof text ([#553](https://github.com/shift-editor/shift/issues/553)) ([5ca476f](https://github.com/shift-editor/shift/commit/5ca476f232fc49b1d35a032dc3bbd67c60722885))
+* **editor:** add a Spacing tool for adjusting sidebearings in proof text ([#528](https://github.com/shift-editor/shift/issues/528)) ([6021608](https://github.com/shift-editor/shift/commit/6021608a5df3d3786764cfc21d02de22aa9529b1))
+* **editor:** create and edit kerning groups ([#561](https://github.com/shift-editor/shift/issues/561)) ([a032d30](https://github.com/shift-editor/shift/commit/a032d30c12f08c7368cc5afe7edf3e200cdf8589))
+* **editor:** let node definitions respond to double-clicks and content changes ([#508](https://github.com/shift-editor/shift/issues/508)) ([3ec02e8](https://github.com/shift-editor/shift/commit/3ec02e8612f380bf0dc27021b55f5eadd43d757f))
+* **editor:** show contour direction and first point in the object tree ([#485](https://github.com/shift-editor/shift/issues/485)) ([d641450](https://github.com/shift-editor/shift/commit/d6414501aa94c4ff626b3a3b6dcc9273425e5844))
+* **editor:** snap points to metrics and other points ([#513](https://github.com/shift-editor/shift/issues/513)) ([e7dacfa](https://github.com/shift-editor/shift/commit/e7dacfa6a420a212046953b44fd1fa0081ced869))
+* expose live Shift font and editor reads to agents ([#489](https://github.com/shift-editor/shift/issues/489)) ([fa46fd7](https://github.com/shift-editor/shift/commit/fa46fd76d8648b54fa1d7af5e27e38d1066e0417))
+* keep each master's kerning through import, save, and export ([#548](https://github.com/shift-editor/shift/issues/548)) ([af3caff](https://github.com/shift-editor/shift/commit/af3caffa934dff95410b8e5a629d8874e639e39f))
+* **mcp:** read kerning groups, pairs, and values over MCP ([#581](https://github.com/shift-editor/shift/issues/581)) ([e23ade2](https://github.com/shift-editor/shift/commit/e23ade2091d26fa4e6365e57830c1439e37dfc67))
+* store glyph categories and compile them into GDEF ([#588](https://github.com/shift-editor/shift/issues/588)) ([4077a4e](https://github.com/shift-editor/shift/commit/4077a4ef439f6d10bb5728cbf2b12012e2d4523e))
+* **text:** add editable text runs as scene nodes ([#459](https://github.com/shift-editor/shift/issues/459)) ([1b51cc3](https://github.com/shift-editor/shift/commit/1b51cc3190977195975e102f8196abbd693e732a))
+* **text:** kern proof text with the font's pair kerning ([#549](https://github.com/shift-editor/shift/issues/549)) ([484e663](https://github.com/shift-editor/shift/commit/484e66318c6bb32f56a3f2aca3aec7f3761e4572))
+* update Linux AppImages from their release channel ([#544](https://github.com/shift-editor/shift/issues/544)) ([81791fd](https://github.com/shift-editor/shift/commit/81791fda3f4e9c8f677d90790461b152db882dcf))
+
+
+### Bug Fixes
+
+* **desktop:** keep New and Open commands enabled without active windows ([#491](https://github.com/shift-editor/shift/issues/491)) ([b001475](https://github.com/shift-editor/shift/commit/b001475c4bdce0e7b6f0b79d25516c33e0e48d09))
+* **desktop:** keep the Text tool available when previewing fonts ([#529](https://github.com/shift-editor/shift/issues/529)) ([3cea05e](https://github.com/shift-editor/shift/commit/3cea05ea936d78880714cbff3222afd6b9649f35))
+* **editor:** keep anchors and components with the outline on LSB edits ([#531](https://github.com/shift-editor/shift/issues/531)) ([6ade7f2](https://github.com/shift-editor/shift/commit/6ade7f216bd5ff968a0a372bc1883d8485bf13b6))
+* **import:** inline feature include files so imported fonts compile ([#554](https://github.com/shift-editor/shift/issues/554)) ([443dc28](https://github.com/shift-editor/shift/commit/443dc288d6bc985beaa5ec3583f6cb6932f0cd84))
+* **interpolation:** restore interpolation for mapped weight axes ([#539](https://github.com/shift-editor/shift/issues/539)) ([0916dad](https://github.com/shift-editor/shift/commit/0916dad97d49bcf3b916cdb207f9dbc8faecae58))
+* make desktop chrome and canvas overlays follow the theme ([#469](https://github.com/shift-editor/shift/issues/469)) ([8dfe36f](https://github.com/shift-editor/shift/commit/8dfe36f01346a85790a5812b44a28e5e2e8c40b8))
+* open font files on Windows and Linux ([#547](https://github.com/shift-editor/shift/issues/547)) ([3bd06c6](https://github.com/shift-editor/shift/commit/3bd06c62e896b02e6cb1dc04ce38730578a9e8c2))
+* use the GPU for WebGPU on Linux ([#560](https://github.com/shift-editor/shift/issues/560)) ([d9e7a33](https://github.com/shift-editor/shift/commit/d9e7a33db64f19df5e8779d599e83203b78cc2e3))
+
+
+### Performance
+
+* **editor:** index store records and rebuild the scene only on node changes ([#517](https://github.com/shift-editor/shift/issues/517)) ([8bcbf5c](https://github.com/shift-editor/shift/commit/8bcbf5c241ea1fbcfc2a54d9953f951dce138e6a))
+* **editor:** stop selection and pointer events re-rendering the editor ([#505](https://github.com/shift-editor/shift/issues/505)) ([9c96150](https://github.com/shift-editor/shift/commit/9c961501d64d2b7413c8a21a0eec46557703341a))
+* speed up scrubbing, undo, and font opening on Linux ([#565](https://github.com/shift-editor/shift/issues/565)) ([417a0cb](https://github.com/shift-editor/shift/commit/417a0cbeba9b11258e591bd045705434a3bf3684))
+
 ## [0.1.1](https://github.com/shift-editor/shift/compare/v0.1.0...v0.1.1) (2026-10-01)
 
 
