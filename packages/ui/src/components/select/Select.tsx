@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Select as BaseSelect, type SelectRootProps } from "@base-ui-components/react/select";
+import { Select as BaseSelect, type SelectRootProps } from "@base-ui/react/select";
 import { Check, ChevronDown } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { usePortalContainer } from "../portal";

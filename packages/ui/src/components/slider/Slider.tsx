@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Slider as BaseSlider } from "@base-ui-components/react/slider";
+import { Slider as BaseSlider } from "@base-ui/react/slider";
 import { cn } from "../../lib/utils";
 
 type SliderRootProps = React.ComponentPropsWithoutRef<typeof BaseSlider.Root<number>>;

@@ -1,5 +1,5 @@
 import * as React from "react";
-import { NumberField as BaseNumberField } from "@base-ui-components/react/number-field";
+import { NumberField as BaseNumberField } from "@base-ui/react/number-field";
 import { cn } from "../../lib/utils";
 
 export interface NumberFieldProps extends React.ComponentPropsWithoutRef<
