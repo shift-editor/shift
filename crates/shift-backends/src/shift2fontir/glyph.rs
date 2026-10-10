@@ -90,7 +90,12 @@ impl Work<Context, WorkId, Error> for GlyphWork {
 
             let location =
                 normalized_source_location(source, &self.snapshot.axes, &metadata.all_source_axes)?;
-            builder.try_add_source(&location, to_glyph_instance(layer))?;
+            let mut instance = to_glyph_instance(layer);
+            if self.snapshot.nonspacing_marks.contains(self.glyph.name()) {
+                // Glyphs exports nonspacing marks with no advance.
+                instance.width = 0.0;
+            }
+            builder.try_add_source(&location, instance)?;
             add_anchors(&mut anchors, layer, &location)?;
         }
 

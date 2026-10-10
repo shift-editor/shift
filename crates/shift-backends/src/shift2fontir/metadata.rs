@@ -95,7 +95,18 @@ impl Work<Context, WorkId, Error> for StaticMetadataWork {
         context.preliminary_glyph_order.set(glyph_order);
         context
             .preliminary_gdef_categories
-            .set(PreliminaryGdefCategories::default());
+            .set(PreliminaryGdefCategories {
+                categories: self
+                    .snapshot
+                    .gdef_classes
+                    .iter()
+                    .map(|(name, class)| (name.as_str().into(), *class))
+                    .collect(),
+                // Classes are already final: marks by category, bases and
+                // ligatures inferred from anchors in `gdef_classes`.
+                infer_from_anchors: false,
+                ..Default::default()
+            });
         context.static_metadata.set(static_metadata);
         Ok(())
     }

@@ -14,11 +14,17 @@ fn source_collection(font: &shift_font::Font) -> shift_font::SourceCollection {
 }
 
 fn glyph_created(glyph: &shift_font::Glyph) -> shift_font::FontChange {
-    shift_font::FontChange::Glyph(shift_font::Replacement::new(None, Some(glyph.clone())))
+    shift_font::FontChange::Glyph(Box::new(shift_font::Replacement::new(
+        None,
+        Some(glyph.clone()),
+    )))
 }
 
 fn glyph_deleted(glyph: &shift_font::Glyph) -> shift_font::FontChange {
-    shift_font::FontChange::Glyph(shift_font::Replacement::new(Some(glyph.clone()), None))
+    shift_font::FontChange::Glyph(Box::new(shift_font::Replacement::new(
+        Some(glyph.clone()),
+        None,
+    )))
 }
 
 fn layer_created(
@@ -690,10 +696,10 @@ fn glyph_rename_preserves_authored_order() {
     replacement.set_name("second.alt");
     store
         .apply_change_set(&shift_font::FontChangeSet::from(
-            shift_font::FontChange::Glyph(shift_font::Replacement::new(
+            shift_font::FontChange::Glyph(Box::new(shift_font::Replacement::new(
                 Some(original),
                 Some(replacement),
-            )),
+            ))),
         ))
         .unwrap();
 
