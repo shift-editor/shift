@@ -7,12 +7,18 @@ import type {
   GlyphPage,
   GlyphResolveInput,
   GlyphSummary,
+  KerningGroupsInput,
+  KerningGroupSummary,
+  KerningPairPage,
+  KerningPairsInput,
+  KerningResolveInput,
   LayerGetInput,
   LayerRenderInput,
   LayerResolveInput,
   LayerSvg,
   LocationResolveInput,
   ResolvedGlyphs,
+  ResolvedKerningPairs,
   ResolvedLayer,
   ResolvedLocation,
   ShiftCapabilities,
@@ -62,6 +68,11 @@ export class ShiftReadScope implements ShiftRead {
     resolve(input: ShiftReadInput<LayerResolveInput>): Promise<ResolvedLayer>;
     render(input: ShiftReadInput<LayerRenderInput>): Promise<LayerSvg>;
   };
+  readonly kerning: {
+    groups(input?: ShiftReadInput<KerningGroupsInput>): Promise<KerningGroupSummary[]>;
+    pairs(input: ShiftReadInput<KerningPairsInput>): Promise<KerningPairPage>;
+    resolve(input: ShiftReadInput<KerningResolveInput>): Promise<ResolvedKerningPairs>;
+  };
 
   readonly #capabilities: ShiftCapabilities;
   readonly #windowId: number;
@@ -82,6 +93,7 @@ export class ShiftReadScope implements ShiftRead {
 
     const layers = capabilities.layers;
     const glyphs = capabilities.glyphs;
+    const kerning = capabilities.kerning;
     this.font = Object.freeze({
       get: async () => {
         this.#assertActive();
@@ -107,6 +119,14 @@ export class ShiftReadScope implements ShiftRead {
         this.#guard(input, (bound) => layers.resolve(bound)),
       render: (input: ShiftReadInput<LayerRenderInput>) =>
         this.#guard(input, (bound) => layers.render(bound)),
+    });
+    this.kerning = Object.freeze({
+      groups: (input: ShiftReadInput<KerningGroupsInput> = {}) =>
+        this.#guard(input, (bound) => kerning.groups(bound)),
+      pairs: (input: ShiftReadInput<KerningPairsInput>) =>
+        this.#guard(input, (bound) => kerning.pairs(bound)),
+      resolve: (input: ShiftReadInput<KerningResolveInput>) =>
+        this.#guard(input, (bound) => kerning.resolve(bound)),
     });
   }
 

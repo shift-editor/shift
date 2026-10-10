@@ -252,6 +252,45 @@ test.describe("sparse source reads", () => {
     expect(sparse?.advertised).toBe(true);
     expect(sparse?.missingAdvertised).toBe(false);
   });
+
+  test("reads kerning groups, a master's pairs, and a pair at every master", async ({ page }) => {
+    const mcpUrl = await enableAgentConnections(page);
+    const result = await runShiftCode(
+      mcpUrl,
+      `async () => {
+        const session = (await shift.sessions.list()).find(({ editorConnected }) => editorConnected);
+        if (!session) throw new Error("Expected connected font");
+        return shift.read({ windowId: session.windowId }, async (read) => {
+          const font = await read.font.get();
+          const lightCondensed = font.sources.find(({ name }) => name === "LightCondensed");
+          const groups = await read.kerning.groups({ position: "second" });
+          const pairs = await read.kerning.pairs({ sourceId: lightCondensed.id, glyph: "T" });
+          const resolved = await read.kerning.resolve({
+            pairs: [{ first: "T", second: "A" }],
+            sourceId: lightCondensed.id,
+          });
+          const [ta] = resolved.items;
+          return {
+            aGroupMembers: groups
+              .find(({ members }) => members.some(({ name }) => name === "A"))
+              ?.members.map(({ name }) => name),
+            tPairs: pairs.items.map(({ first, second, amount }) => [first.name, second.kind, amount]),
+            amount: ta.amount,
+            masters: ta.masters.length === font.sources.length,
+            lightCondensed: ta.masters.find(({ sourceId }) => sourceId === lightCondensed.id),
+          };
+        });
+      }`,
+    );
+
+    expect(result).toMatchObject({
+      aGroupMembers: ["A"],
+      tPairs: [["T", "group", -75]],
+      amount: -75,
+      masters: true,
+      lightCondensed: { amount: -75, origin: "authored", rule: "mixed" },
+    });
+  });
 });
 
 test("inspects the explicitly targeted live editor", async ({ editor }) => {

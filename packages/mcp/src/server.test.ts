@@ -65,6 +65,17 @@ const capabilities: ShiftCapabilities = {
       throw new Error("No open Shift window");
     },
   },
+  kerning: {
+    async groups() {
+      throw new Error("No open Shift window");
+    },
+    async pairs() {
+      throw new Error("No open Shift window");
+    },
+    async resolve() {
+      throw new Error("No open Shift window");
+    },
+  },
 };
 
 const execute = (code: string) => executeShiftCode(capabilities, code);

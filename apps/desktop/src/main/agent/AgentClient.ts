@@ -7,10 +7,13 @@ import type {
   GlyphPage,
   GlyphSelector,
   GlyphSummary,
+  KerningGroupSummary,
+  KerningPairPage,
   LayerAppearance,
   LayerOverlays,
   LayerSvg,
   ResolvedGlyphs,
+  ResolvedKerningPairs,
   ResolvedLayer,
   ResolvedLocation,
   ShiftObservation,
@@ -89,6 +92,24 @@ export class AgentClient {
     ifFontRevision?: FontRevision,
   ): Promise<ShiftObservation<ResolvedGlyphs>> {
     return this.#call("glyphs.resolve", { glyphIds, location, ifFontRevision });
+  }
+
+  kerningGroups(
+    input: AgentCallMap["kerning.groups"]["request"],
+  ): Promise<ShiftObservation<KerningGroupSummary[]>> {
+    return this.#call("kerning.groups", input);
+  }
+
+  kerningPairs(
+    input: AgentCallMap["kerning.pairs"]["request"],
+  ): Promise<ShiftObservation<KerningPairPage>> {
+    return this.#call("kerning.pairs", input);
+  }
+
+  resolveKerning(
+    input: AgentCallMap["kerning.resolve"]["request"],
+  ): Promise<ShiftObservation<ResolvedKerningPairs>> {
+    return this.#call("kerning.resolve", input);
   }
 
   getLayer(

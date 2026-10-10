@@ -7,15 +7,19 @@ import type {
   GlyphPage,
   GlyphSelector,
   GlyphSummary,
+  KerningGroupSummary,
+  KerningPairPage,
+  KerningPairQuery,
   LayerAppearance,
   LayerOverlays,
   LayerSvg,
   ResolvedGlyphs,
+  ResolvedKerningPairs,
   ResolvedLayer,
   ResolvedLocation,
   ShiftObservation,
 } from "@shift/runtime";
-import type { GlyphId, LayerId, SourceId } from "@shift/types";
+import type { GlyphId, KerningPosition, LayerId, SourceId } from "@shift/types";
 
 /** Main-to-renderer calls for live agent inspection of one explicit window. */
 export interface EditorCaptureBounds {
@@ -66,6 +70,29 @@ export type AgentCallMap = {
       ifFontRevision?: FontRevision;
     };
     response: ShiftObservation<ResolvedGlyphs>;
+  };
+  "kerning.groups": {
+    request: { position?: KerningPosition; ifFontRevision?: FontRevision };
+    response: ShiftObservation<KerningGroupSummary[]>;
+  };
+  "kerning.pairs": {
+    request: {
+      sourceId: SourceId;
+      glyph?: string;
+      limit?: number;
+      cursor?: string;
+      ifFontRevision?: FontRevision;
+    };
+    response: ShiftObservation<KerningPairPage>;
+  };
+  "kerning.resolve": {
+    request: {
+      pairs: KerningPairQuery[];
+      sourceId?: SourceId;
+      location?: AxisCoordinate[];
+      ifFontRevision?: FontRevision;
+    };
+    response: ShiftObservation<ResolvedKerningPairs>;
   };
   "layers.get": {
     request: { layerId: LayerId; ifFontRevision?: FontRevision };

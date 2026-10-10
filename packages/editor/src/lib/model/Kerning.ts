@@ -156,6 +156,25 @@ export class SourceKerning {
     return this.#values.get(first)?.get(second) ?? null;
   }
 
+  /** Returns every pair value the source authors, edits applied; a fresh array in no set order. */
+  pairs(): ResolvedKerning[] {
+    const pairs: ResolvedKerning[] = [];
+    for (const [first, row] of this.#values) {
+      for (const [second, committed] of row) {
+        const edited = this.#edits.get(first)?.get(second);
+        const amount = edited === undefined ? committed : edited;
+        if (amount !== null) pairs.push({ first, second, amount });
+      }
+    }
+    for (const [first, row] of this.#edits) {
+      for (const [second, amount] of row) {
+        if (amount === null || this.#values.get(first)?.has(second)) continue;
+        pairs.push({ first, second, amount });
+      }
+    }
+    return pairs;
+  }
+
   /** Whether the source authors at least one pair value. */
   get authorsAny(): boolean {
     for (const row of this.#edits.values()) {
@@ -265,6 +284,11 @@ export class Kerning {
   /** The amount authored for exactly this pair at a source; null when it has none. */
   authoredAmount(sourceId: SourceId, pair: KerningPairSides): number | null {
     return this.#sources.get(sourceId)?.amount(pair.first, pair.second) ?? null;
+  }
+
+  /** Returns every pair value authored at a source; empty for a source without kerning. */
+  authoredPairs(sourceId: SourceId): ResolvedKerning[] {
+    return this.#sources.get(sourceId)?.pairs() ?? [];
   }
 
   /**
