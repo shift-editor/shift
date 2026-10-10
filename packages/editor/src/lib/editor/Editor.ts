@@ -874,9 +874,7 @@ export class Editor {
         const component = renderModel?.componentAt([id]);
         if (!glyph || !component) continue;
 
-        const layer =
-          node.sourceId === this.activeSourceId ? glyph.layerForSource(node.sourceId) : null;
-        return new ComponentObject(component, node, layer);
+        return new ComponentObject(component, node, this.editableLayer(node));
       }
       return null;
     }
@@ -1098,6 +1096,24 @@ export class Editor {
    */
   layerForGlyph(glyphId: GlyphId, sourceId: SourceId): GlyphLayer | null {
     return this.glyphForId(glyphId)?.layerForSource(sourceId) ?? null;
+  }
+
+  /**
+   * Returns the authored layer a glyph node shows, when edits may target it.
+   *
+   * @remarks
+   * A node keeps the source it last showed while the location is interpolated,
+   * so its layer is editable only while that source is the active source.
+   * Reads the active source without tracking it; a `computed` that calls this
+   * tracks {@link activeSourceIdCell} itself to rerun when the location changes.
+   *
+   * @returns null at an interpolated location, for another source's node, or
+   * when the glyph has no layer at the node's source.
+   */
+  editableLayer(node: GlyphNode): GlyphLayer | null {
+    if (node.sourceId !== this.#activeSourceIdCell.peek()) return null;
+
+    return this.layerForGlyph(node.glyphId, node.sourceId);
   }
 
   /**
