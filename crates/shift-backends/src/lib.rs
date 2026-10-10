@@ -6,6 +6,7 @@ pub mod font_loader;
 pub mod font_source;
 pub mod format;
 pub mod formats;
+mod glyph_category;
 mod glyph_subset;
 pub mod import;
 mod import_report;
@@ -29,6 +30,7 @@ pub use font_source::{
     VariationRegion, VariationSupport,
 };
 pub use format::FontFormat;
+pub use glyph_category::{GlyphCategories, ResolvedCategory};
 pub use glyph_subset::GlyphSubsetView;
 pub use import::{FontImport, GlyphDirectoryEntry, ImportBatchLimit};
 pub use import_report::{ImportLoss, ImportLossKind, ImportReport};

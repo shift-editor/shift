@@ -313,11 +313,15 @@ fn load_glyphs(
     include_layer_payloads: bool,
 ) -> Result<Vec<font::Glyph>, StoreError> {
     let glyph_rows = {
-        let mut stmt = conn.prepare("SELECT id, name FROM glyphs ORDER BY order_index, id")?;
+        let mut stmt = conn.prepare(
+            "SELECT id, name, category, sub_category FROM glyphs ORDER BY order_index, id",
+        )?;
         stmt.query_map([], |row| {
             Ok((
                 font::GlyphId::from_raw(row.get::<_, String>(0)?),
                 row.get::<_, Option<String>>(1)?.unwrap_or_default(),
+                row.get::<_, Option<String>>(2)?,
+                row.get::<_, Option<String>>(3)?,
             ))
         })?
         .collect::<Result<Vec<_>, _>>()?
@@ -407,8 +411,11 @@ fn load_glyphs(
     }
 
     let mut glyphs = Vec::with_capacity(glyph_rows.len());
-    for (glyph_id, name) in glyph_rows {
+    for (glyph_id, name, category, sub_category) in glyph_rows {
         let mut glyph = font::Glyph::with_id(glyph_id.clone(), name);
+        // A name a later Shift wrote but this one does not know reads as unset.
+        glyph.set_category(category.and_then(|category| category.parse().ok()));
+        glyph.set_sub_category(sub_category.and_then(|sub_category| sub_category.parse().ok()));
         let mut glyph_unicodes = unicodes.remove(&glyph_id).unwrap_or_default();
         glyph_unicodes.sort_by_key(|(order_index, _)| *order_index);
         glyph.set_unicodes(

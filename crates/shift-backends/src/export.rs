@@ -266,6 +266,52 @@ mod tests {
             .any(|(codepoint, _)| codepoint == 0x0041));
     }
 
+    fn add_glyph_on_every_master(font: &mut Font, name: &str, unicode: u32, anchor: &str) {
+        let mut glyph = shift_font::Glyph::with_unicode(name, unicode);
+        for source in font.sources().to_vec() {
+            let mut layer =
+                shift_font::GlyphLayer::with_width(shift_font::LayerId::new(), source.id(), 300.0);
+            layer.add_anchor(shift_font::Anchor::new(
+                Some(anchor.to_string()),
+                100.0,
+                0.0,
+            ));
+            glyph.set_layer(layer);
+        }
+        font.insert_glyph(glyph).unwrap();
+    }
+
+    #[test]
+    fn compiles_glyph_categories_into_gdef_and_zero_width_marks() {
+        use skrifa::raw::TableProvider;
+        use write_fonts::tables::gdef::GlyphClassDef;
+
+        let mut font = sample_variable_font();
+        // An underscore anchor alone would make both of these marks.
+        add_glyph_on_every_master(&mut font, "jdotless", 0x0237, "_right");
+        add_glyph_on_every_master(&mut font, "acutecomb", 0x0301, "_top");
+
+        let bytes = FontExporter::new().compile_ttf(&font).unwrap();
+        let compiled = FontRef::new(&bytes).unwrap();
+        let gid = |codepoint: u32| compiled.charmap().map(codepoint).unwrap();
+        let class_def = compiled.gdef().unwrap().glyph_class_def().unwrap().unwrap();
+        let class = |codepoint: u32| class_def.get(gid(codepoint).try_into().unwrap());
+        let advance = |codepoint: u32| {
+            compiled
+                .glyph_metrics(
+                    skrifa::instance::Size::unscaled(),
+                    skrifa::instance::LocationRef::default(),
+                )
+                .advance_width(gid(codepoint))
+                .unwrap()
+        };
+
+        assert_ne!(class(0x0237), GlyphClassDef::Mark as u16);
+        assert_eq!(class(0x0301), GlyphClassDef::Mark as u16);
+        assert_eq!(advance(0x0237), 300.0);
+        assert_eq!(advance(0x0301), 0.0);
+    }
+
     #[test]
     fn version_string_omits_compiler_stamp() {
         let mut font = sample_variable_font();

@@ -1,9 +1,13 @@
 use shift_font::{GlyphId, KerningPair, KerningPosition, SourceId, test_support::sample_font};
 use shift_store::{SHIFT_DOCUMENT_SCHEMA_VERSION, ShiftStore};
 
-/// Rewrites current kerning tables into the empty version 1 shape, where
-/// pairs had no source and named glyphs and prefixed groups.
-const V1_KERNING_TABLES: &str = r#"
+/// Rewrites current tables into the empty version 1 shape, where glyphs had
+/// no categories and kerning pairs had no source and named glyphs and
+/// prefixed groups.
+const V1_TABLES: &str = r#"
+ALTER TABLE glyphs DROP COLUMN category;
+ALTER TABLE glyphs DROP COLUMN sub_category;
+
 DROP TABLE kerning_group_members;
 DROP TABLE kerning_groups;
 DROP TABLE kerning_pairs;
@@ -58,8 +62,8 @@ INSERT INTO kerning_pairs (
 fn write_version_1_document(path: &std::path::Path) {
     drop(ShiftStore::create_document(path, &sample_font()).expect("create document"));
     let conn = rusqlite::Connection::open(path).expect("raw open");
-    conn.execute_batch(V1_KERNING_TABLES)
-        .expect("write version 1 kerning tables");
+    conn.execute_batch(V1_TABLES)
+        .expect("write version 1 tables");
     conn.execute_batch(V1_KERNING_ROWS)
         .expect("write version 1 kerning rows");
 }
@@ -138,12 +142,12 @@ fn a_version_1_recovery_overlay_reopens_against_the_migrated_document() {
     drop(document);
     rusqlite::Connection::open(&path)
         .expect("raw open document")
-        .execute_batch(&format!("{V1_KERNING_TABLES}{V1_KERNING_ROWS}"))
-        .expect("restore version 1 document kerning");
+        .execute_batch(&format!("{V1_TABLES}{V1_KERNING_ROWS}"))
+        .expect("restore version 1 document tables");
     rusqlite::Connection::open(&recovery_path)
         .expect("raw open recovery")
-        .execute_batch(V1_KERNING_TABLES)
-        .expect("write version 1 recovery kerning tables");
+        .execute_batch(V1_TABLES)
+        .expect("write version 1 recovery tables");
 
     let document = ShiftStore::open_document_with_recovery(&path, &recovery_path)
         .expect("reopen version 1 document and recovery");
