@@ -12,7 +12,7 @@ import { Button, cn, Tooltip, TooltipContent, TooltipTrigger } from "@shift/ui";
 import KerningIcon from "@/assets/toolbar/kerning.svg";
 import MinusIcon from "@/assets/general/minus.svg";
 import { KerningGroupField } from "@/components/kerning/KerningGroupField";
-import { KerningGroupsPanel } from "@/components/kerning/KerningGroupsPanel";
+import { KerningGroupsPanel } from "@/components/kerning/groups/KerningGroupsPanel";
 import { LockIcon } from "@/components/icons/LockIcon";
 import { LockOpenIcon } from "@/components/icons/LockOpenIcon";
 import type { Editor } from "@shift/editor";

@@ -1,6 +1,6 @@
 import { useSignalState } from "@shift/editor/signals";
 import { KerningGroupField } from "@/components/kerning/KerningGroupField";
-import { KerningGroupsPanel } from "@/components/kerning/KerningGroupsPanel";
+import { KerningGroupsPanel } from "@/components/kerning/groups/KerningGroupsPanel";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { SidebarSection, SidebarSubsection } from "./SidebarSection";
 
