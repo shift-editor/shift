@@ -6,8 +6,8 @@ use fontdrasil::orchestration::{Access, Work};
 use fontdrasil::types::Axes;
 use fontir::error::Error;
 use fontir::ir::{
-    FeaturesSource, GdefCategories, GlobalMetric, GlobalMetricsBuilder, GlyphOrder, NameBuilder,
-    StaticMetadata, DEFAULT_VENDOR_ID,
+    FeaturesSource, GlobalMetric, GlobalMetricsBuilder, GlyphOrder, NameBuilder,
+    PreliminaryGdefCategories, StaticMetadata, DEFAULT_VENDOR_ID,
 };
 use fontir::orchestration::{Context, WorkId};
 use shift_font::{MetricKind, Source};
@@ -39,7 +39,10 @@ impl Work<Context, WorkId, Error> for StaticMetadataWork {
     }
 
     fn also_completes(&self) -> Vec<WorkId> {
-        vec![WorkId::PreliminaryGlyphOrder]
+        vec![
+            WorkId::PreliminaryGlyphOrder,
+            WorkId::PreliminaryGdefCategories,
+        ]
     }
 
     fn exec(&self, context: &Context) -> Result<(), Error> {
@@ -64,7 +67,6 @@ impl Work<Context, WorkId, Error> for StaticMetadataWork {
         names.add_if_present(NameId::LICENSE_URL, &metadata.license_url);
         names.add_if_present(NameId::TYPOGRAPHIC_FAMILY_NAME, &metadata.family_name);
         names.add_if_present(NameId::TYPOGRAPHIC_SUBFAMILY_NAME, &metadata.style_name);
-        names.apply_default_fallbacks(DEFAULT_VENDOR_ID);
 
         let ir_axes = Axes::from(self.snapshot.ir_axes.clone());
         let global_locations = self.global_locations(&ir_axes)?;
@@ -73,13 +75,12 @@ impl Work<Context, WorkId, Error> for StaticMetadataWork {
                 .map_err(|message| Error::InvalidEntry("Shift named instance", message))?;
         let mut static_metadata = StaticMetadata::new(
             self.snapshot.metrics.units_per_em as u16,
-            names.into_inner(),
+            names.build(DEFAULT_VENDOR_ID),
             self.snapshot.ir_axes.clone(),
             named_instances,
             global_locations,
             None,
             self.default_source()?.italic_angle().unwrap_or_default(),
-            GdefCategories::default(),
             None,
             false,
         )?;
@@ -92,6 +93,9 @@ impl Work<Context, WorkId, Error> for StaticMetadataWork {
         }
 
         context.preliminary_glyph_order.set(glyph_order);
+        context
+            .preliminary_gdef_categories
+            .set(PreliminaryGdefCategories::default());
         context.static_metadata.set(static_metadata);
         Ok(())
     }

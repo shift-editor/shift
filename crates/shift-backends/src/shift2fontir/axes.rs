@@ -150,7 +150,8 @@ fn mapped_converter(
         .into_iter()
         .map(|(user, design)| (UserCoord::new(user), DesignCoord::new(design)))
         .collect();
-    Ok(CoordConverter::new(values, default_idx))
+    CoordConverter::new(values, default_idx)
+        .map_err(|error| format!("mapping '{}' is invalid: {error}", mapping.name()))
 }
 
 /// Converts one Shift master location from design space to normalized space.
@@ -201,5 +202,5 @@ pub(super) fn normalized_source_location(
         })
         .collect();
 
-    Ok(design_location.to_normalized(ir_axes))
+    Ok(design_location.to_normalized(ir_axes)?)
 }
