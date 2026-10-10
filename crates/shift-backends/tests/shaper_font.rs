@@ -13,8 +13,11 @@ fn imported_glyphs_features_compile_into_a_shaper_font() {
     let request = ShaperFontRequest::from_font(&font).unwrap();
     let compilation = compile_shaper_font(&request).unwrap();
 
-    let shaper_font = compilation
-        .font
-        .unwrap_or_else(|| panic!("feature source failed to compile:\n{}", compilation.report));
+    let shaper_font = compilation.font.unwrap_or_else(|| {
+        panic!(
+            "feature source failed to compile: {:?}",
+            compilation.diagnostics
+        )
+    });
     assert!(!shaper_font.bytes().is_empty());
 }
