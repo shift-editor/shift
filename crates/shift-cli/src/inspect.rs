@@ -1,3 +1,4 @@
+mod kerning;
 mod render;
 mod report;
 
@@ -15,6 +16,7 @@ pub enum InspectView {
     Sources,
     Glyphs,
     Layers,
+    Kerning,
 }
 
 #[cfg(test)]
@@ -76,11 +78,12 @@ mod tests {
         let output = report.render(InspectView::Summary, RenderMode::Plain);
 
         assert!(output.contains("Dogfood.shift"));
-        assert!(output.contains("app id  SHFT"));
-        assert!(output.contains("axes    1"));
+        assert!(output.contains("app id    SHFT"));
+        assert!(output.contains("axes                1"));
         assert!(output.contains("Sources"));
         assert!(output.contains("Bold*"));
         assert!(output.contains("wght=700"));
+        assert!(output.contains("metric definitions  "));
     }
 
     #[test]
@@ -171,6 +174,54 @@ mod tests {
         assert!(output.contains("source"));
         assert!(output.contains("Bold"));
         assert!(output.contains("600"));
+    }
+
+    #[test]
+    fn kerning_view_counts_each_masters_pairs_by_kind() {
+        let font = shift_font::test_support::sample_font();
+        let report = InspectReport::from_font(Path::new("/tmp/Kerned.shift"), &font);
+        let output = report.render(InspectView::Kerning, RenderMode::Plain);
+        let json = serde_json::to_value(&report).unwrap();
+
+        assert_eq!(json["kerning"]["firstGroupCount"], 1);
+        assert_eq!(json["kerning"]["secondGroupCount"], 1);
+        assert_eq!(json["kerning"]["sources"][0]["name"], "Regular");
+        assert_eq!(json["kerning"]["sources"][0]["groupPairCount"], 1);
+        assert_eq!(json["kerning"]["sources"][1]["pairCount"], 2);
+        assert_eq!(json["kerning"]["sources"][1]["exceptionCount"], 1);
+        assert_eq!(json["kerning"]["sources"][1]["unresolvedCount"], 0);
+        assert!(output.contains("first groups   1"), "{output}");
+        assert!(output.contains("exception"), "{output}");
+        assert!(
+            report
+                .render(InspectView::Summary, RenderMode::Plain)
+                .contains("kerning pairs       3")
+        );
+    }
+
+    #[test]
+    fn kerning_view_counts_pairs_that_no_longer_resolve() {
+        let mut font = shift_font::test_support::sample_font();
+        let group_id = font
+            .kerning()
+            .group_id(shift_font::KerningPosition::Second, "A")
+            .cloned()
+            .unwrap();
+        font.kerning_mut().remove_group(&group_id);
+        let report = InspectReport::from_font(Path::new("/tmp/Kerned.shift"), &font);
+
+        assert_eq!(report.kerning.sources[0].unresolved_count, 1);
+        assert_eq!(report.kerning.sources[1].unresolved_count, 2);
+    }
+
+    #[test]
+    fn kerning_view_has_empty_state() {
+        let report = InspectReport::from_font(Path::new("/tmp/Empty.shift"), &Font::new());
+
+        assert_eq!(
+            report.render(InspectView::Kerning, RenderMode::Plain),
+            "Kerning\nNo kerning"
+        );
     }
 
     fn sample_font() -> Font {

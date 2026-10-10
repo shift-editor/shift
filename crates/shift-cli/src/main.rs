@@ -2,23 +2,27 @@ mod authoring;
 mod cli;
 mod glyph_inspect;
 mod inspect;
+mod kerning;
 mod skill;
 
 use std::io::{self, IsTerminal, Write};
 
 use authoring::{
-    AuthoringReport, add_axis, add_glyph, add_instance, add_layer, add_source, copy_layer,
-    create_font, font_info, remove_instance, set_axis, set_font, set_glyphs, set_instance,
-    set_layer,
+    AuthoringReport, add_axis, add_glyph, add_instance, add_layer, add_source,
+    assign_kerning_group, copy_layer, create_font, create_kerning_group, delete_kerning_group,
+    font_info, remove_instance, remove_kerning, rename_kerning_group, set_axis, set_font,
+    set_glyphs, set_instance, set_kerning, set_layer, unassign_kerning_group,
 };
 use clap::Parser;
 use cli::{
     AxisCommand, Cli, Command, CompileArgs, FontCommand, GlyphCommand, InstanceCommand,
-    LayerCommand, SkillCommand, SourceCommand,
+    KerningCommand, KerningGroupCommand, LayerCommand, SkillCommand, SourceCommand,
 };
 use glyph_inspect::GlyphInspection;
 use inspect::{InspectReport, RenderMode};
+use kerning::{get_kerning, kerning_groups, list_kerning};
 use miette::IntoDiagnostic;
+use serde::Serialize;
 use shift_backends::{ExportFormat, FontExportRequest, FontExportResult, FontExporter};
 use shift_store::ShiftStore;
 use skill::{SkillReport, install_skill, show_skill, skill_status};
@@ -105,12 +109,73 @@ fn main() -> miette::Result<()> {
                 write_authoring_result(copy_layer(args), json)
             }
         },
+        Command::Kerning { command } => kerning_command(command),
         Command::Skill { command } => match command {
             SkillCommand::Show(args) => write_stdout(show_skill(&args)?.trim_end()),
             SkillCommand::Install(args) => write_skill_report(&install_skill(&args)?, args.json),
             SkillCommand::Status(args) => write_skill_report(&skill_status(&args)?, args.json),
         },
     }
+}
+
+fn kerning_command(command: KerningCommand) -> miette::Result<()> {
+    match command {
+        KerningCommand::List(args) => {
+            let json = args.json;
+            write_report(&list_kerning(args)?, json, |report| report.render())
+        }
+        KerningCommand::Groups(args) => {
+            let json = args.json;
+            write_report(&kerning_groups(args)?, json, |report| report.render())
+        }
+        KerningCommand::Get(args) => {
+            let json = args.json;
+            write_report(&get_kerning(args)?, json, |report| report.render())
+        }
+        KerningCommand::Set(args) => {
+            let json = args.mutation.json;
+            write_authoring_result(set_kerning(*args), json)
+        }
+        KerningCommand::Remove(args) => {
+            let json = args.mutation.json;
+            write_authoring_result(remove_kerning(args), json)
+        }
+        KerningCommand::Group { command } => match command {
+            KerningGroupCommand::Create(args) => {
+                let json = args.mutation.json;
+                write_authoring_result(create_kerning_group(args), json)
+            }
+            KerningGroupCommand::Rename(args) => {
+                let json = args.mutation.json;
+                write_authoring_result(rename_kerning_group(args), json)
+            }
+            KerningGroupCommand::Delete(args) => {
+                let json = args.mutation.json;
+                write_authoring_result(delete_kerning_group(args), json)
+            }
+            KerningGroupCommand::Assign(args) => {
+                let json = args.mutation.json;
+                write_authoring_result(assign_kerning_group(args), json)
+            }
+            KerningGroupCommand::Unassign(args) => {
+                let json = args.mutation.json;
+                write_authoring_result(unassign_kerning_group(args), json)
+            }
+        },
+    }
+}
+
+fn write_report<T: Serialize>(
+    report: &T,
+    json: bool,
+    render: impl FnOnce(&T) -> String,
+) -> miette::Result<()> {
+    let output = if json {
+        serde_json::to_string_pretty(report).into_diagnostic()?
+    } else {
+        render(report)
+    };
+    write_stdout(&output)
 }
 
 fn write_authoring_result(

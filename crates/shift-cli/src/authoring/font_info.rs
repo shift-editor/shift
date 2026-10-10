@@ -194,7 +194,7 @@ fn source_metric_intents(
     Ok(intents)
 }
 
-fn target_source_id(font: &Font, selector: Option<&str>) -> Result<SourceId> {
+pub(super) fn target_source_id(font: &Font, selector: Option<&str>) -> Result<SourceId> {
     match selector {
         Some(selector) => resolve_source_id(font, selector),
         None => font

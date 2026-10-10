@@ -9,6 +9,12 @@ use crate::inspect::InspectView;
 
 mod font;
 pub use font::{FontInfoArgs, SetFontArgs};
+mod kerning;
+pub use kerning::{
+    AssignKerningGroupArgs, CreateKerningGroupArgs, DeleteKerningGroupArgs, GetKerningArgs,
+    KerningCommand, KerningGroupCommand, KerningGroupsArgs, KerningPositionArg, ListKerningArgs,
+    RemoveKerningArgs, RenameKerningGroupArgs, SetKerningArgs, UnassignKerningGroupArgs,
+};
 mod skill;
 pub use skill::{
     InstallSkillArgs, ShowSkillArgs, SkillAgent, SkillCommand, SkillIdentityArgs, SkillStatusArgs,
@@ -83,6 +89,12 @@ pub enum Command {
     Layer {
         #[command(subcommand)]
         command: LayerCommand,
+    },
+
+    /// Inspect or author kerning groups and per-master pair values.
+    Kerning {
+        #[command(subcommand)]
+        command: KerningCommand,
     },
 
     /// Install or print the agent skill that matches this command.

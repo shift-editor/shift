@@ -39,6 +39,7 @@ cargo run -p shift-cli -- inspect --view axes path/to/Family.shift
 cargo run -p shift-cli -- inspect --view mappings path/to/Family.shift
 cargo run -p shift-cli -- inspect --view sources path/to/Family.shift
 cargo run -p shift-cli -- inspect --view layers path/to/Family.shift
+cargo run -p shift-cli -- inspect --view kerning path/to/Family.shift
 cargo run -p shift-cli -- inspect --json path/to/Family.shift
 cargo run -p shift-cli -- glyph inspect path/to/Family.glyphs Aacute
 cargo run -p shift-cli -- glyph inspect path/to/Family.designspace Aacute \
@@ -68,6 +69,7 @@ Document inspection views:
 - `sources`: design sources and locations
 - `glyphs`: glyph names, Unicode values, and layer counts
 - `layers`: glyph layer source bindings and geometry counts
+- `kerning`: group counts and each master's pairs by kind (glyph, exception, group), counting pairs whose glyph or group no longer exists
 
 `glyph inspect` reads one glyph through Shift's semantic font model from `.shift`, UFO,
 Designspace, Glyphs, TTF, or OTF input. Locations use external/user-space `TAG=VALUE`
@@ -259,6 +261,54 @@ existing products, names, IDs, and order, skipping occupied locations. Discrete
 axes use only authored values. Reapplying the presets is a no-op with `wrote: false`
 and no changes; this convenience option cannot be combined with individual
 name/location/PostScript flags. It does not generate outlines or static fonts.
+
+### Kerning
+
+```sh
+shift kerning list Family.designspace --glyph A
+shift kerning groups Family.ufo --position first
+shift kerning get Family.shift A V --location wght=650
+shift kerning set Lab.shift @A @V -60 --source Bold
+shift kerning set Lab.shift A W -40
+shift kerning remove Lab.shift A W
+shift kerning set Lab.shift --input kerning.json --dry-run --json
+shift kerning group create Lab.shift A A Aacute Agrave --position first
+shift kerning group assign Lab.shift A Atilde --position first
+shift kerning group unassign Lab.shift Atilde --position first
+shift kerning group rename Lab.shift A A_round --position first
+shift kerning group delete Lab.shift A_round --position first
+```
+
+`list`, `groups`, and `get` read `.shift`, UFO, Designspace, and Glyphs sources (compiled
+TTF and OTF files have no authored kerning to read); edits need a `.shift` document.
+A pair's `first` side is the left glyph, whose first-position group (UFO `kern1`) kerns its
+right edge; `second` is the right glyph, whose second-position group (UFO `kern2`) kerns
+its left edge. A side is a glyph name or ID, or `@NAME` for a group at that side's position.
+Groups are selected by name with `--position`, or by full stable ID. Edits default to
+the default source unless `--source` names a master.
+
+`get` resolves a glyph pair the way export compiles it. At each master it reports the
+value, its `origin`, and for an `authored` value the pair and `rule` that supplied it:
+`glyph`, `exception` (glyph against group), or `group`. A master that authors other
+pairs but not this one is `unkerned` (zero); a master that authors no kerning is
+`interpolated` from those that do. `--location` adds
+the value at an external location.
+
+`set --input` applies groups, then pairs, as one atomic change:
+
+```json
+{
+  "groups": [{ "position": "first", "name": "A", "members": ["A", "Aacute"] }],
+  "pairs": [
+    { "source": "Regular", "first": "@A", "second": "V", "value": -40 },
+    { "first": "A", "second": "W", "value": null }
+  ]
+}
+```
+
+A group that does not exist is created; `members`, when given, becomes its whole
+membership. Pairs may name groups the batch creates. A pair without `source` edits the
+default source, and `null` removes the value there.
 
 Every mutation supports:
 

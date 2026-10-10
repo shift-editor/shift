@@ -20,14 +20,20 @@ mod glyph;
 mod glyph_batch;
 mod input;
 mod instance;
+mod kerning;
 mod layer_payload;
 mod report;
 
 pub use axis::set_axis;
 pub use font_info::{font_info, set_font};
 pub use glyph::{add_glyph, add_layer, copy_layer, set_layer};
+pub(crate) use glyph::{resolve_glyph_id, resolve_source_id};
 pub use glyph_batch::set_glyphs;
 pub use instance::{add_instance, remove_instance, set_instance};
+pub use kerning::{
+    assign_kerning_group, create_kerning_group, delete_kerning_group, remove_kerning,
+    rename_kerning_group, set_kerning, unassign_kerning_group,
+};
 use report::report_changes;
 pub use report::{AuthoringChange, AuthoringReport};
 
