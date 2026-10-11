@@ -18,7 +18,7 @@ import { LockOpenIcon } from "@/components/icons/LockOpenIcon";
 import type { Editor } from "@shift/editor";
 import type { SourceId } from "@shift/types";
 import { useEditor } from "@/workspace/WorkspaceContext";
-import { EditableSidebarInput } from "./EditableSidebarInput";
+import { SidebarNumberField } from "./SidebarNumberField";
 import { SidebarSection, SidebarSubsection } from "./SidebarSection";
 
 /**
@@ -70,17 +70,15 @@ export const KerningPairSection = () => {
           </div>
         </SidebarSubsection>
         <SidebarSubsection title="Value">
-          <EditableSidebarInput
+          <SidebarNumberField
             key={`${pairKey}:${activeSourceId}`}
             ariaLabel="Kerning"
-            className="pl-8"
-            iconPosition="left"
-            icon={
+            label={
               <KerningIcon aria-hidden className="h-5 w-5 text-sidebar-icon" strokeWidth={1.25} />
             }
             value={edited?.amount ?? Math.round(pair.amount)}
             disabled={!edited}
-            onValueChange={(amount) => pair.set(editor, amount)}
+            onValueCommit={(amount) => pair.set(editor, amount)}
           />
         </SidebarSubsection>
         {kernedSources.length > 1 ? (
@@ -215,13 +213,13 @@ const MasterKernRow = ({
         </span>
       </span>
       <div className="w-16 shrink-0">
-        <EditableSidebarInput
+        <SidebarNumberField
           ariaLabel={`Kerning at ${sourceName}`}
-          className="text-right"
+          inputClassName="text-right"
           value={applied?.amount ?? null}
           placeholder={String(resolved)}
           disabled={!editable}
-          onValueChange={(amount) => pair.set(editor, amount, sourceId)}
+          onValueCommit={(amount) => pair.set(editor, amount, sourceId)}
         />
       </div>
       <div className="flex w-6 shrink-0 justify-center">
