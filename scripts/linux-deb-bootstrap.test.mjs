@@ -64,10 +64,12 @@ test("Nightly Linux packages do not enroll in the Release repository", async () 
   assertExcludesRepositoryConfiguration(configuration.rpm);
 });
 
-test("arm64 Release DEB does not enroll in the amd64 APT repository", async () => {
+test("arm64 Release DEB bootstraps the same APT repository", async () => {
   const configuration = await loadLinuxPackageConfiguration("release", "arm64");
 
-  assertExcludesRepositoryConfiguration(configuration.deb);
+  for (const destination of repositoryDestinations) {
+    assert.ok(configuration.deb.some((entry) => entry.endsWith(`=${destination}`)));
+  }
   assertExcludesRepositoryConfiguration(configuration.rpm);
 });
 
