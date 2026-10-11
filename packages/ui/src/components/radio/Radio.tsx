@@ -3,23 +3,17 @@ import { Radio as BaseRadio } from "@base-ui/react/radio";
 import { RadioGroup as BaseRadioGroup } from "@base-ui/react/radio-group";
 import { cn } from "../../lib/utils";
 
-export type RadioGroupProps = React.ComponentPropsWithoutRef<typeof BaseRadioGroup>;
+export type RadioGroupProps = React.ComponentProps<typeof BaseRadioGroup>;
 
-export const RadioGroup = React.forwardRef<
-  React.ElementRef<typeof BaseRadioGroup>,
-  RadioGroupProps
->(({ className, ...props }, ref) => (
-  <BaseRadioGroup ref={ref} className={cn("gap-2", className)} {...props} />
-));
+export function RadioGroup({ className, ...props }: RadioGroupProps) {
+  return <BaseRadioGroup className={cn("gap-2", className)} {...props} />;
+}
 
-RadioGroup.displayName = "RadioGroup";
+export type RadioCardProps = React.ComponentProps<typeof BaseRadio.Root>;
 
-export type RadioCardProps = React.ComponentPropsWithoutRef<typeof BaseRadio.Root>;
-
-export const RadioCard = React.forwardRef<React.ElementRef<typeof BaseRadio.Root>, RadioCardProps>(
-  ({ className, ...props }, ref) => (
+export function RadioCard({ className, ...props }: RadioCardProps) {
+  return (
     <BaseRadio.Root
-      ref={ref}
       className={cn(
         "flex h-12 cursor-pointer items-center justify-between gap-2 rounded-sm border border-transparent px-2 text-sm font-normal",
         "transition-colors duration-200 hover:bg-hover/50 data-[checked]:border-accent data-[checked]:bg-hover",
@@ -29,7 +23,5 @@ export const RadioCard = React.forwardRef<React.ElementRef<typeof BaseRadio.Root
       )}
       {...props}
     />
-  ),
-);
-
-RadioCard.displayName = "RadioCard";
+  );
+}

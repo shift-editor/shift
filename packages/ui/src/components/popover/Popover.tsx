@@ -7,88 +7,61 @@ export interface PopoverProps extends React.ComponentProps<typeof BasePopover.Ro
 
 export const Popover = (props: PopoverProps) => <BasePopover.Root {...props} />;
 
-export interface PopoverTriggerProps extends React.ComponentPropsWithoutRef<
-  typeof BasePopover.Trigger
-> {}
+export interface PopoverTriggerProps extends React.ComponentProps<typeof BasePopover.Trigger> {}
 
-export const PopoverTrigger = React.forwardRef<HTMLButtonElement, PopoverTriggerProps>(
-  ({ className, ...props }, ref) => (
-    <BasePopover.Trigger ref={ref} className={cn(className)} {...props} />
-  ),
-);
-PopoverTrigger.displayName = "PopoverTrigger";
+export function PopoverTrigger({ className, ...props }: PopoverTriggerProps) {
+  return <BasePopover.Trigger className={cn(className)} {...props} />;
+}
 
 export function PopoverPortal(props: React.ComponentProps<typeof BasePopover.Portal>) {
   const container = usePortalContainer();
   return <BasePopover.Portal container={container} {...props} />;
 }
 
-export interface PopoverPositionerProps extends React.ComponentPropsWithoutRef<
+export interface PopoverPositionerProps extends React.ComponentProps<
   typeof BasePopover.Positioner
 > {}
 
-export const PopoverPositioner = React.forwardRef<
-  React.ElementRef<typeof BasePopover.Positioner>,
-  PopoverPositionerProps
->(({ className, ...props }, ref) => (
-  <BasePopover.Positioner ref={ref} className={cn("z-50", className)} {...props} />
-));
-PopoverPositioner.displayName = "PopoverPositioner";
+export function PopoverPositioner({ className, ...props }: PopoverPositionerProps) {
+  return <BasePopover.Positioner className={cn("z-50", className)} {...props} />;
+}
 
-export interface PopoverPopupProps extends React.ComponentPropsWithoutRef<
-  typeof BasePopover.Popup
-> {}
+export interface PopoverPopupProps extends React.ComponentProps<typeof BasePopover.Popup> {}
 
-export const PopoverPopup = React.forwardRef<
-  React.ElementRef<typeof BasePopover.Popup>,
-  PopoverPopupProps
->(({ className, ...props }, ref) => (
-  <BasePopover.Popup
-    ref={ref}
-    className={cn(
-      "min-w-32 rounded-md border border-line-subtle bg-surface p-1 shadow-lg",
-      "focus-visible:outline-none",
-      className,
-    )}
-    {...props}
-  />
-));
-PopoverPopup.displayName = "PopoverPopup";
+export function PopoverPopup({ className, ...props }: PopoverPopupProps) {
+  return (
+    <BasePopover.Popup
+      className={cn(
+        "min-w-32 rounded-md border border-line-subtle bg-surface p-1 shadow-lg",
+        "focus-visible:outline-none",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
 
-export interface PopoverTitleProps extends React.ComponentPropsWithoutRef<
-  typeof BasePopover.Title
-> {}
+export interface PopoverTitleProps extends React.ComponentProps<typeof BasePopover.Title> {}
 
-export const PopoverTitle = React.forwardRef<
-  React.ElementRef<typeof BasePopover.Title>,
-  PopoverTitleProps
->(({ className, ...props }, ref) => (
-  <BasePopover.Title
-    ref={ref}
-    className={cn("text-ui font-medium text-primary", className)}
-    {...props}
-  />
-));
-PopoverTitle.displayName = "PopoverTitle";
+export function PopoverTitle({ className, ...props }: PopoverTitleProps) {
+  return (
+    <BasePopover.Title className={cn("text-ui font-medium text-primary", className)} {...props} />
+  );
+}
 
-export interface PopoverCloseProps extends React.ComponentPropsWithoutRef<
-  typeof BasePopover.Close
-> {
+export interface PopoverCloseProps extends React.ComponentProps<typeof BasePopover.Close> {
   variant?: "icon";
 }
 
-export const PopoverClose = React.forwardRef<
-  React.ElementRef<typeof BasePopover.Close>,
-  PopoverCloseProps
->(({ className, variant, ...props }, ref) => (
-  <BasePopover.Close
-    ref={ref}
-    className={cn(
-      variant === "icon" &&
-        "inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded text-primary/70 transition-colors hover:bg-hover hover:text-primary",
-      className,
-    )}
-    {...props}
-  />
-));
-PopoverClose.displayName = "PopoverClose";
+export function PopoverClose({ className, variant, ...props }: PopoverCloseProps) {
+  return (
+    <BasePopover.Close
+      className={cn(
+        variant === "icon" &&
+          "inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded text-primary/70 transition-colors hover:bg-hover hover:text-primary",
+        className,
+      )}
+      {...props}
+    />
+  );
+}

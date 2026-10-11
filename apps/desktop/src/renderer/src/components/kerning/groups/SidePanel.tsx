@@ -1,4 +1,4 @@
-import { Button, Input, Search, Tooltip, TooltipContent, TooltipTrigger, X } from "@shift/ui";
+import { Button, Input, Search, Tooltip, X } from "@shift/ui";
 
 interface SidePanelProps {
   readonly title: string;
@@ -38,19 +38,10 @@ export function SidePanel({
     >
       <div className="flex h-8 items-center justify-between border-b border-line-subtle px-2">
         <h2 className="truncate text-ui font-medium text-primary">{title}</h2>
-        <Tooltip>
-          <TooltipTrigger>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label="Close"
-              onClick={onClose}
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Close</TooltipContent>
+        <Tooltip content="Close">
+          <Button type="button" variant="ghost" size="icon-sm" aria-label="Close" onClick={onClose}>
+            <X className="h-4 w-4" />
+          </Button>
         </Tooltip>
       </div>
       <div className="border-b border-line-subtle p-2">

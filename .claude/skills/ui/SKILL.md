@@ -27,7 +27,7 @@ When library behavior or composition is unclear, inspect the installed Base UI t
 - Keep application state and domain behavior in the consuming app. Shared wrappers own primitive composition, reusable visual defaults, and widget-local behavior only.
 - Use the Base UI component name for its Shift wrapper: `Button`, `Menu`, `Popover`, `Tooltip`, and so on.
 - Re-export every shared component and public prop type through its component barrel and `packages/ui/src/index.ts`.
-- Prefer `React.ComponentPropsWithoutRef`, `React.ElementRef`, and `React.forwardRef` so wrappers preserve the primitive contract. Set `displayName` on forwarded components.
+- Write wrappers as plain functions whose props extend `React.ComponentProps<typeof BaseX>`. React 19 passes `ref` as a prop, so spreading the remaining props forwards it; do not use `React.forwardRef` or `displayName`.
 - Compose Base UI triggers with its `render` prop. Produce exactly one interactive DOM element: no nested buttons, no trigger-only wrapper spans, and no duplicated event targets.
 - Use Base UI state attributes such as `data-[disabled]`, `data-[highlighted]`, `data-[active]`, and `data-[starting-style]` instead of duplicating primitive state in React.
 

@@ -8,7 +8,7 @@ import {
   type KerningSideId,
 } from "@shift/editor/model";
 import { useRef } from "react";
-import { Button, cn, Tooltip, TooltipContent, TooltipTrigger } from "@shift/ui";
+import { Button, cn, Tooltip } from "@shift/ui";
 import KerningIcon from "@/assets/toolbar/kerning.svg";
 import MinusIcon from "@/assets/general/minus.svg";
 import { KerningGroupField } from "@/components/kerning/KerningGroupField";
@@ -141,22 +141,19 @@ const ExceptionLock = ({ editor, pair, position }: PairSideFieldProps) => {
   const Icon = lock.locked ? LockIcon : LockOpenIcon;
 
   return (
-    <Tooltip>
-      <TooltipTrigger>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label={action}
-          aria-disabled={!lock.toggleable || undefined}
-          className="shrink-0 text-sidebar-icon"
-          onClick={() => {
-            if (lock.toggleable) pair.toggleLock(editor, position);
-          }}
-        >
-          <Icon aria-hidden className="h-4 w-4" />
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>{action}</TooltipContent>
+    <Tooltip content={action}>
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        aria-label={action}
+        aria-disabled={!lock.toggleable || undefined}
+        className="shrink-0 text-sidebar-icon"
+        onClick={() => {
+          if (lock.toggleable) pair.toggleLock(editor, position);
+        }}
+      >
+        <Icon aria-hidden className="h-4 w-4" />
+      </Button>
     </Tooltip>
   );
 };
@@ -224,28 +221,29 @@ const MasterKernRow = ({
       </div>
       <div className="flex w-6 shrink-0 justify-center">
         {applied && editable ? (
-          <Tooltip>
-            <TooltipTrigger>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                aria-label={`Remove kerning at ${sourceName}`}
-                className="text-sidebar-icon"
-                onClick={() =>
-                  void editor.font.setKerningValues(
-                    [kerningValueEdit(sourceId, applied)],
-                    "Remove kerning",
-                  )
-                }
-              >
-                <MinusIcon aria-hidden className="h-3 w-3" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              Remove {sideLabel(editor, kerning, applied.first)} /{" "}
-              {sideLabel(editor, kerning, applied.second)} at this master
-            </TooltipContent>
+          <Tooltip
+            content={
+              <>
+                Remove {sideLabel(editor, kerning, applied.first)} /{" "}
+                {sideLabel(editor, kerning, applied.second)} at this master
+              </>
+            }
+          >
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`Remove kerning at ${sourceName}`}
+              className="text-sidebar-icon"
+              onClick={() =>
+                void editor.font.setKerningValues(
+                  [kerningValueEdit(sourceId, applied)],
+                  "Remove kerning",
+                )
+              }
+            >
+              <MinusIcon aria-hidden className="h-3 w-3" />
+            </Button>
           </Tooltip>
         ) : null}
       </div>

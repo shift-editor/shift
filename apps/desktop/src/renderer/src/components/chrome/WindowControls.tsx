@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Button, Minus, Square, Tooltip, TooltipContent, TooltipTrigger, X } from "@shift/ui";
+import { Button, Minus, Square, Tooltip, X } from "@shift/ui";
 import type { CommandId } from "@shared/commands";
 import type { WindowButton, WindowButtonLayout } from "@shared/menu/types";
 import { getShiftHost } from "@/host/shiftHost";
@@ -36,17 +36,14 @@ export const WindowControls = ({ side }: { side: "start" | "end" }) => {
       {buttons.map((button) => {
         const { label, command, icon: Icon } = BUTTONS[button];
         return (
-          <Tooltip key={button}>
-            <TooltipTrigger>
-              <Button
-                icon={<Icon width={16} height={16} />}
-                aria-label={label}
-                variant="toolbar"
-                size="icon"
-                onClick={() => runCommand(command)}
-              />
-            </TooltipTrigger>
-            <TooltipContent side="bottom">{label}</TooltipContent>
+          <Tooltip key={button} content={label} side="bottom">
+            <Button
+              icon={<Icon width={16} height={16} />}
+              aria-label={label}
+              variant="toolbar"
+              size="icon"
+              onClick={() => runCommand(command)}
+            />
           </Tooltip>
         );
       })}

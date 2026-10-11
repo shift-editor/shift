@@ -15,9 +15,7 @@ export function Select<Value, Multiple extends boolean | undefined = false>(
   return <BaseSelect.Root {...props} />;
 }
 
-export interface SelectTriggerProps extends React.ComponentPropsWithoutRef<
-  typeof BaseSelect.Trigger
-> {
+export interface SelectTriggerProps extends React.ComponentProps<typeof BaseSelect.Trigger> {
   variant?: "filled" | "plain";
 }
 
@@ -26,123 +24,97 @@ const triggerVariantStyles = {
   plain: "bg-background",
 };
 
-export const SelectTrigger = React.forwardRef<
-  React.ElementRef<typeof BaseSelect.Trigger>,
-  SelectTriggerProps
->(({ className, variant = "filled", ...props }, ref) => (
-  <BaseSelect.Trigger
-    ref={ref}
-    className={cn(
-      "flex h-7 min-w-0 cursor-pointer items-center justify-between gap-2 rounded px-2",
-      "text-sm text-primary outline-none focus-visible:ring-1 focus-visible:ring-accent",
-      "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
-      triggerVariantStyles[variant],
-      className,
-    )}
-    {...props}
-  />
-));
-SelectTrigger.displayName = "SelectTrigger";
+export function SelectTrigger({ className, variant = "filled", ...props }: SelectTriggerProps) {
+  return (
+    <BaseSelect.Trigger
+      className={cn(
+        "flex h-7 min-w-0 cursor-pointer items-center justify-between gap-2 rounded px-2",
+        "text-sm text-primary outline-none focus-visible:ring-1 focus-visible:ring-accent",
+        "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+        triggerVariantStyles[variant],
+        className,
+      )}
+      {...props}
+    />
+  );
+}
 
 export const SelectValue = BaseSelect.Value;
 
-export interface SelectIconProps extends React.ComponentPropsWithoutRef<typeof BaseSelect.Icon> {}
+export interface SelectIconProps extends React.ComponentProps<typeof BaseSelect.Icon> {}
 
-export const SelectIcon = React.forwardRef<
-  React.ElementRef<typeof BaseSelect.Icon>,
-  SelectIconProps
->(({ className, children, ...props }, ref) => (
-  <BaseSelect.Icon ref={ref} className={cn("shrink-0 text-muted", className)} {...props}>
-    {children ?? <ChevronDown className="h-3.5 w-3.5" />}
-  </BaseSelect.Icon>
-));
-SelectIcon.displayName = "SelectIcon";
+export function SelectIcon({ className, children, ...props }: SelectIconProps) {
+  return (
+    <BaseSelect.Icon className={cn("shrink-0 text-muted", className)} {...props}>
+      {children ?? <ChevronDown className="h-3.5 w-3.5" />}
+    </BaseSelect.Icon>
+  );
+}
 
 export function SelectPortal(props: React.ComponentProps<typeof BaseSelect.Portal>) {
   const container = usePortalContainer();
   return <BaseSelect.Portal container={container} {...props} />;
 }
 
-export interface SelectPositionerProps extends React.ComponentPropsWithoutRef<
-  typeof BaseSelect.Positioner
-> {}
+export interface SelectPositionerProps extends React.ComponentProps<typeof BaseSelect.Positioner> {}
 
-export const SelectPositioner = React.forwardRef<
-  React.ElementRef<typeof BaseSelect.Positioner>,
-  SelectPositionerProps
->(({ className, ...props }, ref) => (
-  <BaseSelect.Positioner ref={ref} className={cn("z-50", className)} {...props} />
-));
-SelectPositioner.displayName = "SelectPositioner";
+export function SelectPositioner({ className, ...props }: SelectPositionerProps) {
+  return <BaseSelect.Positioner className={cn("z-50", className)} {...props} />;
+}
 
-export interface SelectPopupProps extends React.ComponentPropsWithoutRef<typeof BaseSelect.Popup> {}
+export interface SelectPopupProps extends React.ComponentProps<typeof BaseSelect.Popup> {}
 
-export const SelectPopup = React.forwardRef<
-  React.ElementRef<typeof BaseSelect.Popup>,
-  SelectPopupProps
->(({ className, ...props }, ref) => (
-  <BaseSelect.Popup
-    ref={ref}
-    className={cn(
-      "min-w-(--anchor-width) rounded-md border border-line-subtle bg-surface p-1 shadow-lg outline-none",
-      className,
-    )}
-    {...props}
-  />
-));
-SelectPopup.displayName = "SelectPopup";
+export function SelectPopup({ className, ...props }: SelectPopupProps) {
+  return (
+    <BaseSelect.Popup
+      className={cn(
+        "min-w-(--anchor-width) rounded-md border border-line-subtle bg-surface p-1 shadow-lg outline-none",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
 
 export const SelectList = BaseSelect.List;
 
-export interface SelectItemProps extends React.ComponentPropsWithoutRef<typeof BaseSelect.Item> {}
+export interface SelectItemProps extends React.ComponentProps<typeof BaseSelect.Item> {}
 
-export const SelectItem = React.forwardRef<
-  React.ElementRef<typeof BaseSelect.Item>,
-  SelectItemProps
->(({ className, ...props }, ref) => (
-  <BaseSelect.Item
-    ref={ref}
-    className={cn(
-      "grid h-7 cursor-pointer select-none grid-cols-[1rem_minmax(0,1fr)] items-center gap-2 rounded px-2",
-      "text-sm whitespace-nowrap text-primary outline-none data-[highlighted]:bg-hover/50",
-      "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
-      className,
-    )}
-    {...props}
-  />
-));
-SelectItem.displayName = "SelectItem";
+export function SelectItem({ className, ...props }: SelectItemProps) {
+  return (
+    <BaseSelect.Item
+      className={cn(
+        "grid h-7 cursor-pointer select-none grid-cols-[1rem_minmax(0,1fr)] items-center gap-2 rounded px-2",
+        "text-sm whitespace-nowrap text-primary outline-none data-[highlighted]:bg-hover/50",
+        "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
 
-export interface SelectItemIndicatorProps extends React.ComponentPropsWithoutRef<
+export interface SelectItemIndicatorProps extends React.ComponentProps<
   typeof BaseSelect.ItemIndicator
 > {}
 
-export const SelectItemIndicator = React.forwardRef<
-  React.ElementRef<typeof BaseSelect.ItemIndicator>,
-  SelectItemIndicatorProps
->(({ className, children, ...props }, ref) => (
-  <BaseSelect.ItemIndicator
-    ref={ref}
-    className={cn("flex items-center justify-center", className)}
-    {...props}
-  >
-    {children ?? <Check className="h-3.5 w-3.5" strokeWidth={1.75} />}
-  </BaseSelect.ItemIndicator>
-));
-SelectItemIndicator.displayName = "SelectItemIndicator";
+export function SelectItemIndicator({ className, children, ...props }: SelectItemIndicatorProps) {
+  return (
+    <BaseSelect.ItemIndicator
+      className={cn("flex items-center justify-center", className)}
+      {...props}
+    >
+      {children ?? <Check className="h-3.5 w-3.5" strokeWidth={1.75} />}
+    </BaseSelect.ItemIndicator>
+  );
+}
 
-export interface SelectItemTextProps extends React.ComponentPropsWithoutRef<
-  typeof BaseSelect.ItemText
-> {}
+export interface SelectItemTextProps extends React.ComponentProps<typeof BaseSelect.ItemText> {}
 
 /**
  * Option label, pinned to the item's second column so unselected options,
  * which render no indicator, stay aligned with the selected one.
  */
-export const SelectItemText = React.forwardRef<
-  React.ElementRef<typeof BaseSelect.ItemText>,
-  SelectItemTextProps
->(({ className, ...props }, ref) => (
-  <BaseSelect.ItemText ref={ref} className={cn("col-start-2", className)} {...props} />
-));
-SelectItemText.displayName = "SelectItemText";
+export function SelectItemText({ className, ...props }: SelectItemTextProps) {
+  return <BaseSelect.ItemText className={cn("col-start-2", className)} {...props} />;
+}

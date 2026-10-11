@@ -9,8 +9,6 @@ import {
   MenuSeparator,
   MenuTrigger,
   Tooltip,
-  TooltipContent,
-  TooltipTrigger,
 } from "@shift/ui";
 import VerticalEllipsis from "@/assets/general/vertical-ellipsis.svg";
 import { SidebarActionButton, SidebarActionRow } from "@/components/sidebar";
@@ -100,30 +98,24 @@ const InstanceActionsMenu = ({
 }: InstanceActionsMenuProps) => {
   if (disabled) {
     return (
-      <Tooltip>
-        <TooltipTrigger>
-          <SidebarActionButton label={`Actions for ${instanceName}`} aria-disabled>
-            <VerticalEllipsis className="h-5 w-5 text-icon-subtle" />
-          </SidebarActionButton>
-        </TooltipTrigger>
-        <TooltipContent>Instance actions unavailable in preview mode</TooltipContent>
+      <Tooltip content="Instance actions unavailable in preview mode">
+        <SidebarActionButton label={`Actions for ${instanceName}`} aria-disabled>
+          <VerticalEllipsis className="h-5 w-5 text-icon-subtle" />
+        </SidebarActionButton>
       </Tooltip>
     );
   }
 
   return (
     <Menu modal={false}>
-      <Tooltip>
-        <TooltipTrigger>
-          <MenuTrigger
-            render={
-              <Button variant="ghost" size="icon-sm" aria-label={`Actions for ${instanceName}`} />
-            }
-          >
-            <VerticalEllipsis className="h-5 w-5 text-icon-subtle" />
-          </MenuTrigger>
-        </TooltipTrigger>
-        <TooltipContent>{"Edit instance"}</TooltipContent>
+      <Tooltip content="Edit instance">
+        <MenuTrigger
+          render={
+            <Button variant="ghost" size="icon-sm" aria-label={`Actions for ${instanceName}`} />
+          }
+        >
+          <VerticalEllipsis className="h-5 w-5 text-icon-subtle" />
+        </MenuTrigger>
       </Tooltip>
       <MenuPortal>
         <MenuPositioner sideOffset={4} align="end">

@@ -17,8 +17,6 @@ import {
   PopoverTrigger,
   Search,
   Tooltip,
-  TooltipContent,
-  TooltipTrigger,
   X,
   cn,
 } from "@shift/ui";
@@ -70,44 +68,41 @@ export function KerningGroupField({
   return (
     <Popover open={open} onOpenChange={setOpen} modal={false}>
       {/* The full name when the field cuts it off. */}
-      <Tooltip disabled={!truncated || open || current === null}>
-        <TooltipTrigger>
-          <PopoverTrigger
-            disabled={disabled}
-            render={
-              <Button
-                ref={triggerRef}
-                type="button"
-                variant="field"
-                size="field"
-                isActive={open}
-                aria-label={ariaLabel}
-                className="h-6"
-                onPointerEnter={() => {
-                  const value = valueRef.current;
-                  setTruncated(value !== null && value.scrollWidth > value.clientWidth);
-                }}
-              >
-                <span className="flex min-w-0 flex-1 items-center gap-1.5">
-                  <span
-                    ref={valueRef}
-                    className={
-                      current === null
-                        ? "min-w-0 flex-1 truncate text-center text-secondary"
-                        : "min-w-0 flex-1 truncate text-left"
-                    }
-                  >
-                    {current ?? "—"}
-                  </span>
-                  <span className="flex shrink-0 text-muted">
-                    <ChevronDown className="h-3 w-3" strokeWidth={1.75} />
-                  </span>
+      <Tooltip disabled={!truncated || open || current === null} content={current}>
+        <PopoverTrigger
+          disabled={disabled}
+          render={
+            <Button
+              ref={triggerRef}
+              type="button"
+              variant="field"
+              size="field"
+              isActive={open}
+              aria-label={ariaLabel}
+              className="h-6"
+              onPointerEnter={() => {
+                const value = valueRef.current;
+                setTruncated(value !== null && value.scrollWidth > value.clientWidth);
+              }}
+            >
+              <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                <span
+                  ref={valueRef}
+                  className={
+                    current === null
+                      ? "min-w-0 flex-1 truncate text-center text-secondary"
+                      : "min-w-0 flex-1 truncate text-left"
+                  }
+                >
+                  {current ?? "—"}
                 </span>
-              </Button>
-            }
-          />
-        </TooltipTrigger>
-        <TooltipContent>{current}</TooltipContent>
+                <span className="flex shrink-0 text-muted">
+                  <ChevronDown className="h-3 w-3" strokeWidth={1.75} />
+                </span>
+              </span>
+            </Button>
+          }
+        />
       </Tooltip>
       <PopoverPortal>
         {/* Beside the sidebar like its other panels: right border over the sidebar's, top on the divider above the field's block. */}
@@ -193,27 +188,21 @@ function GroupList({ position, glyphId, glyphName, current, onDone }: GroupListP
       <div className="flex h-8 items-center justify-between gap-1 border-b border-line-subtle pl-2 pr-1">
         <PopoverTitle>{EDGE_GROUPS_TITLE[position]}</PopoverTitle>
         <div className="flex items-center">
-          <Tooltip>
-            <TooltipTrigger>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                aria-label="New group"
-                onClick={startNaming}
-              >
-                <Plus className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>New group</TooltipContent>
+          <Tooltip content="New group">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label="New group"
+              onClick={startNaming}
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
           </Tooltip>
-          <Tooltip>
-            <TooltipTrigger>
-              <PopoverClose variant="icon" aria-label="Close">
-                <X className="h-4 w-4" />
-              </PopoverClose>
-            </TooltipTrigger>
-            <TooltipContent>Close</TooltipContent>
+          <Tooltip content="Close">
+            <PopoverClose variant="icon" aria-label="Close">
+              <X className="h-4 w-4" />
+            </PopoverClose>
           </Tooltip>
         </div>
       </div>
@@ -326,19 +315,16 @@ function CreateGroupPanel({
     >
       <div className="flex h-8 items-center justify-between border-b border-line-subtle pl-2 pr-1">
         <h2 className="truncate text-ui font-medium text-primary">{title}</h2>
-        <Tooltip>
-          <TooltipTrigger>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label="Cancel"
-              onClick={onCancel}
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Cancel</TooltipContent>
+        <Tooltip content="Cancel">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Cancel"
+            onClick={onCancel}
+          >
+            <X className="h-4 w-4" />
+          </Button>
         </Tooltip>
       </div>
       <div className="flex flex-col gap-1 p-2">

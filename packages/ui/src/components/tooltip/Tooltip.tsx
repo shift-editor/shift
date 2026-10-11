@@ -12,22 +12,54 @@ function TooltipProvider({ children, delayDuration = 0 }: TooltipProviderProps) 
   return <BaseTooltip.Provider delay={delayDuration}>{children}</BaseTooltip.Provider>;
 }
 
-interface TooltipProps {
-  children: React.ReactNode;
+type TooltipProps = {
   delayDuration?: number;
   /** Keeps the tooltip from opening, such as when the text it repeats is shown in full. */
   disabled?: boolean;
-}
+} & (
+  | {
+      /** `TooltipTrigger` and `TooltipContent` parts. */
+      children: React.ReactNode;
+      content?: undefined;
+    }
+  | ({
+      /** The element the tooltip describes; it becomes the trigger. */
+      children: React.ReactElement<Record<string, unknown>>;
+      /** What the tooltip says, usually the action's name. */
+      content: React.ReactNode;
+    } & Pick<TooltipContentProps, "side" | "sideOffset">)
+);
 
-function Tooltip({ children, delayDuration, disabled }: TooltipProps) {
+/**
+ * A hover and focus tooltip.
+ *
+ * @remarks
+ * With `content`, the child is the trigger and the tooltip renders its own
+ * parts: `<Tooltip content="Close"><Button … /></Tooltip>`. Without it, compose
+ * `TooltipTrigger` and `TooltipContent` as children.
+ */
+function Tooltip(props: TooltipProps) {
+  const { delayDuration, disabled } = props;
+  const parts =
+    props.content === undefined ? (
+      props.children
+    ) : (
+      <>
+        <TooltipTrigger>{props.children}</TooltipTrigger>
+        <TooltipContent side={props.side} sideOffset={props.sideOffset}>
+          {props.content}
+        </TooltipContent>
+      </>
+    );
+
   if (delayDuration !== undefined) {
     return (
       <BaseTooltip.Provider delay={delayDuration}>
-        <BaseTooltip.Root disabled={disabled}>{children}</BaseTooltip.Root>
+        <BaseTooltip.Root disabled={disabled}>{parts}</BaseTooltip.Root>
       </BaseTooltip.Provider>
     );
   }
-  return <BaseTooltip.Root disabled={disabled}>{children}</BaseTooltip.Root>;
+  return <BaseTooltip.Root disabled={disabled}>{parts}</BaseTooltip.Root>;
 }
 
 interface TooltipTriggerProps {

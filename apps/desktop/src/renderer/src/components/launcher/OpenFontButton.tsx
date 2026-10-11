@@ -8,8 +8,6 @@ import {
   MenuPositioner,
   MenuTrigger,
   Tooltip,
-  TooltipContent,
-  TooltipTrigger,
 } from "@shift/ui";
 import { commandShortcuts, type CommandId } from "@shared/commands";
 import { getShiftHost } from "@/host/shiftHost";
@@ -47,22 +45,19 @@ export const OpenFontButton = () => {
     <div className="flex items-center">
       {openButton}
       <Menu modal={false}>
-        <Tooltip>
-          <TooltipTrigger>
-            <MenuTrigger
-              render={
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="More ways to open"
-                  className="data-[popup-open]:bg-hover/50"
-                />
-              }
-            >
-              <ChevronDown aria-hidden className="h-3.5 w-3.5" />
-            </MenuTrigger>
-          </TooltipTrigger>
-          <TooltipContent>More ways to open</TooltipContent>
+        <Tooltip content="More ways to open">
+          <MenuTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="More ways to open"
+                className="data-[popup-open]:bg-hover/50"
+              />
+            }
+          >
+            <ChevronDown aria-hidden className="h-3.5 w-3.5" />
+          </MenuTrigger>
         </Tooltip>
         <MenuPortal>
           <MenuPositioner side="bottom" align="end" sideOffset={4}>

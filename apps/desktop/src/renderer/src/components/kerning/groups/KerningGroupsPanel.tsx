@@ -14,8 +14,6 @@ import {
   TabsPanel,
   TabsTab,
   Tooltip,
-  TooltipContent,
-  TooltipTrigger,
   X,
 } from "@shift/ui";
 import { GroupsIcon } from "@/components/icons/GroupsIcon";
@@ -67,17 +65,14 @@ export function KerningGroupsPanel({ target, anchorRef }: KerningGroupsPanelProp
 
   return (
     <Popover modal={false}>
-      <Tooltip>
-        <TooltipTrigger>
-          <PopoverTrigger
-            render={
-              <SidebarActionButton label="Kerning groups">
-                <GroupsIcon aria-hidden className="h-4 w-4" />
-              </SidebarActionButton>
-            }
-          />
-        </TooltipTrigger>
-        <TooltipContent>Kerning groups</TooltipContent>
+      <Tooltip content="Kerning groups">
+        <PopoverTrigger
+          render={
+            <SidebarActionButton label="Kerning groups">
+              <GroupsIcon aria-hidden className="h-4 w-4" />
+            </SidebarActionButton>
+          }
+        />
       </Tooltip>
       <PopoverPortal>
         {/* Its right border on the sidebar's border, its top on the divider above the anchor. */}
@@ -91,13 +86,10 @@ export function KerningGroupsPanel({ target, anchorRef }: KerningGroupsPanelProp
           <PopoverPopup className="relative flex w-72 flex-col p-0">
             <div className="flex h-8 items-center justify-between border-b border-line-subtle px-2">
               <PopoverTitle>Kerning groups</PopoverTitle>
-              <Tooltip>
-                <TooltipTrigger>
-                  <PopoverClose variant="icon" aria-label="Close">
-                    <X className="h-4 w-4" />
-                  </PopoverClose>
-                </TooltipTrigger>
-                <TooltipContent>Close</TooltipContent>
+              <Tooltip content="Close">
+                <PopoverClose variant="icon" aria-label="Close">
+                  <X className="h-4 w-4" />
+                </PopoverClose>
               </Tooltip>
             </div>
             <Tabs

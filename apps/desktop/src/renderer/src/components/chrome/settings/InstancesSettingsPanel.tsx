@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import type { Axis, NamedInstance, NamedInstanceId } from "@shift/types";
-import { Input, Tooltip, TooltipContent, TooltipTrigger } from "@shift/ui";
+import { Input, Tooltip } from "@shift/ui";
 import { message } from "@shared/messages";
 import MinusIcon from "@/assets/general/minus.svg";
 import PlusIcon from "@/assets/general/plus.svg";
@@ -54,13 +54,10 @@ export const InstancesSettingsPanel = ({
           {canAuthor ? (
             <CreateInstanceMenu onInstanceCreated={setPendingInstanceId} />
           ) : (
-            <Tooltip>
-              <TooltipTrigger>
-                <SidebarActionButton label="Create instance" aria-disabled="true">
-                  <PlusIcon className="h-3 w-3" />
-                </SidebarActionButton>
-              </TooltipTrigger>
-              <TooltipContent>Create instance</TooltipContent>
+            <Tooltip content="Create instance">
+              <SidebarActionButton label="Create instance" aria-disabled="true">
+                <PlusIcon className="h-3 w-3" />
+              </SidebarActionButton>
             </Tooltip>
           )}
         </div>
@@ -73,23 +70,20 @@ export const InstancesSettingsPanel = ({
               isActive={instance.id === selectedInstance?.id}
               onClick={() => setSelectedInstanceId(instance.id)}
               actions={
-                <Tooltip>
-                  <TooltipTrigger>
-                    <SidebarActionButton
-                      label={`Delete ${instance.name}`}
-                      className="hover:bg-icon-button-hover"
-                      aria-disabled={!canAuthor || undefined}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        if (!canAuthor) return;
+                <Tooltip content={`Delete ${instance.name}`}>
+                  <SidebarActionButton
+                    label={`Delete ${instance.name}`}
+                    className="hover:bg-icon-button-hover"
+                    aria-disabled={!canAuthor || undefined}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      if (!canAuthor) return;
 
-                        font.deleteNamedInstance(instance.id);
-                      }}
-                    >
-                      <MinusIcon className="h-3 w-3" />
-                    </SidebarActionButton>
-                  </TooltipTrigger>
-                  <TooltipContent>{`Delete ${instance.name}`}</TooltipContent>
+                      font.deleteNamedInstance(instance.id);
+                    }}
+                  >
+                    <MinusIcon className="h-3 w-3" />
+                  </SidebarActionButton>
                 </Tooltip>
               }
             >

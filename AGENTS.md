@@ -55,11 +55,12 @@ Example wrapper structure:
 ```tsx
 import { Separator as BaseSeparator } from "@base-ui/react/separator";
 
-export const Separator = React.forwardRef<HTMLDivElement, SeparatorProps>(
-  ({ className, ...props }, ref) => (
-    <BaseSeparator ref={ref} className={cn("project-styles", className)} {...props} />
-  ),
-);
+export interface SeparatorProps extends React.ComponentProps<typeof BaseSeparator> {}
+
+// React 19 passes `ref` as a prop, so it reaches the primitive through `...props`.
+export function Separator({ className, ...props }: SeparatorProps) {
+  return <BaseSeparator className={cn("project-styles", className)} {...props} />;
+}
 ```
 
 ## Package Manager

@@ -2,51 +2,31 @@ import * as React from "react";
 import { Toolbar as BaseToolbar } from "@base-ui/react/toolbar";
 import { cn } from "../../lib/utils";
 
-export interface ToolbarProps extends React.ComponentPropsWithoutRef<typeof BaseToolbar.Root> {}
+export interface ToolbarProps extends React.ComponentProps<typeof BaseToolbar.Root> {}
 
-export const Toolbar = React.forwardRef<React.ElementRef<typeof BaseToolbar.Root>, ToolbarProps>(
-  ({ className, ...props }, ref) => (
-    <BaseToolbar.Root ref={ref} className={cn(className)} {...props} />
-  ),
-);
-Toolbar.displayName = "Toolbar";
+export function Toolbar({ className, ...props }: ToolbarProps) {
+  return <BaseToolbar.Root className={cn(className)} {...props} />;
+}
 
-export interface ToolbarGroupProps extends React.ComponentPropsWithoutRef<
-  typeof BaseToolbar.Group
-> {}
+export interface ToolbarGroupProps extends React.ComponentProps<typeof BaseToolbar.Group> {}
 
-export const ToolbarGroup = React.forwardRef<
-  React.ElementRef<typeof BaseToolbar.Group>,
-  ToolbarGroupProps
->(({ className, ...props }, ref) => (
-  <BaseToolbar.Group ref={ref} className={cn(className)} {...props} />
-));
-ToolbarGroup.displayName = "ToolbarGroup";
+export function ToolbarGroup({ className, ...props }: ToolbarGroupProps) {
+  return <BaseToolbar.Group className={cn(className)} {...props} />;
+}
 
-export interface ToolbarButtonProps extends React.ComponentPropsWithoutRef<
-  typeof BaseToolbar.Button
-> {}
+export interface ToolbarButtonProps extends React.ComponentProps<typeof BaseToolbar.Button> {}
 
-export const ToolbarButton = React.forwardRef<
-  React.ElementRef<typeof BaseToolbar.Button>,
-  ToolbarButtonProps
->(({ className, ...props }, ref) => (
-  <BaseToolbar.Button ref={ref} className={cn(className)} {...props} />
-));
-ToolbarButton.displayName = "ToolbarButton";
+export function ToolbarButton({ className, ...props }: ToolbarButtonProps) {
+  return <BaseToolbar.Button className={cn(className)} {...props} />;
+}
 
-export interface ToolbarSeparatorProps extends React.ComponentPropsWithoutRef<
-  typeof BaseToolbar.Separator
-> {}
+export interface ToolbarSeparatorProps extends React.ComponentProps<typeof BaseToolbar.Separator> {}
 
-export const ToolbarSeparator = React.forwardRef<
-  React.ElementRef<typeof BaseToolbar.Separator>,
-  ToolbarSeparatorProps
->(({ className, ...props }, ref) => (
-  <BaseToolbar.Separator
-    ref={ref}
-    className={cn("h-5 w-px shrink-0 bg-line-subtle", className)}
-    {...props}
-  />
-));
-ToolbarSeparator.displayName = "ToolbarSeparator";
+export function ToolbarSeparator({ className, ...props }: ToolbarSeparatorProps) {
+  return (
+    <BaseToolbar.Separator
+      className={cn("h-5 w-px shrink-0 bg-line-subtle", className)}
+      {...props}
+    />
+  );
+}

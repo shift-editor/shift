@@ -7,31 +7,21 @@ export interface CollapsibleProps extends React.ComponentProps<typeof BaseCollap
 
 export const Collapsible = (props: CollapsibleProps) => <BaseCollapsible.Root {...props} />;
 
-export interface CollapsibleTriggerProps extends React.ComponentPropsWithoutRef<
+export interface CollapsibleTriggerProps extends React.ComponentProps<
   typeof BaseCollapsible.Trigger
 > {}
 
-export const CollapsibleTrigger = React.forwardRef<
-  React.ElementRef<typeof BaseCollapsible.Trigger>,
-  CollapsibleTriggerProps
->(({ className, ...props }, ref) => (
-  <BaseCollapsible.Trigger ref={ref} className={cn("group", className)} {...props} />
-));
-CollapsibleTrigger.displayName = "CollapsibleTrigger";
+export function CollapsibleTrigger({ className, ...props }: CollapsibleTriggerProps) {
+  return <BaseCollapsible.Trigger className={cn("group", className)} {...props} />;
+}
 
-export interface CollapsiblePanelProps extends React.ComponentPropsWithoutRef<
-  typeof BaseCollapsible.Panel
-> {}
+export interface CollapsiblePanelProps extends React.ComponentProps<typeof BaseCollapsible.Panel> {}
 
-export const CollapsiblePanel = React.forwardRef<
-  React.ElementRef<typeof BaseCollapsible.Panel>,
-  CollapsiblePanelProps
->(({ className, ...props }, ref) => (
-  <BaseCollapsible.Panel ref={ref} className={cn(className)} {...props} />
-));
-CollapsiblePanel.displayName = "CollapsiblePanel";
+export function CollapsiblePanel({ className, ...props }: CollapsiblePanelProps) {
+  return <BaseCollapsible.Panel className={cn(className)} {...props} />;
+}
 
-export interface CollapsibleChevronProps extends React.ComponentPropsWithoutRef<"svg"> {}
+export interface CollapsibleChevronProps extends React.ComponentProps<"svg"> {}
 
 export const CollapsibleChevron = ({ className, ...props }: CollapsibleChevronProps) => (
   <ChevronRight

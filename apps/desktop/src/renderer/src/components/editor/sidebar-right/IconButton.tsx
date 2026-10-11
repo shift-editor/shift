@@ -1,4 +1,4 @@
-import { Button, cn, Tooltip, TooltipContent, TooltipTrigger } from "@shift/ui";
+import { Button, cn, Tooltip } from "@shift/ui";
 
 type IconButtonProps = {
   ariaLabel: string;
@@ -17,30 +17,31 @@ export const IconButton = ({
   shortcut,
   className,
 }: IconButtonProps) => (
-  <Tooltip>
-    <TooltipTrigger>
-      <Button
-        aria-label={ariaLabel}
-        aria-disabled={disabled || undefined}
-        className={cn(
-          "h-6 w-6 bg-icon-button p-1 text-sidebar-icon hover:bg-icon-button-hover",
-          className,
-        )}
-        variant="ghost"
-        onClick={() => {
-          if (disabled) return;
+  <Tooltip
+    content={
+      <>
+        {ariaLabel}
+        {shortcut ? (
+          <kbd className="ml-2 font-sans text-on-surface-inverse/70">{shortcut}</kbd>
+        ) : null}
+      </>
+    }
+  >
+    <Button
+      aria-label={ariaLabel}
+      aria-disabled={disabled || undefined}
+      className={cn(
+        "h-6 w-6 bg-icon-button p-1 text-sidebar-icon hover:bg-icon-button-hover",
+        className,
+      )}
+      variant="ghost"
+      onClick={() => {
+        if (disabled) return;
 
-          onClick();
-        }}
-      >
-        <Icon className="w-full h-full" />
-      </Button>
-    </TooltipTrigger>
-    <TooltipContent>
-      {ariaLabel}
-      {shortcut ? (
-        <kbd className="ml-2 font-sans text-on-surface-inverse/70">{shortcut}</kbd>
-      ) : null}
-    </TooltipContent>
+        onClick();
+      }}
+    >
+      <Icon className="w-full h-full" />
+    </Button>
   </Tooltip>
 );

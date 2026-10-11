@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { KerningPairPosition } from "@shift/editor/model";
 import { useSignalState } from "@shift/editor/signals";
 import type { GlyphId, KerningGroupId } from "@shift/types";
-import { Button, ChevronDown, Plus, Tooltip, TooltipContent, TooltipTrigger } from "@shift/ui";
+import { Button, ChevronDown, Plus, Tooltip } from "@shift/ui";
 import { TrashIcon } from "@/components/icons/TrashIcon";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { AddMembersPanel } from "./AddMembersPanel";
@@ -85,22 +85,19 @@ export function GroupView({ position, glyphId, otherGlyphId }: GroupViewProps) {
           </span>
         </Button>
         {shown ? (
-          <Tooltip>
-            <TooltipTrigger>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                className="size-7 shrink-0"
-                isActive={sidePanel === "add"}
-                aria-label={`Add glyphs to ${shown}`}
-                aria-expanded={sidePanel === "add"}
-                onClick={() => toggleSidePanel("add")}
-              >
-                <Plus className="h-4.5 w-4.5" strokeWidth={1.75} />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Add glyphs</TooltipContent>
+          <Tooltip content="Add glyphs">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="size-7 shrink-0"
+              isActive={sidePanel === "add"}
+              aria-label={`Add glyphs to ${shown}`}
+              aria-expanded={sidePanel === "add"}
+              onClick={() => toggleSidePanel("add")}
+            >
+              <Plus className="h-4.5 w-4.5" strokeWidth={1.75} />
+            </Button>
           </Tooltip>
         ) : null}
       </div>
@@ -171,19 +168,16 @@ function SelectedMembersRow({ group, selected, onRemove }: SelectedMembersRowPro
       <span className="truncate text-ui text-primary">
         {only ? glyphName(editor, only) : `${selected.length} glyphs selected`}
       </span>
-      <Tooltip>
-        <TooltipTrigger>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label={`Remove ${removing} from ${group}`}
-            onClick={onRemove}
-          >
-            <TrashIcon aria-hidden className="h-4 w-4" />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>Remove from group</TooltipContent>
+      <Tooltip content="Remove from group">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label={`Remove ${removing} from ${group}`}
+          onClick={onRemove}
+        >
+          <TrashIcon aria-hidden className="h-4 w-4" />
+        </Button>
       </Tooltip>
     </div>
   );
