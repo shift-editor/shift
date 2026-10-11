@@ -1,7 +1,7 @@
 import {
   Group,
   Panel,
-  Separator,
+  Separator as PanelSeparator,
   type GroupProps,
   type PanelImperativeHandle,
   type PanelProps,
@@ -27,32 +27,30 @@ export const ResizablePanel = ({ style, ...props }: ResizablePanelProps) => (
   <Panel style={{ overflow: "hidden", ...style }} {...props} />
 );
 
-const lineAnchor = (inset: ResizableHandleProps["inset"]): string => {
-  switch (inset) {
-    case "start":
-      return "aria-[orientation=vertical]:after:right-1/2 aria-[orientation=horizontal]:after:bottom-1/2";
-    case "end":
-      return "aria-[orientation=vertical]:after:left-1/2 aria-[orientation=horizontal]:after:top-1/2";
-    default:
-      return "aria-[orientation=vertical]:after:left-[calc(50%-1px)] aria-[orientation=horizontal]:after:top-[calc(50%-1px)]";
-  }
+const lineAnchor = {
+  start: "right-1/2",
+  end: "left-1/2",
+  center: "left-[calc(50%-1px)]",
 };
 
+/** A divider between side-by-side panels: a 16px grab area drawing a 2px line. */
 export const ResizableHandle = ({ className, inset, ...props }: ResizableHandleProps) => (
-  <Separator
+  <PanelSeparator
     className={cn(
       // Above the editor canvas stack (z-20) so the half of the grab area that overlaps the
       // neighbouring panel still receives the pointer.
-      "relative z-30 shrink-0 outline-none select-none",
-      "aria-[orientation=vertical]:-mx-2 aria-[orientation=vertical]:w-4 aria-[orientation=vertical]:cursor-col-resize",
-      "aria-[orientation=horizontal]:-my-2 aria-[orientation=horizontal]:h-4 aria-[orientation=horizontal]:cursor-row-resize",
-      "after:absolute after:transition-colors after:content-['']",
-      "aria-[orientation=vertical]:after:inset-y-0 aria-[orientation=vertical]:after:w-0.5",
-      "aria-[orientation=horizontal]:after:inset-x-0 aria-[orientation=horizontal]:after:h-0.5",
-      lineAnchor(inset),
-      "data-[separator=hover]:after:bg-accent/80 data-[separator=focus]:after:bg-accent/80 data-[separator=active]:after:bg-accent",
+      "group relative z-30 -mx-2 w-4 shrink-0 cursor-col-resize select-none",
       className,
     )}
     {...props}
-  />
+  >
+    <span
+      aria-hidden
+      className={cn(
+        "pointer-events-none absolute inset-y-0 w-0.5 transition-colors",
+        lineAnchor[inset ?? "center"],
+        "group-data-[separator=hover]:bg-accent/80 group-data-[separator=focus]:bg-accent/80 group-data-[separator=active]:bg-accent",
+      )}
+    />
+  </PanelSeparator>
 );
