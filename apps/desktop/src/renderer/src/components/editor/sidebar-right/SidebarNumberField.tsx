@@ -34,7 +34,7 @@ interface SidebarNumberFieldProps {
  * A numeric sidebar field over the shared `NumberField`.
  *
  * @remarks
- * Arrow keys step by 1 and Shift by 10, as Base UI does; Cmd steps by 100,
+ * Arrow keys step by 1 and Shift by 10, as Base UI does; Cmd or Ctrl steps by 100,
  * matching canvas nudges. Arrow keys do nothing while the value is `null`,
  * since there is no number to step from. Enter commits and leaves the field, Escape leaves it
  * without committing what was typed. While focused, the sidebar keeps keyboard
@@ -113,7 +113,8 @@ export function SidebarNumberField({
                       event.preventDefault();
                       return;
                     }
-                    if (!event.metaKey) return;
+                    // The accelerator is Cmd on macOS and Ctrl elsewhere, as for canvas nudges.
+                    if (!event.metaKey && !event.ctrlKey) return;
                     event.preventDefault();
                     onValueCommit(value + (event.key === "ArrowUp" ? 1 : -1) * NUDGES_VALUES.large);
                 }

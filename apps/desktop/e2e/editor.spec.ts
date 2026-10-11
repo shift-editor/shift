@@ -715,6 +715,10 @@ test.describe("Editor view", () => {
     await expect.poll(() => editor.selectionBounds()).toMatchObject({ x: initialX + 1 });
     await xInput.press("Shift+ArrowUp");
     await expect.poll(() => editor.selectionBounds()).toMatchObject({ x: initialX + 11 });
+    await xInput.press("ControlOrMeta+ArrowUp");
+    await expect.poll(() => editor.selectionBounds()).toMatchObject({ x: initialX + 111 });
+    await xInput.press("ControlOrMeta+ArrowDown");
+    await expect.poll(() => editor.selectionBounds()).toMatchObject({ x: initialX + 11 });
 
     await xInput.fill(String(initialX + 500));
     await xInput.press("Escape");
