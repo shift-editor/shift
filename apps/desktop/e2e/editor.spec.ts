@@ -452,13 +452,14 @@ test.describe("Editor view", () => {
         window.setContentSize(width! + change, height!);
       }, delta);
 
-    await resizeWindow(-200);
+    // The test window is already at its minimum size, so grow it.
+    await resizeWindow(200);
     try {
-      await expect.poll(() => elementWidth(canvas)).toBeCloseTo(canvasWidth - 200, 0);
+      await expect.poll(() => elementWidth(canvas)).toBeCloseTo(canvasWidth + 200, 0);
       expect(await elementWidth(leftSidebar)).toBeCloseTo(leftWidth, 0);
       expect(await elementWidth(rightSidebar)).toBeCloseTo(rightWidth, 0);
     } finally {
-      await resizeWindow(200);
+      await resizeWindow(-200);
     }
   });
 

@@ -78,16 +78,23 @@ export const useSidebarLayout = (view: "home" | "editor") => {
 
   /** Commits the widths after the user drags or nudges a divider. */
   const onLayoutChanged = (
-    _layout: unknown,
+    sizes: Record<string, number>,
     { isUserInteraction }: { isUserInteraction: boolean },
   ) => {
     if (!isUserInteraction) return;
+    // The panels report their new size only after this callback, so read it from `sizes`
+    // (percentages of the group).
+    const group = contentRefs.left.current?.closest("[data-group]");
+    if (!group) return;
+    const groupWidth = group.getBoundingClientRect().width;
     const layout = { ...layoutRef.current! };
     for (const side of SIDES) {
-      const panel = panelRefs[side].current;
-      if (!panel) continue;
-      const collapsed = panel.isCollapsed();
-      layout[side] = { size: collapsed ? layout[side].size : panel.getSize().inPixels, collapsed };
+      const percent = sizes[`${view}-${side}-sidebar`] ?? 0;
+      const collapsed = percent === 0;
+      layout[side] = {
+        size: collapsed ? layout[side].size : (percent / 100) * groupWidth,
+        collapsed,
+      };
     }
     commit(layout);
   };
