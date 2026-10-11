@@ -22,6 +22,7 @@ packages/ui/
     lib/
       utils.ts             -- cn utility (clsx + tailwind-merge)
     components/
+      autocomplete/        -- Search input with a filtered suggestion list, inline or in a popup
       button/Button.tsx    -- Button with variant/size/isActive/icon props
       checkbox/            -- Checkbox and indicator
       switch/              -- On/off Switch
@@ -74,6 +75,8 @@ Each component follows the same pattern: import the Base UI primitive, wrap it i
 **MenuItem** and **ContextMenuItem** provide default, danger, and outlined visual variants. Menu and context-menu popups and items share the same styling source so kebab and right-click menus remain visually identical. Dialog and popover close primitives remain unstyled by default so they can render text buttons, while their `icon` variant owns compact close-button styling.
 
 **Field**, **Checkbox**, **Switch**, **NumberField**, **Select**, **Tabs**, and **Textarea** are composable primitive families for settings and inspector forms. Validation and application state remain in the consumer; these wrappers only provide accessible structure, behavior, and Shift styling. `FieldLabel` uses `tone` for primary or secondary emphasis. `FieldControl`, `Textarea`, `SelectTrigger`, and `NumberFieldGroup` use `filled` for standard control backgrounds and `plain` for controls that match the application background. `Textarea` renders a native textarea through Base UI Field's `Control` slot so it participates in the same label, validation, and disabled-state contract. `Slider` forwards its `aria-label` to Base UI's interactive thumb rather than leaving the accessible name on the non-interactive root. `Progress` composes Base UI's root, track, and indicator while allowing a consumer to override each visual layer.
+
+**Autocomplete** wraps Base UI's autocomplete. `AutocompleteInput` renders the shared `Input`; with `inline open` the list sits in place, such as inside a dialog, and `autoHighlight="always"` makes Enter pick the first item. Consumers that rank results themselves pass `filter={null}`.
 
 **Menubar** wraps Base UI's menubar: place one `Menu` per top-level menu inside it, and give each `MenuTrigger` the `menubar` variant. `MenuSubmenuRoot` and `MenuSubmenuTrigger` nest menus inside a popup.
 
