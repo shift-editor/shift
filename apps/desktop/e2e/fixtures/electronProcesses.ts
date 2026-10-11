@@ -47,6 +47,10 @@ export class ElectronProcesses {
         MAIN_JS,
         `--user-data-dir=${launch.userDataDir}`,
         `--force-device-scale-factor=${launch.deviceScaleFactor ?? 1}`,
+        // GPU rasterization antialiases rounded edges differently between runs on a loaded
+        // runner, which fails exact interface goldens; the CPU rasterizer is deterministic.
+        // Canvas content renders through WebGPU and is unaffected.
+        "--disable-gpu-rasterization",
         ...(launch.args ?? []),
       ],
       env: launch.env,
