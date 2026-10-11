@@ -352,11 +352,33 @@ export interface NapiSpecimen {
   rightToLeft: boolean
 }
 
+/** Whether a theme's background is light or dark. */
+export declare const enum NapiThemeAppearance {
+  Light = 'light',
+  Dark = 'dark'
+}
+
+/** A valid theme file's contents. */
+export interface NapiThemeFile {
+  /** The name shown in Settings, when the file sets one. */
+  name?: string
+  appearance: NapiThemeAppearance
+  /** `base00` through `base0F` as lowercase `#rrggbb`. */
+  palette: Array<string>
+}
+
 /** Which appearance a `theme` table uses. */
 export declare const enum NapiThemeMode {
   System = 'system',
   Light = 'light',
   Dark = 'dark'
+}
+
+/** The result of reading a theme file. */
+export interface NapiThemeRead {
+  /** The theme, or nothing when an error means it cannot be used. */
+  theme?: NapiThemeFile
+  problems: Array<NapiConfigProblem>
 }
 
 /**
@@ -368,6 +390,9 @@ export interface NapiThemeSlots {
   light?: string
   dark?: string
 }
+
+/** Reads a `themes/<id>.toml` file. */
+export declare function themeRead(source: string): NapiThemeRead
 export interface NapiAddAnchorsIntent {
   layerId: LayerId
   anchors: Array<NapiAnchorSeed>

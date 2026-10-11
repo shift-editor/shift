@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { UserThemeFile } from "@shared/config/config";
 import {
   applyResolvedTheme,
   colorThemes,
@@ -6,9 +7,23 @@ import {
   readThemeSetting,
   resolveTheme,
   themeById,
+  userColorThemes,
   writeThemeSetting,
   type ThemePreference,
 } from ".";
+
+const nord = themeById("nord");
+const nordColors = Object.values(nord.palette);
+
+function themeFile(id: string, overrides: Partial<UserThemeFile> = {}): UserThemeFile {
+  return {
+    id,
+    path: `/config/themes/${id}.toml`,
+    theme: { name: "Rice", appearance: "dark", palette: nordColors },
+    problems: [],
+    ...overrides,
+  };
+}
 
 describe("color themes", () => {
   it("provides unique built-in theme ids with complete palettes", () => {
@@ -169,5 +184,58 @@ describe("theme setting in config.toml", () => {
         expect(readThemeSetting(written).preference).toEqual(preference);
       }
     }
+  });
+});
+
+describe("user themes", () => {
+  it("turns theme files into themes named after the file when they have no name", () => {
+    const files = [
+      themeFile("rice"),
+      themeFile("plain", { theme: { ...themeFile("x").theme!, name: undefined } }),
+    ];
+
+    const { themes, shadowing } = userColorThemes(files);
+
+    expect(themes.map(({ id, name, file }) => ({ id, name, file }))).toEqual([
+      { id: "rice", name: "Rice", file: "/config/themes/rice.toml" },
+      { id: "plain", name: "plain", file: "/config/themes/plain.toml" },
+    ]);
+    expect(themes[0]?.palette).toEqual(nord.palette);
+    expect(shadowing).toEqual([]);
+  });
+
+  it("ignores theme files that reuse a built-in id or system, and never-valid files", () => {
+    const { themes, shadowing } = userColorThemes([
+      themeFile("nord"),
+      themeFile("system"),
+      themeFile("broken", { theme: null }),
+    ]);
+
+    expect(themes).toEqual([]);
+    expect(shadowing.map(({ id }) => id)).toEqual(["nord", "system"]);
+  });
+
+  it("reads, writes, and resolves a user theme among the available themes", () => {
+    const { themes } = userColorThemes([themeFile("rice")]);
+    const available = [...colorThemes, ...themes];
+
+    const { preference, unknownThemes } = readThemeSetting("rice", available);
+    expect(preference).toEqual({ mode: "dark", light: "shift-light", dark: "rice" });
+    expect(unknownThemes).toEqual([]);
+    expect(writeThemeSetting(preference, null, available)).toBe("rice");
+    expect(resolveTheme(preference, "light", available).file).toBe("/config/themes/rice.toml");
+    expect(readThemeSetting("rice").unknownThemes).toEqual(["rice"]);
+  });
+
+  it("returns a new theme object when a theme file changes, which redraws the canvas", () => {
+    const before = userColorThemes([themeFile("rice")]).themes[0];
+    const after = userColorThemes([
+      themeFile("rice", {
+        theme: { name: "Rice", appearance: "light", palette: nordColors },
+      }),
+    ]).themes[0];
+
+    expect(after).not.toBe(before);
+    expect(after?.appearance).toBe("light");
   });
 });

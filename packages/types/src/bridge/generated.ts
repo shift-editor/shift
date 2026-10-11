@@ -339,8 +339,27 @@ export interface Specimen {
   rightToLeft: boolean
 }
 
+/** Whether a theme's background is light or dark. */
+export type ThemeAppearance = "light" | "dark";
+
+/** A valid theme file's contents. */
+export interface ThemeFile {
+  /** The name shown in Settings, when the file sets one. */
+  name?: string
+  appearance: ThemeAppearance
+  /** `base00` through `base0F` as lowercase `#rrggbb`. */
+  palette: Array<string>
+}
+
 /** Which appearance a `theme` table uses. */
 export type ThemeMode = "system" | "light" | "dark";
+
+/** The result of reading a theme file. */
+export interface ThemeRead {
+  /** The theme, or nothing when an error means it cannot be used. */
+  theme?: ThemeFile
+  problems: Array<ConfigProblem>
+}
 
 /**
  * A `theme` table: a mode and the theme used in each appearance; missing
@@ -351,6 +370,7 @@ export interface ThemeSlots {
   light?: string
   dark?: string
 }
+
 export interface AddAnchorsIntent {
   layerId: LayerId
   anchors: Array<AnchorSeed>

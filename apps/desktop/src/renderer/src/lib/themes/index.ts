@@ -1,6 +1,7 @@
-import type { ThemeSetting } from "@shared/config/config";
+import type { ThemeAppearance } from "@shift/types";
+import type { ThemeSetting, UserThemeFile } from "@shared/config/config";
 
-export type ThemeAppearance = "light" | "dark";
+export type { ThemeAppearance };
 
 export type ThemeId =
   | "shift-light"
@@ -14,8 +15,11 @@ export type ThemeId =
   | "one-dark";
 
 export interface ColorTheme {
-  readonly id: ThemeId;
+  /** A built-in {@link ThemeId}, or a user theme's file name without `.toml`. */
+  readonly id: string;
   readonly name: string;
+  /** The theme file, for a user theme. */
+  readonly file?: string;
   readonly appearance: ThemeAppearance;
   readonly palette: {
     readonly base00: string;
@@ -250,11 +254,11 @@ export const colorThemes: readonly ColorTheme[] = [
 /** Whether Shift follows the OS appearance or always uses one. */
 export type ThemeMode = "system" | ThemeAppearance;
 
-/** The mode and the theme each appearance uses; what Settings shows and edits. */
+/** The mode and the theme id each appearance uses; what Settings shows and edits. */
 export interface ThemePreference {
   readonly mode: ThemeMode;
-  readonly light: ThemeId;
-  readonly dark: ThemeId;
+  readonly light: string;
+  readonly dark: string;
 }
 
 /** Used when `config.toml` chooses no theme. */
@@ -264,13 +268,69 @@ export const defaultThemePreference: ThemePreference = {
   dark: "shift-dark",
 };
 
-/** Returns the built-in theme `id`, or Shift Light for an id Shift does not have. */
-export function themeById(id: string): ColorTheme {
-  return colorThemes.find((theme) => theme.id === id) ?? colorThemes[0];
+const PALETTE_KEYS = [
+  "base00",
+  "base01",
+  "base02",
+  "base03",
+  "base04",
+  "base05",
+  "base06",
+  "base07",
+  "base08",
+  "base09",
+  "base0A",
+  "base0B",
+  "base0C",
+  "base0D",
+  "base0E",
+  "base0F",
+] as const satisfies readonly (keyof ColorTheme["palette"])[];
+
+/** The user themes Shift can show, and the files it ignores for reusing a reserved id. */
+export interface UserColorThemes {
+  readonly themes: readonly ColorTheme[];
+  /** Files named like a built-in theme or `system`, which would be ambiguous in `config.toml`. */
+  readonly shadowing: readonly UserThemeFile[];
 }
 
-function isThemeId(value: string): value is ThemeId {
-  return colorThemes.some((theme) => theme.id === value);
+/**
+ * Turns theme files into themes, skipping files that have never been valid.
+ *
+ * @remarks
+ * A file named like a built-in theme or `system` is ignored rather than
+ * replacing it, so `theme = "nord"` always means the same theme. Every call
+ * returns new theme objects, which is what tells the renderers to redraw
+ * after a file is edited.
+ */
+export function userColorThemes(files: readonly UserThemeFile[]): UserColorThemes {
+  const themes: ColorTheme[] = [];
+  const shadowing: UserThemeFile[] = [];
+  for (const file of files) {
+    if (file.id === "system" || colorThemes.some((theme) => theme.id === file.id)) {
+      shadowing.push(file);
+      continue;
+    }
+    const theme = file.theme;
+    if (!theme) continue;
+
+    const palette = Object.fromEntries(
+      PALETTE_KEYS.map((key, index) => [key, theme.palette[index]]),
+    ) as ColorTheme["palette"];
+    themes.push({
+      id: file.id,
+      name: theme.name ?? file.id,
+      file: file.path,
+      appearance: theme.appearance,
+      palette,
+    });
+  }
+  return { themes, shadowing };
+}
+
+/** Returns theme `id` among `themes`, or Shift Light for an id Shift does not have. */
+export function themeById(id: string, themes: readonly ColorTheme[] = colorThemes): ColorTheme {
+  return themes.find((theme) => theme.id === id) ?? colorThemes[0];
 }
 
 /** A preference read from `config.toml`, with any theme names Shift does not have. */
@@ -288,17 +348,21 @@ export interface ThemePreferenceRead {
  * the other; `theme = "system"` follows the OS with the defaults. A table's
  * missing mode means `system`, and a missing or unknown slot keeps its default.
  */
-export function readThemeSetting(setting: ThemeSetting | null): ThemePreferenceRead {
+export function readThemeSetting(
+  setting: ThemeSetting | null,
+  themes: readonly ColorTheme[] = colorThemes,
+): ThemePreferenceRead {
+  const isKnown = (id: string) => themes.some((theme) => theme.id === id);
   if (setting === null) return { preference: defaultThemePreference, unknownThemes: [] };
 
   if (typeof setting === "string") {
     if (setting === "system") {
       return { preference: { ...defaultThemePreference, mode: "system" }, unknownThemes: [] };
     }
-    if (!isThemeId(setting)) {
+    if (!isKnown(setting)) {
       return { preference: defaultThemePreference, unknownThemes: [setting] };
     }
-    const { appearance } = themeById(setting);
+    const { appearance } = themeById(setting, themes);
     return {
       preference: { ...defaultThemePreference, mode: appearance, [appearance]: setting },
       unknownThemes: [],
@@ -306,10 +370,10 @@ export function readThemeSetting(setting: ThemeSetting | null): ThemePreferenceR
   }
 
   const unknownThemes: string[] = [];
-  const slot = (appearance: ThemeAppearance): ThemeId => {
+  const slot = (appearance: ThemeAppearance): string => {
     const name = setting[appearance];
     if (name === undefined) return defaultThemePreference[appearance];
-    if (isThemeId(name)) return name;
+    if (isKnown(name)) return name;
     unknownThemes.push(name);
     return defaultThemePreference[appearance];
   };
@@ -330,12 +394,13 @@ export function readThemeSetting(setting: ThemeSetting | null): ThemePreferenceR
 export function writeThemeSetting(
   preference: ThemePreference,
   current: ThemeSetting | null,
+  themes: readonly ColorTheme[] = colorThemes,
 ): ThemeSetting {
   const table: ThemeSetting = { ...preference };
   if (current !== null && typeof current !== "string") return table;
 
   const name = preference.mode === "system" ? "system" : preference[preference.mode];
-  const roundTrip = readThemeSetting(name).preference;
+  const roundTrip = readThemeSetting(name, themes).preference;
   return isSamePreference(roundTrip, preference) ? name : table;
 }
 
@@ -347,9 +412,10 @@ function isSamePreference(a: ThemePreference, b: ThemePreference): boolean {
 export function resolveTheme(
   preference: ThemePreference,
   systemAppearance: ThemeAppearance,
+  themes: readonly ColorTheme[] = colorThemes,
 ): ColorTheme {
   const appearance = preference.mode === "system" ? systemAppearance : preference.mode;
-  return themeById(preference[appearance]);
+  return themeById(preference[appearance], themes);
 }
 
 export function applyResolvedTheme(

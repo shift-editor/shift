@@ -19,6 +19,7 @@ Central routing table for Shift's distributed documentation. Before creating new
 | `crates/noad/**`            | [`crates/noad/README.md`](../../crates/noad/README.md)                             | Shift-independent MathML Core layout from OpenType MATH data, with provenance               |
 | `crates/noad-build/**`      | [`crates/noad-build/README.md`](../../crates/noad-build/README.md)                 | Shift-independent OpenType MATH table builder from glyph-name-level source data             |
 | `crates/shift-backends/**`  | [`crates/shift-backends/docs/DOCS.md`](../../crates/shift-backends/docs/DOCS.md)   | Font format backends for reading/writing various font formats                               |
+| `crates/shift-config/**`    | [`crates/shift-config/docs/DOCS.md`](../../crates/shift-config/docs/DOCS.md)       | Reading, validating, and comment-preserving edits of `config.toml` and theme files          |
 | `crates/shift-font/**`      | [`crates/shift-font/docs/DOCS.md`](../../crates/shift-font/docs/DOCS.md)           | First-class Rust font object model and editing behavior                                     |
 | `crates/shift-slug/**`      | [`crates/shift-slug/docs/DOCS.md`](../../crates/shift-slug/docs/DOCS.md)           | GPU-independent Slug curves, retained compilation, and packing                              |
 | `crates/shift-store/**`     | [`crates/shift-store/README.md`](../../crates/shift-store/README.md)               | Canonical SQLite `.shift`, sparse recovery overlays, compressed layer payloads, and indexes |
