@@ -117,8 +117,9 @@ test.describe("Theme", () => {
     await expect.poll(async () => (await viewport()).zoom).toBeGreaterThan(beforeZoom.zoom);
 
     await editor.dragCanvas({
-      from: { x: 5, y: 5 },
-      to: { x: bounds.width - 5, y: bounds.height - 5 },
+      // Clear of the sidebar dividers, whose grab areas reach 8px into the canvas.
+      from: { x: 12, y: 12 },
+      to: { x: bounds.width - 12, y: bounds.height - 12 },
       steps: 5,
     });
     await expect.poll(async () => (await editor.selectionIds()).length).toBeGreaterThan(0);
