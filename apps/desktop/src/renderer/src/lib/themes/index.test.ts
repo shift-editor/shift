@@ -19,7 +19,7 @@ function themeFile(id: string, overrides: Partial<UserThemeFile> = {}): UserThem
   return {
     id,
     path: `/config/themes/${id}.toml`,
-    theme: { name: "Rice", appearance: "dark", palette: nordColors },
+    theme: { name: "Rice", appearance: "dark", palette: nordColors, colors: {} },
     problems: [],
     ...overrides,
   };
@@ -231,11 +231,55 @@ describe("user themes", () => {
     const before = userColorThemes([themeFile("rice")]).themes[0];
     const after = userColorThemes([
       themeFile("rice", {
-        theme: { name: "Rice", appearance: "light", palette: nordColors },
+        theme: { name: "Rice", appearance: "light", palette: nordColors, colors: {} },
       }),
     ]).themes[0];
 
     expect(after).not.toBe(before);
     expect(after?.appearance).toBe("light");
+  });
+
+  it("applies a theme file's color overrides on top of its palette", () => {
+    const properties = new Map<string, string>();
+    const root = {
+      dataset: {},
+      style: {
+        colorScheme: "",
+        setProperty: (name: string, value: string) => properties.set(name, value),
+        removeProperty: () => "",
+      },
+    } as unknown as HTMLElement;
+    const [rice] = userColorThemes([
+      themeFile("rice", {
+        theme: {
+          appearance: "dark",
+          palette: nordColors,
+          colors: { accent: "#ff9e64", "editor-handle-primary-stroke": "#ff9e6480" },
+        },
+      }),
+    ]).themes;
+
+    applyResolvedTheme(rice!, root);
+
+    expect(properties.get("--color-accent")).toBe("#ff9e64");
+    expect(properties.get("--editor-handle-primary-stroke")).toBe("#ff9e6480");
+    expect(properties.get("--color-background")).toBe(nord.palette.base00);
+  });
+
+  it("reports override names that match no color and still applies the rest", () => {
+    const { themes, unknownColors } = userColorThemes([
+      themeFile("rice", {
+        theme: {
+          appearance: "dark",
+          palette: nordColors,
+          colors: { acent: "#ff9e64", accent: "#ff9e64" },
+        },
+      }),
+    ]);
+
+    expect(themes).toHaveLength(1);
+    expect(unknownColors.map(({ file, names }) => ({ id: file.id, names }))).toEqual([
+      { id: "rice", names: ["acent"] },
+    ]);
   });
 });

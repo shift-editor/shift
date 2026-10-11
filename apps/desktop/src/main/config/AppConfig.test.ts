@@ -189,7 +189,7 @@ describe("AppConfig", () => {
     expect(themes.map(({ id }) => id)).toEqual(["rice", "zen"]);
     expect(themes[0]).toMatchObject({
       path: path.join(directory, "themes", "rice.toml"),
-      theme: { name: "Rice", appearance: "dark", palette: PALETTE },
+      theme: { name: "Rice", appearance: "dark", palette: PALETTE, colors: {} },
       problems: [],
     });
   });

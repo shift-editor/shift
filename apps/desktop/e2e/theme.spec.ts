@@ -25,7 +25,7 @@ async function useTheme(page: Page, themeId: ThemeId): Promise<void> {
 async function writeThemeFile(
   page: Page,
   id: string,
-  { name = "Rice", appearance = "dark", changes = {} }: ThemeFileOptions = {},
+  { name = "Rice", appearance = "dark", changes = {}, colors = {} }: ThemeFileOptions = {},
 ): Promise<void> {
   const nord = colorThemes.find((theme) => theme.id === "nord");
   if (!nord) throw new Error("Expected the Nord theme");
@@ -34,7 +34,15 @@ async function writeThemeFile(
   );
   const directory = path.join(path.dirname(await configFile(page)), "themes");
   fs.mkdirSync(directory, { recursive: true });
-  const source = [`name = "${name}"`, `appearance = "${appearance}"`, "[palette]", ...palette, ""];
+  const source: string[] = [
+    `name = "${name}"`,
+    `appearance = "${appearance}"`,
+    "[palette]",
+    ...palette,
+    "",
+  ];
+  const overrides = Object.entries(colors).map(([key, color]) => `"${key}" = "${color}"`);
+  if (overrides.length > 0) source.push("[colors]", ...overrides, "");
   fs.writeFileSync(path.join(directory, `${id}.toml`), source.join("\n"));
 }
 
@@ -42,6 +50,8 @@ interface ThemeFileOptions {
   name?: string;
   appearance?: "light" | "dark";
   changes?: Record<string, string>;
+  /** Written as the `[colors]` override table. */
+  colors?: Record<string, string>;
 }
 
 async function cssVariable(page: Page, name: string): Promise<string> {
@@ -176,6 +186,15 @@ test.describe("Theme", () => {
     await expect(page.locator("html")).toHaveAttribute("data-color-theme", "rice");
     await expect.poll(() => cssVariable(page, "--color-background")).toBe("#101820");
     expect(fs.readFileSync(await configFile(page), "utf8")).toBe(`theme = "rice"\n`);
+  });
+
+  test("overrides one derived color from a theme file", async ({ page }) => {
+    await writeThemeFile(page, "rice", { colors: { accent: "#ff9e64" } });
+    await page.evaluate(() => window.shiftHost!.config.setTheme("rice"));
+
+    await expect.poll(() => cssVariable(page, "--color-accent")).toBe("#ff9e64");
+    const nord = colorThemes.find(({ id }) => id === "nord")!;
+    expect(await cssVariable(page, "--editor-handle-primary-stroke")).toBe(nord.palette.base0D);
   });
 
   test("keeps viewport input live after a theme change and a Home round trip", async ({

@@ -8,6 +8,7 @@ import {
 } from "@shift/ui";
 import type { ConfigProblem } from "@shift/types";
 import type { AppConfigState, UserThemeFile } from "@shared/config/config";
+import type { UnknownThemeColors } from "@/lib/themes";
 import { useTheme } from "@/context/ThemeContext";
 import { getShiftHost } from "@/host/shiftHost";
 import HelpIcon from "@/assets/general/help.svg";
@@ -20,10 +21,10 @@ import HelpIcon from "@/assets/general/help.svg";
  * so the fix is usually in the file too.
  */
 export const ConfigFileSection = () => {
-  const { config, unknownThemes, saveError, shadowingThemeFiles } = useTheme();
+  const { config, unknownThemes, saveError, shadowingThemeFiles, unknownThemeColors } = useTheme();
   if (!config) return null;
 
-  const reports = fileReports(config, shadowingThemeFiles);
+  const reports = fileReports(config, shadowingThemeFiles, unknownThemeColors);
   const fileName = `${config.directory}/config.toml`;
   const folderName = config.directory.split(/[\\/]/).filter(Boolean).at(-1) ?? config.directory;
 
@@ -108,7 +109,11 @@ interface FileReport {
 }
 
 /** Every problem in `config.toml` and `themes/`, labeled with its file and what Shift did. */
-function fileReports(config: AppConfigState, shadowing: readonly UserThemeFile[]): FileReport[] {
+function fileReports(
+  config: AppConfigState,
+  shadowing: readonly UserThemeFile[],
+  unknownColors: readonly UnknownThemeColors[],
+): FileReport[] {
   const reports = config.problems.map((problem) =>
     report("config.toml", problem, "Shift is using the last valid settings."),
   );
@@ -124,6 +129,13 @@ function fileReports(config: AppConfigState, shadowing: readonly UserThemeFile[]
     reports.push({
       severity: "warning",
       text: `themes/${file.id}.toml shares its name with a built-in theme and is ignored; rename the file.`,
+    });
+  }
+  for (const { file, names } of unknownColors) {
+    const quoted = names.map((name) => `"${name}"`).join(", ");
+    reports.push({
+      severity: "warning",
+      text: `themes/${file.id}.toml sets ${quoted}, which Shift has no color for; ignored.`,
     });
   }
   return reports;

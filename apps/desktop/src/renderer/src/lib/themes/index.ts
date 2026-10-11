@@ -20,6 +20,11 @@ export interface ColorTheme {
   readonly name: string;
   /** The theme file, for a user theme. */
   readonly file?: string;
+  /**
+   * Overrides of derived colors by name, such as `accent` for `--color-accent`
+   * or `editor-handle-primary-stroke` for `--editor-handle-primary-stroke`.
+   */
+  readonly colors?: Readonly<Record<string, string>>;
   readonly appearance: ThemeAppearance;
   readonly palette: {
     readonly base00: string;
@@ -292,6 +297,13 @@ export interface UserColorThemes {
   readonly themes: readonly ColorTheme[];
   /** Files named like a built-in theme or `system`, which would be ambiguous in `config.toml`. */
   readonly shadowing: readonly UserThemeFile[];
+  /** Override names in each file that name no color Shift derives; they are ignored. */
+  readonly unknownColors: readonly UnknownThemeColors[];
+}
+
+export interface UnknownThemeColors {
+  readonly file: UserThemeFile;
+  readonly names: readonly string[];
 }
 
 /**
@@ -306,6 +318,7 @@ export interface UserColorThemes {
 export function userColorThemes(files: readonly UserThemeFile[]): UserColorThemes {
   const themes: ColorTheme[] = [];
   const shadowing: UserThemeFile[] = [];
+  const unknownColors: UnknownThemeColors[] = [];
   for (const file of files) {
     if (file.id === "system" || colorThemes.some((theme) => theme.id === file.id)) {
       shadowing.push(file);
@@ -317,15 +330,18 @@ export function userColorThemes(files: readonly UserThemeFile[]): UserColorTheme
     const palette = Object.fromEntries(
       PALETTE_KEYS.map((key, index) => [key, theme.palette[index]]),
     ) as ColorTheme["palette"];
+    const unknown = Object.keys(theme.colors).filter((name) => !COLOR_VARIABLES.has(name));
+    if (unknown.length > 0) unknownColors.push({ file, names: unknown });
     themes.push({
       id: file.id,
       name: theme.name ?? file.id,
       file: file.path,
       appearance: theme.appearance,
       palette,
+      colors: theme.colors,
     });
   }
-  return { themes, shadowing };
+  return { themes, shadowing, unknownColors };
 }
 
 /** Returns theme `id` among `themes`, or Shift Light for an id Shift does not have. */
@@ -428,11 +444,26 @@ export function applyResolvedTheme(
   root.dataset.colorTheme = resolvedTheme.id;
   root.style.colorScheme = resolvedTheme.appearance;
 
-  const variables = colorThemeVariables(resolvedTheme);
+  const variables = themeVariables(resolvedTheme);
   for (const [name, value] of Object.entries(variables)) {
     if (resolvedTheme.id === "shift-light") root.style.removeProperty(name);
     else root.style.setProperty(name, value);
   }
+}
+
+/** The CSS variables for `theme`: derived from its palette, then its overrides. */
+function themeVariables(theme: ColorTheme): Record<string, string> {
+  const variables = colorThemeVariables(theme);
+  for (const [name, value] of Object.entries(theme.colors ?? {})) {
+    const variable = COLOR_VARIABLES.get(name);
+    if (variable) variables[variable] = value;
+  }
+  return variables;
+}
+
+/** `accent` for `--color-accent`, `editor-snap-color` for `--editor-snap-color`. */
+function colorName(variable: string): string {
+  return variable.replace(/^--color-/, "").replace(/^--/, "");
 }
 
 function colorThemeVariables(theme: ColorTheme): Record<string, string> {
@@ -596,3 +627,11 @@ function withAlpha(color: string, alpha: number): string {
   const blue = Number.parseInt(color.slice(5, 7), 16);
   return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
 }
+
+/** Override name → CSS variable, for every color a theme derives. */
+const COLOR_VARIABLES: ReadonlyMap<string, string> = new Map(
+  Object.keys(colorThemeVariables(colorThemes[0])).map((variable) => [
+    colorName(variable),
+    variable,
+  ]),
+);

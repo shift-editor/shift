@@ -13,6 +13,13 @@
 //!
 //! Colors are six-digit hex, with or without `#`, so palettes copied from
 //! base16 scheme files work unchanged.
+//!
+//! An optional `[colors]` table overrides individual colors Shift derives from
+//! the palette, by name, such as `accent` or `editor-handle-primary-stroke`.
+//! Override values may carry alpha as `#rrggbbaa`. This crate checks the form
+//! of names and values; which names exist is the desktop renderer's to decide.
+
+use std::collections::BTreeMap;
 
 use toml_edit::{Document, Item, TableLike};
 
@@ -24,7 +31,7 @@ pub const PALETTE_KEYS: [&str; 16] = [
     "base09", "base0A", "base0B", "base0C", "base0D", "base0E", "base0F",
 ];
 
-const KNOWN_KEYS: [&str; 3] = ["name", "appearance", "palette"];
+const KNOWN_KEYS: [&str; 4] = ["name", "appearance", "palette", "colors"];
 
 /// Whether a theme's background is light or dark.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -41,6 +48,8 @@ pub struct Theme {
     pub appearance: Appearance,
     /// `base00` through `base0F` as lowercase `#rrggbb`.
     pub palette: [String; 16],
+    /// Overrides of derived colors by name, as lowercase `#rrggbb` or `#rrggbbaa`.
+    pub colors: BTreeMap<String, String>,
 }
 
 /// The result of reading a theme file.
@@ -115,6 +124,20 @@ pub fn read_theme(source: &str) -> ThemeRead {
         }
     };
 
+    let colors = match root.get("colors") {
+        None => BTreeMap::new(),
+        Some(item) => match item.as_table_like() {
+            Some(table) => read_colors(source, table, &mut problems),
+            None => {
+                problems.push(error_problem(
+                    "\"colors\" must be a table of color names and values.",
+                    at(root, "colors"),
+                ));
+                BTreeMap::new()
+            }
+        },
+    };
+
     let has_error = problems
         .iter()
         .any(|problem| problem.severity == Severity::Error);
@@ -123,10 +146,60 @@ pub fn read_theme(source: &str) -> ThemeRead {
             name,
             appearance,
             palette,
+            colors,
         }),
         _ => None,
     };
     ThemeRead { theme, problems }
+}
+
+fn read_colors(
+    source: &str,
+    table: &dyn TableLike,
+    problems: &mut Vec<ConfigProblem>,
+) -> BTreeMap<String, String> {
+    let mut colors = BTreeMap::new();
+    for (name, item) in table.iter() {
+        let location = key_location(source, table, name);
+        if !is_color_name(name) {
+            problems.push(error_problem(
+                format!(
+                    "\"{name}\" is not a color name; names are lowercase words joined by \"-\"."
+                ),
+                location,
+            ));
+            continue;
+        }
+        match item.as_str().and_then(normalize_override) {
+            Some(color) => {
+                colors.insert(name.to_string(), color);
+            }
+            None => problems.push(error_problem(
+                format!("\"{name}\" must be a hex color such as \"#ff9e64\" or \"#ff9e6480\"."),
+                location,
+            )),
+        }
+    }
+    colors
+}
+
+/// Whether `name` is lowercase words joined by `-`, as derived color names are.
+fn is_color_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.split('-').all(|word| {
+            !word.is_empty()
+                && word
+                    .bytes()
+                    .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
+        })
+}
+
+/// Returns lowercase `#rrggbb` or `#rrggbbaa` for an override with or without `#`.
+fn normalize_override(color: &str) -> Option<String> {
+    let digits = color.strip_prefix('#').unwrap_or(color);
+    let valid =
+        matches!(digits.len(), 6 | 8) && digits.bytes().all(|byte| byte.is_ascii_hexdigit());
+    valid.then(|| format!("#{}", digits.to_ascii_lowercase()))
 }
 
 fn read_palette(
