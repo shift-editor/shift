@@ -1543,6 +1543,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "noad"
+version = "0.0.0"
+
+[[package]]
+name = "noad-build"
+version = "0.0.0"
+
+[[package]]
 name = "nohash-hasher"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
