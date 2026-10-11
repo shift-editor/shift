@@ -4,8 +4,11 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 const versionPattern = /^\d+\.\d+\.\d+$/;
-const architecture = "x86_64";
-const debianArchitecture = "amd64";
+/** Each published architecture under its build, RPM, and Debian names. */
+const architectures = [
+  { build: "x64", rpm: "x86_64", debian: "amd64" },
+  { build: "arm64", rpm: "aarch64", debian: "arm64" },
+];
 
 export async function stageLinuxPackages({ artifactsRoot, repositoryRoot, version }) {
   validateVersion(version);
@@ -14,37 +17,42 @@ export async function stageLinuxPackages({ artifactsRoot, repositoryRoot, versio
   await prepareEmptyDirectory(repository);
 
   const files = await collectFiles(artifacts);
-  const deb = findArtifact(files, `Shift-${version}-Linux-x64.deb`);
-  const rpm = findArtifact(files, `Shift-${version}-Linux-x64.rpm`);
-  findArtifact(files, `Shift-${version}-Linux-x64.AppImage`);
+  const staged = {};
+  for (const architecture of architectures) {
+    const deb = findArtifact(files, `Shift-${version}-Linux-${architecture.build}.deb`);
+    const rpm = findArtifact(files, `Shift-${version}-Linux-${architecture.build}.rpm`);
+    findArtifact(files, `Shift-${version}-Linux-${architecture.build}.AppImage`);
 
-  const debDestination = path.join(
-    repository,
-    "apt",
-    "pool",
-    "main",
-    "s",
-    "shift",
-    `shift_${version}_${debianArchitecture}.deb`,
-  );
-  const rpmDestination = path.join(
-    repository,
-    "rpm",
-    "releases",
-    version,
-    architecture,
-    `shift-${version}-1.${architecture}.rpm`,
-  );
+    const debDestination = path.join(
+      repository,
+      "apt",
+      "pool",
+      "main",
+      "s",
+      "shift",
+      `shift_${version}_${architecture.debian}.deb`,
+    );
+    const rpmDestination = path.join(
+      repository,
+      "rpm",
+      "releases",
+      version,
+      architecture.rpm,
+      `shift-${version}-1.${architecture.rpm}.rpm`,
+    );
 
-  await Promise.all([
-    copy(deb, debDestination),
-    copy(rpm, rpmDestination),
-    mkdir(path.join(repository, "apt", "dists", "release", "main", "binary-amd64"), {
-      recursive: true,
-    }),
-  ]);
+    await Promise.all([
+      copy(deb, debDestination),
+      copy(rpm, rpmDestination),
+      mkdir(
+        path.join(repository, "apt", "dists", "release", "main", `binary-${architecture.debian}`),
+        { recursive: true },
+      ),
+    ]);
+    staged[architecture.build] = { deb: debDestination, rpm: rpmDestination };
+  }
 
-  return { deb: debDestination, rpm: rpmDestination };
+  return staged;
 }
 
 export async function finalizeLinuxRepositories({ repositoryRoot, version, baseUrl, publishedAt }) {
@@ -54,18 +62,20 @@ export async function finalizeLinuxRepositories({ repositoryRoot, version, baseU
   const publicationDate = parsePublicationDate(publishedAt);
   const aptRoot = path.join(repository, "apt");
   const aptDistribution = path.join(aptRoot, "dists", "release");
-  const aptBinary = path.join(aptDistribution, "main", "binary-amd64");
-  const rpmRoot = path.join(repository, "rpm", "releases", version, architecture);
-  const repomd = path.join(rpmRoot, "repodata", "repomd.xml");
-  const repomdSignature = `${repomd}.asc`;
-  const packages = [path.join(aptBinary, "Packages"), path.join(aptBinary, "Packages.gz")];
+  const packages = architectures.flatMap((architecture) => {
+    const aptBinary = path.join(aptDistribution, "main", `binary-${architecture.debian}`);
+    return [path.join(aptBinary, "Packages"), path.join(aptBinary, "Packages.gz")];
+  });
+  const repomds = architectures.map((architecture) =>
+    path.join(repository, "rpm", "releases", version, architecture.rpm, "repodata", "repomd.xml"),
+  );
 
   await Promise.all([
-    requireFile(repomd),
-    requireFile(repomdSignature),
+    ...repomds.flatMap((repomd) => [requireFile(repomd), requireFile(`${repomd}.asc`)]),
     ...packages.map((file) => requireFile(file)),
   ]);
 
+  const debianArchitectures = architectures.map((architecture) => architecture.debian).join(" ");
   const releaseSections = [];
   for (const algorithm of ["sha256", "sha512"]) {
     const entries = [];
@@ -85,7 +95,7 @@ export async function finalizeLinuxRepositories({ repositoryRoot, version, baseU
     "Suite: release",
     "Codename: release",
     `Date: ${publicationDate.toUTCString()}`,
-    "Architectures: amd64",
+    `Architectures: ${debianArchitectures}`,
     "Components: main",
     "Description: Shift font editor packages",
     "Acquire-By-Hash: yes",
@@ -94,27 +104,15 @@ export async function finalizeLinuxRepositories({ repositoryRoot, version, baseU
   ].join("\n");
   await writeFile(path.join(aptDistribution, "Release"), release);
 
-  const repomdSize = (await stat(repomd)).size;
-  const repomdUrl = `${packageBaseUrl}/rpm/releases/${version}/${architecture}/repodata/repomd.xml`;
-  const metalink = [
-    '<?xml version="1.0" encoding="utf-8"?>',
-    `<metalink version="3.0" xmlns="http://www.metalinker.org/" type="static" pubdate="${publicationDate.toUTCString()}" generator="Shift">`,
-    " <files>",
-    '  <file name="repomd.xml">',
-    `   <size>${repomdSize}</size>`,
-    "   <verification>",
-    `    <hash type="sha256">${await hashFile(repomd, "sha256")}</hash>`,
-    `    <hash type="sha512">${await hashFile(repomd, "sha512")}</hash>`,
-    "   </verification>",
-    '   <resources maxconnections="1">',
-    `    <url protocol="https" type="https" preference="100">${repomdUrl}</url>`,
-    "   </resources>",
-    "  </file>",
-    " </files>",
-    "</metalink>",
-    "",
-  ].join("\n");
-  await write(path.join(repository, "rpm", "release", architecture, "metalink.xml"), metalink);
+  for (const [index, architecture] of architectures.entries()) {
+    await writeMetalink({
+      repository,
+      repomd: repomds[index],
+      repomdUrl: `${packageBaseUrl}/rpm/releases/${version}/${architecture.rpm}/repodata/repomd.xml`,
+      rpmArchitecture: architecture.rpm,
+      publicationDate,
+    });
+  }
 
   const keyUrl = `${packageBaseUrl}/keys/shift-repository.gpg`;
   const aptSource = [
@@ -122,7 +120,7 @@ export async function finalizeLinuxRepositories({ repositoryRoot, version, baseU
     `URIs: ${packageBaseUrl}/apt`,
     "Suites: release",
     "Components: main",
-    "Architectures: amd64",
+    `Architectures: ${debianArchitectures}`,
     "Signed-By: /etc/apt/keyrings/shift-repository.gpg",
     "",
   ].join("\n");
@@ -142,6 +140,29 @@ export async function finalizeLinuxRepositories({ repositoryRoot, version, baseU
     write(path.join(repository, "config", "shift.sources"), aptSource),
     write(path.join(repository, "config", "shift.repo"), dnfRepository),
   ]);
+}
+
+async function writeMetalink({ repository, repomd, repomdUrl, rpmArchitecture, publicationDate }) {
+  const repomdSize = (await stat(repomd)).size;
+  const metalink = [
+    '<?xml version="1.0" encoding="utf-8"?>',
+    `<metalink version="3.0" xmlns="http://www.metalinker.org/" type="static" pubdate="${publicationDate.toUTCString()}" generator="Shift">`,
+    " <files>",
+    '  <file name="repomd.xml">',
+    `   <size>${repomdSize}</size>`,
+    "   <verification>",
+    `    <hash type="sha256">${await hashFile(repomd, "sha256")}</hash>`,
+    `    <hash type="sha512">${await hashFile(repomd, "sha512")}</hash>`,
+    "   </verification>",
+    '   <resources maxconnections="1">',
+    `    <url protocol="https" type="https" preference="100">${repomdUrl}</url>`,
+    "   </resources>",
+    "  </file>",
+    " </files>",
+    "</metalink>",
+    "",
+  ].join("\n");
+  await write(path.join(repository, "rpm", "release", rpmArchitecture, "metalink.xml"), metalink);
 }
 
 function validateVersion(version) {

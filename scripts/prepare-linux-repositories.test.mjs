@@ -14,37 +14,53 @@ async function fixture(context) {
   const artifactsRoot = path.join(root, "artifacts");
   const repositoryRoot = path.join(root, "repository");
   await mkdir(artifactsRoot, { recursive: true });
-  await Promise.all([
-    writeFile(path.join(artifactsRoot, `Shift-${version}-Linux-x64.deb`), "deb-package"),
-    writeFile(path.join(artifactsRoot, `Shift-${version}-Linux-x64.rpm`), "rpm-package"),
-    writeFile(path.join(artifactsRoot, `Shift-${version}-Linux-x64.AppImage`), "app-image"),
-  ]);
+  await Promise.all(
+    ["arm64", "x64"].flatMap((architecture) => [
+      writeFile(
+        path.join(artifactsRoot, `Shift-${version}-Linux-${architecture}.deb`),
+        `deb-${architecture}`,
+      ),
+      writeFile(
+        path.join(artifactsRoot, `Shift-${version}-Linux-${architecture}.rpm`),
+        `rpm-${architecture}`,
+      ),
+      writeFile(
+        path.join(artifactsRoot, `Shift-${version}-Linux-${architecture}.AppImage`),
+        `appimage-${architecture}`,
+      ),
+    ]),
+  );
   return { artifactsRoot, repositoryRoot };
 }
 
-test("stages one complete versioned Linux artifact set", async (context) => {
+test("stages a complete versioned Linux artifact set for each architecture", async (context) => {
   const { artifactsRoot, repositoryRoot } = await fixture(context);
   const staged = await stageLinuxPackages({ artifactsRoot, repositoryRoot, version });
 
-  assert.equal(await readFile(staged.deb, "utf8"), "deb-package");
-  assert.equal(await readFile(staged.rpm, "utf8"), "rpm-package");
-  assert.equal(
-    path.relative(repositoryRoot, staged.deb),
-    `apt/pool/main/s/shift/shift_${version}_amd64.deb`,
-  );
-  assert.equal(
-    path.relative(repositoryRoot, staged.rpm),
-    `rpm/releases/${version}/x86_64/shift-${version}-1.x86_64.rpm`,
-  );
+  for (const [architecture, debian, rpm] of [
+    ["x64", "amd64", "x86_64"],
+    ["arm64", "arm64", "aarch64"],
+  ]) {
+    assert.equal(await readFile(staged[architecture].deb, "utf8"), `deb-${architecture}`);
+    assert.equal(await readFile(staged[architecture].rpm, "utf8"), `rpm-${architecture}`);
+    assert.equal(
+      path.relative(repositoryRoot, staged[architecture].deb),
+      `apt/pool/main/s/shift/shift_${version}_${debian}.deb`,
+    );
+    assert.equal(
+      path.relative(repositoryRoot, staged[architecture].rpm),
+      `rpm/releases/${version}/${rpm}/shift-${version}-1.${rpm}.rpm`,
+    );
+  }
 });
 
 test("rejects an incomplete Linux artifact set", async (context) => {
   const { artifactsRoot, repositoryRoot } = await fixture(context);
-  await rm(path.join(artifactsRoot, `Shift-${version}-Linux-x64.AppImage`));
+  await rm(path.join(artifactsRoot, `Shift-${version}-Linux-arm64.rpm`));
 
   await assert.rejects(
     stageLinuxPackages({ artifactsRoot, repositoryRoot, version }),
-    /Expected one Shift-0\.2\.3-Linux-x64\.AppImage, found 0/,
+    /Expected one Shift-0\.2\.3-Linux-arm64\.rpm, found 0/,
   );
 });
 
@@ -52,14 +68,20 @@ test("writes authenticated APT roots and an immutable DNF metalink", async (cont
   const { artifactsRoot, repositoryRoot } = await fixture(context);
   await stageLinuxPackages({ artifactsRoot, repositoryRoot, version });
   const aptBinary = path.join(repositoryRoot, "apt/dists/release/main/binary-amd64");
-  const repodata = path.join(repositoryRoot, `rpm/releases/${version}/x86_64/repodata`);
-  await mkdir(repodata, { recursive: true });
-  await Promise.all([
-    writeFile(path.join(aptBinary, "Packages"), "apt-packages"),
-    writeFile(path.join(aptBinary, "Packages.gz"), "compressed-packages"),
-    writeFile(path.join(repodata, "repomd.xml"), "<repomd>signed content</repomd>"),
-    writeFile(path.join(repodata, "repomd.xml.asc"), "detached-signature"),
-  ]);
+  for (const [debian, rpm] of [
+    ["amd64", "x86_64"],
+    ["arm64", "aarch64"],
+  ]) {
+    const binary = path.join(repositoryRoot, `apt/dists/release/main/binary-${debian}`);
+    const repodata = path.join(repositoryRoot, `rpm/releases/${version}/${rpm}/repodata`);
+    await mkdir(repodata, { recursive: true });
+    await Promise.all([
+      writeFile(path.join(binary, "Packages"), debian === "amd64" ? "apt-packages" : "arm64-list"),
+      writeFile(path.join(binary, "Packages.gz"), `compressed-${debian}`),
+      writeFile(path.join(repodata, "repomd.xml"), `<repomd>signed ${rpm}</repomd>`),
+      writeFile(path.join(repodata, "repomd.xml.asc"), `signature-${rpm}`),
+    ]);
+  }
 
   await finalizeLinuxRepositories({
     repositoryRoot,
@@ -72,24 +94,31 @@ test("writes authenticated APT roots and an immutable DNF metalink", async (cont
   const packageDigest = createHash("sha256").update("apt-packages").digest("hex");
   assert.match(release, /Suite: release/);
   assert.match(release, /Acquire-By-Hash: yes/);
+  assert.match(release, /Architectures: amd64 arm64/);
   assert.match(release, new RegExp(`${packageDigest} 12 main/binary-amd64/Packages`));
+  const arm64Digest = createHash("sha256").update("arm64-list").digest("hex");
+  assert.match(release, new RegExp(`${arm64Digest} 10 main/binary-arm64/Packages`));
   assert.equal(
     await readFile(path.join(aptBinary, "by-hash/SHA256", packageDigest), "utf8"),
     "apt-packages",
   );
 
-  const metalink = await readFile(
-    path.join(repositoryRoot, "rpm/release/x86_64/metalink.xml"),
-    "utf8",
-  );
-  const repomdDigest = createHash("sha256").update("<repomd>signed content</repomd>").digest("hex");
-  assert.match(metalink, new RegExp(repomdDigest));
-  assert.match(
-    metalink,
-    new RegExp(
-      `https://packages\\.shift\\.graphics/rpm/releases/${version}/x86_64/repodata/repomd\\.xml`,
-    ),
-  );
+  for (const rpm of ["x86_64", "aarch64"]) {
+    const metalink = await readFile(
+      path.join(repositoryRoot, `rpm/release/${rpm}/metalink.xml`),
+      "utf8",
+    );
+    const repomdDigest = createHash("sha256")
+      .update(`<repomd>signed ${rpm}</repomd>`)
+      .digest("hex");
+    assert.match(metalink, new RegExp(repomdDigest));
+    assert.match(
+      metalink,
+      new RegExp(
+        `https://packages\\.shift\\.graphics/rpm/releases/${version}/${rpm}/repodata/repomd\\.xml`,
+      ),
+    );
+  }
 
   const aptSource = await readFile(path.join(repositoryRoot, "config/shift.sources"), "utf8");
   assert.match(aptSource, /Suites: release/);

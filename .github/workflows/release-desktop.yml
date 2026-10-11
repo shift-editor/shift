@@ -439,9 +439,9 @@ jobs:
           mkdir dist
           gh release download "$RELEASE_TAG" \
             --dir dist \
-            --pattern "Shift-${RELEASE_VERSION}-Linux-x64.deb" \
-            --pattern "Shift-${RELEASE_VERSION}-Linux-x64.rpm" \
-            --pattern "Shift-${RELEASE_VERSION}-Linux-x64.AppImage" \
+            --pattern "Shift-${RELEASE_VERSION}-Linux-*.deb" \
+            --pattern "Shift-${RELEASE_VERSION}-Linux-*.rpm" \
+            --pattern "Shift-${RELEASE_VERSION}-Linux-*.AppImage" \
             --pattern shift-repository.gpg
 
       - name: Import and verify repository signing key
@@ -472,7 +472,9 @@ jobs:
           install -d "$RPM_DB"
           rpm --dbpath "$RPM_DB" --initdb
           rpmkeys --dbpath "$RPM_DB" --import "$RPM_PUBLIC_KEY"
-          rpmkeys --dbpath "$RPM_DB" --checksig "dist/Shift-${{ needs.prepare.outputs.version }}-Linux-x64.rpm"
+          rpmkeys --dbpath "$RPM_DB" --checksig \
+            "dist/Shift-${{ needs.prepare.outputs.version }}-Linux-x64.rpm" \
+            "dist/Shift-${{ needs.prepare.outputs.version }}-Linux-arm64.rpm"
 
       - name: Build and sign repository metadata
         shell: bash
@@ -489,28 +491,33 @@ jobs:
           FINGERPRINT="${LINUX_REPOSITORY_GPG_FINGERPRINT//[[:space:]]/}"
 
           node scripts/prepare-linux-repositories.mjs stage dist repository "$RELEASE_VERSION"
-          (
-            cd repository/apt
-            apt-ftparchive packages pool/main \
-              > dists/release/main/binary-amd64/Packages
-            gzip -9 -n -c dists/release/main/binary-amd64/Packages \
-              > dists/release/main/binary-amd64/Packages.gz
-          )
-          createrepo_c \
-            --checksum sha256 \
-            "repository/rpm/releases/${RELEASE_VERSION}/x86_64"
+          for DEBIAN_ARCH in amd64 arm64; do
+            (
+              cd repository/apt
+              # Without --arch, each index would list every architecture's DEB.
+              apt-ftparchive --arch "$DEBIAN_ARCH" packages pool/main \
+                > "dists/release/main/binary-${DEBIAN_ARCH}/Packages"
+              gzip -9 -n -c "dists/release/main/binary-${DEBIAN_ARCH}/Packages" \
+                > "dists/release/main/binary-${DEBIAN_ARCH}/Packages.gz"
+            )
+          done
+          for RPM_ARCH in x86_64 aarch64; do
+            createrepo_c \
+              --checksum sha256 \
+              "repository/rpm/releases/${RELEASE_VERSION}/${RPM_ARCH}"
 
-          REPOMD="repository/rpm/releases/${RELEASE_VERSION}/x86_64/repodata/repomd.xml"
-          printf '%s' "$LINUX_REPOSITORY_GPG_PASSPHRASE" | gpg \
-            --batch \
-            --yes \
-            --pinentry-mode loopback \
-            --passphrase-fd 0 \
-            --local-user "$FINGERPRINT" \
-            --armor \
-            --detach-sign \
-            --output "${REPOMD}.asc" \
-            "$REPOMD"
+            REPOMD="repository/rpm/releases/${RELEASE_VERSION}/${RPM_ARCH}/repodata/repomd.xml"
+            printf '%s' "$LINUX_REPOSITORY_GPG_PASSPHRASE" | gpg \
+              --batch \
+              --yes \
+              --pinentry-mode loopback \
+              --passphrase-fd 0 \
+              --local-user "$FINGERPRINT" \
+              --armor \
+              --detach-sign \
+              --output "${REPOMD}.asc" \
+              "$REPOMD"
+          done
 
           node scripts/prepare-linux-repositories.mjs finalize \
             repository \
@@ -532,7 +539,10 @@ jobs:
           install -d repository/keys
           cp dist/shift-repository.gpg repository/keys/shift-repository.gpg
 
-          gpg --batch --verify "${REPOMD}.asc" "$REPOMD"
+          for RPM_ARCH in x86_64 aarch64; do
+            REPOMD="repository/rpm/releases/${RELEASE_VERSION}/${RPM_ARCH}/repodata/repomd.xml"
+            gpg --batch --verify "${REPOMD}.asc" "$REPOMD"
+          done
           gpg --batch --verify repository/apt/dists/release/InRelease
 
       - name: Upload inactive repository content
@@ -569,14 +579,16 @@ jobs:
             --cache-control "no-cache" \
             --no-progress \
             --only-show-errors
-          aws s3 cp \
-            "repository/rpm/releases/${RELEASE_VERSION}/x86_64" \
-            "${DESTINATION}/rpm/releases/${RELEASE_VERSION}/x86_64/" \
-            --recursive \
-            --endpoint-url "$ENDPOINT" \
-            --cache-control "public, max-age=31536000, immutable" \
-            --no-progress \
-            --only-show-errors
+          for RPM_ARCH in x86_64 aarch64; do
+            aws s3 cp \
+              "repository/rpm/releases/${RELEASE_VERSION}/${RPM_ARCH}" \
+              "${DESTINATION}/rpm/releases/${RELEASE_VERSION}/${RPM_ARCH}/" \
+              --recursive \
+              --endpoint-url "$ENDPOINT" \
+              --cache-control "public, max-age=31536000, immutable" \
+              --no-progress \
+              --only-show-errors
+          done
           aws s3 cp repository/config "${DESTINATION}/config/" \
             --recursive \
             --endpoint-url "$ENDPOINT" \
@@ -606,14 +618,23 @@ jobs:
             "$BASE_URL/keys/shift-repository.gpg" \
             --output public-repository-key.gpg
           cmp repository/keys/shift-repository.gpg public-repository-key.gpg
-          curl --fail --head --retry 5 --retry-all-errors \
-            "$BASE_URL/apt/pool/main/s/shift/shift_${RELEASE_VERSION}_amd64.deb" >/dev/null
+          for DEBIAN_ARCH in amd64 arm64; do
+            curl --fail --head --retry 5 --retry-all-errors \
+              "$BASE_URL/apt/pool/main/s/shift/shift_${RELEASE_VERSION}_${DEBIAN_ARCH}.deb" >/dev/null
+          done
 
-          REPOMD_URL="$BASE_URL/rpm/releases/${RELEASE_VERSION}/x86_64/repodata/repomd.xml"
-          curl --fail --retry 5 --retry-all-errors "$REPOMD_URL" --output public-repomd.xml
-          curl --fail --retry 5 --retry-all-errors "${REPOMD_URL}.asc" --output public-repomd.xml.asc
           export GNUPGHOME="$RUNNER_TEMP/linux-repository-gnupg"
-          gpg --batch --verify public-repomd.xml.asc public-repomd.xml
+          for RPM_ARCH in x86_64 aarch64; do
+            REPOMD_URL="$BASE_URL/rpm/releases/${RELEASE_VERSION}/${RPM_ARCH}/repodata/repomd.xml"
+            curl --fail --retry 5 --retry-all-errors "$REPOMD_URL" --output public-repomd.xml
+            curl --fail --retry 5 --retry-all-errors "${REPOMD_URL}.asc" --output public-repomd.xml.asc
+            gpg --batch --verify public-repomd.xml.asc public-repomd.xml
+          done
+
+      - name: Set up arm64 emulation for repository tests
+        uses: docker/setup-qemu-action@v4
+        with:
+          platforms: arm64
 
       - name: Activate and test Linux repositories
         shell: bash
@@ -632,18 +653,23 @@ jobs:
           DESTINATION="s3://${R2_BUCKET}"
           PREVIOUS="$RUNNER_TEMP/previous-linux-repository"
           mkdir "$PREVIOUS"
-          DNF_KEY="rpm/release/x86_64/metalink.xml"
+          RPM_ARCHES=(x86_64 aarch64)
           APT_KEY="apt/dists/release/InRelease"
-          DNF_PREVIOUS=false
+          declare -A DNF_PREVIOUS=([x86_64]=false [aarch64]=false)
+          declare -A DNF_ACTIVATED=([x86_64]=false [aarch64]=false)
           APT_PREVIOUS=false
-          DNF_ACTIVATED=false
           APT_ACTIVATED=false
 
-          if aws s3api head-object --endpoint-url "$ENDPOINT" --bucket "$R2_BUCKET" --key "$DNF_KEY" >/dev/null 2>&1; then
-            DNF_PREVIOUS=true
-            aws s3 cp "${DESTINATION}/${DNF_KEY}" "$PREVIOUS/metalink.xml" \
-              --endpoint-url "$ENDPOINT" --no-progress --only-show-errors
-          fi
+          dnf_key() {
+            echo "rpm/release/$1/metalink.xml"
+          }
+          for RPM_ARCH in "${RPM_ARCHES[@]}"; do
+            if aws s3api head-object --endpoint-url "$ENDPOINT" --bucket "$R2_BUCKET" --key "$(dnf_key "$RPM_ARCH")" >/dev/null 2>&1; then
+              DNF_PREVIOUS[$RPM_ARCH]=true
+              aws s3 cp "${DESTINATION}/$(dnf_key "$RPM_ARCH")" "$PREVIOUS/metalink-${RPM_ARCH}.xml" \
+                --endpoint-url "$ENDPOINT" --no-progress --only-show-errors
+            fi
+          done
           if aws s3api head-object --endpoint-url "$ENDPOINT" --bucket "$R2_BUCKET" --key "$APT_KEY" >/dev/null 2>&1; then
             APT_PREVIOUS=true
             aws s3 cp "${DESTINATION}/${APT_KEY}" "$PREVIOUS/InRelease" \
@@ -674,20 +700,24 @@ jobs:
               if [[ "$APT_ACTIVATED" == true ]]; then
                 restore_object "$APT_PREVIOUS" "$PREVIOUS/InRelease" "$APT_KEY"
               fi
-              if [[ "$DNF_ACTIVATED" == true ]]; then
-                restore_object "$DNF_PREVIOUS" "$PREVIOUS/metalink.xml" "$DNF_KEY"
-              fi
+              for RPM_ARCH in "${RPM_ARCHES[@]}"; do
+                if [[ "${DNF_ACTIVATED[$RPM_ARCH]}" == true ]]; then
+                  restore_object "${DNF_PREVIOUS[$RPM_ARCH]}" "$PREVIOUS/metalink-${RPM_ARCH}.xml" "$(dnf_key "$RPM_ARCH")"
+                fi
+              done
             fi
             exit "$status"
           }
           trap rollback EXIT
 
-          aws s3 cp repository/rpm/release/x86_64/metalink.xml "${DESTINATION}/${DNF_KEY}" \
-            --endpoint-url "$ENDPOINT" \
-            --cache-control "no-cache" \
-            --no-progress \
-            --only-show-errors
-          DNF_ACTIVATED=true
+          for RPM_ARCH in "${RPM_ARCHES[@]}"; do
+            aws s3 cp "repository/rpm/release/${RPM_ARCH}/metalink.xml" "${DESTINATION}/$(dnf_key "$RPM_ARCH")" \
+              --endpoint-url "$ENDPOINT" \
+              --cache-control "no-cache" \
+              --no-progress \
+              --only-show-errors
+            DNF_ACTIVATED[$RPM_ARCH]=true
+          done
           aws s3 cp repository/apt/dists/release/InRelease "${DESTINATION}/${APT_KEY}" \
             --endpoint-url "$ENDPOINT" \
             --cache-control "no-cache" \
@@ -696,57 +726,63 @@ jobs:
           APT_ACTIVATED=true
 
           BASE_URL="${LINUX_PACKAGE_BASE_URL%/}"
-          curl --fail --retry 5 --retry-all-errors \
-            "$BASE_URL/rpm/release/x86_64/metalink.xml" \
-            --output active-metalink.xml
-          cmp repository/rpm/release/x86_64/metalink.xml active-metalink.xml
+          for RPM_ARCH in "${RPM_ARCHES[@]}"; do
+            curl --fail --retry 5 --retry-all-errors \
+              "$BASE_URL/rpm/release/${RPM_ARCH}/metalink.xml" \
+              --output active-metalink.xml
+            cmp "repository/rpm/release/${RPM_ARCH}/metalink.xml" active-metalink.xml
+          done
           curl --fail --retry 5 --retry-all-errors \
             "$BASE_URL/apt/dists/release/InRelease" \
             --output active-InRelease
           cmp repository/apt/dists/release/InRelease active-InRelease
 
-          docker run --rm \
-            --env BASE_URL="$BASE_URL" \
-            --env EXPECTED_VERSION="$RELEASE_VERSION" \
-            ubuntu:24.04 \
-            bash -euxo pipefail -c '
-              apt-get update
-              apt-get install --yes ca-certificates curl
-              curl --fail \
-                "$BASE_URL/apt/pool/main/s/shift/shift_${EXPECTED_VERSION}_amd64.deb" \
-                --output /tmp/shift.deb
-              apt-get install --yes /tmp/shift.deb
-              curl --fail "$BASE_URL/keys/shift-repository.gpg" \
-                --output /tmp/shift-repository.gpg
-              cmp /etc/apt/keyrings/shift-repository.gpg /tmp/shift-repository.gpg
-              curl --fail "$BASE_URL/config/shift.sources" \
-                --output /tmp/shift.sources
-              cmp /etc/apt/sources.list.d/shift.sources /tmp/shift.sources
-              dpkg-query --show --showformat="\${Conffiles}\n" shift \
-                | grep -F /etc/apt/keyrings/shift-repository.gpg
-              dpkg-query --show --showformat="\${Conffiles}\n" shift \
-                | grep -F /etc/apt/sources.list.d/shift.sources
-              apt-get update
-              apt-get install --reinstall --yes shift
-              test "$(dpkg-query --show --showformat="\${Version}" shift)" = "$EXPECTED_VERSION"
-              apt-get remove --yes shift
-              test -f /etc/apt/keyrings/shift-repository.gpg
-              test -f /etc/apt/sources.list.d/shift.sources
-              dpkg --purge shift
-              test ! -e /etc/apt/keyrings/shift-repository.gpg
-              test ! -e /etc/apt/sources.list.d/shift.sources
-            '
-          docker run --rm \
-            --env BASE_URL="$BASE_URL" \
-            --env EXPECTED_VERSION="$RELEASE_VERSION" \
-            fedora:latest \
-            bash -euxo pipefail -c '
-              dnf install --assumeyes ca-certificates curl
-              curl --fail "$BASE_URL/config/shift.repo" \
-                --output /etc/yum.repos.d/shift.repo
-              dnf install --assumeyes shift
-              test "$(rpm --query --queryformat "%{VERSION}" shift)" = "$EXPECTED_VERSION"
-            '
+          for PLATFORM in linux/amd64 linux/arm64; do
+            docker run --rm \
+              --platform "$PLATFORM" \
+              --env BASE_URL="$BASE_URL" \
+              --env EXPECTED_VERSION="$RELEASE_VERSION" \
+              ubuntu:24.04 \
+              bash -euxo pipefail -c '
+                apt-get update
+                apt-get install --yes ca-certificates curl
+                curl --fail \
+                  "$BASE_URL/apt/pool/main/s/shift/shift_${EXPECTED_VERSION}_$(dpkg --print-architecture).deb" \
+                  --output /tmp/shift.deb
+                apt-get install --yes /tmp/shift.deb
+                curl --fail "$BASE_URL/keys/shift-repository.gpg" \
+                  --output /tmp/shift-repository.gpg
+                cmp /etc/apt/keyrings/shift-repository.gpg /tmp/shift-repository.gpg
+                curl --fail "$BASE_URL/config/shift.sources" \
+                  --output /tmp/shift.sources
+                cmp /etc/apt/sources.list.d/shift.sources /tmp/shift.sources
+                dpkg-query --show --showformat="\${Conffiles}\n" shift \
+                  | grep -F /etc/apt/keyrings/shift-repository.gpg
+                dpkg-query --show --showformat="\${Conffiles}\n" shift \
+                  | grep -F /etc/apt/sources.list.d/shift.sources
+                apt-get update
+                apt-get install --reinstall --yes shift
+                test "$(dpkg-query --show --showformat="\${Version}" shift)" = "$EXPECTED_VERSION"
+                apt-get remove --yes shift
+                test -f /etc/apt/keyrings/shift-repository.gpg
+                test -f /etc/apt/sources.list.d/shift.sources
+                dpkg --purge shift
+                test ! -e /etc/apt/keyrings/shift-repository.gpg
+                test ! -e /etc/apt/sources.list.d/shift.sources
+              '
+            docker run --rm \
+              --platform "$PLATFORM" \
+              --env BASE_URL="$BASE_URL" \
+              --env EXPECTED_VERSION="$RELEASE_VERSION" \
+              fedora:latest \
+              bash -euxo pipefail -c '
+                dnf install --assumeyes ca-certificates curl
+                curl --fail "$BASE_URL/config/shift.repo" \
+                  --output /etc/yum.repos.d/shift.repo
+                dnf install --assumeyes shift
+                test "$(rpm --query --queryformat "%{VERSION}" shift)" = "$EXPECTED_VERSION"
+              '
+          done
 
           trap - EXIT
 
