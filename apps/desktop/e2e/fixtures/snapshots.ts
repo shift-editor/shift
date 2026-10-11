@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { editorCanvasStack } from "./appLocators";
@@ -80,7 +81,11 @@ async function comparesInterfaceGoldens(name: string, target: Locator | Page): P
 }
 
 async function attachLocalCapture(name: string, target: Locator | Page): Promise<void> {
-  const body = await target.screenshot({ animations: "disabled", caret: "hide" });
+  const body = await target.screenshot({
+    animations: "disabled",
+    caret: "hide",
+    style: readFileSync(SCREENSHOT_STYLE_PATH, "utf8"),
+  });
   await test.info().attach(`local-${name}`, { body, contentType: "image/png" });
 }
 
