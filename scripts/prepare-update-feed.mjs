@@ -90,30 +90,34 @@ export async function prepareUpdateFeed({
   }
 
   if (distribution === "nightly") {
-    const source = await readFile(
-      findMetadata(files, artifacts, "win32-x64", "latest.yml"),
-      "utf8",
-    );
-    const windowsMetadata = rewriteUpdateMetadata(source, version, assetBaseUrl, assetNames);
-    const windows = parseUpdateMetadata(windowsMetadata, "Windows x64 metadata");
-    const installerName = metadataAssetName(windows.files[0].url);
-    if (!assetNames.has(`${installerName}.blockmap`)) {
-      throw new Error(`Windows update is missing blockmap: ${installerName}.blockmap`);
+    for (const architecture of ["arm64", "x64"]) {
+      const source = await readFile(
+        findMetadata(files, artifacts, `win32-${architecture}`, "latest.yml"),
+        "utf8",
+      );
+      const windowsMetadata = rewriteUpdateMetadata(source, version, assetBaseUrl, assetNames);
+      const windows = parseUpdateMetadata(windowsMetadata, `Windows ${architecture} metadata`);
+      const installerName = metadataAssetName(windows.files[0].url);
+      if (!assetNames.has(`${installerName}.blockmap`)) {
+        throw new Error(`Windows update is missing blockmap: ${installerName}.blockmap`);
+      }
+      metadata.set(`win32-${architecture}`, windowsMetadata);
     }
-    metadata.set("win32-x64", windowsMetadata);
   }
 
-  metadata.set(
-    "linux-x64",
-    appImageMetadata(
-      rewriteUpdateMetadata(
-        await readFile(findMetadata(files, artifacts, "linux-x64", "latest-linux.yml"), "utf8"),
-        version,
-        assetBaseUrl,
-        assetNames,
+  for (const architecture of ["arm64", "x64"]) {
+    const source = await readFile(
+      findMetadata(files, artifacts, `linux-${architecture}`, "latest-linux.yml"),
+      "utf8",
+    );
+    metadata.set(
+      `linux-${architecture}`,
+      appImageMetadata(
+        rewriteUpdateMetadata(source, version, assetBaseUrl, assetNames),
+        architecture,
       ),
-    ),
-  );
+    );
+  }
 
   const channelRoot = path.join(site, "updates", distribution);
   const currentMetadataPath = path.join(channelRoot, "darwin", "arm64", "latest-mac.yml");
@@ -137,10 +141,20 @@ export async function prepareUpdateFeed({
       metadata.get("darwin-arm64"),
     ),
     write(path.join(channelRoot, "darwin", "x64", "latest-mac.yml"), metadata.get("darwin-x64")),
-    write(path.join(channelRoot, "linux", "x64", "latest-linux.yml"), metadata.get("linux-x64")),
-    distribution === "nightly"
-      ? write(path.join(channelRoot, "win32", "x64", "latest.yml"), metadata.get("win32-x64"))
-      : rm(path.join(channelRoot, "win32"), { recursive: true, force: true }),
+    ...["arm64", "x64"].map((architecture) =>
+      write(
+        path.join(channelRoot, "linux", architecture, "latest-linux.yml"),
+        metadata.get(`linux-${architecture}`),
+      ),
+    ),
+    ...(distribution === "nightly"
+      ? ["arm64", "x64"].map((architecture) =>
+          write(
+            path.join(channelRoot, "win32", architecture, "latest.yml"),
+            metadata.get(`win32-${architecture}`),
+          ),
+        )
+      : [rm(path.join(channelRoot, "win32"), { recursive: true, force: true })]),
     rm(path.join(channelRoot, "darwin", "arm64", "RELEASES.json"), { force: true }),
     rm(path.join(channelRoot, "darwin", "x64", "RELEASES.json"), { force: true }),
     rm(path.join(channelRoot, "win32", "x64", "RELEASES"), { force: true }),
@@ -152,8 +166,8 @@ export async function prepareUpdateFeed({
  * RPM packages, which update through their package manager and must never be
  * offered to the in-app updater.
  */
-function appImageMetadata(source) {
-  const metadata = parseUpdateMetadata(source, "Linux x64 metadata");
+function appImageMetadata(source, architecture) {
+  const metadata = parseUpdateMetadata(source, `Linux ${architecture} metadata`);
   const appImages = metadata.files.filter((file) =>
     metadataAssetName(file.url).endsWith(".AppImage"),
   );

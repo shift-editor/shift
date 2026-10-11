@@ -37,42 +37,46 @@ async function writeArtifacts(
     );
   }
 
-  const linuxDirectory = path.join(root, `desktop-${distribution}-linux-x64`);
-  await mkdir(linuxDirectory, { recursive: true });
-  const linuxFiles = linuxPackages.map((extension) => {
-    const assetName = `${prefix}-${version}-Linux-x64.${extension}`;
-    return { assetName, file: { url: assetName, sha512: `linux-${extension}`, size: 5 } };
-  });
-  for (const { assetName } of linuxFiles) {
-    await writeFile(path.join(linuxDirectory, assetName), "linux");
-  }
-  await writeFile(
-    path.join(linuxDirectory, "latest-linux.yml"),
-    dump({
-      version,
-      files: linuxFiles.map(({ file }) => file),
-      path: linuxFiles[0].assetName,
-      sha512: linuxFiles[0].file.sha512,
-      releaseDate: "2026-08-16T12:00:00.000Z",
-    }),
-  );
-
-  if (distribution === "nightly") {
-    const assetName = `${prefix}-${version}-Windows-x64-Setup.exe`;
-    const directory = path.join(root, `desktop-${distribution}-win32-x64`);
-    await mkdir(directory, { recursive: true });
-    await writeFile(path.join(directory, assetName), "windows");
-    await writeFile(path.join(directory, `${assetName}.blockmap`), "blockmap");
+  for (const architecture of ["arm64", "x64"]) {
+    const linuxDirectory = path.join(root, `desktop-${distribution}-linux-${architecture}`);
+    await mkdir(linuxDirectory, { recursive: true });
+    const linuxFiles = linuxPackages.map((extension) => {
+      const assetName = `${prefix}-${version}-Linux-${architecture}.${extension}`;
+      return { assetName, file: { url: assetName, sha512: `linux-${extension}`, size: 5 } };
+    });
+    for (const { assetName } of linuxFiles) {
+      await writeFile(path.join(linuxDirectory, assetName), "linux");
+    }
     await writeFile(
-      path.join(directory, "latest.yml"),
+      path.join(linuxDirectory, "latest-linux.yml"),
       dump({
         version,
-        files: [{ url: assetName, sha512: "windows", size: 7 }],
-        path: assetName,
-        sha512: "windows",
+        files: linuxFiles.map(({ file }) => file),
+        path: linuxFiles[0].assetName,
+        sha512: linuxFiles[0].file.sha512,
         releaseDate: "2026-08-16T12:00:00.000Z",
       }),
     );
+  }
+
+  if (distribution === "nightly") {
+    for (const architecture of ["arm64", "x64"]) {
+      const assetName = `${prefix}-${version}-Windows-${architecture}-Setup.exe`;
+      const directory = path.join(root, `desktop-${distribution}-win32-${architecture}`);
+      await mkdir(directory, { recursive: true });
+      await writeFile(path.join(directory, assetName), "windows");
+      await writeFile(path.join(directory, `${assetName}.blockmap`), "blockmap");
+      await writeFile(
+        path.join(directory, "latest.yml"),
+        dump({
+          version,
+          files: [{ url: assetName, sha512: `windows-${architecture}`, size: 7 }],
+          path: assetName,
+          sha512: `windows-${architecture}`,
+          releaseDate: "2026-08-16T12:00:00.000Z",
+        }),
+      );
+    }
   }
 }
 
@@ -151,17 +155,21 @@ test("offers only the AppImage on the Linux channel", async (context) => {
     repository,
   });
 
-  const linux = load(
-    await readFile(path.join(siteRoot, "updates/release/linux/x64/latest-linux.yml"), "utf8"),
-  );
-  const appImageUrl =
-    "https://github.com/shift-editor/shift/releases/download/v0.1.1/Shift-0.1.1-Linux-x64.AppImage";
-  assert.deepEqual(
-    linux.files.map((file) => file.url),
-    [appImageUrl],
-  );
-  assert.equal(linux.path, appImageUrl);
-  assert.equal(linux.sha512, "linux-AppImage");
+  for (const architecture of ["arm64", "x64"]) {
+    const linux = load(
+      await readFile(
+        path.join(siteRoot, `updates/release/linux/${architecture}/latest-linux.yml`),
+        "utf8",
+      ),
+    );
+    const appImageUrl = `https://github.com/shift-editor/shift/releases/download/v0.1.1/Shift-0.1.1-Linux-${architecture}.AppImage`;
+    assert.deepEqual(
+      linux.files.map((file) => file.url),
+      [appImageUrl],
+    );
+    assert.equal(linux.path, appImageUrl);
+    assert.equal(linux.sha512, "linux-AppImage");
+  }
 });
 
 test("rejects Linux metadata without an AppImage", async (context) => {
@@ -198,14 +206,19 @@ test("stages Nightly macOS, Windows, and Linux metadata", async (context) => {
     nightlyAssetBaseUrl,
   });
 
-  const windows = load(
-    await readFile(path.join(siteRoot, "updates/nightly/win32/x64/latest.yml"), "utf8"),
-  );
-  assert.equal(windows.version, "0.321.1");
-  assert.equal(
-    windows.files[0].url,
-    `${nightlyAssetBaseUrl}/Shift-Nightly-0.321.1-Windows-x64-Setup.exe`,
-  );
+  for (const architecture of ["arm64", "x64"]) {
+    const windows = load(
+      await readFile(
+        path.join(siteRoot, `updates/nightly/win32/${architecture}/latest.yml`),
+        "utf8",
+      ),
+    );
+    assert.equal(windows.version, "0.321.1");
+    assert.equal(
+      windows.files[0].url,
+      `${nightlyAssetBaseUrl}/Shift-Nightly-0.321.1-Windows-${architecture}-Setup.exe`,
+    );
+  }
   const linux = load(
     await readFile(path.join(siteRoot, "updates/nightly/linux/x64/latest-linux.yml"), "utf8"),
   );

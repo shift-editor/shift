@@ -30,13 +30,14 @@ Use Conventional Commit prefixes. `feat`, `fix`, and `perf` appear in the public
 
 ## Packaging and updates
 
-| Target              | Package/update policy                                                                                           |
-| ------------------- | --------------------------------------------------------------------------------------------------------------- |
-| macOS arm64/x64     | Signed and notarized ZIP for automatic updates; DMG for manual installation                                         |
-| Windows Nightly x64 | Unsigned per-user NSIS installer and automatic updates for installed N → N+1 testing                            |
-| Windows Release x64 | Manual GitHub downloads until Authenticode signing is configured                                                |
-| Linux Nightly x64   | Unsigned direct GitHub downloads (`.deb`, `.rpm`, and AppImage); the AppImage updates itself                   |
-| Linux Release x64   | Signed RPM and checksum manifest; signed APT/DNF repositories, plus a self-updating AppImage                    |
+| Target                    | Package/update policy                                                                                                                  |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| macOS arm64/x64           | Signed and notarized ZIP for automatic updates; DMG for manual installation                                                            |
+| Windows Nightly arm64/x64 | Unsigned per-user NSIS installer and automatic updates for installed N → N+1 testing                                                   |
+| Windows Release arm64/x64 | Manual GitHub downloads until Authenticode signing is configured                                                                       |
+| Linux Nightly arm64/x64   | Unsigned direct GitHub downloads (`.deb`, `.rpm`, and AppImage); the AppImage updates itself                                           |
+| Linux Release x64         | Signed RPM and checksum manifest; signed APT/DNF repositories, plus a self-updating AppImage                                           |
+| Linux Release arm64       | Signed RPM and checksum manifest; direct GitHub downloads only until the APT/DNF repositories add arm64, plus a self-updating AppImage |
 
 Packaged builds register `.shift` as a Shift Document with shared document artwork. Release is the preferred handler; Nightly remains an alternate so installing it does not take document ownership from Release. macOS composites the Shift badge onto its standard document shape from bundle metadata and the packaged asset catalog, Windows uses per-user NSIS registry entries, and Linux DEB/RPM packages install `application/x-shift-document` metadata and hicolor MIME icons. Both macOS distributions register as alternate viewers for TTF, OTF, Glyphs, Glyphspackage, UFO, and Designspace sources, which lists Shift under **Open With** without taking ownership of source-font formats.
 
@@ -44,7 +45,7 @@ electron-updater compares the aligned numeric versions, verifies generated SHA-5
 
 electron-builder generates architecture-specific `latest-mac.yml` files for exact versioned ZIP assets, `latest.yml` for the Windows Nightly NSIS installer, and `latest-linux.yml` for Linux. `prepare-update-feed.mjs` keeps only the AppImage in the Linux feed: DEB and RPM installs update through APT/DNF, and the app never runs electron-updater's package installers. GitHub Pages hosts the fixed Release/Nightly metadata files. Versioned Release binaries and their differential-update blockmaps remain on GitHub Releases. Nightly metadata instead references immutable updater packages under `nightly/<full-commit>/` in Cloudflare R2. Because electron-updater cannot derive a previous blockmap URL across commit-addressed directories, Nightly updates fall back to full package downloads; Release differential updates are unchanged.
 
-Linux Release packages use the dedicated `Shift Package Signing` RSA-4096 key. The RPM carries an embedded signature, and the signed `SHA256SUMS.asc` authenticates every direct-download Linux format, including DEB and AppImage. The Release DEB embeds the public key and APT source as Debian conffiles so a direct install enrolls in authenticated APT updates; Nightly DEBs never enroll in the Release repository. APT authenticates package hashes through `InRelease`; DNF checks both the RPM signature and the detached `repomd.xml` signature. The public key is published as `shift-repository.gpg` with the GitHub release and at `https://packages.shift.graphics/keys/shift-repository.gpg`.
+Linux Release packages use the dedicated `Shift Package Signing` RSA-4096 key. The RPM carries an embedded signature, and the signed `SHA256SUMS.asc` authenticates every direct-download Linux format, including DEB and AppImage. The Release x64 DEB embeds the public key and APT source as Debian conffiles so a direct install enrolls in authenticated APT updates; Nightly DEBs and the arm64 DEB never enroll in the amd64-only Release repository. APT authenticates package hashes through `InRelease`; DNF checks both the RPM signature and the detached `repomd.xml` signature. The public key is published as `shift-repository.gpg` with the GitHub release and at `https://packages.shift.graphics/keys/shift-repository.gpg`.
 
 The app waits 30 seconds before its first automatic check to avoid competing with startup, then checks every four hours. Automatic current/error results are quiet. A native-framed update window asks for consent before downloading, then replaces those choices with byte and percentage progress that can be canceled. Download completion replaces progress with **Restart and Install** / Later, is not silently installed on ordinary quit, and cannot restart until every document accepts and commits close.
 
@@ -83,7 +84,7 @@ The AppImage remains a direct-download alternative. Verify it through the releas
 ## Workflows
 
 - `release-please.yml` maintains a draft release pull request. Merging it creates a numeric version tag and draft GitHub release, then invokes `release-desktop.yml`.
-- `release-desktop.yml` validates `vMAJOR.MINOR.PATCH`, builds macOS arm64/x64 ZIPs and DMGs, a Windows x64 per-user NSIS installer, and Linux x64 DEB/RPM/AppImage packages, smoke-tests packaged applications, signs the Release RPM and checksum manifest, uploads the GitHub prerelease, publishes signed APT/DNF repositories, then advances the Release feed.
+- `release-desktop.yml` validates `vMAJOR.MINOR.PATCH`, builds macOS arm64/x64 ZIPs and DMGs, Windows arm64 and x64 per-user NSIS installers, and Linux arm64 and x64 DEB/RPM/AppImage packages, smoke-tests packaged applications, signs the Release RPMs and checksum manifest, uploads the GitHub prerelease, publishes the x64 packages to signed APT/DNF repositories, then advances the Release feed.
 - `signpath-test-windows.yml` is a manual integration check for SignPath. It builds and smoke-tests the Windows x64 package, submits the NSIS installer to the `test-signing` policy, verifies that SignPath returned an Authenticode signature, and retains the signed installer as a 14-day workflow artifact. It does not publish the installer or modify an update feed.
 - `nightly-after-merge.yml` dispatches `nightly.yml` after a pull request labeled `release: nightly` merges into `main`. Closing an unmerged pull request or merging one without the label does nothing.
 - `nightly.yml` runs from that dispatch, its daily schedule, or a manual dispatch. It resolves one `0.RUN.ATTEMPT` version and builds the same matrix. After every build succeeds, it archives versioned updater assets in the immutable R2 prefix `nightly/<full-commit>/`, replaces the rolling GitHub prerelease's friendly download aliases, and advances the feed to the exact R2 prefix. A commit whose R2 manifest and feed are already active is skipped.
@@ -113,21 +114,21 @@ The Release Please workflow mints a short-lived token from the repository-scoped
 | `LINUX_PACKAGE_BASE_URL`           | Linux repository origin; production uses `https://packages.shift.graphics` |
 | `LINUX_REPOSITORY_GPG_FINGERPRINT` | Full fingerprint of the dedicated Linux repository signing key             |
 
-| Secret                             | Purpose                                                        |
-| ---------------------------------- | -------------------------------------------------------------- |
-| `RELEASE_PLEASE_APP_PRIVATE_KEY`   | Private key used to mint installation tokens for one run       |
-| `APPLE_CERTIFICATE`                | Base64-encoded Developer ID Application `.p12`                 |
-| `APPLE_CERTIFICATE_PASSWORD`       | Password protecting the `.p12`                                 |
-| `APPLE_ID`                         | Apple Developer account login used by `notarytool`             |
-| `APPLE_APP_SPECIFIC_PASSWORD`      | Apple ID app-specific password                                 |
-| `APPLE_TEAM_ID`                    | Paid Apple Developer Program team ID                           |
-| `R2_ACCESS_KEY_ID`                 | Release-bucket S3 access key with object read/write permission |
-| `R2_SECRET_ACCESS_KEY`             | Release-bucket S3 secret access key                            |
-| `R2_SCREENSHOT_ACCESS_KEY_ID`      | Bucket-scoped screenshot S3 access key                         |
-| `R2_SCREENSHOT_SECRET_ACCESS_KEY`  | Bucket-scoped screenshot S3 secret access key                  |
-| `LINUX_REPOSITORY_GPG_PRIVATE_KEY` | ASCII-armored private Linux repository signing key             |
-| `LINUX_REPOSITORY_GPG_PASSPHRASE`  | Passphrase protecting the Linux repository signing key         |
-| `SIGNPATH_API_TOKEN`                | API token for a CI user that can submit to `shift/test-signing` |
+| Secret                             | Purpose                                                         |
+| ---------------------------------- | --------------------------------------------------------------- |
+| `RELEASE_PLEASE_APP_PRIVATE_KEY`   | Private key used to mint installation tokens for one run        |
+| `APPLE_CERTIFICATE`                | Base64-encoded Developer ID Application `.p12`                  |
+| `APPLE_CERTIFICATE_PASSWORD`       | Password protecting the `.p12`                                  |
+| `APPLE_ID`                         | Apple Developer account login used by `notarytool`              |
+| `APPLE_APP_SPECIFIC_PASSWORD`      | Apple ID app-specific password                                  |
+| `APPLE_TEAM_ID`                    | Paid Apple Developer Program team ID                            |
+| `R2_ACCESS_KEY_ID`                 | Release-bucket S3 access key with object read/write permission  |
+| `R2_SECRET_ACCESS_KEY`             | Release-bucket S3 secret access key                             |
+| `R2_SCREENSHOT_ACCESS_KEY_ID`      | Bucket-scoped screenshot S3 access key                          |
+| `R2_SCREENSHOT_SECRET_ACCESS_KEY`  | Bucket-scoped screenshot S3 secret access key                   |
+| `LINUX_REPOSITORY_GPG_PRIVATE_KEY` | ASCII-armored private Linux repository signing key              |
+| `LINUX_REPOSITORY_GPG_PASSPHRASE`  | Passphrase protecting the Linux repository signing key          |
+| `SIGNPATH_API_TOKEN`               | API token for a CI user that can submit to `shift/test-signing` |
 
 Never put private keys or signing credentials in repository files, workflow inputs, artifacts, or logs. macOS release and Nightly jobs fail when signing credentials are absent.
 
@@ -151,7 +152,7 @@ Run **Test Sign Windows** from GitHub Actions. Test-signed installers are workfl
 8. Add a DNS-only (not proxied) `CNAME` record from `feeds.shift.graphics` to `shift-editor.github.io` so GitHub can issue its certificate, configure GitHub Pages to publish the root of `update-feeds` with that custom domain, and enforce HTTPS.
 9. Confirm packaged Release and Nightly builds contact only their matching feed paths, and that Nightly metadata references the expected full commit in R2.
 10. Confirm the repository job installs the exact candidate version in its clean Ubuntu and Fedora containers. After a second versioned release exists, perform an installed N → N+1 APT and DNF upgrade test.
-11. Perform real installed N → N+1 tests on macOS arm64/x64 and unsigned Windows Nightly x64, including download consent, full-download fallback, progress, download cancellation and retry, Save, Don't Save, Later, and **Restart and Install**.
+11. Perform real installed N → N+1 tests on macOS arm64/x64 and unsigned Windows Nightly arm64/x64, including download consent, full-download fallback, progress, download cancellation and retry, Save, Don't Save, Later, and **Restart and Install**.
 12. Keep Windows Release on manual downloads until Authenticode signing and installed update verification are complete.
 
 Electron update orchestration has no worthwhile unit test without mocking Electron, native dialogs, and electron-updater. Pure tests cover feed selection, canonical versions, generated metadata validation, feed preparation, and Nightly asset partitioning; installed update behavior and retention pruning remain required manual QA.

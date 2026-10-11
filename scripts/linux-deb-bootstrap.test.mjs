@@ -15,7 +15,7 @@ const repositoryDestinations = [
   "/etc/apt/sources.list.d/shift.sources",
 ];
 
-async function loadLinuxPackageConfiguration(distribution) {
+async function loadLinuxPackageConfiguration(distribution, architecture = "x64") {
   const { stdout } = await execFileAsync(
     process.execPath,
     [
@@ -29,7 +29,7 @@ async function loadLinuxPackageConfiguration(distribution) {
       cwd: repositoryRoot,
       env: {
         ...process.env,
-        SHIFT_BUILD_ARCH: "x64",
+        SHIFT_BUILD_ARCH: architecture,
         SHIFT_DISTRIBUTION: distribution,
       },
     },
@@ -59,6 +59,13 @@ test("Release DEB bootstraps its APT repository as conffiles", async () => {
 
 test("Nightly Linux packages do not enroll in the Release repository", async () => {
   const configuration = await loadLinuxPackageConfiguration("nightly");
+
+  assertExcludesRepositoryConfiguration(configuration.deb);
+  assertExcludesRepositoryConfiguration(configuration.rpm);
+});
+
+test("arm64 Release DEB does not enroll in the amd64 APT repository", async () => {
+  const configuration = await loadLinuxPackageConfiguration("release", "arm64");
 
   assertExcludesRepositoryConfiguration(configuration.deb);
   assertExcludesRepositoryConfiguration(configuration.rpm);

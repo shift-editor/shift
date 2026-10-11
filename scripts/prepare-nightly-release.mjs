@@ -38,6 +38,17 @@ const assets = [
     publicName: "Shift-Nightly-macOS-x64.dmg",
   },
   {
+    pattern: new RegExp(`Shift-Nightly-${escapeRegex(version)}-Windows-arm64-Setup\\.exe$`),
+    publicName: "Shift-Nightly-Windows-arm64-Setup.exe",
+    update: true,
+  },
+  {
+    pattern: new RegExp(
+      `Shift-Nightly-${escapeRegex(version)}-Windows-arm64-Setup\\.exe\\.blockmap$`,
+    ),
+    update: true,
+  },
+  {
     pattern: new RegExp(`Shift-Nightly-${escapeRegex(version)}-Windows-x64-Setup\\.exe$`),
     publicName: "Shift-Nightly-Windows-x64-Setup.exe",
     update: true,
@@ -46,6 +57,19 @@ const assets = [
     pattern: new RegExp(
       `Shift-Nightly-${escapeRegex(version)}-Windows-x64-Setup\\.exe\\.blockmap$`,
     ),
+    update: true,
+  },
+  {
+    pattern: new RegExp(`Shift-Nightly-${escapeRegex(version)}-Linux-arm64\\.deb$`),
+    publicName: "Shift-Nightly-Linux-arm64.deb",
+  },
+  {
+    pattern: new RegExp(`Shift-Nightly-${escapeRegex(version)}-Linux-arm64\\.rpm$`),
+    publicName: "Shift-Nightly-Linux-arm64.rpm",
+  },
+  {
+    pattern: new RegExp(`Shift-Nightly-${escapeRegex(version)}-Linux-arm64\\.AppImage$`),
+    publicName: "Shift-Nightly-Linux-arm64.AppImage",
     update: true,
   },
   {

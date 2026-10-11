@@ -72,11 +72,21 @@ jobs:
             platform: darwin
             arch: x64
             builder-args: "--mac zip dmg --x64"
+          - name: Windows arm64
+            runner: windows-11-arm
+            platform: win32
+            arch: arm64
+            builder-args: "--win nsis --arm64"
           - name: Windows x64
             runner: windows-latest
             platform: win32
             arch: x64
             builder-args: "--win nsis --x64"
+          - name: Linux arm64
+            runner: ubuntu-24.04-arm
+            platform: linux
+            arch: arm64
+            builder-args: "--linux deb rpm AppImage --arm64"
           - name: Linux x64
             runner: ubuntu-latest
             platform: linux
@@ -266,9 +276,9 @@ jobs:
           }
           gpg --batch --list-secret-keys "$FINGERPRINT" >/dev/null
 
-          mapfile -d '' RPMS < <(find dist -type f -name 'Shift-*-Linux-x64.rpm' -print0)
-          [[ "${#RPMS[@]}" == 1 ]] || {
-            echo "Expected one Linux RPM, found ${#RPMS[@]}" >&2
+          mapfile -d '' RPMS < <(find dist -type f -name 'Shift-*-Linux-*.rpm' -print0)
+          [[ "${#RPMS[@]}" == 2 ]] || {
+            echo "Expected arm64 and x64 Linux RPMs, found ${#RPMS[@]}" >&2
             exit 1
           }
           PASSPHRASE_FILE="$RUNNER_TEMP/linux-signing-passphrase"
@@ -282,7 +292,7 @@ jobs:
             --define "_openpgp_sign_id $FINGERPRINT" \
             --define "_gpg_path $GNUPGHOME" \
             --define "_gpg_sign_cmd_extra_args --batch --pinentry-mode loopback --passphrase-file $PASSPHRASE_FILE" \
-            "${RPMS[0]}"
+            "${RPMS[@]}"
 
           gpg --batch --export "$FINGERPRINT" > shift-repository.gpg
           cmp apps/desktop/resources/linux/shift-repository.gpg shift-repository.gpg || {
@@ -295,7 +305,7 @@ jobs:
           install -d "$RPM_DB"
           rpm --dbpath "$RPM_DB" --initdb
           rpmkeys --dbpath "$RPM_DB" --import "$RPM_PUBLIC_KEY"
-          rpmkeys --dbpath "$RPM_DB" --checksig "${RPMS[0]}"
+          rpmkeys --dbpath "$RPM_DB" --checksig "${RPMS[@]}"
 
       - name: Add Developer Preview notice
         env:
