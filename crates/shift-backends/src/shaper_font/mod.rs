@@ -8,6 +8,8 @@
 //! It has no outlines, `cmap`, or `hmtx`: a shaper supplies character mapping
 //! and advances from the live font, so outline and advance edits never require
 //! a rebuild. Glyph ids in the binary index [`ShaperFont::glyph_names`].
+//! [`LiveShaper`] shapes text with it, mapping characters through the live
+//! font and returning only what the features contribute.
 //!
 //! Only authored feature code is compiled. Kerning, mark attachment, and
 //! `STAT`, which export generates from structured data, are absent; insert
@@ -16,6 +18,7 @@
 //! Adapted from Fontra's `build-shaper-font` (Apache-2.0).
 
 mod diagnostics;
+mod shape;
 mod state;
 mod tables;
 
@@ -32,11 +35,15 @@ use fontdrasil::coords::{NormalizedCoord, NormalizedLocation};
 use fontdrasil::types::Axis as IrAxis;
 use fontdrasil::variations::VariationModelError;
 use fontir::ir::StaticMetadata;
+use shift_font::{AxisId, GlyphId};
 use write_fonts::tables::gdef::GlyphClassDef;
 use write_fonts::types::Tag;
 use write_fonts::BuilderError;
 
 pub use diagnostics::{DiagnosticSeverity, FeatureDiagnostic};
+pub use shape::{
+    FeatureSetting, LiveShaper, ShapeError, ShapeRequest, ShapeUnit, ShapedGlyph, TextDirection,
+};
 pub use state::ShaperFontState;
 
 use crate::glyph_category::gdef_classes;
@@ -58,8 +65,13 @@ const NOTDEF: &str = ".notdef";
 pub struct ShaperFontRequest {
     units_per_em: u16,
     glyph_names: Vec<String>,
+    /// The Shift glyph for each name in `glyph_names`; `None` for a `.notdef`
+    /// the font does not have.
+    glyph_ids: Vec<Option<GlyphId>>,
     feature_source: String,
     axes: Vec<IrAxis>,
+    /// The Shift axis for each axis in `axes`.
+    axis_ids: Vec<AxisId>,
     gdef_classes: BTreeMap<String, GlyphClassDef>,
 }
 
@@ -80,23 +92,35 @@ impl ShaperFontRequest {
         let units_per_em =
             units_per_em(value).ok_or(ShaperFontError::InvalidUnitsPerEm { value })?;
         let axes = to_ir_axes(font.axes(), font.axis_mappings())?;
-        let glyph_names = std::iter::once(NOTDEF)
-            .chain(
-                font.glyphs()
-                    .into_iter()
-                    .map(|glyph| glyph.name())
-                    .filter(|name| *name != NOTDEF),
-            )
-            .map(str::to_string)
-            .collect();
+        let (glyph_names, glyph_ids) = std::iter::once((
+            NOTDEF.to_string(),
+            font.glyph(NOTDEF).map(|glyph| glyph.id()),
+        ))
+        .chain(
+            font.glyphs()
+                .into_iter()
+                .filter(|glyph| glyph.name() != NOTDEF)
+                .map(|glyph| (glyph.name().to_string(), Some(glyph.id()))),
+        )
+        .unzip();
 
         Ok(Self {
             units_per_em,
             glyph_names,
+            glyph_ids,
             feature_source: font.features().fea_source().unwrap_or_default().to_string(),
             axes,
+            axis_ids: font.axes().iter().map(|axis| axis.id()).collect(),
             gdef_classes: gdef_classes(font.glyphs(), font.lib()),
         })
+    }
+
+    /// Returns this request with no feature source, which always compiles.
+    fn without_features(&self) -> Self {
+        Self {
+            feature_source: String::new(),
+            ..self.clone()
+        }
     }
 }
 
@@ -105,6 +129,9 @@ impl ShaperFontRequest {
 pub struct ShaperFont {
     bytes: Vec<u8>,
     glyph_names: Vec<String>,
+    glyph_ids: Vec<Option<GlyphId>>,
+    axes: Vec<IrAxis>,
+    axis_ids: Vec<AxisId>,
     insert_markers: Vec<InsertMarker>,
 }
 
@@ -166,6 +193,9 @@ impl ShaperFont {
             font: Some(Self {
                 bytes: builder.build(),
                 glyph_names: request.glyph_names.clone(),
+                glyph_ids: request.glyph_ids.clone(),
+                axes: request.axes.clone(),
+                axis_ids: request.axis_ids.clone(),
                 insert_markers: tables::insert_markers(&compilation, &tree),
             }),
             diagnostics: feature_diagnostics(&warnings, &tree),
@@ -298,5 +328,7 @@ fn variation_metadata(
     Ok(Some(metadata))
 }
 
+#[cfg(test)]
+mod shape_tests;
 #[cfg(test)]
 mod tests;

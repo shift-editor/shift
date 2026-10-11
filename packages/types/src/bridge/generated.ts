@@ -204,6 +204,19 @@ export interface BridgeApi {
   getNamedInstances(): Array<NamedInstance>
   /** Returns the precomputed source-metric interpolation model for this font. */
   getSourceMetricsInterpolation(): SourceMetricsInterpolationSnapshot | null
+  /**
+   * Shapes a run of text with the font's feature code.
+   *
+   * Characters map through the live font's Unicode values and every
+   * glyph's own advance is zero while shaping, so the result carries the
+   * substituted glyphs, their clusters, and only what the feature code
+   * positions. The caller adds live advances, kerning, and mark attachment.
+   *
+   * Feature code with errors shapes with the last version that compiled.
+   * The shaping tables are rebuilt only when a font change since the last
+   * call altered the glyph order, glyph categories, feature code, or axes.
+   */
+  shape(request: ShapeRequest): Array<ShapedGlyph>
   mapLocation(location: Location): Location
   getSources(): Array<Source>
 }
@@ -221,6 +234,13 @@ export interface DocumentState {
   needsSaveAs: boolean
 }
 
+export interface FeatureSetting {
+  /** A feature tag such as `liga`. */
+  tag: string
+  /** `0` turns the feature off, `1` on; larger values pick an alternate. */
+  value: number
+}
+
 export interface FontExportRequest {
   path: string
   format: string
@@ -234,6 +254,50 @@ export interface FontExportResult {
 export interface NewWorkspace {
   familyName?: string
   unitsPerEm?: number
+}
+
+/**
+ * One shaped glyph. Advances and offsets hold only what the font's feature
+ * code positions; glyph advances, kerning, and mark attachment are the
+ * caller's to add.
+ */
+export interface ShapedGlyph {
+  /** Absent when a character has no glyph. */
+  glyphId?: GlyphId
+  /** Index of the first unit the glyph came from. */
+  cluster: number
+  xAdvance: number
+  yAdvance: number
+  xOffset: number
+  yOffset: number
+}
+
+export interface ShapeRequest {
+  units: Array<ShapeUnit>
+  /** User-space location to shape at; omitted axes are at their default. */
+  location: Location
+  /** Guessed from the script when omitted. */
+  direction?: "ltr" | "rtl"
+  /**
+   * ISO 15924 script tag such as `Arab`; guessed from the characters when
+   * omitted.
+   */
+  script?: string
+  /** BCP 47 language tag; the default language system when omitted. */
+  language?: string
+  /** Settings over the features applied by default. */
+  features?: Array<FeatureSetting>
+}
+
+/**
+ * One unit of text to shape: exactly one of a character or a glyph inserted
+ * by name.
+ */
+export interface ShapeUnit {
+  /** A Unicode scalar value. */
+  codepoint?: number
+  /** A glyph with no character to type, shaped as itself. */
+  glyphId?: GlyphId
 }
 
 /**

@@ -1,8 +1,10 @@
 use crate::errors::{self, BridgeError, BridgeResult};
 use crate::input::{parse, BridgeParse};
+use crate::shaping::{NapiShapeRequest, NapiShapedGlyph, ParsedShapeRequest};
 use napi::bindgen_prelude::*;
 use napi::{Error, Status};
 use napi_derive::napi;
+use shift_backends::shaper_font::{LiveShaper, ShaperFontRequest, ShaperFontState};
 use shift_backends::{
   build_binary_atlas_page, font_loader::FontLoader, variable_glyph_inputs,
   AxisIndex as SourceAxisIndex, ExportFormat, FontDirectory, FontExportRequest, FontExportResult,
@@ -1116,6 +1118,9 @@ pub struct Bridge {
   slug_generation: u32,
   slug_atlas: Option<SlugAtlasGeneration>,
   source_atlas_descriptors: BTreeMap<u32, SourceAtlasDescriptor>,
+  shaper_fonts: ShaperFontState,
+  /// Shaper for the current font; `None` until the next shape after a change.
+  shaper: Option<LiveShaper>,
 }
 
 #[napi]
@@ -1131,6 +1136,8 @@ impl Bridge {
       slug_generation: 0,
       slug_atlas: None,
       source_atlas_descriptors: BTreeMap::new(),
+      shaper_fonts: ShaperFontState::default(),
+      shaper: None,
     }
   }
 
@@ -2074,6 +2081,23 @@ impl Bridge {
     Ok(Some(snapshot.into()))
   }
 
+  /// Shapes a run of text with the font's feature code.
+  ///
+  /// Characters map through the live font's Unicode values and every
+  /// glyph's own advance is zero while shaping, so the result carries the
+  /// substituted glyphs, their clusters, and only what the feature code
+  /// positions. The caller adds live advances, kerning, and mark attachment.
+  ///
+  /// Feature code with errors shapes with the last version that compiled.
+  /// The shaping tables are rebuilt only when a font change since the last
+  /// call altered the glyph order, glyph categories, feature code, or axes.
+  #[napi]
+  pub fn shape(&mut self, request: NapiShapeRequest) -> errors::Result<Vec<NapiShapedGlyph>> {
+    let request = ParsedShapeRequest::try_from(request)?;
+    let shaped = self.live_shaper()?.shape(&request.as_request())?;
+    Ok(shaped.into_iter().map(NapiShapedGlyph::from).collect())
+  }
+
   #[napi]
   pub fn map_location(&self, location: NapiLocation) -> errors::Result<NapiLocation> {
     let external = shift_font::ExternalLocation::from_untyped(map_location(location)?);
@@ -2199,8 +2223,38 @@ impl Bridge {
     })
   }
 
+  /// Returns the shaper for the current font, making a new one after a font
+  /// change.
+  fn live_shaper(&mut self) -> BridgeResult<&LiveShaper> {
+    let shaper = match self.shaper.take() {
+      Some(shaper) => shaper,
+      None => self.new_live_shaper()?,
+    };
+    Ok(self.shaper.insert(shaper))
+  }
+
+  /// Updates the shaping tables from the current font and makes a shaper
+  /// with its character mapping. Every layer is acquired first, because a
+  /// glyph's `GDEF` class depends on its anchors.
+  fn new_live_shaper(&mut self) -> BridgeResult<LiveShaper> {
+    self.workspace_mut()?.acquire_all_layers()?;
+    let request = ShaperFontRequest::from_font(self.font()?)?;
+    self.shaper_fonts.update(request)?;
+    let shaper_font =
+      self
+        .shaper_fonts
+        .font()
+        .cloned()
+        .ok_or_else(|| BridgeError::InvalidInput {
+          kind: "font",
+          value: "it has no shaping tables".to_string(),
+        })?;
+    Ok(LiveShaper::new(shaper_font, self.font()?))
+  }
+
   fn mark_font_changed(&mut self) {
     self.slug_atlas = None;
+    self.shaper = None;
     self.bump_live_version();
   }
 
@@ -2214,6 +2268,8 @@ impl Bridge {
 
   fn reset_versions(&mut self) {
     self.slug_atlas = None;
+    self.shaper_fonts = ShaperFontState::default();
+    self.shaper = None;
     self.source_atlas_descriptors.clear();
     self.live_version = DocumentVersion::default();
     self.saved_version = DocumentVersion::default();
@@ -2725,7 +2781,7 @@ fn map_anchor_seed(seed: NapiAnchorSeed) -> errors::Result<AnchorSeed> {
   })
 }
 
-fn map_location(location: NapiLocation) -> errors::Result<FontLocation> {
+pub(crate) fn map_location(location: NapiLocation) -> errors::Result<FontLocation> {
   let values = location
     .values
     .into_iter()

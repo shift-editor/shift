@@ -84,8 +84,10 @@ fn request(glyph_names: &[&str], feature_source: &str) -> ShaperFontRequest {
     ShaperFontRequest {
         units_per_em: 1000,
         glyph_names: glyph_names.iter().map(|name| name.to_string()).collect(),
+        glyph_ids: vec![None; glyph_names.len()],
         feature_source: feature_source.to_string(),
         axes: Vec::new(),
+        axis_ids: Vec::new(),
         gdef_classes: BTreeMap::new(),
     }
 }
