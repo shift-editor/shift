@@ -16,7 +16,7 @@ export type SpacingState =
       selected: SpacingHalf | null;
       /** Whether the pointer is over the active half's value pill, which opens on click. */
       overLabel?: boolean;
-      /** Set by a key press to hide every overlay until the pointer moves. */
+      /** Set by a nudge to hide every overlay until the pointer moves. */
       quiet?: boolean;
     }
   | {

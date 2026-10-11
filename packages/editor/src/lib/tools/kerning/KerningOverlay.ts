@@ -2,7 +2,6 @@ import type { Canvas, ScreenCanvas, ScreenProjection } from "../../editor/render
 import type { Editor } from "../../editor/Editor";
 import { LOCK_PATH_DATA, LOCK_VIEW_BOX_SIZE } from "../../editor/rendering/icons/lock";
 import { kerningLabelLayout, kerningLabelText } from "./KerningLabel";
-import { isGroupSide } from "../../model/Kerning";
 import type { KerningPair } from "./RunKerning";
 
 type KerningTheme = Canvas["theme"]["kerning"]["negative"];
@@ -14,6 +13,10 @@ export interface KerningDrawOptions {
   readonly hovered?: boolean;
   /** Whether the arrow keys change this pair, which gives its strip a light edge. */
   readonly selected?: boolean;
+  /** Draws the strip without its pill: another pair the same kern applies to. */
+  readonly echo?: boolean;
+  /** Fills the pair's glyphs in the kerning colour: a pair the hovered pill's kern reaches. */
+  readonly filled?: boolean;
 }
 
 /**
@@ -23,9 +26,9 @@ export interface KerningDrawOptions {
  * The kern is a translucent strip between the two advance edges in the
  * kerning colours, which no spacing overlay uses: violet when it tightens or
  * is zero, teal when it loosens, and grey at an interpolated location. The pill below the baseline
- * shows the value, with a lock on a side that is a glyph exception. While the pointer is on the pill, other
- * glyphs of the run that kern through one of the pair's groups fill in the
- * kerning colour, showing the reach of a group edit.
+ * shows the value, with a lock on a side that is a glyph exception. The
+ * other pairs the same kern applies to are drawn as echoes, and while the
+ * pointer is on the pill their glyphs fill in the kerning colour.
  */
 export function drawKerningPair(
   canvas: Canvas,
@@ -35,10 +38,12 @@ export function drawKerningPair(
 ): void {
   const theme = kerningTheme(canvas, editor, pair);
   canvas.withTransform(editor.sceneTransform(pair.gap.node), (local) => {
-    if (options.hovered) drawGroupGlyphs(local, editor, pair, theme);
+    if (options.filled) fillPairGlyphs(local, editor, pair, theme);
     local.withScreenSpace((screen, project) => {
       drawKern(screen, project, pair, theme, options.selected ?? false);
-      drawPill(screen, editor, pair, theme, canvas.theme.spacing, options.hovered ?? false);
+      if (!options.echo) {
+        drawPill(screen, editor, pair, theme, canvas.theme.spacing, options.hovered ?? false);
+      }
     });
   });
 }
@@ -74,38 +79,21 @@ function drawKern(
   screen.strokeRect(left + 0.5, top + 0.5, Math.max(width - 1, 0), height - 1, theme.edge, 1);
 }
 
-/**
- * Fills, over their glyph fill, the other glyphs of the run that kern
- * through a group of the edited pair at the active source.
- */
-function drawGroupGlyphs(
+/** Fills both of a pair's glyphs, over their glyph fill, in the kerning colour. */
+function fillPairGlyphs(
   local: Canvas,
   editor: Editor,
   pair: KerningPair,
   theme: KerningTheme,
 ): void {
-  const edited = pair.editablePair(editor);
   const layout = editor.text.layoutCell(pair.gap.node.runId).peek();
-  if (!edited || !layout) return;
-
-  const kerning = editor.font.kerningCell.peek();
-  const members = new Set(
-    [edited.first, edited.second]
-      .filter(isGroupSide)
-      .flatMap((groupId) => kerning.groups.group(groupId)?.glyphIds ?? []),
-  );
-  if (members.size === 0) return;
-
-  const pairItems = new Set([pair.gap.left.itemId, pair.gap.right.itemId]);
-  for (const placed of layout.placedGlyphs) {
-    const glyphId = placed.glyph.glyphId;
-    const itemId = placed.glyph.sourceItemIds[0];
-    if (!glyphId || (itemId && pairItems.has(itemId))) continue;
-    if (!members.has(glyphId)) continue;
+  if (!layout) return;
+  for (const side of [pair.gap.left, pair.gap.right]) {
+    const placed = layout.placedGlyphForItem(side.itemId);
     const model = editor
-      .glyphForId(glyphId)
+      .glyphForId(side.glyphId)
       ?.renderModelAt(editor.externalLocationCell, editor.activeSourceIdCell);
-    if (!model) continue;
+    if (!placed || !model) continue;
 
     local.save();
     local.translate(placed.origin.x, placed.origin.y);

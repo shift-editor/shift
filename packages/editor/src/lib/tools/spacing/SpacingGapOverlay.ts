@@ -23,20 +23,24 @@ export function drawSpacingGap(
   options: SpacingGapDrawOptions = {},
 ): void {
   const { gap } = active;
-  const matched = options.matched ? active.other() : null;
   // Between sources the sidebearings are interpolated and read-only: draw them grey.
   const theme = editor.activeSourceId ? canvas.theme.spacing : canvas.theme.spacingInterpolated;
   canvas.withTransform(editor.sceneTransform(gap.node), (local) => {
+    if (options.labelHovered) drawSameGlyphs(local, editor, active, theme);
     local.withScreenSpace((screen, project) => {
+      // In glyph scope a half stands alone, beside its own glyph.
+      const alone = active.scope === "glyph";
       for (const side of ["left", "right"] as const) {
-        const strong = side === active.side || side === matched?.side;
+        if (alone && side !== active.side) continue;
+        const strong = side === active.side;
         drawHalf(screen, project, theme, gap, side, strong, side === options.selected);
       }
-      drawLabel(screen, editor, theme, active, {
-        hovered: options.labelHovered ?? false,
-        ringed: options.snapped ?? false,
-      });
-      if (matched) drawLabel(screen, editor, theme, matched, { hovered: false, ringed: true });
+      if (!options.echo) {
+        drawLabel(screen, editor, theme, active, {
+          hovered: options.labelHovered ?? false,
+          ringed: options.snapped ?? false,
+        });
+      }
     });
   });
 }
@@ -47,10 +51,39 @@ export interface SpacingGapDrawOptions {
   readonly labelHovered?: boolean;
   /** The half the arrow keys change, which gets an outline. */
   readonly selected?: SpacingSideName | null;
-  /** Whether the active half snapped to the gap's other half, which is then drawn strong with a ringed pill. */
-  readonly matched?: boolean;
-  /** Whether the active value snapped, which rings its pill. */
+  /** Whether the value snapped, which rings its pill. */
   readonly snapped?: boolean;
+  /** Draws the active half without its pill: another place the same sidebearing appears. */
+  readonly echo?: boolean;
+}
+
+/**
+ * Fills, over their glyph fill, the run's other copies of the half's glyph:
+ * every glyph a change to its sidebearing also moves.
+ */
+function drawSameGlyphs(
+  local: Canvas,
+  editor: Editor,
+  half: SpacingHalf,
+  theme: SpacingPalette,
+): void {
+  const glyphSide = half.glyphSide;
+  const layout = editor.text.layoutCell(half.gap.node.runId).peek();
+  if (!glyphSide || !layout) return;
+
+  for (const placed of layout.placedGlyphs) {
+    if (placed.glyph.glyphId !== glyphSide.glyphId) continue;
+    if (placed.glyph.sourceItemIds[0] === glyphSide.itemId) continue;
+    const model = editor
+      .glyphForId(glyphSide.glyphId)
+      ?.renderModelAt(editor.externalLocationCell, editor.activeSourceIdCell);
+    if (!model) return;
+
+    local.save();
+    local.translate(placed.origin.x, placed.origin.y);
+    local.fillPath(model.drawPath, theme.labelFill);
+    local.restore();
+  }
 }
 
 function drawHalf(

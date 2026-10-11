@@ -13,7 +13,7 @@ export type KerningState =
       selected: KerningPair | null;
       /** Whether the pointer is on the hovered pair's pill. */
       overLabel?: boolean;
-      /** Set by a key press to hide every overlay until the pointer moves. */
+      /** Set by a nudge to hide every overlay until the pointer moves. */
       quiet?: boolean;
     }
   | { type: "dragging"; hit: KerningPair; origin: ScenePoint; start: number }

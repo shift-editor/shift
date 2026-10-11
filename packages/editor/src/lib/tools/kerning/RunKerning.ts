@@ -185,6 +185,29 @@ export class RunKerning {
   }
 
   /**
+   * Returns every other pair in the editor's text runs that an edit to
+   * `pair` also changes at the active source: each neighbouring pair that
+   * resolves to the same authored pair, so one with its own exception is
+   * left out.
+   */
+  samePairs(pair: KerningPair): KerningPair[] {
+    const sourceId = pair.source(this.#editor);
+    const edited = pair.editablePair(this.#editor);
+    if (!sourceId || !edited) return [];
+
+    const kerning = this.#editor.font.kerningCell.peek();
+    const definition = this.#editor.nodeDefinition("textRun");
+    return this.#editor.scene
+      .nodesOfKind("textRun")
+      .flatMap((node) => definition.spacingGaps(node).flatMap((gap) => kernedPair(gap) ?? []))
+      .filter((candidate) => {
+        if (candidate.sameAs(pair)) return false;
+        const applied = kerning.editablePair(sourceId, candidate.first, candidate.second);
+        return applied.first === edited.first && applied.second === edited.second;
+      });
+  }
+
+  /**
    * Returns the pair before or after `pair` in reading order.
    *
    * @returns null at either end of the run.

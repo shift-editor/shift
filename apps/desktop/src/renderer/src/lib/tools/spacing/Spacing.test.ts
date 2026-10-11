@@ -95,6 +95,19 @@ describe("Spacing tool", () => {
     expect(hoveredSide()).toBe("right");
   });
 
+  it("hovering a sidebearing finds every other place the same glyph's same sidebearing appears", () => {
+    hoverLocal(450, 200);
+    const state = editor.toolIf("spacing")?.state;
+    const hit = state?.type === "ready" ? state.hit! : null;
+    const tool = editor.toolManager.activeTool as SpacingTool;
+
+    // The first A's RSB; the second A's RSB, at the line end, is the only other.
+    expect(hit).toMatchObject({ side: "left" });
+    const echoes = tool.runs.sameSidebearings(hit!);
+    expect(echoes).toHaveLength(1);
+    expect(echoes[0]).toMatchObject({ side: "left", gap: { leftBoundary: 1000 } });
+  });
+
   it("hovering inside a glyph's outline, away from its edges, shows no gap", () => {
     hoverLocal(200, 200);
 
@@ -300,6 +313,20 @@ describe("Spacing tool", () => {
       await clickLocal(550, 150);
 
       expect(readyState()?.selected?.side).toBe("right");
+      expect(editor.runGlyph?.itemId).toBe(secondItemId());
+    });
+
+    it("dragging a half makes its glyph the current one, without a click first", async () => {
+      const firstItemId = editor.text.run(editor.textRun!.runId)!.items[0]!.id;
+      await clickLocal(50, 150);
+      expect(editor.runGlyph?.itemId).toBe(firstItemId);
+
+      await editor.dragLocal({
+        down: { x: 550, y: 150 },
+        start: { x: 552, y: 150 },
+        end: { x: 570, y: 150 },
+      });
+
       expect(editor.runGlyph?.itemId).toBe(secondItemId());
     });
 
