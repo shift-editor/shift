@@ -5,21 +5,89 @@ use fontdrasil::coords::{
 };
 use fontdrasil::types::{Axes, Axis as IrAxis, Tag};
 use fontir::error::Error;
-use shift_font::{Axis, AxisMapping, NamedInstance, Source};
+use shift_font::{Axis, AxisMapping, CoreError, NamedInstance, Source};
+use write_fonts::types::InvalidTag;
+
+/// Describes Shift axes, mappings, or named instances that cannot define
+/// fontir axes and instance locations.
+#[derive(Debug, thiserror::Error)]
+pub enum AxisConversionError {
+    #[error(transparent)]
+    Invalid(#[from] CoreError),
+
+    #[error("axis '{axis}' has an invalid tag: {source}")]
+    InvalidTag {
+        axis: String,
+        #[source]
+        source: InvalidTag,
+    },
+
+    #[error("mapping '{mapping}' is missing an {side} value for axis '{axis}'")]
+    MissingMappingValue {
+        mapping: String,
+        axis: String,
+        side: MappingSide,
+    },
+
+    #[error("mapping '{mapping}' must have strictly increasing {side} values")]
+    NonIncreasingMapping { mapping: String, side: MappingSide },
+
+    #[error(
+        "mapping '{mapping}' must define the minimum, default, and maximum user values for axis '{axis}'"
+    )]
+    MappingMissingBounds { mapping: String, axis: String },
+
+    #[error("mapping '{mapping}' is invalid: {source}")]
+    InvalidConverter {
+        mapping: String,
+        #[source]
+        source: fontdrasil::error::Error,
+    },
+}
+
+/// Which side of an axis mapping a value belongs to: user-space input or
+/// design-space output.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MappingSide {
+    Input,
+    Output,
+}
+
+impl std::fmt::Display for MappingSide {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Input => "input",
+            Self::Output => "output",
+        })
+    }
+}
+
+/// Parses an axis's OpenType tag.
+fn axis_tag(axis: &Axis) -> Result<Tag, AxisConversionError> {
+    Tag::from_str(axis.tag()).map_err(|source| AxisConversionError::InvalidTag {
+        axis: axis.name().to_string(),
+        source,
+    })
+}
 
 /// Lowers authored product presets without exposing fontir types to Shift's IR.
 ///
 /// Instance locations are already in external/user coordinates. Internal axes
 /// remain absent so fontir fills them from the axis defaults when constructing
 /// `fvar` records.
+///
+/// # Errors
+///
+/// Returns [`AxisConversionError`] when an instance does not validate against
+/// `axes` or one of its axes has an invalid OpenType tag.
 pub(super) fn to_ir_named_instances(
     instances: &[NamedInstance],
     axes: &[Axis],
-) -> Result<Vec<fontir::ir::NamedInstance>, String> {
+) -> Result<Vec<fontir::ir::NamedInstance>, AxisConversionError> {
     instances
         .iter()
         .map(|instance| {
-            instance.validate(axes).map_err(|error| error.to_string())?;
+            instance.validate(axes)?;
             let location = instance
                 .location()
                 .iter()
@@ -28,12 +96,9 @@ pub(super) fn to_ir_named_instances(
                         .iter()
                         .find(|axis| axis.id() == *axis_id)
                         .expect("named instances were validated against these axes");
-                    let tag = Tag::from_str(axis.tag()).map_err(|error| {
-                        format!("axis '{}' has an invalid tag: {error}", axis.name())
-                    })?;
-                    Ok((tag, UserCoord::new(*value)))
+                    Ok((axis_tag(axis)?, UserCoord::new(*value)))
                 })
-                .collect::<Result<UserLocation, String>>()?;
+                .collect::<Result<UserLocation, AxisConversionError>>()?;
 
             Ok(fontir::ir::NamedInstance {
                 name: instance.name().to_string(),
@@ -52,9 +117,12 @@ pub(super) fn to_ir_named_instances(
 ///
 /// # Errors
 ///
-/// Returns an error when an axis, OpenType tag, or independent mapping cannot
-/// define a valid fontir coordinate converter.
-pub(crate) fn to_ir_axes(axes: &[Axis], mappings: &[AxisMapping]) -> Result<Vec<IrAxis>, String> {
+/// Returns [`AxisConversionError`] when an axis, OpenType tag, or independent
+/// mapping cannot define a valid fontir coordinate converter.
+pub(crate) fn to_ir_axes(
+    axes: &[Axis],
+    mappings: &[AxisMapping],
+) -> Result<Vec<IrAxis>, AxisConversionError> {
     axes.iter()
         .map(|axis| to_ir_axis(axis, independent_mapping(axis, mappings)))
         .collect()
@@ -66,10 +134,9 @@ fn independent_mapping<'a>(axis: &Axis, mappings: &'a [AxisMapping]) -> Option<&
         .find(|mapping| mapping.is_independent() && mapping.outputs() == [axis.id()])
 }
 
-fn to_ir_axis(axis: &Axis, mapping: Option<&AxisMapping>) -> Result<IrAxis, String> {
-    axis.validate().map_err(|error| error.to_string())?;
-    let tag = Tag::from_str(axis.tag())
-        .map_err(|error| format!("axis '{}' has an invalid tag: {error}", axis.name()))?;
+fn to_ir_axis(axis: &Axis, mapping: Option<&AxisMapping>) -> Result<IrAxis, AxisConversionError> {
+    axis.validate()?;
+    let tag = axis_tag(axis)?;
     let min = UserCoord::new(axis.minimum());
     let default = UserCoord::new(axis.default());
     let max = UserCoord::new(axis.maximum());
@@ -96,11 +163,14 @@ fn mapped_converter(
     min: UserCoord,
     default: UserCoord,
     max: UserCoord,
-) -> Result<CoordConverter, String> {
-    mapping
-        .validate(std::slice::from_ref(axis))
-        .map_err(|error| error.to_string())?;
+) -> Result<CoordConverter, AxisConversionError> {
+    mapping.validate(std::slice::from_ref(axis))?;
 
+    let missing = |side| AxisConversionError::MissingMappingValue {
+        mapping: mapping.name().to_string(),
+        axis: axis.name().to_string(),
+        side,
+    };
     let mut values = mapping
         .points()
         .iter()
@@ -108,26 +178,25 @@ fn mapped_converter(
             let input = point
                 .input
                 .get(&axis.id())
-                .ok_or_else(|| format!("mapping '{}' is missing an input value", mapping.name()))?;
-            let output = point.output.get(&axis.id()).ok_or_else(|| {
-                format!("mapping '{}' is missing an output value", mapping.name())
-            })?;
+                .ok_or_else(|| missing(MappingSide::Input))?;
+            let output = point
+                .output
+                .get(&axis.id())
+                .ok_or_else(|| missing(MappingSide::Output))?;
             Ok((input, output))
         })
-        .collect::<Result<Vec<_>, String>>()?;
+        .collect::<Result<Vec<_>, AxisConversionError>>()?;
     values.sort_by(|left, right| left.0.total_cmp(&right.0));
 
+    let non_increasing = |side| AxisConversionError::NonIncreasingMapping {
+        mapping: mapping.name().to_string(),
+        side,
+    };
     if values.windows(2).any(|pair| pair[0].0 >= pair[1].0) {
-        return Err(format!(
-            "mapping '{}' must have strictly increasing input values",
-            mapping.name()
-        ));
+        return Err(non_increasing(MappingSide::Input));
     }
     if values.windows(2).any(|pair| pair[0].1 >= pair[1].1) {
-        return Err(format!(
-            "mapping '{}' must have strictly increasing output values",
-            mapping.name()
-        ));
+        return Err(non_increasing(MappingSide::Output));
     }
 
     let required = [min.to_f64(), default.to_f64(), max.to_f64()];
@@ -135,11 +204,10 @@ fn mapped_converter(
         .iter()
         .any(|required| !values.iter().any(|(input, _)| input == required))
     {
-        return Err(format!(
-            "mapping '{}' must define the minimum, default, and maximum user values for axis '{}'",
-            mapping.name(),
-            axis.name()
-        ));
+        return Err(AxisConversionError::MappingMissingBounds {
+            mapping: mapping.name().to_string(),
+            axis: axis.name().to_string(),
+        });
     }
 
     let default_idx = values
@@ -150,8 +218,12 @@ fn mapped_converter(
         .into_iter()
         .map(|(user, design)| (UserCoord::new(user), DesignCoord::new(design)))
         .collect();
-    CoordConverter::new(values, default_idx)
-        .map_err(|error| format!("mapping '{}' is invalid: {error}", mapping.name()))
+    CoordConverter::new(values, default_idx).map_err(|source| {
+        AxisConversionError::InvalidConverter {
+            mapping: mapping.name().to_string(),
+            source,
+        }
+    })
 }
 
 /// Converts one Shift master location from design space to normalized space.
@@ -203,4 +275,81 @@ pub(super) fn normalized_source_location(
         .collect();
 
     Ok(design_location.to_normalized(ir_axes)?)
+}
+
+#[cfg(test)]
+mod tests {
+    use shift_font::{AxisMappingPoint, Location};
+
+    use super::*;
+
+    fn weight_mapping(axis: &Axis, points: &[(f64, f64)]) -> AxisMapping {
+        let points = points
+            .iter()
+            .map(|&(user, design)| {
+                let mut input = Location::new();
+                input.set(axis.id(), user);
+                let mut output = Location::new();
+                output.set(axis.id(), design);
+                AxisMappingPoint {
+                    description: None,
+                    input,
+                    output,
+                }
+            })
+            .collect();
+        AxisMapping::new(
+            "Weight".to_string(),
+            vec![axis.id()],
+            vec![axis.id()],
+            points,
+        )
+    }
+
+    #[test]
+    fn mapping_converts_user_to_design_coordinates() {
+        let axis = Axis::weight();
+        let mapping = weight_mapping(&axis, &[(100.0, 20.0), (400.0, 80.0), (900.0, 200.0)]);
+
+        let axes = to_ir_axes(std::slice::from_ref(&axis), &[mapping]).unwrap();
+
+        assert_eq!(
+            UserCoord::new(400.0).to_design(&axes[0].converter),
+            DesignCoord::new(80.0)
+        );
+    }
+
+    #[test]
+    fn mapping_without_axis_bounds_is_rejected() {
+        let axis = Axis::weight();
+        let mapping = weight_mapping(&axis, &[(100.0, 20.0), (400.0, 80.0)]);
+
+        let error = to_ir_axes(std::slice::from_ref(&axis), &[mapping]).unwrap_err();
+
+        assert!(matches!(
+            error,
+            AxisConversionError::MappingMissingBounds { mapping, axis }
+                if mapping == "Weight" && axis == "Weight"
+        ));
+    }
+
+    #[test]
+    fn mapping_with_decreasing_outputs_is_rejected() {
+        let axis = Axis::weight();
+        let mapping = weight_mapping(&axis, &[(100.0, 200.0), (400.0, 80.0), (900.0, 20.0)]);
+
+        let error = to_ir_axes(std::slice::from_ref(&axis), &[mapping]).unwrap_err();
+
+        assert!(matches!(
+            error,
+            AxisConversionError::NonIncreasingMapping {
+                side: MappingSide::Output,
+                ..
+            }
+        ));
+        assert_eq!(
+            error.to_string(),
+            "mapping 'Weight' must have strictly increasing output values"
+        );
+    }
 }

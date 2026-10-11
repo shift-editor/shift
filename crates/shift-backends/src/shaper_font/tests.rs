@@ -300,3 +300,34 @@ fn request_rejects_fractional_or_out_of_range_units_per_em() {
         ));
     }
 }
+
+#[test]
+fn request_rejects_axes_whose_mapping_cannot_convert() {
+    let mut font = sample_variable_font();
+    let axis = font.axes()[0].clone();
+    let point = |user, design| {
+        let mut input = shift_font::Location::new();
+        input.set(axis.id(), user);
+        let mut output = shift_font::Location::new();
+        output.set(axis.id(), design);
+        shift_font::AxisMappingPoint {
+            description: None,
+            input,
+            output,
+        }
+    };
+    let mapping = shift_font::AxisMapping::new(
+        "Partial".to_string(),
+        vec![axis.id()],
+        vec![axis.id()],
+        vec![point(axis.default(), axis.default())],
+    );
+    font.set_axis_mappings(vec![mapping]).unwrap();
+
+    assert!(matches!(
+        ShaperFontRequest::from_font(&font),
+        Err(ShaperFontError::InvalidAxes(
+            AxisConversionError::MappingMissingBounds { .. }
+        ))
+    ));
+}
