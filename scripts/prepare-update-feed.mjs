@@ -107,7 +107,7 @@ export async function prepareUpdateFeed({
 
   for (const architecture of ["arm64", "x64"]) {
     const source = await readFile(
-      findMetadata(files, artifacts, `linux-${architecture}`, "latest-linux.yml"),
+      findMetadata(files, artifacts, `linux-${architecture}`, linuxMetadataName(architecture)),
       "utf8",
     );
     metadata.set(
@@ -143,7 +143,7 @@ export async function prepareUpdateFeed({
     write(path.join(channelRoot, "darwin", "x64", "latest-mac.yml"), metadata.get("darwin-x64")),
     ...["arm64", "x64"].map((architecture) =>
       write(
-        path.join(channelRoot, "linux", architecture, "latest-linux.yml"),
+        path.join(channelRoot, "linux", architecture, linuxMetadataName(architecture)),
         metadata.get(`linux-${architecture}`),
       ),
     ),
@@ -159,6 +159,14 @@ export async function prepareUpdateFeed({
     rm(path.join(channelRoot, "darwin", "x64", "RELEASES.json"), { force: true }),
     rm(path.join(channelRoot, "win32", "x64", "RELEASES"), { force: true }),
   ]);
+}
+
+/**
+ * electron-builder and electron-updater suffix every Linux metadata file except
+ * x64 with its architecture, so arm64 reads `latest-linux-arm64.yml`.
+ */
+function linuxMetadataName(architecture) {
+  return architecture === "x64" ? "latest-linux.yml" : `latest-linux-${architecture}.yml`;
 }
 
 /**

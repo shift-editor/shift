@@ -48,7 +48,10 @@ async function writeArtifacts(
       await writeFile(path.join(linuxDirectory, assetName), "linux");
     }
     await writeFile(
-      path.join(linuxDirectory, "latest-linux.yml"),
+      path.join(
+        linuxDirectory,
+        architecture === "x64" ? "latest-linux.yml" : `latest-linux-${architecture}.yml`,
+      ),
       dump({
         version,
         files: linuxFiles.map(({ file }) => file),
@@ -155,10 +158,13 @@ test("offers only the AppImage on the Linux channel", async (context) => {
     repository,
   });
 
-  for (const architecture of ["arm64", "x64"]) {
+  for (const [architecture, metadataName] of [
+    ["arm64", "latest-linux-arm64.yml"],
+    ["x64", "latest-linux.yml"],
+  ]) {
     const linux = load(
       await readFile(
-        path.join(siteRoot, `updates/release/linux/${architecture}/latest-linux.yml`),
+        path.join(siteRoot, `updates/release/linux/${architecture}/${metadataName}`),
         "utf8",
       ),
     );
