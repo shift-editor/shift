@@ -72,7 +72,7 @@ impl Work<Context, WorkId, Error> for StaticMetadataWork {
         let global_locations = self.global_locations(&ir_axes)?;
         let named_instances =
             to_ir_named_instances(&self.snapshot.named_instances, &self.snapshot.axes)
-                .map_err(|message| Error::InvalidEntry("Shift named instance", message))?;
+                .map_err(|error| Error::InvalidEntry("Shift named instance", error.to_string()))?;
         let mut static_metadata = StaticMetadata::new(
             self.snapshot.metrics.units_per_em as u16,
             names.build(DEFAULT_VENDOR_ID),

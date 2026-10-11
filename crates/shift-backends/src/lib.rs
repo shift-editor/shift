@@ -35,5 +35,6 @@ pub use glyph_category::{GlyphCategories, ResolvedCategory};
 pub use glyph_subset::GlyphSubsetView;
 pub use import::{FontImport, GlyphDirectoryEntry, ImportBatchLimit};
 pub use import_report::{ImportLoss, ImportLossKind, ImportReport};
+pub use shift2fontir::{AxisConversionError, MappingSide};
 pub use source_glyph_ids::SourceGlyphIds;
 pub use traits::{FontBackend, FontReader, FontView, FontWriter};
