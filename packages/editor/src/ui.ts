@@ -19,7 +19,7 @@ export {
 } from "./ui/SidebarActionRow";
 export { SidebarInputFocusProvider, type SidebarInputFocusHandlers } from "./ui/SidebarInputFocus";
 export { SidebarRowButton, type SidebarRowButtonProps } from "./ui/SidebarRowButton";
-export { ToolsPane, type ToolsPaneProps } from "./ui/ToolsPane";
+export { ToolsPane, type ToolsPaneProps, type ToolsPaneSide } from "./ui/ToolsPane";
 export {
   VariationSidebar,
   type VariationSidebarHost,

@@ -31,6 +31,11 @@ export interface EditorToolbarProps {
   onToggleLeftSidebar?: () => void;
   /** Shows the right sidebar toggle; omit to hide the button. */
   onToggleRightSidebar?: () => void;
+  /**
+   * Renders a slim title bar without the tools, for hosts that place `ToolsPane`
+   * elsewhere, such as floating over the canvas.
+   */
+  compact?: boolean;
 }
 
 /**
@@ -46,6 +51,7 @@ export function EditorToolbar({
   rightSidebarOpen,
   onToggleLeftSidebar,
   onToggleRightSidebar,
+  compact = false,
 }: EditorToolbarProps) {
   const { editor, font } = session;
   const metadata = useSignalState(font.metadataCell);
@@ -55,29 +61,68 @@ export function EditorToolbar({
   const documentTitle =
     host?.documentTitle ?? activeSource?.name ?? metadata.styleName ?? "Interpolated";
   const editedDocumentTitle = `${documentTitle} — Edited`;
+  const navigation = host?.navigation;
+
+  const leftSidebarToggle = onToggleLeftSidebar ? (
+    <Tooltip>
+      <TooltipTrigger>
+        <Button
+          icon={<ShiftIcon name="sidebar-left" className="h-5 w-5" />}
+          aria-label={sidebarToggleLabel("left", leftSidebarOpen)}
+          aria-pressed={leftSidebarOpen}
+          variant="toolbar"
+          size="icon"
+          onClick={onToggleLeftSidebar}
+        />
+      </TooltipTrigger>
+      <TooltipContent side="bottom">Toggle left sidebar</TooltipContent>
+    </Tooltip>
+  ) : null;
+
+  const rightSidebarToggle = onToggleRightSidebar ? (
+    <Tooltip>
+      <TooltipTrigger>
+        <Button
+          icon={<ShiftIcon name="sidebar-right" className="h-5 w-5" />}
+          aria-label={sidebarToggleLabel("right", rightSidebarOpen)}
+          aria-pressed={rightSidebarOpen}
+          variant="toolbar"
+          size="icon"
+          onClick={onToggleRightSidebar}
+        />
+      </TooltipTrigger>
+      <TooltipContent side="bottom">Toggle right sidebar</TooltipContent>
+    </Tooltip>
+  ) : null;
+
+  if (compact) {
+    const familyName = metadata.familyName ?? "Untitled";
+    return (
+      <header className="titlebar-drag grid h-9 w-full grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center bg-chrome">
+        <div className="flex min-w-0 items-center gap-1">
+          {host ? host.windowControls : <DecorativeWindowControls />}
+          {host ? host.menuBar : null}
+          {leftSidebarToggle}
+          {navigation}
+        </div>
+        <p className="truncate whitespace-nowrap px-4 text-ui">
+          <span className="font-medium">{familyName}</span>
+          <span className="text-muted"> — {documentTitle}</span>
+          {host && host.documentEdited ? <span className="text-muted"> · Edited</span> : null}
+        </p>
+        <div className="flex justify-end pr-2">{rightSidebarToggle}</div>
+      </header>
+    );
+  }
 
   return (
     <header className="titlebar-drag grid h-12.5 w-full grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center bg-chrome">
       <div className="flex min-w-0 items-center">
         {host ? host.windowControls : <DecorativeWindowControls />}
         {host ? host.menuBar : null}
-        {onToggleLeftSidebar ? (
-          <Tooltip>
-            <TooltipTrigger>
-              <Button
-                icon={<ShiftIcon name="sidebar-left" className="h-5 w-5" />}
-                aria-label={sidebarToggleLabel("left", leftSidebarOpen)}
-                aria-pressed={leftSidebarOpen}
-                variant="toolbar"
-                size="icon"
-                onClick={onToggleLeftSidebar}
-              />
-            </TooltipTrigger>
-            <TooltipContent side="bottom">Toggle left sidebar</TooltipContent>
-          </Tooltip>
-        ) : null}
+        {leftSidebarToggle}
         <div className="flex min-w-0 items-center justify-center gap-6">
-          {host?.navigation}
+          {navigation}
           <div className="min-w-0">
             <p className="grid truncate whitespace-nowrap text-ui">
               {host ? (
@@ -98,23 +143,7 @@ export function EditorToolbar({
 
       <ToolsPane editor={editor} />
 
-      <div className="flex justify-end pr-2">
-        {onToggleRightSidebar ? (
-          <Tooltip>
-            <TooltipTrigger>
-              <Button
-                icon={<ShiftIcon name="sidebar-right" className="h-5 w-5" />}
-                aria-label={sidebarToggleLabel("right", rightSidebarOpen)}
-                aria-pressed={rightSidebarOpen}
-                variant="toolbar"
-                size="icon"
-                onClick={onToggleRightSidebar}
-              />
-            </TooltipTrigger>
-            <TooltipContent side="bottom">Toggle right sidebar</TooltipContent>
-          </Tooltip>
-        ) : null}
-      </div>
+      <div className="flex justify-end pr-2">{rightSidebarToggle}</div>
     </header>
   );
 }

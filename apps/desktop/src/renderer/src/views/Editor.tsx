@@ -9,6 +9,7 @@ import { LeftSidebar } from "@/components/editor/LeftSidebar";
 import { RightSidebar } from "@/components/editor/RightSidebar";
 import { Canvas } from "@/components/editor/Canvas";
 import { CanvasContextMenu } from "@/components/editor/CanvasContextMenu";
+import { FloatingToolbar } from "@/components/editor/FloatingToolbar";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import type { TextRunNode } from "@shift/editor/types";
 import { useOpenedGlyph } from "@/context/GlyphCatalogContext";
@@ -205,8 +206,9 @@ const EditorLayout = ({ children }: { children: ReactNode }) => {
           onDoubleClick={() => leftSidebarPanelRef.current?.resize(LEFT_SIDEBAR_DEFAULT_SIZE)}
         />
         <ResizablePanel id="canvas" order={2} minSize={30} data-shift-capture-target="editor">
-          <ZoneContainer zone="canvas" className="h-full">
+          <ZoneContainer zone="canvas" className="relative h-full">
             {children}
+            <FloatingToolbar />
           </ZoneContainer>
         </ResizablePanel>
         <ResizableHandle
