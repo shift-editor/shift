@@ -56,3 +56,16 @@ export function spacingBoundary(gap: SpacingGap, half: SpacingSideName): number 
 export function spacingGapCenter(gap: SpacingGap): number {
   return (gap.leftBoundary + gap.rightBoundary) / 2;
 }
+
+/**
+ * Whether a kern lies between the gap's two glyphs, so their advance
+ * boundaries differ.
+ *
+ * @remarks
+ * The Spacing tool does not draw such a gap's halves together: drawn
+ * against a kerned neighbour, a sidebearing's region no longer lines up with
+ * it. Each glyph's own sidebearings show over its outline instead.
+ */
+export function isKernedGap(gap: SpacingGap): boolean {
+  return gap.left !== null && gap.right !== null && gap.leftBoundary !== gap.rightBoundary;
+}

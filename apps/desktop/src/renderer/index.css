@@ -83,6 +83,7 @@
   --editor-glyph-stroke: #000000;
   --editor-component-fill: rgba(231, 231, 231, 0.75);
   --editor-control-line-color: rgba(136, 136, 136, 0.65);
+  --editor-advance-tee-color: rgba(0, 0, 0, 0.45);
   --editor-handle-fill: #ffffff;
   --editor-handle-interpolated-stroke: rgba(0, 0, 0, 0.65);
   --editor-handle-primary-stroke: #0c92f4;

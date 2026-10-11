@@ -157,6 +157,8 @@ export class SpacingDrag implements Behavior<SpacingState, SpacingTool> {
     const layer = hit?.layer(ctx.editor);
     if (!hit || !glyphSide || !layer) return false;
 
+    // The dragged glyph becomes the run's current one, so the sidebar shows it.
+    hit.select(ctx.editor);
     this.#start = glyphSide.sidebearing;
     this.#targets = SnapTargets.for(hit, layer);
     const edit = layer.beginSidebearingEdit(hit.sidebearing);

@@ -100,6 +100,8 @@ export interface EditorRenderTheme {
     componentOverlay: readonly [string, string];
     componentOverlayHover: readonly [string, string];
   };
+  /** The Spacing and Kerning tools' tee at each end of every glyph's advance, on its baseline. */
+  advanceTee: { color: string; widthPx: number; tickPx: number; armPx: number };
   /** The Spacing tool's gap between two glyphs at an authored source. */
   spacing: SpacingPalette;
   /** The same gap at an interpolated location, where nothing is editable. */
@@ -278,6 +280,7 @@ const DEFAULT_EDITOR_RENDER_THEME: EditorRenderTheme = {
     componentOverlay: ["rgba(169, 236, 183, 0.26)", "rgba(255, 182, 207, 0.26)"],
     componentOverlayHover: ["rgba(124, 220, 150, 0.4)", "rgba(255, 151, 186, 0.4)"],
   },
+  advanceTee: { color: "rgba(0, 0, 0, 0.45)", widthPx: 1, tickPx: 10, armPx: 7 },
   spacing: {
     activeFill: "rgba(219, 46, 145, 0.14)",
     activeHatch: "rgba(219, 46, 145, 0.75)",
@@ -341,6 +344,7 @@ export function readEditorRenderTheme(
     theme.component.hoverOutline.stroke,
   );
   theme.controlLine.color = readColor("--editor-control-line-color", theme.controlLine.color);
+  theme.advanceTee.color = readColor("--editor-advance-tee-color", theme.advanceTee.color);
   theme.metricMarker.haloFill = readColor(
     "--editor-metric-marker-fill",
     theme.metricMarker.haloFill,

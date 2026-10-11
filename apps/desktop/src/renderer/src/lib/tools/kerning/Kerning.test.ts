@@ -49,6 +49,62 @@ describe("Kerning tool", () => {
     editor.selectTool("kerning");
   });
 
+  it("the Spacing tool shows nothing in a kerned gap's kern and leaves its sidebearings alone", async () => {
+    editor.selectTool("spacing");
+    const rsb = editor
+      .glyphForId(placed()[0]!.glyph.glyphId!)!
+      .layerForSource(editor.activeSourceId!)!.sidebearings.rsb;
+    hoverKern();
+    const state = editor.toolIf("spacing")?.state;
+
+    expect(state?.type === "ready" && state.hit).toBe(null);
+
+    const center = kernCenter();
+    await editor.dragLocal({ down: center, start: center, end: { x: center.x + 40, y: center.y } });
+    expect(
+      editor.glyphForId(placed()[0]!.glyph.glyphId!)!.layerForSource(editor.activeSourceId!)!
+        .sidebearings.rsb,
+    ).toBe(rsb);
+    expect(kern()).toBe(-75);
+  });
+
+  it("the Spacing tool hits and drags T's own RSB strip where it reaches into the kern", async () => {
+    editor.selectTool("spacing");
+    const [t] = placed();
+    const tLayer = editor.glyphForId(t!.glyph.glyphId!)!.layerForSource(editor.activeSourceId!)!;
+    const rsb = tLayer.sidebearings.rsb!;
+    const tEnd = t!.left + t!.glyph.xAdvance;
+    // Inside T's RSB strip: between its outline's right edge and its own advance edge.
+    const inStrip = { x: tEnd - rsb / 2, y: 300 };
+    const screen = editor.localToScreen(inStrip);
+    editor.pointerMove(screen.x, screen.y);
+    const state = editor.toolIf("spacing")?.state;
+    const hit = state?.type === "ready" ? state.hit : null;
+    expect(hit).toMatchObject({ side: "left", scope: "glyph" });
+    expect(hit?.glyphSide?.glyphId).toBe(t!.glyph.glyphId);
+
+    await editor.dragLocal({ down: inStrip, start: inStrip, end: { x: inStrip.x + 10, y: 300 } });
+    expect(tLayer.sidebearings.rsb).toBe(rsb + 10);
+    expect(kern()).toBe(-75);
+  });
+
+  it("finds every other pair the hovered kern applies to, and none it does not", () => {
+    editor.selectTool("text");
+    editor.textEditing.insert([
+      glyphTextItem("T", 84),
+      glyphTextItem("A", 65),
+      glyphTextItem("T", 84),
+    ]);
+    editor.escape();
+    editor.selectTool("kerning");
+    hoverKern();
+
+    // "TATAT": the second T–A uses the same kern; A–T pairs do not.
+    const echoes = tool().runs.samePairs(hovered()!);
+    expect(echoes).toHaveLength(1);
+    expect(echoes[0]!.amount).toBe(-75);
+  });
+
   it("hovering between two glyphs shows their kern and the pair it comes from", () => {
     hoverKern();
 

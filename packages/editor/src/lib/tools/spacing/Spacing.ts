@@ -10,9 +10,10 @@ import {
   SpacingNudge,
   SpacingSelectClick,
 } from "./behaviors";
-import { RunSpacing, trackRunLayouts, type SpacingHalf } from "./RunSpacing";
+import { RunSpacing, SpacingHalf, trackRunLayouts } from "./RunSpacing";
 import { spacingLabelRect } from "./SpacingLabel";
 import { drawSpacingGap } from "./SpacingGapOverlay";
+import { drawAdvanceTees } from "./AdvanceTees";
 import type { SpacingBehavior, SpacingState } from "./types";
 
 /**
@@ -24,8 +25,13 @@ import type { SpacingBehavior, SpacingState } from "./types";
  * and the right glyph's left one, with the half under the pointer strongest.
  * Dragging anywhere in the gap changes that half's sidebearing; clicking its
  * value pill opens the value for typing ({@link editing}); clicking elsewhere
- * in it selects it for the arrow keys, which hide the overlays while they
- * nudge. Deactivating restores glyph editing on the current glyph.
+ * in it selects it for the arrow keys. While a drag, nudge, or typed value
+ * changes spacing, nothing is drawn over it, so the spacing reads as it is;
+ * a snapped drag shows only the two equal sidebearings. In a kerned gap each glyph's own sidebearing shows where it
+ * reaches, measured to its own advance edge
+ * whatever the kerning; the rest of the space between the boundaries is the
+ * kern, which is the Kerning tool's. Deactivating restores glyph editing on the current
+ * glyph.
  */
 export class SpacingTool extends BaseTool<SpacingState, SpacingTool> {
   readonly id: ToolName = "spacing";
@@ -128,16 +134,17 @@ export class SpacingTool extends BaseTool<SpacingState, SpacingTool> {
     // again, which follows source, location, and outline changes.
     trackRunLayouts(this.editor);
     const state = this.getState();
+    // Hidden while a drag or nudge moves the spacing, so it reads unobstructed.
+    const moving = state.type === "dragging" || (state.type === "ready" && state.quiet);
+    if (state.type !== "idle" && !moving) drawAdvanceTees(canvas, this.editor);
     switch (state.type) {
       case "idle":
         return;
-      case "editing": {
-        const half = this.runs.refresh(state.hit);
-        if (half) drawSpacingGap(canvas, this.editor, half);
+      case "editing":
+        // Nothing over the spacing while it changes, so it reads as it is.
         return;
-      }
       case "dragging":
-        this.#drawDrag(canvas, state);
+        this.#drawSnap(canvas, state);
         return;
       case "ready":
         this.#drawReady(canvas, state);
@@ -145,18 +152,22 @@ export class SpacingTool extends BaseTool<SpacingState, SpacingTool> {
     }
   }
 
-  /** The dragged gap, and the gap holding the matched value when the drag snapped to the glyph's other side. */
-  #drawDrag(canvas: Canvas, state: Extract<SpacingState, { type: "dragging" }>): void {
+  /**
+   * While a drag is snapped, and only then, shows the two equal sidebearings
+   * with their hatching and pills: the dragged one and the one it matched.
+   */
+  #drawSnap(canvas: Canvas, state: Extract<SpacingState, { type: "dragging" }>): void {
+    if (!state.snap) return;
     const hit = this.runs.refresh(state.hit);
     if (!hit) return;
-    drawSpacingGap(canvas, this.editor, hit, {
-      matched: state.snap === "otherHalf",
-      snapped: state.snap !== null,
-    });
-    if (state.snap !== "otherSidebearing") return;
-
-    const opposite = this.runs.oppositeHalf(hit);
-    if (opposite) drawSpacingGap(canvas, this.editor, opposite, { snapped: true });
+    const matched = state.snap === "otherHalf" ? hit.other() : this.runs.oppositeHalf(hit);
+    for (const half of [hit, matched]) {
+      if (half) {
+        drawSpacingGap(canvas, this.editor, new SpacingHalf(half.gap, half.side, "glyph"), {
+          snapped: true,
+        });
+      }
+    }
   }
 
   /** The hovered gap and the selected half, unless a key press asked for a clear view. */
@@ -170,10 +181,18 @@ export class SpacingTool extends BaseTool<SpacingState, SpacingTool> {
       drawSpacingGap(canvas, this.editor, selected, { selected: selected.side });
     }
     if (hit) {
+      this.#drawEchoes(canvas, hit);
       drawSpacingGap(canvas, this.editor, hit, {
         labelHovered: Boolean(state.overLabel),
         selected: selectedHere ? selected.side : null,
       });
+    }
+  }
+
+  /** The same sidebearing everywhere else it appears, which an edit to `half` changes too. */
+  #drawEchoes(canvas: Canvas, half: SpacingHalf): void {
+    for (const echo of this.runs.sameSidebearings(half)) {
+      drawSpacingGap(canvas, this.editor, echo, { echo: true });
     }
   }
 

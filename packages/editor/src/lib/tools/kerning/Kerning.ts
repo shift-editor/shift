@@ -14,6 +14,7 @@ import { kerningLabelLayout } from "./KerningLabel";
 import { drawKerningPair } from "./KerningOverlay";
 import { RunKerning, type KerningPair } from "./RunKerning";
 import { trackRunLayouts } from "../spacing/RunSpacing";
+import { drawAdvanceTees } from "../spacing/AdvanceTees";
 import type { KerningBehavior, KerningState } from "./types";
 
 /**
@@ -125,15 +126,16 @@ export class KerningTool extends BaseTool<KerningState, KerningTool> {
     // again, which follows source, location, kerning, and outline changes.
     trackRunLayouts(this.editor);
     const state = this.getState();
+    // Hidden while a drag or nudge moves the spacing, so it reads unobstructed.
+    const moving = state.type === "dragging" || (state.type === "ready" && state.quiet);
+    if (state.type !== "idle" && !moving) drawAdvanceTees(canvas, this.editor);
     switch (state.type) {
       case "idle":
         return;
       case "editing":
-      case "dragging": {
-        const pair = this.runs.refresh(state.hit);
-        if (pair) drawKerningPair(canvas, this.editor, pair, { selected: true });
+      case "dragging":
+        // Nothing over the kerning while it changes, so it reads as it is.
         return;
-      }
       case "ready":
         this.#drawReady(canvas, state);
         return;
@@ -149,6 +151,13 @@ export class KerningTool extends BaseTool<KerningState, KerningTool> {
       drawKerningPair(canvas, this.editor, selected, { selected: true });
     }
     if (hit) {
+      // Every other pair the same kern applies to; filled while its pill is hovered.
+      for (const echo of this.runs.samePairs(hit)) {
+        drawKerningPair(canvas, this.editor, echo, {
+          echo: true,
+          filled: state.overLabel ?? false,
+        });
+      }
       drawKerningPair(canvas, this.editor, hit, {
         hovered: state.overLabel ?? false,
         selected: selected?.sameAs(hit) ?? false,
