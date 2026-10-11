@@ -189,6 +189,19 @@ export declare class Bridge {
   getNamedInstances(): Array<NapiNamedInstance>
   /** Returns the precomputed source-metric interpolation model for this font. */
   getSourceMetricsInterpolation(): NapiSourceMetricsInterpolationSnapshot | null
+  /**
+   * Shapes a run of text with the font's feature code.
+   *
+   * Characters map through the live font's Unicode values and every
+   * glyph's own advance is zero while shaping, so the result carries the
+   * substituted glyphs, their clusters, and only what the feature code
+   * positions. The caller adds live advances, kerning, and mark attachment.
+   *
+   * Feature code with errors shapes with the last version that compiled.
+   * The shaping tables are rebuilt only when a font change since the last
+   * call altered the glyph order, glyph categories, feature code, or axes.
+   */
+  shape(request: NapiShapeRequest): Array<NapiShapedGlyph>
   mapLocation(location: NapiLocation): NapiLocation
   getSources(): Array<NapiSource>
 }
@@ -206,6 +219,13 @@ export interface NapiDocumentState {
   needsSaveAs: boolean
 }
 
+export interface NapiFeatureSetting {
+  /** A feature tag such as `liga`. */
+  tag: string
+  /** `0` turns the feature off, `1` on; larger values pick an alternate. */
+  value: number
+}
+
 export interface NapiFontExportRequest {
   path: string
   format: string
@@ -219,6 +239,50 @@ export interface NapiFontExportResult {
 export interface NapiNewWorkspace {
   familyName?: string
   unitsPerEm?: number
+}
+
+/**
+ * One shaped glyph. Advances and offsets hold only what the font's feature
+ * code positions; glyph advances, kerning, and mark attachment are the
+ * caller's to add.
+ */
+export interface NapiShapedGlyph {
+  /** Absent when a character has no glyph. */
+  glyphId?: GlyphId
+  /** Index of the first unit the glyph came from. */
+  cluster: number
+  xAdvance: number
+  yAdvance: number
+  xOffset: number
+  yOffset: number
+}
+
+export interface NapiShapeRequest {
+  units: Array<NapiShapeUnit>
+  /** User-space location to shape at; omitted axes are at their default. */
+  location: NapiLocation
+  /** Guessed from the script when omitted. */
+  direction?: "ltr" | "rtl"
+  /**
+   * ISO 15924 script tag such as `Arab`; guessed from the characters when
+   * omitted.
+   */
+  script?: string
+  /** BCP 47 language tag; the default language system when omitted. */
+  language?: string
+  /** Settings over the features applied by default. */
+  features?: Array<NapiFeatureSetting>
+}
+
+/**
+ * One unit of text to shape: exactly one of a character or a glyph inserted
+ * by name.
+ */
+export interface NapiShapeUnit {
+  /** A Unicode scalar value. */
+  codepoint?: number
+  /** A glyph with no character to type, shaped as itself. */
+  glyphId?: GlyphId
 }
 
 /**

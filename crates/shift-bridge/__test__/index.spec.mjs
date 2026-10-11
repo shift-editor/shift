@@ -254,6 +254,40 @@ describe("Bridge", () => {
     expect(glyphState("A").structure.contours[0].points).toHaveLength(1);
   });
 
+  function shapeText(text, options = {}) {
+    const units = [...text].map((character) => ({ codepoint: character.codePointAt(0) }));
+    return bridge.shape({ units, location: { values: {} }, ...options });
+  }
+
+  function glyphName(glyphId) {
+    return bridge.getGlyphs().find((record) => record.id === glyphId)?.name ?? null;
+  }
+
+  it("shapes text with the font's feature code", () => {
+    bridge.closeWorkspace();
+    bridge.openWorkspace(
+      join(repositoryRoot, "fixtures/fonts/Homenaje.glyphs"),
+      join(tempDir, "homenaje.sqlite"),
+    );
+
+    const plain = shapeText("1/2");
+    const fraction = shapeText("1/2", { features: [{ tag: "frac", value: 1 }] });
+
+    expect(plain.map((glyph) => glyphName(glyph.glyphId))).toEqual(["one", "slash", "two"]);
+    expect(plain.map((glyph) => glyph.cluster)).toEqual([0, 1, 2]);
+    expect(fraction.map((glyph) => [glyphName(glyph.glyphId), glyph.cluster])).toEqual([
+      ["onehalf", 0],
+    ]);
+  });
+
+  it("shapes glyphs added since the last shape", () => {
+    expect(shapeText("A")[0].glyphId).toBeUndefined();
+
+    createGlyphLayer("A", [65]);
+
+    expect(glyphName(shapeText("A")[0].glyphId)).toBe("A");
+  });
+
   it("surfaces typed bridge errors at the NAPI boundary", () => {
     expect(() =>
       bridge.apply([

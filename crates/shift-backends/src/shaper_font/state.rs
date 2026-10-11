@@ -7,7 +7,8 @@ use super::{FeatureDiagnostic, ShaperFont, ShaperFontError, ShaperFontRequest};
 ///
 /// A request whose feature source has errors keeps the previous font active,
 /// so shaping continues with the last valid features while the author repairs
-/// the source.
+/// the source. When no request has compiled yet, the font is compiled without
+/// features instead, so text still shapes.
 #[derive(Debug, Default)]
 pub struct ShaperFontState {
     request: Option<ShaperFontRequest>,
@@ -31,9 +32,13 @@ impl ShaperFontState {
         }
 
         let compilation = ShaperFont::compile(&request)?;
+        let featureless = match (&compilation.font, &self.font) {
+            (None, None) => ShaperFont::compile(&request.without_features())?.font,
+            _ => None,
+        };
         self.request = Some(request);
         self.diagnostics = compilation.diagnostics;
-        let Some(font) = compilation.font else {
+        let Some(font) = compilation.font.or(featureless) else {
             return Ok(false);
         };
 
@@ -42,8 +47,9 @@ impl ShaperFontState {
         Ok(true)
     }
 
-    /// Returns the last successfully compiled font, or `None` when no request
-    /// has compiled yet.
+    /// Returns the active font: the last one compiled with its features, or
+    /// the featureless fallback while none has; `None` before the first
+    /// successful update.
     pub fn font(&self) -> Option<&Arc<ShaperFont>> {
         self.font.as_ref()
     }
