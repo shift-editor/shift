@@ -466,12 +466,12 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     };
     for (const { placed, itemId, model } of this.#runGlyphs(node, layout)) {
       model.trackShape();
+      track(model.closedContoursPathCell);
+      track(model.openContoursPathCell);
       ctx.canvas.save();
       ctx.canvas.translate(placed.origin.x, placed.origin.y);
-      this.#outline.draw(ctx.canvas, model, {
-        fill: ctx.canvas.theme.glyph.fill,
-        stroke: outlined.has(itemId) ? outlineStroke : null,
-      });
+      this.#outline.drawDisplay(ctx.canvas, model, ctx.canvas.theme.glyph);
+      if (outlined.has(itemId)) this.#outline.draw(ctx.canvas, model, { stroke: outlineStroke });
       ctx.canvas.restore();
     }
   }

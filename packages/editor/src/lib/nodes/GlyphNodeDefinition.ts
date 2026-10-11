@@ -477,12 +477,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
   #drawDisplayContent(ctx: RenderContext, view: GlyphRenderModel): void {
     track(view.closedContoursPathCell);
     track(view.openContoursPathCell);
-    ctx.canvas.fillPath(view.closedContoursPath, ctx.canvas.theme.glyph.fill);
-    ctx.canvas.strokePath(
-      view.openContoursPath,
-      ctx.canvas.theme.glyph.stroke,
-      ctx.canvas.theme.glyph.widthPx,
-    );
+    this.#outline.drawDisplay(ctx.canvas, view, ctx.canvas.theme.glyph);
   }
 
   /**
