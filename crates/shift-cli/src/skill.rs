@@ -24,7 +24,7 @@ const PRODUCT_VERSION: &str = env!("SHIFT_PRODUCT_VERSION");
 const SKILL_FILE: &str = "SKILL.md";
 
 /// Every file of `skills/shift`, by its path inside the skill directory.
-const FILES: [(&str, &str); 5] = [
+const FILES: [(&str, &str); 6] = [
     (SKILL_FILE, include_str!("../../../skills/shift/SKILL.md")),
     (
         "references/cli.md",
@@ -37,6 +37,10 @@ const FILES: [(&str, &str); 5] = [
     (
         "references/mcp.md",
         include_str!("../../../skills/shift/references/mcp.md"),
+    ),
+    (
+        "references/themes.md",
+        include_str!("../../../skills/shift/references/themes.md"),
     ),
     (
         "references/variable-fonts.md",
@@ -171,6 +175,7 @@ pub fn show_skill(args: &ShowSkillArgs) -> Result<String> {
         SkillTopic::Cli => "references/cli.md",
         SkillTopic::Fonts => "references/fonts.md",
         SkillTopic::VariableFonts => "references/variable-fonts.md",
+        SkillTopic::Themes => "references/themes.md",
     };
     let mut files = identity.render();
     Ok(files.remove(path).expect("every topic is an embedded file"))

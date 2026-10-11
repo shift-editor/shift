@@ -7,12 +7,14 @@ description: Work with fonts in the Shift font editor. Use for questions about t
 
 Shift is a desktop font editor. An agent can reach it in two ways; pick by where the font is.
 
-| The font is… | Use | Read |
-| --- | --- | --- |
-| Open in the running Shift app, or the user means "what I'm looking at" | The local **MCP server** (`shift.describe`, `shift.execute`, `shift.capture`) | [references/mcp.md](references/mcp.md) |
-| A saved file (`.shift`, UFO, Designspace, Glyphs, TTF, OTF), a batch job, or CI | **`shift-cli`** | [references/cli.md](references/cli.md) |
+| The font is…                                                                    | Use                                                                           | Read                                   |
+| ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | -------------------------------------- |
+| Open in the running Shift app, or the user means "what I'm looking at"          | The local **MCP server** (`shift.describe`, `shift.execute`, `shift.capture`) | [references/mcp.md](references/mcp.md) |
+| A saved file (`.shift`, UFO, Designspace, Glyphs, TTF, OTF), a batch job, or CI | **`shift-cli`**                                                               | [references/cli.md](references/cli.md) |
 
 For vocabulary and conventions shared by both, read [references/fonts.md](references/fonts.md); for axes, masters, instances, and interpolation, read [references/variable-fonts.md](references/variable-fonts.md).
+
+To change how Shift itself looks (its colors, a theme, or the user's rice), edit the theme files in its config folder; read [references/themes.md](references/themes.md).
 
 ## Rules
 

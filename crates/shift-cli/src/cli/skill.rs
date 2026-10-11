@@ -81,6 +81,8 @@ pub enum SkillTopic {
     Cli,
     Fonts,
     VariableFonts,
+    /// Shift's own colors: config.toml and theme files.
+    Themes,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
