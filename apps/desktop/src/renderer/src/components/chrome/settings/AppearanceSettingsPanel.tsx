@@ -1,5 +1,6 @@
 import { RadioCard, RadioGroup } from "@shift/ui";
 import { useTheme } from "@/context/ThemeContext";
+import { ConfigFileSection } from "./ConfigFileSection";
 import { colorThemes, type ColorTheme, type ThemeSelection } from "@/lib/themes";
 
 export const AppearanceSettingsPanel = () => {
@@ -41,6 +42,8 @@ export const AppearanceSettingsPanel = () => {
           ))}
         </RadioGroup>
       </fieldset>
+
+      <ConfigFileSection />
     </section>
   );
 };

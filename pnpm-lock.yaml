@@ -120,6 +120,9 @@ importers:
       shift-bridge:
         specifier: workspace:*
         version: link:../../crates/shift-bridge
+      smol-toml:
+        specifier: 1.7.1
+        version: 1.7.1
       zod:
         specifier: ^4.1.12
         version: 4.3.6
@@ -7334,7 +7337,7 @@ snapshots:
   '@testing-library/dom@10.4.1':
     dependencies:
       '@babel/code-frame': 7.29.7
-      '@babel/runtime': 7.28.6
+      '@babel/runtime': 7.29.10
       '@types/aria-query': 5.0.4
       aria-query: 5.3.0
       dom-accessibility-api: 0.5.16

@@ -247,6 +247,11 @@ export const colorThemes: readonly ColorTheme[] = [
   },
 ];
 
+/** Whether `value` names a built-in theme or `system`, as `config.toml` may hold anything. */
+export function isThemeSelection(value: string): value is ThemeSelection {
+  return value === "system" || colorThemes.some((theme) => theme.id === value);
+}
+
 export function resolveThemeSelection(
   themeSelection: ThemeSelection,
   systemAppearance: ThemeAppearance,

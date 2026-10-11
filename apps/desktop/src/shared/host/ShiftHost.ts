@@ -4,6 +4,7 @@ import type { RendererErrorReport } from "../ipc/contract";
 import type { FontSessionMode } from "../workspace/protocol";
 import type { RecentDocument } from "../recents";
 import type { AgentConnectionsState } from "../agent/connections";
+import type { AppConfigState } from "../config/config";
 import type { MenuBar, TitleBarColors, WindowButtonLayout } from "../menu/types";
 
 /**
@@ -161,6 +162,25 @@ export interface ShiftHost {
      * @returns an unsubscribe function.
      */
     onChanged: (callback: (state: AgentConnectionsState) => void) => () => void;
+  };
+  /** This build's `config.toml`, the source of truth for app settings such as the theme. */
+  config: {
+    state: () => Promise<AppConfigState>;
+    /**
+     * Writes the theme selection to `config.toml`, creating it if needed.
+     *
+     * @remarks
+     * Rejects without changing the file when it has errors.
+     */
+    setTheme: (theme: string) => Promise<AppConfigState>;
+    /** Opens the config folder in the system file manager. */
+    reveal: () => Promise<void>;
+    /**
+     * Subscribes to config changes from Settings or other programs.
+     *
+     * @returns an unsubscribe function.
+     */
+    onChanged: (callback: (state: AppConfigState) => void) => () => void;
   };
   /** Main-owned list of files Shift has opened. */
   recents: {

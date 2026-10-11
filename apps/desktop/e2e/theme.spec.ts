@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { colorThemes } from "../src/renderer/src/lib/themes";
 import type { Page } from "@playwright/test";
 import type { ThemeId } from "../src/renderer/src/lib/themes";
@@ -11,12 +13,19 @@ import {
 } from "./fixtures/appLocators";
 import { expectCanvasSnapshot, expectPageSnapshot } from "./fixtures/snapshots";
 
-/** Persists a theme selection, reloads the workspace, and proves the theme is applied. */
+/** Writes a theme selection to config.toml, reloads the workspace, and proves the theme is applied. */
 async function useTheme(page: Page, themeId: ThemeId): Promise<void> {
-  await page.evaluate((id) => localStorage.setItem("themeSelection", id), themeId);
+  await page.evaluate((id) => window.shiftHost!.config.setTheme(id), themeId);
   await page.reload();
   await waitForWorkspaceReady(page);
   await expect(page.locator("html")).toHaveAttribute("data-color-theme", themeId);
+}
+
+/** This build's config.toml in the test's isolated user data. */
+async function configFile(page: Page): Promise<string> {
+  const { directory } = await page.evaluate(() => window.shiftHost!.config.state());
+  fs.mkdirSync(directory, { recursive: true });
+  return path.join(directory, "config.toml");
 }
 
 /** Opens S with every point selected so glyph, handles, and selection chrome are all drawn. */
@@ -69,8 +78,34 @@ test.describe("Theme", () => {
       )
       .toBe(nord.palette.base00);
 
+    expect(fs.readFileSync(await configFile(page), "utf8")).toBe(`theme = "nord"\n`);
     await page.reload();
     await expect(page.locator("html")).toHaveAttribute("data-color-theme", "nord");
+  });
+
+  test("applies a theme chosen by editing config.toml", async ({ page }) => {
+    const file = await configFile(page);
+    fs.writeFileSync(file, `# my rice\ntheme = "gruvbox-dark"\n`);
+
+    await expect(page.locator("html")).toHaveAttribute("data-color-theme", "gruvbox-dark");
+  });
+
+  test("keeps the theme and reports the line when config.toml breaks", async ({ page }) => {
+    const file = await configFile(page);
+    fs.writeFileSync(file, `theme = "dracula"\n`);
+    await expect(page.locator("html")).toHaveAttribute("data-color-theme", "dracula");
+
+    fs.writeFileSync(file, `theme = "nord\n`);
+    await page.getByRole("button", { name: "Settings" }).click();
+    await page.getByRole("button", { name: "Appearance", exact: true }).click();
+
+    await expect(page.getByRole("list", { name: "Config problems" })).toContainText(
+      "config.toml:1:",
+    );
+    await expect(page.locator("html")).toHaveAttribute("data-color-theme", "dracula");
+    await page.getByRole("radio", { name: /Nord/ }).click();
+    await expect(page.getByRole("alert")).toContainText("Not saved");
+    expect(fs.readFileSync(file, "utf8")).toBe(`theme = "nord\n`);
   });
 
   test("keeps viewport input live after a theme change and a Home round trip", async ({
