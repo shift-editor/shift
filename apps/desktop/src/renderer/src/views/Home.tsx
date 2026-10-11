@@ -5,40 +5,28 @@ import { RightSidebar } from "@/components/editor/RightSidebar";
 import { Toolbar } from "@/components/chrome/Toolbar";
 import { useSidebarLayout } from "@/components/chrome/useSidebarLayout";
 
-const LEFT_SIDEBAR_DEFAULT_SIZE = 240;
-const RIGHT_SIDEBAR_DEFAULT_SIZE = 260;
-
 export const Home = () => {
   const {
-    leftSidebarPanelRef,
-    rightSidebarPanelRef,
     leftSidebarContentRef,
     rightSidebarContentRef,
+    onLayoutChanged,
+    sidebarPanelProps,
     toggleLeftSidebar,
     toggleRightSidebar,
-  } = useSidebarLayout();
+    resetLeftSidebar,
+    resetRightSidebar,
+  } = useSidebarLayout("home");
 
   return (
     <main className="grid h-screen w-full grid-rows-[auto_minmax(0,1fr)]">
       <Toolbar toggleLeftSidebar={toggleLeftSidebar} toggleRightSidebar={toggleRightSidebar} />
       <ResizablePanelGroup
         data-testid="home-layout-panels"
-        direction="horizontal"
-        autoSaveId="shift:workspace-layout"
+        orientation="horizontal"
+        onLayoutChanged={onLayoutChanged}
         className="min-h-0 overflow-hidden"
       >
-        <ResizablePanel
-          ref={leftSidebarPanelRef}
-          className="sidebar-panel"
-          data-testid="left-sidebar-panel"
-          id="left-sidebar"
-          order={1}
-          defaultSize={LEFT_SIDEBAR_DEFAULT_SIZE}
-          minSize={160}
-          maxSize={400}
-          collapsible
-          collapsedSize={0}
-        >
+        <ResizablePanel {...sidebarPanelProps("left")}>
           <div ref={leftSidebarContentRef} className="h-full">
             <LeftSidebar />
           </div>
@@ -46,28 +34,19 @@ export const Home = () => {
         <ResizableHandle
           aria-label="Resize left sidebar"
           inset="start"
-          onDoubleClick={() => leftSidebarPanelRef.current?.resize(LEFT_SIDEBAR_DEFAULT_SIZE)}
+          disableDoubleClick
+          onDoubleClick={resetLeftSidebar}
         />
-        <ResizablePanel id="grid" order={2} minSize={300}>
+        <ResizablePanel id="grid" minSize={300}>
           <GlyphGrid />
         </ResizablePanel>
         <ResizableHandle
           aria-label="Resize right sidebar"
           inset="end"
-          onDoubleClick={() => rightSidebarPanelRef.current?.resize(RIGHT_SIDEBAR_DEFAULT_SIZE)}
+          disableDoubleClick
+          onDoubleClick={resetRightSidebar}
         />
-        <ResizablePanel
-          ref={rightSidebarPanelRef}
-          className="sidebar-panel"
-          data-testid="right-sidebar-panel"
-          id="right-sidebar"
-          order={3}
-          defaultSize={RIGHT_SIDEBAR_DEFAULT_SIZE}
-          minSize={180}
-          maxSize={420}
-          collapsible
-          collapsedSize={0}
-        >
+        <ResizablePanel {...sidebarPanelProps("right")}>
           <div ref={rightSidebarContentRef} className="h-full">
             <RightSidebar />
           </div>

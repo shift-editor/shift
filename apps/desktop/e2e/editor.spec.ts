@@ -215,10 +215,10 @@ async function receivesPointerAt(element: Locator, offsetX: number): Promise<boo
   }, offsetX);
 }
 
-/** Resizes a focused divider with the keyboard, which persists the layout like a drag does. */
-async function nudgeDivider(page: Page, divider: Locator, key: string, presses: number) {
+/** Resizes a focused divider one keyboard step, which persists the layout like a drag does. */
+async function nudgeDivider(page: Page, divider: Locator, key: string) {
   await divider.focus();
-  for (let press = 0; press < presses; press += 1) await page.keyboard.press(key);
+  await page.keyboard.press(key);
 }
 
 test.describe("Editor view", () => {
@@ -414,8 +414,8 @@ test.describe("Editor view", () => {
 
   test("resets sidebars to their default width on divider double-click", async ({ page }) => {
     const layout = page.getByTestId("editor-layout-panels");
-    const leftSidebar = layout.getByTestId("left-sidebar-panel");
-    const rightSidebar = layout.getByTestId("right-sidebar-panel");
+    const leftSidebar = layout.getByTestId("editor-left-sidebar");
+    const rightSidebar = layout.getByTestId("editor-right-sidebar");
     const leftDivider = layout.getByRole("separator", { name: "Resize left sidebar" });
     const rightDivider = layout.getByRole("separator", { name: "Resize right sidebar" });
     const defaultLeftWidth = 240;
@@ -433,6 +433,33 @@ test.describe("Editor view", () => {
     await rightDivider.dispatchEvent("dblclick");
     await expect.poll(() => elementWidth(rightSidebar)).toBeCloseTo(defaultRightWidth, 0);
     await expect.poll(() => elementWidth(leftSidebar)).toBeCloseTo(defaultLeftWidth, 0);
+  });
+
+  test("keeps sidebar widths when the window resizes", async ({ electronApp, page, editor }) => {
+    await editor.waitForCanvasRender();
+    const layout = page.getByTestId("editor-layout-panels");
+    const leftSidebar = layout.getByTestId("editor-left-sidebar");
+    const rightSidebar = layout.getByTestId("editor-right-sidebar");
+    const canvas = layout.getByTestId("canvas");
+    const leftWidth = await elementWidth(leftSidebar);
+    const rightWidth = await elementWidth(rightSidebar);
+    const canvasWidth = await elementWidth(canvas);
+
+    const resizeWindow = (delta: number) =>
+      electronApp.evaluate(({ BrowserWindow }, change) => {
+        const window = BrowserWindow.getAllWindows()[0]!;
+        const [width, height] = window.getContentSize();
+        window.setContentSize(width! + change, height!);
+      }, delta);
+
+    await resizeWindow(-200);
+    try {
+      await expect.poll(() => elementWidth(canvas)).toBeCloseTo(canvasWidth - 200, 0);
+      expect(await elementWidth(leftSidebar)).toBeCloseTo(leftWidth, 0);
+      expect(await elementWidth(rightSidebar)).toBeCloseTo(rightWidth, 0);
+    } finally {
+      await resizeWindow(200);
+    }
   });
 
   test("keeps the whole divider grab area above the canvas", async ({ page, editor }) => {
@@ -454,38 +481,38 @@ test.describe("Editor view", () => {
     await editor.waitForCanvasRender();
     const editorLayout = page.getByTestId("editor-layout-panels");
     const homeLayout = page.getByTestId("home-layout-panels");
-    const editorSidebarPanel = editorLayout.getByTestId("left-sidebar-panel");
-    const homeSidebarPanel = homeLayout.getByTestId("left-sidebar-panel");
+    const editorSidebarPanel = editorLayout.getByTestId("editor-left-sidebar");
+    const homeSidebarPanel = homeLayout.getByTestId("home-left-sidebar");
     const initialWidth = await elementWidth(editorSidebarPanel);
 
     await nudgeDivider(
       page,
       editorLayout.getByRole("separator", { name: "Resize left sidebar" }),
       "ArrowRight",
-      4,
     );
-    await expect.poll(() => elementWidth(editorSidebarPanel)).toBeCloseTo(initialWidth + 40, 0);
+    await expect.poll(() => elementWidth(editorSidebarPanel)).toBeGreaterThan(initialWidth + 1);
+    const widenedWidth = await elementWidth(editorSidebarPanel);
 
     await page.getByRole("button", { name: "Font overview", exact: true }).click();
     await page.waitForURL(/#\/home/);
-    await expect.poll(() => elementWidth(homeSidebarPanel)).toBeCloseTo(initialWidth + 40, 0);
+    await expect.poll(() => elementWidth(homeSidebarPanel)).toBeCloseTo(widenedWidth, 0);
 
     await nudgeDivider(
       page,
       homeLayout.getByRole("separator", { name: "Resize left sidebar" }),
       "ArrowLeft",
-      3,
     );
-    await expect.poll(() => elementWidth(homeSidebarPanel)).toBeCloseTo(initialWidth + 10, 0);
+    await expect.poll(() => elementWidth(homeSidebarPanel)).toBeLessThan(widenedWidth - 1);
+    const narrowedWidth = await elementWidth(homeSidebarPanel);
 
     await editor.openGlyphByUnicode("41");
-    await expect.poll(() => elementWidth(editorSidebarPanel)).toBeCloseTo(initialWidth + 10, 0);
+    await expect.poll(() => elementWidth(editorSidebarPanel)).toBeCloseTo(narrowedWidth, 0);
   });
 
   test("toolbar toggles both sidebars without reflowing their contents", async ({ page }) => {
     const layout = page.getByTestId("editor-layout-panels");
-    const leftPanel = layout.getByTestId("left-sidebar-panel");
-    const rightPanel = layout.getByTestId("right-sidebar-panel");
+    const leftPanel = layout.getByTestId("editor-left-sidebar");
+    const rightPanel = layout.getByTestId("editor-right-sidebar");
     const leftContent = editorSidebar(page);
     const rightContent = page.getByRole("complementary", { name: "Glyph properties" });
 

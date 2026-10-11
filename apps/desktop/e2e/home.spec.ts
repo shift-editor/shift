@@ -130,8 +130,8 @@ test.describe("Home view", () => {
   });
 
   test("resets both sidebars to their default widths", async ({ page }) => {
-    const leftSidebar = page.getByTestId("left-sidebar-panel");
-    const rightSidebar = page.getByTestId("right-sidebar-panel");
+    const leftSidebar = page.getByTestId("home-left-sidebar");
+    const rightSidebar = page.getByTestId("home-right-sidebar");
     const leftDivider = page.getByRole("separator", { name: "Resize left sidebar" });
     const rightDivider = page.getByRole("separator", { name: "Resize right sidebar" });
     const defaultLeftWidth = 240;
@@ -153,8 +153,8 @@ test.describe("Home view", () => {
 
   test("toolbar toggles both sidebars without reflowing their contents", async ({ page }) => {
     const layout = page.getByTestId("home-layout-panels");
-    const leftPanel = layout.getByTestId("left-sidebar-panel");
-    const rightPanel = layout.getByTestId("right-sidebar-panel");
+    const leftPanel = layout.getByTestId("home-left-sidebar");
+    const rightPanel = layout.getByTestId("home-right-sidebar");
     const leftContent = page.getByRole("complementary", { name: "Font navigation" });
     const rightContent = page.getByRole("complementary", { name: "Glyph properties" });
     const catalogSurface = glyphCatalogSurface(page);
