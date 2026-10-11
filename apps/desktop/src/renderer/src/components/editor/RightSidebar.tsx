@@ -65,18 +65,32 @@ export const RightSidebar = () => {
           <KerningPairSection />
         ) : (
           <TransformOriginProvider>
-            {/* One block, so its sections are spaced as Transform's are. */}
-            <div ref={selectionBlockRef} className="flex flex-col gap-4 px-3 py-3">
-              <GlyphKerningSection anchorRef={selectionBlockRef} />
-              {hasBooleanSelection || hasTransformSelection ? <BooleanOps /> : null}
+            {/* Kerning | Handle | Transform, each a group with a divider between. */}
+            <div ref={selectionBlockRef} className="flex flex-col">
+              <SidebarGroup>
+                <GlyphKerningSection anchorRef={selectionBlockRef} />
+              </SidebarGroup>
               {hasTransformSelection ? (
-                <>
+                <SidebarGroup>
                   <HandleSection />
-                  <TransformSection />
-                  <ScaleSection />
-                </>
+                </SidebarGroup>
               ) : null}
-              {!hasTransformSelection && hasAnchorSelection ? <AnchorSection /> : null}
+              {hasBooleanSelection || hasTransformSelection ? (
+                <SidebarGroup>
+                  <BooleanOps />
+                  {hasTransformSelection ? (
+                    <>
+                      <TransformSection />
+                      <ScaleSection />
+                    </>
+                  ) : null}
+                </SidebarGroup>
+              ) : null}
+              {!hasTransformSelection && hasAnchorSelection ? (
+                <SidebarGroup>
+                  <AnchorSection />
+                </SidebarGroup>
+              ) : null}
             </div>
           </TransformOriginProvider>
         ),
@@ -84,3 +98,16 @@ export const RightSidebar = () => {
     />
   );
 };
+
+/**
+ * One group of the selection's sections. An empty group, whose section has
+ * nothing to show, is hidden, and a group is divided from a shown one before it.
+ */
+const SidebarGroup = ({ children }: { readonly children: React.ReactNode }) => (
+  <div
+    data-sidebar-group=""
+    className="flex flex-col gap-4 px-3 py-3 empty:hidden [[data-sidebar-group]:not(:empty)~&]:border-t [[data-sidebar-group]:not(:empty)~&]:border-line-subtle"
+  >
+    {children}
+  </div>
+);
