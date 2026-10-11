@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Curve, Vec2 } from "@shift/geo";
 import { Point } from "@shift/glyph-state";
 import { mintPointId } from "@shift/types";
-import { externalAxisLocationFromRecord } from "@shift/editor/variation";
 import { TestEditor } from "@/testing/TestEditor";
 
 let editor: TestEditor;
@@ -132,29 +131,13 @@ describe("deleting on-curve points fits their original span", () => {
   it("does not edit an interpolated location", async () => {
     const before = layer().state;
     editor.selectAll();
-    const axisId = editor.font.createAxis(weightAxis());
-    await editor.settle();
-    editor.setExternalLocation(externalAxisLocationFromRecord({ [axisId]: 550 }));
+    await editor.moveToInterpolatedLocation();
     expect(editor.activeSourceId).toBeNull();
     expect(await editor.deleteSelection()).toBe(false);
     editor.selectSource(editor.font.defaultSource.id);
     expect(layer().state).toEqual(before);
   });
 });
-
-function weightAxis() {
-  return {
-    tag: "wght",
-    name: "Weight",
-    role: "external" as const,
-    axisType: "continuous" as const,
-    minimum: 100,
-    default: 400,
-    maximum: 900,
-    labels: [],
-    hidden: false,
-  };
-}
 
 describe("deleting cubic handles converts the segment to a line", () => {
   beforeEach(async () => {

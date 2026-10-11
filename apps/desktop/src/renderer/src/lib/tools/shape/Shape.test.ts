@@ -59,6 +59,20 @@ describe("Shape tool", () => {
     expect(created.closed).toBe(true);
   });
 
+  it("does not draw into the last source shown at an interpolated location", async () => {
+    await editor.moveToInterpolatedLocation();
+
+    await editor.dragLocal({
+      down: { x: 10, y: 10 },
+      start: { x: 50, y: 30 },
+      end: { x: 110, y: 90 },
+    });
+    await editor.settle();
+
+    editor.selectSource(editor.font.defaultSource.id);
+    expect(contours()).toEqual([]);
+  });
+
   it("selects the committed rectangle and returns to the Select tool", async () => {
     await editor.dragLocal({
       down: { x: 10, y: 10 },

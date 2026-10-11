@@ -18,6 +18,7 @@ import type { ContourId } from "@shift/types";
 import {
   computed,
   signal,
+  track,
   type ComputedSignal,
   type Signal,
   type WritableSignal,
@@ -52,9 +53,8 @@ export class Pen extends BaseTool<PenState, Pen> {
       const context = this.#ctx.value;
       if (!context?.activeContourId) return null;
 
-      const layer = this.editor
-        .glyphForId(context.glyphNode.glyphId)
-        ?.layerForSource(context.glyphNode.sourceId);
+      track(this.editor.activeSourceIdCell);
+      const layer = this.editor.editableLayer(context.glyphNode);
       const contour = layer?.geometryCell.value.contour(context.activeContourId);
       if (!contour || contour.closed) return null;
 

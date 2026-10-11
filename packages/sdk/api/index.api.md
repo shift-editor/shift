@@ -258,6 +258,8 @@ export class Editor {
     get draggingCell(): Signal<boolean>;
     // (undocumented)
     duplicateSelection(): PointId[];
+    // Warning: (ae-forgotten-export) The symbol "GlyphNode" needs to be exported by the entry point index.d.ts
+    editableLayer(node: GlyphNode): GlyphLayer | null;
     // Warning: (ae-forgotten-export) The symbol "Editing" needs to be exported by the entry point index.d.ts
     //
     // (undocumented)
@@ -275,7 +277,6 @@ export class Editor {
     // (undocumented)
     get externalLocationCell(): Signal<ExternalAxisLocation>;
     fitBounds(bounds: SceneBounds): void;
-    // Warning: (ae-forgotten-export) The symbol "GlyphNode" needs to be exported by the entry point index.d.ts
     fitGlyphFrame(node: GlyphNode): void;
     fitInitialBounds(bounds: SceneBounds): void;
     // (undocumented)
@@ -1514,10 +1515,10 @@ export function useSignalState<T>(signal: Signal<T>, options?: UseSignalOptions)
 
 // Warnings were encountered during analysis:
 //
-// dist/Editor-Cm1e_yj_.d.ts:2808:5 - (ae-forgotten-export) The symbol "Axis" needs to be exported by the entry point index.d.ts
-// dist/Editor-Cm1e_yj_.d.ts:2809:5 - (ae-forgotten-export) The symbol "AxisMappingBasis" needs to be exported by the entry point index.d.ts
-// dist/Editor-Cm1e_yj_.d.ts:2810:5 - (ae-forgotten-export) The symbol "Source" needs to be exported by the entry point index.d.ts
-// dist/Editor-Cm1e_yj_.d.ts:4824:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
+// dist/Editor-tfzidUVH.d.ts:2808:5 - (ae-forgotten-export) The symbol "Axis" needs to be exported by the entry point index.d.ts
+// dist/Editor-tfzidUVH.d.ts:2809:5 - (ae-forgotten-export) The symbol "AxisMappingBasis" needs to be exported by the entry point index.d.ts
+// dist/Editor-tfzidUVH.d.ts:2810:5 - (ae-forgotten-export) The symbol "Source" needs to be exported by the entry point index.d.ts
+// dist/Editor-tfzidUVH.d.ts:4824:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

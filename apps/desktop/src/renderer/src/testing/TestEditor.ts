@@ -13,6 +13,7 @@
 
 import { localPoint, scenePoint, screenPoint, type ScreenPoint } from "@shift/editor/spaces";
 import { Editor } from "@shift/editor";
+import { externalAxisLocationFromRecord } from "@shift/editor/variation";
 import type { Glyph, GlyphRenderModel, GlyphLayer } from "@shift/editor/model";
 import type { ToolName } from "@shift/editor/tools";
 import { registerBuiltInTools } from "@/lib/tools/tools";
@@ -193,6 +194,27 @@ export class TestEditor extends Editor {
     const child = this.nodeDefinition("textRun").editItem(run, item.id);
     if (!child) throw new Error("placed glyph is not loaded");
     this.enterNode(child.id);
+  }
+
+  /**
+   * Adds a weight axis and moves to a location between its default and maximum,
+   * where no source sits, so the displayed glyph is interpolated and read-only.
+   */
+  async moveToInterpolatedLocation(): Promise<this> {
+    const axisId = this.font.createAxis({
+      tag: "wght",
+      name: "Weight",
+      role: "external",
+      axisType: "continuous",
+      minimum: 100,
+      default: 400,
+      maximum: 900,
+      labels: [],
+      hidden: false,
+    });
+    await this.settle();
+    this.setExternalLocation(externalAxisLocationFromRecord({ [axisId]: 550 }));
+    return this;
   }
 
   /** Awaits every queued and in-flight apply; geometry reads confirmed truth after. */
