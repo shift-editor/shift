@@ -1,8 +1,10 @@
 import type { Editor } from "../../editor/Editor";
+import { track } from "../../signals";
 import type { GlyphLayer } from "../../model/Glyph";
 import type { ScenePoint } from "../../../types/coordinates";
 import {
   sidebearingOfHalf,
+  spacingGapCenter,
   type Sidebearing,
   type SpacingGap,
   type SpacingSide,
@@ -54,7 +56,8 @@ export class SpacingHalf {
     return (
       this.side === other.side &&
       this.sameGapAs(other) &&
-      this.gap.boundary === other.gap.boundary &&
+      this.gap.leftBoundary === other.gap.leftBoundary &&
+      this.gap.rightBoundary === other.gap.rightBoundary &&
       this.gap.left?.sidebearing === other.gap.left?.sidebearing &&
       this.gap.right?.sidebearing === other.gap.right?.sidebearing
     );
@@ -107,6 +110,14 @@ export class SpacingHalf {
   }
 }
 
+/**
+ * Subscribes the caller's reactive scope to every text run's layout, so an
+ * overlay measured from the layout redraws when it changes.
+ */
+export function trackRunLayouts(editor: Editor): void {
+  for (const run of editor.scene.nodesOfKind("textRun")) track(editor.text.layoutCell(run.runId));
+}
+
 /** The spacing gaps of the editor's text runs, measured on demand. */
 export class RunSpacing {
   readonly #editor: Editor;
@@ -137,13 +148,18 @@ export class RunSpacing {
     return null;
   }
 
-  /** Measures a half again after an edit, by its gap's two glyphs; unchanged if they are no longer neighbours. */
-  refresh(half: SpacingHalf): SpacingHalf {
+  /**
+   * Measures a half again after an edit, by its gap's two glyphs.
+   *
+   * @returns null once they are no longer neighbours, as after an undo that
+   * removes one, so no stale half stays selected.
+   */
+  refresh(half: SpacingHalf): SpacingHalf | null {
     const { node, left, right } = half.gap;
     const gap = this.#editor
       .nodeDefinition("textRun")
       .spacingGapBetween(node, left?.itemId ?? null, right?.itemId ?? null);
-    return gap ? new SpacingHalf(gap, half.side) : half;
+    return gap ? new SpacingHalf(gap, half.side) : null;
   }
 
   /**
@@ -186,13 +202,13 @@ export class RunSpacing {
 }
 
 function sideAt(gap: SpacingGap, x: number): SpacingSideName {
-  const inLeft = gap.left !== null && between(x, gap.left.edge, gap.boundary);
-  const inRight = gap.right !== null && between(x, gap.boundary, gap.right.edge);
+  const inLeft = gap.left !== null && between(x, gap.left.edge, gap.leftBoundary);
+  const inRight = gap.right !== null && between(x, gap.rightBoundary, gap.right.edge);
   if (inLeft !== inRight) return inLeft ? "left" : "right";
   if (inLeft && gap.left!.sidebearing < 0) return "left";
   if (inRight && gap.right!.sidebearing < 0) return "right";
 
-  const pointerSide = x < gap.boundary ? "left" : "right";
+  const pointerSide = x < spacingGapCenter(gap) ? "left" : "right";
   if (gap[pointerSide]) return pointerSide;
   return gap.left ? "left" : "right";
 }

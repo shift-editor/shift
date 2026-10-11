@@ -118,6 +118,7 @@ export class ApplicationMenu {
           this.#commandItem("app.checkForUpdates"),
           { type: "separator" },
           this.#commandItem("app.showSettings"),
+          this.#commandItem("app.installCommandLineTool"),
           { type: "separator" },
           { role: "services", submenu: [] },
           { type: "separator" },

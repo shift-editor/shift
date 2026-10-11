@@ -167,6 +167,7 @@ export function helpMenuItems(
     ...items,
     { type: "separator" },
     item("app.checkForUpdates"),
+    item("app.installCommandLineTool"),
     { type: "separator" },
     item("app.showAbout"),
   ];

@@ -2,6 +2,7 @@ import { Rect, type Rect2D } from "@shift/geo";
 import type { Editor } from "../../editor/Editor";
 import { localPoint } from "../../editor/spaces";
 import type { ScreenPoint } from "../../../types/coordinates";
+import { spacingBoundary } from "../../../types/spacing";
 import type { SpacingHalf } from "./RunSpacing";
 
 const HEIGHT_PX = 16;
@@ -21,7 +22,8 @@ export function spacingLabelCenter(editor: Editor, half: SpacingHalf): ScreenPoi
   if (!glyphSide) return null;
 
   const { gap } = half;
-  const middle = localPoint((glyphSide.edge + gap.boundary) / 2, (gap.top + gap.bottom) / 2);
+  const boundary = spacingBoundary(gap, half.side);
+  const middle = localPoint((glyphSide.edge + boundary) / 2, (gap.top + gap.bottom) / 2);
   return editor.sceneToScreen(editor.toScene(gap.node, middle));
 }
 

@@ -87,6 +87,12 @@ export class CommandRegistry {
  * objects from this context after they finish running.
  */
 export type CommandContext = {
+  commandLineTool: {
+    /** Returns whether this build bundles a `shift-cli` that can be installed. */
+    available: () => boolean;
+    /** Installs it on PATH, confirming before replacing a different command. */
+    install: () => Promise<void>;
+  };
   update: {
     /** Checks the compiled application distribution for an update. */
     checkForUpdates: () => Promise<void>;

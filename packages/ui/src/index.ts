@@ -215,6 +215,7 @@ export {
   List,
   MenuIcon,
   Minus,
+  Plus,
   RotateCcw,
   RotateCw,
   Search,

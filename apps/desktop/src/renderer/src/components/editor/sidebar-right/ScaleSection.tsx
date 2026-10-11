@@ -113,18 +113,18 @@ export const ScaleSection = () => {
       </div>
 
       <div className="flex gap-4">
-        <div className="flex flex-col gap-2">
+        {/* Shrinks to the room the anchor grid leaves, so the row never overflows the sidebar. */}
+        <div className="flex min-w-0 max-w-18 flex-col gap-2">
           <div className="text-ui text-secondary">Scale</div>
-          <div className="max-w-18">
-            <SidebarNumberField
-              ariaLabel="Scale factor"
-              label={<ScaleIcon className="h-3.5 w-3.5" />}
-              value={1}
-              suffix="x"
-              disabled={!editable}
-              onValueCommit={handleScaleChange}
-            />
-          </div>
+          <SidebarNumberField
+            ariaLabel="Scale factor"
+            label={<ScaleIcon className="h-3.5 w-3.5" />}
+            value={1}
+            suffix="x"
+            inputClassName="pl-1 pr-0"
+            disabled={!editable}
+            onValueCommit={handleScaleChange}
+          />
         </div>
 
         <div className="flex flex-col gap-2">

@@ -21,23 +21,36 @@ impl InspectReport {
             InspectView::Sources => self.render_sources(mode),
             InspectView::Glyphs => self.render_glyphs(mode),
             InspectView::Layers => self.render_layers(mode),
+            InspectView::Kerning => self.render_kerning(mode),
         }
     }
 
     fn render_summary(&self, mode: RenderMode) -> String {
-        let mut lines = vec![
-            styled_title(&self.file_name, mode),
-            format_kv("app id", &self.document.application_id, mode),
-            format_kv("schema", &self.document.schema_version.to_string(), mode),
-            format_kv("document", &self.document.document_id, mode),
-            String::new(),
-            format_count("axes", self.axes.len(), mode),
-            format_count("mappings", self.axis_mappings.len(), mode),
-            format_count("instances", self.named_instances.len(), mode),
-            format_count("metric definitions", self.metric_definitions.len(), mode),
-            format_count("sources", self.sources.len(), mode),
-            format_count("glyphs", self.glyph_count, mode),
-        ];
+        let mut lines = vec![styled_title(&self.file_name, mode)];
+        lines.extend(key_values(
+            &[
+                ("app id", self.document.application_id.clone()),
+                ("schema", self.document.schema_version.to_string()),
+                ("document", self.document.document_id.clone()),
+            ],
+            mode,
+        ));
+        lines.push(String::new());
+        lines.extend(key_values(
+            &[
+                ("axes", self.axes.len().to_string()),
+                ("mappings", self.axis_mappings.len().to_string()),
+                ("instances", self.named_instances.len().to_string()),
+                (
+                    "metric definitions",
+                    self.metric_definitions.len().to_string(),
+                ),
+                ("sources", self.sources.len().to_string()),
+                ("glyphs", self.glyph_count.to_string()),
+                ("kerning pairs", self.kerning.pair_count().to_string()),
+            ],
+            mode,
+        ));
 
         if !self.sources.is_empty() {
             lines.push(String::new());
@@ -247,6 +260,54 @@ impl InspectReport {
         section_with_table("Layers", table, mode)
     }
 
+    fn render_kerning(&self, mode: RenderMode) -> String {
+        let kerning = &self.kerning;
+        let group_count = kerning.first_group_count + kerning.second_group_count;
+        if group_count == 0 && kerning.pair_count() == 0 {
+            return empty_section("Kerning", "No kerning", mode);
+        }
+
+        let mut lines = vec![styled_section("Kerning", mode)];
+        lines.extend(key_values(
+            &[
+                ("first groups", kerning.first_group_count.to_string()),
+                ("second groups", kerning.second_group_count.to_string()),
+                ("empty groups", kerning.empty_group_count.to_string()),
+            ],
+            mode,
+        ));
+        lines.push(String::new());
+        let mut table = base_table();
+        table.set_header(vec![
+            header("master", mode),
+            header("pairs", mode),
+            header("glyph", mode),
+            header("exception", mode),
+            header("group", mode),
+            header("unresolved", mode),
+        ]);
+        for source in &kerning.sources {
+            if source.pair_count == 0 {
+                table.add_row(vec![
+                    Cell::new(source.name.clone()),
+                    muted("no pairs", mode),
+                ]);
+                continue;
+            }
+            table.add_row(vec![
+                Cell::new(source.name.clone()),
+                right(source.pair_count),
+                right(source.glyph_pair_count),
+                right(source.exception_count),
+                right(source.group_pair_count),
+                right(source.unresolved_count),
+            ]);
+        }
+        align_right(&mut table, &[1, 2, 3, 4, 5]);
+        lines.push(table.to_string());
+        lines.join("\n")
+    }
+
     fn sources_table(&self, mode: RenderMode) -> String {
         let mut table = base_table();
         table.set_header(vec![
@@ -379,22 +440,25 @@ fn styled_section(value: &str, mode: RenderMode) -> String {
     }
 }
 
-fn format_kv(label: &str, value: &str, mode: RenderMode) -> String {
-    match mode {
-        RenderMode::Plain => format!("{label:<8}{value}"),
-        RenderMode::Styled => format!(
-            "{}{label:<8}{}{}",
-            anstyle::Style::new()
-                .fg_color(Some(AnsiColor::BrightBlack.into()))
-                .render(),
-            anstyle::Reset.render(),
-            value
-        ),
-    }
-}
-
-fn format_count(label: &str, value: usize, mode: RenderMode) -> String {
-    format_kv(label, &value.to_string(), mode)
+/// Renders label/value rows with values aligned two spaces past the longest label.
+fn key_values(rows: &[(&str, String)], mode: RenderMode) -> Vec<String> {
+    let width = rows
+        .iter()
+        .map(|(label, _)| label.chars().count() + 2)
+        .max()
+        .unwrap_or(0);
+    rows.iter()
+        .map(|(label, value)| match mode {
+            RenderMode::Plain => format!("{label:<width$}{value}"),
+            RenderMode::Styled => format!(
+                "{}{label:<width$}{}{value}",
+                anstyle::Style::new()
+                    .fg_color(Some(AnsiColor::BrightBlack.into()))
+                    .render(),
+                anstyle::Reset.render(),
+            ),
+        })
+        .collect()
 }
 
 fn empty_section(title: &str, message: &str, mode: RenderMode) -> String {

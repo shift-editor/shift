@@ -1,6 +1,7 @@
 import type { Canvas, ScreenCanvas, ScreenProjection } from "../../editor/rendering/Canvas";
+import type { SpacingPalette } from "../../editor/rendering/Theme";
 import type { Editor } from "../../editor/Editor";
-import type { SpacingGap, SpacingSideName } from "../../../types/spacing";
+import { spacingBoundary, type SpacingGap, type SpacingSideName } from "../../../types/spacing";
 import { spacingLabelRect, spacingLabelText } from "./SpacingLabel";
 import type { SpacingHalf } from "./RunSpacing";
 
@@ -23,17 +24,19 @@ export function drawSpacingGap(
 ): void {
   const { gap } = active;
   const matched = options.matched ? active.other() : null;
+  // Between sources the sidebearings are interpolated and read-only: draw them grey.
+  const theme = editor.activeSourceId ? canvas.theme.spacing : canvas.theme.spacingInterpolated;
   canvas.withTransform(editor.sceneTransform(gap.node), (local) => {
     local.withScreenSpace((screen, project) => {
       for (const side of ["left", "right"] as const) {
         const strong = side === active.side || side === matched?.side;
-        drawHalf(screen, project, gap, side, strong, side === options.selected);
+        drawHalf(screen, project, theme, gap, side, strong, side === options.selected);
       }
-      drawLabel(screen, editor, active, {
+      drawLabel(screen, editor, theme, active, {
         hovered: options.labelHovered ?? false,
         ringed: options.snapped ?? false,
       });
-      if (matched) drawLabel(screen, editor, matched, { hovered: false, ringed: true });
+      if (matched) drawLabel(screen, editor, theme, matched, { hovered: false, ringed: true });
     });
   });
 }
@@ -53,17 +56,18 @@ export interface SpacingGapDrawOptions {
 function drawHalf(
   screen: ScreenCanvas,
   project: ScreenProjection,
+  theme: SpacingPalette,
   gap: SpacingGap,
   side: SpacingSideName,
   strong: boolean,
   selected: boolean,
 ): void {
   const half = gap[side];
-  if (!half || half.edge === gap.boundary) return;
+  const boundary = spacingBoundary(gap, side);
+  if (!half || half.edge === boundary) return;
 
-  const theme = screen.theme.spacing;
   const a = project.point({ x: half.edge, y: gap.top });
-  const b = project.point({ x: gap.boundary, y: gap.bottom });
+  const b = project.point({ x: boundary, y: gap.bottom });
   const left = Math.min(a.x, b.x);
   const right = Math.max(a.x, b.x);
   const top = Math.min(a.y, b.y);
@@ -99,26 +103,30 @@ function drawHalf(
 }
 
 /** The pill's fill: negative or not, and slightly lighter while hovered to show it opens. */
-function labelFill(
-  theme: Canvas["theme"]["spacing"],
-  isNegative: boolean,
-  hovered: boolean,
-): string {
+function labelFill(theme: SpacingPalette, isNegative: boolean, hovered: boolean): string {
   if (isNegative) return hovered ? theme.negativeLabelHoverFill : theme.negativeLabelFill;
   return hovered ? theme.labelHoverFill : theme.labelFill;
 }
 
 /** A half's fill and hatch: strong when active, and in the negative colours below zero. */
 function halfColors(
-  theme: Canvas["theme"]["spacing"],
+  theme: SpacingPalette,
   isActive: boolean,
   isNegative: boolean,
 ): { fill: string; hatch: string; outline: string } {
   if (isNegative) {
     const outline = theme.negativeLabelFill;
     return isActive
-      ? { fill: theme.negativeActiveFill, hatch: theme.negativeActiveHatch, outline }
-      : { fill: theme.negativeIdleFill, hatch: theme.negativeIdleHatch, outline };
+      ? {
+          fill: theme.negativeActiveFill,
+          hatch: theme.negativeActiveHatch,
+          outline,
+        }
+      : {
+          fill: theme.negativeIdleFill,
+          hatch: theme.negativeIdleHatch,
+          outline,
+        };
   }
   const outline = theme.labelFill;
   return isActive
@@ -130,6 +138,7 @@ function halfColors(
 function drawLabel(
   screen: ScreenCanvas,
   editor: Editor,
+  theme: SpacingPalette,
   half: SpacingHalf,
   { hovered, ringed }: { readonly hovered: boolean; readonly ringed: boolean },
 ): void {
@@ -138,7 +147,6 @@ function drawLabel(
   const glyphSide = half.glyphSide;
   if (!rect || !text || !glyphSide) return;
 
-  const theme = screen.theme.spacing;
   const ctx = screen.ctx;
   ctx.save();
   ctx.beginPath();

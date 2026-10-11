@@ -81,6 +81,18 @@ impl Font {
                         .cloned();
                     require_original(&current, &layer.before, "glyph layer")?;
                 }
+                FontChange::KerningGroup { group_id, group } => {
+                    let current = self.kerning().group(group_id).cloned();
+                    require_original(&current, &group.before, "kerning group")?;
+                }
+                FontChange::KerningValue {
+                    source_id,
+                    pair,
+                    value,
+                } => {
+                    let current = self.kerning().value(source_id, pair);
+                    require_original(&current, &value.before, "kerning value")?;
+                }
             }
         }
 
@@ -127,6 +139,22 @@ impl Font {
                     data.sources = value.after.sources.clone();
                     data.default_source_id = value.after.default_source_id.clone();
                 }
+                FontChange::KerningGroup { group_id, group } => {
+                    self.kerning_mut().put_group(group_id, group.after.clone());
+                }
+                FontChange::KerningValue {
+                    source_id,
+                    pair,
+                    value,
+                } => match value.after {
+                    Some(after) => {
+                        self.kerning_mut()
+                            .set_value(source_id.clone(), pair.clone(), after);
+                    }
+                    None => {
+                        self.kerning_mut().remove_value(source_id, pair);
+                    }
+                },
                 FontChange::Glyph(_) | FontChange::Layer { .. } => {}
             }
         }
@@ -376,8 +404,14 @@ mod tests {
         renamed_first.set_layer(moved_layer.clone());
 
         let changes = FontChangeSet::new(vec![
-            FontChange::Glyph(Replacement::new(Some(second.clone()), Some(renamed_second))),
-            FontChange::Glyph(Replacement::new(Some(first.clone()), Some(renamed_first))),
+            FontChange::Glyph(Box::new(Replacement::new(
+                Some(second.clone()),
+                Some(renamed_second),
+            ))),
+            FontChange::Glyph(Box::new(Replacement::new(
+                Some(first.clone()),
+                Some(renamed_first),
+            ))),
             FontChange::Layer {
                 glyph_id: first.id(),
                 layer: Replacement::new(Some(layer), Some(Arc::new(moved_layer))),
