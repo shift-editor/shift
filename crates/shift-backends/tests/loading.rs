@@ -194,8 +194,14 @@ fn loads_ufo_components_anchors_layers_and_kerning() {
             .iter()
             .any(|source| source.id() == layer.source_id())));
 
-    assert_eq!(font.kerning().get_kerning("T", "A"), Some(-75.0));
-    assert_eq!(font.kerning().get_kerning("V", "A"), Some(-100.0));
+    assert_eq!(
+        shift_font::test_support::default_kerning_between(&font, "T", "A"),
+        Some(-75.0)
+    );
+    assert_eq!(
+        shift_font::test_support::default_kerning_between(&font, "V", "A"),
+        Some(-100.0)
+    );
 }
 
 #[test]
@@ -524,8 +530,14 @@ fn streams_glyphs_file_features_kerning_components_and_anchors() {
     assert!(fea.contains("feature frac"));
     assert!(fea.contains("feature ordn"));
 
-    assert_eq!(font.kerning().get_kerning("A", "V"), Some(-55.0));
-    assert_eq!(font.kerning().get_kerning("V", "a"), Some(-65.0));
+    assert_eq!(
+        shift_font::test_support::default_kerning_between(&font, "A", "V"),
+        Some(-55.0)
+    );
+    assert_eq!(
+        shift_font::test_support::default_kerning_between(&font, "V", "a"),
+        Some(-65.0)
+    );
 
     let aacute = font
         .glyph_by_name("Aacute")

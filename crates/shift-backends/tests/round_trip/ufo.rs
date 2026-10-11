@@ -515,8 +515,14 @@ fn preserves_components_anchors_layers_and_kerning() {
         assert!(reloaded_source_names.contains(&name));
     }
 
-    assert_eq!(reloaded.kerning().get_kerning("T", "A"), Some(-75.0));
-    assert_eq!(reloaded.kerning().get_kerning("V", "A"), Some(-100.0));
+    assert_eq!(
+        shift_font::test_support::default_kerning_between(&reloaded, "T", "A"),
+        Some(-75.0)
+    );
+    assert_eq!(
+        shift_font::test_support::default_kerning_between(&reloaded, "V", "A"),
+        Some(-100.0)
+    );
 }
 
 #[test]

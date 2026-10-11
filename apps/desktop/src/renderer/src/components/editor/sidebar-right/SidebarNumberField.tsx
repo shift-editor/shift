@@ -6,8 +6,8 @@ import { useFocusZone } from "@/context/FocusZoneContext";
 interface SidebarNumberFieldProps {
   /** Names the field for assistive technology and its tooltip. */
   ariaLabel: string;
-  /** The value shown while the field is not being typed in. */
-  value: number;
+  /** The value shown while the field is not being typed in; `null` shows `placeholder`. */
+  value: number | null;
   /** Called with each committed value: on Enter, on blur, and on every arrow step. */
   onValueCommit: (value: number) => void;
   /** A short leading label such as "W", or an icon. */
@@ -16,6 +16,10 @@ interface SidebarNumberFieldProps {
   unit?: "degree";
   /** Text after the number, such as "x" for a factor. */
   suffix?: string;
+  /** Shown greyed while `value` is `null`, such as what an unset value falls back to. */
+  placeholder?: string;
+  /** Classes for the input, such as `text-right` for a column of numbers. */
+  inputClassName?: string;
   disabled?: boolean;
 }
 
@@ -23,8 +27,9 @@ interface SidebarNumberFieldProps {
  * A numeric sidebar field over the shared `NumberField`.
  *
  * @remarks
- * Arrow keys step by 1 and Shift by 10, as Base UI does; Cmd steps by 100,
- * matching canvas nudges. Enter commits and leaves the field, Escape leaves it
+ * Arrow keys step by 1 and Shift by 10, as Base UI does; Cmd or Ctrl steps by 100,
+ * matching canvas nudges. Arrow keys do nothing while the value is `null`,
+ * since there is no number to step from. Enter commits and leaves the field, Escape leaves it
  * without committing what was typed. While focused, the sidebar keeps keyboard
  * focus and editor shortcuts do not fire.
  */
@@ -35,6 +40,8 @@ export function SidebarNumberField({
   label,
   unit,
   suffix,
+  placeholder,
+  inputClassName,
   disabled = false,
 }: SidebarNumberFieldProps) {
   const { lockToZone, unlock } = useFocusZone();
@@ -68,6 +75,8 @@ export function SidebarNumberField({
           <NumberFieldInput
             aria-label={ariaLabel}
             size="compact"
+            placeholder={placeholder}
+            className={inputClassName}
             onFocus={(event) => {
               cancelled.current = false;
               lockToZone("sidebar");
@@ -92,7 +101,12 @@ export function SidebarNumberField({
                   return;
                 case "ArrowUp":
                 case "ArrowDown":
-                  if (!event.metaKey) return;
+                  if (value === null) {
+                    event.preventDefault();
+                    return;
+                  }
+                  // The accelerator is Cmd on macOS and Ctrl elsewhere, as for canvas nudges.
+                  if (!event.metaKey && !event.ctrlKey) return;
                   event.preventDefault();
                   onValueCommit(value + (event.key === "ArrowUp" ? 1 : -1) * NUDGES_VALUES.large);
               }

@@ -1,7 +1,15 @@
-import { asGlyphId, asLayerId, asNodeId, asPointId, asSourceId } from "@shift/types";
+import {
+  asGlyphId,
+  asKerningGroupId,
+  asLayerId,
+  asNodeId,
+  asPointId,
+  asSourceId,
+} from "@shift/types";
 import {
   FontChangedError,
   ShiftReadScope,
+  type KerningPairQuery,
   type LayerGetInput,
   type ShiftCapabilities,
   type ShiftObservation,
@@ -153,7 +161,52 @@ const capabilities: ShiftCapabilities = {
       });
     },
   },
+  kerning: {
+    async groups() {
+      return observation([kerningGroup()]);
+    },
+    async pairs({ sourceId }) {
+      return observation({ sourceId, items: [authoredKerningPair()], nextCursor: null });
+    },
+    async resolve({ pairs }) {
+      return observation({ items: pairs.map(kerningResolution) });
+    },
+  },
 };
+
+function kerningGroup() {
+  return {
+    groupId: asKerningGroupId("kerningGroup_a"),
+    name: "A",
+    position: "second" as const,
+    members: [{ glyphId: asGlyphId("glyph-a"), name: "A" }],
+  };
+}
+
+function authoredKerningPair() {
+  return {
+    first: { kind: "glyph" as const, glyphId: asGlyphId("glyph-t"), name: "T" },
+    second: { kind: "group" as const, groupId: asKerningGroupId("kerningGroup_a"), name: "A" },
+    amount: -75,
+  };
+}
+
+function kerningResolution({ first, second }: KerningPairQuery) {
+  return {
+    first: { glyphId: asGlyphId(`glyph-${first}`), name: first },
+    second: { glyphId: asGlyphId(`glyph-${second}`), name: second },
+    amount: -75,
+    masters: [
+      {
+        sourceId: asSourceId("source-a"),
+        amount: -75,
+        origin: "authored" as const,
+        rule: "exception" as const,
+        pair: authoredKerningPair(),
+      },
+    ],
+  };
+}
 
 function layerIdentity(layerId: LayerGetInput["layerId"]) {
   if (layerId !== "layer-a") throw new Error(`Layer ${layerId} is not in this font`);
@@ -240,6 +293,27 @@ describe("Shift sandbox executes bounded code over live capabilities", () => {
     ).rejects.toThrow();
   });
 
+  it("rejects kerning inputs that are out of bounds or ambiguous before they reach the host", async () => {
+    await expect(
+      executeShiftCode(
+        capabilities,
+        "async () => shift.kerning.pairs({ windowId: 7, sourceId: 'source-a', limit: 0 })",
+      ),
+    ).rejects.toThrow();
+    await expect(
+      executeShiftCode(
+        capabilities,
+        "async () => shift.kerning.resolve({ windowId: 7, pairs: [{ first: 'T', second: 'A' }], sourceId: 'source-a', location: [] })",
+      ),
+    ).rejects.toThrow("sourceId or location, not both");
+    await expect(
+      executeShiftCode(
+        capabilities,
+        "async () => shift.kerning.resolve({ windowId: 7, pairs: [] })",
+      ),
+    ).rejects.toThrow();
+  });
+
   it("rejects an invalid glyph page before it reaches the host", async () => {
     await expect(
       executeShiftCode(capabilities, "async () => shift.glyphs.list({ windowId: 7, limit: 0 })"),
@@ -317,6 +391,15 @@ function revisionedCapabilities({ advanceAfter }: { advanceAfter?: string } = {}
       })),
       render: capabilities.layers.render,
     },
+    kerning: {
+      groups: guarded("kerning.groups", () => [kerningGroup()]),
+      pairs: guarded("kerning.pairs", ({ sourceId }) => ({
+        sourceId,
+        items: [authoredKerningPair()],
+        nextCursor: null,
+      })),
+      resolve: guarded("kerning.resolve", ({ pairs }) => ({ items: pairs.map(kerningResolution) })),
+    },
   };
 
   return {
@@ -347,6 +430,22 @@ describe("shift.read binds one font revision for its callback", () => {
       { method: "font.get", ifFontRevision: undefined },
       { method: "layers.get", ifFontRevision: "revision-1" },
       { method: "layers.resolve", ifFontRevision: "revision-1" },
+    ]);
+  });
+
+  it("reads kerning groups, pairs, and resolutions at the bound revision", async () => {
+    const host = revisionedCapabilities();
+
+    const result = await executeShiftCode(
+      host.capabilities,
+      "async () => shift.read({ windowId: 7 }, async (read) => { const groups = await read.kerning.groups(); const page = await read.kerning.pairs({ sourceId: 'source-a' }); const resolved = await read.kerning.resolve({ pairs: [{ first: 'T', second: 'A' }] }); return { group: groups[0].name, pair: page.items[0].amount, amount: resolved.items[0].amount }; })",
+    );
+
+    expect(result).toEqual({ group: "A", pair: -75, amount: -75 });
+    expect(host.calls.slice(1)).toEqual([
+      { method: "kerning.groups", ifFontRevision: "revision-1" },
+      { method: "kerning.pairs", ifFontRevision: "revision-1" },
+      { method: "kerning.resolve", ifFontRevision: "revision-1" },
     ]);
   });
 

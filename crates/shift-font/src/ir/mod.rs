@@ -9,6 +9,7 @@ pub mod entity;
 pub mod features;
 pub mod font;
 pub mod glyph;
+pub mod glyph_category;
 pub mod glyph_name;
 pub mod guideline;
 pub mod kerning;
@@ -31,14 +32,18 @@ pub use component::{Component, DecomposedTransform, Transform};
 pub use contour::{Contour, Contours};
 pub use entity::{
     AnchorId, AxisId, AxisLabelId, AxisMappingId, ComponentId, ContourId, EntityId, GlyphEntityId,
-    GlyphId, GuidelineId, LayerId, MetricId, NamedInstanceId, PointId, SourceId,
+    GlyphId, GuidelineId, KerningGroupId, LayerId, MetricId, NamedInstanceId, PointId, SourceId,
 };
 pub use features::FeatureData;
 pub use font::{Font, FontMetadata, LANGUAGES_LIB_KEY};
 pub use glyph::{Glyph, GlyphLayer};
+pub use glyph_category::{GlyphCategory, GlyphSubcategory, UnknownGlyphCategory};
 pub use glyph_name::{GlyphName, GlyphNameError};
 pub use guideline::{Guideline, GuidelineOrientation};
-pub use kerning::{KerningData, KerningPair, KerningSide};
+pub use kerning::{
+    Kerning, KerningGroup, KerningPair, KerningPosition, KerningSide, ResolvedKerning,
+    SourceKerning,
+};
 pub use lib_data::{LibData, LibValue};
 pub use metrics::{FontMetrics, MetricDefinition, MetricKind, MetricValue};
 pub use named_instance::NamedInstance;

@@ -14,6 +14,8 @@ function TooltipProvider({ children, delayDuration = 0 }: TooltipProviderProps) 
 
 type TooltipProps = {
   delayDuration?: number;
+  /** Keeps the tooltip from opening, such as when the text it repeats is shown in full. */
+  disabled?: boolean;
 } & (
   | {
       /** `TooltipTrigger` and `TooltipContent` parts. */
@@ -37,7 +39,7 @@ type TooltipProps = {
  * `TooltipTrigger` and `TooltipContent` as children.
  */
 function Tooltip(props: TooltipProps) {
-  const { delayDuration } = props;
+  const { delayDuration, disabled } = props;
   const parts =
     props.content === undefined ? (
       props.children
@@ -53,11 +55,11 @@ function Tooltip(props: TooltipProps) {
   if (delayDuration !== undefined) {
     return (
       <BaseTooltip.Provider delay={delayDuration}>
-        <BaseTooltip.Root>{parts}</BaseTooltip.Root>
+        <BaseTooltip.Root disabled={disabled}>{parts}</BaseTooltip.Root>
       </BaseTooltip.Provider>
     );
   }
-  return <BaseTooltip.Root>{parts}</BaseTooltip.Root>;
+  return <BaseTooltip.Root disabled={disabled}>{parts}</BaseTooltip.Root>;
 }
 
 interface TooltipTriggerProps {

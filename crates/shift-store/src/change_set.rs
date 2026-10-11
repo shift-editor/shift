@@ -62,10 +62,18 @@ impl ShiftStore {
 
         let tracks_workspace = self.tracks_workspace();
         let tx = self.conn.transaction()?;
-        for priority in 0..8 {
+        for priority in 0..=10 {
             for change in &change_set.changes {
                 if change_priority(change) == priority {
                     apply_change(&tx, change)?;
+                }
+            }
+            // A glyph is in one group per position, so every changed group's
+            // old rows go before any new ones: a glyph moving between groups
+            // never sits in both.
+            if priority == KERNING_GROUP_PRIORITY {
+                for (group_id, group) in kerning_groups_after(change_set) {
+                    insert_kerning_group(&tx, group_id, group)?;
                 }
             }
         }
@@ -254,12 +262,17 @@ pub(crate) fn write_glyph_directory_in_tx(
 ) -> Result<(), StoreError> {
     match mode {
         WriteMode::Insert => {
-            tx.prepare_cached("INSERT INTO glyphs (id, name, order_index) VALUES (?1, ?2, ?3)")?
-                .execute(params![
-                    glyph.id().to_string(),
-                    glyph.glyph_name().as_str(),
-                    order_index
-                ])?;
+            tx.prepare_cached(
+                "INSERT INTO glyphs (id, name, order_index, category, sub_category)
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
+            )?
+            .execute(params![
+                glyph.id().to_string(),
+                glyph.glyph_name().as_str(),
+                order_index,
+                glyph.category().map(font::GlyphCategory::as_str),
+                glyph.sub_category().map(font::GlyphSubcategory::as_str),
+            ])?;
             for (unicode_order, unicode) in glyph.unicodes().iter().enumerate() {
                 tx.prepare_cached(
                     "INSERT INTO glyph_unicodes (glyph_id, unicode, order_index) VALUES (?1, ?2, ?3)",
@@ -283,7 +296,7 @@ pub(crate) fn write_glyph_directory_in_tx(
             Ok(())
         }
         WriteMode::Upsert => {
-            upsert_glyph(tx, &glyph.id(), glyph.glyph_name(), order_index)?;
+            upsert_glyph(tx, glyph, order_index)?;
             replace_glyph_unicodes(tx, &glyph.id(), glyph.unicodes())?;
             replace_lib_data(
                 tx,
@@ -306,8 +319,25 @@ fn change_priority(change: &font::FontChange) -> usize {
         font::FontChange::Sources(_) => 5,
         font::FontChange::Glyph(_) => 6,
         font::FontChange::Layer { .. } => 7,
+        font::FontChange::KerningGroup { .. } => KERNING_GROUP_PRIORITY,
+        font::FontChange::KerningValue { .. } => 10,
     }
 }
+
+/// The groups a change set leaves in place, by id.
+fn kerning_groups_after(
+    change_set: &font::FontChangeSet,
+) -> impl Iterator<Item = (&font::KerningGroupId, &font::KerningGroup)> {
+    change_set.changes.iter().filter_map(|change| match change {
+        font::FontChange::KerningGroup { group_id, group } => {
+            group.after.as_ref().map(|group| (group_id, group))
+        }
+        _ => None,
+    })
+}
+
+/// When kerning group changes apply: after glyphs, before pair values.
+const KERNING_GROUP_PRIORITY: usize = 9;
 
 fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), StoreError> {
     match change {
@@ -324,7 +354,113 @@ fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), S
         font::FontChange::Layer {
             glyph_id, layer, ..
         } => replace_layer(tx, glyph_id, layer),
+        font::FontChange::KerningGroup { group_id, .. } => delete_kerning_group(tx, group_id),
+        font::FontChange::KerningValue {
+            source_id,
+            pair,
+            value,
+        } => write_kerning_value(tx, source_id, pair, value.after),
     }
+}
+
+/// Deletes one kerning group and its members; a changed group's new state is
+/// inserted once every changed group is deleted.
+fn delete_kerning_group(
+    tx: &Transaction<'_>,
+    group_id: &font::KerningGroupId,
+) -> Result<(), StoreError> {
+    tx.execute(
+        "DELETE FROM kerning_group_members WHERE group_id = ?1",
+        params![group_id.as_str()],
+    )?;
+    tx.execute(
+        "DELETE FROM kerning_groups WHERE id = ?1",
+        params![group_id.as_str()],
+    )?;
+    Ok(())
+}
+
+/// Replaces every stored kerning group with the groups of `kerning`.
+pub(crate) fn replace_kerning_groups(
+    tx: &Transaction<'_>,
+    kerning: &font::Kerning,
+) -> Result<(), StoreError> {
+    tx.execute("DELETE FROM kerning_group_members", [])?;
+    tx.execute("DELETE FROM kerning_groups", [])?;
+    for (group_id, group) in kerning.all_groups() {
+        insert_kerning_group(tx, group_id, group)?;
+    }
+    Ok(())
+}
+
+/// Upserts or deletes one source's value for one kerning pair.
+fn write_kerning_value(
+    tx: &Transaction<'_>,
+    source_id: &font::SourceId,
+    pair: &font::KerningPair,
+    value: Option<f64>,
+) -> Result<(), StoreError> {
+    let (first_kind, first_value) = kerning_side_parts(&pair.first);
+    let (second_kind, second_value) = kerning_side_parts(&pair.second);
+    match value {
+        Some(value) => {
+            tx.execute(
+                "
+                INSERT INTO kerning_pairs (
+                    source_id, first_kind, first_value, second_kind, second_value, value
+                )
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                ON CONFLICT (source_id, first_kind, first_value, second_kind, second_value)
+                DO UPDATE SET value = excluded.value
+                ",
+                params![
+                    source_id.as_str(),
+                    first_kind,
+                    first_value,
+                    second_kind,
+                    second_value,
+                    value
+                ],
+            )?;
+        }
+        None => {
+            tx.execute(
+                "
+                DELETE FROM kerning_pairs
+                WHERE source_id = ?1
+                  AND first_kind = ?2 AND first_value = ?3
+                  AND second_kind = ?4 AND second_value = ?5
+                ",
+                params![
+                    source_id.as_str(),
+                    first_kind,
+                    first_value,
+                    second_kind,
+                    second_value
+                ],
+            )?;
+        }
+    }
+    Ok(())
+}
+
+/// Replaces every stored pair of `source_id` with its values in `kerning`.
+pub(crate) fn replace_source_kerning(
+    tx: &Transaction<'_>,
+    kerning: &font::Kerning,
+    source_id: &font::SourceId,
+) -> Result<(), StoreError> {
+    tx.execute(
+        "DELETE FROM kerning_pairs WHERE source_id = ?1",
+        [source_id.as_str()],
+    )?;
+    let Some(pairs) = kerning.source(source_id) else {
+        return Ok(());
+    };
+    for (pair, value) in pairs.pairs() {
+        write_kerning_value(tx, source_id, pair, Some(value))?;
+    }
+    Ok(())
 }
 
 fn replace_axes(tx: &Transaction<'_>, axes: &[font::Axis]) -> Result<(), StoreError> {
@@ -733,20 +869,27 @@ pub(crate) fn write_source_snapshot_in_tx(
 
 fn upsert_glyph(
     tx: &Transaction<'_>,
-    glyph_id: &font::GlyphId,
-    name: &font::GlyphName,
+    glyph: &font::Glyph,
     order_index: i64,
 ) -> Result<(), StoreError> {
     tx.prepare_cached(
         "
-        INSERT INTO glyphs (id, name, order_index)
-        VALUES (?1, ?2, ?3)
+        INSERT INTO glyphs (id, name, order_index, category, sub_category)
+        VALUES (?1, ?2, ?3, ?4, ?5)
         ON CONFLICT(id) DO UPDATE SET
             name = excluded.name,
-            order_index = excluded.order_index
+            order_index = excluded.order_index,
+            category = excluded.category,
+            sub_category = excluded.sub_category
         ",
     )?
-    .execute(params![glyph_id.to_string(), name.as_str(), order_index])?;
+    .execute(params![
+        glyph.id().to_string(),
+        glyph.glyph_name().as_str(),
+        order_index,
+        glyph.category().map(font::GlyphCategory::as_str),
+        glyph.sub_category().map(font::GlyphSubcategory::as_str),
+    ])?;
     Ok(())
 }
 
@@ -941,73 +1084,87 @@ fn replace_font_guidelines(
     }
     Ok(())
 }
-fn replace_kerning(tx: &Transaction<'_>, kerning: &font::KerningData) -> Result<(), StoreError> {
+fn replace_kerning(tx: &Transaction<'_>, kerning: &font::Kerning) -> Result<(), StoreError> {
     tx.execute("DELETE FROM kerning_pairs", [])?;
     tx.execute("DELETE FROM kerning_group_members", [])?;
     tx.execute("DELETE FROM kerning_groups", [])?;
 
-    for (name, members) in kerning.groups1() {
-        insert_kerning_group(tx, 1, name, members)?;
+    for position in [font::KerningPosition::First, font::KerningPosition::Second] {
+        for (group_id, group) in kerning.groups(position) {
+            insert_kerning_group(tx, group_id, group)?;
+        }
     }
-    for (name, members) in kerning.groups2() {
-        insert_kerning_group(tx, 2, name, members)?;
-    }
-    for (order_index, pair) in kerning.pairs().iter().enumerate() {
-        let (first_kind, first_value) = kerning_side_parts(&pair.first);
-        let (second_kind, second_value) = kerning_side_parts(&pair.second);
-        tx.execute(
-            "
-            INSERT INTO kerning_pairs (
-                order_index,
+    let mut insert_pair = tx.prepare(
+        "
+        INSERT INTO kerning_pairs (
+            source_id,
+            first_kind,
+            first_value,
+            second_kind,
+            second_value,
+            value
+        )
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+        ",
+    )?;
+    for (source_id, source) in kerning.sources() {
+        for (pair, value) in source.pairs() {
+            let (first_kind, first_value) = kerning_side_parts(&pair.first);
+            let (second_kind, second_value) = kerning_side_parts(&pair.second);
+            insert_pair.execute(params![
+                source_id.as_str(),
                 first_kind,
                 first_value,
                 second_kind,
                 second_value,
-                value
-            )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-            ",
-            params![
-                order_index as i64,
-                first_kind,
-                first_value,
-                second_kind,
-                second_value,
-                pair.value,
-            ],
-        )?;
+                value,
+            ])?;
+        }
     }
     Ok(())
 }
 
 fn insert_kerning_group(
     tx: &Transaction<'_>,
-    side: i64,
-    name: &str,
-    members: &[font::GlyphName],
+    group_id: &font::KerningGroupId,
+    group: &font::KerningGroup,
 ) -> Result<(), StoreError> {
+    let position = kerning_position_column(group.position);
     tx.execute(
         "
-        INSERT INTO kerning_groups (side, name)
-        VALUES (?1, ?2)
+        INSERT INTO kerning_groups (id, position, name)
+        VALUES (?1, ?2, ?3)
         ",
-        params![side, name],
+        params![group_id.as_str(), position, group.name],
     )?;
-    for (order_index, member) in members.iter().enumerate() {
+    for (order_index, member) in group.members.iter().enumerate() {
         tx.execute(
             "
-            INSERT INTO kerning_group_members (side, group_name, glyph_name, order_index)
+            INSERT INTO kerning_group_members (group_id, position, glyph_id, order_index)
             VALUES (?1, ?2, ?3, ?4)
             ",
-            params![side, name, member.as_str(), order_index as i64],
+            params![
+                group_id.as_str(),
+                position,
+                member.as_str(),
+                order_index as i64
+            ],
         )?;
     }
     Ok(())
 }
 
+/// Returns the `position` column value stored for a kerning pair position.
+pub(crate) fn kerning_position_column(position: font::KerningPosition) -> i64 {
+    match position {
+        font::KerningPosition::First => 1,
+        font::KerningPosition::Second => 2,
+    }
+}
+
 fn kerning_side_parts(side: &font::KerningSide) -> (&'static str, &str) {
     match side {
-        font::KerningSide::Glyph(name) => ("glyph", name.as_str()),
+        font::KerningSide::Glyph(glyph_id) => ("glyph", glyph_id.as_str()),
         font::KerningSide::Group(group_id) => ("group", group_id.as_str()),
     }
 }

@@ -5,7 +5,7 @@ use std::collections::HashSet;
 
 use shift_font::{
     Axis, AxisMapping, BinaryData, FeatureData, FontMetadata, FontMetrics, Glyph, Guideline,
-    KerningData, LibData, MetricDefinition, NamedInstance, Source, SourceId,
+    Kerning, LibData, MetricDefinition, NamedInstance, Source, SourceId,
 };
 
 use crate::traits::FontView;
@@ -20,7 +20,7 @@ pub struct GlyphSubsetView<'a, F: FontView> {
     font: &'a F,
     kept: HashSet<String>,
     features: FeatureData,
-    kerning: KerningData,
+    kerning: Kerning,
 }
 
 impl<'a, F: FontView> GlyphSubsetView<'a, F> {
@@ -48,7 +48,7 @@ impl<'a, F: FontView> GlyphSubsetView<'a, F> {
             font,
             kept,
             features: FeatureData::default(),
-            kerning: KerningData::default(),
+            kerning: Kerning::default(),
         }
     }
 }
@@ -101,7 +101,7 @@ impl<F: FontView> FontView for GlyphSubsetView<'_, F> {
             .flatten()
     }
 
-    fn kerning(&self) -> &KerningData {
+    fn kerning(&self) -> &Kerning {
         &self.kerning
     }
 

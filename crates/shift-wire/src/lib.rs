@@ -13,11 +13,12 @@ use shift_font::{
     Anchor as IrAnchor, AnchorId, Axis as IrAxis, AxisId, AxisKind as IrAxisKind, AxisLabelId,
     AxisMapping as IrAxisMapping, AxisMappingBasis as IrAxisMappingBasis, AxisMappingId,
     AxisRole as IrAxisRole, Component as IrComponent, ComponentId, Contour as IrContour, ContourId,
-    FontMetadata as IrFontMetadata, FontMetrics as IrFontMetrics, Glyph as IrGlyph, GlyphId,
-    GlyphInterpolation as IrGlyphInterpolation, GlyphLayer, GlyphName,
+    Font as IrFont, FontMetadata as IrFontMetadata, FontMetrics as IrFontMetrics, Glyph as IrGlyph,
+    GlyphId, GlyphInterpolation as IrGlyphInterpolation, GlyphLayer, GlyphName,
     GlyphProjection as IrGlyphProjection, GlyphSourceComponents as IrGlyphSourceComponents,
-    GuidelineId, InterpolationBasis as IrInterpolationBasis, LayerDifference as IrLayerDifference,
-    LayerId, Location as IrLocation, MetricDefinition as IrMetricDefinition, MetricId,
+    GuidelineId, InterpolationBasis as IrInterpolationBasis, KerningPosition as IrKerningPosition,
+    KerningSide as IrKerningSide, LayerDifference as IrLayerDifference, LayerId,
+    Location as IrLocation, MetricDefinition as IrMetricDefinition, MetricId,
     MetricKind as IrMetricKind, NamedInstance as IrNamedInstance, NamedInstanceId,
     Point as IrPoint, PointId, PointType as IrPointType, Source as IrSource, SourceId,
     SourceMetricField as IrSourceMetricField,
@@ -756,6 +757,7 @@ pub struct FontSnapshot {
     pub named_instances: Vec<NamedInstance>,
     /// Tracked Hyperglot language ids; `None` when the font stores no list.
     pub language_ids: Option<Vec<String>>,
+    pub kerning: KerningSnapshot,
 }
 
 /// Numeric encoding used for component transforms in one projection shape.
@@ -1282,6 +1284,138 @@ impl From<IrSourceMetricField> for SourceMetricField {
             IrSourceMetricField::LineGap => Self::LineGap,
             IrSourceMetricField::UnderlinePosition => Self::UnderlinePosition,
             IrSourceMetricField::UnderlineThickness => Self::UnderlineThickness,
+        }
+    }
+}
+
+/// Pair position a kerning group applies to: `First` kerns a glyph's right
+/// edge, `Second` its left edge.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum KerningPosition {
+    First,
+    Second,
+}
+
+impl From<IrKerningPosition> for KerningPosition {
+    fn from(position: IrKerningPosition) -> Self {
+        match position {
+            IrKerningPosition::First => Self::First,
+            IrKerningPosition::Second => Self::Second,
+        }
+    }
+}
+
+/// Whether a kerning pair side names one glyph or a group.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum KerningSideKind {
+    Glyph,
+    Group,
+}
+
+/// One side of a kerning pair: `id` is a glyph id or a group id, by `kind`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KerningSide {
+    pub kind: KerningSideKind,
+    pub id: String,
+}
+
+impl From<&IrKerningSide> for KerningSide {
+    fn from(side: &IrKerningSide) -> Self {
+        match side {
+            IrKerningSide::Glyph(glyph_id) => Self {
+                kind: KerningSideKind::Glyph,
+                id: glyph_id.to_string(),
+            },
+            IrKerningSide::Group(group_id) => Self {
+                kind: KerningSideKind::Group,
+                id: group_id.to_string(),
+            },
+        }
+    }
+}
+
+/// One kerning group and its members in authored order.
+///
+/// Pairs reference the group by `id`; `name` is its label, unique at its position.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KerningGroup {
+    pub id: String,
+    pub position: KerningPosition,
+    pub name: String,
+    pub glyph_ids: Vec<GlyphId>,
+}
+
+/// One authored pair and its adjustment in font units.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KerningPairValue {
+    pub first: KerningSide,
+    pub second: KerningSide,
+    pub amount: f64,
+}
+
+/// The pairs one source authors.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceKerningPairs {
+    pub source_id: SourceId,
+    pub pairs: Vec<KerningPairValue>,
+}
+
+/// Font kerning for the renderer: groups, per-source pairs, and the basis
+/// kerning interpolates over.
+///
+/// `basis` is absent for a static font. Group members and pair sides may name
+/// glyphs or sources that are not in the font; they never resolve.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KerningSnapshot {
+    pub groups: Vec<KerningGroup>,
+    pub sources: Vec<SourceKerningPairs>,
+    pub basis: Option<InterpolationBasis>,
+}
+
+impl From<&IrFont> for KerningSnapshot {
+    fn from(font: &IrFont) -> Self {
+        let kerning = font.kerning();
+        let groups = [IrKerningPosition::First, IrKerningPosition::Second]
+            .into_iter()
+            .flat_map(|position| {
+                kerning
+                    .groups(position)
+                    .map(|(group_id, group)| KerningGroup {
+                        id: group_id.to_string(),
+                        position: group.position.into(),
+                        name: group.name.clone(),
+                        glyph_ids: group.members.clone(),
+                    })
+            })
+            .collect();
+        let sources = kerning
+            .sources()
+            .map(|(source_id, pairs)| SourceKerningPairs {
+                source_id: source_id.clone(),
+                pairs: pairs
+                    .pairs()
+                    .map(|(pair, amount)| KerningPairValue {
+                        first: (&pair.first).into(),
+                        second: (&pair.second).into(),
+                        amount,
+                    })
+                    .collect(),
+            })
+            .collect();
+        Self {
+            groups,
+            sources,
+            basis: font
+                .kerning_interpolation_basis()
+                .as_ref()
+                .map(InterpolationBasis::from),
         }
     }
 }

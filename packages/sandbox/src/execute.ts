@@ -70,6 +70,15 @@ export async function executeShiftCode(
   installAsyncJsonFunction(vm, "__shiftRenderLayer", deadline, (input) =>
     validated.layers.render(input as never),
   );
+  installAsyncJsonFunction(vm, "__shiftKerningGroups", deadline, (input) =>
+    validated.kerning.groups(input as never),
+  );
+  installAsyncJsonFunction(vm, "__shiftKerningPairs", deadline, (input) =>
+    validated.kerning.pairs(input as never),
+  );
+  installAsyncJsonFunction(vm, "__shiftResolveKerning", deadline, (input) =>
+    validated.kerning.resolve(input as never),
+  );
   installAsyncJsonFunction(vm, "__shiftReadOpen", deadline, async (target) => {
     const scope = await ShiftReadScope.open(validated, shiftInputSchemas.read.parse(target));
     const scopeId = scopes.size + 1;
@@ -111,6 +120,11 @@ export async function executeShiftCode(
         resolve: async (input) => JSON.parse(await __shiftResolveLayer(input)),
         render: async (input) => JSON.parse(await __shiftRenderLayer(input)),
       }),
+      kerning: Object.freeze({
+        groups: async (input) => JSON.parse(await __shiftKerningGroups(input)),
+        pairs: async (input) => JSON.parse(await __shiftKerningPairs(input)),
+        resolve: async (input) => JSON.parse(await __shiftResolveKerning(input)),
+      }),
       read: async (target, callback) => {
         if (typeof callback !== "function") throw new TypeError("shift.read requires a callback");
         const { scopeId, fontRevision } = JSON.parse(await __shiftReadOpen(target));
@@ -132,6 +146,11 @@ export async function executeShiftCode(
             get: call("layers.get"),
             resolve: call("layers.resolve"),
             render: call("layers.render"),
+          }),
+          kerning: Object.freeze({
+            groups: call("kerning.groups"),
+            pairs: call("kerning.pairs"),
+            resolve: call("kerning.resolve"),
           }),
         });
         try {
@@ -207,6 +226,13 @@ function validatedCapabilities(capabilities: ShiftCapabilities): ShiftCapabiliti
       render: (input) =>
         capabilities.layers.render(shiftInputSchemas["layers.render"].parse(input)),
     },
+    kerning: {
+      groups: (input) =>
+        capabilities.kerning.groups(shiftInputSchemas["kerning.groups"].parse(input)),
+      pairs: (input) => capabilities.kerning.pairs(shiftInputSchemas["kerning.pairs"].parse(input)),
+      resolve: (input) =>
+        capabilities.kerning.resolve(shiftInputSchemas["kerning.resolve"].parse(input)),
+    },
   };
 }
 
@@ -238,6 +264,12 @@ function callReadScope(scope: ShiftReadScope, method: unknown, input: unknown): 
       return scope.layers.resolve(args);
     case "layers.render":
       return scope.layers.render(args);
+    case "kerning.groups":
+      return scope.kerning.groups(args);
+    case "kerning.pairs":
+      return scope.kerning.pairs(args);
+    case "kerning.resolve":
+      return scope.kerning.resolve(args);
     default:
       throw new Error(`Unknown shift.read method: ${String(method)}`);
   }

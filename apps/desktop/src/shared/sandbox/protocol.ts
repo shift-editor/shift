@@ -7,12 +7,18 @@ import type {
   GlyphPage,
   GlyphResolveInput,
   GlyphSummary,
+  KerningGroupsInput,
+  KerningGroupSummary,
+  KerningPairPage,
+  KerningPairsInput,
+  KerningResolveInput,
   LayerGetInput,
   LayerRenderInput,
   LayerResolveInput,
   LayerSvg,
   LocationResolveInput,
   ResolvedGlyphs,
+  ResolvedKerningPairs,
   ResolvedLayer,
   ResolvedLocation,
   ShiftCapture,
@@ -65,6 +71,18 @@ export type SandboxHostCallMap = {
   "shift.glyphs.resolve": {
     request: GlyphResolveInput;
     response: ShiftObservation<ResolvedGlyphs>;
+  };
+  "shift.kerning.groups": {
+    request: KerningGroupsInput;
+    response: ShiftObservation<KerningGroupSummary[]>;
+  };
+  "shift.kerning.pairs": {
+    request: KerningPairsInput;
+    response: ShiftObservation<KerningPairPage>;
+  };
+  "shift.kerning.resolve": {
+    request: KerningResolveInput;
+    response: ShiftObservation<ResolvedKerningPairs>;
   };
   "shift.layers.get": {
     request: LayerGetInput;

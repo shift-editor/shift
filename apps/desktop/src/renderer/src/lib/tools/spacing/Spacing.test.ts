@@ -50,11 +50,26 @@ describe("Spacing tool", () => {
     expect(editor.editing.nodeIds).toEqual([child.id]);
   });
 
+  it("drops the selected half when an undo takes one of its glyphs away", async () => {
+    hoverLocal(450, 200);
+    const screen = editor.localToScreen({ x: 450, y: 200 });
+    editor.click(screen.x, screen.y);
+    const tool = () => editor.toolManager.activeTool as SpacingTool;
+    expect(tool().currentHalf).not.toBeNull();
+
+    // Undo the typing removes the second A, so the gap between the two is gone.
+    await editor.undo();
+    await editor.settle();
+
+    expect(tool().currentHalf).toBeNull();
+  });
+
   it("hovering between two glyphs shows the left glyph's RSB and the right glyph's LSB", () => {
     hoverLocal(450, 200);
 
     expect(hoveredGap()).toMatchObject({
-      boundary: 500,
+      leftBoundary: 500,
+      rightBoundary: 500,
       left: { sidebearing: 200, edge: 300 },
       right: { sidebearing: 100, edge: 600 },
     });
@@ -71,7 +86,12 @@ describe("Spacing tool", () => {
   it("hovering before the first glyph shows only its LSB", () => {
     hoverLocal(50, 200);
 
-    expect(hoveredGap()).toMatchObject({ boundary: 0, left: null, right: { sidebearing: 100 } });
+    expect(hoveredGap()).toMatchObject({
+      leftBoundary: 0,
+      rightBoundary: 0,
+      left: null,
+      right: { sidebearing: 100 },
+    });
     expect(hoveredSide()).toBe("right");
   });
 
@@ -86,7 +106,11 @@ describe("Spacing tool", () => {
     await editor.settle();
     hoverLocal(450, 200);
 
-    expect(hoveredGap()).toMatchObject({ boundary: 520, left: { sidebearing: 220 } });
+    expect(hoveredGap()).toMatchObject({
+      leftBoundary: 520,
+      rightBoundary: 520,
+      left: { sidebearing: 220 },
+    });
   });
 
   describe("dragging", () => {
@@ -146,7 +170,11 @@ describe("Spacing tool", () => {
       await editor.settle();
       hoverLocal(290, 200);
 
-      expect(hoveredGap()).toMatchObject({ boundary: 280, left: { sidebearing: -20, edge: 300 } });
+      expect(hoveredGap()).toMatchObject({
+        leftBoundary: 280,
+        rightBoundary: 280,
+        left: { sidebearing: -20, edge: 300 },
+      });
       expect(hoveredSide()).toBe("left");
     });
 
@@ -173,7 +201,10 @@ describe("Spacing tool", () => {
     const clickLeftPill = async () => {
       hoverLocal(450, 200);
       const gap = hoveredGap()!;
-      const pill = editor.localToScreen({ x: 400, y: (gap.top + gap.bottom) / 2 });
+      const pill = editor.localToScreen({
+        x: 400,
+        y: (gap.top + gap.bottom) / 2,
+      });
       await editor.click(pill.x, pill.y);
     };
 
@@ -184,7 +215,9 @@ describe("Spacing tool", () => {
 
       const state = editor.toolIf("spacing")?.state;
       expect(state?.type === "ready" && state.overLabel).toBe(true);
-      expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "pointer" });
+      expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({
+        type: "pointer",
+      });
     });
 
     it("clicking the active half's pill opens its value; clicking elsewhere in the gap does not", async () => {
@@ -202,11 +235,17 @@ describe("Spacing tool", () => {
       spacing().setEditedSidebearing(150);
       await editor.settle();
 
-      expect(editor.requireGlyphLayer().sidebearings).toEqual({ lsb: 100, rsb: 150 });
+      expect(editor.requireGlyphLayer().sidebearings).toEqual({
+        lsb: 100,
+        rsb: 150,
+      });
       expect(spacing().editing?.gap.left?.sidebearing).toBe(150);
 
       await editor.undo();
-      expect(editor.requireGlyphLayer().sidebearings).toEqual({ lsb: 100, rsb: 200 });
+      expect(editor.requireGlyphLayer().sidebearings).toEqual({
+        lsb: 100,
+        rsb: 200,
+      });
     });
 
     it("switching sides edits the other half of the same gap", async () => {
@@ -216,13 +255,19 @@ describe("Spacing tool", () => {
       await editor.settle();
 
       expect(editedSide()).toBe("right");
-      expect(editor.requireGlyphLayer().sidebearings).toEqual({ lsb: 60, rsb: 200 });
+      expect(editor.requireGlyphLayer().sidebearings).toEqual({
+        lsb: 60,
+        rsb: 200,
+      });
     });
 
     it("a canvas click away from the pill closes it; a click on the pill keeps it open", async () => {
       await clickLeftPill();
       const gap = hoveredGapWhileEditing();
-      const pill = editor.localToScreen({ x: 400, y: (gap.top + gap.bottom) / 2 });
+      const pill = editor.localToScreen({
+        x: 400,
+        y: (gap.top + gap.bottom) / 2,
+      });
       await editor.click(pill.x, pill.y);
       expect(editedSide()).toBe("left");
 
@@ -264,7 +309,10 @@ describe("Spacing tool", () => {
       editor.keyDown("ArrowRight", { shiftKey: true });
       await editor.settle();
 
-      expect(editor.requireGlyphLayer().sidebearings).toEqual({ lsb: 100, rsb: 211 });
+      expect(editor.requireGlyphLayer().sidebearings).toEqual({
+        lsb: 100,
+        rsb: 211,
+      });
       expect(readyState()?.quiet).toBe(true);
 
       hoverLocal(460, 150);
@@ -276,7 +324,10 @@ describe("Spacing tool", () => {
       editor.keyDown("ArrowLeft");
       await editor.settle();
 
-      expect(editor.requireGlyphLayer().sidebearings).toEqual({ lsb: 99, rsb: 200 });
+      expect(editor.requireGlyphLayer().sidebearings).toEqual({
+        lsb: 99,
+        rsb: 200,
+      });
     });
 
     it("Tab walks the halves in reading order and Shift-Tab walks back", async () => {

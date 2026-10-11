@@ -8,12 +8,20 @@ export function Tabs({ className, ...props }: TabsProps) {
   return <BaseTabs.Root className={cn("min-w-0", className)} {...props} />;
 }
 
-export interface TabsListProps extends React.ComponentProps<typeof BaseTabs.List> {}
+export interface TabsListProps extends React.ComponentProps<typeof BaseTabs.List> {
+  /** `underline` sits on a rule with a {@link TabsIndicator}; `pill` fills the active tab instead. */
+  variant?: "underline" | "pill";
+}
 
-export function TabsList({ className, ...props }: TabsListProps) {
+const listVariantStyles = {
+  underline: "border-b border-line-subtle",
+  pill: "gap-1",
+};
+
+export function TabsList({ className, variant = "underline", ...props }: TabsListProps) {
   return (
     <BaseTabs.List
-      className={cn("relative flex items-center border-b border-line-subtle", className)}
+      className={cn("relative flex items-center", listVariantStyles[variant], className)}
       {...props}
     />
   );
@@ -21,6 +29,8 @@ export function TabsList({ className, ...props }: TabsListProps) {
 
 export interface TabsTabProps extends React.ComponentProps<typeof BaseTabs.Tab> {
   size?: "sm" | "md";
+  /** Match the list's variant; `pill` sets its own text size. */
+  variant?: "underline" | "pill";
 }
 
 const tabSizeStyles = {
@@ -28,14 +38,20 @@ const tabSizeStyles = {
   md: "px-2.5 text-sm",
 };
 
-export function TabsTab({ className, size = "sm", ...props }: TabsTabProps) {
+const tabVariantStyles = {
+  underline: "h-8",
+  pill: "h-6 rounded px-2 text-ui hover:text-primary data-[active]:bg-hover",
+};
+
+export function TabsTab({ className, size = "sm", variant = "underline", ...props }: TabsTabProps) {
   return (
     <BaseTabs.Tab
       className={cn(
-        "relative h-8 cursor-pointer text-secondary outline-none",
+        "relative cursor-pointer text-secondary outline-none",
         "data-[active]:text-primary data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
         "focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent",
         tabSizeStyles[size],
+        tabVariantStyles[variant],
         className,
       )}
       {...props}

@@ -7,6 +7,7 @@
  */
 export type CommandId =
   | "app.checkForUpdates"
+  | "app.installCommandLineTool"
   | "app.showAbout"
   | "app.showSettings"
   | "help.openWebsite"
