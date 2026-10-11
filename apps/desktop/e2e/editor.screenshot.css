@@ -4,11 +4,3 @@
   scrollbar-width: none !important;
 }
 
-/*
- * A menu popup's rounded corners leave pixels where the canvas behind it shows through, and
- * their antialiasing varies by a grey level between runs on a loaded runner. Square the popup
- * during captures so the golden holds only the menu.
- */
-[role="menu"] {
-  border-radius: 0 !important;
-}
