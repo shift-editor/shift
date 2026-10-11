@@ -14,7 +14,6 @@ use crate::formats::opentype::{BytesFontAdaptor, OpenTypeFont};
 use crate::formats::ufo::{UfoFont, UfoReader, UfoWriter};
 use crate::import::{FontImport, PreparedImport};
 use crate::traits::{FontReader, FontWriter};
-use crate::ImportReport;
 
 pub(crate) trait FontAdaptor {
     fn read_font(&self, path: &str) -> FormatBackendResult<Font>;
@@ -52,8 +51,8 @@ impl FontAdaptor for UfoFontAdaptor {
     }
 
     fn stream(&self, path: &str) -> FormatBackendResult<Option<PreparedImport>> {
-        let (header, stream) = crate::formats::ufo::stream_font(path)?;
-        Ok(Some((header, Box::new(stream), ImportReport::default())))
+        let (header, stream, report) = crate::formats::ufo::stream_font(path)?;
+        Ok(Some((header, Box::new(stream), report)))
     }
 }
 
@@ -82,8 +81,8 @@ impl FontAdaptor for DesignspaceFontAdaptor {
     }
 
     fn stream(&self, path: &str) -> FormatBackendResult<Option<PreparedImport>> {
-        let (header, stream) = crate::formats::designspace::stream_font(path)?;
-        Ok(Some((header, Box::new(stream), ImportReport::default())))
+        let (header, stream, report) = crate::formats::designspace::stream_font(path)?;
+        Ok(Some((header, Box::new(stream), report)))
     }
 }
 

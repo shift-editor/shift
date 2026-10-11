@@ -7,8 +7,8 @@ use shift_font::{Font, Glyph, GlyphId};
 
 use super::{
     conversion::{
-        add_intermediate_sources, convert_glyph, font_header, imported_layer_count,
-        GlyphsLayerSources,
+        add_intermediate_sources, convert_glyph, convert_kerning, font_header,
+        imported_layer_count, GlyphsLayerSources,
     },
     report::import_report,
 };
@@ -88,9 +88,8 @@ pub(crate) fn stream_retained(
     path: &Path,
     source: Arc<GlyphsFont>,
 ) -> FormatBackendResult<(Font, GlyphsGlyphStream, ImportReport)> {
-    let report = import_report(&source);
+    let mut report = import_report(&source);
     let (mut header, source_ids_by_master_id) = font_header(&source, path)?;
-    let sources = add_intermediate_sources(&mut header, &source, source_ids_by_master_id);
     let glyph_names = source
         .glyphs
         .values()
@@ -101,6 +100,9 @@ pub(crate) fn stream_retained(
         .iter()
         .map(|name| (name.clone(), source_glyph_ids.glyph_id(name)))
         .collect();
+    *header.kerning_mut() =
+        convert_kerning(&source, &glyph_ids, &source_ids_by_master_id, &mut report);
+    let sources = add_intermediate_sources(&mut header, &source, source_ids_by_master_id);
 
     Ok((
         header,

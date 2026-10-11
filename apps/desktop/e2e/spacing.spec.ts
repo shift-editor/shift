@@ -28,7 +28,7 @@ async function halfPagePoint(
         const gap = editor.nodeDefinition("textRun").spacingGaps(run)[gapIndex]!;
         const half = gap[side]!;
         const point = {
-          x: (half.edge + gap.boundary) / 2,
+          x: (half.edge + (side === "left" ? gap.leftBoundary : gap.rightBoundary)) / 2,
           y: gap.top + (gap.bottom - gap.top) * height,
         };
         return editor.sceneToScreen(editor.toScene(run, point as never));
@@ -87,7 +87,7 @@ test.describe("Spacing tool", () => {
     await expect(page.getByRole("textbox", { name: "Text input" })).toBeFocused();
     await page.keyboard.type("A");
     await editor.press("Escape");
-    await editor.press("m");
+    await editor.press("s");
     await expect(editor.toolButton("spacing")).toHaveAttribute("aria-pressed", "true");
     await editor.waitForCanvasRender();
   });

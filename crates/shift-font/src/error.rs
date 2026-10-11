@@ -1,6 +1,7 @@
 use crate::{
     AnchorId, AxisId, AxisLabelId, AxisMappingId, ComponentId, ContourId, GlyphId, GlyphName,
-    GuidelineId, LayerId, MetricId, MetricKind, NamedInstanceId, PointId, SourceId,
+    GuidelineId, KerningGroupId, KerningPosition, LayerId, MetricId, MetricKind, NamedInstanceId,
+    PointId, SourceId,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -213,6 +214,30 @@ pub enum CoreError {
 
     #[error("cannot delete the last source")]
     CannotDeleteLastSource,
+
+    #[error("kerning group {0} not found")]
+    KerningGroupNotFound(KerningGroupId),
+
+    #[error("{position:?} kerning group name {name:?} already exists")]
+    DuplicateKerningGroupName {
+        position: KerningPosition,
+        name: String,
+    },
+
+    #[error("kerning group {group_id} does not kern at the {position:?} pair position")]
+    KerningGroupPosition {
+        group_id: KerningGroupId,
+        position: KerningPosition,
+    },
+
+    #[error("kerning group {0} already exists")]
+    DuplicateKerningGroup(KerningGroupId),
+
+    #[error("kerning group name {0:?} is blank or has control characters")]
+    InvalidKerningGroupName(String),
+
+    #[error("kerning value {0} is not finite")]
+    InvalidKerningValue(f64),
 }
 
 pub type CoreResult<T> = Result<T, CoreError>;
@@ -251,6 +276,7 @@ entity_ref! {
     SourceId => SourceNotFound,
     AxisId => AxisNotFound,
     NamedInstanceId => NamedInstanceNotFound,
+    KerningGroupId => KerningGroupNotFound,
 }
 
 /// Turns the `Option` of a lookup into the missing entity's [`CoreError`].

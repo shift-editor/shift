@@ -8,6 +8,7 @@ import type {
   ComponentId,
   GuidelineId,
   GlyphId,
+  KerningGroupId,
   LayerId,
   MetricId,
   NamedInstanceId,
@@ -195,6 +196,11 @@ export interface BridgeApi {
    * applies its own default; an empty array is an explicit empty list.
    */
   getLanguageIds(): Array<string> | null
+  /**
+   * Returns the font's kerning groups, per-source pairs, and the basis
+   * kerning interpolates over.
+   */
+  getKerning(): KerningSnapshot
   getNamedInstances(): Array<NamedInstance>
   /** Returns the precomputed source-metric interpolation model for this font. */
   getSourceMetricsInterpolation(): SourceMetricsInterpolationSnapshot | null
@@ -484,6 +490,13 @@ export interface CreateGlyphLayerIntent {
   sourceId: SourceId
 }
 
+/** Creates an empty kerning group under an id the client mints. */
+export interface CreateKerningGroupIntent {
+  groupId: KerningGroupId
+  position: KerningPosition
+  name: string
+}
+
 /** Creates an authored named instance with client-minted stable identity. */
 export interface CreateNamedInstanceIntent {
   instance: NamedInstance
@@ -508,6 +521,11 @@ export interface DecomposeComponentsIntent {
 /** Font-level axis deletion. Removing an axis also reshapes source locations. */
 export interface DeleteAxisIntent {
   axisId: AxisId
+}
+
+/** Deletes a kerning group; its pairs stay and resolve again on undo. */
+export interface DeleteKerningGroupIntent {
+  groupId: KerningGroupId
 }
 
 /** Deletes an authored named instance without changing sources or geometry. */
@@ -542,8 +560,10 @@ export interface FontIntent {
    * "transformLayer" | "setXAdvance" | "applyBooleanOp".
    * Font-level kinds additionally include metadata replacement, tracked
    * language replacement, axis create/update/delete, mapping replacement,
-   * named-instance create/update/delete, source create/delete, and glyph
-   * or layer creation.
+   * named-instance create/update/delete, source create/delete, glyph
+   * or layer creation, "setKerningValues", and the kerning group kinds
+   * "createKerningGroup" | "setKerningGroupMember" | "renameKerningGroup"
+   * | "deleteKerningGroup".
    * Every kind shares the same apply path; one set is one undo step.
    */
   kind: string
@@ -584,6 +604,11 @@ export interface FontIntent {
   createGlyphLayer?: CreateGlyphLayerIntent
   cloneGlyphLayer?: CloneGlyphLayerIntent
   materializeGlyphLayer?: MaterializeGlyphLayerIntent
+  setKerningValues?: SetKerningValuesIntent
+  createKerningGroup?: CreateKerningGroupIntent
+  setKerningGroupMember?: SetKerningGroupMemberIntent
+  renameKerningGroup?: RenameKerningGroupIntent
+  deleteKerningGroup?: DeleteKerningGroupIntent
 }
 
 export interface FontMetadata {
@@ -637,6 +662,8 @@ export interface FontReplacement {
    * reshapes locations, createSource adds one); absent otherwise.
    */
   sources?: Array<Source>
+  /** Complete kerning when its values or interpolation basis changed. */
+  kerning?: KerningSnapshot
 }
 
 export interface FontSnapshot {
@@ -652,6 +679,7 @@ export interface FontSnapshot {
   namedInstances: Array<NamedInstance>
   /** Tracked Hyperglot language ids; absent when the font stores no list. */
   languageIds?: Array<string>
+  kerning: KerningSnapshot
 }
 
 export interface GlyphChangedEntities {
@@ -777,6 +805,48 @@ export interface InterpolationSupport {
   lower: number
   peak: number
   upper: number
+}
+
+export interface KerningGroup {
+  id: KerningGroupId
+  position: KerningPosition
+  name: string
+  glyphIds: Array<GlyphId>
+}
+
+export interface KerningPairValue {
+  first: KerningSide
+  second: KerningSide
+  amount: number
+}
+
+export type KerningPosition = "first" | "second";
+
+/** One kerning pair side: `id` is a glyph id when `kind` is `glyph`, else a group id. */
+export interface KerningSide {
+  kind: KerningSideKind
+  id: string
+}
+
+export type KerningSideKind = "glyph" | "group";
+
+/**
+ * Font kerning: groups, per-source pairs, and the interpolation basis over
+ * the default source and every master with pairs (absent for static fonts).
+ */
+export interface KerningSnapshot {
+  groups: Array<KerningGroup>
+  sources: Array<SourceKerningPairs>
+  basis?: InterpolationBasis
+}
+
+/** One kerning pair value to set or remove at one source. */
+export interface KerningValueEdit {
+  sourceId: SourceId
+  first: KerningSide
+  second: KerningSide
+  /** New value in font units; absent removes the pair at this source. */
+  amount?: number
 }
 
 /**
@@ -928,6 +998,12 @@ export interface RemovePointsIntent {
   pointIds: Array<PointId>
 }
 
+/** Renames a kerning group; its pairs keep referencing it by id. */
+export interface RenameKerningGroupIntent {
+  groupId: KerningGroupId
+  name: string
+}
+
 /** One direct component whose outline includes its resolved descendants. */
 export interface ResolvedComponentGeometry {
   id: ComponentId
@@ -974,6 +1050,18 @@ export interface SetContourStartIntent {
   layerId: LayerId
   contourId: ContourId
   pointId: PointId
+}
+
+/** Moves a glyph into a group, or out of its group at `position` without one. */
+export interface SetKerningGroupMemberIntent {
+  position: KerningPosition
+  glyphId: GlyphId
+  groupId?: KerningGroupId
+}
+
+/** Sets or removes kerning pair values at sources as one undoable edit. */
+export interface SetKerningValuesIntent {
+  edits: Array<KerningValueEdit>
 }
 
 /** Replaces the font's tracked language list as one undoable edit. */
@@ -1065,6 +1153,11 @@ export interface Source {
   lineGap?: number
   underlinePosition?: number
   underlineThickness?: number
+}
+
+export interface SourceKerningPairs {
+  sourceId: SourceId
+  pairs: Array<KerningPairValue>
 }
 
 export type SourceMetricField = "italicAngle" | "lineGap" | "underlinePosition" | "underlineThickness";

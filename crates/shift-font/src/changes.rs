@@ -3,8 +3,9 @@ use std::sync::Arc;
 use bitflags::bitflags;
 
 use crate::{
-    Axis, AxisMapping, FontMetadata, Glyph, GlyphId, GlyphLayer, LayerId, LibValue,
-    MetricDefinition, NamedInstance, Source, SourceId, LANGUAGES_LIB_KEY,
+    Axis, AxisMapping, FontMetadata, Glyph, GlyphId, GlyphLayer, KerningGroup, KerningGroupId,
+    KerningPair, LayerId, LibValue, MetricDefinition, NamedInstance, Source, SourceId,
+    LANGUAGES_LIB_KEY,
 };
 
 bitflags! {
@@ -21,6 +22,9 @@ bitflags! {
         const SOURCE_METRICS = 1 << 7;
         const NAMED_INSTANCES = 1 << 8;
         const SOURCES = 1 << 9;
+        /// Kerning values or the sources, axes, and mappings its
+        /// interpolation basis is built from.
+        const KERNING = 1 << 10;
     }
 }
 
@@ -84,11 +88,22 @@ pub enum FontChange {
     MetricDefinitions(Replacement<Vec<MetricDefinition>>),
     NamedInstances(Replacement<Vec<NamedInstance>>),
     Sources(Replacement<SourceCollection>),
-    Glyph(Replacement<Option<Glyph>>),
+    Glyph(Box<Replacement<Option<Glyph>>>),
     Layer {
         glyph_id: GlyphId,
         layer: Replacement<Option<Arc<GlyphLayer>>>,
         structural: bool,
+    },
+    /// One kerning group's whole state; `None` is no group with that id.
+    KerningGroup {
+        group_id: KerningGroupId,
+        group: Replacement<Option<KerningGroup>>,
+    },
+    /// One pair's value at one source; `None` is no value.
+    KerningValue {
+        source_id: SourceId,
+        pair: KerningPair,
+        value: Replacement<Option<f64>>,
     },
 }
 
@@ -104,22 +119,29 @@ impl FontChange {
                     | FontChangeImpact::SOURCES
                     | FontChangeImpact::AXIS_MAPPING_BASES
                     | FontChangeImpact::SOURCE_METRICS
+                    | FontChangeImpact::KERNING
             }
             Self::AxisMappings(_) => {
                 FontChangeImpact::AXIS_MAPPINGS
                     | FontChangeImpact::AXIS_MAPPING_BASES
                     | FontChangeImpact::SOURCE_METRICS
+                    | FontChangeImpact::KERNING
             }
             Self::MetricDefinitions(_) => {
                 FontChangeImpact::METRIC_DEFINITIONS | FontChangeImpact::SOURCE_METRICS
             }
             Self::NamedInstances(_) => FontChangeImpact::NAMED_INSTANCES,
-            Self::Sources(_) => FontChangeImpact::SOURCES | FontChangeImpact::SOURCE_METRICS,
+            Self::Sources(_) => {
+                FontChangeImpact::SOURCES
+                    | FontChangeImpact::SOURCE_METRICS
+                    | FontChangeImpact::KERNING
+            }
             Self::Glyph(_) => FontChangeImpact::GLYPHS,
             Self::Layer {
                 structural: true, ..
             } => FontChangeImpact::GLYPHS,
             Self::Layer { .. } => FontChangeImpact::empty(),
+            Self::KerningGroup { .. } | Self::KerningValue { .. } => FontChangeImpact::KERNING,
         }
     }
 
@@ -148,9 +170,10 @@ impl FontChange {
             Self::Sources(value) => {
                 Self::Sources(Replacement::new(value.after.clone(), value.before.clone()))
             }
-            Self::Glyph(value) => {
-                Self::Glyph(Replacement::new(value.after.clone(), value.before.clone()))
-            }
+            Self::Glyph(value) => Self::Glyph(Box::new(Replacement::new(
+                value.after.clone(),
+                value.before.clone(),
+            ))),
             Self::Layer {
                 glyph_id,
                 layer,
@@ -159,6 +182,19 @@ impl FontChange {
                 glyph_id: glyph_id.clone(),
                 layer: Replacement::new(layer.after.clone(), layer.before.clone()),
                 structural: *structural,
+            },
+            Self::KerningGroup { group_id, group } => Self::KerningGroup {
+                group_id: group_id.clone(),
+                group: Replacement::new(group.after.clone(), group.before.clone()),
+            },
+            Self::KerningValue {
+                source_id,
+                pair,
+                value,
+            } => Self::KerningValue {
+                source_id: source_id.clone(),
+                pair: pair.clone(),
+                value: Replacement::new(value.after, value.before),
             },
         }
     }
@@ -286,7 +322,10 @@ impl FontChangeSet {
                         change,
                     }),
                 ),
-                FontChange::Metadata(_) | FontChange::LibValue { .. } => {}
+                FontChange::Metadata(_)
+                | FontChange::LibValue { .. }
+                | FontChange::KerningGroup { .. }
+                | FontChange::KerningValue { .. } => {}
             }
         }
         entities

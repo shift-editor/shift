@@ -1,3 +1,4 @@
+use std::collections::{BTreeMap, HashSet};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -6,21 +7,31 @@ use fontir::error::Error;
 use fontir::orchestration::{Flags, IrWork};
 use fontir::source::Source;
 use shift_font::{
-    Axis, FeatureData, FontMetadata, FontMetrics, Glyph, KerningData, MetricDefinition,
-    NamedInstance, Source as ShiftSource, SourceId,
+    Axis, FeatureData, FontMetadata, FontMetrics, Glyph, Kerning, MetricDefinition, NamedInstance,
+    Source as ShiftSource, SourceId,
 };
 
+use crate::glyph_category::{gdef_classes, GlyphCategories};
 use crate::traits::FontView;
+use write_fonts::tables::gdef::GlyphClassDef;
 
 use super::axes::to_ir_axes;
 use super::glyph::GlyphWork;
-use super::kerning::{KerningGroupWork, KerningInstanceWork};
+use super::kerning::{KerningInstanceWork, KerningLocationsWork};
 use super::metadata::{
     ColorGlyphsWork, ColorPaletteWork, FeatureWork, GlobalMetricsWork, StaticMetadataWork,
 };
 
 const MIN_UNITS_PER_EM: f64 = 16.0;
 const MAX_UNITS_PER_EM: f64 = 16_384.0;
+
+/// Converts units per em to the `head` value, or `None` when it is not a
+/// whole number from 16 to 16384.
+pub(crate) fn units_per_em(value: f64) -> Option<u16> {
+    let valid = value.fract() == 0.0 && (MIN_UNITS_PER_EM..=MAX_UNITS_PER_EM).contains(&value);
+    // In range and whole, so the conversion is exact.
+    valid.then_some(value as u16)
+}
 
 /// Describes a Shift font that cannot become an in-memory fontir source.
 #[derive(Debug, thiserror::Error)]
@@ -62,8 +73,12 @@ pub(super) struct ShiftSnapshot {
     pub sources: Vec<ShiftSource>,
     pub default_source_id: SourceId,
     pub glyphs: Vec<Glyph>,
-    pub kerning: KerningData,
+    pub kerning: Kerning,
     pub features: FeatureData,
+    /// GDEF class for each glyph that has one, by name.
+    pub gdef_classes: BTreeMap<String, GlyphClassDef>,
+    /// Glyphs whose advance compiles to zero, as Glyphs does for nonspacing marks.
+    pub nonspacing_marks: HashSet<String>,
 }
 
 impl ShiftIrSource {
@@ -90,9 +105,7 @@ impl ShiftIrSource {
             .default_source_id()
             .ok_or(ShiftIrSourceError::MissingDefaultSource)?;
         let units_per_em = font.metrics().units_per_em;
-        if !(MIN_UNITS_PER_EM..=MAX_UNITS_PER_EM).contains(&units_per_em)
-            || units_per_em.fract() != 0.0
-        {
+        if self::units_per_em(units_per_em).is_none() {
             return Err(ShiftIrSourceError::InvalidUnitsPerEm {
                 value: units_per_em,
             });
@@ -114,6 +127,15 @@ impl ShiftIrSource {
                 glyphs: font.glyphs().into_iter().cloned().collect(),
                 kerning: font.kerning().clone(),
                 features: font.features().clone(),
+                gdef_classes: gdef_classes(font.glyphs(), font.lib()),
+                nonspacing_marks: {
+                    let categories = GlyphCategories::new();
+                    font.glyphs()
+                        .into_iter()
+                        .filter(|glyph| categories.resolve(glyph).is_nonspacing_mark())
+                        .map(|glyph| glyph.name().to_string())
+                        .collect()
+                },
             }),
         })
     }
@@ -151,8 +173,8 @@ impl Source for ShiftIrSource {
         Ok(Box::new(FeatureWork::new(self.snapshot.clone())))
     }
 
-    fn create_kerning_group_ir_work(&self) -> Result<Box<IrWork>, Error> {
-        Ok(Box::new(KerningGroupWork::new(self.snapshot.clone())))
+    fn create_kerning_locations_ir_work(&self) -> Result<Box<IrWork>, Error> {
+        Ok(Box::new(KerningLocationsWork::new(self.snapshot.clone())))
     }
 
     fn create_kerning_instance_ir_work(

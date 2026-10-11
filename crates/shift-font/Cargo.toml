@@ -13,7 +13,7 @@ test-support = []
 
 [dependencies]
 bitflags = "2"
-fontdrasil = "0.4.0"
+fontdrasil = "1.0.0"
 indexmap = { version = "2", features = ["serde"] }
 kurbo = "0.13.0"
 linesweeper = "0.3.0"

@@ -427,6 +427,7 @@ export class FontSessionClient {
       namedInstances: next.namedInstances ?? current.namedInstances,
       languageIds: next.languages ? (next.languages.languageIds ?? null) : current.languageIds,
       sources: next.sources ?? current.sources,
+      kerning: next.kerning ?? current.kerning,
     });
 
     return applied;

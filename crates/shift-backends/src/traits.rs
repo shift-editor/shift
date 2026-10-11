@@ -1,7 +1,7 @@
 use crate::errors::FormatBackendResult;
 use shift_font::{
     Axis, AxisMapping, BinaryData, FeatureData, Font, FontMetadata, FontMetrics, Glyph, GlyphName,
-    Guideline, KerningData, LibData, MetricDefinition, NamedInstance, Source, SourceId,
+    Guideline, Kerning, LibData, MetricDefinition, NamedInstance, Source, SourceId,
 };
 
 pub trait FontView {
@@ -15,7 +15,7 @@ pub trait FontView {
     fn default_source_id(&self) -> Option<SourceId>;
     fn glyphs(&self) -> Vec<&Glyph>;
     fn glyph(&self, name: &str) -> Option<&Glyph>;
-    fn kerning(&self) -> &KerningData;
+    fn kerning(&self) -> &Kerning;
     fn features(&self) -> &FeatureData;
     fn guidelines(&self) -> &[Guideline];
     fn lib(&self) -> &LibData;
@@ -65,7 +65,7 @@ impl FontView for Font {
         self.glyph_by_name(name)
     }
 
-    fn kerning(&self) -> &KerningData {
+    fn kerning(&self) -> &Kerning {
         self.kerning()
     }
 
@@ -101,7 +101,7 @@ pub trait FontReader: Send + Sync {
         font.glyph_by_name(name).cloned()
     }
 
-    fn get_kerning(&self, font: &Font) -> KerningData {
+    fn get_kerning(&self, font: &Font) -> Kerning {
         font.kerning().clone()
     }
 

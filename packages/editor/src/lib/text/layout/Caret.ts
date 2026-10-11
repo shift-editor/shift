@@ -75,7 +75,7 @@ export class Caret {
           if (g.cluster + 1 === this.cluster) {
             return { x: cursor + g.xAdvance, y: line.y, lineHeight };
           }
-          cursor += g.xAdvance;
+          cursor += g.xAdvance + g.xKern;
         }
       }
 
@@ -145,7 +145,7 @@ export class Caret {
           bestDist = trailingDist;
           bestCluster = g.cluster + 1;
         }
-        cursor += g.xAdvance;
+        cursor += g.xAdvance + g.xKern;
       }
     }
 

@@ -8,6 +8,7 @@ import type {
   ComponentId,
   GuidelineId,
   GlyphId,
+  KerningGroupId,
   GlyphName,
   LayerId,
   MetricId,
@@ -180,6 +181,11 @@ export declare class Bridge {
    * applies its own default; an empty array is an explicit empty list.
    */
   getLanguageIds(): Array<string> | null
+  /**
+   * Returns the font's kerning groups, per-source pairs, and the basis
+   * kerning interpolates over.
+   */
+  getKerning(): NapiKerningSnapshot
   getNamedInstances(): Array<NapiNamedInstance>
   /** Returns the precomputed source-metric interpolation model for this font. */
   getSourceMetricsInterpolation(): NapiSourceMetricsInterpolationSnapshot | null
@@ -478,6 +484,13 @@ export interface NapiCreateGlyphLayerIntent {
   sourceId: SourceId
 }
 
+/** Creates an empty kerning group under an id the client mints. */
+export interface NapiCreateKerningGroupIntent {
+  groupId: KerningGroupId
+  position: NapiKerningPosition
+  name: string
+}
+
 /** Creates an authored named instance with client-minted stable identity. */
 export interface NapiCreateNamedInstanceIntent {
   instance: NapiNamedInstance
@@ -502,6 +515,11 @@ export interface NapiDecomposeComponentsIntent {
 /** Font-level axis deletion. Removing an axis also reshapes source locations. */
 export interface NapiDeleteAxisIntent {
   axisId: AxisId
+}
+
+/** Deletes a kerning group; its pairs stay and resolve again on undo. */
+export interface NapiDeleteKerningGroupIntent {
+  groupId: KerningGroupId
 }
 
 /** Deletes an authored named instance without changing sources or geometry. */
@@ -536,8 +554,10 @@ export interface NapiFontIntent {
    * "transformLayer" | "setXAdvance" | "applyBooleanOp".
    * Font-level kinds additionally include metadata replacement, tracked
    * language replacement, axis create/update/delete, mapping replacement,
-   * named-instance create/update/delete, source create/delete, and glyph
-   * or layer creation.
+   * named-instance create/update/delete, source create/delete, glyph
+   * or layer creation, "setKerningValues", and the kerning group kinds
+   * "createKerningGroup" | "setKerningGroupMember" | "renameKerningGroup"
+   * | "deleteKerningGroup".
    * Every kind shares the same apply path; one set is one undo step.
    */
   kind: string
@@ -578,6 +598,11 @@ export interface NapiFontIntent {
   createGlyphLayer?: NapiCreateGlyphLayerIntent
   cloneGlyphLayer?: NapiCloneGlyphLayerIntent
   materializeGlyphLayer?: NapiMaterializeGlyphLayerIntent
+  setKerningValues?: NapiSetKerningValuesIntent
+  createKerningGroup?: NapiCreateKerningGroupIntent
+  setKerningGroupMember?: NapiSetKerningGroupMemberIntent
+  renameKerningGroup?: NapiRenameKerningGroupIntent
+  deleteKerningGroup?: NapiDeleteKerningGroupIntent
 }
 
 export interface NapiFontMetadata {
@@ -631,6 +656,8 @@ export interface NapiFontReplacement {
    * reshapes locations, createSource adds one); absent otherwise.
    */
   sources?: Array<NapiSource>
+  /** Complete kerning when its values or interpolation basis changed. */
+  kerning?: NapiKerningSnapshot
 }
 
 export interface NapiFontSnapshot {
@@ -646,6 +673,7 @@ export interface NapiFontSnapshot {
   namedInstances: Array<NapiNamedInstance>
   /** Tracked Hyperglot language ids; absent when the font stores no list. */
   languageIds?: Array<string>
+  kerning: NapiKerningSnapshot
 }
 
 export interface NapiGlyphChangedEntities {
@@ -771,6 +799,54 @@ export interface NapiInterpolationSupport {
   lower: number
   peak: number
   upper: number
+}
+
+export interface NapiKerningGroup {
+  id: KerningGroupId
+  position: NapiKerningPosition
+  name: string
+  glyphIds: Array<GlyphId>
+}
+
+export interface NapiKerningPairValue {
+  first: NapiKerningSide
+  second: NapiKerningSide
+  amount: number
+}
+
+export declare const enum NapiKerningPosition {
+  First = 'first',
+  Second = 'second'
+}
+
+/** One kerning pair side: `id` is a glyph id when `kind` is `glyph`, else a group id. */
+export interface NapiKerningSide {
+  kind: NapiKerningSideKind
+  id: string
+}
+
+export declare const enum NapiKerningSideKind {
+  Glyph = 'glyph',
+  Group = 'group'
+}
+
+/**
+ * Font kerning: groups, per-source pairs, and the interpolation basis over
+ * the default source and every master with pairs (absent for static fonts).
+ */
+export interface NapiKerningSnapshot {
+  groups: Array<NapiKerningGroup>
+  sources: Array<NapiSourceKerningPairs>
+  basis?: NapiInterpolationBasis
+}
+
+/** One kerning pair value to set or remove at one source. */
+export interface NapiKerningValueEdit {
+  sourceId: SourceId
+  first: NapiKerningSide
+  second: NapiKerningSide
+  /** New value in font units; absent removes the pair at this source. */
+  amount?: number
 }
 
 /**
@@ -941,6 +1017,12 @@ export interface NapiRemovePointsIntent {
   pointIds: Array<PointId>
 }
 
+/** Renames a kerning group; its pairs keep referencing it by id. */
+export interface NapiRenameKerningGroupIntent {
+  groupId: KerningGroupId
+  name: string
+}
+
 /** One direct component whose outline includes its resolved descendants. */
 export interface NapiResolvedComponentGeometry {
   id: ComponentId
@@ -987,6 +1069,18 @@ export interface NapiSetContourStartIntent {
   layerId: LayerId
   contourId: ContourId
   pointId: PointId
+}
+
+/** Moves a glyph into a group, or out of its group at `position` without one. */
+export interface NapiSetKerningGroupMemberIntent {
+  position: NapiKerningPosition
+  glyphId: GlyphId
+  groupId?: KerningGroupId
+}
+
+/** Sets or removes kerning pair values at sources as one undoable edit. */
+export interface NapiSetKerningValuesIntent {
+  edits: Array<NapiKerningValueEdit>
 }
 
 /** Replaces the font's tracked language list as one undoable edit. */
@@ -1078,6 +1172,11 @@ export interface NapiSource {
   lineGap?: number
   underlinePosition?: number
   underlineThickness?: number
+}
+
+export interface NapiSourceKerningPairs {
+  sourceId: SourceId
+  pairs: Array<NapiKerningPairValue>
 }
 
 export declare const enum NapiSourceMetricField {

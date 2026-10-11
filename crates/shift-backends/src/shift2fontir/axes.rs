@@ -54,7 +54,7 @@ pub(super) fn to_ir_named_instances(
 ///
 /// Returns an error when an axis, OpenType tag, or independent mapping cannot
 /// define a valid fontir coordinate converter.
-pub(super) fn to_ir_axes(axes: &[Axis], mappings: &[AxisMapping]) -> Result<Vec<IrAxis>, String> {
+pub(crate) fn to_ir_axes(axes: &[Axis], mappings: &[AxisMapping]) -> Result<Vec<IrAxis>, String> {
     axes.iter()
         .map(|axis| to_ir_axis(axis, independent_mapping(axis, mappings)))
         .collect()
@@ -150,7 +150,8 @@ fn mapped_converter(
         .into_iter()
         .map(|(user, design)| (UserCoord::new(user), DesignCoord::new(design)))
         .collect();
-    Ok(CoordConverter::new(values, default_idx))
+    CoordConverter::new(values, default_idx)
+        .map_err(|error| format!("mapping '{}' is invalid: {error}", mapping.name()))
 }
 
 /// Converts one Shift master location from design space to normalized space.
@@ -201,5 +202,5 @@ pub(super) fn normalized_source_location(
         })
         .collect();
 
-    Ok(design_location.to_normalized(ir_axes))
+    Ok(design_location.to_normalized(ir_axes)?)
 }

@@ -4,12 +4,14 @@ import type { AgentCallMap, AgentEventMap } from "@shared/agent/protocol";
 import { domPortTransport, serveChannel, type ChannelServer } from "@shared/workspace/channel";
 import type { FontSession } from "@/types/fontSession";
 import { ShiftFontReader } from "./ShiftFontReader";
+import { ShiftKerningReader } from "./ShiftKerningReader";
 
 /** Serves bounded editor observations for one live renderer window. */
 export class AgentBridge {
   readonly #host: ShiftHost;
   readonly #session: FontSession;
   readonly #reader: ShiftFontReader;
+  readonly #kerning: ShiftKerningReader;
   readonly #revisionNamespace = crypto.randomUUID();
   #requests: ChannelServer<AgentEventMap> | null = null;
   #disposed = false;
@@ -18,6 +20,7 @@ export class AgentBridge {
     this.#host = host;
     this.#session = session;
     this.#reader = new ShiftFontReader(session.font, session.mode);
+    this.#kerning = new ShiftKerningReader(session.font);
   }
 
   /** Connects the renderer lane requested by Electron main. */
@@ -48,6 +51,14 @@ export class AgentBridge {
           this.#observe(ifFontRevision, () => this.#reader.getGlyph(selector)),
         "glyphs.resolve": ({ glyphIds, location, ifFontRevision }) =>
           this.#observe(ifFontRevision, () => this.#reader.resolveGlyphs(glyphIds, location)),
+        "kerning.groups": ({ position, ifFontRevision }) =>
+          this.#observe(ifFontRevision, () => this.#kerning.groups(position)),
+        "kerning.pairs": ({ sourceId, glyph, limit, cursor, ifFontRevision }) =>
+          this.#observe(ifFontRevision, () =>
+            this.#kerning.pairs({ sourceId, glyph, limit, cursor }),
+          ),
+        "kerning.resolve": ({ pairs, sourceId, location, ifFontRevision }) =>
+          this.#observe(ifFontRevision, () => this.#kerning.resolve(pairs, { sourceId, location })),
         "layers.get": ({ layerId, ifFontRevision }) =>
           this.#observe(ifFontRevision, () => this.#reader.getLayer(layerId)),
         "layers.resolve": ({ layerId, ifFontRevision }) =>
