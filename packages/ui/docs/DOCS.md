@@ -1,6 +1,6 @@
 # Shared UI (`@shift/ui`)
 
-<!-- reviewed: 2026-09-26 review-every: 90d -->
+<!-- reviewed: 2026-10-11 review-every: 90d -->
 
 Shared UI component library for Shift, wrapping Base UI primitives with Tailwind styling and Shift design tokens.
 
@@ -37,7 +37,7 @@ packages/ui/
       popover/             -- Popover trigger, portal, positioner, popup, title, and close
       progress/            -- Progress root with styled track and indicator
       radio/               -- RadioGroup and selectable RadioCard preset control
-      resizable/           -- ResizablePanelGroup, ResizablePanel, ResizableHandle over react-resizable-panels
+      resizable/           -- ResizablePanelGroup, ResizablePanel, ResizableHandle over react-resizable-panels v4 (pixel sizes)
       select/              -- Select trigger, popup, list, item, and indicator primitives
       separator/           -- Separator (horizontal/vertical)
       slider/              -- Slider with thumb-level accessible name
