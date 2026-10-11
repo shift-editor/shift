@@ -229,6 +229,18 @@ jobs:
       - name: Smoke-test packaged application
         run: node scripts/smoke-packaged.mjs "${{ steps.package.outputs.path }}" nightly
 
+      - name: Verify DEB libraries on clean systems
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t DEBS < <(find "apps/desktop/out/linux-${{ matrix.arch }}" -maxdepth 1 -name '*.deb')
+          [[ "${#DEBS[@]}" == 1 ]] || {
+            echo "Expected one DEB, found ${#DEBS[@]}" >&2
+            exit 1
+          }
+          scripts/check-deb-libraries.sh "${DEBS[0]}"
+
       - name: Verify macOS signature
         if: matrix.platform == 'darwin'
         run: |

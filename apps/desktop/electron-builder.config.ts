@@ -92,6 +92,23 @@ const macosSourceDocumentTypes = [
 const installsAptSource = !isNightly && buildArchitecture === "x64";
 const linuxDocumentIconName = isNightly ? "shift-nightly-document" : documentIconName;
 const linuxDocumentIconSizes = [16, 32, 48, 64, 128, 256, 512];
+/**
+ * electron-builder's default DEB dependencies, plus ALSA, which Electron links
+ * but the defaults omit. Setting `depends` replaces the defaults, so they are
+ * restated. Ubuntu 24.04 and Debian 13 renamed the package to `libasound2t64`.
+ */
+const debDependencies = [
+  "libgtk-3-0",
+  "libnotify4",
+  "libnss3",
+  "libxss1",
+  "libxtst6",
+  "xdg-utils",
+  "libatspi2.0-0",
+  "libuuid1",
+  "libsecret-1-0",
+  "libasound2t64 | libasound2",
+];
 const linuxPackageFiles = [
   `${path.join(__dirname, `resources/linux/${distribution}.xml`)}=/usr/share/mime/packages/${packageName}.xml`,
   ...linuxDocumentIconSizes.map(
@@ -301,6 +318,7 @@ const config: Configuration = {
     artifactName: `${artifactName}-${productVersion}-Linux-${buildArchitecture}.\${ext}`,
   },
   deb: {
+    depends: debDependencies,
     fpm: !installsAptSource
       ? linuxPackageFiles
       : [

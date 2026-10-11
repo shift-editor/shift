@@ -23,7 +23,7 @@ async function loadLinuxPackageConfiguration(distribution, architecture = "x64")
       "tsx",
       "--input-type=module",
       "--eval",
-      `import importedConfig from ${JSON.stringify(configUrl)}; const config = importedConfig.default ?? importedConfig; process.stdout.write(JSON.stringify({ deb: config.deb?.fpm, rpm: config.rpm?.fpm }));`,
+      `import importedConfig from ${JSON.stringify(configUrl)}; const config = importedConfig.default ?? importedConfig; process.stdout.write(JSON.stringify({ deb: config.deb?.fpm, debDepends: config.deb?.depends, rpm: config.rpm?.fpm }));`,
     ],
     {
       cwd: repositoryRoot,
@@ -69,4 +69,11 @@ test("arm64 Release DEB does not enroll in the amd64 APT repository", async () =
 
   assertExcludesRepositoryConfiguration(configuration.deb);
   assertExcludesRepositoryConfiguration(configuration.rpm);
+});
+
+test("DEB declares ALSA under its current and older package names", async () => {
+  const configuration = await loadLinuxPackageConfiguration("release");
+
+  assert.ok(configuration.debDepends.includes("libasound2t64 | libasound2"));
+  assert.ok(configuration.debDepends.includes("libgtk-3-0"));
 });
