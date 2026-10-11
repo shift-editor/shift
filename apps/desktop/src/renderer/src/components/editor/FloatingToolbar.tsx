@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { motion, type Transition } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion, type Transition } from "motion/react";
 import { cn } from "@shift/ui";
 import { ToolsPane, type ToolsPaneSide } from "@shift/editor/ui";
 import DragHandleSvg from "@assets/toolbar/drag-handle.svg";
@@ -44,9 +44,53 @@ const RELEASE_DISTANCE = 128;
  * does not flicker between two edges near a corner.
  */
 const SWITCH_MARGIN = 24;
-/** Short and firm, with just enough bounce that the bar lands with a bump. */
-const SNAP_TRANSITION: Transition = { type: "spring", duration: 0.18, bounce: 0.15 };
-const TOOLS_FADE_TRANSITION: Transition = { duration: 0.14, ease: "easeOut" };
+/**
+ * Pulled onto an edge mid-drag: quick and without bounce, since the pointer is
+ * still moving and a wobble there reads as jitter.
+ */
+const MAGNET_TRANSITION: Transition = {
+  type: "spring",
+  visualDuration: 0.16,
+  bounce: 0,
+};
+/** Pulled off an edge mid-drag: catches up with the pointer almost at once. */
+const DETACH_TRANSITION: Transition = {
+  type: "spring",
+  visualDuration: 0.1,
+  bounce: 0,
+};
+/** Dropped onto an edge: a little longer, landing with a small bump. */
+const DROP_TRANSITION: Transition = {
+  type: "spring",
+  visualDuration: 0.22,
+  bounce: 0.15,
+};
+
+/**
+ * Turning between a row and a column crossfades: the old bar fades out where it
+ * is while the new one scales in at its edge. Any shape between a row and a
+ * column reads as a stray box, so the bar never passes through one. A slight
+ * blur on both bars blends the swap into one change instead of two bars
+ * trading places. Scale is a full transform string so it runs off the main
+ * thread while the canvas is busy.
+ */
+const CROSSFADE_SCALE = "scale(0.95)";
+const CROSSFADE_BLUR = "blur(2px)";
+/** Strong ease-out; ease-in would hold the old bar just as the eye looks at it. */
+const EASE_OUT = [0.23, 1, 0.32, 1] as const;
+/**
+ * The landing preview fades and grows in very slightly rather than popping, and
+ * leaves a little faster than it arrives.
+ */
+const PREVIEW_SCALE = "scale(0.98)";
+const PREVIEW_IN_TRANSITION: Transition = { duration: 0.15, ease: EASE_OUT };
+const PREVIEW_OUT_TRANSITION: Transition = { duration: 0.1, ease: EASE_OUT };
+const CROSSFADE_OUT_TRANSITION: Transition = { duration: 0.1, ease: EASE_OUT };
+const CROSSFADE_IN_TRANSITION: Transition = {
+  transform: { type: "spring", visualDuration: 0.22, bounce: 0.1 },
+  opacity: { duration: 0.13, ease: EASE_OUT },
+  filter: { duration: 0.13, ease: EASE_OUT },
+};
 
 interface DragState {
   /** Bar's top-left corner inside the canvas panel while it follows the pointer. */
@@ -132,6 +176,12 @@ function edgeDistances(
   };
 }
 
+/** Picks the spring for whatever moved the bar into or out of a slot. */
+function slotTransition(dragging: boolean, snapped: boolean, reduceMotion: boolean): Transition {
+  if (!dragging) return reduceMotion ? { ...DROP_TRANSITION, bounce: 0 } : DROP_TRANSITION;
+  return snapped ? MAGNET_TRANSITION : DETACH_TRANSITION;
+}
+
 function snappedSlot(drag: DragState): Dock | null {
   return drag.snapped ? drag.target : null;
 }
@@ -139,7 +189,6 @@ function snappedSlot(drag: DragState): Dock | null {
 export const FloatingToolbar = () => {
   const editor = useEditor();
   const layerRef = useRef<HTMLDivElement>(null);
-  const barRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragState | null>(null);
   const [dock, setDock] = useState<Dock>(readDock);
   const [drag, setDrag] = useState<DragState | null>(null);
@@ -185,7 +234,7 @@ export const FloatingToolbar = () => {
 
   const onGripPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     const layer = layerRef.current?.getBoundingClientRect();
-    const bar = barRef.current;
+    const bar = event.currentTarget.closest<HTMLElement>("[data-floating-toolbar]");
     if (event.button !== 0 || !layer || !bar) return;
     event.preventDefault();
     const start = nextDrag(
@@ -208,11 +257,22 @@ export const FloatingToolbar = () => {
   // follows the pointer otherwise, already turned to suit the edge it is heading for.
   const slot = drag ? snappedSlot(drag) : dock;
   const vertical = isVertical(drag?.target ?? dock);
-  // Motion animates the bar's size and position only when it enters or leaves a
-  // slot; while it follows the pointer it moves with no animation.
-  const layoutDependency = `${slot ?? "free"}:${vertical}`;
+  // Motion animates the bar's position only when it enters or leaves a slot;
+  // while it follows the pointer it moves with no animation.
+  const layoutDependency = slot ?? "free";
   const followStyle = drag && !slot ? { left: drag.left, top: drag.top } : {};
   const orientation = vertical ? "vertical" : "horizontal";
+  // With reduced motion the bars only fade; nothing grows or shrinks.
+  const reduceMotion = useReducedMotion();
+  const previewHidden = {
+    opacity: 0,
+    transform: reduceMotion ? "none" : PREVIEW_SCALE,
+  };
+  const crossfadeHidden = {
+    opacity: 0,
+    transform: reduceMotion ? "none" : CROSSFADE_SCALE,
+    filter: CROSSFADE_BLUR,
+  };
 
   return (
     <div ref={layerRef} className="pointer-events-none absolute inset-0 z-30">
@@ -224,51 +284,90 @@ export const FloatingToolbar = () => {
           className="pointer-events-auto fixed inset-0 z-50 cursor-grabbing"
         />
       ) : null}
-      {drag ? (
-        <div
-          aria-hidden="true"
-          className={cn("absolute rounded-xl bg-accent/5", DROP_ZONE_POSITION[drag.target])}
-        />
-      ) : null}
-      {drag ? (
-        // Outlines exactly where the bar will sit, sized for that edge's orientation.
-        <div aria-hidden="true" className={cn("absolute", SLOT_FRAME[drag.target])}>
-          <div
-            className="rounded-xl border-2 border-dashed border-accent/60 bg-accent/10"
-            style={
-              isVertical(drag.target)
-                ? { width: BAR_THICKNESS, height: drag.length }
-                : { width: drag.length, height: BAR_THICKNESS }
-            }
-          />
-        </div>
-      ) : null}
-      <div className={cn("absolute", slot ? SLOT_FRAME[slot] : "inset-0")}>
-        <motion.div
-          ref={barRef}
-          layout
-          layoutDependency={layoutDependency}
-          transition={SNAP_TRANSITION}
-          style={{ borderRadius: 12, ...followStyle }}
-          className={cn(
-            "pointer-events-auto flex items-center overflow-hidden border border-line-subtle bg-surface",
-            vertical ? "w-12 flex-col py-1.5" : "h-12 flex-row px-1.5",
-            drag ? "shadow-xl" : "card-shadow",
-            slot ? null : "absolute",
-          )}
-        >
-          {/*
-          Remounts per orientation and fades in, so the tools never appear
-          stretched or mid-reflow while the bar morphs around them.
-        */}
+      {/*
+        The landing preview fades in on grab, and crossfades to the next edge as
+        the target changes, so it never jumps from one edge to another.
+      */}
+      <AnimatePresence>
+        {drag ? (
           <motion.div
-            key={orientation}
-            layout="position"
+            key={`zone-${drag.target}`}
+            aria-hidden="true"
+            initial={previewHidden}
+            animate={{
+              opacity: 1,
+              transform: "scale(1)",
+              transition: PREVIEW_IN_TRANSITION,
+            }}
+            exit={{ ...previewHidden, transition: PREVIEW_OUT_TRANSITION }}
+            // Deepens once the bar has snapped, confirming it caught.
+            className={cn(
+              "absolute rounded-xl transition-colors duration-150",
+              drag.snapped ? "bg-accent/10" : "bg-accent/5",
+              DROP_ZONE_POSITION[drag.target],
+            )}
+          />
+        ) : null}
+        {drag ? (
+          // Outlines exactly where the bar will sit, sized for that edge's orientation.
+          <motion.div
+            key={`slot-${drag.target}`}
+            aria-hidden="true"
+            initial={previewHidden}
+            animate={{
+              opacity: 1,
+              transform: "scale(1)",
+              transition: PREVIEW_IN_TRANSITION,
+            }}
+            exit={{ ...previewHidden, transition: PREVIEW_OUT_TRANSITION }}
+            className={cn("absolute", SLOT_FRAME[drag.target])}
+          >
+            <div
+              className="rounded-xl border-2 border-dashed border-accent/60 bg-accent/10"
+              style={
+                isVertical(drag.target)
+                  ? { width: BAR_THICKNESS, height: drag.length }
+                  : { width: drag.length, height: BAR_THICKNESS }
+              }
+            />
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+      {/*
+        Each orientation is its own bar, so turning crossfades between two bars.
+        The leaving bar keeps its last frame and position while it fades out.
+      */}
+      <AnimatePresence initial={false}>
+        <motion.div
+          key={orientation}
+          initial={crossfadeHidden}
+          animate={{
+            opacity: 1,
+            transform: "scale(1)",
+            filter: "blur(0px)",
+            transition: CROSSFADE_IN_TRANSITION,
+            // Nothing left on the bar at rest, so its text and icons stay crisp.
+            transitionEnd: { transform: "none", filter: "none" },
+          }}
+          exit={{
+            ...crossfadeHidden,
+            pointerEvents: "none",
+            transition: CROSSFADE_OUT_TRANSITION,
+          }}
+          className={cn("absolute", slot ? SLOT_FRAME[slot] : null)}
+          style={followStyle}
+        >
+          <motion.div
+            data-floating-toolbar=""
+            layout
             layoutDependency={layoutDependency}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ layout: SNAP_TRANSITION, opacity: TOOLS_FADE_TRANSITION }}
-            className={cn("flex items-center self-stretch", vertical ? "flex-col" : "flex-row")}
+            transition={slotTransition(dragging, slot !== null, reduceMotion ?? false)}
+            style={{ borderRadius: 12 }}
+            className={cn(
+              "pointer-events-auto flex items-center overflow-hidden border border-line-subtle bg-surface",
+              vertical ? "w-12 flex-col py-1.5" : "h-12 flex-row px-1.5",
+              drag ? "shadow-xl" : "card-shadow",
+            )}
           >
             <ToolsPane
               editor={editor}
@@ -297,7 +396,7 @@ export const FloatingToolbar = () => {
             </div>
           </motion.div>
         </motion.div>
-      </div>
+      </AnimatePresence>
     </div>
   );
 };
