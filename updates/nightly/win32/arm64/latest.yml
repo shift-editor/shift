@@ -1,0 +1,8 @@
+version: 0.134.1
+files:
+  - url: https://releases.shift.graphics/nightly/fd124ac451bb8bc4620e4552a383108cc27f9ec9/Shift-Nightly-0.134.1-Windows-arm64-Setup.exe
+    sha512: wxAIMez+qPLVK9067pPI2Y3emQo/DVVX1JupRczAgO9t45uwmvzh0J+oA5/I9wapTJHk0bXOI2I5pgNM5V5QaA==
+    size: 118422600
+path: https://releases.shift.graphics/nightly/fd124ac451bb8bc4620e4552a383108cc27f9ec9/Shift-Nightly-0.134.1-Windows-arm64-Setup.exe
+sha512: wxAIMez+qPLVK9067pPI2Y3emQo/DVVX1JupRczAgO9t45uwmvzh0J+oA5/I9wapTJHk0bXOI2I5pgNM5V5QaA==
+releaseDate: '2026-10-11T14:02:39.710Z'
