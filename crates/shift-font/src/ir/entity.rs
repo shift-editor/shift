@@ -177,6 +177,7 @@ typed_id!(AxisId, "axis");
 typed_id!(AxisLabelId, "axisLabel");
 typed_id!(AxisMappingId, "axisMapping");
 typed_id!(NamedInstanceId, "namedInstance");
+typed_id!(KerningGroupId, "kerningGroup");
 typed_id!(MetricId, "metric");
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]

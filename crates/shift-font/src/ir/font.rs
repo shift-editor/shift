@@ -8,9 +8,10 @@ use crate::entity::{
 use crate::error::{CoreError, CoreResult};
 use crate::features::FeatureData;
 use crate::glyph::{Glyph, GlyphLayer};
+use crate::glyph_category::{GlyphCategory, GlyphSubcategory};
 use crate::guideline::Guideline;
 use crate::interpolation::GlyphInterpolationValues;
-use crate::kerning::KerningData;
+use crate::kerning::Kerning;
 use crate::lib_data::{LibData, LibValue};
 use crate::metrics::{FontMetrics, MetricDefinition, MetricKind, MetricValue};
 use crate::named_instance::{validate_named_instances, NamedInstance};
@@ -116,7 +117,7 @@ struct FontData {
     #[serde(default)]
     default_source_id: Option<SourceId>,
     glyphs: EntityList<Arc<Glyph>>,
-    kerning: KerningData,
+    kerning: Kerning,
     features: FeatureData,
     guidelines: Vec<Guideline>,
     lib: LibData,
@@ -389,7 +390,7 @@ impl Default for Font {
                     sources: vec![default_source],
                     default_source_id: Some(default_source_id),
                     glyphs: EntityList::new(),
-                    kerning: KerningData::new(),
+                    kerning: Kerning::new(),
                     features: FeatureData::new(),
                     guidelines: Vec::new(),
                     lib: LibData::new(),
@@ -422,7 +423,7 @@ impl Font {
                     sources: Vec::new(),
                     default_source_id: None,
                     glyphs: EntityList::new(),
-                    kerning: KerningData::new(),
+                    kerning: Kerning::new(),
                     features: FeatureData::new(),
                     guidelines: Vec::new(),
                     lib: LibData::new(),
@@ -1294,6 +1295,22 @@ impl Font {
         Ok(())
     }
 
+    /// Sets or clears the glyph's category overrides; `None` falls back to
+    /// glyph data.
+    pub fn set_glyph_category(
+        &mut self,
+        glyph_id: GlyphId,
+        category: Option<GlyphCategory>,
+        sub_category: Option<GlyphSubcategory>,
+    ) -> CoreResult<()> {
+        let mut state = (*self.state).clone();
+        let glyph = Arc::make_mut(state.data.glyphs.get_mut(&glyph_id).require(&glyph_id)?);
+        glyph.set_category(category);
+        glyph.set_sub_category(sub_category);
+        self.state = Arc::new(state);
+        Ok(())
+    }
+
     pub fn create_glyph_layer(
         &mut self,
         layer_id: LayerId,
@@ -1437,11 +1454,11 @@ impl Font {
         Ok(layer)
     }
 
-    pub fn kerning(&self) -> &KerningData {
+    pub fn kerning(&self) -> &Kerning {
         &self.data().kerning
     }
 
-    pub fn kerning_mut(&mut self) -> &mut KerningData {
+    pub fn kerning_mut(&mut self) -> &mut Kerning {
         &mut self.data_mut().kerning
     }
 

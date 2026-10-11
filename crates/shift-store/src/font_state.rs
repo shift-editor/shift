@@ -1,7 +1,6 @@
 use crate::error::OrMissing;
 use std::collections::{BTreeMap, HashMap};
 
-use rusqlite::params;
 use shift_font as font;
 
 use crate::{FontInfo, ShiftStore, StoreError, source::SourceKind};
@@ -314,11 +313,15 @@ fn load_glyphs(
     include_layer_payloads: bool,
 ) -> Result<Vec<font::Glyph>, StoreError> {
     let glyph_rows = {
-        let mut stmt = conn.prepare("SELECT id, name FROM glyphs ORDER BY order_index, id")?;
+        let mut stmt = conn.prepare(
+            "SELECT id, name, category, sub_category FROM glyphs ORDER BY order_index, id",
+        )?;
         stmt.query_map([], |row| {
             Ok((
                 font::GlyphId::from_raw(row.get::<_, String>(0)?),
                 row.get::<_, Option<String>>(1)?.unwrap_or_default(),
+                row.get::<_, Option<String>>(2)?,
+                row.get::<_, Option<String>>(3)?,
             ))
         })?
         .collect::<Result<Vec<_>, _>>()?
@@ -408,8 +411,11 @@ fn load_glyphs(
     }
 
     let mut glyphs = Vec::with_capacity(glyph_rows.len());
-    for (glyph_id, name) in glyph_rows {
+    for (glyph_id, name, category, sub_category) in glyph_rows {
         let mut glyph = font::Glyph::with_id(glyph_id.clone(), name);
+        // A name a later Shift wrote but this one does not know reads as unset.
+        glyph.set_category(category.and_then(|category| category.parse().ok()));
+        glyph.set_sub_category(sub_category.and_then(|sub_category| sub_category.parse().ok()));
         let mut glyph_unicodes = unicodes.remove(&glyph_id).unwrap_or_default();
         glyph_unicodes.sort_by_key(|(order_index, _)| *order_index);
         glyph.set_unicodes(
@@ -452,20 +458,16 @@ fn map_guideline_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<font::Guidelin
     ))
 }
 
-fn load_kerning(conn: &rusqlite::Connection) -> Result<font::KerningData, StoreError> {
-    let mut kerning = font::KerningData::new();
-    for (name, members) in load_kerning_groups(conn, 1)? {
-        kerning.set_group1(name, members);
-    }
-    for (name, members) in load_kerning_groups(conn, 2)? {
-        kerning.set_group2(name, members);
+fn load_kerning(conn: &rusqlite::Connection) -> Result<font::Kerning, StoreError> {
+    let mut kerning = font::Kerning::new();
+    for (group_id, group) in load_kerning_groups(conn)? {
+        kerning.set_group(group_id, group)?;
     }
 
     let mut stmt = conn.prepare(
         "
-        SELECT first_kind, first_value, second_kind, second_value, value
+        SELECT source_id, first_kind, first_value, second_kind, second_value, value
         FROM kerning_pairs
-        ORDER BY order_index
         ",
     )?;
     let rows = stmt.query_map([], |row| {
@@ -474,16 +476,17 @@ fn load_kerning(conn: &rusqlite::Connection) -> Result<font::KerningData, StoreE
             row.get::<_, String>(1)?,
             row.get::<_, String>(2)?,
             row.get::<_, String>(3)?,
-            row.get::<_, f64>(4)?,
+            row.get::<_, String>(4)?,
+            row.get::<_, f64>(5)?,
         ))
     })?;
     for row in rows {
-        let (first_kind, first_value, second_kind, second_value, value) = row?;
-        kerning.add_pair(font::KerningPair::new(
-            kerning_side(&first_kind, first_value),
-            kerning_side(&second_kind, second_value),
-            value,
-        ));
+        let (source_id, first_kind, first_value, second_kind, second_value, value) = row?;
+        let pair = font::KerningPair::new(
+            kerning_side(&first_kind, first_value)?,
+            kerning_side(&second_kind, second_value)?,
+        );
+        kerning.set_value(font::SourceId::from_raw(source_id), pair, value);
     }
 
     Ok(kerning)
@@ -491,45 +494,66 @@ fn load_kerning(conn: &rusqlite::Connection) -> Result<font::KerningData, StoreE
 
 fn load_kerning_groups(
     conn: &rusqlite::Connection,
-    side: i64,
-) -> Result<Vec<(String, Vec<font::GlyphName>)>, StoreError> {
+) -> Result<Vec<(font::KerningGroupId, font::KerningGroup)>, StoreError> {
     let mut stmt = conn.prepare(
         "
-        SELECT name
+        SELECT id, position, name
         FROM kerning_groups
-        WHERE side = ?1
-        ORDER BY name
+        ORDER BY id
         ",
     )?;
-    let group_names = stmt
-        .query_map([side], |row| row.get::<_, String>(0))?
+    let group_rows = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })?
         .collect::<Result<Vec<_>, _>>()?;
 
-    let mut groups = Vec::new();
-    for group_name in group_names {
-        let mut member_stmt = conn.prepare(
-            "
-            SELECT glyph_name
-            FROM kerning_group_members
-            WHERE side = ?1 AND group_name = ?2
-            ORDER BY order_index
-            ",
-        )?;
+    let mut member_stmt = conn.prepare(
+        "
+        SELECT glyph_id
+        FROM kerning_group_members
+        WHERE group_id = ?1
+        ORDER BY order_index
+        ",
+    )?;
+    let mut groups = Vec::with_capacity(group_rows.len());
+    for (group_id, position, name) in group_rows {
         let members = member_stmt
-            .query_map(params![side, group_name], |row| {
-                Ok(font::GlyphName::from(row.get::<_, String>(0)?))
+            .query_map([&group_id], |row| {
+                Ok(font::GlyphId::from_raw(row.get::<_, String>(0)?))
             })?
             .collect::<Result<Vec<_>, _>>()?;
-        groups.push((group_name, members));
+        groups.push((
+            font::KerningGroupId::from_raw(group_id),
+            font::KerningGroup::new(kerning_position(position)?, name, members),
+        ));
     }
     Ok(groups)
 }
 
-fn kerning_side(kind: &str, value: String) -> font::KerningSide {
+fn kerning_position(column: i64) -> Result<font::KerningPosition, StoreError> {
+    match column {
+        1 => Ok(font::KerningPosition::First),
+        2 => Ok(font::KerningPosition::Second),
+        _ => Err(StoreError::InvalidDocument(format!(
+            "unknown kerning group position {column}"
+        ))),
+    }
+}
+
+fn kerning_side(kind: &str, value: String) -> Result<font::KerningSide, StoreError> {
     match kind {
-        "glyph" => font::KerningSide::Glyph(value.into()),
-        "group" => font::KerningSide::Group(value),
-        _ => font::KerningSide::Group(value),
+        "glyph" => Ok(font::KerningSide::Glyph(font::GlyphId::from_raw(value))),
+        "group" => Ok(font::KerningSide::Group(font::KerningGroupId::from_raw(
+            value,
+        ))),
+        _ => Err(StoreError::InvalidDocument(format!(
+            "unknown kerning side kind {kind:?}"
+        ))),
     }
 }
 

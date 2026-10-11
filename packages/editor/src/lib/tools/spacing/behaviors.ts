@@ -182,7 +182,16 @@ export class SpacingDrag implements Behavior<SpacingState, SpacingTool> {
     const value = snapped ? snapped.sidebearing : dragged;
     this.#edit.preview(Math.round(value) - Math.round(this.#start));
 
-    ctx.setState({ ...state, hit: ctx.tool.runs.refresh(state.hit), snap: snapped?.kind ?? null });
+    const hit = ctx.tool.runs.refresh(state.hit);
+    if (!hit) {
+      // The gap stopped existing mid-drag; drop it rather than edit a stale half.
+      this.#edit.discard();
+      if (this.#done) this.#done();
+      this.#cleanup();
+      ctx.setState({ type: "ready", hit: null, selected: null });
+      return true;
+    }
+    ctx.setState({ ...state, hit, snap: snapped?.kind ?? null });
     return true;
   }
 

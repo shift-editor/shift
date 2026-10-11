@@ -15,9 +15,11 @@ use shift_font::{
 use crate::{
     errors::{FormatBackendError, FormatBackendResult},
     font_source::VariationAxisKind,
-    formats::ufo::{load_header, read_glyph_paths},
+    formats::ufo::{load_header, read_glyph_paths, UfoKerning},
     import::{GlifGlyph, GlifGlyphStream, GlifLayer},
+    kerning_import::KerningImport,
     metrics::copy_source_metrics,
+    ImportReport,
 };
 
 use super::{
@@ -33,6 +35,7 @@ use super::{
 struct SourceDirectory {
     source_id: SourceId,
     glyphs: BTreeMap<String, PathBuf>,
+    kerning: Option<UfoKerning>,
 }
 
 struct DesignspaceSourceMaterial {
@@ -41,23 +44,26 @@ struct DesignspaceSourceMaterial {
     metric_definitions: Vec<MetricDefinition>,
     metrics: Source,
     glyphs: BTreeMap<String, PathBuf>,
+    kerning: Option<UfoKerning>,
 }
 
-pub(crate) fn stream_font(path: &str) -> FormatBackendResult<(Font, GlifGlyphStream)> {
+type DesignspaceStream = (Font, GlifGlyphStream, ImportReport);
+
+pub(crate) fn stream_font(path: &str) -> FormatBackendResult<DesignspaceStream> {
     stream_designspace(Path::new(path), None).map_err(FormatBackendError::from)
 }
 
 pub(crate) fn stream_retained(
     path: &Path,
     glyph_paths: Arc<[BTreeMap<String, PathBuf>]>,
-) -> FormatBackendResult<(Font, GlifGlyphStream)> {
+) -> FormatBackendResult<DesignspaceStream> {
     stream_designspace(path, Some(&glyph_paths)).map_err(FormatBackendError::from)
 }
 
 fn stream_designspace(
     designspace_path: &Path,
     retained_glyph_paths: Option<&[BTreeMap<String, PathBuf>]>,
-) -> DesignspaceResult<(Font, GlifGlyphStream)> {
+) -> DesignspaceResult<DesignspaceStream> {
     let designspace_dir =
         designspace_path
             .parent()
@@ -94,10 +100,11 @@ fn stream_designspace(
         find_default_source_index(&document).ok_or(DesignspaceError::MissingDefaultSource)?;
     let default_descriptor = &document.sources[default_index];
     let default_path = designspace_dir.join(&default_descriptor.filename);
-    let mut header = load_header(&default_path).map_err(|error| DesignspaceError::LoadUfo {
-        path: default_path.clone(),
-        source: Box::new(error),
-    })?;
+    let (mut header, default_kerning) =
+        load_header(&default_path).map_err(|error| DesignspaceError::LoadUfo {
+            path: default_path.clone(),
+            source: Box::new(error),
+        })?;
     let default_metrics = header
         .default_source()
         .cloned()
@@ -121,14 +128,15 @@ fn stream_designspace(
         .map(|index| {
             let descriptor = &document.sources[index];
             let ufo_path = designspace_dir.join(&descriptor.filename);
-            let (style_name, metric_definitions, metrics) = if index == default_index {
+            let (style_name, metric_definitions, metrics, kerning) = if index == default_index {
                 (
                     default_style_name.clone(),
                     default_metric_definitions.clone(),
                     default_metrics.clone(),
+                    default_kerning.clone(),
                 )
             } else {
-                let ufo_header =
+                let (ufo_header, kerning) =
                     load_header(&ufo_path).map_err(|error| DesignspaceError::LoadUfo {
                         path: ufo_path.clone(),
                         source: Box::new(error),
@@ -141,8 +149,10 @@ fn stream_designspace(
                     ufo_header.metadata().style_name.clone(),
                     ufo_header.metric_definitions().to_vec(),
                     metrics,
+                    kerning,
                 )
             };
+            let kerning = descriptor.layer.is_none().then_some(kerning);
             let glyphs =
                 match retained_glyph_paths {
                     Some(paths) => paths[index].clone(),
@@ -159,6 +169,7 @@ fn stream_designspace(
                 metric_definitions,
                 metrics,
                 glyphs,
+                kerning,
             })
         })
         .collect::<DesignspaceResult<Vec<_>>>()?;
@@ -180,7 +191,8 @@ fn stream_designspace(
 
     let (glyph_ids, glyphs) =
         build_glyph_directory(&SourceGlyphIds::for_path(designspace_path), &directories);
-    Ok((header, GlifGlyphStream::new(glyph_ids, glyphs)))
+    let report = import_kerning(&mut header, &default_kerning, &directories, &glyph_ids);
+    Ok((header, GlifGlyphStream::new(glyph_ids, glyphs), report))
 }
 
 fn stream_axisless_designspace(
@@ -188,7 +200,7 @@ fn stream_axisless_designspace(
     designspace_dir: &Path,
     xml: &str,
     original_error: &str,
-) -> DesignspaceResult<(Font, GlifGlyphStream)> {
+) -> DesignspaceResult<DesignspaceStream> {
     let sources = parse_axisless_sources(xml).map_err(|fallback_error| {
         DesignspaceError::LoadDesignspace {
             path: designspace_path.to_path_buf(),
@@ -202,10 +214,11 @@ fn stream_axisless_designspace(
     }
 
     let default_path = designspace_dir.join(&sources[0].filename);
-    let mut header = load_header(&default_path).map_err(|error| DesignspaceError::LoadUfo {
-        path: default_path,
-        source: Box::new(error),
-    })?;
+    let (mut header, default_kerning) =
+        load_header(&default_path).map_err(|error| DesignspaceError::LoadUfo {
+            path: default_path,
+            source: Box::new(error),
+        })?;
     if let Some(family_name) = &sources[0].familyname {
         header.metadata_mut().family_name = Some(family_name.clone());
     }
@@ -222,14 +235,15 @@ fn stream_axisless_designspace(
         .enumerate()
         .map(|(index, descriptor)| {
             let ufo_path = designspace_dir.join(&descriptor.filename);
-            let (style_name, metric_definitions, imported_metrics) = if index == 0 {
+            let (style_name, metric_definitions, imported_metrics, kerning) = if index == 0 {
                 (
                     default_style_name.clone(),
                     default_metric_definitions.clone(),
                     default_metrics.clone(),
+                    default_kerning.clone(),
                 )
             } else {
-                let ufo_header =
+                let (ufo_header, kerning) =
                     load_header(&ufo_path).map_err(|error| DesignspaceError::LoadUfo {
                         path: ufo_path.clone(),
                         source: Box::new(error),
@@ -242,8 +256,10 @@ fn stream_axisless_designspace(
                     ufo_header.metadata().style_name.clone(),
                     ufo_header.metric_definitions().to_vec(),
                     metrics,
+                    kerning,
                 )
             };
+            let kerning = descriptor.layer.is_none().then_some(kerning);
             let glyphs =
                 read_glyph_paths(&ufo_path, descriptor.layer.as_deref()).map_err(|error| {
                     DesignspaceError::LoadUfo {
@@ -257,6 +273,7 @@ fn stream_axisless_designspace(
                 metric_definitions,
                 metrics: imported_metrics,
                 glyphs,
+                kerning,
             })
         })
         .collect::<DesignspaceResult<Vec<_>>>()?;
@@ -277,7 +294,8 @@ fn stream_axisless_designspace(
 
     let (glyph_ids, glyphs) =
         build_glyph_directory(&SourceGlyphIds::for_path(designspace_path), &directories);
-    Ok((header, GlifGlyphStream::new(glyph_ids, glyphs)))
+    let report = import_kerning(&mut header, &default_kerning, &directories, &glyph_ids);
+    Ok((header, GlifGlyphStream::new(glyph_ids, glyphs), report))
 }
 
 fn register_designspace_sources(
@@ -309,9 +327,32 @@ fn register_designspace_sources(
         directories.push(SourceDirectory {
             source_id,
             glyphs: material.glyphs,
+            kerning: material.kerning,
         });
     }
     directories
+}
+
+/// Installs the default UFO's kerning groups and each master UFO's pairs as
+/// that source's values.
+///
+/// Sources bound to a UFO layer carry no kerning of their own.
+fn import_kerning(
+    header: &mut Font,
+    default_kerning: &UfoKerning,
+    directories: &[SourceDirectory],
+    glyph_ids: &HashMap<String, GlyphId>,
+) -> ImportReport {
+    let mut report = ImportReport::default();
+    let mut import = KerningImport::new(glyph_ids);
+    default_kerning.add_groups(&mut import);
+    for directory in directories {
+        if let Some(kerning) = &directory.kerning {
+            kerning.add_pairs(&mut import, &directory.source_id);
+        }
+    }
+    *header.kerning_mut() = import.finish(&mut report);
+    report
 }
 
 fn add_axes(

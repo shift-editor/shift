@@ -2,10 +2,13 @@ import { GlyphSidebar } from "@shift/editor/ui";
 import { useSignalState } from "@shift/editor/signals";
 import { isSegmentId } from "@shift/glyph-state";
 import { isAnchorId, isComponentId, isContourId, isPointId, type GlyphId } from "@shift/types";
+import { useRef } from "react";
 import { Button } from "@shift/ui";
 import { BooleanOps } from "./BooleanOps";
 import { AnchorSection } from "./sidebar-right/AnchorSection";
+import { GlyphKerningSection } from "./sidebar-right/GlyphKerningSection";
 import { HandleSection } from "./sidebar-right/HandleSection";
+import { KerningPairSection } from "./sidebar-right/KerningPairSection";
 import { ScaleSection } from "./sidebar-right/ScaleSection";
 import { TransformSection } from "./sidebar-right/TransformSection";
 import { ZoomMenu } from "./sidebar-right/ZoomMenu";
@@ -25,10 +28,12 @@ export const RightSidebar = () => {
     availableGlyphs.find((candidate) => candidate.id === glyphId)?.displayName;
   const familyName = useSignalState(session.catalog.familyNameCell) ?? "Untitled";
   const selection = useSignalState(editor.selection.stateCell, { schedule: "frame" });
+  const kerningActive = useSignalState(editor.toolIdCell) === "kerning";
 
   const hasTransformSelection = selection.ids.some(
     (id) => isPointId(id) || isContourId(id) || isSegmentId(id) || isComponentId(id),
   );
+  const selectionBlockRef = useRef<HTMLDivElement>(null);
   const hasAnchorSelection = selection.ids.some(isAnchorId);
   const hasBooleanSelection = selection.ids.filter(isContourId).length >= 2;
 
@@ -56,25 +61,23 @@ export const RightSidebar = () => {
             <ZoomMenu />
           </>
         ),
-        selection: (
+        selection: kerningActive ? (
+          <KerningPairSection />
+        ) : (
           <TransformOriginProvider>
-            {hasTransformSelection || hasBooleanSelection ? (
-              <div className="flex flex-col gap-4 px-3 py-3">
-                <BooleanOps />
-                {hasTransformSelection ? (
-                  <>
-                    <HandleSection />
-                    <TransformSection />
-                    <ScaleSection />
-                  </>
-                ) : null}
-              </div>
-            ) : null}
-            {!hasTransformSelection && hasAnchorSelection ? (
-              <div className="flex flex-col gap-4 px-3 py-3">
-                <AnchorSection />
-              </div>
-            ) : null}
+            {/* One block, so its sections are spaced as Transform's are. */}
+            <div ref={selectionBlockRef} className="flex flex-col gap-4 px-3 py-3">
+              <GlyphKerningSection anchorRef={selectionBlockRef} />
+              {hasBooleanSelection || hasTransformSelection ? <BooleanOps /> : null}
+              {hasTransformSelection ? (
+                <>
+                  <HandleSection />
+                  <TransformSection />
+                  <ScaleSection />
+                </>
+              ) : null}
+              {!hasTransformSelection && hasAnchorSelection ? <AnchorSection /> : null}
+            </div>
           </TransformOriginProvider>
         ),
       }}

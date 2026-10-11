@@ -118,10 +118,12 @@ pub(super) const SOURCE_LOCATIONS: RecoveryTable =
 pub(super) const SOURCE_METRIC_VALUES: RecoveryTable =
     RecoveryTable::replace_collection("source_metric_values", Some("source_id"), false);
 pub(super) const FEATURE_TEXT: RecoveryTable = RecoveryTable::canonical_only("feature_text");
-pub(super) const KERNING_GROUPS: RecoveryTable = RecoveryTable::canonical_only("kerning_groups");
+pub(super) const KERNING_GROUPS: RecoveryTable =
+    RecoveryTable::replace_collection("kerning_groups", None, true);
 pub(super) const KERNING_GROUP_MEMBERS: RecoveryTable =
-    RecoveryTable::canonical_only("kerning_group_members");
-pub(super) const KERNING_PAIRS: RecoveryTable = RecoveryTable::canonical_only("kerning_pairs");
+    RecoveryTable::replace_collection("kerning_group_members", None, false);
+pub(super) const KERNING_PAIRS: RecoveryTable =
+    RecoveryTable::replace_collection("kerning_pairs", Some("source_id"), false);
 pub(super) const FONT_LIB: RecoveryTable =
     RecoveryTable::replace_collection("font_lib", None, false);
 pub(super) const FONTINFO_REMAINDER: RecoveryTable =
@@ -434,8 +436,7 @@ mod tests {
     #[test]
     fn recovery_catalog_classifies_every_document_table() {
         let conn = Connection::open_in_memory().unwrap();
-        conn.execute_batch(crate::schema::DOCUMENT_SCHEMA_V1)
-            .unwrap();
+        conn.execute_batch(crate::schema::DOCUMENT_SCHEMA).unwrap();
         let mut statement = conn
             .prepare(
                 "SELECT name FROM sqlite_schema
@@ -463,13 +464,12 @@ mod tests {
         let recovery_path = temp.path().join("recovery.sqlite");
         let recovery = Connection::open(&recovery_path).unwrap();
         recovery
-            .execute_batch(crate::schema::DOCUMENT_SCHEMA_V1)
+            .execute_batch(crate::schema::DOCUMENT_SCHEMA)
             .unwrap();
         drop(recovery);
 
         let conn = Connection::open_in_memory().unwrap();
-        conn.execute_batch(crate::schema::DOCUMENT_SCHEMA_V1)
-            .unwrap();
+        conn.execute_batch(crate::schema::DOCUMENT_SCHEMA).unwrap();
         conn.execute(
             "ATTACH DATABASE ?1 AS recovery",
             [recovery_path.to_str().unwrap()],

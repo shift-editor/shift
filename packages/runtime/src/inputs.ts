@@ -10,6 +10,9 @@ const layerId = z.string().min(1).transform(asLayerId);
 const axisId = z.string().min(1).transform(asAxisId);
 const axisCoordinate = z.strictObject({ axisId, value: z.number() });
 const location = z.array(axisCoordinate).max(64);
+const kerningPosition = z.enum(["first", "second"]);
+/** A glyph by exact name, or by stable id when it carries the glyph id prefix. */
+const glyphReference = z.string().min(1).max(256);
 
 /** Validates untrusted scripting inputs before they enter a host capability. */
 export const shiftInputSchemas = {
@@ -40,6 +43,33 @@ export const shiftInputSchemas = {
     glyphIds: z.array(glyphId).min(1).max(100),
     location,
   }),
+  "kerning.groups": z.strictObject({
+    windowId,
+    ifFontRevision,
+    position: kerningPosition.optional(),
+  }),
+  "kerning.pairs": z.strictObject({
+    windowId,
+    ifFontRevision,
+    sourceId,
+    glyph: glyphReference.optional(),
+    limit: z.number().int().min(1).max(500).optional(),
+    cursor: z.string().min(1).max(1024).optional(),
+  }),
+  "kerning.resolve": z
+    .strictObject({
+      windowId,
+      ifFontRevision,
+      pairs: z
+        .array(z.strictObject({ first: glyphReference, second: glyphReference }))
+        .min(1)
+        .max(100),
+      sourceId: sourceId.optional(),
+      location: location.optional(),
+    })
+    .refine(({ sourceId, location }) => !(sourceId && location), {
+      message: "kerning.resolve takes sourceId or location, not both",
+    }),
   "layers.get": z.strictObject({ windowId, ifFontRevision, layerId }),
   "layers.resolve": z.strictObject({ windowId, ifFontRevision, layerId }),
   "layers.render": z.strictObject({

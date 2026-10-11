@@ -8,6 +8,7 @@ import type {
   ComponentId,
   GuidelineId,
   GlyphId,
+  KerningGroupId,
   GlyphName,
   LayerId,
   MetricId,

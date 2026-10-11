@@ -19,6 +19,8 @@ interface EditableSidebarInputProps {
   disabled?: boolean;
   suffix?: string;
   defaultValue?: number;
+  /** Shown greyed while the value is null, such as what an unset value falls back to. */
+  placeholder?: string;
 }
 
 const parseNumericValue = (input: string): number | null => {
@@ -44,6 +46,7 @@ export const EditableSidebarInput = forwardRef<
       disabled = false,
       suffix = "",
       defaultValue = 0,
+      placeholder,
     },
     ref,
   ) => {
@@ -141,6 +144,7 @@ export const EditableSidebarInput = forwardRef<
             label={label}
             labelPosition={labelPosition}
             value={isEditing ? editValue : displayText}
+            placeholder={placeholder}
             icon={icon}
             iconPosition={iconPosition}
             readOnly={!isEditing}
