@@ -365,6 +365,8 @@ export interface NapiThemeFile {
   appearance: NapiThemeAppearance
   /** `base00` through `base0F` as lowercase `#rrggbb`. */
   palette: Array<string>
+  /** Overrides of derived colors by name, as `#rrggbb` or `#rrggbbaa`. */
+  colors: Record<string, string>
 }
 
 /** Which appearance a `theme` table uses. */

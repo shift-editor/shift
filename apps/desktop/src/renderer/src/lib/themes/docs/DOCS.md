@@ -7,6 +7,7 @@ Terminal-style color themes for the desktop UI and native editor renderers.
 ## Architecture Invariants
 
 - A `ColorTheme` is a complete 16-color semantic source palette with a stable id and `ThemeAppearance`. Built-in themes use a `ThemeId`; user themes come from `themes/<id>.toml` in the config folder and use the file name as their id.
+- A theme file's optional `[colors]` table overrides individual derived colors by name: the CSS variable without its `--color-` or `--` prefix (`accent`, `editor-handle-primary-stroke`). `applyResolvedTheme` applies overrides after the palette mapping; `COLOR_VARIABLES` maps every name to its variable, and unknown names are ignored and reported.
 - A user theme file named like a built-in theme or `system` is ignored and reported, so `theme = "nord"` always means the built-in Nord.
 - An edited theme file arrives as a new `ColorTheme` object. Every renderer keys its redraw on `resolvedTheme` identity, so a palette change under the same id repaints the DOM, Canvas 2D, WebGL markers, and Slug without a separate signal.
 - `ThemePreference` is a mode (`system`, `light`, or `dark`) plus a theme for each appearance. `system` picks the light or dark slot from `prefers-color-scheme`; the slots default to Shift Light and Shift Dark.

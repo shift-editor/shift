@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use super::*;
 
 const PALETTE: &str = r##"[palette]
@@ -103,4 +105,38 @@ fn requires_a_palette_table() {
 
     assert_eq!(read.theme, None);
     assert!(read.problems[0].message.contains("[palette]"));
+}
+
+#[test]
+fn reads_color_overrides_with_alpha() {
+    let source = format!(
+        "{}\n[colors]\naccent = \"#FF9E64\"\neditor-selection-fill = \"ff9e6420\"\n",
+        theme_source("appearance = \"dark\"")
+    );
+    let theme = read_theme(&source).theme.expect("valid theme");
+
+    assert_eq!(
+        theme.colors,
+        BTreeMap::from([
+            ("accent".to_string(), "#ff9e64".to_string()),
+            ("editor-selection-fill".to_string(), "#ff9e6420".to_string()),
+        ])
+    );
+}
+
+#[test]
+fn rejects_malformed_color_names_and_values_at_their_lines() {
+    let source = format!(
+        "{}\n[colors]\nAccent = \"#ff9e64\"\naccent = \"rgb(1, 2, 3)\"\n",
+        theme_source("appearance = \"dark\"")
+    );
+    let read = read_theme(&source);
+
+    assert_eq!(read.theme, None);
+    let lines: Vec<_> = read
+        .problems
+        .iter()
+        .map(|problem| problem.location.map(|location| location.line))
+        .collect();
+    assert_eq!(lines, vec![Some(21), Some(22)]);
 }

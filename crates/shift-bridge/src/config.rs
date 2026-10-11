@@ -3,6 +3,8 @@
 //! These functions hold no state and touch no files: main owns the file and
 //! passes its text in, so reads and writes stay atomic on the JavaScript side.
 
+use std::collections::HashMap;
+
 use napi::{Error, Result, Status};
 use napi_derive::napi;
 use shift_config::theme::Appearance;
@@ -164,6 +166,8 @@ pub struct NapiThemeFile {
   pub appearance: NapiThemeAppearance,
   /// `base00` through `base0F` as lowercase `#rrggbb`.
   pub palette: Vec<String>,
+  /// Overrides of derived colors by name, as `#rrggbb` or `#rrggbbaa`.
+  pub colors: HashMap<String, String>,
 }
 
 /// The result of reading a theme file.
@@ -186,6 +190,7 @@ pub fn theme_read(source: String) -> NapiThemeRead {
         Appearance::Dark => NapiThemeAppearance::Dark,
       },
       palette: theme.palette.into(),
+      colors: theme.colors.into_iter().collect(),
     }),
     problems: read.problems.into_iter().map(Into::into).collect(),
   }

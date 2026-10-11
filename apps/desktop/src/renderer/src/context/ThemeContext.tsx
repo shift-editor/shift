@@ -1,7 +1,12 @@
 import { createContext, useContext } from "react";
 
 import type { AppConfigState, UserThemeFile } from "@shared/config/config";
-import type { ColorTheme, ThemeAppearance, ThemePreference } from "@/lib/themes";
+import type {
+  ColorTheme,
+  ThemeAppearance,
+  ThemePreference,
+  UnknownThemeColors,
+} from "@/lib/themes";
 export type {
   ColorTheme,
   ThemeAppearance,
@@ -25,6 +30,8 @@ export interface ThemeContextValue {
   shadowingThemeFiles: readonly UserThemeFile[];
   /** Writes the preference to `config.toml`; a refused write restores the previous one. */
   setPreference: (preference: ThemePreference) => void;
+  /** Override names in theme files that name no color Shift has. */
+  unknownThemeColors: readonly UnknownThemeColors[];
   /** This build's config, or `null` until main has answered. */
   config: AppConfigState | null;
   /** Theme names in `config.toml` that Shift does not have; each uses its default. */
