@@ -54,7 +54,7 @@ pub(super) fn to_ir_named_instances(
 ///
 /// Returns an error when an axis, OpenType tag, or independent mapping cannot
 /// define a valid fontir coordinate converter.
-pub(super) fn to_ir_axes(axes: &[Axis], mappings: &[AxisMapping]) -> Result<Vec<IrAxis>, String> {
+pub(crate) fn to_ir_axes(axes: &[Axis], mappings: &[AxisMapping]) -> Result<Vec<IrAxis>, String> {
     axes.iter()
         .map(|axis| to_ir_axis(axis, independent_mapping(axis, mappings)))
         .collect()
