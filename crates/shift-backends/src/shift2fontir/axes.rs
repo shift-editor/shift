@@ -113,7 +113,7 @@ pub(super) fn to_ir_named_instances(
 ///
 /// Mapping inputs are user coordinates and outputs are design coordinates.
 /// Each mapped axis must define strictly increasing values at its user-space
-/// minimum, default, and maximum.
+/// minimum, default, and maximum. A point repeated exactly counts once.
 ///
 /// # Errors
 ///
@@ -187,6 +187,9 @@ fn mapped_converter(
         })
         .collect::<Result<Vec<_>, AxisConversionError>>()?;
     values.sort_by(|left, right| left.0.total_cmp(&right.0));
+    // Fonts imported before duplicate avar points were dropped may repeat a
+    // point; a repeat says nothing new, so only conflicting inputs fail.
+    values.dedup();
 
     let non_increasing = |side| AxisConversionError::NonIncreasingMapping {
         mapping: mapping.name().to_string(),
@@ -330,6 +333,38 @@ mod tests {
             error,
             AxisConversionError::MappingMissingBounds { mapping, axis }
                 if mapping == "Weight" && axis == "Weight"
+        ));
+    }
+
+    #[test]
+    fn mapping_repeating_a_point_converts_but_conflicting_points_do_not() {
+        let axis = Axis::weight();
+        let repeated = weight_mapping(
+            &axis,
+            &[
+                (100.0, 100.0),
+                (400.0, 400.0),
+                (400.0, 400.0),
+                (900.0, 900.0),
+            ],
+        );
+        let conflicting = weight_mapping(
+            &axis,
+            &[
+                (100.0, 100.0),
+                (400.0, 400.0),
+                (400.0, 500.0),
+                (900.0, 900.0),
+            ],
+        );
+
+        assert!(to_ir_axes(std::slice::from_ref(&axis), &[repeated]).is_ok());
+        assert!(matches!(
+            to_ir_axes(std::slice::from_ref(&axis), &[conflicting]).unwrap_err(),
+            AxisConversionError::NonIncreasingMapping {
+                side: MappingSide::Input,
+                ..
+            }
         ));
     }
 
