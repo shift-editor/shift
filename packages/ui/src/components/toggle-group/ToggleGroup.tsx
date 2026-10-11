@@ -1,6 +1,6 @@
 import * as React from "react";
-import { Toggle as BaseToggle } from "@base-ui-components/react/toggle";
-import { ToggleGroup as BaseToggleGroup } from "@base-ui-components/react/toggle-group";
+import { Toggle as BaseToggle } from "@base-ui/react/toggle";
+import { ToggleGroup as BaseToggleGroup } from "@base-ui/react/toggle-group";
 import { cn } from "../../lib/utils";
 
 export interface ToggleGroupProps extends React.ComponentPropsWithoutRef<typeof BaseToggleGroup> {}

@@ -1,8 +1,5 @@
 import * as React from "react";
-import {
-  Button as BaseButton,
-  type ButtonProps as BaseButtonProps,
-} from "@base-ui-components/react/button";
+import { Button as BaseButton, type ButtonProps as BaseButtonProps } from "@base-ui/react/button";
 import { cn } from "../../lib/utils";
 
 export type ButtonProps = BaseButtonProps & {

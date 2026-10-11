@@ -5,7 +5,7 @@ Browser-safe Shift editor runtime and React UI. The SDK contains the real Shift 
 ## Install
 
 ```sh
-pnpm add @shift-editor/sdk react react-dom @base-ui-components/react
+pnpm add @shift-editor/sdk react react-dom @base-ui/react
 ```
 
 Import the stylesheet explicitly when using the supplied UI. Add `fonts.css` only when the page does not already load Inter and JetBrains Mono:

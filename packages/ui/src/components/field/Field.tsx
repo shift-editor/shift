@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Field as BaseField } from "@base-ui-components/react/field";
+import { Field as BaseField } from "@base-ui/react/field";
 import { cn } from "../../lib/utils";
 
 export interface FieldProps extends React.ComponentPropsWithoutRef<typeof BaseField.Root> {}
@@ -43,23 +43,22 @@ const fieldControlVariantStyles = {
   plain: "bg-background",
 };
 
-export const FieldControl = React.forwardRef<
-  React.ElementRef<typeof BaseField.Control>,
-  FieldControlProps
->(({ className, variant = "filled", ...props }, ref) => (
-  <BaseField.Control
-    ref={ref}
-    className={cn(
-      "h-7 w-full rounded px-2 text-sm text-primary outline-none",
-      "focus:ring-1 focus:ring-inset focus:ring-accent",
-      "data-[invalid]:ring-1 data-[invalid]:ring-inset data-[invalid]:ring-error-ring",
-      "data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50",
-      fieldControlVariantStyles[variant],
-      className,
-    )}
-    {...props}
-  />
-));
+export const FieldControl = React.forwardRef<HTMLInputElement, FieldControlProps>(
+  ({ className, variant = "filled", ...props }, ref) => (
+    <BaseField.Control
+      ref={ref}
+      className={cn(
+        "h-7 w-full rounded px-2 text-sm text-primary outline-none",
+        "focus:ring-1 focus:ring-inset focus:ring-accent",
+        "data-[invalid]:ring-1 data-[invalid]:ring-inset data-[invalid]:ring-error-ring",
+        "data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50",
+        fieldControlVariantStyles[variant],
+        className,
+      )}
+      {...props}
+    />
+  ),
+);
 FieldControl.displayName = "FieldControl";
 
 export interface FieldDescriptionProps extends React.ComponentPropsWithoutRef<

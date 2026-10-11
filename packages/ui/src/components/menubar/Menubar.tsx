@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Menubar as BaseMenubar } from "@base-ui-components/react/menubar";
+import { Menubar as BaseMenubar } from "@base-ui/react/menubar";
 import { cn } from "../../lib/utils";
 
 export interface MenubarProps extends React.ComponentPropsWithoutRef<typeof BaseMenubar> {}

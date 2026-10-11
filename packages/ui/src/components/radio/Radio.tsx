@@ -1,6 +1,6 @@
 import * as React from "react";
-import { Radio as BaseRadio } from "@base-ui-components/react/radio";
-import { RadioGroup as BaseRadioGroup } from "@base-ui-components/react/radio-group";
+import { Radio as BaseRadio } from "@base-ui/react/radio";
+import { RadioGroup as BaseRadioGroup } from "@base-ui/react/radio-group";
 import { cn } from "../../lib/utils";
 
 export type RadioGroupProps = React.ComponentPropsWithoutRef<typeof BaseRadioGroup>;
