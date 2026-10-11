@@ -99,12 +99,7 @@ export class AppConfig {
    * safely; the file is left unchanged.
    */
   setTheme(theme: string): AppConfigState {
-    const source = this.#readSource();
-    if (source !== null && readConfig(source).values === null) {
-      throw new Error("config.toml has errors; fix it before changing settings in Shift.");
-    }
-
-    const next = setConfigTheme(source, theme);
+    const next = setConfigTheme(this.#readSource(), theme);
     fs.mkdirSync(this.#directory, { recursive: true });
     const temporaryPath = `${this.#filePath}.${process.pid}.tmp`;
     fs.writeFileSync(temporaryPath, next);
@@ -135,8 +130,6 @@ export class AppConfig {
           {
             severity: "error",
             message: `Cannot read config.toml: ${(error as Error).message}`,
-            line: null,
-            column: null,
           },
         ],
       };

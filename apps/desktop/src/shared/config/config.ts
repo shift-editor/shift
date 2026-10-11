@@ -1,16 +1,6 @@
-/** One problem found in `config.toml`, as shown in Settings → Appearance. */
-export interface ConfigProblem {
-  /**
-   * `error` means the file was not applied and Shift kept the last valid
-   * settings; `warning` means the file applied but a key was ignored.
-   */
-  severity: "error" | "warning";
-  message: string;
-  /** One-based line in `config.toml`, when the problem has a location. */
-  line: number | null;
-  /** One-based column in `config.toml`, when the problem has a location. */
-  column: number | null;
-}
+import type { ConfigProblem } from "@shift/types";
+
+export type { ConfigProblem };
 
 /**
  * Main-owned application settings read from this build's `config.toml`.

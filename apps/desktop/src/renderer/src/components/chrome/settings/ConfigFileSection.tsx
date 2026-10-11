@@ -1,5 +1,5 @@
 import { Button } from "@shift/ui";
-import type { ConfigProblem } from "@shared/config/config";
+import type { ConfigProblem } from "@shift/types";
 import { useTheme } from "@/context/ThemeContext";
 import { getShiftHost } from "@/host/shiftHost";
 
@@ -66,7 +66,7 @@ function problemClass({ severity }: ConfigProblem): string {
 }
 
 function problemText({ severity, message, line, column }: ConfigProblem): string {
-  const location = line === null ? "config.toml" : `config.toml:${line}:${column ?? 1}`;
+  const location = line === undefined ? "config.toml" : `config.toml:${line}:${column ?? 1}`;
   const consequence = severity === "error" ? " Shift is using the last valid settings." : "";
   return `${location} ${message}${consequence}`;
 }

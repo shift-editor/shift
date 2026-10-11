@@ -76,6 +76,9 @@ body = body.replace(
   /export declare const enum (Napi[A-Za-z0-9_]+) \{([\s\S]*?)\n\}/g,
   (_match, name, enumBody) => enumToUnion(name, enumBody),
 );
+// Free functions, such as config.toml parsing, are imported from shift-bridge
+// directly by the process that calls them; they are not part of BridgeApi.
+body = body.replace(/(?:\/\*\*(?:(?!\*\/)[\s\S])*\*\/\n)?export declare function [^\n]*\n\n?/g, "");
 body = withoutNapiPrefix(body);
 body = body.replace(/\bexport declare /g, "export ");
 body = body.replace(/\bReadableStream<Buffer>/g, "NativeReadableStream<Uint8Array>");

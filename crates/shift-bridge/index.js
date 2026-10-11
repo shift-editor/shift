@@ -577,6 +577,9 @@ if (!nativeBinding) {
 
 module.exports = nativeBinding
 module.exports.Bridge = nativeBinding.Bridge
+module.exports.configRead = nativeBinding.configRead
+module.exports.configSetTheme = nativeBinding.configSetTheme
+module.exports.NapiConfigSeverity = nativeBinding.NapiConfigSeverity
 module.exports.NapiAxisRole = nativeBinding.NapiAxisRole
 module.exports.NapiAxisType = nativeBinding.NapiAxisType
 module.exports.NapiComponentTransformKind = nativeBinding.NapiComponentTransformKind

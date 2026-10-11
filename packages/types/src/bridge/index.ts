@@ -77,6 +77,8 @@ export type {
   BoundsCorner,
   OutlineBounds,
   ComponentTransform,
+  ConfigProblem,
+  ConfigSeverity,
   ResolvedComponentGeometry,
   ResolvedLayerGeometry,
   ResolvedOutline,

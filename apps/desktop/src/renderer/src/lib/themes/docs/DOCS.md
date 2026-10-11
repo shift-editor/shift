@@ -20,7 +20,7 @@ Terminal-style color themes for the desktop UI and native editor renderers.
 - `lib/themes/index.ts` — theme types, built-in palette registry, selection resolution, and CSS-variable mapping
 - `context/ThemeContext.tsx` — selection from `config.toml`, first-paint cache, one-time migration of the legacy `themeSelection` key, and OS appearance observation
 - `components/chrome/settings/ConfigFileSection.tsx` — config file location, Open folder, and file problems
-- `src/main/config/` — `AppConfig` (read, watch, write), `configToml` (parse, validate, comment-preserving edits), `configDirectory` (per-build folder)
+- `src/main/config/` — `AppConfig` (read, watch, write), `configToml` (adapter over the `shift-config` crate), `configDirectory` (per-build folder)
 - `components/chrome/settings/AppearanceSettingsPanel.tsx` — accessible preset gallery
 - `packages/editor/src/lib/editor/rendering/Theme.ts` — reads the resolved `--editor-*` variables into `EditorRenderTheme`
 - `apps/desktop/THIRD_PARTY_THEMES.md` — packaged upstream attribution and licenses

@@ -1,0 +1,13 @@
+[package]
+name = "shift-config"
+version = "0.1.0"
+edition = "2021"
+description = "Reads, validates, and edits Shift's config.toml while preserving the user's formatting"
+license.workspace = true
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+thiserror = "2.0.18"
+toml_edit = "0.25.17"

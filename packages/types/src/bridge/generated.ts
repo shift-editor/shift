@@ -221,6 +221,29 @@ export interface BridgeApi {
   getSources(): Array<Source>
 }
 
+/** One problem in `config.toml`; line and column are one-based. */
+export interface ConfigProblem {
+  severity: ConfigSeverity
+  message: string
+  line?: number
+  column?: number
+}
+
+/** The settings in a `config.toml` source. */
+export interface ConfigRead {
+  /** Whether the file may be applied; `false` when any problem is an error. */
+  valid: boolean
+  /** The selected theme, when the file is valid and chooses one. */
+  theme?: string
+  problems: Array<ConfigProblem>
+}
+
+/**
+ * How serious a config problem is: `error` keeps the last valid settings,
+ * `warning` applies the file but ignores something in it.
+ */
+export type ConfigSeverity = "error" | "warning";
+
 export interface DocumentIdentity {
   documentId: string
   canonicalPath: string
