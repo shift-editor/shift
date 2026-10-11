@@ -40,7 +40,7 @@ pub use diagnostics::{DiagnosticSeverity, FeatureDiagnostic};
 pub use state::ShaperFontState;
 
 use crate::glyph_category::gdef_classes;
-use crate::shift2fontir::{to_ir_axes, units_per_em};
+use crate::shift2fontir::{to_ir_axes, units_per_em, AxisConversionError};
 use crate::traits::FontView;
 use diagnostics::feature_diagnostics;
 
@@ -79,8 +79,7 @@ impl ShaperFontRequest {
         let value = font.metrics().units_per_em;
         let units_per_em =
             units_per_em(value).ok_or(ShaperFontError::InvalidUnitsPerEm { value })?;
-        let axes = to_ir_axes(font.axes(), font.axis_mappings())
-            .map_err(|message| ShaperFontError::InvalidAxes { message })?;
+        let axes = to_ir_axes(font.axes(), font.axis_mappings())?;
         let glyph_names = std::iter::once(NOTDEF)
             .chain(
                 font.glyphs()
@@ -229,8 +228,8 @@ pub enum ShaperFontError {
     #[error("units per em must be a whole number from 16 to 16384, got {value}")]
     InvalidUnitsPerEm { value: f64 },
 
-    #[error("cannot build shaper font axes: {message}")]
-    InvalidAxes { message: String },
+    #[error("cannot build shaper font axes: {0}")]
+    InvalidAxes(#[from] AxisConversionError),
 
     #[error("cannot build the variation model for shaper font axes")]
     VariationModel(#[from] VariationModelError),

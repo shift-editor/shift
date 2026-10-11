@@ -15,7 +15,7 @@ use crate::glyph_category::{gdef_classes, GlyphCategories};
 use crate::traits::FontView;
 use write_fonts::tables::gdef::GlyphClassDef;
 
-use super::axes::to_ir_axes;
+use super::axes::{to_ir_axes, AxisConversionError};
 use super::glyph::GlyphWork;
 use super::kerning::{KerningInstanceWork, KerningLocationsWork};
 use super::metadata::{
@@ -41,8 +41,8 @@ pub(crate) enum ShiftIrSourceError {
     )]
     UnsupportedCrossAxisMappings { mapping_count: usize },
 
-    #[error("invalid Shift variation model: {message}")]
-    InvalidVariations { message: String },
+    #[error("invalid Shift variation model: {0}")]
+    InvalidVariations(#[from] AxisConversionError),
 
     #[error("the Shift font has no default source")]
     MissingDefaultSource,
@@ -111,8 +111,7 @@ impl ShiftIrSource {
             });
         }
 
-        let ir_axes = to_ir_axes(font.axes(), font.axis_mappings())
-            .map_err(|message| ShiftIrSourceError::InvalidVariations { message })?;
+        let ir_axes = to_ir_axes(font.axes(), font.axis_mappings())?;
 
         Ok(Self {
             snapshot: Arc::new(ShiftSnapshot {
