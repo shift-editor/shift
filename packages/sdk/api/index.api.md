@@ -270,6 +270,7 @@ export class Editor {
     get editingSourceIdsCell(): Signal<ReadonlySet<SourceId>>;
     // Warning: (ae-forgotten-export) The symbol "NodeId" needs to be exported by the entry point index.d.ts
     enterNode(nodeId: NodeId): void;
+    exitNodes(): void;
     get externalLocation(): ExternalAxisLocation;
     // (undocumented)
     get externalLocationCell(): Signal<ExternalAxisLocation>;
@@ -473,6 +474,8 @@ export class Editor {
     // Warning: (ae-forgotten-export) The symbol "ScreenVector" needs to be exported by the entry point index.d.ts
     toSceneVector(vector: ScreenVector): SceneVector;
     transaction<TResult>(label: string, body: () => TResult): TResult;
+    // Warning: (ae-forgotten-export) The symbol "TransformTarget" needs to be exported by the entry point index.d.ts
+    transformTarget(ids?: readonly SelectableId[]): TransformTarget | null;
     // (undocumented)
     undo(): Promise<void>;
     // (undocumented)
@@ -1511,10 +1514,10 @@ export function useSignalState<T>(signal: Signal<T>, options?: UseSignalOptions)
 
 // Warnings were encountered during analysis:
 //
-// dist/Editor-G3S_oTWU.d.ts:2801:5 - (ae-forgotten-export) The symbol "Axis" needs to be exported by the entry point index.d.ts
-// dist/Editor-G3S_oTWU.d.ts:2802:5 - (ae-forgotten-export) The symbol "AxisMappingBasis" needs to be exported by the entry point index.d.ts
-// dist/Editor-G3S_oTWU.d.ts:2803:5 - (ae-forgotten-export) The symbol "Source" needs to be exported by the entry point index.d.ts
-// dist/Editor-G3S_oTWU.d.ts:4777:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
+// dist/Editor-CAKOcsKq.d.ts:2801:5 - (ae-forgotten-export) The symbol "Axis" needs to be exported by the entry point index.d.ts
+// dist/Editor-CAKOcsKq.d.ts:2802:5 - (ae-forgotten-export) The symbol "AxisMappingBasis" needs to be exported by the entry point index.d.ts
+// dist/Editor-CAKOcsKq.d.ts:2803:5 - (ae-forgotten-export) The symbol "Source" needs to be exported by the entry point index.d.ts
+// dist/Editor-CAKOcsKq.d.ts:4817:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 
