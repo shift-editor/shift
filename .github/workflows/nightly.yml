@@ -104,11 +104,21 @@ jobs:
             platform: darwin
             arch: x64
             builder-args: "--mac zip dmg --x64"
+          - name: Windows arm64
+            runner: windows-11-arm
+            platform: win32
+            arch: arm64
+            builder-args: "--win nsis --arm64"
           - name: Windows x64
             runner: windows-latest
             platform: win32
             arch: x64
             builder-args: "--win nsis --x64"
+          - name: Linux arm64
+            runner: ubuntu-24.04-arm
+            platform: linux
+            arch: arm64
+            builder-args: "--linux deb rpm AppImage --arm64"
           - name: Linux x64
             runner: ubuntu-latest
             platform: linux

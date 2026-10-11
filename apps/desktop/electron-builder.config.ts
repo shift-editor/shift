@@ -21,7 +21,9 @@ if (buildArchitecture !== "arm64" && buildArchitecture !== "x64") {
 const nativeBridgeFiles: Record<string, string> = {
   "darwin-arm64": "shift-bridge.darwin-arm64.node",
   "darwin-x64": "shift-bridge.darwin-x64.node",
+  "linux-arm64": "shift-bridge.linux-arm64-gnu.node",
   "linux-x64": "shift-bridge.linux-x64-gnu.node",
+  "win32-arm64": "shift-bridge.win32-arm64-msvc.node",
   "win32-x64": "shift-bridge.win32-x64-msvc.node",
 };
 const nativeBridgeFile = nativeBridgeFiles[`${process.platform}-${buildArchitecture}`];
@@ -83,6 +85,11 @@ const macosSourceDocumentTypes = [
     LSTypeIsPackage: true,
   },
 ];
+/**
+ * The APT repository publishes only amd64 packages, so only that DEB adds the
+ * Shift source. Other DEBs would register a source that never offers them an update.
+ */
+const installsAptSource = !isNightly && buildArchitecture === "x64";
 const linuxDocumentIconName = isNightly ? "shift-nightly-document" : documentIconName;
 const linuxDocumentIconSizes = [16, 32, 48, 64, 128, 256, 512];
 const linuxPackageFiles = [
@@ -294,7 +301,7 @@ const config: Configuration = {
     artifactName: `${artifactName}-${productVersion}-Linux-${buildArchitecture}.\${ext}`,
   },
   deb: {
-    fpm: isNightly
+    fpm: !installsAptSource
       ? linuxPackageFiles
       : [
           "--config-files",

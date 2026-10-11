@@ -10,10 +10,12 @@ export function updateFeed(feedBaseUrl: string, target: UpdateFeedTarget): Updat
       if (target.architecture !== "arm64" && target.architecture !== "x64") return null;
       break;
     case "win32":
-      if (target.distribution !== "nightly" || target.architecture !== "x64") return null;
+      if (target.distribution !== "nightly") return null;
+      if (target.architecture !== "arm64" && target.architecture !== "x64") return null;
       break;
     case "linux":
-      if (target.linuxInstallation !== "appImage" || target.architecture !== "x64") return null;
+      if (target.linuxInstallation !== "appImage") return null;
+      if (target.architecture !== "arm64" && target.architecture !== "x64") return null;
       break;
     default:
       return null;
