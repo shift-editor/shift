@@ -67,11 +67,12 @@ export function EditorToolbar({
     <Tooltip>
       <TooltipTrigger>
         <Button
-          icon={<ShiftIcon name="sidebar-left" className="h-5 w-5" />}
+          icon={<ShiftIcon name="sidebar-left" className="h-4.5 w-4.5" />}
           aria-label={sidebarToggleLabel("left", leftSidebarOpen)}
           aria-pressed={leftSidebarOpen}
           variant="toolbar"
-          size="icon"
+          size="icon-sm"
+          className="h-7 w-7"
           onClick={onToggleLeftSidebar}
         />
       </TooltipTrigger>
@@ -83,11 +84,12 @@ export function EditorToolbar({
     <Tooltip>
       <TooltipTrigger>
         <Button
-          icon={<ShiftIcon name="sidebar-right" className="h-5 w-5" />}
+          icon={<ShiftIcon name="sidebar-right" className="h-4.5 w-4.5" />}
           aria-label={sidebarToggleLabel("right", rightSidebarOpen)}
           aria-pressed={rightSidebarOpen}
           variant="toolbar"
-          size="icon"
+          size="icon-sm"
+          className="h-7 w-7"
           onClick={onToggleRightSidebar}
         />
       </TooltipTrigger>
@@ -98,7 +100,7 @@ export function EditorToolbar({
   if (compact) {
     const familyName = metadata.familyName ?? "Untitled";
     return (
-      <header className="titlebar-drag grid h-9 w-full grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center bg-chrome">
+      <header className="titlebar-drag grid h-10 w-full grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center bg-chrome">
         <div className="flex min-w-0 items-center gap-1">
           {host ? host.windowControls : <DecorativeWindowControls />}
           {host ? host.menuBar : null}

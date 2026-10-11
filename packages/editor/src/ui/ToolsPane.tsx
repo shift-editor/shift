@@ -51,6 +51,8 @@ interface ToolButtonProps {
   disabled?: boolean;
   onClick?: () => void;
   popupSide: ToolsPaneSide;
+  /** Draws the larger buttons used by the floating bar. */
+  large: boolean;
 }
 
 interface ToolSplitButtonProps extends ToolButtonProps {
@@ -68,8 +70,13 @@ function ToolButton({
   disabled,
   onClick,
   popupSide,
+  large,
 }: ToolButtonProps) {
   const isActive = activeTool === name;
+  const iconClassName = cn(
+    large ? "h-6 w-6" : "h-5.5 w-5.5",
+    isActive ? "text-background" : "text-primary",
+  );
 
   return (
     <Tooltip>
@@ -77,20 +84,16 @@ function ToolButton({
         <ToolbarButton
           render={
             <Button
-              className="h-8 w-8 rounded-md transition-none focus-visible:ring-0"
+              className={cn(
+                "transition-none focus-visible:ring-0",
+                large ? "h-9 w-9 rounded-md" : "h-8 w-8 rounded-md",
+              )}
               variant={isActive ? "primary" : "ghost"}
               icon={
                 iconName ? (
-                  <ShiftIcon
-                    name={iconName}
-                    strokeWidth={1.25}
-                    className={cn("h-5.5 w-5.5", isActive ? "text-background" : "text-primary")}
-                  />
+                  <ShiftIcon name={iconName} strokeWidth={1.25} className={iconClassName} />
                 ) : (
-                  <Icon
-                    className={cn("h-5.5 w-5.5", isActive ? "text-background" : "text-primary")}
-                    strokeWidth={1.25}
-                  />
+                  <Icon className={iconClassName} strokeWidth={1.25} />
                 )
               }
               aria-label={tooltip}
@@ -110,6 +113,16 @@ function ToolButton({
       </TooltipContent>
     </Tooltip>
   );
+}
+
+/** Split-button menu trigger sizes, which run alongside the tool button. */
+const MENU_TRIGGER_SIZE = {
+  horizontal: { regular: "h-8 w-4", large: "h-9 w-5" },
+  vertical: { regular: "h-4 w-8", large: "h-5 w-9" },
+} as const;
+
+function menuTriggerSize(vertical: boolean, large: boolean): string {
+  return MENU_TRIGGER_SIZE[vertical ? "vertical" : "horizontal"][large ? "large" : "regular"];
 }
 
 function ToolSplitButton({
@@ -133,7 +146,7 @@ function ToolSplitButton({
                   size="icon"
                   className={cn(
                     "rounded-sm focus-visible:ring-0 data-[popup-open]:bg-hover/50",
-                    vertical ? "h-4 w-8" : "h-8 w-4",
+                    menuTriggerSize(vertical, buttonProps.large),
                   )}
                   icon={<ChevronDown className="h-3.5 w-3.5 text-primary" strokeWidth={1.5} />}
                   aria-label={`${buttonProps.tooltip} options`}
@@ -190,6 +203,7 @@ export function ToolsPane({
   variant = "titlebar",
 }: ToolsPaneProps) {
   const vertical = orientation === "vertical";
+  const large = variant === "floating";
   const activeTool = useSignalState(editor.toolIdCell);
   const toolRegistry = useSignalState(editor.toolRegistryCell);
 
@@ -201,7 +215,7 @@ export function ToolsPane({
         className={cn(
           "flex items-center overflow-hidden",
           vertical ? "flex-col" : "flex-row",
-          variant === "titlebar" ? "h-10 gap-2 rounded-lg bg-background px-1" : "gap-1",
+          variant === "titlebar" ? "h-10 gap-2 rounded-lg bg-background px-1" : "gap-2",
         )}
       >
         {Array.from(toolRegistry.entries())
@@ -225,6 +239,7 @@ export function ToolsPane({
               disabled,
               onClick: () => editor.setActiveTool(slotToolId),
               popupSide,
+              large,
             };
 
             if (!menuItems) return <ToolButton key={name} {...buttonProps} />;

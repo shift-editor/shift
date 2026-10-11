@@ -12,7 +12,7 @@ export const NavigationPane = () => {
   return (
     <section className="h-full flex flex-1 items-center ml-1">
       <div className="flex flex-1 items-center gap-1">
-        <div className="rounded-lg p-0.5">
+        <div className="flex items-center gap-1 rounded-lg p-0.5">
           {routes.map((route) => {
             if (!route.icon) return null;
             const Icon = route.icon;
@@ -33,7 +33,7 @@ export const NavigationPane = () => {
             return (
               <Tooltip key={route.id} content={route.description} side="bottom" sideOffset={5}>
                 <Button
-                  icon={<Icon width={20} height={20} />}
+                  icon={<Icon width={18} height={18} />}
                   aria-label={route.description}
                   variant="toolbar"
                   isActive={
@@ -41,7 +41,8 @@ export const NavigationPane = () => {
                       ? settings.target !== null
                       : settings.target === null && location.pathname === route.path
                   }
-                  size="icon"
+                  size="icon-sm"
+                  className="h-7 w-7"
                   onClick={onClick}
                 />
               </Tooltip>

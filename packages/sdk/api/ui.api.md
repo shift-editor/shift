@@ -21,6 +21,7 @@ export interface EditorToolbarHost {
 
 // @public (undocumented)
 export interface EditorToolbarProps {
+    compact?: boolean;
     host?: EditorToolbarHost;
     leftSidebarOpen?: boolean;
     onToggleLeftSidebar?: () => void;

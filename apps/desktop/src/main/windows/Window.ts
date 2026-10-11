@@ -40,7 +40,7 @@ function percentToZoomLevel(percent: number): number {
 }
 
 /** Height of the editor's toolbar row, which also hosts the window controls on Windows and Linux. */
-const TITLE_BAR_HEIGHT = 36;
+const TITLE_BAR_HEIGHT = 40;
 
 /** Light-theme chrome colours, used until the renderer reports its resolved theme. */
 const INITIAL_TITLE_BAR_COLORS: TitleBarColors = { background: "#e2e2e2", symbol: "#171717" };

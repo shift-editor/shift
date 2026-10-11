@@ -1,56 +1,71 @@
-import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import {
-  ContextMenu,
-  ContextMenuItem,
-  ContextMenuPopup,
-  ContextMenuPortal,
-  ContextMenuPositioner,
-  ContextMenuTrigger,
-  cn,
-} from "@shift/ui";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { motion, type Transition } from "motion/react";
+import { cn } from "@shift/ui";
 import { ToolsPane, type ToolsPaneSide } from "@shift/editor/ui";
+import DragHandleSvg from "@assets/toolbar/drag-handle.svg";
 import { useEditor } from "@/workspace/WorkspaceContext";
 
-// SPIKE: floating, dockable tools. Positions are relative to the canvas panel so
-// the bar follows the canvas edge as sidebars open and close.
+// SPIKE: floating tools that snap to an edge of the canvas panel. Positions are
+// relative to the panel so the bar follows the canvas as sidebars open and close.
 
-type Dock = "left" | "right" | "bottom";
+type Dock = "top" | "bottom" | "left" | "right";
 
-const DOCKS: readonly Dock[] = ["left", "bottom", "right"];
+const DOCKS: readonly Dock[] = ["bottom", "top", "left", "right"];
 const DOCK_STORAGE_KEY = "shift:floating-toolbar-dock";
-const DOCK_LABELS: Record<Dock, string> = {
-  left: "Dock left",
-  bottom: "Dock bottom",
-  right: "Dock right",
+const POPUP_SIDE: Record<Dock, ToolsPaneSide> = {
+  top: "bottom",
+  bottom: "top",
+  left: "right",
+  right: "left",
 };
-const POPUP_SIDE: Record<Dock, ToolsPaneSide> = { left: "right", right: "left", bottom: "top" };
-const DOCK_POSITION: Record<Dock, string> = {
-  left: "left-3 top-1/2 -translate-y-1/2",
-  right: "right-3 top-1/2 -translate-y-1/2",
-  bottom: "bottom-3 left-1/2 -translate-x-1/2",
+// Each slot is a strip along its edge that centres the bar with flex, so the bar
+// itself carries no percentage translate for Motion's layout animation to fight.
+const SLOT_FRAME: Record<Dock, string> = {
+  top: "inset-x-3 top-3 flex justify-center",
+  bottom: "inset-x-3 bottom-3 flex justify-center",
+  left: "inset-y-3 left-3 flex flex-col justify-center",
+  right: "inset-y-3 right-3 flex flex-col justify-center",
 };
 const DROP_ZONE_POSITION: Record<Dock, string> = {
-  left: "inset-y-3 left-3 w-14",
-  right: "inset-y-3 right-3 w-14",
-  bottom: "inset-x-3 bottom-3 h-14",
+  top: "inset-x-3 top-3 h-12",
+  bottom: "inset-x-3 bottom-3 h-12",
+  left: "inset-y-3 left-3 w-12",
+  right: "inset-y-3 right-3 w-12",
 };
 
+/** Bar thickness across its tools, in either orientation. */
+const BAR_THICKNESS = 48;
+/** How close the bar must come to an edge to snap onto it. */
+const SNAP_DISTANCE = 96;
+/** How far a snapped bar must pull away from its edge before it comes loose. */
+const RELEASE_DISTANCE = 128;
+/**
+ * How much closer another edge must be before the bar switches to it, so it
+ * does not flicker between two edges near a corner.
+ */
+const SWITCH_MARGIN = 24;
+/** Short and firm, with just enough bounce that the bar lands with a bump. */
+const SNAP_TRANSITION: Transition = { type: "spring", duration: 0.18, bounce: 0.15 };
+const TOOLS_FADE_TRANSITION: Transition = { duration: 0.14, ease: "easeOut" };
+
 interface DragState {
-  /** Pointer position inside the canvas panel. */
-  x: number;
-  y: number;
-  /** Pointer offset from the bar's top-left corner when the drag began. */
-  offsetX: number;
-  offsetY: number;
+  /** Bar's top-left corner inside the canvas panel while it follows the pointer. */
+  left: number;
+  top: number;
+  /** Edge where the bar lands on release, whose orientation the bar takes straight away. */
   target: Dock;
+  /** Whether the bar sits in `target`'s slot rather than following the pointer. */
+  snapped: boolean;
+  /** Bar length along its tools, measured when the drag began. */
+  length: number;
 }
 
 function readDock(): Dock {
   try {
     const stored = localStorage.getItem(DOCK_STORAGE_KEY);
-    return DOCKS.find((dock) => dock === stored) ?? "left";
+    return DOCKS.find((dock) => dock === stored) ?? "bottom";
   } catch {
-    return "left";
+    return "bottom";
   }
 }
 
@@ -62,129 +77,227 @@ function writeDock(dock: Dock): void {
   }
 }
 
-function nearestDock(x: number, y: number, rect: DOMRect): Dock {
-  const distances: Record<Dock, number> = {
-    left: x,
-    right: rect.width - x,
-    bottom: rect.height - y,
+function isVertical(dock: Dock): boolean {
+  return dock === "left" || dock === "right";
+}
+
+/**
+ * Pointer offset from the bar's top-left corner that puts the grip, at the far
+ * end of the bar, under the pointer.
+ */
+function gripOffset(dock: Dock, length: number): { x: number; y: number } {
+  const alongBar = length - 16;
+  return isVertical(dock) ? { x: 24, y: alongBar } : { x: alongBar, y: 24 };
+}
+
+/**
+ * Picks where a dragged bar goes. The edge is chosen by the pointer, which the
+ * bar's shape cannot affect; choosing by the bar's body would loop, because the
+ * bar turns to suit its edge and turning moves its ends by hundreds of pixels.
+ * Whether it snaps is judged by the bar's body, already turned for that edge.
+ */
+function nextDrag(previous: DragState, x: number, y: number, layer: DOMRect): DragState {
+  const pointerDistances = edgeDistances(x, y, 0, 0, layer);
+  const nearest = DOCKS.reduce((best, next) =>
+    pointerDistances[next] < pointerDistances[best] ? next : best,
+  );
+  const keepTarget = pointerDistances[previous.target] <= pointerDistances[nearest] + SWITCH_MARGIN;
+  const target = keepTarget ? previous.target : nearest;
+
+  const offset = gripOffset(target, previous.length);
+  const left = x - offset.x;
+  const top = y - offset.y;
+  const vertical = isVertical(target);
+  const width = vertical ? BAR_THICKNESS : previous.length;
+  const height = vertical ? previous.length : BAR_THICKNESS;
+  const barDistance = edgeDistances(left, top, width, height, layer)[target];
+  const holding = previous.snapped && previous.target === target;
+  const snapped = barDistance <= (holding ? RELEASE_DISTANCE : SNAP_DISTANCE);
+  return { ...previous, left, top, target, snapped };
+}
+
+/** Gap between each canvas edge and a box with its top-left corner at `left`, `top`. */
+function edgeDistances(
+  left: number,
+  top: number,
+  width: number,
+  height: number,
+  layer: DOMRect,
+): Record<Dock, number> {
+  return {
+    top,
+    bottom: layer.height - (top + height),
+    left,
+    right: layer.width - (left + width),
   };
-  return DOCKS.reduce((best, dock) => (distances[dock] < distances[best] ? dock : best));
+}
+
+function snappedSlot(drag: DragState): Dock | null {
+  return drag.snapped ? drag.target : null;
 }
 
 export const FloatingToolbar = () => {
   const editor = useEditor();
   const layerRef = useRef<HTMLDivElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
-  const [dock, setDockState] = useState<Dock>(readDock);
+  const dragRef = useRef<DragState | null>(null);
+  const [dock, setDock] = useState<Dock>(readDock);
   const [drag, setDrag] = useState<DragState | null>(null);
+  const dragging = drag !== null;
 
-  const setDock = (next: Dock) => {
-    setDockState(next);
-    writeDock(next);
-  };
+  // Track the drag on the window so it always ends, even when the pointer leaves
+  // the grip, the window loses focus, or the browser cancels the gesture.
+  useEffect(() => {
+    if (!dragging) return;
 
-  const pointInLayer = (event: ReactPointerEvent) => {
-    const rect = layerRef.current!.getBoundingClientRect();
-    return { x: event.clientX - rect.left, y: event.clientY - rect.top, rect };
-  };
+    const move = (event: PointerEvent) => {
+      const layer = layerRef.current?.getBoundingClientRect();
+      const previous = dragRef.current;
+      if (!layer || !previous) return;
+      const next = nextDrag(previous, event.clientX - layer.left, event.clientY - layer.top, layer);
+      dragRef.current = next;
+      setDrag(next);
+    };
+    const drop = () => {
+      const target = dragRef.current?.target;
+      dragRef.current = null;
+      setDrag(null);
+      if (!target) return;
+      setDock(target);
+      writeDock(target);
+    };
+    const cancel = () => {
+      dragRef.current = null;
+      setDrag(null);
+    };
+
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", drop);
+    window.addEventListener("pointercancel", cancel);
+    window.addEventListener("blur", cancel);
+    return () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", drop);
+      window.removeEventListener("pointercancel", cancel);
+      window.removeEventListener("blur", cancel);
+    };
+  }, [dragging]);
 
   const onGripPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0 || !layerRef.current || !barRef.current) return;
+    const layer = layerRef.current?.getBoundingClientRect();
+    const bar = barRef.current;
+    if (event.button !== 0 || !layer || !bar) return;
     event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    const bar = barRef.current.getBoundingClientRect();
-    const { x, y } = pointInLayer(event);
-    setDrag({
-      x,
-      y,
-      offsetX: event.clientX - bar.left,
-      offsetY: event.clientY - bar.top,
-      target: dock,
-    });
+    const start = nextDrag(
+      {
+        left: 0,
+        top: 0,
+        target: dock,
+        snapped: true,
+        length: Math.max(bar.offsetWidth, bar.offsetHeight),
+      },
+      event.clientX - layer.left,
+      event.clientY - layer.top,
+      layer,
+    );
+    dragRef.current = start;
+    setDrag(start);
   };
 
-  const onGripPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (!drag) return;
-    const { x, y, rect } = pointInLayer(event);
-    setDrag({ ...drag, x, y, target: nearestDock(x, y, rect) });
-  };
-
-  const onGripPointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (!drag) return;
-    event.currentTarget.releasePointerCapture(event.pointerId);
-    setDock(drag.target);
-    setDrag(null);
-  };
-
-  // While dragging, the bar previews the orientation of the dock it would snap to.
-  const activeDock = drag?.target ?? dock;
-  const vertical = activeDock !== "bottom";
+  // The bar sits in a dock slot when it is docked or snapped mid-drag, and
+  // follows the pointer otherwise, already turned to suit the edge it is heading for.
+  const slot = drag ? snappedSlot(drag) : dock;
+  const vertical = isVertical(drag?.target ?? dock);
+  // Motion animates the bar's size and position only when it enters or leaves a
+  // slot; while it follows the pointer it moves with no animation.
+  const layoutDependency = `${slot ?? "free"}:${vertical}`;
+  const followStyle = drag && !slot ? { left: drag.left, top: drag.top } : {};
+  const orientation = vertical ? "vertical" : "horizontal";
 
   return (
-    <div ref={layerRef} className="pointer-events-none absolute inset-0 z-10">
+    <div ref={layerRef} className="pointer-events-none absolute inset-0 z-30">
+      {drag ? (
+        // Covers the window while dragging so the grabbing cursor holds over the
+        // canvas, sidebars, and buttons, none of which react until the drop.
+        <div
+          aria-hidden="true"
+          className="pointer-events-auto fixed inset-0 z-50 cursor-grabbing"
+        />
+      ) : null}
       {drag ? (
         <div
           aria-hidden="true"
-          className={cn(
-            "absolute rounded-xl border-2 border-dashed border-primary/40 bg-primary/5",
-            DROP_ZONE_POSITION[drag.target],
-          )}
+          className={cn("absolute rounded-xl bg-accent/5", DROP_ZONE_POSITION[drag.target])}
         />
       ) : null}
-      <ContextMenu>
-        <ContextMenuTrigger className="contents">
+      {drag ? (
+        // Outlines exactly where the bar will sit, sized for that edge's orientation.
+        <div aria-hidden="true" className={cn("absolute", SLOT_FRAME[drag.target])}>
           <div
-            ref={barRef}
-            className={cn(
-              "pointer-events-auto absolute flex items-center gap-1 rounded-xl border border-line-subtle bg-chrome p-1 shadow-lg",
-              vertical ? "flex-col" : "flex-row",
-              drag ? "opacity-90" : DOCK_POSITION[dock],
-            )}
-            style={drag ? { left: drag.x - drag.offsetX, top: drag.y - drag.offsetY } : undefined}
+            className="rounded-xl border-2 border-dashed border-accent/60 bg-accent/10"
+            style={
+              isVertical(drag.target)
+                ? { width: BAR_THICKNESS, height: drag.length }
+                : { width: drag.length, height: BAR_THICKNESS }
+            }
+          />
+        </div>
+      ) : null}
+      <div className={cn("absolute", slot ? SLOT_FRAME[slot] : "inset-0")}>
+        <motion.div
+          ref={barRef}
+          layout
+          layoutDependency={layoutDependency}
+          transition={SNAP_TRANSITION}
+          style={{ borderRadius: 12, ...followStyle }}
+          className={cn(
+            "pointer-events-auto flex items-center overflow-hidden border border-line-subtle bg-surface",
+            vertical ? "w-12 flex-col py-1.5" : "h-12 flex-row px-1.5",
+            drag ? "shadow-xl" : "card-shadow",
+            slot ? null : "absolute",
+          )}
+        >
+          {/*
+          Remounts per orientation and fades in, so the tools never appear
+          stretched or mid-reflow while the bar morphs around them.
+        */}
+          <motion.div
+            key={orientation}
+            layout="position"
+            layoutDependency={layoutDependency}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ layout: SNAP_TRANSITION, opacity: TOOLS_FADE_TRANSITION }}
+            className={cn("flex items-center self-stretch", vertical ? "flex-col" : "flex-row")}
           >
-            <div
-              role="presentation"
-              title="Drag to dock"
-              className={cn(
-                "flex cursor-grab items-center justify-center rounded-md text-muted hover:bg-hover/50 active:cursor-grabbing",
-                vertical ? "h-3 w-8" : "h-8 w-3",
-              )}
-              onPointerDown={onGripPointerDown}
-              onPointerMove={onGripPointerMove}
-              onPointerUp={onGripPointerUp}
-              onPointerCancel={() => setDrag(null)}
-            >
-              <span
-                className={cn(
-                  "rounded-full bg-current opacity-60",
-                  vertical ? "h-0.5 w-4" : "h-4 w-0.5",
-                )}
-              />
-            </div>
             <ToolsPane
               editor={editor}
-              orientation={vertical ? "vertical" : "horizontal"}
-              popupSide={POPUP_SIDE[activeDock]}
+              orientation={orientation}
+              popupSide={POPUP_SIDE[slot ?? dock]}
               variant="floating"
             />
-          </div>
-        </ContextMenuTrigger>
-        <ContextMenuPortal>
-          <ContextMenuPositioner>
-            <ContextMenuPopup>
-              {DOCKS.map((option) => (
-                <ContextMenuItem
-                  key={option}
-                  disabled={option === dock}
-                  onClick={() => setDock(option)}
-                >
-                  {DOCK_LABELS[option]}
-                </ContextMenuItem>
-              ))}
-            </ContextMenuPopup>
-          </ContextMenuPositioner>
-        </ContextMenuPortal>
-      </ContextMenu>
+            <div
+              aria-hidden="true"
+              className={cn(
+                "shrink-0 bg-hover",
+                vertical ? "my-1.5 h-px self-stretch" : "mx-1.5 w-px self-stretch",
+              )}
+            />
+            <div
+              role="presentation"
+              title="Drag to move"
+              className={cn(
+                "flex shrink-0 touch-none items-center justify-center rounded-md text-muted opacity-60 transition-opacity hover:opacity-100",
+                vertical ? "h-5 w-9" : "h-9 w-5",
+                drag ? "cursor-grabbing" : "cursor-grab",
+              )}
+              onPointerDown={onGripPointerDown}
+            >
+              <DragHandleSvg width={22} height={22} className={cn(vertical && "rotate-90")} />
+            </div>
+          </motion.div>
+        </motion.div>
+      </div>
     </div>
   );
 };
