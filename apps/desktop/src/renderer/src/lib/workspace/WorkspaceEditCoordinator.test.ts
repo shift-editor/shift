@@ -141,6 +141,24 @@ describe("WorkspaceEditCoordinator issues save on the committed-op lane", () => 
     expect(client.documentStateCell.peek()).toMatchObject({ dirty: true });
   });
 
+  it("advances authored revision for edits, undo, and redo but not save", async () => {
+    const revision = () => stack.editCoordinator.authoredRevisionCell.peek();
+    const initial = revision();
+
+    stack.editCoordinator.push(createGlyph("A", 65));
+    expect(revision()).toBe(initial + 1);
+    await stack.editCoordinator.settled();
+    expect(revision()).toBe(initial + 1);
+
+    await stack.editCoordinator.undo();
+    expect(revision()).toBe(initial + 2);
+    await stack.editCoordinator.redo();
+    expect(revision()).toBe(initial + 3);
+
+    await stack.editCoordinator.save(savePath());
+    expect(revision()).toBe(initial + 3);
+  });
+
   it("publishes accepted and committed edit identities", async () => {
     const events: WorkspaceEditEvent[] = [];
     const unsubscribe = stack.editCoordinator.onEdit((event) => events.push(event));

@@ -19,6 +19,7 @@
       "entry": [
         "src/main/main.ts",
         "src/preload/preload.ts",
+        "src/utility/sandbox.ts",
         "src/utility/workspace.ts",
         "src/renderer/renderer.ts",
         "electron-builder.config.ts",

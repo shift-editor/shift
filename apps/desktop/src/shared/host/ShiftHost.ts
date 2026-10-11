@@ -3,6 +3,8 @@ import type { UpdateProgress } from "../update/types";
 import type { RendererErrorReport } from "../ipc/contract";
 import type { FontSessionMode } from "../workspace/protocol";
 import type { RecentDocument } from "../recents";
+import type { AgentConnectionsState } from "../agent/connections";
+import type { MenuBar, TitleBarColors, WindowButtonLayout } from "../menu/types";
 
 /**
  * Renderer-facing API for Electron app-shell behavior.
@@ -15,6 +17,10 @@ import type { RecentDocument } from "../recents";
 export interface ShiftHost {
   /** Operating system that owns the current application window. */
   platform: NodeJS.Platform;
+  /** Connects this renderer to main-owned live agent requests. */
+  agent: {
+    connect: () => Promise<void>;
+  };
   /** Runs app commands owned by the main process. */
   commands: {
     /**
@@ -100,6 +106,36 @@ export interface ShiftHost {
      * signal instead of on first paint; repeated calls are ignored.
      */
     ready: () => Promise<void>;
+    /**
+     * Recolours the native window controls drawn over this window's title bar.
+     *
+     * @remarks
+     * Windows and Linux only; macOS ignores it. Call whenever the theme resolves.
+     */
+    setTitleBarColors: (colors: TitleBarColors) => Promise<void>;
+    /**
+     * Returns where the window buttons Shift draws on Linux belong.
+     *
+     * @returns null on macOS and Windows, where Shift does not draw them.
+     */
+    buttonLayout: () => Promise<WindowButtonLayout | null>;
+  };
+  /** The Windows and Linux application menus, drawn by the renderer in the toolbar row. */
+  menu: {
+    /** Returns the current menus; empty on macOS, which keeps its native menu bar. */
+    bar: () => Promise<MenuBar>;
+    /**
+     * Runs a menu item for this window, as the native menu would.
+     *
+     * @param itemId - `id` of a `command` item from {@link bar}.
+     */
+    activate: (itemId: string) => Promise<void>;
+    /**
+     * Subscribes to menu changes: Open Recent updates and enabled-state changes.
+     *
+     * @returns an unsubscribe function.
+     */
+    onBarChanged: (callback: (bar: MenuBar) => void) => () => void;
   };
   /** Privacy-safe renderer diagnostics reported to the main log. */
   errors: {
@@ -113,6 +149,18 @@ export interface ShiftHost {
      * @returns an unsubscribe function.
      */
     onZoomChanged: (callback: (percent: number) => void) => () => void;
+  };
+  /** Whether local agents may connect over MCP, and what they are doing. */
+  agentConnections: {
+    state: () => Promise<AgentConnectionsState>;
+    /** Allows or disallows agent connections; resolves with the resulting state. */
+    setAllowed: (allowed: boolean) => Promise<AgentConnectionsState>;
+    /**
+     * Subscribes to agent connection changes.
+     *
+     * @returns an unsubscribe function.
+     */
+    onChanged: (callback: (state: AgentConnectionsState) => void) => () => void;
   };
   /** Main-owned list of files Shift has opened. */
   recents: {

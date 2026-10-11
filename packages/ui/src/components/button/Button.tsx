@@ -1,13 +1,10 @@
 import * as React from "react";
-import {
-  Button as BaseButton,
-  type ButtonProps as BaseButtonProps,
-} from "@base-ui-components/react/button";
+import { Button as BaseButton, type ButtonProps as BaseButtonProps } from "@base-ui/react/button";
 import { cn } from "../../lib/utils";
 
 export type ButtonProps = BaseButtonProps & {
-  variant?: "default" | "ghost" | "primary" | "toolbar" | "row" | "muted" | "transparent";
-  size?: "sm" | "md" | "lg" | "icon" | "icon-sm";
+  variant?: "default" | "ghost" | "primary" | "toolbar" | "row" | "muted" | "transparent" | "field";
+  size?: "sm" | "md" | "lg" | "icon" | "icon-sm" | "field";
   isActive?: boolean;
   icon?: React.ReactNode;
 };
@@ -21,6 +18,12 @@ const variantStyles = {
   row: "w-full justify-start rounded-sm px-2 text-sm font-normal hover:bg-hover/50 data-[active]:bg-hover data-[active]:hover:bg-hover",
   muted: "text-muted hover:bg-hover/50 hover:text-primary",
   transparent: "bg-transparent hover:bg-transparent data-[active]:bg-transparent",
+  /**
+   * A field that opens something, such as a list beside it: a shade lighter
+   * than a text input's fill, with a hairline border, so it reads apart.
+   */
+  field:
+    "rounded border border-line-subtle bg-surface-muted font-normal text-primary hover:bg-input data-[active]:border-accent",
 };
 
 const sizeStyles = {
@@ -29,30 +32,34 @@ const sizeStyles = {
   lg: "h-11 px-6 text-base",
   icon: "h-8 w-8 p-1",
   "icon-sm": "h-6 w-6 p-0.5",
+  field: "h-7 w-full justify-between px-2 text-ui",
 };
 
-export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant = "default", size = "md", isActive, icon, children, ...props }, ref) => {
-    return (
-      <BaseButton
-        ref={ref}
-        className={cn(
-          "inline-flex cursor-pointer items-center justify-center gap-2 rounded transition-colors duration-200",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
-          "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
-          "aria-disabled:cursor-default aria-disabled:opacity-50",
-          variantStyles[variant],
-          sizeStyles[size],
-          className,
-        )}
-        data-active={isActive ? true : undefined}
-        {...props}
-      >
-        {icon}
-        {children}
-      </BaseButton>
-    );
-  },
-);
-
-Button.displayName = "Button";
+export function Button({
+  className,
+  variant = "default",
+  size = "md",
+  isActive,
+  icon,
+  children,
+  ...props
+}: ButtonProps) {
+  return (
+    <BaseButton
+      className={cn(
+        "inline-flex cursor-pointer items-center justify-center gap-2 rounded transition-colors duration-200",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
+        "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+        "aria-disabled:cursor-default aria-disabled:opacity-50",
+        variantStyles[variant],
+        sizeStyles[size],
+        className,
+      )}
+      data-active={isActive ? true : undefined}
+      {...props}
+    >
+      {icon}
+      {children}
+    </BaseButton>
+  );
+}

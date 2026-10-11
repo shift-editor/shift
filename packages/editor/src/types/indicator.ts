@@ -1,8 +1,5 @@
 import type { Point2D } from "@shift/geo";
-import type { PointId } from "@shift/types";
-import type { SegmentId } from "@shift/glyph-state";
-
-export type { SegmentId };
+import type { PointId, SegmentId } from "@shift/types";
 
 /**
  * Describes the closest point on a segment to the cursor.

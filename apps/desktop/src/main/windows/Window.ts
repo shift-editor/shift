@@ -1,6 +1,8 @@
 import { BrowserWindow, type BrowserWindowConstructorOptions } from "electron";
 import * as ipc from "../../shared/ipc/main";
 import type { RendererCommandId } from "../../shared/commands";
+import { AgentClient } from "../agent/AgentClient";
+import type { TitleBarColors } from "../../shared/menu/types";
 
 export interface WindowOptions {
   title?: string;
@@ -11,6 +13,8 @@ export interface WindowOptions {
   preloadPath: string;
   browserWindowOptions?: BrowserWindowConstructorOptions;
   autoShow: boolean;
+  /** Height of the renderer's title-bar row, which Windows' caption buttons match. */
+  titleBarHeight?: number;
 }
 
 const WINDOW_DEFAULT_OPTIONS: Omit<WindowOptions, "preloadPath"> = {
@@ -35,13 +39,43 @@ function percentToZoomLevel(percent: number): number {
   return Math.log(percent / 100) / Math.log(1.2);
 }
 
+/** Height of the editor's toolbar row, which also hosts the window controls on Windows and Linux. */
+const TITLE_BAR_HEIGHT = 50;
+
+/** Light-theme chrome colours, used until the renderer reports its resolved theme. */
+const INITIAL_TITLE_BAR_COLORS: TitleBarColors = { background: "#e2e2e2", symbol: "#171717" };
+
+/**
+ * Platform window chrome.
+ *
+ * - macOS: the renderer draws its own traffic lights.
+ * - Windows: the system's caption buttons, drawn by Electron over Shift's
+ *   toolbar row, keep Windows 11 snap layouts working.
+ * - Linux: a frameless window; the renderer draws the window buttons in
+ *   Shift's style, placed by the desktop's button layout.
+ *
+ * On Windows and Linux the renderer also draws the menus that would otherwise
+ * sit in a native menu bar.
+ */
+function platformChrome(titleBarHeight: number): BrowserWindowConstructorOptions {
+  switch (process.platform) {
+    case "darwin":
+      return { titleBarStyle: "hidden", trafficLightPosition: { x: -100, y: -100 } };
+    case "win32":
+      return {
+        titleBarStyle: "hidden",
+        titleBarOverlay: {
+          color: INITIAL_TITLE_BAR_COLORS.background,
+          symbolColor: INITIAL_TITLE_BAR_COLORS.symbol,
+          height: titleBarHeight,
+        },
+      };
+    default:
+      return { frame: false };
+  }
+}
+
 const BROWSER_WINDOW_DEFAULT_OPTIONS: BrowserWindowConstructorOptions = {
-  ...(process.platform === "darwin"
-    ? {
-        titleBarStyle: "hidden" as const,
-        trafficLightPosition: { x: -100, y: -100 },
-      }
-    : {}),
   webPreferences: {
     contextIsolation: true,
     nodeIntegration: false,
@@ -50,13 +84,18 @@ const BROWSER_WINDOW_DEFAULT_OPTIONS: BrowserWindowConstructorOptions = {
 };
 
 export class Window {
+  readonly agent = new AgentClient();
+
   #window: BrowserWindow;
   #maximiseOnPresent: boolean;
+  readonly #titleBarHeight: number;
 
   constructor(options: WindowOptions) {
     const windowOptions = { ...WINDOW_DEFAULT_OPTIONS, ...options };
     this.#maximiseOnPresent = windowOptions.maximised ?? false;
+    this.#titleBarHeight = windowOptions.titleBarHeight ?? TITLE_BAR_HEIGHT;
     const browserWindowOptions = {
+      ...platformChrome(this.#titleBarHeight),
       ...BROWSER_WINDOW_DEFAULT_OPTIONS,
       ...windowOptions.browserWindowOptions,
     };
@@ -74,6 +113,9 @@ export class Window {
         preload: windowOptions.preloadPath,
       },
     });
+
+    // The native menu stays installed for its accelerators but is never shown.
+    if (process.platform !== "darwin") this.#window.setMenuBarVisibility(false);
 
     if (windowOptions.autoShow) {
       this.#window.once("ready-to-show", () => {
@@ -110,6 +152,22 @@ export class Window {
 
     this.#window.show();
     this.#window.focus();
+  }
+
+  /**
+   * Recolours the native window controls to match the renderer's theme.
+   *
+   * @remarks
+   * Only Windows windows have a title bar overlay; macOS and Linux ignore this.
+   */
+  setTitleBarColors(colors: TitleBarColors): void {
+    if (process.platform !== "win32") return;
+
+    this.#window.setTitleBarOverlay({
+      color: colors.background,
+      symbolColor: colors.symbol,
+      height: this.#titleBarHeight,
+    });
   }
 
   /** Updates the native window title shown by the operating system. */

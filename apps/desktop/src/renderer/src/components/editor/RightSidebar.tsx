@@ -2,15 +2,17 @@ import { GlyphSidebar } from "@shift/editor/ui";
 import { useSignalState } from "@shift/editor/signals";
 import { isSegmentId } from "@shift/glyph-state";
 import { isAnchorId, isComponentId, isContourId, isPointId, type GlyphId } from "@shift/types";
+import { useRef } from "react";
 import { Button } from "@shift/ui";
 import { BooleanOps } from "./BooleanOps";
 import { AnchorSection } from "./sidebar-right/AnchorSection";
+import { GlyphKerningSection } from "./sidebar-right/GlyphKerningSection";
 import { HandleSection } from "./sidebar-right/HandleSection";
+import { KerningPairSection } from "./sidebar-right/KerningPairSection";
 import { ScaleSection } from "./sidebar-right/ScaleSection";
 import { TransformSection } from "./sidebar-right/TransformSection";
 import { ZoomMenu } from "./sidebar-right/ZoomMenu";
 import { LockIcon } from "@/components/icons/LockIcon";
-import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
 import { TransformOriginProvider } from "@/context/TransformOriginContext";
 import { usePreviewNotice } from "@/context/PreviewNoticeProvider";
 import { useEditor, useFontSession } from "@/workspace/WorkspaceContext";
@@ -20,15 +22,18 @@ export const RightSidebar = () => {
   const showPreviewNotice = usePreviewNotice();
   const readOnlyFont = session.mode === "preview";
   const editor = useEditor();
-  const { availableGlyphs } = useGlyphCatalog();
+  // Read the catalog's glyph list directly: the catalog context changes on every scrub step.
+  const availableGlyphs = useSignalState(session.catalog.glyphsCell);
   const glyphLabel = (glyphId: GlyphId) =>
     availableGlyphs.find((candidate) => candidate.id === glyphId)?.displayName;
   const familyName = useSignalState(session.catalog.familyNameCell) ?? "Untitled";
   const selection = useSignalState(editor.selection.stateCell, { schedule: "frame" });
+  const kerningActive = useSignalState(editor.toolIdCell) === "kerning";
 
   const hasTransformSelection = selection.ids.some(
     (id) => isPointId(id) || isContourId(id) || isSegmentId(id) || isComponentId(id),
   );
+  const selectionBlockRef = useRef<HTMLDivElement>(null);
   const hasAnchorSelection = selection.ids.some(isAnchorId);
   const hasBooleanSelection = selection.ids.filter(isContourId).length >= 2;
 
@@ -56,28 +61,53 @@ export const RightSidebar = () => {
             <ZoomMenu />
           </>
         ),
-        selection: (
+        selection: kerningActive ? (
+          <KerningPairSection />
+        ) : (
           <TransformOriginProvider>
-            {hasTransformSelection || hasBooleanSelection ? (
-              <div className="flex flex-col gap-4 px-3 py-3">
-                <BooleanOps />
-                {hasTransformSelection ? (
-                  <>
-                    <HandleSection />
-                    <TransformSection />
-                    <ScaleSection />
-                  </>
-                ) : null}
-              </div>
-            ) : null}
-            {!hasTransformSelection && hasAnchorSelection ? (
-              <div className="flex flex-col gap-4 px-3 py-3">
-                <AnchorSection />
-              </div>
-            ) : null}
+            {/* Kerning | Handle | Transform, each a group with a divider between. */}
+            <div ref={selectionBlockRef} className="flex flex-col">
+              <SidebarGroup>
+                <GlyphKerningSection anchorRef={selectionBlockRef} />
+              </SidebarGroup>
+              {hasTransformSelection ? (
+                <SidebarGroup>
+                  <HandleSection />
+                </SidebarGroup>
+              ) : null}
+              {hasBooleanSelection || hasTransformSelection ? (
+                <SidebarGroup>
+                  <BooleanOps />
+                  {hasTransformSelection ? (
+                    <>
+                      <TransformSection />
+                      <ScaleSection />
+                    </>
+                  ) : null}
+                </SidebarGroup>
+              ) : null}
+              {!hasTransformSelection && hasAnchorSelection ? (
+                <SidebarGroup>
+                  <AnchorSection />
+                </SidebarGroup>
+              ) : null}
+            </div>
           </TransformOriginProvider>
         ),
       }}
     />
   );
 };
+
+/**
+ * One group of the selection's sections. An empty group, whose section has
+ * nothing to show, is hidden, and a group is divided from a shown one before it.
+ */
+const SidebarGroup = ({ children }: { readonly children: React.ReactNode }) => (
+  <div
+    data-sidebar-group=""
+    className="flex flex-col gap-4 px-3 py-3 empty:hidden [[data-sidebar-group]:not(:empty)~&]:border-t [[data-sidebar-group]:not(:empty)~&]:border-line-subtle"
+  >
+    {children}
+  </div>
+);

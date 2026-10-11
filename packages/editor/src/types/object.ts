@@ -1,5 +1,4 @@
-import type { LocalBounds } from "./coordinates";
-import type { GlyphGeometry, SegmentId } from "@shift/glyph-state";
+import type { GlyphGeometry } from "@shift/glyph-state";
 import type {
   AnchorId,
   ComponentId,
@@ -7,8 +6,11 @@ import type {
   GlyphId,
   NodeId,
   PointId,
+  SegmentId,
+  ShiftId,
   TextItemId,
 } from "@shift/types";
+import type { LocalBounds } from "./coordinates";
 import type { GlyphLayer } from "../lib/model/Glyph";
 import type { ComponentGlyph } from "../lib/model/ComponentGlyph";
 import type { GlyphNode, ShiftNode, TextRunNode } from "./node";
@@ -18,19 +20,6 @@ declare const SelectionIdBrand: unique symbol;
 export type SelectionId = string & { readonly [SelectionIdBrand]: typeof SelectionIdBrand };
 
 export const currentSelectionId = "selection:current" as SelectionId;
-
-/** Identifies an editor-addressable scene node or glyph object. */
-export type ShiftId =
-  | NodeId
-  | PointId
-  | AnchorId
-  | ContourId
-  | SegmentId
-  | ComponentId
-  | TextItemId;
-
-/** Identifies objects that can be selected by the editor. */
-export type SelectableId = ShiftId;
 
 /**
  * Defines the shared contract for a resolved editor object.

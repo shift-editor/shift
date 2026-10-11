@@ -1,4 +1,4 @@
-import { cn, Tooltip, TooltipContent, TooltipTrigger } from "@shift/ui";
+import { cn, Tooltip } from "@shift/ui";
 import type { AnchorPosition } from "@shift/editor/types";
 
 export type { AnchorPosition } from "@shift/editor/types";
@@ -43,26 +43,23 @@ export const TransformGrid = ({
     >
       <rect x="4" y="4" width="54" height="44" className="stroke-control-muted" strokeWidth="2" />
       {anchorPositions.map(({ id, label, cx, cy }) => (
-        <Tooltip key={id}>
-          <TooltipTrigger>
-            <circle
-              role="button"
-              aria-label={label}
-              cx={cx}
-              cy={cy}
-              r="4"
-              className={cn(
-                "transition-colors",
-                onChange ? "cursor-pointer" : "cursor-default",
-                activeAnchor === id ? "fill-accent" : "fill-control-muted",
-                onChange && activeAnchor !== id && "hover:fill-accent/70",
-              )}
-              onClick={() => {
-                if (onChange) onChange(id);
-              }}
-            />
-          </TooltipTrigger>
-          <TooltipContent>{label}</TooltipContent>
+        <Tooltip key={id} content={label}>
+          <circle
+            role="button"
+            aria-label={label}
+            cx={cx}
+            cy={cy}
+            r="4"
+            className={cn(
+              "transition-colors",
+              onChange ? "cursor-pointer" : "cursor-default",
+              activeAnchor === id ? "fill-accent" : "fill-control-muted",
+              onChange && activeAnchor !== id && "hover:fill-accent/70",
+            )}
+            onClick={() => {
+              if (onChange) onChange(id);
+            }}
+          />
         </Tooltip>
       ))}
     </svg>

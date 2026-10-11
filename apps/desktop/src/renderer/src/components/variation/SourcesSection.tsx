@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@shift/ui";
+import { Tooltip } from "@shift/ui";
 import { CollapsibleSection, SidebarActionButton } from "@/components/sidebar";
 import { CreateSourceMenu } from "./CreateSourceMenu";
 import { Sources } from "./Sources";
@@ -48,13 +48,10 @@ export const SourcesSection = ({ defaultOpen = false, outlineControls }: Sources
           {canAuthor ? (
             <CreateSourceMenu onOpenChange={setSourceMenuOpen} />
           ) : (
-            <Tooltip>
-              <TooltipTrigger>
-                <SidebarActionButton label="Create source" aria-disabled>
-                  <PlusIcon className="h-3 w-3" />
-                </SidebarActionButton>
-              </TooltipTrigger>
-              <TooltipContent>Create source</TooltipContent>
+            <Tooltip content="Create source">
+              <SidebarActionButton label="Create source" aria-disabled>
+                <PlusIcon className="h-3 w-3" />
+              </SidebarActionButton>
             </Tooltip>
           )}
         </>

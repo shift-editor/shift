@@ -1,6 +1,6 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { computed, track, useSignalState } from "@shift/editor/signals";
-import type { SelectableId } from "@shift/editor/types";
+import type { SelectableId } from "@shift/types";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import type { ObjectTreeSectionId } from "@/types/objectTree";
 import { useListSelection } from "@/hooks/useListSelection";

@@ -2,6 +2,7 @@ import { app, BrowserWindow, shell } from "electron";
 import type { ShiftLogger } from "../logging";
 import { shiftBuildCommit, shiftProductVersion } from "../release";
 import { getRendererSource } from "../utils";
+import { dialogWindowChrome } from "../windows/dialogWindowChrome";
 
 /** Owns the singleton native-framed window that presents Shift product information. */
 export class AboutWindow {
@@ -41,12 +42,7 @@ export class AboutWindow {
       maximizable: false,
       fullscreenable: false,
       backgroundColor: "#ffffff",
-      ...(process.platform === "darwin"
-        ? {
-            titleBarStyle: "hidden" as const,
-            trafficLightPosition: { x: -100, y: -100 },
-          }
-        : {}),
+      ...dialogWindowChrome(),
       webPreferences: {
         preload: this.#preloadPath,
         contextIsolation: true,

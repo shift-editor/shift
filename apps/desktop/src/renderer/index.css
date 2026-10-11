@@ -83,6 +83,7 @@
   --editor-glyph-stroke: #000000;
   --editor-component-fill: rgba(231, 231, 231, 0.75);
   --editor-control-line-color: rgba(136, 136, 136, 0.65);
+  --editor-advance-tee-color: rgba(0, 0, 0, 0.45);
   --editor-handle-fill: #ffffff;
   --editor-handle-interpolated-stroke: rgba(0, 0, 0, 0.65);
   --editor-handle-primary-stroke: #0c92f4;
@@ -118,6 +119,9 @@
   --editor-spacing-faint: rgba(219, 46, 145, 0.45);
   --editor-spacing-negative: #d97706;
   --editor-spacing-negative-faint: rgba(217, 119, 6, 0.5);
+  --editor-kerning: #7c3aed;
+  --editor-kerning-positive: #0d9488;
+  --editor-interpolated: #8a8a8a;
 }
 
 /* Only Shift Light shows the brand-coloured lid; other themes colour it with their accent. */
@@ -158,16 +162,11 @@ body {
   }
 }
 
-/* Coordinate toolbar-driven layout changes while clipping fixed-width sidebar contents. */
-.sidebar-panel {
-  overflow: hidden;
-}
-
 .sidebar-layout-animating > [data-panel] {
   transition: flex-grow 150ms ease-out;
 }
 
-.sidebar-layout-animating:has([data-resize-handle-state="drag"]) > [data-panel] {
+.sidebar-layout-animating:has([data-separator="active"]) > [data-panel] {
   transition: none;
 }
 
@@ -178,6 +177,23 @@ body {
 }
 
 /* Custom titlebar styles */
+/*
+ * Keeps a title-bar row clear of the native window controls Electron draws over
+ * it on Windows and Linux. Chromium reports the free area through the Window
+ * Controls Overlay variables, whichever side the controls are on; without an
+ * overlay (macOS) both paddings are zero.
+ */
+.title-bar-area {
+  -webkit-app-region: drag;
+  padding-left: env(titlebar-area-x, 0px);
+  padding-right: calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw));
+}
+
+/* Controls in a title-bar row must take clicks and hover, not drag the window. */
+.title-bar-area :is(button, a, input, [role="menubar"]) {
+  -webkit-app-region: no-drag;
+}
+
 .titlebar-drag {
   -webkit-app-region: drag;
 }

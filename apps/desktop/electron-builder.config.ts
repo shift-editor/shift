@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { copyFile, mkdir, mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -21,12 +21,36 @@ if (buildArchitecture !== "arm64" && buildArchitecture !== "x64") {
 const nativeBridgeFiles: Record<string, string> = {
   "darwin-arm64": "shift-bridge.darwin-arm64.node",
   "darwin-x64": "shift-bridge.darwin-x64.node",
+  "linux-arm64": "shift-bridge.linux-arm64-gnu.node",
   "linux-x64": "shift-bridge.linux-x64-gnu.node",
+  "win32-arm64": "shift-bridge.win32-arm64-msvc.node",
   "win32-x64": "shift-bridge.win32-x64-msvc.node",
 };
 const nativeBridgeFile = nativeBridgeFiles[`${process.platform}-${buildArchitecture}`];
 if (!nativeBridgeFile) {
   throw new Error(`Unsupported native bridge target: ${process.platform}-${buildArchitecture}`);
+}
+
+/** The release `shift-cli` from `pnpm build:cli`, bundled so agents and CI match the app. */
+const executableSuffix = process.platform === "win32" ? ".exe" : "";
+const commandLineToolPath = path.join(
+  process.env.CARGO_TARGET_DIR ?? path.resolve(__dirname, "../../target"),
+  "release",
+  `shift-cli${executableSuffix}`,
+);
+/**
+ * The bundled file is named after the command this build installs, so Nightly
+ * never takes the release `shift-cli` name, including on Windows, where the
+ * bundled directory itself goes on PATH. Must match `buildIdentity` in App.ts.
+ */
+const bundledCommandLineToolName = `${distribution === "nightly" ? "shift-cli-nightly" : "shift-cli"}${executableSuffix}`;
+
+function assertCommandLineToolBuilt() {
+  if (!existsSync(commandLineToolPath)) {
+    throw new Error(
+      `shift-cli is missing at ${commandLineToolPath}. Run \`pnpm build:cli\` before packaging.`,
+    );
+  }
 }
 
 const isNightly = distribution === "nightly";
@@ -63,6 +87,23 @@ const macosSourceDocumentTypes = [
 ];
 const linuxDocumentIconName = isNightly ? "shift-nightly-document" : documentIconName;
 const linuxDocumentIconSizes = [16, 32, 48, 64, 128, 256, 512];
+/**
+ * electron-builder's default DEB dependencies, plus ALSA, which Electron links
+ * but the defaults omit. Setting `depends` replaces the defaults, so they are
+ * restated. Ubuntu 24.04 and Debian 13 renamed the package to `libasound2t64`.
+ */
+const debDependencies = [
+  "libgtk-3-0",
+  "libnotify4",
+  "libnss3",
+  "libxss1",
+  "libxtst6",
+  "xdg-utils",
+  "libatspi2.0-0",
+  "libuuid1",
+  "libsecret-1-0",
+  "libasound2t64 | libasound2",
+];
 const linuxPackageFiles = [
   `${path.join(__dirname, `resources/linux/${distribution}.xml`)}=/usr/share/mime/packages/${packageName}.xml`,
   ...linuxDocumentIconSizes.map(
@@ -146,7 +187,10 @@ async function compileMacosAssetCatalog(context: AfterPackContext) {
 }
 
 const config: Configuration = {
-  beforePack: writeThirdPartyLicenses,
+  beforePack: async () => {
+    assertCommandLineToolBuilt();
+    await writeThirdPartyLicenses();
+  },
   afterPack: compileMacosAssetCatalog,
   appId,
   productName,
@@ -174,6 +218,7 @@ const config: Configuration = {
     },
   ],
   extraResources: [
+    { from: commandLineToolPath, to: `bin/${bundledCommandLineToolName}` },
     { from: `../../icons/${iconName}.png`, to: `${iconName}.png` },
     { from: "../../LICENSE-MIT", to: "LICENSE-MIT" },
     { from: "../../LICENSE-APACHE", to: "LICENSE-APACHE" },
@@ -268,6 +313,7 @@ const config: Configuration = {
     artifactName: `${artifactName}-${productVersion}-Linux-${buildArchitecture}.\${ext}`,
   },
   deb: {
+    depends: debDependencies,
     fpm: isNightly
       ? linuxPackageFiles
       : [

@@ -1,12 +1,12 @@
 # Shared UI (`@shift/ui`)
 
-<!-- reviewed: 2026-09-26 review-every: 90d -->
+<!-- reviewed: 2026-10-11 review-every: 90d -->
 
 Shared UI component library for Shift, wrapping Base UI primitives with Tailwind styling and Shift design tokens.
 
 ## Architecture Invariants
 
-- **Architecture Invariant:** Interactive components delegate to a headless primitive library rather than reimplementing widget behavior -- `@base-ui-components/react` by default, with the Resizable family wrapping `react-resizable-panels`. This keeps accessibility, keyboard handling, and ARIA attributes with the primitive. Components may render structural wrapper elements (e.g. `Input`'s positioning `div`/`span`s) around the primitive.
+- **Architecture Invariant:** Interactive components delegate to a headless primitive library rather than reimplementing widget behavior -- `@base-ui/react` by default, with the Resizable family wrapping `react-resizable-panels`. This keeps accessibility, keyboard handling, and ARIA attributes with the primitive. Components may render structural wrapper elements (e.g. `Input`'s positioning `div`/`span`s) around the primitive.
 - **Architecture Invariant:** All application state and business logic live in the consuming app, not in this package. Components add Tailwind classes via `cn`; small self-contained interaction behavior that belongs to the widget itself is allowed (e.g. `Input`'s Cmd/Ctrl+A select-all).
 - **Architecture Invariant:** Each component lives in its own directory with a barrel `index.ts`. The package root `index.ts` re-exports everything -- consumers import from `@shift/ui`, never from deep paths.
 - **Architecture Invariant:** The `cn` utility (clsx + tailwind-merge) must be used for all className composition. This ensures Tailwind class conflicts are resolved correctly when consumers pass overrides.
@@ -22,19 +22,22 @@ packages/ui/
     lib/
       utils.ts             -- cn utility (clsx + tailwind-merge)
     components/
+      autocomplete/        -- Search input with a filtered suggestion list, inline or in a popup
       button/Button.tsx    -- Button with variant/size/isActive/icon props
       checkbox/            -- Checkbox and indicator
+      switch/              -- On/off Switch
       collapsible/         -- Collapsible, CollapsibleTrigger, CollapsiblePanel, CollapsibleChevron
       context-menu/        -- Right-click trigger, portal, positioner, popup, item, and separator
       dialog/              -- Dialog, DialogBackdrop, DialogPortal, DialogPopup, DialogTitle, DialogClose
       field/               -- Field root, label, control, description, and error
       input/Input.tsx      -- Input with label/icon positioning and select-all shortcut
-      menu/                -- Menu trigger, portal, positioner, popup, item, and separator
+      menu/                -- Menu trigger, portal, positioner, popup, item, separator, and submenu
+      menubar/             -- Horizontal row of menus with keyboard navigation between them
       number-field/        -- Numeric root, input, step controls, and scrub area
       popover/             -- Popover trigger, portal, positioner, popup, title, and close
       progress/            -- Progress root with styled track and indicator
       radio/               -- RadioGroup and selectable RadioCard preset control
-      resizable/           -- ResizablePanelGroup, ResizablePanel, ResizableHandle over react-resizable-panels
+      resizable/           -- ResizablePanelGroup, ResizablePanel, ResizableHandle over react-resizable-panels v4 (pixel sizes)
       select/              -- Select trigger, popup, list, item, and indicator primitives
       separator/           -- Separator (horizontal/vertical)
       slider/              -- Slider with thumb-level accessible name
@@ -63,7 +66,7 @@ packages/ui/
 
 ## How it works
 
-Each component follows the same pattern: import the Base UI primitive, wrap it in a `React.forwardRef` (or plain function for root/provider components), apply Shift design tokens via Tailwind classes using `cn`, and forward all remaining props. Consumers never interact with Base UI directly.
+Each component follows the same pattern: import the Base UI primitive, wrap it in a plain function, apply Shift design tokens via Tailwind classes using `cn`, and forward all remaining props. Props extend `React.ComponentProps` of the primitive, so `ref` is one of them (React 19) and reaches the primitive through the spread; there is no `forwardRef`. Consumers never interact with Base UI directly.
 
 **Button** is the most opinionated component, defining seven visual variants (`default`, `ghost`, `primary`, `toolbar`, `row`, `muted`, `transparent`) and five size presets. `toolbar` owns application-toolbar icon treatment, `row` owns selectable full-width rows, `muted` owns low-emphasis actions, and `transparent` suppresses backgrounds in every interaction state. It also supports an `isActive` data attribute for toggled buttons and an `icon` slot.
 
@@ -71,7 +74,13 @@ Each component follows the same pattern: import the Base UI primitive, wrap it i
 
 **MenuItem** and **ContextMenuItem** provide default, danger, and outlined visual variants. Menu and context-menu popups and items share the same styling source so kebab and right-click menus remain visually identical. Dialog and popover close primitives remain unstyled by default so they can render text buttons, while their `icon` variant owns compact close-button styling.
 
-**Field**, **Checkbox**, **NumberField**, **Select**, **Tabs**, and **Textarea** are composable primitive families for settings and inspector forms. Validation and application state remain in the consumer; these wrappers only provide accessible structure, behavior, and Shift styling. `FieldLabel` uses `tone` for primary or secondary emphasis. `FieldControl`, `Textarea`, `SelectTrigger`, and `NumberFieldGroup` use `filled` for standard control backgrounds and `plain` for controls that match the application background. `Textarea` renders a native textarea through Base UI Field's `Control` slot so it participates in the same label, validation, and disabled-state contract. `Slider` forwards its `aria-label` to Base UI's interactive thumb rather than leaving the accessible name on the non-interactive root. `Progress` composes Base UI's root, track, and indicator while allowing a consumer to override each visual layer.
+**Field**, **Checkbox**, **Switch**, **NumberField**, **Select**, **Tabs**, and **Textarea** are composable primitive families for settings and inspector forms. Validation and application state remain in the consumer; these wrappers only provide accessible structure, behavior, and Shift styling. `FieldLabel` uses `tone` for primary or secondary emphasis. `FieldControl`, `Textarea`, `SelectTrigger`, and `NumberFieldGroup` use `filled` for standard control backgrounds and `plain` for controls that match the application background. `Textarea` renders a native textarea through Base UI Field's `Control` slot so it participates in the same label, validation, and disabled-state contract. `Slider` forwards its `aria-label` to Base UI's interactive thumb rather than leaving the accessible name on the non-interactive root. `Progress` composes Base UI's root, track, and indicator while allowing a consumer to override each visual layer.
+
+**Autocomplete** wraps Base UI's autocomplete. `AutocompleteInput` renders the shared `Input`; with `inline open` the list sits in place, such as inside a dialog, and `autoHighlight="always"` makes Enter pick the first item. Consumers that rank results themselves pass `filter={null}`.
+
+**Tooltip** takes `content` for the common case: `<Tooltip content="Close"><Button … /></Tooltip>` makes the child the trigger and renders the popup (with optional `side` and `sideOffset`). Compose `TooltipTrigger` and `TooltipContent` directly only when the parts need to be separate.
+
+**Menubar** wraps Base UI's menubar: place one `Menu` per top-level menu inside it, and give each `MenuTrigger` the `menubar` variant. `MenuSubmenuRoot` and `MenuSubmenuTrigger` nest menus inside a popup.
 
 **Toolbar** exposes Base UI's root, group, button, and separator. Consumers can render the shared `Button` through `ToolbarButton` to retain Shift styling while participating in toolbar focus navigation, or render another Base UI trigger through it for menu composition.
 
@@ -88,13 +97,12 @@ The package also re-exports shared icons from `lucide-react` so app code does no
 ### Add a new component
 
 1. Create `src/components/<name>/<Name>.tsx`.
-2. Import the Base UI primitive: `import { X as BaseX } from "@base-ui-components/react/x"`.
+2. Import the Base UI primitive: `import { X as BaseX } from "@base-ui/react/x"`.
 3. Define a props interface extending the Base UI props, adding any Shift-specific props.
-4. Wrap the Base UI primitive with `React.forwardRef`, apply Tailwind classes via `cn`.
-5. Set `displayName` on the forwarded ref component.
-6. Create `src/components/<name>/index.ts` barrel file exporting the component and its types.
-7. Add the export to `src/index.ts`.
-8. Run `pnpm typecheck` from the package root.
+4. Wrap the Base UI primitive in a plain function whose props extend `React.ComponentProps<typeof BaseX>`, apply Tailwind classes via `cn`, and spread the remaining props (including `ref`) onto the primitive.
+5. Create `src/components/<name>/index.ts` barrel file exporting the component and its types.
+6. Add the export to `src/index.ts`.
+7. Run `pnpm typecheck` from the package root.
 
 ### Override styles from a consumer
 
@@ -115,7 +123,7 @@ Pass a `className` prop -- `cn` (tailwind-merge) will resolve conflicts with the
 
 ## Related
 
-- **`@base-ui-components/react`** -- the unstyled primitive library all components wrap.
+- **`@base-ui/react`** -- the unstyled primitive library all components wrap.
 - **`cn`** -- className merge utility used by every component and by consumer code (e.g., `SidebarSection`).
 - **`useToastManager`** -- Base UI hook re-exported for imperative toast creation (used in `ZoomToast`).
 - **`@shift/types`** -- domain types package (separate from UI types).

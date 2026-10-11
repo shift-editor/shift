@@ -2,6 +2,8 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { GlyphInfo } from "./GlyphInfo.js";
 import { DEFAULT_LANGUAGE_IDS, type GlyphCategory } from "./types.js";
 import { defaultResources } from "./resources.js";
+import { coreResources } from "./coreResources.js";
+import { componentResources } from "./componentResources.js";
 
 let db: GlyphInfo;
 
@@ -678,5 +680,20 @@ describe("cross-domain consistency", () => {
     const glyphData = db.getGlyph(0x24);
     expect(glyphData).not.toBeNull();
     expect(dollarResult!.glyphName).toBe(glyphData!.name);
+  });
+});
+
+describe("component resources loaded later", () => {
+  it("answers names at once and decomposition and search once added", () => {
+    const info = new GlyphInfo(coreResources);
+    expect(info.getGlyphName(0xe9)).toBe("eacute");
+    expect(info.hasComponentResources).toBe(false);
+    expect(info.getDecomposition(0xe9)).toEqual([]);
+    expect(info.search("eacute")).toEqual([]);
+
+    info.addResources(componentResources);
+    expect(info.hasComponentResources).toBe(true);
+    expect(info.getDecomposition(0xe9)).toEqual(db.getDecomposition(0xe9));
+    expect(info.search("eacute")).toEqual(db.search("eacute"));
   });
 });

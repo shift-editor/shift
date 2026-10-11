@@ -1,14 +1,14 @@
 # Preload
 
-<!-- reviewed: 2026-09-05 review-every: 90d -->
+<!-- reviewed: 2026-10-02 review-every: 90d -->
 
-Electron preload script that exposes the typed Shift host API and relays session ports to the renderer.
+Electron preload script that exposes the typed Shift host API and relays session, document, and agent ports to the renderer.
 
 ## Architecture Invariants
 
 - **Architecture Invariant:** Preload exposes only `window.shiftHost`; the native bridge lives in the utility process behind the typed font-session lane. **WHY:** renderer isolation must not expose native font methods directly.
 - **Architecture Invariant:** Every `shiftHost` method delegates through typed IPC helpers and contains only context-bridge-compatible functions and values.
-- **Architecture Invariant:** Session and document `MessagePort`s are relayed with `window.postMessage` because ports cannot cross Electron's context bridge. Renderer listeners authenticate the same window and expected message type before accepting a port.
+- **Architecture Invariant:** Session, document, and agent `MessagePort`s are relayed with `window.postMessage` because ports cannot cross Electron's context bridge. Renderer listeners authenticate the same window and expected message type before accepting a port.
 
 ## Codemap
 
@@ -45,7 +45,7 @@ The preload runs once before the renderer loads:
 
 1. In the main-side handler, create a `MessageChannelMain` and transfer one half with `event.sender.postMessage("<name>.port", null, [port])` — ports cannot travel through `invoke` responses.
 2. In `preload.ts`, relay it into the page: `ipcRenderer.on("<name>.port", ...)` forwarding via `window.postMessage({ type: "<name>.port" }, "*", event.ports)`, mirroring the existing `session.port` and `document.port` relays.
-3. In the renderer listener, accept the port only after checking `event.source === window` and the expected message type.
+3. In the renderer listener, accept the port only after checking `event.source === window` and the expected message type. The live agent lane follows the same transfer contract as the session and document lanes.
 4. Verify: `pnpm --filter @shift/desktop typecheck`, then run the app and confirm the lane connects.
 
 ## Gotchas

@@ -1,5 +1,5 @@
 import { Fragment, useLayoutEffect, useRef, useState } from "react";
-import { Button, cn, Tooltip, TooltipContent, TooltipTrigger } from "@shift/ui";
+import { Button, cn, Tooltip } from "@shift/ui";
 import { pathBasename, recentOpenedLabel, type RecentDocument } from "@shared/recents";
 import { RecentFileMenu } from "./RecentFileMenu";
 import { useAltKeyHeld } from "./useRecentDocuments";
@@ -159,16 +159,13 @@ export const RecentFileCard = ({ document, folder, now, actions }: RecentFileIte
       data-missing={document.missing}
       data-specimen-text={document.specimen?.text}
     >
-      <Tooltip>
-        <TooltipTrigger>
-          <button
-            type="button"
-            aria-label={name}
-            onClick={() => activate(document)}
-            className={CARD_BUTTON_CLASS}
-          />
-        </TooltipTrigger>
-        <TooltipContent>{document.path}</TooltipContent>
+      <Tooltip content={document.path}>
+        <button
+          type="button"
+          aria-label={name}
+          onClick={() => activate(document)}
+          className={CARD_BUTTON_CLASS}
+        />
       </Tooltip>
       <div
         className={cn(

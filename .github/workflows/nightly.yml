@@ -104,11 +104,21 @@ jobs:
             platform: darwin
             arch: x64
             builder-args: "--mac zip dmg --x64"
+          - name: Windows arm64
+            runner: windows-11-arm
+            platform: win32
+            arch: arm64
+            builder-args: "--win nsis --arm64"
           - name: Windows x64
             runner: windows-latest
             platform: win32
             arch: x64
             builder-args: "--win nsis --x64"
+          - name: Linux arm64
+            runner: ubuntu-24.04-arm
+            platform: linux
+            arch: arm64
+            builder-args: "--linux deb rpm AppImage --arm64"
           - name: Linux x64
             runner: ubuntu-latest
             platform: linux
@@ -167,6 +177,9 @@ jobs:
       - name: Build native bridge
         run: pnpm build:native
 
+      - name: Build command-line tool
+        run: pnpm build:cli
+
       - name: Build desktop application
         env:
           SHIFT_DISTRIBUTION: nightly
@@ -215,6 +228,18 @@ jobs:
 
       - name: Smoke-test packaged application
         run: node scripts/smoke-packaged.mjs "${{ steps.package.outputs.path }}" nightly
+
+      - name: Verify DEB libraries on clean systems
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t DEBS < <(find "apps/desktop/out/linux-${{ matrix.arch }}" -maxdepth 1 -name '*.deb')
+          [[ "${#DEBS[@]}" == 1 ]] || {
+            echo "Expected one DEB, found ${#DEBS[@]}" >&2
+            exit 1
+          }
+          scripts/check-deb-libraries.sh "${DEBS[0]}"
 
       - name: Verify macOS signature
         if: matrix.platform == 'darwin'

@@ -13,8 +13,6 @@ import {
   PopoverTitle,
   PopoverTrigger,
   Tooltip,
-  TooltipContent,
-  TooltipTrigger,
   X,
 } from "@shift/ui";
 import PlusIcon from "@/assets/general/plus.svg";
@@ -117,43 +115,34 @@ export const CreateInstanceMenu = ({
 
   if (axes.length === 0) {
     return (
-      <Tooltip>
-        <TooltipTrigger>
-          <SidebarActionButton label="Create instance" aria-disabled="true">
-            <PlusIcon className="h-3 w-3" />
-          </SidebarActionButton>
-        </TooltipTrigger>
-        <TooltipContent>Create instance</TooltipContent>
+      <Tooltip content="Create instance">
+        <SidebarActionButton label="Create instance" aria-disabled="true">
+          <PlusIcon className="h-3 w-3" />
+        </SidebarActionButton>
       </Tooltip>
     );
   }
 
   return (
     <Popover open={open} onOpenChange={handleOpenChange} modal={false}>
-      <Tooltip>
-        <TooltipTrigger>
-          <PopoverTrigger
-            render={
-              <SidebarActionButton label="Create instance">
-                <PlusIcon className="h-3 w-3" />
-              </SidebarActionButton>
-            }
-          />
-        </TooltipTrigger>
-        <TooltipContent>Create instance</TooltipContent>
+      <Tooltip content="Create instance">
+        <PopoverTrigger
+          render={
+            <SidebarActionButton label="Create instance">
+              <PlusIcon className="h-3 w-3" />
+            </SidebarActionButton>
+          }
+        />
       </Tooltip>
       <PopoverPortal>
         <PopoverPositioner sideOffset={4} align="start">
           <PopoverPopup className="w-50 p-0" initialFocus={nameInputRef}>
             <div className="flex h-8 items-center justify-between border-b border-line-subtle px-2">
               <PopoverTitle>Create Instance</PopoverTitle>
-              <Tooltip>
-                <TooltipTrigger>
-                  <PopoverClose variant="icon" aria-label="Close">
-                    <X className="h-4 w-4" />
-                  </PopoverClose>
-                </TooltipTrigger>
-                <TooltipContent>Close</TooltipContent>
+              <Tooltip content="Close">
+                <PopoverClose variant="icon" aria-label="Close">
+                  <X className="h-4 w-4" />
+                </PopoverClose>
               </Tooltip>
             </div>
 

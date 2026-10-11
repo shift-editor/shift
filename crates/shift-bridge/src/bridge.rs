@@ -1,8 +1,10 @@
 use crate::errors::{self, BridgeError, BridgeResult};
 use crate::input::{parse, BridgeParse};
+use crate::shaping::{NapiShapeRequest, NapiShapedGlyph, ParsedShapeRequest};
 use napi::bindgen_prelude::*;
 use napi::{Error, Status};
 use napi_derive::napi;
+use shift_backends::shaper_font::{LiveShaper, ShaperFontRequest, ShaperFontState};
 use shift_backends::{
   build_binary_atlas_page, font_loader::FontLoader, variable_glyph_inputs,
   AxisIndex as SourceAxisIndex, ExportFormat, FontDirectory, FontExportRequest, FontExportResult,
@@ -15,7 +17,8 @@ use shift_font::{
   AnchorId, AnchorSeed, Axis as FontAxis, AxisId, AxisLabel, AxisLabelId, AxisLabelRange,
   AxisMapping as FontAxisMapping, AxisMappingId, AxisMappingPoint as FontAxisMappingPoint,
   AxisRole, BooleanOp, ComponentId, ContourId, Font, FontChangeImpact, FontIntent, FontIntentSet,
-  FontMetadata as FontMetadataModel, Glyph, GlyphId, LayerId, Location as FontLocation,
+  FontMetadata as FontMetadataModel, Glyph, GlyphId, GlyphLayer, KerningGroupId, KerningPair,
+  KerningPosition, KerningSide, KerningValueEdit, LayerId, Location as FontLocation,
   MetricDefinition as FontMetricDefinition, MetricId, MetricKind, MetricValue,
   NamedInstance as FontNamedInstance, NamedInstanceId, PointId, PointSeed, SourceId, Transform,
 };
@@ -30,9 +33,11 @@ use shift_wire::{
     NapiAnchorSeed, NapiAppliedChange, NapiAxis, NapiAxisMapping, NapiAxisMappingBasis,
     NapiAxisRole, NapiAxisType, NapiCatalogAtlasGlyph, NapiCatalogAtlasPage,
     NapiCatalogAtlasWeights, NapiFontIntent, NapiFontMetadata, NapiFontMetrics,
-    NapiFontReplacement, NapiFontSnapshot, NapiGlyphPreview, NapiGlyphProjection, NapiGlyphRecord,
-    NapiGlyphSnapshot, NapiGlyphSnapshotRequest, NapiInterpolationBasis, NapiLanguagesReplacement,
-    NapiLayerMatch, NapiLayerReplaced, NapiLocation, NapiMetricDefinition, NapiMetricKind,
+    NapiFontReplacement, NapiFontSnapshot, NapiGlyphLayerSnapshot, NapiGlyphPreview,
+    NapiGlyphProjection, NapiGlyphRecord, NapiGlyphSnapshot, NapiGlyphSnapshotRequest,
+    NapiInterpolationBasis, NapiKerningPosition, NapiKerningSide, NapiKerningSideKind,
+    NapiKerningSnapshot, NapiKerningValueEdit, NapiLanguagesReplacement, NapiLayerMatch,
+    NapiLayerRead, NapiLayerReplaced, NapiLocation, NapiMetricDefinition, NapiMetricKind,
     NapiNamedInstance, NapiPointSeed, NapiSlugAtlas, NapiSlugExactSource, NapiSlugGlyph,
     NapiSlugLayout, NapiSlugPreviewExtents, NapiSlugSection, NapiSlugWeightSet, NapiSource,
     NapiSourceMetricsInterpolationReplacement, NapiSourceMetricsInterpolationSnapshot,
@@ -42,10 +47,10 @@ use shift_wire::{
   GlyphChangedEntities, GlyphComponents, GlyphEntry, GlyphLayerRecord, GlyphLayerShape,
   GlyphLayerSnapshot, GlyphProjection, GlyphRecord, GlyphSnapshot, GlyphSnapshotRequest,
   GlyphSourceComponents, GlyphSourceShape, GlyphState, GlyphStructure, GlyphVariation,
-  InterpolationBasis as WireInterpolationBasis, InterpolationSupport, LayerMatch as WireLayerMatch,
-  Location as WireLocation, MetricDefinition, MetricKind as WireMetricKind, NamedInstance,
-  PointData, PointType, Source, SourceMetricValue, SourceMetricsInterpolationSnapshot,
-  VariationBasis, VariationDelta,
+  InterpolationBasis as WireInterpolationBasis, InterpolationSupport, KerningSnapshot,
+  LayerMatch as WireLayerMatch, Location as WireLocation, MetricDefinition,
+  MetricKind as WireMetricKind, NamedInstance, PointData, PointType, Source, SourceMetricValue,
+  SourceMetricsInterpolationSnapshot, VariationBasis, VariationDelta,
 };
 use shift_workspace::{
   AcquireScope, DocumentIdentity, FontWorkspace, NewWorkspace, WorkspaceError, WorkspaceSource,
@@ -337,8 +342,10 @@ fn wire_font_snapshot(
     axis_mappings,
     axis_mapping_bases,
     named_instances,
-    // Preview sources expose only the directory, which carries no font lib.
+    // Preview sources expose only the directory, which carries no font lib
+    // or kerning.
     language_ids: None,
+    kerning: KerningSnapshot::default(),
   })
 }
 
@@ -936,7 +943,7 @@ impl FontView for FontSaveSnapshot {
     self.font.glyph_by_name(name)
   }
 
-  fn kerning(&self) -> &shift_font::KerningData {
+  fn kerning(&self) -> &shift_font::Kerning {
     self.font.kerning()
   }
 
@@ -1111,6 +1118,9 @@ pub struct Bridge {
   slug_generation: u32,
   slug_atlas: Option<SlugAtlasGeneration>,
   source_atlas_descriptors: BTreeMap<u32, SourceAtlasDescriptor>,
+  shaper_fonts: ShaperFontState,
+  /// Shaper for the current font; `None` until the next shape after a change.
+  shaper: Option<LiveShaper>,
 }
 
 #[napi]
@@ -1126,6 +1136,8 @@ impl Bridge {
       slug_generation: 0,
       slug_atlas: None,
       source_atlas_descriptors: BTreeMap::new(),
+      shaper_fonts: ShaperFontState::default(),
+      shaper: None,
     }
   }
 
@@ -1179,7 +1191,7 @@ impl Bridge {
     Ok(AsyncTask::new(crate::specimen::SpecimenTask {
       input: crate::specimen::SpecimenInput::Snapshot(
         self
-          .save_snapshot()
+          .specimen_snapshot()
           .map_err(|e| Error::new(Status::GenericFailure, e.to_string()))?,
       ),
     }))
@@ -1364,6 +1376,7 @@ impl Bridge {
     let source_metrics_changed = impact.contains(FontChangeImpact::SOURCE_METRICS);
     let named_instances_changed = impact.contains(FontChangeImpact::NAMED_INSTANCES);
     let sources_changed = impact.contains(FontChangeImpact::SOURCES);
+    let kerning_changed = impact.contains(FontChangeImpact::KERNING);
 
     let touched_layer_ids: Vec<LayerId> = outcome
       .layers
@@ -1425,6 +1438,7 @@ impl Bridge {
             })
             .transpose()?,
           sources: sources_changed.then(|| self.get_sources()).transpose()?,
+          kerning: kerning_changed.then(|| self.get_kerning()).transpose()?,
         })
       })
       .transpose()?;
@@ -1508,6 +1522,74 @@ impl Bridge {
     }
 
     Ok(snapshots.into_iter().map(Into::into).collect())
+  }
+
+  /// Reads exact authored layers by stable layer identity.
+  ///
+  /// Results preserve request order and contain accepted workspace state
+  /// only. Components are not resolved, so a layer with a broken component
+  /// reference remains readable.
+  ///
+  /// # Errors
+  ///
+  /// Returns an error when any identity is malformed or absent from the font.
+  #[napi(ts_args_type = "layerIds: Array<LayerId>")]
+  pub fn read_layers(
+    &mut self,
+    layer_ids: Vec<String>,
+  ) -> errors::Result<Vec<NapiGlyphLayerSnapshot>> {
+    let (layer_ids, glyph_ids) = self.layer_owners(&layer_ids)?;
+    let font = self.acquire_and_font(&glyph_ids, AcquireScope::Glyphs)?;
+
+    layer_ids
+      .iter()
+      .zip(glyph_ids)
+      .map(|(layer_id, glyph_id)| {
+        Ok(layer_snapshot(glyph_id, font.require_layer(layer_id)?).into())
+      })
+      .collect()
+  }
+
+  /// Reads exact authored layers with their composited geometry.
+  ///
+  /// Each root keeps its requested authored geometry; components resolve at
+  /// that layer's source through normal interpolation and fallback, and
+  /// cyclic branches are skipped. Results preserve request order and do not
+  /// publish renderer models.
+  ///
+  /// # Errors
+  ///
+  /// Returns an error when any identity is malformed or absent, a component
+  /// cannot resolve, or referenced interpolation is incompatible.
+  #[napi(ts_args_type = "layerIds: Array<LayerId>")]
+  pub fn resolve_layers(&mut self, layer_ids: Vec<String>) -> errors::Result<Vec<NapiLayerRead>> {
+    let (layer_ids, glyph_ids) = self.layer_owners(&layer_ids)?;
+    let font = self.acquire_and_font(&glyph_ids, AcquireScope::ComponentClosure)?;
+
+    layer_ids
+      .iter()
+      .zip(glyph_ids)
+      .map(|(layer_id, glyph_id)| {
+        Ok(NapiLayerRead {
+          authored: layer_snapshot(glyph_id, font.require_layer(layer_id)?).into(),
+          resolved: (&font.resolve_layer(layer_id)?).into(),
+        })
+      })
+      .collect()
+  }
+
+  /// Parses layer identities and finds each owning glyph, in request order.
+  fn layer_owners(&self, layer_ids: &[String]) -> errors::Result<(Vec<LayerId>, Vec<GlyphId>)> {
+    let font = self.font()?;
+    let layer_ids = layer_ids
+      .iter()
+      .map(|layer_id| parse::<LayerId>(layer_id))
+      .collect::<errors::Result<Vec<_>>>()?;
+    let glyph_ids = layer_ids
+      .iter()
+      .map(|layer_id| Ok(font.require_layer_owner(layer_id)?))
+      .collect::<errors::Result<Vec<_>>>()?;
+    Ok((layer_ids, glyph_ids))
   }
 
   /// Derives entity mappings and structural diagnostics between two layers.
@@ -1965,6 +2047,13 @@ impl Bridge {
     Ok(self.font()?.language_ids())
   }
 
+  /// Returns the font's kerning groups, per-source pairs, and the basis
+  /// kerning interpolates over.
+  #[napi]
+  pub fn get_kerning(&self) -> errors::Result<NapiKerningSnapshot> {
+    Ok(KerningSnapshot::from(self.font()?).into())
+  }
+
   #[napi]
   pub fn get_named_instances(&self) -> errors::Result<Vec<NapiNamedInstance>> {
     Ok(
@@ -1990,6 +2079,23 @@ impl Bridge {
     let snapshot = SourceMetricsInterpolationSnapshot::from(&interpolation);
 
     Ok(Some(snapshot.into()))
+  }
+
+  /// Shapes a run of text with the font's feature code.
+  ///
+  /// Characters map through the live font's Unicode values and every
+  /// glyph's own advance is zero while shaping, so the result carries the
+  /// substituted glyphs, their clusters, and only what the feature code
+  /// positions. The caller adds live advances, kerning, and mark attachment.
+  ///
+  /// Feature code with errors shapes with the last version that compiled.
+  /// The shaping tables are rebuilt only when a font change since the last
+  /// call altered the glyph order, glyph categories, feature code, or axes.
+  #[napi]
+  pub fn shape(&mut self, request: NapiShapeRequest) -> errors::Result<Vec<NapiShapedGlyph>> {
+    let request = ParsedShapeRequest::try_from(request)?;
+    let shaped = self.live_shaper()?.shape(&request.as_request())?;
+    Ok(shaped.into_iter().map(NapiShapedGlyph::from).collect())
   }
 
   #[napi]
@@ -2029,6 +2135,12 @@ impl Bridge {
       });
     }
     Ok(sources)
+  }
+
+  /// Snapshots the font with only the glyphs its thumbnail specimen compiles loaded.
+  fn specimen_snapshot(&mut self) -> BridgeResult<FontSaveSnapshot> {
+    crate::specimen::acquire_specimen_glyphs(self.workspace_mut()?)?;
+    Ok(FontSaveSnapshot::new(self.font()?.clone(), None))
   }
 
   fn save_snapshot(&mut self) -> BridgeResult<FontSaveSnapshot> {
@@ -2111,8 +2223,38 @@ impl Bridge {
     })
   }
 
+  /// Returns the shaper for the current font, making a new one after a font
+  /// change.
+  fn live_shaper(&mut self) -> BridgeResult<&LiveShaper> {
+    let shaper = match self.shaper.take() {
+      Some(shaper) => shaper,
+      None => self.new_live_shaper()?,
+    };
+    Ok(self.shaper.insert(shaper))
+  }
+
+  /// Updates the shaping tables from the current font and makes a shaper
+  /// with its character mapping. Every layer is acquired first, because a
+  /// glyph's `GDEF` class depends on its anchors.
+  fn new_live_shaper(&mut self) -> BridgeResult<LiveShaper> {
+    self.workspace_mut()?.acquire_all_layers()?;
+    let request = ShaperFontRequest::from_font(self.font()?)?;
+    self.shaper_fonts.update(request)?;
+    let shaper_font =
+      self
+        .shaper_fonts
+        .font()
+        .cloned()
+        .ok_or_else(|| BridgeError::InvalidInput {
+          kind: "font",
+          value: "it has no shaping tables".to_string(),
+        })?;
+    Ok(LiveShaper::new(shaper_font, self.font()?))
+  }
+
   fn mark_font_changed(&mut self) {
     self.slug_atlas = None;
+    self.shaper = None;
     self.bump_live_version();
   }
 
@@ -2126,6 +2268,8 @@ impl Bridge {
 
   fn reset_versions(&mut self) {
     self.slug_atlas = None;
+    self.shaper_fonts = ShaperFontState::default();
+    self.shaper = None;
     self.source_atlas_descriptors.clear();
     self.live_version = DocumentVersion::default();
     self.saved_version = DocumentVersion::default();
@@ -2141,6 +2285,31 @@ fn path_to_string(path: &Path) -> BridgeResult<String> {
 
 fn parse_id_list<T: BridgeParse>(ids: &[String]) -> BridgeResult<Vec<T>> {
   ids.iter().map(|id| parse::<T>(id)).collect()
+}
+
+fn map_kerning_value_edit(edit: NapiKerningValueEdit) -> errors::Result<KerningValueEdit> {
+  Ok(KerningValueEdit {
+    source_id: parse::<SourceId>(&edit.source_id)?,
+    pair: KerningPair::new(
+      map_kerning_side(edit.first)?,
+      map_kerning_side(edit.second)?,
+    ),
+    value: edit.amount,
+  })
+}
+
+fn map_kerning_position(position: NapiKerningPosition) -> KerningPosition {
+  match position {
+    NapiKerningPosition::First => KerningPosition::First,
+    NapiKerningPosition::Second => KerningPosition::Second,
+  }
+}
+
+fn map_kerning_side(side: NapiKerningSide) -> errors::Result<KerningSide> {
+  Ok(match side.kind {
+    NapiKerningSideKind::Glyph => KerningSide::Glyph(parse::<GlyphId>(&side.id)?),
+    NapiKerningSideKind::Group => KerningSide::Group(parse::<KerningGroupId>(&side.id)?),
+  })
 }
 
 fn map_intent(intent: NapiFontIntent) -> errors::Result<FontIntent> {
@@ -2370,6 +2539,59 @@ fn map_intent(intent: NapiFontIntent) -> errors::Result<FontIntent> {
         metadata: map_font_metadata(payload.metadata),
       })
     }
+    "setKerningValues" => {
+      let payload = intent
+        .set_kerning_values
+        .ok_or_else(|| missing("setKerningValues"))?;
+      Ok(FontIntent::SetKerningValues {
+        edits: payload
+          .edits
+          .into_iter()
+          .map(map_kerning_value_edit)
+          .collect::<errors::Result<Vec<_>>>()?,
+      })
+    }
+    "createKerningGroup" => {
+      let payload = intent
+        .create_kerning_group
+        .ok_or_else(|| missing("createKerningGroup"))?;
+      Ok(FontIntent::CreateKerningGroup {
+        group_id: parse::<KerningGroupId>(&payload.group_id)?,
+        position: map_kerning_position(payload.position),
+        name: payload.name,
+      })
+    }
+    "setKerningGroupMember" => {
+      let payload = intent
+        .set_kerning_group_member
+        .ok_or_else(|| missing("setKerningGroupMember"))?;
+      Ok(FontIntent::SetKerningGroupMember {
+        position: map_kerning_position(payload.position),
+        glyph_id: parse::<GlyphId>(&payload.glyph_id)?,
+        group_id: payload
+          .group_id
+          .as_deref()
+          .map(parse::<KerningGroupId>)
+          .transpose()?,
+      })
+    }
+    "renameKerningGroup" => {
+      let payload = intent
+        .rename_kerning_group
+        .ok_or_else(|| missing("renameKerningGroup"))?;
+      Ok(FontIntent::RenameKerningGroup {
+        group_id: parse::<KerningGroupId>(&payload.group_id)?,
+        name: payload.name,
+      })
+    }
+    "deleteKerningGroup" => {
+      let payload = intent
+        .delete_kerning_group
+        .ok_or_else(|| missing("deleteKerningGroup"))?;
+      Ok(FontIntent::DeleteKerningGroup {
+        group_id: parse::<KerningGroupId>(&payload.group_id)?,
+      })
+    }
     "setLanguages" => {
       let payload = intent
         .set_languages
@@ -2559,7 +2781,7 @@ fn map_anchor_seed(seed: NapiAnchorSeed) -> errors::Result<AnchorSeed> {
   })
 }
 
-fn map_location(location: NapiLocation) -> errors::Result<FontLocation> {
+pub(crate) fn map_location(location: NapiLocation) -> errors::Result<FontLocation> {
   let values = location
     .values
     .into_iter()
@@ -2701,6 +2923,14 @@ fn map_axis_mapping(mapping: NapiAxisMapping) -> errors::Result<FontAxisMapping>
   Ok(mapped)
 }
 
+fn layer_snapshot(glyph_id: GlyphId, layer: &GlyphLayer) -> GlyphLayerSnapshot {
+  GlyphLayerSnapshot {
+    glyph_id,
+    source_id: layer.source_id(),
+    state: GlyphState::from_layer(layer),
+  }
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -2712,8 +2942,9 @@ mod tests {
     NapiGlyphSnapshotRequest, NapiGlyphState, NapiLocation, NapiMoveAnchorsIntent,
     NapiMovePointsIntent, NapiNamedInstance, NapiPointSeed, NapiPointType, NapiRemoveAnchorsIntent,
     NapiRemovePointsIntent, NapiReverseContourIntent, NapiSetContourClosedIntent,
-    NapiSetLanguagesIntent, NapiSetPointSmoothIntent, NapiSetXAdvanceIntent,
-    NapiTransformLayerIntent, NapiTranslatePointsIntent, NapiUpdateNamedInstanceIntent,
+    NapiSetKerningValuesIntent, NapiSetLanguagesIntent, NapiSetPointSmoothIntent,
+    NapiSetXAdvanceIntent, NapiTransformLayerIntent, NapiTranslatePointsIntent,
+    NapiUpdateNamedInstanceIntent,
   };
   use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -2759,6 +2990,11 @@ mod tests {
       create_glyph_layer: None,
       clone_glyph_layer: None,
       materialize_glyph_layer: None,
+      set_kerning_values: None,
+      create_kerning_group: None,
+      set_kerning_group_member: None,
+      rename_kerning_group: None,
+      delete_kerning_group: None,
     }
   }
 
@@ -4005,6 +4241,53 @@ mod tests {
   }
 
   #[test]
+  fn set_kerning_values_echoes_kerning_and_undo_restores_it() {
+    let mut bridge = bridge_with_workspace();
+    create_default_glyph_layer(&mut bridge, "A", Some(65));
+    let glyph_id = bridge.get_glyphs().unwrap()[0].id.clone();
+    let source_id = default_source_id(&bridge);
+    let side = || NapiKerningSide {
+      kind: NapiKerningSideKind::Glyph,
+      id: glyph_id.clone(),
+    };
+
+    let applied = bridge
+      .apply(
+        vec![NapiFontIntent {
+          set_kerning_values: Some(NapiSetKerningValuesIntent {
+            edits: vec![NapiKerningValueEdit {
+              source_id: source_id.clone(),
+              first: side(),
+              second: side(),
+              amount: Some(-30.0),
+            }],
+          }),
+          ..skeleton_intent("setKerningValues")
+        }],
+        None,
+      )
+      .unwrap();
+
+    let kerning = applied
+      .next
+      .and_then(|next| next.kerning)
+      .expect("setKerningValues must echo kerning");
+    assert_eq!(kerning.sources.len(), 1);
+    assert_eq!(kerning.sources[0].source_id, source_id);
+    assert_eq!(kerning.sources[0].pairs[0].amount, -30.0);
+
+    let undone = bridge
+      .undo()
+      .unwrap()
+      .expect("setKerningValues should undo");
+    let kerning = undone
+      .next
+      .and_then(|next| next.kerning)
+      .expect("undo must echo kerning");
+    assert!(kerning.sources.is_empty());
+  }
+
+  #[test]
   fn apply_create_glyph_layer_resolves_layer_for_new_source() {
     let mut bridge = bridge_with_workspace();
     create_default_glyph_layer(&mut bridge, "A", Some(65));
@@ -4433,6 +4716,78 @@ mod tests {
     assert_eq!(state.structure.contours.len(), 1);
     assert_eq!(state.structure.contours[0].points.len(), 1);
     assert_eq!(&state.values[..], &[500.0, 10.0, 20.0]);
+  }
+
+  fn mutator_sans_bridge(name: &str) -> Bridge {
+    let source_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+      .join("../../fixtures/fonts/mutatorsans-variable/MutatorSans.designspace");
+    let (_, store_path) = test_paths(name);
+    let mut bridge = Bridge::new();
+    bridge
+      .open_workspace(source_path.to_string_lossy().into_owned(), store_path)
+      .unwrap();
+    bridge
+  }
+
+  #[test]
+  fn layer_reads_preserve_request_order_with_resolved_components() {
+    let mut bridge = mutator_sans_bridge("layer-reads");
+    let records = bridge.get_glyphs().unwrap();
+    let composite = records
+      .iter()
+      .find(|glyph| !glyph.component_base_glyph_ids.is_empty())
+      .unwrap();
+    let plain = records
+      .iter()
+      .find(|glyph| glyph.component_base_glyph_ids.is_empty() && glyph.layers.len() > 1)
+      .unwrap();
+    let layer_ids = vec![
+      composite.layers[1].id.clone(),
+      plain.layers[0].id.clone(),
+      composite.layers[0].id.clone(),
+    ];
+
+    let authored = bridge.read_layers(layer_ids.clone()).unwrap();
+    let resolved = bridge.resolve_layers(layer_ids.clone()).unwrap();
+
+    let authored_ids = authored
+      .iter()
+      .map(|layer| layer.state.layer_id.clone())
+      .collect::<Vec<_>>();
+    let resolved_ids = resolved
+      .iter()
+      .map(|layer| layer.authored.state.layer_id.clone())
+      .collect::<Vec<_>>();
+    assert_eq!(authored_ids, layer_ids);
+    assert_eq!(resolved_ids, layer_ids);
+    assert_eq!(
+      resolved[0].authored.source_id,
+      composite.layers[1].source_id
+    );
+    assert_eq!(
+      resolved[0].resolved.components.len(),
+      resolved[0].authored.state.structure.components.len(),
+    );
+    assert!(!resolved[0].resolved.components.is_empty());
+    assert!(resolved[0]
+      .resolved
+      .components
+      .iter()
+      .all(|component| component.outline.bounds.is_some()));
+    assert!(!resolved[0].resolved.outline.svg_path.is_empty());
+    assert!(resolved[1].resolved.components.is_empty());
+  }
+
+  #[test]
+  fn layer_reads_reject_unknown_layers() {
+    let mut bridge = bridge_with_workspace();
+    let layer_id = create_default_glyph_layer(&mut bridge, "A", Some(65));
+    let missing = LayerId::new().to_string();
+
+    assert!(bridge
+      .read_layers(vec![layer_id.clone(), missing.clone()])
+      .is_err());
+    assert!(bridge.resolve_layers(vec![layer_id, missing]).is_err());
   }
 
   #[test]

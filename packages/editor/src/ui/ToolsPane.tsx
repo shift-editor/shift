@@ -161,7 +161,7 @@ function ToolSplitButton({ menuItems, onMenuItemSelect, ...buttonProps }: ToolSp
 }
 
 export function ToolsPane({ editor }: ToolsPaneProps) {
-  const activeTool = useSignalState(editor.toolCell)?.id ?? null;
+  const activeTool = useSignalState(editor.toolIdCell);
   const toolRegistry = useSignalState(editor.toolRegistryCell);
 
   return (
@@ -177,14 +177,19 @@ export function ToolsPane({ editor }: ToolsPaneProps) {
               name === "select" || name === "pen" || name === "hand" || name === "shape"
                 ? name
                 : undefined;
+            // A slot holding several tools activates the one picked last.
+            const slotToolId = menuItems?.find((item) => item.selected)?.toolId ?? name;
+            const slotActive =
+              activeTool === name ||
+              (menuItems?.some((item) => item.toolId === activeTool) ?? false);
             const buttonProps = {
               Icon: icon,
               iconName,
               name,
               tooltip,
-              activeTool,
+              activeTool: slotActive ? name : activeTool,
               disabled,
-              onClick: () => editor.setActiveTool(name),
+              onClick: () => editor.setActiveTool(slotToolId),
             };
 
             if (!menuItems) return <ToolButton key={name} {...buttonProps} />;
@@ -196,7 +201,7 @@ export function ToolsPane({ editor }: ToolsPaneProps) {
                 menuItems={menuItems}
                 onMenuItemSelect={(item) => {
                   item.onSelect();
-                  editor.setActiveTool(name);
+                  editor.setActiveTool(item.toolId ?? name);
                 }}
               />
             );

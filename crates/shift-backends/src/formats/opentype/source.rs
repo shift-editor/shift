@@ -179,23 +179,32 @@ fn binary_directory(
                             default + normalized * (maximum - default)
                         }
                     };
+                    let mut values: Vec<(f64, f64)> = mapping
+                        .axis_value_maps()
+                        .iter()
+                        .map(|value| {
+                            (
+                                user_value(f64::from(value.from_coordinate().to_f32())),
+                                user_value(f64::from(value.to_coordinate().to_f32())),
+                            )
+                        })
+                        .collect();
+                    // Every segment map holds -1, 0, and 1. When the default
+                    // is also the minimum or maximum, two of them name the
+                    // same user value, which a mapping cannot repeat.
+                    values.dedup_by(|(input, _), (previous, _)| input == previous);
+                    let user_location =
+                        |value| Location::from_map(HashMap::from([(axis_id.clone(), value)]));
                     Ok(AxisMapping::new(
                         format!("{} mapping", axis.name()),
                         vec![axis_id.clone()],
                         vec![axis_id.clone()],
-                        mapping
-                            .axis_value_maps()
-                            .iter()
-                            .map(|value| AxisMappingPoint {
+                        values
+                            .into_iter()
+                            .map(|(input, output)| AxisMappingPoint {
                                 description: None,
-                                input: Location::from_map(HashMap::from([(
-                                    axis_id.clone(),
-                                    user_value(f64::from(value.from_coordinate().to_f32())),
-                                )])),
-                                output: Location::from_map(HashMap::from([(
-                                    axis_id.clone(),
-                                    user_value(f64::from(value.to_coordinate().to_f32())),
-                                )])),
+                                input: user_location(input),
+                                output: user_location(output),
                             })
                             .collect(),
                     ))
@@ -274,6 +283,30 @@ mod tests {
             .unwrap()
             .join("fixtures/fonts")
             .join(path)
+    }
+
+    #[test]
+    fn avar_on_an_axis_whose_default_is_its_minimum_imports_a_valid_mapping() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../packages/editor/src/ui/assets/fonts/Inter-VariableFont.ttf");
+        let font = OpenTypeFont::open(&path).unwrap();
+        let axes = font.header.axes();
+        let optical_size = axes.iter().find(|axis| axis.tag() == "opsz").unwrap();
+        assert_eq!(optical_size.minimum(), optical_size.default());
+
+        crate::shift2fontir::to_ir_axes(axes, font.header.axis_mappings()).unwrap();
+        let optical_size_mapping = font
+            .header
+            .axis_mappings()
+            .iter()
+            .find(|mapping| mapping.outputs() == [optical_size.id()])
+            .unwrap();
+        let inputs: Vec<f64> = optical_size_mapping
+            .points()
+            .iter()
+            .filter_map(|point| point.input.get(&optical_size.id()))
+            .collect();
+        assert_eq!(inputs, vec![14.0, 32.0]);
     }
 
     #[test]

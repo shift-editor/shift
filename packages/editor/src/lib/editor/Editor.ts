@@ -1,5 +1,4 @@
 import type { CursorType, ToolRegistryItem } from "../../types/editor";
-import type { FontSessionMode } from "@shift/types";
 import {
   isAnchorId,
   isContourId,
@@ -17,11 +16,15 @@ import {
   type GlyphName,
   type GlyphRecord,
   type Unicode,
+  type FontSessionMode,
   type LayerId,
   type LayerMatch,
   type NodeId,
+  type SegmentId,
+  type SelectableId,
+  type ShiftId,
 } from "@shift/types";
-import { isSegmentId, type SegmentId } from "@shift/glyph-state";
+import { isSegmentId } from "@shift/glyph-state";
 import type { ExternalAxisLocation } from "../../types/variation";
 import type { SourceSelectionMode } from "../../types/sourceSelection";
 import type {
@@ -102,9 +105,10 @@ import { ShiftStore } from "../store/ShiftStore";
 import { EditorGesture, EditorInput, EditorViewState } from "./EditorState";
 import type { PointerTarget } from "../../types/target";
 import type { ComponentTransformSelection } from "../../types/componentTransform";
+import type { TransformTarget } from "../../types/transformTarget";
 import type { ComponentTargets } from "../../types/componentTargets";
 import type { PositionSelection } from "../../types/positionEdit";
-import type { SelectableId, ShiftId, ShiftObject } from "../../types/object";
+import type { ShiftObject } from "../../types/object";
 import type { ShiftEditorRecord, ShiftRecordId } from "../../types/records";
 import type { GlyphNode, NodeKind, ShiftNode } from "../../types/node";
 import {
@@ -200,6 +204,8 @@ export class Editor {
   #toolManager: ToolManager;
   #toolRegistry: Signal<ReadonlyMap<ToolName, ToolRegistryItem>>;
   #tool: Signal<ActiveTool | null>;
+  #toolId: Signal<ToolName | null>;
+  readonly #toolCellsById = new Map<ToolName, Signal<ActiveTool | null>>();
   #dragging: Signal<boolean>;
   #isEditing: Signal<boolean>;
   #selectionBounds: Signal<LocalBounds | null>;
@@ -264,7 +270,9 @@ export class Editor {
     });
     this.#editingSourceIdsCell = signal<ReadonlySet<SourceId>>(
       initialSourceId ? new Set([initialSourceId]) : new Set(),
-      { name: "editor.sources.editing" },
+      // Location changes rewrite this set on every scrub step; only a different
+      // set of sources should re-render the source lists that read it.
+      { name: "editor.sources.editing", equals: sameSourceIds },
     );
     this.#multiSourceEditing = new MultiSourceEditing(
       this.font,
@@ -336,14 +344,17 @@ export class Editor {
           if (shortcut) item.shortcut = shortcut;
           if (onSelect) item.onSelect = onSelect;
           if (menuItems) {
-            item.menuItems = menuItems.map(({ id, icon, label, shortcut, selected, onSelect }) => ({
-              id,
-              icon,
-              label,
-              shortcut,
-              selected,
-              onSelect,
-            }));
+            item.menuItems = menuItems.map(
+              ({ id, icon, label, shortcut, selected, onSelect, toolId }) => ({
+                id,
+                icon,
+                label,
+                shortcut,
+                selected,
+                onSelect,
+                ...(toolId ? { toolId } : {}),
+              }),
+            );
           }
           if (hidden) item.hidden = true;
           if (disabled) item.disabled = true;
@@ -365,6 +376,9 @@ export class Editor {
       },
       { name: "editor.tool" },
     );
+    this.#toolId = computed(() => this.#toolManager.activeToolCell.value?.id ?? null, {
+      name: "editor.toolId",
+    });
     this.#dragging = computed(() => this.gesture.cell.value.phase === "dragging", {
       name: "editor.dragging",
     });
@@ -415,7 +429,10 @@ export class Editor {
       if (manifest.hidden || manifest.disabled) continue;
 
       if (manifest.shortcut != null) {
-        const shortcut: ToolShortcutEntry = { toolId, shortcut: manifest.shortcut };
+        const shortcut: ToolShortcutEntry = {
+          toolId,
+          shortcut: manifest.shortcut,
+        };
         if (manifest.onSelect) shortcut.onSelect = manifest.onSelect;
         shortcuts.push(shortcut);
       }
@@ -423,7 +440,11 @@ export class Editor {
       for (const item of manifest.menuItems ?? []) {
         if (item.shortcut === manifest.shortcut) continue;
 
-        shortcuts.push({ toolId, shortcut: item.shortcut, onSelect: item.onSelect });
+        shortcuts.push({
+          toolId: item.toolId ?? toolId,
+          shortcut: item.shortcut,
+          onSelect: item.onSelect,
+        });
       }
     }
     return shortcuts;
@@ -437,6 +458,46 @@ export class Editor {
   /** Exposes the live active tool identity and state as one reactive value. */
   public get toolCell(): Signal<ActiveTool | null> {
     return this.#tool;
+  }
+
+  /**
+   * Exposes the active tool's identity without its state.
+   *
+   * @remarks
+   * Notifies only when the user switches tools. Readers that branch on which
+   * tool is active subscribe here instead of {@link toolCell}, whose state
+   * changes on every pointer move during a marquee or drag.
+   */
+  public get toolIdCell(): Signal<ToolName | null> {
+    return this.#toolId;
+  }
+
+  /**
+   * Exposes one tool's live state while that tool is active.
+   *
+   * @remarks
+   * Holds null while another tool is active, so readers that follow one tool
+   * ignore every other tool's state changes. The cell is created on first
+   * request and reused for the editor's lifetime.
+   *
+   * @param id - Tool identity whose state the reader follows.
+   * @returns A cell holding the active tool snapshot when its identity matches; otherwise null.
+   */
+  public toolCellIf<Id extends ToolName>(id: Id): Signal<ActiveTool<Id> | null> {
+    let cell = this.#toolCellsById.get(id);
+    if (!cell) {
+      cell = computed(
+        () => {
+          if (this.#toolId.value !== id) return null;
+
+          return this.#tool.value;
+        },
+        { name: `editor.tool.${id}` },
+      );
+      this.#toolCellsById.set(id, cell);
+    }
+
+    return cell as Signal<ActiveTool<Id> | null>;
   }
 
   /**
@@ -817,9 +878,7 @@ export class Editor {
         const component = renderModel?.componentAt([id]);
         if (!glyph || !component) continue;
 
-        const layer =
-          node.sourceId === this.activeSourceId ? glyph.layerForSource(node.sourceId) : null;
-        return new ComponentObject(component, node, layer);
+        return new ComponentObject(component, node, this.editableLayer(node));
       }
       return null;
     }
@@ -832,7 +891,7 @@ export class Editor {
       const { item } = location;
       const glyphId =
         item.kind === "glyph" ? (this.font.entryForName(item.glyphName)?.id ?? null) : null;
-      return new TextItemObject(node, id, glyphId);
+      return new TextItemObject(node, id, glyphId, this.nodeDefinition("textRun"));
     }
 
     return null;
@@ -926,6 +985,25 @@ export class Editor {
   }
 
   /**
+   * Resolves a selection into something the transform box can move, scale, and rotate as a whole.
+   *
+   * @remarks
+   * Asks the definition of the node every selected object belongs to.
+   *
+   * @param ids - Selected object identities, defaulting to the current selection.
+   * @returns null for an empty selection, one spanning nodes, or one the node's kind cannot transform.
+   */
+  public transformTarget(
+    ids: readonly SelectableId[] = this.selection.ids,
+  ): TransformTarget | null {
+    if (ids.length === 0) return null;
+    const node = this.selectionNode(ids);
+    if (!node) return null;
+
+    return this.nodeDefinition(node.kind).transformTarget?.(node, ids) ?? null;
+  }
+
+  /**
    * Resolves selected objects into reference and matched-layer position targets.
    *
    * @remarks
@@ -964,6 +1042,7 @@ export class Editor {
         }
         case "component":
         case "node":
+        case "textItem":
           return null;
       }
     }
@@ -1041,6 +1120,24 @@ export class Editor {
    */
   layerForGlyph(glyphId: GlyphId, sourceId: SourceId): GlyphLayer | null {
     return this.glyphForId(glyphId)?.layerForSource(sourceId) ?? null;
+  }
+
+  /**
+   * Returns the authored layer a glyph node shows, when edits may target it.
+   *
+   * @remarks
+   * A node keeps the source it last showed while the location is interpolated,
+   * so its layer is editable only while that source is the active source.
+   * Reads the active source without tracking it; a `computed` that calls this
+   * tracks {@link activeSourceIdCell} itself to rerun when the location changes.
+   *
+   * @returns null at an interpolated location, for another source's node, or
+   * when the glyph has no layer at the node's source.
+   */
+  editableLayer(node: GlyphNode): GlyphLayer | null {
+    if (node.sourceId !== this.#activeSourceIdCell.peek()) return null;
+
+    return this.layerForGlyph(node.glyphId, node.sourceId);
   }
 
   /**
@@ -1209,19 +1306,36 @@ export class Editor {
     return this.#selectionBounds;
   }
 
+  /** Selects every glyph item of every run; the run level's select-all. */
+  #selectAllGlyphItems(): void {
+    const ids = this.scene
+      .nodesOfKind("textRun")
+      .flatMap((node) => this.text.run(node.runId)?.items ?? [])
+      .filter((item) => item.kind === "glyph")
+      .map((item) => item.id);
+    if (ids.length === 0) return;
+
+    this.history.capture("Select all", () => this.selection.select(ids));
+  }
+
   /** Reactive scene-space bounds of the current selection; see {@link selectionSceneBounds}. */
   public get selectionSceneBoundsCell(): Signal<SceneBounds | null> {
     return this.#selectionSceneBounds;
   }
 
   /**
-   * Select every point in the active authored glyph layer.
+   * Select every point in the active authored glyph layer, or every run glyph when none is edited.
    *
    * This intentionally uses the authored glyph layer rather than interpolated
    * design-location geometry: selection mutates an authored layer, so it must
    * refer to point IDs that layer operations can mutate.
    */
   public selectAll(): void {
+    if (!this.editing.hasScope() && this.scene.nodesOfKind("textRun").length > 0) {
+      this.#selectAllGlyphItems();
+      return;
+    }
+
     const sourceId = this.activeSourceId;
     if (!sourceId) return;
 
@@ -1572,6 +1686,13 @@ export class Editor {
     this.selection.clear();
     this.hover.clear();
     this.editing.enter(nodeId);
+  }
+
+  /** Leaves every edited node, so glyphs draw and hit as plain content. */
+  exitNodes(): void {
+    this.selection.clear();
+    this.hover.clear();
+    this.editing.clear();
   }
 
   /**
@@ -2220,4 +2341,10 @@ function targetNode(scene: Scene, target: PointerTarget): ShiftNode | null {
     case "component":
       return scene.node(target.nodeId);
   }
+}
+
+function sameSourceIds(a: ReadonlySet<SourceId>, b: ReadonlySet<SourceId>): boolean {
+  if (a.size !== b.size) return false;
+  for (const id of a) if (!b.has(id)) return false;
+  return true;
 }

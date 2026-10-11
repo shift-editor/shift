@@ -23,6 +23,10 @@ Shift is free and open source, and runs on macOS, Windows, and Linux. It stays r
 
 Download Shift for macOS, Windows, and Linux from [shift.graphics](https://shift.graphics) or [GitHub Releases](https://github.com/shift-editor/shift/releases). On Linux, install from the [APT or DNF repositories](docs/releases.md#linux-installation) to get updates. For the latest development build, use [Shift Nightly](https://github.com/shift-editor/shift/releases/tag/nightly).
 
+## AI agents
+
+Connect Claude Code, Codex, or another MCP client to fonts open in Shift using the [one-time MCP setup guide](docs/mcp.md). The connection is read-only; use `shift-cli` for saved files that are not open in the app.
+
 ## Status
 
 | Area                                     | Status  |

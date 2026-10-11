@@ -40,12 +40,25 @@ async function runWithVirtualDesktop(screen, command, commandArguments) {
     ],
     {
       env: {
-        ...process.env,
+        ...withoutWaylandSession(process.env),
         [activeEnvironmentVariable]: "1",
       },
       missingCommandHelp: "Enter `nix develop` so Xvfb and Fluxbox are available.",
     },
   );
+}
+
+/**
+ * Drops the host's Wayland session so apps inside use the virtual X display.
+ *
+ * @remarks
+ * Run from a Wayland desktop, Electron prefers `WAYLAND_DISPLAY` over the
+ * `DISPLAY` xvfb-run sets, so E2E windows opened on the developer's real screen
+ * at its scale factor and every canvas golden failed at twice its size.
+ */
+function withoutWaylandSession(environment) {
+  const { WAYLAND_DISPLAY: _wayland, ...rest } = environment;
+  return { ...rest, XDG_SESSION_TYPE: "x11" };
 }
 
 async function runInsideVirtualDesktop(command, commandArguments) {

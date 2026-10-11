@@ -23,7 +23,5 @@
     "../src/renderer/src/types/svg.d.ts",
     "../src/renderer/env.d.ts"
   ],
-  "include": ["./**/*.ts"],
-  // perf.spec.ts still calls a removed layer API; the performance rewrite restores it.
-  "exclude": ["./perf.spec.ts"]
+  "include": ["./**/*.ts", "./**/*.mts"]
 }

@@ -14,11 +14,11 @@ export class Nudge implements SelectBehavior {
     const delta = nudgeDelta(event);
     if (!delta) return false;
 
-    const components = ctx.editor.componentTransformSelection(ctx.editor.selection.ids);
-    if (components) {
-      const edit = components.layer.beginComponentTransformEdit(components);
+    const target = ctx.editor.transformTarget();
+    if (target) {
+      const edit = target.begin("move");
       edit.preview(() => Mat.Translate(delta.x, delta.y));
-      edit.commit("Move components");
+      edit.commit();
       return true;
     }
 

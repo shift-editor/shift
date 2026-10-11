@@ -29,6 +29,10 @@ export class WindowManager {
     return this.#windows.get(window.id) ?? null;
   }
 
+  windowForId(windowId: number): Window | null {
+    return this.#windows.get(windowId) ?? null;
+  }
+
   allWindows(): readonly Window[] {
     return [...this.#windows.values()];
   }

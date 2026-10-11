@@ -156,15 +156,19 @@ impl ShiftStore {
     }
 
     /// Opens a canonical Shift document after validating it read-only first.
+    ///
+    /// A document written by an older supported schema is upgraded in place
+    /// before it is returned, so older app versions can no longer open it.
     pub fn open_document(path: impl AsRef<Path>) -> Result<Self, StoreError> {
         let path = path.as_ref();
 
         Self::verify_document(path)?;
 
         let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE)?;
-        schema::validate_document_header(&conn)?;
+        let version = schema::validate_document_header(&conn)?;
         validate_document_shape(&conn)?;
         configure_document_connection(&conn)?;
+        schema::migrate(&conn, version, schema::SHIFT_DOCUMENT_SCHEMA_VERSION)?;
 
         Ok(Self {
             conn,
@@ -172,6 +176,21 @@ impl ShiftStore {
             kind: StoreKind::Document,
             recovery: None,
         })
+    }
+
+    /// Reads a document's identity after format and schema validation, without
+    /// SQLite's integrity and foreign-key checks.
+    ///
+    /// For deciding which document a path names before opening it. Opening runs
+    /// [`Self::verify_document`] before anything is read or written; running the
+    /// full integrity check here as well cost about 300 ms per inspection on a
+    /// large font, and opening a document inspects it twice.
+    pub fn inspect_document_identity(
+        path: impl AsRef<Path>,
+    ) -> Result<DocumentMetadata, StoreError> {
+        let conn = open_document_read_only(path.as_ref())?;
+        schema::validate_document_header(&conn)?;
+        validate_document_shape(&conn)
     }
 
     /// Performs format, schema, relational, and SQLite integrity validation

@@ -14,7 +14,8 @@ pub(crate) fn document_identity(
     path: impl AsRef<Path>,
 ) -> Result<DocumentIdentity, WorkspaceError> {
     let path = path.as_ref();
-    let metadata = ShiftStore::verify_document(path)?;
+    // Identity only: opening the document runs the full integrity check.
+    let metadata = ShiftStore::inspect_document_identity(path)?;
     let canonical_path = std::fs::canonicalize(path)?;
 
     Ok(DocumentIdentity {

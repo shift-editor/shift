@@ -349,6 +349,7 @@ function colorThemeVariables(theme: ColorTheme): Record<string, string> {
     "--editor-preview-color": palette.base0D,
     "--editor-variation-outline-color": withAlpha(palette.base0D, 0.45),
     "--editor-edit-ghost-color": withAlpha(glyphForeground, 0.12),
+    "--editor-advance-tee-color": withAlpha(glyphForeground, 0.45),
     "--editor-read-only-lock-color": palette.base05,
     "--editor-pen-ready-fill": palette.base00,
     "--editor-pen-ready-stroke": palette.base0D,
@@ -365,6 +366,12 @@ function colorThemeVariables(theme: ColorTheme): Record<string, string> {
     "--editor-spacing-faint": withAlpha(dark ? "#F472B6" : "#DB2E91", dark ? 0.3 : 0.45),
     "--editor-spacing-negative": dark ? "#FBBF24" : "#D97706",
     "--editor-spacing-negative-faint": withAlpha(dark ? "#FBBF24" : "#D97706", dark ? 0.35 : 0.5),
+    // Kerning has its own violet for a tightening kern and teal for a loosening
+    // one, so it never reads as a spacing half.
+    "--editor-kerning": dark ? "#A78BFA" : "#7C3AED",
+    "--editor-kerning-positive": dark ? "#2DD4BF" : "#0D9488",
+    // Interpolated spacing and kerning are read-only, like interpolated points: neutral grey.
+    "--editor-interpolated": dark ? "#9CA3AF" : "#8A8A8A",
     "--editor-text-composite-arm-fill": withAlpha(palette.base04, 0.22),
     "--editor-text-component-overlay-a": withAlpha(palette.base0B, 0.26),
     "--editor-text-component-overlay-b": withAlpha(palette.base0F, 0.26),

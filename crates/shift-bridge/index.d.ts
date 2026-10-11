@@ -8,6 +8,7 @@ import type {
   ComponentId,
   GuidelineId,
   GlyphId,
+  KerningGroupId,
   GlyphName,
   LayerId,
   MetricId,
@@ -74,6 +75,32 @@ export declare class Bridge {
   discardRedo(): void
   /** Glyph-addressed snapshots for renderer-local synchronous font state. */
   getGlyphSnapshots(requests: Array<NapiGlyphSnapshotRequest>): Array<NapiGlyphSnapshot>
+  /**
+   * Reads exact authored layers by stable layer identity.
+   *
+   * Results preserve request order and contain accepted workspace state
+   * only. Components are not resolved, so a layer with a broken component
+   * reference remains readable.
+   *
+   * # Errors
+   *
+   * Returns an error when any identity is malformed or absent from the font.
+   */
+  readLayers(layerIds: Array<LayerId>): Array<NapiGlyphLayerSnapshot>
+  /**
+   * Reads exact authored layers with their composited geometry.
+   *
+   * Each root keeps its requested authored geometry; components resolve at
+   * that layer's source through normal interpolation and fallback, and
+   * cyclic branches are skipped. Results preserve request order and do not
+   * publish renderer models.
+   *
+   * # Errors
+   *
+   * Returns an error when any identity is malformed or absent, a component
+   * cannot resolve, or referenced interpolation is incompatible.
+   */
+  resolveLayers(layerIds: Array<LayerId>): Array<NapiLayerRead>
   /**
    * Derives entity mappings and structural diagnostics between two layers.
    *
@@ -154,9 +181,27 @@ export declare class Bridge {
    * applies its own default; an empty array is an explicit empty list.
    */
   getLanguageIds(): Array<string> | null
+  /**
+   * Returns the font's kerning groups, per-source pairs, and the basis
+   * kerning interpolates over.
+   */
+  getKerning(): NapiKerningSnapshot
   getNamedInstances(): Array<NapiNamedInstance>
   /** Returns the precomputed source-metric interpolation model for this font. */
   getSourceMetricsInterpolation(): NapiSourceMetricsInterpolationSnapshot | null
+  /**
+   * Shapes a run of text with the font's feature code.
+   *
+   * Characters map through the live font's Unicode values and every
+   * glyph's own advance is zero while shaping, so the result carries the
+   * substituted glyphs, their clusters, and only what the feature code
+   * positions. The caller adds live advances, kerning, and mark attachment.
+   *
+   * Feature code with errors shapes with the last version that compiled.
+   * The shaping tables are rebuilt only when a font change since the last
+   * call altered the glyph order, glyph categories, feature code, or axes.
+   */
+  shape(request: NapiShapeRequest): Array<NapiShapedGlyph>
   mapLocation(location: NapiLocation): NapiLocation
   getSources(): Array<NapiSource>
 }
@@ -174,6 +219,13 @@ export interface NapiDocumentState {
   needsSaveAs: boolean
 }
 
+export interface NapiFeatureSetting {
+  /** A feature tag such as `liga`. */
+  tag: string
+  /** `0` turns the feature off, `1` on; larger values pick an alternate. */
+  value: number
+}
+
 export interface NapiFontExportRequest {
   path: string
   format: string
@@ -187,6 +239,50 @@ export interface NapiFontExportResult {
 export interface NapiNewWorkspace {
   familyName?: string
   unitsPerEm?: number
+}
+
+/**
+ * One shaped glyph. Advances and offsets hold only what the font's feature
+ * code positions; glyph advances, kerning, and mark attachment are the
+ * caller's to add.
+ */
+export interface NapiShapedGlyph {
+  /** Absent when a character has no glyph. */
+  glyphId?: GlyphId
+  /** Index of the first unit the glyph came from. */
+  cluster: number
+  xAdvance: number
+  yAdvance: number
+  xOffset: number
+  yOffset: number
+}
+
+export interface NapiShapeRequest {
+  units: Array<NapiShapeUnit>
+  /** User-space location to shape at; omitted axes are at their default. */
+  location: NapiLocation
+  /** Guessed from the script when omitted. */
+  direction?: "ltr" | "rtl"
+  /**
+   * ISO 15924 script tag such as `Arab`; guessed from the characters when
+   * omitted.
+   */
+  script?: string
+  /** BCP 47 language tag; the default language system when omitted. */
+  language?: string
+  /** Settings over the features applied by default. */
+  features?: Array<NapiFeatureSetting>
+}
+
+/**
+ * One unit of text to shape: exactly one of a character or a glyph inserted
+ * by name.
+ */
+export interface NapiShapeUnit {
+  /** A Unicode scalar value. */
+  codepoint?: number
+  /** A glyph with no character to type, shaped as itself. */
+  glyphId?: GlyphId
 }
 
 /**
@@ -322,6 +418,12 @@ export interface NapiBooleanOpIntent {
   operation: string
 }
 
+/** One corner of outline bounds in font units. */
+export interface NapiBoundsCorner {
+  x: number
+  y: number
+}
+
 export interface NapiCatalogAtlasGlyph {
   glyphId: GlyphId
   defaultGlyph: number
@@ -394,6 +496,16 @@ export interface NapiComponentMatch {
   targetId: ComponentId
 }
 
+/** Six-value affine placement of a component in its parent layer. */
+export interface NapiComponentTransform {
+  xx: number
+  xy: number
+  yx: number
+  yy: number
+  dx: number
+  dy: number
+}
+
 export declare const enum NapiComponentTransformKind {
   Decomposed = 'decomposed',
   Affine = 'affine'
@@ -436,6 +548,13 @@ export interface NapiCreateGlyphLayerIntent {
   sourceId: SourceId
 }
 
+/** Creates an empty kerning group under an id the client mints. */
+export interface NapiCreateKerningGroupIntent {
+  groupId: KerningGroupId
+  position: NapiKerningPosition
+  name: string
+}
+
 /** Creates an authored named instance with client-minted stable identity. */
 export interface NapiCreateNamedInstanceIntent {
   instance: NapiNamedInstance
@@ -460,6 +579,11 @@ export interface NapiDecomposeComponentsIntent {
 /** Font-level axis deletion. Removing an axis also reshapes source locations. */
 export interface NapiDeleteAxisIntent {
   axisId: AxisId
+}
+
+/** Deletes a kerning group; its pairs stay and resolve again on undo. */
+export interface NapiDeleteKerningGroupIntent {
+  groupId: KerningGroupId
 }
 
 /** Deletes an authored named instance without changing sources or geometry. */
@@ -494,8 +618,10 @@ export interface NapiFontIntent {
    * "transformLayer" | "setXAdvance" | "applyBooleanOp".
    * Font-level kinds additionally include metadata replacement, tracked
    * language replacement, axis create/update/delete, mapping replacement,
-   * named-instance create/update/delete, source create/delete, and glyph
-   * or layer creation.
+   * named-instance create/update/delete, source create/delete, glyph
+   * or layer creation, "setKerningValues", and the kerning group kinds
+   * "createKerningGroup" | "setKerningGroupMember" | "renameKerningGroup"
+   * | "deleteKerningGroup".
    * Every kind shares the same apply path; one set is one undo step.
    */
   kind: string
@@ -536,6 +662,11 @@ export interface NapiFontIntent {
   createGlyphLayer?: NapiCreateGlyphLayerIntent
   cloneGlyphLayer?: NapiCloneGlyphLayerIntent
   materializeGlyphLayer?: NapiMaterializeGlyphLayerIntent
+  setKerningValues?: NapiSetKerningValuesIntent
+  createKerningGroup?: NapiCreateKerningGroupIntent
+  setKerningGroupMember?: NapiSetKerningGroupMemberIntent
+  renameKerningGroup?: NapiRenameKerningGroupIntent
+  deleteKerningGroup?: NapiDeleteKerningGroupIntent
 }
 
 export interface NapiFontMetadata {
@@ -589,6 +720,8 @@ export interface NapiFontReplacement {
    * reshapes locations, createSource adds one); absent otherwise.
    */
   sources?: Array<NapiSource>
+  /** Complete kerning when its values or interpolation basis changed. */
+  kerning?: NapiKerningSnapshot
 }
 
 export interface NapiFontSnapshot {
@@ -604,6 +737,7 @@ export interface NapiFontSnapshot {
   namedInstances: Array<NapiNamedInstance>
   /** Tracked Hyperglot language ids; absent when the font stores no list. */
   languageIds?: Array<string>
+  kerning: NapiKerningSnapshot
 }
 
 export interface NapiGlyphChangedEntities {
@@ -731,6 +865,54 @@ export interface NapiInterpolationSupport {
   upper: number
 }
 
+export interface NapiKerningGroup {
+  id: KerningGroupId
+  position: NapiKerningPosition
+  name: string
+  glyphIds: Array<GlyphId>
+}
+
+export interface NapiKerningPairValue {
+  first: NapiKerningSide
+  second: NapiKerningSide
+  amount: number
+}
+
+export declare const enum NapiKerningPosition {
+  First = 'first',
+  Second = 'second'
+}
+
+/** One kerning pair side: `id` is a glyph id when `kind` is `glyph`, else a group id. */
+export interface NapiKerningSide {
+  kind: NapiKerningSideKind
+  id: string
+}
+
+export declare const enum NapiKerningSideKind {
+  Glyph = 'glyph',
+  Group = 'group'
+}
+
+/**
+ * Font kerning: groups, per-source pairs, and the interpolation basis over
+ * the default source and every master with pairs (absent for static fonts).
+ */
+export interface NapiKerningSnapshot {
+  groups: Array<NapiKerningGroup>
+  sources: Array<NapiSourceKerningPairs>
+  basis?: NapiInterpolationBasis
+}
+
+/** One kerning pair value to set or remove at one source. */
+export interface NapiKerningValueEdit {
+  sourceId: SourceId
+  first: NapiKerningSide
+  second: NapiKerningSide
+  /** New value in font units; absent removes the pair at this source. */
+  amount?: number
+}
+
 /**
  * Replacement wrapper whose presence distinguishes "unchanged" from a
  * change that removed the tracked language list.
@@ -778,6 +960,12 @@ export interface NapiLayerMatch {
   anchors: Array<NapiAnchorMatch>
   components: Array<NapiComponentMatch>
   differences: Array<NapiLayerDifference>
+}
+
+/** One accepted-state layer: authored state and its resolved geometry, read together. */
+export interface NapiLayerRead {
+  authored: NapiGlyphLayerSnapshot
+  resolved: NapiResolvedLayerGeometry
 }
 
 /**
@@ -843,6 +1031,12 @@ export interface NapiNamedInstance {
   postscriptName?: string
 }
 
+/** Tight axis-aligned outline bounds in font units, y-up. */
+export interface NapiOutlineBounds {
+  min: NapiBoundsCorner
+  max: NapiBoundsCorner
+}
+
 export interface NapiPointData {
   id: PointId
   pointType: NapiPointType
@@ -887,6 +1081,32 @@ export interface NapiRemovePointsIntent {
   pointIds: Array<PointId>
 }
 
+/** Renames a kerning group; its pairs keep referencing it by id. */
+export interface NapiRenameKerningGroupIntent {
+  groupId: KerningGroupId
+  name: string
+}
+
+/** One direct component whose outline includes its resolved descendants. */
+export interface NapiResolvedComponentGeometry {
+  id: ComponentId
+  baseGlyphId: GlyphId
+  transformation: NapiComponentTransform
+  outline: NapiResolvedOutline
+}
+
+/** Composited geometry of one exact authored layer at its own source. */
+export interface NapiResolvedLayerGeometry {
+  outline: NapiResolvedOutline
+  components: Array<NapiResolvedComponentGeometry>
+}
+
+/** Composited outline as one SVG path in font units with its tight bounds. */
+export interface NapiResolvedOutline {
+  svgPath: string
+  bounds?: NapiOutlineBounds
+}
+
 export interface NapiReverseContourIntent {
   layerId: LayerId
   contourId: ContourId
@@ -913,6 +1133,18 @@ export interface NapiSetContourStartIntent {
   layerId: LayerId
   contourId: ContourId
   pointId: PointId
+}
+
+/** Moves a glyph into a group, or out of its group at `position` without one. */
+export interface NapiSetKerningGroupMemberIntent {
+  position: NapiKerningPosition
+  glyphId: GlyphId
+  groupId?: KerningGroupId
+}
+
+/** Sets or removes kerning pair values at sources as one undoable edit. */
+export interface NapiSetKerningValuesIntent {
+  edits: Array<NapiKerningValueEdit>
 }
 
 /** Replaces the font's tracked language list as one undoable edit. */
@@ -1004,6 +1236,11 @@ export interface NapiSource {
   lineGap?: number
   underlinePosition?: number
   underlineThickness?: number
+}
+
+export interface NapiSourceKerningPairs {
+  sourceId: SourceId
+  pairs: Array<NapiKerningPairValue>
 }
 
 export declare const enum NapiSourceMetricField {

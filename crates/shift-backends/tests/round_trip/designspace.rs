@@ -518,3 +518,50 @@ fn plain_ufo_layers_stay_layers_when_axes_exist() {
         "background must stay a UFO layer"
     );
 }
+
+fn mutatorsans_designspace() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../fixtures/fonts/mutatorsans-variable/MutatorSans.designspace")
+}
+
+fn kerning_in_file(font: &Font, filename: &str, first: &str, second: &str) -> Option<f64> {
+    let source = font
+        .sources()
+        .iter()
+        .find(|source| source.filename() == Some(filename) && source.layer_name().is_none())
+        .unwrap_or_else(|| panic!("no master source for {filename}"));
+    shift_font::test_support::kerning_between(font, &source.id(), first, second)
+}
+
+#[test]
+fn each_master_ufo_keeps_its_own_kerning_through_a_round_trip() {
+    let original = load_font(&mutatorsans_designspace());
+    assert_eq!(
+        kerning_in_file(&original, "MutatorSansLightCondensed.ufo", "T", "A"),
+        Some(-75.0)
+    );
+    assert_eq!(
+        kerning_in_file(&original, "MutatorSansBoldWide.ufo", "T", "A"),
+        Some(-150.0)
+    );
+
+    let out_dir = tempfile::tempdir().unwrap();
+    let out_path = out_dir.path().join("MutatorSans.designspace");
+    save_font(&original, &out_path);
+    let reloaded = load_font(&out_path);
+
+    for (filename, value) in [
+        ("MutatorSansLightCondensed.ufo", -75.0),
+        ("MutatorSansBoldWide.ufo", -150.0),
+    ] {
+        assert_eq!(
+            kerning_in_file(&reloaded, filename, "T", "A"),
+            Some(value),
+            "{filename} should keep its own T/A kerning"
+        );
+    }
+    assert_eq!(
+        kerning_in_file(&reloaded, "MutatorSansLightWide.ufo", "B", "H"),
+        Some(-40.0)
+    );
+}

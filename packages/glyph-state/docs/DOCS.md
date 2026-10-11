@@ -97,7 +97,7 @@ Renderer code should keep using cached `GlyphGeometry` instances from the model 
 - The `componentTransformKind` passed to the `GlyphGeometry` constructor must match how the value buffer was packed: `"decomposed"` reads 9 values per component, `"affine"` reads 6. There is no runtime check -- a mismatch silently misreads every component transform. The default is `"decomposed"`.
 - `withPositionUpdates` copies the entire value buffer per call. Batch a frame's updates into one call; unknown point/anchor ids in the update list are skipped without error.
 - `allPoints` returns a fresh array copy on every access. Read it once and reuse the result inside loops.
-- `SegmentId` is derived from the endpoint point ids (`segment:<start>:<end>`), so it is stable across re-parses of unchanged geometry -- but any operation that replaces an endpoint produces a different id. Use `parseSegmentId` to recover the endpoints from an id.
+- `SegmentId` is imported from `@shift/types` and derived here from endpoint point ids (`segment:<start>:<end>`), so it is stable across re-parses of unchanged geometry -- but any operation that replaces an endpoint produces a different id. Use `parseSegmentId` to recover the endpoints from an id.
 
 ## Verification
 

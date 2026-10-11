@@ -12,8 +12,6 @@ import {
   PopoverTitle,
   PopoverTrigger,
   Tooltip,
-  TooltipContent,
-  TooltipTrigger,
   X,
 } from "@shift/ui";
 import type { Axis, AxisId, Source, SourceId } from "@shift/types";
@@ -21,7 +19,6 @@ import PlusIcon from "@/assets/general/plus.svg";
 import WarningIcon from "@/assets/general/warning.svg";
 import { SidebarActionButton } from "@/components/sidebar";
 import { useAxes } from "@/hooks/useAxes";
-import { useExternalLocation } from "@/hooks/useExternalLocation";
 import { useSources } from "@/hooks/useSources";
 import { axisValue } from "@shift/editor/variation";
 import type { ExternalAxisLocation } from "@shift/editor/types";
@@ -61,7 +58,6 @@ export const CreateSourceMenu = ({ onSourceCreated, onOpenChange }: CreateSource
   const editor = useEditor();
   const axes = useAxes();
   const sources = useSources();
-  const [externalLocation] = useExternalLocation();
   const [open, setOpen] = useState(false);
   const [values, setValues] = useState<CreateSourceFormValues>(emptyValues);
   const [validationVisible, setValidationVisible] = useState(false);
@@ -69,7 +65,9 @@ export const CreateSourceMenu = ({ onSourceCreated, onOpenChange }: CreateSource
   const axisInputRefs = useRef(new Map<AxisId, HTMLInputElement>());
 
   const handleOpenChange = (nextOpen: boolean) => {
-    if (nextOpen) setValues(defaultValues(axes, sources, externalLocation));
+    // Read the location only when opening: subscribing would re-render this menu
+    // on every step of a weight scrub just to prefill a form that is closed.
+    if (nextOpen) setValues(defaultValues(axes, sources, editor.externalLocationCell.peek()));
     setValidationVisible(false);
     setOpen(nextOpen);
     if (onOpenChange) onOpenChange(nextOpen);
@@ -123,43 +121,34 @@ export const CreateSourceMenu = ({ onSourceCreated, onOpenChange }: CreateSource
 
   if (axes.length === 0) {
     return (
-      <Tooltip>
-        <TooltipTrigger>
-          <SidebarActionButton label="Create source" aria-disabled="true">
-            <PlusIcon className="h-3 w-3" />
-          </SidebarActionButton>
-        </TooltipTrigger>
-        <TooltipContent>Create source</TooltipContent>
+      <Tooltip content="Create source">
+        <SidebarActionButton label="Create source" aria-disabled="true">
+          <PlusIcon className="h-3 w-3" />
+        </SidebarActionButton>
       </Tooltip>
     );
   }
 
   return (
     <Popover open={open} onOpenChange={handleOpenChange} modal={false}>
-      <Tooltip>
-        <TooltipTrigger>
-          <PopoverTrigger
-            render={
-              <SidebarActionButton label="Create source">
-                <PlusIcon className="h-3 w-3" />
-              </SidebarActionButton>
-            }
-          />
-        </TooltipTrigger>
-        <TooltipContent>Create source</TooltipContent>
+      <Tooltip content="Create source">
+        <PopoverTrigger
+          render={
+            <SidebarActionButton label="Create source">
+              <PlusIcon className="h-3 w-3" />
+            </SidebarActionButton>
+          }
+        />
       </Tooltip>
       <PopoverPortal>
         <PopoverPositioner sideOffset={4} align="start">
           <PopoverPopup className="w-50 p-0" initialFocus={nameInputRef}>
             <div className="flex h-8 items-center justify-between border-b border-line-subtle px-2">
               <PopoverTitle>Create Source</PopoverTitle>
-              <Tooltip>
-                <TooltipTrigger>
-                  <PopoverClose variant="icon" aria-label="Close">
-                    <X className="h-4 w-4" />
-                  </PopoverClose>
-                </TooltipTrigger>
-                <TooltipContent>Close</TooltipContent>
+              <Tooltip content="Close">
+                <PopoverClose variant="icon" aria-label="Close">
+                  <X className="h-4 w-4" />
+                </PopoverClose>
               </Tooltip>
             </div>
 

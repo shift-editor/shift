@@ -39,6 +39,16 @@ When an error pattern repeats and no helper fits, add one next to the data it de
 
 Every new helper gets Rustdoc with an `# Errors` section (see `rustdoc`) and a unit test of the failure it produces.
 
+## Error types
+
+A failure that callers may handle, test, or wrap is a type, not text.
+
+- A function that can fail for more than one reason returns a `thiserror` enum with one variant per reason. Never return `Result<_, String>` or add a `{ message: String }` variant to carry another error.
+- Wrap another module's error with `#[from]` or `#[source]`; never `.map_err(|error| error.to_string())`. Include `{0}` or `{source}` in the wrapping message when callers surface errors through `to_string()`, so the detail survives.
+- Convert to text only at a boundary that requires it: a NAPI or MCP message, or a foreign API such as fontir's `Error::InvalidEntry`.
+- A public error type cannot hold a private one. Export a wrapped error type alongside the public error that contains it.
+- When new code calls an existing function that returns `String` errors, type that function's error first instead of wrapping the string again. Inherited stringly errors spread through every caller that adapts to them.
+
 ## Lookups and ids
 
 - Lookups take ids by reference: `fn glyph(&self, id: &GlyphId)`. Ids are `String` newtypes; a by-value parameter forces every caller that keeps its id to clone it. Take an id by value only when the function stores or returns it.
@@ -57,5 +67,7 @@ Every new helper gets Rustdoc with an `# Errors` section (see `rustdoc`) and a u
 - [ ] No `CoreError::*NotFound`, `SlugError::LengthOverflow`, or `StoreError::MissingEntity` built inline where a helper above applies.
 - [ ] No other crate's error variant named at a call site.
 - [ ] No id cloned on a lookup's success path just for its error.
+- [ ] No new `Result<_, String>`, `{ message: String }` error variant, or `.to_string()` of an error before a text boundary.
+- [ ] Code that calls a function with `String` errors types that error rather than wrapping the string.
 - [ ] Any error built at two or more sites for the same reason has one helper, with Rustdoc and a test.
 - [ ] `cargo fmt`, `cargo clippy` for the affected crates, and their tests pass.

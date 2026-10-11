@@ -21,10 +21,11 @@ export default defineConfig({
       "@shift/geo",
       "@shift/glyph-state",
       "@shift/rules",
+      "@shift/runtime",
       "@shift/types",
       "@shift/validation",
       "regl",
     ],
-    neverBundle: [/^@base-ui-components\/react(?:\/|$)/, "react", "react-dom", "react/jsx-runtime"],
+    neverBundle: [/^@base-ui\/react(?:\/|$)/, "react", "react-dom", "react/jsx-runtime"],
   },
 });

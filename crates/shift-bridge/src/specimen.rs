@@ -4,7 +4,8 @@ use napi::bindgen_prelude::*;
 use napi::{Error, Status};
 use napi_derive::napi;
 use shift_backends::{font_loader::FontLoader, FontExporter, FontView, GlyphSubsetView};
-use shift_font::Glyph;
+use shift_font::{Glyph, GlyphId};
+use shift_workspace::{AcquireScope, FontWorkspace, WorkspaceError};
 
 use crate::bridge::FontSaveSnapshot;
 
@@ -69,6 +70,74 @@ impl SpecimenTask {
 /// specimen's "first drawn glyphs" fallback.
 const LEADING_DRAWN_GLYPHS: usize = 2;
 
+/// Glyph-order batch scanned while looking for the first drawn glyphs.
+const LEADING_GLYPH_BATCH: usize = 16;
+
+/// Loads only the glyphs a document's specimen compiles.
+///
+/// The specimen is chosen from code points, which glyph records carry without
+/// their layers, so a document loads the planned glyphs and their components,
+/// then glyphs from the start of glyph order until it has found the drawn ones
+/// [`source_specimen`] falls back to. Loading every layer instead made opening
+/// or saving a large document block the workspace for about a second. A font
+/// whose specimen needs contextual forms is compiled whole, so it loads whole.
+pub(crate) fn acquire_specimen_glyphs(
+  workspace: &mut FontWorkspace,
+) -> std::result::Result<(), WorkspaceError> {
+  let font = workspace.font();
+  let plan = shift_specimen::subset_plan(&font_characters(font));
+  if plan.needs_features {
+    return workspace.acquire_all_layers();
+  }
+
+  let planned = FontView::glyphs(font)
+    .into_iter()
+    .filter(|glyph| shows_planned_character(glyph, &plan.characters) || glyph.name() == ".notdef")
+    .map(Glyph::id)
+    .collect::<Vec<_>>();
+  workspace.acquire_glyphs(&planned, AcquireScope::ComponentClosure)?;
+
+  let leading = FontView::glyphs(workspace.font())
+    .into_iter()
+    .filter(|glyph| glyph.name() != ".notdef")
+    .map(Glyph::id)
+    .collect::<Vec<GlyphId>>();
+  let mut drawn = 0;
+  for batch in leading.chunks(LEADING_GLYPH_BATCH) {
+    workspace.acquire_glyphs(batch, AcquireScope::ComponentClosure)?;
+    let font = workspace.font();
+    drawn += batch
+      .iter()
+      .filter(|glyph_id| font.glyph(glyph_id).is_some_and(has_outline))
+      .count();
+    if drawn >= LEADING_DRAWN_GLYPHS {
+      break;
+    }
+  }
+  Ok(())
+}
+
+fn font_characters(font: &impl FontView) -> Vec<char> {
+  font
+    .glyphs()
+    .iter()
+    .flat_map(|glyph| {
+      glyph
+        .unicodes()
+        .iter()
+        .filter_map(|&code| char::from_u32(code))
+    })
+    .collect()
+}
+
+fn shows_planned_character(glyph: &Glyph, planned: &[char]) -> bool {
+  glyph
+    .unicodes()
+    .iter()
+    .filter_map(|&code| char::from_u32(code))
+    .any(|character| planned.contains(&character))
+}
+
 /// Builds a source font's specimen by compiling only the glyphs it can use.
 ///
 /// The specimen rules decide from the whole font's character map; only the
@@ -78,28 +147,16 @@ fn source_specimen(
   font: &impl FontView,
 ) -> std::result::Result<Option<shift_specimen::Specimen>, String> {
   let glyphs = font.glyphs();
-  let characters: Vec<char> = glyphs
-    .iter()
-    .flat_map(|glyph| {
-      glyph
-        .unicodes()
-        .iter()
-        .filter_map(|&code| char::from_u32(code))
-    })
-    .collect();
+  let characters = font_characters(font);
   let plan = shift_specimen::subset_plan(&characters);
 
   let exporter = FontExporter::new();
   let binary = if plan.needs_features {
     exporter.compile_ttf(font)
   } else {
-    let planned = glyphs.iter().filter(|glyph| {
-      glyph
-        .unicodes()
-        .iter()
-        .filter_map(|&code| char::from_u32(code))
-        .any(|character| plan.characters.contains(&character))
-    });
+    let planned = glyphs
+      .iter()
+      .filter(|glyph| shows_planned_character(glyph, &plan.characters));
     let leading = glyphs
       .iter()
       .filter(|glyph| glyph.name() != ".notdef" && has_outline(glyph))

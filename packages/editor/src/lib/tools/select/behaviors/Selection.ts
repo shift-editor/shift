@@ -1,7 +1,7 @@
 import type { ToolContext } from "../../core/Behavior";
 import type { ClickEvent } from "../../core/GestureDetector";
 import type { SelectBehavior, SelectState } from "../types";
-import type { SelectableId } from "../../../../types/object";
+import type { SelectableId } from "@shift/types";
 
 export class Selection implements SelectBehavior {
   onClick(state: SelectState, ctx: ToolContext<SelectState>, event: ClickEvent): boolean {

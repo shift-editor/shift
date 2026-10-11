@@ -1,6 +1,7 @@
 import type { Canvas, ScreenCanvas, ScreenProjection } from "../../editor/rendering/Canvas";
+import type { SpacingPalette } from "../../editor/rendering/Theme";
 import type { Editor } from "../../editor/Editor";
-import type { SpacingGap, SpacingSideName } from "../../../types/spacing";
+import { spacingBoundary, type SpacingGap, type SpacingSideName } from "../../../types/spacing";
 import { spacingLabelRect, spacingLabelText } from "./SpacingLabel";
 import type { SpacingHalf } from "./RunSpacing";
 
@@ -22,18 +23,24 @@ export function drawSpacingGap(
   options: SpacingGapDrawOptions = {},
 ): void {
   const { gap } = active;
-  const matched = options.matched ? active.other() : null;
+  // Between sources the sidebearings are interpolated and read-only: draw them grey.
+  const theme = editor.activeSourceId ? canvas.theme.spacing : canvas.theme.spacingInterpolated;
   canvas.withTransform(editor.sceneTransform(gap.node), (local) => {
+    if (options.labelHovered) drawSameGlyphs(local, editor, active, theme);
     local.withScreenSpace((screen, project) => {
+      // In glyph scope a half stands alone, beside its own glyph.
+      const alone = active.scope === "glyph";
       for (const side of ["left", "right"] as const) {
-        const strong = side === active.side || side === matched?.side;
-        drawHalf(screen, project, gap, side, strong, side === options.selected);
+        if (alone && side !== active.side) continue;
+        const strong = side === active.side;
+        drawHalf(screen, project, theme, gap, side, strong, side === options.selected);
       }
-      drawLabel(screen, editor, active, {
-        hovered: options.labelHovered ?? false,
-        ringed: options.snapped ?? false,
-      });
-      if (matched) drawLabel(screen, editor, matched, { hovered: false, ringed: true });
+      if (!options.echo) {
+        drawLabel(screen, editor, theme, active, {
+          hovered: options.labelHovered ?? false,
+          ringed: options.snapped ?? false,
+        });
+      }
     });
   });
 }
@@ -44,26 +51,56 @@ export interface SpacingGapDrawOptions {
   readonly labelHovered?: boolean;
   /** The half the arrow keys change, which gets an outline. */
   readonly selected?: SpacingSideName | null;
-  /** Whether the active half snapped to the gap's other half, which is then drawn strong with a ringed pill. */
-  readonly matched?: boolean;
-  /** Whether the active value snapped, which rings its pill. */
+  /** Whether the value snapped, which rings its pill. */
   readonly snapped?: boolean;
+  /** Draws the active half without its pill: another place the same sidebearing appears. */
+  readonly echo?: boolean;
+}
+
+/**
+ * Fills, over their glyph fill, the run's other copies of the half's glyph:
+ * every glyph a change to its sidebearing also moves.
+ */
+function drawSameGlyphs(
+  local: Canvas,
+  editor: Editor,
+  half: SpacingHalf,
+  theme: SpacingPalette,
+): void {
+  const glyphSide = half.glyphSide;
+  const layout = editor.text.layoutCell(half.gap.node.runId).peek();
+  if (!glyphSide || !layout) return;
+
+  for (const placed of layout.placedGlyphs) {
+    if (placed.glyph.glyphId !== glyphSide.glyphId) continue;
+    if (placed.glyph.sourceItemIds[0] === glyphSide.itemId) continue;
+    const model = editor
+      .glyphForId(glyphSide.glyphId)
+      ?.renderModelAt(editor.externalLocationCell, editor.activeSourceIdCell);
+    if (!model) return;
+
+    local.save();
+    local.translate(placed.origin.x, placed.origin.y);
+    local.fillPath(model.drawPath, theme.labelFill);
+    local.restore();
+  }
 }
 
 function drawHalf(
   screen: ScreenCanvas,
   project: ScreenProjection,
+  theme: SpacingPalette,
   gap: SpacingGap,
   side: SpacingSideName,
   strong: boolean,
   selected: boolean,
 ): void {
   const half = gap[side];
-  if (!half || half.edge === gap.boundary) return;
+  const boundary = spacingBoundary(gap, side);
+  if (!half || half.edge === boundary) return;
 
-  const theme = screen.theme.spacing;
   const a = project.point({ x: half.edge, y: gap.top });
-  const b = project.point({ x: gap.boundary, y: gap.bottom });
+  const b = project.point({ x: boundary, y: gap.bottom });
   const left = Math.min(a.x, b.x);
   const right = Math.max(a.x, b.x);
   const top = Math.min(a.y, b.y);
@@ -99,26 +136,30 @@ function drawHalf(
 }
 
 /** The pill's fill: negative or not, and slightly lighter while hovered to show it opens. */
-function labelFill(
-  theme: Canvas["theme"]["spacing"],
-  isNegative: boolean,
-  hovered: boolean,
-): string {
+function labelFill(theme: SpacingPalette, isNegative: boolean, hovered: boolean): string {
   if (isNegative) return hovered ? theme.negativeLabelHoverFill : theme.negativeLabelFill;
   return hovered ? theme.labelHoverFill : theme.labelFill;
 }
 
 /** A half's fill and hatch: strong when active, and in the negative colours below zero. */
 function halfColors(
-  theme: Canvas["theme"]["spacing"],
+  theme: SpacingPalette,
   isActive: boolean,
   isNegative: boolean,
 ): { fill: string; hatch: string; outline: string } {
   if (isNegative) {
     const outline = theme.negativeLabelFill;
     return isActive
-      ? { fill: theme.negativeActiveFill, hatch: theme.negativeActiveHatch, outline }
-      : { fill: theme.negativeIdleFill, hatch: theme.negativeIdleHatch, outline };
+      ? {
+          fill: theme.negativeActiveFill,
+          hatch: theme.negativeActiveHatch,
+          outline,
+        }
+      : {
+          fill: theme.negativeIdleFill,
+          hatch: theme.negativeIdleHatch,
+          outline,
+        };
   }
   const outline = theme.labelFill;
   return isActive
@@ -130,6 +171,7 @@ function halfColors(
 function drawLabel(
   screen: ScreenCanvas,
   editor: Editor,
+  theme: SpacingPalette,
   half: SpacingHalf,
   { hovered, ringed }: { readonly hovered: boolean; readonly ringed: boolean },
 ): void {
@@ -138,7 +180,6 @@ function drawLabel(
   const glyphSide = half.glyphSide;
   if (!rect || !text || !glyphSide) return;
 
-  const theme = screen.theme.spacing;
   const ctx = screen.ctx;
   ctx.save();
   ctx.beginPath();

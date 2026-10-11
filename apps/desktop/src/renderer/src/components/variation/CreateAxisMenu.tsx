@@ -8,8 +8,6 @@ import {
   MenuSeparator,
   MenuTrigger,
   Tooltip,
-  TooltipContent,
-  TooltipTrigger,
 } from "@shift/ui";
 import PlusIcon from "@/assets/general/plus.svg";
 import { SidebarActionButton } from "@/components/sidebar";
@@ -37,33 +35,27 @@ export const CreateAxisMenu = ({ onAxisCreated, onOpenChange }: CreateAxisMenuPr
 
   if (availablePresets.length === 0) {
     return (
-      <Tooltip>
-        <TooltipTrigger>
-          <SidebarActionButton
-            label="Create custom axis"
-            onClick={() => createAxis(nextCustomAxisDefinition(axes))}
-          >
-            <PlusIcon className="h-3 w-3" />
-          </SidebarActionButton>
-        </TooltipTrigger>
-        <TooltipContent>Create custom axis</TooltipContent>
+      <Tooltip content="Create custom axis">
+        <SidebarActionButton
+          label="Create custom axis"
+          onClick={() => createAxis(nextCustomAxisDefinition(axes))}
+        >
+          <PlusIcon className="h-3 w-3" />
+        </SidebarActionButton>
       </Tooltip>
     );
   }
 
   return (
     <Menu modal={false} onOpenChange={onOpenChange}>
-      <Tooltip>
-        <TooltipTrigger>
-          <MenuTrigger
-            render={
-              <SidebarActionButton label="Create axis">
-                <PlusIcon className="h-3 w-3" />
-              </SidebarActionButton>
-            }
-          />
-        </TooltipTrigger>
-        <TooltipContent>Create axis</TooltipContent>
+      <Tooltip content="Create axis">
+        <MenuTrigger
+          render={
+            <SidebarActionButton label="Create axis">
+              <PlusIcon className="h-3 w-3" />
+            </SidebarActionButton>
+          }
+        />
       </Tooltip>
       <MenuPortal>
         <MenuPositioner sideOffset={4} align="start">

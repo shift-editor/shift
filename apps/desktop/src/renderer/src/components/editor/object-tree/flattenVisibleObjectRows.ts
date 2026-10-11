@@ -1,4 +1,4 @@
-import type { SelectableId } from "@shift/editor/types";
+import type { SelectableId } from "@shift/types";
 import type { ObjectTreeItem, VisibleObjectRow } from "@/types/objectTree";
 
 export function flattenVisibleObjectRows(

@@ -30,14 +30,14 @@ interface SpacingValuePopoverProps {
  */
 export function SpacingValuePopover({ container }: SpacingValuePopoverProps) {
   const editor = useEditor();
-  const tool = useSignalState(editor.toolCell);
+  const tool = useSignalState(editor.toolCellIf("spacing"));
   useSignalState(editor.camera.viewCell);
   const cancelled = useRef(false);
 
   const spacing = editor.toolManager.activeTool;
   const hit = spacing instanceof SpacingTool ? spacing.editing : null;
   const half = hit ? hit.gap[hit.side] : null;
-  if (tool?.id !== "spacing" || !(spacing instanceof SpacingTool) || !hit || !half) return null;
+  if (!tool || !(spacing instanceof SpacingTool) || !hit || !half) return null;
 
   const anchor = {
     getBoundingClientRect: () => {

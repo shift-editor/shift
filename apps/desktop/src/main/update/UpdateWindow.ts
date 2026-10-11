@@ -4,6 +4,7 @@ import type { ShiftLogger } from "../logging";
 import { getRendererSource } from "../utils";
 import * as ipc from "../../shared/ipc/main";
 import type { UpdateProgress } from "../../shared/update/types";
+import { dialogWindowChrome } from "../windows/dialogWindowChrome";
 
 const INITIAL_PROGRESS: UpdateProgress = {
   percent: 0,
@@ -112,12 +113,7 @@ export class UpdateWindow {
       maximizable: false,
       fullscreenable: false,
       backgroundColor: "#ffffff",
-      ...(process.platform === "darwin"
-        ? {
-            titleBarStyle: "hidden" as const,
-            trafficLightPosition: { x: -100, y: -100 },
-          }
-        : {}),
+      ...dialogWindowChrome(),
       webPreferences: {
         preload: this.#preloadPath,
         contextIsolation: true,

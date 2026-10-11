@@ -11,8 +11,12 @@ import type {
   GlyphEntry,
   GlyphHandle,
   GlyphId,
+  GlyphLayerSnapshot,
   GlyphPreview,
   GlyphRecord,
+  KerningGroupId,
+  KerningValueEdit,
+  FontIntent,
   GlyphSnapshotRequest,
   GlyphName,
   SourceId,
@@ -22,8 +26,10 @@ import type {
   ContourId,
   LayerId,
   LayerMatch,
+  LayerRead,
   Location,
   PointId,
+  SegmentId,
   NamedInstance,
   NamedInstanceDefinition,
   NamedInstanceId,
@@ -32,11 +38,11 @@ import type {
 import {
   mintAxisId,
   mintGlyphId,
+  mintKerningGroupId,
   mintLayerId,
   mintNamedInstanceId,
   mintSourceId,
 } from "@shift/types";
-import type { SegmentId } from "@shift/glyph-state";
 import {
   batch,
   computed,
@@ -52,6 +58,8 @@ import type { GlyphReader } from "../../types/glyph";
 import { Glyph, GlyphLayer } from "./Glyph";
 import type { FontStore, GlyphInvalidation } from "./FontStore";
 import type { GlyphLayerState } from "./GlyphLayerState";
+import type { Kerning, KerningPairPosition } from "./Kerning";
+import { KerningEdit } from "./KerningEdit";
 import { SourceMetricsInterpolation } from "./SourceMetricsInterpolation";
 import {
   designAxisLocationFromLocation,
@@ -219,6 +227,7 @@ export class Font {
   readonly #metricDefinitionsCell: Signal<MetricDefinition[]>;
 
   readonly #sourceMetricsInterpolationCell: Signal<SourceMetricsInterpolation | null>;
+  readonly #kerningCell: Signal<Kerning>;
   readonly #defaultSourceMetricsCell: Signal<SourceMetrics>;
 
   readonly #metadataCell: Signal<FontMetadata>;
@@ -275,6 +284,8 @@ export class Font {
         font?.metrics ?? DEFAULT_FONT_METRICS,
       );
     });
+
+    this.#kerningCell = store.kerning.cell;
 
     this.#metadataCell = computed(() => fontCell.value?.metadata ?? {});
     this.#sourcesCell = computed(() => fontCell.value?.sources ?? []);
@@ -360,6 +371,11 @@ export class Font {
   /** Reactive decoder for the Rust-built source-metric interpolation model. */
   get sourceMetricsInterpolationCell(): Signal<SourceMetricsInterpolation | null> {
     return this.#sourceMetricsInterpolationCell;
+  }
+
+  /** Reactive kerning groups and per-source pair values. */
+  get kerningCell(): Signal<Kerning> {
+    return this.#kerningCell;
   }
 
   /** Reactive committed authored font metadata. */
@@ -503,6 +519,48 @@ export class Font {
 
   glyphRecords(): readonly GlyphRecord[] {
     return this.#directoryCell.peek().records;
+  }
+
+  /**
+   * Reads accepted authored layers without loading glyphs into the editor.
+   *
+   * @remarks
+   * Workspace reads follow pending writes; gesture previews are not included.
+   * Components are not resolved, so a layer whose component reference is
+   * broken stays readable. Nothing is published to the store.
+   *
+   * @param layerIds - Layer identities in the order results should follow.
+   * @returns One snapshot per requested layer.
+   * @throws {Error} when workspace authorship is unavailable or a layer identity is unknown.
+   */
+  async readLayers(layerIds: readonly LayerId[]): Promise<readonly GlyphLayerSnapshot[]> {
+    if (!this.#editCoordinator) throw new Error("Authored layers are unavailable in this font");
+
+    return this.#editCoordinator.readLayers(layerIds);
+  }
+
+  /** The layer `glyphId` authors in `sourceId`, or `null` when it has none. */
+  layerIdFor(glyphId: GlyphId, sourceId: SourceId): LayerId | null {
+    return this.#store.layerIdForGlyphSource(glyphId, sourceId);
+  }
+
+  /**
+   * Reads accepted authored layers together with their composited geometry.
+   *
+   * @remarks
+   * Each root keeps its exact authored geometry; components resolve at that
+   * layer's source and cyclic branches are skipped. Both halves come from
+   * one workspace read behind pending writes, never from gesture previews or
+   * published render models.
+   *
+   * @param layerIds - Layer identities in the order results should follow.
+   * @returns One authored snapshot and resolved geometry per requested layer.
+   * @throws {Error} when workspace authorship is unavailable, a layer identity is unknown, or a component cannot resolve.
+   */
+  async resolveLayers(layerIds: readonly LayerId[]): Promise<readonly LayerRead[]> {
+    if (!this.#editCoordinator) throw new Error("Authored layers are unavailable in this font");
+
+    return this.#editCoordinator.resolveLayers(layerIds);
   }
 
   /**
@@ -1185,7 +1243,9 @@ export class Font {
    * @returns A cell whose value is the exact source, or `null` when interpolated.
    */
   sourceAtCell(location: Signal<ExternalAxisLocation>): ComputedSignal<Source | null> {
-    return computed(() => this.#designspace.sourceAt(location.value), { name: "font.sourceAt" });
+    return computed(() => this.#designspace.sourceAt(location.value), {
+      name: "font.sourceAt",
+    });
   }
 
   /**
@@ -1512,6 +1572,129 @@ export class Font {
     );
   }
 
+  /**
+   * Resolves the kerning between `first` followed by `second`.
+   *
+   * @remarks
+   * A variable font blends the sources kerning is authored at, evaluated at
+   * the active source's location when one is being edited and at `location`
+   * otherwise, so every location shows what the compiled font kerns there.
+   * A source without pairs of its own, such as a sparse intermediate master,
+   * therefore shows the blended value. A static font reads the active or
+   * default source.
+   *
+   * @param location - External location displayed by editor controls.
+   * @param sourceId - Source being edited, which takes precedence over `location`.
+   * @returns Font units added after `first`'s advance; zero when no pair applies.
+   */
+  kerningBetween(
+    first: GlyphId,
+    second: GlyphId,
+    location: ExternalAxisLocation,
+    sourceId: SourceId | null,
+  ): number {
+    const kerning = this.#kerningCell.peek();
+    // An authoring source reads its own values, including ones not echoed yet,
+    // whose source the Rust-built basis may not cover until the echo arrives.
+    if (sourceId && kerning.authors(sourceId)) {
+      return kerning.valueAtSource(sourceId, first, second);
+    }
+    const { designLocation, staticSourceId, axes } = this.#peekDesignspace((designspace) => {
+      const source = sourceId ? designspace.source(sourceId) : null;
+      const staticSource = source ?? designspace.sourceAt(designspace.defaultLocation());
+      return {
+        designLocation: source
+          ? designAxisLocationFromLocation(source.location)
+          : designspace.toDesign(location),
+        staticSourceId: staticSource?.id ?? null,
+        axes: designspace.axes,
+      };
+    });
+
+    const interpolated = kerning.valueAtLocation(designLocation, axes, first, second);
+    if (interpolated !== null) return interpolated;
+    return staticSourceId ? kerning.valueAtSource(staticSourceId, first, second) : 0;
+  }
+
+  /**
+   * Opens a kerning edit: previews show at once, and committing submits one
+   * undoable change whose values stay visible until the workspace confirms them.
+   *
+   * @throws {Error} When another kerning edit is open, or editing is not wired.
+   */
+  beginKerningEdit(): KerningEdit {
+    return new KerningEdit(this.#store.kerning, this.editCoordinator);
+  }
+
+  /**
+   * Sets or removes kerning values as one undo step, shown at once.
+   *
+   * @param edits - Values to set at sources; an absent `amount` removes the pair there.
+   * @param label - Undo label.
+   */
+  setKerningValues(edits: readonly KerningValueEdit[], label: string): void {
+    const edit = this.beginKerningEdit();
+    edit.preview(edits);
+    edit.commit(label);
+  }
+
+  /**
+   * Moves glyphs into a kerning group, each leaving the group it was in at
+   * that position, or takes them out of their group there with null; as one
+   * undo step.
+   *
+   * @param position - The pair position the group kerns: `first` is the glyph's right edge.
+   */
+  async assignKerningGroup(
+    position: KerningPairPosition,
+    glyphIds: readonly GlyphId[],
+    groupId: KerningGroupId | null,
+  ): Promise<void> {
+    if (glyphIds.length === 0) return;
+    await this.editCoordinator.apply(
+      glyphIds.map((glyphId) => memberIntent(position, glyphId, groupId)),
+      groupId === null ? "Remove from kerning group" : "Set kerning group",
+    );
+  }
+
+  /**
+   * Creates a kerning group named `name` at a pair position and moves
+   * `glyphIds` into it, as one undo step.
+   *
+   * @returns The new group's id.
+   */
+  async createKerningGroup(
+    position: KerningPairPosition,
+    name: string,
+    glyphIds: readonly GlyphId[] = [],
+  ): Promise<KerningGroupId> {
+    const groupId = mintKerningGroupId();
+    await this.editCoordinator.apply(
+      [
+        { kind: "createKerningGroup", createKerningGroup: { groupId, position, name } },
+        ...glyphIds.map((glyphId) => memberIntent(position, glyphId, groupId)),
+      ],
+      "Create kerning group",
+    );
+    return groupId;
+  }
+
+  /** Renames a kerning group, as one undo step; its pairs reference it by id and keep their kerning. */
+  async renameKerningGroup(groupId: KerningGroupId, name: string): Promise<void> {
+    await this.editCoordinator.apply(
+      [{ kind: "renameKerningGroup", renameKerningGroup: { groupId, name } }],
+      "Rename kerning group",
+    );
+  }
+
+  /** Deletes a kerning group, as one undo step; undo restores it with its kerning. */
+  async deleteKerningGroup(groupId: KerningGroupId): Promise<void> {
+    await this.editCoordinator.apply(
+      [{ kind: "deleteKerningGroup", deleteKerningGroup: { groupId } }],
+      "Delete kerning group",
+    );
+  }
+
   #metricsForSource(source: Source | null): SourceMetrics {
     const unitsPerEm = this.#metricsCell.peek().unitsPerEm;
     const definitions = this.#metricDefinitionsCell.peek();
@@ -1559,4 +1742,16 @@ export class Font {
   #peekDesignspace<T>(read: (designspace: Designspace) => T): T {
     return untracked(() => read(this.#designspace));
   }
+}
+
+/** The intent that moves one glyph into a kerning group, or out of its group with null. */
+function memberIntent(
+  position: KerningPairPosition,
+  glyphId: GlyphId,
+  groupId: KerningGroupId | null,
+): FontIntent {
+  return {
+    kind: "setKerningGroupMember",
+    setKerningGroupMember: { position, glyphId, ...(groupId === null ? {} : { groupId }) },
+  };
 }

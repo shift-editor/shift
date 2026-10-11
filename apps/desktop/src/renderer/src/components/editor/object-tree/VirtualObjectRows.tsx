@@ -1,6 +1,6 @@
 import { cn } from "@shift/ui";
 import { useLayoutEffect, useState } from "react";
-import type { SelectableId } from "@shift/editor/types";
+import type { SelectableId } from "@shift/types";
 import type { VirtualObjectRowsProps } from "@/types/objectTree";
 import { ObjectRow } from "./ObjectRow";
 

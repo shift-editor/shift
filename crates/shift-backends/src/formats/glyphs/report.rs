@@ -67,25 +67,6 @@ pub(super) fn import_report(source: &GlyphsFont) -> ImportReport {
         });
     }
 
-    let default_master_id = source
-        .masters
-        .get(source.default_master_idx)
-        .map(|master| master.id.as_str());
-    let non_default_kerning_pairs = source
-        .kerning_ltr
-        .iter()
-        .filter(|(master_id, _)| Some(master_id.as_str()) != default_master_id)
-        .map(|(_, pairs)| pairs.len())
-        .sum::<usize>();
-    if non_default_kerning_pairs > 0 {
-        report.losses.push(ImportLoss {
-            kind: ImportLossKind::Omitted,
-            message: format!(
-                "Shift stores one kerning table; {non_default_kerning_pairs} non-default-master Glyphs kerning pairs were omitted."
-            ),
-        });
-    }
-
     let rtl_kerning_pairs = source
         .kerning_rtl
         .iter()

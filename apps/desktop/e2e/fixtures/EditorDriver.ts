@@ -20,7 +20,7 @@ const TOOL_LABELS = {
   rectangle: "Rectangle Tool (R)",
   ellipse: "Ellipse Tool (O)",
   text: "Text Tool (T)",
-  spacing: "Spacing Tool (M)",
+  spacing: "Spacing Tool (S)",
 } as const;
 
 /** Toolbar tool actions the driver can locate and activate. */

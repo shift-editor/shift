@@ -188,6 +188,10 @@ export class WorkspaceHost {
       "workspace.export": ({ path }) => this.#export(path),
       "workspace.glyphSnapshots": ({ requests }) =>
         this.#serialize(() => this.#bridge.getGlyphSnapshots(requests) as GlyphSnapshot[]),
+      "workspace.layers.read": ({ layerIds }) =>
+        this.#serialize(() => this.#bridge.readLayers(layerIds)),
+      "workspace.layers.resolve": ({ layerIds }) =>
+        this.#serialize(() => this.#bridge.resolveLayers(layerIds)),
       "workspace.layerMatch": ({ referenceLayerId, targetLayerId }) =>
         this.#serialize(() => this.#bridge.getLayerMatch(referenceLayerId, targetLayerId)),
       "workspace.glyphProjections": ({ glyphIds }) =>
@@ -658,6 +662,7 @@ export class WorkspaceHost {
       axisMappingBases: this.#bridge.getAxisMappingBases(),
       namedInstances: this.#bridge.getNamedInstances(),
       languageIds: this.#bridge.getLanguageIds(),
+      kerning: this.#bridge.getKerning(),
     };
   }
 

@@ -22,10 +22,12 @@ import type {
   FontIntent,
   GlyphId,
   GlyphPreview,
+  GlyphLayerSnapshot,
   GlyphSnapshot,
   GlyphProjection,
   LayerId,
   LayerMatch,
+  LayerRead,
   Location,
   SlugAtlas,
 } from "@shift/types";
@@ -258,6 +260,32 @@ export class FontSessionClient {
   }
 
   /**
+   * Reads exact authored layers by stable identity.
+   *
+   * @param layerIds - Layer identities in the order results should follow.
+   * @returns One accepted-state snapshot per requested layer.
+   * @throws {Error} when any layer identity is not in the font.
+   */
+  async readLayers(layerIds: readonly LayerId[]): Promise<GlyphLayerSnapshot[]> {
+    await this.connect();
+
+    return this.#require().call("workspace.layers.read", { layerIds: [...layerIds] });
+  }
+
+  /**
+   * Reads exact authored layers with their composited geometry.
+   *
+   * @param layerIds - Layer identities in the order results should follow.
+   * @returns One authored snapshot and resolved geometry per requested layer.
+   * @throws {Error} when any layer identity is not in the font or a component cannot resolve.
+   */
+  async resolveLayers(layerIds: readonly LayerId[]): Promise<LayerRead[]> {
+    await this.connect();
+
+    return this.#require().call("workspace.layers.resolve", { layerIds: [...layerIds] });
+  }
+
+  /**
    * Reads compact glyph projection models and their component dependencies.
    *
    * @param glyphIds - Stable root glyph identities requested by the caller.
@@ -399,6 +427,7 @@ export class FontSessionClient {
       namedInstances: next.namedInstances ?? current.namedInstances,
       languageIds: next.languages ? (next.languages.languageIds ?? null) : current.languageIds,
       sources: next.sources ?? current.sources,
+      kerning: next.kerning ?? current.kerning,
     });
 
     return applied;

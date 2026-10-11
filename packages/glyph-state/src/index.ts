@@ -24,11 +24,9 @@ export {
 } from "./GlyphGeometry";
 export {
   Segment,
-  asSegmentId,
   isSegmentId,
   parseSegmentId,
   segmentIdFor,
-  type SegmentId,
   type SegmentHit,
   type SegmentType,
   type SegmentPoints,

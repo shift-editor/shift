@@ -7,9 +7,11 @@ import type {
   GlyphId,
   GlyphPreview,
   GlyphProjection,
+  GlyphLayerSnapshot,
   GlyphSnapshot,
   LayerId,
   LayerMatch,
+  LayerRead,
   Location,
   SlugAtlas,
   Specimen,
@@ -247,6 +249,16 @@ export type SyncCallMap = {
   "workspace.glyphSnapshots": {
     request: { requests: WorkspaceGlyphSnapshotRequest[] };
     response: GlyphSnapshot[];
+  };
+  /** Reads exact authored layers in request order; unknown identities reject. */
+  "workspace.layers.read": {
+    request: { layerIds: LayerId[] };
+    response: GlyphLayerSnapshot[];
+  };
+  /** Reads exact authored layers with composited geometry at each layer's source. */
+  "workspace.layers.resolve": {
+    request: { layerIds: LayerId[] };
+    response: LayerRead[];
   };
   "workspace.layerMatch": {
     request: { referenceLayerId: LayerId; targetLayerId: LayerId };

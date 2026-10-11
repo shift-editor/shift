@@ -9,6 +9,8 @@ import type {
   GlyphCategoryOptions,
   GlyphCodepointCategory,
   Glyph,
+  GlyphInfoComponentResources,
+  GlyphInfoCoreResources,
   GlyphInfoResources,
   Language,
   LanguageCatalog,
@@ -135,10 +137,16 @@ export class GlyphInfo {
   #usedBy: Map<number, number[]>;
   #charsets: CharsetDefinition[];
   #languages: Language[];
-  #searchData: Record<string, unknown>[];
+  #searchData: Record<string, unknown>[] = [];
   #searchIndex: MiniSearch | null = null;
+  #hasComponentResources = false;
 
-  constructor(resources: GlyphInfoResources) {
+  /**
+   * @param resources - every resource, or only the core ones; until
+   * {@link addResources} supplies the component resources, decomposition
+   * lookups return nothing and {@link search} finds nothing.
+   */
+  constructor(resources: GlyphInfoResources | GlyphInfoCoreResources) {
     this.#glyphData = new Map(resources.glyphData.map((g) => [g.codepoint, g]));
     this.#glyphDataByName = new Map(resources.glyphData.map((g) => [g.name, g]));
     this.#glyphDataByAlias = new Map(this.#glyphDataByName);
@@ -155,16 +163,29 @@ export class GlyphInfo {
       }
     }
 
+    this.#decomposed = new Map();
+    this.#usedBy = new Map();
+    this.#charsets = resources.charsets;
+    this.#languages = resources.languages;
+    if ("searchData" in resources) this.addResources(resources);
+  }
+
+  /** Whether decomposition and search data are loaded. */
+  get hasComponentResources(): boolean {
+    return this.#hasComponentResources;
+  }
+
+  /** Supplies decomposition and search data to an instance built from core resources. */
+  addResources(resources: GlyphInfoComponentResources): void {
     this.#decomposed = new Map(
       Object.entries(resources.decomposition.decomposed).map(([k, v]) => [Number(k), v]),
     );
     this.#usedBy = new Map(
       Object.entries(resources.decomposition.usedBy).map(([k, v]) => [Number(k), v]),
     );
-
-    this.#charsets = resources.charsets;
-    this.#languages = resources.languages;
     this.#searchData = resources.searchData;
+    this.#searchIndex = null;
+    this.#hasComponentResources = true;
   }
 
   #getSearchIndex(): MiniSearch {

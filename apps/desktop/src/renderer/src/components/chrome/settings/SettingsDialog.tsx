@@ -7,14 +7,13 @@ import {
   DialogPortal,
   DialogTitle,
   Tooltip,
-  TooltipContent,
-  TooltipTrigger,
   X,
   cn,
 } from "@shift/ui";
 import { message } from "@shared/messages";
 import type { SettingsCategory, SettingsTarget } from "@/types/settings";
 import { useFont } from "@/workspace/WorkspaceContext";
+import { AgentsSettingsPanel } from "./AgentsSettingsPanel";
 import { AppearanceSettingsPanel } from "./AppearanceSettingsPanel";
 import { AxesSettingsPanel } from "./AxesSettingsPanel";
 import { FontSettingsPanel } from "./FontSettingsPanel";
@@ -64,17 +63,14 @@ export const SettingsDialog = ({
             aria-label="Settings details"
             className="relative min-h-0 min-w-0 overflow-hidden bg-surface-muted"
           >
-            <Tooltip>
-              <TooltipTrigger>
-                <DialogClose
-                  variant="icon"
-                  className="absolute right-2 top-2 z-10 h-7 w-7"
-                  aria-label={message("settings.dialog.close")}
-                >
-                  <X className="h-4 w-4" />
-                </DialogClose>
-              </TooltipTrigger>
-              <TooltipContent>{message("settings.dialog.close")}</TooltipContent>
+            <Tooltip content={message("settings.dialog.close")}>
+              <DialogClose
+                variant="icon"
+                className="absolute right-2 top-2 z-10 h-7 w-7"
+                aria-label={message("settings.dialog.close")}
+              >
+                <X className="h-4 w-4" />
+              </DialogClose>
             </Tooltip>
 
             <SettingsCategoryPanel target={activeTarget} canAuthor={canAuthor} />
@@ -96,6 +92,12 @@ const SettingsCategoryPanel = ({ target, canAuthor }: SettingsCategoryPanelProps
       return (
         <ScrollablePanel>
           <AppearanceSettingsPanel />
+        </ScrollablePanel>
+      );
+    case "agents":
+      return (
+        <ScrollablePanel>
+          <AgentsSettingsPanel />
         </ScrollablePanel>
       );
     case "font":
@@ -135,6 +137,8 @@ function targetForCategory(category: SettingsCategory): SettingsTarget {
   switch (category) {
     case "appearance":
       return { category: "appearance" };
+    case "agents":
+      return { category: "agents" };
     case "font":
       return { category: "font" };
     case "sources":

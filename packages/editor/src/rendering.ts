@@ -5,6 +5,7 @@ export {
 } from "./lib/editor/rendering/CanvasSurface";
 export { FrameHandler, type FrameClock } from "./lib/editor/rendering/FrameHandler";
 export { ContourPath } from "./lib/graphics/ContourPath";
+export { renderLayerSvg } from "./lib/editor/rendering/renderLayerSvg";
 export {
   LOCK_GAP_PX,
   LOCK_PATH_DATA,

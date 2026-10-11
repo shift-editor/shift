@@ -2,13 +2,18 @@ import {
   app,
   BrowserWindow,
   clipboard,
+  dialog,
   ipcMain,
   MessageChannelMain,
   screen,
   shell,
+  type MessageBoxOptions,
   type Rectangle,
   type WebContents,
 } from "electron";
+import { randomUUID } from "node:crypto";
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { Window } from "../windows/Window";
 import { getRendererSource } from "../utils";
@@ -19,6 +24,8 @@ import { CommandRegistry, type CommandContext } from "../commands/Command";
 import { FeedbackWindow } from "../feedback/FeedbackWindow";
 import { registerCommands } from "../commands/Commands";
 import { ApplicationMenu } from "../menu/ApplicationMenu";
+import { readButtonLayout } from "../windows/windowButtonLayout";
+import { DIALOG_TITLE_BAR_HEIGHT } from "../windows/dialogWindowChrome";
 import { createShiftLogger, type ShiftLogger } from "../logging";
 import { AppLifecycle } from "./AppLifecycle";
 import { WindowManager } from "../windows/WindowManager";
@@ -30,8 +37,28 @@ import { shiftProductName } from "../release";
 import { AppUpdater } from "../update/AppUpdater";
 import { isConvertiblePreviewPath } from "../../shared/workspace/previewConversion";
 import { FONT_FOLDER_EXTENSIONS, OPEN_FONT_EXTENSIONS } from "../../shared/openFontExtensions";
-import { RecentDocuments } from "../recents/RecentDocuments";
+import { ShiftMcpServer } from "@shift/mcp";
+import type {
+  EditorInspection,
+  FontRevision,
+  ShiftCapture,
+  ShiftCaptureInput,
+  ShiftObservation,
+  ShiftSession,
+} from "@shift/runtime";
 import type { RecentDocumentVisit } from "../../shared/recents";
+import { RecentDocuments } from "../recents/RecentDocuments";
+import { SandboxRuntimeProcess } from "../sandbox/SandboxRuntimeProcess";
+import { AgentConnections } from "../agent/AgentConnections";
+import {
+  CommandLineTool,
+  type CommandLineToolState,
+  executableName,
+  elevateWithOsascript,
+  elevateWithPkexec,
+  resolveCommandInLoginShell,
+  windowsUserPath,
+} from "../cli/CommandLineTool";
 
 const SLUG_ATLAS_PROFILING_ENABLED =
   process.env.SHIFT_PROFILE_SLUG_ATLAS !== undefined &&
@@ -39,6 +66,8 @@ const SLUG_ATLAS_PROFILING_ENABLED =
 /** Loads a reopened document on Home and has the renderer return it to its last glyph. */
 const RESUME_ROUTE = "/home?resume";
 const LAUNCHER_MIN_WIDTH = 880;
+/** The launcher's title-bar row has no tools, so it is shorter than the editor's. */
+const LAUNCHER_TITLE_BAR_HEIGHT = 40;
 const LAUNCHER_WIDTH = 960;
 const LAUNCHER_HEIGHT = 720;
 /** Largest share of the screen the launcher takes on displays smaller than its size. */
@@ -62,6 +91,9 @@ export class App {
   readonly #updater: AppUpdater;
 
   #commands = new CommandRegistry();
+  #agentConnections: AgentConnections | null = null;
+  #commandLineTool: CommandLineTool | null = null;
+  #sandbox: SandboxRuntimeProcess | null = null;
   #windows = new WindowManager();
   #workspaces: WorkspaceManager;
   #documentsRoot: string | null = null;
@@ -71,6 +103,8 @@ export class App {
   /** Launchers a font open is replacing; they stop receiving recents so no half-ready card flashes. */
   #replacedLaunchers = new WeakSet<Window>();
   #pendingOpenPaths: string[] = [];
+  /** The menu bar last sent to renderers, serialized, so unchanged refreshes are skipped. */
+  #publishedMenuBar: string | null = null;
   #previewConversions = new Map<string, Promise<void>>();
   #documentCrashDecisions = new Map<string, Promise<void>>();
 
@@ -106,6 +140,7 @@ export class App {
       open: (sourcePath) => this.#openRecentFromMenu(sourcePath),
       clear: () => this.#recents?.clear(),
     }),
+    () => this.#publishMenuBar(),
   );
 
   /**
@@ -180,6 +215,8 @@ export class App {
     if (!app.commandLine.hasSwitch("user-data-dir")) {
       app.setPath("userData", path.join(app.getPath("appData"), applicationName));
     }
+    // Created after `setName`: the build's name decides which command it installs.
+    this.#commandLineTool = createCommandLineTool();
 
     if (!app.requestSingleInstanceLock()) {
       app.quit();
@@ -221,6 +258,18 @@ export class App {
         path.join(app.getPath("userData"), "recent-documents.json"),
       );
       this.#recents.onChanged(() => this.#publishRecents());
+      await this.#startSandbox();
+      await this.#startAgentConnections();
+      void this.#requireCommandLineTool()
+        .refresh()
+        .catch((error) => {
+          this.#log.error("failed to refresh shift-cli", error);
+        });
+      void this.#requireCommandLineTool()
+        .refreshSkill()
+        .catch((error) => {
+          this.#log.error("failed to refresh the agent skill", error);
+        });
 
       // Taken before recovery, which marks the documents it restores open again.
       const openAtLastExit = this.#recents.takeOpen();
@@ -265,6 +314,8 @@ export class App {
     });
     app.on("will-quit", () => {
       this.#log.info("will quit: disposing app services");
+      void this.#agentConnections?.shutdown();
+      this.#stopSandbox();
       // Only an ordinary quit forgets open documents; an update restart reopens them.
       if (this.#lifecycle.quitReason === "quit") this.#recents?.clearOpen();
       for (const session of this.#workspaces.list()) {
@@ -273,12 +324,19 @@ export class App {
     });
   }
 
-  #createWindow(autoShow = true, bounds?: Rectangle, maximised = false, minWidth?: number): Window {
+  #createWindow(
+    autoShow = true,
+    bounds?: Rectangle,
+    maximised = false,
+    minWidth?: number,
+    titleBarHeight?: number,
+  ): Window {
     const window = new Window({
       preloadPath: path.join(__dirname, "preload.js"),
       autoShow,
       maximised,
       ...(minWidth === undefined ? {} : { minWidth }),
+      ...(titleBarHeight === undefined ? {} : { titleBarHeight }),
       ...(bounds
         ? {
             width: bounds.width,
@@ -302,6 +360,7 @@ export class App {
         this.#log.info("working window closed");
         const session = this.#workspaces.getForBrowserWindow(window.window);
         this.#workspaces.detachWindow(window);
+        window.agent.dispose();
         if (session?.windows.size === 0) this.#endSession(session);
         this.#windows.remove(window);
         this.#applicationMenu.updateCommandStates();
@@ -319,7 +378,13 @@ export class App {
    * that signal never arrives, so a renderer failure cannot leave it invisible.
    */
   #openLauncher(): Window {
-    const window = this.#createWindow(false, launcherBounds(), false, LAUNCHER_MIN_WIDTH);
+    const window = this.#createWindow(
+      false,
+      launcherBounds(),
+      false,
+      LAUNCHER_MIN_WIDTH,
+      LAUNCHER_TITLE_BAR_HEIGHT,
+    );
     this.#loadLauncher(window);
     setTimeout(() => this.#presentIfHidden(window), LAUNCHER_SHOW_FALLBACK_MS);
     return window;
@@ -469,6 +534,18 @@ export class App {
   }
 
   #registerIpcHandlers(): void {
+    ipc.handle(ipcMain, "agentConnections.state", () => this.#requireAgentConnections().state);
+    ipc.handle(ipcMain, "agentConnections.setAllowed", async (_event, allowed) => {
+      const connections = this.#requireAgentConnections();
+      await connections.setAllowed(allowed === true);
+      return connections.state;
+    });
+    ipc.handle(ipcMain, "agent.connect", (event) => {
+      const window = this.#requireWindowForWebContents(event.sender);
+      const { port1, port2 } = new MessageChannelMain();
+      window.agent.connect(port1);
+      event.sender.postMessage("agent.port", null, [port2]);
+    });
     ipc.handle(ipcMain, "commands.run", async (event, id) => {
       const window = this.#requireWindowForWebContents(event.sender);
       try {
@@ -497,6 +574,30 @@ export class App {
     });
     ipc.handle(ipcMain, "recents.list", () => {
       return this.#recents?.list() ?? [];
+    });
+    ipc.handle(ipcMain, "menu.bar", () => this.#applicationMenu.menuBar());
+    ipc.handle(ipcMain, "menu.activate", (event, itemId) => {
+      const window = this.#requireWindowForWebContents(event.sender);
+      this.#applicationMenu.activate(itemId, window.window);
+    });
+    ipc.handle(ipcMain, "window.buttonLayout", () =>
+      process.platform === "linux" ? readButtonLayout() : null,
+    );
+    ipc.handle(ipcMain, "window.setTitleBarColors", (event, colors) => {
+      const browserWindow = BrowserWindow.fromWebContents(event.sender);
+      const window = browserWindow ? this.#windows.windowForBrowserWindow(browserWindow) : null;
+      if (window) {
+        window.setTitleBarColors(colors);
+        return;
+      }
+
+      // About, Feedback, and Update windows are plain BrowserWindows.
+      if (process.platform !== "win32" || !browserWindow) return;
+      browserWindow.setTitleBarOverlay({
+        color: colors.background,
+        symbolColor: colors.symbol,
+        height: DIALOG_TITLE_BAR_HEIGHT,
+      });
     });
     ipc.handle(ipcMain, "recents.open", async (event, sourcePath) => {
       const window = this.#requireWindowForWebContents(event.sender);
@@ -584,12 +685,81 @@ export class App {
     });
   }
 
+  #requireCommandLineTool(): CommandLineTool {
+    if (!this.#commandLineTool) throw new Error("Command-line tool was not initialized");
+    return this.#commandLineTool;
+  }
+
+  /** Installs this build's command-line tool, confirming before replacing a different file. */
+  async #installCommandLineTool(window: Window | null): Promise<void> {
+    const parent = window && !window.window.isDestroyed() ? window.window : null;
+    const show = (options: MessageBoxOptions) =>
+      parent ? dialog.showMessageBox(parent, options) : dialog.showMessageBox(options);
+    const tool = this.#requireCommandLineTool();
+    const command = tool.command;
+
+    const before = await tool.state();
+    if (before.status === "conflict") {
+      const { response } = await show({
+        type: "question",
+        buttons: ["Replace", "Cancel"],
+        defaultId: 0,
+        cancelId: 1,
+        message: `Replace the existing ${command}?`,
+        detail: `A different ${command} is installed at ${before.commandPath}. Replace it with the one bundled with ${app.name}?`,
+      });
+      if (response !== 0) return;
+    }
+
+    let installed: CommandLineToolState;
+    try {
+      installed = await tool.install();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (/User canceled|cancelled|-128|dismissed|Request dismissed/i.test(message)) return;
+      this.#log.error("failed to install shift-cli", error);
+      await show({
+        type: "error",
+        message: "Could not install the command line tool",
+        detail: message,
+      });
+      return;
+    }
+
+    const { checkboxChecked: installSkill } = await show({
+      type: "info",
+      message: "The command line tool is installed",
+      detail: [
+        `${command} is available at ${installed.commandPath}.`,
+        installed.note ?? `Run ${command} --help in a terminal to get started.`,
+      ].join("\n\n"),
+      checkboxLabel: `Also install the agent skill, so Claude Code, Codex, and other agents know how to use ${command}`,
+      checkboxChecked: true,
+    });
+    if (!installSkill) return;
+
+    try {
+      await tool.installSkill();
+    } catch (error) {
+      this.#log.error("failed to install the agent skill", error);
+      await show({
+        type: "error",
+        message: "Could not install the agent skill",
+        detail: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   #commandContext(window?: Window): CommandContext {
     window ??= this.#windows.activeWindow() ?? undefined;
     const session = window ? this.#workspaces.getForBrowserWindow(window.window) : null;
     const document = session?.document ?? null;
 
     return {
+      commandLineTool: {
+        available: () => this.#commandLineTool?.available ?? false,
+        install: () => this.#installCommandLineTool(window ?? null),
+      },
       update: {
         checkForUpdates: async () => {
           await this.#updater.checkForUpdates("manual");
@@ -847,6 +1017,20 @@ export class App {
     }
   }
 
+  #publishMenuBar(): void {
+    const bar = this.#applicationMenu.menuBar();
+    // Command states refresh after every command, including each edit; only an
+    // actual change should re-render the drawn menus in every window.
+    const serialized = JSON.stringify(bar);
+    if (serialized === this.#publishedMenuBar) return;
+    this.#publishedMenuBar = serialized;
+
+    for (const window of this.#windows.allWindows()) {
+      if (window.window.isDestroyed()) continue;
+      ipc.send(window.window.webContents, "menu.barChanged", bar);
+    }
+  }
+
   #publishRecents(): void {
     this.#applicationMenu.refresh();
 
@@ -887,6 +1071,221 @@ export class App {
   #closeReplacedLauncher(launcher: Window): void {
     this.#replacedLaunchers.add(launcher);
     launcher.close();
+  }
+
+  /** Starts the app-owned execution process independently of MCP availability. */
+  async #startSandbox(): Promise<void> {
+    const sandbox = new SandboxRuntimeProcess({
+      capture: (input) => this.#capture(input),
+      sessions: {
+        list: () => Promise.resolve(this.#agentSessions()),
+      },
+      editor: {
+        inspect: ({ windowId, ifFontRevision }) => this.#inspectEditor(windowId, ifFontRevision),
+      },
+      font: {
+        get: ({ windowId, ifFontRevision }) =>
+          this.#windowForAgentRequest(windowId).agent.getFont(ifFontRevision),
+      },
+      locations: {
+        resolve: ({ windowId, location, ifFontRevision }) =>
+          this.#windowForAgentRequest(windowId).agent.resolveLocation(location, ifFontRevision),
+      },
+      glyphs: {
+        list: ({ windowId, limit, cursor, sourceId, ifFontRevision }) =>
+          this.#windowForAgentRequest(windowId).agent.listGlyphs({
+            limit,
+            cursor,
+            sourceId,
+            ifFontRevision,
+          }),
+        get: ({ windowId, ifFontRevision, ...selector }) =>
+          this.#windowForAgentRequest(windowId).agent.getGlyph(selector, ifFontRevision),
+        resolve: ({ windowId, glyphIds, location, ifFontRevision }) =>
+          this.#windowForAgentRequest(windowId).agent.resolveGlyphs(
+            glyphIds,
+            location,
+            ifFontRevision,
+          ),
+      },
+      layers: {
+        get: ({ windowId, layerId, ifFontRevision }) =>
+          this.#windowForAgentRequest(windowId).agent.getLayer(layerId, ifFontRevision),
+        resolve: ({ windowId, layerId, ifFontRevision }) =>
+          this.#windowForAgentRequest(windowId).agent.resolveLayer(layerId, ifFontRevision),
+        render: ({ windowId, layerId, overlays, appearance, ifFontRevision }) =>
+          this.#windowForAgentRequest(windowId).agent.renderLayer(
+            layerId,
+            overlays,
+            appearance,
+            ifFontRevision,
+          ),
+      },
+      kerning: {
+        groups: ({ windowId, ...input }) =>
+          this.#windowForAgentRequest(windowId).agent.kerningGroups(input),
+        pairs: ({ windowId, ...input }) =>
+          this.#windowForAgentRequest(windowId).agent.kerningPairs(input),
+        resolve: ({ windowId, ...input }) =>
+          this.#windowForAgentRequest(windowId).agent.resolveKerning(input),
+      },
+    });
+    this.#sandbox = sandbox;
+    try {
+      await sandbox.start();
+    } catch (error) {
+      sandbox.stop();
+      this.#log.error("failed to start sandbox", error);
+    }
+  }
+
+  async #startAgentConnections(): Promise<void> {
+    const sandbox = this.#sandbox;
+    if (!sandbox) throw new Error("Sandbox runtime was not initialized");
+
+    const { port, serverName, command } = buildIdentity(app.getName());
+    const testing = process.env.NODE_ENV === "test";
+    const connections = new AgentConnections({
+      settingsPath: path.join(app.getPath("userData"), "agent-connections.json"),
+      serverName,
+      port: testing ? 0 : port,
+      createServer: (onActivity) =>
+        new ShiftMcpServer({
+          execute: (code) => sandbox.execute(code),
+          capture: (input) => this.#capture(input),
+          port: testing ? 0 : port,
+          serverInfo: { name: serverName, version: app.getVersion() },
+          commandLineTool: command,
+          logger: createShiftLogger("app.mcp"),
+          onActivity,
+        }),
+      log: createShiftLogger("app.agentConnections"),
+    });
+    connections.onChanged((state) => {
+      for (const window of this.#windows.allWindows()) {
+        if (window.window.isDestroyed()) continue;
+        ipc.send(window.window.webContents, "agentConnections.changed", state);
+      }
+    });
+    this.#agentConnections = connections;
+    await connections.resume();
+  }
+
+  #requireAgentConnections(): AgentConnections {
+    if (!this.#agentConnections) throw new Error("Agent connections are not ready yet");
+    return this.#agentConnections;
+  }
+
+  #stopSandbox(): void {
+    this.#sandbox?.stop();
+    this.#sandbox = null;
+  }
+
+  #agentSessions(): ShiftSession[] {
+    const focusedWindowId = BrowserWindow.getFocusedWindow()?.id ?? null;
+    const sessions: ShiftSession[] = [];
+
+    for (const window of this.#windows.allWindows()) {
+      const session = this.#workspaces.getForBrowserWindow(window.window);
+      if (!session) continue;
+
+      sessions.push({
+        windowId: window.window.id,
+        sessionId: session.sessionId,
+        mode: session.mode,
+        focused: window.window.id === focusedWindowId,
+        editorConnected: window.agent.connected,
+      });
+    }
+
+    return sessions;
+  }
+
+  async #inspectEditor(
+    windowId: number,
+    ifFontRevision?: FontRevision,
+  ): Promise<ShiftObservation<EditorInspection>> {
+    const window = this.#windows.windowForId(windowId);
+    if (!window) throw new Error(`Shift window ${windowId} is not open`);
+
+    const session = this.#workspaces.getForBrowserWindow(window.window);
+    if (!session) throw new Error(`Shift window ${windowId} has no font session`);
+
+    const { fontRevision, value: editor } = await window.agent.inspectEditor(ifFontRevision);
+    return {
+      fontRevision,
+      value: {
+        ...editor,
+        windowId,
+        sessionId: session.sessionId,
+        mode: session.mode,
+      },
+    };
+  }
+
+  async #capture({
+    windowId,
+    target,
+    scale = 1,
+    ifFontRevision,
+  }: ShiftCaptureInput): Promise<ShiftObservation<ShiftCapture>> {
+    const owner = this.#windowForAgentRequest(windowId);
+    const fontRevision = await owner.agent.fontRevision(ifFontRevision);
+    const browserWindow = owner.window;
+    const webContents = browserWindow.webContents;
+    let rectangle: Rectangle | undefined;
+    const content = browserWindow.getContentBounds();
+    let logicalSize = { width: content.width, height: content.height };
+
+    if (target === "editor") {
+      const bounds = await owner.agent.editorCaptureBounds();
+      const zoom = webContents.getZoomFactor();
+      const x = Math.max(0, Math.floor(bounds.x * zoom));
+      const y = Math.max(0, Math.floor(bounds.y * zoom));
+      const width = Math.min(content.width - x, Math.ceil(bounds.width * zoom));
+      const height = Math.min(content.height - y, Math.ceil(bounds.height * zoom));
+      if (width <= 0 || height <= 0) throw new Error("The Shift editor capture area is empty");
+      rectangle = { x, y, width, height };
+      logicalSize = { width, height };
+    }
+
+    const captured = await webContents.capturePage(rectangle);
+    if (captured.isEmpty()) throw new Error(`Shift window ${windowId} produced an empty capture`);
+    const outputSize = {
+      width: Math.max(1, Math.round(logicalSize.width * scale)),
+      height: Math.max(1, Math.round(logicalSize.height * scale)),
+    };
+    const capturedSize = captured.getSize();
+    const image =
+      capturedSize.width === outputSize.width && capturedSize.height === outputSize.height
+        ? captured
+        : captured.resize({ ...outputSize, quality: "best" });
+    const size = image.getSize();
+
+    await owner.agent.fontRevision(fontRevision);
+    return {
+      fontRevision,
+      value: {
+        captureId: randomUUID(),
+        windowId,
+        target,
+        mimeType: "image/png",
+        data: image.toPNG().toString("base64"),
+        width: size.width,
+        height: size.height,
+        scale,
+        capturedAt: new Date().toISOString(),
+      },
+    };
+  }
+
+  #windowForAgentRequest(windowId: number): Window {
+    const window = this.#windows.windowForId(windowId);
+    if (!window) throw new Error(`Shift window ${windowId} is not open`);
+    if (!this.#workspaces.getForBrowserWindow(window.window)) {
+      throw new Error(`Shift window ${windowId} has no font session`);
+    }
+    return window;
   }
 
   #fontSessionForSender(sender: WebContents, operation: string): FontSessionHost {
@@ -931,4 +1330,75 @@ function launcherBounds(): Rectangle {
     width,
     height,
   };
+}
+
+/**
+ * The names that keep each Shift build apart on one machine: its fixed MCP
+ * port, MCP server name, and installed command-line tool.
+ */
+function buildIdentity(appName: string): { port: number; serverName: string; command: string } {
+  switch (appName) {
+    case "Shift":
+      return { port: 17461, serverName: "shift", command: "shift-cli" };
+    case "Shift Nightly":
+      return { port: 17462, serverName: "shift-nightly", command: "shift-cli-nightly" };
+    case "Shift Dev":
+      return { port: 17463, serverName: "shift-dev", command: "shift-cli-dev" };
+    case "Shift Nightly Dev":
+      return { port: 17464, serverName: "shift-nightly-dev", command: "shift-cli-nightly-dev" };
+    default:
+      throw new Error(`Unknown Shift distribution: ${appName}`);
+  }
+}
+
+/** The `shift-cli` shipped with this build and how this platform puts it on PATH. */
+function createCommandLineTool(): CommandLineTool {
+  const log = createShiftLogger("app.commandLineTool");
+  const { command } = buildIdentity(app.getName());
+  const resolveCommand = () => resolveCommandInLoginShell(command);
+  // Packaging names the bundled binary after the build's command, so Windows,
+  // which puts the bundled directory itself on PATH, keeps builds apart too.
+  const bundledPath = app.isPackaged
+    ? path.join(process.resourcesPath, "bin", executableName(command))
+    : developmentCommandLineTool();
+
+  if (process.platform === "win32") {
+    // A development binary is named `shift-cli`, not the build's command, so
+    // putting its directory on PATH would take the release command's name.
+    return new CommandLineTool({
+      bundledPath: app.isPackaged ? bundledPath : null,
+      command,
+      install: { kind: "userPath" },
+      userPath: windowsUserPath,
+      log,
+    });
+  }
+  if (process.platform === "linux" && process.env.APPIMAGE) {
+    return new CommandLineTool({
+      bundledPath,
+      command,
+      install: { kind: "copy", directory: path.join(os.homedir(), ".local", "bin") },
+      resolveCommand,
+      log,
+    });
+  }
+  return new CommandLineTool({
+    bundledPath,
+    command,
+    install: { kind: "link", directory: "/usr/local/bin" },
+    elevate: process.platform === "darwin" ? elevateWithOsascript : elevateWithPkexec,
+    resolveCommand,
+    log,
+  });
+}
+
+/** In development, the most recently built `shift-cli` in the Cargo target directory. */
+function developmentCommandLineTool(): string | null {
+  const targetRoot =
+    process.env.CARGO_TARGET_DIR ?? path.resolve(app.getAppPath(), "..", "..", "target");
+  const candidates = ["release", "debug"]
+    .map((profile) => path.join(targetRoot, profile, executableName("shift-cli")))
+    .filter((candidate) => fs.existsSync(candidate))
+    .sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
+  return candidates[0] ?? null;
 }

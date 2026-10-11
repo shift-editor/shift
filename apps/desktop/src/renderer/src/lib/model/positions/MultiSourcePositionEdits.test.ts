@@ -4,7 +4,7 @@ import type { AnchorId, AxisId, PointId, SourceId } from "@shift/types";
 import { externalAxisLocationFromRecord } from "@shift/editor/variation";
 import type { GlyphLayer } from "@shift/editor/model";
 import { TestEditor } from "@/testing/TestEditor";
-import type { SelectableId } from "@shift/editor/types";
+import type { SelectableId } from "@shift/types";
 import type { PositionSelection } from "@shift/editor/types";
 import { PositionEdits } from "@shift/editor/model";
 

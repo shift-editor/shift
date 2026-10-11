@@ -70,11 +70,15 @@ impl ShiftStore {
                 .map(|_| "?")
                 .collect::<Vec<_>>()
                 .join(",");
+            // Keys go through IN subqueries, not joins: a recovered document reads
+            // through merged UNION ALL views, and SQLite pushes WHERE terms into
+            // them but not join terms, so a join scans every component row.
             let sql = format!(
                 "SELECT DISTINCT c.base_glyph_id
                  FROM glyph_components AS c
-                 JOIN glyph_layers AS l ON l.id = c.layer_id
-                 WHERE l.glyph_id IN ({placeholders})"
+                 WHERE c.layer_id IN (
+                     SELECT l.id FROM glyph_layers AS l WHERE l.glyph_id IN ({placeholders})
+                 )"
             );
             let mut stmt = self.conn.prepare(&sql)?;
             let rows = stmt.query_map(
@@ -132,12 +136,18 @@ impl ShiftStore {
                 .map(|_| "?")
                 .collect::<Vec<_>>()
                 .join(",");
+            // IN subqueries rather than joins, for the merged views; see
+            // `referenced_glyph_ids_for_glyphs`.
             let sql = format!(
                 "SELECT DISTINCT owner.glyph_id
-                 FROM glyph_components AS c
-                 JOIN glyph_layers AS target ON target.glyph_id = c.base_glyph_id
-                 JOIN glyph_layers AS owner ON owner.id = c.layer_id
-                 WHERE target.id IN ({placeholders})"
+                 FROM glyph_layers AS owner
+                 WHERE owner.id IN (
+                     SELECT c.layer_id FROM glyph_components AS c
+                     WHERE c.base_glyph_id IN (
+                         SELECT target.glyph_id FROM glyph_layers AS target
+                         WHERE target.id IN ({placeholders})
+                     )
+                 )"
             );
             let mut stmt = self.conn.prepare(&sql)?;
             let rows = stmt.query_map(

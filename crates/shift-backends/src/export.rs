@@ -6,6 +6,12 @@
 
 use std::path::{Path, PathBuf};
 
+use write_fonts::from_obj::ToOwnedTable;
+use write_fonts::read::{FontRef, TableProvider};
+use write_fonts::tables::name::Name;
+use write_fonts::types::NameId;
+use write_fonts::FontBuilder;
+
 use crate::atomic::write_file_atomic;
 use crate::shift2fontir::{ShiftIrSource, ShiftIrSourceError};
 use crate::traits::FontView;
@@ -62,12 +68,6 @@ pub enum ExportError {
     #[error("export path must end in .ttf for TrueType export: {path}")]
     OutputExtensionMismatch { path: PathBuf },
 
-    #[error("failed to create temporary export directory")]
-    TempDir {
-        #[source]
-        source: std::io::Error,
-    },
-
     #[error("cross-axis mappings are not supported by TTF export yet ({mapping_count} mappings)")]
     UnsupportedCrossAxisMappings { mapping_count: usize },
 
@@ -120,23 +120,16 @@ impl FontExporter {
         })
     }
 
-    /// Compiles a TrueType binary from the supplied font without writing it
-    /// anywhere; build intermediates live in a temporary directory that is
-    /// removed before returning.
+    /// Compiles a TrueType binary from the supplied font in memory without
+    /// writing it anywhere.
     ///
     /// # Errors
     ///
     /// Returns [`ExportError`] when the source cannot be represented in the
     /// supported compiler model or compilation fails.
     pub fn compile_ttf(&self, font: &impl FontView) -> Result<Vec<u8>, ExportError> {
-        let temp_dir = tempfile::Builder::new()
-            .prefix("shift-export-")
-            .tempdir()
-            .map_err(|source| ExportError::TempDir { source })?;
-
-        let build_dir = temp_dir.path().join("build");
         let source = ShiftIrSource::from_font_view(font).map_err(map_source_error)?;
-        compile_ttf(source, &build_dir)
+        compile_ttf(source)
     }
 
     fn export_ttf(&self, font: &impl FontView, output_path: &Path) -> Result<(), ExportError> {
@@ -156,17 +149,60 @@ impl Default for FontExporter {
     }
 }
 
-fn compile_ttf(source: ShiftIrSource, build_dir: &Path) -> Result<Vec<u8>, ExportError> {
-    fontc::generate_font(
-        Box::new(source),
-        build_dir,
-        None,
-        fontc::Flags::default(),
-        false,
-    )
-    .map_err(|source| ExportError::CompileTtf {
-        message: source.to_string(),
-    })
+/// Marker fontc appends to every version string (name ID 5) it compiles.
+const FONTC_VERSION_MARKER: &str = ";fontc ";
+
+fn compile_ttf(source: ShiftIrSource) -> Result<Vec<u8>, ExportError> {
+    let bytes = fontc::generate_font(Box::new(source), fontc::Options::default())
+        .map_err(|error| compile_error(&error))?;
+    strip_compiler_version(&bytes)
+}
+
+/// Removes the `;fontc <version>` suffix fontc stamps onto version strings, so
+/// an exported font reports exactly the version its author entered.
+///
+/// fontc 1.0 always stamps and offers no option to disable it. Its stamp is
+/// always the trailing part of the record, so truncating at the marker restores
+/// the authored string. The binary is returned unchanged when no record carries
+/// the marker.
+///
+/// # Errors
+///
+/// Returns [`ExportError::CompileTtf`] when the compiled binary or its `name`
+/// table cannot be read back or rebuilt.
+fn strip_compiler_version(bytes: &[u8]) -> Result<Vec<u8>, ExportError> {
+    let font = FontRef::new(bytes).map_err(|error| compile_error(&error))?;
+    let mut name: Name = font
+        .name()
+        .map_err(|error| compile_error(&error))?
+        .to_owned_table();
+
+    let mut stamped = false;
+    for record in name
+        .name_record
+        .iter_mut()
+        .filter(|record| record.name_id == NameId::VERSION_STRING)
+    {
+        if let Some(index) = record.string.find(FONTC_VERSION_MARKER) {
+            record.string.truncate(index);
+            stamped = true;
+        }
+    }
+    if !stamped {
+        return Ok(bytes.to_vec());
+    }
+
+    Ok(FontBuilder::new()
+        .add_table(&name)
+        .map_err(|error| compile_error(&error))?
+        .copy_missing_tables(font)
+        .build())
+}
+
+fn compile_error(error: &impl std::fmt::Display) -> ExportError {
+    ExportError::CompileTtf {
+        message: error.to_string(),
+    }
 }
 
 fn map_source_error(error: ShiftIrSourceError) -> ExportError {
@@ -228,6 +264,68 @@ mod tests {
             .charmap()
             .mappings()
             .any(|(codepoint, _)| codepoint == 0x0041));
+    }
+
+    fn add_glyph_on_every_master(font: &mut Font, name: &str, unicode: u32, anchor: &str) {
+        let mut glyph = shift_font::Glyph::with_unicode(name, unicode);
+        for source in font.sources().to_vec() {
+            let mut layer =
+                shift_font::GlyphLayer::with_width(shift_font::LayerId::new(), source.id(), 300.0);
+            layer.add_anchor(shift_font::Anchor::new(
+                Some(anchor.to_string()),
+                100.0,
+                0.0,
+            ));
+            glyph.set_layer(layer);
+        }
+        font.insert_glyph(glyph).unwrap();
+    }
+
+    #[test]
+    fn compiles_glyph_categories_into_gdef_and_zero_width_marks() {
+        use skrifa::raw::TableProvider;
+        use write_fonts::tables::gdef::GlyphClassDef;
+
+        let mut font = sample_variable_font();
+        // An underscore anchor alone would make both of these marks.
+        add_glyph_on_every_master(&mut font, "jdotless", 0x0237, "_right");
+        add_glyph_on_every_master(&mut font, "acutecomb", 0x0301, "_top");
+
+        let bytes = FontExporter::new().compile_ttf(&font).unwrap();
+        let compiled = FontRef::new(&bytes).unwrap();
+        let gid = |codepoint: u32| compiled.charmap().map(codepoint).unwrap();
+        let class_def = compiled.gdef().unwrap().glyph_class_def().unwrap().unwrap();
+        let class = |codepoint: u32| class_def.get(gid(codepoint).try_into().unwrap());
+        let advance = |codepoint: u32| {
+            compiled
+                .glyph_metrics(
+                    skrifa::instance::Size::unscaled(),
+                    skrifa::instance::LocationRef::default(),
+                )
+                .advance_width(gid(codepoint))
+                .unwrap()
+        };
+
+        assert_ne!(class(0x0237), GlyphClassDef::Mark as u16);
+        assert_eq!(class(0x0301), GlyphClassDef::Mark as u16);
+        assert_eq!(advance(0x0237), 300.0);
+        assert_eq!(advance(0x0301), 0.0);
+    }
+
+    #[test]
+    fn version_string_omits_compiler_stamp() {
+        let mut font = sample_variable_font();
+        font.metadata_mut().version_major = Some(2);
+        font.metadata_mut().version_minor = Some(125);
+
+        let bytes = FontExporter::new().compile_ttf(&font).unwrap();
+
+        let exported = FontRef::new(&bytes).unwrap();
+        let versions = exported
+            .localized_strings(skrifa::string::StringId::VERSION_STRING)
+            .map(|string| string.to_string())
+            .collect::<Vec<_>>();
+        assert_eq!(versions, vec!["Version 2.125".to_string()]);
     }
 
     #[test]

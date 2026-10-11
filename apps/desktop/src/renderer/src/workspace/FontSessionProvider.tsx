@@ -5,6 +5,8 @@ import { DocumentErrorScreen } from "@/app/DocumentErrorScreen";
 import { reportRendererError } from "@/app/errorReporting";
 import { FontSessionContext, WorkspaceContext } from "./WorkspaceContext";
 import { getFontSession } from "./runtime";
+import { getShiftHost } from "@/host/shiftHost";
+import { AgentBridge } from "@/agent/AgentBridge";
 
 export function FontSessionProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<FontSession | null>(null);
@@ -38,7 +40,19 @@ export function FontSessionProvider({ children }: { children: ReactNode }) {
     const workspace = session.workspace;
     if (workspace) window.shift = workspace;
 
+    const agent = new AgentBridge(getShiftHost(), session);
+    async function connectAgent(): Promise<void> {
+      try {
+        await agent.connect();
+      } catch (error) {
+        console.error("agent bridge failed to connect", error);
+        reportRendererError("AgentBridge", error);
+      }
+    }
+    void connectAgent();
+
     return () => {
+      agent.dispose();
       delete window.shift;
       delete window.shiftSession;
     };

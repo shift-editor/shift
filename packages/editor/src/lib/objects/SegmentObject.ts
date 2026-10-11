@@ -1,7 +1,7 @@
-import { localBounds } from "../editor/spaces";
+import type { GlyphGeometry } from "@shift/glyph-state";
+import type { ContourId, PointId, SegmentId } from "@shift/types";
 import type { LocalBounds } from "../../types/coordinates";
-import type { GlyphGeometry, SegmentId } from "@shift/glyph-state";
-import type { ContourId, PointId } from "@shift/types";
+import { localBounds } from "../editor/spaces";
 import { track } from "../signals/index";
 import type { GlyphLayer } from "../model/Glyph";
 import type { ShiftObjectOf } from "../../types/object";

@@ -1,6 +1,6 @@
 # Main
 
-<!-- reviewed: 2026-09-26 -->
+<!-- reviewed: 2026-10-04 -->
 
 Electron main process: app startup, windows, menus, document dialogs, and workspace session ownership.
 
@@ -21,10 +21,13 @@ Electron main process: app startup, windows, menus, document dialogs, and worksp
 - **Architecture Invariant:** Closing every window keeps the application alive on macOS. Activating the windowless app opens a fresh launcher; Windows and Linux quit after the last window closes.
 - **Architecture Invariant:** Release and Nightly builds have distinct product identities and app-data roots. `Shift` uses `app.shift` and the `Shift` data root; `Shift Nightly` uses `app.shift.nightly` and the `Shift Nightly` data root. An explicit `--user-data-dir` switch takes precedence for tests and diagnostics.
 - **Architecture Invariant:** Shift is single-instance within one distribution data root. Operating-system font activations received before readiness queue in order; later activations focus an already-open document or create another workspace window. Release owns the `.shift` document association, while Nightly remains an alternate; both distributions are alternate macOS handlers for supported source fonts.
-- **Architecture Invariant:** `AppUpdater` owns application update state in main. It selects only the fixed electron-updater metadata channel for the compiled distribution and exact platform/architecture, requires consent before downloading, deduplicates checks/downloads/restarts, and cannot call `quitAndInstall()` until `AppLifecycle` commits every document. `UpdateWindow` reflects main-owned progress and ready state but never owns updater transitions. macOS Release/Nightly, Windows Nightly x64, and Linux x64 AppImages in a writable folder update automatically. Windows Release and read-only AppImages use distribution-matched manual downloads; DEB and RPM installs are directed to their package manager.
+- **Architecture Invariant:** `AppUpdater` owns application update state in main. It selects only the fixed electron-updater metadata channel for the compiled distribution and exact platform/architecture, requires consent before downloading, deduplicates checks/downloads/restarts, and cannot call `quitAndInstall()` until `AppLifecycle` commits every document. `UpdateWindow` reflects main-owned progress and ready state but never owns updater transitions. macOS Release/Nightly, Windows Nightly arm64/x64, and Linux arm64/x64 AppImages in a writable folder update automatically. Windows Release and read-only AppImages use distribution-matched manual downloads; DEB and RPM installs are directed to their package manager.
 - **Architecture Invariant:** Disposable Slug pages live under the app-wide `derived-cache/slug-atlases` root beside `working-documents`, never inside authored `.shift` content. Utility processes share the one-GiB byte-budgeted LRU; each process validates an artifact index once and then verifies and decompresses its fixed pages independently. Staging paths use readable `run-{pid}-{id}/page-{index}-{id}.zst` names, and every retry owns a distinct file until publication. The LRU scans after an artifact is opened or published, never after every page stream. Stale, corrupt, and evicted entries rebuild.
 - **Architecture Invariant:** Recovery discovery prunes only storage that cannot contain authored work: empty workspace directories, document bindings with no working store or recovery overlay, and SQLite sidecars whose primary file is absent. Working stores and recovery overlays are recoverable and never expire by age. A stale binding whose exact recovery overlay is absent is detached from a surviving working store so unsaved-workspace discovery can recover that store. Malformed or unknown artifacts are retained and reported rather than deleted.
 - **Architecture Invariant:** IPC channels are type-safe. `ipcMain.handle` calls use the typed wrapper from `shared/ipc/main`, and channel names and payload types live in `shared/ipc/contract.ts` and `shared/workspace/protocol.ts`.
+- **Architecture Invariant:** Every packaged build bundles the release `shift-cli` as `Resources/bin/<command>`, where the command is `shift-cli` for release and `shift-cli-nightly` for Nightly; packaging fails in `beforePack` when `pnpm build:cli` has not run. `CommandLineTool` installs it on request from the `app.installCommandLineTool` menu command (Shift menu on macOS, Help on Windows/Linux): a `/usr/local/bin` symlink on macOS and Linux packages (an `osascript` or `pkexec` prompt when the directory is protected), a copy in `~/.local/bin` for AppImages that is refreshed at launch, and a user `PATH` entry on Windows. Each build installs only its own command name (`buildIdentity`: `shift-cli`, `shift-cli-nightly`, `shift-cli-dev`, matching its MCP server name), so builds never replace each other's command, and `shift.guide` tells agents which name to run. The installed command therefore always runs the app's own version. After installing on macOS and Linux, the user's login shell resolves the command so the dialog can name a different copy earlier on `PATH`. The success dialog offers the agent skill as well: the bundled binary runs `skill install --global --command <command>`, writing `~/.agents/skills/<skill>` and `~/.claude/skills/<skill>`, and launch runs it again with `--refresh-only`, which updates only copies it installed earlier.
+- **Architecture Invariant:** Main owns at most one local MCP server per app instance, running only while the persisted "Allow agent connections" setting is on (off by default; `AgentConnections`). It binds only to loopback on the distribution's fixed port (Shift `17461`, Nightly `17462`, Dev `17463`, Nightly Dev `17464`; E2E uses an explicit ephemeral port), uses no credential, resolves every request through an explicit window/session identity, routes revision-correlated renderer observations over a per-window typed request lane, and captures only that resolved window. Renderer-reported editor bounds select the editor-only crop; Electron main owns pixel capture and serialization and verifies the authored revision before and after capture. Port collisions leave the setting on but report the failure in Settings → Agents, without stopping the app-owned sandbox or preventing the app from opening.
+- **Architecture Invariant:** Code submitted to the Shift sandbox never executes in Electron main or a renderer. `SandboxRuntimeProcess` is app-owned, supervises a dedicated utility process, serves only typed capabilities back into main, and terminates the process when a hard execution deadline expires; the next execution restarts it. No long-lived interactive plugin execution mode exists yet.
 
 ## Codemap
 
@@ -37,6 +40,8 @@ src/main/
     AboutWindow.ts                -- singleton product information window
   feedback/
     FeedbackWindow.ts             -- singleton modeless feedback composer window
+  agent/
+    AgentClient.ts                -- main client for one renderer's live inspection lane
   app/
     App.ts                        -- app service graph, IPC handlers, command context
     AppLifecycle.ts               -- close/quit confirmation flow
@@ -54,6 +59,8 @@ src/main/
     types.ts                      -- close reasons and dirty-document choices
   menu/
     ApplicationMenu.ts            -- Electron application menu
+  sandbox/
+    SandboxRuntimeProcess.ts       -- isolated code runtime lifecycle and capability lane
   update/
     AppUpdater.ts                  -- update orchestration, scheduling, consent, and restart safety
     UpdateWindow.ts                -- download progress and install prompt window
@@ -86,13 +93,16 @@ src/main/
 - `UpdateWindow` -- renderer of download progress and ready-to-install choices.
 - `FeedbackWindow` -- singleton modeless composer that routes user-authored feedback to email, GitHub, or Discord without collecting files or diagnostics.
 - `UpdateStatus` -- updater lifecycle: idle, checking, available, downloading, ready, or restarting.
+- `ShiftMcpServer` -- local code-mode MCP adapter over explicitly targeted live app capabilities.
+- `SandboxRuntimeProcess` -- utility-process supervisor for bounded generated-code execution and typed capability callbacks.
+- `AgentClient` -- per-window main-process client for renderer-owned editor observations.
 - `WorkspaceDocumentState` -- utility-owned lifecycle state mirrored into main and renderer.
 
 ## How it works
 
 ### Startup
 
-`main.ts` constructs `App` and calls `start()`. `App.start()` applies the compiled `SHIFT_DISTRIBUTION` identity before its first log entry or path-dependent service action, so logging, settings, caches, and recovery all resolve beneath the correct app-data root. Startup recovery discovery calls `DocumentStorage.pruneOrphanedStorage()` before enumerating recoverable work; this cleanup is structural rather than age-based and never removes a recognized working store or recovery overlay. The production/E2E build and development-only Forge runner write the `main_window` renderer to `.vite/renderer/main_window`; production resolves that same directory through `MAIN_WINDOW_VITE_NAME`. `App` registers commands and IPC handlers, starts `AppLifecycle`, sets the user-data-backed `working-documents` root, creates the launcher window, and installs the application menu. Development uses `Shift Dev` or `Shift Nightly Dev`; an explicit standard `--user-data-dir` switch takes precedence so E2E runs can own isolated browser and working-document state.
+`main.ts` constructs `App` and calls `start()`. `App.start()` applies the compiled `SHIFT_DISTRIBUTION` identity before its first log entry or path-dependent service action, so logging, settings, caches, and recovery all resolve beneath the correct app-data root. Startup recovery discovery calls `DocumentStorage.pruneOrphanedStorage()` before enumerating recoverable work; this cleanup is structural rather than age-based and never removes a recognized working store or recovery overlay. The production/E2E build and development-only Forge runner write the `main_window` renderer to `.vite/renderer/main_window`; production resolves that same directory through `MAIN_WINDOW_VITE_NAME`. `App` registers commands and IPC handlers, starts `AppLifecycle`, starts the sandbox utility process before publishing the MCP descriptor, sets the user-data-backed `working-documents` root, creates the launcher window, and installs the application menu. Development uses `Shift Dev` or `Shift Nightly Dev`; an explicit standard `--user-data-dir` switch takes precedence so E2E runs can own isolated browser and working-document state.
 
 The runtime icon follows the same compiled identity: `AppIcon` selects `nightly-macos.png` when `shiftDistribution` is `"nightly"` and `icon-macos.png` otherwise, so Release and Nightly are visually distinct in the development macOS Dock. Packaged installer icons remain owned by electron-builder configuration. The renderer's shared `app-icon.png` supplies the custom About and Update screens. Both distributions use the shared `shift-document` artwork for `.shift` files; association priority, not document appearance, distinguishes their ownership. Packaged macOS builds also declare TTF, OTF, Glyphs, Glyphspackage, UFO, and Designspace sources as alternate viewer types so Finder recommends Shift under **Open With** without making it the default source-font application.
 
@@ -110,7 +120,16 @@ The View menu reserves conventional Zoom In and Zoom Out labels and shortcuts fo
 
 The macOS Window menu is registered through Electron's native `windowMenu` role so AppKit owns system placement, tiling, and open-window affordances. **Home** focuses an existing launcher or creates one without replacing the current document window. **Settings…** sends `app.showSettings` to the active font renderer and opens the existing document-scoped settings surface at Font; it remains unavailable on the launcher until Shift has app-wide settings.
 
-Eligible packaged macOS builds, Windows Nightly x64 builds, and replaceable Linux AppImages start `AppUpdater` after the first window is prepared. The updater waits 30 seconds before its first quiet check to avoid competing with application startup, then checks every four hours. Development builds explain that updates require packaging; Windows Release and read-only AppImages direct manual checks to matching GitHub downloads, and DEB/RPM installs to their package manager.
+Eligible packaged macOS builds, Windows Nightly arm64/x64 builds, and replaceable Linux AppImages start `AppUpdater` after the first window is prepared. The updater waits 30 seconds before its first quiet check to avoid competing with application startup, then checks every four hours. Development builds explain that updates require packaging; Windows Release and read-only AppImages direct manual checks to matching GitHub downloads, and DEB/RPM installs to their package manager.
+
+### Window Chrome On Windows And Linux
+
+macOS keeps its native menu bar and the renderer's traffic lights. On Windows and Linux one Shift-coloured row replaces the system title bar and menu bar: File · Edit · View · Glyph · Help on the left, the tools in the centre, and window controls at the end.
+
+- **Menus.** `ApplicationMenu.install()` still installs the native template, hidden, so every accelerator keeps working, and gives each item an id (`withMenuItemIds`). `ApplicationMenu.menuBar()` describes that template as a `MenuBar` for the renderer, which reads it through `menu.bar`, follows `menu.barChanged`, and runs items with `menu.activate`; `MenuItem.click` executes custom handlers and Electron roles alike, so the drawn menus never diverge from the native ones. `WindowMenuBar` collapses into a single ☰ menu in narrow editor windows. Tapping Alt or pressing F10 enters menu mode, which underlines access keys; Alt+letter chords stay with the editor because align shortcuts use them.
+- **Windows** keeps the system caption buttons as a title-bar overlay so Windows 11 snap layouts work. The renderer reports its theme's chrome colours through `window.setTitleBarColors`, and `.title-bar-area` pads the row clear of the overlay with the Window Controls Overlay CSS variables.
+- **Linux** windows are frameless. `WindowControls` draws minimize, maximize, and close in Shift's style, placed by `window.buttonLayout`, which `readButtonLayout()` reads from the XDG desktop portal (falling back to GNOME's settings). Chromium's own overlay ignored the desktop's layout, which is why Shift draws these itself.
+- **About, Feedback, and Update** use `dialogWindowChrome()`: the same per-platform rule with a close-only row.
 
 ### Application Updates
 
@@ -118,7 +137,7 @@ Eligible packaged macOS builds, Windows Nightly x64 builds, and replaceable Linu
 
 Automatic current/error results stay quiet. When a check finds an update, the update window offers **Download Update** / Later; declining leaves the version available without prompting again during periodic checks. An accepted download replaces those choices with cumulative progress. Closing the window or choosing Cancel cancels the transfer and returns to available. Download completion replaces progress with **Restart and Install** / Later, and a manual check while available or ready reopens the relevant choice. Later retains a verified download without silently installing it on ordinary quit. Restart prepares every document, cancels all prepared closes if one vetoes, commits every agreed close, and only then calls `quitAndInstall()`. A preparation or workspace-close failure blocks installation, remains technical in the log, and presents actionable document-save guidance rather than workspace internals. Electron closes windows before normal `before-quit`, so `AppLifecycle`'s `confirmed` state allows those closes. An install failure after commit relaunches the currently installed application; closed in-memory sessions are never reconstructed.
 
-The application menu exposes `app.checkForUpdates` under the macOS app menu and the Windows/Linux Help menu. Every platform's Help menu also opens the Shift website, Discord, and X account. Its adjacent support actions open the dedicated public Bug report form, reveal electron-log's active file in the platform file manager, or open a singleton modeless feedback composer. The composer retains its draft while open and routes only user-authored text to the mail client; GitHub and the Discord feedback channel remain explicit alternatives. Closing discards the draft. Users review and attach logs manually; Shift does not read or upload their files. Update behavior remains main-owned and does not add renderer IPC.
+The application menu exposes `app.checkForUpdates` and `app.installCommandLineTool` under the macOS app menu and the Windows/Linux Help menu. Every platform's Help menu also opens the Shift website, Discord, and X account. Its adjacent support actions open the dedicated public Bug report form, reveal electron-log's active file in the platform file manager, or open a singleton modeless feedback composer. The composer retains its draft while open and routes only user-authored text to the mail client; GitHub and the Discord feedback channel remain explicit alternatives. Closing discards the draft. Users review and attach logs manually; Shift does not read or upload their files. Update behavior remains main-owned and does not add renderer IPC.
 
 ### Workspace Creation And Open
 
@@ -150,7 +169,7 @@ Message lanes reject in-flight calls when their remote port closes. An unexpecte
 
 ### IPC
 
-Renderer IPC in `App` is limited to shell capabilities: command execution, clipboard, update-window progress/actions, optional document-lane port transfer, immutable session mode, readiness, and shared session sync-lane port transfer. Font data stays on that sync lane between renderer and utility.
+Renderer IPC in `App` is limited to shell capabilities: command execution, clipboard, update-window progress/actions, optional document-lane and agent-lane port transfer, immutable session mode, readiness, and shared session sync-lane port transfer. Font data stays on the sync lane between renderer and utility. The agent lane returns renderer-owned view facts, authored revision checks, editor capture bounds, read-only font/location/glyph projections, nested authored layers, resolved layer geometry, portable point-in-time SVG, and read-only kerning groups, pairs, and resolutions. Layer reads address one stable `LayerId` and go through the serialized sync lane to one native accepted-state query (`workspace.layers.read` / `workspace.layers.resolve`); Rust resolves components at the layer's own source, so the renderer neither loads glyph models nor sees gesture previews. In the renderer, `AgentBridge` owns only the port and revision guard; `ShiftFontReader` serves the font, glyph, and layer reads, `ShiftKerningReader` answers kerning reads through the font's own kerning lookup and blending, and `ShiftLayer` wraps one layer read so `layers.get`, `layers.resolve`, and `layers.render` all derive from it. Main resolves the explicit window and session before routing each MCP call; editor observations also carry their window and session identities. Window and editor screenshots use `webContents.capturePage()` and return immutable PNG values with unique capture IDs inside the same revision observation contract. A capture ID identifies an image; the surrounding opaque font revision correlates authored state and is verified before and after pixel capture.
 
 ## Workflow recipes
 
@@ -168,6 +187,8 @@ Renderer IPC in `App` is limited to shell capabilities: command execution, clipb
 3. Add native choices to `NativeDialogs` with Electron and scripted implementations in `dialogs/`; keep workspace ownership in `workspace/`.
 
 ## Gotchas
+
+- **Linux WebGPU needs Vulkan.** Chromium ships its Vulkan backend disabled on Linux, so `navigator.gpu.requestAdapter()` returns null and the glyph grid falls back to SVG. `main.ts` enables the `Vulkan` feature on Linux before the app is ready. `--enable-unsafe-webgpu` alone only yields SwiftShader, a CPU renderer.
 
 - Electron/electron-updater orchestration is verified with installed N → N+1 builds; mocking Electron, native dialogs, or the updater does not provide a worthwhile unit test.
 - SHA-512 update metadata verifies package integrity, not publisher authenticity. Windows Release remains manual until Authenticode signing is configured.
@@ -200,7 +221,7 @@ Renderer IPC in `App` is limited to shell capabilities: command execution, clipb
 - Manual installed macOS builds: right-click TTF, OTF, Glyphs, Glyphspackage, UFO, and Designspace sources and verify Shift appears under **Open With** without replacing the current default application.
 - Manual: open the same `.shift` document twice and verify the existing workspace session is reused.
 - Manual: edit a document, close the last window, and verify the save/discard prompt appears.
-- Manual installed N → N+1: verify macOS arm64/x64 and unsigned Windows Nightly x64 consent, download progress, progress-window close/Cancel, retry, Later before and after download, **Restart and Install**, canceled document close, save, discard, install, and relaunch paths. Electron orchestration has no worthwhile unit test without mocking Electron, native dialogs, and electron-updater.
+- Manual installed N → N+1: verify macOS arm64/x64 and unsigned Windows Nightly arm64/x64 consent, download progress, progress-window close/Cancel, retry, Later before and after download, **Restart and Install**, canceled document close, save, discard, install, and relaunch paths. Electron orchestration has no worthwhile unit test without mocking Electron, native dialogs, and electron-updater.
 
 ## Related
 

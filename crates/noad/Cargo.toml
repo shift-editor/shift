@@ -1,0 +1,12 @@
+[package]
+name = "noad"
+version = "0.0.0"
+edition = "2021"
+description = "Lay out MathML Core formulas from OpenType MATH data, recording why each glyph is placed"
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/shift-editor/shift"
+keywords = ["math", "mathml", "opentype", "layout", "fonts"]
+categories = ["text-processing", "graphics"]
+
+[dependencies]

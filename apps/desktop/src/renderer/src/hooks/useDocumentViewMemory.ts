@@ -1,7 +1,7 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router";
 import type { WorkspaceDocumentState } from "@shift/types";
-import { signal, useSignalState } from "@shift/editor/signals";
+import { computed, signal, useSignalState } from "@shift/editor/signals";
 import { editorPath, glyphIdFromPath } from "@/lib/editorRoute";
 import { DocumentViews, documentViewKey } from "@/lib/workspace/documentViews";
 import { useFontSession } from "@/workspace/WorkspaceContext";
@@ -24,9 +24,19 @@ export function useDocumentViewMemory(): void {
   const session = useFontSession();
   const navigate = useNavigate();
   const location = useLocation();
-  const documentState = useSignalState(session.workspace?.documentStateCell ?? NO_DOCUMENT_STATE);
+  // Document state changes on every edit; subscribe to its view key alone so the
+  // whole document window does not re-render with each edit, undo, and redo.
+  const documentStateCell = session.workspace?.documentStateCell ?? NO_DOCUMENT_STATE;
+  const keyCell = useMemo(
+    () =>
+      computed(() => {
+        const documentState = documentStateCell.value;
+        return documentState ? documentViewKey(documentState) : null;
+      }),
+    [documentStateCell],
+  );
+  const key = useSignalState(keyCell);
   const fontLoaded = useSignalState(session.editor.font.loadedCell);
-  const key = documentState ? documentViewKey(documentState) : null;
   const resuming = new URLSearchParams(location.search).has("resume");
 
   useEffect(() => {

@@ -257,10 +257,10 @@ authoredTest(
     await editor.press(process.platform === "darwin" ? "Meta+Shift+C" : "Control+Shift+C");
     const picker = page.getByRole("dialog", { name: "Add Component" });
     await expect(picker).toBeVisible();
-    const search = picker.getByRole("textbox", { name: "Search components" });
+    const search = picker.getByRole("combobox", { name: "Search components" });
     await search.fill(candidate.name);
     await expect(
-      picker.getByRole("button", { name: `Add ${candidate.displayName} as a component` }),
+      picker.getByRole("option", { name: `Add ${candidate.displayName} as a component` }),
     ).toBeVisible();
     await search.press("Enter");
 
@@ -491,13 +491,13 @@ authoredTest(
 
     await clickApplicationMenuItem(page, electronApp, "glyph.addComponent");
     const picker = page.getByRole("dialog", { name: "Add Component" });
-    const search = picker.getByRole("textbox", { name: "Search components" });
+    const search = picker.getByRole("combobox", { name: "Search components" });
     await search.fill(candidate.name);
     await expect
       .poll(() =>
         picker
-          .getByRole("button")
-          .evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-label"))),
+          .getByRole("option")
+          .evaluateAll((options) => options.map((option) => option.getAttribute("aria-label"))),
       )
       .toContain(`Create and add ${candidate.name} as a component`);
     await search.press("Enter");

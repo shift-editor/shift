@@ -1,8 +1,11 @@
 import type { Editor } from "../../editor/Editor";
+import { track } from "../../signals";
 import type { GlyphLayer } from "../../model/Glyph";
 import type { ScenePoint } from "../../../types/coordinates";
 import {
+  isKernedGap,
   sidebearingOfHalf,
+  spacingGapCenter,
   type Sidebearing,
   type SpacingGap,
   type SpacingSide,
@@ -18,9 +21,15 @@ import {
  * {@link RunSpacing.refresh}.
  */
 export class SpacingHalf {
+  /**
+   * @param scope - How the half was reached: through its gap, drawn with the
+   * gap's other half, or through its glyph, drawn alone beside its glyph's
+   * other sidebearing.
+   */
   constructor(
     readonly gap: SpacingGap,
     readonly side: SpacingSideName,
+    readonly scope: SpacingHalfScope = "gap",
   ) {}
 
   /** The glyph whose sidebearing this half is, or null at a line end. */
@@ -36,7 +45,7 @@ export class SpacingHalf {
   /** The gap's other half, when it has one. */
   other(): SpacingHalf | null {
     const side = this.side === "left" ? "right" : "left";
-    return this.gap[side] ? new SpacingHalf(this.gap, side) : null;
+    return this.gap[side] ? new SpacingHalf(this.gap, side, this.scope) : null;
   }
 
   /** Whether both halves belong to the same gap, by its two glyphs. */
@@ -53,8 +62,10 @@ export class SpacingHalf {
     if (!other) return false;
     return (
       this.side === other.side &&
+      this.scope === other.scope &&
       this.sameGapAs(other) &&
-      this.gap.boundary === other.gap.boundary &&
+      this.gap.leftBoundary === other.gap.leftBoundary &&
+      this.gap.rightBoundary === other.gap.rightBoundary &&
       this.gap.left?.sidebearing === other.gap.left?.sidebearing &&
       this.gap.right?.sidebearing === other.gap.right?.sidebearing
     );
@@ -107,6 +118,17 @@ export class SpacingHalf {
   }
 }
 
+/** How a half was reached: through its gap, or through its glyph. */
+export type SpacingHalfScope = "gap" | "glyph";
+
+/**
+ * Subscribes the caller's reactive scope to every text run's layout, so an
+ * overlay measured from the layout redraws when it changes.
+ */
+export function trackRunLayouts(editor: Editor): void {
+  for (const run of editor.scene.nodesOfKind("textRun")) track(editor.text.layoutCell(run.runId));
+}
+
 /** The spacing gaps of the editor's text runs, measured on demand. */
 export class RunSpacing {
   readonly #editor: Editor;
@@ -123,7 +145,9 @@ export class RunSpacing {
    * negative sidebearing's half lies past the boundary. The half containing
    * the point wins; where both do, the negative one, which is reachable only
    * there; where neither does, left of the boundary is the left half. A gap
-   * with only one side always gives that side.
+   * with only one side always gives that side. In a kerned gap, each glyph's
+   * own sidebearing is hit where it reaches, in glyph scope; the rest of the
+   * space between its boundaries is the kern, with no half.
    */
   halfAt(point: ScenePoint): SpacingHalf | null {
     const definition = this.#editor.nodeDefinition("textRun");
@@ -132,18 +156,28 @@ export class RunSpacing {
       const node = runs[index]!;
       const local = this.#editor.toLocal(node, point);
       const gap = definition.spacingGapAt(node, local);
-      if (gap) return new SpacingHalf(gap, sideAt(gap, local.x));
+      if (gap && !isKernedGap(gap)) return new SpacingHalf(gap, sideAt(gap, local.x));
+      if (gap) {
+        // A kerned gap is hit only on each glyph's own sidebearing strip; the
+        // kern beyond them is not spacing.
+        return reachedHalf(gap, local.x);
+      }
     }
     return null;
   }
 
-  /** Measures a half again after an edit, by its gap's two glyphs; unchanged if they are no longer neighbours. */
-  refresh(half: SpacingHalf): SpacingHalf {
+  /**
+   * Measures a half again after an edit, by its gap's two glyphs.
+   *
+   * @returns null once they are no longer neighbours, as after an undo that
+   * removes one, so no stale half stays selected.
+   */
+  refresh(half: SpacingHalf): SpacingHalf | null {
     const { node, left, right } = half.gap;
     const gap = this.#editor
       .nodeDefinition("textRun")
       .spacingGapBetween(node, left?.itemId ?? null, right?.itemId ?? null);
-    return gap ? new SpacingHalf(gap, half.side) : half;
+    return gap ? new SpacingHalf(gap, half.side, half.scope) : null;
   }
 
   /**
@@ -153,7 +187,7 @@ export class RunSpacing {
    * @returns null at either end of the run.
    */
   adjacent(half: SpacingHalf, step: -1 | 1): SpacingHalf | null {
-    const halves = this.#halves(half.gap.node);
+    const halves = this.#halves(half.gap.node, false);
     const index = halves.findIndex(
       (candidate) => candidate.side === half.side && candidate.sameGapAs(half),
     );
@@ -169,15 +203,38 @@ export class RunSpacing {
     if (!itemId) return null;
     const side = half.side === "left" ? "right" : "left";
     return (
-      this.#halves(half.gap.node).find(
-        (candidate) => candidate.side === side && candidate.glyphSide?.itemId === itemId,
-      ) ?? null
+      this.#halves(half.gap.node, true)
+        .map((candidate) => new SpacingHalf(candidate.gap, candidate.side, half.scope))
+        .find((candidate) => candidate.side === side && candidate.glyphSide?.itemId === itemId) ??
+      null
     );
   }
 
-  #halves(node: SpacingGap["node"]): SpacingHalf[] {
+  /**
+   * Returns every other place in the editor's text runs where the same
+   * sidebearing of the same glyph appears: everything an edit to `half`
+   * also changes. Each stands alone, in glyph scope.
+   */
+  sameSidebearings(half: SpacingHalf): SpacingHalf[] {
+    const glyphId = half.glyphSide?.glyphId;
+    if (!glyphId) return [];
+    return this.#editor.scene
+      .nodesOfKind("textRun")
+      .flatMap((node) => this.#halves(node, true))
+      .filter(
+        (candidate) =>
+          candidate.side === half.side &&
+          candidate.glyphSide?.glyphId === glyphId &&
+          !candidate.sameGapAs(half),
+      )
+      .map((candidate) => new SpacingHalf(candidate.gap, candidate.side, "glyph"));
+  }
+
+  /** The run's halves in reading order; a kerned gap's only with `withKerned`. */
+  #halves(node: SpacingGap["node"], withKerned: boolean): SpacingHalf[] {
     const halves: SpacingHalf[] = [];
     for (const gap of this.#editor.nodeDefinition("textRun").spacingGaps(node)) {
+      if (!withKerned && isKernedGap(gap)) continue;
       if (gap.left) halves.push(new SpacingHalf(gap, "left"));
       if (gap.right) halves.push(new SpacingHalf(gap, "right"));
     }
@@ -186,15 +243,33 @@ export class RunSpacing {
 }
 
 function sideAt(gap: SpacingGap, x: number): SpacingSideName {
-  const inLeft = gap.left !== null && between(x, gap.left.edge, gap.boundary);
-  const inRight = gap.right !== null && between(x, gap.boundary, gap.right.edge);
+  const inLeft = gap.left !== null && between(x, gap.left.edge, gap.leftBoundary);
+  const inRight = gap.right !== null && between(x, gap.rightBoundary, gap.right.edge);
   if (inLeft !== inRight) return inLeft ? "left" : "right";
   if (inLeft && gap.left!.sidebearing < 0) return "left";
   if (inRight && gap.right!.sidebearing < 0) return "right";
 
-  const pointerSide = x < gap.boundary ? "left" : "right";
+  const pointerSide = x < spacingGapCenter(gap) ? "left" : "right";
   if (gap[pointerSide]) return pointerSide;
   return gap.left ? "left" : "right";
+}
+
+/**
+ * The half of a kerned gap whose own sidebearing spans `x`, in glyph scope:
+ * where both do, the one whose outline edge is nearer.
+ */
+function reachedHalf(gap: SpacingGap, x: number): SpacingHalf | null {
+  const { left, right } = gap;
+  if (!left || !right) return null;
+  const inLeft = between(x, left.edge, gap.leftBoundary);
+  const inRight = between(x, gap.rightBoundary, right.edge);
+  if (inLeft && inRight) {
+    const nearerLeft = Math.abs(x - left.edge) <= Math.abs(x - right.edge);
+    return new SpacingHalf(gap, nearerLeft ? "left" : "right", "glyph");
+  }
+  if (inLeft) return new SpacingHalf(gap, "left", "glyph");
+  if (inRight) return new SpacingHalf(gap, "right", "glyph");
+  return null;
 }
 
 function between(x: number, a: number, b: number): boolean {

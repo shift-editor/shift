@@ -20,4 +20,6 @@ mod stat;
 #[cfg(test)]
 mod tests;
 
-pub(crate) use source::{ShiftIrSource, ShiftIrSourceError};
+pub(crate) use axes::to_ir_axes;
+pub use axes::{AxisConversionError, MappingSide};
+pub(crate) use source::{units_per_em, ShiftIrSource, ShiftIrSourceError};

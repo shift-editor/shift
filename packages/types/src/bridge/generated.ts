@@ -8,6 +8,7 @@ import type {
   ComponentId,
   GuidelineId,
   GlyphId,
+  KerningGroupId,
   LayerId,
   MetricId,
   NamedInstanceId,
@@ -90,6 +91,32 @@ export interface BridgeApi {
   /** Glyph-addressed snapshots for renderer-local synchronous font state. */
   getGlyphSnapshots(requests: Array<GlyphSnapshotRequest>): Array<GlyphSnapshot>
   /**
+   * Reads exact authored layers by stable layer identity.
+   *
+   * Results preserve request order and contain accepted workspace state
+   * only. Components are not resolved, so a layer with a broken component
+   * reference remains readable.
+   *
+   * # Errors
+   *
+   * Returns an error when any identity is malformed or absent from the font.
+   */
+  readLayers(layerIds: Array<LayerId>): Array<GlyphLayerSnapshot>
+  /**
+   * Reads exact authored layers with their composited geometry.
+   *
+   * Each root keeps its requested authored geometry; components resolve at
+   * that layer's source through normal interpolation and fallback, and
+   * cyclic branches are skipped. Results preserve request order and do not
+   * publish renderer models.
+   *
+   * # Errors
+   *
+   * Returns an error when any identity is malformed or absent, a component
+   * cannot resolve, or referenced interpolation is incompatible.
+   */
+  resolveLayers(layerIds: Array<LayerId>): Array<LayerRead>
+  /**
    * Derives entity mappings and structural diagnostics between two layers.
    *
    * Both layers must belong to the same glyph. The read acquires that glyph's
@@ -169,9 +196,27 @@ export interface BridgeApi {
    * applies its own default; an empty array is an explicit empty list.
    */
   getLanguageIds(): Array<string> | null
+  /**
+   * Returns the font's kerning groups, per-source pairs, and the basis
+   * kerning interpolates over.
+   */
+  getKerning(): KerningSnapshot
   getNamedInstances(): Array<NamedInstance>
   /** Returns the precomputed source-metric interpolation model for this font. */
   getSourceMetricsInterpolation(): SourceMetricsInterpolationSnapshot | null
+  /**
+   * Shapes a run of text with the font's feature code.
+   *
+   * Characters map through the live font's Unicode values and every
+   * glyph's own advance is zero while shaping, so the result carries the
+   * substituted glyphs, their clusters, and only what the feature code
+   * positions. The caller adds live advances, kerning, and mark attachment.
+   *
+   * Feature code with errors shapes with the last version that compiled.
+   * The shaping tables are rebuilt only when a font change since the last
+   * call altered the glyph order, glyph categories, feature code, or axes.
+   */
+  shape(request: ShapeRequest): Array<ShapedGlyph>
   mapLocation(location: Location): Location
   getSources(): Array<Source>
 }
@@ -189,6 +234,13 @@ export interface DocumentState {
   needsSaveAs: boolean
 }
 
+export interface FeatureSetting {
+  /** A feature tag such as `liga`. */
+  tag: string
+  /** `0` turns the feature off, `1` on; larger values pick an alternate. */
+  value: number
+}
+
 export interface FontExportRequest {
   path: string
   format: string
@@ -202,6 +254,50 @@ export interface FontExportResult {
 export interface NewWorkspace {
   familyName?: string
   unitsPerEm?: number
+}
+
+/**
+ * One shaped glyph. Advances and offsets hold only what the font's feature
+ * code positions; glyph advances, kerning, and mark attachment are the
+ * caller's to add.
+ */
+export interface ShapedGlyph {
+  /** Absent when a character has no glyph. */
+  glyphId?: GlyphId
+  /** Index of the first unit the glyph came from. */
+  cluster: number
+  xAdvance: number
+  yAdvance: number
+  xOffset: number
+  yOffset: number
+}
+
+export interface ShapeRequest {
+  units: Array<ShapeUnit>
+  /** User-space location to shape at; omitted axes are at their default. */
+  location: Location
+  /** Guessed from the script when omitted. */
+  direction?: "ltr" | "rtl"
+  /**
+   * ISO 15924 script tag such as `Arab`; guessed from the characters when
+   * omitted.
+   */
+  script?: string
+  /** BCP 47 language tag; the default language system when omitted. */
+  language?: string
+  /** Settings over the features applied by default. */
+  features?: Array<FeatureSetting>
+}
+
+/**
+ * One unit of text to shape: exactly one of a character or a glyph inserted
+ * by name.
+ */
+export interface ShapeUnit {
+  /** A Unicode scalar value. */
+  codepoint?: number
+  /** A glyph with no character to type, shaped as itself. */
+  glyphId?: GlyphId
 }
 
 /**
@@ -331,6 +427,12 @@ export interface BooleanOpIntent {
   operation: string
 }
 
+/** One corner of outline bounds in font units. */
+export interface BoundsCorner {
+  x: number
+  y: number
+}
+
 export interface CatalogAtlasGlyph {
   glyphId: GlyphId
   defaultGlyph: number
@@ -403,6 +505,16 @@ export interface ComponentMatch {
   targetId: ComponentId
 }
 
+/** Six-value affine placement of a component in its parent layer. */
+export interface ComponentTransform {
+  xx: number
+  xy: number
+  yx: number
+  yy: number
+  dx: number
+  dy: number
+}
+
 export type ComponentTransformKind = "decomposed" | "affine";
 
 export interface ContourData {
@@ -442,6 +554,13 @@ export interface CreateGlyphLayerIntent {
   sourceId: SourceId
 }
 
+/** Creates an empty kerning group under an id the client mints. */
+export interface CreateKerningGroupIntent {
+  groupId: KerningGroupId
+  position: KerningPosition
+  name: string
+}
+
 /** Creates an authored named instance with client-minted stable identity. */
 export interface CreateNamedInstanceIntent {
   instance: NamedInstance
@@ -466,6 +585,11 @@ export interface DecomposeComponentsIntent {
 /** Font-level axis deletion. Removing an axis also reshapes source locations. */
 export interface DeleteAxisIntent {
   axisId: AxisId
+}
+
+/** Deletes a kerning group; its pairs stay and resolve again on undo. */
+export interface DeleteKerningGroupIntent {
+  groupId: KerningGroupId
 }
 
 /** Deletes an authored named instance without changing sources or geometry. */
@@ -500,8 +624,10 @@ export interface FontIntent {
    * "transformLayer" | "setXAdvance" | "applyBooleanOp".
    * Font-level kinds additionally include metadata replacement, tracked
    * language replacement, axis create/update/delete, mapping replacement,
-   * named-instance create/update/delete, source create/delete, and glyph
-   * or layer creation.
+   * named-instance create/update/delete, source create/delete, glyph
+   * or layer creation, "setKerningValues", and the kerning group kinds
+   * "createKerningGroup" | "setKerningGroupMember" | "renameKerningGroup"
+   * | "deleteKerningGroup".
    * Every kind shares the same apply path; one set is one undo step.
    */
   kind: string
@@ -542,6 +668,11 @@ export interface FontIntent {
   createGlyphLayer?: CreateGlyphLayerIntent
   cloneGlyphLayer?: CloneGlyphLayerIntent
   materializeGlyphLayer?: MaterializeGlyphLayerIntent
+  setKerningValues?: SetKerningValuesIntent
+  createKerningGroup?: CreateKerningGroupIntent
+  setKerningGroupMember?: SetKerningGroupMemberIntent
+  renameKerningGroup?: RenameKerningGroupIntent
+  deleteKerningGroup?: DeleteKerningGroupIntent
 }
 
 export interface FontMetadata {
@@ -595,6 +726,8 @@ export interface FontReplacement {
    * reshapes locations, createSource adds one); absent otherwise.
    */
   sources?: Array<Source>
+  /** Complete kerning when its values or interpolation basis changed. */
+  kerning?: KerningSnapshot
 }
 
 export interface FontSnapshot {
@@ -610,6 +743,7 @@ export interface FontSnapshot {
   namedInstances: Array<NamedInstance>
   /** Tracked Hyperglot language ids; absent when the font stores no list. */
   languageIds?: Array<string>
+  kerning: KerningSnapshot
 }
 
 export interface GlyphChangedEntities {
@@ -737,6 +871,48 @@ export interface InterpolationSupport {
   upper: number
 }
 
+export interface KerningGroup {
+  id: KerningGroupId
+  position: KerningPosition
+  name: string
+  glyphIds: Array<GlyphId>
+}
+
+export interface KerningPairValue {
+  first: KerningSide
+  second: KerningSide
+  amount: number
+}
+
+export type KerningPosition = "first" | "second";
+
+/** One kerning pair side: `id` is a glyph id when `kind` is `glyph`, else a group id. */
+export interface KerningSide {
+  kind: KerningSideKind
+  id: string
+}
+
+export type KerningSideKind = "glyph" | "group";
+
+/**
+ * Font kerning: groups, per-source pairs, and the interpolation basis over
+ * the default source and every master with pairs (absent for static fonts).
+ */
+export interface KerningSnapshot {
+  groups: Array<KerningGroup>
+  sources: Array<SourceKerningPairs>
+  basis?: InterpolationBasis
+}
+
+/** One kerning pair value to set or remove at one source. */
+export interface KerningValueEdit {
+  sourceId: SourceId
+  first: KerningSide
+  second: KerningSide
+  /** New value in font units; absent removes the pair at this source. */
+  amount?: number
+}
+
 /**
  * Replacement wrapper whose presence distinguishes "unchanged" from a
  * change that removed the tracked language list.
@@ -776,6 +952,12 @@ export interface LayerMatch {
   anchors: Array<AnchorMatch>
   components: Array<ComponentMatch>
   differences: Array<LayerDifference>
+}
+
+/** One accepted-state layer: authored state and its resolved geometry, read together. */
+export interface LayerRead {
+  authored: GlyphLayerSnapshot
+  resolved: ResolvedLayerGeometry
 }
 
 /**
@@ -834,6 +1016,12 @@ export interface NamedInstance {
   postscriptName?: string
 }
 
+/** Tight axis-aligned outline bounds in font units, y-up. */
+export interface OutlineBounds {
+  min: BoundsCorner
+  max: BoundsCorner
+}
+
 export interface PointData {
   id: PointId
   pointType: PointType
@@ -874,6 +1062,32 @@ export interface RemovePointsIntent {
   pointIds: Array<PointId>
 }
 
+/** Renames a kerning group; its pairs keep referencing it by id. */
+export interface RenameKerningGroupIntent {
+  groupId: KerningGroupId
+  name: string
+}
+
+/** One direct component whose outline includes its resolved descendants. */
+export interface ResolvedComponentGeometry {
+  id: ComponentId
+  baseGlyphId: GlyphId
+  transformation: ComponentTransform
+  outline: ResolvedOutline
+}
+
+/** Composited geometry of one exact authored layer at its own source. */
+export interface ResolvedLayerGeometry {
+  outline: ResolvedOutline
+  components: Array<ResolvedComponentGeometry>
+}
+
+/** Composited outline as one SVG path in font units with its tight bounds. */
+export interface ResolvedOutline {
+  svgPath: string
+  bounds?: OutlineBounds
+}
+
 export interface ReverseContourIntent {
   layerId: LayerId
   contourId: ContourId
@@ -900,6 +1114,18 @@ export interface SetContourStartIntent {
   layerId: LayerId
   contourId: ContourId
   pointId: PointId
+}
+
+/** Moves a glyph into a group, or out of its group at `position` without one. */
+export interface SetKerningGroupMemberIntent {
+  position: KerningPosition
+  glyphId: GlyphId
+  groupId?: KerningGroupId
+}
+
+/** Sets or removes kerning pair values at sources as one undoable edit. */
+export interface SetKerningValuesIntent {
+  edits: Array<KerningValueEdit>
 }
 
 /** Replaces the font's tracked language list as one undoable edit. */
@@ -991,6 +1217,11 @@ export interface Source {
   lineGap?: number
   underlinePosition?: number
   underlineThickness?: number
+}
+
+export interface SourceKerningPairs {
+  sourceId: SourceId
+  pairs: Array<KerningPairValue>
 }
 
 export type SourceMetricField = "italicAngle" | "lineGap" | "underlinePosition" | "underlineThickness";

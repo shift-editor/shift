@@ -6,11 +6,11 @@ use std::sync::Arc;
 
 use crate::composite::{
     flatten_selected_component_contours_from_layers, resolved_contours_from_layers,
-    GlyphComponents, ResolvedContour,
+    resolved_layer_geometry_from_layers, GlyphComponents, ResolvedContour, ResolvedLayerGeometry,
 };
 use crate::{
     Axis, ComponentId, CoreError, CoreResult, DesignLocation, Font, Glyph, GlyphId,
-    GlyphInterpolation, GlyphLayer, InterpolationBasis, Source, SourceId,
+    GlyphInterpolation, GlyphLayer, InterpolationBasis, LayerId, Source, SourceId,
 };
 
 /// One exact-source shape that cannot be represented by compatible variation.
@@ -641,6 +641,12 @@ impl FontProjection<'_> {
         else {
             return Ok(false);
         };
+        self.prepare_layer_tree_from(glyph_id, layer)?;
+        Ok(true)
+    }
+
+    /// Inserts `layer` as `glyph_id`'s shape here and resolves its components.
+    fn prepare_layer_tree_from(&mut self, glyph_id: &GlyphId, layer: GlyphLayer) -> CoreResult<()> {
         let components = layer
             .components_iter()
             .map(|component| (component.id(), component.base_glyph_id()))
@@ -658,7 +664,31 @@ impl FontProjection<'_> {
             });
         }
 
-        Ok(true)
+        Ok(())
+    }
+}
+
+impl Font {
+    /// Resolves one exact authored layer with its components at that layer's source.
+    ///
+    /// The root keeps the requested layer's authored geometry. Referenced
+    /// glyphs resolve at the layer's source location through the normal exact
+    /// source, interpolation, and fallback rules; cyclic branches are skipped.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::LayerNotFound`] for an unknown layer,
+    /// [`CoreError::UnresolvableComponentGlyph`] when a component has no
+    /// resolvable shape, or an interpolation error for incompatible
+    /// referenced geometry.
+    pub fn resolve_layer(&self, layer_id: &LayerId) -> CoreResult<ResolvedLayerGeometry> {
+        let glyph_id = self.require_layer_owner(layer_id)?;
+        let layer = self.require_layer(layer_id)?;
+        let location = self.require_source(&layer.source_id())?.location().clone();
+        let mut projection = self.projection(&location);
+        projection.prepare_layer_tree_from(&glyph_id, layer.clone())?;
+
+        resolved_layer_geometry_from_layers(&glyph_id, &projection.layers)
     }
 }
 
@@ -1229,5 +1259,126 @@ mod tests {
         let second = &glyph.contours()[0].points[1];
         assert_eq!((first.x(), first.y()), (50.0, 20.0));
         assert_eq!((second.x(), second.y()), (60.0, 30.0));
+    }
+
+    #[test]
+    fn resolve_layer_keeps_the_exact_root_and_resolves_components_at_its_source() {
+        let (mut font, _axis_id, light_id, regular_id, bold_id) = variable_font();
+        let child_id = GlyphId::from_raw("diaeresis");
+        let mut child = Glyph::with_id(child_id.clone(), "diaeresis");
+        child.set_layer(line_layer(light_id.clone(), 0.0));
+        child.set_layer(line_layer(bold_id, 80.0));
+        font.insert_glyph(child).unwrap();
+
+        let root_id = GlyphId::from_raw("Adieresis");
+        let mut root = Glyph::with_id(root_id.clone(), "Adieresis");
+        let mut light_layer = line_layer(light_id, 300.0);
+        light_layer.add_component(Component::new(child_id.clone(), "diaeresis"));
+        root.set_layer(light_layer);
+        let mut regular_layer = line_layer(regular_id, 500.0);
+        let component_id = regular_layer.add_component(Component::with_matrix(
+            child_id.clone(),
+            "diaeresis",
+            &Transform::translate(0.0, 100.0),
+        ));
+        let regular_layer_id = regular_layer.id();
+        root.set_layer(regular_layer);
+        font.insert_glyph(root).unwrap();
+
+        let geometry = font.resolve_layer(&regular_layer_id).unwrap();
+
+        let starts = geometry
+            .outline()
+            .iter()
+            .map(|contour| (contour.points[0].x(), contour.points[0].y()))
+            .collect::<Vec<_>>();
+        assert_eq!(starts, vec![(500.0, 0.0), (40.0, 100.0)]);
+        let [component] = geometry.components() else {
+            panic!("expected one direct component");
+        };
+        assert_eq!(component.component_id(), component_id);
+        assert_eq!(component.base_glyph_id(), child_id);
+        assert_eq!(component.transformation(), Transform::translate(0.0, 100.0));
+        assert_eq!(component.outline().len(), 1);
+        assert_eq!(component.outline()[0].points[0].x(), 40.0);
+    }
+
+    #[test]
+    fn resolve_layer_groups_nested_outlines_under_their_direct_component() {
+        let mut font = Font::new();
+        let source_id = font.default_source_id().unwrap();
+        let base_id = GlyphId::from_raw("base");
+        let mut base = Glyph::with_id(base_id.clone(), "base");
+        base.set_layer(line_layer(source_id.clone(), 0.0));
+        font.insert_glyph(base).unwrap();
+
+        let middle_id = GlyphId::from_raw("middle");
+        let mut middle = Glyph::with_id(middle_id.clone(), "middle");
+        let mut middle_layer = line_layer(source_id.clone(), 100.0);
+        middle_layer.add_component(Component::with_matrix(
+            base_id.clone(),
+            "base",
+            &Transform::translate(0.0, 50.0),
+        ));
+        middle.set_layer(middle_layer);
+        font.insert_glyph(middle).unwrap();
+
+        let root_id = GlyphId::from_raw("root");
+        let mut root = Glyph::with_id(root_id.clone(), "root");
+        let mut root_layer = GlyphLayer::with_width(LayerId::new(), source_id, 500.0);
+        root_layer.add_component(Component::with_matrix(
+            middle_id.clone(),
+            "middle",
+            &Transform::translate(200.0, 0.0),
+        ));
+        root_layer.add_component(Component::new(base_id.clone(), "base"));
+        let root_layer_id = root_layer.id();
+        root.set_layer(root_layer);
+        font.insert_glyph(root).unwrap();
+
+        let geometry = font.resolve_layer(&root_layer_id).unwrap();
+
+        assert_eq!(geometry.outline().len(), 3);
+        let [middle, base] = geometry.components() else {
+            panic!("expected two direct components");
+        };
+        assert_eq!(middle.base_glyph_id(), middle_id);
+        assert_eq!(
+            crate::composite::resolved_contours_bbox(middle.outline()),
+            Some((200.0, 0.0, 310.0, 50.0)),
+        );
+        assert_eq!(base.base_glyph_id(), base_id);
+        assert_eq!(
+            crate::composite::resolved_contours_bbox(base.outline()),
+            Some((0.0, 0.0, 10.0, 0.0)),
+        );
+    }
+
+    #[test]
+    fn resolve_layer_skips_cyclic_components() {
+        let mut font = Font::new();
+        let source_id = font.default_source_id().unwrap();
+        let root_id = GlyphId::from_raw("root");
+        let mut root = Glyph::with_id(root_id.clone(), "root");
+        let mut root_layer = line_layer(source_id, 0.0);
+        root_layer.add_component(Component::new(root_id.clone(), "root"));
+        let root_layer_id = root_layer.id();
+        root.set_layer(root_layer);
+        font.insert_glyph(root).unwrap();
+
+        let geometry = font.resolve_layer(&root_layer_id).unwrap();
+
+        assert_eq!(geometry.outline().len(), 1);
+        assert!(geometry.components().is_empty());
+    }
+
+    #[test]
+    fn resolve_layer_rejects_an_unknown_layer() {
+        let font = Font::new();
+        let layer_id = LayerId::new();
+
+        let error = font.resolve_layer(&layer_id).unwrap_err();
+
+        assert!(matches!(error, CoreError::LayerNotFound(id) if id == layer_id));
     }
 }

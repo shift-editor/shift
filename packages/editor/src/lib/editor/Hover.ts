@@ -1,5 +1,5 @@
 import { computed, signal, type Signal, type WritableSignal } from "../signals/index";
-import type { SelectableId } from "../../types/object";
+import type { SelectableId } from "@shift/types";
 
 export type HoverEntry = SelectableId;
 export type HoverableId = SelectableId;

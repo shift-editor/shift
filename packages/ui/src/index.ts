@@ -1,3 +1,15 @@
+export {
+  Autocomplete,
+  AutocompleteInput,
+  AutocompleteList,
+  AutocompleteItem,
+  AutocompleteEmpty,
+  type AutocompleteProps,
+  type AutocompleteInputProps,
+  type AutocompleteListProps,
+  type AutocompleteItemProps,
+  type AutocompleteEmptyProps,
+} from "./components/autocomplete";
 export { Button, type ButtonProps } from "./components/button";
 export {
   Toolbar,
@@ -42,6 +54,7 @@ export {
   type CheckboxProps,
   type CheckboxIndicatorProps,
 } from "./components/checkbox";
+export { Switch, type SwitchProps } from "./components/switch";
 export {
   NumberField,
   NumberFieldGroup,
@@ -110,6 +123,8 @@ export {
   MenuCheckboxItem,
   MenuCheckboxItemIndicator,
   MenuSeparator,
+  MenuSubmenuRoot,
+  MenuSubmenuTrigger,
   type MenuProps,
   type MenuTriggerProps,
   type MenuPositionerProps,
@@ -118,7 +133,10 @@ export {
   type MenuCheckboxItemProps,
   type MenuCheckboxItemIndicatorProps,
   type MenuSeparatorProps,
+  type MenuSubmenuRootProps,
+  type MenuSubmenuTriggerProps,
 } from "./components/menu";
+export { Menubar, type MenubarProps } from "./components/menubar";
 export {
   Popover,
   PopoverTrigger,
@@ -191,10 +209,16 @@ export {
   ArrowRight,
   Check,
   ChevronDown,
+  ChevronRight,
+  Copy,
   LayoutGrid,
   List,
+  MenuIcon,
+  Minus,
+  Plus,
   RotateCcw,
   RotateCw,
   Search,
+  Square,
   X,
 } from "lucide-react";

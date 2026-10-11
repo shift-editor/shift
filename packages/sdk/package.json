@@ -38,7 +38,7 @@
     "api:update": "node scripts/build.mjs --update-api"
   },
   "peerDependencies": {
-    "@base-ui-components/react": "1.0.0-rc.0",
+    "@base-ui/react": "^1.8.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },
@@ -46,6 +46,7 @@
     "@microsoft/api-extractor": "^7.59.2",
     "@playwright/test": "^1.59.1",
     "@shift/editor": "workspace:*",
+    "@shift/runtime": "workspace:*",
     "@shift/types": "workspace:*",
     "@shift/ui": "workspace:*",
     "@tailwindcss/vite": "^4.1.11",

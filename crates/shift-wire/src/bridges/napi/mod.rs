@@ -2,7 +2,13 @@ use std::collections::HashMap;
 
 use napi::bindgen_prelude::Float64Array;
 use napi_derive::napi;
-use shift_font::{GlyphId, PointType as IrPointType};
+use shift_font::{
+    composite::{
+        resolved_contours_bbox, resolved_contours_to_svg_path, ResolvedComponentGeometry,
+        ResolvedContour, ResolvedLayerGeometry,
+    },
+    GlyphId, PointType as IrPointType, Transform,
+};
 
 use crate::{
     AnchorData, AnchorMatch, Axis, AxisLabel, AxisMapping, AxisMappingBasis, AxisMappingPoint,
@@ -11,10 +17,12 @@ use crate::{
     GlyphChangedEntities, GlyphComponents, GlyphEntry, GlyphInterpolation, GlyphLayerRecord,
     GlyphLayerShape, GlyphLayerSnapshot, GlyphProjection, GlyphRecord, GlyphSnapshot,
     GlyphSnapshotRequest, GlyphSourceComponents, GlyphSourceShape, GlyphSourceValues, GlyphState,
-    GlyphStructure, GlyphVariation, InterpolationBasis, InterpolationSupport, LayerDifference,
-    LayerDifferenceKind, LayerMatch, Location, MetricDefinition, MetricKind, NamedInstance,
-    PointData, PointMatch, PointType, Source, SourceMetricField, SourceMetricValue,
-    SourceMetricValues, SourceMetricsInterpolationSnapshot, VariationBasis, VariationDelta,
+    GlyphStructure, GlyphVariation, InterpolationBasis, InterpolationSupport, KerningGroup,
+    KerningPairValue, KerningPosition, KerningSide, KerningSideKind, KerningSnapshot,
+    LayerDifference, LayerDifferenceKind, LayerMatch, Location, MetricDefinition, MetricKind,
+    NamedInstance, PointData, PointMatch, PointType, Source, SourceKerningPairs, SourceMetricField,
+    SourceMetricValue, SourceMetricValues, SourceMetricsInterpolationSnapshot, VariationBasis,
+    VariationDelta,
 };
 
 #[napi(object)]
@@ -798,6 +806,7 @@ pub struct NapiFontSnapshot {
     pub named_instances: Vec<NapiNamedInstance>,
     /// Tracked Hyperglot language ids; absent when the font stores no list.
     pub language_ids: Option<Vec<String>>,
+    pub kerning: NapiKerningSnapshot,
 }
 
 impl From<FontSnapshot> for NapiFontSnapshot {
@@ -826,6 +835,7 @@ impl From<FontSnapshot> for NapiFontSnapshot {
                 .map(Into::into)
                 .collect(),
             language_ids: snapshot.language_ids,
+            kerning: snapshot.kerning.into(),
         }
     }
 }
@@ -1314,6 +1324,110 @@ pub struct NapiGlyphPreview {
     pub x_advance: f64,
 }
 
+/// One corner of outline bounds in font units.
+#[napi(object)]
+pub struct NapiBoundsCorner {
+    pub x: f64,
+    pub y: f64,
+}
+
+/// Tight axis-aligned outline bounds in font units, y-up.
+#[napi(object)]
+pub struct NapiOutlineBounds {
+    pub min: NapiBoundsCorner,
+    pub max: NapiBoundsCorner,
+}
+
+/// Composited outline as one SVG path in font units with its tight bounds.
+#[napi(object)]
+pub struct NapiResolvedOutline {
+    pub svg_path: String,
+    pub bounds: Option<NapiOutlineBounds>,
+}
+
+impl From<&[ResolvedContour]> for NapiResolvedOutline {
+    fn from(contours: &[ResolvedContour]) -> Self {
+        Self {
+            svg_path: resolved_contours_to_svg_path(contours),
+            bounds: resolved_contours_bbox(contours).map(|(min_x, min_y, max_x, max_y)| {
+                NapiOutlineBounds {
+                    min: NapiBoundsCorner { x: min_x, y: min_y },
+                    max: NapiBoundsCorner { x: max_x, y: max_y },
+                }
+            }),
+        }
+    }
+}
+
+/// Six-value affine placement of a component in its parent layer.
+#[napi(object)]
+pub struct NapiComponentTransform {
+    pub xx: f64,
+    pub xy: f64,
+    pub yx: f64,
+    pub yy: f64,
+    pub dx: f64,
+    pub dy: f64,
+}
+
+impl From<Transform> for NapiComponentTransform {
+    fn from(transform: Transform) -> Self {
+        Self {
+            xx: transform.xx,
+            xy: transform.xy,
+            yx: transform.yx,
+            yy: transform.yy,
+            dx: transform.dx,
+            dy: transform.dy,
+        }
+    }
+}
+
+/// One direct component whose outline includes its resolved descendants.
+#[napi(object)]
+pub struct NapiResolvedComponentGeometry {
+    #[napi(ts_type = "ComponentId")]
+    pub id: String,
+    #[napi(ts_type = "GlyphId")]
+    pub base_glyph_id: String,
+    pub transformation: NapiComponentTransform,
+    pub outline: NapiResolvedOutline,
+}
+
+impl From<&ResolvedComponentGeometry> for NapiResolvedComponentGeometry {
+    fn from(component: &ResolvedComponentGeometry) -> Self {
+        Self {
+            id: component.component_id().to_string(),
+            base_glyph_id: component.base_glyph_id().to_string(),
+            transformation: component.transformation().into(),
+            outline: component.outline().into(),
+        }
+    }
+}
+
+/// Composited geometry of one exact authored layer at its own source.
+#[napi(object)]
+pub struct NapiResolvedLayerGeometry {
+    pub outline: NapiResolvedOutline,
+    pub components: Vec<NapiResolvedComponentGeometry>,
+}
+
+impl From<&ResolvedLayerGeometry> for NapiResolvedLayerGeometry {
+    fn from(geometry: &ResolvedLayerGeometry) -> Self {
+        Self {
+            outline: geometry.outline().into(),
+            components: geometry.components().iter().map(Into::into).collect(),
+        }
+    }
+}
+
+/// One accepted-state layer: authored state and its resolved geometry, read together.
+#[napi(object)]
+pub struct NapiLayerRead {
+    pub authored: NapiGlyphLayerSnapshot,
+    pub resolved: NapiResolvedLayerGeometry,
+}
+
 #[napi(object)]
 pub struct NapiLocation {
     #[napi(ts_type = "Record<AxisId, number>")]
@@ -1424,8 +1538,10 @@ pub struct NapiFontIntent {
     /// "transformLayer" | "setXAdvance" | "applyBooleanOp".
     /// Font-level kinds additionally include metadata replacement, tracked
     /// language replacement, axis create/update/delete, mapping replacement,
-    /// named-instance create/update/delete, source create/delete, and glyph
-    /// or layer creation.
+    /// named-instance create/update/delete, source create/delete, glyph
+    /// or layer creation, "setKerningValues", and the kerning group kinds
+    /// "createKerningGroup" | "setKerningGroupMember" | "renameKerningGroup"
+    /// | "deleteKerningGroup".
     /// Every kind shares the same apply path; one set is one undo step.
     pub kind: String,
     pub add_points: Option<NapiAddPointsIntent>,
@@ -1465,6 +1581,62 @@ pub struct NapiFontIntent {
     pub create_glyph_layer: Option<NapiCreateGlyphLayerIntent>,
     pub clone_glyph_layer: Option<NapiCloneGlyphLayerIntent>,
     pub materialize_glyph_layer: Option<NapiMaterializeGlyphLayerIntent>,
+    pub set_kerning_values: Option<NapiSetKerningValuesIntent>,
+    pub create_kerning_group: Option<NapiCreateKerningGroupIntent>,
+    pub set_kerning_group_member: Option<NapiSetKerningGroupMemberIntent>,
+    pub rename_kerning_group: Option<NapiRenameKerningGroupIntent>,
+    pub delete_kerning_group: Option<NapiDeleteKerningGroupIntent>,
+}
+
+/// One kerning pair value to set or remove at one source.
+#[napi(object)]
+pub struct NapiKerningValueEdit {
+    #[napi(ts_type = "SourceId")]
+    pub source_id: String,
+    pub first: NapiKerningSide,
+    pub second: NapiKerningSide,
+    /// New value in font units; absent removes the pair at this source.
+    pub amount: Option<f64>,
+}
+
+/// Sets or removes kerning pair values at sources as one undoable edit.
+#[napi(object)]
+pub struct NapiSetKerningValuesIntent {
+    pub edits: Vec<NapiKerningValueEdit>,
+}
+
+/// Creates an empty kerning group under an id the client mints.
+#[napi(object)]
+pub struct NapiCreateKerningGroupIntent {
+    #[napi(ts_type = "KerningGroupId")]
+    pub group_id: String,
+    pub position: NapiKerningPosition,
+    pub name: String,
+}
+
+/// Moves a glyph into a group, or out of its group at `position` without one.
+#[napi(object)]
+pub struct NapiSetKerningGroupMemberIntent {
+    pub position: NapiKerningPosition,
+    #[napi(ts_type = "GlyphId")]
+    pub glyph_id: String,
+    #[napi(ts_type = "KerningGroupId")]
+    pub group_id: Option<String>,
+}
+
+/// Renames a kerning group; its pairs keep referencing it by id.
+#[napi(object)]
+pub struct NapiRenameKerningGroupIntent {
+    #[napi(ts_type = "KerningGroupId")]
+    pub group_id: String,
+    pub name: String,
+}
+
+/// Deletes a kerning group; its pairs stay and resolve again on undo.
+#[napi(object)]
+pub struct NapiDeleteKerningGroupIntent {
+    #[napi(ts_type = "KerningGroupId")]
+    pub group_id: String,
 }
 
 /// Replaces the complete authored metadata snapshot without changing metrics.
@@ -1665,6 +1837,8 @@ pub struct NapiFontReplacement {
     /// Full sources list when font-level source structure changed (createAxis
     /// reshapes locations, createSource adds one); absent otherwise.
     pub sources: Option<Vec<NapiSource>>,
+    /// Complete kerning when its values or interpolation basis changed.
+    pub kerning: Option<NapiKerningSnapshot>,
 }
 
 /// Pure-state response to `apply`: no change records cross to the renderer.
@@ -1875,4 +2049,115 @@ pub struct NapiBooleanOpIntent {
     pub contour_id_b: String,
     /// "union" | "subtract" | "intersect" | "difference"
     pub operation: String,
+}
+
+#[napi(string_enum = "camelCase")]
+pub enum NapiKerningPosition {
+    First,
+    Second,
+}
+
+impl From<KerningPosition> for NapiKerningPosition {
+    fn from(position: KerningPosition) -> Self {
+        match position {
+            KerningPosition::First => Self::First,
+            KerningPosition::Second => Self::Second,
+        }
+    }
+}
+
+#[napi(string_enum = "camelCase")]
+pub enum NapiKerningSideKind {
+    Glyph,
+    Group,
+}
+
+#[napi(object)]
+/// One kerning pair side: `id` is a glyph id when `kind` is `glyph`, else a group id.
+pub struct NapiKerningSide {
+    pub kind: NapiKerningSideKind,
+    pub id: String,
+}
+
+impl From<KerningSide> for NapiKerningSide {
+    fn from(side: KerningSide) -> Self {
+        Self {
+            kind: match side.kind {
+                KerningSideKind::Glyph => NapiKerningSideKind::Glyph,
+                KerningSideKind::Group => NapiKerningSideKind::Group,
+            },
+            id: side.id,
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NapiKerningGroup {
+    #[napi(ts_type = "KerningGroupId")]
+    pub id: String,
+    pub position: NapiKerningPosition,
+    pub name: String,
+    #[napi(ts_type = "Array<GlyphId>")]
+    pub glyph_ids: Vec<String>,
+}
+
+impl From<KerningGroup> for NapiKerningGroup {
+    fn from(group: KerningGroup) -> Self {
+        Self {
+            id: group.id,
+            position: group.position.into(),
+            name: group.name,
+            glyph_ids: group.glyph_ids.iter().map(ToString::to_string).collect(),
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NapiKerningPairValue {
+    pub first: NapiKerningSide,
+    pub second: NapiKerningSide,
+    pub amount: f64,
+}
+
+#[napi(object)]
+pub struct NapiSourceKerningPairs {
+    #[napi(ts_type = "SourceId")]
+    pub source_id: String,
+    pub pairs: Vec<NapiKerningPairValue>,
+}
+
+impl From<SourceKerningPairs> for NapiSourceKerningPairs {
+    fn from(source: SourceKerningPairs) -> Self {
+        Self {
+            source_id: source.source_id.to_string(),
+            pairs: source
+                .pairs
+                .into_iter()
+                .map(|pair: KerningPairValue| NapiKerningPairValue {
+                    first: pair.first.into(),
+                    second: pair.second.into(),
+                    amount: pair.amount,
+                })
+                .collect(),
+        }
+    }
+}
+
+#[napi(object)]
+/// Font kerning: groups, per-source pairs, and the interpolation basis over
+/// the default source and every master with pairs (absent for static fonts).
+pub struct NapiKerningSnapshot {
+    pub groups: Vec<NapiKerningGroup>,
+    pub sources: Vec<NapiSourceKerningPairs>,
+    pub basis: Option<NapiInterpolationBasis>,
+}
+
+impl From<KerningSnapshot> for NapiKerningSnapshot {
+    fn from(kerning: KerningSnapshot) -> Self {
+        Self {
+            groups: kerning.groups.into_iter().map(Into::into).collect(),
+            sources: kerning.sources.into_iter().map(Into::into).collect(),
+            basis: kerning.basis.map(Into::into),
+        }
+    }
 }

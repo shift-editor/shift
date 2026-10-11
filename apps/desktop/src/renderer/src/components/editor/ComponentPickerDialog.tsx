@@ -1,5 +1,10 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Autocomplete,
+  AutocompleteEmpty,
+  AutocompleteInput,
+  AutocompleteItem,
+  AutocompleteList,
   Button,
   cn,
   Dialog,
@@ -8,11 +13,8 @@ import {
   DialogPopup,
   DialogPortal,
   DialogTitle,
-  Input,
   Search,
   Tooltip,
-  TooltipContent,
-  TooltipTrigger,
   X,
 } from "@shift/ui";
 import { useSignalState } from "@shift/editor/signals";
@@ -20,7 +22,7 @@ import AddIcon from "@/assets/general/add.svg";
 import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
 import type { ComponentCandidate } from "@/types/componentPicker";
 import { useEditor, useFont } from "@/workspace/WorkspaceContext";
-import { getGlyphInfo } from "@/workspace/glyphInfo";
+import { getGlyphInfo, loadComponentGlyphInfo } from "@/workspace/glyphInfo";
 import { componentPickerCandidates } from "./componentPicker";
 
 interface ComponentPickerDialogProps {
@@ -52,6 +54,7 @@ function OpenComponentPickerDialog({ onOpenChange }: OpenComponentPickerDialogPr
 
   const catalog = useGlyphCatalog();
   const glyphInfo = getGlyphInfo();
+  const componentDataLoaded = useComponentGlyphInfo();
   const records = useSignalState(font.glyphRecordsCell);
 
   const [componentQuery, setComponentQuery] = useState("");
@@ -71,7 +74,15 @@ function OpenComponentPickerDialog({ onOpenChange }: OpenComponentPickerDialogPr
             glyphInfo,
           )
         : [],
-    [catalog.availableGlyphs, componentQuery, currentGlyphId, glyphInfo, records],
+    // Suggestions and search fill in once decomposition and search data load.
+    [
+      catalog.availableGlyphs,
+      componentDataLoaded,
+      componentQuery,
+      currentGlyphId,
+      glyphInfo,
+      records,
+    ],
   );
 
   const close = useCallback(() => {
@@ -136,68 +147,54 @@ function OpenComponentPickerDialog({ onOpenChange }: OpenComponentPickerDialogPr
           <DialogPopup className="fixed left-1/2 top-1/2 flex h-100 w-87.5 -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden border border-line-subtle">
             <header className="flex h-10 shrink-0 items-center justify-between border-b border-line-subtle px-3">
               <DialogTitle>Add Component</DialogTitle>
-              <Tooltip>
-                <TooltipTrigger>
-                  <DialogClose variant="icon" aria-label="Close Add Component">
-                    <X className="h-4 w-4" />
-                  </DialogClose>
-                </TooltipTrigger>
-                <TooltipContent>Close</TooltipContent>
+              <Tooltip content="Close">
+                <DialogClose variant="icon" aria-label="Close Add Component">
+                  <X className="h-4 w-4" />
+                </DialogClose>
               </Tooltip>
             </header>
-            <form
-              className="shrink-0 border-b border-line-subtle p-2"
-              onSubmit={(event) => {
-                event.preventDefault();
-                const normalizedQuery = componentQuery.trim().toLowerCase();
-                const exactCandidate = candidates.find(
-                  (candidate) =>
-                    candidate.name.toLowerCase() === normalizedQuery ||
-                    candidate.displayName.toLowerCase() === normalizedQuery,
-                );
-                const candidate = exactCandidate ?? candidates[0];
-                if (!candidate) return;
-
-                if (candidate.availability === "missing") {
-                  setPendingCreation(candidate);
-                  return;
-                }
-
-                void addComponent(candidate);
-              }}
+            <Autocomplete
+              inline
+              open
+              items={candidates.slice(0, 100)}
+              filter={null}
+              autoHighlight="always"
+              itemToStringValue={(candidate) => candidate.displayName}
+              value={componentQuery}
+              onValueChange={setComponentQuery}
             >
-              <Input
-                autoFocus
-                aria-label="Search components"
-                icon={<Search className="h-3 w-3 text-muted" />}
-                iconPosition="left"
-                placeholder="Search"
-                size="md"
-                value={componentQuery}
-                onChange={(event) => setComponentQuery(event.currentTarget.value)}
-              />
-            </form>
+              <div className="shrink-0 border-b border-line-subtle p-2">
+                <AutocompleteInput
+                  autoFocus
+                  aria-label="Search components"
+                  icon={<Search className="h-3 w-3 text-muted" />}
+                  iconPosition="left"
+                  placeholder="Search"
+                  size="md"
+                />
+              </div>
 
-            <div className="scrollbar-hidden min-h-0 flex-1 overflow-y-auto px-2 py-1.5">
-              {candidates.length > 0 ? (
-                candidates.slice(0, 100).map((candidate) => (
-                  <Button
+              <AutocompleteEmpty className="flex min-h-0 flex-1 items-center justify-center">
+                No matching glyphs
+              </AutocompleteEmpty>
+              <AutocompleteList className="flex-1">
+                {(candidate: ComponentCandidate) => (
+                  <AutocompleteItem
                     key={`${candidate.availability}-${candidate.glyphId ?? candidate.unicode}`}
-                    type="button"
+                    value={candidate}
                     aria-label={
                       candidate.availability === "missing"
                         ? `Create and add ${candidate.displayName} as a component`
                         : `Add ${candidate.displayName} as a component`
                     }
-                    variant="row"
-                    className="h-14 text-left"
-                    onClick={async () => {
+                    className="h-14"
+                    onClick={() => {
                       if (candidate.availability === "missing") {
                         setPendingCreation(candidate);
                         return;
                       }
 
-                      await addComponent(candidate);
+                      void addComponent(candidate);
                     }}
                   >
                     <span
@@ -223,14 +220,10 @@ function OpenComponentPickerDialog({ onOpenChange }: OpenComponentPickerDialogPr
                           : `U+${candidate.unicode.toString(16).toUpperCase().padStart(4, "0")}`}
                       </span>
                     </span>
-                  </Button>
-                ))
-              ) : (
-                <p className="flex h-full items-center justify-center px-4 text-center text-sm text-muted">
-                  No matching glyphs
-                </p>
-              )}
-            </div>
+                  </AutocompleteItem>
+                )}
+              </AutocompleteList>
+            </Autocomplete>
           </DialogPopup>
         </DialogPortal>
       </Dialog>
@@ -270,4 +263,26 @@ function OpenComponentPickerDialog({ onOpenChange }: OpenComponentPickerDialogPr
       </Dialog>
     </>
   );
+}
+
+/** Loads component decomposition and search data; true once they are available. */
+function useComponentGlyphInfo(): boolean {
+  const [loaded, setLoaded] = useState(() => getGlyphInfo().hasComponentResources);
+
+  useEffect(() => {
+    if (loaded) return undefined;
+
+    let current = true;
+    loadComponentGlyphInfo().then(
+      () => {
+        if (current) setLoaded(true);
+      },
+      (error: unknown) => console.error("loading component glyph data failed", error),
+    );
+    return () => {
+      current = false;
+    };
+  }, [loaded]);
+
+  return loaded;
 }

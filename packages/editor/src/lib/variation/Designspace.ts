@@ -1,13 +1,15 @@
-import type { Axis, AxisMappingBasis, Source, SourceId } from "@shift/types";
+import type { Axis, AxisId, AxisMappingBasis, Source, SourceId } from "@shift/types";
 import { track, type Signal } from "../signals";
 import type { DesignAxisLocation, ExternalAxisLocation } from "../../types/variation";
 import {
+  axisValue,
   defaultExternalAxisLocation,
   designAxisLocationDistanceSquared,
   designAxisLocationFromLocation,
   designAxisLocationsEqual,
   emptyExternalAxisLocation,
   externalAxisLocationForDesignLocation,
+  externalAxisLocationFromRecord,
   mapAxisLocation,
 } from "./location";
 
@@ -92,6 +94,30 @@ export class Designspace {
       if (!nearest || distance < nearest.distance) nearest = { source, distance };
     }
     return nearest?.source ?? null;
+  }
+
+  /**
+   * Builds an external location from explicit axis coordinates.
+   *
+   * @param coordinates - Values keyed by stable axis identity; omitted axes take their defaults.
+   * @throws {Error} when a coordinate names an unknown axis or repeats one.
+   */
+  location(coordinates: readonly { axisId: AxisId; value: number }[]): ExternalAxisLocation {
+    const axisIds = new Set(this.axes.map(({ id }) => id));
+    const values: Record<string, number> = {};
+    for (const { axisId, value } of coordinates) {
+      if (!axisIds.has(axisId)) throw new Error(`Unknown axis: ${axisId}`);
+      if (axisId in values) throw new Error(`Duplicate axis coordinate: ${axisId}`);
+      values[axisId] = value;
+    }
+    return externalAxisLocationFromRecord(values);
+  }
+
+  /** A location's value on every axis, in axis order, with defaults filled in. */
+  coordinates(
+    location: ExternalAxisLocation | DesignAxisLocation,
+  ): { axisId: AxisId; value: number }[] {
+    return this.axes.map((axis) => ({ axisId: axis.id, value: axisValue(location, axis) }));
   }
 
   /** Every axis at its default, or an empty location for a static font. */

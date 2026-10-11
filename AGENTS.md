@@ -46,20 +46,21 @@ All UI components must wrap [Base UI](https://base-ui.com/react/components) prim
 
 - ALWAYS check if a Base UI component exists before creating a custom implementation
 - Wrapper components live in `packages/ui/src/components/{componentName}/`
-- Import Base UI as `import { Component as BaseComponent } from "@base-ui-components/react/component"`
+- Import Base UI as `import { Component as BaseComponent } from "@base-ui/react/component"`
 - Export a wrapped version that applies project styling and extends the Base UI props
 - Use the same name as Base UI (e.g., `Separator`, `Input`, `Tooltip`)
 
 Example wrapper structure:
 
 ```tsx
-import { Separator as BaseSeparator } from "@base-ui-components/react/separator";
+import { Separator as BaseSeparator } from "@base-ui/react/separator";
 
-export const Separator = React.forwardRef<HTMLDivElement, SeparatorProps>(
-  ({ className, ...props }, ref) => (
-    <BaseSeparator ref={ref} className={cn("project-styles", className)} {...props} />
-  ),
-);
+export interface SeparatorProps extends React.ComponentProps<typeof BaseSeparator> {}
+
+// React 19 passes `ref` as a prop, so it reaches the primitive through `...props`.
+export function Separator({ className, ...props }: SeparatorProps) {
+  return <BaseSeparator className={cn("project-styles", className)} {...props} />;
+}
 ```
 
 ## Package Manager

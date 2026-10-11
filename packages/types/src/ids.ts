@@ -18,11 +18,13 @@ declare const AxisMappingIdBrand: unique symbol;
 declare const ComponentIdBrand: unique symbol;
 declare const GuidelineIdBrand: unique symbol;
 declare const GlyphIdBrand: unique symbol;
+declare const KerningGroupIdBrand: unique symbol;
 declare const LayerIdBrand: unique symbol;
 declare const MetricIdBrand: unique symbol;
 declare const NamedInstanceIdBrand: unique symbol;
 declare const NodeIdBrand: unique symbol;
 declare const RunIdBrand: unique symbol;
+declare const SegmentIdBrand: unique symbol;
 declare const TextItemIdBrand: unique symbol;
 declare const SourceIdBrand: unique symbol;
 
@@ -87,6 +89,14 @@ export type GuidelineId = string & {
 export type GlyphId = string & { readonly [GlyphIdBrand]: typeof GlyphIdBrand };
 
 /**
+ * A kerning group identifier from Rust. Pairs reference a group by id, so a
+ * group keeps its kerning when renamed.
+ */
+export type KerningGroupId = string & {
+  readonly [KerningGroupIdBrand]: typeof KerningGroupIdBrand;
+};
+
+/**
  * A layer identifier from Rust.
  * Branded string type - can't be confused with other IDs or plain strings.
  */
@@ -117,6 +127,11 @@ export type NodeId = string & { readonly [NodeIdBrand]: typeof NodeIdBrand };
  */
 export type RunId = string & { readonly [RunIdBrand]: typeof RunIdBrand };
 
+/** Stable identity of one segment derived from its endpoint identities. */
+export type SegmentId = string & {
+  readonly [SegmentIdBrand]: typeof SegmentIdBrand;
+};
+
 /** Identity of a glyph or linebreak within a proof text run. */
 export type TextItemId = string & { readonly [TextItemIdBrand]: typeof TextItemIdBrand };
 
@@ -127,6 +142,19 @@ export type TextItemId = string & { readonly [TextItemIdBrand]: typeof TextItemI
 export type SourceId = string & {
   readonly [SourceIdBrand]: typeof SourceIdBrand;
 };
+
+/** Identifies an editor-addressable scene node or glyph object. */
+export type ShiftId =
+  | NodeId
+  | PointId
+  | AnchorId
+  | ContourId
+  | SegmentId
+  | ComponentId
+  | TextItemId;
+
+/** Identifies objects that can be selected by the editor. */
+export type SelectableId = ShiftId;
 
 /**
  * Convert a string ID from Rust to a typed PointId.
@@ -190,6 +218,10 @@ export function asGuidelineId(id: string): GuidelineId {
  * Convert a string ID from Rust to a typed GlyphId.
  * Use this when receiving IDs from Rust snapshots.
  */
+export function asKerningGroupId(id: string): KerningGroupId {
+  return id as KerningGroupId;
+}
+
 export function asGlyphId(id: string): GlyphId {
   return id as GlyphId;
 }
@@ -226,6 +258,16 @@ export function asNodeId(id: string): NodeId {
  */
 export function asRunId(id: string): RunId {
   return id as RunId;
+}
+
+/**
+ * Converts a derived segment identity string to a typed SegmentId.
+ *
+ * @param id - identity produced from one segment's endpoint identities.
+ * @returns the same string with its segment identity brand.
+ */
+export function asSegmentId(id: string): SegmentId {
+  return id as SegmentId;
 }
 
 /**
@@ -274,6 +316,11 @@ export function isComponentId(id: unknown): id is ComponentId {
 /** Returns whether a value is a runtime-discriminable guideline id. */
 export function isGuidelineId(id: unknown): id is GuidelineId {
   return hasIdPrefix(id, "guideline");
+}
+
+/** Returns whether a value is a runtime-discriminable kerning group id. */
+export function isKerningGroupId(id: unknown): id is KerningGroupId {
+  return hasIdPrefix(id, "kerningGroup");
 }
 
 /** Returns whether a value is a runtime-discriminable glyph id. */
@@ -329,6 +376,7 @@ type MintedIdByPrefix = {
   component: ComponentId;
   guideline: GuidelineId;
   glyph: GlyphId;
+  kerningGroup: KerningGroupId;
   layer: LayerId;
   metric: MetricId;
   namedInstance: NamedInstanceId;
@@ -405,6 +453,11 @@ export function mintComponentId(): ComponentId {
 /** Mints a new glyph id. See {@link mintPointId}. */
 export function mintGlyphId(): GlyphId {
   return mintPrefixedId("glyph");
+}
+
+/** Mints a new kerning group id. See {@link mintPointId}. */
+export function mintKerningGroupId(): KerningGroupId {
+  return mintPrefixedId("kerningGroup");
 }
 
 /** Mints a new layer id. See {@link mintPointId}. */

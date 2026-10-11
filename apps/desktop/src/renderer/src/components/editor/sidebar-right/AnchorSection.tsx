@@ -1,11 +1,11 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { isAnchorId, type AnchorId } from "@shift/types";
 import { useSignalEffect } from "@/hooks/useSignalEffect";
 import { track } from "@shift/editor/signals";
 import { PositionEdits, type GlyphLayer } from "@shift/editor/model";
 import { Vec2, type PointAxis } from "@shift/geo";
 import { useEditor } from "@/workspace/WorkspaceContext";
-import { EditableSidebarInput, type EditableSidebarInputHandle } from "./EditableSidebarInput";
+import { SidebarNumberField } from "./SidebarNumberField";
 import { SidebarSection } from "./SidebarSection";
 
 export const AnchorSection = () => {
@@ -13,8 +13,7 @@ export const AnchorSection = () => {
   const [anchorId, setAnchorId] = useState<AnchorId | null>(null);
   const [anchorName, setAnchorName] = useState<string | null>(null);
   const [layer, setLayer] = useState<GlyphLayer | null>(null);
-  const xRef = useRef<EditableSidebarInputHandle>(null);
-  const yRef = useRef<EditableSidebarInputHandle>(null);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
 
   useSignalEffect(() => {
     track(editor.externalLocationCell);
@@ -27,16 +26,14 @@ export const AnchorSection = () => {
       setAnchorId(null);
       setAnchorName(null);
       setLayer(null);
-      xRef.current?.setValue(0);
-      yRef.current?.setValue(0);
+      setPosition({ x: 0, y: 0 });
       return;
     }
 
     setAnchorId(anchor.id);
     setAnchorName(anchor.name ?? null);
     setLayer(object.layer);
-    xRef.current?.setValue(Math.round(anchor.x));
-    yRef.current?.setValue(Math.round(anchor.y));
+    setPosition({ x: Math.round(anchor.x), y: Math.round(anchor.y) });
   });
 
   const handlePositionChange = (axis: PointAxis, value: number) => {
@@ -58,19 +55,19 @@ export const AnchorSection = () => {
     <SidebarSection title="Anchor">
       <div className="text-ui text-secondary">{anchorName ?? "Unnamed anchor"}</div>
       <div className="flex gap-2">
-        <EditableSidebarInput
-          ref={xRef}
+        <SidebarNumberField
           ariaLabel="Anchor X position"
           label="X"
+          value={position.x}
           disabled={!editable}
-          onValueChange={(value) => handlePositionChange("x", value)}
+          onValueCommit={(value) => handlePositionChange("x", value)}
         />
-        <EditableSidebarInput
-          ref={yRef}
+        <SidebarNumberField
           ariaLabel="Anchor Y position"
           label="Y"
+          value={position.y}
           disabled={!editable}
-          onValueChange={(value) => handlePositionChange("y", value)}
+          onValueCommit={(value) => handlePositionChange("y", value)}
         />
       </div>
     </SidebarSection>

@@ -1,5 +1,5 @@
 import { Curve, Vec2, type Bounds, type CurveType, type Point2D } from "@shift/geo";
-import type { PointId } from "@shift/types";
+import { asSegmentId, type PointId, type SegmentId } from "@shift/types";
 import { Point } from "./Point";
 import type {
   ContourGeometry,
@@ -17,17 +17,7 @@ export type {
   CubicSegmentPoints,
 } from "./types/contour";
 
-declare const SegmentIdBrand: unique symbol;
-
-export type SegmentId = string & {
-  readonly [SegmentIdBrand]: typeof SegmentIdBrand;
-};
-
 const SEGMENT_ID_PREFIX = "segment:";
-
-export function asSegmentId(id: string): SegmentId {
-  return id as SegmentId;
-}
 
 /** Returns the derived segment id for a segment's endpoint point ids. */
 export function segmentIdFor(startPointId: PointId, endPointId: PointId): SegmentId {
