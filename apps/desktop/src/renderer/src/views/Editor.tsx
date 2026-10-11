@@ -175,7 +175,7 @@ const EditorLayout = ({ children }: { children: ReactNode }) => {
     >
       <Toolbar toggleLeftSidebar={toggleLeftSidebar} toggleRightSidebar={toggleRightSidebar} />
       <ResizablePanelGroup
-        data-testid="editor-layout-panels"
+        id="editor-layout-panels"
         orientation="horizontal"
         onLayoutChanged={onLayoutChanged}
         className="flex-1 overflow-hidden"

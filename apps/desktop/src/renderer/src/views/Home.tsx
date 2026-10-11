@@ -21,7 +21,7 @@ export const Home = () => {
     <main className="grid h-screen w-full grid-rows-[auto_minmax(0,1fr)]">
       <Toolbar toggleLeftSidebar={toggleLeftSidebar} toggleRightSidebar={toggleRightSidebar} />
       <ResizablePanelGroup
-        data-testid="home-layout-panels"
+        id="home-layout-panels"
         orientation="horizontal"
         onLayoutChanged={onLayoutChanged}
         className="min-h-0 overflow-hidden"
