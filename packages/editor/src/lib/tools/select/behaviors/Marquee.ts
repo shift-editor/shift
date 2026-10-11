@@ -1,4 +1,4 @@
-import { Bounds, Curve, Rect, type Rect2D } from "@shift/geo";
+import { Bounds, Rect, type Rect2D } from "@shift/geo";
 import type { SelectableId } from "@shift/types";
 import { sceneBounds } from "../../../editor/spaces";
 import type { ToolContext } from "../../core/Behavior";
@@ -57,30 +57,16 @@ export class Marquee implements SelectBehavior {
     return true;
   }
 
-  /** Points inside the rect, plus segments it touches without catching just one end point. */
+  /** Asks each scene node's definition what the rect catches inside it. */
   private getIdsInRect(rect: Rect2D, ctx: ToolContext<SelectState>): Set<SelectableId> {
+    const editor = ctx.editor;
+    const sceneRect = sceneBounds(Bounds.fromXYWH(rect.x, rect.y, rect.width, rect.height));
     const ids = new Set<SelectableId>();
-
-    for (const node of ctx.editor.scene.nodesOfKind("glyph")) {
-      const glyph = ctx.editor.glyphForId(node.glyphId);
-      if (!glyph) continue;
-
-      const geometry = glyph.geometryAt(ctx.editor.externalLocation);
-      const sceneRect = sceneBounds(Bounds.fromXYWH(rect.x, rect.y, rect.width, rect.height));
-      const localRect = Bounds.toRect(ctx.editor.toLocalBounds(node, sceneRect));
-
-      for (const point of geometry.allPoints) {
-        if (Rect.containsPoint(localRect, point)) ids.add(point.id);
-      }
-      for (const segment of geometry.segments) {
-        const startInside = Rect.containsPoint(localRect, segment.start);
-        const endInside = Rect.containsPoint(localRect, segment.end);
-        // Brushing one end point selects that point alone, not the segments leaving it.
-        if (startInside !== endInside) continue;
-        if (Curve.intersectsRect(segment.toCurve(), localRect)) ids.add(segment.id);
-      }
+    for (const node of editor.scene.nodes()) {
+      const localRect = editor.toLocalBounds(node, sceneRect);
+      for (const id of editor.nodeDefinition(node.kind).selectableInRect(node, localRect))
+        ids.add(id);
     }
-
     return ids;
   }
 
