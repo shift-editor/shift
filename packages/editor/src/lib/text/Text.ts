@@ -1,21 +1,21 @@
-import {
-  mintRunId,
-  type GlyphId,
-  type GlyphName,
-  type RunId,
-  type TextItemId,
-  type Unicode,
-} from "@shift/types";
+import { mintRunId, type GlyphId, type GlyphName, type RunId, type TextItemId } from "@shift/types";
 import { computed, keyedCache, signal, track } from "../signals";
 import type { ComputedSignal, Signal } from "../signals";
 import type { Editor } from "../editor/Editor";
-import type { Font } from "../model/Font";
 import type { ShiftStore } from "../store/ShiftStore";
 import type { StoreIndex } from "../store/StoreIndex";
 import type { ShiftEditorRecord } from "../../types/records";
 import type { TextRunNode } from "../../types/node";
 import type { TextRunRecord } from "../../types/text";
-import { glyphTextItem, lineBreakTextItem, Positioner, TextLayout, type TextItem } from "./layout";
+import {
+  characterTextItem,
+  glyphTextItem,
+  lineBreakTextItem,
+  Positioner,
+  TextLayout,
+  textItemGlyph,
+  type TextItem,
+} from "./layout";
 
 /** Owns proof text records and one reactive layout per run identity. */
 export class Text {
@@ -38,6 +38,8 @@ export class Text {
           const record = this.run(runId);
           track(this.#editor.externalLocationCell);
           track(this.#editor.activeSourceIdCell);
+          // Items resolve to glyphs by Unicode value and id, so remapping or deleting a glyph re-lays out.
+          track(this.#editor.font.glyphEntriesCell);
           track(this.#glyphsLoadedCell);
           if (!record) return null;
 
@@ -72,13 +74,31 @@ export class Text {
   }
 
   /**
-   * Returns a new glyph item for a glyph in the font.
+   * Returns a new item that shows a glyph in the font.
+   *
+   * @remarks
+   * A glyph the font maps a character to becomes that character, so it takes
+   * part in shaping like typed text; any other glyph is picked by identity.
    *
    * @returns null when the glyph is not in the font.
    */
   glyphItem(glyphId: GlyphId): TextItem | null {
-    const entry = this.#editor.font.entryForId(glyphId);
-    return entry ? glyphTextItem(entry.name, entry.unicodes[0] ?? null) : null;
+    const font = this.#editor.font;
+    const entry = font.entryForId(glyphId);
+    if (!entry) return null;
+    const typed = entry.unicodes.find((unicode) => font.entryForUnicode(unicode)?.id === glyphId);
+    return typed === undefined ? glyphTextItem(glyphId) : characterTextItem(typed);
+  }
+
+  /**
+   * Returns the glyph an item shows in its run's layout.
+   *
+   * @returns null for a line break, an unknown item, or a character the font maps no glyph to.
+   */
+  glyphIdForItem(id: TextItemId): GlyphId | null {
+    const run = this.runForItem(id);
+    if (!run) return null;
+    return this.layoutCell(run.id).peek()?.placedGlyphForItem(id)?.glyph.glyphId ?? null;
   }
 
   /** Stores an independent proof text source. */
@@ -154,9 +174,41 @@ export class Text {
     return this.#layouts.get(id);
   }
 
-  /** Parses pasted or imported text; typing a slash alone is a literal character. */
+  /**
+   * Parses pasted or imported text.
+   *
+   * @remarks
+   * `/name` picks a glyph by name; a slash alone, or one before a name the
+   * font lacks, is a literal character.
+   */
   itemsFromText(text: string): TextItem[] {
-    return itemsForText(text, this.#editor.font);
+    const items: TextItem[] = [];
+    const source = text.replaceAll("\r\n", "\n");
+    for (let index = 0; index < source.length; ) {
+      const char = source[index];
+      if (char === "\n") {
+        items.push(lineBreakTextItem());
+        index += 1;
+        continue;
+      }
+      if (char === "/") {
+        let end = index + 1;
+        while (end < source.length && source[end] !== "/" && !/\s/.test(source[end]!)) end++;
+        const name = source.slice(index + 1, end) as GlyphName;
+        const entry = end > index + 1 ? this.#editor.font.entryForName(name) : null;
+        const picked = entry ? this.glyphItem(entry.id) : null;
+        if (picked) {
+          items.push(picked);
+          index = end;
+          continue;
+        }
+      }
+      const codepoint = source.codePointAt(index);
+      if (codepoint === undefined) break;
+      items.push(characterTextItem(codepoint));
+      index += String.fromCodePoint(codepoint).length;
+    }
+    return items;
   }
 
   dispose(): void {
@@ -167,8 +219,8 @@ export class Text {
 
   #acquireGlyphs(items: readonly TextItem[]): void {
     for (const item of items) {
-      if (item.kind !== "glyph") continue;
-      const entry = this.#editor.font.entryForName(item.glyphName);
+      if (item.kind === "linebreak") continue;
+      const { entry } = textItemGlyph(item, this.#editor.font);
       if (entry && !this.#editor.glyphForId(entry.id)) this.#loadGlyph(entry.id);
     }
   }
@@ -185,34 +237,4 @@ export class Text {
       this.#loading.delete(id);
     }
   }
-}
-
-function itemsForText(text: string, font: Font): TextItem[] {
-  const items: TextItem[] = [];
-  const source = text.replaceAll("\r\n", "\n");
-  for (let index = 0; index < source.length; ) {
-    const char = source[index];
-    if (char === "\n") {
-      items.push(lineBreakTextItem());
-      index += 1;
-      continue;
-    }
-    if (char === "/") {
-      let end = index + 1;
-      while (end < source.length && source[end] !== "/" && !/\s/.test(source[end]!)) end++;
-      if (end > index + 1) {
-        const name = source.slice(index + 1, end);
-        const handle = font.glyphHandleForName(name as GlyphName);
-        items.push(glyphTextItem(handle.name, handle.unicode ?? null));
-        index = end;
-        continue;
-      }
-    }
-    const codepoint = source.codePointAt(index);
-    if (codepoint === undefined) break;
-    const handle = font.glyphHandleForUnicode(codepoint as Unicode);
-    items.push(glyphTextItem(handle.name, handle.unicode ?? codepoint));
-    index += String.fromCodePoint(codepoint).length;
-  }
-  return items;
 }

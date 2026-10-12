@@ -355,7 +355,9 @@ test.describe("Toolbar tools", () => {
             const layout = run ? editor.text.layoutCell(run.runId).peek() : null;
             return items && layout
               ? {
-                  codepoints: items.map((item) => (item.kind === "glyph" ? item.codepoint : 10)),
+                  codepoints: items.map((item) =>
+                    item.kind === "character" ? item.codepoint : 10,
+                  ),
                   editingNodes: editor.editing.nodeIds.length,
                   caretAtEnd: editor.textEditing.state?.focus === items[items.length - 1]?.id,
                   glyphsLoaded: layout.lines.every((line) =>
@@ -394,7 +396,7 @@ test.describe("Toolbar tools", () => {
         const run = editor.scene.nodesOfKind("textRun")[0]!;
         return editor.text
           .run(run.runId)!
-          .items.map((item) => (item.kind === "glyph" ? item.codepoint : 10));
+          .items.map((item) => (item.kind === "character" ? item.codepoint : 10));
       });
     await expect.poll(codepoints).toEqual([65, 72, 88, 105]);
     await editor.undo();
@@ -416,7 +418,7 @@ test.describe("Toolbar tools", () => {
           codepoints: run
             ? editor.text
                 .run(run.runId)!
-                .items.map((item) => (item.kind === "glyph" ? item.codepoint : 10))
+                .items.map((item) => (item.kind === "character" ? item.codepoint : 10))
             : null,
           edited: child ? editor.glyphForId(child.glyphId)?.name : null,
         };

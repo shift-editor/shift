@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { mintPointId, mintRunId } from "@shift/types";
 import { effect } from "../signals/index";
-import { glyphTextItem } from "../text/layout";
+import { characterTextItem } from "../text/layout";
 import { currentEditingId } from "../../types/editing";
 import { currentSelectionId } from "../../types/object";
 import type { ShiftEditorRecord } from "../../types/records";
@@ -50,12 +50,12 @@ describe("ShiftStore change publication", () => {
   });
 });
 
-function run(...glyphNames: string[]): TextRunRecord {
+function run(...characters: string[]): TextRunRecord {
   return {
     id: mintRunId(),
     type: "textrun",
     scope: "document",
-    items: glyphNames.map((name) => glyphTextItem(name)),
+    items: characters.map((char) => characterTextItem(char.codePointAt(0)!)),
   };
 }
 
@@ -94,25 +94,27 @@ describe("ShiftStore per-record reads", () => {
 });
 
 describe("ShiftStore indexes", () => {
-  const byGlyph = (store: ShiftStore<ShiftEditorRecord>) =>
+  const byCharacter = (store: ShiftStore<ShiftEditorRecord>) =>
     store.index("textrun", (record) =>
-      record.items.flatMap((item) => (item.kind === "glyph" ? [item.glyphName] : [])),
+      record.items.flatMap((item) =>
+        item.kind === "character" ? [String.fromCodePoint(item.codepoint)] : [],
+      ),
     );
 
   it("files records that existed before the index was created", () => {
     const first = run("A", "B");
     const store = new ShiftStore<ShiftEditorRecord>([first]);
 
-    expect(byGlyph(store).get("B")).toEqual([first]);
+    expect(byCharacter(store).get("B")).toEqual([first]);
   });
 
   it("moves a replaced record between keys and drops a deleted one", () => {
     const store = new ShiftStore<ShiftEditorRecord>();
-    const index = byGlyph(store);
+    const index = byCharacter(store);
     const record = run("A");
     store.put(record);
 
-    const renamed = { ...record, items: [glyphTextItem("C")] };
+    const renamed = { ...record, items: [characterTextItem(0x43)] };
     store.put(renamed);
     expect(index.get("A")).toEqual([]);
     expect(index.get("C")).toEqual([renamed]);
@@ -131,7 +133,7 @@ describe("ShiftStore indexes", () => {
 
   it("reruns a reader of one key only when that key's records change", () => {
     const store = new ShiftStore<ShiftEditorRecord>();
-    const index = byGlyph(store);
+    const index = byCharacter(store);
     let runs = 0;
     const reader = effect(() => {
       index.get("A");
@@ -147,7 +149,7 @@ describe("ShiftStore indexes", () => {
 
   it("stops following the store once disposed", () => {
     const store = new ShiftStore<ShiftEditorRecord>();
-    const index = byGlyph(store);
+    const index = byCharacter(store);
     index.dispose();
 
     store.put(run("A"));

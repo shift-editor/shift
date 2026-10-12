@@ -612,6 +612,7 @@ export class Font {
     get editCoordinator(): WorkspaceEditCoordinator;
     entryForId(glyphId: GlyphId): GlyphEntry | null;
     entryForName(name: GlyphName): GlyphEntry | null;
+    entryForUnicode(unicode: Unicode): GlyphEntry | null;
     externalLocationForSource(sourceId: SourceId): ExternalAxisLocation | null;
     getAxes(): Axis[];
     getAxisMappingBases(): AxisMappingBasis[];
@@ -1515,10 +1516,10 @@ export function useSignalState<T>(signal: Signal<T>, options?: UseSignalOptions)
 
 // Warnings were encountered during analysis:
 //
-// dist/Editor-tfzidUVH.d.ts:2808:5 - (ae-forgotten-export) The symbol "Axis" needs to be exported by the entry point index.d.ts
-// dist/Editor-tfzidUVH.d.ts:2809:5 - (ae-forgotten-export) The symbol "AxisMappingBasis" needs to be exported by the entry point index.d.ts
-// dist/Editor-tfzidUVH.d.ts:2810:5 - (ae-forgotten-export) The symbol "Source" needs to be exported by the entry point index.d.ts
-// dist/Editor-tfzidUVH.d.ts:4824:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
+// dist/Editor-BcpUrFMG.d.ts:2808:5 - (ae-forgotten-export) The symbol "Axis" needs to be exported by the entry point index.d.ts
+// dist/Editor-BcpUrFMG.d.ts:2809:5 - (ae-forgotten-export) The symbol "AxisMappingBasis" needs to be exported by the entry point index.d.ts
+// dist/Editor-BcpUrFMG.d.ts:2810:5 - (ae-forgotten-export) The symbol "Source" needs to be exported by the entry point index.d.ts
+// dist/Editor-BcpUrFMG.d.ts:4831:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

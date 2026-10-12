@@ -113,13 +113,13 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     const item = this.editor.text
       .run(node.runId)
       ?.items.find((candidate) => candidate.id === itemId);
-    if (item?.kind !== "glyph") return null;
+    if (!item || item.kind === "linebreak") return null;
 
     const current = this.childGlyph(node);
     if (current?.itemId === itemId) return current;
 
-    const entry = this.editor.font.entryForName(item.glyphName);
-    if (!entry || !this.editor.glyphForId(entry.id)) return null;
+    const glyphId = this.editor.text.glyphIdForItem(itemId);
+    if (!glyphId || !this.editor.glyphForId(glyphId)) return null;
 
     const sourceId =
       current?.sourceId ?? this.editor.activeSourceId ?? this.editor.font.defaultSource.id;
@@ -128,7 +128,7 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
       kind: "glyph",
       parentId: node.id,
       itemId,
-      glyphId: entry.id,
+      glyphId,
       sourceId,
       position: { x: 0, y: 0 },
     });

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { glyphTextItem } from "@shift/editor/text";
+import { characterTextItem } from "@shift/editor/text";
 import type { SpacingTool } from "@shift/editor/tools";
 import { TestEditor } from "@/testing/TestEditor";
 
@@ -36,7 +36,7 @@ describe("Spacing tool", () => {
     // The default advance; setting it again would record a no-op edit.
     expect(editor.requireGlyphLayer().xAdvance).toBe(500);
     editor.selectTool("text");
-    editor.textEditing.insert([glyphTextItem("A", 65)]);
+    editor.textEditing.insert([characterTextItem(65)]);
     editor.escape();
     await editor.settle();
     editor.selectTool("spacing");

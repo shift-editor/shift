@@ -10,18 +10,27 @@ import {
 export type { TextItemId };
 
 /**
- * A single item in a text buffer. Either a glyph (typed character or picked
- * variant) or a structural line break. Line breaks are NOT glyphs — they
+ * A single item in a text buffer: a typed character, a glyph picked by
+ * identity, or a structural line break. Line breaks are NOT glyphs — they
  * never get positioned; the layout splits on them into paragraphs.
  */
-export type TextItem = GlyphTextItem | LineBreakTextItem;
+export type TextItem = CharacterTextItem | GlyphTextItem | LineBreakTextItem;
 
+/** An item that lays out as a glyph: everything but a line break. */
+export type GlyphicTextItem = CharacterTextItem | GlyphTextItem;
+
+/** A typed character; the font's Unicode mapping picks its glyph at layout time. */
+export interface CharacterTextItem {
+  id: TextItemId;
+  kind: "character";
+  codepoint: number;
+}
+
+/** A glyph picked by identity, such as an alternate with no Unicode value. */
 export interface GlyphTextItem {
   id: TextItemId;
   kind: "glyph";
-  glyphName: GlyphName;
-  /** Source codepoint when typed via keyboard; null when picked from a glyph UI. */
-  codepoint: number | null;
+  glyphId: GlyphId;
 }
 
 export interface LineBreakTextItem {
@@ -29,13 +38,17 @@ export interface LineBreakTextItem {
   kind: "linebreak";
 }
 
-/** Build a glyph text item. `codepoint` is null when the source isn't a typed character. */
-export function glyphTextItem(
-  glyphName: GlyphName,
-  codepoint: number | null = null,
+/** Build a character text item. */
+export function characterTextItem(
+  codepoint: number,
   id: TextItemId = mintTextItemId(),
-): GlyphTextItem {
-  return { id, kind: "glyph", glyphName, codepoint };
+): CharacterTextItem {
+  return { id, kind: "character", codepoint };
+}
+
+/** Build a picked glyph text item. */
+export function glyphTextItem(glyphId: GlyphId, id: TextItemId = mintTextItemId()): GlyphTextItem {
+  return { id, kind: "glyph", glyphId };
 }
 
 /** Build a line break text item — structural paragraph separator. */
@@ -66,7 +79,7 @@ export interface PositionedGlyph {
 export type Direction = "ltr" | "rtl";
 
 export interface SegmentedRun {
-  glyphs: readonly GlyphTextItem[];
+  items: readonly GlyphicTextItem[];
   direction: Direction;
   script?: string;
   language?: string;
@@ -112,7 +125,7 @@ export interface CaretPosition {
 }
 
 export interface ParagraphSlice {
-  glyphs: readonly GlyphTextItem[];
+  items: readonly GlyphicTextItem[];
   clusterStart: number;
 }
 

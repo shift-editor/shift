@@ -10,7 +10,7 @@ import type {
   CaretPosition,
   TextItem,
   SourceMetrics,
-  GlyphTextItem,
+  GlyphicTextItem,
   Hit,
   Line,
   ParagraphSlice,
@@ -78,7 +78,7 @@ export class TextLayout {
     const paragraphs: PositionedParagraph[] = splitParagraphs(items).map((p) => ({
       runs: segmentRuns(p).map((run) => positioner.position(run, editor, externalLocation)),
       clusterStart: p.clusterStart,
-      clusterEnd: p.clusterStart + p.glyphs.length + 1,
+      clusterEnd: p.clusterStart + p.items.length + 1,
     }));
 
     const { lines, totalAdvance, bounds } = assembleLayout(paragraphs, origin, this.metrics);
@@ -170,8 +170,8 @@ export class TextLayout {
  * Split the flat item buffer into paragraphs on linebreak items.
  *
  * Linebreaks are *separators*, not glyphs — they're excluded from any
- * paragraph's `glyphs` array but they consume a cluster index. The next
- * paragraph's `clusterStart` is `previous.clusterStart + previous.glyphs.length + 1`
+ * paragraph's `items` array but they consume a cluster index. The next
+ * paragraph's `clusterStart` is `previous.clusterStart + previous.items.length + 1`
  * (the +1 is the linebreak itself).
  *
  *   buffer:  [A, B, \n, C, D]                buffer:  [A, \n, \n, B]
@@ -188,21 +188,21 @@ export class TextLayout {
  */
 function splitParagraphs(items: readonly TextItem[]): ParagraphSlice[] {
   const paragraphs: ParagraphSlice[] = [];
-  let glyphs: GlyphTextItem[] = [];
+  let paragraph: GlyphicTextItem[] = [];
   let clusterStart = 0;
 
   items.forEach((item, index) => {
     if (item.kind === "linebreak") {
-      paragraphs.push({ glyphs, clusterStart });
-      glyphs = [];
+      paragraphs.push({ items: paragraph, clusterStart });
+      paragraph = [];
       clusterStart = index + 1;
       return;
     }
-    glyphs.push(item);
+    paragraph.push(item);
   });
 
-  if (glyphs.length > 0 || items.length > 0) {
-    paragraphs.push({ glyphs, clusterStart });
+  if (paragraph.length > 0 || items.length > 0) {
+    paragraphs.push({ items: paragraph, clusterStart });
   }
 
   return paragraphs;
@@ -216,14 +216,14 @@ function splitParagraphs(items: readonly TextItem[]): ParagraphSlice[] {
  * shape stays stable when Phase 3 introduces real BiDi.
  *
  *   Phase 1 (today):
- *     paragraph: { glyphs: [A, B, C], cs: 0 }
- *     output:    [{ glyphs: [A,B,C], direction: "ltr", clusterStart: 0 }]
+ *     paragraph: { items: [A, B, C], cs: 0 }
+ *     output:    [{ items: [A,B,C], direction: "ltr", clusterStart: 0 }]
  *
  *   Phase 3 (future, with BiDi):
- *     paragraph: { glyphs: ["h","e","l","l","o"," ","ا","ل","ع","ر","ب","ي","ة"], cs: 0 }
+ *     paragraph: { items: ["h","e","l","l","o"," ","ا","ل","ع","ر","ب","ي","ة"], cs: 0 }
  *     output:    [
- *                  { glyphs: ["h","e","l","l","o"," "], direction: "ltr", cs: 0 },
- *                  { glyphs: ["ا","ل","ع","ر","ب","ي","ة"], direction: "rtl", cs: 6 },
+ *                  { items: ["h","e","l","l","o"," "], direction: "ltr", cs: 0 },
+ *                  { items: ["ا","ل","ع","ر","ب","ي","ة"], direction: "rtl", cs: 6 },
  *                ]
  *
  * Per-paragraph signature (not paragraphs[]) so paragraph structure is
@@ -233,7 +233,7 @@ function splitParagraphs(items: readonly TextItem[]): ParagraphSlice[] {
 function segmentRuns(paragraph: ParagraphSlice): SegmentedRun[] {
   return [
     {
-      glyphs: paragraph.glyphs,
+      items: paragraph.items,
       direction: "ltr",
       clusterStart: paragraph.clusterStart,
     },

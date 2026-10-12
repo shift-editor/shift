@@ -131,6 +131,11 @@ class GlyphDirectory {
     return this.#index.entryByName.get(name) ?? null;
   }
 
+  entryForUnicode(unicode: Unicode): GlyphEntry | null {
+    const name = this.#index.nameByUnicode.get(unicode);
+    return name ? this.entryForName(name) : null;
+  }
+
   recordForName(name: GlyphName): GlyphRecord | null {
     return this.#index.recordByName.get(name) ?? null;
   }
@@ -597,6 +602,14 @@ export class Font {
    */
   entryForName(name: GlyphName): GlyphEntry | null {
     return this.#directoryCell.peek().entryForName(name);
+  }
+  /**
+   * Returns the committed glyph the font maps a Unicode value to.
+   *
+   * @returns null when no glyph in the font claims the value.
+   */
+  entryForUnicode(unicode: Unicode): GlyphEntry | null {
+    return this.#directoryCell.peek().entryForUnicode(unicode);
   }
 
   recordForName(name: GlyphName): GlyphRecord | null {

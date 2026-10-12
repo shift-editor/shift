@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import type { TestEditor } from "@/testing/TestEditor";
 import { Positioner } from "@shift/editor/testing";
-import { glyphTextItem as glyph } from "@shift/editor/text";
+import { characterTextItem as char } from "@shift/editor/text";
 import { layoutTestEditor, ltrRun } from "./testUtils";
 import { signal } from "@shift/editor/signals";
 
@@ -15,7 +15,7 @@ describe("Positioner", () => {
   // Levien invariant: positioned.advance === sum of xAdvance.
   it("advance equals sum of xAdvance", () => {
     const positioner = new Positioner();
-    const run = ltrRun([glyph("A", 65), glyph("B", 66), glyph("C", 67)]);
+    const run = ltrRun([char(65), char(66), char(67)]);
 
     const positioned = positioner.position(run, editor, signal(editor.font.defaultLocation()));
 
@@ -27,7 +27,7 @@ describe("Positioner", () => {
   // cluster numbering honors clusterStart and is monotonic.
   it("cluster equals clusterStart + i", () => {
     const positioner = new Positioner();
-    const run = ltrRun([glyph("A", 65), glyph("B", 66)], /* clusterStart */ 7);
+    const run = ltrRun([char(65), char(66)], /* clusterStart */ 7);
 
     const positioned = positioner.position(run, editor, signal(editor.font.defaultLocation()));
 
@@ -37,7 +37,7 @@ describe("Positioner", () => {
   // Each positioned glyph carries the bounds from its resolved render model.
   it("bounds pass through from the Glyph render model", () => {
     const positioner = new Positioner();
-    const a = glyph("A", 65);
+    const a = char(65);
     const run = ltrRun([a]);
     const locationCell = signal(editor.font.defaultLocation());
 
@@ -53,10 +53,10 @@ describe("Positioner", () => {
     expect(positioned.glyphs[0].origin).toEqual({ x: 0, y: 0 });
   });
 
-  // Glyph not in the font → zero advance, null bounds, no throw.
-  it("handles missing glyph gracefully", () => {
+  // Character the font maps no glyph to → zero advance, null bounds, no throw.
+  it("handles an unmapped character gracefully", () => {
     const positioner = new Positioner();
-    const run = ltrRun([glyph("nonexistent-glyph-xyz", 65)]);
+    const run = ltrRun([char(0x10fffd)]);
 
     const positioned = positioner.position(run, editor, signal(editor.font.defaultLocation()));
 

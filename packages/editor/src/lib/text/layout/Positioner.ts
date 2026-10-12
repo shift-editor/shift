@@ -1,13 +1,13 @@
 import { track } from "../../signals";
 import { displayAdvance, isNonSpacingGlyph } from "../../utils/unicode";
-import type { GlyphTextItem, PositionedRun, SegmentedRun } from "./types";
+import { textItemGlyph, type TextItemGlyph } from "./textItemGlyph";
+import type { PositionedRun, SegmentedRun } from "./types";
 import type { Editor } from "../../editor/Editor";
-import type { Font } from "../../model/Font";
 import type { GlyphRenderModel } from "../../model/Glyph";
 import type { Signal } from "../../signals/signal";
 import type { ExternalAxisLocation } from "../../../types/variation";
 import type { Bounds, Point2D } from "@shift/geo";
-import type { GlyphEntry, Source } from "@shift/types";
+import type { Source } from "@shift/types";
 
 /**
  * No-shape positioner — literal LTR advance walk, `cluster = clusterStart + i`.
@@ -31,22 +31,21 @@ export class Positioner {
     track(editor.font.kerningCell);
     let kernable: PositionedRun["glyphs"][number] | null = null;
 
-    for (const [idx, g] of run.glyphs.entries()) {
-      const entry = editor.font.entryForName(g.glyphName);
+    for (const [idx, item] of run.items.entries()) {
+      const resolved = textItemGlyph(item, editor.font);
+      const { entry } = resolved;
       const glyph = entry ? editor.glyphForId(entry.id) : null;
       const renderModel = glyph?.renderModelAt(externalLocation, editor.activeSourceIdCell) ?? null;
-      let glyphName = g.glyphName;
       let bounds: Bounds | null = null;
 
-      if (entry && renderModel) {
+      if (renderModel) {
         // Inside the run's layout computed: spacing edits re-run the layout.
         track(renderModel.xAdvanceCell);
-        glyphName = entry.name;
         bounds = renderModel.bounds;
       }
 
-      const xAdvance = resolveAdvance(g, renderModel);
-      const spacing = !isNonSpacingGlyph(g.glyphName, g.codepoint);
+      const xAdvance = resolveAdvance(resolved, renderModel);
+      const spacing = !isNonSpacingGlyph(resolved.name, resolved.codepoint);
       if (kernable?.glyphId && entry && spacing) {
         kernable.xKern = editor.font.kerningBetween(
           kernable.glyphId,
@@ -57,13 +56,13 @@ export class Positioner {
         totalAdvance += kernable.xKern;
       }
       const origin = { x: totalAdvance, y: 0 };
-      const offset = resolveGlyphOffset(g, editor, source);
+      const offset = resolveGlyphOffset(resolved, editor, source);
       totalAdvance += xAdvance;
 
       const positioned = {
         glyphId: entry?.id ?? null,
-        glyphName,
-        sourceItemIds: [g.id],
+        glyphName: resolved.name,
+        sourceItemIds: [item.id],
         origin,
         xAdvance,
         xKern: 0,
@@ -81,22 +80,21 @@ export class Positioner {
   }
 }
 
-/** Resolve a glyph item to its display advance (handles invisibles, fallbacks). */
-export function resolveAdvance(item: GlyphTextItem, view: GlyphRenderModel | null): number {
+/** Resolve an item's glyph to its display advance (handles invisibles, fallbacks). */
+function resolveAdvance(glyph: TextItemGlyph, view: GlyphRenderModel | null): number {
   const raw = view?.xAdvance ?? 0;
-  return displayAdvance(raw, item.glyphName, item.codepoint);
+  return displayAdvance(raw, glyph.name, glyph.codepoint);
 }
 
-export function resolveGlyphOffset(
-  item: GlyphTextItem,
+function resolveGlyphOffset(
+  resolved: TextItemGlyph,
   editor: Editor,
   source: Source | null,
 ): Point2D {
-  if (!isNonSpacingGlyph(item.glyphName, item.codepoint)) return { x: 0, y: 0 };
+  if (!isNonSpacingGlyph(resolved.name, resolved.codepoint)) return { x: 0, y: 0 };
   if (!source) return { x: 0, y: 0 };
 
-  const record = recordForTextItem(item, editor.font);
-  const glyph = record ? editor.glyphForId(record.id) : null;
+  const glyph = resolved.entry ? editor.glyphForId(resolved.entry.id) : null;
   const layer = glyph?.layerForSource(source.id) ?? null;
   if (!layer) return { x: 0, y: 0 };
 
@@ -137,8 +135,4 @@ export function resolveGlyphOffset(
     x: targetX - centerX,
     y: (metrics.ascender + metrics.descender) / 2 - centerY,
   };
-}
-
-function recordForTextItem(item: GlyphTextItem, font: Font): GlyphEntry | null {
-  return font.entryForName(item.glyphName);
 }
