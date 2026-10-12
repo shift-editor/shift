@@ -40,13 +40,17 @@ Use Conventional Commit prefixes. `feat`, `fix`, and `perf` appear in the public
 
 Minimum operating systems:
 
-| Platform | Minimum                                         | Set by                                                                                     |
-| -------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| macOS    | macOS 13 Ventura                                | Electron 44 (Chromium 152) dropped macOS 12 Monterey                                       |
-| Windows  | Windows 10                                      | Electron dropped Windows 7, 8, and 8.1 in Electron 23                                      |
-| Linux    | glibc 2.35 (Ubuntu 22.04, Debian 12, Fedora 36) | The native bridge links `GLIBC_2.35` symbols; Electron's own binaries need only glibc 2.25 |
+| Platform | Minimum                           | Set by                                                                                 |
+| -------- | --------------------------------- | -------------------------------------------------------------------------------------- |
+| macOS    | macOS 13 Ventura                  | Electron 44 (Chromium 152) dropped macOS 12 Monterey                                   |
+| Windows  | Windows 10                        | Electron dropped Windows 7, 8, and 8.1 in Electron 23                                  |
+| Linux    | glibc 2.27 (Ubuntu 18.04, RHEL 8) | Oldest systems CI installs on; Electron needs glibc 2.25, Shift's native binaries 2.17 |
 
-Intel Macs that cannot install Ventura (for example, a 2015 iMac) cannot run current Shift builds, and neither can RHEL 9 or Rocky Linux 9 (glibc 2.34). `mac.minimumSystemVersion` writes `LSMinimumSystemVersion` into the macOS bundle so older systems show a clear version message instead of a failed launch; raise it whenever an Electron upgrade raises Chromium's macOS floor. The Linux floor follows the glibc of the build runner, so moving the Linux jobs to a newer runner image can raise it. Check with `objdump -T` on the packaged `shift-bridge.linux-*.node`.
+Intel Macs that cannot install Ventura (for example, a 2015 iMac) cannot run current Shift builds. `mac.minimumSystemVersion` writes `LSMinimumSystemVersion` into the macOS bundle so older systems show a clear version message instead of a failed launch; raise it whenever an Electron upgrade raises Chromium's macOS floor.
+
+Linux release jobs build the native bridge and `shift-cli` with `scripts/build-linux-portable.sh`, which compiles and links Rust and C code with napi-rs's glibc 2.17 cross toolchain instead of the runner's glibc, then fails if either binary references a newer or unversioned glibc symbol. Linking against Ubuntu 24.04 previously required glibc 2.35. SQLite is bundled on every platform, so the binaries carry no system `libsqlite3` dependency. Below glibc 2.25, Electron's own executable cannot start, so Ubuntu 16.04 and CentOS 7 remain unsupported.
+
+`scripts/check-deb-libraries.sh` installs the DEB on Ubuntu 18.04, Ubuntu 24.04, and Debian 12; `scripts/check-rpm-libraries.sh` installs the RPM on Rocky Linux 8 and 9, then also loads the bridge and runs `shift-cli`. Both fail on any packaged binary with a missing library or glibc symbol version. Raise these images only when deliberately raising the Linux minimum.
 
 Packaged builds register `.shift` as a Shift Document with shared document artwork. Release is the preferred handler; Nightly remains an alternate so installing it does not take document ownership from Release. macOS composites the Shift badge onto its standard document shape from bundle metadata and the packaged asset catalog, Windows uses per-user NSIS registry entries, and Linux DEB/RPM packages install `application/x-shift-document` metadata and hicolor MIME icons. Both macOS distributions register as alternate viewers for TTF, OTF, Glyphs, Glyphspackage, UFO, and Designspace sources, which lists Shift under **Open With** without taking ownership of source-font formats.
 

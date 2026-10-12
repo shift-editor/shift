@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Installs a Shift DEB on clean Debian-family systems and fails if any packaged
 # executable, shared library, or native module links a library the DEB's
-# declared dependencies do not install. CI runners preinstall many desktop
-# libraries, so a smoke test on the runner itself cannot catch a missing one.
+# declared dependencies do not install, or a glibc symbol version the system
+# lacks. CI runners preinstall many desktop libraries, so a smoke test on the
+# runner itself cannot catch a missing one.
 set -euo pipefail
 
 if [[ $# -ne 1 || ! -f "$1" ]]; then
@@ -12,8 +13,9 @@ fi
 
 DEB_DIRECTORY="$(cd "$(dirname "$1")" && pwd)"
 DEB_NAME="$(basename "$1")"
-# Ubuntu 24.04 names ALSA libasound2t64; Debian 12 still names it libasound2.
-IMAGES=(ubuntu:24.04 debian:12)
+# Ubuntu 18.04 (glibc 2.27) is the oldest supported system. Ubuntu 24.04 names
+# ALSA libasound2t64; Debian 12 still names it libasound2.
+IMAGES=(ubuntu:18.04 ubuntu:24.04 debian:12)
 
 for image in "${IMAGES[@]}"; do
   echo "Checking $DEB_NAME on $image"
@@ -30,7 +32,9 @@ for image in "${IMAGES[@]}"; do
         dpkg --listfiles "$PACKAGE" \
           | while IFS= read -r file; do
               [[ -f "$file" && ( -x "$file" || "$file" == *.so* || "$file" == *.node ) ]] || continue
-              ldd "$file" 2>/dev/null | sed -n "s|^\s*\(\S*\) => not found|$file: \1|p" || true
+              ldd "$file" 2>&1 \
+                | sed -n -e "s|^\s*\(\S*\) => not found|$file: \1|p" -e "s|^.*\(version .* not found\).*|$file: \1|p" \
+                || true
             done
       )"
       if [[ -n "$MISSING" ]]; then

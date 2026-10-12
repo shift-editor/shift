@@ -23,7 +23,7 @@ Shift is free and open source, and runs on macOS, Windows, and Linux. It stays r
 
 Download Shift for macOS, Windows, and Linux from [shift.graphics](https://shift.graphics) or [GitHub Releases](https://github.com/shift-editor/shift/releases). On Linux, install from the [APT or DNF repositories](docs/releases.md#linux-installation) to get updates. For the latest development build, use [Shift Nightly](https://github.com/shift-editor/shift/releases/tag/nightly).
 
-Shift requires macOS 13 Ventura or later, Windows 10 or later, or a Linux distribution with glibc 2.35 or later (Ubuntu 22.04, Debian 12, Fedora 36, or newer).
+Shift requires macOS 13 Ventura or later, Windows 10 or later, or a Linux distribution with glibc 2.27 or later (Ubuntu 18.04, RHEL 8, or newer).
 
 ## AI agents
 
