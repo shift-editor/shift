@@ -196,6 +196,16 @@ function ToolSplitButton({
   );
 }
 
+/** Shift's own icon for a tool slot, following the shape picked in its menu. */
+function slotIconName(
+  name: ToolName,
+  selectedItemId: string | undefined,
+): ShiftIconName | undefined {
+  if (name === "shape") return selectedItemId === "ellipse" ? "circle" : "shape";
+  if (name === "select" || name === "pen" || name === "hand") return name;
+  return undefined;
+}
+
 export function ToolsPane({
   editor,
   orientation = "horizontal",
@@ -221,12 +231,10 @@ export function ToolsPane({
         {Array.from(toolRegistry.entries())
           .filter(([, item]) => !item.hidden)
           .map(([name, { icon, tooltip, menuItems, disabled }]) => {
-            const iconName: ShiftIconName | undefined =
-              name === "select" || name === "pen" || name === "hand" || name === "shape"
-                ? name
-                : undefined;
+            const selectedItem = menuItems?.find((item) => item.selected);
+            const iconName = slotIconName(name, selectedItem?.id);
             // A slot holding several tools activates the one picked last.
-            const slotToolId = menuItems?.find((item) => item.selected)?.toolId ?? name;
+            const slotToolId = selectedItem?.toolId ?? name;
             const slotActive =
               activeTool === name ||
               (menuItems?.some((item) => item.toolId === activeTool) ?? false);
