@@ -1,12 +1,9 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { AnimatePresence, motion, useReducedMotion, type Transition } from "motion/react";
 import { cn } from "@shift/ui";
-import { ToolsPane, type ToolsPaneSide } from "@shift/editor/ui";
-import DragHandleSvg from "@assets/toolbar/drag-handle.svg";
-import { useEditor } from "@/workspace/WorkspaceContext";
-
-// SPIKE: floating tools that snap to an edge of the canvas panel. Positions are
-// relative to the panel so the bar follows the canvas as sidebars open and close.
+import type { Editor } from "../lib/editor/Editor";
+import { ShiftIcon } from "./ShiftIcon";
+import { ToolsPane, type ToolsPaneSide } from "./ToolsPane";
 
 type Dock = "top" | "bottom" | "left" | "right";
 
@@ -186,8 +183,21 @@ function snappedSlot(drag: DragState): Dock | null {
   return drag.snapped ? drag.target : null;
 }
 
-export const FloatingToolbar = () => {
-  const editor = useEditor();
+export interface FloatingToolbarProps {
+  editor: Editor;
+}
+
+/**
+ * Renders the editor's tools as a bar floating over the canvas, docked to an
+ * edge the user picks by dragging its grip.
+ *
+ * @remarks
+ * Place it inside the canvas container, which must be positioned: the bar
+ * fills that container as an overlay and docks against its edges, so it
+ * follows the canvas as surrounding panels resize. The chosen edge is
+ * remembered in `localStorage` when storage is available.
+ */
+export function FloatingToolbar({ editor }: FloatingToolbarProps) {
   const layerRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragState | null>(null);
   const [dock, setDock] = useState<Dock>(readDock);
@@ -392,11 +402,14 @@ export const FloatingToolbar = () => {
               )}
               onPointerDown={onGripPointerDown}
             >
-              <DragHandleSvg width={22} height={22} className={cn(vertical && "rotate-90")} />
+              <ShiftIcon
+                name="drag-handle"
+                className={cn("h-5.5 w-5.5", vertical && "rotate-90")}
+              />
             </div>
           </motion.div>
         </motion.div>
       </AnimatePresence>
     </div>
   );
-};
+}

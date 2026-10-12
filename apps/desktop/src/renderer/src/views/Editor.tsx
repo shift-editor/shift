@@ -9,9 +9,9 @@ import { LeftSidebar } from "@/components/editor/LeftSidebar";
 import { RightSidebar } from "@/components/editor/RightSidebar";
 import { Canvas } from "@/components/editor/Canvas";
 import { CanvasContextMenu } from "@/components/editor/CanvasContextMenu";
-import { FloatingToolbar } from "@/components/editor/FloatingToolbar";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import type { TextRunNode } from "@shift/editor/types";
+import { FloatingToolbar } from "@shift/editor/ui";
 import { useOpenedGlyph } from "@/context/GlyphCatalogContext";
 import { useFocusZone, ZoneContainer } from "@/context/FocusZoneContext";
 import { KeyboardRouter } from "@/lib/keyboard";
@@ -197,7 +197,7 @@ const EditorLayout = ({ children }: { children: ReactNode }) => {
         <ResizablePanel id="canvas" minSize={300} data-shift-capture-target="editor">
           <ZoneContainer zone="canvas" className="relative h-full">
             {children}
-            <FloatingToolbar />
+            <FloatingToolbar editor={editor} />
           </ZoneContainer>
         </ResizablePanel>
         <ResizableHandle

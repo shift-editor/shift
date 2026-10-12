@@ -6,6 +6,7 @@ export {
   type EditableSidebarInputProps,
 } from "./ui/EditableSidebarInput";
 export { EditorToolbar, type EditorToolbarHost, type EditorToolbarProps } from "./ui/EditorToolbar";
+export { FloatingToolbar, type FloatingToolbarProps } from "./ui/FloatingToolbar";
 export { GlyphSidebar, type GlyphSidebarHost, type GlyphSidebarProps } from "./ui/GlyphSidebar";
 export { ShiftEditor, type ShiftEditorProps } from "./ui/ShiftEditor";
 export { ShiftEditorChrome, type ShiftEditorChromeProps } from "./ui/ShiftEditorChrome";
