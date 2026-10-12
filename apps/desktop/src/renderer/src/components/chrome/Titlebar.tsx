@@ -8,14 +8,23 @@ interface TrafficLightButtonProps {
   color: "close" | "minimize" | "maximize";
   onClick: () => void;
   isHovered: boolean;
+  /** Shows the dot macOS puts in the close button while a document has unsaved changes. */
+  edited?: boolean;
 }
 
 interface TitlebarProps {
   closeOnly?: boolean;
   onClose?: () => void;
+  /** Whether the window's document has unsaved changes. */
+  edited?: boolean;
 }
 
-const TrafficLightButton = ({ color, onClick, isHovered }: TrafficLightButtonProps) => {
+const TrafficLightButton = ({
+  color,
+  onClick,
+  isHovered,
+  edited = false,
+}: TrafficLightButtonProps) => {
   // These values reproduce native macOS traffic lights and are intentionally exempt from theme colors.
   const colors = {
     close: {
@@ -59,19 +68,26 @@ const TrafficLightButton = ({ color, onClick, isHovered }: TrafficLightButtonPro
   };
 
   const { bg, icon } = colors[color];
+  // Like macOS, hovering swaps the unsaved-changes dot for the close cross.
+  const showDot = edited && !isHovered;
 
   return (
     <button
       onClick={onClick}
-      className="traffic-light-btn flex h-3 w-3 items-center justify-center rounded-full transition-all duration-150"
+      className="traffic-light-btn relative flex h-3 w-3 items-center justify-center rounded-full transition-all duration-150"
       style={{ backgroundColor: bg }}
-      aria-label={color}
+      aria-label={edited ? `${color}, unsaved changes` : color}
     >
       <span
         className={`transition-opacity duration-150 ${isHovered ? "opacity-100" : "opacity-0"}`}
       >
         {icon}
       </span>
+      <span
+        aria-hidden="true"
+        className={`absolute h-1 w-1 rounded-full transition-opacity duration-150 ${showDot ? "opacity-100" : "opacity-0"}`}
+        style={{ backgroundColor: "#4D0000" }}
+      />
     </button>
   );
 };
@@ -81,7 +97,7 @@ const TrafficLightButton = ({ color, onClick, isHovered }: TrafficLightButtonPro
  *
  * @param props - Control visibility and optional close behavior for the owning window.
  */
-export const Titlebar = ({ closeOnly = false, onClose }: TitlebarProps) => {
+export const Titlebar = ({ closeOnly = false, onClose, edited = false }: TitlebarProps) => {
   const [isHovered, setIsHovered] = useState(false);
   const host = getShiftHost();
 
@@ -115,7 +131,12 @@ export const Titlebar = ({ closeOnly = false, onClose }: TitlebarProps) => {
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      <TrafficLightButton color="close" onClick={handleClose} isHovered={isHovered} />
+      <TrafficLightButton
+        color="close"
+        onClick={handleClose}
+        isHovered={isHovered}
+        edited={edited}
+      />
       {closeOnly ? null : (
         <>
           <TrafficLightButton color="minimize" onClick={handleMinimize} isHovered={isHovered} />
