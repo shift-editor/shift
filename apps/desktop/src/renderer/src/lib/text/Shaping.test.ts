@@ -175,3 +175,23 @@ describe("editing shaped text keeps untouched lines shaped", () => {
     expect(firstLine()).toEqual(["beh-ar.fina", "beh-ar.init"]);
   });
 });
+
+describe("turning shaping off lays a run out as typed", () => {
+  it("shows the typed glyphs at once, and undo shapes the run again", async () => {
+    const editor = new TestEditor();
+    await editor.openSession(SHAPING_TEST, "f");
+    const runId = editor.text.createRun(editor.text.itemsFromText("fi")).id;
+    const names = () =>
+      editor.text
+        .layoutCell(runId)
+        .peek()!
+        .placedGlyphs.map((placed) => placed.glyph.glyphName);
+    await expect.poll(names).toEqual(["f_i"]);
+
+    editor.history.capture("Turn shaping off", () => editor.text.setShaping(runId, false));
+    expect(names()).toEqual(["f", "i"]);
+
+    await editor.undo();
+    await expect.poll(names).toEqual(["f_i"]);
+  });
+});
