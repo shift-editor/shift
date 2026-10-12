@@ -107,10 +107,20 @@ export function EditorToolbar({
           {leftSidebarToggle}
           {navigation}
         </div>
-        <p className="truncate whitespace-nowrap px-4 text-ui">
-          <span className="font-medium">{familyName}</span>
-          <span className="text-muted"> — {documentTitle}</span>
-          {host && host.documentEdited ? <span className="text-muted"> · Edited</span> : null}
+        <p className="flex min-w-0 items-center gap-1.5 whitespace-nowrap px-4 text-ui">
+          {host && host.documentEdited ? (
+            // A dot rather than words, as editors on Windows and Linux mark unsaved files.
+            <span
+              role="img"
+              aria-label="Unsaved changes"
+              title="Unsaved changes"
+              className="h-1.5 w-1.5 shrink-0 rounded-full bg-muted"
+            />
+          ) : null}
+          <span className="truncate">
+            <span className="font-medium">{familyName}</span>
+            <span className="text-muted"> — {documentTitle}</span>
+          </span>
         </p>
         <div className="flex justify-end pr-2">{rightSidebarToggle}</div>
       </header>
