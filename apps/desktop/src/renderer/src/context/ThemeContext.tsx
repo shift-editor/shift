@@ -22,8 +22,6 @@ export type { ColorTheme, ThemeAppearance, ThemeId, ThemeSelection } from "@/lib
 
 /** This window's copy of the last applied selection, read before main answers so the first paint is right. */
 const THEME_CACHE_KEY = "themeCache";
-/** Where Shift kept the selection before `config.toml`; migrated once, then removed. */
-const LEGACY_THEME_KEY = "themeSelection";
 
 export interface ThemeContextValue {
   themeSelection: ThemeSelection;
@@ -47,9 +45,9 @@ function getSystemAppearance(): ThemeAppearance {
   return "light";
 }
 
-function readStoredSelection(key: string): ThemeSelection | null {
+function readCachedSelection(): ThemeSelection | null {
   if (typeof localStorage === "undefined") return null;
-  const stored = localStorage.getItem(key);
+  const stored = localStorage.getItem(THEME_CACHE_KEY);
   return stored !== null && isThemeSelection(stored) ? stored : null;
 }
 
@@ -81,8 +79,7 @@ export function useTheme(): ThemeContextValue {
  */
 export function ThemeProvider({ children, defaultTheme = "shift-light" }: ThemeProviderProps) {
   const [themeSelection, setThemeSelectionState] = useState<ThemeSelection>(
-    () =>
-      readStoredSelection(THEME_CACHE_KEY) ?? readStoredSelection(LEGACY_THEME_KEY) ?? defaultTheme,
+    () => readCachedSelection() ?? defaultTheme,
   );
   const [config, setConfig] = useState<AppConfigState | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -131,13 +128,7 @@ export function ThemeProvider({ children, defaultTheme = "shift-light" }: ThemeP
 
     const load = async () => {
       try {
-        let state = await host.state();
-        const legacy = readStoredSelection(LEGACY_THEME_KEY);
-        const fileIsValid = !state.problems.some(({ severity }) => severity === "error");
-        if (legacy !== null && state.theme === null && fileIsValid) {
-          state = await host.setTheme(legacy);
-        }
-        localStorage.removeItem(LEGACY_THEME_KEY);
+        const state = await host.state();
         if (active) applyConfig(state);
       } catch (error) {
         console.error("Cannot read config.toml", error);

@@ -18,7 +18,7 @@ Terminal-style color themes for the desktop UI and native editor renderers.
 ## Codemap
 
 - `lib/themes/index.ts` — theme types, built-in palette registry, selection resolution, and CSS-variable mapping
-- `context/ThemeContext.tsx` — selection from `config.toml`, first-paint cache, one-time migration of the legacy `themeSelection` key, and OS appearance observation
+- `context/ThemeContext.tsx` — selection from `config.toml`, first-paint cache, and OS appearance observation
 - `components/chrome/settings/ConfigFileSection.tsx` — config file location, Open folder, and file problems
 - `src/main/config/` — `AppConfig` (read, watch, write), `configToml` (adapter over the `shift-config` crate), `configDirectory` (per-build folder)
 - `components/chrome/settings/AppearanceSettingsPanel.tsx` — accessible preset gallery
