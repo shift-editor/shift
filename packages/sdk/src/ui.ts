@@ -1,5 +1,6 @@
 export {
   EditorToolbar,
+  FloatingToolbar,
   GlyphSidebar,
   ShiftEditor,
   ShiftEditorChrome,
@@ -10,6 +11,7 @@ export type {
   EditorToolbarHost,
   EditorToolbarProps,
   EditorUISession,
+  FloatingToolbarProps,
   GlyphSidebarHost,
   GlyphSidebarProps,
   ShiftEditorProps,

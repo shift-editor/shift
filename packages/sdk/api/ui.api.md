@@ -21,7 +21,6 @@ export interface EditorToolbarHost {
 
 // @public (undocumented)
 export interface EditorToolbarProps {
-    compact?: boolean;
     host?: EditorToolbarHost;
     leftSidebarOpen?: boolean;
     onToggleLeftSidebar?: () => void;
@@ -43,6 +42,15 @@ export interface EditorUISession {
     readonly font: Font;
     // (undocumented)
     readonly mode: "preview" | "memory" | "workspace";
+}
+
+// @public
+export function FloatingToolbar(input: FloatingToolbarProps): JSX.Element;
+
+// @public (undocumented)
+export interface FloatingToolbarProps {
+    // (undocumented)
+    editor: Editor;
 }
 
 // @public
