@@ -99,14 +99,15 @@ export function EditorToolbar({
         {leftSidebarToggle}
         {navigation}
       </div>
-      <p className="flex min-w-0 items-center gap-1.5 whitespace-nowrap px-4 text-ui">
+      <p className="relative flex min-w-0 items-center whitespace-nowrap px-4 text-ui">
         {host && host.documentEdited ? (
           // A dot rather than words, as editors on Windows and Linux mark unsaved files.
+          // It sits in the title's padding so toggling it never re-centres the title.
           <span
             role="img"
             aria-label="Unsaved changes"
             title="Unsaved changes"
-            className="h-1.5 w-1.5 shrink-0 rounded-full bg-muted"
+            className="absolute left-1 top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-muted"
           />
         ) : null}
         <span className="truncate">
