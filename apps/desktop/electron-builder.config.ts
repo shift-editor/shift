@@ -242,6 +242,9 @@ const config: Configuration = {
   mac: {
     target: ["zip", "dmg"],
     category: "public.app-category.graphics-design",
+    // Electron 44 (Chromium 152) dropped macOS 12; LSMinimumSystemVersion makes
+    // Finder explain the requirement instead of the app failing to launch.
+    minimumSystemVersion: "13.0",
     icon: `../../icons/${iconName}.icon`,
     identity: signMacos ? undefined : null,
     hardenedRuntime: true,
