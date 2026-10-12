@@ -26,8 +26,15 @@ import { ShiftIcon, type ShiftIconName } from "./ShiftIcon";
 
 type SVGIcon = ComponentType<SVGProps<SVGSVGElement>>;
 
+/** Side of the tools that tooltips and tool menus open toward. */
+export type ToolsPaneSide = "top" | "bottom" | "left" | "right";
+
 export interface ToolsPaneProps {
   editor: Editor;
+  /** Lays the tools out in a row or a column. Defaults to a row. */
+  orientation?: "horizontal" | "vertical";
+  /** Where tooltips and tool menus open, normally toward the canvas. Defaults to below. */
+  popupSide?: ToolsPaneSide;
 }
 
 interface ToolButtonProps {
@@ -38,9 +45,11 @@ interface ToolButtonProps {
   activeTool: ToolName | null;
   disabled?: boolean;
   onClick?: () => void;
+  popupSide: ToolsPaneSide;
 }
 
 interface ToolSplitButtonProps extends ToolButtonProps {
+  vertical: boolean;
   menuItems: readonly ToolMenuItem[];
   onMenuItemSelect: (item: ToolMenuItem) => void;
 }
@@ -53,8 +62,10 @@ function ToolButton({
   activeTool,
   disabled,
   onClick,
+  popupSide,
 }: ToolButtonProps) {
   const isActive = activeTool === name;
+  const iconClassName = cn("h-6 w-6", isActive ? "text-background" : "text-primary");
 
   return (
     <Tooltip>
@@ -62,20 +73,13 @@ function ToolButton({
         <ToolbarButton
           render={
             <Button
-              className="h-8 w-8 rounded-md transition-none focus-visible:ring-0"
+              className={cn("transition-none focus-visible:ring-0", "h-9 w-9 rounded-md")}
               variant={isActive ? "primary" : "ghost"}
               icon={
                 iconName ? (
-                  <ShiftIcon
-                    name={iconName}
-                    strokeWidth={1.25}
-                    className={cn("h-5.5 w-5.5", isActive ? "text-background" : "text-primary")}
-                  />
+                  <ShiftIcon name={iconName} strokeWidth={1.25} className={iconClassName} />
                 ) : (
-                  <Icon
-                    className={cn("h-5.5 w-5.5", isActive ? "text-background" : "text-primary")}
-                    strokeWidth={1.25}
-                  />
+                  <Icon className={iconClassName} strokeWidth={1.25} />
                 )
               }
               aria-label={tooltip}
@@ -90,16 +94,21 @@ function ToolButton({
           }
         />
       </TooltipTrigger>
-      <TooltipContent side="bottom" sideOffset={5}>
+      <TooltipContent side={popupSide} sideOffset={5}>
         {tooltip}
       </TooltipContent>
     </Tooltip>
   );
 }
 
-function ToolSplitButton({ menuItems, onMenuItemSelect, ...buttonProps }: ToolSplitButtonProps) {
+function ToolSplitButton({
+  vertical,
+  menuItems,
+  onMenuItemSelect,
+  ...buttonProps
+}: ToolSplitButtonProps) {
   return (
-    <ToolbarGroup className="flex items-center gap-0.5">
+    <ToolbarGroup className={cn("flex items-center gap-0.5", vertical && "flex-col")}>
       <ToolButton {...buttonProps} />
       <Menu modal={false}>
         <MenuTrigger
@@ -111,7 +120,10 @@ function ToolSplitButton({ menuItems, onMenuItemSelect, ...buttonProps }: ToolSp
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-4 rounded-sm focus-visible:ring-0 data-[popup-open]:bg-hover/50"
+                  className={cn(
+                    "rounded-sm focus-visible:ring-0 data-[popup-open]:bg-hover/50",
+                    vertical ? "h-5 w-9" : "h-9 w-5",
+                  )}
                   icon={<ChevronDown className="h-3.5 w-3.5 text-primary" strokeWidth={1.5} />}
                   aria-label={`${buttonProps.tooltip} options`}
                   disabled={buttonProps.disabled}
@@ -121,7 +133,7 @@ function ToolSplitButton({ menuItems, onMenuItemSelect, ...buttonProps }: ToolSp
           }
         />
         <MenuPortal>
-          <MenuPositioner align="start" sideOffset={4}>
+          <MenuPositioner side={buttonProps.popupSide} align="start" sideOffset={4}>
             <MenuPopup className="min-w-44">
               {menuItems.map((item) => {
                 const Icon = item.icon;
@@ -160,7 +172,22 @@ function ToolSplitButton({ menuItems, onMenuItemSelect, ...buttonProps }: ToolSp
   );
 }
 
-export function ToolsPane({ editor }: ToolsPaneProps) {
+/** Shift's own icon for a tool slot, following the shape picked in its menu. */
+function slotIconName(
+  name: ToolName,
+  selectedItemId: string | undefined,
+): ShiftIconName | undefined {
+  if (name === "shape") return selectedItemId === "ellipse" ? "circle" : "shape";
+  if (name === "select" || name === "pen" || name === "hand") return name;
+  return undefined;
+}
+
+export function ToolsPane({
+  editor,
+  orientation = "horizontal",
+  popupSide = "bottom",
+}: ToolsPaneProps) {
+  const vertical = orientation === "vertical";
   const activeTool = useSignalState(editor.toolIdCell);
   const toolRegistry = useSignalState(editor.toolRegistryCell);
 
@@ -168,17 +195,19 @@ export function ToolsPane({ editor }: ToolsPaneProps) {
     <section className="flex flex-col items-center justify-center gap-2">
       <Toolbar
         aria-label="Editor tools"
-        className="flex h-10 items-center gap-2 overflow-hidden rounded-lg bg-background px-1"
+        orientation={orientation}
+        className={cn(
+          "flex items-center gap-2 overflow-hidden",
+          vertical ? "flex-col" : "flex-row",
+        )}
       >
         {Array.from(toolRegistry.entries())
           .filter(([, item]) => !item.hidden)
           .map(([name, { icon, tooltip, menuItems, disabled }]) => {
-            const iconName: ShiftIconName | undefined =
-              name === "select" || name === "pen" || name === "hand" || name === "shape"
-                ? name
-                : undefined;
+            const selectedItem = menuItems?.find((item) => item.selected);
+            const iconName = slotIconName(name, selectedItem?.id);
             // A slot holding several tools activates the one picked last.
-            const slotToolId = menuItems?.find((item) => item.selected)?.toolId ?? name;
+            const slotToolId = selectedItem?.toolId ?? name;
             const slotActive =
               activeTool === name ||
               (menuItems?.some((item) => item.toolId === activeTool) ?? false);
@@ -190,6 +219,7 @@ export function ToolsPane({ editor }: ToolsPaneProps) {
               activeTool: slotActive ? name : activeTool,
               disabled,
               onClick: () => editor.setActiveTool(slotToolId),
+              popupSide,
             };
 
             if (!menuItems) return <ToolButton key={name} {...buttonProps} />;
@@ -198,6 +228,7 @@ export function ToolsPane({ editor }: ToolsPaneProps) {
               <ToolSplitButton
                 key={name}
                 {...buttonProps}
+                vertical={vertical}
                 menuItems={menuItems}
                 onMenuItemSelect={(item) => {
                   item.onSelect();

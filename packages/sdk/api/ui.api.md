@@ -45,6 +45,15 @@ export interface EditorUISession {
 }
 
 // @public
+export function FloatingToolbar(input: FloatingToolbarProps): JSX.Element;
+
+// @public (undocumented)
+export interface FloatingToolbarProps {
+    // (undocumented)
+    editor: Editor;
+}
+
+// @public
 export function GlyphSidebar(input: GlyphSidebarProps): JSX.Element;
 
 // @public

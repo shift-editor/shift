@@ -47,9 +47,12 @@ const INTERFACE_SNAPSHOT_OPTIONS = {
  * comparison-outline colour changed 3,075 pixels by a median of 0.068. Playwright's default
  * threshold of 0.2 accepts that change even with `maxDiffPixels: 0`, so the threshold must
  * stay between the two. Captures keep device pixels, so a HiDPI golden records backing-store
- * detail instead of a CSS-pixel downsample; at 1× the two scales are identical.
+ * detail instead of a CSS-pixel downsample; at 1× the two scales are identical. The tools
+ * float over the canvas, so captures hide them: toolbar goldens own the tools, and a canvas
+ * golden should change only when the canvas does.
  */
 const CANVAS_SNAPSHOT_OPTIONS = {
+  style: "[data-floating-toolbar] { visibility: hidden; }",
   animations: "disabled",
   caret: "hide",
   maxDiffPixels: 0,

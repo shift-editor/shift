@@ -11,6 +11,7 @@ import { Canvas } from "@/components/editor/Canvas";
 import { CanvasContextMenu } from "@/components/editor/CanvasContextMenu";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import type { TextRunNode } from "@shift/editor/types";
+import { FloatingToolbar } from "@shift/editor/ui";
 import { useOpenedGlyph } from "@/context/GlyphCatalogContext";
 import { useFocusZone, ZoneContainer } from "@/context/FocusZoneContext";
 import { KeyboardRouter } from "@/lib/keyboard";
@@ -194,8 +195,9 @@ const EditorLayout = ({ children }: { children: ReactNode }) => {
           onDoubleClick={resetLeftSidebar}
         />
         <ResizablePanel id="canvas" minSize={300} data-shift-capture-target="editor">
-          <ZoneContainer zone="canvas" className="h-full">
+          <ZoneContainer zone="canvas" className="relative h-full">
             {children}
+            <FloatingToolbar editor={editor} />
           </ZoneContainer>
         </ResizablePanel>
         <ResizableHandle

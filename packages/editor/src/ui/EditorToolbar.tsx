@@ -2,12 +2,11 @@ import { Button, Tooltip, TooltipContent, TooltipTrigger } from "@shift/ui";
 import { useState, type ReactNode } from "react";
 import { useSignalState } from "../lib/signals";
 import { ShiftIcon } from "./ShiftIcon";
-import { ToolsPane } from "./ToolsPane";
 import type { EditorUISession } from "./types";
 
 /** Document chrome an application supplies in place of the toolbar's embedded defaults. */
 export interface EditorToolbarHost {
-  /** Title shown above the family name. */
+  /** Title shown after the family name. */
   documentTitle: string;
   /** Whether to mark the title as edited. */
   documentEdited: boolean;
@@ -34,10 +33,11 @@ export interface EditorToolbarProps {
 }
 
 /**
- * Renders the title bar: document title, the session's tools, and sidebar toggles.
+ * Renders the title bar: window controls, navigation, the family and document
+ * title, and sidebar toggles.
  *
  * @remarks
- * Tools come from the session's registered tools, in registration order.
+ * The tools are not part of it; place `FloatingToolbar` over the canvas.
  */
 export function EditorToolbar({
   session,
@@ -54,67 +54,57 @@ export function EditorToolbar({
   const activeSource = sources.find(({ id }) => id === activeSourceId);
   const documentTitle =
     host?.documentTitle ?? activeSource?.name ?? metadata.styleName ?? "Interpolated";
-  const editedDocumentTitle = `${documentTitle} — Edited`;
+  const navigation = host?.navigation;
 
+  const leftSidebarToggle = onToggleLeftSidebar ? (
+    <Tooltip>
+      <TooltipTrigger>
+        <Button
+          icon={<ShiftIcon name="sidebar-left" className="h-4.5 w-4.5" />}
+          aria-label={sidebarToggleLabel("left", leftSidebarOpen)}
+          aria-pressed={leftSidebarOpen}
+          variant="toolbar"
+          size="icon-sm"
+          className="h-7 w-7"
+          onClick={onToggleLeftSidebar}
+        />
+      </TooltipTrigger>
+      <TooltipContent side="bottom">Toggle left sidebar</TooltipContent>
+    </Tooltip>
+  ) : null;
+
+  const rightSidebarToggle = onToggleRightSidebar ? (
+    <Tooltip>
+      <TooltipTrigger>
+        <Button
+          icon={<ShiftIcon name="sidebar-right" className="h-4.5 w-4.5" />}
+          aria-label={sidebarToggleLabel("right", rightSidebarOpen)}
+          aria-pressed={rightSidebarOpen}
+          variant="toolbar"
+          size="icon-sm"
+          className="h-7 w-7"
+          onClick={onToggleRightSidebar}
+        />
+      </TooltipTrigger>
+      <TooltipContent side="bottom">Toggle right sidebar</TooltipContent>
+    </Tooltip>
+  ) : null;
+
+  const familyName = metadata.familyName ?? "Untitled";
   return (
-    <header className="titlebar-drag grid h-12.5 w-full grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center bg-chrome">
-      <div className="flex min-w-0 items-center">
+    <header className="titlebar-drag grid h-10 w-full grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center bg-chrome">
+      <div className="flex min-w-0 items-center gap-1">
         {host ? host.windowControls : <DecorativeWindowControls />}
         {host ? host.menuBar : null}
-        {onToggleLeftSidebar ? (
-          <Tooltip>
-            <TooltipTrigger>
-              <Button
-                icon={<ShiftIcon name="sidebar-left" className="h-5 w-5" />}
-                aria-label={sidebarToggleLabel("left", leftSidebarOpen)}
-                aria-pressed={leftSidebarOpen}
-                variant="toolbar"
-                size="icon"
-                onClick={onToggleLeftSidebar}
-              />
-            </TooltipTrigger>
-            <TooltipContent side="bottom">Toggle left sidebar</TooltipContent>
-          </Tooltip>
-        ) : null}
-        <div className="flex min-w-0 items-center justify-center gap-6">
-          {host?.navigation}
-          <div className="min-w-0">
-            <p className="grid truncate whitespace-nowrap text-ui">
-              {host ? (
-                <>
-                  <span className="invisible col-start-1 row-start-1">{editedDocumentTitle}</span>
-                  <span className="col-start-1 row-start-1">
-                    {host.documentEdited ? editedDocumentTitle : documentTitle}
-                  </span>
-                </>
-              ) : (
-                documentTitle
-              )}
-            </p>
-            <p className="truncate text-ui font-medium">{metadata.familyName ?? "Untitled"}</p>
-          </div>
-        </div>
+        {leftSidebarToggle}
+        {navigation}
       </div>
-
-      <ToolsPane editor={editor} />
-
-      <div className="flex justify-end pr-2">
-        {onToggleRightSidebar ? (
-          <Tooltip>
-            <TooltipTrigger>
-              <Button
-                icon={<ShiftIcon name="sidebar-right" className="h-5 w-5" />}
-                aria-label={sidebarToggleLabel("right", rightSidebarOpen)}
-                aria-pressed={rightSidebarOpen}
-                variant="toolbar"
-                size="icon"
-                onClick={onToggleRightSidebar}
-              />
-            </TooltipTrigger>
-            <TooltipContent side="bottom">Toggle right sidebar</TooltipContent>
-          </Tooltip>
-        ) : null}
-      </div>
+      <p className="truncate whitespace-nowrap px-4 text-ui">
+        <span className="font-medium">{familyName}</span>
+        <span className="text-muted"> — {documentTitle}</span>
+        {host && host.documentEdited ? <span className="text-muted"> · Edited</span> : null}
+      </p>
+      <div className="flex justify-end pr-2">{rightSidebarToggle}</div>
     </header>
   );
 }
