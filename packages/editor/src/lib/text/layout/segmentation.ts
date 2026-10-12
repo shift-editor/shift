@@ -41,3 +41,8 @@ export function graphemeBoundaries(items: readonly TextItem[]): ReadonlySet<numb
   for (const segment of segmentItems(items, graphemes)) boundaries.add(segment.start);
   return boundaries;
 }
+
+/** Returns the word-like segments of the items, such as words and numbers, not spaces or punctuation. */
+export function wordSegments(items: readonly TextItem[]): ItemSegment[] {
+  return segmentItems(items, words).filter((segment) => segment.isWordLike);
+}

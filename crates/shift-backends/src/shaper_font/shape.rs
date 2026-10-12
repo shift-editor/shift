@@ -10,7 +10,7 @@ use harfrust::{
 };
 use shift_font::{ExternalLocation, GlyphId};
 
-use super::itemize::script_runs;
+use super::itemize::itemize;
 use super::ShaperFont;
 use crate::traits::FontView;
 
@@ -94,7 +94,16 @@ pub struct ParagraphRequest<'a> {
     pub features: &'a [FeatureSetting],
 }
 
-/// One run of a shaped paragraph, in one script and direction.
+/// A shaped paragraph: its direction and its runs.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ShapedParagraph {
+    /// The paragraph's base direction, from its first strong character.
+    pub direction: TextDirection,
+    /// Runs in logical order; a line lays them out by their levels.
+    pub runs: Vec<ShapedRun>,
+}
+
+/// One run of a shaped paragraph, in one script and bidi level.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ShapedRun {
     /// The paragraph units the run covers. Runs are in logical order and
@@ -103,6 +112,8 @@ pub struct ShapedRun {
     /// The run's ISO 15924 script tag, such as `Arab`; `None` when the run
     /// holds only characters common to all scripts.
     pub script: Option<String>,
+    /// The run's resolved bidi level; odd levels read right to left.
+    pub level: u8,
     pub direction: TextDirection,
     /// The run's glyphs in visual order. Clusters index the paragraph's units,
     /// not the run's.
@@ -210,63 +221,11 @@ impl LiveShaper {
     /// distinct glyphs by name than there are stand-in characters, or names a
     /// script or language the shaper does not know.
     pub fn shape(&self, request: &ShapeRequest) -> Result<Vec<ShapedGlyph>, ShapeError> {
-        Ok(self.shape_run(request)?.0)
-    }
-
-    /// Shapes a paragraph, run by run.
-    ///
-    /// Each run takes the direction of its script, so Arabic and Hebrew runs
-    /// come back right to left. Mixed-direction paragraphs are not reordered:
-    /// runs stay in logical order.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`ShapeError`] for the reasons [`Self::shape`] gives.
-    pub fn shape_paragraph(
-        &self,
-        request: &ParagraphRequest,
-    ) -> Result<Vec<ShapedRun>, ShapeError> {
-        script_runs(request.units)
-            .into_iter()
-            .map(|run| {
-                let start = unit_index(run.units.start)?;
-                let end = unit_index(run.units.end)?;
-                let script = run.script.map(|script| script.short_name().to_string());
-                let (mut glyphs, direction) = self.shape_run(&ShapeRequest {
-                    units: &request.units[run.units],
-                    location: request.location,
-                    direction: None,
-                    script: script.as_deref(),
-                    language: request.language,
-                    features: request.features,
-                })?;
-                for glyph in &mut glyphs {
-                    glyph.cluster += start;
-                }
-                Ok(ShapedRun {
-                    units: start..end,
-                    script,
-                    direction,
-                    glyphs,
-                })
-            })
-            .collect()
-    }
-
-    /// Shapes one run and reports the direction it was shaped in.
-    fn shape_run(
-        &self,
-        request: &ShapeRequest,
-    ) -> Result<(Vec<ShapedGlyph>, TextDirection), ShapeError> {
         let mut funcs = LiveFontFuncs {
             characters: &self.characters,
             stand_ins: HashMap::new(),
         };
         let buffer = self.buffer(request, &mut funcs)?;
-        let direction = match buffer.direction() {
-            Direction::RightToLeft => TextDirection::RightToLeft,
-            _ => TextDirection::LeftToRight,
-        };
         let features: Vec<Feature> = request
             .features
             .iter()
@@ -285,7 +244,7 @@ impl LiveShaper {
                 .font_funcs(Some(&mut funcs)),
         );
 
-        let glyphs = shaped
+        Ok(shaped
             .glyph_infos()
             .iter()
             .zip(shaped.glyph_positions())
@@ -297,8 +256,63 @@ impl LiveShaper {
                 x_offset: position.x_offset,
                 y_offset: position.y_offset,
             })
-            .collect();
-        Ok((glyphs, direction))
+            .collect())
+    }
+
+    /// Shapes a paragraph, run by run.
+    ///
+    /// The paragraph splits where its script or bidi level changes, and each
+    /// run is shaped in its level's direction, so Arabic and Hebrew come back
+    /// right to left and digits inside them left to right. Runs stay in
+    /// logical order with their levels; reordering them for display is the
+    /// line's job.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ShapeError`] for the reasons [`Self::shape`] gives.
+    pub fn shape_paragraph(
+        &self,
+        request: &ParagraphRequest,
+    ) -> Result<ShapedParagraph, ShapeError> {
+        let itemized = itemize(request.units);
+        let runs = itemized
+            .runs
+            .into_iter()
+            .map(|run| {
+                let start = unit_index(run.units.start)?;
+                let end = unit_index(run.units.end)?;
+                let script = run.script.map(|script| script.short_name().to_string());
+                let direction = if run.level % 2 == 1 {
+                    TextDirection::RightToLeft
+                } else {
+                    TextDirection::LeftToRight
+                };
+                let mut glyphs = self.shape(&ShapeRequest {
+                    units: &request.units[run.units],
+                    location: request.location,
+                    direction: Some(direction),
+                    script: script.as_deref(),
+                    language: request.language,
+                    features: request.features,
+                })?;
+                for glyph in &mut glyphs {
+                    glyph.cluster += start;
+                }
+                Ok(ShapedRun {
+                    units: start..end,
+                    script,
+                    level: run.level,
+                    direction,
+                    glyphs,
+                })
+            })
+            .collect::<Result<_, ShapeError>>()?;
+        let direction = if itemized.right_to_left {
+            TextDirection::RightToLeft
+        } else {
+            TextDirection::LeftToRight
+        };
+        Ok(ShapedParagraph { direction, runs })
     }
 
     /// Fills a buffer with one character per unit, clustered by unit index,

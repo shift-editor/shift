@@ -19,6 +19,7 @@ import {
   wordCluster,
 } from "./edit";
 import type { Editor } from "../editor/Editor";
+import { wordSegments } from "./layout/segmentation";
 
 /** Owns the session caret for one placed text node; text content belongs to Text. */
 export class TextEditing {
@@ -137,10 +138,10 @@ export class TextEditing {
    *
    * @remarks
    * Movement follows the screen, as on macOS: in right-to-left text, left is
-   * forward in reading order. A character step crosses a grapheme cluster;
-   * past a line's edge it continues into the neighbouring line in reading
-   * order. Word and line steps go forward or back in reading order by the
-   * line's direction.
+   * forward in reading order. A character step crosses a grapheme cluster,
+   * and a word step lands on the edge of the next word on that side, in
+   * whichever direction that word reads. Past a line's edge, either continues
+   * into the neighbouring line in reading order.
    */
   move(direction: -1 | 1, granularity: "character" | "word" | "line", extend = false): void {
     const state = this.state;
@@ -156,9 +157,13 @@ export class TextEditing {
       case "character":
         target = layout.visualStep(cluster, direction) ?? graphemeCluster(items, cluster, logical);
         break;
-      case "word":
-        target = wordCluster(items, cluster, logical);
+      case "word": {
+        const edges = wordEdges(items, layout, direction);
+        target =
+          layout.visualStep(cluster, direction, (stop) => edges.has(stop)) ??
+          wordCluster(items, cluster, logical);
         break;
+      }
       case "line":
         target = layout.lineEdge(lineIndex, direction) ?? cluster;
         break;
@@ -242,4 +247,22 @@ export class TextEditing {
     this.#editor.history.captureOrJoin(label, write);
     this.#goalX = null;
   }
+}
+
+/**
+ * Returns the caret clusters at each word's left (`-1`) or right (`1`) edge
+ * on screen: a left-to-right word's start is its left edge, a right-to-left
+ * word's end is.
+ */
+function wordEdges(
+  items: readonly TextItem[],
+  layout: TextLayout,
+  side: -1 | 1,
+): ReadonlySet<number> {
+  return new Set(
+    wordSegments(items).map((word) => {
+      const rightToLeft = layout.directionAt(word.start) === "rtl";
+      return (side === 1) !== rightToLeft ? word.end : word.start;
+    }),
+  );
 }

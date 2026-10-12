@@ -23,7 +23,7 @@ import type {
 } from "./types";
 import type { Positioner } from "./Positioner";
 import { ShapingPositioner } from "./ShapingPositioner";
-import type { ShapedRun } from "@shift/types";
+import type { ShapedParagraph } from "@shift/types";
 import type { Editor } from "../../editor/Editor";
 import type { Signal } from "../../signals/signal";
 import type { ExternalAxisLocation } from "../../../types/variation";
@@ -35,10 +35,10 @@ export interface TextLayoutParams {
   positioner: Positioner;
   externalLocation: Signal<ExternalAxisLocation>;
   /**
-   * Each paragraph's shaped runs, from shaping that paragraph's same items; a
+   * Each paragraph's shaping, from shaping that paragraph's same items; a
    * null paragraph, or null for all, lays out literally, glyph by glyph.
    */
-  shaped?: readonly (readonly ShapedRun[] | null)[] | null;
+  shaped?: readonly (ShapedParagraph | null)[] | null;
 }
 
 const shapingPositioner = new ShapingPositioner();
@@ -89,11 +89,14 @@ export class TextLayout {
 
     // splitParagraphs → segmentRuns → position → assemble
     const paragraphs: PositionedParagraph[] = splitParagraphs(items).map((p, index) => ({
-      runs: segmentRuns(p, shaped?.[index] ?? null).map((run) =>
-        run.shaped
-          ? shapingPositioner.position(run, run.shaped, editor, externalLocation)
-          : positioner.position(run, editor, externalLocation),
+      runs: visualOrder(
+        segmentRuns(p, shaped?.[index] ?? null).map((run) =>
+          run.shaped
+            ? shapingPositioner.position(run, run.shaped, editor, externalLocation)
+            : positioner.position(run, editor, externalLocation),
+        ),
       ),
+      direction: shaped?.[index]?.direction ?? "ltr",
       clusterStart: p.clusterStart,
       clusterEnd: p.clusterStart + p.items.length + 1,
     }));
@@ -148,9 +151,9 @@ export class TextLayout {
     );
   }
 
-  /** Returns a line's base direction: its first run's, or left to right for an empty line. */
+  /** Returns a line's base direction, left to right for a line outside the layout. */
   lineDirection(lineIndex: number): Direction {
-    return this.lines[lineIndex]?.runs[0]?.direction ?? "ltr";
+    return this.lines[lineIndex]?.direction ?? "ltr";
   }
 
   /**
@@ -199,9 +202,14 @@ export class TextLayout {
    * Returns the caret cluster one character away on screen, to the left
    * (`-1`) or right (`1`), whatever the text's direction.
    *
+   * @param accept - which clusters may be landed on; others are passed over.
    * @returns null at the line's edge in that direction.
    */
-  visualStep(cluster: number, direction: -1 | 1): number | null {
+  visualStep(
+    cluster: number,
+    direction: -1 | 1,
+    accept: (cluster: number) => boolean = () => true,
+  ): number | null {
     const lineIndex = this.lineIndexForCluster(cluster);
     const reading = this.lineDirection(lineIndex) === "rtl" ? -1 : 1;
     // Screen order; zero-width glyphs share an x, so ties fall back to reading order.
@@ -210,7 +218,26 @@ export class TextLayout {
     );
     const index = order.findIndex((stop) => stop.cluster === cluster);
     if (index < 0) return null;
-    return order[index + direction]?.cluster ?? null;
+    for (let next = index + direction; next >= 0 && next < order.length; next += direction) {
+      if (accept(order[next]!.cluster)) return order[next]!.cluster;
+    }
+    return null;
+  }
+
+  /**
+   * Returns the direction of the text at a caret cluster: the run of the
+   * glyph its item shaped into, or the line's direction where no glyph holds it.
+   */
+  directionAt(cluster: number): Direction {
+    const lineIndex = this.lineIndexForCluster(cluster);
+    const placed = this.placedGlyphs.find(
+      (candidate) =>
+        candidate.lineIndex === lineIndex &&
+        cluster >= candidate.glyph.cluster &&
+        cluster < candidate.glyph.cluster + candidate.glyph.sourceItemIds.length,
+    );
+    if (!placed) return this.lineDirection(lineIndex);
+    return this.lines[lineIndex]!.runs[placed.runIndex]!.direction;
   }
 
   /** Returns the caret cluster at a line's left (`-1`) or right (`1`) end on screen. */
@@ -318,18 +345,17 @@ function splitParagraphs(items: readonly TextItem[]): ParagraphSlice[] {
  *                { items: ["ب","ا"],     direction: "rtl", cs: 3, shaped: [...] },
  *              ]
  *
- * Mixed-direction runs stay in logical order until bidi reordering lands.
+ * Runs come out in logical order; {@link visualOrder} puts a line's into
+ * screen order.
  * Per-paragraph signature (not paragraphs[]) so paragraph structure is
  * preserved through the pipeline — assembleLayout makes one Line per paragraph,
  * each Line's `runs` field holds however many runs that paragraph produced.
  */
-function segmentRuns(
-  paragraph: ParagraphSlice,
-  shaped: readonly ShapedRun[] | null,
-): SegmentedRun[] {
+function segmentRuns(paragraph: ParagraphSlice, shaped: ShapedParagraph | null): SegmentedRun[] {
   if (shaped) {
-    return shaped.map((run) => ({
+    return shaped.runs.map((run) => ({
       items: paragraph.items.slice(run.start, run.end),
+      level: run.level,
       direction: run.direction,
       script: run.script,
       clusterStart: paragraph.clusterStart + run.start,
@@ -339,6 +365,7 @@ function segmentRuns(
   return [
     {
       items: paragraph.items,
+      level: 0,
       direction: "ltr",
       clusterStart: paragraph.clusterStart,
     },
@@ -366,6 +393,7 @@ function segmentRuns(
  */
 interface PositionedParagraph {
   runs: PositionedRun[];
+  direction: Direction;
   clusterStart: number;
   clusterEnd: number;
 }
@@ -379,6 +407,7 @@ function assembleLayout(
 
   const lines: Line[] = paragraphs.map((p, i) => ({
     runs: p.runs,
+    direction: p.direction,
     y: origin.y - lineHeight * i,
     ascent: metrics.ascender,
     descent: metrics.descender,
@@ -472,7 +501,7 @@ function lineStops(
   for (const placed of onLine) set(placed.glyph.cluster, placed.left);
 
   const advance = line.runs.reduce((sum, run) => sum + run.advance, 0);
-  const lineEnd = (line.runs[0]?.direction ?? "ltr") === "rtl" ? origin.x : origin.x + advance;
+  const lineEnd = line.direction === "rtl" ? origin.x : origin.x + advance;
   const stops: CaretStop[] = [];
   for (let cluster = line.clusterStart; cluster < line.clusterEnd; cluster++) {
     stops.push({ cluster, x: xs.get(cluster) ?? lineEnd });
@@ -504,4 +533,34 @@ function mergeSpans(spans: [number, number][]): [number, number][] {
     else merged.push([...span]);
   }
   return merged;
+}
+
+/**
+ * Puts a line's runs into screen order by their bidi levels (UAX #9 rule
+ * L2): from the highest level down to the lowest odd one, every stretch of
+ * runs at that level or above is reversed.
+ *
+ *   logical:  [من 1] [hello 2] [دوست 1]   (an Arabic paragraph)
+ *   level 2:  reverse [hello]              → unchanged
+ *   level 1:  reverse all three            → [دوست] [hello] [من]
+ */
+function visualOrder(runs: PositionedRun[]): PositionedRun[] {
+  if (runs.length < 2) return runs;
+  const ordered = [...runs];
+  const levels = runs.map((run) => run.level);
+  const highest = Math.max(...levels);
+  const lowestOdd = Math.min(...levels.filter((level) => level % 2 === 1));
+  for (let level = highest; level >= lowestOdd; level--) {
+    for (let start = 0; start < ordered.length; ) {
+      if (ordered[start]!.level < level) {
+        start++;
+        continue;
+      }
+      let end = start;
+      while (end < ordered.length && ordered[end]!.level >= level) end++;
+      ordered.splice(start, end - start, ...ordered.slice(start, end).reverse());
+      start = end;
+    }
+  }
+  return ordered;
 }

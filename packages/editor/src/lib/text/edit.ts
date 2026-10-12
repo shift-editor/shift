@@ -1,5 +1,5 @@
 import type { TextItem } from "./layout";
-import { graphemes, segmentItems, words } from "./layout/segmentation";
+import { graphemes, segmentItems, wordSegments } from "./layout/segmentation";
 import type { TextCaret, TextEditResult, TextSelectionRange } from "../../types/text";
 
 /** Resolves a durable after-item caret against the current item order. */
@@ -83,7 +83,7 @@ export function wordCluster(
   cluster: number,
   direction: -1 | 1,
 ): number {
-  const segments = segmentItems(items, words).filter((segment) => segment.isWordLike);
+  const segments = wordSegments(items);
   if (direction === 1) {
     return segments.find((segment) => segment.end > cluster)?.end ?? items.length;
   }

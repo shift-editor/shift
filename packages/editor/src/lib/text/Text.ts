@@ -307,7 +307,7 @@ export class Text {
   /** Loads glyphs the shaper substituted in, which no item names directly. */
   #acquireShapedGlyphs(shaped: ShapedText): void {
     for (const paragraph of shaped.paragraphs) {
-      for (const run of paragraph.runs) {
+      for (const run of paragraph.shaped.runs) {
         for (const glyph of run.glyphs) {
           if (glyph.glyphId && !this.#editor.glyphForId(glyph.glyphId)) {
             void this.#loadGlyph(glyph.glyphId);

@@ -29,7 +29,7 @@ import type {
   LayerRead,
   Location,
   ParagraphRequest,
-  ShapedRun,
+  ShapedParagraph,
   PointId,
   SegmentId,
   NamedInstance,
@@ -1287,9 +1287,9 @@ export class Font {
    * Glyph advances, kerning, and mark attachment are not applied; shaped
    * glyphs carry only what the feature code positions.
    *
-   * @returns Each paragraph's runs in logical order, in request order.
+   * @returns Each paragraph's direction and runs in logical order, in request order.
    */
-  shapeParagraphs(paragraphs: readonly ParagraphRequest[]): Promise<ShapedRun[][]> {
+  shapeParagraphs(paragraphs: readonly ParagraphRequest[]): Promise<ShapedParagraph[]> {
     return this.editCoordinator.shapeParagraphs(paragraphs);
   }
 

@@ -1,20 +1,20 @@
-import type { ParagraphRequest, ShapedRun, ShapeUnit } from "@shift/types";
+import type { ParagraphRequest, ShapedParagraph, ShapeUnit } from "@shift/types";
 import { effect, signal } from "../signals";
 import type { ComputedSignal, Effect, Signal, WritableSignal } from "../signals";
 import type { Font } from "../model/Font";
 import type { GlyphicTextItem, TextItem } from "./layout";
 
 /** One paragraph as last shaped, with the content it was shaped from. */
-export interface ShapedParagraph {
+export interface KeyedParagraph {
   /** The shaped content, as {@link paragraphKeys} gives it. */
   readonly key: string;
-  /** The paragraph's runs in logical order; clusters index the paragraph's items. */
-  readonly runs: readonly ShapedRun[];
+  /** Its direction and runs in logical order; clusters index the paragraph's items. */
+  readonly shaped: ShapedParagraph;
 }
 
 /** A run's paragraphs as last shaped. */
 export interface ShapedText {
-  readonly paragraphs: readonly ShapedParagraph[];
+  readonly paragraphs: readonly KeyedParagraph[];
 }
 
 /** What a run asks the shaper for: one request and content key per paragraph. */
@@ -40,7 +40,7 @@ export function paragraphKeys(items: readonly TextItem[]): string[] {
 }
 
 /**
- * Returns each paragraph's runs from a result shaped from that same
+ * Returns each paragraph's shaping from a result shaped from that same
  * paragraph text, or null where the result is for other text.
  *
  * @remarks
@@ -50,8 +50,8 @@ export function paragraphKeys(items: readonly TextItem[]): string[] {
 export function matchShapedParagraphs(
   shaped: ShapedText | null,
   keys: readonly string[],
-): (readonly ShapedRun[] | null)[] {
-  const byKey = new Map(shaped?.paragraphs.map((paragraph) => [paragraph.key, paragraph.runs]));
+): (ShapedParagraph | null)[] {
+  const byKey = new Map(shaped?.paragraphs.map((paragraph) => [paragraph.key, paragraph.shaped]));
   return keys.map((key) => byKey.get(key) ?? null);
 }
 
@@ -137,11 +137,11 @@ export class RunShaping {
   async #send(request: ShapingRequest): Promise<void> {
     this.#inFlight = true;
     try {
-      const runs = await this.#font.shapeParagraphs(request.paragraphs);
+      const results = await this.#font.shapeParagraphs(request.paragraphs);
       if (!this.#disposed) {
-        const paragraphs = runs.map((paragraph, index) => ({
+        const paragraphs = results.map((shaped, index) => ({
           key: request.keys[index]!,
-          runs: paragraph,
+          shaped,
         }));
         const shaped = { paragraphs };
         this.#shapedCell.set(shaped);

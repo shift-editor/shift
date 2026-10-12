@@ -195,3 +195,52 @@ describe("turning shaping off lays a run out as typed", () => {
     await expect.poll(names).toEqual(["f_i"]);
   });
 });
+
+describe("mixed-direction paragraphs lay out by bidi level", () => {
+  it("an Arabic paragraph places an English word to the left of the Arabic before it", async () => {
+    const editor = new TestEditor();
+    await editor.openSession(SHAPING_TEST, "f");
+    const runId = editor.text.createRun(editor.text.itemsFromText("بب fi")).id;
+    const layout = () => editor.text.layoutCell(runId).peek()!;
+    await expect.poll(() => layout().totalAdvance).toBe(1650);
+
+    const byPosition = layout()
+      .placedGlyphs.toSorted((a, b) => a.left - b.left)
+      .map((placed) => [placed.glyph.glyphName, placed.left]);
+    expect(byPosition).toEqual([
+      ["f_i", 0],
+      ["space", 550],
+      ["beh-ar.fina", 800],
+      ["beh-ar.init", 1250],
+    ]);
+    expect(layout().lineDirection(0)).toBe("rtl");
+    expect(layout().caretPosition(0).x).toBe(1650);
+  });
+});
+
+describe("Option-arrows in mixed-direction text", () => {
+  it("only ever move left on screen through Arabic words inside English", async () => {
+    const editor = new TestEditor();
+    await editor.openSession(SHAPING_TEST, "f");
+    editor.selectTool("text");
+    editor.textEditing.selectAll();
+    editor.textEditing.insertText("fi بب بب fi");
+    const runId = editor.textRun!.runId;
+    const layout = () => editor.text.layoutCell(runId).peek()!;
+    await expect.poll(() => layout().lineDirection(0)).toBe("ltr");
+    await expect.poll(() => layout().lines[0]!.runs.length).toBe(3);
+    const caretX = () => {
+      const items = editor.text.run(runId)!.items;
+      return layout().caretPosition(clusterForCaret(items, editor.textEditing.state!.focus)).x;
+    };
+
+    const xs = [caretX()];
+    for (let press = 0; press < 4; press++) {
+      editor.textEditing.move(-1, "word");
+      xs.push(caretX());
+    }
+
+    expect(xs).toEqual([...xs].sort((a, b) => b - a));
+    expect(new Set(xs).size).toBe(xs.length);
+  });
+});

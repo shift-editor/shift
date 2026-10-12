@@ -206,7 +206,7 @@ export interface BridgeApi {
   getSourceMetricsInterpolation(): SourceMetricsInterpolationSnapshot | null
   /**
    * Shapes a paragraph with the font's feature code, split into runs of one
-   * script, each in its script's direction.
+   * script and bidi level, each shaped in its level's direction.
    *
    * Characters map through the live font's Unicode values and every
    * glyph's own advance is zero while shaping, so the result carries the
@@ -217,7 +217,7 @@ export interface BridgeApi {
    * The shaping tables are rebuilt only when a font change since the last
    * call altered the glyph order, glyph categories, feature code, or axes.
    */
-  shapeParagraph(request: ParagraphRequest): Array<ShapedRun>
+  shapeParagraph(request: ParagraphRequest): ShapedParagraph
   mapLocation(location: Location): Location
   getSources(): Array<Source>
 }
@@ -284,7 +284,14 @@ export interface ShapedGlyph {
   yOffset: number
 }
 
-/** One run of a shaped paragraph, in one script and direction. */
+/** A shaped paragraph: its base direction and its runs in logical order. */
+export interface ShapedParagraph {
+  /** The paragraph's base direction, from its first strong character. */
+  direction: "ltr" | "rtl"
+  runs: Array<ShapedRun>
+}
+
+/** One run of a shaped paragraph, in one script and bidi level. */
 export interface ShapedRun {
   /** First paragraph unit in the run. */
   start: number
@@ -295,6 +302,11 @@ export interface ShapedRun {
    * characters common to all scripts.
    */
   script?: string
+  /**
+   * Resolved bidi level; odd levels read right to left. A line lays its
+   * runs out by level.
+   */
+  level: number
   direction: "ltr" | "rtl"
   /** Glyphs in visual order; clusters index the paragraph's units. */
   glyphs: Array<ShapedGlyph>

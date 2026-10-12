@@ -687,8 +687,8 @@ export class Font {
     setLanguageIds(languageIds: readonly string[]): void;
     setMetricDefinitions(definitions: readonly MetricDefinition[]): Promise<void>;
     // Warning: (ae-forgotten-export) The symbol "ParagraphRequest" needs to be exported by the entry point index.d.ts
-    // Warning: (ae-forgotten-export) The symbol "ShapedRun" needs to be exported by the entry point index.d.ts
-    shapeParagraphs(paragraphs: readonly ParagraphRequest[]): Promise<ShapedRun[][]>;
+    // Warning: (ae-forgotten-export) The symbol "ShapedParagraph" needs to be exported by the entry point index.d.ts
+    shapeParagraphs(paragraphs: readonly ParagraphRequest[]): Promise<ShapedParagraph[]>;
     source(sourceId: SourceId): Source | null;
     sourceAt(location: ExternalAxisLocation): Source | null;
     sourceAtCell(location: Signal<ExternalAxisLocation>): ComputedSignal<Source | null>;
@@ -1519,10 +1519,10 @@ export function useSignalState<T>(signal: Signal<T>, options?: UseSignalOptions)
 
 // Warnings were encountered during analysis:
 //
-// dist/Editor-DycmCohy.d.ts:2866:5 - (ae-forgotten-export) The symbol "Axis" needs to be exported by the entry point index.d.ts
-// dist/Editor-DycmCohy.d.ts:2867:5 - (ae-forgotten-export) The symbol "AxisMappingBasis" needs to be exported by the entry point index.d.ts
-// dist/Editor-DycmCohy.d.ts:2868:5 - (ae-forgotten-export) The symbol "Source" needs to be exported by the entry point index.d.ts
-// dist/Editor-DycmCohy.d.ts:4887:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
+// dist/Editor-b165vyHY.d.ts:2877:5 - (ae-forgotten-export) The symbol "Axis" needs to be exported by the entry point index.d.ts
+// dist/Editor-b165vyHY.d.ts:2878:5 - (ae-forgotten-export) The symbol "AxisMappingBasis" needs to be exported by the entry point index.d.ts
+// dist/Editor-b165vyHY.d.ts:2879:5 - (ae-forgotten-export) The symbol "Source" needs to be exported by the entry point index.d.ts
+// dist/Editor-b165vyHY.d.ts:4905:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 
