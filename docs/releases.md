@@ -38,7 +38,15 @@ Use Conventional Commit prefixes. `feat`, `fix`, and `perf` appear in the public
 | Linux Nightly arm64/x64   | Unsigned direct GitHub downloads (`.deb`, `.rpm`, and AppImage); the AppImage updates itself |
 | Linux Release arm64/x64   | Signed RPM and checksum manifest; signed APT/DNF repositories, plus a self-updating AppImage |
 
-macOS builds require macOS 13 Ventura or later. Electron 44 moved to Chromium 152, which dropped macOS 12 Monterey, so Intel Macs that cannot install Ventura (for example, a 2015 iMac) cannot run current Shift builds. `mac.minimumSystemVersion` writes `LSMinimumSystemVersion` into the bundle so older systems show a clear version message instead of a failed launch. Raise it whenever an Electron upgrade raises Chromium's macOS floor.
+Minimum operating systems:
+
+| Platform | Minimum                                         | Set by                                                                                     |
+| -------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| macOS    | macOS 13 Ventura                                | Electron 44 (Chromium 152) dropped macOS 12 Monterey                                       |
+| Windows  | Windows 10                                      | Electron dropped Windows 7, 8, and 8.1 in Electron 23                                      |
+| Linux    | glibc 2.35 (Ubuntu 22.04, Debian 12, Fedora 36) | The native bridge links `GLIBC_2.35` symbols; Electron's own binaries need only glibc 2.25 |
+
+Intel Macs that cannot install Ventura (for example, a 2015 iMac) cannot run current Shift builds, and neither can RHEL 9 or Rocky Linux 9 (glibc 2.34). `mac.minimumSystemVersion` writes `LSMinimumSystemVersion` into the macOS bundle so older systems show a clear version message instead of a failed launch; raise it whenever an Electron upgrade raises Chromium's macOS floor. The Linux floor follows the glibc of the build runner, so moving the Linux jobs to a newer runner image can raise it. Check with `objdump -T` on the packaged `shift-bridge.linux-*.node`.
 
 Packaged builds register `.shift` as a Shift Document with shared document artwork. Release is the preferred handler; Nightly remains an alternate so installing it does not take document ownership from Release. macOS composites the Shift badge onto its standard document shape from bundle metadata and the packaged asset catalog, Windows uses per-user NSIS registry entries, and Linux DEB/RPM packages install `application/x-shift-document` metadata and hicolor MIME icons. Both macOS distributions register as alternate viewers for TTF, OTF, Glyphs, Glyphspackage, UFO, and Designspace sources, which lists Shift under **Open With** without taking ownership of source-font formats.
 
