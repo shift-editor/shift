@@ -16,7 +16,13 @@ import {
   textItemGlyph,
   type TextItem,
 } from "./layout";
-import { paragraphRequests, RunShaping, shapingKey, type ShapedText } from "./RunShaping";
+import {
+  matchShapedParagraphs,
+  paragraphKeys,
+  paragraphRequests,
+  RunShaping,
+  type ShapedText,
+} from "./RunShaping";
 import { locationFromExternalAxisLocation } from "../variation/location";
 
 /** Owns proof text records and one reactive layout per run identity. */
@@ -50,7 +56,7 @@ export class Text {
                   this.#editor.externalLocationCell.value,
                 );
                 return {
-                  key: shapingKey(record.items),
+                  keys: paragraphKeys(record.items),
                   paragraphs: paragraphRequests(record.items, location),
                 };
               },
@@ -76,16 +82,18 @@ export class Text {
           track(this.#glyphsLoadedCell);
           if (!record) return null;
 
-          // A result shaped from other text would map glyphs to the wrong items; lay out literally until it catches up.
-          const shaped = this.#shapings.get(runId).shapedCell.value;
-          const current = shaped?.key === shapingKey(record.items) ? shaped : null;
+          // A paragraph shaped from other text would map glyphs to the wrong items; it lays out literally until it catches up.
+          const shaped = matchShapedParagraphs(
+            this.#shapings.get(runId).shapedCell.value,
+            paragraphKeys(record.items),
+          );
           return new TextLayout({
             items: record.items,
             origin: { x: 0, y: 0 },
             editor: this.#editor,
             positioner: this.#positioner,
             externalLocation: this.#editor.externalLocationCell,
-            shaped: current?.paragraphs ?? null,
+            shaped,
           });
         },
         { name: "text.layoutForRun" },
@@ -265,8 +273,8 @@ export class Text {
 
   /** Loads glyphs the shaper substituted in, which no item names directly. */
   #acquireShapedGlyphs(shaped: ShapedText): void {
-    for (const runs of shaped.paragraphs) {
-      for (const run of runs) {
+    for (const paragraph of shaped.paragraphs) {
+      for (const run of paragraph.runs) {
         for (const glyph of run.glyphs) {
           if (glyph.glyphId && !this.#editor.glyphForId(glyph.glyphId)) {
             void this.#loadGlyph(glyph.glyphId);

@@ -6,13 +6,13 @@
  */
 import type { Bounds as BoundsType } from "@shift/geo";
 import type { GlyphId } from "@shift/types";
-import { Caret } from "./Caret";
+import { graphemeBoundaries } from "./segmentation";
 import type {
   CaretPosition,
   TextItem,
   SourceMetrics,
+  Direction,
   GlyphicTextItem,
-  Hit,
   Line,
   ParagraphSlice,
   Point2D,
@@ -25,7 +25,6 @@ import type { Positioner } from "./Positioner";
 import { ShapingPositioner } from "./ShapingPositioner";
 import type { ShapedRun } from "@shift/types";
 import type { Editor } from "../../editor/Editor";
-import type { Font } from "../../model/Font";
 import type { Signal } from "../../signals/signal";
 import type { ExternalAxisLocation } from "../../../types/variation";
 
@@ -36,10 +35,10 @@ export interface TextLayoutParams {
   positioner: Positioner;
   externalLocation: Signal<ExternalAxisLocation>;
   /**
-   * Each paragraph's shaped runs, from shaping these same items; null lays
-   * every paragraph out literally, glyph by glyph.
+   * Each paragraph's shaped runs, from shaping that paragraph's same items; a
+   * null paragraph, or null for all, lays out literally, glyph by glyph.
    */
-  shaped?: readonly (readonly ShapedRun[])[] | null;
+  shaped?: readonly (readonly ShapedRun[] | null)[] | null;
 }
 
 const shapingPositioner = new ShapingPositioner();
@@ -74,6 +73,10 @@ export class TextLayout {
   /** Every positioned glyph in line, run, and glyph order. */
   readonly placedGlyphs: readonly PlacedGlyph[];
   readonly #placedByItem: ReadonlyMap<TextItemId, PlacedGlyph>;
+  /** Each line's caret stops, in cluster order. */
+  readonly #stops: readonly (readonly CaretStop[])[];
+  /** Clusters a caret may rest at: grapheme boundaries. */
+  readonly #boundaries: ReadonlySet<number>;
 
   constructor(params: TextLayoutParams) {
     const { items, origin, editor, positioner, externalLocation, shaped = null } = params;
@@ -111,6 +114,8 @@ export class TextLayout {
       }
     }
     this.#placedByItem = placedByItem;
+    this.#boundaries = graphemeBoundaries(items);
+    this.#stops = lines.map((line, index) => lineStops(line, index, this.placedGlyphs, origin));
   }
 
   /**
@@ -136,65 +141,121 @@ export class TextLayout {
     );
   }
 
+  /** Returns the index of the line holding a caret cluster, or -1 when out of range. */
+  lineIndexForCluster(cluster: number): number {
+    return this.lines.findIndex(
+      (line) => cluster >= line.clusterStart && cluster < line.clusterEnd,
+    );
+  }
+
+  /** Returns a line's base direction: its first run's, or left to right for an empty line. */
+  lineDirection(lineIndex: number): Direction {
+    return this.lines[lineIndex]?.runs[0]?.direction ?? "ltr";
+  }
+
   /**
-   * Hit-test a canvas point against the layout's advance boxes.
+   * Returns where a caret at `cluster` draws.
    *
-   *   1. Find the line whose vertical band [y+descent, y+ascent] contains p.y
-   *      (with optional padding for edge tolerance).
-   *   2. Walk that line's runs/glyphs, accumulating x from `origin.x`. Return
-   *      the glyph whose box [left, left + advance + kern) contains p.x, so a
-   *      kerned pair leaves no hole and its first glyph owns any overlap.
-   *   3. Within the hit glyph, "left" if p.x is in the left half of the
-   *      advance box, "right" otherwise.
-   *
-   * Returns null when no line / no glyph contains the point.
+   * @remarks
+   * A caret before an item sits on its glyph's leading edge: the left edge in
+   * left-to-right text, the right edge in right-to-left text. A caret inside
+   * a ligature splits the glyph's advance evenly between its items. Clusters
+   * outside the layout draw at its origin.
    */
-  hitTest(p: Point2D, padding: number = 0): Hit | null {
+  caretPosition(cluster: number): CaretPosition {
+    const lineHeight = this.metrics.ascender - this.metrics.descender + (this.metrics.lineGap ?? 0);
+    const lineIndex = this.lineIndexForCluster(cluster);
+    const stop = this.#stops[lineIndex]?.find((candidate) => candidate.cluster === cluster);
+    if (!stop) return { x: this.origin.x, y: this.origin.y, lineHeight };
+    return { x: stop.x, y: this.lines[lineIndex]!.y, lineHeight };
+  }
+
+  /**
+   * Returns the caret cluster nearest a point on one of the layout's lines.
+   *
+   * @param padding - how far past a line's ascent, descent, and ends still counts.
+   * @returns null when the point is off every line.
+   */
+  caretAtPoint(p: Point2D, padding: number = 0): number | null {
     const lineIndex = this.lines.findIndex(
       (line) => p.y <= line.y + line.ascent + padding && p.y >= line.y + line.descent - padding,
     );
-    if (lineIndex < 0) return null;
-
-    for (const placed of this.placedGlyphs) {
-      if (placed.lineIndex !== lineIndex) continue;
-      const width = placed.glyph.xAdvance + placed.glyph.xKern;
-      const right = placed.left + width;
-      if (p.x < placed.left - padding || p.x >= right + padding) continue;
-      const mid = placed.left + width / 2;
-      return {
-        lineIndex,
-        runIndex: placed.runIndex,
-        cluster: placed.glyph.cluster,
-        side: p.x < mid ? "left" : "right",
-      };
-    }
-    return null;
+    const stops = this.#caretStops(lineIndex);
+    if (stops.length === 0) return null;
+    const xs = stops.map((stop) => stop.x);
+    if (p.x < Math.min(...xs) - padding || p.x > Math.max(...xs) + padding) return null;
+    return nearest(stops, p.x).cluster;
   }
 
-  /** @knipclassignore — precise glyph-shape hit-test, deferred to follow-up */
-  shapeHitTest(_p: Point2D, _font: Font): Hit | null {
-    throw new Error("TextLayout.shapeHitTest not implemented");
+  /** Returns the caret cluster on a line whose position is nearest `x`. */
+  nearestCaretOnLine(lineIndex: number, x: number): number {
+    const stops = this.#caretStops(lineIndex);
+    return stops.length > 0
+      ? nearest(stops, x).cluster
+      : (this.lines[lineIndex]?.clusterStart ?? 0);
   }
 
   /**
-   * Inverse of hitTest: leading-edge canvas point of a positioned glyph at
-   * `cluster`. Returns null if the cluster has no positioned glyph (e.g.
-   * cluster falls on a linebreak, or past the buffer end).
+   * Returns the caret cluster one character away on screen, to the left
+   * (`-1`) or right (`1`), whatever the text's direction.
+   *
+   * @returns null at the line's edge in that direction.
    */
-  pointAt(cluster: number): CaretPosition | null {
-    const lineHeight = this.metrics.ascender - this.metrics.descender + (this.metrics.lineGap ?? 0);
-    const placed = this.placedGlyphs.find((candidate) => candidate.glyph.cluster === cluster);
-    return placed ? { x: placed.left, y: placed.baseline, lineHeight } : null;
+  visualStep(cluster: number, direction: -1 | 1): number | null {
+    const lineIndex = this.lineIndexForCluster(cluster);
+    const reading = this.lineDirection(lineIndex) === "rtl" ? -1 : 1;
+    // Screen order; zero-width glyphs share an x, so ties fall back to reading order.
+    const order = [...this.#caretStops(lineIndex)].sort(
+      (a, b) => a.x - b.x || (a.cluster - b.cluster) * reading,
+    );
+    const index = order.findIndex((stop) => stop.cluster === cluster);
+    if (index < 0) return null;
+    return order[index + direction]?.cluster ?? null;
   }
 
-  /** @knipclassignore — convenience for caret construction at a cluster */
-  caretAt(cluster: number): Caret {
-    return Caret.atCluster(this, cluster);
+  /** Returns the caret cluster at a line's left (`-1`) or right (`1`) end on screen. */
+  lineEdge(lineIndex: number, side: -1 | 1): number | null {
+    const stops = this.#caretStops(lineIndex);
+    if (stops.length === 0) return null;
+    return stops.reduce((edge, stop) => ((stop.x - edge.x) * side > 0 ? stop : edge)).cluster;
   }
 
-  /** @knipclassignore — convenience for caret construction at a canvas point */
-  caretAtPoint(p: Point2D): Caret {
-    return Caret.atPoint(this, p);
+  /**
+   * Returns the boxes that highlight a selected cluster range, one per
+   * contiguous stretch on screen; a range across a direction change can
+   * cover several boxes on one line.
+   */
+  selectionRects(start: number, end: number): SelectionRect[] {
+    const rects: SelectionRect[] = [];
+    for (const [lineIndex, line] of this.lines.entries()) {
+      const spans: [number, number][] = [];
+      for (const placed of this.placedGlyphs) {
+        if (placed.lineIndex !== lineIndex || placed.glyph.xAdvance <= 0) continue;
+        const first = placed.glyph.cluster;
+        const count = placed.glyph.sourceItemIds.length;
+        const from = Math.max(first, start);
+        const to = Math.min(first + count, end);
+        if (from >= to) continue;
+        const direction = line.runs[placed.runIndex]!.direction;
+        const a = glyphEdge(placed, direction, from - first, count);
+        const b = glyphEdge(placed, direction, to - first, count);
+        spans.push([Math.min(a, b), Math.max(a, b)]);
+      }
+      for (const [left, right] of mergeSpans(spans)) {
+        rects.push({
+          x: left,
+          width: right - left,
+          top: line.y + line.ascent,
+          bottom: line.y + line.descent,
+        });
+      }
+    }
+    return rects;
+  }
+
+  /** The line's stops a caret may rest at. */
+  #caretStops(lineIndex: number): readonly CaretStop[] {
+    return (this.#stops[lineIndex] ?? []).filter((stop) => this.#boundaries.has(stop.cluster));
   }
 
   measure(): number {
@@ -356,4 +417,91 @@ function placeGlyphs(lines: readonly Line[], origin: Point2D): PlacedGlyph[] {
     }
   }
   return placed;
+}
+
+/** A place on a line where a caret can stand, and where it draws. */
+interface CaretStop {
+  readonly cluster: number;
+  readonly x: number;
+}
+
+/** A selection highlight box in layout units. */
+export interface SelectionRect {
+  readonly x: number;
+  readonly width: number;
+  readonly top: number;
+  readonly bottom: number;
+}
+
+const EPSILON = 1e-6;
+
+/**
+ * Returns a caret stop for every cluster on a line.
+ *
+ * Each glyph with an advance gives its items stops across its box: the
+ * first item at the leading edge, a ligature's later items at even splits,
+ * and the cluster after its last item at the trailing edge. A glyph's leading
+ * edge wins over its neighbour's trailing edge. Clusters held only by
+ * zero-advance glyphs (an unattached mark) stand at the glyph; anything left,
+ * such as an empty line's end, stands at the line's end.
+ */
+function lineStops(
+  line: Line,
+  lineIndex: number,
+  placedGlyphs: readonly PlacedGlyph[],
+  origin: Point2D,
+): CaretStop[] {
+  const xs = new Map<number, number>();
+  const set = (cluster: number, x: number) => {
+    if (!xs.has(cluster)) xs.set(cluster, x);
+  };
+  const onLine = placedGlyphs.filter((placed) => placed.lineIndex === lineIndex);
+  const spacing = onLine.filter((placed) => placed.glyph.xAdvance > 0);
+  const direction = (placed: PlacedGlyph) => line.runs[placed.runIndex]!.direction;
+
+  for (const placed of spacing) {
+    const count = placed.glyph.sourceItemIds.length;
+    for (let k = 0; k < count; k++) {
+      set(placed.glyph.cluster + k, glyphEdge(placed, direction(placed), k, count));
+    }
+  }
+  for (const placed of spacing) {
+    const count = placed.glyph.sourceItemIds.length;
+    set(placed.glyph.cluster + count, glyphEdge(placed, direction(placed), count, count));
+  }
+  for (const placed of onLine) set(placed.glyph.cluster, placed.left);
+
+  const advance = line.runs.reduce((sum, run) => sum + run.advance, 0);
+  const lineEnd = (line.runs[0]?.direction ?? "ltr") === "rtl" ? origin.x : origin.x + advance;
+  const stops: CaretStop[] = [];
+  for (let cluster = line.clusterStart; cluster < line.clusterEnd; cluster++) {
+    stops.push({ cluster, x: xs.get(cluster) ?? lineEnd });
+  }
+  return stops;
+}
+
+/**
+ * Returns the x of the boundary `k` items into a glyph covering `count`
+ * items, measured from its leading edge. Kerning after the glyph belongs to
+ * its box, so a kerned pair leaves no gap between stops.
+ */
+function glyphEdge(placed: PlacedGlyph, direction: Direction, k: number, count: number): number {
+  const width = placed.glyph.xAdvance + placed.glyph.xKern;
+  const offset = (width * k) / count;
+  return direction === "rtl" ? placed.left + width - offset : placed.left + offset;
+}
+
+function nearest(stops: readonly CaretStop[], x: number): CaretStop {
+  return stops.reduce((best, stop) => (Math.abs(stop.x - x) < Math.abs(best.x - x) ? stop : best));
+}
+
+/** Merges touching or overlapping spans. */
+function mergeSpans(spans: [number, number][]): [number, number][] {
+  const merged: [number, number][] = [];
+  for (const span of spans.sort((a, b) => a[0] - b[0])) {
+    const last = merged.at(-1);
+    if (last && span[0] <= last[1] + EPSILON) last[1] = Math.max(last[1], span[1]);
+    else merged.push([...span]);
+  }
+  return merged;
 }

@@ -1,4 +1,5 @@
-import type { TextItem, TextLayout } from "./layout";
+import type { TextItem } from "./layout";
+import { graphemes, segmentItems, words } from "./layout/segmentation";
 import type { TextCaret, TextEditResult, TextSelectionRange } from "../../types/text";
 
 /** Resolves a durable after-item caret against the current item order. */
@@ -59,41 +60,6 @@ export function deleteText(
   return { items: next, anchor: caret, focus: caret };
 }
 
-const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
-const words = new Intl.Segmenter(undefined, { granularity: "word" });
-
-/** A segment of the items, in item indexes. */
-interface ItemSegment {
-  readonly start: number;
-  readonly end: number;
-  readonly isWordLike: boolean;
-}
-
-/**
- * Segments items with a Unicode segmenter.
- *
- * @remarks
- * Each item reads as one code point: a line break as `\n` and a picked glyph
- * as U+FFFC, the object replacement character, so it stands alone like an
- * inline object.
- */
-function segmentItems(items: readonly TextItem[], segmenter: Intl.Segmenter): ItemSegment[] {
-  let text = "";
-  const itemAt = new Map<number, number>();
-  items.forEach((item, index) => {
-    itemAt.set(text.length, index);
-    if (item.kind === "character") text += String.fromCodePoint(item.codepoint);
-    else text += item.kind === "linebreak" ? "\n" : "\uFFFC";
-  });
-  itemAt.set(text.length, items.length);
-
-  return [...segmenter.segment(text)].map((segment) => ({
-    start: itemAt.get(segment.index)!,
-    end: itemAt.get(segment.index + segment.segment.length)!,
-    isWordLike: segment.isWordLike ?? false,
-  }));
-}
-
 /**
  * Returns the next caret cluster one user-perceived character away.
  *
@@ -122,33 +88,4 @@ export function wordCluster(
     return segments.find((segment) => segment.end > cluster)?.end ?? items.length;
   }
   return segments.findLast((segment) => segment.start < cluster)?.start ?? 0;
-}
-
-/** Returns advance-based selection rectangles; structural linebreaks own no fill. */
-export function computeSelectionRects(
-  layout: TextLayout,
-  range: TextSelectionRange,
-): { x: number; width: number; top: number; bottom: number }[] {
-  const rects: { x: number; width: number; top: number; bottom: number }[] = [];
-  for (const line of layout.lines) {
-    let runBase = layout.origin.x;
-    let left: number | null = null;
-    let right = runBase;
-    for (const run of line.runs) {
-      for (const glyph of run.glyphs) {
-        if (glyph.cluster < range.start || glyph.cluster >= range.end) continue;
-        left ??= runBase + glyph.origin.x;
-        right = runBase + glyph.origin.x + glyph.xAdvance;
-      }
-      runBase += run.advance;
-    }
-    if (left !== null)
-      rects.push({
-        x: left,
-        width: right - left,
-        top: line.y + line.ascent,
-        bottom: line.y + line.descent,
-      });
-  }
-  return rects;
 }

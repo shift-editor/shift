@@ -114,13 +114,6 @@ export interface Line {
   clusterEnd: number;
 }
 
-export interface Hit {
-  lineIndex: number;
-  runIndex: number;
-  cluster: number;
-  side: "left" | "right";
-}
-
 export interface CaretPosition {
   x: number;
   y: number;
