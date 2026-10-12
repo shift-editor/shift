@@ -1397,6 +1397,9 @@ fn document_open_rejects_foreign_key_corruption_before_write_access() {
     drop(ShiftStore::create_document(&path, &sample_font()).expect("create document"));
 
     let conn = rusqlite::Connection::open(&path).expect("open raw document");
+    // Bundled SQLite enforces foreign keys by default; corrupting needs them off.
+    conn.pragma_update(None, "foreign_keys", "OFF")
+        .expect("disable foreign keys");
     conn.execute(
         "UPDATE glyphs SET id = 'glyph_orphaned' WHERE id = (SELECT id FROM glyphs LIMIT 1)",
         [],

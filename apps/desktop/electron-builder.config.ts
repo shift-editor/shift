@@ -88,9 +88,11 @@ const macosSourceDocumentTypes = [
 const linuxDocumentIconName = isNightly ? "shift-nightly-document" : documentIconName;
 const linuxDocumentIconSizes = [16, 32, 48, 64, 128, 256, 512];
 /**
- * electron-builder's default DEB dependencies, plus ALSA, which Electron links
- * but the defaults omit. Setting `depends` replaces the defaults, so they are
- * restated. Ubuntu 24.04 and Debian 13 renamed the package to `libasound2t64`.
+ * electron-builder's default DEB dependencies, plus GBM and ALSA, which
+ * Electron links but the defaults omit; older releases such as Ubuntu 18.04
+ * do not install GBM with GTK. Setting `depends` replaces the defaults, so
+ * they are restated. Ubuntu 24.04 and Debian 13 renamed the ALSA package to
+ * `libasound2t64`.
  */
 const debDependencies = [
   "libgtk-3-0",
@@ -102,7 +104,26 @@ const debDependencies = [
   "libatspi2.0-0",
   "libuuid1",
   "libsecret-1-0",
+  "libgbm1",
   "libasound2t64 | libasound2",
+];
+/**
+ * electron-builder's default RPM dependencies, plus GBM and ALSA, which
+ * Electron links but the defaults omit; RHEL 8 installs neither with GTK.
+ * Setting `depends` replaces the defaults, so they are restated. Alternatives
+ * cover openSUSE package names.
+ */
+const rpmDependencies = [
+  "gtk3",
+  "libnotify",
+  "nss",
+  "libXScrnSaver",
+  "(libXtst or libXtst6)",
+  "xdg-utils",
+  "at-spi2-core",
+  "(libuuid or libuuid1)",
+  "(mesa-libgbm or libgbm1)",
+  "(alsa-lib or libasound2)",
 ];
 const linuxPackageFiles = [
   `${path.join(__dirname, `resources/linux/${distribution}.xml`)}=/usr/share/mime/packages/${packageName}.xml`,
@@ -242,6 +263,9 @@ const config: Configuration = {
   mac: {
     target: ["zip", "dmg"],
     category: "public.app-category.graphics-design",
+    // Electron 44 (Chromium 152) dropped macOS 12; LSMinimumSystemVersion makes
+    // Finder explain the requirement instead of the app failing to launch.
+    minimumSystemVersion: "13.0",
     icon: `../../icons/${iconName}.icon`,
     identity: signMacos ? undefined : null,
     hardenedRuntime: true,
@@ -327,6 +351,7 @@ const config: Configuration = {
         ],
   },
   rpm: {
+    depends: rpmDependencies,
     fpm: linuxPackageFiles,
   },
 };
