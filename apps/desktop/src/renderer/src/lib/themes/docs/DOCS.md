@@ -18,7 +18,8 @@ Terminal-style color themes for the desktop UI and native editor renderers.
 ## Codemap
 
 - `lib/themes/index.ts` — theme types, built-in palette registry, selection resolution, and CSS-variable mapping
-- `context/ThemeContext.tsx` — selection from `config.toml`, first-paint cache, and OS appearance observation
+- `context/ThemeContext.tsx` — the context and `useTheme`, free of the desktop host so browser builds of the canvas can read the theme
+- `context/ThemeProvider.tsx` — selection from `config.toml`, first-paint cache, and OS appearance observation
 - `components/chrome/settings/ConfigFileSection.tsx` — config file location, Open folder, and file problems
 - `src/main/config/` — `AppConfig` (read, watch, write), `configToml` (adapter over the `shift-config` crate), `configDirectory` (per-build folder)
 - `components/chrome/settings/AppearanceSettingsPanel.tsx` — accessible preset gallery
@@ -34,7 +35,7 @@ Terminal-style color themes for the desktop UI and native editor renderers.
 
 ## How it works
 
-`ThemeContext` paints from its cached selection, then applies the `theme` main reads from `config.toml` and follows `config.changed`. It observes the OS appearance and resolves one stable `ColorTheme`. `applyResolvedTheme` writes theme metadata and semantic CSS variables before layout effects run. Tailwind utilities consume the `--color-*` variables directly. `CanvasContextProvider` then reads the `--editor-*` variables into `EditorRenderTheme`, updates `Renderer`, rebuilds GPU marker styles, and schedules every canvas layer. Slug uses the resolved theme identity as a redraw key and reads its foreground from computed CSS.
+`ThemeProvider` paints from its cached selection, then applies the `theme` main reads from `config.toml` and follows `config.changed`. It observes the OS appearance and resolves one stable `ColorTheme`. `applyResolvedTheme` writes theme metadata and semantic CSS variables before layout effects run. Tailwind utilities consume the `--color-*` variables directly. `CanvasContextProvider` then reads the `--editor-*` variables into `EditorRenderTheme`, updates `Renderer`, rebuilds GPU marker styles, and schedules every canvas layer. Slug uses the resolved theme identity as a redraw key and reads its foreground from computed CSS.
 
 Selecting Shift Light removes runtime overrides so `index.css` remains the first-paint and failure-mode source of its established colors. Other themes write a complete variable set and therefore do not inherit accidental Shift Light roles.
 
