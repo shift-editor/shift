@@ -53,7 +53,6 @@ export const Toolbar = ({ toggleLeftSidebar, toggleRightSidebar }: ToolbarProps)
         <MemoizedEditorToolbar
           session={session}
           host={host}
-          compact
           onToggleLeftSidebar={toggleLeftSidebar}
           onToggleRightSidebar={toggleRightSidebar}
         />

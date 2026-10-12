@@ -278,6 +278,9 @@ test.describe("opening a font through the application shell", () => {
     for (const label of ["Create glyph", "Create source", "Create instance", "Create axis"]) {
       await expect(workspacePage.getByRole("button", { name: label, exact: true })).toBeDisabled();
     }
+    // The tools float over the glyph editor's canvas, not the glyph catalog.
+    await clickFirstCatalogGlyph(workspacePage);
+    await workspacePage.waitForURL(/#\/editor\//);
     for (const label of ["Pen Tool (P)", "Rectangle Tool (R)", "Rectangle Tool (R) options"]) {
       await expect(workspacePage.getByRole("button", { name: label, exact: true })).toBeDisabled();
     }
