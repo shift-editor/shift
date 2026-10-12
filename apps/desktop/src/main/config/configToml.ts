@@ -1,10 +1,11 @@
 import type { ConfigProblem } from "@shift/types";
 import { configRead, configSetTheme } from "shift-bridge";
+import type { ThemeName } from "../../shared/config/config";
 
 /** Settings this build reads from `config.toml`. */
 export interface ConfigValues {
   /** A theme id or `system`; `null` when the file does not choose one. */
-  theme: string | null;
+  theme: ThemeName | null;
 }
 
 /**
@@ -39,6 +40,6 @@ export function readConfig(source: string): ConfigRead {
  * @throws Error when `source` has errors, so an edit never overwrites a file
  * the user is still fixing.
  */
-export function setConfigTheme(source: string | null, theme: string): string {
+export function setConfigTheme(source: string | null, theme: ThemeName): string {
   return configSetTheme(source, theme);
 }

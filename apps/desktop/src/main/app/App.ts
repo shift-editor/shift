@@ -541,10 +541,9 @@ export class App {
 
   #registerIpcHandlers(): void {
     ipc.handle(ipcMain, "config.state", () => this.#requireConfig().state);
-    ipc.handle(ipcMain, "config.setTheme", (_event, theme) => {
-      if (typeof theme !== "string") throw new Error("Theme must be a string");
-      return this.#requireConfig().setTheme(theme);
-    });
+    ipc.handle(ipcMain, "config.setTheme", (_event, theme) =>
+      this.#requireConfig().setTheme(theme),
+    );
     ipc.handle(ipcMain, "config.reveal", async () => {
       const { directory } = this.#requireConfig().state;
       fs.mkdirSync(directory, { recursive: true });
@@ -1212,7 +1211,7 @@ export class App {
         ipc.send(window.window.webContents, "config.changed", state);
       }
     });
-    config.watch();
+    void config.watch();
     this.#config = config;
   }
 
