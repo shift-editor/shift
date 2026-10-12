@@ -3,9 +3,10 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppConfigState } from "../../shared/config/config";
+import type { ShiftLogger } from "../logging";
 import { AppConfig } from "./AppConfig";
 
-const log = { warn() {} };
+const log: ShiftLogger = { debug() {}, info() {}, warn() {}, error() {} };
 let directory: string;
 let config: AppConfig | null = null;
 
@@ -78,7 +79,7 @@ describe("AppConfig", () => {
     const appConfig = open();
     const changes: AppConfigState[] = [];
     appConfig.onChanged((state) => changes.push(state));
-    appConfig.watch();
+    await appConfig.watch();
 
     // Write through a rename, as most editors do.
     fs.writeFileSync(path.join(directory, "config.toml.tmp"), `theme = "gruvbox-dark"\n`);
@@ -86,6 +87,53 @@ describe("AppConfig", () => {
 
     await vi.waitFor(() => expect(appConfig.state.theme).toBe("gruvbox-dark"), { timeout: 2000 });
     expect(changes.at(-1)?.theme).toBe("gruvbox-dark");
+  });
+
+  it("writes through a symlinked config.toml to its target", () => {
+    const dotfile = path.join(path.dirname(directory), "dotfiles", "config.toml");
+    fs.mkdirSync(path.dirname(dotfile), { recursive: true });
+    fs.writeFileSync(dotfile, `# mine\ntheme = "nord"\n`);
+    fs.mkdirSync(directory, { recursive: true });
+    fs.symlinkSync(dotfile, path.join(directory, "config.toml"));
+
+    open().setTheme("dracula");
+
+    expect(fs.lstatSync(path.join(directory, "config.toml")).isSymbolicLink()).toBe(true);
+    expect(fs.readFileSync(dotfile, "utf8")).toBe(`# mine\ntheme = "dracula"\n`);
+    expect(fs.readdirSync(path.dirname(dotfile))).toEqual(["config.toml"]);
+  });
+
+  it("applies an edit made to the target of a symlinked config.toml", async () => {
+    const dotfile = path.join(path.dirname(directory), "dotfiles", "config.toml");
+    fs.mkdirSync(path.dirname(dotfile), { recursive: true });
+    fs.writeFileSync(dotfile, `theme = "nord"\n`);
+    fs.mkdirSync(directory, { recursive: true });
+    fs.symlinkSync(dotfile, path.join(directory, "config.toml"));
+    const appConfig = open();
+    await appConfig.watch();
+
+    fs.writeFileSync(`${dotfile}.tmp`, `theme = "gruvbox-dark"\n`);
+    fs.renameSync(`${dotfile}.tmp`, dotfile);
+
+    await vi.waitFor(() => expect(appConfig.state.theme).toBe("gruvbox-dark"), { timeout: 2000 });
+  });
+
+  it("follows a config.toml symlinked after watching starts", async () => {
+    write(`theme = "nord"\n`);
+    const appConfig = open();
+    await appConfig.watch();
+    const dotfile = path.join(path.dirname(directory), "dotfiles", "config.toml");
+    fs.mkdirSync(path.dirname(dotfile), { recursive: true });
+    fs.writeFileSync(dotfile, `theme = "dracula"\n`);
+
+    fs.rmSync(path.join(directory, "config.toml"));
+    fs.symlinkSync(dotfile, path.join(directory, "config.toml"));
+    await vi.waitFor(() => expect(appConfig.state.theme).toBe("dracula"), { timeout: 2000 });
+
+    fs.writeFileSync(`${dotfile}.tmp`, `theme = "gruvbox-dark"\n`);
+    fs.renameSync(`${dotfile}.tmp`, dotfile);
+
+    await vi.waitFor(() => expect(appConfig.state.theme).toBe("gruvbox-dark"), { timeout: 2000 });
   });
 
   it("publishes nothing when a reload finds the same settings", () => {

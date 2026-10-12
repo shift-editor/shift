@@ -1,21 +1,19 @@
 import fs from "node:fs";
 import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
-import type { AppConfigState } from "../../shared/config/config";
+import { watch, type FSWatcher } from "chokidar";
+import type { AppConfigState, ThemeName } from "../../shared/config/config";
 import type { ShiftLogger } from "../logging";
 import { readConfig, setConfigTheme, type ConfigValues } from "./configToml";
 
 export const CONFIG_FILE_NAME = "config.toml";
-
-/** Editors save through temporary files and renames; one reload covers the burst. */
-const RELOAD_DELAY_MS = 50;
 
 const EMPTY_VALUES: ConfigValues = { theme: null };
 
 export interface AppConfigOptions {
   /** This build's config folder; see `configDirectory`. */
   directory: string;
-  log: Pick<ShiftLogger, "warn">;
+  log: ShiftLogger;
 }
 
 /**
@@ -30,11 +28,12 @@ export interface AppConfigOptions {
 export class AppConfig {
   readonly #directory: string;
   readonly #filePath: string;
-  readonly #log: AppConfigOptions["log"];
+  readonly #log: ShiftLogger;
   readonly #listeners = new Set<(state: AppConfigState) => void>();
   #state: AppConfigState;
-  #watcher: fs.FSWatcher | null = null;
-  #reloadTimer: NodeJS.Timeout | null = null;
+  #watcher: FSWatcher | null = null;
+  /** The real file behind a symlinked `config.toml`, whose folder is also watched. */
+  #symlinkTarget: string | null = null;
 
   constructor(options: AppConfigOptions) {
     this.#directory = options.directory;
@@ -57,63 +56,73 @@ export class AppConfig {
    * Starts watching the config folder, creating it so it can be watched.
    *
    * @remarks
-   * A folder that cannot be created or watched leaves the config readable at
-   * startup and through Settings, but external edits then need a restart.
+   * Watching folders rather than files sees an editor's save-by-rename and edits
+   * that land right after setup. A `config.toml` symlinked from a dotfiles
+   * repository also has its target's folder watched, moved when the link is
+   * repointed. A folder that cannot be created or watched leaves the config
+   * readable at startup and through Settings, but external edits then need a
+   * restart.
+   *
+   * @returns a promise that settles once changes are being observed.
    */
-  watch(): void {
-    if (this.#watcher) return;
+  watch(): Promise<void> {
+    if (this.#watcher) return Promise.resolve();
     try {
       fs.mkdirSync(this.#directory, { recursive: true });
-      this.#watcher = fs.watch(this.#directory, (_event, fileName) => {
-        if (fileName !== null && fileName !== CONFIG_FILE_NAME) return;
-        this.#scheduleReload();
-      });
-      this.#watcher.on("error", (error) => {
+    } catch (error) {
+      this.#log.warn("cannot create config folder", { directory: this.#directory, error });
+      return Promise.resolve();
+    }
+    this.#symlinkTarget = this.#readSymlinkTarget();
+    const folders = [this.#directory];
+    if (this.#symlinkTarget) folders.push(path.dirname(this.#symlinkTarget));
+    const watcher = watch(folders, { ignoreInitial: true, depth: 0, followSymlinks: false })
+      .on("all", (_event, changedPath) => {
+        if (changedPath === this.#filePath || changedPath === this.#symlinkTarget) this.reload();
+      })
+      .on("error", (error) => {
         this.#log.warn("config watcher stopped", { error });
         this.#closeWatcher();
       });
-    } catch (error) {
-      this.#log.warn("cannot watch config folder", { directory: this.#directory, error });
-    }
-    // The file may have changed between construction and watching.
-    this.reload();
+    this.#watcher = watcher;
+    return new Promise((resolve) => {
+      watcher.once("ready", () => {
+        // The file may have changed between construction and watching.
+        this.reload();
+        resolve();
+      });
+    });
   }
 
   /** Stops watching the config folder. */
   close(): void {
-    if (this.#reloadTimer) clearTimeout(this.#reloadTimer);
-    this.#reloadTimer = null;
     this.#closeWatcher();
     this.#listeners.clear();
   }
 
   /** Rereads `config.toml` and publishes the state when it changed. */
   reload(): void {
+    this.#followSymlink();
     this.#publish(this.#read({ theme: this.#state.theme }));
   }
 
   /**
    * Writes the theme selection to `config.toml`, creating the file if needed.
    *
+   * @remarks
+   * The new text is flushed to a temporary file beside the real file and renamed
+   * over it, so a crash leaves either the old or the new file. A symlinked
+   * `config.toml` stays a symlink: the write goes to its target.
+   *
    * @throws Error when the file does not parse or its `theme` cannot be edited
    * safely; the file is left unchanged.
    */
-  setTheme(theme: string): AppConfigState {
+  setTheme(theme: ThemeName): AppConfigState {
     const next = setConfigTheme(this.#readSource(), theme);
     fs.mkdirSync(this.#directory, { recursive: true });
-    const temporaryPath = `${this.#filePath}.${process.pid}.tmp`;
-    fs.writeFileSync(temporaryPath, next);
-    fs.renameSync(temporaryPath, this.#filePath);
+    writeFileAtomic(resolveTarget(this.#filePath), next);
     this.reload();
     return this.#state;
-  }
-
-  #scheduleReload(): void {
-    if (this.#reloadTimer) clearTimeout(this.#reloadTimer);
-    this.#reloadTimer = setTimeout(() => {
-      this.#reloadTimer = null;
-      this.reload();
-    }, RELOAD_DELAY_MS);
   }
 
   /** Reads the file, keeping `lastValid` values when it has an error. */
@@ -163,8 +172,58 @@ export class AppConfig {
     for (const listener of this.#listeners) listener(state);
   }
 
+  /** Moves the target-folder watch after `config.toml` is linked, unlinked, or repointed. */
+  #followSymlink(): void {
+    if (!this.#watcher) return;
+    const target = this.#readSymlinkTarget();
+    if (target === this.#symlinkTarget) return;
+    const previousFolder = this.#symlinkTarget && path.dirname(this.#symlinkTarget);
+    const nextFolder = target && path.dirname(target);
+    // The config folder itself stays watched, even when the link points inside it.
+    if (previousFolder && previousFolder !== this.#directory) this.#watcher.unwatch(previousFolder);
+    if (nextFolder && nextFolder !== this.#directory) this.#watcher.add(nextFolder);
+    this.#symlinkTarget = target;
+  }
+
+  /** Returns the real file behind a symlinked `config.toml`, or `null`. */
+  #readSymlinkTarget(): string | null {
+    try {
+      if (!fs.lstatSync(this.#filePath).isSymbolicLink()) return null;
+      return fs.realpathSync(this.#filePath);
+    } catch {
+      return null;
+    }
+  }
+
   #closeWatcher(): void {
-    this.#watcher?.close();
+    void this.#watcher?.close();
     this.#watcher = null;
+  }
+}
+
+/** Returns the file a symlink at `filePath` points to, or `filePath` itself. */
+function resolveTarget(filePath: string): string {
+  try {
+    return fs.realpathSync(filePath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return filePath;
+    throw error;
+  }
+}
+
+/** Replaces `filePath` with `contents` through a flushed temporary file and a rename. */
+function writeFileAtomic(filePath: string, contents: string): void {
+  const temporaryPath = `${filePath}.${process.pid}.tmp`;
+  try {
+    const descriptor = fs.openSync(temporaryPath, "w");
+    try {
+      fs.writeFileSync(descriptor, contents);
+      fs.fsyncSync(descriptor);
+    } finally {
+      fs.closeSync(descriptor);
+    }
+    fs.renameSync(temporaryPath, filePath);
+  } finally {
+    fs.rmSync(temporaryPath, { force: true });
   }
 }
