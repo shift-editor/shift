@@ -142,20 +142,19 @@ export const Editor = () => {
   );
 };
 
-const LEFT_SIDEBAR_DEFAULT_SIZE = 15;
-const RIGHT_SIDEBAR_DEFAULT_SIZE = 15;
-
 const EditorLayout = ({ children }: { children: ReactNode }) => {
   const editor = useEditor();
   const shellRef = useRef<HTMLDivElement>(null);
   const {
-    leftSidebarPanelRef,
-    rightSidebarPanelRef,
     leftSidebarContentRef,
     rightSidebarContentRef,
+    onLayoutChanged,
+    sidebarPanelProps,
     toggleLeftSidebar,
     toggleRightSidebar,
-  } = useSidebarLayout();
+    resetLeftSidebar,
+    resetRightSidebar,
+  } = useSidebarLayout("editor");
 
   // Cursor and gesture change on every pointer event. Writing them to the shell directly keeps
   // those events from re-rendering the toolbar, sidebars, and canvas beneath it.
@@ -177,23 +176,12 @@ const EditorLayout = ({ children }: { children: ReactNode }) => {
     >
       <Toolbar toggleLeftSidebar={toggleLeftSidebar} toggleRightSidebar={toggleRightSidebar} />
       <ResizablePanelGroup
-        data-testid="editor-layout-panels"
-        direction="horizontal"
-        autoSaveId="shift:editor-layout"
+        id="editor-layout-panels"
+        orientation="horizontal"
+        onLayoutChanged={onLayoutChanged}
         className="flex-1 overflow-hidden"
       >
-        <ResizablePanel
-          ref={leftSidebarPanelRef}
-          className="sidebar-panel"
-          data-testid="left-sidebar-panel"
-          id="left-sidebar"
-          order={1}
-          defaultSize={LEFT_SIDEBAR_DEFAULT_SIZE}
-          minSize={10}
-          maxSize={30}
-          collapsible
-          collapsedSize={0}
-        >
+        <ResizablePanel {...sidebarPanelProps("left")}>
           <div ref={leftSidebarContentRef} className="h-full">
             <ZoneContainer zone="sidebar" className="h-full">
               <LeftSidebar />
@@ -203,9 +191,10 @@ const EditorLayout = ({ children }: { children: ReactNode }) => {
         <ResizableHandle
           aria-label="Resize left sidebar"
           inset="start"
-          onDoubleClick={() => leftSidebarPanelRef.current?.resize(LEFT_SIDEBAR_DEFAULT_SIZE)}
+          disableDoubleClick
+          onDoubleClick={resetLeftSidebar}
         />
-        <ResizablePanel id="canvas" order={2} minSize={30} data-shift-capture-target="editor">
+        <ResizablePanel id="canvas" minSize={300} data-shift-capture-target="editor">
           <ZoneContainer zone="canvas" className="relative h-full">
             {children}
             <FloatingToolbar />
@@ -214,20 +203,10 @@ const EditorLayout = ({ children }: { children: ReactNode }) => {
         <ResizableHandle
           aria-label="Resize right sidebar"
           inset="end"
-          onDoubleClick={() => rightSidebarPanelRef.current?.resize(RIGHT_SIDEBAR_DEFAULT_SIZE)}
+          disableDoubleClick
+          onDoubleClick={resetRightSidebar}
         />
-        <ResizablePanel
-          ref={rightSidebarPanelRef}
-          className="sidebar-panel"
-          data-testid="right-sidebar-panel"
-          id="right-sidebar"
-          order={3}
-          defaultSize={RIGHT_SIDEBAR_DEFAULT_SIZE}
-          minSize={10}
-          maxSize={30}
-          collapsible
-          collapsedSize={0}
-        >
+        <ResizablePanel {...sidebarPanelProps("right")}>
           <div ref={rightSidebarContentRef} className="h-full">
             <ZoneContainer zone="sidebar" className="h-full">
               <RightSidebar />

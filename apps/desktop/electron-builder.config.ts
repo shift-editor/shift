@@ -85,11 +85,6 @@ const macosSourceDocumentTypes = [
     LSTypeIsPackage: true,
   },
 ];
-/**
- * The APT repository publishes only amd64 packages, so only that DEB adds the
- * Shift source. Other DEBs would register a source that never offers them an update.
- */
-const installsAptSource = !isNightly && buildArchitecture === "x64";
 const linuxDocumentIconName = isNightly ? "shift-nightly-document" : documentIconName;
 const linuxDocumentIconSizes = [16, 32, 48, 64, 128, 256, 512];
 /**
@@ -319,7 +314,7 @@ const config: Configuration = {
   },
   deb: {
     depends: debDependencies,
-    fpm: !installsAptSource
+    fpm: isNightly
       ? linuxPackageFiles
       : [
           "--config-files",

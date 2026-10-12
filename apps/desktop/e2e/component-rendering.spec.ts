@@ -68,6 +68,8 @@ test(
     expect(sample.renderedIds).not.toEqual(sample.exactIds);
     expect(sample.renderedTransforms).toEqual(sample.exactTransforms);
 
+    // Keep the wide component's right edge inside the canvas.
+    await page.evaluate(() => window.shift!.editor.setZoom(window.shift!.editor.zoom * 0.8));
     await expectCanvasSnapshot(editor, "canvas-Aacute-bold-wide-components.png");
   },
 );

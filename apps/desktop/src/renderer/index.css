@@ -162,16 +162,11 @@ body {
   }
 }
 
-/* Coordinate toolbar-driven layout changes while clipping fixed-width sidebar contents. */
-.sidebar-panel {
-  overflow: hidden;
-}
-
 .sidebar-layout-animating > [data-panel] {
   transition: flex-grow 150ms ease-out;
 }
 
-.sidebar-layout-animating:has([data-resize-handle-state="drag"]) > [data-panel] {
+.sidebar-layout-animating:has([data-separator="active"]) > [data-panel] {
   transition: none;
 }
 

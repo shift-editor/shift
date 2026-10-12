@@ -375,6 +375,8 @@ test.describe("Toolbar tools", () => {
           caretAtEnd: true,
           glyphsLoaded: true,
         });
+      // Keep the caret after the last glyph inside the canvas.
+      await page.evaluate(() => window.shift!.editor.setZoom(window.shift!.editor.zoom * 0.8));
       await page.mouse.move(0, 0);
       await expectCanvasSnapshot(editor, "canvas-text-mode-AAB.png");
     },
