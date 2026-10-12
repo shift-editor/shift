@@ -3,6 +3,7 @@ import {
   type GlyphName,
   mintTextItemId,
   type GlyphId,
+  type ShapedGlyph,
   type SourceMetrics,
   type TextItemId,
 } from "@shift/types";
@@ -80,6 +81,8 @@ export type Direction = "ltr" | "rtl";
 
 export interface SegmentedRun {
   items: readonly GlyphicTextItem[];
+  /** The shaper's glyphs in visual order, clusters indexing `items`; absent for literal layout. */
+  shaped?: readonly ShapedGlyph[];
   direction: Direction;
   script?: string;
   language?: string;

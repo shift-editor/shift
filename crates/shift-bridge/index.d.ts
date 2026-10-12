@@ -190,7 +190,8 @@ export declare class Bridge {
   /** Returns the precomputed source-metric interpolation model for this font. */
   getSourceMetricsInterpolation(): NapiSourceMetricsInterpolationSnapshot | null
   /**
-   * Shapes a run of text with the font's feature code.
+   * Shapes a paragraph with the font's feature code, split into runs of one
+   * script, each in its script's direction.
    *
    * Characters map through the live font's Unicode values and every
    * glyph's own advance is zero while shaping, so the result carries the
@@ -201,7 +202,7 @@ export declare class Bridge {
    * The shaping tables are rebuilt only when a font change since the last
    * call altered the glyph order, glyph categories, feature code, or axes.
    */
-  shape(request: NapiShapeRequest): Array<NapiShapedGlyph>
+  shapeParagraph(request: NapiParagraphRequest): Array<NapiShapedRun>
   mapLocation(location: NapiLocation): NapiLocation
   getSources(): Array<NapiSource>
 }
@@ -241,6 +242,17 @@ export interface NapiNewWorkspace {
   unitsPerEm?: number
 }
 
+/** A paragraph to shape, split into runs of one script. */
+export interface NapiParagraphRequest {
+  units: Array<NapiShapeUnit>
+  /** User-space location to shape at; omitted axes are at their default. */
+  location: NapiLocation
+  /** BCP 47 language tag; the default language system when omitted. */
+  language?: string
+  /** Settings over the features applied by default. */
+  features?: Array<NapiFeatureSetting>
+}
+
 /**
  * One shaped glyph. Advances and offsets hold only what the font's feature
  * code positions; glyph advances, kerning, and mark attachment are the
@@ -257,21 +269,20 @@ export interface NapiShapedGlyph {
   yOffset: number
 }
 
-export interface NapiShapeRequest {
-  units: Array<NapiShapeUnit>
-  /** User-space location to shape at; omitted axes are at their default. */
-  location: NapiLocation
-  /** Guessed from the script when omitted. */
-  direction?: "ltr" | "rtl"
+/** One run of a shaped paragraph, in one script and direction. */
+export interface NapiShapedRun {
+  /** First paragraph unit in the run. */
+  start: number
+  /** One past the last paragraph unit in the run. */
+  end: number
   /**
-   * ISO 15924 script tag such as `Arab`; guessed from the characters when
-   * omitted.
+   * ISO 15924 script tag such as `Arab`; absent when the run holds only
+   * characters common to all scripts.
    */
   script?: string
-  /** BCP 47 language tag; the default language system when omitted. */
-  language?: string
-  /** Settings over the features applied by default. */
-  features?: Array<NapiFeatureSetting>
+  direction: "ltr" | "rtl"
+  /** Glyphs in visual order; clusters index the paragraph's units. */
+  glyphs: Array<NapiShapedGlyph>
 }
 
 /**

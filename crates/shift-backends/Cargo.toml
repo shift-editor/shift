@@ -29,6 +29,7 @@ rayon = "1.10"
 serde = "1"
 tempfile = "3"
 thiserror = "2.0.18"
+unicode-script = "0.5"
 write-fonts = "0.52"
 
 [dev-dependencies]
