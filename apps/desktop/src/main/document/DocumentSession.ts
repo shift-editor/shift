@@ -383,7 +383,10 @@ export class DocumentSession {
     if (windows.length === 0) return;
 
     if (!state) {
-      for (const window of windows) window.setTitle(this.#applicationName());
+      for (const window of windows) {
+        window.setTitle(this.#applicationName());
+        window.setDocumentEdited(false);
+      }
       return;
     }
 
@@ -391,6 +394,7 @@ export class DocumentSession {
     const dirty = state.dirty ? " *" : "";
     for (const window of windows) {
       window.setTitle(`${name}${dirty} - ${this.#applicationName()}`);
+      window.setDocumentEdited(state.dirty);
     }
   }
 }

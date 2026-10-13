@@ -2,6 +2,7 @@ import { BrowserWindow, type BrowserWindowConstructorOptions } from "electron";
 import * as ipc from "../../shared/ipc/main";
 import type { RendererCommandId } from "../../shared/commands";
 import { AgentClient } from "../agent/AgentClient";
+import { TOOL_WINDOW_PREFIX } from "../../shared/toolWindows";
 import type { TitleBarColors } from "../../shared/menu/types";
 
 export interface WindowOptions {
@@ -87,6 +88,9 @@ export class Window {
   readonly agent = new AgentClient();
 
   #window: BrowserWindow;
+  /** Tool windows this window opened; they show its document's edited state. */
+  readonly #toolWindows = new Set<BrowserWindow>();
+  #documentEdited = false;
   #maximiseOnPresent: boolean;
   readonly #titleBarHeight: number;
 
@@ -116,6 +120,30 @@ export class Window {
 
     // The native menu stays installed for its accelerators but is never shown.
     if (process.platform !== "darwin") this.#window.setMenuBarVisibility(false);
+
+    // Tool windows (feature code…) run in this renderer; nothing else may open.
+    this.#window.webContents.setWindowOpenHandler(({ frameName }) =>
+      frameName.startsWith(TOOL_WINDOW_PREFIX)
+        ? {
+            action: "allow",
+            overrideBrowserWindowOptions: {
+              minWidth: 420,
+              minHeight: 320,
+              autoHideMenuBar: true,
+              // The window draws its own header; on macOS the traffic lights sit inside it.
+              // Lined up with the main window's drawn traffic lights in a 36px header.
+              ...(process.platform === "darwin"
+                ? { titleBarStyle: "hidden", trafficLightPosition: { x: 12, y: 12 } }
+                : {}),
+            },
+          }
+        : { action: "deny" },
+    );
+    this.#window.webContents.on("did-create-window", (toolWindow) => {
+      this.#toolWindows.add(toolWindow);
+      toolWindow.setDocumentEdited(this.#documentEdited);
+      toolWindow.once("closed", () => this.#toolWindows.delete(toolWindow));
+    });
 
     if (windowOptions.autoShow) {
       this.#window.once("ready-to-show", () => {
@@ -171,6 +199,12 @@ export class Window {
   }
 
   /** Updates the native window title shown by the operating system. */
+  /** Marks this window's document as having unsaved changes, in its tool windows' close buttons. */
+  setDocumentEdited(edited: boolean): void {
+    this.#documentEdited = edited;
+    for (const toolWindow of this.#toolWindows) toolWindow.setDocumentEdited(edited);
+  }
+
   setTitle(title: string): void {
     this.#window.setTitle(title);
   }
