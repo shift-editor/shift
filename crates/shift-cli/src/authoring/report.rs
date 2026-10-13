@@ -86,6 +86,10 @@ pub enum AuthoringChange {
         count: usize,
         instances: Vec<InstanceReport>,
     },
+    FeatureCodeUpdated {
+        /// Lines of feature code now stored; 0 when it was removed.
+        lines: usize,
+    },
     KerningGroupCreated {
         #[serde(flatten)]
         group: GroupReport,
@@ -245,6 +249,9 @@ impl AuthoringReport {
                     lines.push(format!("~ instances  {count} product presets"));
                     lines.extend(instances.iter().map(InstanceReport::render));
                 }
+                AuthoringChange::FeatureCodeUpdated { lines: count } => {
+                    lines.push(format!("~ features  {count} lines"));
+                }
                 AuthoringChange::KerningGroupCreated { group } => {
                     lines.push(format!("+ group   {}", group.render()));
                 }
@@ -394,6 +401,14 @@ pub(super) fn report_changes(font: &Font, changes: &FontChangeSet) -> Vec<Author
         } => kerning_value_change(font, source_id, pair, value.before, value.after),
         _ => None,
     }));
+
+    if impact.contains(FontChangeImpact::FEATURES) {
+        let lines = font
+            .features()
+            .fea_source()
+            .map_or(0, |source| source.lines().count());
+        report.push(AuthoringChange::FeatureCodeUpdated { lines });
+    }
 
     if impact.contains(FontChangeImpact::NAMED_INSTANCES) {
         let instances = font
