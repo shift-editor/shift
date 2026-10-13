@@ -4,6 +4,7 @@ import { useSignalState } from "@shift/editor/signals";
 import {
   Button,
   cn,
+  Input,
   Menu,
   MenuItem,
   MenuPopup,
@@ -11,6 +12,7 @@ import {
   MenuPositioner,
   MenuTrigger,
   RotateCcw,
+  Search,
   Switch,
   Tooltip,
 } from "@shift/ui";
@@ -104,9 +106,19 @@ export const FeaturesSection = () => {
   const editor = useEditor();
   const run = useSignalState(editor.text.currentRunCell);
   const features = useFontFeatures();
+  // null while the search field is closed.
+  const [query, setQuery] = useState<string | null>(null);
   if (!run || features.length === 0) return null;
 
   const overridden = Object.keys(run.features).length > 0;
+  const needle = query?.trim().toLowerCase() ?? "";
+  const shown = needle
+    ? features.filter(
+        (feature) =>
+          feature.tag.toLowerCase().includes(needle) ||
+          (featureName(feature)?.toLowerCase().includes(needle) ?? false),
+      )
+    : features;
   const setFeature = (tag: string, on: boolean | null) =>
     editor.history.capture(
       on === null ? `Use default ${tag}` : `Turn ${on ? "on" : "off"} ${tag}`,
@@ -119,16 +131,53 @@ export const FeaturesSection = () => {
     <SidebarSection
       title="Features"
       actions={
-        <FeaturesMenu
-          canReset={overridden}
-          onReset={() =>
-            editor.history.capture("Reset features", () => editor.text.resetFeatures(run.id))
-          }
-        />
+        <div className="flex items-center">
+          <Tooltip content="Search features">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Search features"
+              aria-pressed={query !== null}
+              isActive={query !== null}
+              className="text-sidebar-icon"
+              onClick={() => setQuery((current) => (current === null ? "" : null))}
+            >
+              <Search aria-hidden className="h-3.5 w-3.5" />
+            </Button>
+          </Tooltip>
+          <FeaturesMenu
+            canReset={overridden}
+            onReset={() =>
+              editor.history.capture("Reset features", () => editor.text.resetFeatures(run.id))
+            }
+          />
+        </div>
       }
     >
-      <ul className="flex flex-col gap-1.5">
-        {features.map((feature) => (
+      {query !== null ? (
+        <Input
+          autoFocus
+          aria-label="Search features"
+          placeholder="Search features..."
+          icon={<Search aria-hidden className="h-3 w-3 text-muted" />}
+          iconPosition="left"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          onKeyDown={(event) => {
+            // Keep Escape and typing out of the canvas's shortcuts.
+            event.nativeEvent.stopImmediatePropagation();
+            if (event.key === "Escape") setQuery(null);
+          }}
+        />
+      ) : null}
+      {/* About ten rows tall at most; a font with many features scrolls inside the section. */}
+      <ul className="flex max-h-80 scrollbar-hidden flex-col gap-1.5 overflow-y-auto">
+        {shown.length === 0 ? (
+          <li className="flex h-6 shrink-0 items-center text-ui text-secondary">
+            No matching features
+          </li>
+        ) : null}
+        {shown.map((feature) => (
           <FeatureRow
             key={feature.tag}
             feature={feature}
@@ -185,12 +234,12 @@ interface FeatureRowProps {
 
 /** A feature's tag, its name, and its control; text reads in full while the feature is on. */
 const FeatureRow = ({ feature, override, onChange }: FeatureRowProps) => {
-  const name = feature.name ?? FEATURE_NAMES[feature.tag] ?? featureFamilyName(feature.tag);
+  const name = featureName(feature);
   const on = override ?? ON_BY_DEFAULT.has(feature.tag);
   const label = name ? `${feature.tag}, ${name}` : feature.tag;
 
   return (
-    <li className="flex h-6 items-center gap-2">
+    <li className="flex h-6 shrink-0 items-center gap-2">
       <span className="flex min-w-0 flex-1 items-center gap-1.5">
         <span
           className={cn(
@@ -274,6 +323,11 @@ function useFontFeatures(): readonly FontFeature[] {
     };
   }, [editor]);
   return features;
+}
+
+/** The name a feature is shown by: the font's, the registered one, or a numbered set's. */
+function featureName(feature: FontFeature): string | null {
+  return feature.name ?? FEATURE_NAMES[feature.tag] ?? featureFamilyName(feature.tag);
 }
 
 /** Names numbered stylistic sets and character variants, such as "Stylistic Set 1". */
