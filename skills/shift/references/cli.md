@@ -33,6 +33,7 @@ Authoring commands work on `.shift` documents and change them atomically: an inv
 
 ```sh
 shift-cli font create Lab.shift
+shift-cli font create Lab.shift --from Family.glyphspackage   # names, UPM, metrics, axes, masters; no glyphs
 shift-cli axis add Lab.shift --tag wght --name Weight --min 100 --default 400 --max 900
 shift-cli source add Lab.shift --name Black --location wght=900
 shift-cli glyph add Lab.shift A --unicode U+0041
