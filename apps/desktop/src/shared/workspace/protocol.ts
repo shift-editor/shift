@@ -12,6 +12,7 @@ import type {
   LayerId,
   LayerMatch,
   LayerRead,
+  FeatureDiagnostic,
   FontFeature,
   Location,
   ParagraphRequest,
@@ -311,6 +312,10 @@ export type SyncCallMap = {
   "workspace.mapLocation": { request: Location; response: Location };
   /** Lists the features the font's compiled feature code defines. */
   "workspace.features": { request: null; response: FontFeature[] };
+  /** Returns the font's authored feature code, or null when it has none. */
+  "workspace.featureSource": { request: null; response: string | null };
+  /** Returns the problems the compiler found in the font's feature code. */
+  "workspace.featureDiagnostics": { request: null; response: FeatureDiagnostic[] };
   /** Shapes paragraphs with the font's feature code, each split into runs of one script and bidi level. */
   "workspace.shapeParagraphs": {
     request: { paragraphs: ParagraphRequest[] };

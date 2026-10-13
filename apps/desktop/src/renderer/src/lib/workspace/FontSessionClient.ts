@@ -28,6 +28,7 @@ import type {
   LayerId,
   LayerMatch,
   LayerRead,
+  FeatureDiagnostic,
   FontFeature,
   Location,
   ParagraphRequest,
@@ -436,6 +437,20 @@ export class FontSessionClient {
     await this.connect();
 
     return this.#require().call("workspace.features", null);
+  }
+
+  /** Returns the problems the compiler found in the current font's feature code. */
+  async featureDiagnostics(): Promise<FeatureDiagnostic[]> {
+    await this.connect();
+
+    return this.#require().call("workspace.featureDiagnostics", null);
+  }
+
+  /** Returns the current font's authored feature code, or null when it has none. */
+  async featureSource(): Promise<string | null> {
+    await this.connect();
+
+    return this.#require().call("workspace.featureSource", null);
   }
 
   #fold(applied: AppliedChange): AppliedChange {

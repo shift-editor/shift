@@ -224,6 +224,8 @@ export class WorkspaceHost {
       "workspace.shaperFont": ({ knownRevision }) =>
         this.#bridge.shaperFont(knownRevision ?? undefined) ?? null,
       "workspace.features": () => this.#bridge.shapingFeatures(),
+      "workspace.featureSource": () => this.#bridge.featureSource() ?? null,
+      "workspace.featureDiagnostics": () => this.#bridge.featureDiagnostics(),
     });
   }
 

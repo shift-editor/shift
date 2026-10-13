@@ -1,5 +1,5 @@
 import type { GlyphEntry, ShaperFont } from "@shift/types";
-import { effect, signal } from "../signals";
+import { effect, signal, track } from "../signals";
 import type { Effect, Signal, WritableSignal } from "../signals";
 import type { Editor } from "../editor/Editor";
 import { SerialRequest } from "../utils/SerialRequest";
@@ -12,7 +12,7 @@ import { loadShaping, type RegisteredShaper } from "../wasm/shaping";
  * Proof text shapes synchronously in `@shift/wasm/shaping`, with a shaper
  * font the workspace compiles from feature code. Fetching it, and loading the
  * module the first time, are the only asynchronous steps, taken when the
- * glyph directory changes, not per keystroke. Until the first
+ * glyph directory or feature code changes, not per keystroke. Until the first
  * shaper is ready, {@link shaperCell} is null and text lays out literally.
  */
 export class TextShaper {
@@ -34,6 +34,8 @@ export class TextShaper {
       () => {
         // A preview reads its source without a workspace, which compiles features.
         if (editor.sessionMode === "preview") return;
+        // New feature code compiles a new shaper font.
+        track(editor.font.featureRevisionCell);
         this.#refresh.request(editor.font.glyphEntriesCell.value);
       },
       { name: "text.shaperRefresh" },

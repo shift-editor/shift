@@ -1,7 +1,7 @@
 use napi_derive::napi;
 use shift_backends::shaper_font::{
-  FeatureSetting, FontFeature, ParagraphRequest, ShapeUnit, ShapedGlyph, ShapedParagraph,
-  ShapedRun, TextDirection,
+  DiagnosticSeverity, FeatureDiagnostic, FeatureSetting, FontFeature, ParagraphRequest, ShapeUnit,
+  ShapedGlyph, ShapedParagraph, ShapedRun, TextDirection,
 };
 use shift_font::{ExternalLocation, GlyphId};
 use shift_wire::bridges::napi::NapiLocation;
@@ -122,6 +122,34 @@ impl From<ShapedRun> for NapiShapedRun {
       level: u32::from(run.level),
       direction: direction_name(run.direction).to_string(),
       glyphs: run.glyphs.into_iter().map(NapiShapedGlyph::from).collect(),
+    }
+  }
+}
+
+/// A problem the compiler found in the font's feature code.
+#[napi(object)]
+pub struct NapiFeatureDiagnostic {
+  #[napi(ts_type = "\"error\" | \"warning\" | \"info\"")]
+  pub severity: String,
+  pub message: String,
+  /// Start of the problem, in UTF-16 code units into the feature code.
+  pub from: u32,
+  /// End of the problem, in UTF-16 code units into the feature code.
+  pub to: u32,
+}
+
+impl From<&FeatureDiagnostic> for NapiFeatureDiagnostic {
+  fn from(diagnostic: &FeatureDiagnostic) -> Self {
+    let severity = match diagnostic.severity {
+      DiagnosticSeverity::Error => "error",
+      DiagnosticSeverity::Warning => "warning",
+      DiagnosticSeverity::Info => "info",
+    };
+    Self {
+      severity: severity.to_string(),
+      message: diagnostic.message.clone(),
+      from: u32::try_from(diagnostic.range.start).unwrap_or(u32::MAX),
+      to: u32::try_from(diagnostic.range.end).unwrap_or(u32::MAX),
     }
   }
 }

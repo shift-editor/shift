@@ -311,7 +311,9 @@ pub(crate) fn write_glyph_directory_in_tx(
 
 fn change_priority(change: &font::FontChange) -> usize {
     match change {
-        font::FontChange::Metadata(_) | font::FontChange::LibValue { .. } => 0,
+        font::FontChange::Metadata(_)
+        | font::FontChange::LibValue { .. }
+        | font::FontChange::FeatureSource(_) => 0,
         font::FontChange::Axes(_) => 1,
         font::FontChange::AxisMappings(_) => 2,
         font::FontChange::MetricDefinitions(_) => 3,
@@ -360,6 +362,7 @@ fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), S
             pair,
             value,
         } => write_kerning_value(tx, source_id, pair, value.after),
+        font::FontChange::FeatureSource(value) => replace_feature_text(tx, value.after.as_deref()),
     }
 }
 
@@ -1046,7 +1049,10 @@ pub(crate) fn upsert_font_info(tx: &Transaction<'_>, font: &font::Font) -> Resul
     Ok(())
 }
 
-fn replace_feature_text(tx: &Transaction<'_>, fea_source: Option<&str>) -> Result<(), StoreError> {
+pub(crate) fn replace_feature_text(
+    tx: &Transaction<'_>,
+    fea_source: Option<&str>,
+) -> Result<(), StoreError> {
     tx.execute("DELETE FROM feature_text", [])?;
     tx.execute(
         "

@@ -9,6 +9,7 @@ import type {
   LayerId,
   LayerMatch,
   LayerRead,
+  FeatureDiagnostic,
   FontFeature,
   Location,
   ParagraphRequest,
@@ -323,6 +324,14 @@ export class WorkspaceEditCoordinator {
   /** Lists the font's features behind pending edits. */
   features(): Promise<FontFeature[]> {
     return this.#withFlush(() => this.#session.features());
+  }
+
+  featureDiagnostics(): Promise<FeatureDiagnostic[]> {
+    return this.#withFlush(() => this.#session.featureDiagnostics());
+  }
+
+  featureSource(): Promise<string | null> {
+    return this.#withFlush(() => this.#session.featureSource());
   }
 
   /** Replays the latest redo entry after pending pushes flush. */
