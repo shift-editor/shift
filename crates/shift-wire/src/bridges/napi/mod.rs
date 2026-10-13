@@ -1516,6 +1516,14 @@ impl From<SourceMetricsInterpolationSnapshot> for NapiSourceMetricsInterpolation
 pub struct NapiSourceMetricsInterpolationReplacement {
     pub snapshot: Option<NapiSourceMetricsInterpolationSnapshot>,
 }
+/// The authored feature code after a change; its presence distinguishes
+/// "unchanged" from a change that removed the code.
+#[napi(object)]
+pub struct NapiFeatureSourceReplacement {
+    /// The feature code, absent when the font has none.
+    pub source: Option<String>,
+}
+
 /// Replacement wrapper whose presence distinguishes "unchanged" from a
 /// change that removed the tracked language list.
 #[napi(object)]
@@ -1567,6 +1575,7 @@ pub struct NapiFontIntent {
     pub update_glyph: Option<NapiUpdateGlyphIntent>,
     pub update_font_metadata: Option<NapiUpdateFontMetadataIntent>,
     pub set_languages: Option<NapiSetLanguagesIntent>,
+    pub set_feature_source: Option<NapiSetFeatureSourceIntent>,
     pub create_axis: Option<NapiCreateAxisIntent>,
     pub update_axis: Option<NapiUpdateAxisIntent>,
     pub delete_axis: Option<NapiDeleteAxisIntent>,
@@ -1644,6 +1653,13 @@ pub struct NapiDeleteKerningGroupIntent {
 pub struct NapiUpdateFontMetadataIntent {
     /// Complete replacement snapshot; omitted optional fields are cleared.
     pub metadata: NapiFontMetadata,
+}
+
+/// Replaces the font's authored feature code as one undoable edit.
+#[napi(object)]
+pub struct NapiSetFeatureSourceIntent {
+    /// The new feature code; absent removes it.
+    pub source: Option<String>,
 }
 
 /// Replaces the font's tracked language list as one undoable edit.
@@ -1834,6 +1850,8 @@ pub struct NapiFontReplacement {
     pub named_instances: Option<Vec<NapiNamedInstance>>,
     /// Tracked language list when it changed; absent otherwise.
     pub languages: Option<NapiLanguagesReplacement>,
+    /// Authored feature code when it changed; absent otherwise.
+    pub feature_source: Option<NapiFeatureSourceReplacement>,
     /// Full sources list when font-level source structure changed (createAxis
     /// reshapes locations, createSource adds one); absent otherwise.
     pub sources: Option<Vec<NapiSource>>,

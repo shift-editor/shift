@@ -50,8 +50,9 @@ export class Text {
                 const record = this.run(runIdCell.value);
                 // A preview reads its source without a workspace, which is what shapes.
                 if (!record?.shaping || this.#editor.sessionMode === "preview") return null;
-                // A glyph's new Unicode value can change what the text shapes to.
+                // A glyph's new Unicode value, or new feature code, can change what the text shapes to.
                 track(this.#editor.font.glyphEntriesCell);
+                track(this.#editor.font.featureRevisionCell);
                 const location = locationFromExternalAxisLocation(
                   this.#editor.externalLocationCell.value,
                 );

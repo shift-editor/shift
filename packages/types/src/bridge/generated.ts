@@ -223,6 +223,14 @@ export interface BridgeApi {
    * tag, in tag order, with stylistic set and character variant names.
    */
   shapingFeatures(): Array<FontFeature>
+  /**
+   * Returns the problems the compiler found in the font's feature code, with
+   * ranges into the text [`Self::feature_source`] returns. Empty when the
+   * code compiles cleanly; errors keep the last valid features shaping.
+   */
+  featureDiagnostics(): Array<FeatureDiagnostic>
+  /** Returns the font's authored feature code, or `None` when it has none. */
+  featureSource(): string | null
   mapLocation(location: Location): Location
   getSources(): Array<Source>
 }
@@ -238,6 +246,16 @@ export interface DocumentState {
   saveTarget?: string
   dirty: boolean
   needsSaveAs: boolean
+}
+
+/** A problem the compiler found in the font's feature code. */
+export interface FeatureDiagnostic {
+  severity: "error" | "warning" | "info"
+  message: string
+  /** Start of the problem, in UTF-16 code units into the feature code. */
+  from: number
+  /** End of the problem, in UTF-16 code units into the feature code. */
+  to: number
 }
 
 export interface FeatureSetting {
@@ -648,6 +666,15 @@ export interface DesignNormalization {
 }
 
 /**
+ * The authored feature code after a change; its presence distinguishes
+ * "unchanged" from a change that removed the code.
+ */
+export interface FeatureSourceReplacement {
+  /** The feature code, absent when the font has none. */
+  source?: string
+}
+
+/**
  * CS0 walking-skeleton intent. A stringly union covering exactly the two
  * skeleton kinds; CS1 replaces this with per-variant intent structs.
  */
@@ -692,6 +719,7 @@ export interface FontIntent {
   updateGlyph?: UpdateGlyphIntent
   updateFontMetadata?: UpdateFontMetadataIntent
   setLanguages?: SetLanguagesIntent
+  setFeatureSource?: SetFeatureSourceIntent
   createAxis?: CreateAxisIntent
   updateAxis?: UpdateAxisIntent
   deleteAxis?: DeleteAxisIntent
@@ -759,6 +787,8 @@ export interface FontReplacement {
   namedInstances?: Array<NamedInstance>
   /** Tracked language list when it changed; absent otherwise. */
   languages?: LanguagesReplacement
+  /** Authored feature code when it changed; absent otherwise. */
+  featureSource?: FeatureSourceReplacement
   /**
    * Full sources list when font-level source structure changed (createAxis
    * reshapes locations, createSource adds one); absent otherwise.
@@ -1152,6 +1182,12 @@ export interface SetContourStartIntent {
   layerId: LayerId
   contourId: ContourId
   pointId: PointId
+}
+
+/** Replaces the font's authored feature code as one undoable edit. */
+export interface SetFeatureSourceIntent {
+  /** The new feature code; absent removes it. */
+  source?: string
 }
 
 /** Moves a glyph into a group, or out of its group at `position` without one. */

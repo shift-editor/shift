@@ -221,6 +221,8 @@ export class WorkspaceHost {
       "workspace.shapeParagraphs": ({ paragraphs }) =>
         paragraphs.map((paragraph) => this.#bridge.shapeParagraph(paragraph)),
       "workspace.features": () => this.#bridge.shapingFeatures(),
+      "workspace.featureSource": () => this.#bridge.featureSource() ?? null,
+      "workspace.featureDiagnostics": () => this.#bridge.featureDiagnostics(),
     });
   }
 

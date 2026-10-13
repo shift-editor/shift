@@ -43,6 +43,8 @@ shift-cli instance add Lab.shift --name Book --location wght=450
 shift-cli kerning set Lab.shift @A @V -60 --source Bold
 shift-cli kerning set Lab.shift --input kerning.json --dry-run --json
 shift-cli kerning group create Lab.shift O O Q --position first
+shift-cli features show Lab.shift > lab.fea                  # the font's OpenType feature code
+shift-cli features set Lab.shift --input lab.fea --dry-run   # replace it; empty input removes it
 ```
 
 - **Shift assigns all identities.** Read the IDs a command returns and use them as selectors; never invent IDs.
