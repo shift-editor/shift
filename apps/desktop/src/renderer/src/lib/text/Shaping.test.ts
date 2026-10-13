@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { resolve } from "node:path";
 import type { GlyphName, RunId } from "@shift/types";
 import { clusterForCaret, lineBreakTextItem } from "@shift/editor/text";
+import { effect } from "@shift/editor/signals";
 import { TestEditor } from "@/testing/TestEditor";
 
 const SHAPING_TEST = resolve(process.cwd(), "../../fixtures/fonts/ShapingTest.ufo");
@@ -273,5 +274,31 @@ describe("features can be turned on or off per proof text", () => {
 
     editor.history.capture("Reset features", () => editor.text.resetFeatures(runId));
     await expect.poll(names).toEqual(["f_i"]);
+  });
+});
+
+describe("a substituted glyph appears only once it has loaded", () => {
+  it("never shows the ligature before its outline and advance are there", async () => {
+    const editor = new TestEditor();
+    await editor.openSession(SHAPING_TEST, "f");
+    const runId = editor.text.createRun(editor.text.itemsFromText("fi")).id;
+    const layoutCell = editor.text.layoutCell(runId);
+    const seen: { names: string[]; advance: number }[] = [];
+    const watcher = effect(() => {
+      const layout = layoutCell.value;
+      if (!layout) return;
+      seen.push({
+        names: layout.placedGlyphs.map((placed) => placed.glyph.glyphName),
+        advance: layout.totalAdvance,
+      });
+    });
+
+    await expect.poll(() => seen.at(-1)?.names).toEqual(["f_i"]);
+    watcher.dispose();
+
+    expect(seen.filter((state) => state.names[0] === "f_i")).not.toContainEqual({
+      names: ["f_i"],
+      advance: 0,
+    });
   });
 });
