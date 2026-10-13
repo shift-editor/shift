@@ -86,7 +86,7 @@ function TooltipContent({
   const container = usePortalContainer();
   return (
     <BaseTooltip.Portal container={container}>
-      <BaseTooltip.Positioner side={side} sideOffset={sideOffset}>
+      <BaseTooltip.Positioner className="z-50" side={side} sideOffset={sideOffset}>
         <BaseTooltip.Popup
           role="tooltip"
           className={cn(

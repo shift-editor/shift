@@ -12,15 +12,16 @@ import {
 import CheckIcon from "@/assets/general/check.svg";
 import ExpandMoreIcon from "@/assets/general/expand-more.svg";
 import SearchIcon from "@/assets/general/search.svg";
-import type { ColorTheme, ThemeId } from "@/lib/themes";
+import type { ColorTheme } from "@/lib/themes";
 
 interface ThemePickerProps {
   label: string;
+  /** Built-in themes first, then theme files, which the list groups under "Your themes". */
   themes: readonly ColorTheme[];
-  value: ThemeId;
+  value: string;
   /** Called with the highlighted theme while the list is open, and `null` when it closes. */
-  onPreview: (id: ThemeId | null) => void;
-  onChoose: (id: ThemeId) => void;
+  onPreview: (id: string | null) => void;
+  onChoose: (id: string) => void;
 }
 
 /**
@@ -30,17 +31,19 @@ interface ThemePickerProps {
  */
 export const ThemePicker = ({ label, themes, value, onPreview, onChoose }: ThemePickerProps) => {
   const listId = useId();
-  const optionId = (id: ThemeId) => `${listId}-${id}`;
+  const optionId = (id: string) => `${listId}-${id}`;
   const searchRef = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [highlightedId, setHighlightedId] = useState<ThemeId>(value);
+  const [highlightedId, setHighlightedId] = useState<string>(value);
 
   const chosen = themeById(themes, value);
   const needle = query.trim().toLowerCase();
   const visible = themes.filter((theme) => theme.name.toLowerCase().includes(needle));
+  const builtIn = visible.filter((theme) => !theme.file);
+  const yours = visible.filter((theme) => theme.file);
 
-  const highlight = (id: ThemeId) => {
+  const highlight = (id: string) => {
     setHighlightedId(id);
     onPreview(id);
   };
@@ -52,7 +55,7 @@ export const ThemePicker = ({ label, themes, value, onPreview, onChoose }: Theme
     if (!next) onPreview(null);
   };
 
-  const choose = (id: ThemeId) => {
+  const choose = (id: string) => {
     onChoose(id);
     handleOpenChange(false);
   };
@@ -71,6 +74,29 @@ export const ThemePicker = ({ label, themes, value, onPreview, onChoose }: Theme
       choose(highlightedId);
     }
   };
+
+  const renderOption = (theme: ColorTheme) => (
+    <div
+      key={theme.id}
+      id={optionId(theme.id)}
+      role="option"
+      aria-selected={theme.id === value}
+      title={theme.file}
+      onMouseEnter={() => highlight(theme.id)}
+      onMouseDown={(event) => event.preventDefault()}
+      onClick={() => choose(theme.id)}
+      className={cn(
+        "flex h-7 shrink-0 cursor-pointer items-center gap-2 rounded px-2 text-sm text-primary",
+        theme.id === highlightedId && "bg-hover",
+      )}
+    >
+      <span className="w-3.5 shrink-0 text-secondary">
+        {theme.id === value ? <CheckIcon className="h-3.5 w-3.5" /> : null}
+      </span>
+      <span className="min-w-0 flex-1 truncate">{theme.name}</span>
+      <ThemeDots theme={theme} />
+    </div>
+  );
 
   return (
     <Popover open={open} onOpenChange={handleOpenChange} modal={false}>
@@ -114,27 +140,13 @@ export const ThemePicker = ({ label, themes, value, onPreview, onChoose }: Theme
               aria-label={label}
               className="scrollbar-hidden flex max-h-64 flex-col overflow-y-auto p-1"
             >
-              {visible.map((theme) => (
-                <div
-                  key={theme.id}
-                  id={optionId(theme.id)}
-                  role="option"
-                  aria-selected={theme.id === value}
-                  onMouseEnter={() => highlight(theme.id)}
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => choose(theme.id)}
-                  className={cn(
-                    "flex h-7 shrink-0 cursor-pointer items-center gap-2 rounded px-2 text-sm text-primary",
-                    theme.id === highlightedId && "bg-hover",
-                  )}
-                >
-                  <span className="w-3.5 shrink-0 text-secondary">
-                    {theme.id === value ? <CheckIcon className="h-3.5 w-3.5" /> : null}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate">{theme.name}</span>
-                  <ThemeDots theme={theme} />
+              {builtIn.map(renderOption)}
+              {yours.length > 0 ? (
+                <div role="group" aria-label="Your themes" className="flex flex-col">
+                  <p className="px-2 pb-1 pt-2 text-ui text-muted">Your themes</p>
+                  {yours.map(renderOption)}
                 </div>
-              ))}
+              ) : null}
               {visible.length === 0 ? (
                 <p className="px-2 py-4 text-center text-ui text-muted">No themes found</p>
               ) : null}
@@ -164,6 +176,6 @@ const ThemeDots = ({ theme }: { theme: ColorTheme }) => {
   );
 };
 
-function themeById(themes: readonly ColorTheme[], id: ThemeId): ColorTheme {
+function themeById(themes: readonly ColorTheme[], id: string): ColorTheme {
   return themes.find((theme) => theme.id === id) ?? themes[0];
 }

@@ -6,7 +6,9 @@ Terminal-style color themes for the desktop UI and native editor renderers.
 
 ## Architecture Invariants
 
-- A `ColorTheme` is a complete 16-color semantic source palette with a stable `ThemeId` and `ThemeAppearance`.
+- A `ColorTheme` is a complete 16-color semantic source palette with a stable id and `ThemeAppearance`. Built-in themes use a `ThemeId`; user themes come from `themes/<id>.toml` in the config folder and use the file name as their id.
+- A user theme file named like a built-in theme or `system` is ignored and reported, so `theme = "nord"` always means the built-in Nord.
+- An edited theme file arrives as a new `ColorTheme` object. Every renderer keys its redraw on `resolvedTheme` identity, so a palette change under the same id repaints the DOM, Canvas 2D, WebGL markers, and Slug without a separate signal.
 - `ThemePreference` is a mode (`system`, `light`, or `dark`) plus a theme for each appearance. `system` picks the light or dark slot from `prefers-color-scheme`; the slots default to Shift Light and Shift Dark.
 - `applyResolvedTheme` maps one resolved palette into both Tailwind's `--color-*` variables and the editor's `--editor-*` variables. DOM, Canvas 2D, WebGL markers, and Slug must therefore redraw from the same resolved theme.
 - Shared UI components consume semantic utilities and never import this registry or depend on theme ids.
@@ -25,13 +27,14 @@ Terminal-style color themes for the desktop UI and native editor renderers.
 - `components/chrome/settings/ConfigFileSection.tsx` — config file location, Open folder, and file problems
 - `src/main/config/` — `AppConfig` (read, watch, write), `configToml` (adapter over the `shift-config` crate), `configDirectory` (per-build folder)
 - `components/chrome/settings/AppearanceSettingsPanel.tsx` — mode tabs and one theme picker per slot
-- `components/chrome/settings/ThemePicker.tsx` — searchable theme list that previews the highlighted theme
+- `components/chrome/settings/ThemePicker.tsx` — searchable theme list (built-in, then "Your themes") that previews the highlighted theme
 - `packages/editor/src/lib/editor/rendering/Theme.ts` — reads the resolved `--editor-*` variables into `EditorRenderTheme`
 - `apps/desktop/THIRD_PARTY_THEMES.md` — packaged upstream attribution and licenses
 
 ## Key Types
 
-- **`ThemeId`** — closed identifier union for bundled palettes.
+- **`ThemeId`** — closed identifier union for bundled palettes; preference slots hold any id, built-in or a user theme file's.
+- **`UserColorThemes`** — themes from valid files, plus the files ignored for reusing a reserved id.
 - **`ThemePreference`** — a `ThemeMode` (`system | light | dark`) and a `ThemeId` per appearance; `readThemeSetting`/`writeThemeSetting` convert it to and from the file's `theme`.
 - **`ThemeAppearance`** — the resolved `light | dark` browser appearance.
 - **`ColorTheme`** — metadata plus a complete Base16-style palette.
@@ -54,9 +57,9 @@ Selecting Shift Light removes runtime overrides so `index.css` remains the first
 
 ## Gotchas
 
-- Changing CSS variables without changing `resolvedTheme` does not notify Canvas 2D or WebGL. Runtime custom editors will need an explicit palette-change signal.
+- Changing CSS variables without changing `resolvedTheme` does not notify Canvas 2D or WebGL. Code that changes colors must produce a new `ColorTheme` object, as `userColorThemes` does for every theme file read.
+- The first-paint cache (`themeCache`) stores the user themes the preference names, since only main can otherwise supply their palettes.
 - `parseCssColor` supports hexadecimal and comma-form RGB/RGBA values. The registry derives compatible RGBA values from six-digit palette entries.
-- Theme-file import/export is intentionally separate from the built-in registry. Imported themes require schema validation and migration before `ThemeId` can become an open user-defined identifier.
 
 ## Verification
 

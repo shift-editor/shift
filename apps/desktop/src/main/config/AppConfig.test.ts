@@ -20,6 +20,20 @@ function write(source: string): void {
   fs.writeFileSync(path.join(directory, "config.toml"), source);
 }
 
+const PALETTE = Array.from({ length: 16 }, (_, index) => `#${index.toString(16).repeat(6)}`);
+
+function themeSource(appearance = "dark", palette = PALETTE): string {
+  const colors = palette.map(
+    (color, index) => `base0${index.toString(16).toUpperCase()} = "${color}"`,
+  );
+  return [`name = "Rice"`, `appearance = "${appearance}"`, "[palette]", ...colors, ""].join("\n");
+}
+
+function writeTheme(id: string, source: string): void {
+  fs.mkdirSync(path.join(directory, "themes"), { recursive: true });
+  fs.writeFileSync(path.join(directory, "themes", `${id}.toml`), source);
+}
+
 function read(): string {
   return fs.readFileSync(path.join(directory, "config.toml"), "utf8");
 }
@@ -36,7 +50,13 @@ afterEach(() => {
 
 describe("AppConfig", () => {
   it("chooses no theme and creates no file when config.toml is missing", () => {
-    expect(open().state).toEqual({ directory, exists: false, theme: null, problems: [] });
+    expect(open().state).toEqual({
+      directory,
+      exists: false,
+      theme: null,
+      problems: [],
+      themes: [],
+    });
     expect(fs.existsSync(path.join(directory, "config.toml"))).toBe(false);
   });
 
@@ -157,5 +177,46 @@ describe("AppConfig", () => {
     appConfig.reload();
 
     expect(published).toEqual([]);
+  });
+
+  it("reads theme files in themes/, ordered by id", () => {
+    writeTheme("zen", themeSource("light"));
+    writeTheme("rice", themeSource());
+    fs.writeFileSync(path.join(directory, "themes", "notes.txt"), "not a theme");
+
+    const { themes } = open().state;
+
+    expect(themes.map(({ id }) => id)).toEqual(["rice", "zen"]);
+    expect(themes[0]).toMatchObject({
+      path: path.join(directory, "themes", "rice.toml"),
+      theme: { name: "Rice", appearance: "dark", palette: PALETTE },
+      problems: [],
+    });
+  });
+
+  it("keeps a theme's last valid palette when its file breaks", () => {
+    writeTheme("rice", themeSource());
+    const appConfig = open();
+
+    writeTheme("rice", themeSource().replace(PALETTE[2], "#xyz"));
+    appConfig.reload();
+
+    const [rice] = appConfig.state.themes;
+    expect(rice.theme?.palette).toEqual(PALETTE);
+    expect(rice.problems).toEqual([expect.objectContaining({ severity: "error", line: 6 })]);
+  });
+
+  it("applies a theme file edited by another program", async () => {
+    writeTheme("rice", themeSource());
+    const appConfig = open();
+    await appConfig.watch();
+    const lighter = PALETTE.map((color, index) => (index === 0 ? "#fafafa" : color));
+
+    writeTheme("rice", themeSource("light", lighter));
+
+    await vi.waitFor(() => expect(appConfig.state.themes[0]?.theme?.appearance).toBe("light"), {
+      timeout: 5000,
+    });
+    expect(appConfig.state.themes[0]?.theme?.palette[0]).toBe("#fafafa");
   });
 });

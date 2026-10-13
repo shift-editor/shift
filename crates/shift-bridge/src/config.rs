@@ -5,6 +5,7 @@
 
 use napi::{Error, Result, Status};
 use napi_derive::napi;
+use shift_config::theme::Appearance;
 use shift_config::{ConfigProblem, Severity, ThemeMode, ThemeSetting, ThemeSlots};
 
 /// How serious a config problem is: `error` keeps the last valid settings,
@@ -146,4 +147,46 @@ pub fn config_set_theme_slots(source: Option<String>, slots: NapiThemeSlots) -> 
 fn set_theme(source: Option<String>, theme: ThemeSetting) -> Result<String> {
   shift_config::set_theme(source.as_deref(), &theme)
     .map_err(|error| Error::new(Status::InvalidArg, error.to_string()))
+}
+
+/// Whether a theme's background is light or dark.
+#[napi(string_enum = "lowercase")]
+pub enum NapiThemeAppearance {
+  Light,
+  Dark,
+}
+
+/// A valid theme file's contents.
+#[napi(object)]
+pub struct NapiThemeFile {
+  /// The name shown in Settings, when the file sets one.
+  pub name: Option<String>,
+  pub appearance: NapiThemeAppearance,
+  /// `base00` through `base0F` as lowercase `#rrggbb`.
+  pub palette: Vec<String>,
+}
+
+/// The result of reading a theme file.
+#[napi(object)]
+pub struct NapiThemeRead {
+  /// The theme, or nothing when an error means it cannot be used.
+  pub theme: Option<NapiThemeFile>,
+  pub problems: Vec<NapiConfigProblem>,
+}
+
+/// Reads a `themes/<id>.toml` file.
+#[napi]
+pub fn theme_read(source: String) -> NapiThemeRead {
+  let read = shift_config::theme::read_theme(&source);
+  NapiThemeRead {
+    theme: read.theme.map(|theme| NapiThemeFile {
+      name: theme.name,
+      appearance: match theme.appearance {
+        Appearance::Light => NapiThemeAppearance::Light,
+        Appearance::Dark => NapiThemeAppearance::Dark,
+      },
+      palette: theme.palette.into(),
+    }),
+    problems: read.problems.into_iter().map(Into::into).collect(),
+  }
 }

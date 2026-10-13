@@ -2,9 +2,15 @@ import fs from "node:fs";
 import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { watch, type FSWatcher } from "chokidar";
-import type { AppConfigState, ThemeSetting } from "../../shared/config/config";
+import type {
+  AppConfigState,
+  ConfigFileState,
+  ThemeSetting,
+  UserThemeFile,
+} from "../../shared/config/config";
 import type { ShiftLogger } from "../logging";
 import { readConfig, setConfigTheme, type ConfigValues } from "./configToml";
+import { readThemeFiles, THEMES_FOLDER_NAME } from "./themeFiles";
 
 export const CONFIG_FILE_NAME = "config.toml";
 
@@ -34,6 +40,7 @@ export interface AppConfigOptions {
 export class AppConfig {
   readonly #directory: string;
   readonly #filePath: string;
+  readonly #themesDirectory: string;
   readonly #log: ShiftLogger;
   readonly #listeners = new Set<(state: AppConfigState) => void>();
   #state: AppConfigState;
@@ -45,7 +52,15 @@ export class AppConfig {
   constructor(options: AppConfigOptions) {
     this.#directory = options.directory;
     this.#filePath = path.join(options.directory, CONFIG_FILE_NAME);
+    this.#themesDirectory = path.join(options.directory, THEMES_FOLDER_NAME);
     this.#log = options.log;
+    this.#state = {
+      directory: this.#directory,
+      exists: false,
+      theme: null,
+      problems: [],
+      themes: [],
+    };
     this.#state = this.#read(EMPTY_VALUES);
   }
 
@@ -60,7 +75,8 @@ export class AppConfig {
   }
 
   /**
-   * Starts watching the config folder, creating it so it can be watched.
+   * Starts watching the config folder and its `themes/`, creating both so
+   * they can be watched.
    *
    * @remarks
    * Watching folders rather than files sees an editor's save-by-rename and edits
@@ -75,17 +91,23 @@ export class AppConfig {
   watch(): Promise<void> {
     if (this.#watcher) return Promise.resolve();
     try {
-      fs.mkdirSync(this.#directory, { recursive: true });
+      fs.mkdirSync(this.#themesDirectory, { recursive: true });
     } catch (error) {
       this.#log.warn("cannot create config folder", { directory: this.#directory, error });
       return Promise.resolve();
     }
     this.#symlinkTarget = this.#readSymlinkTarget();
-    const folders = [this.#directory];
+    const folders = [this.#directory, this.#themesDirectory];
     if (this.#symlinkTarget) folders.push(path.dirname(this.#symlinkTarget));
     const watcher = watch(folders, { ignoreInitial: true, depth: 0, followSymlinks: false })
       .on("all", (_event, changedPath) => {
-        if (changedPath === this.#filePath || changedPath === this.#symlinkTarget) this.reload();
+        if (
+          changedPath === this.#filePath ||
+          changedPath === this.#symlinkTarget ||
+          path.dirname(changedPath) === this.#themesDirectory
+        ) {
+          this.reload();
+        }
       })
       .on("error", (error) => {
         this.#log.warn("config watcher stopped", { error });
@@ -112,7 +134,7 @@ export class AppConfig {
     this.#listeners.clear();
   }
 
-  /** Rereads `config.toml` and publishes the state when it changed. */
+  /** Rereads `config.toml` and the themes, and publishes the state when it changed. */
   reload(): void {
     this.#followSymlink();
     this.#publish(this.#read({ theme: this.#state.theme }));
@@ -137,8 +159,23 @@ export class AppConfig {
     return this.#state;
   }
 
-  /** Reads the file, keeping `lastValid` values when it has an error. */
+  /** Reads the files, keeping last valid values for any that have errors. */
   #read(lastValid: ConfigValues): AppConfigState {
+    return { ...this.#readConfigFile(lastValid), themes: this.#readThemes() };
+  }
+
+  #readThemes(): UserThemeFile[] {
+    const previous = new Map(this.#state.themes.map((theme) => [theme.id, theme]));
+    try {
+      return readThemeFiles(this.#themesDirectory, previous);
+    } catch (error) {
+      this.#log.warn("cannot read themes folder", { folder: this.#themesDirectory, error });
+      return [...previous.values()];
+    }
+  }
+
+  /** Reads `config.toml`, keeping `lastValid` values when it has an error. */
+  #readConfigFile(lastValid: ConfigValues): ConfigFileState {
     let source: string | null;
     try {
       source = this.#readSource();

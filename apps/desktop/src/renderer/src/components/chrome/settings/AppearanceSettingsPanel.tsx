@@ -1,13 +1,7 @@
 import { useEffect, type ReactNode } from "react";
 import { Tabs, TabsList, TabsTab } from "@shift/ui";
 import { useTheme } from "@/context/ThemeContext";
-import {
-  colorThemes,
-  type ColorTheme,
-  type ThemeAppearance,
-  type ThemeId,
-  type ThemeMode,
-} from "@/lib/themes";
+import type { ThemeAppearance, ThemeMode } from "@/lib/themes";
 import { ConfigFileSection } from "./ConfigFileSection";
 import { ThemePicker } from "./ThemePicker";
 
@@ -31,7 +25,7 @@ const SLOTS: Record<ThemeAppearance, { label: string; description: string }> = {
  * appearance not in use; closing the picker without choosing restores it.
  */
 export const AppearanceSettingsPanel = () => {
-  const { preference, previewTheme, setPreference } = useTheme();
+  const { preference, themes, previewTheme, setPreference } = useTheme();
   const { mode } = preference;
   const slots: readonly ThemeAppearance[] = mode === "system" ? ["light", "dark"] : [mode];
 
@@ -42,7 +36,7 @@ export const AppearanceSettingsPanel = () => {
     setPreference({ ...preference, mode: next });
   };
 
-  const chooseTheme = (appearance: ThemeAppearance, id: ThemeId) => {
+  const chooseTheme = (appearance: ThemeAppearance, id: string) => {
     previewTheme(null);
     setPreference({ ...preference, [appearance]: id });
   };
@@ -71,7 +65,7 @@ export const AppearanceSettingsPanel = () => {
         >
           <ThemePicker
             label={SLOTS[appearance].label}
-            themes={themesFor(appearance)}
+            themes={themes.filter((theme) => theme.appearance === appearance)}
             value={preference[appearance]}
             onPreview={previewTheme}
             onChoose={(id) => chooseTheme(appearance, id)}
@@ -101,7 +95,3 @@ const SettingRow = ({ label, description, children }: SettingRowProps) => (
     {children}
   </div>
 );
-
-function themesFor(appearance: ThemeAppearance): readonly ColorTheme[] {
-  return colorThemes.filter((theme) => theme.appearance === appearance);
-}

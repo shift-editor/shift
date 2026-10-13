@@ -5,6 +5,8 @@
 //! blank line around it. The app and `shift-cli` share it, so both agree on
 //! what a valid file is.
 
+pub mod theme;
+
 use std::ops::Range;
 
 use toml_edit::{Document, DocumentMut, InlineTable, Item, Value};
@@ -369,7 +371,7 @@ fn insert_top_level(document: &mut DocumentMut, value: Value) {
 }
 
 /// Converts a byte offset in `source` to a one-based line and character column.
-fn location(source: &str, offset: usize) -> Location {
+pub(crate) fn location(source: &str, offset: usize) -> Location {
     let before = source.get(..offset).unwrap_or(source);
     let line_start = before.rfind('\n').map_or(0, |index| index + 1);
     Location {

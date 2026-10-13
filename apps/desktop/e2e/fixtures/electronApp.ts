@@ -398,11 +398,17 @@ async function resetSharedWorkspace(app: ElectronApplication): Promise<void> {
     throw new Error(`A shared workspace must have one window; it has ${windows.length}.`);
   }
   const page = windows[0]!;
-  // config.toml outlives a reload, so a theme chosen by one test would leak into the next.
+  // config.toml and themes/ outlive a reload, so a theme from one test would leak into the next.
   const { directory } = await page.evaluate(() => window.shiftHost!.config.state());
   fs.rmSync(path.join(directory, "config.toml"), { force: true });
+  fs.rmSync(path.join(directory, "themes"), { recursive: true, force: true });
   await expect
-    .poll(() => page.evaluate(async () => (await window.shiftHost!.config.state()).exists))
+    .poll(() =>
+      page.evaluate(async () => {
+        const state = await window.shiftHost!.config.state();
+        return state.exists || state.themes.length > 0;
+      }),
+    )
     .toBe(false);
   await page.evaluate(() => {
     localStorage.clear();

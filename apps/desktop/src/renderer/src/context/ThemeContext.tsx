@@ -1,7 +1,7 @@
 import { createContext, useContext } from "react";
 
-import type { AppConfigState } from "@shared/config/config";
-import type { ColorTheme, ThemeAppearance, ThemeId, ThemePreference } from "@/lib/themes";
+import type { AppConfigState, UserThemeFile } from "@shared/config/config";
+import type { ColorTheme, ThemeAppearance, ThemePreference } from "@/lib/themes";
 export type {
   ColorTheme,
   ThemeAppearance,
@@ -16,9 +16,13 @@ export interface ThemeContextValue {
   /** The theme on screen: the previewed theme while one is set, otherwise the preference's. */
   resolvedTheme: ColorTheme;
   /** Shows `theme` everywhere, canvas included, without saving it; `null` ends the preview. */
-  previewTheme: (theme: ThemeId | null) => void;
+  previewTheme: (themeId: string | null) => void;
   /** The OS appearance, which picks the theme in `system` mode. */
   systemAppearance: ThemeAppearance;
+  /** Built-in themes followed by the valid files in `themes/`, ordered by id. */
+  themes: readonly ColorTheme[];
+  /** Theme files ignored because they reuse a built-in theme's id or `system`. */
+  shadowingThemeFiles: readonly UserThemeFile[];
   /** Writes the preference to `config.toml`; a refused write restores the previous one. */
   setPreference: (preference: ThemePreference) => void;
   /** This build's config, or `null` until main has answered. */
