@@ -221,6 +221,31 @@ export interface BridgeApi {
   getSources(): Array<Source>
 }
 
+/** One problem in `config.toml`; line and column are one-based. */
+export interface ConfigProblem {
+  severity: ConfigSeverity
+  message: string
+  line?: number
+  column?: number
+}
+
+/** The settings in a `config.toml` source. */
+export interface ConfigRead {
+  /** Whether the file may be applied; `false` when any problem is an error. */
+  valid: boolean
+  /** The theme name, when the file is valid and writes `theme = "…"`. */
+  theme?: string
+  /** The theme table, when the file is valid and writes `theme` as a table. */
+  themeSlots?: ThemeSlots
+  problems: Array<ConfigProblem>
+}
+
+/**
+ * How serious a config problem is: `error` keeps the last valid settings,
+ * `warning` applies the file but ignores something in it.
+ */
+export type ConfigSeverity = "error" | "warning";
+
 export interface DocumentIdentity {
   documentId: string
   canonicalPath: string
@@ -312,6 +337,19 @@ export interface Specimen {
   /** SVG `viewBox` as `[x, y, width, height]`, fitted to the ink. */
   viewBox: Array<number>
   rightToLeft: boolean
+}
+
+/** Which appearance a `theme` table uses. */
+export type ThemeMode = "system" | "light" | "dark";
+
+/**
+ * A `theme` table: a mode and the theme used in each appearance; missing
+ * keys are left to the app's defaults.
+ */
+export interface ThemeSlots {
+  mode?: ThemeMode
+  light?: string
+  dark?: string
 }
 export interface AddAnchorsIntent {
   layerId: LayerId

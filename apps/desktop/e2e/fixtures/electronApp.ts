@@ -388,7 +388,8 @@ async function emulateFocus(page: Page): Promise<void> {
  *
  * @remarks
  * The document stays open in the workspace process; reloading the renderer on the home route
- * with cleared storage drops the previous test's tool, selection, camera, and layout state.
+ * with cleared storage and no `config.toml` drops the previous test's tool, selection, camera,
+ * layout, and theme.
  * The `page` fixture then waits for the workspace to be ready again.
  */
 async function resetSharedWorkspace(app: ElectronApplication): Promise<void> {
@@ -397,6 +398,12 @@ async function resetSharedWorkspace(app: ElectronApplication): Promise<void> {
     throw new Error(`A shared workspace must have one window; it has ${windows.length}.`);
   }
   const page = windows[0]!;
+  // config.toml outlives a reload, so a theme chosen by one test would leak into the next.
+  const { directory } = await page.evaluate(() => window.shiftHost!.config.state());
+  fs.rmSync(path.join(directory, "config.toml"), { force: true });
+  await expect
+    .poll(() => page.evaluate(async () => (await window.shiftHost!.config.state()).exists))
+    .toBe(false);
   await page.evaluate(() => {
     localStorage.clear();
     sessionStorage.clear();

@@ -1,3 +1,5 @@
+import type { ThemeSetting } from "@shared/config/config";
+
 export type ThemeAppearance = "light" | "dark";
 
 export type ThemeId =
@@ -10,8 +12,6 @@ export type ThemeId =
   | "gruvbox-light"
   | "gruvbox-dark"
   | "one-dark";
-
-export type ThemeSelection = "system" | ThemeId;
 
 export interface ColorTheme {
   readonly id: ThemeId;
@@ -247,13 +247,109 @@ export const colorThemes: readonly ColorTheme[] = [
   },
 ];
 
-export function resolveThemeSelection(
-  themeSelection: ThemeSelection,
+/** Whether Shift follows the OS appearance or always uses one. */
+export type ThemeMode = "system" | ThemeAppearance;
+
+/** The mode and the theme each appearance uses; what Settings shows and edits. */
+export interface ThemePreference {
+  readonly mode: ThemeMode;
+  readonly light: ThemeId;
+  readonly dark: ThemeId;
+}
+
+/** Used when `config.toml` chooses no theme. */
+export const defaultThemePreference: ThemePreference = {
+  mode: "light",
+  light: "shift-light",
+  dark: "shift-dark",
+};
+
+/** Returns the built-in theme `id`, or Shift Light for an id Shift does not have. */
+export function themeById(id: string): ColorTheme {
+  return colorThemes.find((theme) => theme.id === id) ?? colorThemes[0];
+}
+
+function isThemeId(value: string): value is ThemeId {
+  return colorThemes.some((theme) => theme.id === value);
+}
+
+/** A preference read from `config.toml`, with any theme names Shift does not have. */
+export interface ThemePreferenceRead {
+  preference: ThemePreference;
+  /** Names that fell back to the default, in file order. */
+  unknownThemes: string[];
+}
+
+/**
+ * Reads the `theme` setting from `config.toml`.
+ *
+ * @remarks
+ * `theme = "nord"` uses Nord in its own appearance, keeping the default for
+ * the other; `theme = "system"` follows the OS with the defaults. A table's
+ * missing mode means `system`, and a missing or unknown slot keeps its default.
+ */
+export function readThemeSetting(setting: ThemeSetting | null): ThemePreferenceRead {
+  if (setting === null) return { preference: defaultThemePreference, unknownThemes: [] };
+
+  if (typeof setting === "string") {
+    if (setting === "system") {
+      return { preference: { ...defaultThemePreference, mode: "system" }, unknownThemes: [] };
+    }
+    if (!isThemeId(setting)) {
+      return { preference: defaultThemePreference, unknownThemes: [setting] };
+    }
+    const { appearance } = themeById(setting);
+    return {
+      preference: { ...defaultThemePreference, mode: appearance, [appearance]: setting },
+      unknownThemes: [],
+    };
+  }
+
+  const unknownThemes: string[] = [];
+  const slot = (appearance: ThemeAppearance): ThemeId => {
+    const name = setting[appearance];
+    if (name === undefined) return defaultThemePreference[appearance];
+    if (isThemeId(name)) return name;
+    unknownThemes.push(name);
+    return defaultThemePreference[appearance];
+  };
+  return {
+    preference: { mode: setting.mode ?? "system", light: slot("light"), dark: slot("dark") },
+    unknownThemes,
+  };
+}
+
+/**
+ * Returns the `theme` setting that saves `preference`.
+ *
+ * @remarks
+ * Keeps the file's form: a file with a `theme` table keeps a table. Otherwise
+ * a preference that `theme = "…"` reads back exactly is written as a name, so
+ * most files stay one line; anything else becomes a table.
+ */
+export function writeThemeSetting(
+  preference: ThemePreference,
+  current: ThemeSetting | null,
+): ThemeSetting {
+  const table: ThemeSetting = { ...preference };
+  if (current !== null && typeof current !== "string") return table;
+
+  const name = preference.mode === "system" ? "system" : preference[preference.mode];
+  const roundTrip = readThemeSetting(name).preference;
+  return isSamePreference(roundTrip, preference) ? name : table;
+}
+
+function isSamePreference(a: ThemePreference, b: ThemePreference): boolean {
+  return a.mode === b.mode && a.light === b.light && a.dark === b.dark;
+}
+
+/** The theme `preference` shows while the OS is in `systemAppearance`. */
+export function resolveTheme(
+  preference: ThemePreference,
   systemAppearance: ThemeAppearance,
 ): ColorTheme {
-  const systemThemeId = systemAppearance === "dark" ? "shift-dark" : "shift-light";
-  const themeId = themeSelection === "system" ? systemThemeId : themeSelection;
-  return colorThemes.find((theme) => theme.id === themeId) ?? colorThemes[0];
+  const appearance = preference.mode === "system" ? systemAppearance : preference.mode;
+  return themeById(preference[appearance]);
 }
 
 export function applyResolvedTheme(
