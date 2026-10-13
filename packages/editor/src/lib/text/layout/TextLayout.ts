@@ -5,7 +5,6 @@
  * `origin.y - lineHeight * n`. Cluster is whole-buffer monotonic.
  */
 import type { Bounds as BoundsType } from "@shift/geo";
-import type { GlyphId } from "@shift/types";
 import { graphemeBoundaries } from "./segmentation";
 import type {
   CaretPosition,
@@ -80,9 +79,11 @@ export class TextLayout {
 
   constructor(params: TextLayoutParams) {
     const { items, origin, editor, positioner, externalLocation, shaped = null } = params;
+    // The active source can be one an edit just deleted, until the editor moves off it.
     const activeSourceId = editor.activeSourceId;
-    this.metrics = activeSourceId
-      ? editor.font.metricsForSource(activeSourceId)
+    const activeSource = activeSourceId ? editor.font.source(activeSourceId) : null;
+    this.metrics = activeSource
+      ? editor.font.metricsForSource(activeSource.id)
       : editor.font.metricsAtLocation(externalLocation.peek());
     this.origin = origin;
     this.bufferLength = items.length;
@@ -132,16 +133,20 @@ export class TextLayout {
   }
 
   /**
-   * Returns one particular glyph an item produced.
+   * Returns the glyphs an item shapes to, in logical order: a letter's body
+   * before its dot, the first half of a split vowel before the second.
    *
-   * @returns null when the item produced no such glyph, such as after a reshape replaced it.
+   * @remarks
+   * A ligature is a part of each item it joins. Empty for line breaks and
+   * unknown items.
    */
-  placedGlyph(itemId: TextItemId, glyphId: GlyphId): PlacedGlyph | null {
-    return (
-      this.placedGlyphs.find(
-        (placed) => placed.glyph.glyphId === glyphId && placed.glyph.sourceItemIds.includes(itemId),
-      ) ?? null
-    );
+  partsOfItem(itemId: TextItemId): readonly PlacedGlyph[] {
+    const parts = this.placedGlyphs.filter((placed) => placed.glyph.sourceItemIds.includes(itemId));
+    const first = parts[0];
+    const rightToLeft =
+      first && this.lines[first.lineIndex]!.runs[first.runIndex]!.direction === "rtl";
+    // A right-to-left run lists its glyphs in screen order, the reverse of logical.
+    return rightToLeft ? parts.reverse() : parts;
   }
 
   /** Returns the index of the line holding a caret cluster, or -1 when out of range. */

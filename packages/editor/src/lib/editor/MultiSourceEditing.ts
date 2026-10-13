@@ -22,6 +22,7 @@ import type {
   PositionTargets,
 } from "../../types/positionEdit";
 import { LatestRequest } from "../utils/LatestRequest";
+import type { GlyphNode } from "../../types/node";
 import type { Scene } from "./Scene";
 
 /** Resolves and retains topology matches for the editor's selected source layers. */
@@ -29,6 +30,7 @@ export class MultiSourceEditing {
   readonly #font: Font;
   readonly #scene: Scene;
   readonly #glyphForId: (glyphId: GlyphId) => Glyph | null;
+  readonly #glyphIdOf: (node: GlyphNode) => GlyphId | null;
   readonly #activeSourceIdCell: Signal<SourceId | null>;
   readonly #editingSourceIdsCell: Signal<ReadonlySet<SourceId>>;
   readonly #matchesCell = signal<ReadonlyMap<LayerId, LayerMatch>>(new Map(), {
@@ -52,12 +54,14 @@ export class MultiSourceEditing {
     font: Font,
     scene: Scene,
     glyphForId: (glyphId: GlyphId) => Glyph | null,
+    glyphIdOf: (node: GlyphNode) => GlyphId | null,
     activeSourceIdCell: Signal<SourceId | null>,
     editingSourceIdsCell: Signal<ReadonlySet<SourceId>>,
   ) {
     this.#font = font;
     this.#scene = scene;
     this.#glyphForId = glyphForId;
+    this.#glyphIdOf = glyphIdOf;
     this.#activeSourceIdCell = activeSourceIdCell;
     this.#editingSourceIdsCell = editingSourceIdsCell;
     this.#effect = effect(() => this.#prepareMatches(), {
@@ -191,8 +195,9 @@ export class MultiSourceEditing {
     let completeReadSet = activeSourceId !== null;
     if (activeSourceId && editingSourceIds.size > 1) {
       for (const node of this.#scene.nodesOfKind("glyph")) {
-        inputs.push(node.glyphId);
-        const glyph = this.#glyphForId(node.glyphId);
+        const glyphId = this.#glyphIdOf(node);
+        inputs.push(glyphId);
+        const glyph = glyphId ? this.#glyphForId(glyphId) : null;
         const referenceLayer = glyph?.layerForSource(activeSourceId);
         inputs.push(referenceLayer?.id ?? null);
         if (!glyph || !referenceLayer) {

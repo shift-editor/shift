@@ -248,7 +248,7 @@ describe("Select movement preserves selected geometry", () => {
     if (!targetPointId) throw new Error("Expected matched target point");
     const node = editor.glyphNode;
     if (!node) throw new Error("Expected glyph node");
-    const targetLayer = editor.glyphForId(node.glyphId)?.layerForId(layerMatch.targetLayerId);
+    const targetLayer = editor.glyphOf(node)?.layerForId(layerMatch.targetLayerId);
     const targetPoint = targetLayer?.point(targetPointId);
     if (!targetLayer || !targetPoint) throw new Error("Expected target layer point");
     const targetBefore = { x: targetPoint.x, y: targetPoint.y };
@@ -263,7 +263,7 @@ describe("Select movement preserves selected geometry", () => {
     });
 
     expect(
-      editor.glyphForId(node.glyphId)?.layerForId(layerMatch.targetLayerId)?.point(targetPointId),
+      editor.glyphOf(node)?.layerForId(layerMatch.targetLayerId)?.point(targetPointId),
     ).toMatchObject({
       x: targetBefore.x + drag.delta.x,
       y: targetBefore.y + drag.delta.y,
@@ -273,7 +273,7 @@ describe("Select movement preserves selected geometry", () => {
     await editor.undo();
     expect(editor.pointPosition(middleId)).toEqual({ x: 150, y: 150 });
     expect(
-      editor.glyphForId(node.glyphId)?.layerForId(layerMatch.targetLayerId)?.point(targetPointId),
+      editor.glyphOf(node)?.layerForId(layerMatch.targetLayerId)?.point(targetPointId),
     ).toMatchObject(targetBefore);
   });
 

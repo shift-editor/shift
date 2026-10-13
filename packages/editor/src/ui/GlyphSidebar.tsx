@@ -1,4 +1,4 @@
-import { Button, Separator, cn } from "@shift/ui";
+import { Button, Separator, Tooltip, cn } from "@shift/ui";
 import type { ReactNode } from "react";
 import { useSignalState } from "../lib/signals";
 import { formatCodepointAsUPlus } from "../lib/utils/unicode";
@@ -6,7 +6,7 @@ import { EditableSidebarInput } from "./EditableSidebarInput";
 import { ShiftIcon } from "./ShiftIcon";
 import type { EditorUISession } from "./types";
 import type { GlyphId } from "@shift/types";
-import { useGlyphMetrics } from "./useGlyphMetrics";
+import { useGlyphMetrics, type SharedMetric } from "./useGlyphMetrics";
 
 /** Application content merged into the glyph sidebar. */
 export interface GlyphSidebarHost {
@@ -32,23 +32,26 @@ export interface GlyphSidebarProps {
  * Renders the glyph inspector: codepoint, sidebearings, advance, and name.
  *
  * @remarks
- * Metrics are live for the single glyph placed in the scene and empty when
- * there are none or several. They are editable only when the session can edit
- * layers and the glyph has a layer at the active source or location.
+ * Describes the glyphs the selection belongs to, or those being edited
+ * (`Editor.subjectGlyphNodesCell`). With several, a metric they share shows
+ * its value and one they differ in shows "Mixed"; editing it sets it on each.
+ * Metrics are editable only when the session can edit layers and every glyph
+ * has a layer at the active source or location.
  */
 export function GlyphSidebar({ session, host = {} }: GlyphSidebarProps) {
   const { editor, font } = session;
   const metadata = useSignalState(font.metadataCell);
   const zoom = useSignalState(editor.zoomCell);
-  const { glyph, sidebearings, xAdvance, hasLayer } = useGlyphMetrics(editor);
+  const { glyphs, lsb, rsb, xAdvance, hasLayer } = useGlyphMetrics(editor);
 
   // Metric edits go through workspace layer intents, which memory sessions lack.
   const editable = session.mode !== "memory" && hasLayer;
-  const leftSidebearing = sidebearings.lsb === null ? null : Math.round(sidebearings.lsb);
-  const rightSidebearing = sidebearings.rsb === null ? null : Math.round(sidebearings.rsb);
-  const sidebearingsEditable = editable && leftSidebearing !== null && rightSidebearing !== null;
+  const sidebearingsEditable = editable && lsb !== null && rsb !== null;
+  const glyph = glyphs.length === 1 ? glyphs[0]! : null;
   const unicode = glyph?.unicode ?? null;
-  const glyphLabel = glyph === null ? null : (host.glyphLabel?.(glyph.id) ?? glyph.name);
+  const label = (each: (typeof glyphs)[number]) => host.glyphLabel?.(each.id) ?? each.name;
+  const glyphNames = glyphs.map(label).join(", ");
+  const glyphLabel = glyphs.length > 1 ? `${glyphs.length} glyphs` : glyphNames || null;
 
   return (
     <aside
@@ -91,7 +94,8 @@ export function GlyphSidebar({ session, host = {} }: GlyphSidebarProps) {
                   ariaLabel="Left sidebearing"
                   label="LSB"
                   className="text-right"
-                  value={leftSidebearing}
+                  value={metricValue(lsb)}
+                  placeholder={metricPlaceholder(lsb)}
                   disabled={!sidebearingsEditable}
                   onValueChange={
                     sidebearingsEditable ? (value) => editor.setLeftSidebearing(value) : undefined
@@ -105,7 +109,8 @@ export function GlyphSidebar({ session, host = {} }: GlyphSidebarProps) {
                   label="RSB"
                   labelPosition="right"
                   className="text-left"
-                  value={rightSidebearing}
+                  value={metricValue(rsb)}
+                  placeholder={metricPlaceholder(rsb)}
                   disabled={!sidebearingsEditable}
                   onValueChange={
                     sidebearingsEditable ? (value) => editor.setRightSidebearing(value) : undefined
@@ -116,16 +121,23 @@ export function GlyphSidebar({ session, host = {} }: GlyphSidebarProps) {
                 <EditableSidebarInput
                   ariaLabel="Advance width"
                   className="text-center"
-                  value={glyph ? Math.round(xAdvance) : null}
+                  value={metricValue(xAdvance)}
+                  placeholder={metricPlaceholder(xAdvance)}
                   disabled={!editable}
                   onValueChange={editable ? (value) => editor.setXAdvance(value) : undefined}
                 />
               </div>
-              <div
-                className={cn("mt-2 font-sans text-sm", glyphLabel === null && "text-secondary")}
-              >
-                {glyphLabel ?? "—"}
-              </div>
+              {/* With several glyphs the label counts them; their names show on hover. */}
+              <Tooltip content={glyphNames} disabled={glyphs.length < 2}>
+                <div
+                  className={cn(
+                    "mt-2 max-w-full truncate font-sans text-sm",
+                    glyphLabel === null && "text-secondary",
+                  )}
+                >
+                  {glyphLabel ?? "—"}
+                </div>
+              </Tooltip>
             </main>
           </section>
         </div>
@@ -134,4 +146,12 @@ export function GlyphSidebar({ session, host = {} }: GlyphSidebarProps) {
       </div>
     </aside>
   );
+}
+
+function metricValue(metric: SharedMetric): number | null {
+  return typeof metric === "number" ? metric : null;
+}
+
+function metricPlaceholder(metric: SharedMetric): string | undefined {
+  return metric === "mixed" ? "Mixed" : undefined;
 }
