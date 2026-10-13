@@ -40,17 +40,20 @@ pub mod check;
 pub mod composite;
 pub mod curve;
 pub mod error;
+pub mod generated_features;
 pub mod intents;
 pub mod interpolation;
 pub mod ir;
 pub mod layer_edit;
 pub mod placed_blend;
 pub mod projection;
+pub mod relationships;
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support;
 
 pub use changes::*;
 pub use error::{CoreError, CoreResult, EntityRef, Require};
+pub use generated_features::{assembled_feature_source, generated_feature_code};
 pub use intents::*;
 pub use interpolation::*;
 pub use ir::*;
@@ -62,3 +65,4 @@ pub use ir::{
 /// Points, vectors, and affine maps in the font model's signatures.
 pub use kurbo;
 pub use projection::*;
+pub use relationships::{GlyphRelationship, Position, RELATIONSHIPS_LIB_KEY};

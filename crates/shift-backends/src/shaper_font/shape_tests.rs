@@ -390,3 +390,54 @@ fn glyphs_the_font_classes_as_marks_are_flagged() {
     let marks: Vec<bool> = shaped.iter().map(|glyph| glyph.is_mark).collect();
     assert_eq!(marks, [false, true]);
 }
+
+#[test]
+fn glyph_names_generate_features_the_code_does_not_write() {
+    let font = font_with(
+        &[
+            ("f", Some('f')),
+            ("i", Some('i')),
+            ("f_i", None),
+            ("a", Some('a')),
+            ("a.ss01", None),
+        ],
+        "",
+    );
+    let location = ExternalLocation::new();
+    let shaper = shaper(&font);
+    let ligature = characters("fi");
+    let alternate = characters("a");
+    let ss01 = [FeatureSetting::parse("ss01", 1).unwrap()];
+
+    let joined = shaper.shape(&request(&ligature, &location)).unwrap();
+    let plain = shaper.shape(&request(&alternate, &location)).unwrap();
+    let styled = shaper
+        .shape(&ShapeRequest {
+            features: &ss01,
+            ..request(&alternate, &location)
+        })
+        .unwrap();
+
+    assert_eq!(names_and_clusters(&font, &joined), vec![named("f_i", 0)]);
+    assert_eq!(names_and_clusters(&font, &plain), vec![named("a", 0)]);
+    assert_eq!(names_and_clusters(&font, &styled), vec![named("a.ss01", 0)]);
+}
+
+#[test]
+fn a_feature_written_in_code_replaces_the_generated_one() {
+    let font = font_with(
+        &[
+            ("f", Some('f')),
+            ("i", Some('i')),
+            ("f_i", None),
+            ("x", None),
+        ],
+        "feature liga { sub f i by x; } liga;",
+    );
+    let location = ExternalLocation::new();
+    let units = characters("fi");
+
+    let shaped = shaper(&font).shape(&request(&units, &location)).unwrap();
+
+    assert_eq!(names_and_clusters(&font, &shaped), vec![named("x", 0)]);
+}

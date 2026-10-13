@@ -285,6 +285,8 @@ const InheritedControl = ({ label, on, override, onChange }: ControlProps & { on
 function useFontFeatures(): readonly FontFeature[] {
   const editor = useEditor();
   const featureRevision = useSignalState(editor.font.featureRevisionCell);
+  // Glyph names generate features too: a new `a.ss04` adds ss04.
+  const glyphs = useSignalState(editor.font.glyphEntriesCell);
   const [features, setFeatures] = useState<readonly FontFeature[]>([]);
   useEffect(() => {
     if (editor.sessionMode !== "workspace") return;
@@ -298,7 +300,7 @@ function useFontFeatures(): readonly FontFeature[] {
     return () => {
       current = false;
     };
-  }, [editor, featureRevision]);
+  }, [editor, featureRevision, glyphs]);
   return features;
 }
 
