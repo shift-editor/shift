@@ -91,6 +91,12 @@ pub enum Command {
         command: LayerCommand,
     },
 
+    /// Read or replace the font's feature code.
+    Features {
+        #[command(subcommand)]
+        command: FeaturesCommand,
+    },
+
     /// Inspect or author kerning groups and per-master pair values.
     Kerning {
         #[command(subcommand)]
@@ -102,6 +108,36 @@ pub enum Command {
         #[command(subcommand)]
         command: SkillCommand,
     },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum FeaturesCommand {
+    /// Print the font's feature code.
+    Show(ShowFeaturesArgs),
+
+    /// Replace the font's feature code with a .fea file's text.
+    Set(SetFeaturesArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct ShowFeaturesArgs {
+    /// Path to the canonical SQLite .shift document.
+    #[arg(value_hint = ValueHint::FilePath)]
+    pub path: PathBuf,
+}
+
+#[derive(Debug, Args)]
+pub struct SetFeaturesArgs {
+    /// Path to the canonical SQLite .shift document.
+    #[arg(value_hint = ValueHint::FilePath)]
+    pub path: PathBuf,
+
+    /// Feature code (.fea) path, or - to read it from stdin; empty input removes it.
+    #[arg(long, value_hint = ValueHint::FilePath)]
+    pub input: PathBuf,
+
+    #[command(flatten)]
+    pub mutation: MutationArgs,
 }
 
 #[derive(Debug, Subcommand)]

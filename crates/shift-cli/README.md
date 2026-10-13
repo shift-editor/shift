@@ -185,6 +185,18 @@ scratch font or load unrelated geometry. Entry errors identify the glyph and one
 number; malformed JSON reports its line and column. An invalid entry leaves every canonical
 byte unchanged, including otherwise valid entries earlier in the batch.
 
+### Feature code
+
+`features show` prints a document's OpenType feature code and `features set` replaces it with a
+`.fea` file's text, as **Edit Feature Code** does in the app. Empty input removes it. The code is
+stored as written; compile or open the document to see problems in it.
+
+```sh
+shift features show Lab.shift > lab.fea
+shift features set Lab.shift --input lab.fea
+shift features set Lab.shift --input - --dry-run < lab.fea
+```
+
 ### Font metadata and source metrics
 
 ```sh

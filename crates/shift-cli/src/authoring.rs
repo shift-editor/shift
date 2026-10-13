@@ -15,6 +15,7 @@ use shift_workspace::FontWorkspace;
 use crate::cli::{AddAxisArgs, AddSourceArgs, CreateFontArgs, MutationArgs};
 
 mod axis;
+mod features;
 mod font_info;
 mod glyph;
 mod glyph_batch;
@@ -25,6 +26,7 @@ mod layer_payload;
 mod report;
 
 pub use axis::set_axis;
+pub use features::{set_features, show_features};
 pub use font_info::{font_info, set_font};
 pub use glyph::{add_glyph, add_layer, copy_layer, set_layer};
 pub(crate) use glyph::{resolve_glyph_id, resolve_source_id};
