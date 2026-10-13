@@ -109,6 +109,7 @@
   --editor-debug-glyph-bbox: #ff00fb;
   --editor-text-cursor-color: #0c92f4;
   --editor-text-selection-fill: rgba(12, 146, 244, 0.2);
+  --editor-text-context-fill: #aaaaaa;
   --editor-text-hover-outline: #0c92f4;
   --editor-text-composite-arm-fill: rgba(128, 128, 128, 0.22);
   --editor-text-component-overlay-a: rgba(169, 236, 183, 0.26);

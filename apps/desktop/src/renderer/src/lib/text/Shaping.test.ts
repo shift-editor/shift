@@ -413,6 +413,29 @@ describe("editing several glyphs at once", () => {
     expect([lsb("f"), lsb("i")]).toEqual([50, 50]);
   });
 
+  it("draws the full metric box for the glyph being worked on and a baseline for the rest", async () => {
+    const editor = new TestEditor();
+    await editor.openSession(SHAPING_TEST, "f");
+    const run = editor.textRun!;
+    editor.history.capture("Set liga", () => editor.text.setFeature(run.runId, "liga", false));
+    const [f] = editor.text.run(run.runId)!.items;
+    editor.text.insertAfter(run.runId, f!.id, editor.text.itemsFromText("i"));
+    const [, i] = editor.text.run(run.runId)!.items;
+    const definition = editor.nodeDefinition("textRun");
+    await expect.poll(() => editor.text.layoutCell(run.runId).peek()?.totalAdvance).toBe(550);
+    const fNode = definition.editItem(run, f!.id)!;
+    const iNode = definition.editItem(run, i!.id, 0, { add: true })!;
+    editor.editing.set([fNode.id, iNode.id]);
+    const glyphs = editor.nodeDefinition("glyph");
+    const boxes = () => [glyphs.showsMetrics(fNode), glyphs.showsMetrics(iNode)];
+
+    expect(boxes()).toEqual([false, true]);
+
+    const fPoint = editor.layerOf(fNode, editor.font.defaultSource.id)!.contours[0]!.points[0]!.id;
+    editor.selection.select([fPoint]);
+    expect(boxes()).toEqual([true, false]);
+  });
+
   it("select all covers every edited glyph, and closing one keeps the other open", async () => {
     const editor = new TestEditor();
     await editor.openSession(SHAPING_TEST, "f");

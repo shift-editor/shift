@@ -491,13 +491,16 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
       color: ctx.canvas.theme.textRun.hoverOutline,
       widthPx: ctx.canvas.theme.textRun.hoverOutlineWidthPx,
     };
+    const style = this.#editsAGlyph(node)
+      ? { ...ctx.canvas.theme.glyph, fill: ctx.canvas.theme.textRun.contextFill }
+      : ctx.canvas.theme.glyph;
     for (const { placed, itemId, model } of this.#runGlyphs(node, layout)) {
       model.trackShape();
       track(model.closedContoursPathCell);
       track(model.openContoursPathCell);
       ctx.canvas.save();
       ctx.canvas.translate(placed.origin.x, placed.origin.y);
-      this.#outline.drawDisplay(ctx.canvas, model, ctx.canvas.theme.glyph);
+      this.#outline.drawDisplay(ctx.canvas, model, style);
       if (outlined.has(itemId)) this.#outline.draw(ctx.canvas, model, { stroke: outlineStroke });
       ctx.canvas.restore();
     }
@@ -535,6 +538,11 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
       const model = this.#model(glyphId);
       if (model) yield { placed, itemId, glyphId, model };
     }
+  }
+
+  /** Whether any of the run's glyphs is being edited. */
+  #editsAGlyph(node: TextRunNode): boolean {
+    return this.childGlyphs(node).some((child) => this.editor.editing.has(child.id));
   }
 
   /** The placed glyphs of the children being edited; a child not edited is plain text. */

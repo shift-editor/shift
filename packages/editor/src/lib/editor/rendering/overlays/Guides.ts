@@ -38,6 +38,12 @@ export class Guides {
     if (readOnly) this.#drawLock(canvas, metrics.descender, advance);
   }
 
+  /** Draws only the baseline across the advance, for an edited glyph whose metrics are not shown. */
+  drawBaseline(canvas: Canvas, advance: number): void {
+    const { color, widthPx } = canvas.theme.guides;
+    canvas.line({ x: 0, y: 0 }, { x: advance, y: 0 }, color, widthPx);
+  }
+
   /** Draws the lock icon centred under the descender line, sized in screen pixels. */
   #drawLock(canvas: Canvas, descender: number, advance: number): void {
     const scale = LOCK_SIZE_PX / LOCK_VIEW_BOX_SIZE;
