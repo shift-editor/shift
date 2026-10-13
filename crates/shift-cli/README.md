@@ -47,6 +47,7 @@ cargo run -p shift-cli -- glyph inspect path/to/Family.designspace Aacute \
 cargo run -p shift-cli -- compile path/to/Family.shift --output path/to/Family.ttf
 
 cargo run -p shift-cli -- font create path/to/Lab.shift
+cargo run -p shift-cli -- font create path/to/Lab.shift --from path/to/Family.glyphspackage
 cargo run -p shift-cli -- axis add path/to/Lab.shift \
   --tag wght --name Weight --min 100 --default 400 --max 900
 cargo run -p shift-cli -- source add path/to/Lab.shift \
@@ -97,6 +98,11 @@ shift layer copy Lab.shift --glyph A --from-source Regular --source Black
 ```
 
 Shift mints every new entity ID. Human and agent workflows may read returned IDs and use them as selectors, but authoring commands never accept caller-chosen identity.
+
+`font create --from` starts a document from another font's structure: its names, units per em,
+vertical metrics, axes, mappings, masters, and named instances, without glyphs, kerning, or feature
+code. Glyph batches that name masters then land in the matching sources, which makes small,
+correctly scaled test documents from real fonts.
 
 `layer add` reads a semantic layer payload from a JSON file, or from stdin when `--input -` is used. Glyph and source membership stay in the command selectors instead of being duplicated inside the payload:
 

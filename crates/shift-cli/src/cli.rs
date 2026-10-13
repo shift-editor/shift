@@ -164,6 +164,12 @@ pub struct CreateFontArgs {
     #[arg(value_hint = ValueHint::FilePath)]
     pub path: PathBuf,
 
+    /// Start from another font's structure (.shift, UFO, Designspace, Glyphs, TTF,
+    /// or OTF): its names, units per em, metrics, axes, mappings, masters, and
+    /// named instances, without glyphs, kerning, or feature code.
+    #[arg(long, value_hint = ValueHint::FilePath)]
+    pub from: Option<PathBuf>,
+
     /// Validate and describe the creation without writing.
     #[arg(long)]
     pub dry_run: bool,
