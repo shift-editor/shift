@@ -1,7 +1,7 @@
 //! Identity-free JSON contracts for CLI authoring.
 
 use serde::Deserialize;
-use shift_font::PointType;
+use shift_font::{DecomposedTransform, PointType};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -14,6 +14,26 @@ pub(super) struct LayerInput {
     pub svg_path: Option<String>,
     #[serde(default)]
     pub anchors: Vec<AnchorInput>,
+    #[serde(default)]
+    pub components: Vec<ComponentInput>,
+}
+
+/// A reference to another glyph, by name, placed with an optional transform.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(super) struct ComponentInput {
+    pub base: String,
+    #[serde(default)]
+    pub transform: Option<TransformInput>,
+}
+
+/// A component transform: Shift's decomposed form, or an affine
+/// `[xx, xy, yx, yy, dx, dy]` as UFO and most font tools write it.
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub(super) enum TransformInput {
+    Affine([f64; 6]),
+    Decomposed(DecomposedTransform),
 }
 
 #[derive(Debug, Deserialize)]
@@ -45,6 +65,9 @@ pub(super) struct AnchorInput {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(super) struct GlyphBatchInput {
+    /// The batch format version; absent means the first.
+    #[serde(default)]
+    pub format: Option<u32>,
     // Deserialize entries separately so schema errors retain glyph/entry context.
     pub glyphs: Vec<serde_json::Value>,
 }

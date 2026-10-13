@@ -22,6 +22,7 @@ mod axis;
 mod font_info;
 mod glyph;
 mod glyph_batch;
+mod glyph_export;
 mod input;
 mod instance;
 mod kerning;
@@ -33,6 +34,7 @@ pub use font_info::{font_info, set_font};
 pub use glyph::{add_glyph, add_layer, copy_layer, set_layer};
 pub(crate) use glyph::{resolve_glyph_id, resolve_source_id};
 pub use glyph_batch::set_glyphs;
+pub use glyph_export::{ExportSources, export_glyphs};
 pub use instance::{add_instance, remove_instance, set_instance};
 pub use kerning::{
     assign_kerning_group, create_kerning_group, delete_kerning_group, remove_kerning,

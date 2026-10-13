@@ -141,6 +141,9 @@ pub enum GlyphCommand {
 
     /// Inspect one glyph from any supported font source.
     Inspect(InspectGlyphArgs),
+
+    /// Write glyphs from any font source as the JSON `glyph set` reads.
+    Export(ExportGlyphsArgs),
 }
 
 #[derive(Debug, Subcommand)]
@@ -222,6 +225,27 @@ pub struct AddSourceArgs {
 
     #[command(flatten)]
     pub mutation: MutationArgs,
+}
+
+#[derive(Debug, Args)]
+pub struct ExportGlyphsArgs {
+    /// Path to a .shift, UFO, Designspace, Glyphs, TTF, or OTF font source.
+    #[arg(value_hint = ValueHint::FilePath)]
+    pub path: PathBuf,
+
+    /// Glyph names to export; repeat or comma-separate. Glyphs their components
+    /// use are exported too.
+    #[arg(long, value_delimiter = ',', required = true)]
+    pub glyphs: Vec<String>,
+
+    /// Source to read: a source name, or `all` for every source. Defaults to the
+    /// default source.
+    #[arg(long)]
+    pub source: Option<String>,
+
+    /// Write the JSON here instead of to stdout.
+    #[arg(long, value_hint = ValueHint::FilePath)]
+    pub output: Option<PathBuf>,
 }
 
 #[derive(Debug, Args)]

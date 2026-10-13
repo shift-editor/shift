@@ -241,6 +241,73 @@ fn glyph_batch_creates_updates_and_authors_distinct_sources_from_one_file() {
 }
 
 #[test]
+fn glyph_batch_components_name_their_bases_even_ones_later_in_the_batch() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("Lab.shift");
+    let input = temp.path().join("glyphs.json");
+    drop(ShiftStore::create_document(&path, &sample_font()).unwrap());
+    std::fs::write(
+        &input,
+        json!({"format": 1, "glyphs": [
+            {"name":"Aring", "layer":{"advance":600, "components":[
+                {"base":"A"},
+                {"base":"ringcomb", "transform":[1, 0, 0, 1, 120, 640]}
+            ]}},
+            {"name":"ringcomb", "layer":{"advance":0, "svgPath":"M0 0 L40 0 L20 40 Z"}}
+        ]})
+        .to_string(),
+    )
+    .unwrap();
+
+    let output = shift(&[
+        "glyph",
+        "set",
+        path.to_str().unwrap(),
+        "--input",
+        input.to_str().unwrap(),
+    ]);
+
+    assert!(output.status.success(), "{:?}", output.stderr);
+    let font = load_font(path.to_str().unwrap());
+    let layer = font
+        .glyph_by_name("Aring")
+        .unwrap()
+        .layer_for_source(font.default_source_id().unwrap())
+        .unwrap();
+    let components: Vec<_> = layer
+        .components()
+        .iter()
+        .map(|(_, component)| component)
+        .collect();
+    let bases: Vec<_> = components
+        .iter()
+        .map(|c| c.base_glyph_name().to_string())
+        .collect();
+    assert_eq!(bases, ["A", "ringcomb"]);
+    assert_eq!(
+        components[1].base_glyph_id(),
+        font.glyph_by_name("ringcomb").unwrap().id()
+    );
+    assert_eq!(components[1].transform().translate_x, 120.0);
+    assert_eq!(components[1].transform().translate_y, 640.0);
+}
+
+#[test]
+fn glyph_batch_rejects_a_format_it_does_not_read() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("Lab.shift");
+    drop(ShiftStore::create_document(&path, &sample_font()).unwrap());
+
+    let output = shift_with_stdin(
+        &["glyph", "set", path.to_str().unwrap(), "--input", "-"],
+        r#"{"format": 2, "glyphs": [{"name":"B"}]}"#,
+    );
+
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("format 2"));
+}
+
+#[test]
 fn glyph_batch_unicode_omission_preserves_and_empty_list_clears_assignments() {
     let temp = tempfile::tempdir().unwrap();
     let path = temp.path().join("Lab.shift");

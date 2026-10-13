@@ -123,7 +123,7 @@ correctly scaled test documents from real fonts.
 }
 ```
 
-Identity is not part of the layer payload. `pointType` defaults to `onCurve`; accepted values are `onCurve`, `offCurve`, and `qCurve`. A new layer payload currently authors contours and anchors. `layer copy` preserves complete authored layer content, including components, while minting fresh internal identities.
+Identity is not part of the layer payload. `pointType` defaults to `onCurve`; accepted values are `onCurve`, `offCurve`, and `qCurve`. A layer payload authors contours, anchors, and components. `layer copy` preserves complete authored layer content, including components, while minting fresh internal identities.
 
 ### Replacing drawings
 
@@ -134,9 +134,17 @@ shift layer set Lab.shift --glyph A --source Regular --input A-regular.json
 ```
 
 An existing layer keeps its stable ID, source binding, height, guidelines, and library data.
-Advance, contours, anchors, and components are replaced. **Existing components are removed**
-because the payload only supports outlines and anchors. Replaced points, contours, and anchors
-receive fresh identities; omitted outlines and anchors produce an empty drawing.
+Advance, contours, anchors, and components are replaced by the payload's. Replaced points,
+contours, anchors, and components receive fresh identities; omitted ones produce an empty drawing.
+
+A payload's `components` name their base glyph and may give a transform, either as an affine
+`[xx, xy, yx, yy, dx, dy]` (as UFO and most tools write it) or as Shift's decomposed form
+(`translateX`, `translateY`, `rotation`, `scaleX`, `scaleY`, `skewX`, `skewY`, `tCenterX`,
+`tCenterY`), which `glyph export` writes:
+
+```json
+{ "advance": 600, "components": [{ "base": "A" }, { "base": "acute", "transform": [1, 0, 0, 1, 99, 20] }] }
+```
 
 Both `layer add` and `layer set` accept `svgPath` instead of `contours`:
 
@@ -179,6 +187,24 @@ shift glyph set Lab.shift --input - --dry-run --json < glyphs.json
 ```
 
 - Omitted `unicodes` preserves existing assignments; `[]` clears them.
+- A component's base may be a glyph created earlier or later in the same batch.
+- `"format": 1` names the batch format; a `shift-cli` that reads another format refuses the file.
+
+### Copying glyphs from other fonts
+
+`glyph export` reads named glyphs from any source Shift opens and writes the batch `glyph set` reads,
+including every glyph their components use. Exported files are small and hand-editable, so they
+make good scratch fixtures:
+
+```sh
+shift glyph export Inter.glyphspackage --glyphs aacute,one.ss01 > latin-bits.json
+shift glyph set Lab.shift --input latin-bits.json
+shift glyph export Inter.glyphspackage --glyphs aacute | shift glyph set Lab.shift --input -
+```
+
+`--source NAME` exports one master and `--source all` every master, each layer named after its
+source (the target document needs sources with those names); the default exports the default
+source for the target's default source. `--output PATH` writes a file instead of stdout.
 - Omitted `layer` authors identity only; it does not create or clear a layer.
 - Omitted `source` selects the default source. Explicit selectors accept source names or full IDs.
 - A name may repeat for distinct sources. Repeated glyph/source pairs and conflicting
