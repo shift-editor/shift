@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { themeRead } from "shift-bridge";
-import type { UserThemeFile } from "../../shared/config/config";
+import type { ThemeFileState } from "../../shared/config/config";
 
 export const THEMES_FOLDER_NAME = "themes";
 const THEME_EXTENSION = ".toml";
@@ -17,8 +17,8 @@ const THEME_EXTENSION = ".toml";
  */
 export function readThemeFiles(
   directory: string,
-  previous: ReadonlyMap<string, UserThemeFile>,
-): UserThemeFile[] {
+  previous: ReadonlyMap<string, ThemeFileState>,
+): ThemeFileState[] {
   let names: string[];
   try {
     names = fs.readdirSync(directory);
@@ -37,8 +37,8 @@ export function readThemeFiles(
 function readThemeFile(
   directory: string,
   id: string,
-  lastValid: UserThemeFile["theme"],
-): UserThemeFile {
+  lastValid: ThemeFileState["theme"],
+): ThemeFileState {
   const filePath = path.join(directory, `${id}${THEME_EXTENSION}`);
   let source: string;
   try {

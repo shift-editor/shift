@@ -7,7 +7,7 @@ import {
   PopoverTrigger,
 } from "@shift/ui";
 import type { ConfigProblem } from "@shift/types";
-import type { AppConfigState, UserThemeFile } from "@shared/config/config";
+import type { AppConfigState, ThemeFileState } from "@shared/config/config";
 import type { UnknownThemeColors } from "@/lib/themes";
 import { useTheme } from "@/context/ThemeContext";
 import { getShiftHost } from "@/host/shiftHost";
@@ -111,7 +111,7 @@ interface FileReport {
 /** Every problem in `config.toml` and `themes/`, labeled with its file and what Shift did. */
 function fileReports(
   config: AppConfigState,
-  shadowing: readonly UserThemeFile[],
+  shadowing: readonly ThemeFileState[],
   unknownColors: readonly UnknownThemeColors[],
 ): FileReport[] {
   const reports = config.problems.map((problem) =>

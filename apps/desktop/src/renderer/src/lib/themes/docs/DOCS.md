@@ -8,7 +8,10 @@ Terminal-style color themes for the desktop UI and native editor renderers.
 
 - A `ColorTheme` is a complete 16-color semantic source palette with a stable id and `ThemeAppearance`. Built-in themes use a `ThemeId`; user themes come from `themes/<id>.toml` in the config folder and use the file name as their id.
 - A theme file's optional `[colors]` table overrides individual derived colors by name: the CSS variable without its `--color-` or `--` prefix (`accent`, `editor-handle-primary-stroke`). `applyResolvedTheme` applies overrides after the palette mapping; `COLOR_VARIABLES` maps every name to its variable, and unknown names are ignored and reported.
-- A user theme file named like a built-in theme or `system` is ignored and reported, so `theme = "nord"` always means the built-in Nord.
+- Shift ships themes two ways: the built-in `colorThemes` in code (Shift's own and the classics), and read-only bundled theme files in `apps/desktop/themes/`, converted from Tinted Theming's base16 schemes and packaged as `Resources/themes/`. Main reads the bundled files once at startup through the same parser as user files. Both kinds are listed together in the pickers, Shift's own first, then by name.
+- A user theme file named like a built-in or bundled theme, or `system`, is ignored and reported, so `theme = "nord"` always means the built-in Nord. Bundled ids are upstream scheme slugs (`catppuccin-mocha`), which people write into their dotfiles; never rename one.
+- Light palettes map their glyph to whichever of `base05`–`base07` contrasts most with the canvas, and darken `base04` toward `base05` until secondary text and control handles reach 3:1. Base16 light schemes often put an accent or a pale tint in `base07` and a faint grey in `base04`. Every built-in theme maps exactly as before.
+- `bundledThemes.test.ts` checks every built-in and bundled theme for readable glyphs, text, points, handles, anchors, snapping, and text on the accent. A bundled theme that falls short gets the smallest `[colors]` override that passes, with its color darkened toward the theme's own text color; Solarized's text on the accent is a known exception.
 - An edited theme file arrives as a new `ColorTheme` object. Every renderer keys its redraw on `resolvedTheme` identity, so a palette change under the same id repaints the DOM, Canvas 2D, WebGL markers, and Slug without a separate signal.
 - `ThemePreference` is a mode (`system`, `light`, or `dark`) plus a theme for each appearance. `system` picks the light or dark slot from `prefers-color-scheme`; the slots default to Shift Light and Shift Dark.
 - `applyResolvedTheme` maps one resolved palette into both Tailwind's `--color-*` variables and the editor's `--editor-*` variables. DOM, Canvas 2D, WebGL markers, and Slug must therefore redraw from the same resolved theme.
@@ -30,6 +33,8 @@ Terminal-style color themes for the desktop UI and native editor renderers.
 - `components/chrome/settings/AppearanceSettingsPanel.tsx` — mode tabs and one theme picker per slot
 - `components/chrome/settings/ThemePicker.tsx` — searchable theme list (built-in, then "Your themes") that previews the highlighted theme
 - `packages/editor/src/lib/editor/rendering/Theme.ts` — reads the resolved `--editor-*` variables into `EditorRenderTheme`
+- `apps/desktop/themes/` — bundled theme files, one per upstream base16 scheme
+- `lib/themes/bundledThemes.test.ts` — contrast check over every built-in and bundled theme
 - `apps/desktop/THIRD_PARTY_THEMES.md` — packaged upstream attribution and licenses
 
 ## Key Types
@@ -47,6 +52,13 @@ Terminal-style color themes for the desktop UI and native editor renderers.
 Selecting Shift Light removes runtime overrides so `index.css` remains the first-paint and failure-mode source of its established colors. Other themes write a complete variable set and therefore do not inherit accidental Shift Light roles.
 
 ## Workflow recipes
+
+### Adding a bundled theme
+
+1. Copy the scheme's palette from https://github.com/tinted-theming/schemes (`base16/<slug>.yaml`) into `apps/desktop/themes/<slug>.toml`, with the header comment, `name`, and `appearance` the other files use. The slug is the id; keep upstream's.
+2. Add a row to the bundled table in `THIRD_PARTY_THEMES.md`.
+3. Run `bundledThemes.test.ts`. If a role falls short, add the smallest `[colors]` override that passes and say why in the file.
+4. Look at the theme in the app, canvas and markers included.
 
 ### Adding a built-in theme
 

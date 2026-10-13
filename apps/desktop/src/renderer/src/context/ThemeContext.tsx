@@ -1,6 +1,6 @@
 import { createContext, useContext } from "react";
 
-import type { AppConfigState, UserThemeFile } from "@shared/config/config";
+import type { AppConfigState, ThemeFileState } from "@shared/config/config";
 import type {
   ColorTheme,
   ThemeAppearance,
@@ -27,7 +27,7 @@ export interface ThemeContextValue {
   /** Built-in themes followed by the valid files in `themes/`, ordered by id. */
   themes: readonly ColorTheme[];
   /** Theme files ignored because they reuse a built-in theme's id or `system`. */
-  shadowingThemeFiles: readonly UserThemeFile[];
+  shadowingThemeFiles: readonly ThemeFileState[];
   /** Writes the preference to `config.toml`; a refused write restores the previous one. */
   setPreference: (preference: ThemePreference) => void;
   /** Override names in theme files that name no color Shift has. */
