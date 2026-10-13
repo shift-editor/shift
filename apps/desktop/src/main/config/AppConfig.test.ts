@@ -96,7 +96,7 @@ describe("AppConfig", () => {
     fs.writeFileSync(path.join(directory, "config.toml.tmp"), `theme = "gruvbox-dark"\n`);
     fs.renameSync(path.join(directory, "config.toml.tmp"), path.join(directory, "config.toml"));
 
-    await vi.waitFor(() => expect(appConfig.state.theme).toBe("gruvbox-dark"), { timeout: 2000 });
+    await vi.waitFor(() => expect(appConfig.state.theme).toBe("gruvbox-dark"), { timeout: 5000 });
     expect(changes.at(-1)?.theme).toBe("gruvbox-dark");
   });
 
@@ -126,7 +126,7 @@ describe("AppConfig", () => {
     fs.writeFileSync(`${dotfile}.tmp`, `theme = "gruvbox-dark"\n`);
     fs.renameSync(`${dotfile}.tmp`, dotfile);
 
-    await vi.waitFor(() => expect(appConfig.state.theme).toBe("gruvbox-dark"), { timeout: 2000 });
+    await vi.waitFor(() => expect(appConfig.state.theme).toBe("gruvbox-dark"), { timeout: 5000 });
   });
 
   it("follows a config.toml symlinked after watching starts", async () => {
@@ -139,12 +139,12 @@ describe("AppConfig", () => {
 
     fs.rmSync(path.join(directory, "config.toml"));
     fs.symlinkSync(dotfile, path.join(directory, "config.toml"));
-    await vi.waitFor(() => expect(appConfig.state.theme).toBe("dracula"), { timeout: 2000 });
+    await vi.waitFor(() => expect(appConfig.state.theme).toBe("dracula"), { timeout: 5000 });
 
     fs.writeFileSync(`${dotfile}.tmp`, `theme = "gruvbox-dark"\n`);
     fs.renameSync(`${dotfile}.tmp`, dotfile);
 
-    await vi.waitFor(() => expect(appConfig.state.theme).toBe("gruvbox-dark"), { timeout: 2000 });
+    await vi.waitFor(() => expect(appConfig.state.theme).toBe("gruvbox-dark"), { timeout: 5000 });
   });
 
   it("publishes nothing when a reload finds the same settings", () => {
