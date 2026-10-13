@@ -1,4 +1,5 @@
 import type { EditorCommandId } from "@shared/commands";
+import { runToolWindowCommand } from "./toolWindowCommands";
 import type { ContourId } from "@shift/types";
 import type { Editor } from "@shift/editor";
 import { electronSystemClipboard } from "@/lib/clipboard/electronSystemClipboard";
@@ -59,7 +60,8 @@ export function reverseContours(editor: Editor, contourIds: Iterable<ContourId>)
 /**
  * Executes a renderer-owned app command against one editor.
  *
- * Focused text controls retain conventional Edit-menu behavior. Otherwise the
+ * A focused tool window (such as the feature code window) handles its own
+ * commands first. Focused text controls retain conventional Edit-menu behavior. Otherwise the
  * command targets Shift's canvas editor and canonical workspace history.
  *
  * @param editor - Editor whose current selection and document state supply command context.
@@ -67,6 +69,9 @@ export function reverseContours(editor: Editor, contourIds: Iterable<ContourId>)
  * @returns true when the command mutates or handles current state.
  */
 export async function runRendererCommand(editor: Editor, id: EditorCommandId): Promise<boolean> {
+  const toolWindowResult = runToolWindowCommand(id);
+  if (toolWindowResult) return toolWindowResult;
+
   if (TEXT_EDIT_COMMANDS.has(id)) {
     const textResult = await runFocusedTextEditCommand(id);
     if (textResult !== null) return textResult;

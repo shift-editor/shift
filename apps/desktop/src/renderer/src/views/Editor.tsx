@@ -9,6 +9,7 @@ import { LeftSidebar } from "@/components/editor/LeftSidebar";
 import { RightSidebar } from "@/components/editor/RightSidebar";
 import { Canvas } from "@/components/editor/Canvas";
 import { CanvasContextMenu } from "@/components/editor/CanvasContextMenu";
+import { FeatureCodeWindow } from "@/components/editor/feature-code/FeatureCodeWindow";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import type { TextRunNode } from "@shift/editor/types";
 import { FloatingToolbar } from "@shift/editor/ui";
@@ -198,6 +199,7 @@ const EditorLayout = ({ children }: { children: ReactNode }) => {
           <ZoneContainer zone="canvas" className="relative h-full">
             {children}
             <FloatingToolbar editor={editor} />
+            <FeatureCodeWindow />
           </ZoneContainer>
         </ResizablePanel>
         <ResizableHandle
