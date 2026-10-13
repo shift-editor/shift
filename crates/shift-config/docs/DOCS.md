@@ -42,6 +42,16 @@ appearance = "dark"     # or "light"
 base00 = "#1a1b26"      # through base0F; "#" optional, either hex-digit case in keys
 ```
 
+An optional `[colors]` table overrides individual colors Shift derives from the palette, by name, as `#rrggbb` or `#rrggbbaa`:
+
+```toml
+[colors]
+accent = "#ff9e64"
+editor-selection-fill = "#ff9e6420"
+```
+
+This crate checks that names are lowercase words joined by `-` and that values are hex; which names exist is the desktop renderer's (`COLOR_VARIABLES` in `lib/themes`).
+
 The appearance and all sixteen colors are required.
 
 ## Gotchas

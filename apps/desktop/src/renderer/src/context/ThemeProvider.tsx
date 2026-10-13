@@ -104,10 +104,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [systemAppearance, setSystemAppearance] = useState<ThemeAppearance>(getSystemAppearance);
   const [previewId, previewTheme] = useState<string | null>(null);
 
-  const { themes: userThemes, shadowing: shadowingThemeFiles } = useMemo(
-    () => userColorThemes(config?.themes ?? []),
-    [config],
-  );
+  const {
+    themes: userThemes,
+    shadowing: shadowingThemeFiles,
+    unknownColors: unknownThemeColors,
+  } = useMemo(() => userColorThemes(config?.themes ?? []), [config]);
   const themes = useMemo(
     // Until main answers, the cached user themes stand in for their files.
     () => [...colorThemes, ...(config ? userThemes : (initialCache?.userThemes ?? []))],
@@ -197,6 +198,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
         systemAppearance,
         themes,
         shadowingThemeFiles,
+        unknownThemeColors,
         setPreference: (next) => void setPreference(next),
         config,
         unknownThemes,
