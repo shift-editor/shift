@@ -100,8 +100,9 @@ jobs:
               - '.codex/skills/**'
               - 'scripts/sync-agent-skills.mjs'
 
-      # A file reaches E2E when it matches the first pattern and neither exclusion, so a
-      # Markdown or docs-only change skips the E2E matrix.
+      # A file reaches E2E when it matches the first pattern and no exclusion, so a
+      # Markdown, docs, or shift-cli-only change skips the E2E matrix. The app bundles
+      # shift-cli only when packaging, which E2E does not exercise.
       - uses: dorny/paths-filter@v4
         id: e2e-filter
         with:
@@ -111,6 +112,7 @@ jobs:
               - '{apps/**,packages/**,crates/**,Cargo.toml,Cargo.lock,rust-toolchain.toml,pnpm-lock.yaml,scripts/run-e2e.mjs,scripts/run-with-virtual-desktop.mjs,tsconfig*.json,turbo.json}'
               - '!**/*.md'
               - '!**/docs/**'
+              - '!crates/shift-cli/**'
 
       # Pull requests run macOS visual and the full platform suite on Linux. The merge
       # queue and manual runs add Windows, limited to @os tests whose behaviour differs by
