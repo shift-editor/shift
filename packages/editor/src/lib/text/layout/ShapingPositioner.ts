@@ -34,7 +34,8 @@ interface LiveGlyph {
  * The shaper substitutes glyphs and applies the feature code's own
  * positioning; this adds what export would generate from structured data:
  * each glyph's live advance, pair kerning between neighbours in a
- * left-to-right run, and mark attachment from anchors. A glyph is a mark when
+ * left-to-right run, cursive attachment from `entry` and `exit` anchors, and
+ * mark attachment from anchors. A glyph is a mark when
  * it has an `_name` anchor and the glyph before it in logical order (a base,
  * or a mark for mark-to-mark) has the matching `name` anchor.
  */
@@ -57,10 +58,20 @@ export class ShapingPositioner {
 
     let pen = 0;
     let kernable: PositionedGlyph | null = null;
+    // The glyph to the left that is not a mark, and how far cursive attachment raised it.
+    let left: LiveGlyph | null = null;
+    let leftRise = 0;
     for (const glyph of glyphs) {
       const { entry } = glyph;
       const attached = glyph.attachment !== null;
-      if (!attached && kernable?.glyphId && entry && run.direction === "ltr") {
+      // Marks, attached or not, take no advance and leave cursive chains and kerning alone.
+      const spacing = !attached && !glyph.shaped.isMark;
+      const join = spacing && left?.positioned ? cursiveJoin(left, glyph, run.direction) : null;
+      if (join && left?.positioned) {
+        // Joined letters meet at their anchors: the left box ends where the right glyph starts.
+        left.positioned.xAdvance = join.x;
+        pen = left.positioned.origin.x + join.x;
+      } else if (spacing && kernable?.glyphId && entry && run.direction === "ltr") {
         kernable.xKern = editor.font.kerningBetween(
           kernable.glyphId,
           entry.id,
@@ -70,7 +81,7 @@ export class ShapingPositioner {
         pen += kernable.xKern;
       }
 
-      const xAdvance = attached ? 0 : advance(glyph) + glyph.shaped.xAdvance;
+      const xAdvance = spacing ? advance(glyph) + glyph.shaped.xAdvance : 0;
       glyph.positioned = {
         glyphId: entry?.id ?? null,
         glyphName: glyph.name,
@@ -84,10 +95,16 @@ export class ShapingPositioner {
         cluster: run.clusterStart + glyph.shaped.cluster,
         bounds: glyph.renderModel?.bounds ?? null,
       };
-      if (!attached) {
-        pen += xAdvance;
-        kernable = glyph.positioned;
+      if (!spacing) {
+        if (!attached) glyph.positioned.yOffset += leftRise;
+        continue;
       }
+      const rise = join ? leftRise + join.y : 0;
+      glyph.positioned.yOffset += rise;
+      pen += xAdvance;
+      kernable = glyph.positioned;
+      left = glyph;
+      leftRise = rise;
     }
 
     // In logical order, so a mark's target (a base or an earlier mark) is placed first.
@@ -137,6 +154,31 @@ function liveGlyph(
     attachment: null,
     positioned: null,
   };
+}
+
+/**
+ * Returns how two neighbouring glyphs join by cursive attachment, or null
+ * when they do not.
+ *
+ * @remarks
+ * The glyph earlier in reading order joins through its `exit` anchor to the
+ * next one's `entry` anchor. `x` is the left glyph's advance that puts the
+ * two anchors together; `y` is how far the right glyph sits above the left
+ * one. Chains rise from the left of the line: in right-to-left text that is
+ * the end of a word, which stays on the baseline, as Nastaliq expects.
+ */
+function cursiveJoin(
+  left: LiveGlyph,
+  right: LiveGlyph,
+  direction: SegmentedRun["direction"],
+): Point2D | null {
+  const [from, to] = direction === "rtl" ? [right, left] : [left, right];
+  const exit = from.anchors.find((anchor) => anchor.name === "exit");
+  const entry = to.anchors.find((anchor) => anchor.name === "entry");
+  if (!exit || !entry) return null;
+  return direction === "rtl"
+    ? { x: entry.x - exit.x, y: entry.y - exit.y }
+    : { x: exit.x - entry.x, y: exit.y - entry.y };
 }
 
 /**

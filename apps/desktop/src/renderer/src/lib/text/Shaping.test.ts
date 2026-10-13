@@ -304,6 +304,65 @@ describe("a substituted glyph appears only once it has loaded", () => {
   });
 });
 
+describe("cursive attachment joins letters at their entry and exit anchors", () => {
+  const heights = (editor: TestEditor, runId: RunId) =>
+    (editor.text.layoutCell(runId).peek()?.placedGlyphs ?? []).map((glyph) => [
+      glyph.glyph.glyphName,
+      glyph.origin.y,
+    ]);
+
+  it("steps a right-to-left word down to the baseline at its last letter", async () => {
+    const editor = new TestEditor();
+    await editor.openSession(SHAPING_TEST, "f");
+    const runId = editor.text.createRun(editor.text.itemsFromText("ببب")).id;
+
+    await expect
+      .poll(() => heights(editor, runId))
+      .toEqual([
+        ["beh-ar.fina", 0],
+        ["beh-ar.medi", 200],
+        ["beh-ar.init", 400],
+      ]);
+    const lefts = editor.text
+      .layoutCell(runId)
+      .peek()!
+      .placedGlyphs.map((glyph) => glyph.left);
+    expect(lefts).toEqual([0, 450, 850]);
+  });
+
+  it("passes over a mark the font classes as one, giving it no advance", async () => {
+    const editor = new TestEditor();
+    await editor.openSession(SHAPING_TEST, "f");
+    const runId = editor.text.createRun(editor.text.itemsFromText("بٰب")).id;
+
+    await expect
+      .poll(() => heights(editor, runId))
+      .toEqual([
+        ["beh-ar.fina", 0],
+        ["alefabove-ar", 0],
+        ["beh-ar.init", 200],
+      ]);
+    const lefts = editor.text
+      .layoutCell(runId)
+      .peek()!
+      .placedGlyphs.map((glyph) => glyph.left);
+    expect(lefts).toEqual([0, 450, 450]);
+  });
+
+  it("follows an exit anchor while it is edited", async () => {
+    const editor = new TestEditor();
+    await editor.openSession(SHAPING_TEST, "beh-ar.init");
+    const runId = editor.text.createRun(editor.text.itemsFromText("ببب")).id;
+    await expect.poll(() => heights(editor, runId).at(-1)).toEqual(["beh-ar.init", 400]);
+
+    const exit = editor.requireGlyphLayer().anchors.find((anchor) => anchor.name === "exit")!;
+    editor.selection.select([exit.id]);
+    editor.keyDown("ArrowUp", { shiftKey: true });
+
+    await expect.poll(() => heights(editor, runId).at(-1)).toEqual(["beh-ar.init", 390]);
+  });
+});
+
 describe("an edited glyph follows its item's shaping", () => {
   it("shows the ligature its item forms, drops the old glyph's selection, and returns", async () => {
     const editor = new TestEditor();

@@ -17,9 +17,12 @@
 		<string>noon-ar</string>
 		<string>noonDotless-ar</string>
 		<string>dotabove-ar</string>
+		<string>alefabove-ar</string>
 	</array>
 	<key>public.openTypeCategories</key>
 	<dict>
+		<key>alefabove-ar</key>
+		<string>mark</string>
 		<key>beh-ar</key>
 		<string>base</string>
 		<key>beh-ar.fina</key>

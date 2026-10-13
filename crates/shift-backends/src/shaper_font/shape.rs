@@ -9,6 +9,9 @@ use harfrust::{
     ShapeOptions, ShaperData, ShaperInstance, Tag, UnicodeBuffer,
 };
 use shift_font::{ExternalLocation, GlyphId};
+use skrifa::raw::tables::layout::ClassDef;
+use skrifa::raw::types::GlyphId16;
+use skrifa::raw::TableProvider;
 
 use super::itemize::itemize;
 use super::ShaperFont;
@@ -137,6 +140,9 @@ pub struct ShapedGlyph {
     pub y_advance: i32,
     pub x_offset: i32,
     pub y_offset: i32,
+    /// Whether `GDEF` classes the glyph as a mark: it takes no advance of
+    /// its own and cursive attachment passes over it.
+    pub is_mark: bool,
 }
 
 /// Describes why a run could not be shaped.
@@ -244,6 +250,11 @@ impl LiveShaper {
                 .font_funcs(Some(&mut funcs)),
         );
 
+        let mark_classes = skrifa::FontRef::new(self.font.bytes())
+            .ok()
+            .and_then(|font| font.gdef().ok())
+            .and_then(|gdef| gdef.glyph_class_def())
+            .and_then(Result::ok);
         Ok(shaped
             .glyph_infos()
             .iter()
@@ -255,6 +266,7 @@ impl LiveShaper {
                 y_advance: position.y_advance,
                 x_offset: position.x_offset,
                 y_offset: position.y_offset,
+                is_mark: is_mark(mark_classes.as_ref(), info.glyph_id),
             })
             .collect())
     }
@@ -428,4 +440,12 @@ impl FontFuncs for LiveFontFuncs<'_> {
     fn advance_width(&mut self, _builtin: &BuiltinFontFuncs, _glyph: ShaperGlyphId) -> i32 {
         0
     }
+}
+
+/// Returns whether `classes`, a `GDEF` glyph class table, puts `glyph` in the
+/// mark class.
+fn is_mark(classes: Option<&ClassDef<'_>>, glyph: u32) -> bool {
+    const MARK_CLASS: u16 = 3;
+    let Some(classes) = classes else { return false };
+    u16::try_from(glyph).is_ok_and(|glyph| classes.get(GlyphId16::new(glyph)) == MARK_CLASS)
 }
