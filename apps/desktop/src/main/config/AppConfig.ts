@@ -8,6 +8,12 @@ import { readConfig, setConfigTheme, type ConfigValues } from "./configToml";
 
 export const CONFIG_FILE_NAME = "config.toml";
 
+/**
+ * How long after watching starts to reread the files once more: macOS can miss
+ * changes made in the first moments of a new watch, longer on a busy machine.
+ */
+const WATCH_SETTLE_MS = 1000;
+
 const EMPTY_VALUES: ConfigValues = { theme: null };
 
 export interface AppConfigOptions {
@@ -32,6 +38,7 @@ export class AppConfig {
   readonly #listeners = new Set<(state: AppConfigState) => void>();
   #state: AppConfigState;
   #watcher: FSWatcher | null = null;
+  #settleTimer: NodeJS.Timeout | null = null;
   /** The real file behind a symlinked `config.toml`, whose folder is also watched. */
   #symlinkTarget: string | null = null;
 
@@ -87,8 +94,13 @@ export class AppConfig {
     this.#watcher = watcher;
     return new Promise((resolve) => {
       watcher.once("ready", () => {
-        // The file may have changed between construction and watching.
+        // The files may have changed between construction and watching, or
+        // while the new watch was still settling.
         this.reload();
+        this.#settleTimer = setTimeout(() => {
+          this.#settleTimer = null;
+          this.reload();
+        }, WATCH_SETTLE_MS);
         resolve();
       });
     });
@@ -196,6 +208,8 @@ export class AppConfig {
   }
 
   #closeWatcher(): void {
+    if (this.#settleTimer) clearTimeout(this.#settleTimer);
+    this.#settleTimer = null;
     void this.#watcher?.close();
     this.#watcher = null;
   }
