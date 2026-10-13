@@ -1,7 +1,8 @@
 use crate::errors::{self, BridgeError, BridgeResult};
 use crate::input::{BridgeParse, parse};
 use crate::shaping::{
-  NapiFontFeature, NapiParagraphRequest, NapiShapedParagraph, ParsedParagraphRequest,
+  NapiFeatureDiagnostic, NapiFontFeature, NapiParagraphRequest, NapiShapedParagraph,
+  ParsedParagraphRequest,
 };
 use napi::bindgen_prelude::*;
 use napi::{Error, Status};
@@ -43,15 +44,15 @@ use shift_wire::{
   bridges::napi::{
     NapiAnchorSeed, NapiAppliedChange, NapiAxis, NapiAxisMapping, NapiAxisMappingBasis,
     NapiAxisRole, NapiAxisType, NapiCatalogAtlasGlyph, NapiCatalogAtlasPage,
-    NapiCatalogAtlasWeights, NapiFontIntent, NapiFontMetadata, NapiFontMetrics,
-    NapiFontReplacement, NapiFontSnapshot, NapiGlyphLayerSnapshot, NapiGlyphPreview,
-    NapiGlyphProjection, NapiGlyphRecord, NapiGlyphSnapshot, NapiGlyphSnapshotRequest,
-    NapiInterpolationBasis, NapiKerningPosition, NapiKerningSide, NapiKerningSideKind,
-    NapiKerningSnapshot, NapiKerningValueEdit, NapiLanguagesReplacement, NapiLayerMatch,
-    NapiLayerRead, NapiLayerReplaced, NapiLocation, NapiMetricDefinition, NapiMetricKind,
-    NapiNamedInstance, NapiPointSeed, NapiSlugAtlas, NapiSlugExactSource, NapiSlugGlyph,
-    NapiSlugLayout, NapiSlugPreviewExtents, NapiSlugSection, NapiSlugWeightSet, NapiSource,
-    NapiSourceMetricsInterpolationReplacement, NapiSourceMetricsInterpolationSnapshot,
+    NapiCatalogAtlasWeights, NapiFeatureSourceReplacement, NapiFontIntent, NapiFontMetadata,
+    NapiFontMetrics, NapiFontReplacement, NapiFontSnapshot, NapiGlyphLayerSnapshot,
+    NapiGlyphPreview, NapiGlyphProjection, NapiGlyphRecord, NapiGlyphSnapshot,
+    NapiGlyphSnapshotRequest, NapiInterpolationBasis, NapiKerningPosition, NapiKerningSide,
+    NapiKerningSideKind, NapiKerningSnapshot, NapiKerningValueEdit, NapiLanguagesReplacement,
+    NapiLayerMatch, NapiLayerRead, NapiLayerReplaced, NapiLocation, NapiMetricDefinition,
+    NapiMetricKind, NapiNamedInstance, NapiPointSeed, NapiSlugAtlas, NapiSlugExactSource,
+    NapiSlugGlyph, NapiSlugLayout, NapiSlugPreviewExtents, NapiSlugSection, NapiSlugWeightSet,
+    NapiSource, NapiSourceMetricsInterpolationReplacement, NapiSourceMetricsInterpolationSnapshot,
   },
 };
 use shift_workspace::{
@@ -1384,6 +1385,7 @@ impl Bridge {
     let impact = outcome.changes.impact();
     let metadata_changed = impact.contains(FontChangeImpact::METADATA);
     let languages_changed = impact.contains(FontChangeImpact::LANGUAGES);
+    let features_changed = impact.contains(FontChangeImpact::FEATURES);
     let glyphs_changed = impact.contains(FontChangeImpact::GLYPHS);
     let axes_changed = impact.contains(FontChangeImpact::AXES);
     let axis_mappings_changed = impact.contains(FontChangeImpact::AXIS_MAPPINGS);
@@ -1450,6 +1452,13 @@ impl Bridge {
             .then(|| -> errors::Result<NapiLanguagesReplacement> {
               Ok(NapiLanguagesReplacement {
                 language_ids: self.get_language_ids()?,
+              })
+            })
+            .transpose()?,
+          feature_source: features_changed
+            .then(|| -> errors::Result<NapiFeatureSourceReplacement> {
+              Ok(NapiFeatureSourceReplacement {
+                source: self.feature_source()?,
               })
             })
             .transpose()?,
@@ -2153,6 +2162,28 @@ impl Bridge {
     Ok(features.into_iter().map(NapiFontFeature::from).collect())
   }
 
+  /// Returns the problems the compiler found in the font's feature code, with
+  /// ranges into the text [`Self::feature_source`] returns. Empty when the
+  /// code compiles cleanly; errors keep the last valid features shaping.
+  #[napi]
+  pub fn feature_diagnostics(&mut self) -> errors::Result<Vec<NapiFeatureDiagnostic>> {
+    self.live_shaper()?;
+    Ok(
+      self
+        .shaper_fonts
+        .diagnostics()
+        .iter()
+        .map(NapiFeatureDiagnostic::from)
+        .collect(),
+    )
+  }
+
+  /// Returns the font's authored feature code, or `None` when it has none.
+  #[napi]
+  pub fn feature_source(&self) -> errors::Result<Option<String>> {
+    Ok(self.font()?.features().fea_source().map(str::to_string))
+  }
+
   #[napi]
   pub fn map_location(&self, location: NapiLocation) -> errors::Result<NapiLocation> {
     let external = shift_font::ExternalLocation::from_untyped(map_location(location)?);
@@ -2675,6 +2706,14 @@ fn map_intent(intent: NapiFontIntent) -> errors::Result<FontIntent> {
         language_ids: payload.language_ids,
       })
     }
+    "setFeatureSource" => {
+      let payload = intent
+        .set_feature_source
+        .ok_or_else(|| missing("setFeatureSource"))?;
+      Ok(FontIntent::SetFeatureSource {
+        source: payload.source,
+      })
+    }
     "createAxis" => {
       let payload = intent.create_axis.ok_or_else(|| missing("createAxis"))?;
       Ok(FontIntent::CreateAxis {
@@ -3017,9 +3056,9 @@ mod tests {
     NapiGlyphSnapshotRequest, NapiGlyphState, NapiLocation, NapiMoveAnchorsIntent,
     NapiMovePointsIntent, NapiNamedInstance, NapiPointSeed, NapiPointType, NapiRemoveAnchorsIntent,
     NapiRemovePointsIntent, NapiReverseContourIntent, NapiSetContourClosedIntent,
-    NapiSetKerningValuesIntent, NapiSetLanguagesIntent, NapiSetPointSmoothIntent,
-    NapiSetXAdvanceIntent, NapiTransformLayerIntent, NapiTranslatePointsIntent,
-    NapiUpdateNamedInstanceIntent,
+    NapiSetFeatureSourceIntent, NapiSetKerningValuesIntent, NapiSetLanguagesIntent,
+    NapiSetPointSmoothIntent, NapiSetXAdvanceIntent, NapiTransformLayerIntent,
+    NapiTranslatePointsIntent, NapiUpdateNamedInstanceIntent,
   };
   use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -3053,6 +3092,7 @@ mod tests {
       update_glyph: None,
       update_font_metadata: None,
       set_languages: None,
+      set_feature_source: None,
       create_axis: None,
       update_axis: None,
       delete_axis: None,
@@ -3993,6 +4033,97 @@ mod tests {
     let state = bridge.document_state().unwrap();
     assert!(state.dirty);
     assert!(state.needs_save_as);
+  }
+
+  /// Opens a copy of the shaping fixture whose feature code is `source`.
+  fn bridge_with_feature_source(name: &str, source: &str) -> Bridge {
+    let fixture =
+      Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/fonts/ShapingTest.ufo");
+    let (document_path, store_path) = test_paths(name);
+    let ufo = Path::new(&document_path).with_file_name("ShapingTest.ufo");
+    copy_directory(&fixture, &ufo);
+    std::fs::write(ufo.join("features.fea"), source).unwrap();
+    let mut bridge = Bridge::new();
+    bridge
+      .open_workspace(ufo.to_string_lossy().into_owned(), store_path)
+      .unwrap();
+    bridge
+  }
+
+  fn copy_directory(source: &Path, destination: &Path) {
+    std::fs::create_dir_all(destination).unwrap();
+    for entry in std::fs::read_dir(source).unwrap() {
+      let entry = entry.unwrap();
+      let target = destination.join(entry.file_name());
+      if entry.file_type().unwrap().is_dir() {
+        copy_directory(&entry.path(), &target);
+      } else {
+        std::fs::copy(entry.path(), target).unwrap();
+      }
+    }
+  }
+
+  #[test]
+  fn feature_diagnostics_point_at_the_problem_in_the_feature_code() {
+    let source = "languagesystem DFLT dflt;\nfeature liga {\n  sub f i by f_x;\n} liga;\n";
+    let mut bridge = bridge_with_feature_source("feature-diagnostics", source);
+
+    let diagnostics = bridge.feature_diagnostics().unwrap();
+
+    let errors: Vec<_> = diagnostics
+      .iter()
+      .filter(|diagnostic| diagnostic.severity == "error")
+      .collect();
+    assert_eq!(
+      errors.len(),
+      1,
+      "{:?}",
+      diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>()
+    );
+    let from = errors[0].from as usize;
+    let to = errors[0].to as usize;
+    assert_eq!(&source[from..to], "f_x");
+  }
+
+  #[test]
+  fn editing_feature_code_echoes_it_and_reports_new_problems_until_undone() {
+    let clean = "languagesystem DFLT dflt;\nfeature liga {\n  sub f i by f_i;\n} liga;\n";
+    let broken = "languagesystem DFLT dflt;\nfeature liga {\n  sub f i by f_x;\n} liga;\n";
+    let mut bridge = bridge_with_feature_source("feature-edit", clean);
+
+    let applied = bridge
+      .apply(
+        vec![NapiFontIntent {
+          set_feature_source: Some(NapiSetFeatureSourceIntent {
+            source: Some(broken.to_string()),
+          }),
+          ..skeleton_intent("setFeatureSource")
+        }],
+        None,
+      )
+      .unwrap();
+
+    let echoed = applied
+      .next
+      .and_then(|next| next.feature_source)
+      .expect("setFeatureSource must echo the feature code");
+    assert_eq!(echoed.source.as_deref(), Some(broken));
+    assert_eq!(bridge.feature_diagnostics().unwrap().len(), 1);
+
+    bridge
+      .undo()
+      .unwrap()
+      .expect("the feature code edit should undo");
+    assert_eq!(bridge.feature_source().unwrap().as_deref(), Some(clean));
+    assert!(bridge.feature_diagnostics().unwrap().is_empty());
+  }
+
+  #[test]
+  fn feature_diagnostics_are_empty_for_code_that_compiles() {
+    let source = "languagesystem DFLT dflt;\nfeature liga {\n  sub f i by f_i;\n} liga;\n";
+    let mut bridge = bridge_with_feature_source("feature-diagnostics-clean", source);
+
+    assert!(bridge.feature_diagnostics().unwrap().is_empty());
   }
 
   #[test]

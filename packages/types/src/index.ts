@@ -213,6 +213,7 @@ export type {
   PointSeed,
   PointType,
   SetAxisMappingsIntent,
+  FeatureDiagnostic,
   FontFeature,
   ShapedGlyph,
   ShapedParagraph,

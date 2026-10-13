@@ -12,6 +12,7 @@ import type {
   LayerId,
   LayerMatch,
   LayerRead,
+  FeatureDiagnostic,
   FontFeature,
   Location,
   ParagraphRequest,
@@ -77,6 +78,8 @@ export interface WorkspaceEditCoordinator {
   shapeParagraphs(paragraphs: readonly ParagraphRequest[]): Promise<ShapedParagraph[]>;
   shaperFont(knownRevision: number | null): Promise<ShaperFont | null>;
   features(): Promise<FontFeature[]>;
+  featureSource(): Promise<string | null>;
+  featureDiagnostics(): Promise<FeatureDiagnostic[]>;
   settled(): Promise<void>;
   undo(): Promise<AppliedChange | null>;
   redo(): Promise<AppliedChange | null>;
