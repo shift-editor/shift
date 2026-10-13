@@ -485,6 +485,10 @@ jobs:
       - name: Run tests
         run: cargo test --workspace --exclude shift-bridge
 
+      # Time budgets hold for optimised code, so they are only asserted here.
+      - name: Check performance budgets
+        run: cargo test --release -p shift-font --lib -- perf_mark
+
   integration:
     name: Integration Tests
     needs: detect-changes
