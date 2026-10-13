@@ -125,7 +125,7 @@ impl ShiftIrSource {
                 default_source_id,
                 glyphs: font.glyphs().into_iter().cloned().collect(),
                 kerning: font.kerning().clone(),
-                features: font.features().clone(),
+                features: compiled_features(font),
                 gdef_classes: gdef_classes(font.glyphs(), font.lib()),
                 nonspacing_marks: {
                     let categories = GlyphCategories::new();
@@ -197,4 +197,13 @@ impl Source for ShiftIrSource {
     fn compilation_flags(&self) -> Flags {
         Flags::empty()
     }
+}
+
+/// The font's features as they compile: its authored code followed by the
+/// features its glyph relationships generate.
+fn compiled_features(font: &impl FontView) -> FeatureData {
+    let source = shift_font::assembled_feature_source(&font.glyphs(), font.features().fea_source());
+    let mut features = font.features().clone();
+    features.set_fea_source((!source.is_empty()).then_some(source));
+    features
 }
