@@ -7,10 +7,13 @@ use shift_font::{FontIntent, FontIntentSet, GlyphId, GlyphName, LayerId};
 
 use crate::cli::SetGlyphsArgs;
 
-use super::glyph::{load_font, parse_unicodes, resolve_source_id};
+use super::glyph::{load_font, parse_unicodes, resolve_glyph_id, resolve_source_id};
 use super::input::{GlyphBatchInput, GlyphEntryInput};
 use super::layer_payload::read_json_input;
 use super::{AuthoringReport, apply_mutation};
+
+/// The glyph batch format `glyph export` writes and `glyph set` reads.
+pub(crate) const GLYPH_BATCH_FORMAT: u32 = 1;
 
 /// Creates or updates glyph identities and drawings with one atomic workspace application.
 ///
@@ -28,11 +31,19 @@ pub fn set_glyphs(args: SetGlyphsArgs) -> Result<AuthoringReport> {
     if batch.glyphs.is_empty() {
         bail!("glyph batch contains no glyphs");
     }
+    if let Some(format) = batch.format
+        && format != GLYPH_BATCH_FORMAT
+    {
+        bail!(
+            "glyph batch format {format} is not supported; this shift-cli reads format {GLYPH_BATCH_FORMAT}"
+        );
+    }
 
     let mut glyphs = HashMap::<String, (GlyphId, Vec<u32>)>::new();
     let mut unicodes = HashMap::<String, Vec<u32>>::new();
     let mut seen = HashSet::new();
     let mut intents = Vec::new();
+    let mut layers = Vec::new();
     for (index, input) in batch.glyphs.into_iter().enumerate() {
         let name = input["name"]
             .as_str()
@@ -102,19 +113,32 @@ pub fn set_glyphs(args: SetGlyphsArgs) -> Result<AuthoringReport> {
             *current_unicodes = values;
         }
 
-        let Some(input) = entry.layer else {
-            continue;
-        };
+        if let Some(input) = entry.layer {
+            layers.push((glyph_id.clone(), source_id, input, context()));
+        }
+    }
+
+    // Layers come after every glyph is planned, so a component may name a glyph
+    // that appears later in the batch.
+    let base_glyph = |name: &str| match glyphs.get(name) {
+        Some((glyph_id, _)) => Ok(glyph_id.clone()),
+        None => resolve_glyph_id(&font, name),
+    };
+    for (glyph_id, source_id, input, context) in layers {
         let existing = font.layer_id_for_glyph_source(glyph_id.clone(), source_id.clone());
         let layer_id = existing.clone().unwrap_or_else(LayerId::new);
         if existing.is_none() {
             intents.push(FontIntent::CreateGlyphLayer {
                 layer_id: layer_id.clone(),
-                glyph_id: glyph_id.clone(),
+                glyph_id,
                 source_id,
             });
         }
-        intents.push(input.into_intent(layer_id).wrap_err_with(context)?);
+        intents.push(
+            input
+                .into_intent(layer_id, &base_glyph)
+                .wrap_err_with(|| context)?,
+        );
     }
 
     apply_mutation(&args.path, &args.mutation, FontIntentSet { intents })
