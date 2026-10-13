@@ -112,7 +112,10 @@ impl ShaperFontRequest {
             units_per_em,
             glyph_names,
             glyph_ids,
-            feature_source: font.features().fea_source().unwrap_or_default().to_string(),
+            feature_source: shift_font::assembled_feature_source(
+                &font.glyphs(),
+                font.features().fea_source(),
+            ),
             axes,
             axis_ids: font.axes().iter().map(|axis| axis.id()).collect(),
             gdef_classes: gdef_classes(font.glyphs(), font.lib()),
