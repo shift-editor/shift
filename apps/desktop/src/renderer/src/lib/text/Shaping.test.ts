@@ -244,3 +244,34 @@ describe("Option-arrows in mixed-direction text", () => {
     expect(new Set(xs).size).toBe(xs.length);
   });
 });
+
+describe("features can be turned on or off per proof text", () => {
+  let editor: TestEditor;
+
+  beforeEach(async () => {
+    editor = new TestEditor();
+    await editor.openSession(SHAPING_TEST, "f");
+  });
+
+  it("lists the features the font's feature code defines", async () => {
+    const tags = (await editor.font.features()).map((feature) => feature.tag);
+
+    expect(tags).toEqual(["ccmp", "fina", "init", "liga", "medi"]);
+  });
+
+  it("turning liga off breaks the ligature and reset brings it back", async () => {
+    const runId = editor.text.createRun(editor.text.itemsFromText("fi")).id;
+    const names = () =>
+      editor.text
+        .layoutCell(runId)
+        .peek()!
+        .placedGlyphs.map((placed) => placed.glyph.glyphName);
+    await expect.poll(names).toEqual(["f_i"]);
+
+    editor.history.capture("Set liga", () => editor.text.setFeature(runId, "liga", false));
+    await expect.poll(names).toEqual(["f", "i"]);
+
+    editor.history.capture("Reset features", () => editor.text.resetFeatures(runId));
+    await expect.poll(names).toEqual(["f_i"]);
+  });
+});

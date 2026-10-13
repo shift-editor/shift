@@ -1,7 +1,7 @@
 use napi_derive::napi;
 use shift_backends::shaper_font::{
-  FeatureSetting, ParagraphRequest, ShapeUnit, ShapedGlyph, ShapedParagraph, ShapedRun,
-  TextDirection,
+  FeatureSetting, FontFeature, ParagraphRequest, ShapeUnit, ShapedGlyph, ShapedParagraph,
+  ShapedRun, TextDirection,
 };
 use shift_font::{ExternalLocation, GlyphId};
 use shift_wire::bridges::napi::NapiLocation;
@@ -119,6 +119,24 @@ impl From<ShapedRun> for NapiShapedRun {
       level: u32::from(run.level),
       direction: direction_name(run.direction).to_string(),
       glyphs: run.glyphs.into_iter().map(NapiShapedGlyph::from).collect(),
+    }
+  }
+}
+
+/// A feature the font's feature code defines.
+#[napi(object)]
+pub struct NapiFontFeature {
+  /// The feature tag, such as `liga` or `ss01`.
+  pub tag: String,
+  /// The name a `featureNames` block gives a stylistic set or character variant.
+  pub name: Option<String>,
+}
+
+impl From<FontFeature> for NapiFontFeature {
+  fn from(feature: FontFeature) -> Self {
+    Self {
+      tag: feature.tag,
+      name: feature.name,
     }
   }
 }

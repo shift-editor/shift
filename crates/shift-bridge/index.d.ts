@@ -203,6 +203,11 @@ export declare class Bridge {
    * call altered the glyph order, glyph categories, feature code, or axes.
    */
   shapeParagraph(request: NapiParagraphRequest): NapiShapedParagraph
+  /**
+   * Returns the features the font's compiled feature code defines, once per
+   * tag, in tag order, with stylistic set and character variant names.
+   */
+  shapingFeatures(): Array<NapiFontFeature>
   mapLocation(location: NapiLocation): NapiLocation
   getSources(): Array<NapiSource>
 }
@@ -235,6 +240,14 @@ export interface NapiFontExportRequest {
 export interface NapiFontExportResult {
   path: string
   format: string
+}
+
+/** A feature the font's feature code defines. */
+export interface NapiFontFeature {
+  /** The feature tag, such as `liga` or `ss01`. */
+  tag: string
+  /** The name a `featureNames` block gives a stylistic set or character variant. */
+  name?: string
 }
 
 export interface NapiNewWorkspace {

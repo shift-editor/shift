@@ -57,7 +57,7 @@ export class Text {
                 );
                 return {
                   keys: paragraphKeys(record.items),
-                  paragraphs: paragraphRequests(record.items, location),
+                  paragraphs: paragraphRequests(record.items, location, record.features),
                 };
               },
               { name: "text.shapingRequest" },
@@ -175,6 +175,7 @@ export class Text {
       scope: "document",
       items: [...items],
       shaping: true,
+      features: {},
     };
     this.#store.put(record);
     return record;
@@ -227,6 +228,27 @@ export class Text {
   setShaping(id: RunId, shaping: boolean): void {
     const run = this.run(id);
     if (run && run.shaping !== shaping) this.#store.put({ ...run, shaping });
+  }
+
+  /**
+   * Turns a feature on or off for a run, or back to the font's default.
+   *
+   * @param on - `true` or `false` to force the feature; `null` for the default.
+   *
+   * @remarks
+   * Writes the run record, so call it inside a history capture.
+   */
+  setFeature(id: RunId, tag: string, on: boolean | null): void {
+    const run = this.run(id);
+    if (!run || (run.features[tag] ?? null) === on) return;
+    const { [tag]: _previous, ...rest } = run.features;
+    this.#store.put({ ...run, features: on === null ? rest : { ...rest, [tag]: on } });
+  }
+
+  /** Returns every feature of a run to the font's default. */
+  resetFeatures(id: RunId): void {
+    const run = this.run(id);
+    if (run && Object.keys(run.features).length > 0) this.#store.put({ ...run, features: {} });
   }
 
   /**

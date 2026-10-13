@@ -29,6 +29,9 @@ export interface ShapingRequest {
  *
  * @remarks
  * Item ids are left out, so retyping the same text reuses its shaping.
+ * Location and feature settings are left out too: a result shaped with old
+ * ones still maps glyphs to the right items, so it stays shown until the new
+ * one arrives.
  */
 export function paragraphKeys(items: readonly TextItem[]): string[] {
   const keys: string[][] = [[]];
@@ -55,17 +58,23 @@ export function matchShapedParagraphs(
   return keys.map((key) => byKey.get(key) ?? null);
 }
 
-/** Splits items into one shaping request per paragraph. */
+/**
+ * Splits items into one shaping request per paragraph.
+ *
+ * @param features - Features turned on or off by tag; others keep the font's default.
+ */
 export function paragraphRequests(
   items: readonly TextItem[],
   location: ParagraphRequest["location"],
+  features: Readonly<Record<string, boolean>>,
 ): ParagraphRequest[] {
+  const settings = Object.entries(features).map(([tag, on]) => ({ tag, value: on ? 1 : 0 }));
   const paragraphs: ShapeUnit[][] = [[]];
   for (const item of items) {
     if (item.kind === "linebreak") paragraphs.push([]);
     else paragraphs.at(-1)!.push(shapeUnit(item));
   }
-  return paragraphs.map((units) => ({ units, location }));
+  return paragraphs.map((units) => ({ units, location, features: settings }));
 }
 
 function shapeUnit(item: GlyphicTextItem): ShapeUnit {

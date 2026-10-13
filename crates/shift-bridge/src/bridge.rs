@@ -1,6 +1,8 @@
 use crate::errors::{self, BridgeError, BridgeResult};
 use crate::input::{parse, BridgeParse};
-use crate::shaping::{NapiParagraphRequest, NapiShapedParagraph, ParsedParagraphRequest};
+use crate::shaping::{
+  NapiFontFeature, NapiParagraphRequest, NapiShapedParagraph, ParsedParagraphRequest,
+};
 use napi::bindgen_prelude::*;
 use napi::{Error, Status};
 use napi_derive::napi;
@@ -2100,6 +2102,14 @@ impl Bridge {
     let request = ParsedParagraphRequest::try_from(request)?;
     let paragraph = self.live_shaper()?.shape_paragraph(&request.as_request())?;
     Ok(NapiShapedParagraph::from(paragraph))
+  }
+
+  /// Returns the features the font's compiled feature code defines, once per
+  /// tag, in tag order, with stylistic set and character variant names.
+  #[napi]
+  pub fn shaping_features(&mut self) -> errors::Result<Vec<NapiFontFeature>> {
+    let features = self.live_shaper()?.font().features()?;
+    Ok(features.into_iter().map(NapiFontFeature::from).collect())
   }
 
   #[napi]
