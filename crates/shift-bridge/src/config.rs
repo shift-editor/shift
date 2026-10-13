@@ -5,7 +5,7 @@
 
 use napi::{Error, Result, Status};
 use napi_derive::napi;
-use shift_config::{ConfigProblem, Severity};
+use shift_config::{ConfigProblem, Severity, ThemeMode, ThemeSetting, ThemeSlots};
 
 /// How serious a config problem is: `error` keeps the last valid settings,
 /// `warning` applies the file but ignores something in it.
@@ -24,14 +24,61 @@ pub struct NapiConfigProblem {
   pub column: Option<u32>,
 }
 
+/// Which appearance a `theme` table uses.
+#[napi(string_enum = "lowercase")]
+pub enum NapiThemeMode {
+  System,
+  Light,
+  Dark,
+}
+
+/// A `theme` table: a mode and the theme used in each appearance; missing
+/// keys are left to the app's defaults.
+#[napi(object)]
+pub struct NapiThemeSlots {
+  pub mode: Option<NapiThemeMode>,
+  pub light: Option<String>,
+  pub dark: Option<String>,
+}
+
 /// The settings in a `config.toml` source.
 #[napi(object)]
 pub struct NapiConfigRead {
   /// Whether the file may be applied; `false` when any problem is an error.
   pub valid: bool,
-  /// The selected theme, when the file is valid and chooses one.
+  /// The theme name, when the file is valid and writes `theme = "…"`.
   pub theme: Option<String>,
+  /// The theme table, when the file is valid and writes `theme` as a table.
+  pub theme_slots: Option<NapiThemeSlots>,
   pub problems: Vec<NapiConfigProblem>,
+}
+
+impl From<ThemeSlots> for NapiThemeSlots {
+  fn from(slots: ThemeSlots) -> Self {
+    Self {
+      mode: slots.mode.map(|mode| match mode {
+        ThemeMode::System => NapiThemeMode::System,
+        ThemeMode::Light => NapiThemeMode::Light,
+        ThemeMode::Dark => NapiThemeMode::Dark,
+      }),
+      light: slots.light,
+      dark: slots.dark,
+    }
+  }
+}
+
+impl From<NapiThemeSlots> for ThemeSlots {
+  fn from(slots: NapiThemeSlots) -> Self {
+    Self {
+      mode: slots.mode.map(|mode| match mode {
+        NapiThemeMode::System => ThemeMode::System,
+        NapiThemeMode::Light => ThemeMode::Light,
+        NapiThemeMode::Dark => ThemeMode::Dark,
+      }),
+      light: slots.light,
+      dark: slots.dark,
+    }
+  }
 }
 
 impl From<ConfigProblem> for NapiConfigProblem {
@@ -58,15 +105,22 @@ impl From<ConfigProblem> for NapiConfigProblem {
 #[napi]
 pub fn config_read(source: String) -> NapiConfigRead {
   let read = shift_config::read_config(&source);
+  let valid = read.values.is_some();
+  let (theme, theme_slots) = match read.values.and_then(|values| values.theme) {
+    None => (None, None),
+    Some(ThemeSetting::Name(name)) => (Some(name), None),
+    Some(ThemeSetting::Slots(slots)) => (None, Some(slots.into())),
+  };
   NapiConfigRead {
-    valid: read.values.is_some(),
-    theme: read.values.and_then(|values| values.theme),
+    valid,
+    theme,
+    theme_slots,
     problems: read.problems.into_iter().map(Into::into).collect(),
   }
 }
 
-/// Returns `source` with its theme set, preserving everything else; `null`
-/// source creates a new file.
+/// Returns `source` with `theme = "…"` set, preserving everything else;
+/// `null` source creates a new file.
 ///
 /// # Errors
 ///
@@ -74,6 +128,22 @@ pub fn config_read(source: String) -> NapiConfigRead {
 /// user is still fixing.
 #[napi]
 pub fn config_set_theme(source: Option<String>, theme: String) -> Result<String> {
+  set_theme(source, ThemeSetting::Name(theme))
+}
+
+/// Returns `source` with its `theme` table set, editing an existing table in
+/// place; `null` source creates a new file.
+///
+/// # Errors
+///
+/// Throws when `source` has errors, so an edit never overwrites a file the
+/// user is still fixing.
+#[napi]
+pub fn config_set_theme_slots(source: Option<String>, slots: NapiThemeSlots) -> Result<String> {
+  set_theme(source, ThemeSetting::Slots(slots.into()))
+}
+
+fn set_theme(source: Option<String>, theme: ThemeSetting) -> Result<String> {
   shift_config::set_theme(source.as_deref(), &theme)
     .map_err(|error| Error::new(Status::InvalidArg, error.to_string()))
 }

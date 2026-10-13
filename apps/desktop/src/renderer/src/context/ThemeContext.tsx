@@ -1,18 +1,30 @@
 import { createContext, useContext } from "react";
 
 import type { AppConfigState } from "@shared/config/config";
-import type { ColorTheme, ThemeSelection } from "@/lib/themes";
-export type { ColorTheme, ThemeAppearance, ThemeId, ThemeSelection } from "@/lib/themes";
+import type { ColorTheme, ThemeAppearance, ThemeId, ThemePreference } from "@/lib/themes";
+export type {
+  ColorTheme,
+  ThemeAppearance,
+  ThemeId,
+  ThemeMode,
+  ThemePreference,
+} from "@/lib/themes";
 
 export interface ThemeContextValue {
-  themeSelection: ThemeSelection;
+  /** The mode and the light and dark themes from `config.toml`. */
+  preference: ThemePreference;
+  /** The theme on screen: the previewed theme while one is set, otherwise the preference's. */
   resolvedTheme: ColorTheme;
-  /** Writes the selection to `config.toml`; a refused write restores the previous selection. */
-  setThemeSelection: (selection: ThemeSelection) => void;
+  /** Shows `theme` everywhere, canvas included, without saving it; `null` ends the preview. */
+  previewTheme: (theme: ThemeId | null) => void;
+  /** The OS appearance, which picks the theme in `system` mode. */
+  systemAppearance: ThemeAppearance;
+  /** Writes the preference to `config.toml`; a refused write restores the previous one. */
+  setPreference: (preference: ThemePreference) => void;
   /** This build's config, or `null` until main has answered. */
   config: AppConfigState | null;
-  /** A theme named in `config.toml` that Shift does not have, or `null`. */
-  unknownTheme: string | null;
+  /** Theme names in `config.toml` that Shift does not have; each uses its default. */
+  unknownThemes: string[];
   /** Why the last change from Settings was not saved, or `null`. */
   saveError: string | null;
 }

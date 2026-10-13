@@ -11,10 +11,11 @@ import { getShiftHost } from "@/host/shiftHost";
  * so the fix is usually in the file too.
  */
 export const ConfigFileSection = () => {
-  const { config, unknownTheme, saveError } = useTheme();
+  const { config, unknownThemes, saveError } = useTheme();
   if (!config) return null;
 
   const fileName = `${config.directory}/config.toml`;
+  const folderName = config.directory.split(/[\\/]/).filter(Boolean).at(-1) ?? config.directory;
 
   return (
     <section className="flex flex-col gap-2" aria-label="Config file">
@@ -22,32 +23,35 @@ export const ConfigFileSection = () => {
         <div className="flex min-w-0 flex-col gap-0.5">
           <h3 className="text-ui font-medium text-primary">Config file</h3>
           <p className="truncate font-mono text-ui text-secondary" title={fileName}>
-            {fileName}
+            {folderName}/config.toml
           </p>
         </div>
-        <Button
-          variant="muted"
-          onClick={async () => {
-            try {
-              await getShiftHost().config.reveal();
-            } catch (error) {
-              console.error("Cannot open the config folder", error);
-            }
-          }}
-        >
-          Open folder
-        </Button>
+        <div className="shrink-0 whitespace-nowrap">
+          <Button
+            variant="default"
+            size="field"
+            onClick={async () => {
+              try {
+                await getShiftHost().config.reveal();
+              } catch (error) {
+                console.error("Cannot open the config folder", error);
+              }
+            }}
+          >
+            Open folder
+          </Button>
+        </div>
       </div>
       {saveError ? (
         <p role="alert" className="text-ui text-error">
           Not saved: {saveError}
         </p>
       ) : null}
-      {unknownTheme ? (
-        <p className="text-ui text-secondary">
-          config.toml chooses theme “{unknownTheme}”, which Shift does not have; using the default.
+      {unknownThemes.map((name) => (
+        <p key={name} className="text-ui text-secondary">
+          config.toml chooses theme “{name}”, which Shift does not have; using the default.
         </p>
-      ) : null}
+      ))}
       {config.problems.length > 0 ? (
         <ul className="flex flex-col gap-1" aria-label="Config problems">
           {config.problems.map((problem, index) => (

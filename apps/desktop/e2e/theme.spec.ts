@@ -28,6 +28,19 @@ async function configFile(page: Page): Promise<string> {
   return path.join(directory, "config.toml");
 }
 
+/** Opens Settings → Appearance. */
+async function openAppearance(page: Page): Promise<void> {
+  await page.getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("button", { name: "Appearance", exact: true }).click();
+}
+
+/** Switches to `mode` in Settings → Appearance and picks `themeName` for it. */
+async function chooseTheme(page: Page, mode: "Light" | "Dark", themeName: string): Promise<void> {
+  await page.getByRole("tab", { name: mode, exact: true }).click();
+  await page.getByRole("button", { name: `${mode} theme`, exact: true }).click();
+  await page.getByRole("option", { name: themeName, exact: true }).click();
+}
+
 /** Opens S with every point selected so glyph, handles, and selection chrome are all drawn. */
 async function openSelectedS(editor: EditorDriver): Promise<void> {
   await editor.openGlyphByUnicode("53");
@@ -62,9 +75,8 @@ test.describe("Theme", () => {
   });
 
   test("selects and persists a classic color theme", async ({ page }) => {
-    await page.getByRole("button", { name: "Settings" }).click();
-    await page.getByRole("button", { name: "Appearance", exact: true }).click();
-    await page.getByRole("radio", { name: /Nord/ }).click();
+    await openAppearance(page);
+    await chooseTheme(page, "Dark", "Nord");
 
     const nord = colorThemes.find(({ id }) => id === "nord");
     if (!nord) throw new Error("Expected the Nord theme");
@@ -83,6 +95,18 @@ test.describe("Theme", () => {
     await expect(page.locator("html")).toHaveAttribute("data-color-theme", "nord");
   });
 
+  test("saves a light and a dark theme for system mode", async ({ page }) => {
+    await openAppearance(page);
+    await chooseTheme(page, "Light", "Gruvbox Light");
+    await page.getByRole("tab", { name: "System", exact: true }).click();
+    await page.getByRole("button", { name: "Dark theme", exact: true }).click();
+    await page.getByRole("option", { name: "Nord", exact: true }).click();
+
+    await expect
+      .poll(async () => fs.readFileSync(await configFile(page), "utf8"))
+      .toBe(`theme = { mode = "system", light = "gruvbox-light", dark = "nord" }\n`);
+  });
+
   test("applies a theme chosen by editing config.toml", async ({ page }) => {
     const file = await configFile(page);
     fs.writeFileSync(file, `# my rice\ntheme = "gruvbox-dark"\n`);
@@ -96,14 +120,13 @@ test.describe("Theme", () => {
     await expect(page.locator("html")).toHaveAttribute("data-color-theme", "dracula");
 
     fs.writeFileSync(file, `theme = "nord\n`);
-    await page.getByRole("button", { name: "Settings" }).click();
-    await page.getByRole("button", { name: "Appearance", exact: true }).click();
+    await openAppearance(page);
 
     await expect(page.getByRole("list", { name: "Config problems" })).toContainText(
       "config.toml:1:",
     );
     await expect(page.locator("html")).toHaveAttribute("data-color-theme", "dracula");
-    await page.getByRole("radio", { name: /Nord/ }).click();
+    await page.getByRole("tab", { name: "Light", exact: true }).click();
     await expect(page.getByRole("alert")).toContainText("Not saved");
     expect(fs.readFileSync(file, "utf8")).toBe(`theme = "nord\n`);
   });
@@ -119,9 +142,8 @@ test.describe("Theme", () => {
 
     await clickFirstCatalogGlyph(page);
     await waitForEditorReady(page, glyphId);
-    await page.getByRole("button", { name: "Settings" }).click();
-    await page.getByRole("button", { name: "Appearance", exact: true }).click();
-    await page.getByRole("radio", { name: /Dracula/ }).click();
+    await openAppearance(page);
+    await chooseTheme(page, "Dark", "Dracula");
     await page.getByRole("button", { name: "Close settings" }).click();
     await page.getByRole("button", { name: "Font overview" }).click();
     await page.waitForURL(/#\/home$/);
@@ -184,9 +206,8 @@ test.describe("Theme", () => {
     }, markersBefore.toString("base64"));
     expect(markersDrawn).toBe(true);
 
-    await page.getByRole("button", { name: "Settings" }).click();
-    await page.getByRole("button", { name: "Appearance", exact: true }).click();
-    await page.getByRole("radio", { name: /Nord/ }).click();
+    await openAppearance(page);
+    await chooseTheme(page, "Dark", "Nord");
     await page.getByRole("button", { name: "Close settings" }).click();
 
     await expect(page.locator("html")).toHaveAttribute("data-color-theme", "nord");

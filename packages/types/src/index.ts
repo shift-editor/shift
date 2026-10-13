@@ -169,6 +169,8 @@ export type {
   ComponentTransform,
   ConfigProblem,
   ConfigSeverity,
+  ThemeMode,
+  ThemeSlots,
   ResolvedComponentGeometry,
   ResolvedLayerGeometry,
   ResolvedOutline,

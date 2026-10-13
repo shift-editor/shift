@@ -7,7 +7,7 @@ import type {
 import type { UpdateProgress } from "../update/types";
 import type { RecentDocument } from "../recents";
 import type { AgentConnectionsState } from "../agent/connections";
-import type { AppConfigState, ThemeName } from "../config/config";
+import type { AppConfigState, ThemeSetting } from "../config/config";
 import type { MenuBar, TitleBarColors, WindowButtonLayout } from "../menu/types";
 
 export type DocumentCallMap = {
@@ -48,8 +48,8 @@ export type RendererToMain = {
   "agentConnections.setAllowed": (allowed: boolean) => AgentConnectionsState;
   "commands.run": (id: CommandId) => void;
   "config.state": () => AppConfigState;
-  /** Writes the theme selection to `config.toml`; rejects when the file has errors. */
-  "config.setTheme": (theme: ThemeName) => AppConfigState;
+  /** Writes the theme setting to `config.toml`; rejects when the file has errors. */
+  "config.setTheme": (theme: ThemeSetting) => AppConfigState;
   /** Opens this build's config folder in the system file manager. */
   "config.reveal": () => void;
   "clipboard.readText": () => string;

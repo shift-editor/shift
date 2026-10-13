@@ -53,6 +53,17 @@ describe("AppConfig", () => {
     expect(state).toMatchObject({ exists: true, theme: "dracula" });
   });
 
+  it("writes and reads a mode with a theme for each appearance", () => {
+    write(`# rice\ntheme = "nord" # cold\n`);
+
+    const state = open().setTheme({ mode: "system", light: "gruvbox-light", dark: "nord" });
+
+    expect(read()).toBe(
+      `# rice\ntheme = { mode = "system", light = "gruvbox-light", dark = "nord" } # cold\n`,
+    );
+    expect(state.theme).toEqual({ mode: "system", light: "gruvbox-light", dark: "nord" });
+  });
+
   it("keeps the last valid theme and reports the error when the file breaks", () => {
     write(`theme = "nord"\n`);
     const appConfig = open();

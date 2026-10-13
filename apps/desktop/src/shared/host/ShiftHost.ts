@@ -4,7 +4,7 @@ import type { RendererErrorReport } from "../ipc/contract";
 import type { FontSessionMode } from "../workspace/protocol";
 import type { RecentDocument } from "../recents";
 import type { AgentConnectionsState } from "../agent/connections";
-import type { AppConfigState, ThemeName } from "../config/config";
+import type { AppConfigState, ThemeSetting } from "../config/config";
 import type { MenuBar, TitleBarColors, WindowButtonLayout } from "../menu/types";
 
 /**
@@ -167,12 +167,12 @@ export interface ShiftHost {
   config: {
     state: () => Promise<AppConfigState>;
     /**
-     * Writes the theme selection to `config.toml`, creating it if needed.
+     * Writes the theme setting to `config.toml`, creating it if needed.
      *
      * @remarks
      * Rejects without changing the file when it has errors.
      */
-    setTheme: (theme: ThemeName) => Promise<AppConfigState>;
+    setTheme: (theme: ThemeSetting) => Promise<AppConfigState>;
     /** Opens the config folder in the system file manager. */
     reveal: () => Promise<void>;
     /**

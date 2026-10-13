@@ -210,8 +210,8 @@ export declare class Bridge {
 export declare function configRead(source: string): NapiConfigRead
 
 /**
- * Returns `source` with its theme set, preserving everything else; `null`
- * source creates a new file.
+ * Returns `source` with `theme = "…"` set, preserving everything else;
+ * `null` source creates a new file.
  *
  * # Errors
  *
@@ -219,6 +219,17 @@ export declare function configRead(source: string): NapiConfigRead
  * user is still fixing.
  */
 export declare function configSetTheme(source: string | undefined | null, theme: string): string
+
+/**
+ * Returns `source` with its `theme` table set, editing an existing table in
+ * place; `null` source creates a new file.
+ *
+ * # Errors
+ *
+ * Throws when `source` has errors, so an edit never overwrites a file the
+ * user is still fixing.
+ */
+export declare function configSetThemeSlots(source: string | undefined | null, slots: NapiThemeSlots): string
 
 /** One problem in `config.toml`; line and column are one-based. */
 export interface NapiConfigProblem {
@@ -232,8 +243,10 @@ export interface NapiConfigProblem {
 export interface NapiConfigRead {
   /** Whether the file may be applied; `false` when any problem is an error. */
   valid: boolean
-  /** The selected theme, when the file is valid and chooses one. */
+  /** The theme name, when the file is valid and writes `theme = "…"`. */
   theme?: string
+  /** The theme table, when the file is valid and writes `theme` as a table. */
+  themeSlots?: NapiThemeSlots
   problems: Array<NapiConfigProblem>
 }
 
@@ -337,6 +350,23 @@ export interface NapiSpecimen {
   /** SVG `viewBox` as `[x, y, width, height]`, fitted to the ink. */
   viewBox: Array<number>
   rightToLeft: boolean
+}
+
+/** Which appearance a `theme` table uses. */
+export declare const enum NapiThemeMode {
+  System = 'system',
+  Light = 'light',
+  Dark = 'dark'
+}
+
+/**
+ * A `theme` table: a mode and the theme used in each appearance; missing
+ * keys are left to the app's defaults.
+ */
+export interface NapiThemeSlots {
+  mode?: NapiThemeMode
+  light?: string
+  dark?: string
 }
 export interface NapiAddAnchorsIntent {
   layerId: LayerId

@@ -148,7 +148,7 @@ Golden captures are the final assertion of a behavioral test, taken with the hel
 - Park the pointer off the target before capturing toolbars and menus so hover styling and tooltips are not part of the golden.
 - Do not count or sample palette colours. Assert the render state the editor publishes, or capture a golden of the state.
 - Canvas goldens keep device pixels (`scale: "device"`). A HiDPI spec sets Playwright's `deviceScaleFactor` option (`test.use({ deviceScaleFactor: 2 })`), which the Electron fixtures pass to `--force-device-scale-factor`; window sizing stays in CSS pixels, so a 2× canvas golden is twice the 1× dimensions. Assert `window.devicePixelRatio` before capturing.
-- Theme goldens persist the selection (`localStorage.themeSelection`), reload, and assert `data-color-theme` before capturing. Shift Light uses stylesheet defaults; every other theme maps its palette through a light or dark branch of `colorThemeVariables()`, so add a theme golden when a new theme changes that mapping rather than for each palette.
+- Theme goldens write the theme to `config.toml` through `shiftHost.config.setTheme`, reload, and assert `data-color-theme` before capturing. Shift Light uses stylesheet defaults; every other theme maps its palette through a light or dark branch of `colorThemeVariables()`, so add a theme golden when a new theme changes that mapping rather than for each palette.
 
 ### Visual contracts
 

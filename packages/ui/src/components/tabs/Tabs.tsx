@@ -9,13 +9,18 @@ export function Tabs({ className, ...props }: TabsProps) {
 }
 
 export interface TabsListProps extends React.ComponentProps<typeof BaseTabs.List> {
-  /** `underline` sits on a rule with a {@link TabsIndicator}; `pill` fills the active tab instead. */
-  variant?: "underline" | "pill";
+  /**
+   * `underline` sits on a rule with a {@link TabsIndicator}; `pill` fills the active tab instead;
+   * `segmented` is a filled track whose active tab is raised in the field color, for a setting
+   * that sits beside other fields.
+   */
+  variant?: "underline" | "pill" | "segmented";
 }
 
 const listVariantStyles = {
   underline: "border-b border-line-subtle",
   pill: "gap-1",
+  segmented: "gap-0.5 rounded bg-input p-0.5",
 };
 
 export function TabsList({ className, variant = "underline", ...props }: TabsListProps) {
@@ -29,8 +34,8 @@ export function TabsList({ className, variant = "underline", ...props }: TabsLis
 
 export interface TabsTabProps extends React.ComponentProps<typeof BaseTabs.Tab> {
   size?: "sm" | "md";
-  /** Match the list's variant; `pill` sets its own text size. */
-  variant?: "underline" | "pill";
+  /** Match the list's variant; `pill` and `segmented` set their own text size. */
+  variant?: "underline" | "pill" | "segmented";
 }
 
 const tabSizeStyles = {
@@ -41,6 +46,8 @@ const tabSizeStyles = {
 const tabVariantStyles = {
   underline: "h-8",
   pill: "h-6 rounded px-2 text-ui hover:text-primary data-[active]:bg-hover",
+  segmented:
+    "h-6 rounded-sm px-2.5 text-ui hover:text-primary data-[active]:bg-background data-[active]:shadow-sm",
 };
 
 export function TabsTab({ className, size = "sm", variant = "underline", ...props }: TabsTabProps) {

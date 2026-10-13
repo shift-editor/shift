@@ -233,8 +233,10 @@ export interface ConfigProblem {
 export interface ConfigRead {
   /** Whether the file may be applied; `false` when any problem is an error. */
   valid: boolean
-  /** The selected theme, when the file is valid and chooses one. */
+  /** The theme name, when the file is valid and writes `theme = "…"`. */
   theme?: string
+  /** The theme table, when the file is valid and writes `theme` as a table. */
+  themeSlots?: ThemeSlots
   problems: Array<ConfigProblem>
 }
 
@@ -335,6 +337,19 @@ export interface Specimen {
   /** SVG `viewBox` as `[x, y, width, height]`, fitted to the ink. */
   viewBox: Array<number>
   rightToLeft: boolean
+}
+
+/** Which appearance a `theme` table uses. */
+export type ThemeMode = "system" | "light" | "dark";
+
+/**
+ * A `theme` table: a mode and the theme used in each appearance; missing
+ * keys are left to the app's defaults.
+ */
+export interface ThemeSlots {
+  mode?: ThemeMode
+  light?: string
+  dark?: string
 }
 export interface AddAnchorsIntent {
   layerId: LayerId

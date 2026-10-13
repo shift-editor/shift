@@ -1,72 +1,107 @@
-import { RadioCard, RadioGroup } from "@shift/ui";
+import { useEffect, type ReactNode } from "react";
+import { Tabs, TabsList, TabsTab } from "@shift/ui";
 import { useTheme } from "@/context/ThemeContext";
+import {
+  colorThemes,
+  type ColorTheme,
+  type ThemeAppearance,
+  type ThemeId,
+  type ThemeMode,
+} from "@/lib/themes";
 import { ConfigFileSection } from "./ConfigFileSection";
-import { colorThemes, type ColorTheme, type ThemeSelection } from "@/lib/themes";
+import { ThemePicker } from "./ThemePicker";
 
+const MODES: readonly { mode: ThemeMode; label: string }[] = [
+  { mode: "light", label: "Light" },
+  { mode: "dark", label: "Dark" },
+  { mode: "system", label: "System" },
+];
+
+const SLOTS: Record<ThemeAppearance, { label: string; description: string }> = {
+  light: { label: "Light theme", description: "Used in light mode" },
+  dark: { label: "Dark theme", description: "Used in dark mode" },
+};
+
+/**
+ * Settings → Appearance: a mode (Light, Dark or System) and the theme each
+ * appearance uses.
+ *
+ * @remarks
+ * Highlighting a theme in a picker previews it on the whole window, even for the
+ * appearance not in use; closing the picker without choosing restores it.
+ */
 export const AppearanceSettingsPanel = () => {
-  const { themeSelection, resolvedTheme, setThemeSelection } = useTheme();
-  const options: readonly {
-    selection: ThemeSelection;
-    label: string;
-    theme: ColorTheme;
-  }[] = [
-    { selection: "system", label: "System", theme: resolvedTheme },
-    ...colorThemes.map((theme) => ({ selection: theme.id, label: theme.name, theme })),
-  ];
+  const { preference, previewTheme, setPreference } = useTheme();
+  const { mode } = preference;
+  const slots: readonly ThemeAppearance[] = mode === "system" ? ["light", "dark"] : [mode];
+
+  useEffect(() => () => previewTheme(null), [previewTheme]);
+
+  const chooseMode = (next: ThemeMode) => {
+    previewTheme(null);
+    setPreference({ ...preference, mode: next });
+  };
+
+  const chooseTheme = (appearance: ThemeAppearance, id: ThemeId) => {
+    previewTheme(null);
+    setPreference({ ...preference, [appearance]: id });
+  };
 
   return (
-    <section className="flex flex-col gap-5 p-6">
-      <header className="flex flex-col gap-1 pr-8">
-        <h2 className="text-sm font-medium text-primary">Appearance</h2>
-        <p className="text-ui text-secondary">
-          Choose a color theme for the application and editor canvas.
-        </p>
-      </header>
+    <section className="flex flex-col py-6" aria-label="Appearance">
+      <h2 className="px-6 pb-3 text-sm font-medium text-primary">Appearance</h2>
 
-      <fieldset className="flex flex-col gap-2">
-        <legend className="mb-2 text-ui font-medium text-primary">Color theme</legend>
-        <RadioGroup
-          aria-label="Color theme"
-          value={themeSelection}
-          onValueChange={(value) => setThemeSelection(value as ThemeSelection)}
-          className="grid grid-cols-2"
+      <SettingRow label="Mode" description="Follow the system, or always use one">
+        <Tabs value={mode} onValueChange={(next) => chooseMode(next as ThemeMode)}>
+          <TabsList variant="segmented" aria-label="Mode">
+            {MODES.map(({ mode: value, label }) => (
+              <TabsTab key={value} value={value} variant="segmented">
+                {label}
+              </TabsTab>
+            ))}
+          </TabsList>
+        </Tabs>
+      </SettingRow>
+
+      {slots.map((appearance) => (
+        <SettingRow
+          key={appearance}
+          label={SLOTS[appearance].label}
+          description={SLOTS[appearance].description}
         >
-          {options.map(({ selection, label, theme }) => (
-            <RadioCard key={selection} value={selection}>
-              <span className="flex min-w-0 flex-col items-start">
-                <span className="truncate">{label}</span>
-                <span className="text-ui capitalize text-muted">{theme.appearance}</span>
-              </span>
-              <ThemeSwatches theme={theme} />
-            </RadioCard>
-          ))}
-        </RadioGroup>
-      </fieldset>
+          <ThemePicker
+            label={SLOTS[appearance].label}
+            themes={themesFor(appearance)}
+            value={preference[appearance]}
+            onPreview={previewTheme}
+            onChoose={(id) => chooseTheme(appearance, id)}
+          />
+        </SettingRow>
+      ))}
 
-      <ConfigFileSection />
+      <div className="border-t border-chrome px-6 pt-4">
+        <ConfigFileSection />
+      </div>
     </section>
   );
 };
 
-const ThemeSwatches = ({ theme }: { theme: ColorTheme }) => {
-  const { palette } = theme;
-  const colors = [
-    palette.base00,
-    palette.base05,
-    palette.base08,
-    palette.base0B,
-    palette.base0D,
-    palette.base0E,
-  ];
+interface SettingRowProps {
+  label: string;
+  description: string;
+  children: ReactNode;
+}
 
-  return (
-    <span
-      aria-hidden
-      className="flex shrink-0 overflow-hidden rounded-sm border border-line-subtle"
-    >
-      {colors.map((color, index) => (
-        <span key={`${color}-${index}`} className="h-4 w-3" style={{ backgroundColor: color }} />
-      ))}
-    </span>
-  );
-};
+const SettingRow = ({ label, description, children }: SettingRowProps) => (
+  <div className="flex items-center justify-between gap-6 border-t border-chrome px-6 py-4 first-of-type:border-t-0">
+    <div className="flex min-w-0 flex-col gap-0.5">
+      <span className="text-sm text-primary">{label}</span>
+      <span className="text-ui text-secondary">{description}</span>
+    </div>
+    {children}
+  </div>
+);
+
+function themesFor(appearance: ThemeAppearance): readonly ColorTheme[] {
+  return colorThemes.filter((theme) => theme.appearance === appearance);
+}

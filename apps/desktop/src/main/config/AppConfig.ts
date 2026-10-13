@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { watch, type FSWatcher } from "chokidar";
-import type { AppConfigState, ThemeName } from "../../shared/config/config";
+import type { AppConfigState, ThemeSetting } from "../../shared/config/config";
 import type { ShiftLogger } from "../logging";
 import { readConfig, setConfigTheme, type ConfigValues } from "./configToml";
 
@@ -107,7 +107,7 @@ export class AppConfig {
   }
 
   /**
-   * Writes the theme selection to `config.toml`, creating the file if needed.
+   * Writes the theme setting to `config.toml`, creating the file if needed.
    *
    * @remarks
    * The new text is flushed to a temporary file beside the real file and renamed
@@ -117,7 +117,7 @@ export class AppConfig {
    * @throws Error when the file does not parse or its `theme` cannot be edited
    * safely; the file is left unchanged.
    */
-  setTheme(theme: ThemeName): AppConfigState {
+  setTheme(theme: ThemeSetting): AppConfigState {
     const next = setConfigTheme(this.#readSource(), theme);
     fs.mkdirSync(this.#directory, { recursive: true });
     writeFileAtomic(resolveTarget(this.#filePath), next);
