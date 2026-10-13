@@ -27,6 +27,7 @@ import type {
   LayerId,
   LayerMatch,
   LayerRead,
+  FeatureDiagnostic,
   FontFeature,
   Location,
   ParagraphRequest,
@@ -1303,6 +1304,16 @@ export class Font {
     return this.editCoordinator.features();
   }
 
+  /** Returns the problems the compiler found in the font's feature code, after pending edits settle. */
+  featureDiagnostics(): Promise<FeatureDiagnostic[]> {
+    return this.editCoordinator.featureDiagnostics();
+  }
+
+  /** Returns the font's authored feature code, after pending edits settle; null when it has none. */
+  featureSource(): Promise<string | null> {
+    return this.editCoordinator.featureSource();
+  }
+
   /** @knipclassignore — used by VariationPanel component */
   isVariable(): boolean {
     return this.getAxes().length > 0;
@@ -1381,6 +1392,27 @@ export class Font {
       kind: "setLanguages",
       setLanguages: { languageIds: [...languageIds] },
     });
+  }
+
+  /**
+   * Queues replacement of the authored feature code on the workspace edit lane.
+   *
+   * @remarks
+   * {@link featureRevisionCell} ticks once the workspace echo is folded. Call
+   * inside an edit-coordinator transaction to control the undo step label.
+   *
+   * @param source - The complete feature code; null removes it.
+   */
+  setFeatureSource(source: string | null): void {
+    this.editCoordinator.push({
+      kind: "setFeatureSource",
+      setFeatureSource: source === null ? {} : { source },
+    });
+  }
+
+  /** Ticks whenever the authored feature code may have changed, including through undo and redo. */
+  get featureRevisionCell(): Signal<number> {
+    return this.#store.featureRevisionCell;
   }
 
   /**

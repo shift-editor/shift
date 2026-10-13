@@ -2266,6 +2266,85 @@ fn undoing_a_saved_language_list_removes_it_from_document_recovery() {
     assert_eq!(recovered.font().language_ids(), None);
 }
 
+fn set_feature_source(workspace: &mut FontWorkspace, source: Option<&str>) {
+    workspace
+        .apply(
+            FontIntentSet {
+                intents: vec![FontIntent::SetFeatureSource {
+                    source: source.map(str::to_string),
+                }],
+            },
+            Some("Edit Feature Code".to_string()),
+        )
+        .unwrap();
+}
+
+fn feature_source(workspace: &FontWorkspace) -> Option<String> {
+    workspace.font().features().fea_source().map(str::to_string)
+}
+
+const LIGA: &str = "feature liga { sub f i by f_i; } liga;\n";
+
+#[test]
+fn feature_code_edits_persist_across_resume_and_undo() {
+    let temp = tempfile::tempdir().unwrap();
+    let store_path = temp.path().join("working.sqlite");
+    let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
+    assert_eq!(feature_source(&workspace), None);
+
+    set_feature_source(&mut workspace, Some(LIGA));
+    assert_eq!(feature_source(&workspace).as_deref(), Some(LIGA));
+    drop(workspace);
+
+    let mut workspace = FontWorkspace::resume(&store_path).unwrap();
+    assert_eq!(feature_source(&workspace).as_deref(), Some(LIGA));
+
+    set_feature_source(&mut workspace, None);
+    let undone = workspace
+        .undo()
+        .unwrap()
+        .expect("feature code edit should undo");
+    assert!(
+        undone
+            .changes
+            .changes
+            .iter()
+            .any(|change| matches!(change, FontChange::FeatureSource(_)))
+    );
+    assert_eq!(feature_source(&workspace).as_deref(), Some(LIGA));
+
+    workspace
+        .redo()
+        .unwrap()
+        .expect("feature code edit should redo");
+    assert_eq!(feature_source(&workspace), None);
+}
+
+#[test]
+fn feature_code_survives_document_recovery_and_save() {
+    let temp = tempfile::tempdir().unwrap();
+    let document_path = temp.path().join("Features.shift");
+    let recovery_path = temp.path().join("recovery.sqlite");
+    drop(ShiftStore::create_document(&document_path, &shift_font::Font::new()).unwrap());
+
+    let mut workspace = FontWorkspace::open_document(&document_path, &recovery_path).unwrap();
+    set_feature_source(&mut workspace, Some(LIGA));
+    drop(workspace);
+
+    let mut recovered = FontWorkspace::open_document(&document_path, &recovery_path).unwrap();
+    assert!(recovered.is_dirty().unwrap());
+    assert_eq!(feature_source(&recovered).as_deref(), Some(LIGA));
+
+    recovered.save().unwrap();
+    drop(recovered);
+
+    let saved = ShiftStore::open_document(&document_path)
+        .unwrap()
+        .load_font_state()
+        .unwrap();
+    assert_eq!(saved.features().fea_source(), Some(LIGA));
+}
+
 #[test]
 fn named_instance_crud_is_undoable_and_keeps_external_location() {
     let temp = tempfile::tempdir().unwrap();

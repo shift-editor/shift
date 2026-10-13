@@ -278,6 +278,30 @@ describe("features can be turned on or off per proof text", () => {
   });
 });
 
+describe("editing feature code reshapes proof text", () => {
+  it("drops a ligature when its rule is removed, and undo brings it back", async () => {
+    const editor = new TestEditor();
+    await editor.openSession(SHAPING_TEST, "f");
+    const runId = editor.text.createRun(editor.text.itemsFromText("fi")).id;
+    const names = () =>
+      editor.text
+        .layoutCell(runId)
+        .peek()
+        ?.placedGlyphs.map((glyph) => glyph.glyph.glyphName) ?? [];
+    await expect.poll(names).toEqual(["f_i"]);
+    const original = await editor.font.featureSource();
+
+    editor.history.capture("Edit Feature Code", () =>
+      editor.font.setFeatureSource("languagesystem DFLT dflt;\n"),
+    );
+    await expect.poll(names).toEqual(["f", "i"]);
+
+    await editor.undo();
+    await expect.poll(names).toEqual(["f_i"]);
+    expect(await editor.font.featureSource()).toBe(original);
+  });
+});
+
 describe("a substituted glyph appears only once it has loaded", () => {
   it("never shows the ligature before its outline and advance are there", async () => {
     const editor = new TestEditor();

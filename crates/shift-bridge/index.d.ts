@@ -208,6 +208,14 @@ export declare class Bridge {
    * tag, in tag order, with stylistic set and character variant names.
    */
   shapingFeatures(): Array<NapiFontFeature>
+  /**
+   * Returns the problems the compiler found in the font's feature code, with
+   * ranges into the text [`Self::feature_source`] returns. Empty when the
+   * code compiles cleanly; errors keep the last valid features shaping.
+   */
+  featureDiagnostics(): Array<NapiFeatureDiagnostic>
+  /** Returns the font's authored feature code, or `None` when it has none. */
+  featureSource(): string | null
   mapLocation(location: NapiLocation): NapiLocation
   getSources(): Array<NapiSource>
 }
@@ -223,6 +231,16 @@ export interface NapiDocumentState {
   saveTarget?: string
   dirty: boolean
   needsSaveAs: boolean
+}
+
+/** A problem the compiler found in the font's feature code. */
+export interface NapiFeatureDiagnostic {
+  severity: "error" | "warning" | "info"
+  message: string
+  /** Start of the problem, in UTF-16 code units into the feature code. */
+  from: number
+  /** End of the problem, in UTF-16 code units into the feature code. */
+  to: number
 }
 
 export interface NapiFeatureSetting {
@@ -642,6 +660,15 @@ export interface NapiDesignNormalization {
 }
 
 /**
+ * The authored feature code after a change; its presence distinguishes
+ * "unchanged" from a change that removed the code.
+ */
+export interface NapiFeatureSourceReplacement {
+  /** The feature code, absent when the font has none. */
+  source?: string
+}
+
+/**
  * CS0 walking-skeleton intent. A stringly union covering exactly the two
  * skeleton kinds; CS1 replaces this with per-variant intent structs.
  */
@@ -686,6 +713,7 @@ export interface NapiFontIntent {
   updateGlyph?: NapiUpdateGlyphIntent
   updateFontMetadata?: NapiUpdateFontMetadataIntent
   setLanguages?: NapiSetLanguagesIntent
+  setFeatureSource?: NapiSetFeatureSourceIntent
   createAxis?: NapiCreateAxisIntent
   updateAxis?: NapiUpdateAxisIntent
   deleteAxis?: NapiDeleteAxisIntent
@@ -753,6 +781,8 @@ export interface NapiFontReplacement {
   namedInstances?: Array<NapiNamedInstance>
   /** Tracked language list when it changed; absent otherwise. */
   languages?: NapiLanguagesReplacement
+  /** Authored feature code when it changed; absent otherwise. */
+  featureSource?: NapiFeatureSourceReplacement
   /**
    * Full sources list when font-level source structure changed (createAxis
    * reshapes locations, createSource adds one); absent otherwise.
@@ -1171,6 +1201,12 @@ export interface NapiSetContourStartIntent {
   layerId: LayerId
   contourId: ContourId
   pointId: PointId
+}
+
+/** Replaces the font's authored feature code as one undoable edit. */
+export interface NapiSetFeatureSourceIntent {
+  /** The new feature code; absent removes it. */
+  source?: string
 }
 
 /** Moves a glyph into a group, or out of its group at `position` without one. */
