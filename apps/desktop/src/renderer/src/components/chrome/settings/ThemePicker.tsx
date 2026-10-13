@@ -16,7 +16,7 @@ import type { ColorTheme } from "@/lib/themes";
 
 interface ThemePickerProps {
   label: string;
-  /** Built-in themes first, then theme files, which the list groups under "Your themes". */
+  /** Shift's themes, then theme files, which the list groups under "Your themes". */
   themes: readonly ColorTheme[];
   value: string;
   /** Called with the highlighted theme while the list is open, and `null` when it closes. */
@@ -39,9 +39,11 @@ export const ThemePicker = ({ label, themes, value, onPreview, onChoose }: Theme
 
   const chosen = themeById(themes, value);
   const needle = query.trim().toLowerCase();
-  const visible = themes.filter((theme) => theme.name.toLowerCase().includes(needle));
-  const builtIn = visible.filter((theme) => !theme.file);
-  const yours = visible.filter((theme) => theme.file);
+  const matching = themes.filter((theme) => theme.name.toLowerCase().includes(needle));
+  const builtIn = matching.filter((theme) => !theme.file).sort(compareShipped);
+  const yours = matching.filter((theme) => theme.file);
+  /** The listed order, which the arrow keys follow. */
+  const listed = [...builtIn, ...yours];
 
   const highlight = (id: string) => {
     setHighlightedId(id);
@@ -63,13 +65,13 @@ export const ThemePicker = ({ label, themes, value, onPreview, onChoose }: Theme
   const handleKeyDown = (event: KeyboardEvent) => {
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
-      if (visible.length === 0) return;
-      const from = visible.findIndex((theme) => theme.id === highlightedId);
+      if (listed.length === 0) return;
+      const from = listed.findIndex((theme) => theme.id === highlightedId);
       const step = event.key === "ArrowDown" ? 1 : -1;
-      const next = visible[Math.min(visible.length - 1, Math.max(0, from + step))];
+      const next = listed[Math.min(listed.length - 1, Math.max(0, from + step))];
       highlight(next.id);
       document.getElementById(optionId(next.id))?.scrollIntoView({ block: "nearest" });
-    } else if (event.key === "Enter" && visible.some((theme) => theme.id === highlightedId)) {
+    } else if (event.key === "Enter" && listed.some((theme) => theme.id === highlightedId)) {
       event.preventDefault();
       choose(highlightedId);
     }
@@ -147,7 +149,7 @@ export const ThemePicker = ({ label, themes, value, onPreview, onChoose }: Theme
                   {yours.map(renderOption)}
                 </div>
               ) : null}
-              {visible.length === 0 ? (
+              {listed.length === 0 ? (
                 <p className="px-2 py-4 text-center text-ui text-muted">No themes found</p>
               ) : null}
             </div>
@@ -175,6 +177,16 @@ const ThemeDots = ({ theme }: { theme: ColorTheme }) => {
     </span>
   );
 };
+
+/** Shift's own theme first, then the rest by name. */
+function compareShipped(a: ColorTheme, b: ColorTheme): number {
+  const order = Number(isShiftTheme(b)) - Number(isShiftTheme(a));
+  return order || a.name.localeCompare(b.name);
+}
+
+function isShiftTheme(theme: ColorTheme): boolean {
+  return theme.id === "shift-light" || theme.id === "shift-dark";
+}
 
 function themeById(themes: readonly ColorTheme[], id: string): ColorTheme {
   return themes.find((theme) => theme.id === id) ?? themes[0];

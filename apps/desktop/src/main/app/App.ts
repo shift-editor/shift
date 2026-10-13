@@ -1203,6 +1203,11 @@ export class App {
         explicitUserDataDirectory: app.commandLine.hasSwitch("user-data-dir"),
         xdgConfigHome: process.env.XDG_CONFIG_HOME,
       }),
+      // Unpackaged, main runs from apps/desktop/.vite/build, both under
+      // electron-forge and when E2E launches main.js directly.
+      bundledThemesDirectory: app.isPackaged
+        ? path.join(process.resourcesPath, "themes")
+        : path.join(__dirname, "..", "..", "themes"),
       log: createShiftLogger("app.config"),
     });
     config.onChanged((state) => {

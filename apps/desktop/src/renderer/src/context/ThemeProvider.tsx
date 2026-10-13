@@ -12,6 +12,7 @@ import type { AppConfigState } from "@shared/config/config";
 import { getShiftHost } from "@/host/shiftHost";
 import {
   applyResolvedTheme,
+  bundledColorThemes,
   colorThemes,
   defaultThemePreference,
   readThemeSetting,
@@ -34,7 +35,7 @@ const THEME_CACHE_KEY = "themeCache";
 
 interface ThemeCache {
   preference: ThemePreference;
-  /** User themes the preference names, which only main can otherwise supply. */
+  /** Bundled and user themes the preference names, which only main can otherwise supply. */
   userThemes: ColorTheme[];
 }
 
@@ -76,9 +77,15 @@ function writeThemeCache(cache: ThemeCache): void {
   }
 }
 
-/** Built-in themes followed by the valid files in `themes/`. */
+/** The themes Shift ships: built into the app, then bundled as files. */
+function shippedThemes(state: AppConfigState): ColorTheme[] {
+  return [...colorThemes, ...bundledColorThemes(state.bundledThemes)];
+}
+
+/** Every theme `state` offers: Shift's, then the valid files in `themes/`. */
 function availableThemes(state: AppConfigState): ColorTheme[] {
-  return [...colorThemes, ...userColorThemes(state.themes).themes];
+  const shipped = shippedThemes(state);
+  return [...shipped, ...userColorThemes(state.themes, shipped).themes];
 }
 
 /**
@@ -104,15 +111,17 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [systemAppearance, setSystemAppearance] = useState<ThemeAppearance>(getSystemAppearance);
   const [previewId, previewTheme] = useState<string | null>(null);
 
+  const shipped = useMemo(() => (config ? shippedThemes(config) : colorThemes), [config]);
   const {
     themes: userThemes,
     shadowing: shadowingThemeFiles,
     unknownColors: unknownThemeColors,
-  } = useMemo(() => userColorThemes(config?.themes ?? []), [config]);
+  } = useMemo(() => userColorThemes(config?.themes ?? [], shipped), [config, shipped]);
   const themes = useMemo(
-    // Until main answers, the cached user themes stand in for their files.
-    () => [...colorThemes, ...(config ? userThemes : (initialCache?.userThemes ?? []))],
-    [config, initialCache, userThemes],
+    // Until main answers, the cached file themes stand in for their files.
+    () =>
+      config ? [...shipped, ...userThemes] : [...colorThemes, ...(initialCache?.userThemes ?? [])],
+    [config, initialCache, shipped, userThemes],
   );
   const resolvedTheme = useMemo(
     () =>
@@ -154,7 +163,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     const named = new Set([preference.light, preference.dark]);
     writeThemeCache({
       preference,
-      userThemes: themes.filter((theme) => theme.file && named.has(theme.id)),
+      userThemes: themes.filter((theme) => !colorThemes.includes(theme) && named.has(theme.id)),
     });
   }, [preference, themes]);
 

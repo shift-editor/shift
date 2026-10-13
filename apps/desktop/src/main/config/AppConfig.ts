@@ -6,7 +6,7 @@ import type {
   AppConfigState,
   ConfigFileState,
   ThemeSetting,
-  UserThemeFile,
+  ThemeFileState,
 } from "../../shared/config/config";
 import type { ShiftLogger } from "../logging";
 import { readConfig, setConfigTheme, type ConfigValues } from "./configToml";
@@ -25,6 +25,8 @@ const EMPTY_VALUES: ConfigValues = { theme: null };
 export interface AppConfigOptions {
   /** This build's config folder; see `configDirectory`. */
   directory: string;
+  /** The read-only theme files shipped with Shift; omitted, Shift lists none. */
+  bundledThemesDirectory?: string;
   log: ShiftLogger;
 }
 
@@ -41,6 +43,7 @@ export class AppConfig {
   readonly #directory: string;
   readonly #filePath: string;
   readonly #themesDirectory: string;
+  readonly #bundledThemes: ThemeFileState[];
   readonly #log: ShiftLogger;
   readonly #listeners = new Set<(state: AppConfigState) => void>();
   #state: AppConfigState;
@@ -54,12 +57,16 @@ export class AppConfig {
     this.#filePath = path.join(options.directory, CONFIG_FILE_NAME);
     this.#themesDirectory = path.join(options.directory, THEMES_FOLDER_NAME);
     this.#log = options.log;
+    this.#bundledThemes = options.bundledThemesDirectory
+      ? this.#readThemeFolder(options.bundledThemesDirectory, new Map())
+      : [];
     this.#state = {
       directory: this.#directory,
       exists: false,
       theme: null,
       problems: [],
       themes: [],
+      bundledThemes: this.#bundledThemes,
     };
     this.#state = this.#read(EMPTY_VALUES);
   }
@@ -161,15 +168,27 @@ export class AppConfig {
 
   /** Reads the files, keeping last valid values for any that have errors. */
   #read(lastValid: ConfigValues): AppConfigState {
-    return { ...this.#readConfigFile(lastValid), themes: this.#readThemes() };
+    return {
+      ...this.#readConfigFile(lastValid),
+      themes: this.#readThemes(),
+      bundledThemes: this.#bundledThemes,
+    };
   }
 
-  #readThemes(): UserThemeFile[] {
+  #readThemes(): ThemeFileState[] {
     const previous = new Map(this.#state.themes.map((theme) => [theme.id, theme]));
+    return this.#readThemeFolder(this.#themesDirectory, previous);
+  }
+
+  /** Reads a folder of theme files, keeping `previous` when the folder cannot be read. */
+  #readThemeFolder(
+    folder: string,
+    previous: ReadonlyMap<string, ThemeFileState>,
+  ): ThemeFileState[] {
     try {
-      return readThemeFiles(this.#themesDirectory, previous);
+      return readThemeFiles(folder, previous);
     } catch (error) {
-      this.#log.warn("cannot read themes folder", { folder: this.#themesDirectory, error });
+      this.#log.warn("cannot read themes folder", { folder, error });
       return [...previous.values()];
     }
   }

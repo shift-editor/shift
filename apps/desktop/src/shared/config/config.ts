@@ -20,8 +20,8 @@ export type ThemeName = string;
  */
 export type ThemeSetting = ThemeName | ThemeSlots;
 
-/** One theme file in the config folder's `themes/`. */
-export interface UserThemeFile {
+/** One theme file: Shift's bundled themes, or one in the config folder's `themes/`. */
+export interface ThemeFileState {
   /** The file name without `.toml`; `config.toml` names it to choose it. */
   id: string;
   path: string;
@@ -55,5 +55,7 @@ export interface ConfigFileState {
  */
 export interface AppConfigState extends ConfigFileState {
   /** Theme files in `themes/`, ordered by id. */
-  themes: UserThemeFile[];
+  themes: ThemeFileState[];
+  /** Read-only themes shipped with Shift, ordered by id; read once at startup. */
+  bundledThemes: ThemeFileState[];
 }

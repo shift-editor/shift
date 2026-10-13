@@ -56,6 +56,7 @@ describe("AppConfig", () => {
       theme: null,
       problems: [],
       themes: [],
+      bundledThemes: [],
     });
     expect(fs.existsSync(path.join(directory, "config.toml"))).toBe(false);
   });
@@ -177,6 +178,22 @@ describe("AppConfig", () => {
     appConfig.reload();
 
     expect(published).toEqual([]);
+  });
+
+  it("reads the bundled themes once, beside the user's", () => {
+    const bundled = path.join(path.dirname(directory), "bundled");
+    fs.mkdirSync(bundled, { recursive: true });
+    fs.writeFileSync(path.join(bundled, "rice.toml"), themeSource("light"));
+    writeTheme("mine", themeSource());
+    config = new AppConfig({ directory, bundledThemesDirectory: bundled, log });
+
+    fs.rmSync(path.join(bundled, "rice.toml"));
+    config.reload();
+
+    expect(config.state.bundledThemes.map(({ id, theme }) => [id, theme?.appearance])).toEqual([
+      ["rice", "light"],
+    ]);
+    expect(config.state.themes.map(({ id }) => id)).toEqual(["mine"]);
   });
 
   it("reads theme files in themes/, ordered by id", () => {
