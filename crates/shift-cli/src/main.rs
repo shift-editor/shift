@@ -12,12 +12,14 @@ use authoring::{
     AuthoringReport, ExportSources, add_axis, add_glyph, add_instance, add_layer, add_source,
     assign_kerning_group, copy_layer, create_font, create_kerning_group, delete_kerning_group,
     export_glyphs, font_info, remove_instance, remove_kerning, rename_kerning_group, set_axis,
-    set_font, set_glyphs, set_instance, set_kerning, set_layer, unassign_kerning_group,
+    set_features, set_font, set_glyphs, set_instance, set_kerning, set_layer, show_features,
+    unassign_kerning_group,
 };
 use clap::Parser;
 use cli::{
-    AxisCommand, Cli, Command, CompileArgs, FontCommand, GlyphCommand, InstanceCommand,
-    KerningCommand, KerningGroupCommand, LayerCommand, SkillCommand, SourceCommand,
+    AxisCommand, Cli, Command, CompileArgs, FeaturesCommand, FontCommand, GlyphCommand,
+    InstanceCommand, KerningCommand, KerningGroupCommand, LayerCommand, SkillCommand,
+    SourceCommand,
 };
 use glyph_inspect::GlyphInspection;
 use inspect::{InspectReport, RenderMode};
@@ -117,6 +119,20 @@ fn main() -> miette::Result<()> {
             LayerCommand::Copy(args) => {
                 let json = args.mutation.json;
                 write_authoring_result(copy_layer(&args), json)
+            }
+        },
+        Command::Features { command } => match command {
+            FeaturesCommand::Show(args) => {
+                let source = show_features(&args)?;
+                let mut stdout = io::stdout().lock();
+                if let Some(source) = source {
+                    write!(stdout, "{source}").into_diagnostic()?;
+                }
+                Ok(())
+            }
+            FeaturesCommand::Set(args) => {
+                let json = args.mutation.json;
+                write_authoring_result(set_features(&args), json)
             }
         },
         Command::Kerning { command } => kerning_command(command),
