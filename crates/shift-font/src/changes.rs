@@ -5,7 +5,7 @@ use bitflags::bitflags;
 use crate::{
     Axis, AxisMapping, FontMetadata, Glyph, GlyphId, GlyphLayer, KerningGroup, KerningGroupId,
     KerningPair, LayerId, LibValue, MetricDefinition, NamedInstance, Source, SourceId,
-    LANGUAGES_LIB_KEY,
+    FEATURE_CODE_SETTINGS_LIB_KEY, GENERATED_FEATURES_OFF_LIB_KEY, LANGUAGES_LIB_KEY,
 };
 
 bitflags! {
@@ -117,6 +117,12 @@ impl FontChange {
         match self {
             Self::Metadata(_) => FontChangeImpact::METADATA,
             Self::LibValue { key, .. } if key == LANGUAGES_LIB_KEY => FontChangeImpact::LANGUAGES,
+            Self::LibValue { key, .. }
+                if key == FEATURE_CODE_SETTINGS_LIB_KEY
+                    || key == GENERATED_FEATURES_OFF_LIB_KEY =>
+            {
+                FontChangeImpact::FEATURES
+            }
             Self::LibValue { .. } => FontChangeImpact::empty(),
             Self::Axes(_) => {
                 FontChangeImpact::AXES

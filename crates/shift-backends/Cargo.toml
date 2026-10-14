@@ -15,6 +15,7 @@ shift-slug = { workspace = true }
 norad = "0.18.4"
 skrifa = "0.32.0"
 fea-rs = "1.0"
+feanor = "0.2.0"
 fontbe = "1.0"
 fontc = "1.0"
 fontdrasil = "1.0"
