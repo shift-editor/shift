@@ -1476,6 +1476,11 @@ impl Font {
         &mut self.data_mut().kerning
     }
 
+    /// How this font's feature code is linted and formatted.
+    pub fn feature_code_settings(&self) -> crate::FeatureCodeSettings {
+        crate::FeatureCodeSettings::from_lib(self.lib())
+    }
+
     pub fn features(&self) -> &FeatureData {
         &self.data().features
     }

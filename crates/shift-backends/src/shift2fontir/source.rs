@@ -252,7 +252,11 @@ impl Source for ShiftIrSource {
 /// The font's features as they compile: its authored code followed by the
 /// features its glyph relationships generate.
 fn compiled_features(font: &impl FontView) -> FeatureData {
-    let source = shift_font::assembled_feature_source(&font.glyphs(), font.features().fea_source());
+    let source = shift_font::assembled_feature_source(
+        &font.glyphs(),
+        font.features().fea_source(),
+        &shift_font::generated_features_off(font.lib()),
+    );
     let mut features = font.features().clone();
     features.set_fea_source((!source.is_empty()).then_some(source));
     features
