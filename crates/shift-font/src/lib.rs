@@ -40,6 +40,7 @@ pub mod check;
 pub mod composite;
 pub mod curve;
 pub mod error;
+pub mod feature_code_settings;
 pub mod generated_features;
 pub mod intents;
 pub mod interpolation;
@@ -53,7 +54,13 @@ pub mod test_support;
 
 pub use changes::*;
 pub use error::{CoreError, CoreResult, EntityRef, Require};
-pub use generated_features::{assembled_feature_source, generated_feature_code};
+pub use feature_code_settings::{
+    FEATURE_CODE_SETTINGS_LIB_KEY, FeatureCodeIndent, FeatureCodeSettings,
+};
+pub use generated_features::{
+    GENERATED_FEATURES_OFF_LIB_KEY, GeneratedFeature, assembled_feature_source,
+    generated_feature_code, generated_feature_ranges, generated_features, generated_features_off,
+};
 pub use intents::*;
 pub use interpolation::*;
 pub use ir::*;

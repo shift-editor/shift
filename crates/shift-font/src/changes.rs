@@ -3,9 +3,9 @@ use std::sync::Arc;
 use bitflags::bitflags;
 
 use crate::{
-    Axis, AxisMapping, FontMetadata, Glyph, GlyphId, GlyphLayer, KerningGroup, KerningGroupId,
-    KerningPair, LANGUAGES_LIB_KEY, LayerId, LibValue, MetricDefinition, NamedInstance, Source,
-    SourceId,
+    Axis, AxisMapping, FEATURE_CODE_SETTINGS_LIB_KEY, FontMetadata, GENERATED_FEATURES_OFF_LIB_KEY,
+    Glyph, GlyphId, GlyphLayer, KerningGroup, KerningGroupId, KerningPair, LANGUAGES_LIB_KEY,
+    LayerId, LibValue, MetricDefinition, NamedInstance, Source, SourceId,
 };
 
 bitflags! {
@@ -117,6 +117,12 @@ impl FontChange {
         match self {
             Self::Metadata(_) => FontChangeImpact::METADATA,
             Self::LibValue { key, .. } if key == LANGUAGES_LIB_KEY => FontChangeImpact::LANGUAGES,
+            Self::LibValue { key, .. }
+                if key == FEATURE_CODE_SETTINGS_LIB_KEY
+                    || key == GENERATED_FEATURES_OFF_LIB_KEY =>
+            {
+                FontChangeImpact::FEATURES
+            }
             Self::LibValue { .. } => FontChangeImpact::empty(),
             Self::Axes(_) => {
                 FontChangeImpact::AXES

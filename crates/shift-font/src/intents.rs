@@ -20,6 +20,7 @@ use crate::ir::{
 };
 use crate::layer_edit::BulkNodePositionUpdates;
 use crate::source::source_locations_equal;
+use crate::{FEATURE_CODE_SETTINGS_LIB_KEY, FeatureCodeSettings};
 use crate::{KerningGroup, KerningGroupId, KerningPair, KerningPosition, KerningSide};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::sync::Arc;
@@ -215,6 +216,15 @@ pub enum FontIntent {
     SetFeatureSource {
         source: Option<String>,
     },
+    /// Replaces how the feature code is linted and formatted.
+    SetFeatureCodeSettings {
+        settings: FeatureCodeSettings,
+    },
+    /// Switches a generated feature on or off; off, it is shown but not compiled.
+    SetGeneratedFeatureOn {
+        tag: String,
+        on: bool,
+    },
     CreateAxis {
         axis: Axis,
     },
@@ -352,6 +362,8 @@ impl FontIntent {
             | Self::UpdateFontMetadata { .. }
             | Self::SetLanguages { .. }
             | Self::SetFeatureSource { .. }
+            | Self::SetFeatureCodeSettings { .. }
+            | Self::SetGeneratedFeatureOn { .. }
             | Self::CreateAxis { .. }
             | Self::UpdateAxis { .. }
             | Self::DeleteAxis { .. }
@@ -417,6 +429,8 @@ impl FontIntent {
             | Self::UpdateFontMetadata { .. }
             | Self::SetLanguages { .. }
             | Self::SetFeatureSource { .. }
+            | Self::SetFeatureCodeSettings { .. }
+            | Self::SetGeneratedFeatureOn { .. }
             | Self::CreateAxis { .. }
             | Self::UpdateAxis { .. }
             | Self::DeleteAxis { .. }
@@ -790,6 +804,21 @@ impl Font {
                 self.features_mut().set_fea_source(source.clone());
                 Ok((Vec::new(), None))
             }
+            FontIntent::SetGeneratedFeatureOn { tag, on } => {
+                self.apply_set_generated_feature_on(tag, *on);
+                Ok((Vec::new(), None))
+            }
+            FontIntent::SetFeatureCodeSettings { settings } => {
+                match settings.to_lib_value() {
+                    Some(value) => self
+                        .lib_mut()
+                        .set(FEATURE_CODE_SETTINGS_LIB_KEY.to_string(), value),
+                    None => {
+                        self.lib_mut().remove(FEATURE_CODE_SETTINGS_LIB_KEY);
+                    }
+                }
+                Ok((Vec::new(), None))
+            }
             FontIntent::SetKerningValues { edits } => {
                 self.apply_set_kerning_values(edits)?;
                 Ok((Vec::new(), None))
@@ -1035,6 +1064,24 @@ impl Font {
                 }
             }
         }
+    }
+
+    fn apply_set_generated_feature_on(&mut self, tag: &str, on: bool) {
+        let mut off = crate::generated_features_off(self.lib());
+        if on {
+            off.remove(tag);
+        } else {
+            off.insert(tag.to_string());
+        }
+        if off.is_empty() {
+            self.lib_mut().remove(crate::GENERATED_FEATURES_OFF_LIB_KEY);
+            return;
+        }
+        let tags = off.into_iter().map(LibValue::String).collect();
+        self.lib_mut().set(
+            crate::GENERATED_FEATURES_OFF_LIB_KEY.to_string(),
+            LibValue::Array(tags),
+        );
     }
 
     fn apply_set_languages(&mut self, language_ids: &[String]) {
@@ -1767,6 +1814,8 @@ impl Font {
             | FontIntent::UpdateFontMetadata { .. }
             | FontIntent::SetLanguages { .. }
             | FontIntent::SetFeatureSource { .. }
+            | FontIntent::SetFeatureCodeSettings { .. }
+            | FontIntent::SetGeneratedFeatureOn { .. }
             | FontIntent::CreateAxis { .. }
             | FontIntent::UpdateAxis { .. }
             | FontIntent::DeleteAxis { .. }

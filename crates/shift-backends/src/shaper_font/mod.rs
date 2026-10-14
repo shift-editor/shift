@@ -115,6 +115,7 @@ impl ShaperFontRequest {
             feature_source: shift_font::assembled_feature_source(
                 &font.glyphs(),
                 font.features().fea_source(),
+                &shift_font::generated_features_off(font.lib()),
             ),
             axes,
             axis_ids: font.axes().iter().map(shift_font::Axis::id).collect(),

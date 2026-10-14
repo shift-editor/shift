@@ -274,6 +274,22 @@ fn alternate(of: GlyphId, feature: &str) -> GlyphRelationship {
     }
 }
 
+fn starts_uppercase(name: &str) -> bool {
+    name.chars().next().is_some_and(char::is_uppercase)
+}
+
+/// `name` with its first letter lowercased (`Aacute` → `aacute`), or fully
+/// lowercased when it is all capitals (`AE` → `ae`).
+fn lowercased(name: &str) -> Option<String> {
+    let mut chars = name.chars();
+    let first = chars.next()?;
+    let rest: String = chars.collect();
+    if rest.chars().any(char::is_lowercase) {
+        return Some(first.to_lowercase().chain(rest.chars()).collect());
+    }
+    Some(name.to_lowercase())
+}
+
 /// What a `stem.suffix` glyph is to `stem`.
 fn suffix_relationships(
     font: &impl GlyphLookup,
@@ -294,6 +310,17 @@ fn suffix_relationships(
         return vec![alternate(of, suffix)];
     }
     match suffix {
+        // Named after the capital (Roboto's `A.smcp`): the lowercase letter becomes
+        // this small capital in smcp, and the capital in c2sc.
+        "sc" | "smcp" if starts_uppercase(stem) => {
+            let lower = lowercased(stem).and_then(|lower| font.glyph_id_by_name(&lower));
+            let mut relationships: Vec<_> = lower
+                .map(|lower| alternate(lower, "smcp"))
+                .into_iter()
+                .collect();
+            relationships.push(alternate(of, "c2sc"));
+            relationships
+        }
         "sc" | "smcp" => {
             let mut relationships = vec![alternate(of, "smcp")];
             // An uppercase letter with the same name also becomes this small capital.
@@ -417,6 +444,7 @@ mod tests {
             "a.cv02",
             "A",
             "a.sc",
+            "A.smcp",
             "one",
             "one.tf",
             "beh-ar",
@@ -440,6 +468,14 @@ mod tests {
                 alternate(id(&font, "a"), "smcp"),
                 alternate(id(&font, "A"), "c2sc")
             ]
+        );
+        assert_eq!(
+            implied(&font, "A.smcp"),
+            [
+                alternate(id(&font, "a"), "smcp"),
+                alternate(id(&font, "A"), "c2sc")
+            ],
+            "a small capital named after its capital serves both features"
         );
         assert_eq!(
             implied(&font, "one.tf"),
