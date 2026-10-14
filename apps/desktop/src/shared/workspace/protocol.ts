@@ -12,7 +12,11 @@ import type {
   LayerId,
   LayerMatch,
   LayerRead,
+  FeatureCodeSettings,
   FeatureDiagnostic,
+  FeatureEdit,
+  FeatureSymbol,
+  GeneratedFeature,
   FontFeature,
   Location,
   ParagraphRequest,
@@ -316,6 +320,24 @@ export type SyncCallMap = {
   "workspace.featureSource": { request: null; response: string | null };
   /** Returns the problems the compiler found in the font's feature code. */
   "workspace.featureDiagnostics": { request: null; response: FeatureDiagnostic[] };
+  /** Returns the linter's and compiler's problems in feature code being edited. */
+  "workspace.lintFeatureCode": { request: { text: string }; response: FeatureDiagnostic[] };
+  /** Returns feature code laid out with the font's feature code settings. */
+  "workspace.formatFeatureCode": { request: { text: string }; response: string };
+  /** Returns how the font's feature code is linted and formatted. */
+  "workspace.featureCodeSettings": { request: null; response: FeatureCodeSettings };
+  /** Returns the class, lookup, or glyph name at a UTF-16 offset in feature code, with its definitions and uses. */
+  "workspace.featureSymbolAt": {
+    request: { text: string; offset: number };
+    response: FeatureSymbol | null;
+  };
+  /** Returns the edits that rename the class or lookup at a UTF-16 offset, or null. */
+  "workspace.renameFeatureSymbol": {
+    request: { text: string; offset: number; newName: string };
+    response: FeatureEdit[] | null;
+  };
+  /** Returns the features glyph relationships generate, in compile order. */
+  "workspace.generatedFeatures": { request: null; response: GeneratedFeature[] };
   /** Shapes paragraphs with the font's feature code, each split into runs of one script and bidi level. */
   "workspace.shapeParagraphs": {
     request: { paragraphs: ParagraphRequest[] };

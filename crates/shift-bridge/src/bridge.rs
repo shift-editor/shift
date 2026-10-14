@@ -1,8 +1,8 @@
 use crate::errors::{self, BridgeError, BridgeResult};
 use crate::input::{BridgeParse, parse};
 use crate::shaping::{
-  NapiFeatureDiagnostic, NapiFontFeature, NapiParagraphRequest, NapiShapedParagraph,
-  ParsedParagraphRequest,
+  NapiFeatureDiagnostic, NapiFeatureEdit, NapiFeatureSymbol, NapiFontFeature, NapiGeneratedFeature,
+  NapiParagraphRequest, NapiShapedParagraph, ParsedParagraphRequest,
 };
 use napi::bindgen_prelude::*;
 use napi::{Error, Status};
@@ -44,15 +44,16 @@ use shift_wire::{
   bridges::napi::{
     NapiAnchorSeed, NapiAppliedChange, NapiAxis, NapiAxisMapping, NapiAxisMappingBasis,
     NapiAxisRole, NapiAxisType, NapiCatalogAtlasGlyph, NapiCatalogAtlasPage,
-    NapiCatalogAtlasWeights, NapiFeatureSourceReplacement, NapiFontIntent, NapiFontMetadata,
-    NapiFontMetrics, NapiFontReplacement, NapiFontSnapshot, NapiGlyphLayerSnapshot,
-    NapiGlyphPreview, NapiGlyphProjection, NapiGlyphRecord, NapiGlyphSnapshot,
-    NapiGlyphSnapshotRequest, NapiInterpolationBasis, NapiKerningPosition, NapiKerningSide,
-    NapiKerningSideKind, NapiKerningSnapshot, NapiKerningValueEdit, NapiLanguagesReplacement,
-    NapiLayerMatch, NapiLayerRead, NapiLayerReplaced, NapiLocation, NapiMetricDefinition,
-    NapiMetricKind, NapiNamedInstance, NapiPointSeed, NapiSlugAtlas, NapiSlugExactSource,
-    NapiSlugGlyph, NapiSlugLayout, NapiSlugPreviewExtents, NapiSlugSection, NapiSlugWeightSet,
-    NapiSource, NapiSourceMetricsInterpolationReplacement, NapiSourceMetricsInterpolationSnapshot,
+    NapiCatalogAtlasWeights, NapiFeatureCodeSettings, NapiFeatureSourceReplacement, NapiFontIntent,
+    NapiFontMetadata, NapiFontMetrics, NapiFontReplacement, NapiFontSnapshot,
+    NapiGlyphLayerSnapshot, NapiGlyphPreview, NapiGlyphProjection, NapiGlyphRecord,
+    NapiGlyphSnapshot, NapiGlyphSnapshotRequest, NapiInterpolationBasis, NapiKerningPosition,
+    NapiKerningSide, NapiKerningSideKind, NapiKerningSnapshot, NapiKerningValueEdit,
+    NapiLanguagesReplacement, NapiLayerMatch, NapiLayerRead, NapiLayerReplaced, NapiLocation,
+    NapiMetricDefinition, NapiMetricKind, NapiNamedInstance, NapiPointSeed, NapiSlugAtlas,
+    NapiSlugExactSource, NapiSlugGlyph, NapiSlugLayout, NapiSlugPreviewExtents, NapiSlugSection,
+    NapiSlugWeightSet, NapiSource, NapiSourceMetricsInterpolationReplacement,
+    NapiSourceMetricsInterpolationSnapshot,
   },
 };
 use shift_workspace::{
@@ -2178,6 +2179,116 @@ impl Bridge {
     )
   }
 
+  /// Returns the problems in `text`, the feature code being edited: the
+  /// linter's, with glyph names checked against the font, and, when `text` is
+  /// the font's feature code, the compiler's that the linter does not already
+  /// report at the same place.
+  #[napi]
+  pub fn lint_feature_code(&mut self, text: String) -> errors::Result<Vec<NapiFeatureDiagnostic>> {
+    let lints = shift_backends::feature_code::lint_feature_code(&text, self.font()?);
+    let applied = self.font()?.features().fea_source().unwrap_or_default() == text;
+    let compiled = if applied {
+      self.feature_diagnostics()?
+    } else {
+      Vec::new()
+    };
+    // Problems past the authored code belong to a generated feature; point them at its block.
+    let font = self.font()?;
+    let glyphs: Vec<_> = font.glyphs().collect();
+    let off = shift_font::generated_features_off(font.lib());
+    let generated = shift_font::generated_features(&glyphs, &text, &off);
+    let ranges = shift_font::generated_feature_ranges(&text, &generated);
+    let (in_generated, in_code): (Vec<_>, Vec<_>) = compiled.into_iter().partition(|problem| {
+      ranges
+        .first()
+        .is_some_and(|(_, first)| problem.from as usize >= first.start)
+    });
+    let mut diagnostics: Vec<NapiFeatureDiagnostic> =
+      lints.into_iter().map(NapiFeatureDiagnostic::from).collect();
+    let in_blocks: Vec<_> = in_generated
+      .into_iter()
+      .filter_map(|mut problem| {
+        let (tag, range) = ranges
+          .iter()
+          .find(|(_, range)| range.contains(&(problem.from as usize)))?;
+        let start = u32::try_from(range.start).unwrap_or(u32::MAX);
+        problem.from -= start;
+        problem.to = problem.to.saturating_sub(start).max(problem.from);
+        problem.generated_tag = Some(tag.clone());
+        Some(problem)
+      })
+      .collect();
+    let uncovered: Vec<_> = in_code
+      .into_iter()
+      .filter(|problem| {
+        !diagnostics.iter().any(|lint| {
+          lint.from < problem.to.max(problem.from + 1) && problem.from < lint.to.max(lint.from + 1)
+        })
+      })
+      .collect();
+    diagnostics.extend(uncovered);
+    diagnostics.sort_by_key(|diagnostic| (diagnostic.from, diagnostic.to));
+    diagnostics.extend(in_blocks);
+    Ok(diagnostics)
+  }
+
+  /// Returns `text` laid out by the formatter with the font's feature code
+  /// settings. Only layout changes; code that doesn't parse stays as written.
+  #[napi]
+  pub fn format_feature_code(&self, text: String) -> errors::Result<String> {
+    let settings = self.font()?.feature_code_settings();
+    Ok(shift_backends::feature_code::format_feature_code(
+      &text, &settings,
+    ))
+  }
+
+  /// Returns how the font's feature code is linted and formatted.
+  #[napi]
+  pub fn feature_code_settings(&self) -> errors::Result<NapiFeatureCodeSettings> {
+    Ok(self.font()?.feature_code_settings().into())
+  }
+
+  /// Returns the class, mark class, lookup, or glyph name written at
+  /// `offset` (UTF-16) in `text`, with where it's defined and used.
+  #[napi]
+  pub fn feature_symbol_at(&self, text: String, offset: u32) -> Option<NapiFeatureSymbol> {
+    shift_backends::feature_code::feature_symbol_at(&text, offset as usize)
+      .map(NapiFeatureSymbol::from)
+  }
+
+  /// Returns the edits that rename the class, mark class, or lookup at
+  /// `offset` (UTF-16) in `text` to `new_name` everywhere; null when nothing
+  /// renameable is there or the name is invalid.
+  #[napi]
+  pub fn rename_feature_symbol(
+    &self,
+    text: String,
+    offset: u32,
+    new_name: String,
+  ) -> Option<Vec<NapiFeatureEdit>> {
+    shift_backends::feature_code::rename_feature_symbol(&text, offset as usize, &new_name)
+      .map(|edits| edits.into_iter().map(NapiFeatureEdit::from).collect())
+  }
+
+  /// Returns the features the glyphs' relationships generate, in the order they
+  /// compile after the authored code, leaving out features the code defines.
+  #[napi]
+  pub fn generated_features(&self) -> errors::Result<Vec<NapiGeneratedFeature>> {
+    let font = self.font()?;
+    let glyphs: Vec<_> = font.glyphs().collect();
+    let authored = font.features().fea_source().unwrap_or_default();
+    Ok(
+      shift_font::generated_features(
+        &glyphs,
+        authored,
+        &shift_font::generated_features_off(font.lib()),
+      )
+      .into_iter()
+      .map(NapiGeneratedFeature::from)
+      .collect(),
+    )
+  }
+
   /// Returns the font's authored feature code, or `None` when it has none.
   #[napi]
   pub fn feature_source(&self) -> errors::Result<Option<String>> {
@@ -2714,6 +2825,23 @@ fn map_intent(intent: NapiFontIntent) -> errors::Result<FontIntent> {
         source: payload.source,
       })
     }
+    "setGeneratedFeatureOn" => {
+      let payload = intent
+        .set_generated_feature_on
+        .ok_or_else(|| missing("setGeneratedFeatureOn"))?;
+      Ok(FontIntent::SetGeneratedFeatureOn {
+        tag: payload.tag,
+        on: payload.on,
+      })
+    }
+    "setFeatureCodeSettings" => {
+      let payload = intent
+        .set_feature_code_settings
+        .ok_or_else(|| missing("setFeatureCodeSettings"))?;
+      Ok(FontIntent::SetFeatureCodeSettings {
+        settings: payload.settings.into(),
+      })
+    }
     "createAxis" => {
       let payload = intent.create_axis.ok_or_else(|| missing("createAxis"))?;
       Ok(FontIntent::CreateAxis {
@@ -3056,9 +3184,10 @@ mod tests {
     NapiGlyphSnapshotRequest, NapiGlyphState, NapiLocation, NapiMoveAnchorsIntent,
     NapiMovePointsIntent, NapiNamedInstance, NapiPointSeed, NapiPointType, NapiRemoveAnchorsIntent,
     NapiRemovePointsIntent, NapiReverseContourIntent, NapiSetContourClosedIntent,
-    NapiSetFeatureSourceIntent, NapiSetKerningValuesIntent, NapiSetLanguagesIntent,
-    NapiSetPointSmoothIntent, NapiSetXAdvanceIntent, NapiTransformLayerIntent,
-    NapiTranslatePointsIntent, NapiUpdateNamedInstanceIntent,
+    NapiSetFeatureCodeSettingsIntent, NapiSetFeatureSourceIntent, NapiSetGeneratedFeatureOnIntent,
+    NapiSetKerningValuesIntent, NapiSetLanguagesIntent, NapiSetPointSmoothIntent,
+    NapiSetXAdvanceIntent, NapiTransformLayerIntent, NapiTranslatePointsIntent,
+    NapiUpdateNamedInstanceIntent,
   };
   use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -3093,6 +3222,8 @@ mod tests {
       update_font_metadata: None,
       set_languages: None,
       set_feature_source: None,
+      set_feature_code_settings: None,
+      set_generated_feature_on: None,
       create_axis: None,
       update_axis: None,
       delete_axis: None,
@@ -4086,6 +4217,134 @@ mod tests {
   }
 
   #[test]
+  fn a_compile_error_inside_generated_code_points_at_its_feature() {
+    // An unclosed block makes the generated features compile inside it.
+    let source = "languagesystem DFLT dflt;\nfeature calt {\n  sub f by f;\n";
+    let mut bridge = bridge_with_feature_source("generated-error", source);
+    let generated: Vec<_> = bridge
+      .generated_features()
+      .unwrap()
+      .into_iter()
+      .map(|feature| (feature.tag, feature.code))
+      .collect();
+
+    let diagnostics = bridge.lint_feature_code(source.to_string()).unwrap();
+
+    let in_block = diagnostics
+      .iter()
+      .find(|diagnostic| diagnostic.generated_tag.is_some())
+      .expect("an error inside generated code is pointed at its feature");
+    let (_, code) = generated
+      .iter()
+      .find(|(tag, _)| Some(tag) == in_block.generated_tag.as_ref())
+      .unwrap();
+    assert!((in_block.to as usize) <= code.encode_utf16().count());
+  }
+
+  #[test]
+  fn a_generated_feature_switched_off_stays_listed_but_stops_compiling() {
+    let mut bridge = bridge_with_feature_source("generated-off", "");
+    let compiled = |bridge: &mut Bridge| {
+      bridge
+        .shaping_features()
+        .unwrap()
+        .into_iter()
+        .map(|feature| feature.tag)
+        .collect::<Vec<_>>()
+    };
+    assert!(compiled(&mut bridge).contains(&"liga".to_string()));
+
+    bridge
+      .apply(
+        vec![NapiFontIntent {
+          set_generated_feature_on: Some(NapiSetGeneratedFeatureOnIntent {
+            tag: "liga".to_string(),
+            on: false,
+          }),
+          ..skeleton_intent("setGeneratedFeatureOn")
+        }],
+        None,
+      )
+      .unwrap();
+
+    let liga = bridge
+      .generated_features()
+      .unwrap()
+      .into_iter()
+      .find(|feature| feature.tag == "liga")
+      .expect("a switched-off feature is still listed");
+    assert!(!liga.on);
+    assert!(!compiled(&mut bridge).contains(&"liga".to_string()));
+    bridge.undo().unwrap().expect("switching off should undo");
+    assert!(compiled(&mut bridge).contains(&"liga".to_string()));
+  }
+
+  #[test]
+  fn linting_reports_a_missing_glyph_once_with_a_fix() {
+    let source = "languagesystem DFLT dflt;\nfeature liga {\n  sub f i by f_x;\n} liga;\n";
+    let mut bridge = bridge_with_feature_source("feature-lint", source);
+
+    let diagnostics = bridge.lint_feature_code(source.to_string()).unwrap();
+
+    let at_problem: Vec<_> = diagnostics
+      .iter()
+      .filter(|diagnostic| &source[diagnostic.from as usize..diagnostic.to as usize] == "f_x")
+      .collect();
+    assert_eq!(
+      at_problem.len(),
+      1,
+      "the compiler's report of f_x is not repeated"
+    );
+    assert_eq!(at_problem[0].rule.as_deref(), Some("G001"));
+    assert!(!at_problem[0].fixes.is_empty());
+  }
+
+  #[test]
+  fn ignoring_a_rule_is_an_undoable_edit_that_echoes_the_feature_code() {
+    let source = "languagesystem DFLT dflt;\nfeature liga {\n  sub f i by f_x;\n} liga;\n";
+    let mut bridge = bridge_with_feature_source("feature-settings", source);
+    let mut settings = bridge.feature_code_settings().unwrap();
+    settings.ignored_rules = vec!["G001".to_string()];
+
+    let applied = bridge
+      .apply(
+        vec![NapiFontIntent {
+          set_feature_code_settings: Some(NapiSetFeatureCodeSettingsIntent { settings }),
+          ..skeleton_intent("setFeatureCodeSettings")
+        }],
+        None,
+      )
+      .unwrap();
+
+    assert!(applied.next.and_then(|next| next.feature_source).is_some());
+    let rules = |bridge: &mut Bridge| {
+      bridge
+        .lint_feature_code("feature liga { sub f i by f_x; } liga;\n".to_string())
+        .unwrap()
+        .into_iter()
+        .filter_map(|diagnostic| diagnostic.rule)
+        .collect::<Vec<_>>()
+    };
+    assert!(!rules(&mut bridge).contains(&"G001".to_string()));
+    bridge
+      .undo()
+      .unwrap()
+      .expect("the settings edit should undo");
+    assert!(rules(&mut bridge).contains(&"G001".to_string()));
+  }
+
+  #[test]
+  fn formatting_uses_the_font_settings() {
+    let bridge = bridge_with_feature_source("feature-format", "");
+
+    let formatted = bridge
+      .format_feature_code("feature liga {\nsub f i by f_i;\n} liga;\n".to_string())
+      .unwrap();
+
+    assert_eq!(formatted, "feature liga {\n    sub f i by f_i;\n} liga;\n");
+  }
+
+  #[test]
   fn editing_feature_code_echoes_it_and_reports_new_problems_until_undone() {
     let clean = "languagesystem DFLT dflt;\nfeature liga {\n  sub f i by f_i;\n} liga;\n";
     let broken = "languagesystem DFLT dflt;\nfeature liga {\n  sub f i by f_x;\n} liga;\n";
@@ -4116,6 +4375,40 @@ mod tests {
       .expect("the feature code edit should undo");
     assert_eq!(bridge.feature_source().unwrap().as_deref(), Some(clean));
     assert!(bridge.feature_diagnostics().unwrap().is_empty());
+  }
+
+  #[test]
+  fn generated_features_follow_glyph_names_unless_the_code_defines_them() {
+    let generated = |source: &str, name: &str| {
+      bridge_with_feature_source(name, source)
+        .generated_features()
+        .unwrap()
+        .into_iter()
+        .map(|feature| (feature.tag, feature.rules))
+        .collect::<Vec<_>>()
+    };
+
+    // The fixture's f_i and beh forms generate liga and the positional forms.
+    assert_eq!(
+      generated("languagesystem DFLT dflt;\n", "generated-all"),
+      [
+        ("init".to_string(), 1),
+        ("medi".to_string(), 1),
+        ("fina".to_string(), 1),
+        ("liga".to_string(), 1)
+      ]
+    );
+    assert_eq!(
+      generated(
+        "feature liga { sub f i by f_i; } liga;\n",
+        "generated-but-liga"
+      ),
+      [
+        ("init".to_string(), 1),
+        ("medi".to_string(), 1),
+        ("fina".to_string(), 1)
+      ]
+    );
   }
 
   #[test]
