@@ -1,5 +1,5 @@
 [package]
-name = "noad-build"
+name = "rumil-build"
 version = "0.0.0"
 edition = "2021"
 description = "Build OpenType MATH tables from glyph-name-level font source data"

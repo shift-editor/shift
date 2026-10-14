@@ -1,4 +1,4 @@
-# noad-build
+# rumil-build
 
 Build OpenType `MATH` tables from glyph-name-level font source data: MATH constants, `math.*` anchors, size variants, and glyph assemblies, matching what ufo2ft builds from `com.nagwa.MATHPlugin.*` lib keys.
 
