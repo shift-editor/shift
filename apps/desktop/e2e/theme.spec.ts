@@ -147,6 +147,15 @@ test.describe("Theme", () => {
       .toBe(`theme = { mode = "system", light = "gruvbox-light", dark = "nord" }\n`);
   });
 
+  test("lists the bundled themes and applies one", async ({ page }) => {
+    await openAppearance(page);
+    await chooseTheme(page, "Dark", "Catppuccin Mocha");
+
+    await expect(page.locator("html")).toHaveAttribute("data-color-theme", "catppuccin-mocha");
+    await expect.poll(() => cssVariable(page, "--color-background")).toBe("#1e1e2e");
+    expect(fs.readFileSync(await configFile(page), "utf8")).toBe(`theme = "catppuccin-mocha"\n`);
+  });
+
   test("applies a theme chosen by editing config.toml", async ({ page }) => {
     const file = await configFile(page);
     fs.writeFileSync(file, `# my rice\ntheme = "gruvbox-dark"\n`);

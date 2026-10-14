@@ -246,6 +246,7 @@ const config: Configuration = {
     { from: "../../THIRD_PARTY_NOTICES.md", to: "THIRD_PARTY_NOTICES.md" },
     { from: ".generated/THIRD_PARTY_LICENSES.txt", to: "THIRD_PARTY_LICENSES.txt" },
     { from: "THIRD_PARTY_THEMES.md", to: "THIRD_PARTY_THEMES.md" },
+    { from: "themes", to: "themes", filter: ["*.toml"] },
   ],
   asar: true,
   asarUnpack: ["**/*.node"],

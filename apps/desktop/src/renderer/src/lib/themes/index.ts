@@ -1,5 +1,5 @@
 import type { ThemeAppearance } from "@shift/types";
-import type { ThemeSetting, UserThemeFile } from "@shared/config/config";
+import type { ThemeFile, ThemeFileState, ThemeSetting } from "@shared/config/config";
 
 export type { ThemeAppearance };
 
@@ -296,52 +296,67 @@ const PALETTE_KEYS = [
 export interface UserColorThemes {
   readonly themes: readonly ColorTheme[];
   /** Files named like a built-in theme or `system`, which would be ambiguous in `config.toml`. */
-  readonly shadowing: readonly UserThemeFile[];
+  readonly shadowing: readonly ThemeFileState[];
   /** Override names in each file that name no color Shift derives; they are ignored. */
   readonly unknownColors: readonly UnknownThemeColors[];
 }
 
 export interface UnknownThemeColors {
-  readonly file: UserThemeFile;
+  readonly file: ThemeFileState;
   readonly names: readonly string[];
 }
 
 /**
- * Turns theme files into themes, skipping files that have never been valid.
+ * Turns the user's theme files into themes, skipping files that have never been valid.
  *
  * @remarks
- * A file named like a built-in theme or `system` is ignored rather than
- * replacing it, so `theme = "nord"` always means the same theme. Every call
- * returns new theme objects, which is what tells the renderers to redraw
- * after a file is edited.
+ * A file named like a built-in or bundled theme, or `system`, is ignored rather
+ * than replacing it, so `theme = "nord"` always means the same theme. Every call
+ * returns new theme objects, which is what tells the renderers to redraw after a
+ * file is edited.
+ *
+ * @param reserved - the themes Shift ships, whose ids user files may not take.
  */
-export function userColorThemes(files: readonly UserThemeFile[]): UserColorThemes {
+export function userColorThemes(
+  files: readonly ThemeFileState[],
+  reserved: readonly ColorTheme[] = colorThemes,
+): UserColorThemes {
   const themes: ColorTheme[] = [];
-  const shadowing: UserThemeFile[] = [];
+  const shadowing: ThemeFileState[] = [];
   const unknownColors: UnknownThemeColors[] = [];
   for (const file of files) {
-    if (file.id === "system" || colorThemes.some((theme) => theme.id === file.id)) {
+    if (file.id === "system" || reserved.some((theme) => theme.id === file.id)) {
       shadowing.push(file);
       continue;
     }
-    const theme = file.theme;
-    if (!theme) continue;
+    if (!file.theme) continue;
 
-    const palette = Object.fromEntries(
-      PALETTE_KEYS.map((key, index) => [key, theme.palette[index]]),
-    ) as ColorTheme["palette"];
-    const unknown = Object.keys(theme.colors).filter((name) => !COLOR_VARIABLES.has(name));
+    const unknown = Object.keys(file.theme.colors).filter((name) => !COLOR_VARIABLES.has(name));
     if (unknown.length > 0) unknownColors.push({ file, names: unknown });
-    themes.push({
-      id: file.id,
-      name: theme.name ?? file.id,
-      file: file.path,
-      appearance: theme.appearance,
-      palette,
-      colors: theme.colors,
-    });
+    themes.push({ ...colorThemeFromFile(file.id, file.theme), file: file.path });
   }
   return { themes, shadowing, unknownColors };
+}
+
+/**
+ * Turns the theme files shipped with Shift into themes. They are read-only and
+ * listed with the built-in themes, so they carry no `file`.
+ */
+export function bundledColorThemes(files: readonly ThemeFileState[]): ColorTheme[] {
+  return files.flatMap((file) => (file.theme ? [colorThemeFromFile(file.id, file.theme)] : []));
+}
+
+function colorThemeFromFile(id: string, theme: ThemeFile): ColorTheme {
+  const palette = Object.fromEntries(
+    PALETTE_KEYS.map((key, index) => [key, theme.palette[index]]),
+  ) as ColorTheme["palette"];
+  return {
+    id,
+    name: theme.name ?? id,
+    appearance: theme.appearance,
+    palette,
+    colors: theme.colors,
+  };
 }
 
 /** Returns theme `id` among `themes`, or Shift Light for an id Shift does not have. */
@@ -469,8 +484,8 @@ function colorName(variable: string): string {
 function colorThemeVariables(theme: ColorTheme): Record<string, string> {
   const { palette } = theme;
   const dark = theme.appearance === "dark";
-  const glyphForeground = dark ? palette.base06 : palette.base07;
-  const secondary = dark ? withAlpha(palette.base05, 0.78) : palette.base04;
+  const glyphForeground = dark ? palette.base06 : lightGlyphForeground(palette);
+  const secondary = dark ? withAlpha(palette.base05, 0.78) : lightSecondary(palette);
   const muted = dark ? withAlpha(palette.base05, 0.6) : palette.base03;
   const handleOverlay = dark ? palette.base07 : palette.base00;
   const surface = dark ? palette.base01 : palette.base00;
@@ -582,16 +597,50 @@ const PREFERRED_CONTRAST_MARGIN = 0.8;
  * over-favours dark text on saturated mid-tone accents, where light text reads better.
  */
 function readableOn(background: string, [preferred, ...others]: readonly string[]): string {
-  const backgroundLuminance = relativeLuminance(background);
-  const contrast = (color: string) => {
-    const [lighter, darker] = [relativeLuminance(color), backgroundLuminance].sort((a, b) => b - a);
-    return (lighter + 0.05) / (darker + 0.05);
-  };
+  const contrast = (color: string) => contrastRatio(color, background);
   const best = others.reduce(
     (best, color) => (contrast(color) > contrast(best) ? color : best),
     preferred,
   );
   return contrast(preferred) >= contrast(best) * PREFERRED_CONTRAST_MARGIN ? preferred : best;
+}
+
+/**
+ * A light theme's glyph color: whichever of `base05`–`base07` contrasts most with
+ * the canvas. Base16 puts the darkest text in `base07` by convention, but many light
+ * palettes use it for an accent or a pale tint instead.
+ */
+function lightGlyphForeground(palette: ColorTheme["palette"]): string {
+  const candidates = [palette.base07, palette.base06, palette.base05];
+  return candidates.reduce((best, color) =>
+    contrastRatio(color, palette.base00) > contrastRatio(best, palette.base00) ? color : best,
+  );
+}
+
+/**
+ * A light theme's secondary text and control-handle color: `base04`, darkened toward
+ * `base05` in quarter steps until it reaches 3:1 on the canvas. Light palettes often
+ * make `base04` too pale to see.
+ */
+function lightSecondary(palette: ColorTheme["palette"]): string {
+  const steps = SECONDARY_DARKENING_STEPS.map((amount) =>
+    mix(palette.base04, palette.base05, amount),
+  );
+  const readable = steps.find(
+    (color) => contrastRatio(color, palette.base00) >= MINIMUM_SECONDARY_CONTRAST,
+  );
+  return readable ?? palette.base05;
+}
+
+const SECONDARY_DARKENING_STEPS = [0, 0.25, 0.5, 0.75] as const;
+const MINIMUM_SECONDARY_CONTRAST = 3;
+
+/** WCAG contrast ratio between two `#rrggbb` colors. */
+function contrastRatio(first: string, second: string): number {
+  const [lighter, darker] = [relativeLuminance(first), relativeLuminance(second)].sort(
+    (a, b) => b - a,
+  );
+  return (lighter + 0.05) / (darker + 0.05);
 }
 
 function lightest(first: string, second: string): string {

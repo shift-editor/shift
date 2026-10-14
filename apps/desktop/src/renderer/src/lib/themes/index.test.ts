@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { UserThemeFile } from "@shared/config/config";
+import type { ThemeFileState } from "@shared/config/config";
 import {
   applyResolvedTheme,
+  bundledColorThemes,
   colorThemes,
   defaultThemePreference,
   readThemeSetting,
@@ -15,7 +16,7 @@ import {
 const nord = themeById("nord");
 const nordColors = Object.values(nord.palette);
 
-function themeFile(id: string, overrides: Partial<UserThemeFile> = {}): UserThemeFile {
+function themeFile(id: string, overrides: Partial<ThemeFileState> = {}): ThemeFileState {
   return {
     id,
     path: `/config/themes/${id}.toml`,
@@ -202,6 +203,16 @@ describe("user themes", () => {
     ]);
     expect(themes[0]?.palette).toEqual(nord.palette);
     expect(shadowing).toEqual([]);
+  });
+
+  it("ignores user theme files that reuse a bundled theme's id", () => {
+    const shipped = [...colorThemes, ...bundledColorThemes([themeFile("rice")])];
+
+    const { themes, shadowing } = userColorThemes([themeFile("rice")], shipped);
+
+    expect(themes).toEqual([]);
+    expect(shadowing.map(({ id }) => id)).toEqual(["rice"]);
+    expect(shipped.at(-1)?.file).toBeUndefined();
   });
 
   it("ignores theme files that reuse a built-in id or system, and never-valid files", () => {
