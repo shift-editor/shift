@@ -23,6 +23,7 @@ shift-cli skill install            # .agents/skills/shift and .claude/skills/shi
 shift-cli skill install --global   # the same under your home directory
 shift-cli skill status --global    # current, stale, missing, or foreign for each copy
 shift-cli skill show variable-fonts
+shift-cli skill show themes
 ```
 
 Each build installs its own skill, named after its command: `shift`, `shift-nightly`, `shift-dev`. A non-release skill opens by naming its command. `SKILL.md` records the version and command in `metadata`, and `status` compares every file, so a stale reference is caught as well as a stale `SKILL.md`. A same-named skill that `shift-cli` did not install is replaced only with `--force`. Shift's **Install Command Line Tool…** offers the global install, and the app refreshes an installed copy at launch with `--refresh-only`.
