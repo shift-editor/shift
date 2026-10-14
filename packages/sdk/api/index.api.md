@@ -623,12 +623,19 @@ export class Font {
     entryForName(name: GlyphName): GlyphEntry | null;
     entryForUnicode(unicode: Unicode): GlyphEntry | null;
     externalLocationForSource(sourceId: SourceId): ExternalAxisLocation | null;
+    // Warning: (ae-forgotten-export) The symbol "FeatureCodeSettings" needs to be exported by the entry point index.d.ts
+    featureCodeSettings(): Promise<FeatureCodeSettings>;
     // Warning: (ae-forgotten-export) The symbol "FeatureDiagnostic" needs to be exported by the entry point index.d.ts
     featureDiagnostics(): Promise<FeatureDiagnostic[]>;
     get featureRevisionCell(): Signal<number>;
     // Warning: (ae-forgotten-export) The symbol "FontFeature" needs to be exported by the entry point index.d.ts
     features(): Promise<FontFeature[]>;
     featureSource(): Promise<string | null>;
+    // Warning: (ae-forgotten-export) The symbol "FeatureSymbol" needs to be exported by the entry point index.d.ts
+    featureSymbolAt(text: string, offset: number): Promise<FeatureSymbol | null>;
+    formatFeatureCode(text: string): Promise<string>;
+    // Warning: (ae-forgotten-export) The symbol "GeneratedFeature" needs to be exported by the entry point index.d.ts
+    generatedFeatures(): Promise<GeneratedFeature[]>;
     getAxes(): Axis[];
     getAxisMappingBases(): AxisMappingBasis[];
     getAxisMappings(): AxisMapping[];
@@ -657,6 +664,7 @@ export class Font {
     layerIdForSegment(segmentId: SegmentId): LayerId | null;
     // Warning: (ae-forgotten-export) The symbol "GlyphLayerState" needs to be exported by the entry point index.d.ts
     layerState(layerId: LayerId): GlyphLayerState | null;
+    lintFeatureCode(text: string): Promise<FeatureDiagnostic[]>;
     // (undocumented)
     get loaded(): boolean;
     get loadedCell(): Signal<boolean>;
@@ -694,10 +702,14 @@ export class Font {
     recordForId(glyphId: GlyphId): GlyphRecord | null;
     // (undocumented)
     recordForName(name: GlyphName): GlyphRecord | null;
+    // Warning: (ae-forgotten-export) The symbol "FeatureEdit" needs to be exported by the entry point index.d.ts
+    renameFeatureSymbol(text: string, offset: number, newName: string): Promise<FeatureEdit[] | null>;
     renameKerningGroup(groupId: KerningGroupId, name: string): Promise<void>;
     resolveLayers(layerIds: readonly LayerId[]): Promise<readonly LayerRead[]>;
     setAxisMappings(mappings: readonly AxisMapping[]): Promise<void>;
+    setFeatureCodeSettings(settings: FeatureCodeSettings): void;
     setFeatureSource(source: string | null): void;
+    setGeneratedFeatureOn(tag: string, on: boolean): void;
     // Warning: (ae-forgotten-export) The symbol "KerningValueEdit" needs to be exported by the entry point index.d.ts
     setKerningValues(edits: readonly KerningValueEdit[], label: string): void;
     setLanguageIds(languageIds: readonly string[]): void;
@@ -1535,10 +1547,10 @@ export function useSignalState<T>(signal: Signal<T>, options?: UseSignalOptions)
 
 // Warnings were encountered during analysis:
 //
-// dist/Editor-BADfLOSe.d.ts:2918:5 - (ae-forgotten-export) The symbol "Axis" needs to be exported by the entry point index.d.ts
-// dist/Editor-BADfLOSe.d.ts:2919:5 - (ae-forgotten-export) The symbol "AxisMappingBasis" needs to be exported by the entry point index.d.ts
-// dist/Editor-BADfLOSe.d.ts:2920:5 - (ae-forgotten-export) The symbol "Source" needs to be exported by the entry point index.d.ts
-// dist/Editor-BADfLOSe.d.ts:4956:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
+// dist/Editor-qCXZkwGx.d.ts:2997:5 - (ae-forgotten-export) The symbol "Axis" needs to be exported by the entry point index.d.ts
+// dist/Editor-qCXZkwGx.d.ts:2998:5 - (ae-forgotten-export) The symbol "AxisMappingBasis" needs to be exported by the entry point index.d.ts
+// dist/Editor-qCXZkwGx.d.ts:2999:5 - (ae-forgotten-export) The symbol "Source" needs to be exported by the entry point index.d.ts
+// dist/Editor-qCXZkwGx.d.ts:5041:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

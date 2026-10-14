@@ -1576,6 +1576,8 @@ pub struct NapiFontIntent {
     pub update_font_metadata: Option<NapiUpdateFontMetadataIntent>,
     pub set_languages: Option<NapiSetLanguagesIntent>,
     pub set_feature_source: Option<NapiSetFeatureSourceIntent>,
+    pub set_feature_code_settings: Option<NapiSetFeatureCodeSettingsIntent>,
+    pub set_generated_feature_on: Option<NapiSetGeneratedFeatureOnIntent>,
     pub create_axis: Option<NapiCreateAxisIntent>,
     pub update_axis: Option<NapiUpdateAxisIntent>,
     pub delete_axis: Option<NapiDeleteAxisIntent>,
@@ -1660,6 +1662,76 @@ pub struct NapiUpdateFontMetadataIntent {
 pub struct NapiSetFeatureSourceIntent {
     /// The new feature code; absent removes it.
     pub source: Option<String>,
+}
+
+/// Switches a generated feature on or off as one undoable edit.
+#[napi(object)]
+pub struct NapiSetGeneratedFeatureOnIntent {
+    pub tag: String,
+    pub on: bool,
+}
+
+/// Replaces how the font's feature code is linted and formatted, as one undoable edit.
+#[napi(object)]
+pub struct NapiSetFeatureCodeSettingsIntent {
+    pub settings: NapiFeatureCodeSettings,
+}
+
+/// How a font's feature code is linted and formatted.
+#[napi(object)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NapiFeatureCodeSettings {
+    /// The width classes are packed to and long rules wrapped at, in characters.
+    pub line_width: u32,
+    /// The indent unit: what the code already uses, tabs, or `indentWidth` spaces.
+    #[napi(ts_type = "\"auto\" | \"tab\" | \"spaces\"")]
+    pub indent: String,
+    /// Spaces per level when `indent` is `"spaces"`.
+    pub indent_width: u32,
+    /// Keep statements aligned by hand aligned, with their columns recomputed.
+    pub keep_alignment: bool,
+    /// Lint rules never reported for this font, by code (`G001`) or name.
+    pub ignored_rules: Vec<String>,
+    /// Format the feature code each time the document is saved.
+    pub format_on_save: bool,
+}
+
+impl From<shift_font::FeatureCodeSettings> for NapiFeatureCodeSettings {
+    fn from(settings: shift_font::FeatureCodeSettings) -> Self {
+        let (indent, indent_width) = match settings.indent {
+            shift_font::FeatureCodeIndent::Auto => ("auto", 4),
+            shift_font::FeatureCodeIndent::Tab => ("tab", 4),
+            shift_font::FeatureCodeIndent::Spaces(spaces) => ("spaces", u32::from(spaces)),
+        };
+        Self {
+            line_width: settings.line_width,
+            indent: indent.to_string(),
+            indent_width,
+            keep_alignment: settings.keep_alignment,
+            ignored_rules: settings.ignored_rules,
+            format_on_save: settings.format_on_save,
+        }
+    }
+}
+
+impl From<NapiFeatureCodeSettings> for shift_font::FeatureCodeSettings {
+    fn from(settings: NapiFeatureCodeSettings) -> Self {
+        let indent = match settings.indent.as_str() {
+            "tab" => shift_font::FeatureCodeIndent::Tab,
+            "spaces" => u8::try_from(settings.indent_width.clamp(1, 16)).map_or(
+                shift_font::FeatureCodeIndent::Auto,
+                shift_font::FeatureCodeIndent::Spaces,
+            ),
+            _ => shift_font::FeatureCodeIndent::Auto,
+        };
+        Self {
+            line_width: settings.line_width.max(1),
+            indent,
+            keep_alignment: settings.keep_alignment,
+            ignored_rules: settings.ignored_rules,
+            format_on_save: settings.format_on_save,
+        }
+    }
 }
 
 /// Replaces the font's tracked language list as one undoable edit.

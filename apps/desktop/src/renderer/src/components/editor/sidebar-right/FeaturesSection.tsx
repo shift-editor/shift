@@ -16,6 +16,7 @@ import {
   Switch,
   Tooltip,
 } from "@shift/ui";
+import ErrorIcon from "@/assets/general/error.svg";
 import HorizontalEllipsis from "@/assets/general/horizontal-ellipsis.svg";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { SidebarSection } from "./SidebarSection";
@@ -82,7 +83,23 @@ export const FeaturesSection = () => {
   const errorCount = useFeatureErrorCount();
   // null while the search field is closed.
   const [query, setQuery] = useState<string | null>(null);
-  if (!run || features.length === 0) return null;
+  // The section always offers the feature code; its switches need proof text to apply to.
+  if (!run || features.length === 0) {
+    const hint = features.length === 0 ? "No features yet" : "Select proof text to set features";
+    return (
+      <SidebarSection
+        title="Features"
+        actions={
+          <div className="flex items-center">
+            {errorCount > 0 ? <FeatureErrorBadge count={errorCount} /> : null}
+            <FeaturesMenu canReset={false} onReset={() => {}} />
+          </div>
+        }
+      >
+        <p className="flex h-6 items-center text-ui text-secondary">{hint}</p>
+      </SidebarSection>
+    );
+  }
 
   const overridden = Object.keys(run.features).length > 0;
   const needle = query?.trim().toLowerCase() ?? "";
@@ -326,19 +343,25 @@ function useFeatureErrorCount(): number {
   return count;
 }
 
-/** The count of feature code errors; opens the feature code window to fix them. */
+/**
+ * The count of feature code errors, as IDEs mark a file with problems: the
+ * error icon and the number. Opens the feature code window to fix them.
+ */
 const FeatureErrorBadge = ({ count }: { readonly count: number }) => {
   const label = count === 1 ? "1 error in feature code" : `${count} errors in feature code`;
   return (
     <Tooltip content={label}>
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="sm"
         aria-label={label}
-        className="mr-1 rounded-full bg-error px-1.5 text-xs leading-4 font-semibold text-on-accent"
         onClick={() => featureCodeOpenCell.set(true)}
       >
-        {count}
-      </button>
+        <span className="flex items-center gap-1 text-error tabular-nums">
+          <ErrorIcon aria-hidden className="size-3.5" />
+          {count}
+        </span>
+      </Button>
     </Tooltip>
   );
 };

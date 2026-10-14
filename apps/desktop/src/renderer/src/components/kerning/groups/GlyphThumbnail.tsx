@@ -31,11 +31,17 @@ export function GlyphThumbnail({ glyphId }: { readonly glyphId: GlyphId }) {
   );
 }
 
-/** Draws one glyph centred on its advance, baseline at a fixed height; reruns on its signals. */
-function drawThumbnail(canvas: HTMLCanvasElement, editor: Editor, glyphId: GlyphId): void {
+/**
+ * Draws one glyph centred on its advance, baseline at a fixed height, into a
+ * thumbnail canvas; inside an effect it reruns on the glyph's signals. Draws
+ * nothing until the glyph is loaded.
+ */
+export function drawThumbnail(canvas: HTMLCanvasElement, editor: Editor, glyphId: GlyphId): void {
   track(editor.font.metricsCell);
   const glyph = previewGlyph(editor, glyphId);
-  const ratio = window.devicePixelRatio || 1;
+  // The canvas may sit in a tool window, whose pixel ratio and styles are its own.
+  const view = canvas.ownerDocument.defaultView ?? window;
+  const ratio = view.devicePixelRatio || 1;
   canvas.width = Math.round(THUMBNAIL_PX * ratio);
   canvas.height = Math.round(THUMBNAIL_PX * ratio);
   const ctx = canvas.getContext("2d");
@@ -44,6 +50,6 @@ function drawThumbnail(canvas: HTMLCanvasElement, editor: Editor, glyphId: Glyph
   const scale = (THUMBNAIL_PX * 0.75) / editor.font.metricsCell.peek().unitsPerEm;
   const x = (THUMBNAIL_PX - glyph.advance * scale) / 2;
   const baseline = THUMBNAIL_PX * 0.78;
-  ctx.fillStyle = getComputedStyle(canvas).color;
+  ctx.fillStyle = view.getComputedStyle(canvas).color;
   fillGlyph(ctx, glyph.path, x, baseline, scale, ratio, 1);
 }
