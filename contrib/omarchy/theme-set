@@ -1,0 +1,29 @@
+#!/bin/bash
+# Copies the Shift theme Omarchy rendered into every Shift build's themes folder.
+# Installed as ~/.config/omarchy/hooks/theme-set.d/shift; see README.md.
+
+set -euo pipefail
+
+source_file="$HOME/.local/state/omarchy/current/theme/shift.toml"
+config_home="${XDG_CONFIG_HOME:-$HOME/.config}"
+
+[[ -f $source_file ]] || exit 0
+
+# A color the active theme lacks would leave its placeholder behind; Shift would
+# reject the file, so keep the previous theme instead.
+if grep -q '{{' "$source_file"; then
+  echo "Skipping Shift theme: shift.toml has unresolved colors." >&2
+  exit 0
+fi
+
+for build in shift shift-nightly shift-dev; do
+  # Only follow builds that exist; never create a config folder for one.
+  [[ -d $config_home/$build ]] || continue
+
+  themes="$config_home/$build/themes"
+  mkdir -p "$themes"
+  # Shift reloads on every write, so replace the file in one rename.
+  temporary=$(mktemp "$themes/.omarchy.toml.XXXXXX")
+  cp "$source_file" "$temporary"
+  mv "$temporary" "$themes/omarchy.toml"
+done

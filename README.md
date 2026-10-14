@@ -29,6 +29,10 @@ Shift requires macOS 13 Ventura or later, Windows 10 or later, or a Linux distri
 
 Connect Claude Code, Codex, or another MCP client to fonts open in Shift using the [one-time MCP setup guide](docs/mcp.md). The connection is read-only; use `shift-cli` for saved files that are not open in the app.
 
+## Themes
+
+Shift's colors live in plain files you can edit and keep in your dotfiles; every save applies live. See the [theme guide](docs/themes.md), and [`contrib/omarchy`](contrib/omarchy/README.md) to follow your Omarchy theme.
+
 ## Status
 
 | Area                                     | Status  |
