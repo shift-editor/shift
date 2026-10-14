@@ -1,6 +1,7 @@
 import type { ShiftHost } from "@shared/host/ShiftHost";
 import type { DocumentCallMap, DocumentEventMap } from "@shared/ipc/contract";
 import { domPortTransport, serveChannel, type ChannelServer } from "@shared/workspace/channel";
+import { runBeforeSave } from "@/lib/documents/beforeSave";
 import type { WorkspaceEditCoordinator } from "@/lib/workspace/WorkspaceEditCoordinator";
 
 interface WorkspaceDocumentBridgeOptions {
@@ -33,7 +34,10 @@ export class WorkspaceDocumentBridge {
       domPortTransport(await port.received),
       {
         "document.state": () => this.#edits.state(),
-        "document.save": ({ path }) => this.#edits.save(path),
+        "document.save": async ({ path }) => {
+          await runBeforeSave();
+          return this.#edits.save(path);
+        },
         "document.export": ({ path }) => this.#edits.export(path),
       },
     );

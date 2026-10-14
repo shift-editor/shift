@@ -596,6 +596,9 @@ export class App {
       const window = this.#requireWindowForWebContents(event.sender);
       this.#applicationMenu.activate(itemId, window.window);
     });
+    ipc.handle(ipcMain, "window.setToolWindowPinned", (event, name, pinned) => {
+      this.#requireWindowForWebContents(event.sender).setToolWindowPinned(name, pinned);
+    });
     ipc.handle(ipcMain, "window.buttonLayout", () =>
       process.platform === "linux" ? readButtonLayout() : null,
     );

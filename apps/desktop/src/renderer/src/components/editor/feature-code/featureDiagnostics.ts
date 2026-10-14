@@ -1,4 +1,4 @@
-import { lintGutter, setDiagnostics, type Diagnostic } from "@codemirror/lint";
+import { setDiagnostics, type Action, type Diagnostic } from "@codemirror/lint";
 import { StateEffect, StateField, type EditorState, type Range } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, WidgetType } from "@codemirror/view";
 import type { FeatureDiagnostic } from "@shift/types";
@@ -40,25 +40,57 @@ const inlineMessages = StateField.define<DecorationSet>({
   provide: (field) => EditorView.decorations.from(field),
 });
 
-/** Underlines, gutter marks, and inline messages for the compiler's problems. */
-export const featureDiagnostics = [lintGutter(), inlineMessages];
+/**
+ * Underlines and inline messages for problems in the code. Like Zed and VS
+ * Code there are no gutter marks: CodeMirror's gutter hover also listens on the
+ * opener window, so in a tool window it never closes.
+ */
+export const featureDiagnostics = [inlineMessages];
+
+/** What a problem's hover offers beyond its fixes. */
+export interface FeatureDiagnosticActions {
+  /** Stops reporting a lint rule for this font. */
+  readonly onIgnore: (rule: string) => void;
+}
 
 /**
- * Shows `diagnostics` in `view`: each problem underlined with its message on
- * hover, marked in the gutter, and the first problem on each line written
- * after the line's end.
+ * Shows `diagnostics`, found in the editor's current text, in `view`: each
+ * problem underlined with its message, rule, and quick fixes on hover, and
+ * the first problem on each line written after the line's end.
  */
 export function showFeatureDiagnostics(
   view: EditorView,
   diagnostics: readonly FeatureDiagnostic[],
+  actions?: FeatureDiagnosticActions,
 ): void {
   const length = view.state.doc.length;
-  const lint: Diagnostic[] = diagnostics.map((diagnostic) => ({
-    from: Math.min(diagnostic.from, length),
-    to: Math.min(Math.max(diagnostic.to, diagnostic.from), length),
-    severity: diagnostic.severity,
-    message: diagnostic.message,
-  }));
+  const linted = view.state.doc;
+  const lint: Diagnostic[] = diagnostics.map((diagnostic) => {
+    const rule = diagnostic.rule ?? undefined;
+    const fixes: Action[] = diagnostic.fixes.map((fix) => ({
+      name: fix.safe ? fix.title : `${fix.title} (unsafe)`,
+      apply: (target) => {
+        // Fix offsets point into the text that was linted; any edit since makes them stale.
+        if (target.state.doc !== linted) return;
+        const changes = fix.edits.map((edit) => ({
+          from: edit.from,
+          to: edit.to,
+          insert: edit.text,
+        }));
+        target.dispatch({ changes });
+      },
+    }));
+    const ruleActions: Action[] =
+      rule && actions ? [{ name: `Ignore ${rule}`, apply: () => actions.onIgnore(rule) }] : [];
+    return {
+      from: Math.min(diagnostic.from, length),
+      to: Math.min(Math.max(diagnostic.to, diagnostic.from), length),
+      severity: diagnostic.severity,
+      message: diagnostic.message,
+      renderMessage: (view) => messageElement(view, diagnostic.message, rule),
+      actions: [...fixes, ...ruleActions],
+    };
+  });
   view.dispatch(setDiagnostics(view.state, lint), {
     effects: setInlineMessages.of(inlineDecorations(view.state, lint)),
   });
@@ -75,4 +107,38 @@ function inlineDecorations(state: EditorState, diagnostics: readonly Diagnostic[
     widgets.push(Decoration.widget({ widget, side: 1 }).range(line.to));
   }
   return Decoration.set(widgets, true);
+}
+
+/**
+ * A problem's message followed by where it came from, as Zed writes it:
+ * `… (Feanor T001)`, the rule a link to its documentation.
+ */
+function messageElement(view: EditorView, message: string, rule: string | undefined): Node {
+  const doc = view.dom.ownerDocument;
+  const root = doc.createElement("div");
+  root.className = "cm-fea-diagnostic-message";
+  root.append(message);
+  if (!rule) return root;
+  const source = doc.createElement("span");
+  source.className = "cm-fea-diagnostic-source";
+  const link = doc.createElement("button");
+  link.type = "button";
+  link.className = "cm-fea-diagnostic-rule";
+  link.textContent = rule;
+  link.title = `Open the documentation for ${rule}`;
+  link.addEventListener("click", () => openRuleDocumentation(rule));
+  source.append(" (Feanor ", link, ")");
+  root.append(source);
+  return root;
+}
+
+/** Where a Feanor rule is documented. */
+export function ruleDocumentationUrl(rule: string): string {
+  return `https://github.com/shift-editor/feanor/blob/main/crates/feanor/rules/${encodeURIComponent(rule)}.md`;
+}
+
+/** Opens a rule's documentation in the browser. */
+export function openRuleDocumentation(rule: string): void {
+  // The document window opens Shift's documentation links in the browser.
+  window.open(ruleDocumentationUrl(rule), "_blank", "noopener");
 }

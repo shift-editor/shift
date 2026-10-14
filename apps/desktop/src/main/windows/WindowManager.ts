@@ -25,8 +25,18 @@ export class WindowManager {
     return focused ? this.windowForBrowserWindow(focused) : null;
   }
 
+  /**
+   * The document window `window` belongs to: itself, or for a tool window such
+   * as the feature code window, the document window that opened it, so menu
+   * commands like Save act on that document.
+   */
   windowForBrowserWindow(window: BrowserWindow): Window | null {
-    return this.#windows.get(window.id) ?? null;
+    const own = this.#windows.get(window.id);
+    if (own) return own;
+    for (const candidate of this.#windows.values()) {
+      if (candidate.ownsToolWindow(window)) return candidate;
+    }
+    return null;
   }
 
   windowForId(windowId: number): Window | null {

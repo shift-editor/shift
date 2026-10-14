@@ -226,6 +226,14 @@ export class WorkspaceHost {
       "workspace.features": () => this.#bridge.shapingFeatures(),
       "workspace.featureSource": () => this.#bridge.featureSource() ?? null,
       "workspace.featureDiagnostics": () => this.#bridge.featureDiagnostics(),
+      "workspace.generatedFeatures": () => this.#bridge.generatedFeatures(),
+      "workspace.lintFeatureCode": ({ text }) => this.#bridge.lintFeatureCode(text),
+      "workspace.formatFeatureCode": ({ text }) => this.#bridge.formatFeatureCode(text),
+      "workspace.featureCodeSettings": () => this.#bridge.featureCodeSettings(),
+      "workspace.featureSymbolAt": ({ text, offset }) =>
+        this.#bridge.featureSymbolAt(text, offset) ?? null,
+      "workspace.renameFeatureSymbol": ({ text, offset, newName }) =>
+        this.#bridge.renameFeatureSymbol(text, offset, newName) ?? null,
     });
   }
 

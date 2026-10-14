@@ -1,4 +1,4 @@
-import { BrowserWindow, type BrowserWindowConstructorOptions } from "electron";
+import { BrowserWindow, shell, type BrowserWindowConstructorOptions } from "electron";
 import * as ipc from "../../shared/ipc/main";
 import type { RendererCommandId } from "../../shared/commands";
 import { AgentClient } from "../agent/AgentClient";
@@ -89,7 +89,8 @@ export class Window {
 
   #window: BrowserWindow;
   /** Tool windows this window opened; they show its document's edited state. */
-  readonly #toolWindows = new Set<BrowserWindow>();
+  /** Tool windows this window opened, by the name each was opened with. */
+  readonly #toolWindows = new Map<string, BrowserWindow>();
   #documentEdited = false;
   #maximiseOnPresent: boolean;
   readonly #titleBarHeight: number;
@@ -121,28 +122,34 @@ export class Window {
     // The native menu stays installed for its accelerators but is never shown.
     if (process.platform !== "darwin") this.#window.setMenuBarVisibility(false);
 
-    // Tool windows (feature code…) run in this renderer; nothing else may open.
-    this.#window.webContents.setWindowOpenHandler(({ frameName }) =>
-      frameName.startsWith(TOOL_WINDOW_PREFIX)
-        ? {
-            action: "allow",
-            overrideBrowserWindowOptions: {
-              minWidth: 420,
-              minHeight: 320,
-              autoHideMenuBar: true,
-              // The window draws its own header; on macOS the traffic lights sit inside it.
-              // Lined up with the main window's drawn traffic lights in a 36px header.
-              ...(process.platform === "darwin"
-                ? { titleBarStyle: "hidden", trafficLightPosition: { x: 12, y: 12 } }
-                : {}),
-            },
-          }
-        : { action: "deny" },
-    );
-    this.#window.webContents.on("did-create-window", (toolWindow) => {
-      this.#toolWindows.add(toolWindow);
+    // Tool windows (feature code…) run in this renderer; Shift's own documentation
+    // links open in the browser; nothing else may open.
+    this.#window.webContents.setWindowOpenHandler(({ frameName, url }) => {
+      if (frameName.startsWith(TOOL_WINDOW_PREFIX)) {
+        return {
+          action: "allow",
+          overrideBrowserWindowOptions: {
+            minWidth: 420,
+            minHeight: 320,
+            autoHideMenuBar: true,
+            // The window draws its own header; on macOS the traffic lights sit inside it.
+            // Lined up with the main window's drawn traffic lights in a 36px header.
+            ...(process.platform === "darwin"
+              ? { titleBarStyle: "hidden", trafficLightPosition: { x: 12, y: 12 } }
+              : {}),
+          },
+        };
+      }
+      if (isDocumentationUrl(url)) void shell.openExternal(url);
+      return { action: "deny" };
+    });
+
+    this.#window.webContents.on("did-create-window", (toolWindow, { frameName }) => {
+      this.#toolWindows.set(frameName, toolWindow);
       toolWindow.setDocumentEdited(this.#documentEdited);
-      toolWindow.once("closed", () => this.#toolWindows.delete(toolWindow));
+      toolWindow.once("closed", () => {
+        if (this.#toolWindows.get(frameName) === toolWindow) this.#toolWindows.delete(frameName);
+      });
     });
 
     if (windowOptions.autoShow) {
@@ -150,6 +157,19 @@ export class Window {
         this.present();
       });
     }
+  }
+
+  /** Whether `window` is a tool window this window opened. */
+  ownsToolWindow(window: BrowserWindow): boolean {
+    return [...this.#toolWindows.values()].includes(window);
+  }
+
+  /**
+   * Keeps the tool window opened as `name` floating above every other window,
+   * as a pinned inspector does, or returns it to normal stacking.
+   */
+  setToolWindowPinned(name: string, pinned: boolean): void {
+    this.#toolWindows.get(name)?.setAlwaysOnTop(pinned, "floating");
   }
 
   get window(): BrowserWindow {
@@ -202,7 +222,7 @@ export class Window {
   /** Marks this window's document as having unsaved changes, in its tool windows' close buttons. */
   setDocumentEdited(edited: boolean): void {
     this.#documentEdited = edited;
-    for (const toolWindow of this.#toolWindows) toolWindow.setDocumentEdited(edited);
+    for (const toolWindow of this.#toolWindows.values()) toolWindow.setDocumentEdited(edited);
   }
 
   setTitle(title: string): void {
@@ -248,4 +268,11 @@ export class Window {
     this.#window.webContents.setZoomLevel(percentToZoomLevel(percent));
     ipc.send(this.#window.webContents, "ui.zoomChanged", percent);
   }
+}
+
+/** Origins whose pages document Shift, which a document window may open in the browser. */
+const DOCUMENTATION_PREFIXES = ["https://github.com/shift-editor/", "https://shift.graphics/"];
+
+function isDocumentationUrl(url: string): boolean {
+  return DOCUMENTATION_PREFIXES.some((prefix) => url.startsWith(prefix));
 }

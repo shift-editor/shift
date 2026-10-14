@@ -115,6 +115,13 @@ export interface ShiftHost {
      */
     setTitleBarColors: (colors: TitleBarColors) => Promise<void>;
     /**
+     * Keeps a tool window this window opened, such as the feature code window,
+     * above every other window, or lets it go behind them again.
+     *
+     * @param name - The name the tool window was opened with.
+     */
+    setToolWindowPinned: (name: string, pinned: boolean) => Promise<void>;
+    /**
      * Returns where the window buttons Shift draws on Linux belong.
      *
      * @returns null on macOS and Windows, where Shift does not draw them.

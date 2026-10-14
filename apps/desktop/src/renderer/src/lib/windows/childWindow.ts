@@ -1,3 +1,4 @@
+import { trackScrollActivity } from "@/lib/themes/scrollActivity";
 /** Where and how big a window is on screen, in CSS pixels. */
 export interface WindowBounds {
   readonly x: number;
@@ -53,6 +54,8 @@ export function openChildWindow(options: ChildWindowOptions): ChildWindow | null
   const container = doc.createElement("div");
   container.className = "h-screen w-screen";
   doc.body.replaceChildren(container);
+  // Scrollbar thumbs show while their element scrolls; this window's scrolling is tracked here.
+  const stopScrollTracking = trackScrollActivity(doc);
 
   let closed = false;
   return {
@@ -69,6 +72,7 @@ export function openChildWindow(options: ChildWindowOptions): ChildWindow | null
       closed = true;
       syncStyles.disconnect();
       syncTheme.disconnect();
+      stopScrollTracking();
       child.close();
     },
   };

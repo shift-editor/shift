@@ -581,3 +581,24 @@ describe("editing several glyphs at once", () => {
     expect(definition.childGlyphs(run)).toHaveLength(2);
   });
 });
+
+describe("switching a generated feature off", () => {
+  it("stops it shaping proof text, and undo brings it back", async () => {
+    const editor = new TestEditor();
+    await editor.openSession(SHAPING_TEST, "f");
+    editor.history.capture("Edit Feature Code", () => editor.font.setFeatureSource(null));
+    const runId = editor.text.createRun(editor.text.itemsFromText("fi")).id;
+    const names = () =>
+      editor.text
+        .layoutCell(runId)
+        .peek()
+        ?.placedGlyphs.map((glyph) => glyph.glyph.glyphName) ?? [];
+    await expect.poll(names).toEqual(["f_i"]);
+
+    editor.history.capture("Turn Off liga", () => editor.font.setGeneratedFeatureOn("liga", false));
+
+    await expect.poll(names).toEqual(["f", "i"]);
+    await editor.undo();
+    await expect.poll(names).toEqual(["f_i"]);
+  });
+});

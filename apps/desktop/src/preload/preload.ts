@@ -39,6 +39,7 @@ const shiftHost: ShiftHost = {
     ready: invoke(ipcRenderer, "window.ready"),
     setTitleBarColors: invoke(ipcRenderer, "window.setTitleBarColors"),
     buttonLayout: invoke(ipcRenderer, "window.buttonLayout"),
+    setToolWindowPinned: invoke(ipcRenderer, "window.setToolWindowPinned"),
   },
   menu: {
     bar: invoke(ipcRenderer, "menu.bar"),

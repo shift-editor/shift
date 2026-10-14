@@ -80,6 +80,26 @@ function tokenKind(match: RegExpExecArray): TokenKind | null {
 }
 
 /**
+ * Writes one line of feature code into `parent` as text and coloured spans,
+ * for code shown outside the editor such as generated features.
+ */
+export function appendHighlightedLine(parent: HTMLElement, line: string): void {
+  const doc = parent.ownerDocument;
+  let at = 0;
+  for (const match of line.matchAll(TOKEN)) {
+    const kind = tokenKind(match);
+    if (!kind) continue;
+    if (match.index > at) parent.append(line.slice(at, match.index));
+    const span = doc.createElement("span");
+    span.className = `cm-fea-${kind}`;
+    span.textContent = match[0];
+    parent.append(span);
+    at = match.index + match[0].length;
+  }
+  if (at < line.length) parent.append(line.slice(at));
+}
+
+/**
  * Colours only the lines on screen. Every `.fea` token ends on the line it
  * starts on, so a line needs nothing from the lines above it, and jumping
  * deep into a long file colours at once.
