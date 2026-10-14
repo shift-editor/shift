@@ -15,21 +15,26 @@ GLIBC_FLOOR="2.17"
 BRIDGE="$ROOT/crates/shift-bridge/shift-bridge.linux-$(node -p process.arch)-gnu.node"
 CLI="$ROOT/target/release/shift-cli"
 
+# Same location and layout `napi build --use-napi-cross` uses.
 TOOLCHAIN_ROOT="$(
-  cd "$ROOT/crates/shift-bridge" && TRIPLE="$TRIPLE" node -e '
+  cd "$ROOT/crates/shift-bridge" && TRIPLE="$TRIPLE" node -p '
     const { homedir } = require("node:os");
-    const { existsSync, mkdirSync } = require("node:fs");
     const { join } = require("node:path");
-    const { version, download } = require("@napi-rs/cross-toolchain");
-    // Same location and layout `napi build --use-napi-cross` uses.
-    const root = join(homedir(), ".napi-rs", "cross-toolchain", version, process.env.TRIPLE);
-    if (!existsSync(join(root, "package.json"))) {
-      mkdirSync(root, { recursive: true });
-      download(process.arch, process.env.TRIPLE).unpack(root);
-    }
-    console.log(root);
+    const { version } = require("@napi-rs/cross-toolchain");
+    join(homedir(), ".napi-rs", "cross-toolchain", version, process.env.TRIPLE);
   '
 )"
+# Kept out of the substitution above: download() runs `npm pack`, which prints
+# the tarball name on stdout.
+if [[ ! -f "$TOOLCHAIN_ROOT/package.json" ]]; then
+  mkdir -p "$TOOLCHAIN_ROOT"
+  (
+    cd "$ROOT/crates/shift-bridge" && TRIPLE="$TRIPLE" DEST="$TOOLCHAIN_ROOT" node -e '
+      const { download } = require("@napi-rs/cross-toolchain");
+      download(process.arch, process.env.TRIPLE).unpack(process.env.DEST);
+    '
+  )
+fi
 TOOLCHAIN="$TOOLCHAIN_ROOT/bin/$TRIPLE"
 
 export "CARGO_TARGET_${TRIPLE_UPPER}_LINKER=$TOOLCHAIN-gcc"
