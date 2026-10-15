@@ -224,6 +224,12 @@ export interface BridgeApi {
    */
   shapingFeatures(): Array<FontFeature>
   /**
+   * Returns every substitution a feature can make, ordered by output glyph:
+   * the glyphs each rule replaces and the glyph it puts in their place.
+   * Empty for a positioning feature or a tag the font does not define.
+   */
+  featureSubstitutions(tag: string): Array<FeatureSubstitution>
+  /**
    * Returns the problems the compiler found in the font's feature code, with
    * ranges into the text [`Self::feature_source`] returns. Empty when the
    * code compiles cleanly; errors keep the last valid features shaping.
@@ -326,6 +332,13 @@ export interface FeatureSetting {
   value: number
 }
 
+/** One substitution a feature can make: `input` in the text becomes `output`. */
+export interface FeatureSubstitution {
+  /** The glyphs replaced; more than one for a ligature. */
+  input: Array<GlyphId>
+  output: GlyphId
+}
+
 /**
  * A class, mark class, lookup, or glyph name in feature code, and every
  * place it's written.
@@ -381,6 +394,11 @@ export interface ParagraphRequest {
   units: Array<ShapeUnit>
   /** User-space location to shape at; omitted axes are at their default. */
   location: Location
+  /**
+   * ISO 15924 script tag, such as `Arab`, to shape every run in; each
+   * run's own script when omitted.
+   */
+  script?: string
   /** BCP 47 language tag; the default language system when omitted. */
   language?: string
   /** Settings over the features applied by default. */

@@ -10,6 +10,8 @@ interface SidebarNumberFieldProps {
   value: number | null;
   /** Called with each committed value: on Enter, on blur, and on every arrow step. */
   onValueCommit: (value: number) => void;
+  /** Called when the field is emptied and committed; without it, emptying keeps the value. */
+  onClear?: () => void;
   /** A short leading label such as "W", or an icon. */
   label?: ReactNode;
   /** Formats the value with a unit, such as degrees. */
@@ -37,6 +39,7 @@ export function SidebarNumberField({
   ariaLabel,
   value,
   onValueCommit,
+  onClear,
   label,
   unit,
   suffix,
@@ -65,7 +68,12 @@ export function SidebarNumberField({
         }}
         disabled={disabled}
         onValueCommitted={(next, details) => {
-          if (cancelled.current || next === null) return;
+          if (cancelled.current) return;
+          if (next === null) {
+            if (onClear) onClear();
+            setRevision((current) => current + 1);
+            return;
+          }
           onValueCommit(next);
           if (details.reason !== "keyboard") setRevision((current) => current + 1);
         }}

@@ -33,6 +33,7 @@ import type {
   FeatureEdit,
   FeatureSymbol,
   GeneratedFeature,
+  FeatureSubstitution,
   FontFeature,
   Location,
   ParagraphRequest,
@@ -430,6 +431,13 @@ export class FontSessionClient {
     await this.connect();
 
     return this.#require().call("workspace.features", null);
+  }
+
+  /** Returns every substitution a feature can make, ordered by output glyph. */
+  async featureSubstitutions(tag: string): Promise<FeatureSubstitution[]> {
+    await this.connect();
+
+    return this.#require().call("workspace.featureSubstitutions", { tag });
   }
 
   /** Returns the features the current font's glyph relationships generate. */

@@ -320,6 +320,7 @@ export class Editor {
     readonly history: EditorHistory;
     // (undocumented)
     get hitRadius(): number;
+    hitRadiusIn(node: ShiftNode): number;
     // Warning: (ae-forgotten-export) The symbol "Hover" needs to be exported by the entry point index.d.ts
     //
     // (undocumented)
@@ -631,6 +632,8 @@ export class Font {
     // Warning: (ae-forgotten-export) The symbol "FontFeature" needs to be exported by the entry point index.d.ts
     features(): Promise<FontFeature[]>;
     featureSource(): Promise<string | null>;
+    // Warning: (ae-forgotten-export) The symbol "FeatureSubstitution" needs to be exported by the entry point index.d.ts
+    featureSubstitutions(tag: string): Promise<FeatureSubstitution[]>;
     // Warning: (ae-forgotten-export) The symbol "FeatureSymbol" needs to be exported by the entry point index.d.ts
     featureSymbolAt(text: string, offset: number): Promise<FeatureSymbol | null>;
     formatFeatureCode(text: string): Promise<string>;
@@ -1547,10 +1550,10 @@ export function useSignalState<T>(signal: Signal<T>, options?: UseSignalOptions)
 
 // Warnings were encountered during analysis:
 //
-// dist/Editor-qCXZkwGx.d.ts:2997:5 - (ae-forgotten-export) The symbol "Axis" needs to be exported by the entry point index.d.ts
-// dist/Editor-qCXZkwGx.d.ts:2998:5 - (ae-forgotten-export) The symbol "AxisMappingBasis" needs to be exported by the entry point index.d.ts
-// dist/Editor-qCXZkwGx.d.ts:2999:5 - (ae-forgotten-export) The symbol "Source" needs to be exported by the entry point index.d.ts
-// dist/Editor-qCXZkwGx.d.ts:5041:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
+// dist/Editor-BEIl259I.d.ts:3008:5 - (ae-forgotten-export) The symbol "Axis" needs to be exported by the entry point index.d.ts
+// dist/Editor-BEIl259I.d.ts:3009:5 - (ae-forgotten-export) The symbol "AxisMappingBasis" needs to be exported by the entry point index.d.ts
+// dist/Editor-BEIl259I.d.ts:3010:5 - (ae-forgotten-export) The symbol "Source" needs to be exported by the entry point index.d.ts
+// dist/Editor-BEIl259I.d.ts:5074:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

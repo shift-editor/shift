@@ -58,6 +58,7 @@ export function GlyphSidebar(input: GlyphSidebarProps): JSX.Element;
 
 // @public
 export interface GlyphSidebarHost {
+    glyph?: ReactNode;
     // Warning: (ae-forgotten-export) The symbol "GlyphId" needs to be exported by the entry point ui.d.ts
     glyphLabel?: (glyphId: GlyphId) => string | undefined;
     header?: ReactNode;

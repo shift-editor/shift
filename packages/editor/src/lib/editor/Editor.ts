@@ -45,6 +45,7 @@ import {
   invertTransform,
   localBounds,
   sceneBounds,
+  sceneVector,
   spaceTransform,
   transformBounds,
 } from "./spaces";
@@ -1997,6 +1998,20 @@ export class Editor {
 
   public get hitRadius(): number {
     return this.#camera.hitRadius;
+  }
+
+  /**
+   * Returns the pointer hit radius in a node's own units.
+   *
+   * @remarks
+   * The radius is constant on screen, so a glyph edited inside small text has
+   * a larger radius in its units than one edited at the font's own size.
+   *
+   * @param node - the node whose units the radius is measured in.
+   */
+  public hitRadiusIn(node: ShiftNode): number {
+    const radius = this.toLocalVector(node, sceneVector(this.hitRadius, 0));
+    return Math.hypot(radius.x, radius.y);
   }
 
   /** @knipclassignore Indirectly consumed through Renderer. */

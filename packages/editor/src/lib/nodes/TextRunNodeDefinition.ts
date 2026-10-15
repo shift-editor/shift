@@ -38,8 +38,16 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
   readonly #outline = new OutlineRenderer();
 
   unitsTransform(node: TextRunNode): Mat {
-    const scale = this.#scale(node);
+    const scale = this.emScale(node);
     return Mat.Scale(scale, -scale);
+  }
+
+  /**
+   * Returns how many scene units one font unit of the run spans: its size over
+   * the font's units per em, 1 when the run is set at the font's own size.
+   */
+  emScale(node: TextRunNode): number {
+    return node.size / this.editor.font.metricsCell.peek().unitsPerEm;
   }
 
   /**
@@ -293,7 +301,7 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     const layout = this.editor.text.layoutCell(node.runId).peek();
     if (!layout) return null;
 
-    const radius = this.editor.hitRadius / this.#scale(node);
+    const radius = this.editor.hitRadiusIn(node);
     let target: PointerTarget | null = null;
     for (const { placed, itemId, model } of this.#runGlyphs(node, layout)) {
       const local = {
@@ -325,7 +333,7 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     const layout = this.editor.text.layoutCell(node.runId).peek();
     if (!layout) return null;
 
-    const padding = this.editor.hitRadius / this.#scale(node);
+    const padding = this.editor.hitRadiusIn(node);
     let nearest: SpacingGap | null = null;
     for (const gap of this.#gaps(node, layout)) {
       if (point.y < gap.bottom - padding || point.y > gap.top + padding) continue;
@@ -441,7 +449,7 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     const run = this.editor.text.run(node.runId);
     if (!layout || !run) return null;
 
-    const padding = this.editor.hitRadius / this.#scale(node);
+    const padding = this.editor.hitRadiusIn(node);
     const cluster = layout.caretAtPoint(point, padding);
     if (cluster !== null) return cluster;
 
@@ -494,13 +502,18 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     const style = this.#editsAGlyph(node)
       ? { ...ctx.canvas.theme.glyph, fill: ctx.canvas.theme.textRun.contextFill }
       : ctx.canvas.theme.glyph;
-    for (const { placed, itemId, model } of this.#runGlyphs(node, layout)) {
+    track(this.editor.text.highlightCell);
+    const highlight = this.editor.text.highlightCell.peek();
+    const highlighted = highlight?.runId === node.runId ? highlight.glyphs : null;
+    const highlightStyle = { ...style, fill: ctx.canvas.theme.textRun.hoverOutline };
+    for (const { placed, itemId, glyphId, model } of this.#runGlyphs(node, layout)) {
       model.trackShape();
       track(model.closedContoursPathCell);
       track(model.openContoursPathCell);
       ctx.canvas.save();
       ctx.canvas.translate(placed.origin.x, placed.origin.y);
-      this.#outline.drawDisplay(ctx.canvas, model, style);
+      const glyphStyle = highlighted?.has(glyphId) ? highlightStyle : style;
+      this.#outline.drawDisplay(ctx.canvas, model, glyphStyle);
       if (outlined.has(itemId)) this.#outline.draw(ctx.canvas, model, { stroke: outlineStroke });
       ctx.canvas.restore();
     }
@@ -572,10 +585,6 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
       if (isTextItemId(id)) ids.add(id);
     }
     return ids;
-  }
-
-  #scale(node: TextRunNode): number {
-    return node.size / this.editor.font.metricsCell.peek().unitsPerEm;
   }
 }
 

@@ -1,8 +1,9 @@
 use crate::errors::{self, BridgeError, BridgeResult};
 use crate::input::{parse, BridgeParse};
 use crate::shaping::{
-  NapiFeatureDiagnostic, NapiFeatureEdit, NapiFeatureSymbol, NapiFontFeature, NapiGeneratedFeature,
-  NapiParagraphRequest, NapiShapedParagraph, ParsedParagraphRequest,
+  NapiFeatureDiagnostic, NapiFeatureEdit, NapiFeatureSubstitution, NapiFeatureSymbol,
+  NapiFontFeature, NapiGeneratedFeature, NapiParagraphRequest, NapiShapedParagraph,
+  ParsedParagraphRequest,
 };
 use napi::bindgen_prelude::*;
 use napi::{Error, Status};
@@ -2120,6 +2121,23 @@ impl Bridge {
   pub fn shaping_features(&mut self) -> errors::Result<Vec<NapiFontFeature>> {
     let features = self.live_shaper()?.font().features()?;
     Ok(features.into_iter().map(NapiFontFeature::from).collect())
+  }
+
+  /// Returns every substitution a feature can make, ordered by output glyph:
+  /// the glyphs each rule replaces and the glyph it puts in their place.
+  /// Empty for a positioning feature or a tag the font does not define.
+  #[napi]
+  pub fn feature_substitutions(
+    &mut self,
+    tag: String,
+  ) -> errors::Result<Vec<NapiFeatureSubstitution>> {
+    let substitutions = self.live_shaper()?.feature_substitutions(&tag)?;
+    Ok(
+      substitutions
+        .into_iter()
+        .map(NapiFeatureSubstitution::from)
+        .collect(),
+    )
   }
 
   /// Returns the problems the compiler found in the font's feature code, with

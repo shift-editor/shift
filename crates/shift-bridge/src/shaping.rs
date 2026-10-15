@@ -2,7 +2,7 @@ use napi_derive::napi;
 use shift_backends::feature_code::{FeatureEdit, FeatureLint, FeatureSymbol, FeatureSymbolKind};
 use shift_backends::shaper_font::{
   DiagnosticSeverity, FeatureDiagnostic, FeatureSetting, FontFeature, ParagraphRequest, ShapeUnit,
-  ShapedGlyph, ShapedParagraph, ShapedRun, TextDirection,
+  ShapedGlyph, ShapedParagraph, ShapedRun, Substitution, TextDirection,
 };
 use shift_font::{ExternalLocation, GlyphId};
 use shift_wire::bridges::napi::NapiLocation;
@@ -35,6 +35,9 @@ pub struct NapiParagraphRequest {
   pub units: Vec<NapiShapeUnit>,
   /// User-space location to shape at; omitted axes are at their default.
   pub location: NapiLocation,
+  /// ISO 15924 script tag, such as `Arab`, to shape every run in; each
+  /// run's own script when omitted.
+  pub script: Option<String>,
   /// BCP 47 language tag; the default language system when omitted.
   pub language: Option<String>,
   /// Settings over the features applied by default.
@@ -315,6 +318,7 @@ impl From<FontFeature> for NapiFontFeature {
 pub(crate) struct ParsedParagraphRequest {
   units: Vec<ShapeUnit>,
   location: ExternalLocation,
+  script: Option<String>,
   language: Option<String>,
   features: Vec<FeatureSetting>,
 }
@@ -324,6 +328,7 @@ impl ParsedParagraphRequest {
     ParagraphRequest {
       units: &self.units,
       location: &self.location,
+      script: self.script.as_deref(),
       language: self.language.as_deref(),
       features: &self.features,
     }
@@ -350,6 +355,7 @@ impl TryFrom<NapiParagraphRequest> for ParsedParagraphRequest {
     Ok(Self {
       units,
       location,
+      script: request.script,
       language: request.language,
       features,
     })
@@ -376,5 +382,24 @@ fn direction_name(direction: TextDirection) -> &'static str {
   match direction {
     TextDirection::LeftToRight => "ltr",
     TextDirection::RightToLeft => "rtl",
+  }
+}
+
+/// One substitution a feature can make: `input` in the text becomes `output`.
+#[napi(object)]
+pub struct NapiFeatureSubstitution {
+  /// The glyphs replaced; more than one for a ligature.
+  #[napi(ts_type = "Array<GlyphId>")]
+  pub input: Vec<String>,
+  #[napi(ts_type = "GlyphId")]
+  pub output: String,
+}
+
+impl From<Substitution> for NapiFeatureSubstitution {
+  fn from(substitution: Substitution) -> Self {
+    Self {
+      input: substitution.input.iter().map(ToString::to_string).collect(),
+      output: substitution.output.to_string(),
+    }
   }
 }

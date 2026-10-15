@@ -19,6 +19,8 @@ export interface GlyphSidebarHost {
    * Called with the glyph the sidebar shows, which changes as the edited glyph does.
    */
   glyphLabel?: (glyphId: GlyphId) => string | undefined;
+  /** Rendered at the end of the Glyph section, for more of the glyph's own data. */
+  glyph?: ReactNode;
   /** Rendered below the glyph metrics, for panels about the current selection. */
   selection?: ReactNode;
 }
@@ -79,7 +81,7 @@ export function GlyphSidebar({ session, host = {} }: GlyphSidebarProps) {
       </div>
       <Separator />
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="scrollbar-hidden min-h-0 flex-1 overflow-y-auto">
         <div className="px-3 py-3">
           <section className="flex flex-col gap-2">
             <h3 className="text-ui font-medium text-primary">Glyph</h3>
@@ -139,6 +141,7 @@ export function GlyphSidebar({ session, host = {} }: GlyphSidebarProps) {
                 </div>
               </Tooltip>
             </main>
+            {host.glyph}
           </section>
         </div>
         <Separator />

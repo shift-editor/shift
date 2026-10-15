@@ -46,7 +46,7 @@ pub use diagnostics::{DiagnosticSeverity, FeatureDiagnostic};
 pub use features::FontFeature;
 pub use shape::{
     FeatureSetting, LiveShaper, ParagraphRequest, ShapeError, ShapeRequest, ShapeUnit, ShapedGlyph,
-    ShapedParagraph, ShapedRun, TextDirection,
+    ShapedParagraph, ShapedRun, Substitution, TextDirection,
 };
 pub use state::ShaperFontState;
 

@@ -14,6 +14,9 @@ export type {
   GlyphicTextItem,
   GlyphTextItem,
   SegmentedRun,
+  TextAlign,
   TextItem,
 } from "./lib/text/layout/types";
 export { fallbackGlyphNameForUnicode, formatCodepointAsUPlus } from "./lib/utils/unicode";
+export type { TextRunRecord } from "./types/text";
+export type { TextHighlight } from "./lib/text/Text";

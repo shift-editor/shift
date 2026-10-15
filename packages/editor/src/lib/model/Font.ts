@@ -32,6 +32,7 @@ import type {
   FeatureEdit,
   FeatureSymbol,
   GeneratedFeature,
+  FeatureSubstitution,
   FontFeature,
   Location,
   ParagraphRequest,
@@ -1306,6 +1307,17 @@ export class Font {
    */
   features(): Promise<FontFeature[]> {
     return this.editCoordinator.features();
+  }
+
+  /**
+   * Returns every substitution a feature can make, after pending edits settle.
+   *
+   * @returns The glyphs each rule replaces and the glyph it puts in their
+   * place, ordered by output glyph; empty for a positioning feature or a tag
+   * the font does not define.
+   */
+  featureSubstitutions(tag: string): Promise<FeatureSubstitution[]> {
+    return this.editCoordinator.featureSubstitutions(tag);
   }
 
   /** Returns the features the font's glyph relationships generate, in compile order, after pending edits settle. */

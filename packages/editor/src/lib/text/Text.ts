@@ -6,7 +6,7 @@ import type { ShiftStore } from "../store/ShiftStore";
 import type { StoreIndex } from "../store/StoreIndex";
 import type { ShiftEditorRecord } from "../../types/records";
 import type { TextRunNode } from "../../types/node";
-import type { TextRunRecord } from "../../types/text";
+import type { TextAlign, TextRunRecord } from "../../types/text";
 import {
   characterTextItem,
   glyphTextItem,
@@ -14,6 +14,7 @@ import {
   Positioner,
   TextLayout,
   textItemGlyph,
+  type Direction,
   type TextItem,
 } from "./layout";
 import {
@@ -25,12 +26,19 @@ import {
 } from "./RunShaping";
 import { locationFromExternalAxisLocation } from "../variation/location";
 
+/** Glyphs one run draws highlighted. */
+export interface TextHighlight {
+  readonly runId: RunId;
+  readonly glyphs: ReadonlySet<GlyphId>;
+}
+
 /** Owns proof text records and one reactive layout per run identity. */
 export class Text {
   readonly #store: ShiftStore<ShiftEditorRecord>;
   readonly #editor: Editor;
   readonly #positioner = new Positioner();
   readonly #glyphsLoadedCell = signal(0);
+  readonly #highlightCell = signal<TextHighlight | null>(null);
   // non-reactive: dedupes in-flight glyph loads; only read by the imperative load path
   readonly #loading = new Map<GlyphId, Promise<void>>();
   readonly #runsByItem: StoreIndex<TextItemId, TextRunRecord>;
@@ -58,7 +66,7 @@ export class Text {
                 );
                 return {
                   keys: paragraphKeys(record.items),
-                  paragraphs: paragraphRequests(record.items, location, record.features),
+                  paragraphs: paragraphRequests(record.items, location, record),
                 };
               },
               { name: "text.shapingRequest" },
@@ -82,6 +90,7 @@ export class Text {
           track(this.#editor.font.glyphEntriesCell);
           track(this.#glyphsLoadedCell);
           if (!record) return null;
+          const unitsPerEm = this.#editor.font.metricsCell.value.unitsPerEm;
 
           // A paragraph shaped from other text would map glyphs to the wrong items; it lays out literally until it catches up.
           const shaped = record.shaping
@@ -97,26 +106,65 @@ export class Text {
             positioner: this.#positioner,
             externalLocation: this.#editor.externalLocationCell,
             shaped,
+            align: record.align,
+            lineHeight: record.lineHeight === null ? null : record.lineHeight * unitsPerEm,
           });
         },
         { name: "text.layoutForRun" },
       ),
   });
+  readonly #scripts = keyedCache({
+    name: "text.scripts",
+    key: (runId: RunId) => runId,
+    dispose: (scriptsCell: ComputedSignal<readonly string[]>) => scriptsCell.dispose(),
+    create: (runIdCell: Signal<RunId>) =>
+      computed(
+        () => {
+          const shaped = this.#shapings.get(runIdCell.value).shapedCell.value;
+          const scripts = new Set<string>();
+          for (const paragraph of shaped?.paragraphs ?? []) {
+            for (const run of paragraph.shaped.runs) if (run.script) scripts.add(run.script);
+          }
+          return [...scripts];
+        },
+        { name: "text.scripts", equals: sameStrings },
+      ),
+  });
+  readonly #directions = keyedCache({
+    name: "text.direction",
+    key: (runId: RunId) => runId,
+    dispose: (directionCell: ComputedSignal<Direction>) => directionCell.dispose(),
+    create: (runIdCell: Signal<RunId>) =>
+      computed(
+        () =>
+          this.#shapings.get(runIdCell.value).shapedCell.value?.paragraphs[0]?.shaped.direction ??
+          "ltr",
+        { name: "text.direction" },
+      ),
+  });
   /**
-   * The run the user is working in: the one being typed in, otherwise the
-   * scene's only run, such as the page run around an edited glyph.
+   * The run node the user is working in: the one being typed in, otherwise
+   * the scene's only run, such as the page run around an edited glyph.
    *
    * @remarks
    * Null when no text is being typed and the scene holds no run or several.
    */
-  readonly currentRunCell: Signal<TextRunRecord | null> = computed(
+  readonly currentRunNodeCell: Signal<TextRunNode | null> = computed(
     () => {
       const editing = this.#editor.textEditing.stateCell.value;
       // The node lookup does not subscribe; a run node keeps the same run for its whole life.
       const typedIn = this.#editor.scene.nodeOfKind(editing?.nodeId ?? null, "textRun");
       const runs = this.#editor.scene.cell.value.nodes.filter((node) => node.kind === "textRun");
       const node = typedIn ?? (runs.length === 1 ? runs[0] : null);
-      return node?.kind === "textRun" ? this.run(node.runId) : null;
+      return node?.kind === "textRun" ? node : null;
+    },
+    { name: "text.currentRunNode" },
+  );
+  /** The record of {@link currentRunNodeCell}'s run. */
+  readonly currentRunCell: Signal<TextRunRecord | null> = computed(
+    () => {
+      const node = this.currentRunNodeCell.value;
+      return node ? this.run(node.runId) : null;
     },
     { name: "text.currentRun" },
   );
@@ -177,6 +225,10 @@ export class Text {
       items: [...items],
       shaping: true,
       features: {},
+      language: null,
+      script: null,
+      align: null,
+      lineHeight: null,
     };
     this.#store.put(record);
     return record;
@@ -253,6 +305,91 @@ export class Text {
   }
 
   /**
+   * Sets the language a run is shaped as.
+   *
+   * @param language - A BCP 47 tag such as `ur`; null for the font's default language.
+   *
+   * @remarks
+   * Writes the run record, so call it inside a history capture.
+   */
+  setLanguage(id: RunId, language: string | null): void {
+    const run = this.run(id);
+    if (run && run.language !== language) this.#store.put({ ...run, language });
+  }
+
+  /**
+   * Sets the script a run is shaped in.
+   *
+   * @param script - An ISO 15924 tag such as `Arab`; null to use each stretch's own script.
+   *
+   * @remarks
+   * Writes the run record, so call it inside a history capture.
+   */
+  setScript(id: RunId, script: string | null): void {
+    const run = this.run(id);
+    if (run && run.script !== script) this.#store.put({ ...run, script });
+  }
+
+  /**
+   * Sets how a run's lines line up; null follows each line's direction.
+   *
+   * @remarks
+   * Writes the run record, so call it inside a history capture.
+   */
+  setAlign(id: RunId, align: TextAlign | null): void {
+    const run = this.run(id);
+    if (run && run.align !== align) this.#store.put({ ...run, align });
+  }
+
+  /**
+   * Sets the distance between a run's baselines.
+   *
+   * @param lineHeight - In ems, such as 1.5; null for the font's own line spacing.
+   *
+   * @remarks
+   * Writes the run record, so call it inside a history capture.
+   */
+  setLineHeight(id: RunId, lineHeight: number | null): void {
+    const run = this.run(id);
+    if (run && run.lineHeight !== lineHeight) this.#store.put({ ...run, lineHeight });
+  }
+
+  /**
+   * Returns the scripts a run's text was shaped in, in order of first use.
+   *
+   * @remarks
+   * Reactive, and unchanged while the scripts stay the same, so a reader
+   * doesn't rerun on every keystroke. Empty until the text is shaped.
+   */
+  scriptsCell(id: RunId): ComputedSignal<readonly string[]> {
+    return this.#scripts.get(id);
+  }
+
+  /**
+   * Returns the direction of a run's first paragraph: right to left when it
+   * starts with Arabic or Hebrew, say.
+   *
+   * @remarks
+   * Reactive. Left to right until the text is shaped.
+   */
+  directionCell(id: RunId): ComputedSignal<Direction> {
+    return this.#directions.get(id);
+  }
+
+  /**
+   * The glyphs one run draws highlighted, such as those a hovered feature
+   * changes; null while nothing is highlighted.
+   */
+  get highlightCell(): Signal<TextHighlight | null> {
+    return this.#highlightCell;
+  }
+
+  /** Highlights the given glyphs wherever one run sets them, or clears the highlight. */
+  setHighlight(highlight: TextHighlight | null): void {
+    this.#highlightCell.set(highlight);
+  }
+
+  /**
    * Inserts items into a run directly after one of its items.
    *
    * @returns false when the run or `afterId` is missing.
@@ -315,6 +452,8 @@ export class Text {
   dispose(): void {
     this.#unsubscribeStore();
     this.#runsByItem.dispose();
+    this.#scripts.clear();
+    this.#directions.clear();
     this.#layouts.clear();
     this.#shapings.clear();
   }
@@ -359,4 +498,8 @@ export class Text {
     this.#loading.set(id, load);
     return load;
   }
+}
+
+function sameStrings(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
