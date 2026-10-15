@@ -34,6 +34,7 @@ import {
 } from "../signals";
 import type { DeleteMode, GlyphFillHit, GlyphOptions } from "../../types/glyph";
 import type { DesignAxisLocation, ExternalAxisLocation } from "../../types/variation";
+import type { WeightedSource } from "../../types/glyphRender";
 import { designAxisLocationFromLocation, designAxisLocationsEqual } from "../variation/location";
 import type { Designspace } from "../variation/Designspace";
 import { interpolateSourceValues, interpolationWeights } from "../interpolation/InterpolationBasis";
@@ -1310,6 +1311,7 @@ export class GlyphLayer {
 }
 
 const IDENTITY_GLYPH_TRANSFORM_CELL = signal<MatModel>(Mat.Identity());
+const NO_PLACED_CONTOURS_CELL = signal<readonly RenderContour[] | null>(null);
 const NO_ACTIVE_SOURCE_CELL = signal<SourceId | null>(null);
 
 /**
@@ -1343,12 +1345,17 @@ export class GlyphRenderModel {
     sourceId: SourceId | null,
   ) => GlyphGeometry;
 
+  readonly #decompositionWeightsAt: (
+    location: ExternalAxisLocation,
+  ) => readonly WeightedSource[] | null;
+
   readonly #geometry: GlyphRenderGeometry;
 
   readonly #componentCache: KeyedCache<ComponentGlyphDefinition, string, ComponentGlyph>;
   readonly #contoursByGlyph = new Map<GlyphId, Signal<readonly RenderContour[]>>();
 
   readonly #componentsCell: Signal<readonly ComponentGlyph[]>;
+  readonly #decomposedSourcesCell: Signal<readonly WeightedSource[] | null>;
   readonly #contoursCell: Signal<readonly GlyphContour[]>;
   readonly #boundsCell: Signal<BoundsType | null>;
   readonly #drawPathCell: Signal<Path2D>;
@@ -1371,6 +1378,8 @@ export class GlyphRenderModel {
    * @param exactSourceId - Resolves an exact master identity at the current position.
    * @param layerAt - Resolves exact authored layers for root or component glyphs.
    * @param geometryAt - Resolves root or component geometry at the current position.
+   * @param decompositionWeightsAt - The root glyph's decomposition masters and
+   * their weights at a location, or `null` when it stays composite.
    */
   constructor(
     glyphId: GlyphId,
@@ -1390,6 +1399,7 @@ export class GlyphRenderModel {
       location: ExternalAxisLocation,
       sourceId: SourceId | null,
     ) => GlyphGeometry,
+    decompositionWeightsAt: (location: ExternalAxisLocation) => readonly WeightedSource[] | null,
   ) {
     this.#glyphId = glyphId;
     this.#externalLocation = externalLocation;
@@ -1398,6 +1408,7 @@ export class GlyphRenderModel {
     this.#exactSourceId = exactSourceId;
     this.#layerAt = layerAt;
     this.#geometryAt = geometryAt;
+    this.#decompositionWeightsAt = decompositionWeightsAt;
     this.#geometry = new ViewGeometry(layer, geometry);
     this.#anchorsCell = new ViewAnchors(layer, geometry).anchorsCell;
     this.#componentCache = keyedCache<ComponentGlyphDefinition, string, ComponentGlyph>({
@@ -1413,6 +1424,9 @@ export class GlyphRenderModel {
       );
       return this.#componentCache.map(components.components);
     });
+    this.#decomposedSourcesCell = computed(() =>
+      this.#decomposedSourcesAt(this.#externalLocation.value, this.#activeSourceId.value),
+    );
     const rootContoursCell = this.contoursAt(
       signal(this.#glyphId, { name: "glyph.renderModel.glyphId" }),
       IDENTITY_GLYPH_TRANSFORM_CELL,
@@ -1490,11 +1504,35 @@ export class GlyphRenderModel {
     return this.#geometryAt(glyphId, location, sourceId);
   }
 
-  /** @internal Builds contour occurrences owned directly by one glyph occurrence. */
+  /** @internal Resolves a root or component glyph's geometry as one master draws it. */
+  geometryForSource(glyphId: GlyphId, sourceId: SourceId): GlyphGeometry {
+    return this.#geometryAt(glyphId, this.#externalLocation.peek(), sourceId);
+  }
+
+  /**
+   * @internal The root glyph's decomposition masters and their weights while
+   * this location sits between them, for a glyph that compiled fonts
+   * interpolate decomposed.
+   *
+   * @remarks
+   * Component occurrences then draw their outlines as each master places
+   * them, blended, instead of applying blended transform values.
+   */
+  get decomposedSourcesCell(): Signal<readonly WeightedSource[] | null> {
+    return this.#decomposedSourcesCell;
+  }
+
+  /**
+   * @internal Builds contour occurrences owned directly by one glyph occurrence.
+   *
+   * @param placedCell - Already-placed contours that replace the glyph's own,
+   * when they are not `null`.
+   */
   contoursAt(
     glyphIdCell: Signal<GlyphId>,
     matrixCell: Signal<MatModel>,
     component: ComponentGlyph | null,
+    placedCell: Signal<readonly RenderContour[] | null> = NO_PLACED_CONTOURS_CELL,
   ): Signal<readonly GlyphContour[]> {
     const contourCache = keyedCache<RenderContour, string, GlyphContour>({
       name: "glyph.renderModel.contours",
@@ -1502,7 +1540,18 @@ export class GlyphRenderModel {
       create: (contourCell) => new GlyphContour(contourCell, matrixCell, component),
     });
 
-    return computed(() => contourCache.map(this.#contoursForGlyph(glyphIdCell.value).value));
+    return computed(() =>
+      contourCache.map(placedCell.value ?? this.#contoursForGlyph(glyphIdCell.value).value),
+    );
+  }
+
+  #decomposedSourcesAt(
+    location: ExternalAxisLocation,
+    activeSourceId: SourceId | null,
+  ): readonly WeightedSource[] | null {
+    if (activeSourceId || this.#exactSourceId(location, null)) return null;
+
+    return this.#decompositionWeightsAt(location);
   }
 
   /** Shares one evaluated source-contour stream across every occurrence of a glyph. */
@@ -2045,6 +2094,26 @@ export class Glyph {
     return this.#geometryAtDesignLocation(designLocation, exactSource?.id ?? null);
   }
 
+  /** The decomposition basis's masters and their weights at a location. */
+  #decompositionWeightsAt(
+    externalLocation: ExternalAxisLocation,
+  ): readonly WeightedSource[] | null {
+    this.#designspace.track();
+    track(this.#projectionCell);
+    const basis = this.#projectionCell.peek()?.decomposition;
+    if (!basis) return null;
+
+    const weights = interpolationWeights(
+      basis,
+      this.#designspace.toDesign(externalLocation),
+      this.#designspace.axes,
+    );
+    return basis.sourceIds.map((sourceId, index) => ({
+      sourceId,
+      weight: weights[index] ?? 0,
+    }));
+  }
+
   geometryForSource(sourceId: SourceId): GlyphGeometry {
     track(this.#layersCell);
     this.#designspace.track();
@@ -2185,6 +2254,7 @@ export class Glyph {
           new GlyphGeometry({ contours: [], anchors: [], components: [] }, new Float64Array([0]))
         );
       },
+      (location) => this.#decompositionWeightsAt(location),
     );
     renderModels.set(activeSourceIdCell, renderModel);
     return renderModel;
