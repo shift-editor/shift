@@ -304,6 +304,65 @@ describe("a substituted glyph appears only once it has loaded", () => {
   });
 });
 
+describe("cursive attachment joins letters at their entry and exit anchors", () => {
+  const heights = (editor: TestEditor, runId: RunId) =>
+    (editor.text.layoutCell(runId).peek()?.placedGlyphs ?? []).map((glyph) => [
+      glyph.glyph.glyphName,
+      glyph.origin.y,
+    ]);
+
+  it("steps a right-to-left word down to the baseline at its last letter", async () => {
+    const editor = new TestEditor();
+    await editor.openSession(SHAPING_TEST, "f");
+    const runId = editor.text.createRun(editor.text.itemsFromText("ببب")).id;
+
+    await expect
+      .poll(() => heights(editor, runId))
+      .toEqual([
+        ["beh-ar.fina", 0],
+        ["beh-ar.medi", 200],
+        ["beh-ar.init", 400],
+      ]);
+    const lefts = editor.text
+      .layoutCell(runId)
+      .peek()!
+      .placedGlyphs.map((glyph) => glyph.left);
+    expect(lefts).toEqual([0, 450, 850]);
+  });
+
+  it("passes over a mark the font classes as one, giving it no advance", async () => {
+    const editor = new TestEditor();
+    await editor.openSession(SHAPING_TEST, "f");
+    const runId = editor.text.createRun(editor.text.itemsFromText("بٰب")).id;
+
+    await expect
+      .poll(() => heights(editor, runId))
+      .toEqual([
+        ["beh-ar.fina", 0],
+        ["alefabove-ar", 0],
+        ["beh-ar.init", 200],
+      ]);
+    const lefts = editor.text
+      .layoutCell(runId)
+      .peek()!
+      .placedGlyphs.map((glyph) => glyph.left);
+    expect(lefts).toEqual([0, 450, 450]);
+  });
+
+  it("follows an exit anchor while it is edited", async () => {
+    const editor = new TestEditor();
+    await editor.openSession(SHAPING_TEST, "beh-ar.init");
+    const runId = editor.text.createRun(editor.text.itemsFromText("ببب")).id;
+    await expect.poll(() => heights(editor, runId).at(-1)).toEqual(["beh-ar.init", 400]);
+
+    const exit = editor.requireGlyphLayer().anchors.find((anchor) => anchor.name === "exit")!;
+    editor.selection.select([exit.id]);
+    editor.keyDown("ArrowUp", { shiftKey: true });
+
+    await expect.poll(() => heights(editor, runId).at(-1)).toEqual(["beh-ar.init", 390]);
+  });
+});
+
 describe("an edited glyph follows its item's shaping", () => {
   it("shows the ligature its item forms, drops the old glyph's selection, and returns", async () => {
     const editor = new TestEditor();
@@ -352,6 +411,29 @@ describe("editing several glyphs at once", () => {
 
     await editor.undo();
     expect([lsb("f"), lsb("i")]).toEqual([50, 50]);
+  });
+
+  it("draws the full metric box for the glyph being worked on and a baseline for the rest", async () => {
+    const editor = new TestEditor();
+    await editor.openSession(SHAPING_TEST, "f");
+    const run = editor.textRun!;
+    editor.history.capture("Set liga", () => editor.text.setFeature(run.runId, "liga", false));
+    const [f] = editor.text.run(run.runId)!.items;
+    editor.text.insertAfter(run.runId, f!.id, editor.text.itemsFromText("i"));
+    const [, i] = editor.text.run(run.runId)!.items;
+    const definition = editor.nodeDefinition("textRun");
+    await expect.poll(() => editor.text.layoutCell(run.runId).peek()?.totalAdvance).toBe(550);
+    const fNode = definition.editItem(run, f!.id)!;
+    const iNode = definition.editItem(run, i!.id, 0, { add: true })!;
+    editor.editing.set([fNode.id, iNode.id]);
+    const glyphs = editor.nodeDefinition("glyph");
+    const boxes = () => [glyphs.showsMetrics(fNode), glyphs.showsMetrics(iNode)];
+
+    expect(boxes()).toEqual([false, true]);
+
+    const fPoint = editor.layerOf(fNode, editor.font.defaultSource.id)!.contours[0]!.points[0]!.id;
+    editor.selection.select([fPoint]);
+    expect(boxes()).toEqual([true, false]);
   });
 
   it("select all covers every edited glyph, and closing one keeps the other open", async () => {
