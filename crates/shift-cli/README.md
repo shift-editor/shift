@@ -106,6 +106,36 @@ Findings carry a stable code, a fixed severity, the glyph, master, and contour c
 
 Problems the reader had to work around, such as kerning pairs naming missing glyphs or a repeated named instance, are listed as `note:` lines and under `import` in `--json`. `check` exits with status 1 when any finding is an error.
 
+## Proof
+
+`proof` renders text or a glyph grid set in a font to a PNG or SVG, so people and agents can look at what they drew without opening the app or installing the font:
+
+```sh
+shift proof Lab.shift --output proof.png
+shift proof Lab.shift --output proof.png --text "HOHOHOnnnooo" --sizes 16,32,72 --metrics
+shift proof Lab.shift --output weights.png --at wght=300 --at wght=700 --masters
+shift proof Lab.shift --output alternates.png --text "a/a.ss01 g" --features ss01,-liga
+shift proof Arabic.glyphs --output arabic.png --text "مرحبا بالعالم"
+shift proof Lab.shift --output glyphs.png --grid
+shift proof Lab.shift --output proof.svg --width 1200 --json
+```
+
+- `PATH` is a `.shift` document or any source `glyph inspect` reads. `.ttf` and `.otf` files are proofed as they are; every other source is compiled in memory with the same exporter as `compile`, so kerning and features are exactly what export produces.
+- `--text` sets one line and may repeat. Without it the proof shows `Hamburgefonstiv`, `HOHOHOnnnooo`, a pangram, and `0123456789 Il1| O0 {}[]()`.
+- Inside `--text`, `/name` sets a glyph by name, as in Glyphs and FontGoggles: the name runs to the next `/` or space, and a space that ends a name is consumed (`/a /b` sets two glyphs with no space; write `/space` for one). `//` is a literal slash. Named glyphs are placed directly with their own advance, unshaped, so kerning and contextual features do not reach across them. Unknown names are drawn red and listed in `missingGlyphNames`.
+- `--sizes` takes pixels per em (default `72`). Every line is set at every size.
+- `--at TAG=VALUE[,TAG=VALUE]` sets every line at an external user-space location; repeat it to compare locations. `--instances` adds every named instance of the compiled font, labelled with its name, and `--masters` adds every master of the source, labelled with the master name (not available for `.ttf`/`.otf`). Rows are grouped by line, then size, then location, so the same text stacks for comparison, and each row is labelled with its size and location. Unknown axes and out-of-range values are rejected. `--location` is a hidden alias of `--at`.
+- `--features` takes HarfBuzz feature syntax, comma-separated or repeated: `ss01`, `-liga`, `kern=0`, `aalt=2`. `--script` (ISO 15924, such as `arab`), `--language` (BCP 47, such as `tr`), and `--direction ltr|rtl|ttb|btt` override what is otherwise guessed from the text.
+- Horizontal lines follow the Unicode bidirectional algorithm, with `--direction` as the paragraph direction (the first strong character otherwise), and are split into runs of one script before shaping. Right-to-left lines are right-aligned. Vertical text (`ttb`, `btt`) is set in columns, never wrapped and without guides.
+- `--metrics` draws ascender (purple), cap-height (teal), x-height (green), baseline (blue), and descender (orange) guides behind the rows at the largest size. The ascender and descender are the authored `OS/2` typo values, not the padded `hhea` line height.
+- `--grid` sets the glyphs of `--text` (characters and `/name` tokens; spaces only separate them), or every glyph in glyph order when there is no text, unshaped in cells with each glyph's name underneath, one grid per location. It takes one size (default `48`) and wraps at `--width` (default `1200`).
+- `--width` fixes the image width and wraps text at spaces; without it the image grows to fit the longest row.
+- `--format png|svg` picks the encoding; by default an `.svg` output is SVG and anything else is PNG.
+
+Text is black on white. Characters the font does not map shape to `.notdef` and are drawn in red (an inkless `.notdef` becomes a hollow red box); they are listed under `missing` in the human output and in `missingCharacters`, overall and per line, in the `--json` report. A text proof of a font that maps no characters is an error and writes nothing.
+
+The `--json` report carries the image size, the shaping options, every location (`label`, user-space `axes`, font-unit `metrics`, and `guides`), and one entry per drawn row with its `line` and `location` indexes, text, size, pen origin `x`, `baseline`, `width` in pixels, `direction`, and `glyphs` in visual order: `name`, `glyphId`, `cluster` (byte offset in the line), `x` and `advance` in font units, and `missing`. A grid reports `grids`, one per location, whose `cells` carry the printed `label`, position, and the same glyph fields.
+
 ## Authoring
 
 Authoring commands operate on Shift domain objects rather than persistence rows. The resource surface creates font topology, glyph identity, and sparse authored layers:
