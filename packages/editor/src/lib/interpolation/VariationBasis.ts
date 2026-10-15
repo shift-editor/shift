@@ -47,9 +47,10 @@ function regionScalar(
     if (!axis) return 0;
     const normalization = normalizationById?.get(axis.id);
     if (normalizationById && !normalization) return 0;
-    const value = normalization
+    const unclamped = normalization
       ? normalizeAxis(location.get(axis.id) ?? normalization.default, axis, normalization)
       : normalizeAxis(location.get(axis.id) ?? axis.default, axis);
+    const value = Math.min(1, Math.max(-1, unclamped));
 
     if (value === support.peak) continue;
     if (support.lower === 0 && support.peak === 0 && support.upper === 0) continue;
@@ -77,14 +78,26 @@ function normalizeAxis(
   const maximum =
     designNormalization?.maximum ?? axis.maximum ?? Math.max(...(axis.values ?? [axis.default]));
   const defaultValue = designNormalization?.default ?? axis.default;
+  const tolerance = 1e-9 * (1 + Math.abs(defaultValue));
+  if (Math.abs(value - defaultValue) < tolerance) return 0;
 
-  if (value < defaultValue) {
-    const range = defaultValue - minimum;
-    return Math.abs(range) < Number.EPSILON ? 0 : (value - defaultValue) / range;
+  const range = value < defaultValue ? defaultValue - minimum : maximum - defaultValue;
+  if (Math.abs(range) < tolerance) return 0;
+
+  return snapNormalized((value - defaultValue) / range);
+}
+
+/**
+ * Snaps a normalized coordinate to `0` or `±1` when it misses by rounding.
+ *
+ * @remarks
+ * Mirrors Rust's `DesignNormalization::normalize`: mapped defaults and extremes
+ * come from compiled mapping bases, so a source authored exactly at the default
+ * can normalize to `1e-15`.
+ */
+function snapNormalized(normalized: number): number {
+  for (const anchor of [-1, 0, 1]) {
+    if (Math.abs(normalized - anchor) < 1e-9) return anchor;
   }
-  if (value > defaultValue) {
-    const range = maximum - defaultValue;
-    return Math.abs(range) < Number.EPSILON ? 0 : (value - defaultValue) / range;
-  }
-  return 0;
+  return normalized;
 }

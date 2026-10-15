@@ -583,7 +583,8 @@ fn region_scalar(
             normalization.normalize(location.get(&axis.id()).unwrap_or(normalization.default))
         } else {
             axis.normalize(location.get(&axis.id()).unwrap_or(axis.default()))
-        };
+        }
+        .clamp(-1.0, 1.0);
 
         if normalized == support.peak
             || (support.minimum == 0.0 && support.peak == 0.0 && support.maximum == 0.0)
