@@ -69,6 +69,10 @@ export class RunText {
         track(editor.font.glyphEntriesCell);
         const location = locationFromExternalAxisLocation(editor.externalLocationCell.value);
         const features = featureSettings(record);
+        const languageAndScript = {
+          ...(record.language === null ? {} : { language: record.language }),
+          ...(record.script === null ? {} : { script: record.script }),
+        };
         const split = splitParagraphs(record.items);
         if (split.length === 0) return null;
         return {
@@ -77,6 +81,7 @@ export class RunText {
             units: paragraph.items.map(shapeUnit),
             location,
             features,
+            ...languageAndScript,
           })),
         };
       },
@@ -115,6 +120,7 @@ export class RunText {
         track(editor.font.glyphEntriesCell);
         track(owner.glyphsLoadedCell);
         if (!record) return null;
+        const unitsPerEm = editor.font.metricsCell.value.unitsPerEm;
         const shaped = record.shaping ? this.#shownFor(record, owner) : null;
         return new TextLayout({
           items: record.items,
@@ -122,10 +128,17 @@ export class RunText {
           editor,
           externalLocation: editor.externalLocationCell,
           shaped,
+          align: record.align,
+          lineHeight: record.lineHeight === null ? null : record.lineHeight * unitsPerEm,
         });
       },
       { name: "text.layoutForRun" },
     );
+  }
+
+  /** The run's current shaping result, before it waits on glyph loads; null while it lays out literally. */
+  get shapedCell(): ComputedSignal<ShapedText | null> {
+    return this.#shapedCell;
   }
 
   /** The run's layout; invalidates on content, location, source, glyph loads, shaping results, and the shaping switch. */

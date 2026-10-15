@@ -220,6 +220,7 @@ export type {
   FeatureRange,
   FeatureSymbol,
   GeneratedFeature,
+  FeatureSubstitution,
   FontFeature,
   ShapedGlyph,
   ShapedParagraph,
