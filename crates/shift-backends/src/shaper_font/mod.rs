@@ -46,7 +46,7 @@ pub use diagnostics::{DiagnosticSeverity, FeatureDiagnostic};
 pub use features::FontFeature;
 pub use shape::{
     FeatureSetting, LiveShaper, ParagraphRequest, ShapeError, ShapeRequest, ShapeUnit, ShapedGlyph,
-    ShapedParagraph, ShapedRun, TextDirection,
+    ShapedParagraph, ShapedRun, Substitution, TextDirection,
 };
 pub use state::ShaperFontState;
 
@@ -115,6 +115,7 @@ impl ShaperFontRequest {
             feature_source: shift_font::assembled_feature_source(
                 &font.glyphs(),
                 font.features().fea_source(),
+                &shift_font::generated_features_off(font.lib()),
             ),
             axes,
             axis_ids: font.axes().iter().map(|axis| axis.id()).collect(),

@@ -9,7 +9,12 @@ import type {
   LayerId,
   LayerMatch,
   LayerRead,
+  FeatureCodeSettings,
   FeatureDiagnostic,
+  FeatureEdit,
+  FeatureSymbol,
+  GeneratedFeature,
+  FeatureSubstitution,
   FontFeature,
   Location,
   ParagraphRequest,
@@ -317,12 +322,44 @@ export class WorkspaceEditCoordinator {
     return this.#withFlush(() => this.#session.features());
   }
 
+  featureSubstitutions(tag: string): Promise<FeatureSubstitution[]> {
+    return this.#withFlush(() => this.#session.featureSubstitutions(tag));
+  }
+
+  generatedFeatures(): Promise<GeneratedFeature[]> {
+    return this.#withFlush(() => this.#session.generatedFeatures());
+  }
+
   featureDiagnostics(): Promise<FeatureDiagnostic[]> {
     return this.#withFlush(() => this.#session.featureDiagnostics());
   }
 
   featureSource(): Promise<string | null> {
     return this.#withFlush(() => this.#session.featureSource());
+  }
+
+  lintFeatureCode(text: string): Promise<FeatureDiagnostic[]> {
+    return this.#withFlush(() => this.#session.lintFeatureCode(text));
+  }
+
+  formatFeatureCode(text: string): Promise<string> {
+    return this.#withFlush(() => this.#session.formatFeatureCode(text));
+  }
+
+  featureCodeSettings(): Promise<FeatureCodeSettings> {
+    return this.#withFlush(() => this.#session.featureCodeSettings());
+  }
+
+  featureSymbolAt(text: string, offset: number): Promise<FeatureSymbol | null> {
+    return this.#session.featureSymbolAt(text, offset);
+  }
+
+  renameFeatureSymbol(
+    text: string,
+    offset: number,
+    newName: string,
+  ): Promise<FeatureEdit[] | null> {
+    return this.#session.renameFeatureSymbol(text, offset, newName);
   }
 
   /** Replays the latest redo entry after pending pushes flush. */

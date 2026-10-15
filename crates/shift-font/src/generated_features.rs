@@ -8,7 +8,23 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 
 use crate::relationships::{relationships, GlyphIndex, GlyphLookup};
-use crate::{Glyph, GlyphRelationship};
+use crate::{Glyph, GlyphRelationship, LibData, LibValue};
+
+/// The font lib key listing the generated features switched off, by tag.
+pub const GENERATED_FEATURES_OFF_LIB_KEY: &str = "com.shift.generatedFeaturesOff";
+
+/// The tags of the generated features `lib` switches off.
+pub fn generated_features_off(lib: &LibData) -> BTreeSet<String> {
+    let Some(LibValue::Array(tags)) = lib.get(GENERATED_FEATURES_OFF_LIB_KEY) else {
+        return BTreeSet::new();
+    };
+    tags.iter()
+        .filter_map(|tag| match tag {
+            LibValue::String(tag) => Some(tag.clone()),
+            _ => None,
+        })
+        .collect()
+}
 
 /// The order generated features are written in: forms and localisation
 /// first, then ligatures, then case, figures, and stylistic alternates.
@@ -19,10 +35,15 @@ const FEATURE_ORDER: [&str; 26] = [
 ];
 
 /// The feature source a font compiles with: its authored code, then the
-/// features its glyphs' relationships generate. `glyphs` is in glyph order.
-pub fn assembled_feature_source(glyphs: &[&Glyph], authored: Option<&str>) -> String {
+/// features its glyphs' relationships generate, except those switched off.
+/// `glyphs` is in glyph order.
+pub fn assembled_feature_source(
+    glyphs: &[&Glyph],
+    authored: Option<&str>,
+    off: &BTreeSet<String>,
+) -> String {
     let authored = authored.unwrap_or_default();
-    let generated = generated_feature_code(glyphs, authored);
+    let generated = generated_feature_code(glyphs, authored, off);
     match (authored.trim().is_empty(), generated.is_empty()) {
         (_, true) => authored.to_string(),
         (true, false) => generated,
@@ -30,9 +51,38 @@ pub fn assembled_feature_source(glyphs: &[&Glyph], authored: Option<&str>) -> St
     }
 }
 
+/// One feature generated from glyph relationships.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GeneratedFeature {
+    pub tag: String,
+    /// The complete `feature tag { … } tag;` block.
+    pub code: String,
+    /// How many substitutions it makes.
+    pub rules: usize,
+    /// Whether it compiles; a feature switched off is still generated, to show.
+    pub on: bool,
+}
+
 /// The feature code `glyphs`' relationships generate, leaving out every
-/// feature `authored` defines. Empty when nothing is generated.
-pub fn generated_feature_code(glyphs: &[&Glyph], authored: &str) -> String {
+/// feature `authored` defines and every feature in `off`. Empty when nothing
+/// is generated.
+pub fn generated_feature_code(glyphs: &[&Glyph], authored: &str, off: &BTreeSet<String>) -> String {
+    generated_features(glyphs, authored, off)
+        .into_iter()
+        .filter(|feature| feature.on)
+        .map(|feature| feature.code)
+        .collect::<Vec<_>>()
+        .join("\n\n")
+}
+
+/// The features `glyphs`' relationships generate, in the order they are
+/// written, leaving out every feature `authored` defines; those in `off` are
+/// marked as switched off.
+pub fn generated_features(
+    glyphs: &[&Glyph],
+    authored: &str,
+    off: &BTreeSet<String>,
+) -> Vec<GeneratedFeature> {
     let authored = authored_feature_tags(authored);
     let index = GlyphIndex::new(glyphs.iter().copied());
     let mut features: BTreeMap<String, Vec<Rule>> = BTreeMap::new();
@@ -53,21 +103,54 @@ pub fn generated_feature_code(glyphs: &[&Glyph], authored: &str) -> String {
         }
     }
 
-    let mut code = String::new();
-    for (tag, mut rules) in ordered(features) {
-        let ligatures = rules.iter().any(|rule| rule.input.len() > 1);
-        // Longer ligatures first, so f_f_i wins over f_f.
-        rules.sort_by_key(|rule| std::cmp::Reverse(rule.input.len()));
-        let _ = writeln!(code, "feature {tag} {{");
-        if ligatures {
-            let _ = writeln!(code, "    lookupflag IgnoreMarks;");
-        }
-        for rule in rules {
-            let _ = writeln!(code, "    sub {} by {};", rule.input.join(" "), rule.output);
-        }
-        let _ = writeln!(code, "}} {tag};\n");
-    }
-    code.trim_end().to_string()
+    ordered(features)
+        .into_iter()
+        .map(|(tag, mut rules)| {
+            let ligatures = rules.iter().any(|rule| rule.input.len() > 1);
+            // Longer ligatures first, so f_f_i wins over f_f.
+            rules.sort_by_key(|rule| std::cmp::Reverse(rule.input.len()));
+            let mut code = String::new();
+            let _ = writeln!(code, "feature {tag} {{");
+            if ligatures {
+                let _ = writeln!(code, "    lookupflag IgnoreMarks;");
+            }
+            for rule in &rules {
+                let _ = writeln!(code, "    sub {} by {};", rule.input.join(" "), rule.output);
+            }
+            let _ = write!(code, "}} {tag};");
+            GeneratedFeature {
+                on: !off.contains(&tag),
+                tag,
+                code,
+                rules: rules.len(),
+            }
+        })
+        .collect()
+}
+
+/// Where each switched-on feature in `features` sits in the source
+/// [`assembled_feature_source`] builds from `authored`, as UTF-16 ranges, so
+/// problems the compiler finds there can be pointed at their feature.
+pub fn generated_feature_ranges(
+    authored: &str,
+    features: &[GeneratedFeature],
+) -> Vec<(String, std::ops::Range<usize>)> {
+    let units = |text: &str| text.encode_utf16().count();
+    let mut start = if authored.trim().is_empty() {
+        0
+    } else {
+        units(authored) + units("\n\n")
+    };
+    features
+        .iter()
+        .filter(|feature| feature.on)
+        .map(|feature| {
+            let end = start + units(&feature.code);
+            let range = (feature.tag.clone(), start..end);
+            start = end + units("\n\n");
+            range
+        })
+        .collect()
 }
 
 /// One substitution: the glyphs it replaces and the glyph it puts in their place.
@@ -136,7 +219,11 @@ mod tests {
     }
 
     fn generated(glyphs: &[Glyph], authored: &str) -> String {
-        generated_feature_code(&glyphs.iter().collect::<Vec<_>>(), authored)
+        generated_feature_code(
+            &glyphs.iter().collect::<Vec<_>>(),
+            authored,
+            &BTreeSet::new(),
+        )
     }
 
     #[test]
@@ -177,9 +264,53 @@ mod tests {
             "a commented-out block does not take over"
         );
         assert_eq!(
-            assembled_feature_source(&refs, Some(authored)),
+            assembled_feature_source(&refs, Some(authored), &BTreeSet::new()),
             format!("{authored}\n\n{generated}")
         );
+    }
+
+    #[test]
+    fn a_feature_switched_off_is_listed_but_not_compiled() {
+        let glyphs = glyphs(&["a", "a.ss01", "one", "one.tf"]);
+        let refs: Vec<_> = glyphs.iter().collect();
+        let off = BTreeSet::from(["ss01".to_string()]);
+
+        let features = generated_features(&refs, "", &off);
+        let source = assembled_feature_source(&refs, None, &off);
+
+        let ss01 = features
+            .iter()
+            .find(|feature| feature.tag == "ss01")
+            .unwrap();
+        assert!(!ss01.on);
+        assert!(!source.contains("feature ss01"));
+        assert!(source.contains("feature tnum"));
+    }
+
+    #[test]
+    fn feature_ranges_point_into_the_assembled_source() {
+        let glyphs = glyphs(&["a", "a.ss01", "one", "one.tf", "b", "b.ss02"]);
+        let refs: Vec<_> = glyphs.iter().collect();
+        let authored = "# ✓ notes\nfeature liga { sub f i by f_i; } liga;";
+        let off = BTreeSet::from(["ss02".to_string()]);
+        let source: Vec<u16> = assembled_feature_source(&refs, Some(authored), &off)
+            .encode_utf16()
+            .collect();
+        let features = generated_features(&refs, authored, &off);
+
+        let ranges = generated_feature_ranges(authored, &features);
+
+        let tags: Vec<_> = ranges.iter().map(|(tag, _)| tag.as_str()).collect();
+        assert_eq!(
+            tags,
+            ["tnum", "ss01"],
+            "switched-off features take no space"
+        );
+        for (tag, range) in ranges {
+            let code = String::from_utf16(&source[range]).unwrap();
+            assert!(code.starts_with(&format!("feature {tag} {{")));
+            assert!(code.ends_with(&format!("}} {tag};")));
+        }
     }
 
     #[test]

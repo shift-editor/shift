@@ -261,6 +261,15 @@ describe("features can be turned on or off per proof text", () => {
     expect(tags).toEqual(["ccmp", "dlig", "fina", "init", "liga", "medi"]);
   });
 
+  it("lists what a feature substitutes", async () => {
+    const id = (name: string) => editor.font.entryForName(name as GlyphName)!.id;
+
+    expect(await editor.font.featureSubstitutions("liga")).toEqual([
+      { input: [id("f"), id("i")], output: id("f_i") },
+    ]);
+    expect(await editor.font.featureSubstitutions("smcp")).toEqual([]);
+  });
+
   it("turning liga off breaks the ligature and reset brings it back", async () => {
     const runId = editor.text.createRun(editor.text.itemsFromText("fi")).id;
     const names = () =>
@@ -275,6 +284,147 @@ describe("features can be turned on or off per proof text", () => {
 
     editor.history.capture("Reset features", () => editor.text.resetFeatures(runId));
     await expect.poll(names).toEqual(["f_i"]);
+  });
+});
+
+describe("proof text is shaped in a chosen language and script", () => {
+  let editor: TestEditor;
+
+  beforeEach(async () => {
+    editor = new TestEditor();
+    await editor.openSession(SHAPING_TEST, "f");
+    editor.history.capture("Edit Feature Code", () =>
+      editor.font.setFeatureSource(
+        [
+          "languagesystem DFLT dflt;",
+          "languagesystem latn dflt;",
+          "languagesystem latn TRK;",
+          "languagesystem arab dflt;",
+          "feature locl {",
+          "  script latn; language TRK; sub i by f_i;",
+          "  script arab; sub space by noonDotless-ar;",
+          "} locl;",
+        ].join("\n"),
+      ),
+    );
+  });
+
+  const names = (runId: RunId) => () =>
+    editor.text
+      .layoutCell(runId)
+      .peek()
+      ?.placedGlyphs.map((placed) => placed.glyph.glyphName) ?? [];
+
+  it("a language picks its localized forms, and undo drops them", async () => {
+    const runId = editor.text.createRun(editor.text.itemsFromText("i")).id;
+    await expect.poll(names(runId)).toEqual(["i"]);
+
+    editor.history.capture("Set text language", () => editor.text.setLanguage(runId, "tr"));
+    await expect.poll(names(runId)).toEqual(["f_i"]);
+
+    await editor.undo();
+    await expect.poll(names(runId)).toEqual(["i"]);
+  });
+
+  it("a chosen script shapes characters that have no script of their own", async () => {
+    const runId = editor.text.createRun(editor.text.itemsFromText(" ")).id;
+    await expect.poll(names(runId)).toEqual(["space"]);
+
+    editor.history.capture("Set text script", () => editor.text.setScript(runId, "Arab"));
+    await expect.poll(names(runId)).toEqual(["noonDotless-ar"]);
+  });
+
+  it("reports the scripts the text was shaped in, in order of first use", async () => {
+    const runId = editor.text.createRun(editor.text.itemsFromText("بب fi")).id;
+
+    await expect.poll(() => editor.text.scriptsCell(runId).peek()).toEqual(["Arab", "Latn"]);
+  });
+});
+
+describe("proof text lines line up", () => {
+  let editor: TestEditor;
+
+  beforeEach(async () => {
+    editor = new TestEditor();
+    await editor.openSession(SHAPING_TEST, "f");
+  });
+
+  /** Each line's left and right edges. */
+  const edges = (runId: RunId) => () =>
+    editor.text
+      .layoutCell(runId)
+      .peek()
+      ?.lines.map((line) => {
+        const advance = line.runs.reduce((sum, run) => sum + run.advance, 0);
+        return [line.x, line.x + advance];
+      }) ?? [];
+
+  it("follows each line's direction until an alignment is chosen", async () => {
+    const runId = editor.text.createRun(editor.text.itemsFromText("fifi\nب")).id;
+    await expect.poll(() => edges(runId)()[0]).toEqual([0, 1100]);
+
+    // The Arabic line ends where the widest line does.
+    expect(edges(runId)()[1]![1]).toBe(1100);
+  });
+
+  it("centres or right-aligns every line against the widest", async () => {
+    const runId = editor.text.createRun(editor.text.itemsFromText("fifi\nfi")).id;
+    await expect.poll(edges(runId)).toEqual([
+      [0, 1100],
+      [0, 550],
+    ]);
+
+    editor.history.capture("Align text", () => editor.text.setAlign(runId, "center"));
+    await expect.poll(edges(runId)).toEqual([
+      [0, 1100],
+      [275, 825],
+    ]);
+
+    editor.history.capture("Align text", () => editor.text.setAlign(runId, "right"));
+    await expect.poll(edges(runId)).toEqual([
+      [0, 1100],
+      [550, 1100],
+    ]);
+  });
+});
+
+describe("proof text line height and size", () => {
+  let editor: TestEditor;
+
+  beforeEach(async () => {
+    editor = new TestEditor();
+    await editor.openSession(SHAPING_TEST, "f");
+  });
+
+  const baselines = (runId: RunId) => () =>
+    editor.text
+      .layoutCell(runId)
+      .peek()
+      ?.lines.map((line) => line.y) ?? [];
+
+  it("a line height in ems sets the distance between baselines, and Auto returns the font's", async () => {
+    const runId = editor.text.createRun(editor.text.itemsFromText("fi\nfi")).id;
+    await expect.poll(() => baselines(runId)().length).toBe(2);
+    const fontSpacing = baselines(runId)();
+
+    editor.history.capture("Set line height", () => editor.text.setLineHeight(runId, 1.5));
+    expect(baselines(runId)()).toEqual([0, -1500]);
+
+    editor.history.capture("Set line height", () => editor.text.setLineHeight(runId, null));
+    expect(baselines(runId)()).toEqual(fontSpacing);
+  });
+
+  it("changing a run's font size is one undo step", async () => {
+    const node = editor.text.currentRunNodeCell.peek()!;
+    expect(node.size).toBe(1000);
+
+    editor.history.capture("Set font size", () =>
+      editor.scene.updateNode({ id: node.id, size: 72 }),
+    );
+    expect(editor.text.currentRunNodeCell.peek()!.size).toBe(72);
+
+    await editor.undo();
+    expect(editor.text.currentRunNodeCell.peek()!.size).toBe(1000);
   });
 });
 
@@ -510,5 +660,26 @@ describe("editing several glyphs at once", () => {
 
     await editor.undo();
     expect(definition.childGlyphs(run)).toHaveLength(2);
+  });
+});
+
+describe("switching a generated feature off", () => {
+  it("stops it shaping proof text, and undo brings it back", async () => {
+    const editor = new TestEditor();
+    await editor.openSession(SHAPING_TEST, "f");
+    editor.history.capture("Edit Feature Code", () => editor.font.setFeatureSource(null));
+    const runId = editor.text.createRun(editor.text.itemsFromText("fi")).id;
+    const names = () =>
+      editor.text
+        .layoutCell(runId)
+        .peek()
+        ?.placedGlyphs.map((glyph) => glyph.glyph.glyphName) ?? [];
+    await expect.poll(names).toEqual(["f_i"]);
+
+    editor.history.capture("Turn Off liga", () => editor.font.setGeneratedFeatureOn("liga", false));
+
+    await expect.poll(names).toEqual(["f", "i"]);
+    await editor.undo();
+    await expect.poll(names).toEqual(["f_i"]);
   });
 });

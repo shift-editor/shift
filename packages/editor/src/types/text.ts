@@ -1,5 +1,7 @@
 import type { NodeId, RunId, TextItemId } from "@shift/types";
-import type { TextItem } from "../lib/text/layout/types";
+import type { TextAlign, TextItem } from "../lib/text/layout/types";
+
+export type { TextAlign };
 
 /** Caret immediately after an item; null denotes the start of a run. */
 export type TextCaret = TextItemId | null;
@@ -52,4 +54,21 @@ export interface TextRunRecord {
    * as `ss01`; a tag left out keeps the font's default.
    */
   readonly features: Readonly<Record<string, boolean>>;
+  /**
+   * The BCP 47 language the text is shaped as, such as `ur` or `tr`, which
+   * picks the font's localized forms; null uses the font's default language.
+   */
+  readonly language: string | null;
+  /**
+   * An ISO 15924 script, such as `Arab`, that the whole text is shaped in;
+   * null shapes each stretch in the script of its own characters.
+   */
+  readonly script: string | null;
+  /**
+   * The distance between baselines, in ems (1.5 is one and a half ems); null
+   * uses the font's own line spacing: ascender, descender, and line gap.
+   */
+  readonly lineHeight: number | null;
+  /** How lines line up; null follows each line's direction, so Arabic lines sit right. */
+  readonly align: TextAlign | null;
 }

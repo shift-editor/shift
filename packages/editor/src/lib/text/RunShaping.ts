@@ -58,23 +58,33 @@ export function matchShapedParagraphs(
   return keys.map((key) => byKey.get(key) ?? null);
 }
 
-/**
- * Splits items into one shaping request per paragraph.
- *
- * @param features - Features turned on or off by tag; others keep the font's default.
- */
+/** How a run asks to be shaped, besides its text and location. */
+export interface ShapingSettings {
+  /** Features turned on or off by tag; others keep the font's default. */
+  readonly features: Readonly<Record<string, boolean>>;
+  /** A BCP 47 language tag; null for the font's default language. */
+  readonly language: string | null;
+  /** An ISO 15924 script for every run; null for each run's own. */
+  readonly script: string | null;
+}
+
+/** Splits items into one shaping request per paragraph. */
 export function paragraphRequests(
   items: readonly TextItem[],
   location: ParagraphRequest["location"],
-  features: Readonly<Record<string, boolean>>,
+  { features, language, script }: ShapingSettings,
 ): ParagraphRequest[] {
   const settings = Object.entries(features).map(([tag, on]) => ({ tag, value: on ? 1 : 0 }));
+  const languageAndScript = {
+    ...(language === null ? {} : { language }),
+    ...(script === null ? {} : { script }),
+  };
   const paragraphs: ShapeUnit[][] = [[]];
   for (const item of items) {
     if (item.kind === "linebreak") paragraphs.push([]);
     else paragraphs.at(-1)!.push(shapeUnit(item));
   }
-  return paragraphs.map((units) => ({ units, location, features: settings }));
+  return paragraphs.map((units) => ({ units, location, features: settings, ...languageAndScript }));
 }
 
 function shapeUnit(item: GlyphicTextItem): ShapeUnit {

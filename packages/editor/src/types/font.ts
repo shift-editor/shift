@@ -12,7 +12,12 @@ import type {
   LayerId,
   LayerMatch,
   LayerRead,
+  FeatureCodeSettings,
   FeatureDiagnostic,
+  FeatureEdit,
+  FeatureSymbol,
+  GeneratedFeature,
+  FeatureSubstitution,
   FontFeature,
   Location,
   ParagraphRequest,
@@ -76,8 +81,15 @@ export interface WorkspaceEditCoordinator {
   mapLocation(location: Location): Promise<Location>;
   shapeParagraphs(paragraphs: readonly ParagraphRequest[]): Promise<ShapedParagraph[]>;
   features(): Promise<FontFeature[]>;
+  featureSubstitutions(tag: string): Promise<FeatureSubstitution[]>;
   featureSource(): Promise<string | null>;
   featureDiagnostics(): Promise<FeatureDiagnostic[]>;
+  generatedFeatures(): Promise<GeneratedFeature[]>;
+  lintFeatureCode(text: string): Promise<FeatureDiagnostic[]>;
+  formatFeatureCode(text: string): Promise<string>;
+  featureCodeSettings(): Promise<FeatureCodeSettings>;
+  featureSymbolAt(text: string, offset: number): Promise<FeatureSymbol | null>;
+  renameFeatureSymbol(text: string, offset: number, newName: string): Promise<FeatureEdit[] | null>;
   settled(): Promise<void>;
   undo(): Promise<AppliedChange | null>;
   redo(): Promise<AppliedChange | null>;

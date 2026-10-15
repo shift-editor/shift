@@ -224,11 +224,47 @@ export interface BridgeApi {
    */
   shapingFeatures(): Array<FontFeature>
   /**
+   * Returns every substitution a feature can make, ordered by output glyph:
+   * the glyphs each rule replaces and the glyph it puts in their place.
+   * Empty for a positioning feature or a tag the font does not define.
+   */
+  featureSubstitutions(tag: string): Array<FeatureSubstitution>
+  /**
    * Returns the problems the compiler found in the font's feature code, with
    * ranges into the text [`Self::feature_source`] returns. Empty when the
    * code compiles cleanly; errors keep the last valid features shaping.
    */
   featureDiagnostics(): Array<FeatureDiagnostic>
+  /**
+   * Returns the problems in `text`, the feature code being edited: the
+   * linter's, with glyph names checked against the font, and, when `text` is
+   * the font's feature code, the compiler's that the linter does not already
+   * report at the same place.
+   */
+  lintFeatureCode(text: string): Array<FeatureDiagnostic>
+  /**
+   * Returns `text` laid out by the formatter with the font's feature code
+   * settings. Only layout changes; code that doesn't parse stays as written.
+   */
+  formatFeatureCode(text: string): string
+  /** Returns how the font's feature code is linted and formatted. */
+  featureCodeSettings(): FeatureCodeSettings
+  /**
+   * Returns the class, mark class, lookup, or glyph name written at
+   * `offset` (UTF-16) in `text`, with where it's defined and used.
+   */
+  featureSymbolAt(text: string, offset: number): FeatureSymbol | null
+  /**
+   * Returns the edits that rename the class, mark class, or lookup at
+   * `offset` (UTF-16) in `text` to `new_name` everywhere; null when nothing
+   * renameable is there or the name is invalid.
+   */
+  renameFeatureSymbol(text: string, offset: number, newName: string): Array<FeatureEdit> | null
+  /**
+   * Returns the features the glyphs' relationships generate, in the order they
+   * compile after the authored code, leaving out features the code defines.
+   */
+  generatedFeatures(): Array<GeneratedFeature>
   /** Returns the font's authored feature code, or `None` when it has none. */
   featureSource(): string | null
   mapLocation(location: Location): Location
@@ -248,13 +284,44 @@ export interface DocumentState {
   needsSaveAs: boolean
 }
 
-/** A problem the compiler found in the font's feature code. */
+/** A problem the compiler or the linter found in the font's feature code. */
 export interface FeatureDiagnostic {
   severity: "error" | "warning" | "info"
   message: string
   /** Start of the problem, in UTF-16 code units into the feature code. */
   from: number
   /** End of the problem, in UTF-16 code units into the feature code. */
+  to: number
+  /** The lint rule's code, such as `G001`; absent for the compiler's problems. */
+  rule?: string
+  /** Edits that resolve the problem, best first. */
+  fixes: Array<FeatureFix>
+  /**
+   * The generated feature the problem is in, with `from`/`to` relative to
+   * that feature's code; absent for problems in the authored code.
+   */
+  generatedTag?: string
+}
+
+/** Replaces `from..to` of the linted code, in UTF-16 code units, with `text`. */
+export interface FeatureEdit {
+  from: number
+  to: number
+  text: string
+}
+
+/** Edits that resolve a [`FeatureDiagnostic`]. */
+export interface FeatureFix {
+  /** What the fix does, for a quick-fix menu. */
+  title: string
+  /** Whether the fix keeps what the compiled font does; unsafe fixes need checking. */
+  safe: boolean
+  edits: Array<FeatureEdit>
+}
+
+/** A range of feature code, in UTF-16 code units. */
+export interface FeatureRange {
+  from: number
   to: number
 }
 
@@ -263,6 +330,29 @@ export interface FeatureSetting {
   tag: string
   /** `0` turns the feature off, `1` on; larger values pick an alternate. */
   value: number
+}
+
+/** One substitution a feature can make: `input` in the text becomes `output`. */
+export interface FeatureSubstitution {
+  /** The glyphs replaced; more than one for a ligature. */
+  input: Array<GlyphId>
+  output: GlyphId
+}
+
+/**
+ * A class, mark class, lookup, or glyph name in feature code, and every
+ * place it's written.
+ */
+export interface FeatureSymbol {
+  kind: "class" | "markClass" | "lookup" | "glyph"
+  /** The name as written; classes keep their `@`. */
+  name: string
+  /**
+   * Where it's defined: one place for a class or lookup, one per statement
+   * for a mark class, none for a glyph or an undefined name.
+   */
+  definitions: Array<FeatureRange>
+  references: Array<FeatureRange>
 }
 
 export interface FontExportRequest {
@@ -283,6 +373,17 @@ export interface FontFeature {
   name?: string
 }
 
+/** A feature generated from glyph relationships. */
+export interface GeneratedFeature {
+  tag: string
+  /** The complete `feature tag { … } tag;` block. */
+  code: string
+  /** How many substitutions it makes. */
+  rules: number
+  /** Whether it compiles; switched off, it is listed so it can be switched back on. */
+  on: boolean
+}
+
 export interface NewWorkspace {
   familyName?: string
   unitsPerEm?: number
@@ -293,6 +394,11 @@ export interface ParagraphRequest {
   units: Array<ShapeUnit>
   /** User-space location to shape at; omitted axes are at their default. */
   location: Location
+  /**
+   * ISO 15924 script tag, such as `Arab`, to shape every run in; each
+   * run's own script when omitted.
+   */
+  script?: string
   /** BCP 47 language tag; the default language system when omitted. */
   language?: string
   /** Settings over the features applied by default. */
@@ -665,6 +771,22 @@ export interface DesignNormalization {
   maximum: number
 }
 
+/** How a font's feature code is linted and formatted. */
+export interface FeatureCodeSettings {
+  /** The width classes are packed to and long rules wrapped at, in characters. */
+  lineWidth: number
+  /** The indent unit: what the code already uses, tabs, or `indentWidth` spaces. */
+  indent: "auto" | "tab" | "spaces"
+  /** Spaces per level when `indent` is `"spaces"`. */
+  indentWidth: number
+  /** Keep statements aligned by hand aligned, with their columns recomputed. */
+  keepAlignment: boolean
+  /** Lint rules never reported for this font, by code (`G001`) or name. */
+  ignoredRules: Array<string>
+  /** Format the feature code each time the document is saved. */
+  formatOnSave: boolean
+}
+
 /**
  * The authored feature code after a change; its presence distinguishes
  * "unchanged" from a change that removed the code.
@@ -720,6 +842,8 @@ export interface FontIntent {
   updateFontMetadata?: UpdateFontMetadataIntent
   setLanguages?: SetLanguagesIntent
   setFeatureSource?: SetFeatureSourceIntent
+  setFeatureCodeSettings?: SetFeatureCodeSettingsIntent
+  setGeneratedFeatureOn?: SetGeneratedFeatureOnIntent
   createAxis?: CreateAxisIntent
   updateAxis?: UpdateAxisIntent
   deleteAxis?: DeleteAxisIntent
@@ -1184,10 +1308,21 @@ export interface SetContourStartIntent {
   pointId: PointId
 }
 
+/** Replaces how the font's feature code is linted and formatted, as one undoable edit. */
+export interface SetFeatureCodeSettingsIntent {
+  settings: FeatureCodeSettings
+}
+
 /** Replaces the font's authored feature code as one undoable edit. */
 export interface SetFeatureSourceIntent {
   /** The new feature code; absent removes it. */
   source?: string
+}
+
+/** Switches a generated feature on or off as one undoable edit. */
+export interface SetGeneratedFeatureOnIntent {
+  tag: string
+  on: boolean
 }
 
 /** Moves a glyph into a group, or out of its group at `position` without one. */

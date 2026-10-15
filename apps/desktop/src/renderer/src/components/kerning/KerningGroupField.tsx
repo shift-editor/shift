@@ -21,6 +21,7 @@ import {
   cn,
 } from "@shift/ui";
 import { useEditor } from "@/workspace/WorkspaceContext";
+import { sidebarBlock } from "../editor/sidebar-right/SidebarPicker";
 
 /** The glyph edge whose group a pair position names: a first glyph's right, a second's left. */
 const EDGE_LABEL: Readonly<Record<KerningPairPosition, string>> = {
@@ -271,9 +272,6 @@ function GroupList({ position, glyphId, glyphName, current, onDone }: GroupListP
  * The padded sidebar block holding a field: the parent of its section, which
  * starts at the sidebar's inner edge just below a divider.
  */
-function sidebarBlock(field: HTMLElement | null): Element | null {
-  return field?.closest("section")?.parentElement ?? null;
-}
 
 interface CreateGroupPanelProps {
   readonly title: string;

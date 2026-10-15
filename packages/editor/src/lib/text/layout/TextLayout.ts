@@ -15,6 +15,7 @@ import type {
   Line,
   ParagraphSlice,
   Point2D,
+  TextAlign,
   PositionedGlyph,
   PositionedRun,
   SegmentedRun,
@@ -38,6 +39,13 @@ export interface TextLayoutParams {
    * null paragraph, or null for all, lays out literally, glyph by glyph.
    */
   shaped?: readonly (ShapedParagraph | null)[] | null;
+  /**
+   * How lines line up within the widest one; null or absent follows each
+   * line's direction, left for left-to-right and right for right-to-left.
+   */
+  align?: TextAlign | null;
+  /** The distance between baselines in font units; null or absent uses the font's line spacing. */
+  lineHeight?: number | null;
 }
 
 const shapingPositioner = new ShapingPositioner();
@@ -79,6 +87,7 @@ export class TextLayout {
 
   constructor(params: TextLayoutParams) {
     const { items, origin, editor, positioner, externalLocation, shaped = null } = params;
+    const align = params.align ?? null;
     // The active source can be one an edit just deleted, until the editor moves off it.
     const activeSourceId = editor.activeSourceId;
     const activeSource = activeSourceId ? editor.font.source(activeSourceId) : null;
@@ -102,11 +111,17 @@ export class TextLayout {
       clusterEnd: p.clusterStart + p.items.length + 1,
     }));
 
-    const { lines, totalAdvance, bounds } = assembleLayout(paragraphs, origin, this.metrics);
+    const { lines, totalAdvance, bounds } = assembleLayout(
+      paragraphs,
+      origin,
+      this.metrics,
+      align,
+      params.lineHeight ?? null,
+    );
     this.lines = lines;
     this.totalAdvance = totalAdvance;
     this.bounds = bounds;
-    this.placedGlyphs = placeGlyphs(lines, origin);
+    this.placedGlyphs = placeGlyphs(lines);
     const placedByItem = new Map<TextItemId, PlacedGlyph>();
     for (const placed of this.placedGlyphs) {
       for (const itemId of placed.glyph.sourceItemIds) {
@@ -119,7 +134,7 @@ export class TextLayout {
     }
     this.#placedByItem = placedByItem;
     this.#boundaries = graphemeBoundaries(items);
-    this.#stops = lines.map((line, index) => lineStops(line, index, this.placedGlyphs, origin));
+    this.#stops = lines.map((line, index) => lineStops(line, index, this.placedGlyphs));
   }
 
   /**
@@ -390,6 +405,11 @@ function segmentRuns(paragraph: ParagraphSlice, shaped: ShapedParagraph | null):
  *     line 1  baseline y = -1000   ──────────  [C D]
  *     line 2  baseline y = -2000   ──────────  []        ← empty paragraph still gets a line
  *
+ * Lines line up within the widest line: a left-aligned line starts at
+ * `origin.x`, a right-aligned one ends at `origin.x` plus the widest line's
+ * advance, and a centred one sits midway. Without an alignment each line
+ * follows its direction, so Arabic lines sit right.
+ *
  * `totalAdvance` is summed from `run.advance` (which Positioner already
  * computed as the sum of its glyphs' xAdvance).
  *
@@ -407,12 +427,18 @@ function assembleLayout(
   paragraphs: PositionedParagraph[],
   origin: Point2D,
   metrics: SourceMetrics,
+  align: TextAlign | null,
+  chosenLineHeight: number | null,
 ): AssembledLayout {
-  const lineHeight = metrics.ascender - metrics.descender + (metrics.lineGap ?? 0);
+  const lineHeight =
+    chosenLineHeight ?? metrics.ascender - metrics.descender + (metrics.lineGap ?? 0);
+  const advances = paragraphs.map((p) => p.runs.reduce((sum, run) => sum + run.advance, 0));
+  const widest = Math.max(0, ...advances);
 
   const lines: Line[] = paragraphs.map((p, i) => ({
     runs: p.runs,
     direction: p.direction,
+    x: origin.x + alignOffset(align ?? directionAlign(p.direction), widest - advances[i]!),
     y: origin.y - lineHeight * i,
     ascent: metrics.ascender,
     descent: metrics.descender,
@@ -430,10 +456,26 @@ function assembleLayout(
   return { lines, totalAdvance, bounds: null };
 }
 
-function placeGlyphs(lines: readonly Line[], origin: Point2D): PlacedGlyph[] {
+function directionAlign(direction: Direction): TextAlign {
+  return direction === "rtl" ? "right" : "left";
+}
+
+/** How far a line moves right to align it, given the room the widest line leaves it. */
+function alignOffset(align: TextAlign, room: number): number {
+  switch (align) {
+    case "left":
+      return 0;
+    case "center":
+      return room / 2;
+    case "right":
+      return room;
+  }
+}
+
+function placeGlyphs(lines: readonly Line[]): PlacedGlyph[] {
   const placed: PlacedGlyph[] = [];
   for (const [lineIndex, line] of lines.entries()) {
-    let runBase = origin.x;
+    let runBase = line.x;
     for (const [runIndex, run] of line.runs.entries()) {
       for (const glyph of run.glyphs) {
         const left = runBase + glyph.origin.x;
@@ -483,7 +525,6 @@ function lineStops(
   line: Line,
   lineIndex: number,
   placedGlyphs: readonly PlacedGlyph[],
-  origin: Point2D,
 ): CaretStop[] {
   const xs = new Map<number, number>();
   const set = (cluster: number, x: number) => {
@@ -506,7 +547,7 @@ function lineStops(
   for (const placed of onLine) set(placed.glyph.cluster, placed.left);
 
   const advance = line.runs.reduce((sum, run) => sum + run.advance, 0);
-  const lineEnd = line.direction === "rtl" ? origin.x : origin.x + advance;
+  const lineEnd = line.direction === "rtl" ? line.x : line.x + advance;
   const stops: CaretStop[] = [];
   for (let cluster = line.clusterStart; cluster < line.clusterEnd; cluster++) {
     stops.push({ cluster, x: xs.get(cluster) ?? lineEnd });

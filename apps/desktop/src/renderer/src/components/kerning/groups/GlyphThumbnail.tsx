@@ -8,42 +8,64 @@ import { fillGlyph, previewGlyph } from "./previewGlyphs";
 /** The thumbnail's square size, in CSS pixels. */
 const THUMBNAIL_PX = 22;
 
-/** A glyph's outline at the active source or location, fitted into a small square. */
-export function GlyphThumbnail({ glyphId }: { readonly glyphId: GlyphId }) {
+/**
+ * A glyph's outline at the active source or location, fitted into a square.
+ *
+ * @param size - The square's side in CSS pixels; small by default, for lists.
+ */
+export function GlyphThumbnail({
+  glyphId,
+  size = THUMBNAIL_PX,
+}: {
+  readonly glyphId: GlyphId;
+  readonly size?: number;
+}) {
   const editor = useEditor();
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return undefined;
-    const subscription = effect(() => drawThumbnail(canvas, editor, glyphId));
+    const subscription = effect(() => drawThumbnail(canvas, editor, glyphId, size));
     return () => subscription.dispose();
-  }, [editor, glyphId]);
+  }, [editor, glyphId, size]);
 
   return (
     <canvas
       ref={canvasRef}
       aria-hidden="true"
-      width={THUMBNAIL_PX}
-      height={THUMBNAIL_PX}
-      className="size-5.5 shrink-0 text-primary"
+      width={size}
+      height={size}
+      style={{ width: size, height: size }}
+      className="shrink-0 text-primary"
     />
   );
 }
 
-/** Draws one glyph centred on its advance, baseline at a fixed height; reruns on its signals. */
-function drawThumbnail(canvas: HTMLCanvasElement, editor: Editor, glyphId: GlyphId): void {
+/**
+ * Draws one glyph centred on its advance, baseline at a fixed height, into a
+ * thumbnail canvas; inside an effect it reruns on the glyph's signals. Draws
+ * nothing until the glyph is loaded.
+ */
+export function drawThumbnail(
+  canvas: HTMLCanvasElement,
+  editor: Editor,
+  glyphId: GlyphId,
+  size: number = THUMBNAIL_PX,
+): void {
   track(editor.font.metricsCell);
   const glyph = previewGlyph(editor, glyphId);
-  const ratio = window.devicePixelRatio || 1;
-  canvas.width = Math.round(THUMBNAIL_PX * ratio);
-  canvas.height = Math.round(THUMBNAIL_PX * ratio);
+  // The canvas may sit in a tool window, whose pixel ratio and styles are its own.
+  const view = canvas.ownerDocument.defaultView ?? window;
+  const ratio = view.devicePixelRatio || 1;
+  canvas.width = Math.round(size * ratio);
+  canvas.height = Math.round(size * ratio);
   const ctx = canvas.getContext("2d");
   if (!ctx || !glyph) return;
 
-  const scale = (THUMBNAIL_PX * 0.75) / editor.font.metricsCell.peek().unitsPerEm;
-  const x = (THUMBNAIL_PX - glyph.advance * scale) / 2;
-  const baseline = THUMBNAIL_PX * 0.78;
-  ctx.fillStyle = getComputedStyle(canvas).color;
+  const scale = (size * 0.75) / editor.font.metricsCell.peek().unitsPerEm;
+  const x = (size - glyph.advance * scale) / 2;
+  const baseline = size * 0.78;
+  ctx.fillStyle = view.getComputedStyle(canvas).color;
   fillGlyph(ctx, glyph.path, x, baseline, scale, ratio, 1);
 }

@@ -6,6 +6,8 @@ type IconButtonProps = {
   onClick: () => void;
   disabled?: boolean;
   shortcut?: string;
+  /** For a toggle: whether it is on, shown filled and announced as pressed. */
+  pressed?: boolean;
   className?: string;
 };
 
@@ -15,6 +17,7 @@ export const IconButton = ({
   onClick,
   disabled,
   shortcut,
+  pressed,
   className,
 }: IconButtonProps) => (
   <Tooltip
@@ -30,6 +33,8 @@ export const IconButton = ({
     <Button
       aria-label={ariaLabel}
       aria-disabled={disabled || undefined}
+      aria-pressed={pressed}
+      isActive={pressed}
       className={cn(
         "h-6 w-6 bg-icon-button p-1 text-sidebar-icon hover:bg-icon-button-hover",
         className,

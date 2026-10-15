@@ -68,6 +68,8 @@ export type RendererToMain = {
   "window.ready": () => void;
   /** Recolours the native window controls drawn over the sender's title bar (Windows and Linux). */
   "window.setTitleBarColors": (colors: TitleBarColors) => void;
+  /** Keeps the sender's tool window `name` above other windows, or stops keeping it there. */
+  "window.setToolWindowPinned": (name: string, pinned: boolean) => void;
   /** Returns the desktop's window-button layout on Linux, or null where the system draws them. */
   "window.buttonLayout": () => WindowButtonLayout | null;
   /** Returns the Windows and Linux menus for the sender's menu bar; empty on macOS. */
