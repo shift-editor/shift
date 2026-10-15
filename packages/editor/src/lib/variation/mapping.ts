@@ -77,10 +77,7 @@ export function evaluateAxisMappingBasis(
       if (!axis)
         throw new Error(`axis mapping ${mapping.mappingId} references unknown axis ${axisId}`);
       const base = axisLocationValue(location, axis);
-      return [
-        axis.id,
-        denormalizeAxis(normalizeAxis(base, axis) + (adjustments[index] ?? 0), axis),
-      ];
+      return [axis.id, base + (adjustments[index] ?? 0)];
     }),
   ) as unknown as DesignAxisLocation;
 }
@@ -166,21 +163,6 @@ function isIndependent(basis: AxisMappingBasis): boolean {
 
 function axisLocationValue(location: MappingInputLocation, axis: Axis): number {
   return location.get(axis.id) ?? axis.default;
-}
-
-function normalizeAxis(value: number, axis: Axis): number {
-  const minimum = axis.minimum ?? Math.min(...(axis.values ?? [axis.default]));
-  const maximum = axis.maximum ?? Math.max(...(axis.values ?? [axis.default]));
-
-  if (value < axis.default) {
-    const range = axis.default - minimum;
-    return Math.abs(range) < Number.EPSILON ? 0 : (value - axis.default) / range;
-  }
-  if (value > axis.default) {
-    const range = maximum - axis.default;
-    return Math.abs(range) < Number.EPSILON ? 0 : (value - axis.default) / range;
-  }
-  return 0;
 }
 
 function denormalizeAxis(value: number, axis: Axis): number {

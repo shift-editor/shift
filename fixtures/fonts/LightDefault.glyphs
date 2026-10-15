@@ -1,0 +1,46 @@
+{
+.appVersion = "3532";
+.formatVersion = 3;
+familyName = "Light Default";
+unitsPerEm = 1000;
+axes = ({ name = Weight; tag = wght; });
+metrics = ({ type = ascender; });
+fontMaster = (
+{
+id = light;
+name = Light;
+axesValues = (62);
+metricValues = ({ pos = 700; });
+},
+{
+id = bold;
+name = Bold;
+axesValues = (158);
+metricValues = ({ pos = 800; });
+}
+);
+instances = (
+{ name = Light; axesValues = (62); weightClass = 300; },
+{ name = Regular; axesValues = (84); weightClass = 400; },
+{ name = SemiBold; axesValues = (120); weightClass = 600; },
+{ name = Bold; axesValues = (158); weightClass = 700; }
+);
+glyphs = (
+{
+glyphname = A;
+unicode = 65;
+layers = (
+{
+layerId = light;
+width = 400;
+shapes = ({ closed = 1; nodes = ((0,0,l), (62,0,l), (62,700,l), (0,700,l)); });
+},
+{
+layerId = bold;
+width = 600;
+shapes = ({ closed = 1; nodes = ((0,0,l), (158,0,l), (158,700,l), (0,700,l)); });
+}
+);
+}
+);
+}
