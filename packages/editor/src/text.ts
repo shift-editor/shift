@@ -3,15 +3,17 @@ export {
   caretForCluster,
   clusterForCaret,
   deleteText,
+  graphemeCluster,
   selectionRange,
   spliceText,
   wordCluster,
 } from "./lib/text/edit";
-export { glyphTextItem, lineBreakTextItem } from "./lib/text/layout/types";
-export type { GlyphTextItem, SegmentedRun, TextItem } from "./lib/text/layout/types";
-export {
-  fallbackGlyphNameForUnicode,
-  formatCodepointAsUPlus,
-  resolveGlyphNameFromUnicode,
-  textItemFromCodepoint,
-} from "./lib/utils/unicode";
+export { characterTextItem, glyphTextItem, lineBreakTextItem } from "./lib/text/layout/types";
+export type {
+  CharacterTextItem,
+  GlyphicTextItem,
+  GlyphTextItem,
+  SegmentedRun,
+  TextItem,
+} from "./lib/text/layout/types";
+export { fallbackGlyphNameForUnicode, formatCodepointAsUPlus } from "./lib/utils/unicode";

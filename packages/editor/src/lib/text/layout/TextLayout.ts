@@ -5,12 +5,13 @@
  * `origin.y - lineHeight * n`. Cluster is whole-buffer monotonic.
  */
 import type { Bounds as BoundsType } from "@shift/geo";
+import type { GlyphId } from "@shift/types";
 import { Caret } from "./Caret";
 import type {
   CaretPosition,
   TextItem,
   SourceMetrics,
-  GlyphTextItem,
+  GlyphicTextItem,
   Hit,
   Line,
   ParagraphSlice,
@@ -21,6 +22,8 @@ import type {
   TextItemId,
 } from "./types";
 import type { Positioner } from "./Positioner";
+import { ShapingPositioner } from "./ShapingPositioner";
+import type { ShapedRun } from "@shift/types";
 import type { Editor } from "../../editor/Editor";
 import type { Font } from "../../model/Font";
 import type { Signal } from "../../signals/signal";
@@ -32,7 +35,14 @@ export interface TextLayoutParams {
   editor: Editor;
   positioner: Positioner;
   externalLocation: Signal<ExternalAxisLocation>;
+  /**
+   * Each paragraph's shaped runs, from shaping these same items; null lays
+   * every paragraph out literally, glyph by glyph.
+   */
+  shaped?: readonly (readonly ShapedRun[])[] | null;
 }
+
+const shapingPositioner = new ShapingPositioner();
 
 /** One positioned glyph with its layout-local placement resolved. */
 export interface PlacedGlyph {
@@ -66,7 +76,7 @@ export class TextLayout {
   readonly #placedByItem: ReadonlyMap<TextItemId, PlacedGlyph>;
 
   constructor(params: TextLayoutParams) {
-    const { items, origin, editor, positioner, externalLocation } = params;
+    const { items, origin, editor, positioner, externalLocation, shaped = null } = params;
     const activeSourceId = editor.activeSourceId;
     this.metrics = activeSourceId
       ? editor.font.metricsForSource(activeSourceId)
@@ -75,10 +85,14 @@ export class TextLayout {
     this.bufferLength = items.length;
 
     // splitParagraphs → segmentRuns → position → assemble
-    const paragraphs: PositionedParagraph[] = splitParagraphs(items).map((p) => ({
-      runs: segmentRuns(p).map((run) => positioner.position(run, editor, externalLocation)),
+    const paragraphs: PositionedParagraph[] = splitParagraphs(items).map((p, index) => ({
+      runs: segmentRuns(p, shaped?.[index] ?? null).map((run) =>
+        run.shaped
+          ? shapingPositioner.position(run, run.shaped, editor, externalLocation)
+          : positioner.position(run, editor, externalLocation),
+      ),
       clusterStart: p.clusterStart,
-      clusterEnd: p.clusterStart + p.glyphs.length + 1,
+      clusterEnd: p.clusterStart + p.items.length + 1,
     }));
 
     const { lines, totalAdvance, bounds } = assembleLayout(paragraphs, origin, this.metrics);
@@ -89,15 +103,37 @@ export class TextLayout {
     const placedByItem = new Map<TextItemId, PlacedGlyph>();
     for (const placed of this.placedGlyphs) {
       for (const itemId of placed.glyph.sourceItemIds) {
-        if (!placedByItem.has(itemId)) placedByItem.set(itemId, placed);
+        const current = placedByItem.get(itemId);
+        // A character the font decomposes (a base and its dot) answers with the glyph that advances.
+        if (!current || placed.glyph.xAdvance > current.glyph.xAdvance) {
+          placedByItem.set(itemId, placed);
+        }
       }
     }
     this.#placedByItem = placedByItem;
   }
 
-  /** Returns the first glyph an item produced, or null for line breaks and unknown items. */
+  /**
+   * Returns the glyph that stands for an item: its widest glyph when shaping
+   * split it into several, such as a letter body and a separate dot.
+   *
+   * @returns null for line breaks and unknown items.
+   */
   placedGlyphForItem(itemId: TextItemId): PlacedGlyph | null {
     return this.#placedByItem.get(itemId) ?? null;
+  }
+
+  /**
+   * Returns one particular glyph an item produced.
+   *
+   * @returns null when the item produced no such glyph, such as after a reshape replaced it.
+   */
+  placedGlyph(itemId: TextItemId, glyphId: GlyphId): PlacedGlyph | null {
+    return (
+      this.placedGlyphs.find(
+        (placed) => placed.glyph.glyphId === glyphId && placed.glyph.sourceItemIds.includes(itemId),
+      ) ?? null
+    );
   }
 
   /**
@@ -170,8 +206,8 @@ export class TextLayout {
  * Split the flat item buffer into paragraphs on linebreak items.
  *
  * Linebreaks are *separators*, not glyphs — they're excluded from any
- * paragraph's `glyphs` array but they consume a cluster index. The next
- * paragraph's `clusterStart` is `previous.clusterStart + previous.glyphs.length + 1`
+ * paragraph's `items` array but they consume a cluster index. The next
+ * paragraph's `clusterStart` is `previous.clusterStart + previous.items.length + 1`
  * (the +1 is the linebreak itself).
  *
  *   buffer:  [A, B, \n, C, D]                buffer:  [A, \n, \n, B]
@@ -188,21 +224,21 @@ export class TextLayout {
  */
 function splitParagraphs(items: readonly TextItem[]): ParagraphSlice[] {
   const paragraphs: ParagraphSlice[] = [];
-  let glyphs: GlyphTextItem[] = [];
+  let paragraph: GlyphicTextItem[] = [];
   let clusterStart = 0;
 
   items.forEach((item, index) => {
     if (item.kind === "linebreak") {
-      paragraphs.push({ glyphs, clusterStart });
-      glyphs = [];
+      paragraphs.push({ items: paragraph, clusterStart });
+      paragraph = [];
       clusterStart = index + 1;
       return;
     }
-    glyphs.push(item);
+    paragraph.push(item);
   });
 
-  if (glyphs.length > 0 || items.length > 0) {
-    paragraphs.push({ glyphs, clusterStart });
+  if (paragraph.length > 0 || items.length > 0) {
+    paragraphs.push({ items: paragraph, clusterStart });
   }
 
   return paragraphs;
@@ -211,29 +247,37 @@ function splitParagraphs(items: readonly TextItem[]): ParagraphSlice[] {
 /**
  * Segment a single paragraph into runs by direction / script / language.
  *
- * Phase 1: trivial — every paragraph becomes one LTR run, no BiDi or script
- * detection. Returned as a `SegmentedRun[]` (single-element array) so the
- * shape stays stable when Phase 3 introduces real BiDi.
+ * A shaped paragraph takes the shaper's runs: one per script, in logical
+ * order, each carrying its glyphs with clusters made run-relative. Without
+ * shaping, the paragraph is one literal LTR run.
  *
- *   Phase 1 (today):
- *     paragraph: { glyphs: [A, B, C], cs: 0 }
- *     output:    [{ glyphs: [A,B,C], direction: "ltr", clusterStart: 0 }]
+ *   paragraph: { items: ["h","i"," ","ب","ا"], cs: 0 }, shaped
+ *   output:    [
+ *                { items: ["h","i"," "], direction: "ltr", cs: 0, shaped: [...] },
+ *                { items: ["ب","ا"],     direction: "rtl", cs: 3, shaped: [...] },
+ *              ]
  *
- *   Phase 3 (future, with BiDi):
- *     paragraph: { glyphs: ["h","e","l","l","o"," ","ا","ل","ع","ر","ب","ي","ة"], cs: 0 }
- *     output:    [
- *                  { glyphs: ["h","e","l","l","o"," "], direction: "ltr", cs: 0 },
- *                  { glyphs: ["ا","ل","ع","ر","ب","ي","ة"], direction: "rtl", cs: 6 },
- *                ]
- *
+ * Mixed-direction runs stay in logical order until bidi reordering lands.
  * Per-paragraph signature (not paragraphs[]) so paragraph structure is
  * preserved through the pipeline — assembleLayout makes one Line per paragraph,
  * each Line's `runs` field holds however many runs that paragraph produced.
  */
-function segmentRuns(paragraph: ParagraphSlice): SegmentedRun[] {
+function segmentRuns(
+  paragraph: ParagraphSlice,
+  shaped: readonly ShapedRun[] | null,
+): SegmentedRun[] {
+  if (shaped) {
+    return shaped.map((run) => ({
+      items: paragraph.items.slice(run.start, run.end),
+      direction: run.direction,
+      script: run.script,
+      clusterStart: paragraph.clusterStart + run.start,
+      shaped: run.glyphs.map((glyph) => ({ ...glyph, cluster: glyph.cluster - run.start })),
+    }));
+  }
   return [
     {
-      glyphs: paragraph.glyphs,
+      items: paragraph.items,
       direction: "ltr",
       clusterStart: paragraph.clusterStart,
     },

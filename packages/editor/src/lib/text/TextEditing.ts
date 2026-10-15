@@ -14,6 +14,7 @@ import {
   clusterForCaret,
   computeSelectionRects,
   deleteText,
+  graphemeCluster,
   selectionRange,
   spliceText,
   wordCluster,
@@ -139,7 +140,7 @@ export class TextEditing {
     let target = cluster;
     switch (granularity) {
       case "character":
-        target = cluster + direction;
+        target = graphemeCluster(items, cluster, direction);
         break;
       case "word":
         target = wordCluster(items, cluster, direction);

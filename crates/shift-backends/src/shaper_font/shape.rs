@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::ops::Range;
 use std::sync::Arc;
 
 use fontdrasil::coords::UserCoord;
@@ -9,6 +10,7 @@ use harfrust::{
 };
 use shift_font::{ExternalLocation, GlyphId};
 
+use super::itemize::script_runs;
 use super::ShaperFont;
 use crate::traits::FontView;
 
@@ -76,6 +78,35 @@ pub struct ShapeRequest<'a> {
     pub language: Option<&'a str>,
     /// Settings over the features the shaper applies by default.
     pub features: &'a [FeatureSetting],
+}
+
+/// A paragraph and how to shape it: split into runs of one script, each
+/// shaped in that script's direction.
+#[derive(Clone, Copy, Debug)]
+pub struct ParagraphRequest<'a> {
+    pub units: &'a [ShapeUnit],
+    /// Where in the designspace to shape, in user coordinates, as in
+    /// [`ShapeRequest::location`].
+    pub location: &'a ExternalLocation,
+    /// A BCP 47 language tag; `None` uses the default language system.
+    pub language: Option<&'a str>,
+    /// Settings over the features the shaper applies by default, for every run.
+    pub features: &'a [FeatureSetting],
+}
+
+/// One run of a shaped paragraph, in one script and direction.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ShapedRun {
+    /// The paragraph units the run covers. Runs are in logical order and
+    /// together cover every unit.
+    pub units: Range<u32>,
+    /// The run's ISO 15924 script tag, such as `Arab`; `None` when the run
+    /// holds only characters common to all scripts.
+    pub script: Option<String>,
+    pub direction: TextDirection,
+    /// The run's glyphs in visual order. Clusters index the paragraph's units,
+    /// not the run's.
+    pub glyphs: Vec<ShapedGlyph>,
 }
 
 /// One glyph of shaped text.
@@ -179,11 +210,63 @@ impl LiveShaper {
     /// distinct glyphs by name than there are stand-in characters, or names a
     /// script or language the shaper does not know.
     pub fn shape(&self, request: &ShapeRequest) -> Result<Vec<ShapedGlyph>, ShapeError> {
+        Ok(self.shape_run(request)?.0)
+    }
+
+    /// Shapes a paragraph, run by run.
+    ///
+    /// Each run takes the direction of its script, so Arabic and Hebrew runs
+    /// come back right to left. Mixed-direction paragraphs are not reordered:
+    /// runs stay in logical order.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ShapeError`] for the reasons [`Self::shape`] gives.
+    pub fn shape_paragraph(
+        &self,
+        request: &ParagraphRequest,
+    ) -> Result<Vec<ShapedRun>, ShapeError> {
+        script_runs(request.units)
+            .into_iter()
+            .map(|run| {
+                let start = unit_index(run.units.start)?;
+                let end = unit_index(run.units.end)?;
+                let script = run.script.map(|script| script.short_name().to_string());
+                let (mut glyphs, direction) = self.shape_run(&ShapeRequest {
+                    units: &request.units[run.units],
+                    location: request.location,
+                    direction: None,
+                    script: script.as_deref(),
+                    language: request.language,
+                    features: request.features,
+                })?;
+                for glyph in &mut glyphs {
+                    glyph.cluster += start;
+                }
+                Ok(ShapedRun {
+                    units: start..end,
+                    script,
+                    direction,
+                    glyphs,
+                })
+            })
+            .collect()
+    }
+
+    /// Shapes one run and reports the direction it was shaped in.
+    fn shape_run(
+        &self,
+        request: &ShapeRequest,
+    ) -> Result<(Vec<ShapedGlyph>, TextDirection), ShapeError> {
         let mut funcs = LiveFontFuncs {
             characters: &self.characters,
             stand_ins: HashMap::new(),
         };
         let buffer = self.buffer(request, &mut funcs)?;
+        let direction = match buffer.direction() {
+            Direction::RightToLeft => TextDirection::RightToLeft,
+            _ => TextDirection::LeftToRight,
+        };
         let features: Vec<Feature> = request
             .features
             .iter()
@@ -202,7 +285,7 @@ impl LiveShaper {
                 .font_funcs(Some(&mut funcs)),
         );
 
-        Ok(shaped
+        let glyphs = shaped
             .glyph_infos()
             .iter()
             .zip(shaped.glyph_positions())
@@ -214,7 +297,8 @@ impl LiveShaper {
                 x_offset: position.x_offset,
                 y_offset: position.y_offset,
             })
-            .collect())
+            .collect();
+        Ok((glyphs, direction))
     }
 
     /// Fills a buffer with one character per unit, clustered by unit index,
@@ -229,7 +313,7 @@ impl LiveShaper {
         let mut next_stand_in = GLYPH_STAND_INS.clone();
 
         for (index, unit) in request.units.iter().enumerate() {
-            let cluster = u32::try_from(index).map_err(|_| ShapeError::TooManyUnits)?;
+            let cluster = unit_index(index)?;
             let character = match unit {
                 ShapeUnit::Character(character) => *character,
                 ShapeUnit::Glyph(glyph_id) => match stand_ins.get(glyph_id) {
@@ -294,6 +378,15 @@ impl LiveShaper {
         let index = usize::try_from(shaper_glyph).ok()?;
         self.font.glyph_ids.get(index)?.clone()
     }
+}
+
+/// Converts a unit index to the `u32` a cluster holds.
+///
+/// # Errors
+///
+/// Returns [`ShapeError::TooManyUnits`] when the index does not fit.
+fn unit_index(index: usize) -> Result<u32, ShapeError> {
+    u32::try_from(index).map_err(|_| ShapeError::TooManyUnits)
 }
 
 fn iso15924_script(tag: &str) -> Result<Script, ShapeError> {

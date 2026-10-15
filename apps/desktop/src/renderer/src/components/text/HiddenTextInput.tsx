@@ -1,7 +1,8 @@
 import { useCallback, useRef } from "react";
 import { useEditor } from "@/workspace/WorkspaceContext";
+import type { Editor } from "@shift/editor";
 import { useSignalState } from "@shift/editor/signals";
-import { glyphTextItem, lineBreakTextItem, type TextItem } from "@shift/editor/text";
+import { characterTextItem, lineBreakTextItem, type TextItem } from "@shift/editor/text";
 
 /** Receives native text, clipboard, and IME events while a text node is active. */
 export function TextInput() {
@@ -19,12 +20,9 @@ export function TextInput() {
   if (tool?.state.type !== "editing" || !editing) return null;
 
   const insertLiteral = (text: string) => {
-    const items = [...text.replaceAll("\r\n", "\n")].map((char) => {
-      if (char === "\n") return lineBreakTextItem();
-      const codepoint = char.codePointAt(0)!;
-      const handle = editor.font.glyphHandleForUnicode(codepoint);
-      return glyphTextItem(handle.name, codepoint);
-    });
+    const items = [...text.replaceAll("\r\n", "\n")].map((char) =>
+      char === "\n" ? lineBreakTextItem() : characterTextItem(char.codePointAt(0)!),
+    );
     editor.textEditing.insert(items);
   };
 
@@ -87,7 +85,9 @@ export function TextInput() {
         break;
       case "c":
         if (e.metaKey || e.ctrlKey) {
-          const text = textEditing.selectedItems.map(clipboardText).join("");
+          const text = textEditing.selectedItems
+            .map((item) => clipboardText(item, editor))
+            .join("");
           try {
             if (text) await navigator.clipboard?.writeText(text);
           } catch (error) {
@@ -149,8 +149,10 @@ function horizontalGranularity(e: React.KeyboardEvent): "character" | "word" | "
   return "character";
 }
 
-function clipboardText(item: TextItem): string {
+/** Copies a picked glyph as `/name`, which pasting reads back as the same glyph. */
+function clipboardText(item: TextItem, editor: Editor): string {
   if (item.kind === "linebreak") return "\n";
-  if (item.codepoint === null) return `/${item.glyphName}`;
-  return String.fromCodePoint(item.codepoint);
+  if (item.kind === "character") return String.fromCodePoint(item.codepoint);
+  const name = editor.font.entryForId(item.glyphId)?.name;
+  return name ? `/${name}` : "";
 }

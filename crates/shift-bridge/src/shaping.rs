@@ -1,6 +1,6 @@
 use napi_derive::napi;
 use shift_backends::shaper_font::{
-  FeatureSetting, ShapeRequest, ShapeUnit, ShapedGlyph, TextDirection,
+  FeatureSetting, ParagraphRequest, ShapeUnit, ShapedGlyph, ShapedRun, TextDirection,
 };
 use shift_font::{ExternalLocation, GlyphId};
 use shift_wire::bridges::napi::NapiLocation;
@@ -27,17 +27,12 @@ pub struct NapiFeatureSetting {
   pub value: u32,
 }
 
+/// A paragraph to shape, split into runs of one script.
 #[napi(object)]
-pub struct NapiShapeRequest {
+pub struct NapiParagraphRequest {
   pub units: Vec<NapiShapeUnit>,
   /// User-space location to shape at; omitted axes are at their default.
   pub location: NapiLocation,
-  /// Guessed from the script when omitted.
-  #[napi(ts_type = "\"ltr\" | \"rtl\"")]
-  pub direction: Option<String>,
-  /// ISO 15924 script tag such as `Arab`; guessed from the characters when
-  /// omitted.
-  pub script: Option<String>,
   /// BCP 47 language tag; the default language system when omitted.
   pub language: Option<String>,
   /// Settings over the features applied by default.
@@ -73,45 +68,68 @@ impl From<ShapedGlyph> for NapiShapedGlyph {
   }
 }
 
-/// A [`NapiShapeRequest`] with its inputs parsed into the types the shaper
-/// takes.
-pub(crate) struct ParsedShapeRequest {
+/// One run of a shaped paragraph, in one script and direction.
+#[napi(object)]
+pub struct NapiShapedRun {
+  /// First paragraph unit in the run.
+  pub start: u32,
+  /// One past the last paragraph unit in the run.
+  pub end: u32,
+  /// ISO 15924 script tag such as `Arab`; absent when the run holds only
+  /// characters common to all scripts.
+  pub script: Option<String>,
+  #[napi(ts_type = "\"ltr\" | \"rtl\"")]
+  pub direction: String,
+  /// Glyphs in visual order; clusters index the paragraph's units.
+  pub glyphs: Vec<NapiShapedGlyph>,
+}
+
+impl From<ShapedRun> for NapiShapedRun {
+  fn from(run: ShapedRun) -> Self {
+    let direction = match run.direction {
+      TextDirection::LeftToRight => "ltr",
+      TextDirection::RightToLeft => "rtl",
+    };
+    Self {
+      start: run.units.start,
+      end: run.units.end,
+      script: run.script,
+      direction: direction.to_string(),
+      glyphs: run.glyphs.into_iter().map(NapiShapedGlyph::from).collect(),
+    }
+  }
+}
+
+/// A [`NapiParagraphRequest`] with its inputs parsed into the types the
+/// shaper takes.
+pub(crate) struct ParsedParagraphRequest {
   units: Vec<ShapeUnit>,
   location: ExternalLocation,
-  direction: Option<TextDirection>,
-  script: Option<String>,
   language: Option<String>,
   features: Vec<FeatureSetting>,
 }
 
-impl ParsedShapeRequest {
-  pub(crate) fn as_request(&self) -> ShapeRequest<'_> {
-    ShapeRequest {
+impl ParsedParagraphRequest {
+  pub(crate) fn as_request(&self) -> ParagraphRequest<'_> {
+    ParagraphRequest {
       units: &self.units,
       location: &self.location,
-      direction: self.direction,
-      script: self.script.as_deref(),
       language: self.language.as_deref(),
       features: &self.features,
     }
   }
 }
 
-impl TryFrom<NapiShapeRequest> for ParsedShapeRequest {
+impl TryFrom<NapiParagraphRequest> for ParsedParagraphRequest {
   type Error = BridgeError;
 
-  fn try_from(request: NapiShapeRequest) -> BridgeResult<Self> {
+  fn try_from(request: NapiParagraphRequest) -> BridgeResult<Self> {
     let units = request
       .units
       .into_iter()
       .map(shape_unit)
       .collect::<BridgeResult<_>>()?;
     let location = ExternalLocation::from_untyped(crate::bridge::map_location(request.location)?);
-    let direction = request
-      .direction
-      .as_deref()
-      .map(text_direction)
-      .transpose()?;
     let features = request
       .features
       .unwrap_or_default()
@@ -122,8 +140,6 @@ impl TryFrom<NapiShapeRequest> for ParsedShapeRequest {
     Ok(Self {
       units,
       location,
-      direction,
-      script: request.script,
       language: request.language,
       features,
     })
@@ -142,17 +158,6 @@ fn shape_unit(unit: NapiShapeUnit) -> BridgeResult<ShapeUnit> {
     _ => Err(BridgeError::InvalidInput {
       kind: "shape unit",
       value: "needs exactly one of codepoint or glyphId".to_string(),
-    }),
-  }
-}
-
-fn text_direction(direction: &str) -> BridgeResult<TextDirection> {
-  match direction {
-    "ltr" => Ok(TextDirection::LeftToRight),
-    "rtl" => Ok(TextDirection::RightToLeft),
-    _ => Err(BridgeError::InvalidInput {
-      kind: "text direction",
-      value: direction.to_string(),
     }),
   }
 }

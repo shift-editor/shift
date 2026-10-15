@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { TestEditor } from "@/testing/TestEditor";
 import { localPoint, scenePoint } from "@shift/editor/spaces";
-import { clusterForCaret, glyphTextItem } from "@shift/editor/text";
+import { characterTextItem, clusterForCaret } from "@shift/editor/text";
 import type { GlyphNode, TextRunNode } from "@shift/editor/types";
 
 describe("page run text editing", () => {
@@ -42,7 +42,7 @@ describe("page run text editing", () => {
   });
 
   it("returning to Text mode puts the caret after the edited glyph when the old caret's item is gone", async () => {
-    editor.textEditing.insert([glyphTextItem("A", 65)]);
+    editor.textEditing.insert([characterTextItem(65)]);
     editor.escape();
     await editor.undo();
     editor.selectTool("text");
@@ -50,7 +50,7 @@ describe("page run text editing", () => {
   });
 
   it("undo outside Text mode keeps the caret without showing it", async () => {
-    editor.textEditing.insert([glyphTextItem("A", 65)]);
+    editor.textEditing.insert([characterTextItem(65)]);
     editor.escape();
     await editor.undo();
     expect(editor.textEditing.state).toBeNull();
@@ -59,7 +59,7 @@ describe("page run text editing", () => {
   });
 
   it("inserts text and replays content and caret through undo and redo", async () => {
-    editor.textEditing.insert([glyphTextItem("A", 65)]);
+    editor.textEditing.insert([characterTextItem(65)]);
     const item = items()[1]!;
     expect(editor.textEditing.state?.focus).toBe(item.id);
     await editor.undo();
@@ -73,7 +73,7 @@ describe("page run text editing", () => {
   it("typing before the edited glyph pushes it right", () => {
     const before = editor.toScene(child, localPoint(0, 0));
     editor.textEditing.placeAtCluster(0);
-    editor.textEditing.insert([glyphTextItem("A", 65)]);
+    editor.textEditing.insert([characterTextItem(65)]);
     const advance = editor.text.layoutCell(run.runId).peek()!.totalAdvance / 2;
     expect(editor.toScene(child, localPoint(0, 0))).toEqual({ x: before.x + advance, y: before.y });
   });
@@ -108,9 +108,9 @@ describe("page run text editing", () => {
     const prior = editor.textEditing.state?.focus;
     editor.textEditing.selectAll();
     expect(editor.textEditing.selectedItems.map((item) => item.kind)).toEqual([
-      "glyph",
+      "character",
       "linebreak",
-      "glyph",
+      "character",
     ]);
     expect(editor.textEditing.state?.anchor).toBeNull();
     await editor.undo();
@@ -123,9 +123,9 @@ describe("page run text editing", () => {
     editor.textEditing.move(-1, "character");
     expect(editor.textEditing.state?.focus).toBe(items()[1]!.id);
     editor.textEditing.deleteBackward();
-    expect(items().map((item) => item.kind)).toEqual(["glyph", "glyph"]);
+    expect(items().map((item) => item.kind)).toEqual(["character", "character"]);
     await editor.undo();
-    expect(items().map((item) => item.kind)).toEqual(["glyph", "linebreak", "glyph"]);
+    expect(items().map((item) => item.kind)).toEqual(["character", "linebreak", "character"]);
     expect(editor.textEditing.state?.focus).toBe(items()[1]!.id);
   });
 
@@ -134,7 +134,7 @@ describe("page run text editing", () => {
     editor.textEditing.moveVertical(-1, true);
     expect(editor.textEditing.selectedItems.map((item) => item.kind)).toEqual([
       "linebreak",
-      "glyph",
+      "character",
     ]);
     expect(editor.textEditing.state?.focus).toBe(items()[0]!.id);
   });
@@ -144,7 +144,7 @@ describe("page run text editing", () => {
     const initial = layoutCell.peek();
     editor.textEditing.placeAtCluster(0);
     expect(layoutCell.peek()).toBe(initial);
-    editor.textEditing.insert([glyphTextItem("A", 65)]);
+    editor.textEditing.insert([characterTextItem(65)]);
     const populated = layoutCell.peek();
     expect(populated).not.toBe(initial);
     editor.textEditing.move(-1, "character");
@@ -152,16 +152,16 @@ describe("page run text editing", () => {
   });
 
   it("a caret stays on its item when another item is inserted before it", () => {
-    editor.textEditing.insert([glyphTextItem("A", 65)]);
+    editor.textEditing.insert([characterTextItem(65)]);
     const target = items()[1]!.id;
     editor.textEditing.placeAtCluster(0);
-    editor.textEditing.insert([glyphTextItem("A", 65)]);
+    editor.textEditing.insert([characterTextItem(65)]);
     expect(items()[2]?.id).toBe(target);
     expect(clusterForCaret(items(), target)).toBe(3);
   });
 
   it("caret placement maps a point in a scaled run to its cluster", () => {
-    editor.textEditing.insert([glyphTextItem("A", 65)]);
+    editor.textEditing.insert([characterTextItem(65)]);
     editor.scene.updateNode({
       id: run.id,
       size: editor.font.metricsCell.peek().unitsPerEm * 2,
@@ -173,5 +173,42 @@ describe("page run text editing", () => {
     expect(definition.caretAt(node, localPoint(advance * 1.75, 0))).toBe(2);
     expect(definition.caretAt(node, editor.toLocal(node, scenePoint(advance * 3.5, 0)))).toBe(2);
     expect(definition.caretAt(node, localPoint(advance * 10, 0))).toBeNull();
+  });
+
+  it("arrows step over a base and its combining mark as one character", () => {
+    editor.textEditing.insertText("e\u0301x");
+    const start = clusterForCaret(items(), editor.textEditing.state!.focus);
+
+    editor.textEditing.move(-1, "character");
+    editor.textEditing.move(-1, "character");
+
+    expect(clusterForCaret(items(), editor.textEditing.state!.focus)).toBe(start - 3);
+  });
+
+  it("Backspace removes a combining mark alone and Delete removes the whole cluster", () => {
+    editor.textEditing.insertText("e\u0301");
+    editor.textEditing.deleteBackward();
+    expect(items().at(-1)).toMatchObject({ kind: "character", codepoint: 0x65 });
+
+    editor.textEditing.insertText("\u0301x");
+    editor.textEditing.move(-1, "character");
+    editor.textEditing.move(-1, "character");
+    editor.textEditing.deleteForward();
+    expect(items().at(-1)).toMatchObject({ kind: "character", codepoint: 0x78 });
+    expect(items().some((item) => item.kind === "character" && item.codepoint === 0x65)).toBe(
+      false,
+    );
+  });
+
+  it("Option-arrows move to word edges, skipping spaces and punctuation", () => {
+    editor.textEditing.insertText(" hello, world");
+    const end = clusterForCaret(items(), editor.textEditing.state!.focus);
+
+    editor.textEditing.move(-1, "word");
+    expect(clusterForCaret(items(), editor.textEditing.state!.focus)).toBe(end - 5);
+    editor.textEditing.move(-1, "word");
+    expect(clusterForCaret(items(), editor.textEditing.state!.focus)).toBe(end - 12);
+    editor.textEditing.move(1, "word");
+    expect(clusterForCaret(items(), editor.textEditing.state!.focus)).toBe(end - 7);
   });
 });

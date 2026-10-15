@@ -50,6 +50,8 @@ export interface TextPointerTarget {
   readonly node: TextRunNode;
   readonly point: LocalPoint;
   readonly itemId: TextItemId;
+  /** The glyph hit, one of possibly several the item's character shaped into. */
+  readonly glyphId: GlyphId;
 }
 
 export interface CanvasTarget {

@@ -35,6 +35,13 @@ export function spliceText(
   return { items: next, anchor: caret, focus: caret };
 }
 
+/**
+ * Deletes the selection, or one step from a collapsed caret.
+ *
+ * @remarks
+ * Backward removes one code point, so a combining mark goes before its base;
+ * forward removes a whole grapheme cluster.
+ */
 export function deleteText(
   items: readonly TextItem[],
   anchor: TextCaret,
@@ -44,7 +51,7 @@ export function deleteText(
   let { start, end } = selectionRange(items, anchor, focus);
   if (start === end) {
     if (direction === -1) start = Math.max(0, start - 1);
-    else end = Math.min(items.length, end + 1);
+    else end = graphemeCluster(items, end, 1);
   }
   if (start === end) return null;
   const next = [...items.slice(0, start), ...items.slice(end)];
@@ -52,29 +59,69 @@ export function deleteText(
   return { items: next, anchor: caret, focus: caret };
 }
 
+const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+const words = new Intl.Segmenter(undefined, { granularity: "word" });
+
+/** A segment of the items, in item indexes. */
+interface ItemSegment {
+  readonly start: number;
+  readonly end: number;
+  readonly isWordLike: boolean;
+}
+
+/**
+ * Segments items with a Unicode segmenter.
+ *
+ * @remarks
+ * Each item reads as one code point: a line break as `\n` and a picked glyph
+ * as U+FFFC, the object replacement character, so it stands alone like an
+ * inline object.
+ */
+function segmentItems(items: readonly TextItem[], segmenter: Intl.Segmenter): ItemSegment[] {
+  let text = "";
+  const itemAt = new Map<number, number>();
+  items.forEach((item, index) => {
+    itemAt.set(text.length, index);
+    if (item.kind === "character") text += String.fromCodePoint(item.codepoint);
+    else text += item.kind === "linebreak" ? "\n" : "\uFFFC";
+  });
+  itemAt.set(text.length, items.length);
+
+  return [...segmenter.segment(text)].map((segment) => ({
+    start: itemAt.get(segment.index)!,
+    end: itemAt.get(segment.index + segment.segment.length)!,
+    isWordLike: segment.isWordLike ?? false,
+  }));
+}
+
+/**
+ * Returns the next caret cluster one user-perceived character away.
+ *
+ * @remarks
+ * Steps over a whole grapheme cluster, so a base and its combining marks, or
+ * an emoji sequence, move as one.
+ */
+export function graphemeCluster(
+  items: readonly TextItem[],
+  cluster: number,
+  direction: -1 | 1,
+): number {
+  const segments = segmentItems(items, graphemes);
+  if (direction === 1) return segments.find((segment) => segment.end > cluster)?.end ?? cluster;
+  return segments.findLast((segment) => segment.start < cluster)?.start ?? cluster;
+}
+
+/** Returns the end of the next word, or the start of the previous one. */
 export function wordCluster(
   items: readonly TextItem[],
   cluster: number,
   direction: -1 | 1,
 ): number {
-  let pos = cluster;
-  const whitespace = (item: TextItem) =>
-    item.kind === "linebreak" ||
-    (item.kind === "glyph" && (item.codepoint === 32 || item.codepoint === 9));
-  const punctuation = (item: TextItem) =>
-    item.kind === "glyph" &&
-    item.codepoint !== null &&
-    ((item.codepoint >= 0x21 && item.codepoint <= 0x2f) ||
-      (item.codepoint >= 0x3a && item.codepoint <= 0x40) ||
-      (item.codepoint >= 0x5b && item.codepoint <= 0x60) ||
-      (item.codepoint >= 0x7b && item.codepoint <= 0x7e));
-  if (direction === -1) {
-    while (pos > 0 && whitespace(items[pos - 1]!)) pos--;
-    while (pos > 0 && !whitespace(items[pos - 1]!) && !punctuation(items[pos - 1]!)) pos--;
-  } else {
-    while (pos < items.length && !whitespace(items[pos]!) && !punctuation(items[pos]!)) pos++;
+  const segments = segmentItems(items, words).filter((segment) => segment.isWordLike);
+  if (direction === 1) {
+    return segments.find((segment) => segment.end > cluster)?.end ?? items.length;
   }
-  return pos;
+  return segments.findLast((segment) => segment.start < cluster)?.start ?? 0;
 }
 
 /** Returns advance-based selection rectangles; structural linebreaks own no fill. */

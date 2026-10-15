@@ -1,0 +1,23 @@
+languagesystem DFLT dflt;
+languagesystem latn dflt;
+languagesystem arab dflt;
+
+feature ccmp {
+    sub noon-ar by noonDotless-ar dotabove-ar;
+} ccmp;
+
+feature liga {
+    sub f i by f_i;
+} liga;
+
+feature init {
+    sub beh-ar by beh-ar.init;
+} init;
+
+feature medi {
+    sub beh-ar by beh-ar.medi;
+} medi;
+
+feature fina {
+    sub beh-ar by beh-ar.fina;
+} fina;
