@@ -14,6 +14,7 @@ import type {
   FeatureEdit,
   FeatureSymbol,
   GeneratedFeature,
+  FeatureSubstitution,
   FontFeature,
   Location,
   ParagraphRequest,
@@ -328,6 +329,10 @@ export class WorkspaceEditCoordinator {
   /** Lists the font's features behind pending edits. */
   features(): Promise<FontFeature[]> {
     return this.#withFlush(() => this.#session.features());
+  }
+
+  featureSubstitutions(tag: string): Promise<FeatureSubstitution[]> {
+    return this.#withFlush(() => this.#session.featureSubstitutions(tag));
   }
 
   generatedFeatures(): Promise<GeneratedFeature[]> {

@@ -106,7 +106,7 @@ export class PenOverlay extends CanvasItem<PenOverlayProps> {
     const nodePoint = this.#editor.toLocal(node, pointer.scene);
     const stroke = PenStroke.active(this.#pen);
     const target = stroke
-      ? PenTargets.forGeometry(stroke.layer.geometry).at(nodePoint, this.#editor.hitRadius)
+      ? PenTargets.forGeometry(stroke.layer.geometry).at(nodePoint, this.#editor.hitRadiusIn(node))
       : null;
     const modifiers = normalizeModifiers(this.#editor.input.modifiersCell.peek());
     const anchor =

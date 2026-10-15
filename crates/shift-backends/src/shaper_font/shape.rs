@@ -24,6 +24,8 @@ pub type ShapedRun = shift_shape::ShapedRun<GlyphId>;
 /// the feature source contributes: every glyph's own advance is zero while
 /// shaping, so the caller adds live advances, kerning, and mark attachment.
 pub type ShapedGlyph = shift_shape::ShapedGlyph<GlyphId>;
+/// One substitution a feature can make: `input` in the text becomes `output`.
+pub type Substitution = shift_shape::Substitution<GlyphId>;
 
 /// Shapes text with a [`ShaperFont`], taking characters from the live font.
 ///
@@ -83,6 +85,17 @@ impl LiveShaper {
         let coords = self.normalized_coords(request.location);
         self.shaper
             .shape_paragraph(&self.glyphs, &request.at(coords.as_slice()))
+    }
+
+    /// Returns every substitution a feature can make, in Shift glyph ids;
+    /// see [`Shaper::feature_substitutions`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ShapeError::InvalidFont`] when the shaper font's `GSUB`
+    /// cannot be read.
+    pub fn feature_substitutions(&self, tag: &str) -> Result<Vec<Substitution>, ShapeError> {
+        self.shaper.feature_substitutions(&self.glyphs, tag)
     }
 
     /// Normalizes `location` on the shaper font's axes, in `fvar` order.

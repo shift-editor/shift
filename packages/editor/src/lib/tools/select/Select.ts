@@ -55,7 +55,7 @@ export class Select extends BaseTool<SelectState, Select> {
     const drop = EndpointDrop.fromSelection(this.editor);
     if (!drop) return false;
 
-    return drop.targetWithin(this.editor.hitRadius) !== null;
+    return drop.targetWithin(this.editor.hitRadiusIn(drop.node)) !== null;
   }
 
   override getCursor(state: SelectState): CursorType {

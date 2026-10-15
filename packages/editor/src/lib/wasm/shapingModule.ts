@@ -93,12 +93,13 @@ export class RegisteredShaper {
   #input(paragraph: ParagraphRequest): ParagraphInput {
     const units = paragraph.units.map((unit) => this.#unit(unit));
     const location = this.#axisIds.map((axisId) => paragraph.location.values[axisId] ?? NaN);
+    const script = paragraph.script ? tagNumber(paragraph.script) : 0;
     const language = paragraph.language ? codeUnits(paragraph.language) : [];
     const features = (paragraph.features ?? []).map(({ tag, value: setting }) => ({
       tag: tagNumber(tag),
       setting,
     }));
-    return { units, location, language, features };
+    return { units, location, script, language, features };
   }
 
   /** A code point, or `-(glyph + 1)` for a glyph inserted by name. */

@@ -255,9 +255,86 @@ fn paragraph<'a>(units: &'a [ShapeUnit], location: &'a ExternalLocation) -> Para
     ParagraphRequest {
         units,
         location,
+        script: None,
         language: None,
         features: &[],
     }
+}
+
+/// A font whose Arabic script swaps the digit one, and whose Urdu language swaps four.
+fn arabic_digits_font() -> Font {
+    font_with(
+        &[
+            ("one", Some('1')),
+            ("one.arab", None),
+            ("four-persian", Some('\u{06F4}')),
+            ("four-persian.urdu", None),
+        ],
+        "languagesystem DFLT dflt;
+         languagesystem arab dflt;
+         languagesystem arab URD;
+         feature locl {
+             script arab;
+             sub one by one.arab;
+             language URD;
+             sub four-persian by four-persian.urdu;
+         } locl;",
+    )
+}
+
+#[test]
+fn a_chosen_script_shapes_characters_that_have_none_of_their_own() {
+    let font = arabic_digits_font();
+    let location = ExternalLocation::new();
+    let units = characters("1");
+    let shaper = shaper(&font);
+
+    let detected = shaper
+        .shape_paragraph(&paragraph(&units, &location))
+        .unwrap();
+    let chosen = shaper
+        .shape_paragraph(&ParagraphRequest {
+            script: Some("Arab"),
+            ..paragraph(&units, &location)
+        })
+        .unwrap();
+
+    assert_eq!(
+        names_and_clusters(&font, &detected.runs[0].glyphs),
+        vec![named("one", 0)]
+    );
+    assert_eq!(chosen.runs[0].script.as_deref(), Some("Arab"));
+    assert_eq!(
+        names_and_clusters(&font, &chosen.runs[0].glyphs),
+        vec![named("one.arab", 0)]
+    );
+}
+
+#[test]
+fn a_language_selects_its_localized_forms() {
+    let font = arabic_digits_font();
+    let location = ExternalLocation::new();
+    let units = characters("\u{06F4}");
+    let shaper = shaper(&font);
+
+    let default = shaper
+        .shape_paragraph(&paragraph(&units, &location))
+        .unwrap();
+    let urdu = shaper
+        .shape_paragraph(&ParagraphRequest {
+            language: Some("ur"),
+            ..paragraph(&units, &location)
+        })
+        .unwrap();
+
+    assert_eq!(
+        names_and_clusters(&font, &default.runs[0].glyphs),
+        vec![named("four-persian", 0)]
+    );
+    assert_eq!(
+        names_and_clusters(&font, &urdu.runs[0].glyphs),
+        vec![named("four-persian.urdu", 0)]
+    );
 }
 
 #[test]
@@ -438,4 +515,70 @@ fn a_feature_written_in_code_replaces_the_generated_one() {
     let shaped = shaper(&font).shape(&request(&units, &location)).unwrap();
 
     assert_eq!(names_and_clusters(&font, &shaped), vec![named("x", 0)]);
+}
+
+#[test]
+fn a_feature_lists_the_glyphs_it_brings_in_contextual_ones_included() {
+    let font = font_with(
+        &[
+            ("a", Some('a')),
+            ("b", Some('b')),
+            ("a.ss01", None),
+            ("a.alt", None),
+            ("b.ss01", None),
+        ],
+        "languagesystem DFLT dflt;
+         feature ss01 { sub a by a.ss01; sub b by b.ss01; } ss01;
+         feature calt { sub a' b by a.alt; } calt;",
+    );
+    let shaper = shaper(&font);
+    let rules = |tag: &str| substitution_names(&font, &shaper.feature_substitutions(tag).unwrap());
+
+    assert_eq!(rules("ss01"), ["a -> a.ss01", "b -> b.ss01"]);
+    assert_eq!(rules("calt"), ["a -> a.alt"]);
+    assert!(rules("smcp").is_empty());
+}
+
+#[test]
+fn a_feature_lists_glyphs_it_makes_from_glyphs_no_character_reaches() {
+    let font = font_with(
+        &[
+            ("one", Some('1')),
+            ("one.osf", None),
+            ("one.tf", None),
+            ("one.osf.tf", None),
+        ],
+        "languagesystem DFLT dflt;
+         feature onum { sub one by one.osf; } onum;
+         feature tnum { sub one by one.tf; sub one.osf by one.osf.tf; } tnum;",
+    );
+    let shaper = shaper(&font);
+    let rules = substitution_names(&font, &shaper.feature_substitutions("tnum").unwrap());
+
+    assert_eq!(rules, ["one -> one.tf", "one.osf -> one.osf.tf"]);
+}
+
+#[test]
+fn a_ligature_lists_every_glyph_it_replaces() {
+    let font = font_with(
+        &[("f", Some('f')), ("i", Some('i')), ("f_i", None)],
+        "languagesystem DFLT dflt;
+         feature liga { sub f i by f_i; } liga;",
+    );
+    let shaper = shaper(&font);
+    let rules = substitution_names(&font, &shaper.feature_substitutions("liga").unwrap());
+
+    assert_eq!(rules, ["f i -> f_i"]);
+}
+
+/// Each substitution as `input names -> output name`.
+fn substitution_names(font: &Font, substitutions: &[Substitution]) -> Vec<String> {
+    let name = |id: &GlyphId| font.glyph(id).unwrap().name().to_string();
+    substitutions
+        .iter()
+        .map(|rule| {
+            let input: Vec<String> = rule.input.iter().map(name).collect();
+            format!("{} -> {}", input.join(" "), name(&rule.output))
+        })
+        .collect()
 }

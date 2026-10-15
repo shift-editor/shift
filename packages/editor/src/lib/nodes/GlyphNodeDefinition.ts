@@ -85,8 +85,15 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
   /** Node-scoped variation outlines rendered by this glyph behavior plugin. */
   readonly outlines = new GlyphOutlines();
 
-  unitsTransform(_node: GlyphNode): Mat {
-    return Mat.Scale(1, -1);
+  /**
+   * Flips font units to Y-down; a glyph edited inside text also takes the
+   * text's size, so it stays the size of the glyphs around it.
+   */
+  unitsTransform(node: GlyphNode): Mat {
+    const parent = node.parentId === null ? null : this.editor.scene.node(node.parentId);
+    const scale =
+      parent?.kind === "textRun" ? this.editor.nodeDefinition("textRun").emScale(parent) : 1;
+    return Mat.Scale(scale, -scale);
   }
 
   bounds(node: GlyphNode): LocalBounds | null {
@@ -152,7 +159,8 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     const glyphId = this.editor.glyphIdOf(node);
     if (!geometry || !glyphId) return null;
 
-    const hit = geometry.hitAt(point, this.editor.hitRadius);
+    const radius = this.editor.hitRadiusIn(node);
+    const hit = geometry.hitAt(point, radius);
     if (hit) {
       switch (hit.kind) {
         case "segment": {
@@ -194,8 +202,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
       const contour = contours[index];
       const component = contour?.component;
       if (!component) continue;
-      if (!contour.segments().some((segment) => segment.hit(point, this.editor.hitRadius)))
-        continue;
+      if (!contour.segments().some((segment) => segment.hit(point, radius))) continue;
 
       const componentId = component.componentPath[0];
       if (!componentId) continue;

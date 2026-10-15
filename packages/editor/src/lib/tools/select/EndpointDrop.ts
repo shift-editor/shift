@@ -5,14 +5,18 @@ import type { Editor } from "../../editor/Editor";
 import type { GlyphLayer } from "../../model/Glyph";
 import type { ContourEnd } from "../../model/JoinContours";
 import { objectIsKindOf } from "../../../types/object";
+import type { GlyphNode } from "../../../types/node";
 
 /** A lone selected open end point being dragged, which may land on another open end. */
 export class EndpointDrop {
+  /** The glyph node the end is edited in; hit radii are measured in its units. */
+  readonly node: GlyphNode;
   readonly #layer: GlyphLayer;
   readonly #pointId: PointId;
   readonly #end: ContourEnd;
 
-  private constructor(layer: GlyphLayer, pointId: PointId, end: ContourEnd) {
+  private constructor(node: GlyphNode, layer: GlyphLayer, pointId: PointId, end: ContourEnd) {
+    this.node = node;
     this.#layer = layer;
     this.#pointId = pointId;
     this.#end = end;
@@ -30,7 +34,10 @@ export class EndpointDrop {
     const side = contour ? openEndSide(contour, object.pointId) : null;
     if (!side) return null;
 
-    return new EndpointDrop(object.layer, object.pointId, { contourId: object.contourId, side });
+    return new EndpointDrop(object.node, object.layer, object.pointId, {
+      contourId: object.contourId,
+      side,
+    });
   }
 
   /** The nearest other open end within `radius` of the dragged end's current position. */

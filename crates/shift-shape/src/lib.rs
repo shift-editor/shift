@@ -19,6 +19,7 @@ mod breaks;
 mod itemize;
 mod shape;
 mod source;
+mod substitutions;
 
 pub use axis::AxisNormalization;
 pub use breaks::{line_breaks, LineBreak};
@@ -28,6 +29,7 @@ pub use shape::{
     ShapedRun, Shaper, TextDirection,
 };
 pub use source::{character_glyphs, FontGlyphs, GlyphSource, NOTDEF};
+pub use substitutions::Substitution;
 
 /// One unit of text to shape, naming inserted glyphs by `G`, the host's
 /// glyph identity.

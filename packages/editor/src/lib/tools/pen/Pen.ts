@@ -206,7 +206,7 @@ export class Pen extends BaseTool<PenState, Pen> {
 
     const nodePoint = this.editor.toLocal(stroke.node, pos.scene);
     const targets = PenTargets.forGeometry(stroke.layer.geometry);
-    const target = targets.at(nodePoint, this.editor.hitRadius);
+    const target = targets.at(nodePoint, this.editor.hitRadiusIn(stroke.node));
     const activeEndpoint = stroke.activeEndpoint;
 
     switch (target.type) {

@@ -48,6 +48,8 @@ layout! {
         pub units: Vec<f64>,
         /// The user coordinate on each shaper axis, in order; NaN for the axis default.
         pub location: Vec<f64>,
+        /// An ISO 15924 script tag's four bytes, big-endian, to shape every run in; 0 for each run's own script.
+        pub script: f64,
         /// A BCP 47 language tag as UTF-16 code units; empty for the default language system.
         pub language: Vec<f64>,
         pub features: Vec<FeatureInput>,
@@ -259,6 +261,9 @@ mod exports {
                 .collect();
             String::from_utf16_lossy(&code_units)
         });
+        let script = whole(paragraph.script)
+            .filter(|&tag| tag != 0)
+            .map(|tag| Tag::from_u32(tag).to_string());
         let features = paragraph
             .features
             .iter()
@@ -275,6 +280,7 @@ mod exports {
             &ParagraphRequest {
                 units: &units,
                 location: coords.as_slice(),
+                script: script.as_deref(),
                 language: language.as_deref(),
                 features: &features,
             },

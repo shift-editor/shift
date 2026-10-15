@@ -241,7 +241,7 @@ export class Translate implements SelectBehavior {
     if (!drag) return;
 
     const drop = EndpointDrop.fromSelection(editor);
-    const target = drop?.targetWithin(editor.hitRadius) ?? null;
+    const target = drop?.targetWithin(editor.hitRadiusIn(drop.node)) ?? null;
     if (!drop || !target) {
       drag.commit();
       return;

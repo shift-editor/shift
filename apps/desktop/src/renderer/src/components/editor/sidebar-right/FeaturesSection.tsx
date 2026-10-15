@@ -1,107 +1,34 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import type { TextRunRecord } from "@shift/editor/text";
 import type { FontFeature } from "@shift/types";
-import { useSignalState } from "@shift/editor/signals";
-import {
-  Button,
-  cn,
-  Input,
-  Menu,
-  MenuItem,
-  MenuPopup,
-  MenuPortal,
-  MenuPositioner,
-  MenuTrigger,
-  RotateCcw,
-  Search,
-  Switch,
-  Tooltip,
-} from "@shift/ui";
-import ErrorIcon from "@/assets/general/error.svg";
-import HorizontalEllipsis from "@/assets/general/horizontal-ellipsis.svg";
+import { Button, cn, Input, Search, Tooltip, X } from "@shift/ui";
 import { useEditor } from "@/workspace/WorkspaceContext";
-import { SidebarSection } from "./SidebarSection";
 import { featureName } from "../featureNames";
-import { featureCodeOpenCell } from "../feature-code/featureCodeState";
-
-/** Features a script's shaping needs or export generates; they stay out of the list. */
-const REQUIRED_FEATURES = new Set([
-  "aalt",
-  "abvf",
-  "abvm",
-  "abvs",
-  "akhn",
-  "blwf",
-  "blwm",
-  "blws",
-  "ccmp",
-  "cfar",
-  "cjct",
-  "curs",
-  "dist",
-  "fin2",
-  "fin3",
-  "fina",
-  "half",
-  "haln",
-  "init",
-  "isol",
-  "kern",
-  "ljmo",
-  "locl",
-  "mark",
-  "med2",
-  "medi",
-  "mkmk",
-  "nukt",
-  "pref",
-  "pres",
-  "pstf",
-  "psts",
-  "rclt",
-  "rkrf",
-  "rlig",
-  "rphf",
-  "rvrn",
-  "stch",
-  "tjmo",
-  "vjmo",
-  "vatu",
-]);
-
-/** Features a shaper applies unless told otherwise; every other listed feature starts off. */
-const ON_BY_DEFAULT = new Set(["calt", "clig", "liga"]);
+import { FeaturePreviewPopover, TAG_PILL, useFeatureHighlight } from "./FeaturesPanel";
+import { groupFeatures, onByDefault, useFontFeatures } from "./fontFeatures";
+import { SidebarSection } from "./SidebarSection";
+import { useTextSettingsRun } from "./TextSection";
 
 /**
- * The font's features for the proof text the user is working in, each on or
- * off. A feature set away from the font's default reads in full; ones left
- * at the default are muted, as Kerning mutes unset values.
+ * Every feature the text can turn on or off, grouped under headings, so
+ * rows never come and go; the search icon narrows them by tag or name. As
+ * in Fontra and FontGoggles, each row's dot shows its setting and cycles it
+ * on click: solid green on, solid red off; at the font's default, pale
+ * green when that is on and grey when it is off. Hovering a tag highlights
+ * what it changes in the text; clicking it previews the glyphs it brings in.
  */
 export const FeaturesSection = () => {
-  const editor = useEditor();
-  const run = useSignalState(editor.text.currentRunCell);
+  const target = useTextSettingsRun();
   const features = useFontFeatures();
-  const errorCount = useFeatureErrorCount();
+  // The previewed feature and the tag that opened it, which the preview sits beside.
+  const [preview, setPreview] = useState<{ feature: FontFeature; anchor: HTMLElement } | null>(
+    null,
+  );
   // null while the search field is closed.
   const [query, setQuery] = useState<string | null>(null);
-  // The section always offers the feature code; its switches need proof text to apply to.
-  if (!run || features.length === 0) {
-    const hint = features.length === 0 ? "No features yet" : "Select proof text to set features";
-    return (
-      <SidebarSection
-        title="Features"
-        actions={
-          <div className="flex items-center">
-            {errorCount > 0 ? <FeatureErrorBadge count={errorCount} /> : null}
-            <FeaturesMenu canReset={false} onReset={() => {}} />
-          </div>
-        }
-      >
-        <p className="flex h-6 items-center text-ui text-secondary">{hint}</p>
-      </SidebarSection>
-    );
-  }
+  if (!target || features.length === 0) return null;
+  const { run } = target;
 
-  const overridden = Object.keys(run.features).length > 0;
   const needle = query?.trim().toLowerCase() ?? "";
   const shown = needle
     ? features.filter(
@@ -110,258 +37,192 @@ export const FeaturesSection = () => {
           (featureName(feature)?.toLowerCase().includes(needle) ?? false),
       )
     : features;
-  const setFeature = (tag: string, on: boolean | null) =>
-    editor.history.capture(
-      on === null ? `Use default ${tag}` : `Turn ${on ? "on" : "off"} ${tag}`,
-      () =>
-        // Back at the font's default, the feature stops being an override.
-        editor.text.setFeature(run.id, tag, on === ON_BY_DEFAULT.has(tag) ? null : on),
-    );
 
   return (
     <SidebarSection
       title="Features"
       actions={
-        <div className="flex items-center">
-          {errorCount > 0 ? <FeatureErrorBadge count={errorCount} /> : null}
-          <Tooltip content="Search features">
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label="Search features"
-              aria-pressed={query !== null}
-              isActive={query !== null}
-              className="text-sidebar-icon"
-              onClick={() => setQuery((current) => (current === null ? "" : null))}
-            >
-              <Search aria-hidden className="h-3.5 w-3.5" />
-            </Button>
-          </Tooltip>
-          <FeaturesMenu
-            canReset={overridden}
-            onReset={() =>
-              editor.history.capture("Reset features", () => editor.text.resetFeatures(run.id))
-            }
-          />
-        </div>
+        <Tooltip content="Search features">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Search features"
+            className="text-sidebar-icon"
+            onClick={() => setQuery("")}
+          >
+            <Search aria-hidden className="h-3.5 w-3.5" />
+          </Button>
+        </Tooltip>
       }
+      header={query === null ? undefined : <SearchField query={query} onChange={setQuery} />}
     >
-      {query !== null ? (
-        <Input
-          autoFocus
-          aria-label="Search features"
-          placeholder="Search features..."
-          icon={<Search aria-hidden className="h-3 w-3 text-muted" />}
-          iconPosition="left"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          onKeyDown={(event) => {
-            // Keep Escape and typing out of the canvas's shortcuts.
-            event.nativeEvent.stopImmediatePropagation();
-            if (event.key === "Escape") setQuery(null);
-          }}
-        />
-      ) : null}
-      {/* About ten rows tall at most; a font with many features scrolls inside the section. */}
-      <ul className="flex max-h-80 scrollbar-hidden flex-col gap-1.5 overflow-y-auto">
-        {shown.length === 0 ? (
-          <li className="flex h-6 shrink-0 items-center text-ui text-secondary">
-            No matching features
-          </li>
-        ) : null}
-        {shown.map((feature) => (
-          <FeatureRow
-            key={feature.tag}
-            feature={feature}
-            override={run.features[feature.tag] ?? null}
-            onChange={(on) => setFeature(feature.tag, on)}
-          />
-        ))}
-      </ul>
+      {shown.length === 0 ? (
+        <p className="flex h-6 items-center text-ui text-secondary">No matching features</p>
+      ) : (
+        // Eight rows, then the list scrolls.
+        <div className="scrollbar-hidden flex max-h-62 flex-col gap-2 overflow-y-auto">
+          {groupFeatures(shown).map((group) => (
+            <section key={group.title} aria-label={group.title} className="flex flex-col gap-2">
+              <h4 className="flex h-5 items-end text-ui text-secondary">{group.title}</h4>
+              {group.features.map((feature) => (
+                <FeatureRow
+                  key={feature.tag}
+                  run={run}
+                  feature={feature}
+                  previewing={preview?.feature.tag === feature.tag}
+                  onPreview={(anchor) =>
+                    setPreview((current) =>
+                      current?.feature.tag === feature.tag ? null : { feature, anchor },
+                    )
+                  }
+                />
+              ))}
+            </section>
+          ))}
+        </div>
+      )}
+      <FeaturePreviewPopover
+        feature={preview?.feature ?? null}
+        anchor={preview?.anchor ?? null}
+        onClose={() => setPreview(null)}
+      />
     </SidebarSection>
   );
 };
 
-interface FeaturesMenuProps {
-  readonly canReset: boolean;
-  readonly onReset: () => void;
-}
-
-/** The section's settings menu; always shown, so the header never shifts. */
-const FeaturesMenu = ({ canReset, onReset }: FeaturesMenuProps) => (
-  <Menu modal={false}>
-    <Tooltip content="Feature settings">
-      <MenuTrigger
-        render={
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Feature settings"
-            className="text-sidebar-icon"
-          />
-        }
-      >
-        <HorizontalEllipsis className="h-5 w-5 text-icon-subtle" />
-      </MenuTrigger>
-    </Tooltip>
-    <MenuPortal>
-      <MenuPositioner sideOffset={4} align="end">
-        <MenuPopup>
-          <MenuItem onClick={() => featureCodeOpenCell.set(true)}>Edit Feature Code…</MenuItem>
-          <MenuItem disabled={!canReset} onClick={onReset}>
-            Reset All Features
-          </MenuItem>
-        </MenuPopup>
-      </MenuPositioner>
-    </MenuPortal>
-  </Menu>
-);
-
-interface FeatureRowProps {
-  readonly feature: FontFeature;
-  /** This text's setting, or null at the font's default. */
-  readonly override: boolean | null;
-  /** Sets the feature on or off for this text, or back to the font's default with null. */
-  readonly onChange: (on: boolean | null) => void;
-}
-
-/** A feature's tag, its name, and its control; text reads in full while the feature is on. */
-const FeatureRow = ({ feature, override, onChange }: FeatureRowProps) => {
-  const name = featureName(feature);
-  const on = override ?? ON_BY_DEFAULT.has(feature.tag);
-  const label = name ? `${feature.tag}, ${name}` : feature.tag;
-
-  return (
-    <li className="flex h-6 shrink-0 items-center gap-2">
-      <span className="flex min-w-0 flex-1 items-center gap-1.5">
-        <span
-          className={cn(
-            "shrink-0 rounded bg-input px-1.5 py-0.5 font-mono text-ui",
-            on ? "text-primary" : "text-secondary",
-          )}
-        >
-          {feature.tag}
-        </span>
-        {name ? <FeatureName name={name} on={on} /> : null}
-      </span>
-      <InheritedControl label={label} on={on} override={override} onChange={onChange} />
-    </li>
-  );
-};
-
-/** A feature's name, cut off to fit, with the full name on hover when it is. */
-const FeatureName = ({ name, on }: { readonly name: string; readonly on: boolean }) => {
-  // Whether the name is cut off, measured when the pointer arrives.
-  const [truncated, setTruncated] = useState(false);
-  return (
-    <Tooltip disabled={!truncated} content={name}>
-      <span
-        className={cn("min-w-0 truncate text-ui", on ? "text-primary" : "text-secondary")}
-        onPointerEnter={(event) =>
-          setTruncated(event.currentTarget.scrollWidth > event.currentTarget.clientWidth)
-        }
-      >
-        {name}
-      </span>
-    </Tooltip>
-  );
-};
-
-interface ControlProps {
-  readonly label: string;
-  readonly override: boolean | null;
-  readonly onChange: (on: boolean | null) => void;
-}
-
-/**
- * The feature's actual state as a switch; a changed feature also shows a
- * button back to the font's default, as Kerning shows a remove button on a set value.
- */
-const InheritedControl = ({ label, on, override, onChange }: ControlProps & { on: boolean }) => (
+/** The section's title row while searching: a search field, and a button closing it. */
+const SearchField = ({
+  query,
+  onChange,
+}: {
+  query: string;
+  /** The new query, or null to close the search. */
+  onChange: (query: string | null) => void;
+}) => (
   <>
-    <div className="flex w-6 shrink-0 justify-center">
-      {override !== null ? (
-        <Tooltip content="Reset to font default">
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label={`Reset ${label} to font default`}
-            className="text-sidebar-icon"
-            onClick={() => onChange(null)}
-          >
-            <RotateCcw aria-hidden className="h-3.5 w-3.5" />
-          </Button>
-        </Tooltip>
-      ) : null}
+    <div className="min-w-0 flex-1">
+      <Input
+        autoFocus
+        aria-label="Search features"
+        placeholder="Search features"
+        icon={<Search aria-hidden className="h-3 w-3 text-muted" />}
+        iconPosition="left"
+        value={query}
+        onChange={(event) => onChange(event.currentTarget.value)}
+        onKeyDown={(event) => {
+          // Keep Escape and typing out of the canvas's shortcuts.
+          event.nativeEvent.stopImmediatePropagation();
+          if (event.key === "Escape") onChange(null);
+        }}
+      />
     </div>
-    <Switch checked={on} aria-label={label} onCheckedChange={onChange} />
+    <Tooltip content="Close search">
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        aria-label="Close search"
+        className="shrink-0 text-sidebar-icon"
+        onClick={() => onChange(null)}
+      >
+        <X aria-hidden className="h-4 w-4" />
+      </Button>
+    </Tooltip>
   </>
 );
 
-/** Lists the font's user-facing features; empty in a preview, which has no shaping. */
-function useFontFeatures(): readonly FontFeature[] {
+const FeatureRow = ({
+  run,
+  feature,
+  previewing,
+  onPreview,
+}: {
+  run: TextRunRecord;
+  feature: FontFeature;
+  /** Whether the preview shows this feature. */
+  previewing: boolean;
+  /** Opens the preview on this feature from its tag, or closes it if open. */
+  onPreview: (anchor: HTMLElement) => void;
+}) => {
   const editor = useEditor();
-  const featureRevision = useSignalState(editor.font.featureRevisionCell);
-  // Glyph names generate features too: a new `a.ss04` adds ss04.
-  const glyphs = useSignalState(editor.font.glyphEntriesCell);
-  const [features, setFeatures] = useState<readonly FontFeature[]>([]);
-  useEffect(() => {
-    if (editor.sessionMode !== "workspace") return;
-    let current = true;
-    editor.font
-      .features()
-      .then((all) => {
-        if (current) setFeatures(all.filter((feature) => !REQUIRED_FEATURES.has(feature.tag)));
-      })
-      .catch((error: unknown) => console.error("failed to list font features", error));
-    return () => {
-      current = false;
-    };
-  }, [editor, featureRevision, glyphs]);
-  return features;
-}
+  const highlight = useFeatureHighlight(run);
+  const name = featureName(feature);
+  const setting = run.features[feature.tag] ?? null;
+  const state = stateLabel(feature.tag, setting);
+  const cycle = (reverse: boolean) => {
+    const next = (reverse ? PREVIOUS_SETTING : NEXT_SETTING).get(setting) ?? null;
+    editor.history.capture(`Set ${feature.tag} to ${stateLabel(feature.tag, next)}`, () =>
+      editor.text.setFeature(run.id, feature.tag, next),
+    );
+  };
 
-/** How many errors the compiler reports in the font's feature code. */
-function useFeatureErrorCount(): number {
-  const editor = useEditor();
-  const featureRevision = useSignalState(editor.font.featureRevisionCell);
-  const [count, setCount] = useState(0);
-  useEffect(() => {
-    if (editor.sessionMode !== "workspace") return;
-    let current = true;
-    editor.font
-      .featureDiagnostics()
-      .then((diagnostics) => {
-        if (!current) return;
-        setCount(diagnostics.filter((diagnostic) => diagnostic.severity === "error").length);
-      })
-      .catch((error: unknown) => console.error("failed to read feature diagnostics", error));
-    return () => {
-      current = false;
-    };
-  }, [editor, featureRevision]);
-  return count;
-}
-
-/**
- * The count of feature code errors, as IDEs mark a file with problems: the
- * error icon and the number. Opens the feature code window to fix them.
- */
-const FeatureErrorBadge = ({ count }: { readonly count: number }) => {
-  const label = count === 1 ? "1 error in feature code" : `${count} errors in feature code`;
   return (
-    <Tooltip content={label}>
-      <Button
-        variant="ghost"
-        size="sm"
-        aria-label={label}
-        onClick={() => featureCodeOpenCell.set(true)}
-      >
-        <span className="flex items-center gap-1 text-error tabular-nums">
-          <ErrorIcon aria-hidden className="size-3.5" />
-          {count}
-        </span>
-      </Button>
-    </Tooltip>
+    <div className="flex h-6 shrink-0 items-center justify-between gap-2 text-ui">
+      <span className="flex min-w-0 items-center gap-1.5">
+        <button
+          type="button"
+          data-feature-tag=""
+          aria-label={`Preview ${feature.tag}`}
+          aria-pressed={previewing}
+          className={cn(
+            TAG_PILL,
+            "cursor-default",
+            "text-primary",
+            previewing ? "bg-icon-button-hover" : "hover:bg-hover",
+          )}
+          onPointerEnter={() => highlight(feature.tag)}
+          onPointerLeave={() => highlight(null)}
+          onClick={(event) => onPreview(event.currentTarget)}
+        >
+          {feature.tag}
+        </button>
+        {name ? <span className="truncate text-primary">{name}</span> : null}
+      </span>
+      <Tooltip content={state}>
+        <button
+          type="button"
+          aria-label={`${feature.tag}${name ? `, ${name}` : ""}, ${state}`}
+          className="group flex size-6 shrink-0 items-center justify-center rounded outline-none focus-visible:ring-1 focus-visible:ring-accent"
+          onClick={(event) => cycle(event.altKey)}
+        >
+          <span
+            aria-hidden
+            className={cn(
+              "size-2 rounded-full group-hover:brightness-75",
+              dotColor(feature.tag, setting),
+            )}
+          />
+        </button>
+      </Tooltip>
+    </div>
   );
 };
+
+/**
+ * Solid green or red while forced on or off. While the font's default holds,
+ * pale green if it turns the feature on, grey if it leaves it off; most
+ * features are off by default, and red is kept for turning one off.
+ */
+function dotColor(tag: string, setting: boolean | null): string {
+  if (setting === true) return "bg-state-on";
+  if (setting === false) return "bg-state-off";
+  return onByDefault(tag) ? "bg-state-on/35" : "bg-control-muted";
+}
+
+/** Each click moves a feature on: the font's default, then on, then off, then back. */
+const NEXT_SETTING = new Map<boolean | null, boolean | null>([
+  [null, true],
+  [true, false],
+  [false, null],
+]);
+/** Alt-click walks the cycle backwards. */
+const PREVIOUS_SETTING = new Map<boolean | null, boolean | null>([
+  [null, false],
+  [false, true],
+  [true, null],
+]);
+
+/** A setting as the tooltip names it; the default says what the font does. */
+function stateLabel(tag: string, setting: boolean | null): string {
+  if (setting === null) return `Default (${onByDefault(tag) ? "on" : "off"})`;
+  return setting ? "On" : "Off";
+}
