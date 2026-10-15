@@ -994,6 +994,9 @@ pub struct GlyphProjection {
     pub glyph_id: GlyphId,
     pub fallback: GlyphLayerShape,
     pub interpolation: Option<GlyphInterpolation>,
+    /// Basis over the glyph's and its components' masters, present when
+    /// compiled fonts interpolate the glyph decomposed.
+    pub decomposition: Option<InterpolationBasis>,
     pub variation: Option<GlyphVariation>,
     pub exact_source_shapes: Vec<GlyphSourceShape>,
     pub components: GlyphComponents,
@@ -1007,6 +1010,7 @@ impl From<&IrGlyphProjection> for GlyphProjection {
             glyph_id: projection.glyph_id(),
             fallback: GlyphLayerShape::from(projection.fallback()),
             interpolation: projection.interpolation().map(Into::into),
+            decomposition: projection.decomposition().map(Into::into),
             variation: None,
             exact_source_shapes: projection
                 .exact_source_shapes()
