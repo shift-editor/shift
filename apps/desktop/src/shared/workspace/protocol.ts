@@ -12,6 +12,7 @@ import type {
   LayerId,
   LayerMatch,
   LayerRead,
+  FontFeature,
   Location,
   ParagraphRequest,
   ShapedParagraph,
@@ -307,6 +308,8 @@ export type SyncCallMap = {
   };
   /** Evaluates font-owned independent and cross-axis mappings in Rust. */
   "workspace.mapLocation": { request: Location; response: Location };
+  /** Lists the features the font's compiled feature code defines. */
+  "workspace.features": { request: null; response: FontFeature[] };
   /** Shapes paragraphs with the font's feature code, each split into runs of one script and bidi level. */
   "workspace.shapeParagraphs": {
     request: { paragraphs: ParagraphRequest[] };

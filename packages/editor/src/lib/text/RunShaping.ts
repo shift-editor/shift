@@ -29,6 +29,9 @@ export interface ShapingRequest {
  *
  * @remarks
  * Item ids are left out, so retyping the same text reuses its shaping.
+ * Location and feature settings are left out too: a result shaped with old
+ * ones still maps glyphs to the right items, so it stays shown until the new
+ * one arrives.
  */
 export function paragraphKeys(items: readonly TextItem[]): string[] {
   const keys: string[][] = [[]];
@@ -55,17 +58,23 @@ export function matchShapedParagraphs(
   return keys.map((key) => byKey.get(key) ?? null);
 }
 
-/** Splits items into one shaping request per paragraph. */
+/**
+ * Splits items into one shaping request per paragraph.
+ *
+ * @param features - Features turned on or off by tag; others keep the font's default.
+ */
 export function paragraphRequests(
   items: readonly TextItem[],
   location: ParagraphRequest["location"],
+  features: Readonly<Record<string, boolean>>,
 ): ParagraphRequest[] {
+  const settings = Object.entries(features).map(([tag, on]) => ({ tag, value: on ? 1 : 0 }));
   const paragraphs: ShapeUnit[][] = [[]];
   for (const item of items) {
     if (item.kind === "linebreak") paragraphs.push([]);
     else paragraphs.at(-1)!.push(shapeUnit(item));
   }
-  return paragraphs.map((units) => ({ units, location }));
+  return paragraphs.map((units) => ({ units, location, features: settings }));
 }
 
 function shapeUnit(item: GlyphicTextItem): ShapeUnit {
@@ -84,7 +93,7 @@ function shapeUnit(item: GlyphicTextItem): ShapeUnit {
  */
 export class RunShaping {
   readonly #font: Font;
-  readonly #onShaped: (shaped: ShapedText) => void;
+  readonly #prepare: (shaped: ShapedText) => Promise<void>;
   readonly #requestCell: ComputedSignal<ShapingRequest | null>;
   readonly #shapedCell: WritableSignal<ShapedText | null> = signal(null);
   readonly #requests: Effect;
@@ -95,15 +104,16 @@ export class RunShaping {
 
   /**
    * @param requestCell - What to shape; owned by this shaping and disposed with it.
-   * @param onShaped - Called with each published result, such as to load the glyphs it shows.
+   * @param prepare - Readies a result before it is shown, such as loading the
+   *   glyphs it substitutes in; the previous result stays shown meanwhile.
    */
   constructor(
     font: Font,
     requestCell: ComputedSignal<ShapingRequest | null>,
-    onShaped: (shaped: ShapedText) => void,
+    prepare: (shaped: ShapedText) => Promise<void>,
   ) {
     this.#font = font;
-    this.#onShaped = onShaped;
+    this.#prepare = prepare;
     this.#requestCell = requestCell;
     this.#requests = effect(
       () => {
@@ -144,8 +154,9 @@ export class RunShaping {
           shaped,
         }));
         const shaped = { paragraphs };
-        this.#shapedCell.set(shaped);
-        this.#onShaped(shaped);
+        // Showing a glyph before it loads draws it blank for a moment, so wait.
+        await this.#prepare(shaped);
+        if (!this.#disposed) this.#shapedCell.set(shaped);
       }
     } catch (error) {
       console.error("failed to shape text", error);

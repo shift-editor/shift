@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { resolve } from "node:path";
 import type { GlyphName, RunId } from "@shift/types";
 import { clusterForCaret, lineBreakTextItem } from "@shift/editor/text";
+import { effect } from "@shift/editor/signals";
 import { TestEditor } from "@/testing/TestEditor";
 
 const SHAPING_TEST = resolve(process.cwd(), "../../fixtures/fonts/ShapingTest.ufo");
@@ -242,5 +243,62 @@ describe("Option-arrows in mixed-direction text", () => {
 
     expect(xs).toEqual([...xs].sort((a, b) => b - a));
     expect(new Set(xs).size).toBe(xs.length);
+  });
+});
+
+describe("features can be turned on or off per proof text", () => {
+  let editor: TestEditor;
+
+  beforeEach(async () => {
+    editor = new TestEditor();
+    await editor.openSession(SHAPING_TEST, "f");
+  });
+
+  it("lists the features the font's feature code defines", async () => {
+    const tags = (await editor.font.features()).map((feature) => feature.tag);
+
+    expect(tags).toEqual(["ccmp", "fina", "init", "liga", "medi"]);
+  });
+
+  it("turning liga off breaks the ligature and reset brings it back", async () => {
+    const runId = editor.text.createRun(editor.text.itemsFromText("fi")).id;
+    const names = () =>
+      editor.text
+        .layoutCell(runId)
+        .peek()!
+        .placedGlyphs.map((placed) => placed.glyph.glyphName);
+    await expect.poll(names).toEqual(["f_i"]);
+
+    editor.history.capture("Set liga", () => editor.text.setFeature(runId, "liga", false));
+    await expect.poll(names).toEqual(["f", "i"]);
+
+    editor.history.capture("Reset features", () => editor.text.resetFeatures(runId));
+    await expect.poll(names).toEqual(["f_i"]);
+  });
+});
+
+describe("a substituted glyph appears only once it has loaded", () => {
+  it("never shows the ligature before its outline and advance are there", async () => {
+    const editor = new TestEditor();
+    await editor.openSession(SHAPING_TEST, "f");
+    const runId = editor.text.createRun(editor.text.itemsFromText("fi")).id;
+    const layoutCell = editor.text.layoutCell(runId);
+    const seen: { names: string[]; advance: number }[] = [];
+    const watcher = effect(() => {
+      const layout = layoutCell.value;
+      if (!layout) return;
+      seen.push({
+        names: layout.placedGlyphs.map((placed) => placed.glyph.glyphName),
+        advance: layout.totalAdvance,
+      });
+    });
+
+    await expect.poll(() => seen.at(-1)?.names).toEqual(["f_i"]);
+    watcher.dispose();
+
+    expect(seen.filter((state) => state.names[0] === "f_i")).not.toContainEqual({
+      names: ["f_i"],
+      advance: 0,
+    });
   });
 });

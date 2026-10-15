@@ -614,6 +614,8 @@ export class Font {
     entryForName(name: GlyphName): GlyphEntry | null;
     entryForUnicode(unicode: Unicode): GlyphEntry | null;
     externalLocationForSource(sourceId: SourceId): ExternalAxisLocation | null;
+    // Warning: (ae-forgotten-export) The symbol "FontFeature" needs to be exported by the entry point index.d.ts
+    features(): Promise<FontFeature[]>;
     getAxes(): Axis[];
     getAxisMappingBases(): AxisMappingBasis[];
     getAxisMappings(): AxisMapping[];
@@ -1519,10 +1521,10 @@ export function useSignalState<T>(signal: Signal<T>, options?: UseSignalOptions)
 
 // Warnings were encountered during analysis:
 //
-// dist/Editor-b165vyHY.d.ts:2877:5 - (ae-forgotten-export) The symbol "Axis" needs to be exported by the entry point index.d.ts
-// dist/Editor-b165vyHY.d.ts:2878:5 - (ae-forgotten-export) The symbol "AxisMappingBasis" needs to be exported by the entry point index.d.ts
-// dist/Editor-b165vyHY.d.ts:2879:5 - (ae-forgotten-export) The symbol "Source" needs to be exported by the entry point index.d.ts
-// dist/Editor-b165vyHY.d.ts:4905:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
+// dist/Editor-Cy2ce-hQ.d.ts:2884:5 - (ae-forgotten-export) The symbol "Axis" needs to be exported by the entry point index.d.ts
+// dist/Editor-Cy2ce-hQ.d.ts:2885:5 - (ae-forgotten-export) The symbol "AxisMappingBasis" needs to be exported by the entry point index.d.ts
+// dist/Editor-Cy2ce-hQ.d.ts:2886:5 - (ae-forgotten-export) The symbol "Source" needs to be exported by the entry point index.d.ts
+// dist/Editor-Cy2ce-hQ.d.ts:4918:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

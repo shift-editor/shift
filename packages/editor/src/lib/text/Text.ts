@@ -32,7 +32,7 @@ export class Text {
   readonly #positioner = new Positioner();
   readonly #glyphsLoadedCell = signal(0);
   // non-reactive: dedupes in-flight glyph loads; only read by the imperative load path
-  readonly #loading = new Set<GlyphId>();
+  readonly #loading = new Map<GlyphId, Promise<void>>();
   readonly #runsByItem: StoreIndex<TextItemId, TextRunRecord>;
   readonly #unsubscribeStore: () => void;
   readonly #shapings = keyedCache({
@@ -57,12 +57,12 @@ export class Text {
                 );
                 return {
                   keys: paragraphKeys(record.items),
-                  paragraphs: paragraphRequests(record.items, location),
+                  paragraphs: paragraphRequests(record.items, location, record.features),
                 };
               },
               { name: "text.shapingRequest" },
             ),
-            (shaped) => this.#acquireShapedGlyphs(shaped),
+            (shaped) => this.#loadShapedGlyphs(shaped),
           ),
       ),
   });
@@ -175,6 +175,7 @@ export class Text {
       scope: "document",
       items: [...items],
       shaping: true,
+      features: {},
     };
     this.#store.put(record);
     return record;
@@ -227,6 +228,27 @@ export class Text {
   setShaping(id: RunId, shaping: boolean): void {
     const run = this.run(id);
     if (run && run.shaping !== shaping) this.#store.put({ ...run, shaping });
+  }
+
+  /**
+   * Turns a feature on or off for a run, or back to the font's default.
+   *
+   * @param on - `true` or `false` to force the feature; `null` for the default.
+   *
+   * @remarks
+   * Writes the run record, so call it inside a history capture.
+   */
+  setFeature(id: RunId, tag: string, on: boolean | null): void {
+    const run = this.run(id);
+    if (!run || (run.features[tag] ?? null) === on) return;
+    const { [tag]: _previous, ...rest } = run.features;
+    this.#store.put({ ...run, features: on === null ? rest : { ...rest, [tag]: on } });
+  }
+
+  /** Returns every feature of a run to the font's default. */
+  resetFeatures(id: RunId): void {
+    const run = this.run(id);
+    if (run && Object.keys(run.features).length > 0) this.#store.put({ ...run, features: {} });
   }
 
   /**
@@ -300,33 +322,40 @@ export class Text {
     for (const item of items) {
       if (item.kind === "linebreak") continue;
       const { entry } = textItemGlyph(item, this.#editor.font);
-      if (entry && !this.#editor.glyphForId(entry.id)) this.#loadGlyph(entry.id);
+      if (entry && !this.#editor.glyphForId(entry.id)) void this.#loadGlyph(entry.id);
     }
   }
 
-  /** Loads glyphs the shaper substituted in, which no item names directly. */
-  #acquireShapedGlyphs(shaped: ShapedText): void {
+  /** Loads the glyphs the shaper substituted in, which no item names directly. */
+  async #loadShapedGlyphs(shaped: ShapedText): Promise<void> {
+    const loads: Promise<void>[] = [];
     for (const paragraph of shaped.paragraphs) {
       for (const run of paragraph.shaped.runs) {
         for (const glyph of run.glyphs) {
           if (glyph.glyphId && !this.#editor.glyphForId(glyph.glyphId)) {
-            void this.#loadGlyph(glyph.glyphId);
+            loads.push(this.#loadGlyph(glyph.glyphId));
           }
         }
       }
     }
+    await Promise.all(loads);
   }
 
-  async #loadGlyph(id: GlyphId): Promise<void> {
-    if (this.#loading.has(id)) return;
-    this.#loading.add(id);
-    try {
-      await this.#editor.font.loadGlyph(id);
-      this.#glyphsLoadedCell.update((version) => version + 1);
-    } catch (error) {
-      console.error("failed to load text glyph", error);
-    } finally {
-      this.#loading.delete(id);
-    }
+  /** Loads a glyph, joining a load already under way; failures are logged, not thrown. */
+  #loadGlyph(id: GlyphId): Promise<void> {
+    const pending = this.#loading.get(id);
+    if (pending) return pending;
+    const load = (async () => {
+      try {
+        await this.#editor.font.loadGlyph(id);
+        this.#glyphsLoadedCell.update((version) => version + 1);
+      } catch (error) {
+        console.error("failed to load text glyph", error);
+      } finally {
+        this.#loading.delete(id);
+      }
+    })();
+    this.#loading.set(id, load);
+    return load;
   }
 }

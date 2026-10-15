@@ -218,6 +218,11 @@ export interface BridgeApi {
    * call altered the glyph order, glyph categories, feature code, or axes.
    */
   shapeParagraph(request: ParagraphRequest): ShapedParagraph
+  /**
+   * Returns the features the font's compiled feature code defines, once per
+   * tag, in tag order, with stylistic set and character variant names.
+   */
+  shapingFeatures(): Array<FontFeature>
   mapLocation(location: Location): Location
   getSources(): Array<Source>
 }
@@ -275,6 +280,14 @@ export interface FontExportRequest {
 export interface FontExportResult {
   path: string
   format: string
+}
+
+/** A feature the font's feature code defines. */
+export interface FontFeature {
+  /** The feature tag, such as `liga` or `ss01`. */
+  tag: string
+  /** The name a `featureNames` block gives a stylistic set or character variant. */
+  name?: string
 }
 
 export interface NewWorkspace {
