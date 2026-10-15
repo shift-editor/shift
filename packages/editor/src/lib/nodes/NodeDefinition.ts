@@ -8,6 +8,12 @@ import type { RenderContext, RenderPass } from "../../types/rendering";
 import type { SelectableId } from "@shift/types";
 import type { TransformTarget } from "../../types/transformTarget";
 
+/** How a double-click edits what it hits. */
+export interface DoubleClickOptions {
+  /** Add to what is being edited instead of replacing it. */
+  readonly add: boolean;
+}
+
 /**
  * Defines behavior shared by every scene node of one kind.
  *
@@ -124,9 +130,11 @@ export abstract class NodeDefinition<N extends ShiftNode = ShiftNode> {
    *
    * @param node - the node asked; the hit node or one of its ancestors.
    * @param target - what the pointer hit.
+   * @param options.add - add what was hit to what is being edited instead of
+   *   replacing it, as Shift does.
    * @returns true when handled.
    */
-  onDoubleClick?(node: N, target: PointerTarget): boolean;
+  onDoubleClick?(node: N, target: PointerTarget, options: DoubleClickOptions): boolean;
 
   /**
    * Brings the node's children and fields back in step after its content changed.

@@ -61,9 +61,7 @@ function rightSidebearing(page: Page): Promise<number | null> {
     const sourceId = editor.activeSourceId;
     const node = editor.scene.nodesOfKind("glyph")[0];
     const rsb =
-      node && sourceId
-        ? editor.glyphForId(node.glyphId)?.layerForSource(sourceId)?.sidebearings.rsb
-        : null;
+      node && sourceId ? editor.glyphOf(node)?.layerForSource(sourceId)?.sidebearings.rsb : null;
     return rsb === null || rsb === undefined ? null : Math.round(rsb);
   });
 }

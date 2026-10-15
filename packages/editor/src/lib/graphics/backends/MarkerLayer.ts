@@ -24,7 +24,6 @@ export class MarkerLayer {
   #drawCommand: REGL.DrawCommand | null = null;
   #available = false;
   #instanceCapacity = 0;
-  #frameDrew = false;
   #drawProps: MarkerDrawProps = {
     instanceCount: 0,
     logicalWidth: 0,
@@ -51,15 +50,14 @@ export class MarkerLayer {
     return this.#available;
   }
 
-  /** Starts a marker frame and forgets whether any marker content has drawn. */
+  /**
+   * Starts a marker frame by clearing the surface.
+   *
+   * @remarks
+   * Draws in the frame then add to it, so several glyph nodes can each draw
+   * their markers.
+   */
   begin(): void {
-    this.#frameDrew = false;
-  }
-
-  /** Clears the marker surface when the frame produced no marker draw. */
-  commit(): void {
-    if (this.#frameDrew) return;
-
     this.clear();
   }
 
@@ -111,7 +109,7 @@ export class MarkerLayer {
   }
 
   /**
-   * Draws the uploaded markers, clearing the surface first.
+   * Draws the uploaded markers over what the frame has drawn so far.
    *
    * @param toScreen - Maps marker positions to screen pixels; marker sizes stay in pixels.
    * @param logicalWidth - Canvas width in logical pixels.
@@ -126,14 +124,8 @@ export class MarkerLayer {
     if (!this.#regl || !this.#instanceBuffer || !this.#drawCommand || !this.#available)
       return false;
 
-    this.#frameDrew = true;
+    if (instanceCount === 0) return true;
 
-    if (instanceCount === 0) {
-      this.clear();
-      return true;
-    }
-
-    this.clear();
     this.#drawProps.instanceCount = instanceCount;
     this.#drawProps.logicalWidth = logicalWidth;
     this.#drawProps.logicalHeight = logicalHeight;

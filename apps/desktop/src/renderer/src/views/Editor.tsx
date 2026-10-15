@@ -54,7 +54,7 @@ export const Editor = () => {
       });
     const previous = runs.childGlyph(run);
     const open = () => {
-      if (previous?.glyphId === glyph.id) {
+      if (previous && editor.glyphIdOf(previous) === glyph.id) {
         editor.enterNode(previous.id);
         return previous;
       }

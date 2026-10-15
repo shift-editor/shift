@@ -1,4 +1,3 @@
-import type { NodeReference } from "../../types/records";
 import { Bounds, Curve, Mat, Rect } from "@shift/geo";
 import type {
   ComponentId,
@@ -22,7 +21,7 @@ import {
 } from "../editor/rendering/overlays";
 import { displayAdvance } from "../utils/unicode";
 import { computed, keyedCache, track } from "../signals/index";
-import type { GlyphRenderModel } from "../model/Glyph";
+import type { Glyph, GlyphRenderModel } from "../model/Glyph";
 import { standardMetricLines } from "../model/positions";
 import type { GlyphContour } from "../model/ComponentGlyph";
 import type { HandleState } from "../../types/graphics";
@@ -49,10 +48,6 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
 
   readonly #outline = new OutlineRenderer();
 
-  /** A glyph node depends on the glyph it shows. */
-  override references(node: GlyphNode): readonly NodeReference[] {
-    return [node.glyphId];
-  }
   readonly #debugOverlays = new DebugOverlays();
   readonly #controlLines = new ControlLines();
   readonly #anchors = new Anchors();
@@ -130,7 +125,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
    */
   override selectableInRect(node: GlyphNode, rect: LocalBounds): SelectableId[] {
     if (node.parentId !== null && !this.#isEditing(node)) return [];
-    const glyph = this.editor.glyphForId(node.glyphId);
+    const glyph = this.#glyph(node);
     if (!glyph) return [];
 
     const geometry = glyph.geometryAt(this.editor.externalLocation);
@@ -154,7 +149,8 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     if (node.parentId !== null && !this.#isEditing(node)) return null;
 
     const geometry = this.#view(node);
-    if (!geometry) return null;
+    const glyphId = this.editor.glyphIdOf(node);
+    if (!geometry || !glyphId) return null;
 
     const hit = geometry.hitAt(point, this.editor.hitRadius);
     if (hit) {
@@ -166,7 +162,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
           return {
             ...hit,
             nodeId: node.id,
-            glyphId: node.glyphId,
+            glyphId,
             point,
             segmentId: hit.id,
             pointIds: segment.pointIds,
@@ -177,7 +173,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
           return {
             ...hit,
             nodeId: node.id,
-            glyphId: node.glyphId,
+            glyphId,
             point,
             pointId: hit.id,
           };
@@ -186,7 +182,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
           return {
             ...hit,
             nodeId: node.id,
-            glyphId: node.glyphId,
+            glyphId,
             point,
             anchorId: hit.id,
           };
@@ -210,7 +206,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
         componentId,
         componentPath: component.componentPath,
         nodeId: node.id,
-        glyphId: node.glyphId,
+        glyphId,
         point,
       };
     }
@@ -232,7 +228,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
           componentId,
           componentPath: fillHit.componentPath,
           nodeId: node.id,
-          glyphId: node.glyphId,
+          glyphId,
           point,
         };
       }
@@ -278,11 +274,18 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     };
   }
 
+  /** The loaded glyph the node shows, which follows its run's shaping. */
+  #glyph(node: GlyphNode): Glyph | null {
+    const glyphId = this.editor.glyphIdOf(node);
+    return glyphId ? this.editor.glyphForId(glyphId) : null;
+  }
+
   #view(node: GlyphNode): GlyphRenderModel | null {
     return (
-      this.editor
-        .glyphForId(node.glyphId)
-        ?.renderModelAt(this.editor.externalLocationCell, this.editor.activeSourceIdCell) ?? null
+      this.#glyph(node)?.renderModelAt(
+        this.editor.externalLocationCell,
+        this.editor.activeSourceIdCell,
+      ) ?? null
     );
   }
 
@@ -303,7 +306,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
 
   /** Advance the metric lines are drawn across, subscribed for redraw; null for an unknown glyph. */
   #displayAdvance(node: GlyphNode, view: GlyphRenderModel): number | null {
-    const glyph = this.editor.glyphForId(node.glyphId);
+    const glyph = this.#glyph(node);
     if (!glyph) return null;
 
     track(view.xAdvanceCell);
@@ -369,7 +372,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     const targets = this.visibleOutlines(node.id);
     if (targets.length === 0) return;
 
-    const glyph = this.editor.glyphForId(node.glyphId);
+    const glyph = this.#glyph(node);
     if (!glyph) return;
 
     for (const target of targets) {
@@ -463,7 +466,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     const sourceId = this.editor.activeSourceIdCell.peek();
     if (!sourceId) return;
 
-    const layer = this.editor.layerForGlyph(node.glyphId, sourceId);
+    const layer = this.#glyph(node)?.layerForSource(sourceId) ?? null;
     if (!layer) return;
 
     track(layer.editBaseOutlineCell);
