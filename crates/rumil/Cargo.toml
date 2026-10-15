@@ -10,3 +10,6 @@ keywords = ["math", "mathml", "opentype", "layout", "fonts"]
 categories = ["text-processing", "graphics"]
 
 [dependencies]
+
+[dev-dependencies]
+read-fonts = "0.45.1"
