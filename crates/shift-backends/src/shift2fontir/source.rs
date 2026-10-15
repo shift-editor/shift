@@ -79,6 +79,9 @@ pub(super) struct ShiftSnapshot {
     pub gdef_classes: BTreeMap<String, GlyphClassDef>,
     /// Glyphs whose advance compiles to zero, as Glyphs does for nonspacing marks.
     pub nonspacing_marks: HashSet<String>,
+    /// Glyphs the source marks as not exported, by name. They stay available
+    /// as components, which the compiler decomposes, but are not emitted.
+    pub skipped_glyphs: HashSet<String>,
 }
 
 impl ShiftIrSource {
@@ -135,6 +138,12 @@ impl ShiftIrSource {
                         .map(|glyph| glyph.name().to_string())
                         .collect()
                 },
+                skipped_glyphs: font
+                    .lib()
+                    .skipped_export_glyphs()
+                    .into_iter()
+                    .map(str::to_string)
+                    .collect(),
             }),
         })
     }
