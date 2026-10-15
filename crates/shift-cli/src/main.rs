@@ -4,6 +4,7 @@ mod cli;
 mod glyph_inspect;
 mod inspect;
 mod kerning;
+mod proof;
 mod skill;
 
 use std::io::{self, IsTerminal, Write};
@@ -42,6 +43,10 @@ fn main() -> miette::Result<()> {
         Command::Compile(args) => {
             let result = compile(args)?;
             write_stdout(&result.path.display().to_string())
+        }
+        Command::Proof(args) => {
+            let summary = proof::proof(&args)?;
+            write_report(&summary, args.json, proof::ProofSummary::render)
         }
         Command::Font { command } => match command {
             FontCommand::Create(args) => {
