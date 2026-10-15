@@ -39,6 +39,14 @@ fontmake -u MutatorSansLightCondensed.ufo -o otf
 
 Or download pre-built binaries from font distribution sources.
 
+## MultiFamily.glyphs
+
+Hand-written. One source that also builds a second family (`Multi Family UI`)
+whose instances repeat the main family's locations, a main-family instance at
+the same location as another (`Bold Copy`), and a non-exported component part
+(`_part`, `export = 0`) used by `A`. Covers family-scoped instance import,
+repeated-instance handling, and skipped export.
+
 ## LightDefault.glyphs
 
 Hand-written. The default master is the lightest, its design values (stem
