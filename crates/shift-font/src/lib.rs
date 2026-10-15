@@ -30,6 +30,7 @@
 //! and `shift-wire`. UI interaction belongs to the TypeScript editor.
 //!
 pub mod changes;
+pub mod check;
 pub mod composite;
 pub mod curve;
 pub mod error;
