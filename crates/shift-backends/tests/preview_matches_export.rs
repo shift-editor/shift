@@ -166,6 +166,7 @@ fn glyphs_preview_matches_export() {
         "MutatorSansVariable.glyphs",
         "MappedWeight.glyphs",
         "LightDefault.glyphs",
+        "ScaledComponent.glyphs",
     ] {
         let path = fixture(name);
         assert_eq!(

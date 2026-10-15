@@ -1,6 +1,6 @@
-import type { Bounds } from "@shift/geo";
+import type { Bounds, MatModel } from "@shift/geo";
 import type { SegmentedContour } from "@shift/glyph-state";
-import type { AnchorId, ContourId } from "@shift/types";
+import type { AnchorId, ContourId, SourceId } from "@shift/types";
 
 /** Font metrics needed by glyph guide drawing. */
 export interface GlyphGuideMetrics {
@@ -32,4 +32,17 @@ export interface GlyphRenderAnchor {
   readonly name?: string;
   readonly x: number;
   readonly y: number;
+}
+
+/** One master's share of an in-between location: the glyph's source weight. */
+export interface WeightedSource {
+  readonly sourceId: SourceId;
+  readonly weight: number;
+}
+
+/** One master's outline of a component occurrence, placed by that master's transform. */
+export interface PlacedContours {
+  readonly weight: number;
+  readonly matrix: MatModel;
+  readonly contours: readonly GlyphRenderContour[];
 }

@@ -569,6 +569,7 @@ fn wire_source_glyph(
           glyph_id,
           fallback,
           interpolation: None,
+          decomposition: None,
           variation,
           exact_source_shapes,
           components,
