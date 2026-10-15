@@ -165,6 +165,7 @@ fn glyphs_preview_matches_export() {
     for name in [
         "MutatorSansVariable.glyphs",
         "MappedWeight.glyphs",
+        "MultiFamily.glyphs",
         "LightDefault.glyphs",
     ] {
         let path = fixture(name);
