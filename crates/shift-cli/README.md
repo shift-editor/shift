@@ -85,6 +85,27 @@ coordinates and are mapped once into design space. Its views are:
 
 `--json` emits the complete `GlyphInspection` regardless of the selected human-readable view.
 
+## Check
+
+`check` reports problems that make a font build, interpolate, or render differently from what was drawn, in any source Shift reads:
+
+```sh
+shift check Family.glyphs
+shift check Family.designspace --json
+shift check Lab.shift --charset latin1
+shift check Mono.ufo --mono --width 600
+```
+
+Findings carry a stable code, a fixed severity, the glyph, master, and contour concerned, and a message. Codes group by subject:
+
+- `D` axes and masters: no master at the default (`D001`), masters at the same location (`D002`), a master outside its axis (`D003`), a mapping that turns back on itself (`D004`), an axis that runs past its last master (`D005`).
+- `I` interpolation against the default master: a glyph missing from the default master (`I001`), incompatible structure (`I002`), compatible layers that can't interpolate (`I003`), a contour whose different start point breaks the shape halfway (`I004`), a contour running the other way (`I005`), contours in each other's place (`I006`), a contour that turns inside out between masters (`I007`), masters using components differently (`I008`, a warning: compilers decompose these, Shift's preview leaves the master out).
+- `O` drawing, per master: open contours (`O001`), contours too small to draw (`O002`), coordinates that aren't numbers (`O003`), invalid advances (`O004`), a contour wholly inside another and winding the same way (`O005`), an encoded glyph that draws nothing in the default master (`O006`), a glyph that can't be drawn (`O007`). Glyphs marked not to export, and unencoded `_` part glyphs, are skipped.
+- `K` kerning: a pair through an empty group (`K001`), a pair naming a glyph or group not in the font (`K002`).
+- `C` and `M`, opt-in: `--charset ascii|latin1|FILE` requires characters (a file lists characters, `U+XXXX` scalars, and `U+XXXX..U+YYYY` ranges, one per line); `--mono [--width N]` requires one advance width, the most common one per master when no width is given.
+
+Problems the reader had to work around, such as kerning pairs naming missing glyphs or a repeated named instance, are listed as `note:` lines and under `import` in `--json`. `check` exits with status 1 when any finding is an error.
+
 ## Authoring
 
 Authoring commands operate on Shift domain objects rather than persistence rows. The resource surface creates font topology, glyph identity, and sparse authored layers:
@@ -367,6 +388,7 @@ After pulling or merging `main`, rerun the same `cargo install` command to updat
 cargo test -p shift-cli
 cargo run -p shift-cli -- inspect --help
 cargo run -p shift-cli -- compile --help
+cargo run -p shift-cli -- proof --help
 cargo run -p shift-cli -- axis add --help
 cargo run -p shift-cli -- source add --help
 cargo run -p shift-cli -- glyph add --help
