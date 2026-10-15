@@ -1,5 +1,5 @@
 export { TextLayout } from "./TextLayout";
-export type { PlacedGlyph, TextLayoutParams } from "./TextLayout";
+export type { PlacedGlyph, SelectionRect, TextLayoutParams } from "./TextLayout";
 export { Caret } from "./Caret";
 export { Positioner } from "./Positioner";
 export { textItemGlyph, type TextItemGlyph } from "./textItemGlyph";
@@ -11,7 +11,6 @@ export type {
   Direction,
   GlyphicTextItem,
   GlyphTextItem,
-  Hit,
   Line,
   LineBreakTextItem,
   PositionedGlyph,

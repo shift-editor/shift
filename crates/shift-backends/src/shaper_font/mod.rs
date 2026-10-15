@@ -44,7 +44,7 @@ use write_fonts::BuilderError;
 pub use diagnostics::{DiagnosticSeverity, FeatureDiagnostic};
 pub use shape::{
     FeatureSetting, LiveShaper, ParagraphRequest, ShapeError, ShapeRequest, ShapeUnit, ShapedGlyph,
-    ShapedRun, TextDirection,
+    ShapedParagraph, ShapedRun, TextDirection,
 };
 pub use state::ShaperFontState;
 

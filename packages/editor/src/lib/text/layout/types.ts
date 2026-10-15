@@ -81,6 +81,8 @@ export type Direction = "ltr" | "rtl";
 
 export interface SegmentedRun {
   items: readonly GlyphicTextItem[];
+  /** Bidi level; odd reads right to left. Literal runs are level 0. */
+  level: number;
   /** The shaper's glyphs in visual order, clusters indexing `items`; absent for literal layout. */
   shaped?: readonly ShapedGlyph[];
   direction: Direction;
@@ -92,6 +94,8 @@ export interface SegmentedRun {
 
 export interface PositionedRun {
   glyphs: PositionedGlyph[];
+  /** Bidi level; odd reads right to left. */
+  level: number;
   direction: Direction;
   script?: string;
   language?: string;
@@ -100,7 +104,10 @@ export interface PositionedRun {
 }
 
 export interface Line {
+  /** Runs in screen order, left to right. */
   runs: PositionedRun[];
+  /** The paragraph's base direction. */
+  direction: Direction;
   y: number;
   ascent: number;
   descent: number;
@@ -112,13 +119,6 @@ export interface Line {
    * caret position on the final line).
    */
   clusterEnd: number;
-}
-
-export interface Hit {
-  lineIndex: number;
-  runIndex: number;
-  cluster: number;
-  side: "left" | "right";
 }
 
 export interface CaretPosition {

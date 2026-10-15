@@ -47,7 +47,7 @@ export async function layoutTestEditor(): Promise<TestEditor> {
 }
 
 export function ltrRun(items: readonly GlyphicTextItem[], clusterStart = 0): SegmentedRun {
-  return { items, direction: "ltr", clusterStart };
+  return { items, level: 0, direction: "ltr", clusterStart };
 }
 
 export function makeLayout(items: readonly TextItem[], editor: TestEditor): TextLayout {

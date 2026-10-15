@@ -1,6 +1,7 @@
 use napi_derive::napi;
 use shift_backends::shaper_font::{
-  FeatureSetting, ParagraphRequest, ShapeUnit, ShapedGlyph, ShapedRun, TextDirection,
+  FeatureSetting, ParagraphRequest, ShapeUnit, ShapedGlyph, ShapedParagraph, ShapedRun,
+  TextDirection,
 };
 use shift_font::{ExternalLocation, GlyphId};
 use shift_wire::bridges::napi::NapiLocation;
@@ -68,7 +69,29 @@ impl From<ShapedGlyph> for NapiShapedGlyph {
   }
 }
 
-/// One run of a shaped paragraph, in one script and direction.
+/// A shaped paragraph: its base direction and its runs in logical order.
+#[napi(object)]
+pub struct NapiShapedParagraph {
+  /// The paragraph's base direction, from its first strong character.
+  #[napi(ts_type = "\"ltr\" | \"rtl\"")]
+  pub direction: String,
+  pub runs: Vec<NapiShapedRun>,
+}
+
+impl From<ShapedParagraph> for NapiShapedParagraph {
+  fn from(paragraph: ShapedParagraph) -> Self {
+    Self {
+      direction: direction_name(paragraph.direction).to_string(),
+      runs: paragraph
+        .runs
+        .into_iter()
+        .map(NapiShapedRun::from)
+        .collect(),
+    }
+  }
+}
+
+/// One run of a shaped paragraph, in one script and bidi level.
 #[napi(object)]
 pub struct NapiShapedRun {
   /// First paragraph unit in the run.
@@ -78,6 +101,9 @@ pub struct NapiShapedRun {
   /// ISO 15924 script tag such as `Arab`; absent when the run holds only
   /// characters common to all scripts.
   pub script: Option<String>,
+  /// Resolved bidi level; odd levels read right to left. A line lays its
+  /// runs out by level.
+  pub level: u32,
   #[napi(ts_type = "\"ltr\" | \"rtl\"")]
   pub direction: String,
   /// Glyphs in visual order; clusters index the paragraph's units.
@@ -86,15 +112,12 @@ pub struct NapiShapedRun {
 
 impl From<ShapedRun> for NapiShapedRun {
   fn from(run: ShapedRun) -> Self {
-    let direction = match run.direction {
-      TextDirection::LeftToRight => "ltr",
-      TextDirection::RightToLeft => "rtl",
-    };
     Self {
       start: run.units.start,
       end: run.units.end,
       script: run.script,
-      direction: direction.to_string(),
+      level: u32::from(run.level),
+      direction: direction_name(run.direction).to_string(),
       glyphs: run.glyphs.into_iter().map(NapiShapedGlyph::from).collect(),
     }
   }
@@ -159,5 +182,12 @@ fn shape_unit(unit: NapiShapeUnit) -> BridgeResult<ShapeUnit> {
       kind: "shape unit",
       value: "needs exactly one of codepoint or glyphId".to_string(),
     }),
+  }
+}
+
+fn direction_name(direction: TextDirection) -> &'static str {
+  match direction {
+    TextDirection::LeftToRight => "ltr",
+    TextDirection::RightToLeft => "rtl",
   }
 }

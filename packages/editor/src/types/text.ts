@@ -42,4 +42,9 @@ export interface TextRunRecord {
   readonly type: "textrun";
   readonly scope: "document";
   readonly items: readonly TextItem[];
+  /**
+   * Whether the font's feature code shapes the text; off lays out each item
+   * as typed, glyph by glyph.
+   */
+  readonly shaping: boolean;
 }

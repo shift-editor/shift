@@ -212,6 +212,7 @@ export type {
   PointType,
   SetAxisMappingsIntent,
   ShapedGlyph,
+  ShapedParagraph,
   ShapedRun,
   ShapeUnit,
   SetKerningValuesIntent,

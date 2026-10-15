@@ -8,11 +8,10 @@ import {
   type TextEditingRecord,
   type TextEditResult,
 } from "../../types/text";
-import { Caret, type TextItem } from "./layout";
+import { Caret, type SelectionRect, type TextItem, type TextLayout } from "./layout";
 import {
   caretForCluster,
   clusterForCaret,
-  computeSelectionRects,
   deleteText,
   graphemeCluster,
   selectionRange,
@@ -20,6 +19,7 @@ import {
   wordCluster,
 } from "./edit";
 import type { Editor } from "../editor/Editor";
+import { wordSegments } from "./layout/segmentation";
 
 /** Owns the session caret for one placed text node; text content belongs to Text. */
 export class TextEditing {
@@ -105,14 +105,15 @@ export class TextEditing {
     return items.slice(start, end);
   }
 
-  get selectionRects(): ReturnType<typeof computeSelectionRects> {
+  get selectionRects(): SelectionRect[] {
     const state = this.state;
     const node = this.#editor.scene.nodeOfKind(state?.nodeId ?? null, "textRun");
     if (!node || !state) return [];
     const run = this.#editor.text.run(node.runId);
     const layout = this.#editor.text.layoutCell(node.runId).peek();
     if (!run || !layout) return [];
-    return computeSelectionRects(layout, selectionRange(run.items, state.anchor, state.focus));
+    const { start, end } = selectionRange(run.items, state.anchor, state.focus);
+    return layout.selectionRects(start, end);
   }
 
   insert(items: readonly TextItem[]): void {
@@ -132,34 +133,40 @@ export class TextEditing {
     this.#edit("Delete text", (items, anchor, focus) => deleteText(items, anchor, focus, 1));
   }
 
+  /**
+   * Moves the caret left (`-1`) or right (`1`) on screen, as the arrow keys do.
+   *
+   * @remarks
+   * Movement follows the screen, as on macOS: in right-to-left text, left is
+   * forward in reading order. A character step crosses a grapheme cluster,
+   * and a word step lands on the edge of the next word on that side, in
+   * whichever direction that word reads. Past a line's edge, either continues
+   * into the neighbouring line in reading order.
+   */
   move(direction: -1 | 1, granularity: "character" | "word" | "line", extend = false): void {
     const state = this.state;
     const items = this.#items();
-    if (!state || !items) return;
+    const layout = this.#layout();
+    if (!state || !items || !layout) return;
     const cluster = clusterForCaret(items, state.focus);
+    const lineIndex = layout.lineIndexForCluster(cluster);
+    // Reading order is screen order flipped in a right-to-left line.
+    const logical = layout.lineDirection(lineIndex) === "rtl" ? (-direction as -1 | 1) : direction;
     let target = cluster;
     switch (granularity) {
       case "character":
-        target = graphemeCluster(items, cluster, direction);
+        target = layout.visualStep(cluster, direction) ?? graphemeCluster(items, cluster, logical);
         break;
-      case "word":
-        target = wordCluster(items, cluster, direction);
-        break;
-      case "line": {
-        const node = this.#editor.scene.nodeOfKind(state.nodeId, "textRun");
-        const line =
-          node &&
-          this.#editor.text
-            .layoutCell(node.runId)
-            .peek()
-            ?.lines.find((line) => cluster >= line.clusterStart && cluster < line.clusterEnd);
-        if (!line) {
-          target = cluster;
-          break;
-        }
-        target = direction === -1 ? line.clusterStart : line.clusterEnd - 1;
+      case "word": {
+        const edges = wordEdges(items, layout, direction);
+        target =
+          layout.visualStep(cluster, direction, (stop) => edges.has(stop)) ??
+          wordCluster(items, cluster, logical);
         break;
       }
+      case "line":
+        target = layout.lineEdge(lineIndex, direction) ?? cluster;
+        break;
     }
     this.#goalX = null;
     this.#place(target, extend, "Move text caret");
@@ -209,6 +216,11 @@ export class TextEditing {
     else write();
   }
 
+  #layout(): TextLayout | null {
+    const node = this.#editor.scene.nodeOfKind(this.state?.nodeId ?? null, "textRun");
+    return node ? this.#editor.text.layoutCell(node.runId).peek() : null;
+  }
+
   #items(): readonly TextItem[] | null {
     const node = this.#editor.scene.nodeOfKind(this.state?.nodeId ?? null, "textRun");
     return node ? this.#editor.text.items(node) : null;
@@ -235,4 +247,22 @@ export class TextEditing {
     this.#editor.history.captureOrJoin(label, write);
     this.#goalX = null;
   }
+}
+
+/**
+ * Returns the caret clusters at each word's left (`-1`) or right (`1`) edge
+ * on screen: a left-to-right word's start is its left edge, a right-to-left
+ * word's end is.
+ */
+function wordEdges(
+  items: readonly TextItem[],
+  layout: TextLayout,
+  side: -1 | 1,
+): ReadonlySet<number> {
+  return new Set(
+    wordSegments(items).map((word) => {
+      const rightToLeft = layout.directionAt(word.start) === "rtl";
+      return (side === 1) !== rightToLeft ? word.end : word.start;
+    }),
+  );
 }

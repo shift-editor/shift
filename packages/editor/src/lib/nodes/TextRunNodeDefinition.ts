@@ -409,8 +409,9 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
    * Returns the caret cluster nearest a point inside the run's lines.
    *
    * @remarks
-   * Accepts the glyph boxes, a narrow strip past each line's ends, and the
-   * empty run's origin; blank canvas elsewhere returns null.
+   * Accepts each line's extent, a narrow strip past its ends, and the empty
+   * run's origin; blank canvas elsewhere returns null. The caret lands on the
+   * nearest character boundary, inside ligatures and in either direction.
    *
    * @param node - the run node.
    * @param point - a point in the run's own units.
@@ -420,17 +421,10 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     const run = this.editor.text.run(node.runId);
     if (!layout || !run) return null;
 
-    const hit = layout.hitTest(point);
-    if (hit) return hit.cluster + (hit.side === "right" ? 1 : 0);
-
     const padding = this.editor.hitRadius / this.#scale(node);
-    for (const line of layout.lines) {
-      if (point.y < line.y + line.descent - padding || point.y > line.y + line.ascent + padding)
-        continue;
-      const advance = line.runs.reduce((sum, part) => sum + part.advance, 0);
-      if (point.x < -padding || point.x > advance + padding) continue;
-      return point.x <= 0 ? line.clusterStart : line.clusterEnd - 1;
-    }
+    const cluster = layout.caretAtPoint(point, padding);
+    if (cluster !== null) return cluster;
+
     const nearEmptyOrigin =
       run.items.length === 0 &&
       Math.abs(point.x) <= padding &&
