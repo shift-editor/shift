@@ -531,6 +531,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     const { interpolated, rootContours } = this.#controlContours(view);
     for (const contour of rootContours) contour.trackShape();
     view.trackAnchors();
+    track(view.anchorsWithComponentsCell);
 
     this.#segments.draw(
       ctx.canvas,
@@ -556,6 +557,11 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
       interpolated,
       metricLines,
       (pointId, contourId) => this.editor.handlesVisible(pointId, contourId),
+    );
+    const ownNames = new Set(view.anchors.map((anchor) => anchor.name));
+    this.#anchors.drawInherited(
+      ctx.canvas,
+      view.anchorsWithComponents.filter((anchor) => !ownNames.has(anchor.name)),
     );
     this.#anchors.draw(ctx.canvas, view.anchors, {
       selection: this.editor.selection,
