@@ -9,6 +9,7 @@ import type {
   MoveAnchorsIntent,
   MovePointsIntent,
   RemoveAnchorsIntent,
+  RenameAnchorsIntent,
   RemoveComponentsIntent,
   RemovePointsIntent,
   ReverseContourIntent,
@@ -130,6 +131,13 @@ export class LayerIntents {
     return this.#editCoordinator.push({
       kind: "removeAnchors",
       removeAnchors: { layerId: this.#layerId, ...payload },
+    });
+  }
+
+  renameAnchors(payload: Payload<RenameAnchorsIntent>): PendingEditId {
+    return this.#editCoordinator.push({
+      kind: "renameAnchors",
+      renameAnchors: { layerId: this.#layerId, ...payload },
     });
   }
 

@@ -716,7 +716,7 @@ export interface FontIntent {
    * Discriminator naming the populated payload field. Editing kinds:
    * "addPoints" | "addContour" | "setContourClosed" | "movePoints" |
    * "setPointSmooth" | "removePoints" | "addAnchors" | "moveAnchors" |
-   * "removeAnchors" | "addComponent" | "setComponentTransforms" |
+   * "removeAnchors" | "renameAnchors" | "addComponent" | "setComponentTransforms" |
    * "removeComponents" | "decomposeComponents" |
    * "reverseContour" | "setContourStart" | "translatePoints" |
    * "transformLayer" | "setXAdvance" | "applyBooleanOp".
@@ -738,6 +738,7 @@ export interface FontIntent {
   addAnchors?: AddAnchorsIntent
   moveAnchors?: MoveAnchorsIntent
   removeAnchors?: RemoveAnchorsIntent
+  renameAnchors?: RenameAnchorsIntent
   addComponent?: AddComponentIntent
   setComponentTransforms?: SetComponentTransformsIntent
   removeComponents?: RemoveComponentsIntent
@@ -1165,6 +1166,13 @@ export interface RemoveComponentsIntent {
 export interface RemovePointsIntent {
   layerId: LayerId
   pointIds: Array<PointId>
+}
+
+/** Renames anchors in one layer; `names[i]` is the new name of `anchorIds[i]`. */
+export interface RenameAnchorsIntent {
+  layerId: LayerId
+  anchorIds: Array<AnchorId>
+  names: Array<string>
 }
 
 /** Renames a kerning group; its pairs keep referencing it by id. */

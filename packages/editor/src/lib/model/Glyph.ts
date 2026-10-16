@@ -372,6 +372,15 @@ class GlyphLayerWriter {
     this.#state.state.removeAnchors(editId, ids);
   }
 
+  renameAnchors(names: ReadonlyMap<AnchorId, string>): void {
+    if (names.size === 0) return;
+
+    const anchorIds = [...names.keys()];
+    const renamed = [...names.values()];
+    const editId = this.#workspaceIntents.renameAnchors({ anchorIds, names: renamed });
+    this.#state.state.renameAnchors(editId, anchorIds, renamed);
+  }
+
   addComponent(baseGlyphId: GlyphId): ComponentId {
     const componentId = mintComponentId();
     this.#workspaceIntents.addComponent({ componentId, baseGlyphId });
@@ -1137,6 +1146,19 @@ export class GlyphLayer {
    */
   removeAnchors(anchorIds: readonly AnchorId[]): void {
     this.#writer.removeAnchors(anchorIds);
+  }
+
+  /**
+   * Renames anchors in this source.
+   *
+   * @remarks
+   * Sources interpolate only when their anchors share names in the same
+   * order; {@link Glyph.renameAnchor} renames across every source at once.
+   *
+   * @param names - New name for each anchor id.
+   */
+  renameAnchors(names: ReadonlyMap<AnchorId, string>): void {
+    this.#writer.renameAnchors(names);
   }
 
   /**
@@ -2103,6 +2125,34 @@ export class Glyph {
 
   get layers(): readonly GlyphLayer[] {
     return this.#layersCell.peek();
+  }
+
+  /**
+   * Adds a named anchor at the same position in every source.
+   *
+   * @remarks
+   * Sources interpolate only when their anchors match by name and order, so
+   * an anchor goes into all of them; move it per source afterwards.
+   */
+  addAnchor(name: string, position: Point2D): void {
+    for (const layer of this.#layersCell.peek()) layer.addAnchor(name, position);
+  }
+
+  /**
+   * Renames the anchor called `name` in every source, keeping sources compatible.
+   *
+   * @returns The number of anchors renamed.
+   */
+  renameAnchor(name: string, newName: string): number {
+    let renamed = 0;
+    for (const layer of this.#layersCell.peek()) {
+      const names = new Map(
+        layer.anchors.flatMap((anchor) => (anchor.name === name ? [[anchor.id, newName]] : [])),
+      );
+      layer.renameAnchors(names);
+      renamed += names.size;
+    }
+    return renamed;
   }
 
   layerForSource(sourceId: SourceId): GlyphLayer | null {

@@ -1540,7 +1540,7 @@ pub struct NapiFontIntent {
     /// Discriminator naming the populated payload field. Editing kinds:
     /// "addPoints" | "addContour" | "setContourClosed" | "movePoints" |
     /// "setPointSmooth" | "removePoints" | "addAnchors" | "moveAnchors" |
-    /// "removeAnchors" | "addComponent" | "setComponentTransforms" |
+    /// "removeAnchors" | "renameAnchors" | "addComponent" | "setComponentTransforms" |
     /// "removeComponents" | "decomposeComponents" |
     /// "reverseContour" | "setContourStart" | "translatePoints" |
     /// "transformLayer" | "setXAdvance" | "applyBooleanOp".
@@ -1561,6 +1561,7 @@ pub struct NapiFontIntent {
     pub add_anchors: Option<NapiAddAnchorsIntent>,
     pub move_anchors: Option<NapiMoveAnchorsIntent>,
     pub remove_anchors: Option<NapiRemoveAnchorsIntent>,
+    pub rename_anchors: Option<NapiRenameAnchorsIntent>,
     pub add_component: Option<NapiAddComponentIntent>,
     pub set_component_transforms: Option<NapiSetComponentTransformsIntent>,
     pub remove_components: Option<NapiRemoveComponentsIntent>,
@@ -1964,6 +1965,16 @@ pub struct NapiRemoveAnchorsIntent {
     pub layer_id: String,
     #[napi(ts_type = "Array<AnchorId>")]
     pub anchor_ids: Vec<String>,
+}
+
+/// Renames anchors in one layer; `names[i]` is the new name of `anchorIds[i]`.
+#[napi(object)]
+pub struct NapiRenameAnchorsIntent {
+    #[napi(ts_type = "LayerId")]
+    pub layer_id: String,
+    #[napi(ts_type = "Array<AnchorId>")]
+    pub anchor_ids: Vec<String>,
+    pub names: Vec<String>,
 }
 
 #[napi(object)]

@@ -100,6 +100,7 @@ export type {
   MoveAnchorsIntent,
   MovePointsIntent,
   RemoveAnchorsIntent,
+  RenameAnchorsIntent,
   RemoveComponentsIntent,
   RemovePointsIntent,
   ReverseContourIntent,

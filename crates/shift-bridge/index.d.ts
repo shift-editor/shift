@@ -747,7 +747,7 @@ export interface NapiFontIntent {
    * Discriminator naming the populated payload field. Editing kinds:
    * "addPoints" | "addContour" | "setContourClosed" | "movePoints" |
    * "setPointSmooth" | "removePoints" | "addAnchors" | "moveAnchors" |
-   * "removeAnchors" | "addComponent" | "setComponentTransforms" |
+   * "removeAnchors" | "renameAnchors" | "addComponent" | "setComponentTransforms" |
    * "removeComponents" | "decomposeComponents" |
    * "reverseContour" | "setContourStart" | "translatePoints" |
    * "transformLayer" | "setXAdvance" | "applyBooleanOp".
@@ -769,6 +769,7 @@ export interface NapiFontIntent {
   addAnchors?: NapiAddAnchorsIntent
   moveAnchors?: NapiMoveAnchorsIntent
   removeAnchors?: NapiRemoveAnchorsIntent
+  renameAnchors?: NapiRenameAnchorsIntent
   addComponent?: NapiAddComponentIntent
   setComponentTransforms?: NapiSetComponentTransformsIntent
   removeComponents?: NapiRemoveComponentsIntent
@@ -1221,6 +1222,13 @@ export interface NapiRemoveComponentsIntent {
 export interface NapiRemovePointsIntent {
   layerId: LayerId
   pointIds: Array<PointId>
+}
+
+/** Renames anchors in one layer; `names[i]` is the new name of `anchorIds[i]`. */
+export interface NapiRenameAnchorsIntent {
+  layerId: LayerId
+  anchorIds: Array<AnchorId>
+  names: Array<string>
 }
 
 /** Renames a kerning group; its pairs keep referencing it by id. */

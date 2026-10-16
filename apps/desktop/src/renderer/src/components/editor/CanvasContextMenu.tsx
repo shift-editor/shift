@@ -83,6 +83,9 @@ export const CanvasContextMenu = ({ children }: CanvasContextMenuProps) => {
             <ContextMenuItem onClick={async () => runCommand("glyph.addComponent")}>
               Add component…
             </ContextMenuItem>
+            <ContextMenuItem onClick={async () => runCommand("glyph.addAnchor")}>
+              Add anchor
+            </ContextMenuItem>
             {editor.canDecomposeSelection() && (
               <ContextMenuItem onClick={async () => runCommand("glyph.decomposeComponents")}>
                 Decompose Components

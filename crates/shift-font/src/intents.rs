@@ -101,6 +101,12 @@ pub enum FontIntent {
         layer_id: LayerId,
         anchor_ids: Vec<AnchorId>,
     },
+    /// Renames anchors in one layer; `names[i]` is the new name of `anchor_ids[i]`.
+    RenameAnchors {
+        layer_id: LayerId,
+        anchor_ids: Vec<AnchorId>,
+        names: Vec<String>,
+    },
     /// Adds one direct reference after rejecting direct or transitive component cycles.
     AddComponent {
         layer_id: LayerId,
@@ -314,6 +320,7 @@ impl FontIntent {
             | Self::AddAnchors { layer_id, .. }
             | Self::MoveAnchors { layer_id, .. }
             | Self::RemoveAnchors { layer_id, .. }
+            | Self::RenameAnchors { layer_id, .. }
             | Self::AddComponent { layer_id, .. }
             | Self::SetComponentTransforms { layer_id, .. }
             | Self::RemoveComponents { layer_id, .. }
@@ -369,6 +376,7 @@ impl FontIntent {
             | Self::AddAnchors { layer_id, .. }
             | Self::MoveAnchors { layer_id, .. }
             | Self::RemoveAnchors { layer_id, .. }
+            | Self::RenameAnchors { layer_id, .. }
             | Self::AddComponent { layer_id, .. }
             | Self::SetComponentTransforms { layer_id, .. }
             | Self::RemoveComponents { layer_id, .. }
@@ -1396,6 +1404,34 @@ impl Font {
                 }
 
                 self.forget_anchor_ids(anchor_ids);
+                Ok(())
+            }
+            FontIntent::RenameAnchors {
+                layer_id,
+                anchor_ids,
+                names,
+            } => {
+                if names.len() != anchor_ids.len() {
+                    return Err(CoreError::InvalidAnchorId(format!(
+                        "renameAnchors expects {} names for {} anchors, got {}",
+                        anchor_ids.len(),
+                        anchor_ids.len(),
+                        names.len()
+                    )));
+                }
+
+                let layer = self.require_layer_mut(layer_id)?;
+                for anchor_id in anchor_ids {
+                    if layer.anchor(anchor_id).is_none() {
+                        return Err(CoreError::AnchorNotFound(anchor_id.clone()));
+                    }
+                }
+                for (anchor_id, name) in anchor_ids.iter().zip(names) {
+                    if let Some(anchor) = layer.anchor_mut(anchor_id) {
+                        anchor.set_name(name.clone());
+                    }
+                }
+
                 Ok(())
             }
             FontIntent::AddComponent {

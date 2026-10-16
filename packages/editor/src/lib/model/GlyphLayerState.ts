@@ -225,6 +225,14 @@ export class GlyphLayerState {
     return this.#applyEdit(editId, () => this.#buffers.peek().moveAnchors(anchorIds, coords));
   }
 
+  renameAnchors(
+    editId: PendingEditId,
+    anchorIds: readonly AnchorId[],
+    names: readonly string[],
+  ): boolean {
+    return this.#applyEdit(editId, () => this.#buffers.peek().renameAnchors(anchorIds, names));
+  }
+
   removeAnchors(editId: PendingEditId, anchorIds: readonly AnchorId[]): boolean {
     return this.#applyEdit(editId, () => this.#buffers.peek().removeAnchors(anchorIds));
   }

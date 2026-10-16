@@ -2444,6 +2444,16 @@ fn map_intent(intent: NapiFontIntent) -> errors::Result<FontIntent> {
         anchor_ids: parse_id_list::<AnchorId>(&payload.anchor_ids)?,
       })
     }
+    "renameAnchors" => {
+      let payload = intent
+        .rename_anchors
+        .ok_or_else(|| missing("renameAnchors"))?;
+      Ok(FontIntent::RenameAnchors {
+        layer_id: parse::<LayerId>(&payload.layer_id)?,
+        anchor_ids: parse_id_list::<AnchorId>(&payload.anchor_ids)?,
+        names: payload.names,
+      })
+    }
     "addComponent" => {
       let payload = intent
         .add_component
@@ -2998,6 +3008,7 @@ mod tests {
       add_anchors: None,
       move_anchors: None,
       remove_anchors: None,
+      rename_anchors: None,
       add_component: None,
       set_component_transforms: None,
       remove_components: None,

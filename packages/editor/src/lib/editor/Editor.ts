@@ -2186,6 +2186,62 @@ export class Editor {
     return true;
   }
 
+  /**
+   * Adds an anchor at the pointer to the edited glyph, in every source, and selects it.
+   *
+   * @remarks
+   * The anchor is named `new` (or `new.1`, `new.2`, … when taken), as Glyphs
+   * names it, for renaming in the sidebar. Sources interpolate only when their
+   * anchors match, so every source gets it at the same position. One undo step.
+   *
+   * @returns `false` when there is no single edited glyph at an active source.
+   */
+  public addAnchorAtPointer(): boolean {
+    const sourceId = this.activeSourceId;
+    const glyphNodes = this.scene.nodesOfKind("glyph");
+    const node = glyphNodes.length === 1 ? glyphNodes[0] : null;
+    const glyph = node ? this.glyphForId(node.glyphId) : null;
+    const layer = node && sourceId ? this.layerForGlyph(node.glyphId, sourceId) : null;
+    if (!node || !glyph || !layer) return false;
+
+    const taken = new Set(glyph.layers.flatMap((each) => each.anchors.map((a) => a.name)));
+    let name = "new";
+    for (let suffix = 1; taken.has(name); suffix++) name = `new.${suffix}`;
+    const point = this.toLocal(node, this.getMousePosition());
+
+    this.transaction("Add Anchor", () => {
+      glyph.addAnchor(name, { x: Math.round(point.x), y: Math.round(point.y) });
+    });
+    const added = layer.anchors.find((anchor) => anchor.name === name);
+    if (added) this.selection.select([added.id]);
+    return true;
+  }
+
+  /**
+   * Renames an anchor in every source of its glyph, as one undo step.
+   *
+   * @remarks
+   * Sources interpolate only when their anchors share names, so the anchor
+   * with the same name is renamed in each. An unnamed anchor is named in its
+   * own source only.
+   *
+   * @returns `false` when the anchor is unknown or the name is empty or unchanged.
+   */
+  public renameAnchor(anchorId: AnchorId, name: string): boolean {
+    const object = this.object(anchorId);
+    if (object?.kind !== "anchor") return false;
+    const current = object.geometry.anchor(anchorId)?.name;
+    const glyph = this.glyphForId(object.node.glyphId);
+    const newName = name.trim();
+    if (!glyph || newName === "" || newName === current) return false;
+
+    this.transaction("Rename Anchor", () => {
+      if (current === undefined) object.layer?.renameAnchors(new Map([[anchorId, newName]]));
+      else glyph.renameAnchor(current, newName);
+    });
+    return true;
+  }
+
   /** Whether the selection is entirely components that {@link decomposeSelection} can decompose. */
   public canDecomposeSelection(): boolean {
     return this.#componentTargets(this.selection.ids) !== null;
