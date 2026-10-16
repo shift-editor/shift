@@ -11,7 +11,8 @@ export {
 export { characterTextItem, glyphTextItem, lineBreakTextItem } from "./lib/text/layout/types";
 export type {
   CharacterTextItem,
-  GlyphicTextItem,
+  Paragraph,
+  ParagraphItem,
   GlyphTextItem,
   SegmentedRun,
   TextItem,

@@ -11,9 +11,8 @@ import {
   characterTextItem,
   glyphTextItem,
   lineBreakTextItem,
-  Positioner,
   TextLayout,
-  textItemGlyph,
+  glyphIdForItem,
   type TextItem,
 } from "./layout";
 import { paragraphRequests, RunShaping, shapingKey, type ShapedText } from "./RunShaping";
@@ -23,7 +22,6 @@ import { locationFromExternalAxisLocation } from "../variation/location";
 export class Text {
   readonly #store: ShiftStore<ShiftEditorRecord>;
   readonly #editor: Editor;
-  readonly #positioner = new Positioner();
   readonly #glyphsLoadedCell = signal(0);
   // non-reactive: dedupes in-flight glyph loads; only read by the imperative load path
   readonly #loading = new Set<GlyphId>();
@@ -83,7 +81,6 @@ export class Text {
             items: record.items,
             origin: { x: 0, y: 0 },
             editor: this.#editor,
-            positioner: this.#positioner,
             externalLocation: this.#editor.externalLocationCell,
             shaped: current?.paragraphs ?? null,
           });
@@ -258,8 +255,8 @@ export class Text {
   #acquireGlyphs(items: readonly TextItem[]): void {
     for (const item of items) {
       if (item.kind === "linebreak") continue;
-      const { entry } = textItemGlyph(item, this.#editor.font);
-      if (entry && !this.#editor.glyphForId(entry.id)) this.#loadGlyph(entry.id);
+      const glyphId = glyphIdForItem(item, this.#editor.font);
+      if (glyphId && !this.#editor.glyphForId(glyphId)) void this.#loadGlyph(glyphId);
     }
   }
 

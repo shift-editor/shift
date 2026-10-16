@@ -14,10 +14,10 @@ describe("Positioner", () => {
 
   // Levien invariant: positioned.advance === sum of xAdvance.
   it("advance equals sum of xAdvance", () => {
-    const positioner = new Positioner();
-    const run = ltrRun([char(65), char(66), char(67)]);
+    const positioner = new Positioner(editor, signal(editor.font.defaultLocation()));
+    const run = ltrRun(editor, [char(65), char(66), char(67)]);
 
-    const positioned = positioner.position(run, editor, signal(editor.font.defaultLocation()));
+    const positioned = positioner.position(run, "literal");
 
     const sum = positioned.glyphs.reduce((s, g) => s + g.xAdvance, 0);
     expect(positioned.advance).toBe(sum);
@@ -26,22 +26,22 @@ describe("Positioner", () => {
 
   // cluster numbering honors clusterStart and is monotonic.
   it("cluster equals clusterStart + i", () => {
-    const positioner = new Positioner();
-    const run = ltrRun([char(65), char(66)], /* clusterStart */ 7);
+    const positioner = new Positioner(editor, signal(editor.font.defaultLocation()));
+    const run = ltrRun(editor, [char(65), char(66)], /* clusterStart */ 7);
 
-    const positioned = positioner.position(run, editor, signal(editor.font.defaultLocation()));
+    const positioned = positioner.position(run, "literal");
 
     expect(positioned.glyphs.map((g) => g.cluster)).toEqual([7, 8]);
   });
 
   // Each positioned glyph carries the bounds from its resolved render model.
   it("bounds pass through from the Glyph render model", () => {
-    const positioner = new Positioner();
     const a = char(65);
-    const run = ltrRun([a]);
+    const run = ltrRun(editor, [a]);
     const locationCell = signal(editor.font.defaultLocation());
+    const positioner = new Positioner(editor, locationCell);
 
-    const positioned = positioner.position(run, editor, locationCell);
+    const positioned = positioner.position(run, "literal");
     const record = editor.font.recordForName("A");
     const expectedBounds = record
       ? (editor.glyphForId(record.id)?.renderModelAt(locationCell).bounds ?? null)
@@ -55,10 +55,10 @@ describe("Positioner", () => {
 
   // Character the font maps no glyph to → zero advance, null bounds, no throw.
   it("handles an unmapped character gracefully", () => {
-    const positioner = new Positioner();
-    const run = ltrRun([char(0x10fffd)]);
+    const positioner = new Positioner(editor, signal(editor.font.defaultLocation()));
+    const run = ltrRun(editor, [char(0x10fffd)]);
 
-    const positioned = positioner.position(run, editor, signal(editor.font.defaultLocation()));
+    const positioned = positioner.position(run, "literal");
 
     expect(positioned.glyphs[0].xAdvance).toBe(0);
     expect(positioned.glyphs[0].bounds).toBeNull();
@@ -67,10 +67,10 @@ describe("Positioner", () => {
 
   // Empty run → empty positioned glyphs, zero advance.
   it("empty run yields empty positioned glyphs", () => {
-    const positioner = new Positioner();
-    const run = ltrRun([]);
+    const positioner = new Positioner(editor, signal(editor.font.defaultLocation()));
+    const run = ltrRun(editor, []);
 
-    const positioned = positioner.position(run, editor, signal(editor.font.defaultLocation()));
+    const positioned = positioner.position(run, "literal");
 
     expect(positioned.glyphs).toEqual([]);
     expect(positioned.advance).toBe(0);

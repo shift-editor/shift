@@ -9,6 +9,7 @@ export { GlyphOutlines } from "../lib/nodes/GlyphOutlines";
 export { ShiftStore } from "../lib/store/ShiftStore";
 export { Caret } from "../lib/text/layout/Caret";
 export { Positioner } from "../lib/text/layout/Positioner";
+export { literalRun } from "../lib/text/layout/paragraphs";
 export { TextLayout } from "../lib/text/layout/TextLayout";
 export {
   SELECT_BOUNDING_BOX_STYLE,

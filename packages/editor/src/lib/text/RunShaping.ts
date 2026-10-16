@@ -2,7 +2,7 @@ import type { ParagraphRequest, ShapedRun, ShapeUnit } from "@shift/types";
 import { effect, signal } from "../signals";
 import type { ComputedSignal, Effect, Signal, WritableSignal } from "../signals";
 import type { Font } from "../model/Font";
-import type { GlyphicTextItem, TextItem } from "./layout";
+import { splitParagraphs, type ParagraphItem, type TextItem } from "./layout";
 
 /** A run's paragraphs as last shaped, with the content they were shaped from. */
 export interface ShapedText {
@@ -34,20 +34,18 @@ export function shapingKey(items: readonly TextItem[]): string {
     .join(" ");
 }
 
-/** Splits items into one shaping request per paragraph. */
+/** Returns one shaping request per paragraph, split as layout splits them. */
 export function paragraphRequests(
   items: readonly TextItem[],
   location: ParagraphRequest["location"],
 ): ParagraphRequest[] {
-  const paragraphs: ShapeUnit[][] = [[]];
-  for (const item of items) {
-    if (item.kind === "linebreak") paragraphs.push([]);
-    else paragraphs.at(-1)!.push(shapeUnit(item));
-  }
-  return paragraphs.map((units) => ({ units, location }));
+  return splitParagraphs(items).map((paragraph) => ({
+    units: paragraph.items.map(shapeUnit),
+    location,
+  }));
 }
 
-function shapeUnit(item: GlyphicTextItem): ShapeUnit {
+function shapeUnit(item: ParagraphItem): ShapeUnit {
   return item.kind === "character" ? { codepoint: item.codepoint } : { glyphId: item.glyphId };
 }
 
