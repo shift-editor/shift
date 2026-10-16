@@ -1,5 +1,5 @@
 import { mintRunId, type GlyphId, type GlyphName, type RunId, type TextItemId } from "@shift/types";
-import { computed, keyedCache, signal, track, untracked } from "../signals";
+import { keyedCache, signal, untracked } from "../signals";
 import type { ComputedSignal, Signal } from "../signals";
 import type { Editor } from "../editor/Editor";
 import type { ShiftStore } from "../store/ShiftStore";
@@ -15,8 +15,7 @@ import {
   glyphIdForItem,
   type TextItem,
 } from "./layout";
-import { paragraphRequests, RunShaping, shapingKey, type ShapedText } from "./RunShaping";
-import { locationFromExternalAxisLocation } from "../variation/location";
+import { RunText, type ShapedText } from "./RunText";
 
 /** Owns proof text records and one reactive layout per run identity. */
 export class Text {
@@ -27,67 +26,22 @@ export class Text {
   readonly #loading = new Set<GlyphId>();
   readonly #runsByItem: StoreIndex<TextItemId, TextRunRecord>;
   readonly #unsubscribeStore: () => void;
-  readonly #shapings = keyedCache({
-    name: "text.shaping",
+  readonly #runs = keyedCache({
+    name: "text.run",
     key: (runId: RunId) => runId,
-    dispose: (shaping: RunShaping) => shaping.dispose(),
+    dispose: (runText: RunText) => runText.dispose(),
     create: (runIdCell: Signal<RunId>) =>
-      // Created on a layout's first read; its effect must not join that computed.
+      // Created on a layout's first read; its shaping effect must not join that computed.
       untracked(
         () =>
-          new RunShaping(
-            this.#editor.font,
-            computed(
-              () => {
-                const record = this.run(runIdCell.value);
-                // A preview reads its source without a workspace, which is what shapes.
-                if (!record || this.#editor.sessionMode === "preview") return null;
-                // A glyph's new Unicode value can change what the text shapes to.
-                track(this.#editor.font.glyphEntriesCell);
-                const location = locationFromExternalAxisLocation(
-                  this.#editor.externalLocationCell.value,
-                );
-                return {
-                  key: shapingKey(record.items),
-                  paragraphs: paragraphRequests(record.items, location),
-                };
-              },
-              { name: "text.shapingRequest" },
-            ),
-            (shaped) => this.#acquireShapedGlyphs(shaped),
-          ),
+          new RunText(this.#editor, runIdCell, {
+            run: (id) => this.run(id),
+            glyphsLoadedCell: this.#glyphsLoadedCell,
+            onShaped: (shaped) => this.#acquireShapedGlyphs(shaped),
+          }),
       ),
   });
-  readonly #layouts = keyedCache({
-    name: "text.layout",
-    key: (runId: RunId) => runId,
-    dispose: (layoutCell: ComputedSignal<TextLayout | null>) => layoutCell.dispose(),
-    create: (runIdCell: Signal<RunId>) =>
-      computed(
-        () => {
-          const runId = runIdCell.value;
-          const record = this.run(runId);
-          track(this.#editor.externalLocationCell);
-          track(this.#editor.activeSourceIdCell);
-          // Items resolve to glyphs by Unicode value and id, so remapping or deleting a glyph re-lays out.
-          track(this.#editor.font.glyphEntriesCell);
-          track(this.#glyphsLoadedCell);
-          if (!record) return null;
 
-          // A result shaped from other text would map glyphs to the wrong items; lay out literally until it catches up.
-          const shaped = this.#shapings.get(runId).shapedCell.value;
-          const current = shaped?.key === shapingKey(record.items) ? shaped : null;
-          return new TextLayout({
-            items: record.items,
-            origin: { x: 0, y: 0 },
-            editor: this.#editor,
-            externalLocation: this.#editor.externalLocationCell,
-            shaped: current?.paragraphs ?? null,
-          });
-        },
-        { name: "text.layoutForRun" },
-      ),
-  });
   constructor(store: ShiftStore<ShiftEditorRecord>, editor: Editor) {
     this.#store = store;
     this.#editor = editor;
@@ -205,7 +159,7 @@ export class Text {
 
   /** Returns a stable computed whose layout invalidates on content, location, source, or glyph acquisition. */
   layoutCell(id: RunId): ComputedSignal<TextLayout | null> {
-    return this.#layouts.get(id);
+    return this.#runs.get(id).layoutCell;
   }
 
   /**
@@ -248,8 +202,7 @@ export class Text {
   dispose(): void {
     this.#unsubscribeStore();
     this.#runsByItem.dispose();
-    this.#layouts.clear();
-    this.#shapings.clear();
+    this.#runs.clear();
   }
 
   #acquireGlyphs(items: readonly TextItem[]): void {
