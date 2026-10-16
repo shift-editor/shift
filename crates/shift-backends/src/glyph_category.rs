@@ -23,6 +23,11 @@ pub struct ResolvedCategory {
 }
 
 impl ResolvedCategory {
+    /// Whether the glyph is in the Mark category, whatever its subcategory.
+    pub fn is_mark(self) -> bool {
+        self.category == Some(GlyphCategory::Mark)
+    }
+
     /// Whether the glyph is a combining mark that takes no horizontal space.
     pub fn is_nonspacing_mark(self) -> bool {
         self.category == Some(GlyphCategory::Mark)

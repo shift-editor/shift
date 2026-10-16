@@ -79,9 +79,16 @@ pub(super) struct ShiftSnapshot {
     pub gdef_classes: BTreeMap<String, GlyphClassDef>,
     /// Glyphs whose advance compiles to zero, as Glyphs does for nonspacing marks.
     pub nonspacing_marks: HashSet<String>,
+    /// Glyphs in the Mark category, whatever their subcategory; anchor
+    /// propagation returns such a glyph's own anchors as they are.
+    pub mark_category_glyphs: HashSet<String>,
 }
 
 impl ShiftIrSource {
+    pub(super) fn snapshot(&self) -> &ShiftSnapshot {
+        &self.snapshot
+    }
+
     /// Freezes a font view into the representation consumed by fontir work.
     ///
     /// # Errors
@@ -132,6 +139,14 @@ impl ShiftIrSource {
                     font.glyphs()
                         .into_iter()
                         .filter(|glyph| categories.resolve(glyph).is_nonspacing_mark())
+                        .map(|glyph| glyph.name().to_string())
+                        .collect()
+                },
+                mark_category_glyphs: {
+                    let categories = GlyphCategories::new();
+                    font.glyphs()
+                        .into_iter()
+                        .filter(|glyph| categories.resolve(glyph).is_mark())
                         .map(|glyph| glyph.name().to_string())
                         .collect()
                 },
@@ -194,7 +209,8 @@ impl Source for ShiftIrSource {
         Ok(Box::new(ColorGlyphsWork))
     }
 
+    /// Propagates component anchors into composites, as fontc does for Glyphs sources.
     fn compilation_flags(&self) -> Flags {
-        Flags::empty()
+        Flags::PROPAGATE_ANCHORS
     }
 }
