@@ -44,6 +44,11 @@ export interface BridgeApi {
    */
   fontFileSpecimen(path: string): Promise<Specimen | null>
   /**
+   * Returns each anchor name's kind as export reads it; the reference the
+   * editor's own anchor-name parsing is tested against.
+   */
+  anchorKinds(names: Array<string>): Array<AnchorKind>
+  /**
    * Returns every glyph's anchors as export compiles them, with component
    * anchors propagated into composites, at each master source.
    *
@@ -226,6 +231,15 @@ export interface BridgeApi {
   shape(request: ShapeRequest): Array<ShapedGlyph>
   mapLocation(location: Location): Location
   getSources(): Array<Source>
+}
+
+/** An anchor's role in mark positioning, as export reads its name. */
+export interface AnchorKind {
+  kind: "base" | "mark" | "ligature" | "componentMarker" | "caret" | "vcaret" | "entry" | "exit" | "invalid"
+  /** The attachment group, such as `top`, for base, mark, and ligature anchors. */
+  group?: string
+  /** The ligature component or caret number, counting from 1. */
+  index?: number
 }
 
 /** One problem in `config.toml`; line and column are one-based. */

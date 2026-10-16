@@ -1,4 +1,5 @@
 import type { MatModel } from "@shift/geo";
+import { parseIndex } from "./anchorKind";
 
 /** A named anchor position in a glyph's own coordinates. */
 export interface PropagationAnchor {
@@ -210,9 +211,4 @@ function swapPair(name: string, one: string, two: string): string {
 function splitOnce(name: string): [string, string] | null {
   const at = name.indexOf("_");
   return at < 0 ? null : [name.slice(0, at), name.slice(at + 1)];
-}
-
-/** Parses an unsigned index the way Rust's `usize::from_str` does; null when it is not one. */
-function parseIndex(text: string): number | null {
-  return /^\+?\d+$/.test(text) ? Number(text) : null;
 }

@@ -1182,6 +1182,16 @@ impl Bridge {
     })
   }
 
+  /// Returns each anchor name's kind as export reads it; the reference the
+  /// editor's own anchor-name parsing is tested against.
+  #[napi]
+  pub fn anchor_kinds(&self, names: Vec<String>) -> Vec<crate::anchors::NapiAnchorKind> {
+    names
+      .iter()
+      .map(|name| shift_backends::anchor_kind(name).into())
+      .collect()
+  }
+
   /// Returns every glyph's anchors as export compiles them, with component
   /// anchors propagated into composites, at each master source.
   ///
