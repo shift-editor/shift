@@ -1,4 +1,4 @@
-import { mintRunId, type GlyphId, type GlyphName, type RunId, type TextItemId } from "@shift/types";
+import { mintRunId, type GlyphId, type RunId, type TextItemId } from "@shift/types";
 import { keyedCache, signal, untracked } from "../signals";
 import type { ComputedSignal, Signal } from "../signals";
 import type { Editor } from "../editor/Editor";
@@ -10,12 +10,12 @@ import type { TextRunRecord } from "../../types/text";
 import {
   characterTextItem,
   glyphTextItem,
-  lineBreakTextItem,
   TextLayout,
   glyphIdForItem,
   type TextItem,
 } from "./layout";
 import { RunText, type ShapedText } from "./RunText";
+import { GlyphNameParser, type TextParseContext, type TextParser } from "./parsing";
 
 /** Owns proof text records and one reactive layout per run identity. */
 export class Text {
@@ -26,6 +26,13 @@ export class Text {
   readonly #loading = new Set<GlyphId>();
   readonly #runsByItem: StoreIndex<TextItemId, TextRunRecord>;
   readonly #unsubscribeStore: () => void;
+  readonly #parseContext: TextParseContext = {
+    glyphNamed: (name) => {
+      const entry = this.#editor.font.entryForName(name);
+      return entry ? this.glyphItem(entry.id) : null;
+    },
+  };
+  #parser: TextParser = new GlyphNameParser();
   readonly #runs = keyedCache({
     name: "text.run",
     key: (runId: RunId) => runId,
@@ -162,41 +169,18 @@ export class Text {
     return this.#runs.get(id).layoutCell;
   }
 
-  /**
-   * Parses pasted or imported text.
-   *
-   * @remarks
-   * `/name` picks a glyph by name; a slash alone, or one before a name the
-   * font lacks, is a literal character.
-   */
+  /** The parser for typed and pasted text; replace it to change the input syntax for every run. */
+  get parser(): TextParser {
+    return this.#parser;
+  }
+
+  set parser(parser: TextParser) {
+    this.#parser = parser;
+  }
+
+  /** Parses typed, pasted, or imported text with {@link parser}. */
   itemsFromText(text: string): TextItem[] {
-    const items: TextItem[] = [];
-    const source = text.replaceAll("\r\n", "\n");
-    for (let index = 0; index < source.length; ) {
-      const char = source[index];
-      if (char === "\n") {
-        items.push(lineBreakTextItem());
-        index += 1;
-        continue;
-      }
-      if (char === "/") {
-        let end = index + 1;
-        while (end < source.length && source[end] !== "/" && !/\s/.test(source[end]!)) end++;
-        const name = source.slice(index + 1, end) as GlyphName;
-        const entry = end > index + 1 ? this.#editor.font.entryForName(name) : null;
-        const picked = entry ? this.glyphItem(entry.id) : null;
-        if (picked) {
-          items.push(picked);
-          index = end;
-          continue;
-        }
-      }
-      const codepoint = source.codePointAt(index);
-      if (codepoint === undefined) break;
-      items.push(characterTextItem(codepoint));
-      index += String.fromCodePoint(codepoint).length;
-    }
-    return items;
+    return this.#parser.parse(text, this.#parseContext);
   }
 
   dispose(): void {
