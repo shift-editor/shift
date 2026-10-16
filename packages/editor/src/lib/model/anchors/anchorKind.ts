@@ -29,14 +29,10 @@ export function anchorKind(name: string): AnchorKind {
   if (name === "entry") return { kind: "entry" };
   if (name === "exit") return { kind: "exit" };
 
-  const caret = name.startsWith("caret_")
-    ? name.slice("caret_".length)
-    : name.startsWith("vcaret_")
-      ? name.slice("vcaret_".length)
-      : null;
-  if (caret !== null) {
-    const kind = name.startsWith("v") ? "vcaret" : "caret";
-    const index = parseIndex(caret);
+  const caretPrefix = ["caret_", "vcaret_"].find((prefix) => name.startsWith(prefix));
+  if (caretPrefix) {
+    const kind = caretPrefix === "vcaret_" ? "vcaret" : "caret";
+    const index = parseIndex(name.slice(caretPrefix.length));
     if (index === 0) return { kind: "invalid" };
     // A caret with no number, or a malformed one, is the first.
     return { kind, index: index ?? 1 };
