@@ -15,6 +15,7 @@ import type {
   Line,
   Point2D,
   PositionedGlyph,
+  SelectionRect,
   PositionedRun,
   TextItemId,
 } from "./types";
@@ -25,6 +26,7 @@ import type { Editor } from "../../editor/Editor";
 import type { Font } from "../../model/Font";
 import type { Signal } from "../../signals/signal";
 import type { ExternalAxisLocation } from "../../../types/variation";
+import type { TextSelectionRange } from "../../../types/text";
 
 export interface TextLayoutParams {
   items: readonly TextItem[];
@@ -191,6 +193,33 @@ export class TextLayout {
   /** @knipclassignore — convenience for caret construction at a canvas point */
   caretAtPoint(p: Point2D): Caret {
     return Caret.atPoint(this, p);
+  }
+
+  /** Returns advance-based highlight rectangles for a cluster range, one per line; line breaks own no fill. */
+  selectionRects(range: TextSelectionRange): SelectionRect[] {
+    const rects: SelectionRect[] = [];
+    for (const line of this.lines) {
+      let runBase = this.origin.x;
+      let left: number | null = null;
+      let right = runBase;
+      for (const run of line.runs) {
+        for (const glyph of run.glyphs) {
+          if (glyph.cluster < range.start || glyph.cluster >= range.end) continue;
+          left ??= runBase + glyph.origin.x;
+          right = runBase + glyph.origin.x + glyph.xAdvance;
+        }
+        runBase += run.advance;
+      }
+      if (left !== null) {
+        rects.push({
+          x: left,
+          width: right - left,
+          top: line.y + line.ascent,
+          bottom: line.y + line.descent,
+        });
+      }
+    }
+    return rects;
   }
 
   measure(): number {

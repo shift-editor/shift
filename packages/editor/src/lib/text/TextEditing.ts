@@ -2,24 +2,11 @@ import { computed, type Signal } from "../signals";
 import type { NodeId } from "@shift/types";
 import type { ShiftStore } from "../store/ShiftStore";
 import type { ShiftEditorRecord } from "../../types/records";
-import {
-  currentTextEditingId,
-  type TextCaret,
-  type TextEditingRecord,
-  type TextEditResult,
-} from "../../types/text";
-import { Caret, type TextItem } from "./layout";
-import {
-  caretForCluster,
-  clusterForCaret,
-  computeSelectionRects,
-  deleteText,
-  graphemeCluster,
-  selectionRange,
-  spliceText,
-  wordCluster,
-} from "./edit";
+import { currentTextEditingId, type TextCaret, type TextEditingRecord } from "../../types/text";
+import { Caret, type SelectionRect, type TextItem } from "./layout";
+import { TextBuffer } from "./TextBuffer";
 import type { Editor } from "../editor/Editor";
+import type { TextRunNode } from "../../types/node";
 
 /** Owns the session caret for one placed text node; text content belongs to Text. */
 export class TextEditing {
@@ -98,55 +85,46 @@ export class TextEditing {
   }
 
   get selectedItems(): readonly TextItem[] {
-    const state = this.state;
-    const items = this.#items();
-    if (!state || !items) return [];
-    const { start, end } = selectionRange(items, state.anchor, state.focus);
-    return items.slice(start, end);
+    return this.#buffer()?.selectedItems ?? [];
   }
 
-  get selectionRects(): ReturnType<typeof computeSelectionRects> {
-    const state = this.state;
-    const node = this.#editor.scene.nodeOfKind(state?.nodeId ?? null, "textRun");
-    if (!node || !state) return [];
-    const run = this.#editor.text.run(node.runId);
-    const layout = this.#editor.text.layoutCell(node.runId).peek();
-    if (!run || !layout) return [];
-    return computeSelectionRects(layout, selectionRange(run.items, state.anchor, state.focus));
+  get selectionRects(): readonly SelectionRect[] {
+    const node = this.#node();
+    const buffer = this.#buffer();
+    const layout = node && this.#editor.text.layoutCell(node.runId).peek();
+    if (!buffer || !layout) return [];
+    return layout.selectionRects(buffer.selection);
   }
 
   insert(items: readonly TextItem[]): void {
     if (items.length === 0) return;
-    this.#edit("Insert text", (current, anchor, focus) =>
-      spliceText(current, anchor, focus, items),
-    );
+    this.#edit("Insert text", (buffer) => buffer.splice(items));
   }
 
   insertText(text: string): void {
     this.insert(this.#editor.text.itemsFromText(text));
   }
   deleteBackward(): void {
-    this.#edit("Delete text", (items, anchor, focus) => deleteText(items, anchor, focus, -1));
+    this.#edit("Delete text", (buffer) => buffer.delete(-1));
   }
   deleteForward(): void {
-    this.#edit("Delete text", (items, anchor, focus) => deleteText(items, anchor, focus, 1));
+    this.#edit("Delete text", (buffer) => buffer.delete(1));
   }
 
   move(direction: -1 | 1, granularity: "character" | "word" | "line", extend = false): void {
-    const state = this.state;
-    const items = this.#items();
-    if (!state || !items) return;
-    const cluster = clusterForCaret(items, state.focus);
+    const buffer = this.#buffer();
+    if (!buffer) return;
+    const cluster = buffer.focusCluster;
     let target = cluster;
     switch (granularity) {
       case "character":
-        target = graphemeCluster(items, cluster, direction);
+        target = buffer.graphemeStep(cluster, direction);
         break;
       case "word":
-        target = wordCluster(items, cluster, direction);
+        target = buffer.wordStep(cluster, direction);
         break;
       case "line": {
-        const node = this.#editor.scene.nodeOfKind(state.nodeId, "textRun");
+        const node = this.#node();
         const line =
           node &&
           this.#editor.text
@@ -166,13 +144,11 @@ export class TextEditing {
   }
 
   moveVertical(direction: -1 | 1, extend = false): void {
-    const state = this.state;
-    const node = this.#editor.scene.nodeOfKind(state?.nodeId ?? null, "textRun");
-    const items = this.#items();
-    if (!state || !node || !items) return;
-    const layout = this.#editor.text.layoutCell(node.runId).peek();
-    if (!layout) return;
-    const caret = Caret.atCluster(layout, clusterForCaret(items, state.focus));
+    const node = this.#node();
+    const buffer = this.#buffer();
+    const layout = node && this.#editor.text.layoutCell(node.runId).peek();
+    if (!buffer || !layout) return;
+    const caret = Caret.atCluster(layout, buffer.focusCluster);
     this.#goalX ??= caret.position().x;
     this.#place(
       (direction === -1 ? caret.previousLine(this.#goalX) : caret.nextLine(this.#goalX)).cluster,
@@ -188,16 +164,16 @@ export class TextEditing {
   }
 
   selectAll(): void {
-    const items = this.#items();
-    if (!items) return;
-    this.#place(items.length, true, "Select text", null);
+    const buffer = this.#buffer();
+    if (!buffer) return;
+    this.#place(buffer.items.length, true, "Select text", null);
   }
 
   #place(cluster: number, extend: boolean, label?: string, anchor?: TextCaret): void {
     const state = this.state;
-    const items = this.#items();
-    if (!state || !items) return;
-    const caret = caretForCluster(items, cluster);
+    const buffer = this.#buffer();
+    if (!state || !buffer) return;
+    const caret = buffer.caretAt(cluster);
     const extendedAnchor = extend ? state.anchor : caret;
     const write = () =>
       this.#store.put({
@@ -209,24 +185,24 @@ export class TextEditing {
     else write();
   }
 
-  #items(): readonly TextItem[] | null {
-    const node = this.#editor.scene.nodeOfKind(this.state?.nodeId ?? null, "textRun");
-    return node ? this.#editor.text.items(node) : null;
+  #node(): TextRunNode | null {
+    return this.#editor.scene.nodeOfKind(this.state?.nodeId ?? null, "textRun");
   }
 
-  #edit(
-    label: string,
-    edit: (
-      items: readonly TextItem[],
-      anchor: TextCaret,
-      focus: TextCaret,
-    ) => TextEditResult | null,
-  ): void {
+  /** The edited run's items with the current selection; null when not editing. */
+  #buffer(): TextBuffer | null {
     const state = this.state;
-    const node = this.#editor.scene.nodeOfKind(state?.nodeId ?? null, "textRun");
+    const node = this.#node();
+    if (!state || !node) return null;
+    return new TextBuffer(this.#editor.text.items(node), state.focus, state.anchor);
+  }
+
+  #edit(label: string, edit: (buffer: TextBuffer) => TextBuffer | null): void {
+    const state = this.state;
+    const node = this.#node();
     const run = node && this.#editor.text.run(node.runId);
     if (!state || !run) return;
-    const result = edit(run.items, state.anchor, state.focus);
+    const result = edit(new TextBuffer(run.items, state.focus, state.anchor));
     if (!result) return;
     const write = () => {
       this.#editor.text.setItems(run.id, result.items);

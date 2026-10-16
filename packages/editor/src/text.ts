@@ -1,13 +1,5 @@
 export { TextEditing } from "./lib/text/TextEditing";
-export {
-  caretForCluster,
-  clusterForCaret,
-  deleteText,
-  graphemeCluster,
-  selectionRange,
-  spliceText,
-  wordCluster,
-} from "./lib/text/edit";
+export { TextBuffer } from "./lib/text/TextBuffer";
 export { characterTextItem, glyphTextItem, lineBreakTextItem } from "./lib/text/layout/types";
 export type {
   CharacterTextItem,

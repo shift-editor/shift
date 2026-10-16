@@ -141,6 +141,14 @@ export interface Hit {
   side: "left" | "right";
 }
 
+/** A selection highlight on one line, in layout coordinates. */
+export interface SelectionRect {
+  readonly x: number;
+  readonly width: number;
+  readonly top: number;
+  readonly bottom: number;
+}
+
 export interface CaretPosition {
   x: number;
   y: number;

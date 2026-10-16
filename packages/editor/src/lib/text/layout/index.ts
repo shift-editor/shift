@@ -17,6 +17,7 @@ export type {
   LineBreakTextItem,
   PositionedGlyph,
   PositionedRun,
+  SelectionRect,
   SegmentedRun,
   TextItemId,
 } from "./types";
