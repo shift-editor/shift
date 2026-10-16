@@ -111,7 +111,6 @@ impl Work<Context, WorkId, Error> for StaticMetadataWork {
                     .iter()
                     .map(|name| name.as_str().into())
                     .collect(),
-                ..Default::default()
             });
         context.static_metadata.set(static_metadata);
         Ok(())

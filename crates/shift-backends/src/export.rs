@@ -345,7 +345,7 @@ mod tests {
             }
             for &(base, dx, dy) in components {
                 let base = font.glyph_by_name(base).unwrap();
-                let mut component = shift_font::Component::new(base.id(), base.name().clone());
+                let mut component = shift_font::Component::new(base.id(), base.name());
                 component.translate(dx, dy);
                 layer.add_component(component);
             }
