@@ -44,6 +44,13 @@ export interface BridgeApi {
    */
   fontFileSpecimen(path: string): Promise<Specimen | null>
   /**
+   * Returns every glyph's anchors as export compiles them, with component
+   * anchors propagated into composites, at each master source.
+   *
+   * The reference the editor's own anchor propagation is tested against.
+   */
+  propagatedAnchors(): Array<PropagatedGlyphAnchors>
+  /**
    * Builds the thumbnail specimen from the open document's current state.
    *
    * Resolves to `null` when the font draws nothing usable; rejects when no
@@ -279,6 +286,23 @@ export interface FontExportResult {
 export interface NewWorkspace {
   familyName?: string
   unitsPerEm?: number
+}
+
+export interface PropagatedAnchor {
+  name: string
+  x: number
+  y: number
+}
+
+/** One glyph's anchors as export compiles them, at each master source it has a layer for. */
+export interface PropagatedGlyphAnchors {
+  glyphName: GlyphName
+  sources: Array<PropagatedSourceAnchors>
+}
+
+export interface PropagatedSourceAnchors {
+  sourceId: SourceId
+  anchors: Array<PropagatedAnchor>
 }
 
 /**
@@ -874,6 +898,13 @@ export interface GlyphRecord {
   unicodes: Array<Unicode>
   componentBaseGlyphIds: Array<GlyphId>
   layers: Array<GlyphLayerRecord>
+  /** In the Mark category or classed `mark`: anchor propagation keeps its own anchors. */
+  mark?: boolean
+  /**
+   * `"explicit"` when classed a ligature, `"subcategory"` when a ligature
+   * once it has an attaching anchor.
+   */
+  ligature?: "explicit" | "subcategory"
 }
 
 export interface GlyphSnapshot {

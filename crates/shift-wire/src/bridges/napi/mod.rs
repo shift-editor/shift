@@ -500,6 +500,12 @@ pub struct NapiGlyphRecord {
     #[napi(ts_type = "Array<GlyphId>")]
     pub component_base_glyph_ids: Vec<String>,
     pub layers: Vec<NapiGlyphLayerRecord>,
+    /// In the Mark category or classed `mark`: anchor propagation keeps its own anchors.
+    pub mark: Option<bool>,
+    /// `"explicit"` when classed a ligature, `"subcategory"` when a ligature
+    /// once it has an attaching anchor.
+    #[napi(ts_type = "\"explicit\" | \"subcategory\"")]
+    pub ligature: Option<String>,
 }
 
 impl From<GlyphRecord> for NapiGlyphRecord {
@@ -514,6 +520,8 @@ impl From<GlyphRecord> for NapiGlyphRecord {
                 .map(|id| id.to_string())
                 .collect(),
             layers: record.layers.into_iter().map(Into::into).collect(),
+            mark: record.mark.then_some(true),
+            ligature: record.ligature,
         }
     }
 }

@@ -1182,6 +1182,21 @@ impl Bridge {
     })
   }
 
+  /// Returns every glyph's anchors as export compiles them, with component
+  /// anchors propagated into composites, at each master source.
+  ///
+  /// The reference the editor's own anchor propagation is tested against.
+  #[napi]
+  pub fn propagated_anchors(&mut self) -> Result<Vec<crate::anchors::NapiPropagatedGlyphAnchors>> {
+    let snapshot = self
+      .save_snapshot()
+      .map_err(|e| Error::new(Status::GenericFailure, e.to_string()))?;
+    let glyphs = FontExporter::new()
+      .propagated_anchors(&snapshot)
+      .map_err(|e| Error::new(Status::GenericFailure, e.to_string()))?;
+    Ok(glyphs.into_iter().map(Into::into).collect())
+  }
+
   /// Builds the thumbnail specimen from the open document's current state.
   ///
   /// Resolves to `null` when the font draws nothing usable; rejects when no
@@ -1314,10 +1329,21 @@ impl Bridge {
     let workspace = self.workspace()?;
     let font = workspace.font();
     let mut component_references = workspace.glyph_component_references()?;
+    let propagation = shift_backends::propagation_categories(font.glyphs(), font.lib());
     let mut records = font
       .glyphs()
       .map(|glyph| {
         let mut record = GlyphRecord::from(glyph);
+        if let Some(category) = propagation.get(&glyph.id()) {
+          record.mark = category.mark;
+          record.ligature = category.ligature.map(|ligature| {
+            match ligature {
+              shift_backends::PropagationLigature::Explicit => "explicit",
+              shift_backends::PropagationLigature::Subcategory => "subcategory",
+            }
+            .to_string()
+          });
+        }
         record.component_base_glyph_ids =
           component_references.remove(&glyph.id()).unwrap_or_default();
         record.layers = font

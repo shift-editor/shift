@@ -32,7 +32,17 @@ import {
   type Signal,
   type WritableSignal,
 } from "../signals";
-import type { DeleteMode, GlyphFillHit, GlyphOptions } from "../../types/glyph";
+import type {
+  AnchorPropagationCategory,
+  DeleteMode,
+  GlyphFillHit,
+  GlyphOptions,
+} from "../../types/glyph";
+import {
+  propagateAnchors,
+  type PropagatedAnchors,
+  type PropagationAnchor,
+} from "./anchors/propagateAnchors";
 import type { DesignAxisLocation, ExternalAxisLocation } from "../../types/variation";
 import { designAxisLocationFromLocation, designAxisLocationsEqual } from "../variation/location";
 import type { Designspace } from "../variation/Designspace";
@@ -1358,6 +1368,12 @@ export class GlyphRenderModel {
   readonly #svgPathCell: Signal<string>;
   readonly #sidebearingsCell: Signal<GlyphSidebearings>;
   readonly #anchorsCell: Signal<readonly RenderAnchor[]>;
+  readonly #anchorCategory: (glyphId: GlyphId) => AnchorPropagationCategory;
+  readonly #propagatedCache: KeyedCache<GlyphId, GlyphId, ComputedSignal<PropagatedAnchors>>;
+  // non-reactive: glyphs whose propagation is being computed, to stop at a component cycle
+  readonly #propagating = new Set<GlyphId>();
+  readonly #propagatedAnchorsCell: Signal<readonly PropagationAnchor[]>;
+  readonly #anchorsByNameCell: Signal<ReadonlyMap<string, PropagationAnchor>>;
 
   /**
    * Creates a Glyph render model tied to a live external location and optional exact source.
@@ -1371,6 +1387,7 @@ export class GlyphRenderModel {
    * @param exactSourceId - Resolves an exact master identity at the current position.
    * @param layerAt - Resolves exact authored layers for root or component glyphs.
    * @param geometryAt - Resolves root or component geometry at the current position.
+   * @param anchorCategory - Reads a root or component glyph's propagation category.
    */
   constructor(
     glyphId: GlyphId,
@@ -1390,8 +1407,27 @@ export class GlyphRenderModel {
       location: ExternalAxisLocation,
       sourceId: SourceId | null,
     ) => GlyphGeometry,
+    anchorCategory: (glyphId: GlyphId) => AnchorPropagationCategory,
   ) {
     this.#glyphId = glyphId;
+    this.#anchorCategory = anchorCategory;
+    this.#propagatedCache = keyedCache<GlyphId, GlyphId, ComputedSignal<PropagatedAnchors>>({
+      name: "glyph.renderModel.propagatedAnchors",
+      key: (id) => id,
+      create: (idCell) =>
+        computed(() => this.#propagate(idCell.value), {
+          name: "glyph.renderModel.propagatedAnchors",
+        }),
+      dispose: (cell) => cell.dispose(),
+    });
+    this.#propagatedAnchorsCell = computed(
+      () => this.#propagatedCache.get(this.#glyphId).value.anchors,
+      { name: "glyph.renderModel.anchorsWithComponents" },
+    );
+    this.#anchorsByNameCell = computed(
+      () => new Map(this.#propagatedAnchorsCell.value.map((anchor) => [anchor.name, anchor])),
+      { name: "glyph.renderModel.anchorsByName" },
+    );
     this.#externalLocation = externalLocation;
     this.#activeSourceId = activeSourceId;
     this.#projectionCell = projectionCell;
@@ -1475,6 +1511,74 @@ export class GlyphRenderModel {
         rsb: this.#geometry.xAdvanceCell.value - bounds.max.x,
       };
     });
+  }
+
+  /**
+   * The glyph's anchors with its components' anchors copied in, as export compiles them.
+   *
+   * @remarks
+   * A composite takes its components' anchors moved with them, a stacked mark's
+   * `name` anchor replacing the base's, and its own anchors win over copied
+   * ones. Computed at this model's location from each glyph's geometry there,
+   * so it matches export exactly at sources, and between them wherever
+   * component transforms vary linearly.
+   */
+  get anchorsWithComponentsCell(): Signal<readonly PropagationAnchor[]> {
+    return this.#propagatedAnchorsCell;
+  }
+
+  get anchorsWithComponents(): readonly PropagationAnchor[] {
+    return this.#propagatedAnchorsCell.peek();
+  }
+
+  /**
+   * Returns the anchor marks attach to by name, own or from a component.
+   *
+   * @remarks
+   * The one lookup by anchor name: with duplicate names the last one wins,
+   * as export resolves them.
+   */
+  anchorNamed(name: string): PropagationAnchor | null {
+    track(this.#anchorsByNameCell);
+    return this.#anchorsByNameCell.peek().get(name) ?? null;
+  }
+
+  #propagate(glyphId: GlyphId): PropagatedAnchors {
+    // Rust rejects component cycles; this stops one that reaches the editor first.
+    if (this.#propagating.has(glyphId)) return { anchors: [], baseGlyphCount: 0 };
+    this.#propagating.add(glyphId);
+    try {
+      // Called from the propagation computeds: track, then read.
+      track(this.#externalLocation);
+      const geometry = this.geometryAt(glyphId, this.#externalLocation.peek());
+      const anchors = geometry.anchors.flatMap((anchor) =>
+        anchor.name === undefined ? [] : [{ name: anchor.name, x: anchor.x, y: anchor.y }],
+      );
+      const components = geometry.components.map((component) => {
+        const propagatedCell = this.#propagatedCache.get(component.baseGlyphId);
+        track(propagatedCell);
+        const propagated = propagatedCell.peek();
+        return {
+          anchors: propagated.anchors,
+          baseGlyphCount: propagated.baseGlyphCount,
+          matrix: component.matrix,
+        };
+      });
+      const category = this.#anchorCategory(glyphId);
+      // Export classes a glyph by its authored anchors, named or not.
+      const attaching = geometry.anchors.some((anchor) => !anchor.name?.startsWith("_"));
+      const propagated = propagateAnchors({
+        anchors,
+        components,
+        isMark: category.mark,
+        isLigature:
+          category.ligature === "explicit" || (category.ligature === "subcategory" && attaching),
+      });
+      // Export rewrites only composites' anchors; others compile as authored.
+      return components.length > 0 ? propagated : { ...propagated, anchors };
+    } finally {
+      this.#propagating.delete(glyphId);
+    }
   }
 
   /** @internal Resolves numeric geometry for component occurrence arithmetic. */
@@ -1947,6 +2051,7 @@ export class Glyph {
   readonly #designspace: Designspace;
   readonly #projectionCell: Signal<GlyphProjection | null>;
   readonly #defaultSourceId: SourceId;
+  readonly #anchorCategory: (glyphId: GlyphId) => AnchorPropagationCategory;
   readonly #layersBySourceIdCell = computed(
     () => new Map(this.#layersCell.value.map((layer) => [layer.sourceId, layer] as const)),
     { name: "glyph.layersBySourceId" },
@@ -1970,6 +2075,7 @@ export class Glyph {
     this.#designspace = options.designspace;
     this.#projectionCell = options.projectionCell;
     this.#defaultSourceId = options.defaultSourceId;
+    this.#anchorCategory = options.anchorCategory;
     this.replaceComponentGlyphs(options.componentGlyphs);
   }
 
@@ -2185,6 +2291,7 @@ export class Glyph {
           new GlyphGeometry({ contours: [], anchors: [], components: [] }, new Float64Array([0]))
         );
       },
+      this.#anchorCategory,
     );
     renderModels.set(activeSourceIdCell, renderModel);
     return renderModel;

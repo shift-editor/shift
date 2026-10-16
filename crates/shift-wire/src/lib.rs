@@ -341,6 +341,11 @@ pub struct GlyphRecord {
     pub unicodes: Vec<u32>,
     pub component_base_glyph_ids: Vec<GlyphId>,
     pub layers: Vec<GlyphLayerRecord>,
+    /// In the Mark category or classed `mark`: anchor propagation keeps its own anchors.
+    pub mark: bool,
+    /// `"explicit"` when classed a ligature, `"subcategory"` when a ligature
+    /// once it has an attaching anchor.
+    pub ligature: Option<String>,
 }
 
 impl From<&IrGlyph> for GlyphRecord {
@@ -371,6 +376,8 @@ impl From<&IrGlyph> for GlyphRecord {
             unicodes: glyph.unicodes().to_vec(),
             component_base_glyph_ids,
             layers,
+            mark: false,
+            ligature: None,
         }
     }
 }

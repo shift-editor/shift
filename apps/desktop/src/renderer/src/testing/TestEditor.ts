@@ -33,6 +33,7 @@ import type { SystemClipboard } from "@shift/editor/clipboard";
 import { createWorkspaceStack, type WorkspaceStack } from "./workspaceStack";
 import type { GlyphNode, TextRunNode } from "@shift/editor/types";
 import type { FontSessionMode, WorkspaceDocumentState } from "@shared/workspace/protocol";
+import type { PropagatedGlyphAnchors } from "@shift/types";
 
 const DEFAULT_MODIFIERS = { shiftKey: false, altKey: false, metaKey: false };
 
@@ -114,6 +115,12 @@ export class TestEditor extends Editor {
   /** The real renderer edit coordinator, for desktop components built around this editor. */
   get workspaceEditCoordinator(): WorkspaceStack["editCoordinator"] {
     return this.#stack.editCoordinator;
+  }
+
+  /** Every glyph's anchors as export compiles them, once pending edits reach the workspace. */
+  async propagatedAnchors(): Promise<PropagatedGlyphAnchors[]> {
+    await this.settle();
+    return this.#stack.client.propagatedAnchors();
   }
 
   /** Flushes pending edits, saves to a new target, and adopts it. */
