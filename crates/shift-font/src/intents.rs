@@ -5,6 +5,7 @@
 //! carry caller-minted ids and insertion anchors, while changesets retain
 //! expected originals and replacements for atomic persistence and inversion.
 
+use crate::anchor_attachment::realign_attached_components;
 use crate::changes::{FontChange, FontChangeSet, Replacement, SourceCollection};
 use crate::composite::anchor_aligned_offset;
 use crate::error::{CoreError, CoreResult};
@@ -423,6 +424,20 @@ impl FontIntent {
         }
     }
 
+    /// Whether this intent can change a layer's anchors, so components
+    /// attached to them elsewhere may follow.
+    pub fn may_move_anchors(&self) -> bool {
+        matches!(
+            self,
+            Self::AddAnchors { .. }
+                | Self::MoveAnchors { .. }
+                | Self::RemoveAnchors { .. }
+                | Self::RenameAnchors { .. }
+                | Self::TransformLayer { .. }
+                | Self::ReplaceGlyphLayerContent { .. }
+        )
+    }
+
     /// Whether this intent creates, renames, deletes, or fills kerning groups.
     fn edits_kerning_groups(&self) -> bool {
         matches!(
@@ -538,6 +553,15 @@ impl Font {
             let structural = intent.structural();
             after.apply_intent(intent)?;
             touch(&mut touched, layer_id, structural);
+        }
+
+        // Components sitting on anchors this set moved follow them, in the same undo step.
+        let edited = touched
+            .iter()
+            .map(|(layer_id, _)| layer_id.clone())
+            .collect::<Vec<_>>();
+        for layer_id in realign_attached_components(&before, &mut after, &edited) {
+            touch(&mut touched, layer_id, false);
         }
 
         let mut changes = FontChangeSet::default();

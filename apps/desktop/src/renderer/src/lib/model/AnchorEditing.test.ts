@@ -65,4 +65,19 @@ describe("adding and renaming anchors", () => {
     await editor.settle();
     expect(namesBySource("a")[0]).toContain("new.1");
   });
+
+  it("moves components attached to a moved anchor, in composites the editor holds", async () => {
+    const source = editor.font.defaultSource;
+    const aacute = glyph("aacute").layerForSource(source.id)!;
+    const acuteX = () => aacute.geometry.components[1]!.matrix.e;
+    expect(acuteX()).toBe(150);
+
+    const layer = glyph("a").layerForSource(source.id)!;
+    const top = layer.anchors.find((anchor) => anchor.name === "top")!;
+    const [position] = layer.positionsFor([{ kind: "anchor", id: top.id }]);
+    layer.applyPositionPatch([{ ...position!, x: position!.x + 30 }]);
+    await editor.settle();
+
+    expect(acuteX()).toBe(180);
+  });
 });

@@ -29,6 +29,7 @@
 //! orchestration belongs to `shift-workspace`. Transport belongs to `shift-bridge`
 //! and `shift-wire`. UI interaction belongs to the TypeScript editor.
 //!
+mod anchor_attachment;
 pub mod changes;
 pub mod composite;
 pub mod curve;

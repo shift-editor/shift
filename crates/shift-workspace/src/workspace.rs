@@ -286,6 +286,26 @@ impl FontWorkspace {
         if !component_roots.is_empty() {
             self.acquire_glyphs(&component_roots, AcquireScope::ComponentClosure)?;
         }
+        // Components attached to anchors this set moves follow them: load
+        // every composite built on an edited glyph, with its other components.
+        let anchor_glyphs = set
+            .intents
+            .iter()
+            .filter(|intent| intent.may_move_anchors())
+            .filter_map(|intent| intent.layer_id())
+            .filter_map(|layer_id| self.font.glyph_id_by_layer(layer_id))
+            .collect::<HashSet<_>>();
+        if !anchor_glyphs.is_empty() {
+            let dependents = self
+                .glyph_component_references()?
+                .into_iter()
+                .filter(|(_, bases)| bases.iter().any(|base| anchor_glyphs.contains(base)))
+                .map(|(glyph_id, _)| glyph_id)
+                .collect::<Vec<_>>();
+            if !dependents.is_empty() {
+                self.acquire_glyphs(&dependents, AcquireScope::ComponentClosure)?;
+            }
+        }
 
         let outcome = self.commit_edit(true, |font| {
             let outcome = font.apply_intents(set)?;
