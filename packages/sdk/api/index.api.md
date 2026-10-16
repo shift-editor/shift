@@ -200,6 +200,7 @@ export class Editor {
     get activeSourceId(): SourceId | null;
     // (undocumented)
     get activeSourceIdCell(): Signal<SourceId | null>;
+    addAnchorAtPointer(): boolean;
     addComponent(baseGlyphId: GlyphId): Promise<ComponentId | null>;
     // Warning: (ae-forgotten-export) The symbol "Canvas2DSurface" needs to be exported by the entry point index.d.ts
     // Warning: (ae-forgotten-export) The symbol "MarkerCanvasSurface" needs to be exported by the entry point index.d.ts
@@ -371,6 +372,7 @@ export class Editor {
     // Warning: (ae-forgotten-export) The symbol "ToolManifest" needs to be exported by the entry point index.d.ts
     // Warning: (ae-forgotten-export) The symbol "ToolRegistration" needs to be exported by the entry point index.d.ts
     registerTool(manifest: ToolManifest): ToolRegistration;
+    renameAnchor(anchorId: AnchorId, name: string): boolean;
     // Warning: (ae-forgotten-export) The symbol "TemporaryToolOptions" needs to be exported by the entry point index.d.ts
     //
     // (undocumented)
@@ -761,6 +763,7 @@ export interface FontSnapshot {
 export class Glyph {
     // Warning: (ae-forgotten-export) The symbol "GlyphOptions" needs to be exported by the entry point index.d.ts
     constructor(options: GlyphOptions);
+    addAnchor(name: string, position: Point2D): void;
     // Warning: (ae-forgotten-export) The symbol "Point" needs to be exported by the entry point index.d.ts
     //
     // (undocumented)
@@ -805,6 +808,7 @@ export class Glyph {
     point(pointId: PointId): Point | null;
     // (undocumented)
     points(pointIds: readonly PointId[]): Point[];
+    renameAnchor(name: string, newName: string): number;
     replaceComponentGlyphs(componentGlyphs: ReadonlyMap<GlyphId, Glyph>): void;
     // (undocumented)
     replaceEntry(entry: GlyphEntry): void;
@@ -904,6 +908,8 @@ export interface GlyphRecord {
     //
     // (undocumented)
     layers: Array<GlyphLayerRecord>;
+    ligature?: "explicit" | "subcategory";
+    mark?: boolean;
     // (undocumented)
     name: GlyphName;
     // (undocumented)
@@ -1515,10 +1521,10 @@ export function useSignalState<T>(signal: Signal<T>, options?: UseSignalOptions)
 
 // Warnings were encountered during analysis:
 //
-// dist/Editor-tfzidUVH.d.ts:2808:5 - (ae-forgotten-export) The symbol "Axis" needs to be exported by the entry point index.d.ts
-// dist/Editor-tfzidUVH.d.ts:2809:5 - (ae-forgotten-export) The symbol "AxisMappingBasis" needs to be exported by the entry point index.d.ts
-// dist/Editor-tfzidUVH.d.ts:2810:5 - (ae-forgotten-export) The symbol "Source" needs to be exported by the entry point index.d.ts
-// dist/Editor-tfzidUVH.d.ts:4824:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
+// dist/Editor-Cga1Nw47.d.ts:2822:5 - (ae-forgotten-export) The symbol "Axis" needs to be exported by the entry point index.d.ts
+// dist/Editor-Cga1Nw47.d.ts:2823:5 - (ae-forgotten-export) The symbol "AxisMappingBasis" needs to be exported by the entry point index.d.ts
+// dist/Editor-Cga1Nw47.d.ts:2824:5 - (ae-forgotten-export) The symbol "Source" needs to be exported by the entry point index.d.ts
+// dist/Editor-Cga1Nw47.d.ts:4904:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 
