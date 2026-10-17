@@ -114,6 +114,36 @@ describe("adding, renaming, and deleting anchors", () => {
     expect(anchorNames("a", active)).toContain("new.1");
   });
 
+  it("moves several anchors to one coordinate, keeping other sources relative", async () => {
+    const { active, other } = sources();
+    await editBothSources();
+    const at = (sourceId: SourceId, name: string) =>
+      glyph("a")
+        .layerForSource(sourceId)!
+        .anchors.find((anchor) => anchor.name === name)!;
+    const otherTopBefore = at(other, "top").x;
+    const activeTopBefore = at(active, "top").x;
+
+    expect(editor.setAnchorAxis([anchorId("a", "top"), anchorId("a", "ogonek")], "x", 300)).toBe(
+      true,
+    );
+    await editor.settle();
+
+    expect(at(active, "top").x).toBe(300);
+    expect(at(active, "ogonek").x).toBe(300);
+    expect(at(other, "top").x).toBe(otherTopBefore + (300 - activeTopBefore));
+  });
+
+  it("adds an anchor on the baseline at the middle of the advance", async () => {
+    const layer = glyph("a").layerForSource(sources().active)!;
+
+    expect(editor.addAnchorAt()).toBe(true);
+    await editor.settle();
+
+    const added = layer.anchors.find((anchor) => anchor.name === "new")!;
+    expect({ x: added.x, y: added.y }).toEqual({ x: Math.round(layer.xAdvance / 2), y: 0 });
+  });
+
   it("moves components attached to a moved anchor, in composites the editor holds", async () => {
     const source = editor.font.defaultSource;
     const aacute = glyph("aacute").layerForSource(source.id)!;

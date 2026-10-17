@@ -3,79 +3,80 @@ import { Input, Tooltip } from "@shift/ui";
 import { isAnchorId, type AnchorId } from "@shift/types";
 import { useSignalEffect } from "@/hooks/useSignalEffect";
 import { track } from "@shift/editor/signals";
-import { PositionEdits, type GlyphLayer } from "@shift/editor/model";
-import { Vec2, type PointAxis } from "@shift/geo";
+import type { PointAxis } from "@shift/geo";
 import { useFocusZone } from "@/context/FocusZoneContext";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { SidebarNumberField } from "./SidebarNumberField";
 import { SidebarSection } from "./SidebarSection";
 
+interface SelectedAnchors {
+  readonly ids: readonly AnchorId[];
+  /** The one anchor's name; `undefined` with several anchors selected. */
+  readonly name: string | null | undefined;
+  /** The shared coordinate on each axis, or null when the anchors differ. */
+  readonly x: number | null;
+  readonly y: number | null;
+}
+
+const NONE: SelectedAnchors = { ids: [], name: null, x: null, y: null };
+
 export const AnchorSection = () => {
   const editor = useEditor();
-  const [anchorId, setAnchorId] = useState<AnchorId | null>(null);
-  const [anchorName, setAnchorName] = useState<string | null>(null);
-  const [layer, setLayer] = useState<GlyphLayer | null>(null);
-  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [selected, setSelected] = useState<SelectedAnchors>(NONE);
 
   useSignalEffect(() => {
     track(editor.externalLocationCell);
     track(editor.activeSourceIdCell);
-    const selection = editor.selection.stateCell.value;
-    const selectedId = selection.ids.length === 1 ? selection.ids[0] : null;
-    const object = selectedId && isAnchorId(selectedId) ? editor.object(selectedId) : null;
-    const anchor = object?.kind === "anchor" ? object.geometry.anchor(object.anchorId) : null;
-    if (!object || object.kind !== "anchor" || !anchor) {
-      setAnchorId(null);
-      setAnchorName(null);
-      setLayer(null);
-      setPosition({ x: 0, y: 0 });
+    const anchors = editor.selection.stateCell.value.ids.filter(isAnchorId).flatMap((id) => {
+      const object = editor.object(id);
+      const anchor = object?.kind === "anchor" ? object.geometry.anchor(id) : null;
+      return anchor && object?.kind === "anchor" && object.layer ? [anchor] : [];
+    });
+    if (anchors.length === 0) {
+      setSelected(NONE);
       return;
     }
 
-    setAnchorId(anchor.id);
-    setAnchorName(anchor.name ?? null);
-    setLayer(object.layer);
-    setPosition({ x: Math.round(anchor.x), y: Math.round(anchor.y) });
+    const shared = (axis: PointAxis) => {
+      const value = Math.round(anchors[0]![axis]);
+      return anchors.every((anchor) => Math.round(anchor[axis]) === value) ? value : null;
+    };
+    setSelected({
+      ids: anchors.map((anchor) => anchor.id),
+      name: anchors.length === 1 ? (anchors[0]!.name ?? null) : undefined,
+      x: shared("x"),
+      y: shared("y"),
+    });
   });
 
-  const handlePositionChange = (axis: PointAxis, value: number) => {
-    if (!anchorId || !layer) return;
-
-    const positionSelection = editor.positionSelection([anchorId]);
-    const currentAnchor = positionSelection?.layer.anchor(anchorId);
-    if (!positionSelection || !currentAnchor) return;
-
-    const delta = Vec2.fromAxis(axis, value - currentAnchor[axis]);
-    const move = PositionEdits.fromSelection(positionSelection).move(positionSelection.targets);
-    move.preview(delta);
-    move.commit("Move anchor");
-  };
-
-  const editable = anchorId !== null && layer !== null;
+  const single = selected.ids.length === 1;
+  const editable = selected.ids.length > 0;
 
   return (
-    <SidebarSection title="Anchor">
+    <SidebarSection title={single ? "Anchor" : "Anchors"}>
       <AnchorNameField
-        key={`${anchorId}:${anchorName}`}
-        name={anchorName}
-        disabled={!editable}
-        onCommit={(name) => anchorId && editor.renameAnchor(anchorId, name)}
+        key={`${selected.ids.join(",")}:${selected.name}`}
+        name={selected.name ?? null}
+        mixed={selected.name === undefined}
+        disabled={!single}
+        onCommit={(name) => {
+          const [anchorId] = selected.ids;
+          if (anchorId) editor.renameAnchor(anchorId, name);
+        }}
       />
       <div className="flex gap-2">
-        <SidebarNumberField
-          ariaLabel="Anchor X position"
-          label="X"
-          value={position.x}
-          disabled={!editable}
-          onValueCommit={(value) => handlePositionChange("x", value)}
-        />
-        <SidebarNumberField
-          ariaLabel="Anchor Y position"
-          label="Y"
-          value={position.y}
-          disabled={!editable}
-          onValueCommit={(value) => handlePositionChange("y", value)}
-        />
+        {(["x", "y"] as const).map((axis) => (
+          <SidebarNumberField
+            key={axis}
+            ariaLabel={`Anchor ${axis.toUpperCase()} position`}
+            label={axis.toUpperCase()}
+            value={selected[axis]}
+            placeholder="Mixed"
+            disabled={!editable}
+            // Several anchors all move to the value typed.
+            onValueCommit={(value) => editor.setAnchorAxis(selected.ids, axis, value)}
+          />
+        ))}
       </div>
     </SidebarSection>
   );
@@ -83,18 +84,20 @@ export const AnchorSection = () => {
 
 interface AnchorNameFieldProps {
   name: string | null;
+  /** Several anchors are selected: their names show as Mixed and are not renamed. */
+  mixed: boolean;
   disabled: boolean;
   onCommit: (name: string) => void;
 }
 
 /**
- * The anchor's name, renamed in every source on Enter or blur.
+ * The anchor's name, renamed in the sources being edited on Enter or blur.
  *
  * @remarks
  * Escape leaves the field without renaming. While focused, the sidebar keeps
  * keyboard focus and editor shortcuts do not fire.
  */
-function AnchorNameField({ name, disabled, onCommit }: AnchorNameFieldProps) {
+function AnchorNameField({ name, mixed, disabled, onCommit }: AnchorNameFieldProps) {
   const { lockToZone, unlock } = useFocusZone();
   const [draft, setDraft] = useState(name ?? "");
   const cancelled = useRef(false);
@@ -103,8 +106,8 @@ function AnchorNameField({ name, disabled, onCommit }: AnchorNameFieldProps) {
     <Tooltip content="Anchor name">
       <Input
         aria-label="Anchor name"
-        value={draft}
-        placeholder="Unnamed anchor"
+        value={mixed ? "" : draft}
+        placeholder={mixed ? "Mixed" : "Unnamed anchor"}
         disabled={disabled}
         onChange={(event) => setDraft(event.currentTarget.value)}
         onFocus={(event) => {
