@@ -604,6 +604,24 @@ export class Font {
   }
 
   /**
+   * Reports whether a glyph is a nonspacing mark, as export resolves its category.
+   *
+   * @remarks
+   * Reads the category Rust resolves from the glyph's own category and Glyphs'
+   * glyph data, so the name alone never decides it. Read inside a `computed` or
+   * `effect`, the reader reruns when the glyph directory changes.
+   *
+   * @param name - Glyph name to look up in the font directory.
+   * @returns `false` when the font has no glyph with this name: a character
+   * without a glyph has nothing to place, so it is laid out as spacing.
+   */
+  isNonspacingMark(name: GlyphName): boolean {
+    // Callers run inside text layout and render computeds; a re-read directory re-runs them.
+    track(this.#directoryCell);
+    return this.#directoryCell.peek().recordForName(name)?.nonspacingMark ?? false;
+  }
+
+  /**
    * Returns the committed Unicode assignments for a glyph name.
    *
    * @param name - Glyph name to look up in the font directory.
