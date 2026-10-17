@@ -7,11 +7,16 @@ import { createStubCanvas } from "@/testing/stubCanvas";
 
 const FONT = resolve(process.cwd(), "../../fixtures/fonts/AnchorDragBench.glyphs");
 
+interface SceneFrame {
+  readonly fills: Path2D[];
+  readonly strokes: Path2D[];
+}
+
 /**
  * Attaches the real renderer to stub canvases and records the paths the
- * scene fills in each frame it draws.
+ * scene fills and strokes in each frame it draws.
  */
-function recordSceneFills(editor: TestEditor): () => readonly Path2D[] {
+function recordSceneFrames(editor: TestEditor): () => SceneFrame {
   const rect = { x: 0, y: 0, width: 1000, height: 800, left: 0, top: 0, right: 1000, bottom: 800 };
   const element = () =>
     ({
@@ -31,18 +36,27 @@ function recordSceneFills(editor: TestEditor): () => readonly Path2D[] {
     height: 800,
   });
 
-  const frames: Path2D[][] = [];
+  const frames: SceneFrame[] = [];
   const scene = surface();
   // The renderer clears a layer at the start of each frame it draws.
-  scene.ctx.clearRect = () => frames.push([]);
-  scene.ctx.fill = ((path: Path2D) => frames.at(-1)?.push(path)) as typeof scene.ctx.fill;
+  scene.ctx.clearRect = () => frames.push({ fills: [], strokes: [] });
+  scene.ctx.fill = ((path: Path2D) => frames.at(-1)?.fills.push(path)) as typeof scene.ctx.fill;
+  scene.ctx.stroke = ((path?: Path2D) => {
+    if (path) frames.at(-1)?.strokes.push(path);
+  }) as typeof scene.ctx.stroke;
   editor.attachRenderSurfaces(
     surface() as never,
     scene as never,
     surface() as never,
     { canvas: element(), rect, dpr: 1, width: 1000, height: 800 } as never,
   );
-  return () => frames.at(-1) ?? [];
+  return () => frames.at(-1) ?? { fills: [], strokes: [] };
+}
+
+/** Records the paths the scene fills in its latest frame. */
+function recordSceneFills(editor: TestEditor): () => readonly Path2D[] {
+  const latest = recordSceneFrames(editor);
+  return () => latest().fills;
 }
 
 describe("text run drawing", () => {
@@ -91,5 +105,26 @@ describe("text run drawing", () => {
     editor.text.setItems(run.runId, [edited, ...editor.text.itemsFromText("ouo")]);
 
     await expect.poll(() => fillsOf(latestFills(), renderModel("o"))).toBe(2);
+  });
+
+  it("starts stroking a run glyph's open contour when one of its contours opens", async () => {
+    editor = await new TestEditor().openSession(FONT, "u");
+    const latestFrame = recordSceneFrames(editor);
+    const run = editor.textRun!;
+    const edited = editor.text.run(run.runId)!.items[0]!;
+    editor.text.setItems(run.runId, [edited, ...editor.text.itemsFromText("ouo")]);
+    await expect.poll(() => fillsOf(latestFrame().fills, renderModel("o"))).toBe(2);
+
+    const o = renderModel("o")!;
+    const strokesOfOpenPath = () =>
+      latestFrame().strokes.filter((path) => path === o.openContoursPath).length;
+    // Closed contours only: the run strokes nothing for it.
+    expect(o.hasOpenContoursCell.peek()).toBe(false);
+    expect(strokesOfOpenPath()).toBe(0);
+    const layer = editor.glyphForId(glyphId("o"))!.layerForSource(editor.font.defaultSource.id)!;
+    layer.openContour(layer.contours[0]!.id);
+    await editor.settle();
+
+    await expect.poll(strokesOfOpenPath).toBe(2);
   });
 });

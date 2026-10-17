@@ -265,13 +265,13 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
 
     const radius = this.editor.hitRadius / this.#scale(node);
     let target: PointerTarget | null = null;
-    for (const { placed, itemId, model } of this.#runGlyphs(node, layout)) {
+    this.#forEachRunGlyph(node, layout, (placed, itemId, model) => {
       const local = {
         x: point.x - placed.origin.x,
         y: point.y - placed.origin.y,
       };
       if (hitsOutline(model, local, radius)) target = { kind: "text", node, point, itemId };
-    }
+    });
     return target;
   }
 
@@ -460,27 +460,35 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     }
   }
 
+  /**
+   * Fills every run glyph, strokes its open contours, and outlines it when hovered or selected.
+   *
+   * @remarks
+   * One path batch for the whole run: a glyph costs one translate and one
+   * fill, plus a stroke only when it has open contours. Each distinct glyph
+   * subscribes and resolves its paths once per draw (see {@link distinctGlyph}).
+   */
   #drawGlyphs(node: TextRunNode, ctx: RenderContext, layout: TextLayout): void {
+    const canvas = ctx.canvas;
     const outlined = this.#outlinedItemIds();
     const outlineStroke = {
-      color: ctx.canvas.theme.textRun.hoverOutline,
-      widthPx: ctx.canvas.theme.textRun.hoverOutlineWidthPx,
+      color: canvas.theme.textRun.hoverOutline,
+      widthPx: canvas.theme.textRun.hoverOutlineWidthPx,
     };
-    // Occurrences of one glyph share its render model, so subscribe once per glyph.
-    const tracked = new Set<GlyphRenderModel>();
-    for (const { placed, itemId, model } of this.#runGlyphs(node, layout)) {
-      if (!tracked.has(model)) {
-        tracked.add(model);
-        model.trackShape();
-        track(model.closedContoursPathCell);
-        track(model.openContoursPathCell);
-      }
-      ctx.canvas.save();
-      ctx.canvas.translate(placed.origin.x, placed.origin.y);
-      this.#outline.drawDisplay(ctx.canvas, model, ctx.canvas.theme.glyph);
-      if (outlined.has(itemId)) this.#outline.draw(ctx.canvas, model, { stroke: outlineStroke });
-      ctx.canvas.restore();
-    }
+    const distinct = new Map<GlyphRenderModel, DistinctGlyph>();
+    canvas.withPathBatch(canvas.theme.glyph, (batch) => {
+      this.#forEachRunGlyph(node, layout, (placed, itemId, model) => {
+        let glyph = distinct.get(model);
+        if (!glyph) {
+          glyph = distinctGlyph(model);
+          distinct.set(model, glyph);
+        }
+        batch.offset(placed.origin.x, placed.origin.y);
+        batch.fill(glyph.closed);
+        if (glyph.open) batch.stroke(glyph.open);
+        if (outlined.has(itemId)) this.#outline.draw(canvas, model, { stroke: outlineStroke });
+      });
+    });
   }
 
   #drawCaret(node: TextRunNode, ctx: RenderContext, layout: TextLayout): void {
@@ -498,27 +506,26 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
   }
 
   /**
-   * The glyphs the run draws and hits itself: every loaded glyph except an edited child's item.
+   * Visits the glyphs the run draws and hits itself: every loaded glyph except an edited child's item.
    *
    * @remarks
    * Resolves each distinct glyph's render model once per walk, so a reactive
-   * caller subscribes to each glyph's load once however often it occurs.
+   * caller subscribes to each glyph's load once however often it occurs. A
+   * callback rather than an iterator, so a walk over a long run allocates
+   * nothing per glyph.
    */
-  *#runGlyphs(
+  #forEachRunGlyph(
     node: TextRunNode,
     layout: TextLayout,
-  ): Iterable<{
-    placed: PlacedGlyph;
-    itemId: TextItemId;
-    model: GlyphRenderModel;
-  }> {
+    visit: (placed: PlacedGlyph, itemId: TextItemId, model: GlyphRenderModel) => void,
+  ): void {
     const skip = this.#editedChildItemId(node);
     const modelFor = this.#models();
     for (const placed of layout.placedGlyphs) {
       const itemId = placed.glyph.sourceItemIds[0];
       if (!itemId || itemId === skip || !placed.glyph.glyphId) continue;
       const model = modelFor(placed.glyph.glyphId);
-      if (model) yield { placed, itemId, model };
+      if (model) visit(placed, itemId, model);
     }
   }
 
@@ -571,6 +578,31 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
   #scale(node: TextRunNode): number {
     return node.size / this.editor.font.metricsCell.peek().unitsPerEm;
   }
+}
+
+/** One distinct glyph's display paths, resolved once per draw of a run. */
+interface DistinctGlyph {
+  readonly closed: Path2D;
+  /** Null when the glyph has no open contours, so nothing is stroked. */
+  readonly open: Path2D | null;
+}
+
+/**
+ * Subscribes the reactive caller to a glyph's display and returns its paths.
+ *
+ * @remarks
+ * Subscribes to the open-contours path only while there are open contours;
+ * {@link GlyphRenderModel.hasOpenContoursCell} reruns the caller when a
+ * contour opens.
+ */
+function distinctGlyph(model: GlyphRenderModel): DistinctGlyph {
+  model.trackShape();
+  track(model.closedContoursPathCell);
+  track(model.hasOpenContoursCell);
+  if (!model.hasOpenContoursCell.peek()) return { closed: model.closedContoursPath, open: null };
+
+  track(model.openContoursPathCell);
+  return { closed: model.closedContoursPath, open: model.openContoursPath };
 }
 
 /** Whether a glyph-local point is inside a fill or within `radius` of a contour. */
