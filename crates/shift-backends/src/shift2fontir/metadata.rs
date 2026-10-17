@@ -105,7 +105,12 @@ impl Work<Context, WorkId, Error> for StaticMetadataWork {
                 // Classes are already final: marks by category, bases and
                 // ligatures inferred from anchors in `gdef_classes`.
                 infer_from_anchors: false,
-                ..Default::default()
+                mark_category_glyphs: self
+                    .snapshot
+                    .mark_category_glyphs
+                    .iter()
+                    .map(|name| name.as_str().into())
+                    .collect(),
             });
         context.static_metadata.set(static_metadata);
         Ok(())

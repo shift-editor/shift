@@ -650,6 +650,7 @@ fn wire_source_shape(
         id: ComponentId::from_raw(format!("{glyph_id}-{selector}-m{index}")).to_string(),
         base_glyph_id,
         base_glyph_name,
+        alignment: Default::default(),
       })
     })
     .collect::<BridgeResult<Vec<_>>>()?;
@@ -1182,6 +1183,31 @@ impl Bridge {
     })
   }
 
+  /// Returns each anchor name's kind as export reads it; the reference the
+  /// editor's own anchor-name parsing is tested against.
+  #[napi]
+  pub fn anchor_kinds(&self, names: Vec<String>) -> Vec<crate::anchors::NapiAnchorKind> {
+    names
+      .iter()
+      .map(|name| shift_backends::anchor_kind(name).into())
+      .collect()
+  }
+
+  /// Returns every glyph's anchors as export compiles them, with component
+  /// anchors propagated into composites, at each master source.
+  ///
+  /// The reference the editor's own anchor propagation is tested against.
+  #[napi]
+  pub fn propagated_anchors(&mut self) -> Result<Vec<crate::anchors::NapiPropagatedGlyphAnchors>> {
+    let snapshot = self
+      .save_snapshot()
+      .map_err(|e| Error::new(Status::GenericFailure, e.to_string()))?;
+    let glyphs = FontExporter::new()
+      .propagated_anchors(&snapshot)
+      .map_err(|e| Error::new(Status::GenericFailure, e.to_string()))?;
+    Ok(glyphs.into_iter().map(Into::into).collect())
+  }
+
   /// Builds the thumbnail specimen from the open document's current state.
   ///
   /// Resolves to `null` when the font draws nothing usable; rejects when no
@@ -1314,10 +1340,21 @@ impl Bridge {
     let workspace = self.workspace()?;
     let font = workspace.font();
     let mut component_references = workspace.glyph_component_references()?;
+    let propagation = shift_backends::propagation_categories(font.glyphs(), font.lib());
     let mut records = font
       .glyphs()
       .map(|glyph| {
         let mut record = GlyphRecord::from(glyph);
+        if let Some(category) = propagation.get(&glyph.id()) {
+          record.mark = category.mark;
+          record.ligature = category.ligature.map(|ligature| {
+            match ligature {
+              shift_backends::PropagationLigature::Explicit => "explicit",
+              shift_backends::PropagationLigature::Subcategory => "subcategory",
+            }
+            .to_string()
+          });
+        }
         record.component_base_glyph_ids =
           component_references.remove(&glyph.id()).unwrap_or_default();
         record.layers = font
@@ -2408,6 +2445,16 @@ fn map_intent(intent: NapiFontIntent) -> errors::Result<FontIntent> {
         anchor_ids: parse_id_list::<AnchorId>(&payload.anchor_ids)?,
       })
     }
+    "renameAnchors" => {
+      let payload = intent
+        .rename_anchors
+        .ok_or_else(|| missing("renameAnchors"))?;
+      Ok(FontIntent::RenameAnchors {
+        layer_id: parse::<LayerId>(&payload.layer_id)?,
+        anchor_ids: parse_id_list::<AnchorId>(&payload.anchor_ids)?,
+        names: payload.names,
+      })
+    }
     "addComponent" => {
       let payload = intent
         .add_component
@@ -2426,6 +2473,16 @@ fn map_intent(intent: NapiFontIntent) -> errors::Result<FontIntent> {
         layer_id: parse::<LayerId>(&payload.layer_id)?,
         component_ids: parse_id_list::<ComponentId>(&payload.component_ids)?,
         transforms: payload.transforms,
+      })
+    }
+    "setComponentAlignment" => {
+      let payload = intent
+        .set_component_alignment
+        .ok_or_else(|| missing("setComponentAlignment"))?;
+      Ok(FontIntent::SetComponentAlignment {
+        layer_id: parse::<LayerId>(&payload.layer_id)?,
+        component_ids: parse_id_list::<ComponentId>(&payload.component_ids)?,
+        alignment: shift_wire::bridges::napi::parse_alignment(Some(&payload.alignment)),
       })
     }
     "removeComponents" => {
@@ -2962,8 +3019,10 @@ mod tests {
       add_anchors: None,
       move_anchors: None,
       remove_anchors: None,
+      rename_anchors: None,
       add_component: None,
       set_component_transforms: None,
+      set_component_alignment: None,
       remove_components: None,
       decompose_components: None,
       reverse_contour: None,

@@ -156,7 +156,8 @@ export class GlyphGeometry {
       if (
         component.id !== other.id ||
         component.baseGlyphId !== other.baseGlyphId ||
-        component.baseGlyphName !== other.baseGlyphName
+        component.baseGlyphName !== other.baseGlyphName ||
+        (component.alignment ?? "unset") !== (other.alignment ?? "unset")
       )
         return false;
     }

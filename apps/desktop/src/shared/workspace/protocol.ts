@@ -11,6 +11,7 @@ import type {
   GlyphSnapshot,
   LayerId,
   LayerMatch,
+  PropagatedGlyphAnchors,
   LayerRead,
   Location,
   SlugAtlas,
@@ -263,6 +264,11 @@ export type SyncCallMap = {
   "workspace.layerMatch": {
     request: { referenceLayerId: LayerId; targetLayerId: LayerId };
     response: LayerMatch;
+  };
+  /** Every glyph's anchors as export compiles them, with component anchors propagated. */
+  "workspace.propagatedAnchors": {
+    request: undefined;
+    response: PropagatedGlyphAnchors[];
   };
   "workspace.glyphProjections": {
     request: { glyphIds: GlyphId[] };

@@ -44,6 +44,18 @@ export interface BridgeApi {
    */
   fontFileSpecimen(path: string): Promise<Specimen | null>
   /**
+   * Returns each anchor name's kind as export reads it; the reference the
+   * editor's own anchor-name parsing is tested against.
+   */
+  anchorKinds(names: Array<string>): Array<AnchorKind>
+  /**
+   * Returns every glyph's anchors as export compiles them, with component
+   * anchors propagated into composites, at each master source.
+   *
+   * The reference the editor's own anchor propagation is tested against.
+   */
+  propagatedAnchors(): Array<PropagatedGlyphAnchors>
+  /**
    * Builds the thumbnail specimen from the open document's current state.
    *
    * Resolves to `null` when the font draws nothing usable; rejects when no
@@ -221,6 +233,15 @@ export interface BridgeApi {
   getSources(): Array<Source>
 }
 
+/** An anchor's role in mark positioning, as export reads its name. */
+export interface AnchorKind {
+  kind: "base" | "mark" | "ligature" | "componentMarker" | "caret" | "vcaret" | "entry" | "exit" | "invalid"
+  /** The attachment group, such as `top`, for base, mark, and ligature anchors. */
+  group?: string
+  /** The ligature component or caret number, counting from 1. */
+  index?: number
+}
+
 /** One problem in `config.toml`; line and column are one-based. */
 export interface ConfigProblem {
   severity: ConfigSeverity
@@ -279,6 +300,23 @@ export interface FontExportResult {
 export interface NewWorkspace {
   familyName?: string
   unitsPerEm?: number
+}
+
+export interface PropagatedAnchor {
+  name: string
+  x: number
+  y: number
+}
+
+/** One glyph's anchors as export compiles them, at each master source it has a layer for. */
+export interface PropagatedGlyphAnchors {
+  glyphName: GlyphName
+  sources: Array<PropagatedSourceAnchors>
+}
+
+export interface PropagatedSourceAnchors {
+  sourceId: SourceId
+  anchors: Array<PropagatedAnchor>
 }
 
 /**
@@ -549,6 +587,11 @@ export interface ComponentData {
   id: ComponentId
   baseGlyphId: GlyphId
   baseGlyphName: GlyphName
+  /**
+   * Placed by its anchors (`anchored`) or by hand (`free`); `unset` or absent
+   * counts as anchored while the component sits exactly on its anchors.
+   */
+  alignment?: "anchored" | "free" | "unset"
 }
 
 export interface ComponentGlyph {
@@ -678,7 +721,7 @@ export interface FontIntent {
    * Discriminator naming the populated payload field. Editing kinds:
    * "addPoints" | "addContour" | "setContourClosed" | "movePoints" |
    * "setPointSmooth" | "removePoints" | "addAnchors" | "moveAnchors" |
-   * "removeAnchors" | "addComponent" | "setComponentTransforms" |
+   * "removeAnchors" | "renameAnchors" | "addComponent" | "setComponentAlignment" | "setComponentTransforms" |
    * "removeComponents" | "decomposeComponents" |
    * "reverseContour" | "setContourStart" | "translatePoints" |
    * "transformLayer" | "setXAdvance" | "applyBooleanOp".
@@ -700,8 +743,10 @@ export interface FontIntent {
   addAnchors?: AddAnchorsIntent
   moveAnchors?: MoveAnchorsIntent
   removeAnchors?: RemoveAnchorsIntent
+  renameAnchors?: RenameAnchorsIntent
   addComponent?: AddComponentIntent
   setComponentTransforms?: SetComponentTransformsIntent
+  setComponentAlignment?: SetComponentAlignmentIntent
   removeComponents?: RemoveComponentsIntent
   decomposeComponents?: DecomposeComponentsIntent
   reverseContour?: ReverseContourIntent
@@ -874,6 +919,13 @@ export interface GlyphRecord {
   unicodes: Array<Unicode>
   componentBaseGlyphIds: Array<GlyphId>
   layers: Array<GlyphLayerRecord>
+  /** In the Mark category or classed `mark`: anchor propagation keeps its own anchors. */
+  mark?: boolean
+  /**
+   * `"explicit"` when classed a ligature, `"subcategory"` when a ligature
+   * once it has an attaching anchor.
+   */
+  ligature?: "explicit" | "subcategory"
 }
 
 export interface GlyphSnapshot {
@@ -1122,6 +1174,13 @@ export interface RemovePointsIntent {
   pointIds: Array<PointId>
 }
 
+/** Renames anchors in one layer; `names[i]` is the new name of `anchorIds[i]`. */
+export interface RenameAnchorsIntent {
+  layerId: LayerId
+  anchorIds: Array<AnchorId>
+  names: Array<string>
+}
+
 /** Renames a kerning group; its pairs keep referencing it by id. */
 export interface RenameKerningGroupIntent {
   groupId: KerningGroupId
@@ -1155,6 +1214,16 @@ export interface ReverseContourIntent {
 
 export interface SetAxisMappingsIntent {
   mappings: Array<AxisMapping>
+}
+
+/**
+ * Records whether components are placed by their anchors; anchoring one also
+ * places it on its anchors now.
+ */
+export interface SetComponentAlignmentIntent {
+  layerId: LayerId
+  componentIds: Array<ComponentId>
+  alignment: "anchored" | "free" | "unset"
 }
 
 export interface SetComponentTransformsIntent {

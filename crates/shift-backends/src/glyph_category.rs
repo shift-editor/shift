@@ -9,7 +9,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use glyphs_reader::glyphdata::GlyphData;
-use shift_font::{Glyph, GlyphCategory, GlyphSubcategory, LibData, LibValue};
+use shift_font::{Glyph, GlyphCategory, GlyphId, GlyphSubcategory, LibData, LibValue};
 use write_fonts::tables::gdef::GlyphClassDef;
 
 /// Font lib key a UFO uses for explicit GDEF classes.
@@ -23,6 +23,11 @@ pub struct ResolvedCategory {
 }
 
 impl ResolvedCategory {
+    /// Whether the glyph is in the Mark category, whatever its subcategory.
+    pub fn is_mark(self) -> bool {
+        self.category == Some(GlyphCategory::Mark)
+    }
+
     /// Whether the glyph is a combining mark that takes no horizontal space.
     pub fn is_nonspacing_mark(self) -> bool {
         self.category == Some(GlyphCategory::Mark)
@@ -82,6 +87,51 @@ impl GlyphCategories {
                 .filter(|sub_category| Some(*sub_category) != looked_up.sub_category),
         }
     }
+}
+
+/// How a glyph is a ligature to anchor propagation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PropagationLigature {
+    /// A UFO `public.openTypeCategories` entry makes it one.
+    Explicit,
+    /// Its Ligature subcategory makes it one once it has an attaching anchor.
+    Subcategory,
+}
+
+/// What anchor propagation reads from a glyph's category, as export resolves it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct PropagationCategory {
+    /// In the Mark category or classed `mark`: propagation keeps a mark's own anchors.
+    pub mark: bool,
+    /// Ligature components number their anchors (`top_1`, `top_2`).
+    pub ligature: Option<PropagationLigature>,
+}
+
+/// Each glyph's propagation category, by glyph id.
+pub fn propagation_categories<'a>(
+    glyphs: impl IntoIterator<Item = &'a Glyph>,
+    font_lib: &LibData,
+) -> BTreeMap<GlyphId, PropagationCategory> {
+    let categories = GlyphCategories::new();
+    let explicit = opentype_categories(font_lib);
+    glyphs
+        .into_iter()
+        .map(|glyph| {
+            let resolved = categories.resolve(glyph);
+            let explicit = explicit.get(glyph.name()).copied();
+            let ligature = match explicit {
+                Some(GlyphClassDef::Ligature) => Some(PropagationLigature::Explicit),
+                Some(_) => None,
+                None => (resolved.sub_category == Some(GlyphSubcategory::Ligature))
+                    .then_some(PropagationLigature::Subcategory),
+            };
+            let category = PropagationCategory {
+                mark: resolved.is_mark() || explicit == Some(GlyphClassDef::Mark),
+                ligature,
+            };
+            (glyph.id(), category)
+        })
+        .collect()
 }
 
 /// GDEF classes for every glyph that has one, by glyph name.

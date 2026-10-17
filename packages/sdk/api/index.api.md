@@ -200,6 +200,8 @@ export class Editor {
     get activeSourceId(): SourceId | null;
     // (undocumented)
     get activeSourceIdCell(): Signal<SourceId | null>;
+    addAnchorAt(position: Point2D): boolean;
+    addAnchorAtPointer(): boolean;
     addComponent(baseGlyphId: GlyphId): Promise<ComponentId | null>;
     // Warning: (ae-forgotten-export) The symbol "Canvas2DSurface" needs to be exported by the entry point index.d.ts
     // Warning: (ae-forgotten-export) The symbol "MarkerCanvasSurface" needs to be exported by the entry point index.d.ts
@@ -371,6 +373,7 @@ export class Editor {
     // Warning: (ae-forgotten-export) The symbol "ToolManifest" needs to be exported by the entry point index.d.ts
     // Warning: (ae-forgotten-export) The symbol "ToolRegistration" needs to be exported by the entry point index.d.ts
     registerTool(manifest: ToolManifest): ToolRegistration;
+    renameAnchor(anchorId: AnchorId, name: string): boolean;
     // Warning: (ae-forgotten-export) The symbol "TemporaryToolOptions" needs to be exported by the entry point index.d.ts
     //
     // (undocumented)
@@ -389,6 +392,7 @@ export class Editor {
     // (undocumented)
     screenToScene(screen: ScreenPoint): ScenePoint;
     selectAll(): void;
+    selectedComponentsAnchored(): boolean | null;
     // Warning: (ae-forgotten-export) The symbol "Selection_2" needs to be exported by the entry point index.d.ts
     readonly selection: Selection_2;
     // Warning: (ae-forgotten-export) The symbol "LocalBounds" needs to be exported by the entry point index.d.ts
@@ -406,6 +410,7 @@ export class Editor {
     readonly sessionMode: FontSessionMode;
     // (undocumented)
     setActiveTool(toolName: ToolName): void;
+    setAnchorAxis(anchorIds: readonly AnchorId[], axis: "x" | "y", value: number): boolean;
     // Warning: (ae-forgotten-export) The symbol "Rect2D" needs to be exported by the entry point index.d.ts
     //
     // (undocumented)
@@ -428,6 +433,7 @@ export class Editor {
     // (undocumented)
     setRenderTheme(theme: EditorRenderTheme): void;
     setRightSidebearing(value: number): void;
+    setSelectedComponentsAnchored(anchored: boolean): Promise<boolean>;
     setSourceToDefault(): void;
     // (undocumented)
     setToolState(scope: ToolStateScope, toolId: string, key: string, value: unknown): void;
@@ -904,6 +910,8 @@ export interface GlyphRecord {
     //
     // (undocumented)
     layers: Array<GlyphLayerRecord>;
+    ligature?: "explicit" | "subcategory";
+    mark?: boolean;
     // (undocumented)
     name: GlyphName;
     // (undocumented)
@@ -1515,10 +1523,10 @@ export function useSignalState<T>(signal: Signal<T>, options?: UseSignalOptions)
 
 // Warnings were encountered during analysis:
 //
-// dist/Editor-tfzidUVH.d.ts:2808:5 - (ae-forgotten-export) The symbol "Axis" needs to be exported by the entry point index.d.ts
-// dist/Editor-tfzidUVH.d.ts:2809:5 - (ae-forgotten-export) The symbol "AxisMappingBasis" needs to be exported by the entry point index.d.ts
-// dist/Editor-tfzidUVH.d.ts:2810:5 - (ae-forgotten-export) The symbol "Source" needs to be exported by the entry point index.d.ts
-// dist/Editor-tfzidUVH.d.ts:4824:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
+// dist/Editor-DWlkqMcq.d.ts:2842:5 - (ae-forgotten-export) The symbol "Axis" needs to be exported by the entry point index.d.ts
+// dist/Editor-DWlkqMcq.d.ts:2843:5 - (ae-forgotten-export) The symbol "AxisMappingBasis" needs to be exported by the entry point index.d.ts
+// dist/Editor-DWlkqMcq.d.ts:2844:5 - (ae-forgotten-export) The symbol "Source" needs to be exported by the entry point index.d.ts
+// dist/Editor-DWlkqMcq.d.ts:4928:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

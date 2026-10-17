@@ -13,7 +13,7 @@ use write_fonts::types::NameId;
 use write_fonts::FontBuilder;
 
 use crate::atomic::write_file_atomic;
-use crate::shift2fontir::{ShiftIrSource, ShiftIrSourceError};
+use crate::shift2fontir::{PropagatedGlyphAnchors, ShiftIrSource, ShiftIrSourceError};
 use crate::traits::FontView;
 
 /// Identifies a binary font format supported by [`FontExporter`].
@@ -140,6 +140,22 @@ impl FontExporter {
             path: output_path.to_path_buf(),
             source,
         })
+    }
+
+    /// Returns every glyph's anchors as export compiles them, with component
+    /// anchors propagated into composites.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ExportError`] when the font cannot be compiled.
+    pub fn propagated_anchors(
+        &self,
+        font: &impl FontView,
+    ) -> Result<Vec<PropagatedGlyphAnchors>, ExportError> {
+        ShiftIrSource::from_font_view(font)
+            .map_err(map_source_error)?
+            .propagated_anchors()
+            .map_err(|error| compile_error(&error))
     }
 }
 
@@ -310,6 +326,82 @@ mod tests {
         assert_eq!(class(0x0301), GlyphClassDef::Mark as u16);
         assert_eq!(advance(0x0237), 300.0);
         assert_eq!(advance(0x0301), 0.0);
+    }
+
+    /// Adds a glyph with the same anchors and components on every master.
+    fn add_composed_glyph(
+        font: &mut Font,
+        name: &str,
+        unicode: u32,
+        anchors: &[(&str, f64, f64)],
+        components: &[(&str, f64, f64)],
+    ) {
+        let mut glyph = shift_font::Glyph::with_unicode(name, unicode);
+        for source in font.sources().to_vec() {
+            let mut layer =
+                shift_font::GlyphLayer::with_width(shift_font::LayerId::new(), source.id(), 500.0);
+            for &(anchor, x, y) in anchors {
+                layer.add_anchor(shift_font::Anchor::new(Some(anchor.to_string()), x, y));
+            }
+            for &(base, dx, dy) in components {
+                let base = font.glyph_by_name(base).unwrap();
+                let mut component = shift_font::Component::new(base.id(), base.name());
+                component.translate(dx, dy);
+                layer.add_component(component);
+            }
+            glyph.set_layer(layer);
+        }
+        font.insert_glyph(glyph).unwrap();
+    }
+
+    #[test]
+    fn propagates_component_anchors_into_composites() {
+        let mut font = sample_variable_font();
+        add_composed_glyph(
+            &mut font,
+            "a",
+            0x61,
+            &[("top", 250.0, 500.0), ("bottom", 250.0, 0.0)],
+            &[],
+        );
+        add_composed_glyph(
+            &mut font,
+            "acutecomb",
+            0x301,
+            &[("_top", 100.0, 500.0), ("top", 100.0, 700.0)],
+            &[],
+        );
+        add_composed_glyph(
+            &mut font,
+            "aacute",
+            0xE1,
+            &[],
+            &[("a", 0.0, 0.0), ("acutecomb", 150.0, 0.0)],
+        );
+
+        let glyphs = FontExporter::new().propagated_anchors(&font).unwrap();
+        let aacute = glyphs
+            .iter()
+            .find(|glyph| glyph.glyph_name == "aacute")
+            .unwrap();
+        let default = font.default_source_id().unwrap();
+        let anchors = &aacute
+            .sources
+            .iter()
+            .find(|source| source.source_id == default)
+            .unwrap()
+            .anchors;
+
+        let named = |name: &str| {
+            anchors
+                .iter()
+                .find(|anchor| anchor.name == name)
+                .map(|anchor| (anchor.x, anchor.y))
+        };
+        // The acute stacks: the composite's top is the accent's own top, moved with it.
+        assert_eq!(named("top"), Some((250.0, 700.0)));
+        assert_eq!(named("bottom"), Some((250.0, 0.0)));
+        assert_eq!(named("_top"), None);
     }
 
     #[test]
