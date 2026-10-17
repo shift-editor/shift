@@ -148,6 +148,9 @@ importers:
       '@shadcn/lint':
         specifier: ^0.2.0
         version: 0.2.0
+      '@shift/wasm':
+        specifier: workspace:*
+        version: link:../../packages/wasm
       '@tailwindcss/vite':
         specifier: ^4.1.11
         version: 4.1.11(vite@6.4.3(@types/node@25.3.0)(jiti@2.6.1)(lightningcss@1.30.1)(terser@5.49.0)(tsx@4.21.0))
@@ -315,6 +318,9 @@ importers:
         specifier: workspace:*
         version: link:../types
     devDependencies:
+      '@shift/wasm':
+        specifier: workspace:*
+        version: link:../wasm
       typescript:
         specifier: ^5.5.4
         version: 5.9.3

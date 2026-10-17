@@ -462,6 +462,15 @@ describe("Mat - 2D Affine Transform Matrix", () => {
       expect(d.scaleX).toBeCloseTo(1);
       expect(d.scaleY).toBeCloseTo(1);
     });
+
+    it("keeps skew finite when the x axis collapses to zero", () => {
+      const collapsed = Mat.Scale(0, 2);
+
+      const d = Mat.toDecomposed(collapsed);
+
+      expect(d.skewX).toBe(0);
+      expect(Mat.fromDecomposed(d)).toEqual(collapsed);
+    });
   });
 
   describe("decomposed roundtrip", () => {

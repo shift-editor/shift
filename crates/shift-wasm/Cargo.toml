@@ -9,6 +9,11 @@ publish = false
 [lib]
 crate-type = ["cdylib", "rlib"]
 
+[features]
+# Test-only exports of shift-font rules the editor keeps in TypeScript, built
+# into @shift/wasm/reference so tests compare the two. Never shipped.
+reference = []
+
 [dependencies]
 fontir = "1.0.0"
 serde = { version = "1.0", features = ["derive"] }
