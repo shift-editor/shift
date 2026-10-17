@@ -35,6 +35,7 @@ const UFO_PREVIEW_FONT_PATH = path.resolve(
   APP_ROOT,
   "../../fixtures/fonts/mutatorsans/MutatorSansLightCondensed.ufo",
 );
+const ANCHOR_DRAG_FONT_PATH = path.resolve(APP_ROOT, "../../fixtures/fonts/AnchorDragBench.glyphs");
 const GLYPHS_PREVIEW_FONT_PATH =
   process.env.SHIFT_E2E_GLYPHS_PREVIEW_FONT_PATH ??
   path.resolve(APP_ROOT, "../../fixtures/fonts/MutatorSansVariable.glyphs");
@@ -157,6 +158,8 @@ export const variablePreviewTest = createAppTest(VARIABLE_PREVIEW_FONT_PATH, cop
 export const designspacePreviewTest = createAppTest(EDITABLE_FONT_PATH, copyImportedSource);
 export const ufoPreviewTest = createAppTest(UFO_PREVIEW_FONT_PATH, copyImportedSource);
 export const glyphsPreviewTest = createAppTest(GLYPHS_PREVIEW_FONT_PATH, copyImportedSource);
+/** Authored `AnchorDragBench`: `a`–`z`, combining marks, and composites on `u`. */
+export const anchorDragTest = createAppTest(ANCHOR_DRAG_FONT_PATH, createAuthoredDocument);
 
 export { expect } from "@playwright/test";
 
