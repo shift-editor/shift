@@ -1,0 +1,7712 @@
+{
+  "compose": [
+    {
+      "decomposed": {
+        "rotation": 0.0,
+        "scaleX": 1.0,
+        "scaleY": 1.0,
+        "skewX": 0.0,
+        "skewY": 0.0,
+        "tCenterX": 0.0,
+        "tCenterY": 0.0,
+        "translateX": 0.0,
+        "translateY": 0.0
+      },
+      "mappedPoint": {
+        "x": 37.5,
+        "y": -82.25
+      },
+      "matrix": {
+        "a": 1.0,
+        "b": 0.0,
+        "c": 0.0,
+        "d": 1.0,
+        "e": 0.0,
+        "f": 0.0
+      },
+      "name": "identity",
+      "point": {
+        "x": 37.5,
+        "y": -82.25
+      }
+    },
+    {
+      "decomposed": {
+        "rotation": 0.0,
+        "scaleX": 1.0,
+        "scaleY": 1.0,
+        "skewX": 0.0,
+        "skewY": 0.0,
+        "tCenterX": 0.0,
+        "tCenterY": 0.0,
+        "translateX": 120.5,
+        "translateY": -48.25
+      },
+      "mappedPoint": {
+        "x": 158.0,
+        "y": -130.5
+      },
+      "matrix": {
+        "a": 1.0,
+        "b": 0.0,
+        "c": 0.0,
+        "d": 1.0,
+        "e": 120.5,
+        "f": -48.25
+      },
+      "name": "translation",
+      "point": {
+        "x": 37.5,
+        "y": -82.25
+      }
+    },
+    {
+      "decomposed": {
+        "rotation": 30.0,
+        "scaleX": 1.0,
+        "scaleY": 1.0,
+        "skewX": 0.0,
+        "skewY": 0.0,
+        "tCenterX": 0.0,
+        "tCenterY": 0.0,
+        "translateX": 0.0,
+        "translateY": 0.0
+      },
+      "mappedPoint": {
+        "x": 73.60095264191645,
+        "y": -52.480589461270085
+      },
+      "matrix": {
+        "a": 0.8660254037844387,
+        "b": 0.49999999999999994,
+        "c": -0.49999999999999994,
+        "d": 0.8660254037844387,
+        "e": 0.0,
+        "f": 0.0
+      },
+      "name": "rotation 30",
+      "point": {
+        "x": 37.5,
+        "y": -82.25
+      }
+    },
+    {
+      "decomposed": {
+        "rotation": 90.0,
+        "scaleX": 1.0,
+        "scaleY": 1.0,
+        "skewX": 0.0,
+        "skewY": 0.0,
+        "tCenterX": 0.0,
+        "tCenterY": 0.0,
+        "translateX": 0.0,
+        "translateY": 0.0
+      },
+      "mappedPoint": {
+        "x": 82.25,
+        "y": 37.49999999999999
+      },
+      "matrix": {
+        "a": 6.123233995736766e-17,
+        "b": 1.0,
+        "c": -1.0,
+        "d": 6.123233995736766e-17,
+        "e": 0.0,
+        "f": 0.0
+      },
+      "name": "rotation 90",
+      "point": {
+        "x": 37.5,
+        "y": -82.25
+      }
+    },
+    {
+      "decomposed": {
+        "rotation": -135.0,
+        "scaleX": 1.0,
+        "scaleY": 1.0,
+        "skewX": 0.0,
+        "skewY": 0.0,
+        "tCenterX": 0.0,
+        "tCenterY": 0.0,
+        "translateX": 10.0,
+        "translateY": 20.0
+      },
+      "mappedPoint": {
+        "x": -74.67603704708907,
+        "y": 51.643028458097994
+      },
+      "matrix": {
+        "a": -0.7071067811865475,
+        "b": -0.7071067811865476,
+        "c": 0.7071067811865476,
+        "d": -0.7071067811865475,
+        "e": 10.0,
+        "f": 20.0
+      },
+      "name": "rotation -135",
+      "point": {
+        "x": 37.5,
+        "y": -82.25
+      }
+    },
+    {
+      "decomposed": {
+        "rotation": 180.0,
+        "scaleX": 1.0,
+        "scaleY": 1.0,
+        "skewX": 0.0,
+        "skewY": 0.0,
+        "tCenterX": 0.0,
+        "tCenterY": 0.0,
+        "translateX": 0.0,
+        "translateY": 0.0
+      },
+      "mappedPoint": {
+        "x": -37.49999999999999,
+        "y": 82.25
+      },
+      "matrix": {
+        "a": -1.0,
+        "b": 1.2246467991473532e-16,
+        "c": -1.2246467991473532e-16,
+        "d": -1.0,
+        "e": 0.0,
+        "f": 0.0
+      },
+      "name": "rotation 180",
+      "point": {
+        "x": 37.5,
+        "y": -82.25
+      }
+    },
+    {
+      "decomposed": {
+        "rotation": 0.0,
+        "scaleX": 2.5,
+        "scaleY": 2.5,
+        "skewX": 0.0,
+        "skewY": 0.0,
+        "tCenterX": 0.0,
+        "tCenterY": 0.0,
+        "translateX": 0.0,
+        "translateY": 0.0
+      },
+      "mappedPoint": {
+        "x": 93.75,
+        "y": -205.625
+      },
+      "matrix": {
+        "a": 2.5,
+        "b": 0.0,
+        "c": 0.0,
+        "d": 2.5,
+        "e": 0.0,
+        "f": 0.0
+      },
+      "name": "uniform scale",
+      "point": {
+        "x": 37.5,
+        "y": -82.25
+      }
+    },
+    {
+      "decomposed": {
+        "rotation": 0.0,
+        "scaleX": 0.5,
+        "scaleY": 3.0,
+        "skewX": 0.0,
+        "skewY": 0.0,
+        "tCenterX": 0.0,
+        "tCenterY": 0.0,
+        "translateX": 0.0,
+        "translateY": 0.0
+      },
+      "mappedPoint": {
+        "x": 18.75,
+        "y": -246.75
+      },
+      "matrix": {
+        "a": 0.5,
+        "b": 0.0,
+        "c": 0.0,
+        "d": 3.0,
+        "e": 0.0,
+        "f": 0.0
+      },
+      "name": "non-uniform scale",
+      "point": {
+        "x": 37.5,
+        "y": -82.25
+      }
+    },
+    {
+      "decomposed": {
+        "rotation": 0.0,
+        "scaleX": -1.0,
+        "scaleY": 1.0,
+        "skewX": 0.0,
+        "skewY": 0.0,
+        "tCenterX": 0.0,
+        "tCenterY": 0.0,
+        "translateX": 500.0,
+        "translateY": 0.0
+      },
+      "mappedPoint": {
+        "x": 462.5,
+        "y": -82.25
+      },
+      "matrix": {
+        "a": -1.0,
+        "b": -0.0,
+        "c": -0.0,
+        "d": 1.0,
+        "e": 500.0,
+        "f": 0.0
+      },
+      "name": "horizontal flip",
+      "point": {
+        "x": 37.5,
+        "y": -82.25
+      }
+    },
+    {
+      "decomposed": {
+        "rotation": 0.0,
+        "scaleX": 1.0,
+        "scaleY": -1.0,
+        "skewX": 0.0,
+        "skewY": 0.0,
+        "tCenterX": 0.0,
+        "tCenterY": 0.0,
+        "translateX": 0.0,
+        "translateY": 700.0
+      },
+      "mappedPoint": {
+        "x": 37.5,
+        "y": 782.25
+      },
+      "matrix": {
+        "a": 1.0,
+        "b": 0.0,
+        "c": 0.0,
+        "d": -1.0,
+        "e": 0.0,
+        "f": 700.0
+      },
+      "name": "vertical flip",
+      "point": {
+        "x": 37.5,
+        "y": -82.25
+      }
+    },
+    {
+      "decomposed": {
+        "rotation": 0.0,
+        "scaleX": -1.0,
+        "scaleY": -1.0,
+        "skewX": 0.0,
+        "skewY": 0.0,
+        "tCenterX": 0.0,
+        "tCenterY": 0.0,
+        "translateX": 0.0,
+        "translateY": 0.0
+      },
+      "mappedPoint": {
+        "x": -37.5,
+        "y": 82.25
+      },
+      "matrix": {
+        "a": -1.0,
+        "b": 0.0,
+        "c": 0.0,
+        "d": -1.0,
+        "e": 0.0,
+        "f": 0.0
+      },
+      "name": "double flip",
+      "point": {
+        "x": 37.5,
+        "y": -82.25
+      }
+    },
+    {
+      "decomposed": {
+        "rotation": 0.0,
+        "scaleX": 1.0,
+        "scaleY": 1.0,
+        "skewX": 15.0,
+        "skewY": 0.0,
+        "tCenterX": 0.0,
+        "tCenterY": 0.0,
+        "translateX": 0.0,
+        "translateY": 0.0
+      },
+      "mappedPoint": {
+        "x": 37.5,
+        "y": -92.2980947161671
+      },
+      "matrix": {
+        "a": 1.0,
+        "b": -0.2679491924311227,
+        "c": 0.0,
+        "d": 1.0,
+        "e": 0.0,
+        "f": 0.0
+      },
+      "name": "skew x",
+      "point": {
+        "x": 37.5,
+        "y": -82.25
+      }
+    },
+    {
+      "decomposed": {
+        "rotation": 0.0,
+        "scaleX": 1.0,
+        "scaleY": 1.0,
+        "skewX": 0.0,
+        "skewY": -20.0,
+        "tCenterX": 0.0,
+        "tCenterY": 0.0,
+        "translateX": 0.0,
+        "translateY": 0.0
+      },
+      "mappedPoint": {
+        "x": 67.43655176839513,
+        "y": -82.25
+      },
+      "matrix": {
+        "a": 1.0,
+        "b": 0.0,
+        "c": -0.36397023426620234,
+        "d": 1.0,
+        "e": 0.0,
+        "f": 0.0
+      },
+      "name": "skew y",
+      "point": {
+        "x": 37.5,
+        "y": -82.25
+      }
+    },
+    {
+      "decomposed": {
+        "rotation": 0.0,
+        "scaleX": 1.0,
+        "scaleY": 1.0,
+        "skewX": 12.0,
+        "skewY": 8.0,
+        "tCenterX": 0.0,
+        "tCenterY": 0.0,
+        "translateX": 0.0,
+        "translateY": 0.0
+      },
+      "mappedPoint": {
+        "x": 25.940516345728305,
+        "y": -90.22087106262583
+      },
+      "matrix": {
+        "a": 1.0,
+        "b": -0.21255656167002213,
+        "c": 0.14054083470239143,
+        "d": 1.0,
+        "e": 0.0,
+        "f": 0.0
+      },
+      "name": "skew both",
+      "point": {
+        "x": 37.5,
+        "y": -82.25
+      }
+    },
+    {
+      "decomposed": {
+        "rotation": 45.0,
+        "scaleX": 1.0,
+        "scaleY": 1.0,
+        "skewX": 0.0,
+        "skewY": 0.0,
+        "tCenterX": 250.0,
+        "tCenterY": 350.0,
+        "translateX": 0.0,
+        "translateY": 0.0
+      },
+      "mappedPoint": {
+        "x": 405.3867151657438,
+        "y": -105.90709717002653
+      },
+      "matrix": {
+        "a": 0.7071067811865476,
+        "b": 0.7071067811865475,
+        "c": -0.7071067811865475,
+        "d": 0.7071067811865476,
+        "e": 320.71067811865476,
+        "f": -74.26406871192853
+      },
+      "name": "rotation about center",
+      "point": {
+        "x": 37.5,
+        "y": -82.25
+      }
+    },
+    {
+      "decomposed": {
+        "rotation": 0.0,
+        "scaleX": 1.5,
+        "scaleY": 0.75,
+        "skewX": 0.0,
+        "skewY": 0.0,
+        "tCenterX": 300.0,
+        "tCenterY": -120.0,
+        "translateX": 0.0,
+        "translateY": 0.0
+      },
+      "mappedPoint": {
+        "x": -93.75,
+        "y": -91.6875
+      },
+      "matrix": {
+        "a": 1.5,
+        "b": 0.0,
+        "c": 0.0,
+        "d": 0.75,
+        "e": -150.0,
+        "f": -30.0
+      },
+      "name": "scale about center",
+      "point": {
+        "x": 37.5,
+        "y": -82.25
+      }
+    },
+    {
+      "decomposed": {
+        "rotation": 0.0,
+        "scaleX": -1.0,
+        "scaleY": 1.0,
+        "skewX": 0.0,
+        "skewY": 0.0,
+        "tCenterX": 250.0,
+        "tCenterY": 0.0,
+        "translateX": 4.0,
+        "translateY": -6.0
+      },
+      "mappedPoint": {
+        "x": 466.5,
+        "y": -88.25
+      },
+      "matrix": {
+        "a": -1.0,
+        "b": -0.0,
+        "c": -0.0,
+        "d": 1.0,
+        "e": 504.0,
+        "f": -6.0
+      },
+      "name": "flip about center",
+      "point": {
+        "x": 37.5,
+        "y": -82.25
+      }
+    },
+    {
+      "decomposed": {
+        "rotation": -62.5,
+        "scaleX": 1.25,
+        "scaleY": -0.8,
+        "skewX": 9.0,
+        "skewY": -4.0,
+        "tCenterX": 110.0,
+        "tCenterY": 240.0,
+        "translateX": 33.0,
+        "translateY": -17.5
+      },
+      "mappedPoint": {
+        "x": 334.6833343735768,
+        "y": 392.6976055358258
+      },
+      "matrix": {
+        "a": 0.689576738043579,
+        "b": -1.050256504930488,
+        "c": -0.7499694270961561,
+        "d": -0.29186659093363965,
+        "e": 247.13922131828377,
+        "f": 408.0761973664272
+      },
+      "name": "every field",
+      "point": {
+        "x": 37.5,
+        "y": -82.25
+      }
+    },
+    {
+      "decomposed": {
+        "rotation": 20.0,
+        "scaleX": 0.0,
+        "scaleY": 1.0,
+        "skewX": 0.0,
+        "skewY": 0.0,
+        "tCenterX": 10.0,
+        "tCenterY": 10.0,
+        "translateX": 5.0,
+        "translateY": 5.0
+      },
+      "mappedPoint": {
+        "x": 46.55135822179294,
+        "y": -71.68664426750004
+      },
+      "matrix": {
+        "a": 0.0,
+        "b": 0.0,
+        "c": -0.3420201433256687,
+        "d": 0.9396926207859084,
+        "e": 18.420201433256686,
+        "f": 5.603073792140915
+      },
+      "name": "zero scale",
+      "point": {
+        "x": 37.5,
+        "y": -82.25
+      }
+    }
+  ],
+  "contours": [
+    {
+      "bounds": null,
+      "closed": false,
+      "name": "open off",
+      "points": [
+        {
+          "pointType": "offCurve",
+          "x": -269.0,
+          "y": -378.0
+        }
+      ],
+      "segments": []
+    },
+    {
+      "bounds": null,
+      "closed": true,
+      "name": "closed off",
+      "points": [
+        {
+          "pointType": "offCurve",
+          "x": 131.25,
+          "y": -229.0
+        }
+      ],
+      "segments": []
+    },
+    {
+      "bounds": null,
+      "closed": false,
+      "name": "open on",
+      "points": [
+        {
+          "pointType": "onCurve",
+          "x": -82.75,
+          "y": -329.25
+        }
+      ],
+      "segments": []
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": -100.5,
+          "y": 48.75
+        },
+        "min": {
+          "x": -100.5,
+          "y": 48.75
+        }
+      },
+      "closed": true,
+      "name": "closed on",
+      "points": [
+        {
+          "pointType": "onCurve",
+          "x": -100.5,
+          "y": 48.75
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": -100.5,
+              "y": 48.75
+            },
+            "min": {
+              "x": -100.5,
+              "y": 48.75
+            }
+          },
+          "points": [
+            0,
+            0
+          ],
+          "type": "line"
+        }
+      ]
+    },
+    {
+      "bounds": null,
+      "closed": false,
+      "name": "open off,off",
+      "points": [
+        {
+          "pointType": "offCurve",
+          "x": -318.25,
+          "y": -309.25
+        },
+        {
+          "pointType": "offCurve",
+          "x": 406.0,
+          "y": -169.75
+        }
+      ],
+      "segments": []
+    },
+    {
+      "bounds": null,
+      "closed": true,
+      "name": "closed off,off",
+      "points": [
+        {
+          "pointType": "offCurve",
+          "x": 371.5,
+          "y": 252.5
+        },
+        {
+          "pointType": "offCurve",
+          "x": 298.75,
+          "y": -415.5
+        }
+      ],
+      "segments": []
+    },
+    {
+      "bounds": null,
+      "closed": false,
+      "name": "open on,off",
+      "points": [
+        {
+          "pointType": "onCurve",
+          "x": 160.0,
+          "y": 73.25
+        },
+        {
+          "pointType": "offCurve",
+          "x": 44.75,
+          "y": 44.75
+        }
+      ],
+      "segments": []
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 299.25,
+          "y": 301.5
+        },
+        "min": {
+          "x": 144.875,
+          "y": 165.5
+        }
+      },
+      "closed": true,
+      "name": "closed on,off",
+      "points": [
+        {
+          "pointType": "onCurve",
+          "x": 299.25,
+          "y": 165.5
+        },
+        {
+          "pointType": "offCurve",
+          "x": -9.5,
+          "y": 437.5
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 299.25,
+              "y": 301.5
+            },
+            "min": {
+              "x": 144.875,
+              "y": 165.5
+            }
+          },
+          "points": [
+            0,
+            1,
+            0
+          ],
+          "type": "quad"
+        }
+      ]
+    },
+    {
+      "bounds": null,
+      "closed": false,
+      "name": "open off,on",
+      "points": [
+        {
+          "pointType": "offCurve",
+          "x": -288.75,
+          "y": 323.0
+        },
+        {
+          "pointType": "onCurve",
+          "x": -271.5,
+          "y": 261.5
+        }
+      ],
+      "segments": []
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 409.5,
+          "y": 13.75
+        },
+        "min": {
+          "x": 82.375,
+          "y": -390.5
+        }
+      },
+      "closed": true,
+      "name": "closed off,on",
+      "points": [
+        {
+          "pointType": "offCurve",
+          "x": -244.75,
+          "y": 418.0
+        },
+        {
+          "pointType": "onCurve",
+          "x": 409.5,
+          "y": -390.5
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 409.5,
+              "y": 13.75
+            },
+            "min": {
+              "x": 82.375,
+              "y": -390.5
+            }
+          },
+          "points": [
+            1,
+            0,
+            1
+          ],
+          "type": "quad"
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 399.25,
+          "y": 337.5
+        },
+        "min": {
+          "x": 194.0,
+          "y": -203.25
+        }
+      },
+      "closed": false,
+      "name": "open on,on",
+      "points": [
+        {
+          "pointType": "onCurve",
+          "x": 194.0,
+          "y": 337.5
+        },
+        {
+          "pointType": "onCurve",
+          "x": 399.25,
+          "y": -203.25
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 399.25,
+              "y": 337.5
+            },
+            "min": {
+              "x": 194.0,
+              "y": -203.25
+            }
+          },
+          "points": [
+            0,
+            1
+          ],
+          "type": "line"
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 120.0,
+          "y": 53.5
+        },
+        "min": {
+          "x": -321.75,
+          "y": -289.0
+        }
+      },
+      "closed": true,
+      "name": "closed on,on",
+      "points": [
+        {
+          "pointType": "onCurve",
+          "x": -321.75,
+          "y": -289.0
+        },
+        {
+          "pointType": "onCurve",
+          "x": 120.0,
+          "y": 53.5
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 120.0,
+              "y": 53.5
+            },
+            "min": {
+              "x": -321.75,
+              "y": -289.0
+            }
+          },
+          "points": [
+            0,
+            1
+          ],
+          "type": "line"
+        },
+        {
+          "bounds": {
+            "max": {
+              "x": 120.0,
+              "y": 53.5
+            },
+            "min": {
+              "x": -321.75,
+              "y": -289.0
+            }
+          },
+          "points": [
+            1,
+            0
+          ],
+          "type": "line"
+        }
+      ]
+    },
+    {
+      "bounds": null,
+      "closed": false,
+      "name": "open off,off,off",
+      "points": [
+        {
+          "pointType": "offCurve",
+          "x": -161.25,
+          "y": -336.25
+        },
+        {
+          "pointType": "offCurve",
+          "x": -313.25,
+          "y": 141.0
+        },
+        {
+          "pointType": "offCurve",
+          "x": 470.5,
+          "y": 4.25
+        }
+      ],
+      "segments": []
+    },
+    {
+      "bounds": null,
+      "closed": true,
+      "name": "closed off,off,off",
+      "points": [
+        {
+          "pointType": "offCurve",
+          "x": 442.0,
+          "y": 71.25
+        },
+        {
+          "pointType": "offCurve",
+          "x": -276.5,
+          "y": -370.5
+        },
+        {
+          "pointType": "offCurve",
+          "x": -451.0,
+          "y": 429.5
+        }
+      ],
+      "segments": []
+    },
+    {
+      "bounds": null,
+      "closed": false,
+      "name": "open on,off,off",
+      "points": [
+        {
+          "pointType": "onCurve",
+          "x": -126.25,
+          "y": 370.75
+        },
+        {
+          "pointType": "offCurve",
+          "x": 37.0,
+          "y": 278.0
+        },
+        {
+          "pointType": "offCurve",
+          "x": 130.5,
+          "y": -375.0
+        }
+      ],
+      "segments": []
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 452.5,
+          "y": 402.5
+        },
+        "min": {
+          "x": 77.68008436819622,
+          "y": 56.727367211151275
+        }
+      },
+      "closed": true,
+      "name": "closed on,off,off",
+      "points": [
+        {
+          "pointType": "onCurve",
+          "x": 452.5,
+          "y": 402.5
+        },
+        {
+          "pointType": "offCurve",
+          "x": -256.25,
+          "y": -296.75
+        },
+        {
+          "pointType": "offCurve",
+          "x": 214.5,
+          "y": 256.75
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 452.5,
+              "y": 402.5
+            },
+            "min": {
+              "x": 77.68008436819622,
+              "y": 56.727367211151275
+            }
+          },
+          "points": [
+            0,
+            1,
+            2,
+            0
+          ],
+          "type": "cubic"
+        }
+      ]
+    },
+    {
+      "bounds": null,
+      "closed": false,
+      "name": "open off,on,off",
+      "points": [
+        {
+          "pointType": "offCurve",
+          "x": 493.5,
+          "y": 287.25
+        },
+        {
+          "pointType": "onCurve",
+          "x": -342.25,
+          "y": 74.0
+        },
+        {
+          "pointType": "offCurve",
+          "x": 266.5,
+          "y": -16.25
+        }
+      ],
+      "segments": []
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": -5.25,
+          "y": 20.308529517724274
+        },
+        "min": {
+          "x": -214.86298604376296,
+          "y": -58.38736337696056
+        }
+      },
+      "closed": true,
+      "name": "closed off,on,off",
+      "points": [
+        {
+          "pointType": "offCurve",
+          "x": -8.5,
+          "y": 106.0
+        },
+        {
+          "pointType": "onCurve",
+          "x": -5.25,
+          "y": -9.25
+        },
+        {
+          "pointType": "offCurve",
+          "x": -475.25,
+          "y": -163.75
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": -5.25,
+              "y": 20.308529517724274
+            },
+            "min": {
+              "x": -214.86298604376296,
+              "y": -58.38736337696056
+            }
+          },
+          "points": [
+            1,
+            2,
+            0,
+            1
+          ],
+          "type": "cubic"
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": -183.75,
+          "y": 33.25
+        },
+        "min": {
+          "x": -411.5,
+          "y": -265.25
+        }
+      },
+      "closed": false,
+      "name": "open on,on,off",
+      "points": [
+        {
+          "pointType": "onCurve",
+          "x": -411.5,
+          "y": -265.25
+        },
+        {
+          "pointType": "onCurve",
+          "x": -183.75,
+          "y": 33.25
+        },
+        {
+          "pointType": "offCurve",
+          "x": 443.75,
+          "y": 299.75
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": -183.75,
+              "y": 33.25
+            },
+            "min": {
+              "x": -411.5,
+              "y": -265.25
+            }
+          },
+          "points": [
+            0,
+            1
+          ],
+          "type": "line"
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 471.75,
+          "y": 440.25
+        },
+        "min": {
+          "x": 261.71916346564234,
+          "y": 112.45165493875422
+        }
+      },
+      "closed": true,
+      "name": "closed on,on,off",
+      "points": [
+        {
+          "pointType": "onCurve",
+          "x": 471.75,
+          "y": 278.0
+        },
+        {
+          "pointType": "onCurve",
+          "x": 356.0,
+          "y": 440.25
+        },
+        {
+          "pointType": "offCurve",
+          "x": 121.0,
+          "y": -120.5
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 471.75,
+              "y": 440.25
+            },
+            "min": {
+              "x": 356.0,
+              "y": 278.0
+            }
+          },
+          "points": [
+            0,
+            1
+          ],
+          "type": "line"
+        },
+        {
+          "bounds": {
+            "max": {
+              "x": 471.75,
+              "y": 440.25
+            },
+            "min": {
+              "x": 261.71916346564234,
+              "y": 112.45165493875422
+            }
+          },
+          "points": [
+            1,
+            2,
+            0
+          ],
+          "type": "quad"
+        }
+      ]
+    },
+    {
+      "bounds": null,
+      "closed": false,
+      "name": "open off,off,on",
+      "points": [
+        {
+          "pointType": "offCurve",
+          "x": 47.5,
+          "y": -354.25
+        },
+        {
+          "pointType": "offCurve",
+          "x": 111.5,
+          "y": 269.25
+        },
+        {
+          "pointType": "onCurve",
+          "x": 90.25,
+          "y": -47.5
+        }
+      ],
+      "segments": []
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 53.532980457237414,
+          "y": -222.25
+        },
+        "min": {
+          "x": -331.25,
+          "y": -329.62415177750063
+        }
+      },
+      "closed": true,
+      "name": "closed off,off,on",
+      "points": [
+        {
+          "pointType": "offCurve",
+          "x": 191.25,
+          "y": -400.5
+        },
+        {
+          "pointType": "offCurve",
+          "x": 172.25,
+          "y": -325.5
+        },
+        {
+          "pointType": "onCurve",
+          "x": -331.25,
+          "y": -222.25
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 53.532980457237414,
+              "y": -222.25
+            },
+            "min": {
+              "x": -331.25,
+              "y": -329.62415177750063
+            }
+          },
+          "points": [
+            2,
+            0,
+            1,
+            2
+          ],
+          "type": "cubic"
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 402.75,
+          "y": 103.7671755725191
+        },
+        "min": {
+          "x": -24.087448188862865,
+          "y": -414.25
+        }
+      },
+      "closed": false,
+      "name": "open on,off,on",
+      "points": [
+        {
+          "pointType": "onCurve",
+          "x": 251.0,
+          "y": 69.5
+        },
+        {
+          "pointType": "offCurve",
+          "x": -366.75,
+          "y": 237.0
+        },
+        {
+          "pointType": "onCurve",
+          "x": 402.75,
+          "y": -414.25
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 402.75,
+              "y": 103.7671755725191
+            },
+            "min": {
+              "x": -24.087448188862865,
+              "y": -414.25
+            }
+          },
+          "points": [
+            0,
+            1,
+            2
+          ],
+          "type": "quad"
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 235.55622995877235,
+          "y": 306.0557138069705
+        },
+        "min": {
+          "x": 46.75,
+          "y": -185.0
+        }
+      },
+      "closed": true,
+      "name": "closed on,off,on",
+      "points": [
+        {
+          "pointType": "onCurve",
+          "x": 143.0,
+          "y": 279.5
+        },
+        {
+          "pointType": "offCurve",
+          "x": 367.75,
+          "y": 420.25
+        },
+        {
+          "pointType": "onCurve",
+          "x": 46.75,
+          "y": -185.0
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 235.55622995877235,
+              "y": 306.0557138069705
+            },
+            "min": {
+              "x": 46.75,
+              "y": -185.0
+            }
+          },
+          "points": [
+            0,
+            1,
+            2
+          ],
+          "type": "quad"
+        },
+        {
+          "bounds": {
+            "max": {
+              "x": 143.0,
+              "y": 279.5
+            },
+            "min": {
+              "x": 46.75,
+              "y": -185.0
+            }
+          },
+          "points": [
+            2,
+            0
+          ],
+          "type": "line"
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 418.25,
+          "y": 487.25
+        },
+        "min": {
+          "x": -427.0,
+          "y": -284.25
+        }
+      },
+      "closed": false,
+      "name": "open off,on,on",
+      "points": [
+        {
+          "pointType": "offCurve",
+          "x": 418.75,
+          "y": 435.75
+        },
+        {
+          "pointType": "onCurve",
+          "x": -427.0,
+          "y": -284.25
+        },
+        {
+          "pointType": "onCurve",
+          "x": 418.25,
+          "y": 487.25
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 418.25,
+              "y": 487.25
+            },
+            "min": {
+              "x": -427.0,
+              "y": -284.25
+            }
+          },
+          "points": [
+            1,
+            2
+          ],
+          "type": "line"
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 210.25,
+          "y": 443.0
+        },
+        "min": {
+          "x": -415.5,
+          "y": -116.25
+        }
+      },
+      "closed": true,
+      "name": "closed off,on,on",
+      "points": [
+        {
+          "pointType": "offCurve",
+          "x": 115.75,
+          "y": 270.25
+        },
+        {
+          "pointType": "onCurve",
+          "x": -415.5,
+          "y": -116.25
+        },
+        {
+          "pointType": "onCurve",
+          "x": 210.25,
+          "y": 443.0
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 210.25,
+              "y": 443.0
+            },
+            "min": {
+              "x": -415.5,
+              "y": -116.25
+            }
+          },
+          "points": [
+            1,
+            2
+          ],
+          "type": "line"
+        },
+        {
+          "bounds": {
+            "max": {
+              "x": 210.25,
+              "y": 443.0
+            },
+            "min": {
+              "x": -415.5,
+              "y": -116.25
+            }
+          },
+          "points": [
+            2,
+            0,
+            1
+          ],
+          "type": "quad"
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 203.25,
+          "y": 315.0
+        },
+        "min": {
+          "x": -262.0,
+          "y": -311.75
+        }
+      },
+      "closed": false,
+      "name": "open on,on,on",
+      "points": [
+        {
+          "pointType": "onCurve",
+          "x": 203.25,
+          "y": 315.0
+        },
+        {
+          "pointType": "onCurve",
+          "x": -262.0,
+          "y": -227.75
+        },
+        {
+          "pointType": "onCurve",
+          "x": 65.0,
+          "y": -311.75
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 203.25,
+              "y": 315.0
+            },
+            "min": {
+              "x": -262.0,
+              "y": -227.75
+            }
+          },
+          "points": [
+            0,
+            1
+          ],
+          "type": "line"
+        },
+        {
+          "bounds": {
+            "max": {
+              "x": 65.0,
+              "y": -227.75
+            },
+            "min": {
+              "x": -262.0,
+              "y": -311.75
+            }
+          },
+          "points": [
+            1,
+            2
+          ],
+          "type": "line"
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 404.75,
+          "y": 442.25
+        },
+        "min": {
+          "x": -293.0,
+          "y": -306.0
+        }
+      },
+      "closed": true,
+      "name": "closed on,on,on",
+      "points": [
+        {
+          "pointType": "onCurve",
+          "x": -87.75,
+          "y": -306.0
+        },
+        {
+          "pointType": "onCurve",
+          "x": -293.0,
+          "y": 442.25
+        },
+        {
+          "pointType": "onCurve",
+          "x": 404.75,
+          "y": -0.5
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": -87.75,
+              "y": 442.25
+            },
+            "min": {
+              "x": -293.0,
+              "y": -306.0
+            }
+          },
+          "points": [
+            0,
+            1
+          ],
+          "type": "line"
+        },
+        {
+          "bounds": {
+            "max": {
+              "x": 404.75,
+              "y": 442.25
+            },
+            "min": {
+              "x": -293.0,
+              "y": -0.5
+            }
+          },
+          "points": [
+            1,
+            2
+          ],
+          "type": "line"
+        },
+        {
+          "bounds": {
+            "max": {
+              "x": 404.75,
+              "y": -0.5
+            },
+            "min": {
+              "x": -87.75,
+              "y": -306.0
+            }
+          },
+          "points": [
+            2,
+            0
+          ],
+          "type": "line"
+        }
+      ]
+    },
+    {
+      "bounds": null,
+      "closed": false,
+      "name": "open off,off,off,off",
+      "points": [
+        {
+          "pointType": "offCurve",
+          "x": -456.5,
+          "y": -64.25
+        },
+        {
+          "pointType": "offCurve",
+          "x": -224.25,
+          "y": 110.75
+        },
+        {
+          "pointType": "offCurve",
+          "x": -244.75,
+          "y": -66.5
+        },
+        {
+          "pointType": "offCurve",
+          "x": 476.75,
+          "y": -203.0
+        }
+      ],
+      "segments": []
+    },
+    {
+      "bounds": null,
+      "closed": true,
+      "name": "closed off,off,off,off",
+      "points": [
+        {
+          "pointType": "offCurve",
+          "x": 97.25,
+          "y": -363.0
+        },
+        {
+          "pointType": "offCurve",
+          "x": 468.5,
+          "y": 283.25
+        },
+        {
+          "pointType": "offCurve",
+          "x": 82.75,
+          "y": 440.25
+        },
+        {
+          "pointType": "offCurve",
+          "x": -429.5,
+          "y": 201.5
+        }
+      ],
+      "segments": []
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 361.0,
+          "y": 183.5066781194317
+        },
+        "min": {
+          "x": 88.33526861486999,
+          "y": -209.25
+        }
+      },
+      "closed": false,
+      "name": "open on,off,off,off",
+      "points": [
+        {
+          "pointType": "onCurve",
+          "x": 361.0,
+          "y": -209.25
+        },
+        {
+          "pointType": "offCurve",
+          "x": -170.75,
+          "y": 454.5
+        },
+        {
+          "pointType": "offCurve",
+          "x": 245.75,
+          "y": 116.25
+        },
+        {
+          "pointType": "offCurve",
+          "x": 208.75,
+          "y": -67.5
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 361.0,
+              "y": 183.5066781194317
+            },
+            "min": {
+              "x": 88.33526861486999,
+              "y": -209.25
+            }
+          },
+          "points": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "type": "cubic"
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 154.81523182049045,
+          "y": 426.0
+        },
+        "min": {
+          "x": -113.0,
+          "y": 14.41066937466941
+        }
+      },
+      "closed": true,
+      "name": "closed on,off,off,off",
+      "points": [
+        {
+          "pointType": "onCurve",
+          "x": -113.0,
+          "y": 426.0
+        },
+        {
+          "pointType": "offCurve",
+          "x": 10.5,
+          "y": 128.25
+        },
+        {
+          "pointType": "offCurve",
+          "x": 352.5,
+          "y": -79.5
+        },
+        {
+          "pointType": "offCurve",
+          "x": -0.5,
+          "y": 57.5
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 154.81523182049045,
+              "y": 426.0
+            },
+            "min": {
+              "x": -113.0,
+              "y": 14.41066937466941
+            }
+          },
+          "points": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "type": "cubic"
+        }
+      ]
+    },
+    {
+      "bounds": null,
+      "closed": false,
+      "name": "open off,on,off,off",
+      "points": [
+        {
+          "pointType": "offCurve",
+          "x": 437.0,
+          "y": -354.75
+        },
+        {
+          "pointType": "onCurve",
+          "x": -43.5,
+          "y": -389.75
+        },
+        {
+          "pointType": "offCurve",
+          "x": 94.0,
+          "y": 185.0
+        },
+        {
+          "pointType": "offCurve",
+          "x": 286.0,
+          "y": -125.25
+        }
+      ],
+      "segments": []
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 12.25,
+          "y": 336.75
+        },
+        "min": {
+          "x": -340.3871359634946,
+          "y": -376.25
+        }
+      },
+      "closed": true,
+      "name": "closed off,on,off,off",
+      "points": [
+        {
+          "pointType": "offCurve",
+          "x": 12.25,
+          "y": -376.25
+        },
+        {
+          "pointType": "onCurve",
+          "x": 5.0,
+          "y": 336.75
+        },
+        {
+          "pointType": "offCurve",
+          "x": -494.75,
+          "y": -252.25
+        },
+        {
+          "pointType": "offCurve",
+          "x": -416.75,
+          "y": 119.75
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 12.25,
+              "y": 336.75
+            },
+            "min": {
+              "x": -340.3871359634946,
+              "y": -376.25
+            }
+          },
+          "points": [
+            1,
+            2,
+            3,
+            0
+          ],
+          "type": "cubic"
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 499.25,
+          "y": -295.25
+        },
+        "min": {
+          "x": 307.5,
+          "y": -496.75
+        }
+      },
+      "closed": false,
+      "name": "open on,on,off,off",
+      "points": [
+        {
+          "pointType": "onCurve",
+          "x": 499.25,
+          "y": -295.25
+        },
+        {
+          "pointType": "onCurve",
+          "x": 307.5,
+          "y": -496.75
+        },
+        {
+          "pointType": "offCurve",
+          "x": -78.0,
+          "y": -254.75
+        },
+        {
+          "pointType": "offCurve",
+          "x": -29.5,
+          "y": -476.5
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 499.25,
+              "y": -295.25
+            },
+            "min": {
+              "x": 307.5,
+              "y": -496.75
+            }
+          },
+          "points": [
+            0,
+            1
+          ],
+          "type": "line"
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 314.25,
+          "y": 364.25
+        },
+        "min": {
+          "x": -103.22618118587305,
+          "y": -174.70097331823263
+        }
+      },
+      "closed": true,
+      "name": "closed on,on,off,off",
+      "points": [
+        {
+          "pointType": "onCurve",
+          "x": 314.25,
+          "y": 133.75
+        },
+        {
+          "pointType": "onCurve",
+          "x": 288.75,
+          "y": 364.25
+        },
+        {
+          "pointType": "offCurve",
+          "x": -220.75,
+          "y": -442.75
+        },
+        {
+          "pointType": "offCurve",
+          "x": -255.5,
+          "y": -189.0
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 314.25,
+              "y": 364.25
+            },
+            "min": {
+              "x": 288.75,
+              "y": 133.75
+            }
+          },
+          "points": [
+            0,
+            1
+          ],
+          "type": "line"
+        },
+        {
+          "bounds": {
+            "max": {
+              "x": 314.25,
+              "y": 364.25
+            },
+            "min": {
+              "x": -103.22618118587305,
+              "y": -174.70097331823263
+            }
+          },
+          "points": [
+            1,
+            2,
+            3,
+            0
+          ],
+          "type": "cubic"
+        }
+      ]
+    },
+    {
+      "bounds": null,
+      "closed": false,
+      "name": "open off,off,on,off",
+      "points": [
+        {
+          "pointType": "offCurve",
+          "x": -273.0,
+          "y": -429.0
+        },
+        {
+          "pointType": "offCurve",
+          "x": -368.0,
+          "y": -90.0
+        },
+        {
+          "pointType": "onCurve",
+          "x": -84.25,
+          "y": -499.25
+        },
+        {
+          "pointType": "offCurve",
+          "x": 230.25,
+          "y": 313.0
+        }
+      ],
+      "segments": []
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 242.0,
+          "y": 415.75
+        },
+        "min": {
+          "x": -485.0,
+          "y": 10.552871753055232
+        }
+      },
+      "closed": true,
+      "name": "closed off,off,on,off",
+      "points": [
+        {
+          "pointType": "offCurve",
+          "x": -124.0,
+          "y": 47.5
+        },
+        {
+          "pointType": "offCurve",
+          "x": -485.0,
+          "y": 353.75
+        },
+        {
+          "pointType": "onCurve",
+          "x": 242.0,
+          "y": 415.75
+        },
+        {
+          "pointType": "offCurve",
+          "x": -462.25,
+          "y": -261.0
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 242.0,
+              "y": 415.75
+            },
+            "min": {
+              "x": -485.0,
+              "y": 10.552871753055232
+            }
+          },
+          "points": [
+            2,
+            3,
+            0,
+            1
+          ],
+          "type": "cubic"
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 465.0,
+          "y": 453.25
+        },
+        "min": {
+          "x": -131.0,
+          "y": -338.0
+        }
+      },
+      "closed": false,
+      "name": "open on,off,on,off",
+      "points": [
+        {
+          "pointType": "onCurve",
+          "x": 465.0,
+          "y": 453.25
+        },
+        {
+          "pointType": "offCurve",
+          "x": 224.0,
+          "y": -328.25
+        },
+        {
+          "pointType": "onCurve",
+          "x": -131.0,
+          "y": -338.0
+        },
+        {
+          "pointType": "offCurve",
+          "x": 451.25,
+          "y": 388.5
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 465.0,
+              "y": 453.25
+            },
+            "min": {
+              "x": -131.0,
+              "y": -338.0
+            }
+          },
+          "points": [
+            0,
+            1,
+            2
+          ],
+          "type": "quad"
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 248.27867469879513,
+          "y": 312.9054259634888
+        },
+        "min": {
+          "x": -478.75,
+          "y": 47.12588904694168
+        }
+      },
+      "closed": true,
+      "name": "closed on,off,on,off",
+      "points": [
+        {
+          "pointType": "onCurve",
+          "x": -478.75,
+          "y": 302.25
+        },
+        {
+          "pointType": "offCurve",
+          "x": 354.0,
+          "y": -121.25
+        },
+        {
+          "pointType": "onCurve",
+          "x": 220.75,
+          "y": 158.25
+        },
+        {
+          "pointType": "offCurve",
+          "x": 389.75,
+          "y": 353.5
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 239.13049948240166,
+              "y": 302.25
+            },
+            "min": {
+              "x": -478.75,
+              "y": 47.12588904694168
+            }
+          },
+          "points": [
+            0,
+            1,
+            2
+          ],
+          "type": "quad"
+        },
+        {
+          "bounds": {
+            "max": {
+              "x": 248.27867469879513,
+              "y": 312.9054259634888
+            },
+            "min": {
+              "x": -478.75,
+              "y": 158.25
+            }
+          },
+          "points": [
+            2,
+            3,
+            0
+          ],
+          "type": "quad"
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 341.75,
+          "y": -319.5
+        },
+        "min": {
+          "x": -93.5,
+          "y": -409.25
+        }
+      },
+      "closed": false,
+      "name": "open off,on,on,off",
+      "points": [
+        {
+          "pointType": "offCurve",
+          "x": 70.25,
+          "y": -11.75
+        },
+        {
+          "pointType": "onCurve",
+          "x": 341.75,
+          "y": -409.25
+        },
+        {
+          "pointType": "onCurve",
+          "x": -93.5,
+          "y": -319.5
+        },
+        {
+          "pointType": "offCurve",
+          "x": 450.0,
+          "y": -324.5
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 341.75,
+              "y": -319.5
+            },
+            "min": {
+              "x": -93.5,
+              "y": -409.25
+            }
+          },
+          "points": [
+            1,
+            2
+          ],
+          "type": "line"
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 413.5,
+          "y": 284.71976355605943
+        },
+        "min": {
+          "x": -476.25,
+          "y": -130.0
+        }
+      },
+      "closed": true,
+      "name": "closed off,on,on,off",
+      "points": [
+        {
+          "pointType": "offCurve",
+          "x": -332.25,
+          "y": -34.5
+        },
+        {
+          "pointType": "onCurve",
+          "x": -476.25,
+          "y": -130.0
+        },
+        {
+          "pointType": "onCurve",
+          "x": 413.5,
+          "y": 231.5
+        },
+        {
+          "pointType": "offCurve",
+          "x": -84.0,
+          "y": 442.25
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 413.5,
+              "y": 231.5
+            },
+            "min": {
+              "x": -476.25,
+              "y": -130.0
+            }
+          },
+          "points": [
+            1,
+            2
+          ],
+          "type": "line"
+        },
+        {
+          "bounds": {
+            "max": {
+              "x": 413.5,
+              "y": 284.71976355605943
+            },
+            "min": {
+              "x": -476.25,
+              "y": -130.0
+            }
+          },
+          "points": [
+            2,
+            3,
+            0,
+            1
+          ],
+          "type": "cubic"
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 204.5,
+          "y": 59.25
+        },
+        "min": {
+          "x": -247.5,
+          "y": -177.25
+        }
+      },
+      "closed": false,
+      "name": "open on,on,on,off",
+      "points": [
+        {
+          "pointType": "onCurve",
+          "x": -247.5,
+          "y": 59.25
+        },
+        {
+          "pointType": "onCurve",
+          "x": 204.5,
+          "y": -177.25
+        },
+        {
+          "pointType": "onCurve",
+          "x": 107.25,
+          "y": -106.0
+        },
+        {
+          "pointType": "offCurve",
+          "x": -484.0,
+          "y": 350.5
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 204.5,
+              "y": 59.25
+            },
+            "min": {
+              "x": -247.5,
+              "y": -177.25
+            }
+          },
+          "points": [
+            0,
+            1
+          ],
+          "type": "line"
+        },
+        {
+          "bounds": {
+            "max": {
+              "x": 204.5,
+              "y": -106.0
+            },
+            "min": {
+              "x": 107.25,
+              "y": -177.25
+            }
+          },
+          "points": [
+            1,
+            2
+          ],
+          "type": "line"
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 248.25,
+          "y": 479.0
+        },
+        "min": {
+          "x": -130.29400702106318,
+          "y": -148.964790807307
+        }
+      },
+      "closed": true,
+      "name": "closed on,on,on,off",
+      "points": [
+        {
+          "pointType": "onCurve",
+          "x": 141.0,
+          "y": 79.75
+        },
+        {
+          "pointType": "onCurve",
+          "x": 248.25,
+          "y": 479.0
+        },
+        {
+          "pointType": "onCurve",
+          "x": -96.0,
+          "y": -119.0
+        },
+        {
+          "pointType": "offCurve",
+          "x": -226.75,
+          "y": -231.75
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 248.25,
+              "y": 479.0
+            },
+            "min": {
+              "x": 141.0,
+              "y": 79.75
+            }
+          },
+          "points": [
+            0,
+            1
+          ],
+          "type": "line"
+        },
+        {
+          "bounds": {
+            "max": {
+              "x": 248.25,
+              "y": 479.0
+            },
+            "min": {
+              "x": -96.0,
+              "y": -119.0
+            }
+          },
+          "points": [
+            1,
+            2
+          ],
+          "type": "line"
+        },
+        {
+          "bounds": {
+            "max": {
+              "x": 141.0,
+              "y": 79.75
+            },
+            "min": {
+              "x": -130.29400702106318,
+              "y": -148.964790807307
+            }
+          },
+          "points": [
+            2,
+            3,
+            0
+          ],
+          "type": "quad"
+        }
+      ]
+    },
+    {
+      "bounds": null,
+      "closed": false,
+      "name": "open off,off,off,on",
+      "points": [
+        {
+          "pointType": "offCurve",
+          "x": -461.5,
+          "y": 124.75
+        },
+        {
+          "pointType": "offCurve",
+          "x": 345.25,
+          "y": -101.25
+        },
+        {
+          "pointType": "offCurve",
+          "x": -216.5,
+          "y": -172.5
+        },
+        {
+          "pointType": "onCurve",
+          "x": 272.0,
+          "y": -73.25
+        }
+      ],
+      "segments": []
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 225.5,
+          "y": 451.5
+        },
+        "min": {
+          "x": -242.47390308563214,
+          "y": 345.0
+        }
+      },
+      "closed": true,
+      "name": "closed off,off,off,on",
+      "points": [
+        {
+          "pointType": "offCurve",
+          "x": -178.5,
+          "y": 402.75
+        },
+        {
+          "pointType": "offCurve",
+          "x": -487.0,
+          "y": 282.75
+        },
+        {
+          "pointType": "offCurve",
+          "x": 27.5,
+          "y": 451.5
+        },
+        {
+          "pointType": "onCurve",
+          "x": 225.5,
+          "y": 345.0
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 225.5,
+              "y": 451.5
+            },
+            "min": {
+              "x": -242.47390308563214,
+              "y": 345.0
+            }
+          },
+          "points": [
+            3,
+            0,
+            1,
+            2
+          ],
+          "type": "cubic"
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 383.25,
+          "y": 319.74954058881747
+        },
+        "min": {
+          "x": -374.7991011706732,
+          "y": -484.0
+        }
+      },
+      "closed": false,
+      "name": "open on,off,off,on",
+      "points": [
+        {
+          "pointType": "onCurve",
+          "x": 383.25,
+          "y": -484.0
+        },
+        {
+          "pointType": "offCurve",
+          "x": 294.25,
+          "y": -71.25
+        },
+        {
+          "pointType": "offCurve",
+          "x": -397.0,
+          "y": 416.75
+        },
+        {
+          "pointType": "onCurve",
+          "x": -374.25,
+          "y": 303.0
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 383.25,
+              "y": 319.74954058881747
+            },
+            "min": {
+              "x": -374.7991011706732,
+              "y": -484.0
+            }
+          },
+          "points": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "type": "cubic"
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 498.5,
+          "y": 169.25
+        },
+        "min": {
+          "x": -448.75,
+          "y": -298.25
+        }
+      },
+      "closed": true,
+      "name": "closed on,off,off,on",
+      "points": [
+        {
+          "pointType": "onCurve",
+          "x": -448.75,
+          "y": -298.25
+        },
+        {
+          "pointType": "offCurve",
+          "x": -133.25,
+          "y": 353.25
+        },
+        {
+          "pointType": "offCurve",
+          "x": -58.75,
+          "y": 97.5
+        },
+        {
+          "pointType": "onCurve",
+          "x": 498.5,
+          "y": 169.25
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 498.5,
+              "y": 169.25
+            },
+            "min": {
+              "x": -448.75,
+              "y": -298.25
+            }
+          },
+          "points": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "type": "cubic"
+        },
+        {
+          "bounds": {
+            "max": {
+              "x": 498.5,
+              "y": 169.25
+            },
+            "min": {
+              "x": -448.75,
+              "y": -298.25
+            }
+          },
+          "points": [
+            3,
+            0
+          ],
+          "type": "line"
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 418.75,
+          "y": 420.5
+        },
+        "min": {
+          "x": -23.5,
+          "y": -286.5
+        }
+      },
+      "closed": false,
+      "name": "open off,on,off,on",
+      "points": [
+        {
+          "pointType": "offCurve",
+          "x": -443.5,
+          "y": 423.75
+        },
+        {
+          "pointType": "onCurve",
+          "x": -23.5,
+          "y": 420.5
+        },
+        {
+          "pointType": "offCurve",
+          "x": 29.0,
+          "y": 337.5
+        },
+        {
+          "pointType": "onCurve",
+          "x": 418.75,
+          "y": -286.5
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 418.75,
+              "y": 420.5
+            },
+            "min": {
+              "x": -23.5,
+              "y": -286.5
+            }
+          },
+          "points": [
+            1,
+            2,
+            3
+          ],
+          "type": "quad"
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 0.2944250871080172,
+          "y": 68.5
+        },
+        "min": {
+          "x": -356.5,
+          "y": -141.0
+        }
+      },
+      "closed": true,
+      "name": "closed off,on,off,on",
+      "points": [
+        {
+          "pointType": "offCurve",
+          "x": -271.5,
+          "y": 44.25
+        },
+        {
+          "pointType": "onCurve",
+          "x": -42.25,
+          "y": -141.0
+        },
+        {
+          "pointType": "offCurve",
+          "x": 123.5,
+          "y": -135.75
+        },
+        {
+          "pointType": "onCurve",
+          "x": -356.5,
+          "y": 68.5
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 0.2944250871080172,
+              "y": 68.5
+            },
+            "min": {
+              "x": -356.5,
+              "y": -141.0
+            }
+          },
+          "points": [
+            1,
+            2,
+            3
+          ],
+          "type": "quad"
+        },
+        {
+          "bounds": {
+            "max": {
+              "x": -42.25,
+              "y": 68.5
+            },
+            "min": {
+              "x": -356.5,
+              "y": -141.0
+            }
+          },
+          "points": [
+            3,
+            0,
+            1
+          ],
+          "type": "quad"
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 449.0,
+          "y": 414.5
+        },
+        "min": {
+          "x": -415.25,
+          "y": 54.98586540215214
+        }
+      },
+      "closed": false,
+      "name": "open on,on,off,on",
+      "points": [
+        {
+          "pointType": "onCurve",
+          "x": -415.25,
+          "y": 151.25
+        },
+        {
+          "pointType": "onCurve",
+          "x": 449.0,
+          "y": 414.5
+        },
+        {
+          "pointType": "offCurve",
+          "x": -392.75,
+          "y": -287.5
+        },
+        {
+          "pointType": "onCurve",
+          "x": -182.5,
+          "y": 381.25
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 449.0,
+              "y": 414.5
+            },
+            "min": {
+              "x": -415.25,
+              "y": 151.25
+            }
+          },
+          "points": [
+            0,
+            1
+          ],
+          "type": "line"
+        },
+        {
+          "bounds": {
+            "max": {
+              "x": 449.0,
+              "y": 414.5
+            },
+            "min": {
+              "x": -224.5200213878327,
+              "y": 54.98586540215214
+            }
+          },
+          "points": [
+            1,
+            2,
+            3
+          ],
+          "type": "quad"
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 210.0,
+          "y": -6.75
+        },
+        "min": {
+          "x": -231.48505075022067,
+          "y": -375.25
+        }
+      },
+      "closed": true,
+      "name": "closed on,on,off,on",
+      "points": [
+        {
+          "pointType": "onCurve",
+          "x": 125.0,
+          "y": -375.25
+        },
+        {
+          "pointType": "onCurve",
+          "x": 210.0,
+          "y": -6.75
+        },
+        {
+          "pointType": "offCurve",
+          "x": -497.25,
+          "y": -129.75
+        },
+        {
+          "pointType": "onCurve",
+          "x": -71.5,
+          "y": -73.5
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 210.0,
+              "y": -6.75
+            },
+            "min": {
+              "x": 125.0,
+              "y": -375.25
+            }
+          },
+          "points": [
+            0,
+            1
+          ],
+          "type": "line"
+        },
+        {
+          "bounds": {
+            "max": {
+              "x": 210.0,
+              "y": -6.75
+            },
+            "min": {
+              "x": -231.48505075022067,
+              "y": -91.15167364016736
+            }
+          },
+          "points": [
+            1,
+            2,
+            3
+          ],
+          "type": "quad"
+        },
+        {
+          "bounds": {
+            "max": {
+              "x": 125.0,
+              "y": -73.5
+            },
+            "min": {
+              "x": -71.5,
+              "y": -375.25
+            }
+          },
+          "points": [
+            3,
+            0
+          ],
+          "type": "line"
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 415.25,
+          "y": -110.25
+        },
+        "min": {
+          "x": 177.25,
+          "y": -478.5
+        }
+      },
+      "closed": false,
+      "name": "open off,off,on,on",
+      "points": [
+        {
+          "pointType": "offCurve",
+          "x": -26.25,
+          "y": -307.75
+        },
+        {
+          "pointType": "offCurve",
+          "x": 260.25,
+          "y": -361.0
+        },
+        {
+          "pointType": "onCurve",
+          "x": 415.25,
+          "y": -110.25
+        },
+        {
+          "pointType": "onCurve",
+          "x": 177.25,
+          "y": -478.5
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 415.25,
+              "y": -110.25
+            },
+            "min": {
+              "x": 177.25,
+              "y": -478.5
+            }
+          },
+          "points": [
+            2,
+            3
+          ],
+          "type": "line"
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 265.5,
+          "y": 235.33005405945002
+        },
+        "min": {
+          "x": -110.84741822426597,
+          "y": -179.76490067706584
+        }
+      },
+      "closed": true,
+      "name": "closed off,off,on,on",
+      "points": [
+        {
+          "pointType": "offCurve",
+          "x": 241.75,
+          "y": -356.75
+        },
+        {
+          "pointType": "offCurve",
+          "x": -477.75,
+          "y": 351.75
+        },
+        {
+          "pointType": "onCurve",
+          "x": 137.0,
+          "y": 218.5
+        },
+        {
+          "pointType": "onCurve",
+          "x": 265.5,
+          "y": -137.25
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 265.5,
+              "y": 218.5
+            },
+            "min": {
+              "x": 137.0,
+              "y": -137.25
+            }
+          },
+          "points": [
+            2,
+            3
+          ],
+          "type": "line"
+        },
+        {
+          "bounds": {
+            "max": {
+              "x": 265.5,
+              "y": 235.33005405945002
+            },
+            "min": {
+              "x": -110.84741822426597,
+              "y": -179.76490067706584
+            }
+          },
+          "points": [
+            3,
+            0,
+            1,
+            2
+          ],
+          "type": "cubic"
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 479.0,
+          "y": 476.25
+        },
+        "min": {
+          "x": -21.0,
+          "y": 285.0
+        }
+      },
+      "closed": false,
+      "name": "open on,off,on,on",
+      "points": [
+        {
+          "pointType": "onCurve",
+          "x": -21.0,
+          "y": 476.25
+        },
+        {
+          "pointType": "offCurve",
+          "x": 45.0,
+          "y": 461.0
+        },
+        {
+          "pointType": "onCurve",
+          "x": 102.5,
+          "y": 309.0
+        },
+        {
+          "pointType": "onCurve",
+          "x": 479.0,
+          "y": 285.0
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 102.5,
+              "y": 476.25
+            },
+            "min": {
+              "x": -21.0,
+              "y": 309.0
+            }
+          },
+          "points": [
+            0,
+            1,
+            2
+          ],
+          "type": "quad"
+        },
+        {
+          "bounds": {
+            "max": {
+              "x": 479.0,
+              "y": 309.0
+            },
+            "min": {
+              "x": 102.5,
+              "y": 285.0
+            }
+          },
+          "points": [
+            2,
+            3
+          ],
+          "type": "line"
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 320.28053435114504,
+          "y": 478.25
+        },
+        "min": {
+          "x": -239.0,
+          "y": 145.91282165039928
+        }
+      },
+      "closed": true,
+      "name": "closed on,off,on,on",
+      "points": [
+        {
+          "pointType": "onCurve",
+          "x": 31.5,
+          "y": 478.25
+        },
+        {
+          "pointType": "offCurve",
+          "x": 420.5,
+          "y": -133.75
+        },
+        {
+          "pointType": "onCurve",
+          "x": 285.5,
+          "y": 381.25
+        },
+        {
+          "pointType": "onCurve",
+          "x": -239.0,
+          "y": 301.75
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 320.28053435114504,
+              "y": 478.25
+            },
+            "min": {
+              "x": 31.5,
+              "y": 145.91282165039928
+            }
+          },
+          "points": [
+            0,
+            1,
+            2
+          ],
+          "type": "quad"
+        },
+        {
+          "bounds": {
+            "max": {
+              "x": 285.5,
+              "y": 381.25
+            },
+            "min": {
+              "x": -239.0,
+              "y": 301.75
+            }
+          },
+          "points": [
+            2,
+            3
+          ],
+          "type": "line"
+        },
+        {
+          "bounds": {
+            "max": {
+              "x": 31.5,
+              "y": 478.25
+            },
+            "min": {
+              "x": -239.0,
+              "y": 301.75
+            }
+          },
+          "points": [
+            3,
+            0
+          ],
+          "type": "line"
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 267.25,
+          "y": 56.25
+        },
+        "min": {
+          "x": -169.0,
+          "y": -156.25
+        }
+      },
+      "closed": false,
+      "name": "open off,on,on,on",
+      "points": [
+        {
+          "pointType": "offCurve",
+          "x": 427.25,
+          "y": -306.25
+        },
+        {
+          "pointType": "onCurve",
+          "x": -169.0,
+          "y": 56.25
+        },
+        {
+          "pointType": "onCurve",
+          "x": 267.25,
+          "y": -138.25
+        },
+        {
+          "pointType": "onCurve",
+          "x": -86.75,
+          "y": -156.25
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 267.25,
+              "y": 56.25
+            },
+            "min": {
+              "x": -169.0,
+              "y": -138.25
+            }
+          },
+          "points": [
+            1,
+            2
+          ],
+          "type": "line"
+        },
+        {
+          "bounds": {
+            "max": {
+              "x": 267.25,
+              "y": -138.25
+            },
+            "min": {
+              "x": -86.75,
+              "y": -156.25
+            }
+          },
+          "points": [
+            2,
+            3
+          ],
+          "type": "line"
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 394.25,
+          "y": 105.0
+        },
+        "min": {
+          "x": -344.5,
+          "y": -298.5
+        }
+      },
+      "closed": true,
+      "name": "closed off,on,on,on",
+      "points": [
+        {
+          "pointType": "offCurve",
+          "x": -291.5,
+          "y": 138.75
+        },
+        {
+          "pointType": "onCurve",
+          "x": 346.5,
+          "y": -298.5
+        },
+        {
+          "pointType": "onCurve",
+          "x": 394.25,
+          "y": 105.0
+        },
+        {
+          "pointType": "onCurve",
+          "x": -344.5,
+          "y": -60.0
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 394.25,
+              "y": 105.0
+            },
+            "min": {
+              "x": 346.5,
+              "y": -298.5
+            }
+          },
+          "points": [
+            1,
+            2
+          ],
+          "type": "line"
+        },
+        {
+          "bounds": {
+            "max": {
+              "x": 394.25,
+              "y": 105.0
+            },
+            "min": {
+              "x": -344.5,
+              "y": -60.0
+            }
+          },
+          "points": [
+            2,
+            3
+          ],
+          "type": "line"
+        },
+        {
+          "bounds": {
+            "max": {
+              "x": 346.5,
+              "y": 2.109375
+            },
+            "min": {
+              "x": -344.5,
+              "y": -298.5
+            }
+          },
+          "points": [
+            3,
+            0,
+            1
+          ],
+          "type": "quad"
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 443.25,
+          "y": 491.75
+        },
+        "min": {
+          "x": -227.5,
+          "y": 42.5
+        }
+      },
+      "closed": false,
+      "name": "open on,on,on,on",
+      "points": [
+        {
+          "pointType": "onCurve",
+          "x": 84.75,
+          "y": 491.75
+        },
+        {
+          "pointType": "onCurve",
+          "x": 443.25,
+          "y": 42.5
+        },
+        {
+          "pointType": "onCurve",
+          "x": -55.75,
+          "y": 335.25
+        },
+        {
+          "pointType": "onCurve",
+          "x": -227.5,
+          "y": 465.0
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 443.25,
+              "y": 491.75
+            },
+            "min": {
+              "x": 84.75,
+              "y": 42.5
+            }
+          },
+          "points": [
+            0,
+            1
+          ],
+          "type": "line"
+        },
+        {
+          "bounds": {
+            "max": {
+              "x": 443.25,
+              "y": 335.25
+            },
+            "min": {
+              "x": -55.75,
+              "y": 42.5
+            }
+          },
+          "points": [
+            1,
+            2
+          ],
+          "type": "line"
+        },
+        {
+          "bounds": {
+            "max": {
+              "x": -55.75,
+              "y": 465.0
+            },
+            "min": {
+              "x": -227.5,
+              "y": 335.25
+            }
+          },
+          "points": [
+            2,
+            3
+          ],
+          "type": "line"
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 441.25,
+          "y": 490.75
+        },
+        "min": {
+          "x": -212.25,
+          "y": -81.25
+        }
+      },
+      "closed": true,
+      "name": "closed on,on,on,on",
+      "points": [
+        {
+          "pointType": "onCurve",
+          "x": -212.25,
+          "y": 490.75
+        },
+        {
+          "pointType": "onCurve",
+          "x": -81.0,
+          "y": 485.75
+        },
+        {
+          "pointType": "onCurve",
+          "x": 441.25,
+          "y": -81.25
+        },
+        {
+          "pointType": "onCurve",
+          "x": 146.0,
+          "y": 481.5
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": -81.0,
+              "y": 490.75
+            },
+            "min": {
+              "x": -212.25,
+              "y": 485.75
+            }
+          },
+          "points": [
+            0,
+            1
+          ],
+          "type": "line"
+        },
+        {
+          "bounds": {
+            "max": {
+              "x": 441.25,
+              "y": 485.75
+            },
+            "min": {
+              "x": -81.0,
+              "y": -81.25
+            }
+          },
+          "points": [
+            1,
+            2
+          ],
+          "type": "line"
+        },
+        {
+          "bounds": {
+            "max": {
+              "x": 441.25,
+              "y": 481.5
+            },
+            "min": {
+              "x": 146.0,
+              "y": -81.25
+            }
+          },
+          "points": [
+            2,
+            3
+          ],
+          "type": "line"
+        },
+        {
+          "bounds": {
+            "max": {
+              "x": 146.0,
+              "y": 490.75
+            },
+            "min": {
+              "x": -212.25,
+              "y": 481.5
+            }
+          },
+          "points": [
+            3,
+            0
+          ],
+          "type": "line"
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 100.0,
+          "y": 50.0
+        },
+        "min": {
+          "x": 0.0,
+          "y": 0.0
+        }
+      },
+      "closed": false,
+      "name": "quadratic with interior extrema",
+      "points": [
+        {
+          "pointType": "onCurve",
+          "x": 0.0,
+          "y": 0.0
+        },
+        {
+          "pointType": "offCurve",
+          "x": 50.0,
+          "y": 100.0
+        },
+        {
+          "pointType": "qCurve",
+          "x": 100.0,
+          "y": 0.0
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 100.0,
+              "y": 50.0
+            },
+            "min": {
+              "x": 0.0,
+              "y": 0.0
+            }
+          },
+          "points": [
+            0,
+            1,
+            2
+          ],
+          "type": "quad"
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 108.88888888888889,
+          "y": 20.0
+        },
+        "min": {
+          "x": 0.0,
+          "y": -25.71428571428571
+        }
+      },
+      "closed": false,
+      "name": "quadratic with control past the end",
+      "points": [
+        {
+          "pointType": "onCurve",
+          "x": 0.0,
+          "y": 0.0
+        },
+        {
+          "pointType": "offCurve",
+          "x": 140.0,
+          "y": -60.0
+        },
+        {
+          "pointType": "onCurve",
+          "x": 100.0,
+          "y": 20.0
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 108.88888888888889,
+              "y": 20.0
+            },
+            "min": {
+              "x": 0.0,
+              "y": -25.71428571428571
+            }
+          },
+          "points": [
+            0,
+            1,
+            2
+          ],
+          "type": "quad"
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 100.0,
+          "y": 150.0
+        },
+        "min": {
+          "x": 0.0,
+          "y": 0.0
+        }
+      },
+      "closed": false,
+      "name": "bulging cubic",
+      "points": [
+        {
+          "pointType": "onCurve",
+          "x": 0.0,
+          "y": 0.0
+        },
+        {
+          "pointType": "offCurve",
+          "x": 0.0,
+          "y": 200.0
+        },
+        {
+          "pointType": "offCurve",
+          "x": 100.0,
+          "y": 200.0
+        },
+        {
+          "pointType": "onCurve",
+          "x": 100.0,
+          "y": 0.0
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 100.0,
+              "y": 150.0
+            },
+            "min": {
+              "x": 0.0,
+              "y": 0.0
+            }
+          },
+          "points": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "type": "cubic"
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 100.0,
+          "y": 57.73502691896257
+        },
+        "min": {
+          "x": 0.0,
+          "y": -57.735026918962575
+        }
+      },
+      "closed": false,
+      "name": "s-curve cubic",
+      "points": [
+        {
+          "pointType": "onCurve",
+          "x": 0.0,
+          "y": 0.0
+        },
+        {
+          "pointType": "offCurve",
+          "x": 100.0,
+          "y": 200.0
+        },
+        {
+          "pointType": "offCurve",
+          "x": -100.0,
+          "y": -200.0
+        },
+        {
+          "pointType": "onCurve",
+          "x": 100.0,
+          "y": 0.0
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 100.0,
+              "y": 57.73502691896257
+            },
+            "min": {
+              "x": 0.0,
+              "y": -57.735026918962575
+            }
+          },
+          "points": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "type": "cubic"
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 90.0,
+          "y": 40.0
+        },
+        "min": {
+          "x": 10.0,
+          "y": 10.0
+        }
+      },
+      "closed": false,
+      "name": "cubic with retracted handles",
+      "points": [
+        {
+          "pointType": "onCurve",
+          "x": 10.0,
+          "y": 10.0
+        },
+        {
+          "pointType": "offCurve",
+          "x": 10.0,
+          "y": 10.0
+        },
+        {
+          "pointType": "offCurve",
+          "x": 90.0,
+          "y": 40.0
+        },
+        {
+          "pointType": "onCurve",
+          "x": 90.0,
+          "y": 40.0
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 90.0,
+              "y": 40.0
+            },
+            "min": {
+              "x": 10.0,
+              "y": 10.0
+            }
+          },
+          "points": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "type": "cubic"
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 100.0,
+          "y": 100.0
+        },
+        "min": {
+          "x": 0.0,
+          "y": 0.0
+        }
+      },
+      "closed": false,
+      "name": "collinear cubic",
+      "points": [
+        {
+          "pointType": "onCurve",
+          "x": 0.0,
+          "y": 0.0
+        },
+        {
+          "pointType": "offCurve",
+          "x": 25.0,
+          "y": 25.0
+        },
+        {
+          "pointType": "offCurve",
+          "x": 75.0,
+          "y": 75.0
+        },
+        {
+          "pointType": "onCurve",
+          "x": 100.0,
+          "y": 100.0
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 100.0,
+              "y": 100.0
+            },
+            "min": {
+              "x": 0.0,
+              "y": 0.0
+            }
+          },
+          "points": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "type": "cubic"
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 42.0,
+          "y": 42.0
+        },
+        "min": {
+          "x": 42.0,
+          "y": 42.0
+        }
+      },
+      "closed": false,
+      "name": "cubic collapsed to a point",
+      "points": [
+        {
+          "pointType": "onCurve",
+          "x": 42.0,
+          "y": 42.0
+        },
+        {
+          "pointType": "offCurve",
+          "x": 42.0,
+          "y": 42.0
+        },
+        {
+          "pointType": "offCurve",
+          "x": 42.0,
+          "y": 42.0
+        },
+        {
+          "pointType": "onCurve",
+          "x": 42.0,
+          "y": 42.0
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 42.0,
+              "y": 42.0
+            },
+            "min": {
+              "x": 42.0,
+              "y": 42.0
+            }
+          },
+          "points": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "type": "cubic"
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 90.0,
+          "y": 28.350563313766244
+        },
+        "min": {
+          "x": 0.0,
+          "y": -2.638364628594587
+        }
+      },
+      "closed": false,
+      "name": "cubic whose x derivative is nearly linear",
+      "points": [
+        {
+          "pointType": "onCurve",
+          "x": 0.0,
+          "y": 0.0
+        },
+        {
+          "pointType": "offCurve",
+          "x": 30.0,
+          "y": 80.0
+        },
+        {
+          "pointType": "offCurve",
+          "x": 60.00000000001,
+          "y": -40.0
+        },
+        {
+          "pointType": "onCurve",
+          "x": 90.0,
+          "y": 10.0
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 90.0,
+              "y": 28.350563313766244
+            },
+            "min": {
+              "x": 0.0,
+              "y": -2.638364628594587
+            }
+          },
+          "points": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "type": "cubic"
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 100.0,
+          "y": 0.0009
+        },
+        "min": {
+          "x": 99.9997,
+          "y": 0.0
+        }
+      },
+      "closed": false,
+      "name": "tiny cubic tail split near its end",
+      "points": [
+        {
+          "pointType": "onCurve",
+          "x": 99.9997,
+          "y": 0.0009
+        },
+        {
+          "pointType": "offCurve",
+          "x": 99.9998,
+          "y": 0.0006
+        },
+        {
+          "pointType": "offCurve",
+          "x": 99.9999,
+          "y": 0.0003
+        },
+        {
+          "pointType": "onCurve",
+          "x": 100.0,
+          "y": 0.0
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 100.0,
+              "y": 0.0009
+            },
+            "min": {
+              "x": 99.9997,
+              "y": 0.0
+            }
+          },
+          "points": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "type": "cubic"
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 100.0,
+          "y": 100.0
+        },
+        "min": {
+          "x": 0.0,
+          "y": 0.0
+        }
+      },
+      "closed": false,
+      "name": "nearly straight quadratic",
+      "points": [
+        {
+          "pointType": "onCurve",
+          "x": 0.0,
+          "y": 0.0
+        },
+        {
+          "pointType": "offCurve",
+          "x": 50.00000000002,
+          "y": 50.0
+        },
+        {
+          "pointType": "onCurve",
+          "x": 100.0,
+          "y": 100.0
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 100.0,
+              "y": 100.0
+            },
+            "min": {
+              "x": 0.0,
+              "y": 0.0
+            }
+          },
+          "points": [
+            0,
+            1,
+            2
+          ],
+          "type": "quad"
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 500.0,
+          "y": 500.0
+        },
+        "min": {
+          "x": 0.0,
+          "y": 0.0
+        }
+      },
+      "closed": true,
+      "name": "closed ring of cubics",
+      "points": [
+        {
+          "pointType": "onCurve",
+          "x": 250.0,
+          "y": 0.0
+        },
+        {
+          "pointType": "offCurve",
+          "x": 388.0,
+          "y": 0.0
+        },
+        {
+          "pointType": "offCurve",
+          "x": 500.0,
+          "y": 112.0
+        },
+        {
+          "pointType": "onCurve",
+          "x": 500.0,
+          "y": 250.0
+        },
+        {
+          "pointType": "offCurve",
+          "x": 500.0,
+          "y": 388.0
+        },
+        {
+          "pointType": "offCurve",
+          "x": 388.0,
+          "y": 500.0
+        },
+        {
+          "pointType": "onCurve",
+          "x": 250.0,
+          "y": 500.0
+        },
+        {
+          "pointType": "offCurve",
+          "x": 112.0,
+          "y": 500.0
+        },
+        {
+          "pointType": "offCurve",
+          "x": 0.0,
+          "y": 388.0
+        },
+        {
+          "pointType": "onCurve",
+          "x": 0.0,
+          "y": 250.0
+        },
+        {
+          "pointType": "offCurve",
+          "x": 0.0,
+          "y": 112.0
+        },
+        {
+          "pointType": "offCurve",
+          "x": 112.0,
+          "y": 0.0
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 500.0,
+              "y": 250.0
+            },
+            "min": {
+              "x": 250.0,
+              "y": 0.0
+            }
+          },
+          "points": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "type": "cubic"
+        },
+        {
+          "bounds": {
+            "max": {
+              "x": 500.0,
+              "y": 500.0
+            },
+            "min": {
+              "x": 250.0,
+              "y": 250.0
+            }
+          },
+          "points": [
+            3,
+            4,
+            5,
+            6
+          ],
+          "type": "cubic"
+        },
+        {
+          "bounds": {
+            "max": {
+              "x": 250.0,
+              "y": 500.0
+            },
+            "min": {
+              "x": 0.0,
+              "y": 250.0
+            }
+          },
+          "points": [
+            6,
+            7,
+            8,
+            9
+          ],
+          "type": "cubic"
+        },
+        {
+          "bounds": {
+            "max": {
+              "x": 250.0,
+              "y": 250.0
+            },
+            "min": {
+              "x": 0.0,
+              "y": 0.0
+            }
+          },
+          "points": [
+            9,
+            10,
+            11,
+            0
+          ],
+          "type": "cubic"
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 207.27272727272725,
+          "y": 182.5
+        },
+        "min": {
+          "x": 0.0,
+          "y": -11.42857142857143
+        }
+      },
+      "closed": true,
+      "name": "closed TrueType-style quadratics",
+      "points": [
+        {
+          "pointType": "onCurve",
+          "x": 0.0,
+          "y": 0.0
+        },
+        {
+          "pointType": "offCurve",
+          "x": 120.0,
+          "y": -40.0
+        },
+        {
+          "pointType": "qCurve",
+          "x": 200.0,
+          "y": 60.0
+        },
+        {
+          "pointType": "offCurve",
+          "x": 240.0,
+          "y": 200.0
+        },
+        {
+          "pointType": "qCurve",
+          "x": 60.0,
+          "y": 180.0
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 200.0,
+              "y": 60.0
+            },
+            "min": {
+              "x": 0.0,
+              "y": -11.42857142857143
+            }
+          },
+          "points": [
+            0,
+            1,
+            2
+          ],
+          "type": "quad"
+        },
+        {
+          "bounds": {
+            "max": {
+              "x": 207.27272727272725,
+              "y": 182.5
+            },
+            "min": {
+              "x": 60.0,
+              "y": 60.0
+            }
+          },
+          "points": [
+            2,
+            3,
+            4
+          ],
+          "type": "quad"
+        },
+        {
+          "bounds": {
+            "max": {
+              "x": 60.0,
+              "y": 180.0
+            },
+            "min": {
+              "x": 0.0,
+              "y": 0.0
+            }
+          },
+          "points": [
+            4,
+            0
+          ],
+          "type": "line"
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 12.5,
+          "y": -7.25
+        },
+        "min": {
+          "x": 12.5,
+          "y": -7.25
+        }
+      },
+      "closed": true,
+      "name": "closed single on-curve point",
+      "points": [
+        {
+          "pointType": "onCurve",
+          "x": 12.5,
+          "y": -7.25
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 12.5,
+              "y": -7.25
+            },
+            "min": {
+              "x": 12.5,
+              "y": -7.25
+            }
+          },
+          "points": [
+            0,
+            0
+          ],
+          "type": "line"
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 120.0,
+          "y": 67.5
+        },
+        "min": {
+          "x": 0.0,
+          "y": 0.0
+        }
+      },
+      "closed": false,
+      "name": "open cubic with a dangling handle",
+      "points": [
+        {
+          "pointType": "onCurve",
+          "x": 0.0,
+          "y": 0.0
+        },
+        {
+          "pointType": "offCurve",
+          "x": 40.0,
+          "y": 90.0
+        },
+        {
+          "pointType": "offCurve",
+          "x": 80.0,
+          "y": 90.0
+        },
+        {
+          "pointType": "onCurve",
+          "x": 120.0,
+          "y": 0.0
+        },
+        {
+          "pointType": "offCurve",
+          "x": 160.0,
+          "y": -90.0
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 120.0,
+              "y": 67.5
+            },
+            "min": {
+              "x": 0.0,
+              "y": 0.0
+            }
+          },
+          "points": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "type": "cubic"
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "max": {
+          "x": 100.0,
+          "y": 0.0
+        },
+        "min": {
+          "x": 0.0,
+          "y": 0.0
+        }
+      },
+      "closed": false,
+      "name": "open cubic missing its end point",
+      "points": [
+        {
+          "pointType": "onCurve",
+          "x": 0.0,
+          "y": 0.0
+        },
+        {
+          "pointType": "onCurve",
+          "x": 100.0,
+          "y": 0.0
+        },
+        {
+          "pointType": "offCurve",
+          "x": 140.0,
+          "y": 80.0
+        },
+        {
+          "pointType": "offCurve",
+          "x": 180.0,
+          "y": 80.0
+        }
+      ],
+      "segments": [
+        {
+          "bounds": {
+            "max": {
+              "x": 100.0,
+              "y": 0.0
+            },
+            "min": {
+              "x": 0.0,
+              "y": 0.0
+            }
+          },
+          "points": [
+            0,
+            1
+          ],
+          "type": "line"
+        }
+      ]
+    }
+  ],
+  "decompose": [
+    {
+      "decomposed": {
+        "rotation": 0.0,
+        "scaleX": 1.0,
+        "scaleY": 1.0,
+        "skewX": 0.0,
+        "skewY": 0.0,
+        "tCenterX": 0.0,
+        "tCenterY": 0.0,
+        "translateX": 0.0,
+        "translateY": 0.0
+      },
+      "matrix": {
+        "a": 1.0,
+        "b": 0.0,
+        "c": 0.0,
+        "d": 1.0,
+        "e": 0.0,
+        "f": 0.0
+      },
+      "name": "identity"
+    },
+    {
+      "decomposed": {
+        "rotation": 0.0,
+        "scaleX": 1.0,
+        "scaleY": 1.0,
+        "skewX": 0.0,
+        "skewY": 0.0,
+        "tCenterX": 0.0,
+        "tCenterY": 0.0,
+        "translateX": -15.0,
+        "translateY": 42.0
+      },
+      "matrix": {
+        "a": 1.0,
+        "b": 0.0,
+        "c": 0.0,
+        "d": 1.0,
+        "e": -15.0,
+        "f": 42.0
+      },
+      "name": "translation"
+    },
+    {
+      "decomposed": {
+        "rotation": 0.0,
+        "scaleX": 3.0,
+        "scaleY": 0.25,
+        "skewX": 0.0,
+        "skewY": 0.0,
+        "tCenterX": 0.0,
+        "tCenterY": 0.0,
+        "translateX": 0.0,
+        "translateY": 0.0
+      },
+      "matrix": {
+        "a": 3.0,
+        "b": 0.0,
+        "c": 0.0,
+        "d": 0.25,
+        "e": 0.0,
+        "f": 0.0
+      },
+      "name": "scale"
+    },
+    {
+      "decomposed": {
+        "rotation": 180.0,
+        "scaleX": 1.0,
+        "scaleY": -1.0,
+        "skewX": -0.0,
+        "skewY": 0.0,
+        "tCenterX": 0.0,
+        "tCenterY": 0.0,
+        "translateX": 600.0,
+        "translateY": 0.0
+      },
+      "matrix": {
+        "a": -1.0,
+        "b": 0.0,
+        "c": 0.0,
+        "d": 1.0,
+        "e": 600.0,
+        "f": 0.0
+      },
+      "name": "horizontal flip"
+    },
+    {
+      "decomposed": {
+        "rotation": 0.0,
+        "scaleX": 1.0,
+        "scaleY": -1.0,
+        "skewX": -0.0,
+        "skewY": 0.0,
+        "tCenterX": 0.0,
+        "tCenterY": 0.0,
+        "translateX": 0.0,
+        "translateY": 800.0
+      },
+      "matrix": {
+        "a": 1.0,
+        "b": 0.0,
+        "c": 0.0,
+        "d": -1.0,
+        "e": 0.0,
+        "f": 800.0
+      },
+      "name": "vertical flip"
+    },
+    {
+      "decomposed": {
+        "rotation": 0.0,
+        "scaleX": 1.0,
+        "scaleY": 1.077032961426901,
+        "skewX": 20.374527188735193,
+        "skewY": 0.0,
+        "tCenterX": 0.0,
+        "tCenterY": 0.0,
+        "translateX": 0.0,
+        "translateY": 0.0
+      },
+      "matrix": {
+        "a": 1.0,
+        "b": 0.0,
+        "c": 0.4,
+        "d": 1.0,
+        "e": 0.0,
+        "f": 0.0
+      },
+      "name": "shear x"
+    },
+    {
+      "decomposed": {
+        "rotation": 16.69924423399362,
+        "scaleX": 1.044030650891055,
+        "scaleY": 1.0,
+        "skewX": 16.031892858769208,
+        "skewY": 0.0,
+        "tCenterX": 0.0,
+        "tCenterY": 0.0,
+        "translateX": 0.0,
+        "translateY": 0.0
+      },
+      "matrix": {
+        "a": 1.0,
+        "b": 0.3,
+        "c": 0.0,
+        "d": 1.0,
+        "e": 0.0,
+        "f": 0.0
+      },
+      "name": "shear y"
+    },
+    {
+      "decomposed": {
+        "rotation": -36.86989764584402,
+        "scaleX": 1.0,
+        "scaleY": 1.4212670403551897,
+        "skewX": 13.453640623169406,
+        "skewY": 0.0,
+        "tCenterX": 0.0,
+        "tCenterY": 0.0,
+        "translateX": 12.0,
+        "translateY": -7.0
+      },
+      "matrix": {
+        "a": 0.8,
+        "b": -0.6,
+        "c": 1.1,
+        "d": 0.9,
+        "e": 12.0,
+        "f": -7.0
+      },
+      "name": "general"
+    },
+    {
+      "decomposed": {
+        "rotation": 90.0,
+        "scaleX": 1.0,
+        "scaleY": -1.0,
+        "skewX": -0.0,
+        "skewY": 0.0,
+        "tCenterX": 0.0,
+        "tCenterY": 0.0,
+        "translateX": 3.0,
+        "translateY": 4.0
+      },
+      "matrix": {
+        "a": 0.0,
+        "b": 1.0,
+        "c": 1.0,
+        "d": 0.0,
+        "e": 3.0,
+        "f": 4.0
+      },
+      "name": "reflection with rotation"
+    },
+    {
+      "decomposed": {
+        "rotation": 0.0,
+        "scaleX": 0.0,
+        "scaleY": 2.0,
+        "skewX": 0.0,
+        "skewY": 0.0,
+        "tCenterX": 0.0,
+        "tCenterY": 0.0,
+        "translateX": 1.0,
+        "translateY": 1.0
+      },
+      "matrix": {
+        "a": 0.0,
+        "b": 0.0,
+        "c": 0.0,
+        "d": 2.0,
+        "e": 1.0,
+        "f": 1.0
+      },
+      "name": "singular"
+    },
+    {
+      "decomposed": {
+        "rotation": 0.0,
+        "scaleX": 1.0,
+        "scaleY": 1.0,
+        "skewX": 0.0,
+        "skewY": 0.0,
+        "tCenterX": 0.0,
+        "tCenterY": 0.0,
+        "translateX": 0.0,
+        "translateY": 0.0
+      },
+      "matrix": {
+        "a": 1.0,
+        "b": 0.0,
+        "c": 0.0,
+        "d": 1.0,
+        "e": 0.0,
+        "f": 0.0
+      },
+      "name": "identity"
+    },
+    {
+      "decomposed": {
+        "rotation": 0.0,
+        "scaleX": 1.0,
+        "scaleY": 1.0,
+        "skewX": 0.0,
+        "skewY": 0.0,
+        "tCenterX": 0.0,
+        "tCenterY": 0.0,
+        "translateX": 120.5,
+        "translateY": -48.25
+      },
+      "matrix": {
+        "a": 1.0,
+        "b": 0.0,
+        "c": 0.0,
+        "d": 1.0,
+        "e": 120.5,
+        "f": -48.25
+      },
+      "name": "translation"
+    },
+    {
+      "decomposed": {
+        "rotation": 29.999999999999996,
+        "scaleX": 1.0,
+        "scaleY": 1.0,
+        "skewX": 0.0,
+        "skewY": 0.0,
+        "tCenterX": 0.0,
+        "tCenterY": 0.0,
+        "translateX": 0.0,
+        "translateY": 0.0
+      },
+      "matrix": {
+        "a": 0.8660254037844387,
+        "b": 0.49999999999999994,
+        "c": -0.49999999999999994,
+        "d": 0.8660254037844387,
+        "e": 0.0,
+        "f": 0.0
+      },
+      "name": "rotation 30"
+    },
+    {
+      "decomposed": {
+        "rotation": 90.0,
+        "scaleX": 1.0,
+        "scaleY": 1.0,
+        "skewX": 0.0,
+        "skewY": 0.0,
+        "tCenterX": 0.0,
+        "tCenterY": 0.0,
+        "translateX": 0.0,
+        "translateY": 0.0
+      },
+      "matrix": {
+        "a": 6.123233995736766e-17,
+        "b": 1.0,
+        "c": -1.0,
+        "d": 6.123233995736766e-17,
+        "e": 0.0,
+        "f": 0.0
+      },
+      "name": "rotation 90"
+    },
+    {
+      "decomposed": {
+        "rotation": -135.0,
+        "scaleX": 1.0,
+        "scaleY": 1.0,
+        "skewX": 0.0,
+        "skewY": 0.0,
+        "tCenterX": 0.0,
+        "tCenterY": 0.0,
+        "translateX": 10.0,
+        "translateY": 20.0
+      },
+      "matrix": {
+        "a": -0.7071067811865475,
+        "b": -0.7071067811865476,
+        "c": 0.7071067811865476,
+        "d": -0.7071067811865475,
+        "e": 10.0,
+        "f": 20.0
+      },
+      "name": "rotation -135"
+    },
+    {
+      "decomposed": {
+        "rotation": 180.0,
+        "scaleX": 1.0,
+        "scaleY": 1.0,
+        "skewX": 0.0,
+        "skewY": 0.0,
+        "tCenterX": 0.0,
+        "tCenterY": 0.0,
+        "translateX": 0.0,
+        "translateY": 0.0
+      },
+      "matrix": {
+        "a": -1.0,
+        "b": 1.2246467991473532e-16,
+        "c": -1.2246467991473532e-16,
+        "d": -1.0,
+        "e": 0.0,
+        "f": 0.0
+      },
+      "name": "rotation 180"
+    },
+    {
+      "decomposed": {
+        "rotation": 0.0,
+        "scaleX": 2.5,
+        "scaleY": 2.5,
+        "skewX": 0.0,
+        "skewY": 0.0,
+        "tCenterX": 0.0,
+        "tCenterY": 0.0,
+        "translateX": 0.0,
+        "translateY": 0.0
+      },
+      "matrix": {
+        "a": 2.5,
+        "b": 0.0,
+        "c": 0.0,
+        "d": 2.5,
+        "e": 0.0,
+        "f": 0.0
+      },
+      "name": "uniform scale"
+    },
+    {
+      "decomposed": {
+        "rotation": 0.0,
+        "scaleX": 0.5,
+        "scaleY": 3.0,
+        "skewX": 0.0,
+        "skewY": 0.0,
+        "tCenterX": 0.0,
+        "tCenterY": 0.0,
+        "translateX": 0.0,
+        "translateY": 0.0
+      },
+      "matrix": {
+        "a": 0.5,
+        "b": 0.0,
+        "c": 0.0,
+        "d": 3.0,
+        "e": 0.0,
+        "f": 0.0
+      },
+      "name": "non-uniform scale"
+    },
+    {
+      "decomposed": {
+        "rotation": -180.0,
+        "scaleX": 1.0,
+        "scaleY": -1.0,
+        "skewX": -0.0,
+        "skewY": 0.0,
+        "tCenterX": 0.0,
+        "tCenterY": 0.0,
+        "translateX": 500.0,
+        "translateY": 0.0
+      },
+      "matrix": {
+        "a": -1.0,
+        "b": -0.0,
+        "c": -0.0,
+        "d": 1.0,
+        "e": 500.0,
+        "f": 0.0
+      },
+      "name": "horizontal flip"
+    },
+    {
+      "decomposed": {
+        "rotation": 0.0,
+        "scaleX": 1.0,
+        "scaleY": -1.0,
+        "skewX": -0.0,
+        "skewY": 0.0,
+        "tCenterX": 0.0,
+        "tCenterY": 0.0,
+        "translateX": 0.0,
+        "translateY": 700.0
+      },
+      "matrix": {
+        "a": 1.0,
+        "b": 0.0,
+        "c": 0.0,
+        "d": -1.0,
+        "e": 0.0,
+        "f": 700.0
+      },
+      "name": "vertical flip"
+    },
+    {
+      "decomposed": {
+        "rotation": 180.0,
+        "scaleX": 1.0,
+        "scaleY": 1.0,
+        "skewX": -0.0,
+        "skewY": 0.0,
+        "tCenterX": 0.0,
+        "tCenterY": 0.0,
+        "translateX": 0.0,
+        "translateY": 0.0
+      },
+      "matrix": {
+        "a": -1.0,
+        "b": 0.0,
+        "c": 0.0,
+        "d": -1.0,
+        "e": 0.0,
+        "f": 0.0
+      },
+      "name": "double flip"
+    },
+    {
+      "decomposed": {
+        "rotation": -14.999999999999998,
+        "scaleX": 1.035276180410083,
+        "scaleY": 1.0,
+        "skewX": -14.510818699069858,
+        "skewY": 0.0,
+        "tCenterX": 0.0,
+        "tCenterY": 0.0,
+        "translateX": 0.0,
+        "translateY": 0.0
+      },
+      "matrix": {
+        "a": 1.0,
+        "b": -0.2679491924311227,
+        "c": 0.0,
+        "d": 1.0,
+        "e": 0.0,
+        "f": 0.0
+      },
+      "name": "skew x"
+    },
+    {
+      "decomposed": {
+        "rotation": 0.0,
+        "scaleX": 1.0,
+        "scaleY": 1.064177772475912,
+        "skewX": -18.881721230906873,
+        "skewY": 0.0,
+        "tCenterX": 0.0,
+        "tCenterY": 0.0,
+        "translateX": 0.0,
+        "translateY": 0.0
+      },
+      "matrix": {
+        "a": 1.0,
+        "b": 0.0,
+        "c": -0.36397023426620234,
+        "d": 1.0,
+        "e": 0.0,
+        "f": 0.0
+      },
+      "name": "skew y"
+    },
+    {
+      "decomposed": {
+        "rotation": -12.000000000000002,
+        "scaleX": 1.0223405948650293,
+        "scaleY": 1.009827572518618,
+        "skewX": -3.990287715225981,
+        "skewY": 0.0,
+        "tCenterX": 0.0,
+        "tCenterY": 0.0,
+        "translateX": 0.0,
+        "translateY": 0.0
+      },
+      "matrix": {
+        "a": 1.0,
+        "b": -0.21255656167002213,
+        "c": 0.14054083470239143,
+        "d": 1.0,
+        "e": 0.0,
+        "f": 0.0
+      },
+      "name": "skew both"
+    },
+    {
+      "decomposed": {
+        "rotation": 44.99999999999999,
+        "scaleX": 1.0,
+        "scaleY": 1.0,
+        "skewX": 0.0,
+        "skewY": 0.0,
+        "tCenterX": 0.0,
+        "tCenterY": 0.0,
+        "translateX": 320.71067811865476,
+        "translateY": -74.26406871192853
+      },
+      "matrix": {
+        "a": 0.7071067811865476,
+        "b": 0.7071067811865475,
+        "c": -0.7071067811865475,
+        "d": 0.7071067811865476,
+        "e": 320.71067811865476,
+        "f": -74.26406871192853
+      },
+      "name": "rotation about center"
+    },
+    {
+      "decomposed": {
+        "rotation": 0.0,
+        "scaleX": 1.5,
+        "scaleY": 0.75,
+        "skewX": 0.0,
+        "skewY": 0.0,
+        "tCenterX": 0.0,
+        "tCenterY": 0.0,
+        "translateX": -150.0,
+        "translateY": -30.0
+      },
+      "matrix": {
+        "a": 1.5,
+        "b": 0.0,
+        "c": 0.0,
+        "d": 0.75,
+        "e": -150.0,
+        "f": -30.0
+      },
+      "name": "scale about center"
+    },
+    {
+      "decomposed": {
+        "rotation": -180.0,
+        "scaleX": 1.0,
+        "scaleY": -1.0,
+        "skewX": -0.0,
+        "skewY": 0.0,
+        "tCenterX": 0.0,
+        "tCenterY": 0.0,
+        "translateX": 504.0,
+        "translateY": -6.0
+      },
+      "matrix": {
+        "a": -1.0,
+        "b": -0.0,
+        "c": -0.0,
+        "d": 1.0,
+        "e": 504.0,
+        "f": -6.0
+      },
+      "name": "flip about center"
+    },
+    {
+      "decomposed": {
+        "rotation": -56.71192389417378,
+        "scaleX": 1.2564055093000932,
+        "scaleY": -0.8047609884196432,
+        "skewX": 11.767179556032028,
+        "skewY": 0.0,
+        "tCenterX": 0.0,
+        "tCenterY": 0.0,
+        "translateX": 247.13922131828377,
+        "translateY": 408.0761973664272
+      },
+      "matrix": {
+        "a": 0.689576738043579,
+        "b": -1.050256504930488,
+        "c": -0.7499694270961561,
+        "d": -0.29186659093363965,
+        "e": 247.13922131828377,
+        "f": 408.0761973664272
+      },
+      "name": "every field"
+    },
+    {
+      "decomposed": {
+        "rotation": 0.0,
+        "scaleX": 0.0,
+        "scaleY": 1.0,
+        "skewX": 0.0,
+        "skewY": 0.0,
+        "tCenterX": 0.0,
+        "tCenterY": 0.0,
+        "translateX": 18.420201433256686,
+        "translateY": 5.603073792140915
+      },
+      "matrix": {
+        "a": 0.0,
+        "b": 0.0,
+        "c": -0.3420201433256687,
+        "d": 0.9396926207859084,
+        "e": 18.420201433256686,
+        "f": 5.603073792140915
+      },
+      "name": "zero scale"
+    }
+  ],
+  "layerTransforms": [
+    {
+      "after": [
+        600.0,
+        285.5,
+        -12.0,
+        424.0,
+        -12.0,
+        535.5,
+        99.5,
+        535.5,
+        238.0,
+        455.5,
+        508.0,
+        115.5,
+        508.0,
+        75.5,
+        -42.0,
+        195.5,
+        78.25,
+        335.5,
+        288.0,
+        395.5,
+        228.0,
+        455.5,
+        288.0,
+        395.5,
+        368.0,
+        285.5,
+        688.0,
+        23.0,
+        -15.75,
+        35.5,
+        -12.0,
+        0.0,
+        1.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        175.5,
+        -12.0,
+        0.0,
+        1.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        55.5,
+        18.0,
+        25.0,
+        1.0,
+        1.0,
+        0.0,
+        0.0,
+        100.0,
+        200.0,
+        35.5,
+        -12.0,
+        0.0,
+        -1.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        42.5,
+        -21.0,
+        -40.0,
+        0.7,
+        1.3,
+        10.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "afterBounds": {
+        "max": {
+          "x": 535.5,
+          "y": 508.0
+        },
+        "min": {
+          "x": 75.5,
+          "y": -42.0
+        }
+      },
+      "before": {
+        "layerId": "layer_reference-layer",
+        "structure": {
+          "anchors": [
+            {
+              "id": "anchor_500",
+              "name": "top"
+            },
+            {
+              "id": "anchor_501",
+              "name": "_bottom"
+            }
+          ],
+          "components": [
+            {
+              "baseGlyphId": "glyph_base",
+              "baseGlyphName": "base",
+              "id": "component_600"
+            },
+            {
+              "baseGlyphId": "glyph_base",
+              "baseGlyphName": "base",
+              "id": "component_601"
+            },
+            {
+              "baseGlyphId": "glyph_base",
+              "baseGlyphName": "base",
+              "id": "component_602"
+            },
+            {
+              "baseGlyphId": "glyph_base",
+              "baseGlyphName": "base",
+              "id": "component_603"
+            },
+            {
+              "baseGlyphId": "glyph_base",
+              "baseGlyphName": "base",
+              "id": "component_604"
+            }
+          ],
+          "contours": [
+            {
+              "closed": true,
+              "id": "contour_100",
+              "points": [
+                {
+                  "id": "point_1001",
+                  "pointType": "onCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1002",
+                  "pointType": "offCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1003",
+                  "pointType": "offCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1004",
+                  "pointType": "onCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1005",
+                  "pointType": "onCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1006",
+                  "pointType": "onCurve",
+                  "smooth": false
+                }
+              ]
+            },
+            {
+              "closed": false,
+              "id": "contour_200",
+              "points": [
+                {
+                  "id": "point_1007",
+                  "pointType": "onCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1008",
+                  "pointType": "onCurve",
+                  "smooth": false
+                }
+              ]
+            },
+            {
+              "closed": true,
+              "id": "contour_300",
+              "points": [
+                {
+                  "id": "point_1009",
+                  "pointType": "onCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1010",
+                  "pointType": "offCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1011",
+                  "pointType": "qCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1012",
+                  "pointType": "offCurve",
+                  "smooth": false
+                }
+              ]
+            }
+          ]
+        },
+        "values": [
+          600.0,
+          250.0,
+          0.0,
+          388.5,
+          0.0,
+          500.0,
+          111.5,
+          500.0,
+          250.0,
+          420.0,
+          520.0,
+          80.0,
+          520.0,
+          40.0,
+          -30.0,
+          160.0,
+          90.25,
+          300.0,
+          300.0,
+          360.0,
+          240.0,
+          420.0,
+          300.0,
+          360.0,
+          380.0,
+          250.0,
+          700.0,
+          -12.5,
+          -3.75,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          140.0,
+          0.0,
+          0.0,
+          1.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          20.0,
+          30.0,
+          25.0,
+          1.0,
+          1.0,
+          0.0,
+          0.0,
+          100.0,
+          200.0,
+          0.0,
+          0.0,
+          0.0,
+          -1.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          7.0,
+          -9.0,
+          -40.0,
+          0.7,
+          1.3,
+          10.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "matrix": {
+        "a": 1.0,
+        "b": 0.0,
+        "c": 0.0,
+        "d": 1.0,
+        "e": 35.5,
+        "f": -12.0
+      },
+      "name": "translation"
+    },
+    {
+      "after": [
+        600.0,
+        250.0,
+        -130.0,
+        457.75,
+        -130.0,
+        625.0,
+        37.25,
+        625.0,
+        245.0,
+        505.0,
+        650.0,
+        -5.0,
+        650.0,
+        -65.0,
+        -175.0,
+        115.0,
+        5.375,
+        325.0,
+        320.0,
+        415.0,
+        230.0,
+        505.0,
+        320.0,
+        415.0,
+        440.0,
+        250.0,
+        920.0,
+        -143.75,
+        -135.625,
+        -125.0,
+        -130.0,
+        0.0,
+        1.5,
+        1.5,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        85.0,
+        -130.0,
+        0.0,
+        1.5,
+        1.5,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        45.83931046671236,
+        -120.28507537209987,
+        25.0,
+        1.4999999999999998,
+        1.4999999999999998,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        -125.0,
+        -130.0,
+        -180.0,
+        1.5,
+        -1.5,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        -114.5,
+        -143.5,
+        -58.131778888086494,
+        1.1048639299426037,
+        1.9499999999999997,
+        -17.286328867790825,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "afterBounds": {
+        "max": {
+          "x": 625.0,
+          "y": 650.0
+        },
+        "min": {
+          "x": -65.0,
+          "y": -175.0
+        }
+      },
+      "before": {
+        "layerId": "layer_reference-layer",
+        "structure": {
+          "anchors": [
+            {
+              "id": "anchor_500",
+              "name": "top"
+            },
+            {
+              "id": "anchor_501",
+              "name": "_bottom"
+            }
+          ],
+          "components": [
+            {
+              "baseGlyphId": "glyph_base",
+              "baseGlyphName": "base",
+              "id": "component_600"
+            },
+            {
+              "baseGlyphId": "glyph_base",
+              "baseGlyphName": "base",
+              "id": "component_601"
+            },
+            {
+              "baseGlyphId": "glyph_base",
+              "baseGlyphName": "base",
+              "id": "component_602"
+            },
+            {
+              "baseGlyphId": "glyph_base",
+              "baseGlyphName": "base",
+              "id": "component_603"
+            },
+            {
+              "baseGlyphId": "glyph_base",
+              "baseGlyphName": "base",
+              "id": "component_604"
+            }
+          ],
+          "contours": [
+            {
+              "closed": true,
+              "id": "contour_100",
+              "points": [
+                {
+                  "id": "point_1001",
+                  "pointType": "onCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1002",
+                  "pointType": "offCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1003",
+                  "pointType": "offCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1004",
+                  "pointType": "onCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1005",
+                  "pointType": "onCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1006",
+                  "pointType": "onCurve",
+                  "smooth": false
+                }
+              ]
+            },
+            {
+              "closed": false,
+              "id": "contour_200",
+              "points": [
+                {
+                  "id": "point_1007",
+                  "pointType": "onCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1008",
+                  "pointType": "onCurve",
+                  "smooth": false
+                }
+              ]
+            },
+            {
+              "closed": true,
+              "id": "contour_300",
+              "points": [
+                {
+                  "id": "point_1009",
+                  "pointType": "onCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1010",
+                  "pointType": "offCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1011",
+                  "pointType": "qCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1012",
+                  "pointType": "offCurve",
+                  "smooth": false
+                }
+              ]
+            }
+          ]
+        },
+        "values": [
+          600.0,
+          250.0,
+          0.0,
+          388.5,
+          0.0,
+          500.0,
+          111.5,
+          500.0,
+          250.0,
+          420.0,
+          520.0,
+          80.0,
+          520.0,
+          40.0,
+          -30.0,
+          160.0,
+          90.25,
+          300.0,
+          300.0,
+          360.0,
+          240.0,
+          420.0,
+          300.0,
+          360.0,
+          380.0,
+          250.0,
+          700.0,
+          -12.5,
+          -3.75,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          140.0,
+          0.0,
+          0.0,
+          1.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          20.0,
+          30.0,
+          25.0,
+          1.0,
+          1.0,
+          0.0,
+          0.0,
+          100.0,
+          200.0,
+          0.0,
+          0.0,
+          0.0,
+          -1.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          7.0,
+          -9.0,
+          -40.0,
+          0.7,
+          1.3,
+          10.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "matrix": {
+        "a": 1.5,
+        "b": 0.0,
+        "c": 0.0,
+        "d": 1.5,
+        "e": -125.0,
+        "f": -130.0
+      },
+      "name": "uniform scale about center"
+    },
+    {
+      "after": [
+        600.0,
+        150.0,
+        -416.0,
+        233.1,
+        -416.0,
+        300.0,
+        -215.29999999999998,
+        300.0,
+        34.0,
+        252.0,
+        520.0,
+        48.0,
+        520.0,
+        24.0,
+        -470.0,
+        96.0,
+        -253.54999999999998,
+        180.0,
+        124.0,
+        216.0,
+        16.0,
+        252.0,
+        124.0,
+        216.0,
+        268.0,
+        150.0,
+        844.0,
+        -7.5,
+        -422.75,
+        0.0,
+        -416.0,
+        0.0,
+        0.6,
+        1.8,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        84.0,
+        -416.0,
+        0.0,
+        0.6,
+        1.8,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        68.33572418668494,
+        -404.3420904465198,
+        54.441463942587866,
+        0.9350860078363826,
+        1.6509434145205029,
+        35.54770881536912,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        -416.0,
+        -180.0,
+        0.6,
+        -1.8,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        4.2,
+        -432.2,
+        -78.29256916276431,
+        1.1499083751102839,
+        1.8613409696157879,
+        -41.61619284040982,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "afterBounds": {
+        "max": {
+          "x": 300.0,
+          "y": 520.0
+        },
+        "min": {
+          "x": 24.0,
+          "y": -470.0
+        }
+      },
+      "before": {
+        "layerId": "layer_reference-layer",
+        "structure": {
+          "anchors": [
+            {
+              "id": "anchor_500",
+              "name": "top"
+            },
+            {
+              "id": "anchor_501",
+              "name": "_bottom"
+            }
+          ],
+          "components": [
+            {
+              "baseGlyphId": "glyph_base",
+              "baseGlyphName": "base",
+              "id": "component_600"
+            },
+            {
+              "baseGlyphId": "glyph_base",
+              "baseGlyphName": "base",
+              "id": "component_601"
+            },
+            {
+              "baseGlyphId": "glyph_base",
+              "baseGlyphName": "base",
+              "id": "component_602"
+            },
+            {
+              "baseGlyphId": "glyph_base",
+              "baseGlyphName": "base",
+              "id": "component_603"
+            },
+            {
+              "baseGlyphId": "glyph_base",
+              "baseGlyphName": "base",
+              "id": "component_604"
+            }
+          ],
+          "contours": [
+            {
+              "closed": true,
+              "id": "contour_100",
+              "points": [
+                {
+                  "id": "point_1001",
+                  "pointType": "onCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1002",
+                  "pointType": "offCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1003",
+                  "pointType": "offCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1004",
+                  "pointType": "onCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1005",
+                  "pointType": "onCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1006",
+                  "pointType": "onCurve",
+                  "smooth": false
+                }
+              ]
+            },
+            {
+              "closed": false,
+              "id": "contour_200",
+              "points": [
+                {
+                  "id": "point_1007",
+                  "pointType": "onCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1008",
+                  "pointType": "onCurve",
+                  "smooth": false
+                }
+              ]
+            },
+            {
+              "closed": true,
+              "id": "contour_300",
+              "points": [
+                {
+                  "id": "point_1009",
+                  "pointType": "onCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1010",
+                  "pointType": "offCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1011",
+                  "pointType": "qCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1012",
+                  "pointType": "offCurve",
+                  "smooth": false
+                }
+              ]
+            }
+          ]
+        },
+        "values": [
+          600.0,
+          250.0,
+          0.0,
+          388.5,
+          0.0,
+          500.0,
+          111.5,
+          500.0,
+          250.0,
+          420.0,
+          520.0,
+          80.0,
+          520.0,
+          40.0,
+          -30.0,
+          160.0,
+          90.25,
+          300.0,
+          300.0,
+          360.0,
+          240.0,
+          420.0,
+          300.0,
+          360.0,
+          380.0,
+          250.0,
+          700.0,
+          -12.5,
+          -3.75,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          140.0,
+          0.0,
+          0.0,
+          1.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          20.0,
+          30.0,
+          25.0,
+          1.0,
+          1.0,
+          0.0,
+          0.0,
+          100.0,
+          200.0,
+          0.0,
+          0.0,
+          0.0,
+          -1.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          7.0,
+          -9.0,
+          -40.0,
+          0.7,
+          1.3,
+          10.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "matrix": {
+        "a": 0.6,
+        "b": 0.0,
+        "c": 0.0,
+        "d": 1.8,
+        "e": 0.0,
+        "f": -416.0
+      },
+      "name": "non-uniform scale about corner"
+    },
+    {
+      "after": [
+        600.0,
+        1.5308084989341916e-14,
+        250.0,
+        2.3788764073437337e-14,
+        388.5,
+        -111.49999999999997,
+        500.0,
+        -249.99999999999997,
+        500.0,
+        -520.0,
+        420.00000000000006,
+        -520.0,
+        80.00000000000003,
+        30.000000000000004,
+        40.0,
+        -90.24999999999999,
+        160.0,
+        -300.0,
+        300.0,
+        -239.99999999999997,
+        360.0,
+        -300.0,
+        420.0,
+        -380.0,
+        360.0,
+        -700.0,
+        250.00000000000006,
+        3.749999999999999,
+        -12.5,
+        0.0,
+        0.0,
+        90.0,
+        1.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        8.572527594031473e-15,
+        140.0,
+        90.0,
+        1.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        -6.476616418600081,
+        113.8928736444749,
+        115.0,
+        0.9999999999999999,
+        0.9999999999999999,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        -90.00000000000001,
+        1.0,
+        -1.0,
+        -0.0,
+        0.0,
+        0.0,
+        0.0,
+        9.0,
+        6.999999999999999,
+        31.868221111913506,
+        0.7365759532950692,
+        1.3,
+        -17.286328867790814,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "afterBounds": {
+        "max": {
+          "x": 30.000000000000004,
+          "y": 500.0
+        },
+        "min": {
+          "x": -520.0,
+          "y": 40.0
+        }
+      },
+      "before": {
+        "layerId": "layer_reference-layer",
+        "structure": {
+          "anchors": [
+            {
+              "id": "anchor_500",
+              "name": "top"
+            },
+            {
+              "id": "anchor_501",
+              "name": "_bottom"
+            }
+          ],
+          "components": [
+            {
+              "baseGlyphId": "glyph_base",
+              "baseGlyphName": "base",
+              "id": "component_600"
+            },
+            {
+              "baseGlyphId": "glyph_base",
+              "baseGlyphName": "base",
+              "id": "component_601"
+            },
+            {
+              "baseGlyphId": "glyph_base",
+              "baseGlyphName": "base",
+              "id": "component_602"
+            },
+            {
+              "baseGlyphId": "glyph_base",
+              "baseGlyphName": "base",
+              "id": "component_603"
+            },
+            {
+              "baseGlyphId": "glyph_base",
+              "baseGlyphName": "base",
+              "id": "component_604"
+            }
+          ],
+          "contours": [
+            {
+              "closed": true,
+              "id": "contour_100",
+              "points": [
+                {
+                  "id": "point_1001",
+                  "pointType": "onCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1002",
+                  "pointType": "offCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1003",
+                  "pointType": "offCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1004",
+                  "pointType": "onCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1005",
+                  "pointType": "onCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1006",
+                  "pointType": "onCurve",
+                  "smooth": false
+                }
+              ]
+            },
+            {
+              "closed": false,
+              "id": "contour_200",
+              "points": [
+                {
+                  "id": "point_1007",
+                  "pointType": "onCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1008",
+                  "pointType": "onCurve",
+                  "smooth": false
+                }
+              ]
+            },
+            {
+              "closed": true,
+              "id": "contour_300",
+              "points": [
+                {
+                  "id": "point_1009",
+                  "pointType": "onCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1010",
+                  "pointType": "offCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1011",
+                  "pointType": "qCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1012",
+                  "pointType": "offCurve",
+                  "smooth": false
+                }
+              ]
+            }
+          ]
+        },
+        "values": [
+          600.0,
+          250.0,
+          0.0,
+          388.5,
+          0.0,
+          500.0,
+          111.5,
+          500.0,
+          250.0,
+          420.0,
+          520.0,
+          80.0,
+          520.0,
+          40.0,
+          -30.0,
+          160.0,
+          90.25,
+          300.0,
+          300.0,
+          360.0,
+          240.0,
+          420.0,
+          300.0,
+          360.0,
+          380.0,
+          250.0,
+          700.0,
+          -12.5,
+          -3.75,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          140.0,
+          0.0,
+          0.0,
+          1.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          20.0,
+          30.0,
+          25.0,
+          1.0,
+          1.0,
+          0.0,
+          0.0,
+          100.0,
+          200.0,
+          0.0,
+          0.0,
+          0.0,
+          -1.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          7.0,
+          -9.0,
+          -40.0,
+          0.7,
+          1.3,
+          10.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "matrix": {
+        "a": 6.123233995736766e-17,
+        "b": 1.0,
+        "c": -1.0,
+        "d": 6.123233995736766e-17,
+        "e": 0.0,
+        "f": 0.0
+      },
+      "name": "rotation 90"
+    },
+    {
+      "after": [
+        600.0,
+        108.39385089609297,
+        41.94565233418976,
+        224.54972455653422,
+        -33.486854015391515,
+        378.78874528662453,
+        -0.7023380936522301,
+        454.22125163620575,
+        115.45353556678901,
+        534.1801456546291,
+        385.4657117132556,
+        249.03215255318497,
+        570.6429836183648,
+        -84.0661394228969,
+        131.15973264898273,
+        82.06717269111101,
+        166.6531842426167,
+        313.7190897978723,
+        266.31487096706564,
+        331.3609817736961,
+        183.31629478943853,
+        414.3595579513231,
+        200.95818676526235,
+        407.6104466757999,
+        300.7301743017979,
+        489.6411754066119,
+        629.0150498959865,
+        -113.7995695708872,
+        181.768384395839,
+        -101.27379109026305,
+        178.10541108794652,
+        -33.0,
+        1.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        16.140088422096326,
+        101.85594618584273,
+        -33.0,
+        1.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        -2.22777194952603,
+        121.5066538612833,
+        -7.999999999999998,
+        1.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        -101.27379109026305,
+        178.10541108794652,
+        147.00000000000003,
+        1.0,
+        -1.0,
+        -0.0,
+        0.0,
+        0.0,
+        0.0,
+        -100.30484842978032,
+        166.7449027313325,
+        -91.13177888808649,
+        0.7365759532950693,
+        1.2999999999999998,
+        -17.286328867790814,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "afterBounds": {
+        "max": {
+          "x": 534.1801456546291,
+          "y": 570.6429836183648
+        },
+        "min": {
+          "x": -84.0661394228969,
+          "y": 1.390027890726798
+        }
+      },
+      "before": {
+        "layerId": "layer_reference-layer",
+        "structure": {
+          "anchors": [
+            {
+              "id": "anchor_500",
+              "name": "top"
+            },
+            {
+              "id": "anchor_501",
+              "name": "_bottom"
+            }
+          ],
+          "components": [
+            {
+              "baseGlyphId": "glyph_base",
+              "baseGlyphName": "base",
+              "id": "component_600"
+            },
+            {
+              "baseGlyphId": "glyph_base",
+              "baseGlyphName": "base",
+              "id": "component_601"
+            },
+            {
+              "baseGlyphId": "glyph_base",
+              "baseGlyphName": "base",
+              "id": "component_602"
+            },
+            {
+              "baseGlyphId": "glyph_base",
+              "baseGlyphName": "base",
+              "id": "component_603"
+            },
+            {
+              "baseGlyphId": "glyph_base",
+              "baseGlyphName": "base",
+              "id": "component_604"
+            }
+          ],
+          "contours": [
+            {
+              "closed": true,
+              "id": "contour_100",
+              "points": [
+                {
+                  "id": "point_1001",
+                  "pointType": "onCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1002",
+                  "pointType": "offCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1003",
+                  "pointType": "offCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1004",
+                  "pointType": "onCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1005",
+                  "pointType": "onCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1006",
+                  "pointType": "onCurve",
+                  "smooth": false
+                }
+              ]
+            },
+            {
+              "closed": false,
+              "id": "contour_200",
+              "points": [
+                {
+                  "id": "point_1007",
+                  "pointType": "onCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1008",
+                  "pointType": "onCurve",
+                  "smooth": false
+                }
+              ]
+            },
+            {
+              "closed": true,
+              "id": "contour_300",
+              "points": [
+                {
+                  "id": "point_1009",
+                  "pointType": "onCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1010",
+                  "pointType": "offCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1011",
+                  "pointType": "qCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1012",
+                  "pointType": "offCurve",
+                  "smooth": false
+                }
+              ]
+            }
+          ]
+        },
+        "values": [
+          600.0,
+          250.0,
+          0.0,
+          388.5,
+          0.0,
+          500.0,
+          111.5,
+          500.0,
+          250.0,
+          420.0,
+          520.0,
+          80.0,
+          520.0,
+          40.0,
+          -30.0,
+          160.0,
+          90.25,
+          300.0,
+          300.0,
+          360.0,
+          240.0,
+          420.0,
+          300.0,
+          360.0,
+          380.0,
+          250.0,
+          700.0,
+          -12.5,
+          -3.75,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          140.0,
+          0.0,
+          0.0,
+          1.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          20.0,
+          30.0,
+          25.0,
+          1.0,
+          1.0,
+          0.0,
+          0.0,
+          100.0,
+          200.0,
+          0.0,
+          0.0,
+          0.0,
+          -1.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          7.0,
+          -9.0,
+          -40.0,
+          0.7,
+          1.3,
+          10.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "matrix": {
+        "a": 0.838670567945424,
+        "b": -0.5446390350150271,
+        "c": 0.5446390350150271,
+        "d": 0.838670567945424,
+        "e": -101.27379109026305,
+        "f": 178.10541108794652
+      },
+      "name": "rotation about center"
+    },
+    {
+      "after": [
+        600.0,
+        250.0,
+        0.0,
+        111.5,
+        0.0,
+        0.0,
+        111.5,
+        0.0,
+        250.0,
+        80.0,
+        520.0,
+        420.0,
+        520.0,
+        460.0,
+        -30.0,
+        340.0,
+        90.25,
+        200.0,
+        300.0,
+        140.0,
+        240.0,
+        80.0,
+        300.0,
+        140.0,
+        380.0,
+        250.0,
+        700.0,
+        512.5,
+        -3.75,
+        500.0,
+        0.0,
+        180.0,
+        1.0,
+        -1.0,
+        -0.0,
+        0.0,
+        0.0,
+        0.0,
+        360.0,
+        0.0,
+        180.0,
+        1.0,
+        -1.0,
+        -0.0,
+        0.0,
+        0.0,
+        0.0,
+        386.1071263555251,
+        6.476616418600088,
+        155.0,
+        1.0,
+        -1.0,
+        -0.0,
+        0.0,
+        0.0,
+        0.0,
+        500.0,
+        0.0,
+        -0.0,
+        1.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        493.0,
+        -9.0,
+        -121.86822111191351,
+        0.7365759532950692,
+        -1.2999999999999998,
+        17.286328867790814,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "afterBounds": {
+        "max": {
+          "x": 460.0,
+          "y": 520.0
+        },
+        "min": {
+          "x": 0.0,
+          "y": -30.0
+        }
+      },
+      "before": {
+        "layerId": "layer_reference-layer",
+        "structure": {
+          "anchors": [
+            {
+              "id": "anchor_500",
+              "name": "top"
+            },
+            {
+              "id": "anchor_501",
+              "name": "_bottom"
+            }
+          ],
+          "components": [
+            {
+              "baseGlyphId": "glyph_base",
+              "baseGlyphName": "base",
+              "id": "component_600"
+            },
+            {
+              "baseGlyphId": "glyph_base",
+              "baseGlyphName": "base",
+              "id": "component_601"
+            },
+            {
+              "baseGlyphId": "glyph_base",
+              "baseGlyphName": "base",
+              "id": "component_602"
+            },
+            {
+              "baseGlyphId": "glyph_base",
+              "baseGlyphName": "base",
+              "id": "component_603"
+            },
+            {
+              "baseGlyphId": "glyph_base",
+              "baseGlyphName": "base",
+              "id": "component_604"
+            }
+          ],
+          "contours": [
+            {
+              "closed": true,
+              "id": "contour_100",
+              "points": [
+                {
+                  "id": "point_1001",
+                  "pointType": "onCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1002",
+                  "pointType": "offCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1003",
+                  "pointType": "offCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1004",
+                  "pointType": "onCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1005",
+                  "pointType": "onCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1006",
+                  "pointType": "onCurve",
+                  "smooth": false
+                }
+              ]
+            },
+            {
+              "closed": false,
+              "id": "contour_200",
+              "points": [
+                {
+                  "id": "point_1007",
+                  "pointType": "onCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1008",
+                  "pointType": "onCurve",
+                  "smooth": false
+                }
+              ]
+            },
+            {
+              "closed": true,
+              "id": "contour_300",
+              "points": [
+                {
+                  "id": "point_1009",
+                  "pointType": "onCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1010",
+                  "pointType": "offCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1011",
+                  "pointType": "qCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1012",
+                  "pointType": "offCurve",
+                  "smooth": false
+                }
+              ]
+            }
+          ]
+        },
+        "values": [
+          600.0,
+          250.0,
+          0.0,
+          388.5,
+          0.0,
+          500.0,
+          111.5,
+          500.0,
+          250.0,
+          420.0,
+          520.0,
+          80.0,
+          520.0,
+          40.0,
+          -30.0,
+          160.0,
+          90.25,
+          300.0,
+          300.0,
+          360.0,
+          240.0,
+          420.0,
+          300.0,
+          360.0,
+          380.0,
+          250.0,
+          700.0,
+          -12.5,
+          -3.75,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          140.0,
+          0.0,
+          0.0,
+          1.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          20.0,
+          30.0,
+          25.0,
+          1.0,
+          1.0,
+          0.0,
+          0.0,
+          100.0,
+          200.0,
+          0.0,
+          0.0,
+          0.0,
+          -1.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          7.0,
+          -9.0,
+          -40.0,
+          0.7,
+          1.3,
+          10.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "matrix": {
+        "a": -1.0,
+        "b": 0.0,
+        "c": 0.0,
+        "d": 1.0,
+        "e": 500.0,
+        "f": 0.0
+      },
+      "name": "horizontal flip about center"
+    },
+    {
+      "after": [
+        600.0,
+        250.0,
+        0.0,
+        388.5,
+        0.0,
+        500.0,
+        -111.5,
+        500.0,
+        -250.0,
+        420.0,
+        -520.0,
+        80.0,
+        -520.0,
+        40.0,
+        30.0,
+        160.0,
+        -90.25,
+        300.0,
+        -300.0,
+        360.0,
+        -240.0,
+        420.0,
+        -300.0,
+        360.0,
+        -380.0,
+        250.0,
+        -700.0,
+        -12.5,
+        3.75,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        -1.0,
+        -0.0,
+        0.0,
+        0.0,
+        0.0,
+        140.0,
+        0.0,
+        0.0,
+        1.0,
+        -1.0,
+        -0.0,
+        0.0,
+        0.0,
+        0.0,
+        113.8928736444749,
+        -6.476616418600088,
+        -25.0,
+        1.0,
+        -1.0,
+        -0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        180.0,
+        1.0,
+        1.0,
+        -0.0,
+        0.0,
+        0.0,
+        0.0,
+        7.0,
+        9.0,
+        58.131778888086494,
+        0.7365759532950692,
+        -1.2999999999999998,
+        17.286328867790814,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "afterBounds": {
+        "max": {
+          "x": 500.0,
+          "y": 30.0
+        },
+        "min": {
+          "x": 40.0,
+          "y": -520.0
+        }
+      },
+      "before": {
+        "layerId": "layer_reference-layer",
+        "structure": {
+          "anchors": [
+            {
+              "id": "anchor_500",
+              "name": "top"
+            },
+            {
+              "id": "anchor_501",
+              "name": "_bottom"
+            }
+          ],
+          "components": [
+            {
+              "baseGlyphId": "glyph_base",
+              "baseGlyphName": "base",
+              "id": "component_600"
+            },
+            {
+              "baseGlyphId": "glyph_base",
+              "baseGlyphName": "base",
+              "id": "component_601"
+            },
+            {
+              "baseGlyphId": "glyph_base",
+              "baseGlyphName": "base",
+              "id": "component_602"
+            },
+            {
+              "baseGlyphId": "glyph_base",
+              "baseGlyphName": "base",
+              "id": "component_603"
+            },
+            {
+              "baseGlyphId": "glyph_base",
+              "baseGlyphName": "base",
+              "id": "component_604"
+            }
+          ],
+          "contours": [
+            {
+              "closed": true,
+              "id": "contour_100",
+              "points": [
+                {
+                  "id": "point_1001",
+                  "pointType": "onCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1002",
+                  "pointType": "offCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1003",
+                  "pointType": "offCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1004",
+                  "pointType": "onCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1005",
+                  "pointType": "onCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1006",
+                  "pointType": "onCurve",
+                  "smooth": false
+                }
+              ]
+            },
+            {
+              "closed": false,
+              "id": "contour_200",
+              "points": [
+                {
+                  "id": "point_1007",
+                  "pointType": "onCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1008",
+                  "pointType": "onCurve",
+                  "smooth": false
+                }
+              ]
+            },
+            {
+              "closed": true,
+              "id": "contour_300",
+              "points": [
+                {
+                  "id": "point_1009",
+                  "pointType": "onCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1010",
+                  "pointType": "offCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1011",
+                  "pointType": "qCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1012",
+                  "pointType": "offCurve",
+                  "smooth": false
+                }
+              ]
+            }
+          ]
+        },
+        "values": [
+          600.0,
+          250.0,
+          0.0,
+          388.5,
+          0.0,
+          500.0,
+          111.5,
+          500.0,
+          250.0,
+          420.0,
+          520.0,
+          80.0,
+          520.0,
+          40.0,
+          -30.0,
+          160.0,
+          90.25,
+          300.0,
+          300.0,
+          360.0,
+          240.0,
+          420.0,
+          300.0,
+          360.0,
+          380.0,
+          250.0,
+          700.0,
+          -12.5,
+          -3.75,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          140.0,
+          0.0,
+          0.0,
+          1.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          20.0,
+          30.0,
+          25.0,
+          1.0,
+          1.0,
+          0.0,
+          0.0,
+          100.0,
+          200.0,
+          0.0,
+          0.0,
+          0.0,
+          -1.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          7.0,
+          -9.0,
+          -40.0,
+          0.7,
+          1.3,
+          10.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "matrix": {
+        "a": 1.0,
+        "b": 0.0,
+        "c": 0.0,
+        "d": -1.0,
+        "e": 0.0,
+        "f": 0.0
+      },
+      "name": "vertical flip"
+    },
+    {
+      "after": [
+        600.0,
+        250.0,
+        0.0,
+        388.5,
+        0.0,
+        527.875,
+        111.5,
+        562.5,
+        250.0,
+        550.0,
+        520.0,
+        210.0,
+        520.0,
+        32.5,
+        -30.0,
+        182.5625,
+        90.25,
+        375.0,
+        300.0,
+        420.0,
+        240.0,
+        495.0,
+        300.0,
+        455.0,
+        380.0,
+        425.0,
+        700.0,
+        -13.4375,
+        -3.75,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        1.0307764064044151,
+        13.63302222536641,
+        0.0,
+        0.0,
+        0.0,
+        140.0,
+        0.0,
+        0.0,
+        1.0,
+        1.0307764064044151,
+        13.63302222536641,
+        0.0,
+        0.0,
+        0.0,
+        115.51202774912493,
+        6.476616418600088,
+        22.666513644754563,
+        1.0966649433519065,
+        0.9272680313819515,
+        10.290908375686046,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        -180.0,
+        1.0,
+        -1.0307764064044151,
+        13.63302222536641,
+        0.0,
+        0.0,
+        0.0,
+        4.75,
+        -9.0,
+        -69.61111249585731,
+        0.6673581946432415,
+        1.4724349119844626,
+        -20.67343839528564,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "afterBounds": {
+        "max": {
+          "x": 562.5,
+          "y": 520.0
+        },
+        "min": {
+          "x": 32.5,
+          "y": -30.0
+        }
+      },
+      "before": {
+        "layerId": "layer_reference-layer",
+        "structure": {
+          "anchors": [
+            {
+              "id": "anchor_500",
+              "name": "top"
+            },
+            {
+              "id": "anchor_501",
+              "name": "_bottom"
+            }
+          ],
+          "components": [
+            {
+              "baseGlyphId": "glyph_base",
+              "baseGlyphName": "base",
+              "id": "component_600"
+            },
+            {
+              "baseGlyphId": "glyph_base",
+              "baseGlyphName": "base",
+              "id": "component_601"
+            },
+            {
+              "baseGlyphId": "glyph_base",
+              "baseGlyphName": "base",
+              "id": "component_602"
+            },
+            {
+              "baseGlyphId": "glyph_base",
+              "baseGlyphName": "base",
+              "id": "component_603"
+            },
+            {
+              "baseGlyphId": "glyph_base",
+              "baseGlyphName": "base",
+              "id": "component_604"
+            }
+          ],
+          "contours": [
+            {
+              "closed": true,
+              "id": "contour_100",
+              "points": [
+                {
+                  "id": "point_1001",
+                  "pointType": "onCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1002",
+                  "pointType": "offCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1003",
+                  "pointType": "offCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1004",
+                  "pointType": "onCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1005",
+                  "pointType": "onCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1006",
+                  "pointType": "onCurve",
+                  "smooth": false
+                }
+              ]
+            },
+            {
+              "closed": false,
+              "id": "contour_200",
+              "points": [
+                {
+                  "id": "point_1007",
+                  "pointType": "onCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1008",
+                  "pointType": "onCurve",
+                  "smooth": false
+                }
+              ]
+            },
+            {
+              "closed": true,
+              "id": "contour_300",
+              "points": [
+                {
+                  "id": "point_1009",
+                  "pointType": "onCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1010",
+                  "pointType": "offCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1011",
+                  "pointType": "qCurve",
+                  "smooth": false
+                },
+                {
+                  "id": "point_1012",
+                  "pointType": "offCurve",
+                  "smooth": false
+                }
+              ]
+            }
+          ]
+        },
+        "values": [
+          600.0,
+          250.0,
+          0.0,
+          388.5,
+          0.0,
+          500.0,
+          111.5,
+          500.0,
+          250.0,
+          420.0,
+          520.0,
+          80.0,
+          520.0,
+          40.0,
+          -30.0,
+          160.0,
+          90.25,
+          300.0,
+          300.0,
+          360.0,
+          240.0,
+          420.0,
+          300.0,
+          360.0,
+          380.0,
+          250.0,
+          700.0,
+          -12.5,
+          -3.75,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          140.0,
+          0.0,
+          0.0,
+          1.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          20.0,
+          30.0,
+          25.0,
+          1.0,
+          1.0,
+          0.0,
+          0.0,
+          100.0,
+          200.0,
+          0.0,
+          0.0,
+          0.0,
+          -1.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          7.0,
+          -9.0,
+          -40.0,
+          0.7,
+          1.3,
+          10.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "matrix": {
+        "a": 1.0,
+        "b": 0.0,
+        "c": 0.25,
+        "d": 1.0,
+        "e": 0.0,
+        "f": 0.0
+      },
+      "name": "skew"
+    }
+  ]
+}

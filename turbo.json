@@ -186,7 +186,7 @@
     },
     "test": {
       "outputs": [],
-      "inputs": ["src/**", "*.config.ts"]
+      "inputs": ["src/**", "*.config.ts", "$TURBO_ROOT$/packages/types/__fixtures__/**"]
     },
     "@shift/glyph-info#test": {
       "dependsOn": ["generate"],
@@ -204,7 +204,8 @@
         "src/**",
         "*.config.ts",
         "$TURBO_ROOT$/packages/*/src/**",
-        "$TURBO_ROOT$/packages/*/package.json"
+        "$TURBO_ROOT$/packages/*/package.json",
+        "$TURBO_ROOT$/packages/types/__fixtures__/**"
       ]
     },
     "shift-bridge#test": {
