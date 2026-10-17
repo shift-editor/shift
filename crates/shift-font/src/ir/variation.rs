@@ -430,7 +430,7 @@ mod tests {
     }
 
     #[test]
-    fn compiled_mapping_fixture_matches_fontdrasil() {
+    fn generated_file_axis_mapping_basis_matches_fontdrasil() {
         let weight = Axis::with_id(
             AxisId::from_raw("weight"),
             "wght".to_string(),

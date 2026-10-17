@@ -273,7 +273,7 @@ mod tests {
     };
 
     #[test]
-    fn generated_typescript_source_metric_layout_is_current() {
+    fn generated_file_source_metric_layout_is_current() {
         let module = TypeScriptModule::new("crates/shift-font/src/interpolation/metrics.rs")
             .number(
                 "Interpolation values per metric definition.",

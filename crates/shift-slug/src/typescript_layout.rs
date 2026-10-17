@@ -121,7 +121,7 @@ fn variable_glyphs_pack_fields_at_their_struct_offsets() {
 }
 
 #[test]
-fn generated_typescript_slug_atlas_layout_is_current() {
+fn generated_file_slug_atlas_layout_is_current() {
     let module = TypeScriptModule::new("crates/shift-slug/src/typescript_layout.rs")
         .number(
             "Byte stride of one resident quadratic curve.",

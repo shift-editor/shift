@@ -167,7 +167,7 @@ mod tests {
     }
 
     #[test]
-    fn generated_typescript_glyph_value_layout_is_current() {
+    fn generated_file_glyph_value_layout_is_current() {
         let module = TypeScriptModule::new("crates/shift-font/src/interpolation/values.rs")
             .number(
                 "Leading glyph values holding the horizontal advance.",
