@@ -203,7 +203,7 @@ export class SlugAtlas {
     const params = new Uint32Array(SLUG_VARIABLE_PARAMS_BYTES / Uint32Array.BYTES_PER_ELEMENT);
     params[words.instanceCount] = checkedU32(instanceCount, "instance count");
     params[words.atlasSplitOffset] = checkedU32(this.#splitOffset, "resident atlas split offset");
-    params[words.bandCount] = offset(atlas.bandCount);
+    params[words.bandCount] = checkedU32(atlas.bandCount, "band count");
     params[words.baseCurves] = offset(layout.baseCurves.offset);
     params[words.curveDeltas] = offset(layout.curveDeltas.offset);
     params[words.sparseDeltas] = offset(layout.sparseDeltas.offset);
