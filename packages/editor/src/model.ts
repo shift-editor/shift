@@ -1,6 +1,7 @@
 export { Font } from "./lib/model/Font";
-export { isGroupSide, Kerning, kerningValueEdit, wireSide } from "./lib/model/Kerning";
+export { isGroupSide, kerningValueEdit, wireSide } from "./lib/model/Kerning";
 export type {
+  Kerning,
   KerningPairPosition,
   KerningPairSides,
   KerningSideId,

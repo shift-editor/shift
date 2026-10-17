@@ -142,7 +142,8 @@ impl DecomposedTransform {
 
         let rotation = m.xy.atan2(m.xx).to_degrees();
 
-        let skew_x = if scale_y.abs() > f64::EPSILON {
+        // A collapsed axis has no direction to measure skew against; 0/0 would be NaN.
+        let skew_x = if scale_x.abs() > f64::EPSILON && scale_y.abs() > f64::EPSILON {
             ((m.xx * m.yx + m.xy * m.yy) / (scale_x * scale_y))
                 .atan()
                 .to_degrees()
@@ -407,6 +408,16 @@ mod tests {
         assert!((original.rotation - roundtrip.rotation).abs() < 1e-10);
         assert!((original.scale_x - roundtrip.scale_x).abs() < 1e-10);
         assert!((original.scale_y - roundtrip.scale_y).abs() < 1e-10);
+    }
+
+    #[test]
+    fn decomposing_a_collapsed_x_axis_keeps_skew_finite() {
+        let collapsed = Transform::scale(0.0, 2.0);
+
+        let decomposed = DecomposedTransform::from_matrix(&collapsed);
+
+        assert_eq!(decomposed.skew_x, 0.0);
+        assert_eq!(decomposed.to_matrix(), collapsed);
     }
 
     #[test]

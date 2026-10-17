@@ -11,6 +11,10 @@
     ".": {
       "types": "./src/index.ts",
       "import": "./src/index.ts"
+    },
+    "./reference": {
+      "types": "./src/reference.ts",
+      "import": "./src/reference.ts"
     }
   },
   "scripts": {

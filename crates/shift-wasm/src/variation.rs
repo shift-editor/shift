@@ -52,7 +52,7 @@ pub enum VariationAxisType {
 /// Axes in order.
 #[derive(Deserialize, Tsify)]
 #[serde(transparent)]
-pub struct VariationAxes(Vec<VariationAxis>);
+pub struct VariationAxes(pub(crate) Vec<VariationAxis>);
 
 /// A font's compiled axis mappings, in order.
 #[derive(Deserialize, Tsify)]
@@ -332,7 +332,7 @@ fn with_axes<R>(handle: u32, call: impl FnOnce(&[Axis]) -> R) -> R {
     AXES.with_borrow(|registry| call(registry.get(handle).map_or(&[][..], Vec::as_slice)))
 }
 
-fn axis(data: VariationAxis) -> Axis {
+pub(crate) fn axis(data: VariationAxis) -> Axis {
     let id = AxisId::from_raw(data.id);
     let mut axis = match data.axis_type {
         VariationAxisType::Discrete => Axis::discrete_with_id(

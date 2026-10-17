@@ -346,7 +346,7 @@ fn invalid_mapping(mapping: &AxisMapping, message: impl Into<String>) -> CoreErr
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{AxisId, AxisMappingId, AxisMappingPoint};
+    use crate::{AxisId, AxisMappingPoint};
 
     #[test]
     fn maps_independent_axes_before_cross_axis_mappings() {
@@ -452,112 +452,6 @@ mod tests {
     }
 
     #[test]
-    fn compiled_mapping_fixture_matches_fontdrasil() {
-        let weight = Axis::with_id(
-            AxisId::from_raw("weight"),
-            "wght".to_string(),
-            "Weight".to_string(),
-            100.0,
-            400.0,
-            900.0,
-        );
-        let width = Axis::with_id(
-            AxisId::from_raw("width"),
-            "wdth".to_string(),
-            "Width".to_string(),
-            50.0,
-            100.0,
-            200.0,
-        );
-        let mut optical = Axis::with_id(
-            AxisId::from_raw("optical"),
-            "opsz".to_string(),
-            "Optical size".to_string(),
-            8.0,
-            12.0,
-            72.0,
-        );
-        optical.set_role(AxisRole::Internal);
-        let axes = vec![weight.clone(), width.clone(), optical.clone()];
-        let mappings = [
-            AxisMapping::with_id(
-                AxisMappingId::from_raw("weight"),
-                "Weight curve".to_string(),
-                vec![weight.id()],
-                vec![weight.id()],
-                vec![
-                    point(&[(weight.id(), 100.0)], &[(weight.id(), 100.0)]),
-                    point(&[(weight.id(), 400.0)], &[(weight.id(), 400.0)]),
-                    point(&[(weight.id(), 900.0)], &[(weight.id(), 800.0)]),
-                ],
-            ),
-            AxisMapping::with_id(
-                AxisMappingId::from_raw("reversed"),
-                "Reversed weight".to_string(),
-                vec![weight.id()],
-                vec![weight.id()],
-                vec![
-                    point(&[(weight.id(), 100.0)], &[(weight.id(), 900.0)]),
-                    point(&[(weight.id(), 900.0)], &[(weight.id(), 100.0)]),
-                ],
-            ),
-            AxisMapping::with_id(
-                AxisMappingId::from_raw("optical"),
-                "Optical compensation".to_string(),
-                vec![weight.id(), width.id()],
-                vec![optical.id()],
-                vec![point(
-                    &[(weight.id(), 800.0), (width.id(), 125.0)],
-                    &[(optical.id(), 72.0)],
-                )],
-            ),
-        ];
-        let bases = mappings
-            .iter()
-            .map(|mapping| AxisMappingBasis::try_from((mapping, axes.as_slice())).unwrap())
-            .collect::<Vec<_>>();
-        let fixture = serde_json::json!({
-            "axes": axes.iter().map(axis_fixture).collect::<Vec<_>>(),
-            "bases": bases.iter().map(basis_fixture).collect::<Vec<_>>(),
-            "cases": [
-                {
-                    "basisIds": [mappings[0].id().to_string()],
-                    "location": { weight.id().to_string(): 650.0 },
-                    "expected": { weight.id().to_string(): 600.0 },
-                },
-                {
-                    "basisIds": [mappings[1].id().to_string()],
-                    "location": { weight.id().to_string(): 250.0 },
-                    "expected": { weight.id().to_string(): 650.0 },
-                },
-                {
-                    "basisIds": [mappings[0].id().to_string(), mappings[2].id().to_string()],
-                    "location": {
-                        weight.id().to_string(): 900.0,
-                        width.id().to_string(): 125.0,
-                    },
-                    "expected": {
-                        weight.id().to_string(): 800.0,
-                        optical.id().to_string(): 72.0,
-                    },
-                },
-            ],
-        });
-        let generated = format!("{}\n", serde_json::to_string_pretty(&fixture).unwrap());
-        if std::env::var_os("SHIFT_UPDATE_FIXTURES").is_some() {
-            let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("../../packages/types/__fixtures__/axis_mapping_basis.json");
-            std::fs::write(path, generated).unwrap();
-            return;
-        }
-
-        assert_eq!(
-            include_str!("../../../../packages/types/__fixtures__/axis_mapping_basis.json"),
-            generated,
-        );
-    }
-
-    #[test]
     fn one_sided_axes_merge_equivalent_normalized_mapping_points() {
         let axis = Axis::with_id(
             AxisId::from_raw("one-sided"),
@@ -599,61 +493,6 @@ mod tests {
         let mapped = map_location(&external, &[optical.clone()], &[]).unwrap();
 
         assert_eq!(mapped.get(&optical.id()), Some(12.0));
-    }
-
-    fn axis_fixture(axis: &Axis) -> serde_json::Value {
-        serde_json::json!({
-            "id": axis.id().to_string(),
-            "tag": axis.tag(),
-            "name": axis.name(),
-            "role": match axis.role() {
-                AxisRole::External => "external",
-                AxisRole::Internal => "internal",
-            },
-            "axisType": "continuous",
-            "minimum": axis.minimum(),
-            "default": axis.default(),
-            "maximum": axis.maximum(),
-            "labels": [],
-            "hidden": false,
-        })
-    }
-
-    fn basis_fixture(basis: &AxisMappingBasis) -> serde_json::Value {
-        serde_json::json!({
-            "mappingId": basis.mapping_id().to_string(),
-            "inputAxisIds": basis
-                .input_axis_ids()
-                .iter()
-                .map(ToString::to_string)
-                .collect::<Vec<_>>(),
-            "outputAxisIds": basis
-                .output_axis_ids()
-                .iter()
-                .map(ToString::to_string)
-                .collect::<Vec<_>>(),
-            "basis": {
-                "deltas": basis
-                    .basis()
-                    .deltas()
-                    .iter()
-                    .map(|delta| serde_json::json!({
-                        "region": delta
-                            .region()
-                            .supports()
-                            .iter()
-                            .map(|support| serde_json::json!({
-                                "axisId": support.axis_id().to_string(),
-                                "lower": support.minimum(),
-                                "peak": support.peak(),
-                                "upper": support.maximum(),
-                            }))
-                            .collect::<Vec<_>>(),
-                        "values": delta.values(),
-                    }))
-                    .collect::<Vec<_>>(),
-            },
-        })
     }
 
     fn point(input: &[(AxisId, f64)], output: &[(AxisId, f64)]) -> AxisMappingPoint {

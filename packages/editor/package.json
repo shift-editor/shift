@@ -24,6 +24,10 @@
       "types": "./src/rendering.ts",
       "import": "./src/rendering.ts"
     },
+    "./reference-testing": {
+      "types": "./src/testing/reference.ts",
+      "import": "./src/testing/reference.ts"
+    },
     "./ui": {
       "types": "./src/ui.ts",
       "import": "./src/ui.ts"
