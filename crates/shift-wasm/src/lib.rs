@@ -12,4 +12,6 @@
 pub mod anchors;
 pub mod names;
 mod reader;
+#[cfg(feature = "reference")]
+pub mod reference;
 pub mod variation;
