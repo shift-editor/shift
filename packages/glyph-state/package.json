@@ -11,6 +11,10 @@
     ".": {
       "types": "./src/index.ts",
       "import": "./src/index.ts"
+    },
+    "./testing": {
+      "types": "./src/testing/index.ts",
+      "import": "./src/testing/index.ts"
     }
   },
   "scripts": {
@@ -23,6 +27,7 @@
     "@shift/geo": "workspace:*"
   },
   "devDependencies": {
+    "@shift/wasm": "workspace:*",
     "typescript": "^5.5.4",
     "vitest": "^4.1.10"
   }

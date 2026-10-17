@@ -29,6 +29,7 @@ packages/glyph-state/src/
   Point.ts              -- id-aware point with on/off-curve predicates and factories
   IdIndex.ts            -- lazy id-to-object map over a supplied list
   types/contour.ts      -- minimal named contour geometry contract
+  testing/reference.ts  -- @shift/glyph-state/testing: inputs and comparisons for Rust reference tests
 ```
 
 ## Key Types
