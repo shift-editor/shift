@@ -9,7 +9,7 @@ Runs shift-font's rules in the editor through WebAssembly, so the editor calls t
 - **One implementation.** Each export calls shift-font code that native callers also use: anchor kinds from fontir's `AnchorKind::new`, `anchor_propagation::compiled_anchors`, `anchor_attachment::follow_anchors`, and the variation evaluators (`AxisMappingBasis::evaluate`, `map_location_with_bases`, `InterpolationBasis::weights_at`). This crate only converts between numbers and those types. A rule that needs logic here is a rule that belongs in shift-font.
 - **Synchronous.** The module is embedded in `@shift/wasm` as base64 and instantiated with `initSync` at import, so computeds and render paths call it directly. Nothing awaits, fetches, or needs a bundler plugin; desktop, vitest, and the SDK import it the same way.
 - **Built, never committed.** `packages/wasm/src/generated/` is gitignored and built like the native addon: `@shift/wasm#build` is a turbo task over the Rust sources, `build:native` runs it, and typecheck, tests, and desktop builds depend on it. WHY: rustc's output depends on the build host (Cargo hashes `rustc -vV`, host line included, into symbol names, which decides data layout), so a module built on macOS never matches one built on Linux, and a committed copy could not be checked against a fresh build.
-- **Pinned toolchain.** wasm-bindgen is pinned exactly (`=0.2.121`); the build script refuses a CLI that does not match `Cargo.lock`. wasm-opt is binaryen 132 with explicit features. The checkout and Cargo home paths that panic messages embed are remapped, so the module carries no machine's paths.
+- **Pinned toolchain.** wasm-bindgen is pinned exactly (`=0.2.121`); the build script refuses a CLI that does not match `Cargo.lock`. wasm-opt is the npm `binaryen` package, pinned exactly as a devDependency of `@shift/wasm` and run through Node from the package's own `bin`, never from PATH, with explicit features. The checkout and Cargo home paths that panic messages embed are remapped, so the module carries no machine's paths.
 - **Numbers across the boundary.** Hot calls take and return `Float64Array`s in the layouts each function documents, with no per-call objects. Anchor names are interned once (`internName`/`nameOf`) and travel as ids. Axes and compiled bases are registered once, giving a handle; a location then travels as numbers in axis order, NaN for a missing coordinate. Cold, structured values (`AnchorKind`, registration inputs) are typed with tsify, so `shift_wasm.d.ts` is generated, not hand-written.
 - **Handles follow their objects.** The editor registers each axes array and basis once per object identity (`lib/wasm/variation.ts`, `Handles`). A `FinalizationRegistry` releases the module's copy when the object is collected.
 
@@ -23,10 +23,10 @@ crates/shift-wasm/src/
   names.rs       interned anchor names
   reader.rs      sequential reader over a Float64Array input
 packages/wasm/
-  scripts/build.mjs   cargo build → wasm-bindgen → wasm-opt → base64 module.ts in src/generated (gitignored)
+  scripts/build.mjs   cargo build → wasm-bindgen → wasm-opt (npm binaryen) → base64 module.ts in src/generated (gitignored)
   src/index.ts        instantiates the module and re-exports the glue
 .github/actions/wasm-toolchain/
-  action.yml          installs the pinned wasm-bindgen and wasm-opt on any CI runner
+  action.yml          installs the pinned wasm-bindgen on any CI runner
 packages/editor/src/lib/wasm/
   anchors.ts     typed wrappers: propagateAnchors, followingPlacements, anchorKind
   variation.ts   typed wrappers, handles, and the per-basis weights memo
@@ -43,7 +43,7 @@ packages/editor/src/lib/wasm/
 
 `build.mjs` builds the crate for `wasm32-unknown-unknown`, runs wasm-bindgen for the web target, shrinks the module with wasm-opt, and writes it as base64 into `module.ts`, dropping the glue's fetch-by-URL fallback so bundlers emit no stray copy. `src/index.ts` decodes it and calls `initSync` at import. The editor's wrappers in `lib/wasm/` intern names, register axes and bases once, pack inputs into typed arrays, and unpack results; they hold no rules of their own.
 
-The Nix dev shell provides `wasm-bindgen-cli` and `binaryen`; CI jobs install the same versions with `.github/actions/wasm-toolchain`. Updating wasm-bindgen means changing the crate pin, the Nix package, and `Cargo.lock` together.
+The Nix dev shell provides `wasm-bindgen-cli`; CI jobs install the version `Cargo.lock` pins with `.github/actions/wasm-toolchain` (`taiki-e/install-action`). Updating wasm-bindgen means changing the crate pin, the Nix package, and `Cargo.lock` together. wasm-opt needs no install: `pnpm install` brings it with `@shift/wasm`'s `binaryen` devDependency, so updating it is a `package.json` change.
 
 ## What stays in TypeScript
 
