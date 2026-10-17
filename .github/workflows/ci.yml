@@ -491,6 +491,45 @@ jobs:
       - name: Check performance budgets
         run: cargo test --release -p shift-font --lib -- perf_mark
 
+  wasm:
+    name: WebAssembly Module
+    needs: detect-changes
+    if: needs.detect-changes.outputs.rust == 'true' || needs.detect-changes.outputs.typescript == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Install toolchain
+        run: rustup show
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          shared-key: shift-wasm
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      # The versions the Nix dev shell provides: wasm-bindgen must match
+      # Cargo.lock, and wasm-opt the binaryen that built the committed module.
+      - name: Install wasm-bindgen and wasm-opt
+        run: |
+          set -euo pipefail
+          bindgen=$(awk '/^name = "wasm-bindgen"$/ { getline; gsub(/"/, "", $3); print $3 }' Cargo.lock)
+          curl -sSfL "https://github.com/wasm-bindgen/wasm-bindgen/releases/download/${bindgen}/wasm-bindgen-${bindgen}-x86_64-unknown-linux-musl.tar.gz" | tar xz
+          echo "$PWD/wasm-bindgen-${bindgen}-x86_64-unknown-linux-musl" >> "$GITHUB_PATH"
+          curl -sSfL "https://github.com/WebAssembly/binaryen/releases/download/version_132/binaryen-version_132-x86_64-linux.tar.gz" | tar xz
+          echo "$PWD/binaryen-version_132/bin" >> "$GITHUB_PATH"
+
+      - name: Check the committed module is current
+        run: node packages/wasm/scripts/build.mjs --check
+
   integration:
     name: Integration Tests
     needs: detect-changes
@@ -860,6 +899,7 @@ jobs:
       - release-config
       - rust-fmt
       - rust-check
+      - wasm
       - integration
       - e2e-build
       - e2e

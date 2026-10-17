@@ -5,7 +5,7 @@
 // wasm-opt; wasm-bindgen must match the crate version in Cargo.lock exactly.
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync, readdirSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "../../..");
@@ -22,7 +22,27 @@ if (locked !== cli) {
 }
 
 const out = check ? mkdtempSync(join(tmpdir(), "shift-wasm-")) : generated;
-run("cargo", ["build", "-p", "shift-wasm", "--target", "wasm32-unknown-unknown", "--release"]);
+// Paths of the checkout and the Cargo home end up in panic messages; replace
+// them so every machine builds the same bytes. RUSTFLAGS replaces the target
+// flags in .cargo/config.toml, so they are repeated here.
+const cargoHome = process.env.CARGO_HOME ?? join(homedir(), ".cargo");
+execFileSync(
+  "cargo",
+  ["build", "-p", "shift-wasm", "--target", "wasm32-unknown-unknown", "--release"],
+  {
+    cwd: root,
+    stdio: "inherit",
+    env: {
+      ...process.env,
+      RUSTFLAGS: [
+        `--remap-path-prefix=${cargoHome}=/cargo`,
+        `--remap-path-prefix=${root}=/shift`,
+        "--cfg",
+        'getrandom_backend="wasm_js"',
+      ].join(" "),
+    },
+  },
+);
 run("wasm-bindgen", [
   "--target",
   "web",
