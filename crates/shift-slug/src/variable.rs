@@ -1048,6 +1048,18 @@ impl<'a> Iterator for PackedVariableChunks<'a> {
     }
 }
 
+/// Packs component glyph records alone, as the resident atlas section does.
+#[cfg(test)]
+pub(crate) fn pack_component_glyphs(values: &[VariableComponentGlyph]) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    let mut writer = PackedChunkWriter::new(DEFAULT_PACK_CHUNK_BYTES, |chunk| {
+        bytes.extend_from_slice(chunk.bytes);
+    });
+    component::write_component_glyphs(&mut writer, values);
+    writer.finish();
+    bytes
+}
+
 struct PackedChunkWriter<F> {
     emit: F,
     bytes: Vec<u8>,

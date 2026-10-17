@@ -5,17 +5,34 @@ use std::mem::{offset_of, size_of};
 use shift_font::test_support::generated::{assert_generated_file, TypeScriptModule};
 
 use crate::variable::{
-    params_word, COMPONENT_GLYPH_FLAG, CURVE_BYTES, GLYPH_OFFSET_MASK,
+    pack_component_glyphs, params_word, COMPONENT_GLYPH_FLAG, CURVE_BYTES, GLYPH_OFFSET_MASK,
     VARIABLE_COMPONENT_GLYPH_BYTES, VARIABLE_GLYPH_BYTES,
 };
 use crate::{
-    pack_render_instances, Curve, OutlineCommand, RenderInstance, VariableAtlasBuilder,
+    pack_render_instances, Bounds, Curve, OutlineCommand, RenderInstance, VariableAtlasBuilder,
     VariableComponentGlyph, VariableGlyph, RENDER_INSTANCE_BYTES, RENDER_PARAMS_BYTES,
     VARIABLE_PARAMS_BYTES,
 };
 
 fn read_u32(bytes: &[u8], offset: usize) -> u32 {
     u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap())
+}
+
+fn read_f32(bytes: &[u8], offset: usize) -> f32 {
+    f32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap())
+}
+
+fn read_f32s<const N: usize>(bytes: &[u8], offset: usize) -> [f32; N] {
+    std::array::from_fn(|index| read_f32(bytes, offset + index * size_of::<f32>()))
+}
+
+fn read_bounds(bytes: &[u8], offset: usize) -> Bounds {
+    Bounds {
+        min_x: read_f32(bytes, offset + offset_of!(Bounds, min_x)),
+        min_y: read_f32(bytes, offset + offset_of!(Bounds, min_y)),
+        max_x: read_f32(bytes, offset + offset_of!(Bounds, max_x)),
+        max_y: read_f32(bytes, offset + offset_of!(Bounds, max_y)),
+    }
 }
 
 #[test]
@@ -32,13 +49,23 @@ fn packed_strides_match_shader_struct_sizes() {
 #[test]
 fn render_instances_pack_fields_at_their_struct_offsets() {
     let bytes = pack_render_instances(&[RenderInstance {
+        pixel_rect: [1.0, 2.0, 3.0, 4.0],
+        em_transform: [5.0, 6.0, 7.0, 8.0],
         glyph_index: 11,
         scratch_curve_start: 13,
         scratch_band_start: 17,
         scratch_index_start: 19,
-        ..RenderInstance::default()
     }])
     .unwrap();
+
+    assert_eq!(
+        read_f32s(&bytes, offset_of!(RenderInstance, pixel_rect)),
+        [1.0, 2.0, 3.0, 4.0]
+    );
+    assert_eq!(
+        read_f32s(&bytes, offset_of!(RenderInstance, em_transform)),
+        [5.0, 6.0, 7.0, 8.0]
+    );
 
     assert_eq!(
         read_u32(&bytes, offset_of!(RenderInstance, glyph_index)),
@@ -96,6 +123,12 @@ fn variable_glyphs_pack_fields_at_their_struct_offsets() {
     let glyph_offset = packed.layout().glyphs.offset + VARIABLE_GLYPH_BYTES;
 
     assert_ne!(glyph.curve_start, 0);
+    let bounds = glyph.bounds;
+    assert!(bounds.min_x != bounds.min_y && bounds.max_x != bounds.max_y);
+    assert_eq!(
+        read_bounds(bytes, glyph_offset + offset_of!(VariableGlyph, bounds)),
+        bounds
+    );
     assert_eq!(
         read_u32(bytes, glyph_offset + offset_of!(VariableGlyph, curve_start)),
         glyph.curve_start
@@ -117,6 +150,64 @@ fn variable_glyphs_pack_fields_at_their_struct_offsets() {
             glyph_offset + offset_of!(VariableGlyph, source_count)
         ),
         glyph.source_count
+    );
+}
+
+#[test]
+fn component_glyphs_pack_fields_at_their_struct_offsets() {
+    let glyphs = [
+        VariableComponentGlyph::default(),
+        VariableComponentGlyph {
+            part_start: 2,
+            part_count: 3,
+            component_start: 5,
+            component_count: 7,
+            root_glyph_index: 11,
+            _padding: 13,
+        },
+    ];
+    let bytes = pack_component_glyphs(&glyphs);
+    let glyph = VARIABLE_COMPONENT_GLYPH_BYTES;
+
+    assert_eq!(bytes.len(), glyphs.len() * VARIABLE_COMPONENT_GLYPH_BYTES);
+    assert_eq!(
+        read_u32(
+            &bytes,
+            glyph + offset_of!(VariableComponentGlyph, part_start)
+        ),
+        2
+    );
+    assert_eq!(
+        read_u32(
+            &bytes,
+            glyph + offset_of!(VariableComponentGlyph, part_count)
+        ),
+        3
+    );
+    assert_eq!(
+        read_u32(
+            &bytes,
+            glyph + offset_of!(VariableComponentGlyph, component_start)
+        ),
+        5
+    );
+    assert_eq!(
+        read_u32(
+            &bytes,
+            glyph + offset_of!(VariableComponentGlyph, component_count)
+        ),
+        7
+    );
+    assert_eq!(
+        read_u32(
+            &bytes,
+            glyph + offset_of!(VariableComponentGlyph, root_glyph_index)
+        ),
+        11
+    );
+    assert_eq!(
+        read_u32(&bytes, glyph + offset_of!(VariableComponentGlyph, _padding)),
+        13
     );
 }
 
